@@ -157,3 +157,29 @@ func EnvLockedChanges(current, merged Config, lookup func(string) (string, bool)
 	}
 	return locked
 }
+
+// PinnedKey is one runtime config key that an AMDL_* environment variable
+// pins: Env names the variable, Key the dotted config key it overrides.
+type PinnedKey struct {
+	Key string `json:"key"`
+	Env string `json:"env"`
+}
+
+// PinnedRuntimeKeys returns the runtime keys (the ones GET /api/v1/config
+// returns) whose override variable is set in lookup, sorted by key and never
+// nil. A key is pinned whenever its variable is set, whatever its value: a PUT
+// changing it is rejected by EnvLockedChanges, so a client should not offer
+// the change.
+func PinnedRuntimeKeys(lookup func(string) (string, bool)) []PinnedKey {
+	pinned := []PinnedKey{}
+	for _, field := range envFields() {
+		if !isRuntimeKey(field.key) {
+			continue
+		}
+		if _, ok := lookup(field.name); ok {
+			pinned = append(pinned, PinnedKey{Key: field.key, Env: field.name})
+		}
+	}
+	slices.SortFunc(pinned, func(a, b PinnedKey) int { return strings.Compare(a.Key, b.Key) })
+	return pinned
+}

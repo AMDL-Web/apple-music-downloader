@@ -201,7 +201,8 @@ is the documentation — every key's allowed values, units and defaults live in 
   format) need a restart.
 - **Any key** can be overridden with `AMDL_<SECTION>_<KEY>`, e.g.
   `AMDL_DOWNLOAD_QUALITY_PRIORITY=alac,aac`. Unknown `AMDL_*` variables fail startup
-  rather than being silently ignored, and env-pinned fields are rejected by `PUT` with 422.
+  rather than being silently ignored, and env-pinned fields are rejected by `PUT` with 422
+  (`GET /config` lists them in `pinned`).
 
 Defaults, hand edits and reload, and the Docker specifics: [docs/configuration.md](docs/configuration.md)
 and [docs/deployment.md](docs/deployment.md).

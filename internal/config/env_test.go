@@ -198,6 +198,32 @@ func TestEnvLockedChanges(t *testing.T) {
 	}
 }
 
+// Only runtime keys are reported (startup keys never appear in GET /config),
+// pinned by the variable being set even when its value equals the file's.
+func TestPinnedRuntimeKeys(t *testing.T) {
+	set := map[string]bool{
+		"AMDL_SIMULATE_ENABLED":          true,
+		"AMDL_DOWNLOAD_TEMP_DIR":         true,
+		"AMDL_DOWNLOAD_DOWNLOADS_DIR":    true,
+		"AMDL_WRAPPER_ADDRESS":           true,
+		"AMDL_SERVER_LISTEN":             true,
+		"AMDL_DOWNLOAD_MAX_RUNNING_JOBS": true,
+	}
+	lookup := func(name string) (string, bool) { return "", set[name] }
+	want := []PinnedKey{
+		{Key: "download.downloads_dir", Env: "AMDL_DOWNLOAD_DOWNLOADS_DIR"},
+		{Key: "download.temp_dir", Env: "AMDL_DOWNLOAD_TEMP_DIR"},
+		{Key: "simulate.enabled", Env: "AMDL_SIMULATE_ENABLED"},
+	}
+	if got := PinnedRuntimeKeys(lookup); !reflect.DeepEqual(got, want) {
+		t.Fatalf("pinned = %v, want %v", got, want)
+	}
+	none := PinnedRuntimeKeys(func(string) (string, bool) { return "", false })
+	if none == nil || len(none) != 0 {
+		t.Fatalf("no variables set: pinned = %#v, want an empty non-nil slice", none)
+	}
+}
+
 // Bootstrapping must write the example's values, not the environment overlay:
 // the overlay is re-applied on every load, and baking it into the file would
 // keep the value pinned even after the variable is unset.

@@ -36,12 +36,24 @@ func (s *Server) reloadConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeConfigView(w http.ResponseWriter, reloadErr error) {
-	view, err := config.MutableView(s.currentConfig())
+	s.writeConfigResponse(w, s.currentConfig(), reloadErr)
+}
+
+// writeConfigResponse answers GET, PUT and POST /config/reload alike: the
+// ConfigResponse schema for cfg.
+func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, reloadErr error) {
+	view, err := config.MutableView(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeInternalError, "render config: "+err.Error())
 		return
 	}
-	resp := map[string]any{"config": view, "persisted": s.cfg != nil && s.cfg.Persistent()}
+	resp := map[string]any{
+		"config":    view,
+		"persisted": s.cfg != nil && s.cfg.Persistent(),
+		// The same variables PUT checks with EnvLockedChanges, so a client
+		// can disable exactly the fields a PUT would reject.
+		"pinned": config.PinnedRuntimeKeys(os.LookupEnv),
+	}
 	if reloadErr != nil {
 		resp["reload_error"] = reloadErr.Error()
 	}
@@ -123,12 +135,7 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	// apply the store's final snapshot so an older request cannot restore its
 	// logging level after a newer write.
 	s.applyLoggingConfig()
-	view, err := config.MutableView(updated)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, CodeInternalError, "render config: "+err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"config": view, "persisted": s.cfg.Persistent()})
+	s.writeConfigResponse(w, updated, nil)
 }
 
 // isFileAccessError reports an error reading or writing the config file

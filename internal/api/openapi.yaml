@@ -194,6 +194,10 @@ paths:
         through this API; edit the startup configuration configs/config.yaml and
         restart instead.
 
+        pinned lists the returned keys that an AMDL_* environment variable
+        currently sets; PUT rejects a change to any of them with 422
+        config_key_pinned, so a client should disable those fields.
+
         GET is a pure read of the in-memory configuration and has no side effects:
         it does not re-read configs/config.yaml. A hand edit of the file takes
         effect through POST /api/v1/config/reload or SIGHUP; startup-only fields
@@ -2109,10 +2113,23 @@ components:
           $ref: '#/components/schemas/LibrarySyncStatus'
     ConfigResponse:
       type: object
-      required: [config, persisted]
+      required: [config, persisted, pinned]
       properties:
         config:
           $ref: '#/components/schemas/RuntimeConfig'
+        pinned:
+          type: array
+          description: >-
+            The keys of config that an AMDL_<SECTION>_<KEY> environment variable
+            currently sets, sorted by key; empty when none. The environment
+            value wins on every reload, so PUT rejects a change to one of them
+            with 422 config_key_pinned. Startup keys are never listed: they are
+            not in config.
+          items:
+            $ref: '#/components/schemas/PinnedKey'
+          example:
+            - {key: download.downloads_dir, env: AMDL_DOWNLOAD_DOWNLOADS_DIR}
+            - {key: simulate.enabled, env: AMDL_SIMULATE_ENABLED}
         persisted:
           type: boolean
           description: >-
@@ -2126,6 +2143,18 @@ components:
             configuration file could not be used (unreadable or failing
             validation); config is then the previous, still active
             configuration.
+    PinnedKey:
+      type: object
+      required: [key, env]
+      properties:
+        key:
+          type: string
+          description: Dotted config key, as in RuntimeConfig (section.key).
+          example: download.downloads_dir
+        env:
+          type: string
+          description: The environment variable that sets it.
+          example: AMDL_DOWNLOAD_DOWNLOADS_DIR
     SubmitResult:
       type: object
       required: [url, status]

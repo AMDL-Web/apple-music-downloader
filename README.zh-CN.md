@@ -185,7 +185,7 @@ SIGHUP 生效。
 - **启动期字段**（监听地址、数据库路径、wrapper 地址、各种池大小、日志格式）需要重启。
 - **任意字段**都可以用 `AMDL_<大写段名>_<大写键名>` 覆盖，例如
   `AMDL_DOWNLOAD_QUALITY_PRIORITY=alac,aac`。无法识别的 `AMDL_*` 变量会让启动失败，而不是被
-  静默忽略；被环境变量固定的字段在 `PUT` 时返回 422。
+  静默忽略；被环境变量固定的字段在 `PUT` 时返回 422（`GET /config` 在 `pinned` 里列出它们）。
 
 默认值、手工编辑与重新加载、Docker 部分见 [docs/configuration.md](docs/configuration.md) 和
 [docs/deployment.md](docs/deployment.md)。

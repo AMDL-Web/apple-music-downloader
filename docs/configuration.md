@@ -72,7 +72,9 @@ as the separator: `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_DATABASE_P
   exist fail the same way, for example `AMDL_RUNTIME_CONFIG`, `AMDL_LISTEN` (use
   `AMDL_SERVER_LISTEN`) and `AMDL_WRAPPER_ADDR` (use `AMDL_WRAPPER_ADDRESS`).
 - A field pinned by an environment variable cannot be changed through
-  `PUT /api/v1/config` — it returns `422`. Change the variable and restart.
+  `PUT /api/v1/config` — it returns `422`. Change the variable and restart. Every config
+  answer lists the pinned runtime keys with their variables in `pinned`, so a client can
+  disable those fields.
 - A `PUT` persists the effective runtime snapshot, so an unchanged runtime field pinned by
   an environment variable may be written into the file during an unrelated `PUT`.
   Startup-field overrides are never baked in.

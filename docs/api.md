@@ -486,7 +486,11 @@ curl -X POST http://localhost:18080/api/v1/config/reload
 ```
 
 `GET /api/v1/config` returns the runtime-mutable keys of the in-memory config and has no
-side effects; it does not read the file. `POST /api/v1/config/reload` (or SIGHUP) re-reads
+side effects; it does not read the file. Next to `config` and `persisted`, `pinned` lists
+the runtime keys an `AMDL_*` variable currently sets, sorted by key, for example
+`[{"key":"download.downloads_dir","env":"AMDL_DOWNLOAD_DOWNLOADS_DIR"}]` (`[]` when none):
+a `PUT` changing one of them is rejected, so a client should disable those fields. Every
+answer that returns the config (`GET`, `PUT`, reload) carries it. `POST /api/v1/config/reload` (or SIGHUP) re-reads
 `configs/config.yaml` and applies its runtime keys, then answers like `GET`. When the file
 is unreadable or invalid, the previous config stays active and the answer is still `200`,
 with `reload_error` saying why.
