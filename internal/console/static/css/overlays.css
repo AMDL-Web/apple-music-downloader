@@ -94,6 +94,8 @@
 }
 
 .palette-sub {
+  /* Only the room the label leaves: on a narrow screen the label wins. */
+  flex: 1 1 0;
   min-width: 0;
   color: var(--text-secondary);
   font-size: var(--fs-12);
@@ -122,6 +124,22 @@
   color: var(--text-secondary);
   font-size: var(--fs-12);
   line-height: var(--lh-12);
+}
+
+/* Touch screens: a visible Close (no Escape key) and no keyboard hints. */
+.palette-close {
+  display: none;
+}
+
+@media (hover: none) {
+  .palette-close {
+    display: inline-flex;
+  }
+
+  .palette-keys,
+  .palette-foot {
+    display: none;
+  }
 }
 
 .toasts {

@@ -32,7 +32,7 @@ wins and this page is fixed in the same change. Sources are listed in
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
 | `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings, API links |
 | `#/new?url=` | New download | Sections `compose` (text box, media-user-token when needed, Download N), `links` (a row per link found), `results` (after a submit), and beside them at 1024 px and up `options` and `bookmarklet`. `url` carries one or more links, newline- or space-separated and URL-encoded (`lib/route.js` `newDownloadHash`, `newDownloadUrls`), and follows the text box; `lib/links.js` parses them |
-| `#/settings?section=` | Settings | A section list (a select under 640 px) and one open section: `downloads` (the default), `files`, `artwork`, `lyrics`, `catalog`, `library_sync`, `logging`, `simulate`, `account`, `config_file` (`lib/settings.js` `SETTINGS_SECTIONS`; `section` is lowercase words joined by `_`, `settingsSection`). The palette links to `account` and `library_sync` |
+| `#/settings?section=` | Settings | A section list (a select under 640 px) and one open section: `downloads` (the default), `files`, `artwork`, `lyrics`, `catalog`, `library_sync`, `logging`, `simulate`, `account`, `config_file` (`lib/settings.js` `SETTINGS_SECTIONS`; `section` is lowercase words joined by `_`, `settingsSection`). The palette finds every section and field (`lib/palette.js`) |
 
 New download is the primary action and has these entry points: the
 `.sidebar-new` button first in the sidebar (icon-only with a tooltip on the
@@ -321,7 +321,12 @@ and motion covers.
   finished" with a link to the Queue, `lib/watch.js`; such a job is not also
   sent to the milestone region), command palette (Cmd/Ctrl+K, never over a
   modal dialog; combobox + listbox; focus handling from `useDialog`, so
-  focus returns to the opener), shortcut sheet (`?`).
+  focus returns to the opener; rows from `lib/palette.js`: a query holding
+  Apple Music links offers "Download this link" first, Settings sections and
+  fields match by label, key or panel, job rows add status and date; a
+  visually hidden polite status reads the result count once the job search
+  answers; under `(hover: none)` a `.palette-close` button shows and the key
+  hints and `.palette-foot` hide), shortcut sheet (`?`).
 - **Dialogs** (`ui/dialogs.js`): `Dialog` is a scrim plus a modal panel
   (`useDialog`: focus the first `[data-autofocus]`, trap Tab, Escape closes
   without reaching the page shortcuts, focus returns to the opener).

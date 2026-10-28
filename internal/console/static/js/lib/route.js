@@ -155,8 +155,8 @@ export function newDownloadHash(urls = []) {
 /**
  * The section #/settings?section= names, or '' (the page's first section).
  * Section names are lowercase words joined by underscores; the settings page
- * owns the list, and the command palette links to "account" and
- * "library_sync".
+ * owns the list (lib/settings.js SETTINGS_SECTIONS), which the command
+ * palette also searches.
  */
 export function settingsSection(params = {}) {
   const s = params.section;

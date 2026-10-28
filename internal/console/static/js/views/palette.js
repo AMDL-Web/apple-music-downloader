@@ -2,37 +2,16 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, docsUrl } from '../api.js';
-import { jobTitle, jobSubtitle, typeLabel } from '../lib/format.js';
-import { buildHash, settingsHash } from '../lib/route.js';
+import { paletteItems, resultCount } from '../lib/palette.js';
 import { Icon, Button } from '../ui/components.js';
 import { Dialog, useDialog } from '../ui/dialogs.js';
 import { useDebounced } from '../ui/hooks.js';
-import { SKINS } from '../lib/prefs.js';
-
-const STATIC_ITEMS = [
-  { id: 'act-new', group: 'Actions', label: 'New download', icon: 'plus', hash: buildHash('new'), keys: 'n' },
-  { id: 'nav-overview', group: 'Navigate', label: 'Overview', icon: 'grid', hash: buildHash('overview'), keys: 'g o' },
-  { id: 'nav-queue', group: 'Navigate', label: 'Queue', icon: 'list', hash: buildHash('queue'), keys: 'g q' },
-  { id: 'nav-showcase', group: 'Navigate', label: 'Showcase', icon: 'disc', hash: buildHash('showcase'), keys: 'g s' },
-  { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
-  { id: 'nav-system', group: 'Navigate', label: 'System', icon: 'server', hash: buildHash('system'), keys: 'g y' },
-  { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,' },
-  { id: 'nav-docs', group: 'Navigate', label: 'API docs', icon: 'book', external: true },
-  { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },
-  { id: 'f-running', group: 'Filters', label: 'Show active jobs', icon: 'dot', hash: buildHash('queue') },
-  { id: 'f-errors', group: 'Filters', label: 'Show error logs', icon: 'triangle-alert', hash: buildHash('logs', { level: 'warn,error' }) },
-  { id: 'set-account', group: 'Settings', label: 'Apple Music account', icon: 'key', hash: settingsHash('account') },
-  { id: 'set-library-sync', group: 'Settings', label: 'Library sync', icon: 'rotate', hash: settingsHash('library_sync') },
-  { id: 'theme-system', group: 'Theme', label: 'Use system theme', icon: 'monitor', theme: 'system' },
-  { id: 'theme-light', group: 'Theme', label: 'Use light theme', icon: 'sun', theme: 'light' },
-  { id: 'theme-dark', group: 'Theme', label: 'Use dark theme', icon: 'moon', theme: 'dark' },
-  ...SKINS.map((s) => ({ id: `skin-${s.value}`, group: 'Style', label: `Style: ${s.label}`, icon: 'palette', skin: s.value })),
-];
 
 export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  const [jobs, setJobs] = useState({ items: [], loading: false });
+  // q: the query these jobs answer.
+  const [jobs, setJobs] = useState({ items: [], loading: false, q: '' });
   const debounced = useDebounced(query, 200);
   const input = useRef(null);
   const panel = useRef(null);
@@ -44,33 +23,23 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
   useEffect(() => {
     const q = debounced.trim();
     if (!q) {
-      setJobs({ items: [], loading: false });
+      setJobs({ items: [], loading: false, q });
       return undefined;
     }
     let cancelled = false;
     setJobs((j) => ({ ...j, loading: true }));
     listDownloads({ q, limit: 8 }).then(
-      (body) => !cancelled && setJobs({ items: body.downloads, loading: false }),
-      () => !cancelled && setJobs({ items: [], loading: false }),
+      (body) => !cancelled && setJobs({ items: body.downloads, loading: false, q }),
+      () => !cancelled && setJobs({ items: [], loading: false, q }),
     );
     return () => {
       cancelled = true;
     };
   }, [debounced]);
 
-  const q = query.trim().toLowerCase();
-  const items = [
-    ...STATIC_ITEMS.filter((it) => !q || it.label.toLowerCase().includes(q) || it.group.toLowerCase().includes(q)),
-    ...jobs.items.map((job) => ({
-      id: `job-${job.id}`,
-      group: 'Jobs',
-      label: jobTitle(job),
-      sub: [jobSubtitle(job), typeLabel(job.type)].filter(Boolean).join(' · '),
-      icon: 'music',
-      hash: buildHash('queue', {}, job.id),
-      dir: 'auto',
-    })),
-  ];
+  const items = paletteItems(query, jobs.items);
+  // Announced once the job search for what was typed has answered.
+  const settled = query.trim() !== '' && query.trim() === jobs.q && !jobs.loading;
   const current = Math.min(active, Math.max(0, items.length - 1));
 
   useEffect(() => setActive(0), [query, jobs.items.length]);
@@ -142,7 +111,9 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
           onInput=${(e) => setQuery(e.currentTarget.value)}
           onKeyDown=${onKey}
         />
+        <${Button} variant="ghost" size="sm" icon="x" className="palette-close" aria-label="Close" onClick=${onClose} />
       </div>
+      <p class="sr-only" role="status" aria-live="polite">${settled ? resultCount(items.length) : ''}</p>
       <ul id="palette-list" role="listbox" class="palette-list" aria-label="Results">
         ${rows}
         ${items.length === 0 && !jobs.loading ? html`<li role="presentation" class="palette-empty">No results</li>` : null}
@@ -167,6 +138,7 @@ const SHORTCUTS = [
   ['x', 'Select the focused job (Queue)'],
   ['Esc', 'Close the drawer or dialog, then leave selection'],
   ['Paste a link', 'New download with that link, outside a text field'],
+  ['Cmd/Ctrl + S', 'Save settings (Settings)'],
   ['Cmd/Ctrl + K', 'Command palette'],
   ['?', 'This list'],
 ];

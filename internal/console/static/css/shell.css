@@ -216,6 +216,12 @@
   font-family: var(--font-sans);
 }
 
+@media (hover: none) {
+  .search-trigger-kbd {
+    display: none;
+  }
+}
+
 .banners {
   display: flex;
   flex-direction: column;
