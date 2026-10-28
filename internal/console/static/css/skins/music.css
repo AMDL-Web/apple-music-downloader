@@ -897,6 +897,96 @@
   }
 }
 
+/* The legend under the cells names each shape; states at zero stay out. */
+:root[data-skin="music"] [data-section="live"] .jprog {
+  flex-wrap: wrap;
+  row-gap: var(--s-2);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-legend {
+  display: flex;
+  flex: 1 0 100%;
+  gap: var(--s-1) var(--s-4);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-legend {
+  color: var(--art-t2);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key {
+  gap: var(--s-1_5);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key[data-zero] {
+  display: none;
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key::before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--role, var(--track));
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-key[data-state="completed"]::before {
+  background: var(--art-t1);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-key[data-state="skipped"]::before {
+  background: color-mix(in srgb, var(--art-t1) 55%, transparent);
+}
+
+:root[data-skin="music"] [data-section="live"] .jprog-key[data-state="remaining"]::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+/* Recent failures sit under the live cards as their own grouped rows. */
+:root[data-skin="music"] [data-section="live"] .attention {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--grid-gap);
+  border-top: 0;
+}
+
+:root[data-skin="music"] [data-section="live"] .attention-row {
+  column-gap: var(--s-4);
+  padding: var(--s-3) var(--s-4) var(--s-3) var(--s-5);
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+}
+
+:root[data-skin="music"] [data-section="live"] .attention-row + .attention-row {
+  border-top: 0;
+}
+
+:root[data-skin="music"] [data-section="live"] .attention-icon .icon {
+  width: var(--icon-nav);
+  height: var(--icon-nav);
+}
+
+:root[data-skin="music"] [data-section="live"] .attention-title {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] [data-section="live"] .attention-label {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] [data-section="live"] .attention-link {
+  color: var(--text-primary);
+}
+
+:root[data-skin="music"] [data-section="live"] .attention-detail {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
 /* ---- Recently completed -------------------------------------------- */
 
 /* A shelf with no surface behind it; every tile is shown and the row scrolls. */

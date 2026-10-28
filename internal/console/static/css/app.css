@@ -3149,6 +3149,24 @@ kbd {
     padding: 0 var(--s-4);
   }
 
+  /* Retry moves under the text so the title keeps the row's width. */
+  .attention-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon title"
+      "icon detail"
+      ". action";
+  }
+
+  .attention-row > .btn {
+    justify-self: start;
+    margin-top: var(--s-2);
+  }
+
+  .attention-input {
+    display: none;
+  }
+
   .topbar-right {
     gap: var(--s-1);
   }

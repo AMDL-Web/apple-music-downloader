@@ -108,8 +108,12 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   Failed turns red only when it is not zero. Total keeps its big numeral on
   phones.
 - **Live queue**: 80px cover, kicker (type, genre, year, start), 28px title,
-  artist; a fraction ("3 / 12 tracks") over 24px per-track cells; a "when"
-  column behind one unbroken hairline with the status and "Updated …".
+  artist; a fraction ("3 / 12 tracks") over 24px per-track cells, then a
+  legend in words with a square key per shape ("1 saved · 11 remaining",
+  zeros left out); a "when" column behind one unbroken hairline with the
+  status and "Updated …". Failures of the last 24 h follow under a 1px ink
+  rule: a red "FAILED" kicker, the title, the mono link, the error and its
+  age, and a Retry button.
 - **Queue list**: 64px covers, kicker, 20px title, cells, status, time; the
   filter tabs sit on a 1px ink rule with a 4px underline for the active tab.
   From 640 to 1023 the cells take a full-width line under the cover and
@@ -176,9 +180,9 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   cut off); the live list shows "Updated …" and the drawer has the times.
 - Helvetica Neue and SF Pro are Apple-only; elsewhere the stack falls back to
   Arial or the system UI face, which weakens the tight display tracking.
-- The progress legend ("0 saved · 11 downloading · 9 waiting"), the
-  throughput formats breakdown and per-day axis labels need data the DOM does
-  not carry; the cells and their counts stand in.
+- The progress legend says "remaining" for tracks in flight and waiting alike
+  (the list payload does not tell them apart), not the mockup's "11
+  downloading · 9 waiting".
 - On the showcase the filter tabs stay above the hero (DOM and focus order);
   the mockup placed the hero first.
 - The showcase tabs carry no counts (the view knows only the current type's

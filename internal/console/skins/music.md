@@ -109,6 +109,11 @@ base durations (120 ms color, 200 ms overlays).
   canvas, the body is the grouped surface. Section actions are red text links
   with a chevron. A shelf never clips (only its body does), so a heading's
   glyph overshoot is never cut by the rounded corner.
+- **Live cards**: under the cells a legend names each shape with its count
+  (filled pill "saved", outlined "remaining"; states at zero are left out).
+  Failures of the last 24 h follow the cards as grouped rows: a red circle
+  glyph, "Failed" in red, the title and the mono link, the error and its age,
+  and a Retry button (under the text on phones).
 - **Overview order**: Now downloading (full width), Recently completed, then
   Jobs and Throughput (8 columns) beside System health (4 columns, spanning both
   rows), then the log tail. Below 1024 px they stack in that reading order:
@@ -180,7 +185,8 @@ base durations (120 ms color, 200 ms overlays).
 - SF Pro Display only exists on Apple platforms; Windows and Linux fall back to
   Helvetica Neue or Segoe UI and the tight tracking looks heavier there.
 - Many light album colors at once on a black page can look loud.
-- The mockup's attention row for failed jobs, per-track progress text ("12 of
-  20 tracks done", "13 % transferred"), a meaningful sublabel per Jobs column
-  ("of 256 slots", "3 workers") and icon tiles for the runtime facts need DOM
-  that the console does not render yet.
+- The live list payload cannot tell a track in flight from a waiting one, so
+  the legend says "remaining" for both and there is no "13 % transferred".
+- A meaningful sublabel per Jobs column ("of 256 slots", "3 workers") and
+  icon tiles for the runtime facts need DOM that the console does not render
+  yet.
