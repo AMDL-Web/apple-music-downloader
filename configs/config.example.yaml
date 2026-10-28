@@ -50,7 +50,8 @@ logging:
   # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   access_log: false
   # integer records: number of recent structured records retained for GET /api/v1/logs and its SSE stream.
-  # 0 disables in-memory retention and the log APIs return an empty history; valid range: 0-100000. Requires a restart.
+  # 0 disables in-memory retention, and both log APIs then answer 503 feature_unavailable; valid range: 0-100000.
+  # Requires a restart.
   buffer_size: 2000
   # bool: true writes to the rotating file below; false leaves file output disabled. Requires a restart.
   file_enabled: false
@@ -232,7 +233,7 @@ download:
   # verified, tagged, saved) are always published immediately, as are item_completed, item_failed,
   # item_skipped and every other one-shot event. A meter value held back by this interval is flushed
   # out just before whichever event supersedes it, so the last percentage before a state change is
-  # never lost and clients resuming from last_event_id see the same stream as live ones.
+  # never lost and clients resuming from an event cursor see the same stream as live ones.
   # This is a floor on spacing, layered on top of the unconditional whole-percent rounding gate, so a
   # meter still never emits more than ~101 times per stage no matter how low this is set.
   # Allowed 0-10000; values <=0 disable time-based coalescing and leave only the percent gate;

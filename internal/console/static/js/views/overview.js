@@ -4,9 +4,9 @@
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, getHealth, getWrapperStatus, getLibrarySync, getHooks, getStats, listLogs, logStreamUrl, settle, parseData } from '../api.js';
 import { count, bytes, dayLabel, jobTitle, jobSubtitle, artPalette, clockTime } from '../lib/format.js';
-import { backendHealthView, wrapperView, librarySyncView, hooksView, logLevelView, isAlreadyInLibrary } from '../lib/status.js';
+import { backendHealthView, wrapperView, librarySyncView, hooksView, logLevelView, isAlreadyInLibrary, LOG_RETENTION_OFF } from '../lib/status.js';
 import { upsertJob, appendLogs, emptyLogs } from '../lib/store.js';
-import { StreamClient, claimSecondary, releaseSecondary, createCoalescer } from '../lib/stream.js';
+import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
 import { buildHash } from '../lib/route.js';
 import { useApp, Card, Icon, Badge, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, Unavailable, LinkButton } from '../ui/components.js';
 import { usePoll, useColumns } from '../ui/hooks.js';
@@ -331,7 +331,9 @@ function LogTail() {
     ${loading
       ? html`<${SkeletonRows} n=${6} kind="log" />`
       : error
-        ? html`<${ErrorNote} title="Couldn't load logs" error=${error} />`
+        ? isFeatureUnavailable(error.status, error.body)
+          ? html`<${Empty} icon="file-text" title=${LOG_RETENTION_OFF} />`
+          : html`<${ErrorNote} title="Couldn't load logs" error=${error} />`
         : logs.entries.length === 0
           ? html`<${Empty} icon="file-text" title="No log records yet" />`
           : html`<ol class="log-tail" aria-label="Latest log records">

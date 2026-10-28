@@ -45,7 +45,8 @@ write it lists the offending keys.
 An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
 methods answers `405 method_not_allowed`. `feature_unavailable` means the component behind
 the route (log buffer, wrapper client, quality probe, developer-token signing, library
-watcher) is not wired into this process. A job lookup answers `404 job_not_found` only
+watcher) is not wired into this process; the log routes also answer it when
+`logging.buffer_size` is `0`. A job lookup answers `404 job_not_found` only
 when the job does not exist; a store failure is `500 store_error`, so a client never drops
 a job because of a transient error.
 
@@ -82,6 +83,52 @@ Returns `{"status":"ok"}`, or `503` with `{"status":"degraded","database_error":
 when the SQLite store cannot be reached. This is what the container health check uses.
 
 ```bash
+curl http://localhost:18080/api/v1/system
+```
+
+Returns what is running and what it has to work with:
+
+- `version`, `commit`, `build_date`: stamped at build time (`make build`, the Docker
+  image). A plain `go build` reports `version` `dev` and takes the commit and its time
+  from git, if it was built inside a checkout; `go run` leaves both empty.
+- `go_version`, `os`, `arch`, `started_at`, `uptime_seconds`.
+- `simulate` (`simulate.enabled`), `signing_mode` (`local` when the three
+  `catalog.apple_music_*` keys are set, else `legacy`), `motion_artwork_enabled`.
+- `jobs`: `workers` (`download.max_running_jobs` at startup), `active`, `queue_depth` of
+  `queue_capacity` (a full queue rejects submissions with `queue_full`), and
+  `recovery_backlog`, the jobs resumed at startup that still wait for a worker.
+- `pools`: the startup sizes of the download, decrypt and wrapper-request pools.
+- `tools`: each external command (`ffmpeg`) with `available` and its resolved `path`, or
+  the lookup `error`.
+- `storage`: `free_bytes` and `total_bytes` of the file systems holding
+  `download.downloads_dir` and `download.temp_dir`, or an `error` when a directory
+  cannot be inspected (it does not exist yet, or the platform is not Linux, macOS or
+  FreeBSD).
+
+No secret is returned; `signing_mode` only says whether signing keys are configured.
+
+```bash
+curl 'http://localhost:18080/api/v1/stats?days=7'
+```
+
+Download activity. `days` is 1-90 (default 14); anything else is `400 invalid_request`.
+
+- `totals`: every retained job (`jobs`), its tracks by final status (`tracks_completed`,
+  `tracks_skipped` for files already on disk, `tracks_failed`), the bytes written by
+  completed tracks and their total playback time (`duration_ms`).
+- `daily`: exactly `days` entries, one per UTC date, oldest first, ending today. Each has
+  `tracks_completed`, `bytes_written`, `jobs_completed` and `jobs_failed`; a quiet day has
+  zeros. A track counts on the day it completed, a job on each day it finished or failed
+  (a failed job that is retried and completes counts on both).
+- `codecs`: completed tracks of every retained job by `codec`, `bit_depth` and
+  `sample_rate`, most first.
+- `hooks`: per hook name, `succeeded` and `failed` runs inside the window, and
+  `last_failed_at` when one failed.
+
+Deleting a job removes it from every figure. Results are cached for 30 seconds per `days`
+value; `generated_at` says when a result was computed.
+
+```bash
 curl http://localhost:18080/api/v1/developer-token
 ```
 
@@ -115,8 +162,9 @@ Every HTTP response carries an `X-Request-ID`. Send your own header of the same 
 `GET /api/v1/logs?request_id=<id>` aggregates that request's access log with the
 synchronous job operations it triggered.
 
-In-memory retention is `logging.buffer_size`; at `0` no history is kept but the live SSE
-stream still pushes new records. File output is off by default and rotates by
+In-memory retention is `logging.buffer_size`; at `0` no history is kept and both
+`GET /logs` and `GET /logs/stream` answer `503 feature_unavailable`; read the console or
+file output instead. File output is off by default and rotates by
 `max_size_mb` / `max_backups` / `max_age_days`, optionally gzipped. `logging.level` and
 `logging.access_log` are runtime-mutable; format, destination, buffer size and rotation
 need a restart.

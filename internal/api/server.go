@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"amdl/internal/config"
 	"amdl/internal/console"
@@ -27,7 +28,8 @@ type Deps struct {
 	// Logger is the base logger of request logs; nil means slog.Default().
 	Logger *slog.Logger
 	// Logging backs GET /logs and GET /logs/stream and applies runtime
-	// log-level changes.
+	// log-level changes. With logging.buffer_size 0 (no in-memory retention)
+	// the two log routes answer 503 feature_unavailable.
 	Logging        *logging.System
 	Wrapper        WrapperService
 	Quality        QualityService
@@ -37,17 +39,24 @@ type Deps struct {
 
 // Server holds the HTTP handlers; build it with New and serve Routes.
 type Server struct {
-	cfg         *config.Store
-	store       *db.Store
-	hub         *events.Hub
-	manager     *jobs.Manager
-	logger      *slog.Logger
-	logSystem   *logging.System
-	logStore    *logging.Store
+	cfg       *config.Store
+	store     *db.Store
+	hub       *events.Hub
+	manager   *jobs.Manager
+	logger    *slog.Logger
+	logSystem *logging.System
+	logStore  *logging.Store
+	// logsOff is set when logging.buffer_size is 0: the log routes answer 503
+	// feature_unavailable with that reason.
+	logsOff     bool
 	wrapper     WrapperService
 	quality     QualityService
 	devToken    DeveloperTokenService
 	librarySync LibrarySyncService
+	// now is the clock of GET /system uptime and the GET /stats window and
+	// cache; nil means time.Now.
+	now        func() time.Time
+	statsCache statsCache
 }
 
 // New returns a Server for deps. It does no I/O.
@@ -57,8 +66,15 @@ func New(deps Deps) *Server {
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, devToken: deps.DeveloperToken, librarySync: deps.LibrarySync,
 	}
+	// logging.buffer_size is a startup key, so the snapshot read here is the
+	// size the log store was built with. A store without retention keeps no
+	// history for the log routes to serve.
 	if deps.Logging != nil {
-		s.logStore = deps.Logging.Store
+		if deps.Config != nil && deps.Config.Get().Logging.BufferSize == 0 {
+			s.logsOff = true
+		} else {
+			s.logStore = deps.Logging.Store
+		}
 	}
 	return s
 }
@@ -89,6 +105,8 @@ func (s *Server) routes() []route {
 		{http.MethodGet, "/api/openapi.yaml", h(openAPI)},
 
 		{http.MethodGet, "/api/v1/health", h(s.health)},
+		{http.MethodGet, "/api/v1/system", h(s.systemInfo)},
+		{http.MethodGet, "/api/v1/stats", h(s.stats)},
 		{http.MethodGet, "/api/v1/logs", h(s.listLogs)},
 		{http.MethodGet, "/api/v1/logs/stream", h(s.streamLogs)},
 		{http.MethodGet, "/api/v1/config", h(s.getConfig)},

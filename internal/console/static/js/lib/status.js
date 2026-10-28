@@ -181,6 +181,12 @@ export function logLevelView(level) {
 }
 
 /** @returns {StatusView} */
+/**
+ * Copy for the log routes answering 503 feature_unavailable, which the backend
+ * does when logging.buffer_size is 0 and it keeps no log history.
+ */
+export const LOG_RETENTION_OFF = 'In-memory log retention is off (logging.buffer_size: 0)';
+
 export function connectionView(state) {
   switch (state) {
     case 'live':

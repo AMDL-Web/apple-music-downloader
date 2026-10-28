@@ -72,6 +72,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # The same build args as docker-publish.yml, so the ldflags path is
+      # exercised before a release depends on it.
+      - name: Build info
+        id: build
+        run: |
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       # Single-arch and never pushed: this only proves the Dockerfile and
       # .dockerignore still produce an image before a release tag depends on it.
       - name: Build image
@@ -80,6 +88,10 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
+          build-args: |
+            VERSION=dev
+            COMMIT=${{ steps.build.outputs.commit }}
+            BUILD_DATE=${{ steps.build.outputs.date }}
           cache-from: type=gha
           # Fork pull requests may only read the cache; a failed export must
           # not fail a build that succeeded.

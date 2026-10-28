@@ -69,8 +69,11 @@ Done when: health is `ok`; the stream shows `job_queued`, `job_started`,
 `item_progress` and `job_finished` frames with increasing `id:` lines; the job ends
 `completed`. Adapt to the change:
 
-- Resume: reconnect with `-H "Last-Event-ID: <id>"` (SSE) or
-  `?last_event_id=<id>` (WebSocket) and confirm only later ids arrive.
+- Resume: reconnect with `-H "Last-Event-ID: <id>"` or `?cursor=<id>` and confirm
+  only later ids arrive.
+- System and stats: `curl -s $B/system | jq .` shows the `git describe` version that
+  `make dev` stamps; after a job finishes, `curl -s "$B/stats?days=7" | jq .totals`
+  counts its tracks (stats are cached for 30 s).
 - Overview feed: `curl -sN $B/downloads/events` while submitting a job; expect
   `download_upserted` frames.
 - Config: `curl -s $B/config | jq .`, then `PUT` a runtime key and read it back; a

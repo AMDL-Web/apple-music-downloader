@@ -6,11 +6,11 @@ import { listLogs, logStreamUrl, parseData } from '../api.js';
 import { clockTime, absTime, shortId, count } from '../lib/format.js';
 import { logLevelView } from '../lib/status.js';
 import { appendLogs, emptyLogs, LOG_CAP } from '../lib/store.js';
-import { StreamClient, claimSecondary, releaseSecondary, createCoalescer } from '../lib/stream.js';
+import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
 import { buildHash, logFilters, logParams, logQuery, LOG_LEVELS, LOG_COMPONENTS } from '../lib/route.js';
 import { useApp, Icon, Button, Empty, ErrorNote, SkeletonRows, CopyButton, StatusText } from '../ui/components.js';
 import { useDebounced, useMedia } from '../ui/hooks.js';
-import { connectionView } from '../lib/status.js';
+import { connectionView, LOG_RETENTION_OFF } from '../lib/status.js';
 
 const FOLLOW_SLACK_PX = 24;
 const INITIAL_LIMIT = 200;
@@ -96,7 +96,9 @@ export function LogsPage({ route }) {
       },
       onState: (s) => setStreamState(s.state),
       onEnd: ({ status, body }) => {
-        if (status === 400) setError({ status, message: (body && body.error && body.error.message) || 'Invalid filter' });
+        const err = body && body.error;
+        if (status === 400) setError({ status, message: (err && err.message) || 'Invalid filter' });
+        else if (isFeatureUnavailable(status, body)) setError({ status, code: err.code, message: err.message, body });
       },
     });
     claimSecondary(client);
@@ -145,10 +147,21 @@ export function LogsPage({ route }) {
     setQInput('');
     app.navigate(buildHash('logs'), { replace: true });
   };
-  const sv = live ? connectionView(streamState) : { icon: 'pause', role: 'neutral', label: 'Paused' };
+  // GET /logs and /logs/stream answer 503 feature_unavailable when the backend
+  // keeps no log history; that is a setting, not a failure to retry.
+  const retentionOff = error !== null && isFeatureUnavailable(error.status, error.body);
+  const sv = retentionOff
+    ? { icon: 'circle-minus', role: 'neutral', label: 'Off' }
+    : live
+      ? connectionView(streamState)
+      : { icon: 'pause', role: 'neutral', label: 'Paused' };
 
   let body;
   if (loading) body = html`<${SkeletonRows} n=${12} kind="log" />`;
+  else if (retentionOff)
+    body = html`<${Empty} icon="file-text" title=${LOG_RETENTION_OFF}>
+      The backend writes records only to its console or log file. Set logging.buffer_size above 0 and restart it to read them here.
+    </${Empty}>`;
   else if (error && logs.entries.length === 0) body = html`<${ErrorNote} title=${error.status === 400 ? 'The filter was rejected' : "Couldn't load logs"} error=${error} />`;
   else if (logs.entries.length === 0)
     body = html`<${Empty} icon="file-text" title=${filtered ? 'No records match' : 'No log records yet'} action=${filtered ? html`<${Button} size="sm" onClick=${clear}>Clear filters</${Button}>` : null}>
@@ -221,7 +234,7 @@ export function LogsPage({ route }) {
             : null}
         </div>`
       : null}
-    ${error && logs.entries.length > 0 ? html`<${ErrorNote} title="The filter was rejected" error=${error} />` : null}
+    ${error && !retentionOff && logs.entries.length > 0 ? html`<${ErrorNote} title="The filter was rejected" error=${error} />` : null}
     <div class="card card-flush log-card">
       <div
         class=${wrap ? 'log-view is-wrap' : 'log-view'}

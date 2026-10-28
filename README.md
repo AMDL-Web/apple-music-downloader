@@ -17,7 +17,7 @@
 media, decrypts it, remuxes and tags it, and writes a finished file to your disk —
 publishing every stage as it happens.**
 
-One Go binary, one SQLite file, a REST + SSE + WebSocket API on `/api/v1`, and an
+One Go binary, one SQLite file, a REST + Server-Sent Events API on `/api/v1`, and an
 OpenAPI 3.1 spec that the AMDL web and iOS clients are built against. It handles
 songs, albums, playlists, artists and radio stations.
 
@@ -69,7 +69,7 @@ Interactive API reference: <http://localhost:18080/docs>.
 
 <p align="center">
   <img src="./assets/readme/architecture.svg" width="100%"
-       alt="Web and iOS clients call the backend over REST, SSE and WebSocket; the backend keeps its job queue in SQLite, runs the download pipeline and writes files to disk; it requires wrapper-manager over gRPC and reads Apple Music from two different hosts">
+       alt="Web and iOS clients call the backend over REST and Server-Sent Events; the backend keeps its job queue in SQLite, runs the download pipeline and writes files to disk; it requires wrapper-manager over gRPC and reads Apple Music from two different hosts">
 </p>
 
 **`wrapper-manager` is not optional.** It holds the Apple Music account session and
@@ -171,7 +171,7 @@ the source of truth for every request and response shape. Every path below is un
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |
 | **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
-| **System** | `GET /health` · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
+| **System** | `GET /health` · `GET /system` build, capacity and free space · `GET /stats` download statistics · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
 
 Submissions take `urls`, and an `overrides` object that overlays the runtime config for
 that batch only — quality priority, memory mode, path templates, lyrics settings,
@@ -235,7 +235,7 @@ Both are covered in [docs/automation.md](docs/automation.md).
 
 | | |
 | --- | --- |
-| [docs/api.md](docs/api.md) | Every endpoint with curl examples, job overrides, SSE/WS semantics |
+| [docs/api.md](docs/api.md) | Every endpoint with curl examples, job overrides, error codes, SSE stream semantics |
 | [docs/configuration.md](docs/configuration.md) | Config file, defaults, env overrides, runtime vs startup keys, reload |
 | [docs/deployment.md](docs/deployment.md) | Docker, mounts, `PUID`/`PGID`, seeding, releases and image tags |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | Retries, codec fallback, concurrency pools, memory modes, lyrics |

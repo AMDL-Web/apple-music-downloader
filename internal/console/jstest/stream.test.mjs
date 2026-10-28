@@ -4,6 +4,8 @@ import {
   backoffDelay,
   withCursor,
   isNewerCursor,
+  isFeatureUnavailable,
+  endsStream,
   StreamClient,
   claimSecondary,
   releaseSecondary,
@@ -160,6 +162,42 @@ test('404 and 400 end the stream and pass the error body on', async () => {
   assert.equal(ended.status, 400);
   assert.equal(ended.body.error.code, 'invalid_request');
   assert.equal(env.timers.size, 0);
+});
+
+test('503 feature_unavailable ends the stream; any other 503 is retried', async () => {
+  const off = { error: { code: 'feature_unavailable', message: 'the log buffer is not available in this process' } };
+  assert.equal(isFeatureUnavailable(503, off), true);
+  assert.equal(isFeatureUnavailable(503, { error: { code: 'queue_full', message: 'full' } }), false);
+  assert.equal(isFeatureUnavailable(503, null), false, 'a proxy page has no envelope');
+  assert.equal(isFeatureUnavailable(500, off), false);
+  assert.equal(endsStream(404, null), true);
+  assert.equal(endsStream(502, null), false);
+
+  const env = fakeEnv();
+  env.fetch = async () => new Response(JSON.stringify(off), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  let ended = null;
+  const client = new StreamClient({ url: 'http://h/api/v1/logs/stream', env, onEvent: () => {}, onEnd: (r) => (ended = r) }).start();
+  await settle();
+  assert.equal(client.state, 'ended');
+  assert.equal(ended.status, 503);
+  assert.equal(ended.body.error.code, 'feature_unavailable');
+  assert.equal(env.timers.size, 0, 'no reconnect is scheduled');
+
+  const retry = fakeEnv();
+  let calls = 0;
+  retry.fetch = async () => {
+    calls++;
+    return new Response('<html>Service Unavailable</html>', { status: 503, headers: { 'Content-Type': 'text/html' } });
+  };
+  let retryEnded = null;
+  const proxied = new StreamClient({ url: 'http://h/api/v1/logs/stream', env: retry, onEvent: () => {}, onEnd: (r) => (retryEnded = r) }).start();
+  await settle();
+  assert.equal(proxied.state, 'reconnecting');
+  assert.equal(retryEnded, null);
+  assert.ok(retry.runNext(), 'a reconnect is scheduled');
+  await settle();
+  assert.equal(calls, 2);
+  proxied.stop();
 });
 
 test('failures back off, turn offline after a minute and resync after five', async () => {

@@ -24,7 +24,11 @@ amdl-web mirror by hand. Built by `New(Deps)`; `Server.Routes` is the handler.
   (`writeJobLookupError`); any other store error is 500 `store_error`.
 - `Deps`: Config, Store, Hub and Manager are required. Logging, Wrapper, Quality,
   DeveloperToken and LibrarySync are optional; a route whose dependency is nil
-  answers 503 `feature_unavailable`.
+  answers 503 `feature_unavailable`, as do the log routes when
+  `logging.buffer_size` is 0 (decided once in `New`; it is a startup key).
+- `GET /stats` results are cached per `days` for `statsCacheTTL`; the queries
+  live in `internal/db#Store.Stats` and must keep using the
+  `job_events(type, created_at)` index (a db test checks the query plans).
 - Streams are SSE only, started by `startSSE` (Content-Type, `Cache-Control:
   no-cache`, `X-Accel-Buffering: no`, head flushed, no `Connection` header). Every
   stream sends `: keepalive` every `sseKeepaliveInterval`; job streams also

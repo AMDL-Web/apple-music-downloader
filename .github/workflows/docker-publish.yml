@@ -61,6 +61,16 @@ jobs:
           ref: ${{ steps.ref.outputs.tag }}
           fetch-depth: 1
 
+      # GET /api/v1/system reports the build identity. The build context has no
+      # .git (.dockerignore), so it goes in as build args. The commit is read
+      # after the tag checkout because github.sha is the triggering commit, not
+      # the tag's, when the workflow is dispatched by hand.
+      - name: Build info
+        id: build
+        run: |
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       # The Dockerfile's build stage cross-compiles Go on the build platform,
       # but the runtime stage (alpine + apk) runs on the target platform, so
       # arm64 needs QEMU emulation.
@@ -103,6 +113,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.ref.outputs.tag }}
+            COMMIT=${{ steps.build.outputs.commit }}
+            BUILD_DATE=${{ steps.build.outputs.date }}
           cache-from: type=gha
           # A release triggered by a merged PR may only have read access to the
           # cache. The cache is an optimization; a failed export must not fail

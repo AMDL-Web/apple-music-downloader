@@ -46,6 +46,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /api/v1/system:
+    get:
+      tags: [System]
+      summary: Build, runtime capacity and host resources
+      description: >-
+        Reports the running build (version, commit and build date stamped at
+        build time; version is dev and the other two come from the VCS stamp or
+        are empty for a build without them), the Go runtime, process start and
+        uptime, the simulate flag, the developer-token signing mode, the job
+        workers and queue, the process-wide pool sizes, the external tools, and
+        the free space of download.downloads_dir and download.temp_dir. It never
+        returns a secret: signing_mode says whether the signing keys are
+        configured, not which.
+      operationId: getSystem
+      responses:
+        '200':
+          description: The system snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemInfo'
+  /api/v1/stats:
+    get:
+      tags: [System]
+      summary: Download activity statistics
+      description: >-
+        Totals and the codec mix over every retained job, plus a per-day series
+        and hook outcomes for the last `days` UTC calendar days, today included.
+        Only jobs that still exist count: deleting a job removes its items and
+        events. Results are cached for 30 seconds per `days` value;
+        generated_at says when a result was computed.
+      operationId: getStats
+      parameters:
+        - $ref: '#/components/parameters/StatsDays'
+      responses:
+        '200':
+          description: The statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stats'
+        '400':
+          description: invalid_request; days is not an integer between 1 and 90.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/StoreError'
   /api/v1/logs:
     get:
       tags: [System]
@@ -80,7 +129,13 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '503':
-          $ref: '#/components/responses/FeatureUnavailable'
+          description: >-
+            feature_unavailable; logging.buffer_size is 0, so no log history is
+            retained, or the log buffer is not wired into this process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/logs/stream:
     get:
       tags: [System]
@@ -117,7 +172,13 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '503':
-          $ref: '#/components/responses/FeatureUnavailable'
+          description: >-
+            feature_unavailable; logging.buffer_size is 0, so no log history is
+            retained, or the log buffer is not wired into this process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/config:
     get:
       tags: [System]
@@ -1010,6 +1071,11 @@ components:
       in: query
       description: Maximum number of entries to return or replay; default 200 for queries and 500 for SSE.
       schema: {type: integer, minimum: 1, maximum: 1000}
+    StatsDays:
+      name: days
+      in: query
+      description: Number of UTC calendar days in the daily series and hook window, ending today; default 14.
+      schema: {type: integer, minimum: 1, maximum: 90, default: 14}
   responses:
     BadRequest:
       description: invalid_request or invalid_json; invalid request parameters or body.
@@ -1187,6 +1253,245 @@ components:
           enum: [ok, degraded]
         database_error:
           type: string
+    SystemInfo:
+      type: object
+      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, signing_mode, motion_artwork_enabled, jobs, pools, tools, storage]
+      properties:
+        version:
+          type: string
+          description: Release tag the binary was built from; dev for a build without -ldflags.
+        commit:
+          type: string
+          description: Abbreviated commit hash; empty when unknown.
+        build_date:
+          type: string
+          description: RFC 3339 build time; without -ldflags the commit time from the VCS stamp, or empty.
+        go_version:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+          description: When this process started.
+        uptime_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+        simulate:
+          type: boolean
+          description: simulate.enabled; jobs simulate transfer, decryption and file writes.
+        signing_mode:
+          type: string
+          enum: [local, legacy]
+          description: >-
+            local when the catalog.apple_music_* developer-token signing keys are
+            set (GET /developer-token works); legacy when the backend scrapes the
+            web-player token.
+        motion_artwork_enabled:
+          type: boolean
+          description: catalog.motion_artwork_enabled.
+        jobs:
+          type: object
+          required: [workers, active, queue_depth, queue_capacity, recovery_backlog]
+          properties:
+            workers:
+              type: integer
+              description: Worker count, fixed at startup by download.max_running_jobs.
+            active:
+              type: integer
+              description: Jobs being processed now.
+            queue_depth:
+              type: integer
+              description: Admitted jobs waiting for a worker.
+            queue_capacity:
+              type: integer
+              description: Admission queue size; a submission that finds it full is queue_full.
+            recovery_backlog:
+              type: integer
+              description: Jobs recovered at startup still waiting for a worker; unbounded and served first.
+        pools:
+          type: object
+          required: [downloads, decrypts, wrapper_requests]
+          description: Process-wide pool sizes (download.max_parallel_*), fixed at startup.
+          properties:
+            downloads:
+              type: integer
+            decrypts:
+              type: integer
+            wrapper_requests:
+              type: integer
+        tools:
+          type: array
+          description: External commands the pipeline runs (ffmpeg), looked up on PATH.
+          items:
+            type: object
+            required: [name, available]
+            properties:
+              name:
+                type: string
+              available:
+                type: boolean
+              path:
+                type: string
+                description: Resolved executable path when available.
+              error:
+                type: string
+                description: Why the lookup failed.
+        storage:
+          type: array
+          description: >-
+            Free space of downloads_dir and temp_dir, in that order. Either both
+            byte counts or error is present; error is set when the directory
+            cannot be inspected (for example it does not exist) or the platform
+            has no statfs.
+          items:
+            type: object
+            required: [name, path]
+            properties:
+              name:
+                type: string
+                enum: [downloads_dir, temp_dir]
+              path:
+                type: string
+                description: The configured path.
+              free_bytes:
+                type: integer
+                format: int64
+                minimum: 0
+                description: Bytes available to the backend's user.
+              total_bytes:
+                type: integer
+                format: int64
+                minimum: 0
+              error:
+                type: string
+      example:
+        version: v2.0.0
+        commit: a6a6b46
+        build_date: '2026-10-28T12:00:00Z'
+        go_version: go1.26.5
+        os: linux
+        arch: amd64
+        started_at: '2026-10-28T12:00:05Z'
+        uptime_seconds: 3600
+        simulate: false
+        signing_mode: legacy
+        motion_artwork_enabled: true
+        jobs: {workers: 3, active: 1, queue_depth: 0, queue_capacity: 256, recovery_backlog: 0}
+        pools: {downloads: 16, decrypts: 32, wrapper_requests: 24}
+        tools:
+          - {name: ffmpeg, available: true, path: /usr/bin/ffmpeg}
+        storage:
+          - {name: downloads_dir, path: data/downloads, free_bytes: 512000000000, total_bytes: 1000000000000}
+          - {name: temp_dir, path: data/tmp, error: 'statfs data/tmp: no such file or directory'}
+    Stats:
+      type: object
+      required: [generated_at, days, totals, daily, codecs, hooks]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+          description: When this result was computed; a cached result keeps its time.
+        days:
+          type: integer
+          minimum: 1
+          maximum: 90
+        totals:
+          type: object
+          description: Every retained job and its items, not only the window.
+          required: [jobs, tracks_completed, tracks_skipped, tracks_failed, bytes_written, duration_ms]
+          properties:
+            jobs:
+              type: integer
+            tracks_completed:
+              type: integer
+              description: Items with status completed (written by this backend).
+            tracks_skipped:
+              type: integer
+              description: Items with status skipped_existing (already on disk).
+            tracks_failed:
+              type: integer
+            bytes_written:
+              type: integer
+              format: int64
+              description: Sum of file_size over completed items, in bytes.
+            duration_ms:
+              type: integer
+              format: int64
+              description: Sum of the playback duration of completed items, in milliseconds.
+        daily:
+          type: array
+          description: >-
+            Exactly `days` entries, one per UTC calendar day, oldest first, ending
+            today; a day without activity has zeros. A track counts on the day of
+            its last item_completed event; a job counts once per job_finished or
+            job_failed event.
+          items:
+            type: object
+            required: [date, tracks_completed, bytes_written, jobs_completed, jobs_failed]
+            properties:
+              date:
+                type: string
+                format: date
+              tracks_completed:
+                type: integer
+              bytes_written:
+                type: integer
+                format: int64
+              jobs_completed:
+                type: integer
+              jobs_failed:
+                type: integer
+        codecs:
+          type: array
+          description: Completed items of every retained job, grouped by codec, bit depth and sample rate; most tracks first.
+          items:
+            type: object
+            required: [codec, bit_depth, sample_rate, tracks]
+            properties:
+              codec:
+                type: string
+              bit_depth:
+                type: integer
+              sample_rate:
+                type: integer
+              tracks:
+                type: integer
+        hooks:
+          type: array
+          description: >-
+            Outcomes recorded inside the window per hook name (hook_succeeded and
+            hook_failed events), sorted by name. A hook with no outcome in the
+            window is absent.
+          items:
+            type: object
+            required: [name, succeeded, failed]
+            properties:
+              name:
+                type: string
+              succeeded:
+                type: integer
+              failed:
+                type: integer
+              last_failed_at:
+                type: string
+                format: date-time
+                description: The latest failure inside the window; absent when there was none.
+      example:
+        generated_at: '2026-10-28T13:00:00Z'
+        days: 2
+        totals: {jobs: 12, tracks_completed: 210, tracks_skipped: 4, tracks_failed: 1, bytes_written: 9876543210, duration_ms: 52000000}
+        daily:
+          - {date: '2026-10-27', tracks_completed: 0, bytes_written: 0, jobs_completed: 0, jobs_failed: 0}
+          - {date: '2026-10-28', tracks_completed: 21, bytes_written: 987654321, jobs_completed: 1, jobs_failed: 0}
+        codecs:
+          - {codec: alac, bit_depth: 24, sample_rate: 96000, tracks: 120}
+          - {codec: alac, bit_depth: 16, sample_rate: 44100, tracks: 90}
+        hooks:
+          - {name: notify, succeeded: 10, failed: 1, last_failed_at: '2026-10-28T09:15:00Z'}
     HooksResponse:
       type: object
       additionalProperties: false

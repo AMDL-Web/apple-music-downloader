@@ -2,14 +2,14 @@
      width="1200" height="480" viewBox="0 0 1200 480"
      role="img" aria-labelledby="archTitle archDesc">
   <title id="archTitle">Where AMDL Backend sits</title>
-  <desc id="archDesc">Web and iOS clients call the backend over REST, SSE and WebSocket. The backend keeps a job queue in SQLite and runs the download pipeline, writing finished files to disk. It requires wrapper-manager over gRPC for device manifests, licenses and lyrics, and reads Apple Music over HTTPS from two hosts: api.music.apple.com for catalog metadata and amp-api.music.apple.com, which alone serves enhancedHls.</desc>
+  <desc id="archDesc">Web and iOS clients call the backend over REST and Server-Sent Events. The backend keeps a job queue in SQLite and runs the download pipeline, writing finished files to disk. It requires wrapper-manager over gRPC for device manifests, licenses and lyrics, and reads Apple Music over HTTPS from two hosts: api.music.apple.com for catalog metadata and amp-api.music.apple.com, which alone serves enhancedHls.</desc>
 
   <rect width="1200" height="480" rx="24" fill="#0A0C0E"/>
   <rect x="0.75" y="0.75" width="1198.5" height="478.5" rx="23.25" fill="none" stroke="#1B2127" stroke-width="1.5"/>
 
   <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#79838D" letter-spacing="2">
     <text x="56" y="84">CLIENTS</text>
-    <text x="392" y="84">REST + SSE + WEBSOCKET  ·  /api/v1</text>
+    <text x="392" y="84">REST + SSE  ·  /api/v1</text>
     <text x="868" y="84">YOUR DISK</text>
   </g>
 
@@ -33,7 +33,7 @@
   <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#AEB7C0">
     <text x="420" y="180">job queue · SQLite store</text>
     <text x="420" y="206">download pipeline · ffmpeg</text>
-    <text x="420" y="232">SSE/WS hub · hooks · sync</text>
+    <text x="420" y="232">SSE streams · hooks · sync</text>
   </g>
 
   <path d="M808 164 H 858" stroke="#3A434C" stroke-width="2" fill="none"/>

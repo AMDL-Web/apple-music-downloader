@@ -16,7 +16,7 @@
 **丢一条 Apple Music 链接进去。它解析出曲目，取回加密的 Enhanced HLS 媒体，解密、重封装、
 打标签，把成品文件写到你自己的磁盘上——每一步都实时推送出来。**
 
-一个 Go 二进制、一个 SQLite 文件，`/api/v1` 上的 REST + SSE + WebSocket 接口，以及 AMDL
+一个 Go 二进制、一个 SQLite 文件，`/api/v1` 上的 REST + Server-Sent Events 接口，以及 AMDL
 网页端与 iOS 端所依据的 OpenAPI 3.1 规范。支持单曲、专辑、歌单、艺人和电台。
 
 ---
@@ -66,7 +66,7 @@ data/downloads/albums/<艺人>/<专辑>/01. Song.m4a   ← ALAC，封面与歌�
 
 <p align="center">
   <img src="./assets/readme/architecture.svg" width="100%"
-       alt="网页端与 iOS 端通过 REST、SSE 和 WebSocket 调用后端；后端把任务队列放在 SQLite 里，跑下载流水线并把文件写到磁盘；它依赖 gRPC 上的 wrapper-manager，并从两个不同的 Apple 主机读取数据">
+       alt="网页端与 iOS 端通过 REST 和 Server-Sent Events 调用后端；后端把任务队列放在 SQLite 里，跑下载流水线并把文件写到磁盘；它依赖 gRPC 上的 wrapper-manager，并从两个不同的 Apple 主机读取数据">
 </p>
 
 **`wrapper-manager` 不是可选项。** 它持有 Apple Music 账号登录态，通过 gRPC 提供设备清单、
@@ -157,7 +157,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |
 | **资料库同步** | `GET /library-sync` · `POST /library-sync/reset` |
-| **系统** | `GET /health` · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
+| **系统** | `GET /health` · `GET /system` 构建信息、容量与剩余空间 · `GET /stats` 下载统计 · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
 
 提交接口接受 `urls`，以及一个只对该批任务生效的 `overrides` 对象——编码优先级、内存模式、
 路径模板、歌词选项、`force_overwrite`、hooks 允许列表，以及电台和私人歌单所需的
@@ -215,7 +215,7 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 
 | | |
 | --- | --- |
-| [docs/api.md](docs/api.md) | 全部端点、curl 示例、任务 overrides、SSE/WS 语义 |
+| [docs/api.md](docs/api.md) | 全部端点、curl 示例、任务 overrides、错误码、SSE 事件流语义 |
 | [docs/configuration.md](docs/configuration.md) | 配置文件、默认值、环境变量覆盖、运行期与启动期字段、重新加载 |
 | [docs/deployment.md](docs/deployment.md) | Docker、挂载、`PUID`/`PGID`、配置播种、发版与镜像 tag |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | 重试、编码回退、并发池、内存模式、歌词 |

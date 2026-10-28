@@ -26,7 +26,7 @@ const eventItemProgress = domain.EventItemProgress
 // user (slow clients get dropped), amdl-ios-gateway turns it into APNs Live
 // Activity traffic, and the web frontend re-renders the job list. So the fix is
 // a time floor, applied at the point of persistence so that every consumer,
-// live or replaying from last_event_id, sees the identical reduced stream.
+// live or resuming from an event cursor, sees the identical reduced stream.
 //
 // What is rate-limited is only meter movement *within* one state. Three rules
 // keep that from losing anything:
@@ -39,8 +39,8 @@ const eventItemProgress = domain.EventItemProgress
 //     any non-progress event, which puts the final meter value on the wire
 //     immediately before item_completed / item_failed / item_skipped.
 //   - Because the flush happens *before* the superseding event, event ids stay
-//     monotonic and in causal order, and a client replaying from last_event_id
-//     reads exactly what a live client saw.
+//     monotonic and in causal order, and a client resuming from an event
+//     cursor reads exactly what a live client saw.
 //
 // Not safe for concurrent use, and deliberately so: one gate belongs to one
 // item, and an item is driven start to finish by a single goroutine (the media

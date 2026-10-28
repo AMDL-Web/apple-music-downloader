@@ -14,9 +14,17 @@ COPY . .
 
 ARG TARGETOS
 ARG TARGETARCH
+# Build identity reported by GET /api/v1/system. .dockerignore keeps .git out
+# of the context, so these build args are its only source; without them the
+# image reports version dev and no commit.
+ARG VERSION=dev
+ARG COMMIT=
+ARG BUILD_DATE=
 # modernc.org/sqlite is pure Go, so CGO_ENABLED=0 produces a static binary.
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w" -o /out/amdl-api ./cmd/amdl-api
+    go build -trimpath \
+      -ldflags="-s -w -X amdl/internal/buildinfo.Version=${VERSION} -X amdl/internal/buildinfo.Commit=${COMMIT} -X amdl/internal/buildinfo.BuildDate=${BUILD_DATE}" \
+      -o /out/amdl-api ./cmd/amdl-api
 
 # ---- Runtime stage -----------------------------------------------------
 FROM alpine:3.24

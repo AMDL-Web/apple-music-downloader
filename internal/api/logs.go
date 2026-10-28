@@ -20,7 +20,7 @@ func (s *Server) listLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.logStore == nil {
-		writeFeatureUnavailable(w, "the log buffer")
+		s.writeLogsUnavailable(w)
 		return
 	}
 	page := s.logStore.List(filter)
@@ -39,7 +39,7 @@ func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.logStore == nil {
-		writeFeatureUnavailable(w, "the log buffer")
+		s.writeLogsUnavailable(w)
 		return
 	}
 	backlog, live, unsubscribe := s.logStore.Subscribe(filter)
@@ -51,6 +51,15 @@ func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 	keepalive := time.NewTicker(sseKeepaliveInterval)
 	defer keepalive.Stop()
 	runLogStream(r.Context(), stream, backlog, live, keepalive.C)
+}
+
+// writeLogsUnavailable answers a log route that has no log history to serve.
+func (s *Server) writeLogsUnavailable(w http.ResponseWriter) {
+	if s.logsOff {
+		writeError(w, http.StatusServiceUnavailable, CodeFeatureUnavailable, "in-memory log retention is off (logging.buffer_size: 0)")
+		return
+	}
+	writeFeatureUnavailable(w, "the log buffer")
 }
 
 // runLogStream sends backlog, then each record published on live, plus a

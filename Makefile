@@ -12,6 +12,14 @@ GOVULNCHECK_VERSION ?= v1.6.0
 GO_DIRS = $(shell $(GO) list -e -f '{{.Dir}}' ./... | sed 's|^$(CURDIR)/||')
 NODE_TESTS = $(wildcard .github/scripts/*.test.mjs scripts/*.test.mjs internal/console/jstest/*.test.mjs)
 
+# Build identity stamped into internal/buildinfo (GET /api/v1/system). Each
+# falls back quietly when git or the .git directory is missing, such as in a
+# source tarball: version reads dev and the commit stays empty.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS = -X amdl/internal/buildinfo.Version=$(VERSION) -X amdl/internal/buildinfo.Commit=$(COMMIT) -X amdl/internal/buildinfo.BuildDate=$(BUILD_DATE)
+
 DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
@@ -21,11 +29,12 @@ DOCKER_IMAGE ?= amdl-backend:dev
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
 
-build: ## Compile every package
+build: ## Compile every package, then the ./amdl-api binary with the version stamped from git
 	$(GO) build ./...
+	$(GO) build -ldflags "$(LDFLAGS)" -o amdl-api ./cmd/amdl-api
 
 run: ## Run the API with configs/config.yaml (needs wrapper-manager for real downloads)
-	$(GO) run ./cmd/amdl-api
+	$(GO) run -ldflags "$(LDFLAGS)" ./cmd/amdl-api
 
 dev: ## Run the API in simulate mode on 127.0.0.1:18080 with a throwaway config and data under data/dev/
 	@mkdir -p $(DEV_DIR)
@@ -41,7 +50,7 @@ dev: ## Run the API in simulate mode on 127.0.0.1:18080 with a throwaway config 
 	AMDL_DOWNLOAD_TEMP_DIR=$(DEV_DIR)/tmp \
 	AMDL_LOGGING_FILE_ENABLED=false \
 	AMDL_CATALOG_LANGUAGE=en-US \
-	$(GO) run ./cmd/amdl-api
+	$(GO) run -ldflags "$(LDFLAGS)" ./cmd/amdl-api
 
 fmt: ## Rewrite Go files with gofmt
 	@test -n "$(strip $(GO_DIRS))" || { echo "fmt: go list found no packages" >&2; exit 1; }

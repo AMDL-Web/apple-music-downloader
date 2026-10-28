@@ -1,9 +1,10 @@
 // Server-Sent Events over fetch, with a resumable cursor, backoff, an idle
 // watchdog and a pause while the tab is hidden. fetch instead of EventSource
 // because the client must see the status code: 204 ends a per-job stream,
-// 404 means the job is gone, 400 is a bad filter, and only network or 5xx
-// failures are worth a retry. Pure apart from the injected fetch, timers and
-// document, so node:test drives it with fakes.
+// 404 means the job is gone, 400 is a bad filter, a 503 feature_unavailable
+// means the route is off in this backend (log retention disabled), and only
+// network or other 5xx failures are worth a retry. Pure apart from the
+// injected fetch, timers and document, so node:test drives it with fakes.
 
 import { SSEParser } from './sse.js';
 
@@ -22,6 +23,20 @@ export function backoffDelay(attempt, random = Math.random) {
 
 /** Statuses after which reconnecting cannot succeed, so the stream ends. */
 const ENDING_STATUSES = new Set([204, 400, 404, 405, 410, 422]);
+
+/**
+ * Whether a response is the backend saying the route is switched off in this
+ * process: 503 with the error code feature_unavailable. Any other 503 (a proxy
+ * during a restart, a full queue) is transient and retried.
+ */
+export function isFeatureUnavailable(status, body) {
+  return status === 503 && Boolean(body && body.error && body.error.code === 'feature_unavailable');
+}
+
+/** Whether a non-200 response ends the stream instead of being retried. */
+export function endsStream(status, body) {
+  return ENDING_STATUSES.has(status) || isFeatureUnavailable(status, body);
+}
 
 /** Whether `next` is a cursor past `current`. Cursors are decimal event ids or log sequences. */
 export function isNewerCursor(current, next) {
@@ -52,7 +67,7 @@ const defaultEnv = () => ({
  *
  * States: connecting, live, reconnecting, offline (failing for longer than
  * offlineAfterMs, still retrying), paused (tab hidden), ended (an ending
- * status; see onEnd), stopped.
+ * status, see endsStream; onEnd gets it), stopped.
  */
 export class StreamClient {
   /**
@@ -161,7 +176,7 @@ export class StreamClient {
       await this.read(res, gen);
       return;
     }
-    if (ENDING_STATUSES.has(res.status)) {
+    if (ENDING_STATUSES.has(res.status) || res.status === 503) {
       let body = null;
       try {
         body = await res.json();
@@ -169,11 +184,13 @@ export class StreamClient {
         body = null;
       }
       if (gen !== this.generation) return;
-      this.generation++;
-      this.controller = null;
-      this.setState('ended');
-      this.onEnd({ status: res.status, body });
-      return;
+      if (endsStream(res.status, body)) {
+        this.generation++;
+        this.controller = null;
+        this.setState('ended');
+        this.onEnd({ status: res.status, body });
+        return;
+      }
     }
     this.fail(false);
   }

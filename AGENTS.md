@@ -1,7 +1,7 @@
 # amdl-backend
 
 Go service that resolves Apple Music links and runs the download → decrypt →
-remux → tag pipeline. REST + SSE + WebSocket on `/api/v1`, SQLite store. It owns
+remux → tag pipeline. REST + SSE on `/api/v1`, SQLite store. It owns
 `internal/api/openapi.yaml`, which the iOS app and the web frontend mirror by hand
 (see [Related repositories](#related-repositories)).
 
