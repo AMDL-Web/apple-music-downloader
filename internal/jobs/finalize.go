@@ -48,6 +48,10 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 		m.mu.Unlock()
 		return nil
 	}
+	// From here on the cancel is decided, and the caller's context (an HTTP
+	// request) must not stop it half-way: items written cancelled with the job
+	// row still queued would be reset and downloaded by the next worker.
+	ctx = context.WithoutCancel(ctx)
 	// No worker holds the job, so nothing else ends its items. A recovered job
 	// can carry rows a previous process left mid-download; end them before the
 	// terminal write, then re-read the job so the counters in its row snapshot,
@@ -211,13 +215,17 @@ func (m *Manager) run(parent context.Context, jobID string) {
 		// Interrupted, not finished: the row stays running with its items,
 		// checkpoints and media-user-token, and no terminal event or hook
 		// fires, so RecoverUnfinished resumes it on the next start. A panic is
-		// excluded because recovery would only run into it again.
+		// excluded because recovery would only run into it again. A nil error
+		// counts as interrupted too: ProcessJob need not surface ctx errors, so
+		// nil does not prove every item ended, and a resumed job that had
+		// finished only resolves again and skips its finished items.
 		jobLogger.Info("job interrupted by shutdown; it resumes on the next start", "duration_ms", time.Since(started).Milliseconds())
 		return
 	}
 	// The reload carries the item counters the terminal decision and the
 	// terminal event payload use, derived by the store from job_items.
-	if latest, loadErr := m.store.GetJob(context.Background(), job.ID); loadErr == nil {
+	latest, loadErr := m.store.GetJob(context.Background(), job.ID)
+	if loadErr == nil {
 		job = latest
 	} else {
 		jobLogger.Error("reload job before finalize", "error", loadErr)
@@ -242,6 +250,13 @@ func (m *Manager) run(parent context.Context, jobID string) {
 		job.Status = domain.JobFailed
 		job.Error = err.Error()
 		m.finalizeLogged(job, domain.EventJobFailed, err.Error())
+	case loadErr != nil:
+		// Without the reload the counters are the claim-time ones, so success
+		// cannot be judged. Failing keeps Retry available, and a retry skips the
+		// items that did finish.
+		job.Status = domain.JobFailed
+		job.Error = fmt.Sprintf("read final item states: %v", loadErr)
+		m.finalizeLogged(job, domain.EventJobFailed, job.Error)
 	default:
 		if job.FailedItems > 0 {
 			job.Status = domain.JobFailed

@@ -169,6 +169,9 @@ func (d *Dispatcher) Dispatch(event string, job domain.Job, items []domain.JobIt
 	d.mu.Lock()
 	if d.closed {
 		d.mu.Unlock()
+		// Only a worker that outlived its shutdown step gets here; the store
+		// may already be closed, so the log is the only record.
+		d.logger.Warn("hooks not run: the dispatcher has shut down", "job_id", job.ID, "hook_event", event, "hooks", len(matched))
 		return
 	}
 	d.wg.Add(len(matched))

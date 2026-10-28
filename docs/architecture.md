@@ -39,7 +39,9 @@ SIGHUP reloads the config file and applies its logging level (same as
 Every long-lived component has the same shape: a constructor that does no I/O, a
 `Start` that owns its goroutines or a blocking `Run(ctx)` that the caller runs on its
 own goroutine, and a `Shutdown(ctx)` or `Wait(ctx)` (or `Run` itself) that returns only
-after they exit. Nothing outlives `Store.Close`.
+after they exit or its deadline passes. Nothing outlives `Store.Close` unless its shutdown
+step timed out, which is logged as "gave up waiting during shutdown"; a job such a worker
+was running stays `running` and resumes on the next start.
 
 ## 2. Packages
 

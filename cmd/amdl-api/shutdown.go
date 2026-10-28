@@ -55,7 +55,8 @@ func (t shutdownTimeouts) total() time.Duration {
 // shutdownSteps stops the running components in the order of
 // docs/architecture.md section 1. The store, the wrapper client and the log
 // system are closed by run's defers after it returns, so nothing that may
-// still use them outlives them.
+// still use them outlives them, unless a step gave up waiting (logged), and
+// then its stragglers meet closed resources.
 type shutdownSteps struct {
 	logger   *slog.Logger
 	timeouts shutdownTimeouts

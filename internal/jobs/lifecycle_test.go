@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -246,6 +247,90 @@ func TestProcessorPanicFailsJobAndWorkerSurvives(t *testing.T) {
 	}
 	if err := manager.Retry(ctx, panicked.ID); err != nil {
 		t.Fatalf("Retry of the panicked job: %v, want it retryable", err)
+	}
+}
+
+// cutContext reports itself cancelled from its n-th Done call on, so a test can
+// end a caller's context at every point inside a store sequence.
+type cutContext struct {
+	context.Context
+	mu   sync.Mutex
+	left int
+	done chan struct{}
+}
+
+func newCutContext(n int) *cutContext {
+	return &cutContext{Context: context.Background(), left: n, done: make(chan struct{})}
+}
+
+func (c *cutContext) Done() <-chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.left > 0 {
+		c.left--
+		if c.left == 0 {
+			close(c.done)
+		}
+	}
+	return c.done
+}
+
+func (c *cutContext) Err() error {
+	select {
+	case <-c.done:
+		return context.Canceled
+	default:
+		return nil
+	}
+}
+
+// A queued cancel whose caller goes away mid-way (a client disconnect) either
+// changes nothing or completes: never items cancelled under a job that is
+// still queued, which the next worker would reset and download in full.
+func TestCancelQueuedJobIsAllOrNothingWhenTheCallerGoesAway(t *testing.T) {
+	for n := 1; n <= 60; n++ {
+		store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := context.Background()
+		now := time.Now().UTC()
+		job := domain.Job{ID: "job-q", Input: "album|us|1", Type: "album", Storefront: "us", CanonicalKey: "album:us:1",
+			Status: domain.JobQueued, TotalItems: 2, CreatedAt: now, UpdatedAt: now}
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+		for i, status := range []domain.ItemStatus{domain.ItemQueued, domain.ItemDownloading} {
+			id := fmt.Sprintf("item-%d", i)
+			if err := store.CreateItem(ctx, domain.JobItem{ID: id, JobID: job.ID, AdamID: id, Kind: "song", Index: i + 1, Status: status, CreatedAt: now, UpdatedAt: now}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		manager := NewManager(store, events.NewHub(), &neverRunProcessor{t: t}, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+		cancelErr := manager.Cancel(newCutContext(n), job.ID)
+
+		got, err := store.GetJob(ctx, job.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		items, err := store.ListItems(ctx, job.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancelled := 0
+		for _, item := range items {
+			if item.Status == domain.ItemCancelled {
+				cancelled++
+			}
+		}
+		switch {
+		case got.Status == domain.JobCancelled && cancelled == 2 && cancelErr == nil:
+		case got.Status == domain.JobQueued && cancelled == 0 && cancelErr != nil:
+		default:
+			t.Fatalf("cut at Done call %d: job %s with %d of 2 items cancelled, Cancel error %v; want all or nothing", n, got.Status, cancelled, cancelErr)
+		}
+		store.Close()
 	}
 }
 
