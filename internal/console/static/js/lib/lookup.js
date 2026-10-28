@@ -25,6 +25,9 @@ export const PREVIEW_KINDS = ['album', 'song', 'playlist', 'artist', 'station'];
  *   {state: 'error', error} | {state: 'queued'} (wanted, waiting for a
  *   slot) | {state: 'idle'} (not wanted).
  * - retry(url): forgets a cached answer so want() fetches it again.
+ * - forget(urls): aborts these lookups in flight and drops their cached
+ *   answers, then fetches the wanted ones again (the media-user-token a
+ *   private playlist is read with changed).
  * - dispose(): aborts everything in flight.
  *
  * Answers (errors included) are cached per URL in `cache`, which the caller
@@ -90,6 +93,18 @@ export function createLookupQueue({ lookup, max = LOOKUP_CONCURRENCY, cache = ne
     },
     retry(url) {
       cache.delete(url);
+      pump();
+      onChange();
+    },
+    forget(urls) {
+      for (const url of urls || []) {
+        const ctrl = inflight.get(url);
+        if (ctrl) {
+          ctrl.abort();
+          inflight.delete(url);
+        }
+        cache.delete(url);
+      }
       pump();
       onChange();
     },

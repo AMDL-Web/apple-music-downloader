@@ -83,6 +83,36 @@ test('the cache keeps the newest LOOKUP_CACHE_MAX answers but never evicts a wan
   assert.equal(calls, LOOKUP_CACHE_MAX + 5, 'nothing was fetched twice');
 });
 
+test('forget aborts in-flight lookups and drops cached answers, so a new token reads them again', async () => {
+  const f = fakeLookup();
+  const cache = new Map();
+  const q = createLookupQueue({ lookup: f.lookup, max: 4, cache });
+  q.want(['album', 'mine', 'theirs']);
+  await tick();
+  f.calls[0].resolve({ title: 'Album' });
+  f.calls[1].resolve({ title: 'Mine, read with the old token' });
+  await tick();
+  await tick();
+  assert.equal(q.status('mine').state, 'ready');
+  assert.equal(q.status('theirs').state, 'loading');
+  q.forget(['mine', 'theirs']);
+  await tick();
+  assert.equal(f.calls[2].signal.aborted, true, 'the lookup with the old token is cancelled');
+  assert.deepEqual(f.calls.slice(3).map((c) => c.url), ['mine', 'theirs'], 'both are looked up again');
+  assert.equal(q.status('mine').state, 'loading', 'the old answer is gone');
+  assert.deepEqual(q.status('album'), { state: 'ready', data: { title: 'Album' } }, 'other answers stay');
+  // The aborted call settling late does not land in the cache.
+  f.calls[2].resolve({ title: 'late' });
+  f.calls[3].resolve({ title: 'Mine' });
+  await tick();
+  await tick();
+  assert.deepEqual(q.status('mine'), { state: 'ready', data: { title: 'Mine' } });
+  assert.equal(q.status('theirs').state, 'loading');
+  q.forget(['not-wanted']);
+  await tick();
+  assert.equal(f.calls.length, 5, 'forgetting an unknown link fetches nothing');
+});
+
 test('dispose aborts everything and stops notifying', async () => {
   const f = fakeLookup();
   let changes = 0;

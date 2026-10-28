@@ -13,6 +13,8 @@ import {
   submitSummary,
   classifySubmitError,
   bookmarklet,
+  needsMediaUserToken,
+  requestOverrides,
 } from '../static/js/lib/submit.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
@@ -67,11 +69,36 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
     ['not_found', true],
     "Apple's 404 keeps the link out of the submit",
   );
-  // A private playlist answers 404 without the token the preview never sends.
+  // A private playlist answers 404 without a token, and with a wrong one.
   assert.equal(linkIssue(entry(PRIVATE), missing).code, 'needs_token');
   const typed = linkIssue(entry(PRIVATE), missing, { hasToken: true });
   assert.deepEqual([typed.code, typed.blocking], ['preview_failed', false]);
-  assert.match(typed.message, /private playlists are read with the token/);
+  assert.equal(typed.message, 'No preview: Apple Music found no playlist here with this media-user-token');
+  assert.equal(linkIssue(entry(PRIVATE), upstream, { hasToken: true }).message, 'No preview: wrapper: dial failed');
+});
+
+test('needsMediaUserToken: stations, private playlists and previews that say so', () => {
+  const none = () => null;
+  assert.equal(needsMediaUserToken([], none), false);
+  assert.equal(needsMediaUserToken([IGOR, FOLKLORE, 'https://example.com/x'], none), false);
+  assert.equal(needsMediaUserToken([IGOR, STATION], none), true);
+  assert.equal(needsMediaUserToken([PRIVATE], none), true);
+  assert.equal(needsMediaUserToken(['https://music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb'], none), false, 'a catalog playlist needs none');
+  const says = (url) => (url === FOLKLORE ? { state: 'ready', data: { needs_media_user_token: true } } : { state: 'idle' });
+  assert.equal(needsMediaUserToken([IGOR, FOLKLORE], says), true);
+  assert.equal(needsMediaUserToken([IGOR, FOLKLORE], (url) => ({ state: 'error', error: { status: 502 } })), false);
+});
+
+test('requestOverrides sends the typed token only with links that need it', () => {
+  const opts = { lyrics_format: 'ttml' };
+  const none = () => null;
+  assert.deepEqual(requestOverrides(opts, [IGOR, STATION], ' tok ', none), { lyrics_format: 'ttml', media_user_token: 'tok' });
+  assert.deepEqual(requestOverrides(opts, [PRIVATE], 'tok', none), { lyrics_format: 'ttml', media_user_token: 'tok' });
+  // The station was removed or sent in another request: the token stays home.
+  assert.equal(requestOverrides(opts, [IGOR, FOLKLORE], 'tok', none), opts);
+  assert.equal(requestOverrides(opts, [STATION], '   ', none), opts, 'an empty field leaves the server token in charge');
+  assert.equal(requestOverrides(opts, [STATION], undefined, none), opts);
+  assert.equal(opts.media_user_token, undefined, 'the options object is not changed');
 });
 
 test('submittable keeps links without a blocking issue, in order', () => {

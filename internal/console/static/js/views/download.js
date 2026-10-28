@@ -9,9 +9,21 @@
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
 import { createDownload, getConfig, getDownload, getHooks, lookupLink } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
-import { scanLinks, removeLink } from '../lib/links.js';
+import { scanLinks, removeLink, parseLink } from '../lib/links.js';
 import { createLookupQueue, PREVIEW_KINDS, PREVIEW_LIMIT } from '../lib/lookup.js';
-import { linkIssue, submittable, chunk, pairResults, keptAfterSubmit, resultRows, applyFeedToResults, submitSummary, classifySubmitError } from '../lib/submit.js';
+import {
+  linkIssue,
+  submittable,
+  chunk,
+  pairResults,
+  keptAfterSubmit,
+  resultRows,
+  applyFeedToResults,
+  submitSummary,
+  classifySubmitError,
+  needsMediaUserToken,
+  requestOverrides,
+} from '../lib/submit.js';
 import { OPTIONS_KEY, optionDefaults, buildOverrides, applyOverrides, sanitizeOverrides, parseStoredOptions, describeOverrides } from '../lib/overrides.js';
 import { readPref, writePref } from '../lib/prefs.js';
 import { useApp, Card, Button, Notice } from '../ui/components.js';
@@ -23,6 +35,11 @@ import { ResultsCard, BookmarkletCard } from './download-results.js';
 
 // Previews outlive the page, so coming back does not look links up again.
 const LOOKUPS = new Map();
+
+const isPrivate = (url) => {
+  const link = parseLink(url);
+  return Boolean(link && link.private);
+};
 
 const storage = () => {
   try {
@@ -159,20 +176,45 @@ export function DownloadPage({ route }) {
     setRefusal('');
   };
 
-  // Previews: the first PREVIEW_LIMIT previewable links, 4 at a time.
+  // Previews: the first PREVIEW_LIMIT previewable links, 4 at a time. A
+  // private playlist is read with the typed token once it settles; answers
+  // read with it leave the shared cache with the page, whose field starts
+  // empty next time.
+  const settledToken = useDebounced(token.trim(), 350);
+  const tokenRef = useRef(settledToken);
+  tokenRef.current = settledToken;
+  const readWithToken = useRef(new Set());
   const [, setTick] = useState(0);
   const queue = useRef(null);
   if (!queue.current) {
     queue.current = createLookupQueue({
-      lookup: (url, signal) => lookupLink(url, { signal }),
+      lookup: (url, signal) => {
+        const t = isPrivate(url) ? tokenRef.current : '';
+        if (t) readWithToken.current.add(url);
+        else readWithToken.current.delete(url);
+        return lookupLink(url, { signal, mediaUserToken: t });
+      },
       cache: LOOKUPS,
       onChange: () => setTick((n) => n + 1),
     });
   }
-  useEffect(() => () => queue.current.dispose(), []);
+  useEffect(
+    () => () => {
+      queue.current.dispose();
+      for (const url of readWithToken.current) LOOKUPS.delete(url);
+    },
+    [],
+  );
   const previewable = (list) => list.filter((e) => e.link && PREVIEW_KINDS.includes(e.link.kind));
   const wanted = useMemo(() => previewable(scanLinks(settled)).slice(0, PREVIEW_LIMIT).map((e) => e.url), [settled]);
   useEffect(() => queue.current.want(wanted), [wanted.join('\n')]);
+  // A changed token reads private playlists again.
+  const tokenSeen = useRef(settledToken);
+  useEffect(() => {
+    if (tokenSeen.current === settledToken) return;
+    tokenSeen.current = settledToken;
+    queue.current.forget([...new Set([...wanted, ...LOOKUPS.keys()])].filter(isPrivate));
+  }, [settledToken]);
   const previewSet = new Set(previewable(entries).slice(0, PREVIEW_LIMIT).map((e) => e.url));
   const skipped = Math.max(0, previewable(entries).length - PREVIEW_LIMIT);
   const statusOf = (url) => {
@@ -184,13 +226,10 @@ export function DownloadPage({ route }) {
   const issueOf = (e) => linkIssue(e, e.link && PREVIEW_KINDS.includes(e.link.kind) ? queue.current.status(e.url) : null, { hasToken });
   const sendable = submittable(entries, issueOf);
   const flagged = entries.filter((e) => issueOf(e)).length;
-  const needsToken = entries.some((e) => {
-    if (!e.link) return false;
-    const s = queue.current.status(e.url);
-    return e.link.needsToken || (s.state === 'ready' && s.data && s.data.needs_media_user_token);
-  });
+  const lookupStatus = (url) => queue.current.status(url);
+  const needsToken = needsMediaUserToken(entries.map((e) => e.url), lookupStatus);
 
-  // Submit and results.
+  // Submit and results (without the token).
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [refusal, setRefusal] = useState('');
@@ -223,13 +262,17 @@ export function DownloadPage({ route }) {
     };
   }, [app.epoch]);
 
-  /** Sends `urls` in chunks the backend accepts; returns {pairs, failure}. */
+  /**
+   * Sends `urls` in chunks the backend accepts, the typed token only with
+   * a chunk that needs it; returns {pairs, failure}.
+   */
   const send = async (urls, ov) => {
     const pairs = [];
     let fail = null;
     for (const part of chunk(urls)) {
+      const body = requestOverrides(ov, part, token, lookupStatus);
       try {
-        const resp = await createDownload(Object.keys(ov).length ? { urls: part, overrides: ov } : { urls: part });
+        const resp = await createDownload(Object.keys(body).length ? { urls: part, overrides: body } : { urls: part });
         pairs.push(...pairResults(part, resp.results));
       } catch (err) {
         const c = classifySubmitError(err);
@@ -245,11 +288,10 @@ export function DownloadPage({ route }) {
 
   const submit = async () => {
     if (busy || sendable.length === 0) return;
-    const ov = token.trim() ? { ...overrides, media_user_token: token.trim() } : overrides;
     setBusy(true);
     setFailure('');
     setRefusal('');
-    const { pairs, fail } = await send(sendable, ov);
+    const { pairs, fail } = await send(sendable, overrides);
     setBusy(false);
     if (fail) {
       if (fail.kind === 'overrides') {
@@ -262,7 +304,7 @@ export function DownloadPage({ route }) {
       return;
     }
     const rows = resultRows(pairs);
-    setResults({ rows, overrides: ov });
+    setResults({ rows, overrides });
     const summary = submitSummary(rows);
     const queued = rows.some((r) => r.view.status === 'accepted');
     app.toast({ message: queued ? `Download started: ${summary}` : summary, role: queued ? 'success' : 'warning' });

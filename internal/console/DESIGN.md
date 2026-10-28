@@ -318,8 +318,11 @@ and motion covers.
   aborted, answers are cached per tab. Links that are not Apple Music, not a
   downloadable kind, music videos, refused by the lookup (400) or unknown to
   Apple (its 404) are flagged and not sent; stations and private playlists
-  bring a media-user-token password field (sent as
-  `overrides.media_user_token`, never stored).
+  bring a media-user-token password field. The token is never stored: once
+  it has settled for 350 ms, private playlists are looked up again with it
+  (a station's preview does not use it), and a request carries it as
+  `overrides.media_user_token` only while one of its links needs it
+  (`lib/submit.js` `requestOverrides`).
   Qualities opens a sheet from `POST /quality`: a summary per quality slot,
   then each track's formats; errors show inline with the server's message.
   Options start collapsed with a line naming what differs from `GET /config`

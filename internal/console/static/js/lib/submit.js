@@ -28,9 +28,11 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
   const err = lookup && lookup.state === 'error' ? lookup.error : null;
   if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: err.message || 'The backend does not download this link' };
   // Apple answered 404 for the id: a job of this link could only fail. A
-  // private playlist reads as 404 without a token, which the preview never
-  // sends, so it is not judged by its preview.
-  if (err && !link.private && err.status === 502 && /catalog/i.test(err.message || '') && /\b404\b/.test(err.message || '')) {
+  // private playlist is read with a media-user-token (typed or the
+  // server's), and a missing or wrong token reads as 404 too, so it is not
+  // judged by its preview.
+  const notFound = Boolean(err && err.status === 502 && /catalog/i.test(err.message || '') && /\b404\b/.test(err.message || ''));
+  if (notFound && !link.private) {
     return { code: 'not_found', role: 'danger', blocking: true, message: 'Apple Music has nothing at this link', title: err.message };
   }
   const needsToken = link.needsToken || Boolean(lookup && lookup.state === 'ready' && lookup.data && lookup.data.needs_media_user_token);
@@ -43,10 +45,35 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
     };
   }
   if (err && err.code !== 'aborted') {
-    const why = link.private ? 'private playlists are read with the token when the download runs' : shortError(err.message) || 'the lookup failed';
+    const why = notFound ? 'Apple Music found no playlist here with this media-user-token' : shortError(err.message) || 'the lookup failed';
     return { code: 'preview_failed', role: 'warning', blocking: false, message: `No preview: ${why}`, title: err.message };
   }
   return null;
+}
+
+/**
+ * Whether sending `urls` needs a media-user-token: one of them is a
+ * station or a private playlist (lib/links.js needsToken), or its preview
+ * (`statusOf(url)`, a lib/lookup.js status) says so.
+ */
+export function needsMediaUserToken(urls, statusOf = () => null) {
+  return (urls || []).some((url) => {
+    const link = parseLink(url);
+    if (!link) return false;
+    if (link.needsToken) return true;
+    const s = statusOf(url);
+    return Boolean(s && s.state === 'ready' && s.data && s.data.needs_media_user_token);
+  });
+}
+
+/**
+ * The overrides for one request of `urls`: `overrides` plus the typed
+ * `token` as media_user_token, only while some of these links need it, so
+ * the token never travels with links that do not use it.
+ */
+export function requestOverrides(overrides, urls, token, statusOf) {
+  const t = typeof token === 'string' ? token.trim() : '';
+  return t && needsMediaUserToken(urls, statusOf) ? { ...overrides, media_user_token: t } : overrides;
 }
 
 /** The URLs to submit: every link without a blocking issue, in order. */
