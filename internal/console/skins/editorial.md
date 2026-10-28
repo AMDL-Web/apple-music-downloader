@@ -102,10 +102,12 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   running under the controls. Under 1024 the button is an ink square with
   the plus (base rail behavior), and under 900 the nav spreads full width
   without numbers. Search, Style and Theme read as text with an underline,
-  not boxes.
+  not boxes. The page under it spans the same width (no `--content-max`
+  cap), so the bands and the grid end under the controls at any width.
 - **Mobile** (under 640): the top bar carries the wordmark (`::before` with
   empty alt text) and the 3px rule; the bottom tab bar has a 1px ink top rule
-  and a 4px ink bar over the active tab. New is a 48px ink block (current: a
+  and a 4px ink bar over the active tab. New is a 48 x 28px ink block that
+  rises over the icon line, its label on the other labels' line (current: a
   bold label, no bar, which would run into the block); More turns ink while
   its sheet is open and takes the bar on Logs, System and Settings.
 - **Banners**: full-bleed bands under the masthead, ink by default and red for
@@ -129,8 +131,8 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   filter tabs sit on a 1px ink rule with a 4px underline for the active tab.
   From 640 to 1023 the cells take a full-width line under the cover and
   title, as in the live queue, so each cell keeps its shape.
-- **Kicker**: one line, cut with an ellipsis; under 900 it drops the start
-  time.
+- **Kicker**: one line, cut with an ellipsis; under 900, and from 1024 to
+  1279 where the lists sit in narrower columns, it drops the start time.
 - **Fields** (search, select, every text, number, path, template and secret
   input) are a rule to write on, text on the keyline; focus thickens the rule
   to 2px ink instead of drawing a box. An invalid field's rule is red; a
@@ -189,8 +191,10 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   hairlines, the current page the palette's grey band and 4px ink bar with a
   "CURRENT" kicker.
 - **Qualities sheet**: each quality slot is a fact under a 1px ink rule (20px
-  bold name, mono codec, counts); each track is a mono number, its name and
-  its formats as one line of words split by hairlines, no boxes.
+  bold name, mono codec, counts); each track is a mono number, its name, a
+  "LYRICS" kicker and its formats as one line of words split by hairlines,
+  no boxes; a wrapped line never opens with a hairline (each format carries
+  its rule and the list clips the first one of a line).
 - **New download**: on the 12-column grid from 1024, links in 7 columns and
   options in 5 (8 and 4 from 1280). Detected links: 64px covers (56 under
   640), the kind, storefront, explicit and ADM as a kicker instead of chips,
@@ -201,7 +205,10 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   not queued reads like a recent failure, a kicker in its role's color
   over the mono link. Options: groups between hairlines under ink kickers,
   the codec list ruled with mono ranks, "+ AAC" and the other codecs to add
-  as words, and the changed-value mark an ink square. The bookmarklet code
+  as words with no side padding (a wrapped line starts on the keyline), and
+  the changed-value mark an ink square. Text actions (Reset to defaults,
+  Refresh in an account head) put their label, not their box, on the
+  keyline. The bookmarklet code
   sits between two hairlines and the steps are numbered `01` … in mono.
 - **Settings**: the section list is the label column (three of twelve
   columns from 900, two from 1280), numbered `01` … in mono under the same
@@ -211,9 +218,12 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   mono key in ink-3, the control on a rule at the right; "UNSAVED" is an ink
   kicker beside an underlined Undo; errors and warnings carry the 3px red
   rule. Ordered lists and the template reference are ruled, not boxed;
-  panel and account heads are kickers over a 1px ink rule. The save bar is
-  an ink band across the page's foot (flush on the tab bar under 640), Save
-  the paper button on it and the focus ring paper.
+  panel, account and login heads are kickers over a 1px ink rule. Inline
+  code (an environment variable, a config key in a note) is the mono face
+  with no fill. The save bar is an ink band across the page's foot (flush on
+  the tab bar under 640, also at the end of the page, where the page's
+  bottom padding gives way to it), Save the paper button on it and the
+  focus ring paper.
 - **Queue selection**: the bar is a band between two ink rules over the
   list, opaque, sticking at the very top (the top bar does not stick here);
   its lower rule stands in for the list's. Checkboxes sit 12px in from the
@@ -236,8 +246,9 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
 
 - The mobile wordmark uses `content: "AMDL" / ""`; browsers without
   alternative-text support for `content` (Firefox before 128) drop it.
-- Under 900 the job kicker drops the start time on every row (it would be
-  cut off); the live list shows "Updated …" and the drawer has the times.
+- Under 900 and from 1024 to 1279 the job kicker drops the start time on
+  every row (it would be cut off); the lists show "Updated …" and the drawer
+  has the times.
 - Helvetica Neue and SF Pro are Apple-only; elsewhere the stack falls back to
   Arial or the system UI face, which weakens the tight display tracking.
 - The progress legend says "remaining" for tracks in flight and waiting alike

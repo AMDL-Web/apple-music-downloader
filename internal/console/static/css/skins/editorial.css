@@ -202,6 +202,13 @@
   border-color: var(--border-control);
 }
 
+/* Inline code is the mono face alone, no fill. */
+:root[data-skin="editorial"] code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 :root[data-skin="editorial"] .muted {
   color: var(--text-secondary);
 }
@@ -425,6 +432,14 @@
 
   :root[data-skin="editorial"] .main {
     grid-column: 1 / -1;
+  }
+}
+
+/* The page spans the masthead: the base cap of --content-max would stop
+   the bands and the grid short of the controls above them. */
+@media (min-width: 640px) {
+  :root[data-skin="editorial"] .main {
+    max-width: none;
   }
 }
 
@@ -1153,9 +1168,10 @@
   margin-inline: var(--s-1_5);
 }
 
-/* Under 900 the kicker keeps type, genre and year; the start time would be
-   cut off (the live list shows "Updated …", the drawer has the times). */
-@media (max-width: 899px) {
+/* Under 900, and from 1024 to 1279 where the lists sit in narrower grid
+   columns, the kicker keeps type, genre and year; the start time would be
+   cut off (the lists show "Updated …", the drawer has the times). */
+@media (max-width: 899px), (min-width: 1024px) and (max-width: 1279px) {
   :root[data-skin="editorial"] .job-fact[data-key="started"] {
     display: none;
   }
@@ -2777,20 +2793,35 @@
   font-weight: var(--w-semibold);
 }
 
+:root[data-skin="editorial"] .quality-track-head .chip {
+  height: auto;
+  padding: 0;
+  border: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-kicker);
+  line-height: var(--lh-kicker);
+  font-weight: var(--w-semibold);
+  letter-spacing: 0.09em;
+}
+
+/* Formats split by hairlines that never open a line: every format carries
+   its rule on the left, and the list (its indent turned from padding into
+   margin) starts one gutter early and clips, so the rule of a line's first
+   format falls outside it. */
 :root[data-skin="editorial"] .quality-track-opts {
   gap: var(--s-1) 0;
+  margin-left: calc(2.5ch + var(--s-2) - var(--s-3));
+  padding-inline-start: 0;
+  overflow: hidden;
 }
 
 :root[data-skin="editorial"] .quality-opt {
-  padding: 0 var(--s-3) 0 0;
+  margin-left: -1px;
+  padding: 0 var(--s-3);
   border: 0;
+  border-left: 1px solid var(--border-subtle);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
-}
-
-:root[data-skin="editorial"] .quality-opt + .quality-opt {
-  padding-left: var(--s-3);
-  border-left: 1px solid var(--border-subtle);
 }
 
 :root[data-skin="editorial"] .quality-opt-label {
@@ -3006,6 +3037,11 @@
   padding-top: 0;
 }
 
+/* Reset starts its label on the left keyline when it wraps there. */
+:root[data-skin="editorial"] .new-options-foot > .new-options-reset {
+  margin-left: calc(-1 * (var(--s-2) + 1px));
+}
+
 :root[data-skin="editorial"] .new-field-label {
   font-weight: var(--w-semibold);
 }
@@ -3044,11 +3080,12 @@
 
 /* "+ AAC", "+ Dolby Atmos": a line of words to pick from, not a row of boxes. */
 :root[data-skin="editorial"] .new-codec-add {
-  column-gap: var(--s-1);
+  column-gap: var(--s-3);
 }
 
+/* No side padding, so a wrapped line of words starts on the keyline. */
 :root[data-skin="editorial"] .new-codec-add-btn {
-  padding: 0 var(--s-1_5);
+  padding: 0;
   border-color: transparent;
 }
 
@@ -3106,6 +3143,15 @@
   :root[data-skin="editorial"] .new-link-actions {
     justify-content: flex-start;
     padding-left: calc(56px + var(--s-3));
+  }
+
+  /* Remove alone stays beside the text. */
+  :root[data-skin="editorial"] .new-link:not(:has(.new-link-quality, .new-link-retry)) {
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+  }
+
+  :root[data-skin="editorial"] .new-link:not(:has(.new-link-quality, .new-link-retry)) .new-link-actions {
+    padding-left: 0;
   }
 
   :root[data-skin="editorial"] .new-result-row {
@@ -3300,10 +3346,23 @@
 /* Panels (library sync, the config file) and the account: kicker heads over
    an ink rule. */
 :root[data-skin="editorial"] .settings-panel-head,
-:root[data-skin="editorial"] .account-block-head {
+:root[data-skin="editorial"] .account-block-head,
+:root[data-skin="editorial"] .login-form > .section-title {
   min-height: var(--control-h);
   padding-bottom: var(--s-1);
   border-bottom: 1px solid var(--border-strong);
+}
+
+/* The login form's head is its title alone, set on the same line height
+   as a head with a button. */
+:root[data-skin="editorial"] .login-form > .section-title {
+  display: flex;
+  align-items: center;
+}
+
+/* Text actions end on the right keyline (their label, not their box). */
+:root[data-skin="editorial"] .account-block-head > .btn-ghost:last-child {
+  margin-right: calc(-1 * (var(--s-2) + 1px));
 }
 
 :root[data-skin="editorial"] .account-name {
@@ -3358,6 +3417,18 @@
   :root[data-skin="editorial"] .save-bar {
     bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
     padding: var(--s-2) var(--gutter);
+  }
+}
+
+/* At the end of the page the band still lies on its foot (on the tab bar
+   under 640): the page's bottom padding gives way to it. */
+:root[data-skin="editorial"] .main:has(> .page > .save-bar) {
+  padding-bottom: 0;
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .main:has(> .page > .save-bar) {
+    padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   }
 }
 
