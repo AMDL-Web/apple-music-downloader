@@ -5,7 +5,7 @@ import { listDownloads, docsUrl } from '../api.js';
 import { jobTitle, jobSubtitle, typeLabel } from '../lib/format.js';
 import { buildHash, settingsHash } from '../lib/route.js';
 import { Icon, Button } from '../ui/components.js';
-import { Dialog } from '../ui/dialogs.js';
+import { Dialog, useDialog } from '../ui/dialogs.js';
 import { useDebounced } from '../ui/hooks.js';
 import { SKINS } from '../lib/prefs.js';
 
@@ -35,10 +35,11 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
   const [jobs, setJobs] = useState({ items: [], loading: false });
   const debounced = useDebounced(query, 200);
   const input = useRef(null);
-
-  useEffect(() => {
-    if (input.current) input.current.focus();
-  }, []);
+  const panel = useRef(null);
+  // Focus starts in the input, Tab stays in the panel, Escape closes it, and
+  // focus returns to whatever had it when the palette opened (a command that
+  // opens another page moves it to that page's heading instead).
+  useDialog(panel, onClose);
 
   useEffect(() => {
     const q = debounced.trim();
@@ -93,9 +94,6 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       run(items[current]);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
     } else if (e.key === 'Tab') {
       e.preventDefault();
     }
@@ -127,11 +125,12 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
 
   return html`<div class="overlay-host">
     <div class="scrim" onClick=${onClose}></div>
-    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette" ref=${panel}>
       <div class="palette-input">
         <${Icon} name="search" />
         <input
           ref=${input}
+          data-autofocus
           type="text"
           role="combobox"
           aria-expanded="true"

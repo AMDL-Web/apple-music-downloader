@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  historyIndex,
+  refusedMove,
   parseHash,
   buildHash,
   queueFilters,
@@ -116,4 +118,14 @@ test('toApiError reads the 2.0 error envelope', () => {
   const bare = toApiError(502, null, 'GET /x failed with HTTP 502.');
   assert.equal(bare.message, 'GET /x failed with HTTP 502.');
   assert.equal(bare.code, '');
+});
+
+test('refusedMove undoes a refused hash change without adding an entry', () => {
+  assert.equal(historyIndex({ amdlIdx: 3 }), 3);
+  assert.equal(historyIndex(null), null);
+  assert.equal(historyIndex({ other: 1 }), null);
+  assert.deepEqual(refusedMove(5, null), { undo: -1, redo: null }, 'a link pushed a new entry');
+  assert.deepEqual(refusedMove(5, { amdlIdx: 4 }), { undo: 1, redo: -1 }, 'Back');
+  assert.deepEqual(refusedMove(5, { amdlIdx: 7 }), { undo: -2, redo: 2 }, 'Forward twice');
+  assert.equal(refusedMove(5, { amdlIdx: 5 }).undo, 0, 'the same stamp cannot be undone through the history');
 });

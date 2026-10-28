@@ -44,6 +44,31 @@ export function buildHash(page, params = {}, jobId = null) {
   return q ? `${path}?${q}` : path;
 }
 
+/**
+ * The console's position in the tab's history: every entry it shows is
+ * stamped history.state = {amdlIdx: n}, counting up from the first.
+ * Returns n, or null for an entry without a stamp (one a link or a
+ * location.hash assignment just pushed).
+ */
+export function historyIndex(state) {
+  return state && Number.isInteger(state.amdlIdx) ? state.amdlIdx : null;
+}
+
+/**
+ * Undoing a hash change the leave guard refused, without adding an entry:
+ * {undo, redo}, history.go() deltas. A pushed entry (no stamp) is undone
+ * by going back one and redone by pushing the hash again (redo null); a
+ * Back or Forward to the entry stamped `state` is undone by going the
+ * other way and redone by going there again. `shownIdx` is the stamp of
+ * the entry shown before the change. {undo: 0} means it cannot be undone
+ * through the history.
+ */
+export function refusedMove(shownIdx, state) {
+  const idx = historyIndex(state);
+  if (idx === null) return { undo: -1, redo: null };
+  return { undo: shownIdx - idx, redo: idx - shownIdx };
+}
+
 export const QUEUE_TABS = ['active', 'failed', 'all'];
 
 const TAB_STATUSES = { active: ['running', 'queued'], failed: ['failed'], all: [] };

@@ -291,8 +291,9 @@ and motion covers.
   "Reload from file".
 - **Primitives**: buttons (primary, secondary, ghost, danger), segmented
   control, search field, select, chips, notices, toasts (`role="status"`,
-  errors stay until dismissed), command palette (Cmd/Ctrl+K, combobox +
-  listbox), shortcut sheet (`?`).
+  errors stay until dismissed), command palette (Cmd/Ctrl+K, never over a
+  modal dialog; combobox + listbox; focus handling from `useDialog`, so
+  focus returns to the opener), shortcut sheet (`?`).
 - **Dialogs** (`ui/dialogs.js`): `Dialog` is a scrim plus a modal panel
   (`useDialog`: focus the first `[data-autofocus]`, trap Tab, Escape closes
   without reaching the page shortcuts, focus returns to the opener).
@@ -389,9 +390,12 @@ whether it renders cells or a bar. Text a skin adds with `::before` (section
 numbers, "No.") is decoration and repeats nothing a screen reader needs.
 With unsaved settings, leaving the page asks first: a page sets
 `setLeaveGuard` from the app context, every hash change passes it (links,
-the palette, shortcuts, Back), and a refused change restores the URL while
-the page shows its `ConfirmDialog`; the browser's own prompt covers closing
-the tab. Moving between settings sections never asks.
+the palette, shortcuts, Back), and a refused change is undone through the
+history, so no entry is added (a pushed entry is dropped with Back, a Back
+or Forward is reversed; entries carry `history.state.amdlIdx`,
+`lib/route.js` `refusedMove`) while the page shows its `ConfirmDialog`;
+leaving after all repeats the same move (`resumeLeave`). The browser's own
+prompt covers closing the tab. Moving between settings sections never asks.
 
 ## Data flow
 

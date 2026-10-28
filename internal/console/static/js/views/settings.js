@@ -183,7 +183,8 @@ export function SettingsPage({ route }) {
     if (app.setLeaveGuard) app.setLeaveGuard(null);
     setLeaveTo(null);
     setDraft({});
-    app.navigate(to);
+    if (app.resumeLeave) app.resumeLeave(to);
+    else app.navigate(to);
   };
 
   const sectionOf = (key) => (fieldByKey(key) || {}).section;
