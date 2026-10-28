@@ -32,21 +32,23 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
   }
   const err = lookup && lookup.state === 'error' ? lookup.error : null;
   const msg = err ? String(err.message || '') : '';
-  // Apple refuses a storefront it does not have (its 400, which the lookup
-  // passes on as 502 upstream_error); a job of the link could only fail.
-  // Only the word "storefront" is matched, so a reworded message still
-  // counts, and the row's text is built from the link, not the message.
-  if (err && (err.status === 502 || err.status === 400) && /storefront/i.test(msg)) {
-    return { code: 'bad_storefront', role: 'danger', blocking: true, message: `Apple Music has no storefront “${link.storefront.toUpperCase()}”`, title: msg };
-  }
-  if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: capitalized(err.message) || 'The backend does not download this link' };
   // Apple answered 404 for the id: a job of this link could only fail. The
   // catalog read never carries the media-user-token (internal/applemusic
-  // Playlist), so this holds for private playlists too.
-  const notFound = Boolean(err && err.status === 502 && /catalog/i.test(err.message || '') && /\b404\b/.test(err.message || ''));
+  // Playlist), so this holds for private playlists too. Checked before the
+  // storefront case: every catalog error names its storefront
+  // (internal/applemusic catalogRequestError), a missing id included.
+  const notFound = Boolean(err && err.status === 502 && /\b404\b/.test(msg));
   if (notFound) {
     return { code: 'not_found', role: 'danger', blocking: true, message: 'Apple Music has nothing at this link', title: err.message };
   }
+  // Apple refuses a storefront it does not have with a 400, which the lookup
+  // passes on as 502 upstream_error; a job of the link could only fail. The
+  // row's text is built from the link, not the message.
+  const badStorefront = /storefront/i.test(msg) && (/\b400\b/.test(msg) || /unknown storefront|not know the storefront/i.test(msg));
+  if (err && (err.status === 502 || err.status === 400) && badStorefront) {
+    return { code: 'bad_storefront', role: 'danger', blocking: true, message: `Apple Music has no storefront “${link.storefront.toUpperCase()}”`, title: msg };
+  }
+  if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: capitalized(err.message) || 'The backend does not download this link' };
   // Only a station cannot download without the token; a private playlist
   // uses it for its cover alone (lib/links.js needsToken).
   const required = link.kind === 'station' || Boolean(lookup && lookup.state === 'ready' && lookup.data && lookup.data.needs_media_user_token);

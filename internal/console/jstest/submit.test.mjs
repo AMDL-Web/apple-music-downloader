@@ -216,6 +216,16 @@ test('linkIssue blocks a storefront Apple does not have and a link without one',
   assert.deepEqual(submittable(entries, issueOf), [IGOR], 'flagged, so never also counted to download');
   const reworded = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'Apple Music does not know the storefront zz' } };
   assert.equal(linkIssue(zz, reworded).code, 'bad_storefront', 'a reworded server message still blocks');
+  // The backend's catalog errors name the storefront in every case
+  // (internal/applemusic catalogRequestError), so a missing id in a real
+  // storefront must stay not_found.
+  const current = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: Apple Music request for album 1463409338 in storefront zz failed: 400 Bad Request' } };
+  assert.equal(linkIssue(zz, current).code, 'bad_storefront');
+  const us = entry(IGOR);
+  const gone = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: Apple Music has no album 1463409338 in storefront us (404)' } };
+  assert.equal(linkIssue(us, gone).code, 'not_found');
+  const busy = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: Apple Music request for album 1463409338 in storefront us failed: 503 Service Unavailable' } };
+  assert.equal(linkIssue(us, busy).code, 'preview_failed', 'an outage in a real storefront is a warning, not a bad storefront');
   const bare = entry('https://music.apple.com/album/igor/1463409338');
   assert.deepEqual([linkIssue(bare).code, linkIssue(bare).blocking], ['no_storefront', true]);
 });
