@@ -60,7 +60,8 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
 | Live queue title and fraction | `--fs-row-title` | 28px; 22px under 900 | 700 |
 | Health status | `--fs-status-lg` | 26px; 22px under 640 | 700 |
 | Wordmark | `--fs-brand` | 26px | 800 |
-| Queue row title | `--fs-list-title` | 20px; 17px under 640 | 700 |
+| Queue row and detected link titles | `--fs-list-title` | 20px; 17px under 640 | 700 |
+| Dialog and sheet titles | `--fs-24` | 24px / 32px | 800, -0.025em |
 | Section and tile titles | `--fs-card-title`, `--fs-tile-title` | 19px | 700 |
 | Body | `--fs-body` | 15px | 400 |
 | Kickers | `--fs-kicker` | 11px, uppercase, +0.09em | 600 |
@@ -90,20 +91,30 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
 
 - **Masthead** (640 px and up): the sidebar becomes a band across the top,
   wordmark "AMDL" with "Apple Music Downloader" beside it (1024 and up), the
-  numbered nav (`01 Overview` … via CSS counters), "API docs", and the top-bar
-  controls laid over its right end (`.main-col` is `display: contents`, so the
-  top bar and the sidebar share the grid cell). The active item has a 4px ink
-  underline on the 3px rule. One line at 1440 and up; below that the nav wraps
-  under the wordmark, and under 900 it spreads full width without numbers.
-  Search, Style and Theme read as text with an underline, not boxes.
+  ink New download button, the numbered nav (`01 Overview` … `06 Settings`
+  via CSS counters) and "API docs"; the top-bar controls sit at the right end
+  of the wordmark's line (`.main-col` is `display: contents`, so the top bar
+  and the sidebar share the grid cell). The active item has a 4px ink
+  underline on the 3px rule. Below 1760 px the button, nav and API docs take
+  a second line under the wordmark; from 1760 (the line needs about 1700)
+  everything is one line, the controls in a grid column of their own that
+  carries the rule too, so a line that grows wraps in its column instead of
+  running under the controls. Under 1024 the button is an ink square with
+  the plus (base rail behavior), and under 900 the nav spreads full width
+  without numbers. Search, Style and Theme read as text with an underline,
+  not boxes.
 - **Mobile** (under 640): the top bar carries the wordmark (`::before` with
   empty alt text) and the 3px rule; the bottom tab bar has a 1px ink top rule
-  and a 4px ink bar over the active tab.
+  and a 4px ink bar over the active tab. New is a 48px ink block (current: a
+  bold label, no bar, which would run into the block); More turns ink while
+  its sheet is open and takes the bar on Logs, System and Settings.
 - **Banners**: full-bleed bands under the masthead, ink by default and red for
   warning and danger (the simulate band). In-page notices are a 3px rule in
   the role color with no fill.
 - **Page head**: the huge title left, the page summary in a right-hand column
   behind a hairline (under 640 it drops below the title over a hairline).
+  Overview's New download is a 44px ink button after the summary, on its
+  bottom line; under 640 it sits under the summary on the left keyline.
 - **KPIs**: glyph and label over a hairline, the bare numeral, the meta line.
   Failed turns red only when it is not zero. Total keeps its big numeral on
   phones.
@@ -120,8 +131,18 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   title, as in the live queue, so each cell keeps its shape.
 - **Kicker**: one line, cut with an ellipsis; under 900 it drops the start
   time.
-- **Fields** (search, select) are a rule to write on; focus thickens the
-  rule to 2px ink instead of drawing a box.
+- **Fields** (search, select, every text, number, path, template and secret
+  input) are a rule to write on, text on the keyline; focus thickens the rule
+  to 2px ink instead of drawing a box. An invalid field's rule is red; a
+  pinned (disabled) one is dashed with its value in ink-2. The New download
+  link box is ruled paper: a hairline under every 20px line of mono text and
+  the field's rule under the last.
+- **Checkboxes and switches** are square: a checkbox is a control outline,
+  solid ink with a paper tick when checked, a paper bar when some are
+  (select all); a switch is a squared track, ink when on. Under
+  `forced-colors` the checkboxes are the native ones.
+- **Card actions** that are buttons (Edit, Done, Reset, Clear, Retry) read as
+  semibold words that underline on hover, like the "→" links.
 - **Toggle buttons** (Pause, Wrap, Reveal): a control outline at rest;
   pressed, an ink outline with a 3px ink bar along the bottom. No ink fill.
 - **Cells** (status by shape): waiting is an outline, completed solid ink,
@@ -149,17 +170,56 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   failed tab shows its note right under the tab rule, with no second rule.
   Tile facts keep each fact whole; the separator dot that would open a line
   is clipped, so no line starts or ends with one.
-- **System**: from 1024 the configuration groups run one per row, with the
-  values in the same column as the other sections' key-value rows.
 - **Drawer**: ink rule on its left edge, 3px rule under the bar, 120px cover,
   32px title, times as four facts, each section under a 1px ink rule. The
-  action row's first ghost button sits on the left keyline. Tracks: the head
+  action row's first ghost button sits on the left keyline and Delete (red
+  icon, ink word) ends on the right one. Tracks: the head
   keeps the "16 / 16" count and the full-width strip below is the one
   per-track picture (the head's cells are hidden); a track's stage strip
   shows only while some stage is not done.
 - **Palette, sheet, toasts**: 1px ink border, no shadow; the palette input sits
   on a 3px rule and the selection is a grey band with a 4px ink bar; toasts
   have a 4px left rule, red for errors.
+- **Dialogs and sheets** hang from a 3px ink rule; a confirm whose button is
+  destructive hangs from a red one (`:has(.btn-danger)`). Titles are 24px
+  heavy, the body 15px ink-2, Cancel an ink outline and the destructive
+  button a red outline.
+- **More sheet**: a band across the phone that sits on the tab bar's rule
+  (3px ink top, no sides), its text on the page keyline; rows under
+  hairlines, the current page the palette's grey band and 4px ink bar with a
+  "CURRENT" kicker.
+- **Qualities sheet**: each quality slot is a fact under a 1px ink rule (20px
+  bold name, mono codec, counts); each track is a mono number, its name and
+  its formats as one line of words split by hairlines, no boxes.
+- **New download**: on the 12-column grid from 1024, links in 7 columns and
+  options in 5 (8 and 4 from 1280). Detected links: 64px covers (56 under
+  640), the kind, storefront, explicit and ADM as a kicker instead of chips,
+  a 20px title, facts that never open a line with a dot (the tile facts'
+  clip), the mono link in ink-3; a flagged link's title turns ink-2 and its
+  issue is a red status line. The count line is semibold ink and Download N
+  a 44px ink button. Submitted rows are the live queue's; a link that was
+  not queued reads like a recent failure, a kicker in its role's color
+  over the mono link. Options: groups between hairlines under ink kickers,
+  the codec list ruled with mono ranks, "+ AAC" and the other codecs to add
+  as words, and the changed-value mark an ink square. The bookmarklet code
+  sits between two hairlines and the steps are numbered `01` … in mono.
+- **Settings**: the section list is the label column (three of twelve
+  columns from 900, two from 1280), numbered `01` … in mono under the same
+  ink rule as the open section, items under hairlines without icons, the
+  open one bold behind a 4px ink bar; unsaved sections carry a square ink
+  mark, invalid ones the red icon. Fields: 15px semibold label, ink-2 help,
+  mono key in ink-3, the control on a rule at the right; "UNSAVED" is an ink
+  kicker beside an underlined Undo; errors and warnings carry the 3px red
+  rule. Ordered lists and the template reference are ruled, not boxed;
+  panel and account heads are kickers over a 1px ink rule. The save bar is
+  an ink band across the page's foot (flush on the tab bar under 640), Save
+  the paper button on it and the focus ring paper.
+- **Queue selection**: the bar is a band between two ink rules over the
+  list, opaque, sticking at the very top (the top bar does not stick here);
+  its lower rule stands in for the list's. Checkboxes sit 12px in from the
+  keyline, 16px from the cover (14px in a 44px target under 640), with the
+  select-all box in the same column; a selected row is ink, the palette's
+  grey band and 4px ink bar, never red.
 - **Empty states** are left-aligned display text without an icon; error notes
   carry a 3px red rule.
 
@@ -190,3 +250,8 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   lines all read "of N total"; each needs copy from the view.
 - The overview's "Recently completed" meta line is one string, so a wrapped
   line can still start with a separator dot.
+- The one-line masthead starts at a measured width (1760 px for six nav
+  items, "Live" and "Queue 2"); a longer connection label or nav makes the
+  line wrap inside its column (API docs first) rather than overlap.
+- The destructive confirm's red rule relies on `:has()`; without it the
+  dialog keeps the ink rule.
