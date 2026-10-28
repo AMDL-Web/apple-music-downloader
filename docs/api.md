@@ -4,13 +4,73 @@
 
 Examples assume the service listens on `http://localhost:18080`.
 
-- Interactive Swagger UI: <http://localhost:18080/docs>
+- Interactive Swagger UI: <http://localhost:18080/docs> (loads Swagger UI from unpkg.com,
+  so it needs internet access)
 - OpenAPI 3.1 spec: <http://localhost:18080/api/openapi.yaml> (source:
   [`internal/api/openapi.yaml`](../internal/api/openapi.yaml))
+- Web console: <http://localhost:18080/console/>; `/` redirects there
 
-The spec is the source of truth for every request and response shape. The iOS and web
-clients mirror those JSON shapes by hand, so a response-shape change here is normally a
+The spec is the source of truth for every request and response shape; its `info.version`
+is the contract version, while the URL prefix stays `/api/v1`. The iOS and web clients
+mirror those JSON shapes by hand, so a response-shape change here is normally a
 multi-repository change.
+
+## Errors
+
+Every non-2xx JSON response has one shape:
+
+```json
+{"error": {"code": "job_not_found", "message": "job job_… not found"}}
+```
+
+Switch on `code`, a stable value of the `ErrorCode` enum in the spec (Go: the constants in
+`internal/api/errors.go`). `message` is for humans and may change. `details` is present
+only for some codes: on `POST /downloads` it holds the batch body, on a rejected config
+write it lists the offending keys.
+
+| Status | Codes |
+| --- | --- |
+| 400 | `invalid_request` (query or body validation, a malformed stream cursor), `invalid_json` (the body is not well-formed JSON) |
+| 401 | `authentication_failed` |
+| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
+| 405 | `method_not_allowed`, with an `Allow` header |
+| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending`, `signing_disabled` |
+| 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
+| 422 | `invalid_overrides`, `config_key_not_mutable`, `config_key_pinned`, `invalid_config`, `no_urls_accepted` |
+| 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
+| 502 | `upstream_error` |
+| 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
+| 504 | `upstream_timeout` |
+
+An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
+methods answers `405 method_not_allowed`. `feature_unavailable` means the component behind
+the route (log buffer, wrapper client, quality probe, developer-token signing, library
+watcher) is not wired into this process. A job lookup answers `404 job_not_found` only
+when the job does not exist; a store failure is `500 store_error`, so a client never drops
+a job because of a transient error.
+
+The one exception is `GET /api/v1/health`, whose `503` body is
+`{"status":"degraded","database_error":"…"}`.
+
+## Streams
+
+Every stream is Server-Sent Events: the per-job events, the overview feed and the log
+tail. They share these rules:
+
+- **Resume cursor.** Send the `Last-Event-ID` header or `?cursor=<id>`; when both are set
+  the header wins, because `EventSource` sends it on every automatic reconnect while the
+  URL still carries the first cursor. A cursor that is not a non-negative integer is
+  `400 invalid_request`. The stream replays everything after the cursor, then goes live.
+- **Seeding.** `GET /downloads` and `GET /downloads/{id}` return `event_cursor`, read
+  before the snapshot, so resuming from it never skips an event. Never open the overview
+  feed without a cursor: that replays the whole retained milestone history.
+- **Keepalive.** Every stream sends a `: keepalive` comment every 15 seconds and the
+  `X-Accel-Buffering: no` header, so proxies neither buffer nor time out an idle stream.
+- **CORS** allows the `Last-Event-ID` request header, so a cross-origin `EventSource`
+  resumes too, and exposes `X-Request-ID`.
+
+Events are named (`event: <type>`), so a browser client uses `addEventListener` with the
+name; `onmessage` does not fire for them.
 
 ## System
 
@@ -26,22 +86,30 @@ curl http://localhost:18080/api/v1/developer-token
 ```
 
 Mints a shareable Apple Music developer token. Available only when local signing is
-enabled (all three `catalog.apple_music_*` keys set); otherwise it returns `409`. The
-token's lifetime is `catalog.developer_token_ttl_hours` and its `origin` claim comes from
-`catalog.allowed_origins`. This is a different token from the backend's own internal one,
-which always lasts 24 hours.
+enabled (all three `catalog.apple_music_*` keys set); otherwise it returns
+`409 signing_disabled`. The token's lifetime is `catalog.developer_token_ttl_hours` and
+its `origin` claim comes from `catalog.allowed_origins`. This is a different token from
+the backend's own internal one, which always lasts 24 hours.
 
 ### Logs
 
 ```bash
 curl 'http://localhost:18080/api/v1/logs?level=error&limit=100'
+curl 'http://localhost:18080/api/v1/logs?level=error&cursor=1234'
 ```
+
+The first query returns the newest `limit` entries; pass the response's `next_cursor` as
+`?cursor=` to page forward. `truncated` says that entries after the cursor were already
+evicted from the buffer.
 
 ```bash
 curl -N 'http://localhost:18080/api/v1/logs/stream?job_id=job_01JZ0000000000000000000000'
 ```
 
-The SSE `id` works as `Last-Event-ID` on reconnect.
+Each entry is an event named `log` whose `id` is the log sequence. With a cursor the
+stream replays every matching entry still buffered; without one, the newest `limit`
+(default 500). A client that reads too slowly is disconnected and reconnects from its last
+id.
 
 Every HTTP response carries an `X-Request-ID`. Send your own header of the same name and
 `GET /api/v1/logs?request_id=<id>` aggregates that request's access log with the
@@ -59,8 +127,10 @@ need a restart.
 curl http://localhost:18080/api/v1/wrapper/status
 ```
 
-The gRPC connection is lazy — the backend starts fine without a reachable wrapper, and
-this endpoint is how you verify connectivity.
+Returns `ready`, `status`, `regions`, `client_count` and `accounts` (the logged-in account
+identifiers, `[]` when none). The gRPC connection is lazy — the backend starts fine without
+a reachable wrapper, and this endpoint is how you verify connectivity; an unreachable
+wrapper is `503 wrapper_unavailable`.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login \
@@ -68,8 +138,9 @@ curl -X POST http://localhost:18080/api/v1/wrapper/login \
   -d '{"username":"apple-id@example.com","password":"password"}'
 ```
 
-If the response contains `"status":"needs_2fa"`, submit the code within 30 seconds using
-the `login_id` from that response:
+The username is trimmed; the password is forwarded exactly as sent, because spaces can be
+part of it. If the response contains `"status":"needs_2fa"`, submit the code within 30
+seconds using the `login_id` from that response:
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login/{login_id}/2fa \
@@ -83,6 +154,12 @@ curl -X POST http://localhost:18080/api/v1/wrapper/logout \
   -d '{"username":"apple-id@example.com"}'
 ```
 
+Login errors: `401 authentication_failed`, `409 already_logged_in` (the account already
+has a wrapper), `409 login_pending` (a login for the account, or this session's two-step
+code, is already in progress), `404 login_not_found` (the two-step session expired),
+`404 account_not_found` (logout of an account with no wrapper), `502 upstream_error`,
+`504 upstream_timeout`.
+
 ## Downloads
 
 ### Create
@@ -90,12 +167,27 @@ curl -X POST http://localhost:18080/api/v1/wrapper/logout \
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads \
   -H 'Content-Type: application/json' \
-  -d '{"url":"https://music.apple.com/us/album/example/123456789?i=987654321",
+  -d '{"urls":["https://music.apple.com/us/album/example/123456789?i=987654321"],
        "overrides":{"force_overwrite":true}}'
 ```
 
-Takes either `url` or `urls`. Each input is reported back with its own submit status:
-`accepted`, `invalid`, `duplicate_in_request`, `duplicate_active` or `queue_full`.
+`urls` is a list; each entry may itself hold several URLs separated by whitespace, commas
+or semicolons, up to 100 in all. Each URL is reported back in `results[]` with a `status`
+and, unless it was accepted, an `error` object `{code, message, details?}`:
+
+| `status` | `error.code` |
+| --- | --- |
+| `accepted` | — (the new `job` is included) |
+| `invalid` | `invalid_url`, `unsupported_input`, `unsupported_storefront` (`details`: `storefront`, `supported_storefronts`), `decryptor_unavailable`, `invalid_configuration` |
+| `duplicate_in_request` | `duplicate_in_request` |
+| `duplicate_active` | `duplicate_active` (`existing_job_id` names the running job) |
+| `queue_full` | `queue_full` |
+| `error` | `store_error`, `internal_error` — the server failed; the same submit may succeed when retried |
+
+The response is `202` with `{accepted, rejected, results}` when at least one URL was
+accepted. When none was, it is an error whose `details` is that same body: `500
+store_error` if any URL failed in the job store (`500 internal_error` if the only server
+failure was an unexpected validator error), else `422 no_urls_accepted`.
 
 For album links carrying `?i=<song_id>`, `catalog.album_track_url_mode` decides the task
 type: `song` (default) treats it as a single-song job using the `i` parameter, `album`
@@ -104,7 +196,7 @@ ignores `i` and downloads the whole album.
 ### Job overrides
 
 `overrides` overlays the job-mutable runtime config for that submission only. Omitted
-fields keep the global value.
+fields keep the global value; a value that fails validation is `422 invalid_overrides`.
 
 | Field | Notes |
 | --- | --- |
@@ -117,8 +209,8 @@ fields keep the global value.
 | `hooks` | Allow-list of hook entry names |
 | `media_user_token` | Apple Music subscription token for stations and private playlists |
 
-The old top-level `force` and `media_user_token` request fields were removed — sending
-them now returns `400` as unknown fields.
+The request has no top-level `force` or `media_user_token` field; sending one is
+`400 invalid_request` (unknown field).
 
 **`force_overwrite`** — `true` overwrites an existing audio file and its lyrics sidecar;
 `false` (the default, from `download.force_overwrite`) skips tracks whose output already
@@ -130,10 +222,10 @@ type, events and job types, and never returns URLs, headers, commands or working
 directories. Omitting the field keeps the default (every enabled, matching hook may run);
 `[]` runs no hooks for this batch; a non-empty list restricts to those names. The list
 cannot enable a `enabled: false` entry and never bypasses `events` / `job_types` matching.
-Duplicate names behave like one entry; unknown names return `422` when any hook entry is
-configured. The selection is persisted with the job: the `job_queued` hook dispatches only
-on first submission (never on retry or restart recovery), and terminal-event hooks
-arriving after a retry or restart stay bound to the same allow-list.
+Duplicate names behave like one entry; unknown names return `422 invalid_overrides` when
+any hook entry is configured. The selection is persisted with the job: the `job_queued`
+hook dispatches only on first submission (never on retry or restart recovery), and
+terminal-event hooks arriving after a retry or restart stay bound to the same allow-list.
 
 **`media_user_token`** — three-state: omitted uses the global
 `catalog.media_user_token` fallback, a non-empty string uses that value for this batch,
@@ -145,9 +237,6 @@ not store it. It is cleared when a job completes or is cancelled, and retained o
 so a retry can still resolve. It is never echoed back in create, list, detail or SSE
 responses. The global fallback in `catalog.media_user_token` does persist to the
 config file and may be returned by `GET /api/v1/config`.
-
-`catalog.media_user_token_priority` is kept only for old configs; it is deprecated and no
-longer takes part in selection.
 
 ### Radio stations
 
@@ -178,6 +267,8 @@ Without one the playlist still downloads, just without its cover.
 curl http://localhost:18080/api/v1/downloads/{job_id}
 ```
 
+Returns `{job, items, hooks, event_cursor}`.
+
 ```bash
 curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,cancelled&type=album&storefront=cn&q=beta&created_after=2024-07-01&sort=updated_at&order=desc'
 ```
@@ -185,7 +276,8 @@ curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,ca
 Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `storefront`, `q`,
 `created_after`, `created_before`, `updated_after`, `updated_before`, `sort`
 (`created_at` | `updated_at`), `order` (`asc` | `desc`). Multi-value parameters accept
-repeated keys or comma-separated values. The response adds `total`, `limit` and `offset`.
+repeated keys or comma-separated values. The response adds `status_counts` (for the same
+filter), `total`, `limit`, `offset` and the global `event_cursor`.
 
 Every job carries `total_items` (tracks the input resolved to) and four disjoint item
 counters, always present: `completed_items` (written by this job), `skipped_items`
@@ -203,24 +295,40 @@ curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/cancel
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/retry
 ```
 
-Only `failed` jobs can be retried. A non-failed job, one still finishing its previous run,
-or one whose canonical key is already running returns `409`.
+Only `failed` jobs can be retried: otherwise `409 job_not_retryable`. A job still finishing
+its previous run is `409 job_finalizing` (retry a moment later), one whose input is
+already queued or running again is `409 duplicate_active`, and a full queue is
+`503 queue_full`.
 
 ```bash
 curl -X DELETE http://localhost:18080/api/v1/downloads/{job_id}
 ```
 
-Deletes a terminal job and its records.
+Deletes a terminal job and its records. A job that is queued, running, finalizing or
+running a hook is `409 job_active`.
 
 ## Events
 
 ```bash
-curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
+curl -N 'http://localhost:18080/api/v1/downloads/{job_id}/events?cursor=<event_cursor>'
+curl -N 'http://localhost:18080/api/v1/downloads/events?cursor=<event_cursor>'
 ```
 
-`GET /api/v1/downloads/events` is the cross-job overview feed: it
-pushes only the milestones that change how a job appears in the list, so a client can
-render the whole downloads page without subscribing to each job.
+The per-job stream replays the job's events after the cursor, then streams new ones; each
+SSE event is named after the event type and its `id` is the event id. It ends once the
+job is terminal and every hook has finished. A client that already has everything gets
+`204 No Content`, which makes `EventSource` stop reconnecting. A browser reports any
+non-200 answer as a generic `error`, so a client whose stream closed refetches
+`GET /downloads/{job_id}` to tell "finished" from "broken".
+
+`GET /api/v1/downloads/events` is the cross-job overview feed: it pushes only the
+milestones that change how a job appears in the list, so a client can render the whole
+downloads page without subscribing to each job. Messages are named `download_upserted`
+(data: `{type, job, event_id, status_counts}`, the job's current snapshot) and
+`download_deleted` (`{type, job_id, event_id, status_counts}`); `status_counts` is global.
+`event_id` is also the SSE id and only moves forward; a resent message is idempotent. The
+feed never ends on its own. It is the only stream that delivers a motion artwork resolved
+after a job finished.
 
 Each event is `{id, job_id, item_id?, type, phase?, message?, payload?, created_at}`
 (the `Event` schema), and `payload` is a JSON object. Job lifecycle events carry the same
@@ -253,8 +361,8 @@ between two `item_progress` events for the same item in the same state. It throt
 the download and decrypt meters; status changes, stage marks and one-shot events always
 publish immediately. A value held back by the interval is flushed just before whatever
 event supersedes it, so the last percentage before a state change is never lost and a
-client resuming from `last_event_id` sees the same sequence as a live one. It is read once
-when a job starts.
+client resuming from a cursor sees the same sequence as a live one. It is read once when
+a job starts.
 
 ## Quality probe
 
@@ -267,7 +375,8 @@ curl -X POST http://localhost:18080/api/v1/quality \
 Reports the codecs and audio quality a song, album, playlist, artist or station URL
 currently declares in its master playlist, without creating a job. It reuses the download
 path's region validation, collection resolution, metadata refresh, retries, concurrency
-scheduling, HLS source selection and codec/ALAC filtering rules.
+scheduling, HLS source selection and codec/ALAC filtering rules. Any failure of the lookup,
+including a URL it cannot parse, is `502 upstream_error`.
 
 The success path reads one master playlist per track occurrence and summarises every
 quality from it; on failure it re-acquires the source per `download.max_attempts`. It does
@@ -283,11 +392,22 @@ Apple Music's original order and duplicate track occurrences. Stations use the r
 
 ```bash
 curl http://localhost:18080/api/v1/config
+curl -X POST http://localhost:18080/api/v1/config/reload
 ```
 
+`GET /api/v1/config` returns the runtime-mutable keys of the in-memory config and has no
+side effects; it does not read the file. `POST /api/v1/config/reload` (or SIGHUP) re-reads
+`configs/config.yaml` and applies its runtime keys, then answers like `GET`. When the file
+is unreadable or invalid, the previous config stays active and the answer is still `200`,
+with `reload_error` saying why.
+
 `PUT /api/v1/config` changes runtime-mutable keys only, but rewrites the entire file
-including startup keys — comments and custom formatting are not preserved. See
-[configuration.md](configuration.md).
+including startup keys — comments and custom formatting are not preserved. It re-reads the
+file first, so a hand edit made since the last reload is kept. Errors: `422
+config_key_not_mutable` (a startup key), `422 config_key_pinned` (a key set by an
+`AMDL_*` variable), both listing the keys in `details.keys`; `422 invalid_config` (the
+result fails validation, or the file on disk no longer validates); `400 invalid_request`
+for an unknown key. See [configuration.md](configuration.md).
 
 `GET /api/v1/hooks` returns the master switch plus each entry's name, enabled state, type,
 events and job types — never URLs, headers, commands or working directories.

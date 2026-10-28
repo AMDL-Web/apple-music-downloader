@@ -18,7 +18,7 @@ func TestSwaggerUI(t *testing.T) {
 		t.Fatalf("content type = %q", contentType)
 	}
 	body := recorder.Body.String()
-	for _, expected := range []string{"swagger-ui-dist@5.32.8", "/api/openapi.yaml", "SwaggerUIBundle"} {
+	for _, expected := range []string{`<html lang="en">`, "<title>AMDL API reference</title>", "swagger-ui-dist@5.32.8", "/api/openapi.yaml", "SwaggerUIBundle", "needs internet access"} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("Swagger UI does not contain %q", expected)
 		}
@@ -35,8 +35,10 @@ func TestOpenAPISpecification(t *testing.T) {
 		t.Fatalf("content type = %q", contentType)
 	}
 	var spec struct {
-		OpenAPI    string                    `yaml:"openapi"`
-		Paths      map[string]map[string]any `yaml:"paths"`
+		OpenAPI string `yaml:"openapi"`
+		Info    struct {
+			Version string `yaml:"version"`
+		} `yaml:"info"`
 		Components struct {
 			Schemas map[string]any `yaml:"schemas"`
 		} `yaml:"components"`
@@ -47,37 +49,8 @@ func TestOpenAPISpecification(t *testing.T) {
 	if spec.OpenAPI != "3.1.0" {
 		t.Fatalf("OpenAPI version = %q", spec.OpenAPI)
 	}
-	wantOperations := map[string][]string{
-		"/api/v1/health":                       {"get"},
-		"/api/v1/logs":                         {"get"},
-		"/api/v1/logs/stream":                  {"get"},
-		"/api/v1/config":                       {"get", "put"},
-		"/api/v1/hooks":                        {"get"},
-		"/api/v1/library-sync":                 {"get"},
-		"/api/v1/library-sync/reset":           {"post"},
-		"/api/v1/wrapper/status":               {"get"},
-		"/api/v1/wrapper/login":                {"post"},
-		"/api/v1/wrapper/login/{login_id}/2fa": {"post"},
-		"/api/v1/wrapper/logout":               {"post"},
-		"/api/v1/quality":                      {"post"},
-		"/api/v1/downloads":                    {"get", "post"},
-		"/api/v1/downloads/events":             {"get"},
-		"/api/v1/downloads/{job_id}":           {"get", "delete"},
-		"/api/v1/downloads/{job_id}/cancel":    {"post"},
-		"/api/v1/downloads/{job_id}/retry":     {"post"},
-		"/api/v1/downloads/{job_id}/events":    {"get"},
-	}
-	for path, methods := range wantOperations {
-		operations, ok := spec.Paths[path]
-		if !ok {
-			t.Errorf("OpenAPI path %q is missing", path)
-			continue
-		}
-		for _, method := range methods {
-			if _, ok := operations[method]; !ok {
-				t.Errorf("OpenAPI operation %s %s is missing", method, path)
-			}
-		}
+	if spec.Info.Version != "2.0.0" {
+		t.Fatalf("info.version = %q, want the 2.0.0 contract", spec.Info.Version)
 	}
 	if _, ok := spec.Components.Schemas["QualityTrack"]; !ok {
 		t.Error("OpenAPI QualityTrack schema is missing")

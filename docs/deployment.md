@@ -86,8 +86,8 @@ Container-specific variables:
 
 Three ways to change configuration: runtime keys via `PUT /api/v1/config` (immediate);
 any key via an environment variable followed by `docker compose up -d`; or by editing
-`config.yaml` in the mounted directory — runtime keys are re-read on the next
-`GET /api/v1/config`, startup keys need a container restart. Inside the container the
+`config.yaml` in the mounted directory — runtime keys apply on
+`POST /api/v1/config/reload` or SIGHUP, startup keys need a container restart. Inside the container the
 listen and wrapper addresses always come from the environment. Remember that a `PUT`
 rewrites the whole file and drops comments.
 

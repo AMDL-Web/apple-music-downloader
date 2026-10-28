@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,11 +16,11 @@ import (
 func (s *Server) listLogs(w http.ResponseWriter, r *http.Request) {
 	filter, err := parseLogFilter(r, false)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, err.Error())
 		return
 	}
 	if s.logStore == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"logs": []logging.Entry{}, "next_cursor": 0, "oldest_sequence": 0, "truncated": false})
+		writeFeatureUnavailable(w, "the log buffer")
 		return
 	}
 	page := s.logStore.List(filter)
@@ -31,88 +30,63 @@ func (s *Server) listLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// streamLogs is the SSE log tail: it replays the matching entries still in
+// the buffer, then streams new ones as event "log" with the sequence as id.
 func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 	filter, err := parseLogFilter(r, true)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, err.Error())
 		return
 	}
 	if s.logStore == nil {
-		writeError(w, http.StatusServiceUnavailable, errors.New("log buffer is not configured"))
-		return
-	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, errors.New("streaming is not supported"))
+		writeFeatureUnavailable(w, "the log buffer")
 		return
 	}
 	backlog, live, unsubscribe := s.logStore.Subscribe(filter)
 	defer unsubscribe()
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
+	stream, err := startSSE(w)
+	if err != nil {
+		return
+	}
+	keepalive := time.NewTicker(sseKeepaliveInterval)
+	defer keepalive.Stop()
+	runLogStream(r.Context(), stream, backlog, live, keepalive.C)
+}
+
+// runLogStream sends backlog, then each record published on live, plus a
+// keepalive comment on every tick. A closed live channel means the store
+// dropped this slow subscriber, so the stream ends and the client reconnects
+// with its last sequence to fill the gap.
+func runLogStream(ctx context.Context, sink sseSink, backlog []logging.Entry, live <-chan logging.Entry, keepalive <-chan time.Time) {
 	for _, entry := range backlog {
-		if err := writeLogEvent(w, entry); err != nil {
+		if sendLogEntry(sink, entry) != nil {
 			return
 		}
 	}
-	flusher.Flush()
-	heartbeat := time.NewTicker(15 * time.Second)
-	defer heartbeat.Stop()
-	write := func(entry logging.Entry) error {
-		if err := writeLogEvent(w, entry); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
-	}
-	keepalive := func() error {
-		if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
-	}
-	runLogStream(r.Context(), live, heartbeat.C, write, keepalive)
-}
-
-// runLogStream drives the live phase of the SSE log endpoint.
-// Callers replay their own backlog first, then hand the subscription here: each
-// published record goes out through write, and every tick calls keepalive so an
-// idle connection stays open and a dead peer is detected. A closed live channel
-// means the store dropped this slow subscriber, so the client must reconnect
-// with its last sequence to fill the gap.
-func runLogStream(
-	ctx context.Context,
-	live <-chan logging.Entry,
-	tick <-chan time.Time,
-	write func(logging.Entry) error,
-	keepalive func() error,
-) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case entry, ok := <-live:
-			if !ok || write(entry) != nil {
+			if !ok || sendLogEntry(sink, entry) != nil {
 				return
 			}
-		case <-tick:
-			if keepalive() != nil {
+		case <-keepalive:
+			if sink.keepalive() != nil {
 				return
 			}
 		}
 	}
 }
 
-func writeLogEvent(w io.Writer, entry logging.Entry) error {
+// sendLogEntry writes one entry. An entry that cannot be encoded is skipped
+// rather than ending the stream, which would replay it on every reconnect.
+func sendLogEntry(sink sseSink, entry logging.Entry) error {
 	raw, err := json.Marshal(entry)
 	if err != nil {
-		return err
+		return nil
 	}
-	_, err = fmt.Fprintf(w, "id: %d\nevent: log\ndata: %s\n\n", entry.Sequence, raw)
-	return err
+	return sink.send(strconv.FormatUint(entry.Sequence, 10), "log", raw)
 }
 
 func parseLogFilter(r *http.Request, stream bool) (logging.Filter, error) {
@@ -137,21 +111,15 @@ func parseLogFilter(r *http.Request, stream bool) (logging.Filter, error) {
 			}
 		}
 	}
-	if raw := strings.TrimSpace(q.Get("after")); raw != "" {
-		after, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			return filter, errors.New("after must be a non-negative integer")
-		}
-		filter.After = after
-	} else if stream {
-		if raw := strings.TrimSpace(r.Header.Get("Last-Event-ID")); raw != "" {
-			after, err := strconv.ParseUint(raw, 10, 64)
-			if err != nil {
-				return filter, errors.New("Last-Event-ID must be a non-negative integer")
-			}
-			filter.After = after
-		}
+	cursor := queryCursor
+	if stream {
+		cursor = streamCursor
 	}
+	after, err := cursor(r)
+	if err != nil {
+		return filter, err
+	}
+	filter.After = after
 	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 || limit > 1000 {
@@ -159,7 +127,6 @@ func parseLogFilter(r *http.Request, stream bool) (logging.Filter, error) {
 		}
 		filter.Limit = limit
 	}
-	var err error
 	if filter.Since, err = parseLogTime(q.Get("since")); err != nil {
 		return filter, fmt.Errorf("since: %w", err)
 	}

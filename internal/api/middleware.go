@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -44,7 +43,7 @@ func (s *Server) observeHTTP(next http.Handler) http.Handler {
 				}
 				logger.Error("http request panic", "method", r.Method, "path", r.URL.Path, "panic", fmt.Sprint(recovered), "stack", string(debug.Stack()))
 				if !tracked.wroteHeader {
-					writeError(tracked, http.StatusInternalServerError, errors.New("internal server error"))
+					writeError(tracked, http.StatusInternalServerError, CodeInternalError, "internal server error")
 				} else {
 					panic(recovered)
 				}
@@ -115,11 +114,15 @@ func (w *trackingResponseWriter) Write(data []byte) (int, error) {
 
 func (w *trackingResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-func (w *trackingResponseWriter) Flush() {
+func (w *trackingResponseWriter) Flush() { _ = w.FlushError() }
+
+// FlushError lets http.ResponseController report a failed flush, which is how
+// a stream notices that its client went away.
+func (w *trackingResponseWriter) FlushError() error {
 	if !w.wroteHeader {
 		w.WriteHeader(http.StatusOK)
 	}
-	_ = http.NewResponseController(w.ResponseWriter).Flush()
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 
 func (w *trackingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {

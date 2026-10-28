@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -97,4 +98,31 @@ func newTestServerWithManager(t *testing.T) *Server {
 	t.Cleanup(func() { store.Close() })
 	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
 	return &Server{store: store, manager: manager}
+}
+
+// assertErrorCode checks a response against the error envelope
+// {"error": {"code", "message", "details"?}}: the status, the code, a
+// non-empty message, and the JSON content type. It returns the details.
+func assertErrorCode(t *testing.T, recorder *httptest.ResponseRecorder, status int, code ErrorCode) json.RawMessage {
+	t.Helper()
+	if recorder.Code != status {
+		t.Fatalf("status = %d, want %d (body %s)", recorder.Code, status, recorder.Body.String())
+	}
+	if ct := recorder.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+		t.Fatalf("content type = %q, want JSON (body %s)", ct, recorder.Body.String())
+	}
+	var body struct {
+		Error *struct {
+			Code    string          `json:"code"`
+			Message string          `json:"message"`
+			Details json.RawMessage `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil || body.Error == nil {
+		t.Fatalf("body %s is not the error envelope: %v", recorder.Body.String(), err)
+	}
+	if body.Error.Code != string(code) || body.Error.Message == "" {
+		t.Fatalf("error = %+v, want code %q and a message", body.Error, code)
+	}
+	return body.Error.Details
 }

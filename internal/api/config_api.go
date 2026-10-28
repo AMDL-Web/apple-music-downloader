@@ -3,7 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
@@ -11,31 +12,39 @@ import (
 	"amdl/internal/config"
 )
 
-// getConfig returns the runtime-changeable part of the current config
-// (mutable download fields, logging level/access log, simulate,
-// catalog.album_track_url_mode/media_user_token/signed_mode_hls_source).
-// Startup-bound fields are omitted: clients cannot change them through this
-// API, so they have no reason to see them here.
-//
-// The combined config file is re-read first. Runtime-field edits take effect
-// on the next GET; startup-field edits remain pending until restart. If the
-// file is currently unreadable or invalid (e.g. an edit in progress), the
-// last good snapshot is served and reload_error reports why.
+// getConfig returns the runtime-changeable part of the in-memory config
+// snapshot (mutable download fields, logging level and access log, simulate,
+// library sync, and the runtime catalog keys). Startup-bound fields are
+// omitted: clients cannot change them through this API. It never reads the
+// file; POST /config/reload and SIGHUP do.
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
-	resp := map[string]any{"persisted": false}
-	if s.cfg != nil {
-		resp["persisted"] = s.cfg.Persistent()
-		if err := s.cfg.Reload(); err != nil {
-			resp["reload_error"] = err.Error()
-		}
-	}
-	s.applyLoggingConfig()
-	view, err := config.MutableView(s.currentConfig())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+	s.writeConfigView(w, nil)
+}
+
+// reloadConfig re-reads the config file and applies its runtime-mutable
+// fields, then answers like GET /config. A file that cannot be read or does
+// not validate leaves the previous snapshot in place; the response is still
+// 200 and reload_error says why, because the request itself succeeded.
+func (s *Server) reloadConfig(w http.ResponseWriter, r *http.Request) {
+	if s.cfg == nil {
+		writeFeatureUnavailable(w, "the runtime config store")
 		return
 	}
-	resp["config"] = view
+	reloadErr := s.cfg.Reload()
+	s.applyLoggingConfig()
+	s.writeConfigView(w, reloadErr)
+}
+
+func (s *Server) writeConfigView(w http.ResponseWriter, reloadErr error) {
+	view, err := config.MutableView(s.currentConfig())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, CodeInternalError, "render config: "+err.Error())
+		return
+	}
+	resp := map[string]any{"config": view, "persisted": s.cfg != nil && s.cfg.Persistent()}
+	if reloadErr != nil {
+		resp["reload_error"] = reloadErr.Error()
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -45,12 +54,12 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 // and fields consumed only at startup (server, database, logging outputs,
 // wrapper, tools, catalog client/signing/request limits, and process-wide
 // download worker/media pools) are rejected — changing them at runtime would
-// silently do nothing. Accepted
-// changes apply to new requests and newly started jobs immediately and are
-// written back to the combined config file, so they survive restarts.
+// silently do nothing. Accepted changes apply to new requests and newly
+// started jobs immediately and are written back to the combined config file,
+// so they survive restarts.
 func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	if s.cfg == nil {
-		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("runtime config store is not configured"))
+		writeFeatureUnavailable(w, "the runtime config store")
 		return
 	}
 	var body json.RawMessage
@@ -59,42 +68,55 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	// Decode, merge, and validate inside the store's atomic update, so two
 	// concurrent PUTs can never merge onto the same stale snapshot and
-	// silently drop each other's changes. rejectStatus/rejectErr carry the
-	// request-level failure out of the closure; any other error is a
-	// persistence failure.
-	var rejectStatus int
-	var rejectErr error
+	// silently drop each other's changes. reject carries a request-level
+	// failure out of the closure. UpdateAndSave re-reads the file before it
+	// calls the closure, so an error with mutated still false is the file
+	// itself, not this request.
+	var reject func(http.ResponseWriter)
+	mutated := false
 	updated, err := s.cfg.UpdateAndSave(func(current config.Config) (config.Config, error) {
+		mutated = true
 		merged := current
 		decoder := json.NewDecoder(bytes.NewReader(body))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&merged); err != nil {
-			rejectStatus, rejectErr = http.StatusBadRequest, err
+			reject = func(w http.ResponseWriter) { writeError(w, http.StatusBadRequest, jsonErrorCode(err), err.Error()) }
 			return config.Config{}, err
 		}
 		if locked := config.RuntimeLockedChanges(current, merged); len(locked) > 0 {
-			rejectStatus, rejectErr = http.StatusUnprocessableEntity, fmt.Errorf("fields can only be changed in the config file and require a restart: %s", strings.Join(locked, ", "))
-			return config.Config{}, rejectErr
+			err := errors.New("fields can only be changed in the config file and require a restart: " + strings.Join(locked, ", "))
+			reject = func(w http.ResponseWriter) {
+				writeErrorDetails(w, http.StatusUnprocessableEntity, CodeConfigKeyNotMutable, err.Error(), map[string]any{"keys": locked})
+			}
+			return config.Config{}, err
 		}
 		// A field pinned by an AMDL_* environment override would accept the
 		// write but revert to the environment value on the next reload, so
 		// reject it up front instead of pretending the change stuck.
 		if locked := config.EnvLockedChanges(current, merged, os.LookupEnv); len(locked) > 0 {
-			rejectStatus, rejectErr = http.StatusUnprocessableEntity, fmt.Errorf("fields are pinned by environment variables; unset the variable and restart to change them: %s", strings.Join(locked, ", "))
-			return config.Config{}, rejectErr
+			err := errors.New("fields are pinned by environment variables; unset the variable and restart to change them: " + strings.Join(locked, ", "))
+			reject = func(w http.ResponseWriter) {
+				writeErrorDetails(w, http.StatusUnprocessableEntity, CodeConfigKeyPinned, err.Error(), map[string]any{"keys": locked})
+			}
+			return config.Config{}, err
 		}
 		if err := merged.Validate(); err != nil {
-			rejectStatus, rejectErr = http.StatusUnprocessableEntity, err
+			reject = func(w http.ResponseWriter) {
+				writeError(w, http.StatusUnprocessableEntity, CodeInvalidConfig, err.Error())
+			}
 			return config.Config{}, err
 		}
 		return merged, nil
 	})
-	if err != nil {
-		if rejectErr != nil {
-			writeError(w, rejectStatus, rejectErr)
-			return
-		}
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("persist config: %w", err))
+	switch {
+	case reject != nil:
+		reject(w)
+		return
+	case err != nil && !mutated && !isFileAccessError(err):
+		writeError(w, http.StatusUnprocessableEntity, CodeInvalidConfig, "the config file no longer validates; fix it, then retry: "+err.Error())
+		return
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, CodeInternalError, "persist config: "+err.Error())
 		return
 	}
 	// Another concurrent update may have committed after this one returned;
@@ -103,10 +125,17 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	s.applyLoggingConfig()
 	view, err := config.MutableView(updated)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeError(w, http.StatusInternalServerError, CodeInternalError, "render config: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"config": view, "persisted": s.cfg.Persistent()})
+}
+
+// isFileAccessError reports an error reading or writing the config file
+// itself (permissions, I/O), as opposed to its content not validating.
+func isFileAccessError(err error) bool {
+	var pathErr *fs.PathError
+	return errors.As(err, &pathErr)
 }
 
 func (s *Server) applyLoggingConfig() {

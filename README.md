@@ -158,24 +158,30 @@ lyrics sidecars are written next to the audio when enabled.
 
 ## API
 
-`http://localhost:18080/docs` is a live Swagger UI over
-[`internal/api/openapi.yaml`](internal/api/openapi.yaml), which is the source of truth
-for every request and response shape.
+`http://localhost:18080/docs` is a live Swagger UI (loaded from unpkg.com, so it needs
+internet access) over [`internal/api/openapi.yaml`](internal/api/openapi.yaml), which is
+the source of truth for every request and response shape. Every path below is under
+`/api/v1`; the web console is at `/console/`.
 
 | | |
 | --- | --- |
 | **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
-| **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed |
+| **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed (SSE) |
 | **Quality** | `POST /quality` — probe a URL's declared codecs and audio quality without creating a job |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
-| **Config** | `GET /config` · `PUT /config` · `GET /hooks` |
+| **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |
 | **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
 | **System** | `GET /health` · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
 
-Submissions take `url` or `urls`, and an `overrides` object that overlays the runtime
-config for that batch only — quality priority, memory mode, path templates, lyrics
-settings, `force_overwrite`, the hook allow-list, and the `media_user_token` that radio
-stations and private playlists need. Tokens are never echoed back in any response.
+Submissions take `urls`, and an `overrides` object that overlays the runtime config for
+that batch only — quality priority, memory mode, path templates, lyrics settings,
+`force_overwrite`, the hook allow-list, and the `media_user_token` that radio stations and
+private playlists need. Tokens are never echoed back in any response.
+
+Errors share one body, `{"error": {"code", "message", "details"?}}`; clients switch on
+`code`. Streams are Server-Sent Events that resume from `Last-Event-ID` or `?cursor=`,
+seeded from the `event_cursor` of the matching snapshot. `GET /config` only reads; a
+hand-edited config file is applied by `POST /config/reload` or SIGHUP.
 
 Every response carries an `X-Request-ID`; send your own and
 `GET /logs?request_id=<id>` aggregates that request's access and job logs.

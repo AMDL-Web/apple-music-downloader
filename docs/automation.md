@@ -101,10 +101,10 @@ library_sync:
   interval_minutes: 15    # 1..1440
 ```
 
-Both keys are runtime-mutable through `PUT /api/v1/config` or a manual file edit — the
-polling loop re-reads them at the start of every pass, so turning it off really stops the
-polling rather than just discarding results, and shortening the interval takes effect
-immediately instead of after the current wait.
+Both keys are runtime-mutable through `PUT /api/v1/config`, or a manual file edit applied
+with `POST /api/v1/config/reload` — the polling loop reads them at the start of every
+pass, so turning it off really stops the polling rather than just discarding results, and
+shortening the interval takes effect immediately instead of after the current wait.
 
 It depends on `catalog.media_user_token`: a personal library is readable only with a
 subscription token, and a developer token alone will not do. With that field empty the

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"time"
 
 	"amdl/internal/db"
 	"amdl/internal/domain"
@@ -17,53 +16,40 @@ import (
 
 // downloadsFeed is the SSE overview feed: it pushes one DownloadFeedMessage
 // per change to the GET /downloads list — download_upserted (the affected
-// job's latest snapshot) as jobs are queued/started/progress/finish, and
-// download_deleted as jobs are removed. Resume via the Last-Event-ID header;
-// the client should first GET /downloads for the full list and use that
-// response's last_event_id here.
+// job's latest snapshot) as jobs are queued, start, progress and finish, and
+// download_deleted as jobs are removed. A client first reads GET /downloads
+// and resumes from its event_cursor (Last-Event-ID or ?cursor=).
 func (s *Server) downloadsFeed(w http.ResponseWriter, r *http.Request) {
-	lastID, _ := strconv.ParseInt(r.Header.Get("Last-Event-ID"), 10, 64)
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("streaming unsupported"))
+	cursor, err := streamCursor(r)
+	if err != nil {
+		writeCursorError(w, err)
 		return
 	}
-
 	// Subscribe before the first drain so a milestone published between the
 	// backlog read and registration still wakes a subsequent drain.
-	ch, cancel := s.hub.SubscribeAll()
+	wake, cancel := s.hub.SubscribeAll()
 	defer cancel()
-
-	// Flush the response head right away so the client's EventSource opens even
-	// when there's no backlog to send (mirrors the single-job events handler);
-	// otherwise the 200 would wait for the first change or the 10s keepalive,
-	// and intermediary proxies could time the idle connection out first.
-	flusher.Flush()
-
-	write := func(msg domain.DownloadFeedMessage) error {
-		raw, _ := json.Marshal(msg)
-		fmt.Fprintf(w, "id: %d\n", msg.EventID)
-		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", msg.Type, raw)
-		flusher.Flush()
-		return nil
+	stream, err := startSSE(w)
+	if err != nil {
+		return
 	}
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	keepalive := func() error {
-		fmt.Fprint(w, ": keepalive\n\n")
-		flusher.Flush()
-		return nil
-	}
-	s.runDownloadsFeed(r.Context(), lastID, ch, ticker.C, write, keepalive)
+	ticks, stop := newStreamTicks()
+	defer stop()
+	s.runDownloadsFeed(r.Context(), stream, int64(cursor), wake, ticks)
 }
 
-// runDownloadsFeed drives the overview feed loop. It drains milestone events newer than the cursor into one message
-// per affected job (deduped to the latest action/snapshot) and calls keepalive
-// on each tick. write returning an error (client gone) ends the loop.
-func (s *Server) runDownloadsFeed(ctx context.Context, lastID int64, ch <-chan struct{}, tick <-chan time.Time, write func(domain.DownloadFeedMessage) error, keepalive func() error) {
+// runDownloadsFeed drives the overview feed loop. It drains milestone events
+// newer than lastID into one message per affected job (deduped to the latest
+// action and snapshot) on every wake and re-drain tick. A write error (client
+// gone) ends the loop. The feed never ends on its own.
+func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int64, wake <-chan struct{}, ticks streamTicks) {
+	write := func(msg domain.DownloadFeedMessage) error {
+		raw, err := json.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("encode feed message: %w", err)
+		}
+		return sink.send(strconv.FormatInt(msg.EventID, 10), msg.Type, raw)
+	}
 	drain := func() error {
 		for {
 			events, err := s.store.ListMilestoneEventsAfterLimit(ctx, lastID, streamEventPageSize)
@@ -141,21 +127,17 @@ func (s *Server) runDownloadsFeed(ctx context.Context, lastID int64, ch <-chan s
 		select {
 		case <-ctx.Done():
 			return
-		case _, ok := <-ch:
-			if !ok {
+		case _, ok := <-wake:
+			if !ok || drain() != nil {
 				return
 			}
-			if err := drain(); err != nil {
+		case <-ticks.redrain:
+			if drain() != nil {
 				return
 			}
-		case <-tick:
-			if err := drain(); err != nil {
+		case <-ticks.keepalive:
+			if sink.keepalive() != nil {
 				return
-			}
-			if keepalive != nil {
-				if err := keepalive(); err != nil {
-					return
-				}
 			}
 		}
 	}

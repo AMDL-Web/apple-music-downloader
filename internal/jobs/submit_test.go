@@ -74,8 +74,8 @@ func TestSubmitBatchDedupesWithinRequest(t *testing.T) {
 	if resp.Results[0].Status != domain.SubmitAccepted || resp.Results[1].Status != domain.SubmitAccepted {
 		t.Fatalf("first two results = %+v, want accepted", resp.Results[:2])
 	}
-	if resp.Results[2].Status != domain.SubmitDuplicateInRequest {
-		t.Fatalf("third result = %+v, want duplicate_in_request", resp.Results[2])
+	if resp.Results[2].Status != domain.SubmitDuplicateInRequest || resp.Results[2].Error == nil || resp.Results[2].Error.Code != "duplicate_in_request" {
+		t.Fatalf("third result = %+v, want duplicate_in_request with its error code", resp.Results[2])
 	}
 	if resp.Accepted != 2 || resp.Rejected != 1 {
 		t.Fatalf("resp = %+v, want 2 accepted / 1 rejected", resp)
@@ -93,7 +93,8 @@ func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T)
 	jobID := first.Results[0].Job.ID
 
 	second := manager.SubmitBatch(ctx, []string{"song|us|222"}, nil)
-	if second.Results[0].Status != domain.SubmitDuplicateActive || second.Results[0].ExistingJobID != jobID {
+	if second.Results[0].Status != domain.SubmitDuplicateActive || second.Results[0].ExistingJobID != jobID ||
+		second.Results[0].Error == nil || second.Results[0].Error.Code != "duplicate_active" {
 		t.Fatalf("second submit = %+v, want duplicate_active for %s", second.Results[0], jobID)
 	}
 
@@ -121,8 +122,10 @@ func TestSubmitBatchQueueFullMarksRemainingWithoutRollback(t *testing.T) {
 	if resp.Results[0].Status != domain.SubmitAccepted {
 		t.Fatalf("first = %+v, want accepted", resp.Results[0])
 	}
-	if resp.Results[1].Status != domain.SubmitQueueFull || resp.Results[2].Status != domain.SubmitQueueFull {
-		t.Fatalf("remaining = %+v, want queue_full", resp.Results[1:])
+	for _, result := range resp.Results[1:] {
+		if result.Status != domain.SubmitQueueFull || result.Error == nil || result.Error.Code != "queue_full" {
+			t.Fatalf("remaining = %+v, want queue_full with its error code", resp.Results[1:])
+		}
 	}
 	if resp.Accepted != 1 || resp.Rejected != 2 {
 		t.Fatalf("resp = %+v, want 1 accepted / 2 rejected", resp)
@@ -132,8 +135,40 @@ func TestSubmitBatchQueueFullMarksRemainingWithoutRollback(t *testing.T) {
 func TestSubmitBatchInvalidURLReportsError(t *testing.T) {
 	manager := newTestManager(t)
 	resp := manager.SubmitBatch(context.Background(), []string{"bad:not-a-url"}, nil)
-	if resp.Results[0].Status != domain.SubmitInvalid || resp.Results[0].Error == "" {
-		t.Fatalf("result = %+v, want invalid with error message", resp.Results[0])
+	got := resp.Results[0]
+	if got.Status != domain.SubmitInvalid || got.Error == nil || got.Error.Code != "invalid_url" || got.Error.Message != "bad test url" || got.Error.Details != nil {
+		t.Fatalf("result = %+v, want invalid with the processor's code and message", got)
+	}
+}
+
+// A store failure is not a verdict on the URL: it is reported as status
+// error with store_error, which tells the client to retry, and never as
+// invalid, which tells it the input is bad.
+func TestSubmitBatchStoreFailureIsErrorNotInvalid(t *testing.T) {
+	manager := newTestManager(t)
+	if err := manager.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	resp := manager.SubmitBatch(context.Background(), []string{"song|us|1"}, nil)
+	got := resp.Results[0]
+	if got.Status != domain.SubmitServerError || got.Error == nil || got.Error.Code != "store_error" {
+		t.Fatalf("result = %+v, want status error with store_error", got)
+	}
+	if resp.Accepted != 0 || resp.Rejected != 1 {
+		t.Fatalf("resp = %+v, want 0 accepted / 1 rejected", resp)
+	}
+}
+
+func TestRequestErrorSubmitErrorCarriesStorefrontDetails(t *testing.T) {
+	err := &RequestError{Code: "unsupported_storefront", Message: "storefront \"jp\" is not supported", Storefront: "jp", SupportedStorefronts: []string{"us", "cn"}}
+	got := err.SubmitError()
+	raw, marshalErr := json.Marshal(got)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	want := `{"code":"unsupported_storefront","message":"storefront \"jp\" is not supported","details":{"storefront":"jp","supported_storefronts":["us","cn"]}}`
+	if string(raw) != want {
+		t.Fatalf("submit error = %s, want %s", raw, want)
 	}
 }
 

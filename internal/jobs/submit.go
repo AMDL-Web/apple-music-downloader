@@ -63,12 +63,14 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 	for i, url := range urls {
 		validated, err := m.processor.ValidateRequest(ctx, url)
 		if err != nil {
-			results[i] = domain.SubmitResult{URL: url, Status: domain.SubmitInvalid, Error: requestErrorMessage(err)}
+			results[i] = validationFailure(url, err)
 			continue
 		}
 		key := canonicalKey(validated.Type, validated.Storefront, validated.ID, destination)
 		if seenKeys[key] {
-			results[i] = domain.SubmitResult{URL: url, Status: domain.SubmitDuplicateInRequest}
+			results[i] = domain.SubmitResult{URL: url, Status: domain.SubmitDuplicateInRequest, Error: &domain.SubmitError{
+				Code: domain.SubmitCodeDuplicateInRequest, Message: "an earlier URL in this request names the same download",
+			}}
 			continue
 		}
 		seenKeys[key] = true
@@ -85,21 +87,21 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 	queueFull := false
 	for _, c := range candidates {
 		if queueFull {
-			results[c.index] = domain.SubmitResult{URL: c.url, Status: domain.SubmitQueueFull}
+			results[c.index] = queueFullResult(c.url)
 			continue
 		}
 		existing, found, err := m.store.FindActiveJobByKey(ctx, c.key)
 		if err != nil {
-			results[c.index] = domain.SubmitResult{URL: c.url, Status: domain.SubmitInvalid, Error: err.Error()}
+			results[c.index] = storeFailure(c.url, "look up active jobs", err)
 			continue
 		}
 		if found {
-			results[c.index] = domain.SubmitResult{URL: c.url, Status: domain.SubmitDuplicateActive, ExistingJobID: existing.ID}
+			results[c.index] = duplicateActiveResult(c.url, existing.ID)
 			continue
 		}
 		if len(m.queue) >= cap(m.queue) {
 			queueFull = true
-			results[c.index] = domain.SubmitResult{URL: c.url, Status: domain.SubmitQueueFull}
+			results[c.index] = queueFullResult(c.url)
 			continue
 		}
 
@@ -113,10 +115,10 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 		}
 		if err := m.store.CreateJob(ctx, job); err != nil {
 			if errors.Is(err, db.ErrDuplicateActive) {
-				results[c.index] = domain.SubmitResult{URL: c.url, Status: domain.SubmitDuplicateActive}
+				results[c.index] = duplicateActiveResult(c.url, "")
 				continue
 			}
-			results[c.index] = domain.SubmitResult{URL: c.url, Status: domain.SubmitInvalid, Error: err.Error()}
+			results[c.index] = storeFailure(c.url, "create job", err)
 			continue
 		}
 		message := "job queued"
@@ -227,12 +229,40 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	return nil
 }
 
-func requestErrorMessage(err error) string {
+// validationFailure is the result for a URL the processor refused. A
+// RequestError is a verdict on the URL (status invalid); any other error is a
+// failure of the validator itself (status error), which a retry may not hit.
+func validationFailure(url string, err error) domain.SubmitResult {
 	var reqErr *RequestError
 	if errors.As(err, &reqErr) {
-		return reqErr.Code + ": " + reqErr.Message
+		return domain.SubmitResult{URL: url, Status: domain.SubmitInvalid, Error: reqErr.SubmitError()}
 	}
-	return err.Error()
+	return domain.SubmitResult{URL: url, Status: domain.SubmitServerError, Error: &domain.SubmitError{
+		Code: domain.SubmitCodeInternalError, Message: "validate url: " + err.Error(),
+	}}
+}
+
+// storeFailure is the result for a URL whose submit failed in the job store:
+// status error with store_error, so a client retries instead of dropping it.
+func storeFailure(url, op string, err error) domain.SubmitResult {
+	return domain.SubmitResult{URL: url, Status: domain.SubmitServerError, Error: &domain.SubmitError{
+		Code: domain.SubmitCodeStoreError, Message: op + ": " + err.Error(),
+	}}
+}
+
+func queueFullResult(url string) domain.SubmitResult {
+	return domain.SubmitResult{URL: url, Status: domain.SubmitQueueFull, Error: &domain.SubmitError{
+		Code: domain.SubmitCodeQueueFull, Message: ErrQueueFull.Error(),
+	}}
+}
+
+// duplicateActiveResult is the result for a URL whose download already runs
+// in a queued or running job. existingJobID is empty when the store's unique
+// index caught the race instead of the lookup.
+func duplicateActiveResult(url, existingJobID string) domain.SubmitResult {
+	return domain.SubmitResult{URL: url, Status: domain.SubmitDuplicateActive, ExistingJobID: existingJobID, Error: &domain.SubmitError{
+		Code: domain.SubmitCodeDuplicateActive, Message: "an active job already downloads this input",
+	}}
 }
 
 // needsMediaUserToken reports whether a job can consume the per-job credential:

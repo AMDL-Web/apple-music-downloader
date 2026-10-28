@@ -26,8 +26,11 @@ func TestCreateDownloadSplitsBatchAndDedupes(t *testing.T) {
 	if resp.Accepted != 2 || resp.Rejected != 1 || len(resp.Results) != 3 {
 		t.Fatalf("resp = %+v, want 2 accepted / 1 rejected across 3 results", resp)
 	}
-	if resp.Results[2].Status != domain.SubmitDuplicateInRequest {
-		t.Fatalf("third result = %+v, want duplicate_in_request", resp.Results[2])
+	if resp.Results[2].Status != domain.SubmitDuplicateInRequest || resp.Results[2].Error == nil || resp.Results[2].Error.Code != "duplicate_in_request" {
+		t.Fatalf("third result = %+v, want duplicate_in_request with its error object", resp.Results[2])
+	}
+	if resp.Results[0].Error != nil {
+		t.Fatalf("accepted result carries an error: %+v", resp.Results[0])
 	}
 }
 
@@ -156,7 +159,7 @@ func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
 	var resp struct {
 		Downloads    []map[string]any       `json:"downloads"`
 		StatusCounts domain.JobStatusCounts `json:"status_counts"`
-		LastEventID  int64                  `json:"last_event_id"`
+		EventCursor  *int64                 `json:"event_cursor"`
 		Total        int                    `json:"total"`
 		Limit        int                    `json:"limit"`
 		Offset       int                    `json:"offset"`
@@ -172,6 +175,9 @@ func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
 	}
 	if resp.StatusCounts != (domain.JobStatusCounts{Running: 1, Total: 1}) {
 		t.Fatalf("status_counts = %+v, want running=1 total=1 with other statuses zero", resp.StatusCounts)
+	}
+	if resp.EventCursor == nil || *resp.EventCursor != 0 {
+		t.Fatalf("event_cursor = %v, want 0 (no events yet)", resp.EventCursor)
 	}
 	assertJobCounters(t, resp.Downloads[0])
 }
@@ -338,22 +344,16 @@ func TestDeleteDownload(t *testing.T) {
 	}
 
 	recorder = requestJSON(t, server.Routes(), http.MethodDelete, "/api/v1/downloads/"+running.ID, "")
-	if recorder.Code != http.StatusConflict {
-		t.Fatalf("delete running: status = %d, want %d", recorder.Code, http.StatusConflict)
-	}
+	assertErrorCode(t, recorder, http.StatusConflict, "job_active")
 
 	recorder = requestJSON(t, server.Routes(), http.MethodDelete, "/api/v1/downloads/missing", "")
-	if recorder.Code != http.StatusNotFound {
-		t.Fatalf("delete missing: status = %d, want %d", recorder.Code, http.StatusNotFound)
-	}
+	assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
 }
 
 func TestCreateDownloadRejectsEmptyURLs(t *testing.T) {
 	server := newTestServerWithManager(t)
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":[" , ,"]}`)
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-	}
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
 }
 
 func TestCreateDownloadRejectsTooManyURLs(t *testing.T) {
@@ -367,16 +367,57 @@ func TestCreateDownloadRejectsTooManyURLs(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", string(body))
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
+}
+
+// When no URL is accepted the batch body moves into error.details, so a
+// client that only understands the envelope still sees each URL's verdict.
+func TestCreateDownloadAllRejectedIsNoURLsAccepted(t *testing.T) {
+	server := newTestServerWithManager(t)
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":["bad-url"]}`)
+	details := assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "no_urls_accepted")
+	var batch domain.BatchSubmitResponse
+	if err := json.Unmarshal(details, &batch); err != nil {
+		t.Fatalf("details %s is not the batch body: %v", details, err)
+	}
+	if batch.Accepted != 0 || batch.Rejected != 1 || len(batch.Results) != 1 {
+		t.Fatalf("batch = %+v, want 0 accepted / 1 rejected", batch)
+	}
+	got := batch.Results[0]
+	if got.URL != "bad-url" || got.Status != domain.SubmitInvalid || got.Error == nil || got.Error.Code != "invalid_url" {
+		t.Fatalf("result = %+v, want invalid with invalid_url", got)
 	}
 }
 
-func TestCreateDownloadAllRejectedReturns422(t *testing.T) {
+// A store failure is retryable, so it must not look like a verdict on the
+// input: 500 store_error, with the per-URL results still in details.
+func TestCreateDownloadStoreFailureIsStoreError(t *testing.T) {
 	server := newTestServerWithManager(t)
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":["bad-url"]}`)
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	if err := server.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", `{"urls":["song|us|1","bad-url"]}`)
+	details := assertErrorCode(t, recorder, http.StatusInternalServerError, "store_error")
+	var batch domain.BatchSubmitResponse
+	if err := json.Unmarshal(details, &batch); err != nil {
+		t.Fatalf("details %s is not the batch body: %v", details, err)
+	}
+	if len(batch.Results) != 2 || batch.Results[0].Status != domain.SubmitServerError || batch.Results[0].Error.Code != "store_error" ||
+		batch.Results[1].Status != domain.SubmitInvalid {
+		t.Fatalf("results = %+v, want store failure then invalid", batch.Results)
+	}
+}
+
+// A transient store error on a job lookup is a 500, never a 404: a 404 tells
+// a client to drop a job that may still exist.
+func TestJobLookupStoreFailureIsNotNotFound(t *testing.T) {
+	server := newTestServerWithManager(t)
+	if err := server.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/v1/downloads/job1", "/api/v1/downloads/job1/events"} {
+		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
+		assertErrorCode(t, recorder, http.StatusInternalServerError, "store_error")
 	}
 }
 
@@ -435,19 +476,14 @@ func TestRetryDownloadRejectsNonFailedAndMissingJobs(t *testing.T) {
 	}
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+completed.ID+"/retry", "")
-	if recorder.Code != http.StatusConflict {
-		t.Fatalf("retry completed job status = %d, want 409", recorder.Code)
-	}
+	assertErrorCode(t, recorder, http.StatusConflict, "job_not_retryable")
 	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/no-such-job/retry", "")
-	if recorder.Code != http.StatusNotFound {
-		t.Fatalf("retry missing job status = %d, want 404", recorder.Code)
-	}
+	assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
 }
 
-// TestCancelMissingJobIsNotFound pins a status code an iOS client had to work
-// around. Cancel used to funnel every error into 500, so a job that had already
-// been deleted was indistinguishable from a broken server — one means "drop the
-// row from the list", the other means "back off and retry".
+// TestCancelMissingJobIsNotFound pins job_not_found on every job route: a
+// missing job means "drop the row from the list", unlike a 500, which means
+// "back off and retry".
 func TestCancelMissingJobIsNotFound(t *testing.T) {
 	server := newTestServerWithManager(t)
 
@@ -459,13 +495,13 @@ func TestCancelMissingJobIsNotFound(t *testing.T) {
 		{"cancel", http.MethodPost, "/api/v1/downloads/job_missing/cancel"},
 		{"retry", http.MethodPost, "/api/v1/downloads/job_missing/retry"},
 		{"delete", http.MethodDelete, "/api/v1/downloads/job_missing"},
+		{"get", http.MethodGet, "/api/v1/downloads/job_missing"},
+		{"events", http.MethodGet, "/api/v1/downloads/job_missing/events"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			server.Routes().ServeHTTP(recorder, httptest.NewRequest(tc.method, tc.path, nil))
-			if recorder.Code != http.StatusNotFound {
-				t.Errorf("%s = %d, want 404 (body %q)", tc.name, recorder.Code, recorder.Body.String())
-			}
+			assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
 		})
 	}
 }

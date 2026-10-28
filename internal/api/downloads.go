@@ -39,11 +39,11 @@ func (s *Server) createDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(urls) == 0 {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("urls is required"))
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "urls is required")
 		return
 	}
 	if len(urls) > maxBatchSubmitURLs {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("too many urls: max %d per request", maxBatchSubmitURLs))
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, fmt.Sprintf("too many urls: max %d per request", maxBatchSubmitURLs))
 		return
 	}
 	// Normalize the canonical token override once here so downstream code sees
@@ -59,26 +59,47 @@ func (s *Server) createDownload(w http.ResponseWriter, r *http.Request) {
 		// Strict: fresh input is rejected, not clamped — only overrides already
 		// persisted before the limits existed are clamped when jobs run.
 		if _, err := req.Overrides.ApplyValidatedStrict(s.currentConfig()); err != nil {
-			writeError(w, http.StatusUnprocessableEntity, fmt.Errorf("invalid overrides: %w", err))
+			writeError(w, http.StatusUnprocessableEntity, CodeInvalidOverrides, "invalid overrides: "+err.Error())
 			return
 		}
 		if err := s.manager.ValidateHookSelection(req.Overrides.Hooks); err != nil {
-			writeError(w, http.StatusUnprocessableEntity, fmt.Errorf("invalid overrides: %w", err))
+			writeError(w, http.StatusUnprocessableEntity, CodeInvalidOverrides, "invalid overrides: "+err.Error())
 			return
 		}
 	}
 	resp := s.manager.SubmitBatch(r.Context(), urls, req.Overrides)
-	status := http.StatusUnprocessableEntity
 	if resp.Accepted > 0 {
-		status = http.StatusAccepted
+		writeJSON(w, http.StatusAccepted, resp)
+		return
 	}
-	writeJSON(w, status, resp)
+	// Nothing was queued. A server-side failure means the same batch may
+	// succeed when retried, so it is a 500, not a verdict on the input; the
+	// per-URL results go out in details either way.
+	var serverCode ErrorCode
+	for _, result := range resp.Results {
+		if result.Status != domain.SubmitServerError {
+			continue
+		}
+		if result.Error != nil && result.Error.Code == domain.SubmitCodeInternalError {
+			if serverCode == "" {
+				serverCode = CodeInternalError
+			}
+			continue
+		}
+		serverCode = CodeStoreError
+		break
+	}
+	if serverCode != "" {
+		writeErrorDetails(w, http.StatusInternalServerError, serverCode, "no URL was accepted: the server failed; retry the submit", resp)
+		return
+	}
+	writeErrorDetails(w, http.StatusUnprocessableEntity, CodeNoURLsAccepted, "no URL was accepted; see details.results", resp)
 }
 
 func (s *Server) listDownloads(w http.ResponseWriter, r *http.Request) {
 	filter, err := parseJobListFilter(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, err.Error())
 		return
 	}
 	// Read the global cursor before the job snapshot, for the same reason
@@ -86,25 +107,25 @@ func (s *Server) listDownloads(w http.ResponseWriter, r *http.Request) {
 	// this read and the snapshot is already reflected in the snapshot, so the
 	// cursor a client resumes the overview feed from never runs ahead of what
 	// this response shows.
-	lastEventID, err := s.store.LatestGlobalEventID(r.Context())
+	eventCursor, err := s.store.LatestGlobalEventID(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeStoreError(w, "read event cursor", err)
 		return
 	}
 	jobs, total, err := s.store.ListJobs(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeStoreError(w, "list jobs", err)
 		return
 	}
 	counts, err := s.store.CountJobsByStatus(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeStoreError(w, "count jobs", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"downloads":     jobs,
 		"status_counts": makeJobStatusCounts(counts, total),
-		"total":         total, "limit": filter.Limit, "offset": filter.Offset, "last_event_id": lastEventID,
+		"total":         total, "limit": filter.Limit, "offset": filter.Offset, "event_cursor": eventCursor,
 	})
 }
 
@@ -132,16 +153,9 @@ func (s *Server) jobSnapshot(ctx context.Context, id string) (*domain.Job, error
 }
 
 func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
-	if err := s.manager.Cancel(r.Context(), r.PathValue("id")); err != nil {
-		// A missing job is a 404 here as it is on retry and delete. It used to
-		// be funnelled into 500 along with everything else, which left a client
-		// unable to tell "this job is gone, drop it from the list" from "the
-		// server is broken, back off and retry".
-		if errors.Is(err, db.ErrJobNotFound) {
-			writeError(w, http.StatusNotFound, err)
-			return
-		}
-		writeError(w, http.StatusInternalServerError, err)
+	id := r.PathValue("id")
+	if err := s.manager.Cancel(r.Context(), id); err != nil {
+		writeJobLookupError(w, id, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
@@ -151,16 +165,19 @@ func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
 // downloaded again: completed/skipped items are preserved as-is, failed ones
 // are reset to queued and re-processed.
 func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
-	if err := s.manager.Retry(r.Context(), r.PathValue("id")); err != nil {
+	id := r.PathValue("id")
+	if err := s.manager.Retry(r.Context(), id); err != nil {
 		switch {
-		case errors.Is(err, db.ErrJobNotFound):
-			writeError(w, http.StatusNotFound, err)
-		case errors.Is(err, jobs.ErrJobNotRetryable), errors.Is(err, jobs.ErrJobFinalizing), errors.Is(err, db.ErrDuplicateActive):
-			writeError(w, http.StatusConflict, err)
+		case errors.Is(err, jobs.ErrJobNotRetryable):
+			writeError(w, http.StatusConflict, CodeJobNotRetryable, err.Error())
+		case errors.Is(err, jobs.ErrJobFinalizing):
+			writeError(w, http.StatusConflict, CodeJobFinalizing, err.Error())
+		case errors.Is(err, db.ErrDuplicateActive):
+			writeError(w, http.StatusConflict, CodeDuplicateActive, "an active job already downloads this input")
 		case errors.Is(err, jobs.ErrQueueFull):
-			writeError(w, http.StatusServiceUnavailable, err)
+			writeError(w, http.StatusServiceUnavailable, CodeQueueFull, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, err)
+			writeJobLookupError(w, id, err)
 		}
 		return
 	}
@@ -175,21 +192,21 @@ func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 	// cursor never races ahead of what the response actually reflects.
 	// Reading it after the snapshot instead would let a concurrent event land
 	// in between: the cursor would include it, but the snapshot wouldn't,
-	// and the stream's Last-Event-ID filters strictly by id, so a client would
+	// and the stream's cursor filters strictly by id, so a client would
 	// skip that event and never see its effect until a later one arrives.
-	lastEventID, err := s.store.LatestEventID(r.Context(), id)
+	eventCursor, err := s.store.LatestEventID(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeStoreError(w, "read event cursor", err)
 		return
 	}
 	job, err := s.store.GetJob(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, err)
+		writeJobLookupError(w, id, err)
 		return
 	}
 	items, err := s.store.ListItems(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeStoreError(w, "list items", err)
 		return
 	}
 	// The snapshot and the SSE stream are two access modes of one state, so
@@ -197,12 +214,12 @@ func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 	// visible here too, derived from those same persisted events.
 	hookEvents, err := s.store.ListHookEvents(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeStoreError(w, "list hook events", err)
 		return
 	}
 	hooks := domain.SummarizeHooks(hookEvents, s.manager.HooksPending(id))
 	writeJSON(w, http.StatusOK, map[string]any{
-		"job": job, "items": items, "hooks": hooks, "last_event_id": lastEventID,
+		"job": job, "items": items, "hooks": hooks, "event_cursor": eventCursor,
 	})
 }
 
@@ -210,15 +227,13 @@ func (s *Server) deleteDownload(w http.ResponseWriter, r *http.Request) {
 	// Deletion goes through the manager, not the store, so a job whose
 	// finalize sequence (terminal event + hook dispatch) is still in flight
 	// is refused even though its status row already reads terminal.
-	if err := s.manager.Delete(r.Context(), r.PathValue("id")); err != nil {
-		switch {
-		case errors.Is(err, db.ErrJobNotFound):
-			writeError(w, http.StatusNotFound, err)
-		case errors.Is(err, db.ErrJobNotTerminal):
-			writeError(w, http.StatusConflict, err)
-		default:
-			writeError(w, http.StatusInternalServerError, err)
+	id := r.PathValue("id")
+	if err := s.manager.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, db.ErrJobNotTerminal) {
+			writeError(w, http.StatusConflict, CodeJobActive, fmt.Sprintf("job %s is still running, finalizing or running a hook", id))
+			return
 		}
+		writeJobLookupError(w, id, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

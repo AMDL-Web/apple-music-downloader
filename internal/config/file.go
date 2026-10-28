@@ -52,13 +52,8 @@ func bootstrapConfig(configPath string) error {
 	return writeFileAtomic(configPath, raw, 0o600)
 }
 
-// Save writes the complete configuration to path, owner-only because the file
-// may hold a media-user-token. The running service persists through
-// Store.UpdateAndSave instead.
-func Save(path string, cfg Config) error {
-	return saveConfig(path, cfg)
-}
-
+// saveConfig writes the complete configuration to path, owner-only because
+// the file may hold a media-user-token.
 func saveConfig(path string, cfg Config) error {
 	out, err := yaml.Marshal(cfg)
 	if err != nil {

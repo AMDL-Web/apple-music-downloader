@@ -35,6 +35,7 @@ type Client struct {
 var (
 	ErrAuthenticationFailed = errors.New("wrapper authentication failed")
 	ErrAlreadyLoggedIn      = errors.New("wrapper account already logged in")
+	ErrLoginPending         = errors.New("a wrapper login for this account is already pending")
 	ErrLoginSessionNotFound = errors.New("wrapper login session not found")
 	ErrLoginSessionBusy     = errors.New("wrapper login session is already being verified")
 	ErrLoginTimeout         = errors.New("wrapper login timed out")
@@ -67,16 +68,24 @@ const (
 	// account. Releases that run several wrappers per account start another
 	// one instead and never send it.
 	msgAlreadyLoggedIn = "already login"
+	// msgLoginPending answers a login of an account whose earlier login is
+	// still waiting for its two-step code.
+	msgLoginPending = "login already pending"
 	// msgNoSuchAccount answers a logout of an account with no wrapper.
 	msgNoSuchAccount = "no such account"
 )
 
 // loginFailure maps the message of a replyFailed login answer to its error.
 func loginFailure(msg string) error {
-	if strings.Contains(strings.ToLower(msg), msgAlreadyLoggedIn) {
+	msg = strings.ToLower(msg)
+	switch {
+	case strings.Contains(msg, msgAlreadyLoggedIn):
 		return ErrAlreadyLoggedIn
+	case strings.Contains(msg, msgLoginPending):
+		return ErrLoginPending
+	default:
+		return ErrAuthenticationFailed
 	}
-	return ErrAuthenticationFailed
 }
 
 // logoutFailure maps a logout answer other than replyOK to its error.
@@ -101,13 +110,14 @@ type loginSession struct {
 	busy      bool
 }
 
+// Status is wrapper-manager's state as GET /api/v1/wrapper/status returns
+// it. Regions and Accounts are never nil, so they encode as [] when empty.
 type Status struct {
-	Ready             bool     `json:"ready"`
-	Status            bool     `json:"status"`
-	Regions           []string `json:"regions"`
-	ClientCount       int32    `json:"client_count"`
-	Accounts          []string `json:"accounts,omitempty"`
-	AccountsSupported bool     `json:"accounts_supported"`
+	Ready       bool     `json:"ready"`
+	Status      bool     `json:"status"`
+	Regions     []string `json:"regions"`
+	ClientCount int32    `json:"client_count"`
+	Accounts    []string `json:"accounts"`
 }
 
 // DecryptSession is a live decrypt stream to the wrapper for a single track.
@@ -344,21 +354,19 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	}
 	data := resp.GetData()
 	return Status{
-		Ready:             data.GetReady(),
-		Status:            data.GetStatus(),
-		Regions:           data.GetRegions(),
-		ClientCount:       data.GetClientCount(),
-		Accounts:          data.GetAccounts(),
-		AccountsSupported: statusAccountsSupported(data),
+		Ready:       data.GetReady(),
+		Status:      data.GetStatus(),
+		Regions:     nonNil(data.GetRegions()),
+		ClientCount: data.GetClientCount(),
+		Accounts:    nonNil(data.GetAccounts()),
 	}, nil
 }
 
-func statusAccountsSupported(data *pb.StatusData) bool {
-	if data == nil {
-		return false
+func nonNil(values []string) []string {
+	if values == nil {
+		return []string{}
 	}
-	field := data.ProtoReflect().Descriptor().Fields().ByName("accounts")
-	return field != nil && data.ProtoReflect().Get(field).List().Len() > 0
+	return values
 }
 
 func (c *Client) M3U8(ctx context.Context, adamID string) (string, error) {

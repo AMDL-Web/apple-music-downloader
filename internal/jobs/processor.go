@@ -25,6 +25,9 @@ type ValidationResult struct {
 	ID         string
 }
 
+// RequestError is a Processor.ValidateRequest verdict on one URL. Code is
+// the stable submit error code (domain.SubmitError.Code); Storefront and
+// SupportedStorefronts are set for unsupported_storefront.
 type RequestError struct {
 	Code                 string
 	Message              string
@@ -36,6 +39,18 @@ type RequestError struct {
 func (e *RequestError) Error() string { return e.Message }
 
 func (e *RequestError) Unwrap() error { return e.Cause }
+
+// SubmitError is e as a per-URL submit error.
+func (e *RequestError) SubmitError() *domain.SubmitError {
+	out := &domain.SubmitError{Code: e.Code, Message: e.Message}
+	if e.Storefront != "" || e.SupportedStorefronts != nil {
+		out.Details = map[string]any{
+			"storefront":            e.Storefront,
+			"supported_storefronts": append([]string{}, e.SupportedStorefronts...),
+		}
+	}
+	return out
+}
 
 type Reporter interface {
 	SetJob(ctx context.Context, job *domain.Job) error

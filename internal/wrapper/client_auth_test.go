@@ -2,6 +2,7 @@ package wrapper
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"amdl/internal/config"
+
 	pb "github.com/AMDL-Web/wrapper-manager/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -107,8 +109,31 @@ func TestStatusReturnsAccountsWhenManagerProvidesThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !status.AccountsSupported || len(status.Accounts) != 1 || status.Accounts[0] != "user@example.com" {
+	if len(status.Accounts) != 1 || status.Accounts[0] != "user@example.com" {
 		t.Fatalf("unexpected accounts status: %#v", status)
+	}
+}
+
+// A manager with no logged-in account (or one too old to report accounts)
+// sends no accounts; the status still encodes "accounts": [] and "regions":
+// [] rather than omitting them or sending null.
+func TestStatusEncodesEmptyListsAsArrays(t *testing.T) {
+	server := &authTestServer{status: func(context.Context, *emptypb.Empty) (*pb.StatusReply, error) {
+		return &pb.StatusReply{Header: &pb.ReplyHeader{Code: 0}, Data: &pb.StatusData{}}, nil
+	}}
+	client := newAuthTestClient(t, server, time.Second)
+
+	status, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"ready":false,"status":false,"regions":[],"client_count":0,"accounts":[]}`
+	if string(raw) != want {
+		t.Fatalf("status JSON = %s, want %s", raw, want)
 	}
 }
 
@@ -420,7 +445,7 @@ func TestUpstreamReplyWording(t *testing.T) {
 	}{
 		{msg: "already login", want: ErrAlreadyLoggedIn},
 		{msg: "login failed", want: ErrAuthenticationFailed},
-		{msg: "login already pending", want: ErrAuthenticationFailed},
+		{msg: "login already pending", want: ErrLoginPending},
 		{msg: "no pending login", want: ErrAuthenticationFailed},
 	}
 	for _, tt := range login {

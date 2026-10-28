@@ -311,17 +311,48 @@ func TestDownloadsFeedReplaysMilestonesAcrossDatabasePages(t *testing.T) {
 
 	hub := events.NewHub()
 	server := &Server{store: store, hub: hub, manager: jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())}
-	var got []domain.DownloadFeedMessage
-	server.runDownloadsFeed(ctx, 0, make(chan struct{}), make(chan time.Time), func(msg domain.DownloadFeedMessage) error {
-		got = append(got, msg)
-		if len(got) == 2 {
+	sink := &recordingSink{onSend: func(n int) {
+		if n == 2 {
 			cancel()
 		}
-		return nil
-	}, nil)
+	}}
+	server.runDownloadsFeed(ctx, sink, 0, make(chan struct{}), streamTicks{})
+	var got []domain.DownloadFeedMessage
+	for _, frame := range sink.frames {
+		var msg domain.DownloadFeedMessage
+		if err := json.Unmarshal(frame.data, &msg); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, msg)
+	}
 	if len(got) != 2 || got[0].EventID != boundaryID || got[1].EventID != finalID {
 		t.Fatalf("paged feed messages = %+v, want page cursors %d then %d", got, boundaryID, finalID)
 	}
+}
+
+// recordingSink is an sseSink that keeps every frame in memory.
+type recordingSink struct {
+	frames     []sseFrame
+	keepalives int
+	onSend     func(n int)
+}
+
+type sseFrame struct {
+	id, name string
+	data     []byte
+}
+
+func (r *recordingSink) send(id, name string, data []byte) error {
+	r.frames = append(r.frames, sseFrame{id: id, name: name, data: append([]byte(nil), data...)})
+	if r.onSend != nil {
+		r.onSend(len(r.frames))
+	}
+	return nil
+}
+
+func (r *recordingSink) keepalive() error {
+	r.keepalives++
+	return nil
 }
 
 // TestDownloadsFeedFlushesHeadWithoutBacklog guards against the SSE feed

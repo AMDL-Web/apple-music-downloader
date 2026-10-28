@@ -1,58 +1,66 @@
 package api
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
+	"sort"
+	"strings"
 
 	"amdl/internal/config"
+	"amdl/internal/console"
 	"amdl/internal/db"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
-	"amdl/internal/librarysync"
 	"amdl/internal/logging"
 )
 
+// Deps are the components the HTTP layer serves. Config, Store, Hub and
+// Manager are required. The rest are optional: when one is nil, the routes
+// that need it answer 503 feature_unavailable and nothing else changes.
+type Deps struct {
+	// Config is the live runtime config shared with the download pipeline;
+	// the /config routes read, reload and replace its snapshot.
+	Config  *config.Store
+	Store   *db.Store
+	Hub     *events.Hub
+	Manager *jobs.Manager
+	// Logger is the base logger of request logs; nil means slog.Default().
+	Logger *slog.Logger
+	// Logging backs GET /logs and GET /logs/stream and applies runtime
+	// log-level changes.
+	Logging        *logging.System
+	Wrapper        WrapperService
+	Quality        QualityService
+	DeveloperToken DeveloperTokenService
+	LibrarySync    LibrarySyncService
+}
+
+// Server holds the HTTP handlers; build it with New and serve Routes.
 type Server struct {
-	// cfg is the live runtime config store shared with the download pipeline;
-	// GET/PUT /api/v1/config read and replace its snapshot.
-	cfg       *config.Store
-	store     *db.Store
-	hub       *events.Hub
-	manager   *jobs.Manager
-	wrapper   wrapperService
-	quality   qualityService
-	devToken  developerTokenService
-	logger    *slog.Logger
-	logStore  *logging.Store
-	logSystem *logging.System
-	// librarySync is optional; nil means the watcher was not wired.
-	librarySync librarySyncService
+	cfg         *config.Store
+	store       *db.Store
+	hub         *events.Hub
+	manager     *jobs.Manager
+	logger      *slog.Logger
+	logSystem   *logging.System
+	logStore    *logging.Store
+	wrapper     WrapperService
+	quality     QualityService
+	devToken    DeveloperTokenService
+	librarySync LibrarySyncService
 }
 
-// librarySyncService is the library watcher, wired in after construction via
-// SetLibrarySync rather than as another NewServer parameter — the watcher needs
-// the job manager, which is itself a NewServer argument, and the many existing
-// call sites should not all have to learn about an optional dependency. A nil
-// value means the feature is not wired, and its endpoints answer 503.
-type librarySyncService interface {
-	Status() librarysync.Status
-	ResetAnchor(ctx context.Context) (int64, error)
-}
-
-func NewServer(cfg *config.Store, store *db.Store, hub *events.Hub, manager *jobs.Manager, wrapperClient wrapperService, qualityClient qualityService, devToken developerTokenService, logger *slog.Logger, logSystem ...*logging.System) *Server {
-	s := &Server{cfg: cfg, store: store, hub: hub, manager: manager, wrapper: wrapperClient, quality: qualityClient, devToken: devToken, logger: logger}
-	if len(logSystem) > 0 && logSystem[0] != nil {
-		s.logSystem = logSystem[0]
-		s.logStore = logSystem[0].Store
+// New returns a Server for deps. It does no I/O.
+func New(deps Deps) *Server {
+	s := &Server{
+		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
+		logger: deps.Logger, logSystem: deps.Logging,
+		wrapper: deps.Wrapper, quality: deps.Quality, devToken: deps.DeveloperToken, librarySync: deps.LibrarySync,
+	}
+	if deps.Logging != nil {
+		s.logStore = deps.Logging.Store
 	}
 	return s
-}
-
-// SetLibrarySync attaches the library watcher. Optional: without it the
-// /api/v1/library-sync endpoints answer 503 and nothing else changes.
-func (s *Server) SetLibrarySync(watcher librarySyncService) {
-	s.librarySync = watcher
 }
 
 // currentConfig returns the live runtime config snapshot; nil-safe for test
@@ -64,42 +72,129 @@ func (s *Server) currentConfig() config.Config {
 	return s.cfg.Get()
 }
 
+// route is one line of the route table. Every pattern under /api/v1/ is an
+// operation in openapi.yaml and the reverse (TestRoutesMatchSpec).
+type route struct {
+	method  string
+	pattern string
+	handler http.Handler
+}
+
+func (s *Server) routes() []route {
+	h := func(f http.HandlerFunc) http.Handler { return f }
+	return []route{
+		{http.MethodGet, "/{$}", h(redirectToConsole)},
+		{http.MethodGet, "/console/", http.StripPrefix("/console", console.Handler())},
+		{http.MethodGet, "/docs", h(swaggerUI)},
+		{http.MethodGet, "/api/openapi.yaml", h(openAPI)},
+
+		{http.MethodGet, "/api/v1/health", h(s.health)},
+		{http.MethodGet, "/api/v1/logs", h(s.listLogs)},
+		{http.MethodGet, "/api/v1/logs/stream", h(s.streamLogs)},
+		{http.MethodGet, "/api/v1/config", h(s.getConfig)},
+		{http.MethodPut, "/api/v1/config", h(s.updateConfig)},
+		{http.MethodPost, "/api/v1/config/reload", h(s.reloadConfig)},
+		{http.MethodGet, "/api/v1/hooks", h(s.listHooks)},
+		{http.MethodGet, "/api/v1/developer-token", h(s.developerToken)},
+		{http.MethodGet, "/api/v1/library-sync", h(s.librarySyncStatus)},
+		{http.MethodPost, "/api/v1/library-sync/reset", h(s.librarySyncReset)},
+		{http.MethodGet, "/api/v1/wrapper/status", h(s.wrapperStatus)},
+		{http.MethodPost, "/api/v1/wrapper/login", h(s.wrapperLogin)},
+		{http.MethodPost, "/api/v1/wrapper/login/{login_id}/2fa", h(s.wrapperTwoStep)},
+		{http.MethodPost, "/api/v1/wrapper/logout", h(s.wrapperLogout)},
+		{http.MethodPost, "/api/v1/quality", h(s.queryQuality)},
+		{http.MethodPost, "/api/v1/downloads", h(s.createDownload)},
+		{http.MethodGet, "/api/v1/downloads", h(s.listDownloads)},
+		// The literal "events" segment is more specific than "{id}", so the
+		// overview feed takes precedence over GET /api/v1/downloads/{id} for
+		// that exact path (a real job id is never "events").
+		{http.MethodGet, "/api/v1/downloads/events", h(s.downloadsFeed)},
+		{http.MethodGet, "/api/v1/downloads/{id}", h(s.getDownload)},
+		{http.MethodDelete, "/api/v1/downloads/{id}", h(s.deleteDownload)},
+		{http.MethodPost, "/api/v1/downloads/{id}/cancel", h(s.cancelDownload)},
+		{http.MethodPost, "/api/v1/downloads/{id}/retry", h(s.retryDownload)},
+		{http.MethodGet, "/api/v1/downloads/{id}/events", h(s.jobEvents)},
+	}
+}
+
+// Routes returns the handler to serve: the route table on one mux, wrapped in
+// CORS and request observation (X-Request-ID, access log, panic recovery).
 func (s *Server) Routes() http.Handler {
+	table := s.routes()
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /docs", swaggerUI)
-	mux.HandleFunc("GET /api/openapi.yaml", openAPI)
-	mux.HandleFunc("GET /api/v1/health", s.health)
-	mux.HandleFunc("GET /api/v1/logs", s.listLogs)
-	mux.HandleFunc("GET /api/v1/logs/stream", s.streamLogs)
-	mux.HandleFunc("GET /api/v1/config", s.getConfig)
-	mux.HandleFunc("PUT /api/v1/config", s.updateConfig)
-	mux.HandleFunc("GET /api/v1/hooks", s.listHooks)
-	mux.HandleFunc("GET /api/v1/developer-token", s.developerToken)
-	mux.HandleFunc("GET /api/v1/library-sync", s.librarySyncStatus)
-	mux.HandleFunc("POST /api/v1/library-sync/reset", s.librarySyncReset)
-	mux.HandleFunc("GET /api/v1/wrapper/status", s.wrapperStatus)
-	mux.HandleFunc("POST /api/v1/wrapper/login", s.wrapperLogin)
-	mux.HandleFunc("POST /api/v1/wrapper/login/{login_id}/2fa", s.wrapperTwoStep)
-	mux.HandleFunc("POST /api/v1/wrapper/logout", s.wrapperLogout)
-	mux.HandleFunc("POST /api/v1/quality", s.queryQuality)
-	mux.HandleFunc("POST /api/v1/downloads", s.createDownload)
-	mux.HandleFunc("GET /api/v1/downloads", s.listDownloads)
-	// The literal "events" segment is more specific than "{id}", so the
-	// overview feed takes precedence over GET /api/v1/downloads/{id} for that
-	// exact path (a real job id is never "events").
-	mux.HandleFunc("GET /api/v1/downloads/events", s.downloadsFeed)
-	mux.HandleFunc("GET /api/v1/downloads/{id}", s.getDownload)
-	mux.HandleFunc("DELETE /api/v1/downloads/{id}", s.deleteDownload)
-	mux.HandleFunc("POST /api/v1/downloads/{id}/cancel", s.cancelDownload)
-	mux.HandleFunc("POST /api/v1/downloads/{id}/retry", s.retryDownload)
-	mux.HandleFunc("GET /api/v1/downloads/{id}/events", s.events)
+	for _, rt := range table {
+		mux.Handle(rt.method+" "+rt.pattern, rt.handler)
+	}
+	// http.ServeMux answers an unknown path or a wrong method with its own
+	// plain-text 404/405. Under /api/ every miss reaches this catch-all
+	// instead, because a method-less pattern matches whatever a method
+	// pattern does not, and it answers with the JSON error envelope.
+	mux.Handle("/api/", apiFallback(table))
 	return s.observeHTTP(cors(mux))
 }
 
+// apiFallback answers a request under /api/ that no route matched: 405
+// method_not_allowed with an Allow header when some route has the path with
+// another method, else 404 route_not_found. Path matching uses a ServeMux per
+// pattern so it agrees with the real routing.
+func apiFallback(table []route) http.Handler {
+	type pathRoutes struct {
+		probe   *http.ServeMux
+		methods []string
+	}
+	byPattern := map[string]*pathRoutes{}
+	var paths []*pathRoutes
+	for _, rt := range table {
+		if !strings.HasPrefix(rt.pattern, "/api/") {
+			continue
+		}
+		p, ok := byPattern[rt.pattern]
+		if !ok {
+			p = &pathRoutes{probe: http.NewServeMux()}
+			p.probe.Handle(rt.pattern, http.NotFoundHandler())
+			byPattern[rt.pattern] = p
+			paths = append(paths, p)
+		}
+		p.methods = append(p.methods, rt.method)
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		allowed := map[string]bool{}
+		for _, p := range paths {
+			if _, pattern := p.probe.Handler(r); pattern == "" {
+				continue
+			}
+			for _, method := range p.methods {
+				allowed[method] = true
+				if method == http.MethodGet {
+					allowed[http.MethodHead] = true
+				}
+			}
+		}
+		if len(allowed) == 0 {
+			writeError(w, http.StatusNotFound, CodeRouteNotFound, "no route for "+r.URL.Path)
+			return
+		}
+		methods := make([]string, 0, len(allowed))
+		for method := range allowed {
+			methods = append(methods, method)
+		}
+		sort.Strings(methods)
+		w.Header().Set("Allow", strings.Join(methods, ", "))
+		writeError(w, http.StatusMethodNotAllowed, CodeMethodNotAllowed, r.Method+" is not allowed on "+r.URL.Path)
+	})
+}
+
+// redirectToConsole sends the bare root to the web console.
+func redirectToConsole(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/console/", http.StatusFound)
+}
+
+// cors allows any origin. Last-Event-ID is an allowed request header so a
+// cross-origin EventSource can resume a stream.
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, Last-Event-ID")
 		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 		if r.Method == http.MethodOptions {

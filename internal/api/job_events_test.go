@@ -108,14 +108,12 @@ func TestEventsRejectsTerminalJob(t *testing.T) {
 	}
 
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/done1/events", "")
-	if recorder.Code != http.StatusConflict {
-		t.Fatalf("SSE subscribe to terminal job: status = %d, want %d", recorder.Code, http.StatusConflict)
+	if recorder.Code != http.StatusNoContent || recorder.Body.Len() != 0 {
+		t.Fatalf("SSE subscribe to terminal job: status = %d body %q, want an empty %d", recorder.Code, recorder.Body.String(), http.StatusNoContent)
 	}
 
 	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/missing/events", "")
-	if recorder.Code != http.StatusNotFound {
-		t.Fatalf("SSE subscribe to missing job: status = %d, want %d", recorder.Code, http.StatusNotFound)
-	}
+	assertErrorCode(t, recorder, http.StatusNotFound, "job_not_found")
 }
 
 // TestEventsReplaysBacklogForTerminalJobInsteadOfRejecting guards against the
@@ -158,14 +156,14 @@ func TestEventsReplaysBacklogForTerminalJobInsteadOfRejecting(t *testing.T) {
 		t.Fatalf("SSE body missing backlog events: %s", recorder.Body.String())
 	}
 
-	// Fully caught up now: a fresh connection with last_event_id at the
-	// terminal event must go back to being rejected outright.
+	// Fully caught up now: a fresh connection resuming at the terminal event
+	// gets 204 No Content, which tells EventSource to stop reconnecting.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/downloads/done2/events", nil)
 	req.Header.Set("Last-Event-ID", strconv.FormatInt(stored.ID, 10))
 	recorder = httptest.NewRecorder()
 	server.Routes().ServeHTTP(recorder, req)
-	if recorder.Code != http.StatusConflict {
-		t.Fatalf("SSE fully caught up on terminal job: status = %d, want %d", recorder.Code, http.StatusConflict)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("SSE fully caught up on terminal job: status = %d, want %d", recorder.Code, http.StatusNoContent)
 	}
 }
 
@@ -304,8 +302,8 @@ func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 	}
 
 	// The hook is done and the job was already terminal: a fresh, fully
-	// caught-up connection must now be rejected outright, same as any other
-	// exhausted terminal job.
+	// caught-up connection now gets 204, same as any other exhausted
+	// terminal job.
 	latestID, err := store.LatestEventID(ctx, job.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -320,8 +318,8 @@ func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status after hook completion = %d, want %d (nothing left to deliver)", resp.StatusCode, http.StatusConflict)
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status after hook completion = %d, want %d (nothing left to deliver)", resp.StatusCode, http.StatusNoContent)
 	}
 }
 

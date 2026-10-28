@@ -166,9 +166,11 @@ func main() {
 	httpHandlerCtx, cancelHTTPHandlers := context.WithCancel(context.Background())
 	defer cancelHTTPHandlers()
 	var activeHTTPHandlers sync.WaitGroup
-	apiServer := api.NewServer(cfgStore, store, hub, manager, wrapperClient, qualityService, catalog, logSystem.Logger, logSystem)
-	apiServer.SetLibrarySync(libraryWatcher)
-	routes := apiServer.Routes()
+	routes := api.New(api.Deps{
+		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
+		Logger: logSystem.Logger, Logging: logSystem,
+		Wrapper: wrapperClient, Quality: qualityService, DeveloperToken: catalog, LibrarySync: libraryWatcher,
+	}).Routes()
 	httpServer := &http.Server{
 		Addr: cfg.Server.Listen,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

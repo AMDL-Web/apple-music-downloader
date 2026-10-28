@@ -3,14 +3,15 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"amdl/internal/wrapper"
 )
 
-type wrapperService interface {
+// WrapperService is the wrapper-manager client: account status, login with
+// an optional two-step code, and logout.
+type WrapperService interface {
 	Status(context.Context) (wrapper.Status, error)
 	StartLogin(context.Context, string, string) (wrapper.LoginResult, error)
 	SubmitTwoStepCode(context.Context, string, string) (wrapper.LoginResult, error)
@@ -18,9 +19,13 @@ type wrapperService interface {
 }
 
 func (s *Server) wrapperStatus(w http.ResponseWriter, r *http.Request) {
+	if s.wrapper == nil {
+		writeFeatureUnavailable(w, "the wrapper")
+		return
+	}
 	status, err := s.wrapper.Status(r.Context())
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, err)
+		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnavailable, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
@@ -34,10 +39,15 @@ func (s *Server) wrapperLogin(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONBody(w, r, &req, false) {
 		return
 	}
+	// The password goes to Apple as typed: leading or trailing spaces can be
+	// part of it. Only a password that is nothing but whitespace is refused.
 	req.Username = strings.TrimSpace(req.Username)
-	req.Password = strings.TrimSpace(req.Password)
-	if req.Username == "" || req.Password == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("username and password are required"))
+	if req.Username == "" || strings.TrimSpace(req.Password) == "" {
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "username and password are required")
+		return
+	}
+	if s.wrapper == nil {
+		writeFeatureUnavailable(w, "the wrapper")
 		return
 	}
 	result, err := s.wrapper.StartLogin(r.Context(), req.Username, req.Password)
@@ -61,7 +71,11 @@ func (s *Server) wrapperTwoStep(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Code = strings.TrimSpace(req.Code)
 	if req.Code == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("two_step_code is required"))
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "two_step_code is required")
+		return
+	}
+	if s.wrapper == nil {
+		writeFeatureUnavailable(w, "the wrapper")
 		return
 	}
 	result, err := s.wrapper.SubmitTwoStepCode(r.Context(), r.PathValue("login_id"), req.Code)
@@ -81,7 +95,11 @@ func (s *Server) wrapperLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("username is required"))
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "username is required")
+		return
+	}
+	if s.wrapper == nil {
+		writeFeatureUnavailable(w, "the wrapper")
 		return
 	}
 	if err := s.wrapper.Logout(r.Context(), req.Username); err != nil {
@@ -91,17 +109,23 @@ func (s *Server) wrapperLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out", "username": req.Username})
 }
 
+// writeWrapperError maps a wrapper login, two-step or logout error. Anything
+// the wrapper package does not classify is an upstream failure.
 func writeWrapperError(w http.ResponseWriter, err error) {
-	status := http.StatusBadGateway
 	switch {
 	case errors.Is(err, wrapper.ErrAuthenticationFailed):
-		status = http.StatusUnauthorized
-	case errors.Is(err, wrapper.ErrAlreadyLoggedIn), errors.Is(err, wrapper.ErrLoginSessionBusy):
-		status = http.StatusConflict
-	case errors.Is(err, wrapper.ErrLoginSessionNotFound), errors.Is(err, wrapper.ErrAccountNotFound):
-		status = http.StatusNotFound
+		writeError(w, http.StatusUnauthorized, CodeAuthenticationFailed, err.Error())
+	case errors.Is(err, wrapper.ErrAlreadyLoggedIn):
+		writeError(w, http.StatusConflict, CodeAlreadyLoggedIn, err.Error())
+	case errors.Is(err, wrapper.ErrLoginPending), errors.Is(err, wrapper.ErrLoginSessionBusy):
+		writeError(w, http.StatusConflict, CodeLoginPending, err.Error())
+	case errors.Is(err, wrapper.ErrLoginSessionNotFound):
+		writeError(w, http.StatusNotFound, CodeLoginNotFound, err.Error())
+	case errors.Is(err, wrapper.ErrAccountNotFound):
+		writeError(w, http.StatusNotFound, CodeAccountNotFound, err.Error())
 	case errors.Is(err, wrapper.ErrLoginTimeout):
-		status = http.StatusGatewayTimeout
+		writeError(w, http.StatusGatewayTimeout, CodeUpstreamTimeout, err.Error())
+	default:
+		writeError(w, http.StatusBadGateway, CodeUpstreamError, err.Error())
 	}
-	writeError(w, status, err)
 }

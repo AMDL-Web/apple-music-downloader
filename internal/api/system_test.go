@@ -202,9 +202,17 @@ func TestQualityEndpointReturnsCollectionTracks(t *testing.T) {
 func TestQualityEndpointValidatesURL(t *testing.T) {
 	server := &Server{quality: &fakeQualityService{}}
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", `{"url":" "}`)
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-	}
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
+}
+
+func TestQualityEndpointErrors(t *testing.T) {
+	body := `{"url":"https://music.apple.com/us/album/x/1"}`
+	recorder := requestJSON(t, (&Server{}).Routes(), http.MethodPost, "/api/v1/quality", body)
+	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "feature_unavailable")
+
+	server := &Server{quality: &fakeQualityService{err: errors.New("catalog lookup failed")}}
+	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", body)
+	assertErrorCode(t, recorder, http.StatusBadGateway, "upstream_error")
 }
 
 type fakeDevTokenService struct {
@@ -221,16 +229,13 @@ func (f *fakeDevTokenService) MintDeveloperToken() (string, error) {
 func TestDeveloperTokenLegacyModeConflict(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default()), devToken: &fakeDevTokenService{}}
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/developer-token", "")
-	if recorder.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusConflict)
-	}
-	var resp map[string]string
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatal("expected error message in response body")
-	}
+	assertErrorCode(t, recorder, http.StatusConflict, "signing_disabled")
+}
+
+func TestDeveloperTokenWithoutService(t *testing.T) {
+	server := &Server{cfg: config.NewStore(signingEnabledConfig())}
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/developer-token", "")
+	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "feature_unavailable")
 }
 
 func signingEnabledConfig() config.Config {
@@ -267,7 +272,5 @@ func TestDeveloperTokenSigningError(t *testing.T) {
 	fake := &fakeDevTokenService{err: errors.New("boom")}
 	server := &Server{cfg: config.NewStore(signingEnabledConfig()), devToken: fake}
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/developer-token", "")
-	if recorder.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
-	}
+	assertErrorCode(t, recorder, http.StatusInternalServerError, "internal_error")
 }

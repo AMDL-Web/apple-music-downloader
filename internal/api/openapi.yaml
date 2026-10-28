@@ -1,8 +1,25 @@
 openapi: 3.1.0
 info:
   title: AMDL Backend API
-  version: 1.0.0
-  description: Apple Music download jobs and wrapper-manager management API.
+  version: 2.0.0
+  description: |
+    Apple Music download jobs and wrapper-manager management API. The URL prefix
+    stays /api/v1; info.version is the version of this contract.
+
+    Errors: every non-2xx JSON response is an ErrorResponse,
+    `{"error": {"code", "message", "details"?}}`. Switch on `code` (the
+    ErrorCode enum); `message` is for humans and may change; `details` is
+    code-specific. The one exception is GET /api/v1/health, whose 503 body is a
+    HealthResponse. A path under /api/ that does not exist answers 404
+    route_not_found; a path that exists with other methods answers 405
+    method_not_allowed with an Allow header. A route whose optional backend
+    component is not wired into the process answers 503 feature_unavailable.
+
+    Streams are Server-Sent Events. Each resumes from the Last-Event-ID header or
+    the `cursor` query parameter; the header wins when both are set, and a
+    malformed cursor is 400 invalid_request. Every stream sends a `: keepalive`
+    comment every 15 seconds and the X-Accel-Buffering: no header. CORS allows
+    the Last-Event-ID request header, so a cross-origin EventSource resumes too.
 servers:
   - url: /
 tags:
@@ -36,12 +53,12 @@ paths:
       description: >-
         Queries the recent structured logs retained by logging.buffer_size, returned
         in ascending time order. The first query returns the most recent `limit`
-        entries; follow-up queries with `after` page onward from that cursor, and
-        next_cursor can be used directly for the next page. oldest_sequence is the
-        oldest sequence number still retained; truncated means entries between
-        `after` and it have already been evicted from the in-memory ring. Sensitive
-        attributes are redacted uniformly before they enter the buffer or any
-        external output.
+        entries; follow-up queries with `cursor` page onward from that sequence,
+        and next_cursor can be passed as the next query's cursor. oldest_sequence
+        is the oldest sequence number still retained; truncated means entries
+        between `cursor` and it have already been evicted from the in-memory ring.
+        Sensitive attributes are redacted uniformly before they enter the buffer or
+        any external output.
       operationId: listLogs
       parameters:
         - $ref: '#/components/parameters/LogLevel'
@@ -51,7 +68,7 @@ paths:
         - $ref: '#/components/parameters/LogQuery'
         - $ref: '#/components/parameters/LogSince'
         - $ref: '#/components/parameters/LogUntil'
-        - $ref: '#/components/parameters/LogAfter'
+        - $ref: '#/components/parameters/LogCursor'
         - $ref: '#/components/parameters/LogLimit'
       responses:
         '200':
@@ -62,6 +79,8 @@ paths:
                 $ref: '#/components/schemas/LogListResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/logs/stream:
     get:
       tags: [System]
@@ -69,13 +88,13 @@ paths:
       description: >-
         SSE log stream. Matching entries still in memory after the cursor are
         replayed first, then new entries keep being pushed; every event is named log
-        and its SSE id equals the log sequence. When `after` is omitted, the
-        Last-Event-ID request header is used; with a cursor, every matching entry
-        still in memory is replayed, and when both are omitted the most recent
-        entries are replayed up to `limit`. The server sends a keepalive comment
-        every 15 seconds; if the client keeps reading too slowly the connection is
-        closed, and the client should reconnect with the last id it received to
-        catch up.
+        and its SSE id equals the log sequence. The cursor is the Last-Event-ID
+        header or the `cursor` query parameter (the header wins). With a cursor,
+        every matching entry still in memory is replayed; without one, the most
+        recent entries are replayed up to `limit`. The server sends a keepalive
+        comment every 15 seconds; if the client keeps reading too slowly the
+        connection is closed, and the client should reconnect with the last id it
+        received to catch up.
       operationId: streamLogs
       parameters:
         - $ref: '#/components/parameters/LogLevel'
@@ -85,14 +104,9 @@ paths:
         - $ref: '#/components/parameters/LogQuery'
         - $ref: '#/components/parameters/LogSince'
         - $ref: '#/components/parameters/LogUntil'
-        - $ref: '#/components/parameters/LogAfter'
+        - $ref: '#/components/parameters/LogCursor'
         - $ref: '#/components/parameters/LogLimit'
-        - name: Last-Event-ID
-          in: header
-          required: false
-          schema:
-            type: string
-            pattern: '^[0-9]+$'
+        - $ref: '#/components/parameters/LastEventID'
       responses:
         '200':
           description: text/event-stream; data is LogEntry JSON.
@@ -103,7 +117,7 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/config:
     get:
       tags: [System]
@@ -119,15 +133,10 @@ paths:
         through this API; edit the startup configuration configs/config.yaml and
         restart instead.
 
-        All fields live in configs/config.yaml. Every GET re-reads that file's
-        runtime fields before responding, so mutable fields hand-edited while the
-        service runs take effect on the next GET without a restart; startup-only
-        fields still require a restart. AMDL_<SECTION>_<KEY> environment variable
-        overrides (section and key names in upper case) are applied on every
-        re-read as well and take precedence over file values. While the file is
-        unreadable or fails validation (for example when it is half-edited), the
-        last valid configuration keeps being returned, together with a reload_error
-        field explaining why.
+        GET is a pure read of the in-memory configuration and has no side effects:
+        it does not re-read configs/config.yaml. A hand edit of the file takes
+        effect through POST /api/v1/config/reload or SIGHUP; startup-only fields
+        still require a restart.
       operationId: getConfig
       responses:
         '200':
@@ -151,15 +160,13 @@ paths:
         section, the library_sync section, and
         catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
         Every other field is consumed only at process startup, and a request that
-        changes one is rejected with 422 — edit the startup configuration
-        configs/config.yaml and restart instead. As the only exception,
-        catalog.media_user_token_priority sent by old clients is still accepted,
-        but the field is deprecated, its value is ignored, and it no longer takes
-        part in token selection. Fields overridden by an AMDL_<SECTION>_<KEY>
-        environment variable (section and key names in upper case) also return 422:
-        the write would be masked again by the environment variable's value on the
-        next configuration reload, so change the environment variable and restart
-        instead.
+        changes one is rejected with 422 config_key_not_mutable — edit the startup
+        configuration configs/config.yaml and restart instead. Fields overridden by
+        an AMDL_<SECTION>_<KEY> environment variable (section and key names in upper
+        case) return 422 config_key_pinned: the write would be masked again by the
+        environment variable's value on the next configuration reload, so change
+        the environment variable and restart instead. An unknown field is 400
+        invalid_request.
 
         Changes take effect immediately for new requests and newly started jobs
         (running jobs keep the configuration snapshot taken when they started), and
@@ -170,12 +177,12 @@ paths:
         configs/config.example.yaml, which serves as the template for config.yaml
         on first start.
 
-        Note for frontends: before confirming a write, GET once and build the
-        request body from its response. PUT merges onto the backend's current
-        in-memory configuration, while GET first re-reads the configuration file and
-        syncs hand edits made while the service runs into memory — a PUT without
-        the preceding GET may, working from a stale view, overwrite values just
-        changed elsewhere (another page or a hand edit).
+        PUT re-reads configs/config.yaml under the same lock before it applies the
+        patch, so a hand edit made since the last reload is kept rather than
+        overwritten. When that file no longer validates, PUT answers 422
+        invalid_config and changes nothing; fix the file first. Frontends should
+        still build the body from a fresh GET and send only the fields the user
+        changed.
       operationId: updateConfig
       requestBody:
         required: true
@@ -191,7 +198,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConfigResponse'
         '400':
-          description: The request body is not valid JSON or contains unknown fields.
+          description: >-
+            invalid_json: the body is not well-formed JSON; invalid_request: it
+            contains unknown fields or values of the wrong type.
           content:
             application/json:
               schema:
@@ -200,13 +209,41 @@ paths:
           $ref: '#/components/responses/JSONBodyTooLarge'
         '422':
           description: >-
-            The merged result fails configuration validation, or the request tries
-            to change a startup-only field, or a field overridden by an AMDL_*
-            environment variable.
+            config_key_not_mutable: the request changes a startup-only field;
+            config_key_pinned: it changes a field overridden by an AMDL_*
+            environment variable (both list the fields in details.keys);
+            invalid_config: the merged result fails configuration validation, or
+            the config file on disk no longer validates.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
+  /api/v1/config/reload:
+    post:
+      tags: [System]
+      summary: Re-read the configuration file
+      description: >-
+        Re-reads configs/config.yaml (AMDL_* environment overrides included) and
+        applies its runtime-mutable fields, the same as sending SIGHUP; the
+        logging level takes effect at once. Startup-only fields keep their
+        in-memory values until a restart. The response has the shape of GET
+        /api/v1/config. When the file cannot be read or fails validation (for
+        example while it is half-edited), the previous configuration stays in
+        place and the response is still 200, with reload_error explaining why.
+      operationId: reloadConfig
+      responses:
+        '200':
+          description: The runtime-mutable configuration after the reload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/hooks:
     get:
       tags: [System]
@@ -234,8 +271,8 @@ paths:
         Available only in local signing mode: signs a fresh JWT with the configured
         .p8 private key, valid for catalog.developer_token_ttl_hours (default 1
         hour); when catalog.allowed_origins is configured, an origin claim is added.
-        Returns 409 in legacy scraping mode (the scraped token is origin-restricted
-        and cannot be handed out).
+        Returns 409 signing_disabled in legacy scraping mode (the scraped token is
+        origin-restricted and cannot be handed out).
       operationId: getDeveloperToken
       responses:
         '200':
@@ -245,13 +282,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeveloperTokenResponse'
         '409':
-          description: The service is in legacy scraping mode, which does not support issuing a developer token.
+          description: signing_disabled; the service is in legacy scraping mode, which does not support issuing a developer token.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/library-sync:
     get:
       tags: [System]
@@ -278,11 +317,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/LibrarySyncStatus'
         '503':
-          description: This process has no library monitor wired in.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/library-sync/reset:
     post:
       tags: [System]
@@ -304,14 +339,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LibrarySyncResetResponse'
-        '503':
-          description: This process has no library monitor wired in.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '500':
-          $ref: '#/components/responses/InternalError'
+          $ref: '#/components/responses/StoreError'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/wrapper/status:
     get:
       tags: [Wrapper]
@@ -326,12 +357,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/WrapperStatus'
         '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          description: >-
+            wrapper_unavailable: wrapper-manager did not answer;
+            feature_unavailable: no wrapper client is wired into this process.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/wrapper/login:
     post:
       tags: [Wrapper]
       summary: Log in to a wrapper account
-      description: Login may succeed immediately, or return a login_id that requires a two-step verification code.
+      description: >-
+        Login may succeed immediately, or return a login_id that requires a
+        two-step verification code. The username is trimmed; the password is
+        forwarded exactly as sent, because spaces can be part of it (a password
+        that is only whitespace is 400 invalid_request).
       operationId: loginWrapper
       requestBody:
         required: true
@@ -362,6 +403,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '502':
           $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
         '504':
           $ref: '#/components/responses/GatewayTimeout'
   /api/v1/wrapper/login/{login_id}/2fa:
@@ -396,6 +439,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '502':
           $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
         '504':
           $ref: '#/components/responses/GatewayTimeout'
   /api/v1/wrapper/logout:
@@ -424,6 +469,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '502':
           $ref: '#/components/responses/BadGateway'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/quality:
     post:
       tags: [Quality]
@@ -446,7 +493,9 @@ paths:
         not read individual media playlists, does not verify media segments, and
         never enters the encrypted media transfer. The region check requires the
         wrapper/decryptor to be ready and the URL's storefront to be among the
-        regions it reports. music-video is not supported.
+        regions it reports. music-video is not supported. Any failure after the
+        url field is present, including a URL the backend cannot parse, is 502
+        upstream_error.
       operationId: queryQuality
       requestBody:
         required: true
@@ -466,9 +515,13 @@ paths:
         '413':
           $ref: '#/components/responses/JSONBodyTooLarge'
         '502':
-          $ref: '#/components/responses/BadGateway'
+          description: upstream_error; the lookup failed (catalog, wrapper or URL validation).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/downloads:
     get:
       tags: [Downloads]
@@ -590,20 +643,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/DownloadList'
         '400':
-          description: Invalid query parameters (unknown enum value, bad time format, limit/offset out of range, and so on).
+          description: invalid_request; invalid query parameters (unknown enum value, bad time format, limit/offset out of range, and so on).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          $ref: '#/components/responses/InternalError'
+          $ref: '#/components/responses/StoreError'
     post:
       tags: [Downloads]
       summary: Create download jobs in bulk
       description: >-
         Submits a batch of URLs and returns the enqueue result for each one;
         duplicate, unsupported or queue-full URLs are flagged individually in
-        results without affecting the other URLs. The optional overrides field
+        results without affecting the other URLs. Each URL that was not accepted
+        carries an error object (SubmitError) with a stable code. The answer is
+        202 with the BatchSubmitResponse when at least one URL was accepted. When
+        none was, it is an ErrorResponse whose details is the BatchSubmitResponse:
+        500 store_error if any URL failed in the job store (status error; the same
+        submit may succeed when retried), 500 internal_error if the only server
+        failure was an unexpected validator error, else 422 no_urls_accepted. The optional overrides field
         applies to the jobs created by this request and overrides the download
         section of the runtime configuration; overrides.media_user_token overrides
         the catalog.media_user_token fallback and follows its own rules for
@@ -626,10 +685,10 @@ paths:
                 $ref: '#/components/schemas/BatchSubmitResponse'
         '400':
           description: >-
-            The request body cannot be parsed, contains unknown fields (for example
-            the old top-level media_user_token, or a misspelled key inside
-            overrides), urls is empty, or it exceeds the per-request limit (100
-            URLs).
+            invalid_json: the body cannot be parsed; invalid_request: it contains
+            unknown fields (for example the old top-level media_user_token, or a
+            misspelled key inside overrides), urls is empty, or it exceeds the
+            per-request limit (100 URLs).
           content:
             application/json:
               schema:
@@ -638,15 +697,23 @@ paths:
           $ref: '#/components/responses/JSONBodyTooLarge'
         '422':
           description: >-
-            Every URL was rejected (the body is a BatchSubmitResponse; see results
-            for each reason), or overrides failed configuration validation
-            (including unknown entry names in hooks; the body is an ErrorResponse).
+            no_urls_accepted: every URL was rejected, and error.details is the
+            BatchSubmitResponse with each URL's reason; invalid_overrides:
+            overrides failed configuration validation (including unknown entry
+            names in hooks).
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/BatchSubmitResponse'
-                  - $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            store_error (or internal_error): no URL was accepted and at least one
+            failed on the server side (status error); error.details is the
+            BatchSubmitResponse. Retry the submit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/downloads/events:
     get:
       tags: [Downloads]
@@ -669,19 +736,17 @@ paths:
         The animated cover is the only kind of change that can still arrive after a
         job reaches a terminal state: it is resolved out of band, and by then the
         per-job event stream has usually closed, so only this endpoint delivers it.
-        Resuming after a disconnect: first GET /downloads to obtain last_event_id,
-        then resume with the Last-Event-ID header to receive only the changes made
-        after it. download_upserted and download_deleted both carry event_id;
-        after processing each message, the client uses that value as its new
-        resume cursor.
+        Resuming: first GET /downloads to obtain event_cursor, then connect with
+        ?cursor=<event_cursor> (or the Last-Event-ID header) to receive only the
+        changes made after that snapshot. Never connect without a cursor: that
+        replays the whole retained milestone history. download_upserted and
+        download_deleted both carry event_id, which is also the SSE id; after
+        processing each message, the client uses it as its new resume cursor.
+        The feed never ends on its own.
       operationId: streamDownloadsFeed
       parameters:
-        - name: Last-Event-ID
-          in: header
-          description: The latest event_id already processed (taken from last_event_id of GET /downloads or from the event_id of the previous push).
-          schema:
-            type: integer
-            format: int64
+        - $ref: '#/components/parameters/StreamCursor'
+        - $ref: '#/components/parameters/LastEventID'
       responses:
         '200':
           description: SSE event stream; each data is one DownloadFeedMessage.
@@ -689,8 +754,8 @@ paths:
             text/event-stream:
               schema:
                 type: string
-        '500':
-          $ref: '#/components/responses/InternalError'
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /api/v1/downloads/{job_id}:
     get:
       tags: [Downloads]
@@ -700,15 +765,15 @@ paths:
         - $ref: '#/components/parameters/JobID'
       responses:
         '200':
-          description: The job, its items and the retry policy.
+          description: The job, its items, its hook states and the event cursor.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DownloadDetail'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/JobNotFound'
         '500':
-          $ref: '#/components/responses/InternalError'
+          $ref: '#/components/responses/StoreError'
     delete:
       tags: [Downloads]
       summary: Delete a download job
@@ -729,15 +794,15 @@ paths:
                     type: string
                     const: deleted
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/JobNotFound'
         '409':
-          description: The job is not in a terminal state and must be cancelled first.
+          description: job_active; the job is still queued or running (cancel it first), finalizing, or running a hook.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          $ref: '#/components/responses/InternalError'
+          $ref: '#/components/responses/StoreError'
   /api/v1/downloads/{job_id}/cancel:
     post:
       tags: [Downloads]
@@ -758,9 +823,9 @@ paths:
                     type: string
                     const: cancelled
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/JobNotFound'
         '500':
-          $ref: '#/components/responses/InternalError'
+          $ref: '#/components/responses/StoreError'
   /api/v1/downloads/{job_id}/retry:
     post:
       tags: [Downloads]
@@ -789,33 +854,37 @@ paths:
                     type: string
                     const: queued
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/JobNotFound'
         '409':
           description: |
-            The job is not in the failed state; or a queued/running job for the
-            same link already exists; or the previous run is still wrapping up (the
-            terminal state was just written but worker cleanup/hook dispatch has not
-            finished; the window is very short, so simply retry a moment later).
+            job_not_retryable: the job is not in the failed state;
+            duplicate_active: a queued/running job for the same link already
+            exists; job_finalizing: the previous run is still wrapping up (the
+            terminal state was just written but worker cleanup/hook dispatch has
+            not finished; the window is very short, so simply retry a moment
+            later).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: The job queue is full; retry later.
+          description: queue_full; the job queue is full, retry later.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          $ref: '#/components/responses/InternalError'
+          $ref: '#/components/responses/StoreError'
   /api/v1/downloads/{job_id}/events:
     get:
       tags: [Downloads]
       summary: Subscribe to download job events
       description: |
-        Server-Sent Events stream with Last-Event-ID resumption.
-        Each SSE event is named after its EventType and its data is an Event
-        object, whose payload is a JSON object. The payload of job lifecycle events
+        Server-Sent Events stream of one job, resumable from the Last-Event-ID
+        header or ?cursor= (seed it from event_cursor of GET
+        /downloads/{job_id}). Each SSE event is named after its EventType, its id
+        is the event id, and its data is an Event object, whose payload is a JSON
+        object. The payload of job lifecycle events
         (job_queued/job_recovered/job_retried/job_started/resolved_input/job_finished/job_failed/job_cancelled)
         contains the same public fields as the REST `Job`; the payload of track
         status events contains the same public fields as the REST `JobItem` and
@@ -828,18 +897,17 @@ paths:
         events of post-download hooks still running — hooks fire asynchronously
         and may be recorded only after the job reaches its terminal state), those
         events are replayed as-is first; the connection stays open while any hook
-        is still running and closes only once the hooks finish. The subscription
-        is rejected outright (409) only when the client has already caught up on
-        every event and no hook is still running — in that case use
-        GET .../downloads/{job_id} for the final state.
+        is still running and closes only once the hooks finish. When the client has
+        already caught up on every event and no hook is still running, the answer
+        is 204 No Content, which makes a browser EventSource stop reconnecting.
+        A browser reports any non-200 answer as a generic error, so a client
+        whose stream ended refetches GET /downloads/{job_id} to tell "finished"
+        from "broken".
       operationId: streamDownloadEvents
       parameters:
         - $ref: '#/components/parameters/JobID'
-        - name: Last-Event-ID
-          in: header
-          schema:
-            type: integer
-            format: int64
+        - $ref: '#/components/parameters/StreamCursor'
+        - $ref: '#/components/parameters/LastEventID'
       responses:
         '200':
           description: SSE event stream.
@@ -847,14 +915,16 @@ paths:
             text/event-stream:
               schema:
                 type: string
+        '204':
+          description: >-
+            The job is in a terminal state, no hook is still running, and the client
+            has caught up on every event; no new events will be produced.
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: The job is in a terminal state, no hook is still running, and the client has caught up on every historical event; no new events will be produced, so the subscription is rejected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/JobNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
 components:
   parameters:
     LoginID:
@@ -908,11 +978,33 @@ components:
       in: query
       description: Inclusive upper bound (entries at this instant are included); RFC3339 timestamp.
       schema: {type: string, format: date-time}
-    LogAfter:
-      name: after
+    LogCursor:
+      name: cursor
       in: query
-      description: Only return entries whose sequence is greater than this value.
+      description: >-
+        Only return entries whose sequence is greater than this value (next_cursor
+        of the previous page, or the last SSE id received). A value that is not a
+        non-negative integer is 400 invalid_request.
       schema: {type: integer, format: int64, minimum: 0}
+    StreamCursor:
+      name: cursor
+      in: query
+      description: >-
+        Resume point: replay only events whose id is greater than this value. Use
+        event_cursor from the matching snapshot (GET /downloads or GET
+        /downloads/{job_id}) for the first connect. Ignored when Last-Event-ID is
+        set. A value that is not a non-negative integer is 400 invalid_request.
+      schema: {type: integer, format: int64, minimum: 0}
+    LastEventID:
+      name: Last-Event-ID
+      in: header
+      description: >-
+        Resume point, sent by EventSource on every automatic reconnect; it wins
+        over ?cursor=. A value that is not a non-negative integer is 400
+        invalid_request.
+      schema:
+        type: string
+        pattern: '^[0-9]+$'
     LogLimit:
       name: limit
       in: query
@@ -920,55 +1012,72 @@ components:
       schema: {type: integer, minimum: 1, maximum: 1000}
   responses:
     BadRequest:
-      description: Invalid request parameters.
+      description: invalid_request or invalid_json; invalid request parameters or body.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     JSONBodyTooLarge:
-      description: The JSON request body exceeds the 1 MiB limit.
+      description: request_too_large; the JSON request body exceeds the 1 MiB limit.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unauthorized:
-      description: Wrong login credentials or verification code.
+      description: authentication_failed; wrong login credentials or verification code.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: The resource does not exist or the login session has expired.
+      description: >-
+        login_not_found: the two-step login session does not exist or expired;
+        account_not_found: no wrapper runs for that account.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    JobNotFound:
+      description: job_not_found; no job has this id.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: The account is already logged in or the session is being verified.
+      description: >-
+        already_logged_in: the account already has a wrapper; login_pending: a
+        login for the account (or this session's two-step code) is already in
+        progress.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     BadGateway:
-      description: wrapper-manager returned an error.
+      description: upstream_error; wrapper-manager returned an error.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-    ServiceUnavailable:
-      description: The service is temporarily unavailable.
+    FeatureUnavailable:
+      description: feature_unavailable; the component behind this route is not wired into this process.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     GatewayTimeout:
-      description: The wrapper login timed out.
+      description: upstream_timeout; the wrapper login timed out.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     InternalError:
-      description: Internal server error.
+      description: internal_error; an unexpected server failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    StoreError:
+      description: store_error; the job store failed. The request may succeed when retried.
       content:
         application/json:
           schema:
@@ -976,18 +1085,69 @@ components:
   schemas:
     ErrorResponse:
       type: object
+      description: >-
+        The body of every non-2xx JSON response except the 503 of GET
+        /api/v1/health.
       required: [error]
       properties:
         error:
-          type: string
-        message:
-          type: string
-        storefront:
-          type: string
-        supported_storefronts:
-          type: array
-          items:
-            type: string
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              $ref: '#/components/schemas/ErrorCode'
+            message:
+              type: string
+              description: Human-readable explanation; may change between releases.
+            details:
+              description: >-
+                Code-specific data. no_urls_accepted and store_error from POST
+                /downloads: the BatchSubmitResponse. config_key_not_mutable and
+                config_key_pinned: {"keys": [...]}, the rejected fields.
+    ErrorCode:
+      type: string
+      description: |
+        Stable, machine-readable error code, sent with the status listed here.
+        400 invalid_request (query or body validation), invalid_json (the body
+        is not well-formed JSON); 401 authentication_failed; 404
+        route_not_found, job_not_found, login_not_found, account_not_found; 405
+        method_not_allowed (with an Allow header); 409 job_active,
+        job_not_retryable, job_finalizing, duplicate_active, already_logged_in,
+        login_pending, signing_disabled; 413 request_too_large; 422
+        invalid_overrides, config_key_not_mutable, config_key_pinned,
+        invalid_config, no_urls_accepted; 500 internal_error, store_error
+        (retrying may succeed); 502 upstream_error; 503 queue_full,
+        wrapper_unavailable, feature_unavailable (the route's optional component
+        is not wired into this process); 504 upstream_timeout.
+      enum:
+        - invalid_request
+        - invalid_json
+        - authentication_failed
+        - route_not_found
+        - job_not_found
+        - login_not_found
+        - account_not_found
+        - method_not_allowed
+        - job_active
+        - job_not_retryable
+        - job_finalizing
+        - duplicate_active
+        - already_logged_in
+        - login_pending
+        - signing_disabled
+        - request_too_large
+        - invalid_overrides
+        - config_key_not_mutable
+        - config_key_pinned
+        - invalid_config
+        - no_urls_accepted
+        - internal_error
+        - store_error
+        - upstream_error
+        - queue_full
+        - wrapper_unavailable
+        - feature_unavailable
+        - upstream_timeout
     DeveloperTokenResponse:
       type: object
       required: [token]
@@ -997,7 +1157,7 @@ components:
           description: ES256-signed Apple Music developer token (JWT). Read the expiry time from the exp claim in the payload.
     WrapperStatus:
       type: object
-      required: [ready, status, regions, client_count, accounts_supported]
+      required: [ready, status, regions, client_count, accounts]
       properties:
         ready:
           type: boolean
@@ -1005,17 +1165,17 @@ components:
           type: boolean
         regions:
           type: array
+          description: Storefronts the decryptor serves; an empty array when none.
           items:
             type: string
         client_count:
           type: integer
           format: int32
-        accounts_supported:
-          type: boolean
-          description: Whether wrapper-manager returned the optional accounts field; false means the connected manager version does not support it.
         accounts:
           type: array
-          description: Logged-in wrapper account identifiers when supported by wrapper-manager.
+          description: >-
+            Logged-in wrapper account identifiers; an empty array when no account
+            is logged in or the connected wrapper-manager does not report them.
           items:
             type: string
     HealthResponse:
@@ -1105,7 +1265,7 @@ components:
           description: The oldest global sequence number currently in the in-memory buffer; 0 when the buffer is empty.
         truncated:
           type: boolean
-          description: Whether entries after the after cursor and before oldest_sequence have already been evicted.
+          description: Whether entries after the cursor and before oldest_sequence have already been evicted.
     LoginRequest:
       type: object
       required: [username, password]
@@ -1326,15 +1486,6 @@ components:
                 is written back to the configuration file; GET returns the current
                 value. overrides.media_user_token in a request can override it or
                 explicitly clear it per job.
-            media_user_token_priority:
-              type: string
-              enum: [request, config]
-              deprecated: true
-              writeOnly: true
-              description: >-
-                Deprecated input field accepted only for compatibility with old
-                clients; its value is ignored and no longer takes part in token
-                selection. New clients must use overrides.media_user_token.
             signed_mode_hls_source:
               type: string
               enum: [wrapper, web_token]
@@ -1403,7 +1554,7 @@ components:
                 immediately and are unaffected by this value. A progress value held
                 back by the interval is emitted before the event that supersedes
                 it, so the last percentage before a status change is never lost,
-                and a client resuming with last_event_id sees exactly the same event
+                and a client resuming from a cursor sees exactly the same event
                 sequence as a live client. This is a time floor layered on top of
                 the "whole-percentage rounding" threshold, so however small it is
                 set, a single meter still emits no more than about 101 events per
@@ -1550,9 +1701,10 @@ components:
         reload_error:
           type: string
           description: >-
-            Present only on GET when re-reading the configuration file failed:
-            explains why the file is unusable (unreadable or failing validation);
-            config is then the last valid configuration.
+            Present only in the answer to POST /api/v1/config/reload when the
+            configuration file could not be used (unreadable or failing
+            validation); config is then the previous, still active
+            configuration.
     SubmitResult:
       type: object
       required: [url, status]
@@ -1562,16 +1714,67 @@ components:
           description: A single input URL after splitting and normalization.
         status:
           type: string
-          enum: [accepted, invalid, duplicate_in_request, duplicate_active, queue_full]
+          enum: [accepted, invalid, duplicate_in_request, duplicate_active, queue_full, error]
+          description: >-
+            accepted: a job was created. invalid: the URL will not be accepted as
+            it is (error.code says why). duplicate_in_request: an earlier URL in
+            the same request names the same download. duplicate_active: a queued
+            or running job already downloads it. queue_full: the job queue is
+            full; retry later. error: the server failed while handling the URL
+            (store_error); the same submit may succeed when retried.
         job:
           $ref: '#/components/schemas/Job'
           description: The newly created job, returned when status is accepted.
         existing_job_id:
           type: string
-          description: When status is duplicate_active, points to the job with the same content that is already in progress.
+          description: When status is duplicate_active, points to the job with the same content that is already in progress (absent when the store's uniqueness check caught a concurrent submit).
         error:
+          $ref: '#/components/schemas/SubmitError'
+    SubmitError:
+      type: object
+      description: Why one URL was not accepted; present for every status except accepted.
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/SubmitErrorCode'
+        message:
           type: string
-          description: Explanation of why the URL was rejected.
+          description: Human-readable explanation; may change between releases.
+        details:
+          type: object
+          description: >-
+            unsupported_storefront: {"storefront": "jp", "supported_storefronts":
+            ["us"]}, the storefronts the decryptor serves.
+          properties:
+            storefront:
+              type: string
+            supported_storefronts:
+              type: array
+              items:
+                type: string
+    SubmitErrorCode:
+      type: string
+      description: |
+        Stable per-URL code. With status invalid: invalid_url (not an Apple
+        Music URL the backend can parse), unsupported_input (a link type the
+        backend does not download, such as music videos),
+        unsupported_storefront (the decryptor does not serve the URL's
+        storefront), decryptor_unavailable (the wrapper is not ready; retrying
+        later may succeed), invalid_configuration (the runtime configuration
+        cannot parse this link). With the status of the same name:
+        duplicate_in_request, duplicate_active, queue_full. With status error:
+        store_error, internal_error (the validator failed unexpectedly).
+      enum:
+        - invalid_url
+        - invalid_configuration
+        - unsupported_input
+        - unsupported_storefront
+        - decryptor_unavailable
+        - duplicate_in_request
+        - duplicate_active
+        - queue_full
+        - store_error
+        - internal_error
     BatchSubmitResponse:
       type: object
       required: [accepted, rejected, results]
@@ -2064,7 +2267,7 @@ components:
         updated_at: {type: string, format: date-time}
     DownloadList:
       type: object
-      required: [downloads, status_counts, total, limit, offset, last_event_id]
+      required: [downloads, status_counts, total, limit, offset, event_cursor]
       properties:
         downloads:
           type: array
@@ -2086,14 +2289,14 @@ components:
         offset:
           type: integer
           description: The offset actually used.
-        last_event_id:
+        event_cursor:
           type: integer
           format: int64
           description: >-
             The latest persisted event id globally (across all jobs; 0 when there
-            are no events yet). Clients can use it as the resume point for the
-            overview event stream GET /downloads/events to receive only list
-            changes after this snapshot.
+            are no events yet), read before the snapshot. Pass it as ?cursor= (or
+            Last-Event-ID) to GET /downloads/events to receive only list changes
+            after this snapshot; resuming from it never skips an event.
     DownloadStatusCounts:
       type: object
       description: >-
@@ -2147,7 +2350,7 @@ components:
             idempotent), never skipped.
     DownloadDetail:
       type: object
-      required: [job, items, hooks, last_event_id]
+      required: [job, items, hooks, event_cursor]
       properties:
         job:
           $ref: '#/components/schemas/Job'
@@ -2166,14 +2369,14 @@ components:
             finished).
           items:
             $ref: '#/components/schemas/HookState'
-        last_event_id:
+        event_cursor:
           type: integer
           format: int64
           description: >-
             The latest persisted event id for this job (0 when there are no events
-            yet). Clients can use it as the resume point for the SSE stream's
-            Last-Event-ID to skip the historical events already reflected in this
-            response and receive only later incremental updates.
+            yet), read before the snapshot. Pass it as ?cursor= (or Last-Event-ID)
+            to GET /downloads/{job_id}/events to skip the events already reflected
+            in this response and receive only later updates.
     EventType:
       type: string
       description: >-

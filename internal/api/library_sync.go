@@ -1,16 +1,24 @@
 package api
 
 import (
-	"fmt"
+	"context"
 	"net/http"
+
+	"amdl/internal/librarysync"
 )
+
+// LibrarySyncService is the library watcher.
+type LibrarySyncService interface {
+	Status() librarysync.Status
+	ResetAnchor(ctx context.Context) (int64, error)
+}
 
 // librarySyncStatus reports what the watcher is doing: the live config values
 // plus what the last pass observed. It answers even while the feature is
 // disabled, so a client can render the toggle's current state without guessing.
 func (s *Server) librarySyncStatus(w http.ResponseWriter, r *http.Request) {
 	if s.librarySync == nil {
-		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("library sync is not wired into this process"))
+		writeFeatureUnavailable(w, "library sync")
 		return
 	}
 	writeJSON(w, http.StatusOK, s.librarySync.Status())
@@ -24,12 +32,12 @@ func (s *Server) librarySyncStatus(w http.ResponseWriter, r *http.Request) {
 // again". Re-downloading one album is a normal POST /api/v1/downloads.
 func (s *Server) librarySyncReset(w http.ResponseWriter, r *http.Request) {
 	if s.librarySync == nil {
-		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("library sync is not wired into this process"))
+		writeFeatureUnavailable(w, "library sync")
 		return
 	}
 	cleared, err := s.librarySync.ResetAnchor(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeStoreError(w, "reset library sync anchor", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

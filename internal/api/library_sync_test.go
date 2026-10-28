@@ -24,7 +24,7 @@ func (f *fakeLibrarySync) ResetAnchor(context.Context) (int64, error) {
 }
 
 // Both endpoints must answer rather than panic when the watcher was never
-// wired — a Server built without it is the shape every existing test uses.
+// wired: LibrarySync is an optional dependency.
 func TestLibrarySyncEndpointsWithoutWatcher(t *testing.T) {
 	server := &Server{}
 	routes := server.Routes()
@@ -33,9 +33,7 @@ func TestLibrarySyncEndpointsWithoutWatcher(t *testing.T) {
 		{http.MethodPost, "/api/v1/library-sync/reset"},
 	} {
 		recorder := requestJSON(t, routes, tc.method, tc.path, "")
-		if recorder.Code != http.StatusServiceUnavailable {
-			t.Fatalf("%s %s status = %d, want 503", tc.method, tc.path, recorder.Code)
-		}
+		assertErrorCode(t, recorder, http.StatusServiceUnavailable, "feature_unavailable")
 	}
 }
 
@@ -43,8 +41,7 @@ func TestLibrarySyncStatusReportsWatcherState(t *testing.T) {
 	watcher := &fakeLibrarySync{status: librarysync.Status{
 		Enabled: true, IntervalMinutes: 15, AnchorSize: 50, TotalSubmitted: 3,
 	}}
-	server := &Server{}
-	server.SetLibrarySync(watcher)
+	server := New(Deps{LibrarySync: watcher})
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/library-sync", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
@@ -65,8 +62,7 @@ func TestLibrarySyncResetClearsAnchor(t *testing.T) {
 		status:  librarysync.Status{Enabled: true, IntervalMinutes: 15, AnchorSize: 50},
 		cleared: 50,
 	}
-	server := &Server{}
-	server.SetLibrarySync(watcher)
+	server := New(Deps{LibrarySync: watcher})
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/library-sync/reset", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())

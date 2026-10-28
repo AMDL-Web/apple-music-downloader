@@ -377,12 +377,12 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 		if submissionConsumed(result) {
 			if result.Status != domain.SubmitAccepted {
 				w.logger.Info("library submission not queued",
-					"url", result.URL, "status", string(result.Status), "error", result.Error)
+					"url", result.URL, "status", string(result.Status), "error", rejectionReason(result))
 			}
 			continue
 		}
 		w.logger.Warn("library submission rejected; retrying next pass",
-			"url", result.URL, "status", string(result.Status), "error", result.Error)
+			"url", result.URL, "status", string(result.Status), "error", rejectionReason(result))
 		pending = append(pending, describe(albumID, rejectionReason(result)))
 	}
 	w.logger.Info("library sync submitted albums",
@@ -390,11 +390,12 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 	return resp.Accepted, pending
 }
 
-// permanentRejections are the jobs.RequestError codes for an input that will
-// never be accepted, however often it is retried. Every other rejection
-// (decryptor_unavailable, a store failure, a code this list does not know)
-// leaves the album to be retried. The codes are set by the job processor's
-// request validation (internal/media Downloader.ValidateRequest).
+// permanentRejections are the submit error codes of an invalid input that
+// will never be accepted, however often it is retried. Every other rejection
+// (decryptor_unavailable, invalid_configuration, a code this list does not
+// know) leaves the album to be retried, and so does every result with status
+// error (store_error). The codes are set by the job processor's request
+// validation (internal/media Downloader.ValidateRequest).
 var permanentRejections = map[string]bool{
 	"invalid_url":            true,
 	"unsupported_input":      true,
@@ -415,21 +416,20 @@ func submissionConsumed(result domain.SubmitResult) bool {
 	}
 }
 
-// rejectionCode extracts the code from a rejection's "code: message" error
-// text, or "" when it carries none (a store failure's raw error).
+// rejectionCode is the submit error code of a rejection, or "" when it
+// carries none.
 func rejectionCode(result domain.SubmitResult) string {
-	code, _, found := strings.Cut(result.Error, ": ")
-	if !found {
+	if result.Error == nil {
 		return ""
 	}
-	return code
+	return result.Error.Code
 }
 
 func rejectionReason(result domain.SubmitResult) string {
-	if result.Error == "" {
+	if result.Error == nil {
 		return string(result.Status)
 	}
-	return string(result.Status) + ": " + result.Error
+	return string(result.Status) + ": " + result.Error.Code + ": " + result.Error.Message
 }
 
 // ResetAnchor forgets the watermark and reports how many entries went.

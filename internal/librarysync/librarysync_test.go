@@ -372,10 +372,12 @@ func TestRejectedSubmissionKeepsAnchorOnlyWhenRetryable(t *testing.T) {
 		wantAdvanced bool
 	}{
 		{name: "queue full", result: domain.SubmitResult{Status: domain.SubmitQueueFull}, wantAdvanced: false},
-		{name: "decryptor unavailable", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: "decryptor_unavailable: decryptor is not ready"}, wantAdvanced: false},
-		{name: "store failure", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: "database is locked"}, wantAdvanced: false},
-		{name: "unknown status", result: domain.SubmitResult{Status: domain.SubmitStatus("error"), Error: "store_error: disk I/O error"}, wantAdvanced: false},
-		{name: "unsupported storefront", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: "unsupported_storefront: storefront \"cn\" is not supported by decryptor"}, wantAdvanced: true},
+		{name: "decryptor unavailable", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "decryptor_unavailable", Message: "decryptor is not ready"}}, wantAdvanced: false},
+		{name: "invalid without a code", result: domain.SubmitResult{Status: domain.SubmitInvalid}, wantAdvanced: false},
+		{name: "store failure", result: domain.SubmitResult{Status: domain.SubmitServerError, Error: &domain.SubmitError{Code: "store_error", Message: "disk I/O error"}}, wantAdvanced: false},
+		{name: "invalid url", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "invalid_url", Message: "not an Apple Music URL"}}, wantAdvanced: true},
+		{name: "unsupported input", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "unsupported_input", Message: "music-video download is not implemented"}}, wantAdvanced: true},
+		{name: "unsupported storefront", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "unsupported_storefront", Message: "storefront \"cn\" is not supported by decryptor"}}, wantAdvanced: true},
 		{name: "already downloading", result: domain.SubmitResult{Status: domain.SubmitDuplicateActive, ExistingJobID: "job_1"}, wantAdvanced: true},
 	}
 	for _, tt := range tests {

@@ -24,7 +24,7 @@ func newObservedServer(t *testing.T) (*Server, *logging.System) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = system.Close() })
-	server := NewServer(config.NewStore(cfg), nil, nil, nil, nil, nil, nil, system.Logger, system)
+	server := New(Deps{Config: config.NewStore(cfg), Logger: system.Logger, Logging: system})
 	return server, system
 }
 
@@ -72,9 +72,7 @@ func TestHTTPObservationRecoversPanic(t *testing.T) {
 	}))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/panic", nil))
-	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "internal server error") {
-		t.Fatalf("panic response = %d %s", rec.Code, rec.Body.String())
-	}
+	assertErrorCode(t, rec, http.StatusInternalServerError, "internal_error")
 	page := system.Store.List(logging.Filter{Levels: []string{"error"}, Limit: 10})
 	if len(page.Entries) != 2 || page.Entries[0].Message != "http request panic" || page.Entries[1].Message != "http request" {
 		t.Fatalf("panic logs = %#v", page.Entries)
