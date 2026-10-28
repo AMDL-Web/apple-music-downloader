@@ -210,6 +210,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConfigResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
     put:
       tags: [System]
       summary: Update the runtime configuration
@@ -1287,9 +1289,12 @@ components:
             details:
               description: >-
                 Code-specific data. no_urls_accepted and store_error from POST
-                /downloads: the BatchSubmitResponse. config_key_not_mutable and
-                config_key_pinned: {"keys": [...]}, the rejected fields. Errors
-                of POST /lookup after the link parsed: {"link": LookupLink}.
+                /downloads: the BatchSubmitResponse. config_key_not_mutable:
+                {"keys": [...]}, the rejected fields as dotted key names.
+                config_key_pinned: {"keys": [...]}, each entry
+                "<key> (<ENV_VAR>)", for example "download.downloads_dir
+                (AMDL_DOWNLOAD_DOWNLOADS_DIR)". Errors of POST /lookup after
+                the link parsed: {"link": LookupLink}.
     ErrorCode:
       type: string
       description: |

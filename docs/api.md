@@ -499,7 +499,10 @@ with `reload_error` saying why.
 including startup keys — comments and custom formatting are not preserved. It re-reads the
 file first, so a hand edit made since the last reload is kept. Errors: `422
 config_key_not_mutable` (a startup key), `422 config_key_pinned` (a key set by an
-`AMDL_*` variable), both listing the keys in `details.keys`; `422 invalid_config` (the
+`AMDL_*` variable), both listing the keys in `details.keys` — plain dotted key
+names for `config_key_not_mutable`, `"<key> (<ENV_VAR>)"` entries such as
+`"download.downloads_dir (AMDL_DOWNLOAD_DOWNLOADS_DIR)"` for `config_key_pinned`;
+`422 invalid_config` (the
 result fails validation, or the file on disk no longer validates); `400 invalid_request`
 for an unknown key. See [configuration.md](configuration.md).
 
