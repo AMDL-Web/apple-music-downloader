@@ -1,0 +1,215 @@
+# Architecture
+
+> Type: reference
+
+How amdl-backend is put together, and the rules each layer keeps. When this page and
+the code disagree, the code wins and this page gets fixed in the same commit. Breaking
+changes against 1.x are listed in [Upgrading to 2.0](upgrading-to-2.0.md).
+
+## 1. Process and lifecycle
+
+`cmd/amdl-api/main.go` only parses the environment and calls `run(ctx) error`; every
+deferred close runs on every exit path. `run` builds the components, starts them, and
+on SIGINT/SIGTERM stops them in this order:
+
+1. HTTP: stop accepting connections, give ordinary requests a short drain, then cancel
+   the base context so long-lived SSE streams end instead of holding the shutdown
+   deadline.
+2. Library watcher and catalog token refresher: stop and wait.
+3. Job manager: cancel workers with the cause `jobs.ErrShutdown`. A job interrupted by
+   shutdown is **not** cancelled: it stays `running` in the database, keeps its resume
+   checkpoints and media-user-token, emits no terminal event and fires no hook. The next
+   start requeues it through recovery (`job_recovered`).
+4. Downloader background work (motion-artwork backfill): wait.
+5. Hook dispatcher: drain in-flight hooks.
+6. Store: close.
+
+SIGHUP reloads the config file (same as `POST /api/v1/config/reload`).
+
+Every long-lived component has the same shape: a constructor that does no I/O, a
+`Start`/`Run` that owns its goroutines, and a `Stop`/`Shutdown(ctx)` or `Wait(ctx)` that
+returns only after they exit. Nothing outlives `Store.Close`.
+
+## 2. Packages
+
+| Package | Owns | Must not |
+| --- | --- | --- |
+| `internal/api` | HTTP: route table, handlers per resource, JSON and error envelope, SSE | hold business state, talk to Apple or the wrapper directly |
+| `internal/console` | the embedded web console (static files + handler) | call anything but the public `/api/v1` |
+| `internal/jobs` | admission, queue, workers, terminal-state rules, hook dispatch trigger | know about HTTP |
+| `internal/media` | the per-track pipeline: select, fetch, decrypt, remux, tag, finalize; simulate backend | write job rows except through `jobs.Reporter` |
+| `internal/applemusic` | both Apple hosts, tokens, catalog and library reads | fail a job because an amp-api-only field is missing |
+| `internal/wrapper` | the wrapper-manager gRPC client (login, status, decrypt sessions) | |
+| `internal/db` | SQLite schema, versioned migrations, queries | contain business rules |
+| `internal/domain` | shared types, enums and event type constants | import other internal packages |
+| `internal/events` | in-process wake signals for streams | carry events (subscribers re-read the store) |
+| `internal/config` | config file, env overrides, validation, runtime store | |
+| `internal/hooks` | webhook/exec hook execution | |
+| `internal/librarysync` | the library watcher | |
+| `internal/logging` | slog setup, in-memory ring buffer, log subscriptions | |
+| `internal/limits` | semaphores and the Apple request gate | |
+| `internal/ids` | random IDs (`job_<32 hex>`, `item_<32 hex>`) | |
+| `internal/buildinfo` | version, commit, build date (ldflags), process start time | |
+
+## 3. HTTP API conventions
+
+All JSON endpoints live under `/api/v1`; 2.0 keeps that prefix and sets the spec's
+`info.version` to the release version. The contract is `internal/api/openapi.yaml`;
+the route table in `internal/api` and the spec are checked against each other in both
+directions by a test.
+
+### 3.1 Errors
+
+Every non-2xx JSON response is
+
+```json
+{"error": {"code": "job_not_found", "message": "job job_… not found", "details": {}}}
+```
+
+`code` is a stable snake_case identifier from the `ErrorCode` enum in the spec (Go:
+constants in `internal/api`). `message` is for humans and may change. `details` is
+optional and code-specific (for example `{"storefront": "jp", "supported_storefronts":
+["us"]}` for `unsupported_storefront`). Unknown routes under `/api/` answer
+`route_not_found` with the same envelope; a path that exists with other methods answers
+`405 method_not_allowed` with an `Allow` header (computed from the route table, since
+`http.ServeMux` writes its own plain-text 404/405 before any handler runs).
+
+| Status | Codes |
+| --- | --- |
+| 400 | `invalid_request` (query/body validation), `invalid_json` |
+| 401 | `authentication_failed` (wrapper login) |
+| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
+| 405 | `method_not_allowed` |
+| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `signing_disabled` |
+| 413 | `request_too_large` |
+| 422 | `invalid_overrides`, `config_key_not_mutable`, `config_key_pinned`, `invalid_config`, `no_urls_accepted` |
+| 500 | `internal_error`, `store_error` |
+| 502 | `upstream_error` |
+| 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
+
+Per-URL submit results keep the coarse `status` enum (`accepted`, `invalid`,
+`duplicate_in_request`, `duplicate_active`, `queue_full`, plus `error` for a store
+failure) and carry the detail in `results[].error` (`{code, message, details?}`), with
+codes `invalid_url`, `unsupported_type`, `unsupported_storefront`,
+`decryptor_unavailable`, `duplicate_in_request`, `duplicate_active`, `queue_full`,
+`store_error`. `POST /downloads` answers `202` with the batch body when at least one URL
+was accepted. When none was, it answers `500 store_error` if any rejection was a store
+failure (the client should retry) and `422 no_urls_accepted` otherwise; either way the
+batch body is in `error.details`.
+
+### 3.2 Jobs
+
+- Counters are disjoint and always present: `total_items`, `completed_items` (written by
+  this job), `skipped_items` (already on disk), `failed_items`, `cancelled_items`.
+  `total_items` is stored when the input resolves; the other four are always derived
+  from `job_items` by one store query, including when the manager decides the terminal
+  status at finalize. There are no stored per-status counter columns. `done_items` and
+  the legacy `force` flag are gone; forcing is `overrides.force_overwrite`.
+- `started_at` is set the first time a worker starts the job and kept across recovery
+  and retry; `finished_at` is set on the terminal transition and cleared by retry. Both
+  are RFC 3339 or absent.
+- A user cancel marks every non-terminal item `cancelled`, persisted with a
+  non-cancelled context. A shutdown leaves items as they are so recovery can resume them.
+- `GET /downloads` and `GET /downloads/{id}` return `event_cursor`: pass it as
+  `?cursor=` (or `Last-Event-ID`) to the matching stream. It is read before the
+  snapshot, so resuming from it never skips an event.
+
+### 3.3 Events and streams
+
+- An event is `{id, job_id, item_id?, type, phase?, message?, payload?, created_at}`.
+  `payload` is a JSON **object**, not a string. Event types are the constants in
+  `internal/domain` and the `EventType` enum in the spec.
+- Streams are Server-Sent Events only. There are no WebSocket twins.
+- Every stream resumes from `Last-Event-ID` or `?cursor=<id>`; the header wins when both
+  are present. A malformed cursor is `400 invalid_request`. CORS allows the
+  `Last-Event-ID` request header, so a cross-origin `EventSource` resumes too.
+- Every stream sends `X-Accel-Buffering: no` and a `: keepalive` comment every 15 s.
+  That comment interval is separate from the store re-drain ticker that bounds latency
+  when a wake signal is dropped; keep both.
+- `GET /downloads/events`: named events `download_upserted` / `download_deleted`, `id`
+  = event id, `data` = `{type, job?, job_id?, event_id, status_counts}`.
+- `GET /downloads/{id}/events`: named event = event type, `id` = event id. When the job
+  is terminal and the client has everything, the server answers **204 No Content**,
+  which makes `EventSource` close without reconnecting. A browser reports any non-200
+  as a generic `error`, so a client that sees its stream close refetches the job to tell
+  "finished" from "broken".
+- `GET /logs` and `GET /logs/stream` page with `cursor` (log sequence) as well; the list
+  returns `next_cursor`.
+- Only milestone events reach the overview feed. `item_progress` events are kept while a
+  job runs and pruned when it finishes.
+
+### 3.4 Config
+
+- `GET /config` returns the in-memory snapshot and has no side effects.
+- `POST /config/reload` (and SIGHUP) re-reads the file; the response is the same shape as
+  `GET`, with `reload_error` set if the file is invalid (the previous snapshot stays).
+- `PUT /config` re-reads the file under the same lock before applying the patch, so a
+  hand edit made since the last reload is not overwritten.
+
+### 3.5 System and stats
+
+- `GET /system`: build info, uptime, simulate flag, signing mode, job/queue capacity,
+  pool sizes, tool availability, free space of `downloads_dir` and `temp_dir`.
+
+  ```json
+  {"version": "v2.0.0", "commit": "a6a6b46", "build_date": "2026-10-28T12:00:00Z",
+   "go_version": "go1.26.5", "os": "linux", "arch": "amd64",
+   "started_at": "2026-10-28T12:00:05Z", "uptime_seconds": 3600,
+   "simulate": false, "signing_mode": "legacy", "motion_artwork_enabled": true,
+   "jobs": {"workers": 3, "active": 1, "queue_depth": 0, "queue_capacity": 256, "recovery_backlog": 0},
+   "pools": {"downloads": 16, "decrypts": 32, "wrapper_requests": 24},
+   "tools": [{"name": "ffmpeg", "available": true, "path": "/usr/bin/ffmpeg"}],
+   "storage": [{"name": "downloads_dir", "path": "data/downloads", "free_bytes": 1, "total_bytes": 2},
+               {"name": "temp_dir", "path": "data/tmp", "error": "statfs unsupported"}]}
+  ```
+
+  `version` is `dev` and `commit`/`build_date` are empty for builds without ldflags;
+  `signing_mode` is `local` when the developer-token signing keys are set.
+- `GET /stats?days=N` (1-90, default 14): totals over retained history plus a per-day
+  series (UTC dates, oldest first, every day present) of completed tracks, bytes
+  written and finished jobs, codec mix, and hook outcomes. Results are cached for 30 s;
+  the numbers cover jobs that still exist.
+
+  ```json
+  {"generated_at": "…", "days": 14,
+   "totals": {"jobs": 12, "tracks_completed": 210, "tracks_skipped": 4, "tracks_failed": 1,
+              "bytes_written": 9876543210, "duration_ms": 52000000},
+   "daily": [{"date": "2026-10-28", "tracks_completed": 21, "bytes_written": 987654321,
+              "jobs_completed": 1, "jobs_failed": 0}],
+   "codecs": [{"codec": "alac", "bit_depth": 24, "sample_rate": 96000, "tracks": 120}],
+   "hooks": [{"name": "notify", "succeeded": 10, "failed": 1, "last_failed_at": "…"}]}
+  ```
+
+## 4. Storage
+
+- Schema changes are ordered migrations gated by `PRAGMA user_version`. Migration 1
+  brings any 1.x database to the final 1.x schema: it runs, once, everything 1.x ran on
+  every open (`CREATE TABLE IF NOT EXISTS`, the column backfills, progress backfill,
+  timestamp normalization). After that, `Open` does nothing schema-shaped.
+- Migration 2 is the 2.0 schema: `jobs.started_at`/`finished_at` (backfilled from
+  events), drops `jobs.force`, `jobs.done_items` and `jobs.failed_items`, indexes
+  `job_events(type, created_at)` and deletes `item_progress` events of terminal jobs.
+- Migrations preserve every row of user data (jobs, items, milestone events,
+  library-sync anchor). A test builds a database from the frozen 1.x schema SQL, inserts
+  rows, migrates, and asserts every row survived and migration 1 changed nothing on a
+  database that was already current.
+- Timestamps are fixed-width UTC text so lexical order is time order.
+
+## 5. Output paths
+
+Path templates, `{Quality}` labels and lyrics sidecar names are unchanged from 1.x,
+because the "already downloaded" check compares paths and any change re-downloads whole
+libraries. Path segments are cleaned by `safeName`: reserved characters replaced,
+leading and trailing dots and spaces removed, each segment capped at 240 bytes on a
+rune boundary.
+
+## 6. Hooks
+
+Exec hooks receive absolute output paths and an environment without the backend's own
+`AMDL_*` configuration variables (only the documented hook variables are added).
+Webhook URLs must be absolute `http`/`https` URLs; an invalid one fails startup.
+
+## 7. Web console
+
+`internal/console` serves a no-build Preact+htm app at `/console/`; `/` redirects there.
+It is a client of the public API only. See `internal/console/DESIGN.md`.

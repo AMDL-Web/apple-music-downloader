@@ -63,8 +63,8 @@ Config key: follow "Change together" in `internal/config/AGENTS.md` (struct,
 `Default()`, validation, the full comment in `configs/config.example.yaml`,
 runtime or startup, job overrides and their OpenAPI schema when overridable).
 
-DB column: follow `internal/db/AGENTS.md` (row-preserving `ensureColumn` migration,
-confirmation before applying to a real database).
+DB column: follow `internal/db/AGENTS.md` (a new numbered migration that keeps user
+data, tested against the frozen 1.x schema; never edit a shipped migration).
 
 Output path: follow `internal/media/AGENTS.md`; any change to existing names is
 breaking.
