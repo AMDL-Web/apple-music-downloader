@@ -3,12 +3,12 @@ module amdl
 // Keep this in step with the golang image in Dockerfile. CI resolves its Go
 // version from this line (go-version-file: go.mod), so letting the two drift
 // means the released binary is built by a toolchain CI never exercised.
-go 1.26.5
+go 1.26.10
 
 require (
 	github.com/iyear/gowidevine v0.1.3
 	github.com/zhaarey/go-mp4tag v0.0.0-20260509131819-a89fa417cd97
-	google.golang.org/grpc v1.83.0
+	google.golang.org/grpc v1.83.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.56.0
@@ -27,9 +27,9 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

@@ -3,7 +3,7 @@
 # ---- Build stage -------------------------------------------------------
 # Cross-compilation runs on the build platform (--platform=$BUILDPLATFORM),
 # so buildx can produce linux/amd64 and linux/arm64 images directly.
-FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine AS build
 
 WORKDIR /src
 
