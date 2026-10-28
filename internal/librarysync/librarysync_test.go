@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
@@ -470,5 +471,52 @@ func TestResetDuringFailingPassForgetsPendingAlbums(t *testing.T) {
 	}
 	if status := w.Status(); status.LastError != "" || status.AnchorSize != 0 {
 		t.Fatalf("status = %+v, want no retry error and an empty anchor", status)
+	}
+}
+
+// blockingLibrary holds the first page read until its context ends.
+type blockingLibrary struct {
+	fakeLibrary
+	entered chan struct{}
+	exited  chan struct{}
+}
+
+func (b *blockingLibrary) LibrarySongsNewestFirst(ctx context.Context, _ string, _, _ int) ([]applemusic.LibrarySong, bool, error) {
+	close(b.entered)
+	<-ctx.Done()
+	close(b.exited)
+	return nil, false, ctx.Err()
+}
+
+// Run returns once its context ends and the pass in flight has stopped, so
+// shutdown can wait for it before closing the store the pass writes to.
+func TestRunReturnsAfterCancelAndInFlightPass(t *testing.T) {
+	lib := &blockingLibrary{entered: make(chan struct{}), exited: make(chan struct{})}
+	cfg := config.Default()
+	cfg.LibrarySync.Enabled = true
+	cfg.Catalog.MediaUserToken = "token"
+	w := New(config.NewStore(cfg), lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		w.run(ctx, time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-lib.entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no pass started")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return after its context ended")
+	}
+	select {
+	case <-lib.exited:
+	default:
+		t.Fatal("Run returned while a pass was still in flight")
 	}
 }

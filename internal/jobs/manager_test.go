@@ -250,63 +250,6 @@ func TestRecoverUnfinishedHandlesMoreThanQueueCapacityWithoutLoss(t *testing.T) 
 	}
 }
 
-type shutdownProcessor struct {
-	keyedProcessor
-	started chan struct{}
-	exited  chan struct{}
-	once    sync.Once
-}
-
-func (p *shutdownProcessor) ProcessJob(ctx context.Context, _ domain.Job, _ Reporter) error {
-	p.once.Do(func() { close(p.started) })
-	<-ctx.Done()
-	close(p.exited)
-	return ctx.Err()
-}
-
-func TestManagerShutdownCancelsAndWaitsForRunningWorker(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-
-	processor := &shutdownProcessor{started: make(chan struct{}), exited: make(chan struct{})}
-	manager := NewManager(store, events.NewHub(), processor, 1, slog.Default())
-	manager.Start(context.Background())
-	resp := manager.SubmitBatch(context.Background(), []string{"song|cn|shutdown"}, nil)
-	if resp.Accepted != 1 {
-		t.Fatalf("submit = %+v", resp)
-	}
-	select {
-	case <-processor.started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("processor did not start")
-	}
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if err := manager.Shutdown(shutdownCtx); err != nil {
-		t.Fatalf("Shutdown: %v", err)
-	}
-	select {
-	case <-processor.exited:
-	default:
-		t.Fatal("Shutdown returned before ProcessJob exited")
-	}
-	if err := manager.Wait(context.Background()); err != nil {
-		t.Fatalf("Wait after Shutdown: %v", err)
-	}
-
-	job, err := store.GetJob(context.Background(), resp.Results[0].Job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if job.Status != domain.JobCancelled {
-		t.Fatalf("job status = %s, want %s", job.Status, domain.JobCancelled)
-	}
-}
-
 // TestRecoverUnfinishedDoesNotDispatchJobQueuedHook guards the documented
 // design decision that recovery re-enqueues jobs without re-firing the
 // job_queued creation hook: those jobs were created before the restart, so

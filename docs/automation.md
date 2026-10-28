@@ -26,35 +26,47 @@ filters by `song`, `album`, `playlist`, `artist`, `station`; empty or omitted ma
 Every entry whose `enabled`, `events` and `job_types` all match runs concurrently, bounded
 by `max_concurrent`.
 
-- `job_queued` fires right after creation, before any track is resolved — the payload's
-  `items` list is empty and `total_items` is 0. It **cannot** share an entry with a
-  terminal event; put creation and terminal hooks in separate entries, which may point at
-  the same URL or command.
+- `job_queued` fires right after creation, before any track is resolved — the payload has
+  no `items` and `total_items` is 0. It **cannot** share an entry with a terminal event;
+  put creation and terminal hooks in separate entries, which may point at the same URL or
+  command.
 - `job_finished` means zero failed items; `job_failed` means at least one failed item or an
-  aborted job; `job_cancelled` means cancelled through the API.
+  aborted job; `job_cancelled` means cancelled through the API. A job that was running
+  when the backend stopped fires none of them then: it resumes on the next start and fires
+  its terminal hook when it finishes.
 
-**Webhook entries** POST to `url` with optional `headers`. `send_payload: false` sends an
-empty body, which suits refresh-style endpoints that ignore it. `max_attempts` counts the
-first try, and retries wait one second between attempts.
+**Webhook entries** POST to `url`, which must be an absolute `http` or `https` URL (an
+invalid one fails startup and names the entry), with optional `headers`.
+`send_payload: false` sends an empty body, which suits refresh-style endpoints that ignore
+it. `max_attempts` counts the first try, and retries wait one second between attempts.
 
 **Exec entries** run `command` through `sh -c` with the JSON payload on stdin, optionally
-in `workdir`. These environment variables are also set:
+in `workdir`. The command inherits the backend's environment (`PATH`, `HOME`, `TZ`, …)
+**without** any `AMDL_*` variable: those configure the backend, and some, such as
+`AMDL_CATALOG_MEDIA_USER_TOKEN`, are secrets. Pass what a script needs explicitly. These
+variables are set instead:
 
 ```text
-AMDL_EVENT         job_queued | job_finished | job_failed | job_cancelled
-AMDL_JOB_ID        job ID
-AMDL_JOB_TYPE      song | album | playlist | artist | station
-AMDL_JOB_STATUS    queued | completed | failed | cancelled
-AMDL_JOB_INPUT     original Apple Music URL
-AMDL_STOREFRONT    storefront code, e.g. "us", "cn"
-AMDL_TOTAL_ITEMS   total track count
-AMDL_DONE_ITEMS    completed/skipped track count
-AMDL_FAILED_ITEMS  failed track count
-AMDL_OUTPUT_PATHS  newline-separated absolute output paths
+AMDL_EVENT            job_queued | job_finished | job_failed | job_cancelled
+AMDL_JOB_ID           job ID
+AMDL_JOB_TYPE         song | album | playlist | artist | station
+AMDL_JOB_STATUS       queued | completed | failed | cancelled
+AMDL_JOB_INPUT        original Apple Music URL
+AMDL_STOREFRONT       storefront code, e.g. "us", "cn"
+AMDL_TOTAL_ITEMS      total track count
+AMDL_COMPLETED_ITEMS  tracks this job wrote
+AMDL_SKIPPED_ITEMS    tracks already on disk
+AMDL_FAILED_ITEMS     failed tracks
+AMDL_CANCELLED_ITEMS  tracks cancelled before they finished
+AMDL_OUTPUT_PATHS     newline-separated absolute output paths
 ```
 
+A failing exec hook records the last 4 KiB of its stderr in its `hook_failed` event.
+
 The JSON payload — sent as the webhook body when `send_payload` is true, and written to an
-exec hook's stdin — looks like:
+exec hook's stdin — looks like this. The `job` counters are the API's (see
+[api.md](api.md#query-cancel-retry-delete)); `error` is present only when the job has one, `started_at` and
+`finished_at` only once set, and `output_path` is absolute:
 
 ```json
 {
@@ -67,9 +79,12 @@ exec hook's stdin — looks like:
     "storefront": "us",
     "status": "completed",
     "total_items": 12,
-    "done_items": 12,
+    "completed_items": 11,
+    "skipped_items": 1,
     "failed_items": 0,
-    "error": ""
+    "cancelled_items": 0,
+    "started_at": "2026-07-04T10:28:41Z",
+    "finished_at": "2026-07-04T10:30:00Z"
   },
   "items": [
     {
@@ -79,7 +94,7 @@ exec hook's stdin — looks like:
       "album": "Album Name",
       "status": "completed",
       "codec": "alac",
-      "output_path": "/data/downloads/albums/Album Name/01. Song 1.m4a"
+      "output_path": "/app/data/downloads/albums/Album Name/01. Song 1.m4a"
     }
   ]
 }
@@ -87,7 +102,9 @@ exec hook's stdin — looks like:
 
 Hook execution surfaces as `hook_started`, `hook_succeeded` and `hook_failed` events, and
 a submission can restrict which entries may run through `overrides.hooks` — see
-[api.md](api.md#job-overrides).
+[api.md](api.md#job-overrides). On shutdown, hooks get a short drain: retries stop at once,
+and an attempt still running when the drain ends is cancelled and recorded as
+`hook_failed`.
 
 ## Library sync
 

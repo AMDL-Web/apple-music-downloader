@@ -17,8 +17,11 @@ import (
 
 // ErrShutdown is the cancellation cause of a job interrupted because the
 // process is stopping. Such a job is not cancelled: it stays running in the
-// store with its checkpoints, and recovery resumes it on the next start.
-// Check it with errors.Is(context.Cause(ctx), ErrShutdown).
+// store with its items, checkpoints and media-user-token, emits no terminal
+// event and fires no hook, and RecoverUnfinished resumes it on the next start.
+// Only Manager.Shutdown sets this cause; cancelling the context passed to
+// Start counts as a user cancel. Check it with
+// errors.Is(context.Cause(ctx), ErrShutdown).
 var ErrShutdown = errors.New("job manager is shutting down")
 
 type Manager struct {
@@ -62,7 +65,7 @@ type Manager struct {
 	// every worker (including an in-flight ProcessJob) has returned.
 	lifecycleMu  sync.Mutex
 	started      bool
-	workerCancel context.CancelFunc
+	workerCancel context.CancelCauseFunc
 	workerDone   chan struct{}
 	workerWG     sync.WaitGroup
 }
@@ -159,7 +162,7 @@ func (m *Manager) Start(ctx context.Context) {
 		m.lifecycleMu.Unlock()
 		return
 	}
-	workerCtx, cancel := context.WithCancel(ctx)
+	workerCtx, cancel := context.WithCancelCause(ctx)
 	m.started = true
 	m.workerCancel = cancel
 	m.workerWG.Add(m.workers)
@@ -174,10 +177,11 @@ func (m *Manager) Start(ctx context.Context) {
 	}()
 }
 
-// Shutdown cancels all workers and waits for in-flight jobs to finish. The
-// supplied context bounds only the wait; worker cancellation remains in
-// effect if the deadline expires, and a later Wait can still observe their
-// eventual completion.
+// Shutdown cancels all workers with the cause ErrShutdown and waits for
+// in-flight jobs to return. Those jobs stay running in the store for
+// RecoverUnfinished (see ErrShutdown). The supplied context bounds only the
+// wait; worker cancellation remains in effect if the deadline expires, and a
+// later Wait can still observe their eventual completion.
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.lifecycleMu.Lock()
 	started := m.started
@@ -186,7 +190,7 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	if !started {
 		return nil
 	}
-	cancel()
+	cancel(ErrShutdown)
 	return m.Wait(ctx)
 }
 

@@ -94,8 +94,8 @@ func (c *CatalogClient) scrapeWebToken(ctx context.Context) (string, time.Durati
 	return token, c.cfg.TokenTTL(), nil
 }
 
-// tokenRefreshCheckInterval bounds how often the background refresher started
-// by StartTokenRefresher wakes to re-check the scraped-token caches. Each wake
+// tokenRefreshCheckInterval bounds how often the background refresher run by
+// RunTokenRefresher wakes to re-check the scraped-token caches. Each wake
 // only compares timestamps under a lock; it scrapes Apple solely when a cached
 // token is within tokenRefreshLead of its cached expiry.
 const tokenRefreshCheckInterval = time.Minute
@@ -107,27 +107,30 @@ const tokenRefreshCheckInterval = time.Minute
 // minimum token_cache_ttl) and above tokenRefreshCheckInterval.
 const tokenRefreshLead = 5 * time.Minute
 
-// StartTokenRefresher runs a background loop that proactively re-scrapes the
-// music.apple.com web tokens shortly before their cached validity lapses, so
-// catalog and enhanced-HLS requests in legacy or signed_mode_hls_source=
-// web_token mode never pay the inline scrape latency and never hit a lapsed
-// token. It only renews a token that has already been fetched at least once (a
-// non-empty cache); it never scrapes a token nothing has used yet, preserving
-// the lazy-first behavior for deployments that never touch the scraped path.
-// The loop stops when ctx is done; call it once at startup.
-func (c *CatalogClient) StartTokenRefresher(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(tokenRefreshCheckInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				c.refreshExpiringWebTokens(ctx)
-			}
+// RunTokenRefresher proactively re-scrapes the music.apple.com web tokens
+// shortly before their cached validity lapses, so catalog and enhanced-HLS
+// requests in legacy or signed_mode_hls_source=web_token mode never pay the
+// inline scrape latency and never hit a lapsed token. It only renews a token
+// that has already been fetched at least once (a non-empty cache); it never
+// scrapes a token nothing has used yet, preserving the lazy-first behavior for
+// deployments that never touch the scraped path. It blocks until ctx is done
+// and returns once a refresh in flight has stopped; run it once, on its own
+// goroutine.
+func (c *CatalogClient) RunTokenRefresher(ctx context.Context) {
+	c.runTokenRefresher(ctx, tokenRefreshCheckInterval)
+}
+
+func (c *CatalogClient) runTokenRefresher(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.refreshExpiringWebTokens(ctx)
 		}
-	}()
+	}
 }
 
 // refreshExpiringWebTokens renews any scraped token within tokenRefreshLead of

@@ -41,6 +41,19 @@ func (s *Store) ResetUnfinishedItems(ctx context.Context, jobID string, updatedA
 	return err
 }
 
+// CancelUnfinishedItems ends every item of jobID that has not reached a
+// terminal state (completed, skipped_existing, failed or cancelled) as
+// cancelled with statusMessage, in one statement. It is the queued-job form of
+// the per-item cancel internal/media writes while a job runs; other columns
+// keep the item's last state.
+func (s *Store) CancelUnfinishedItems(ctx context.Context, jobID, statusMessage string, updatedAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE job_items SET status=?, status_message=?, updated_at=?
+		WHERE job_id=? AND status NOT IN (?,?,?,?)`,
+		string(domain.ItemCancelled), statusMessage, formatTime(updatedAt), jobID,
+		string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemFailed), string(domain.ItemCancelled))
+	return err
+}
+
 // DeleteItem removes a single item row. Used when a re-run of a job (retry or
 // post-restart requeue) resolves a collection that no longer contains a track
 // a previous run created an item for, so stale rows don't distort the job's

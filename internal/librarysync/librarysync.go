@@ -101,41 +101,47 @@ type Watcher struct {
 	idleReason string
 }
 
-// New builds a watcher over the live config. It does no I/O; Start runs it.
+// pollTick is how often the poll loop checks whether a pass is due.
+const pollTick = 15 * time.Second
+
+// New builds a watcher over the live config. It does no I/O; Run runs it.
 func New(cfg *config.Store, library Library, store AnchorStore, jobs Submitter, logger *slog.Logger) *Watcher {
 	return &Watcher{cfg: cfg, library: library, store: store, jobs: jobs, logger: logger}
 }
 
-// Start runs the poll loop until ctx is cancelled.
+// Run polls until ctx is cancelled and returns once the loop, including a pass
+// in flight, has stopped. The caller runs it on its own goroutine and waits for
+// it before closing the store.
 //
 // The loop always ticks at a fixed short cadence and decides per tick whether a
 // pass is due. Sleeping for the configured interval instead would mean a change
 // from 24 hours to 5 minutes only took effect a day later.
-func (w *Watcher) Start(ctx context.Context) {
-	go func() {
-		const tick = 15 * time.Second
-		timer := time.NewTicker(tick)
-		defer timer.Stop()
-		var lastRun time.Time
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-			}
-			cfg := w.cfg.Get().LibrarySync
-			if !cfg.Enabled {
-				lastRun = time.Time{} // re-enabling polls promptly, not a full interval later
-				w.noteIdle("")
-				continue
-			}
-			if !lastRun.IsZero() && time.Since(lastRun) < cfg.Interval() {
-				continue
-			}
-			lastRun = time.Now()
-			w.RunOnce(ctx)
+func (w *Watcher) Run(ctx context.Context) {
+	w.run(ctx, pollTick)
+}
+
+func (w *Watcher) run(ctx context.Context, tick time.Duration) {
+	timer := time.NewTicker(tick)
+	defer timer.Stop()
+	var lastRun time.Time
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
 		}
-	}()
+		cfg := w.cfg.Get().LibrarySync
+		if !cfg.Enabled {
+			lastRun = time.Time{} // re-enabling polls promptly, not a full interval later
+			w.noteIdle("")
+			continue
+		}
+		if !lastRun.IsZero() && time.Since(lastRun) < cfg.Interval() {
+			continue
+		}
+		lastRun = time.Now()
+		w.RunOnce(ctx)
+	}
 }
 
 // RunOnce performs a single pass. Exported so the reset endpoint and tests can

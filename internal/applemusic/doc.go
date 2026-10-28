@@ -3,7 +3,7 @@
 // once by NewCatalogClient: Song, Album, Playlist, StationTracks, ArtistAlbums,
 // FetchCover, LibrarySongsNewestFirst, LibraryAlbumCatalogURL. EnrichWithAlbum
 // merges album-level fields into a song for every caller. Startup calls
-// InitDeveloperToken and StartTokenRefresher once.
+// InitDeveloperToken once and runs RunTokenRefresher until shutdown.
 //
 // Invariants: apiBase picks api.music.apple.com when developer-token signing is
 // enabled, amp-api.music.apple.com otherwise; MotionArtworkViaWebToken and

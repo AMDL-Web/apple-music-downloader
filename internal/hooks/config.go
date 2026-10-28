@@ -3,6 +3,7 @@ package hooks
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -180,6 +181,9 @@ func (c Config) validate() error {
 			if strings.TrimSpace(e.URL) == "" {
 				return fmt.Errorf("%s: url is required for type webhook", label)
 			}
+			if err := validateWebhookURL(e.URL); err != nil {
+				return fmt.Errorf("%s: url: %w", label, err)
+			}
 		case "exec":
 			if strings.TrimSpace(e.Command) == "" {
 				return fmt.Errorf("%s: command is required for type exec", label)
@@ -188,6 +192,22 @@ func (c Config) validate() error {
 		// max_attempts is not validated here: values <= 0 (including
 		// negatives) behave as a single attempt, matching the documented
 		// semantics and download.max_attempts.
+	}
+	return nil
+}
+
+// validateWebhookURL accepts only an absolute http or https URL with a host,
+// so a typo fails startup instead of every run of the hook.
+func validateWebhookURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("%q must be an absolute http or https URL", raw)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("%q has no host", raw)
 	}
 	return nil
 }

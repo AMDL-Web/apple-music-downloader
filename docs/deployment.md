@@ -30,6 +30,7 @@ Or without compose:
 ```bash
 docker build -t amdl-backend .
 docker run -d --name amdl-backend \
+  --stop-timeout 120 \
   -p 18080:18080 \
   -v ./configs:/app/configs \
   -v ./data/db:/app/data/db \
@@ -47,6 +48,34 @@ via `su-exec` to run the backend.
 
 The container health check hits `GET /api/v1/health`, deriving the port from
 `AMDL_SERVER_LISTEN`.
+
+## Stopping and restarting
+
+`docker compose stop`, `restart` and `up -d` after an image update are safe while jobs
+run. On SIGTERM the backend stops taking requests, ends open event streams, and stops
+its workers without cancelling their jobs: those stay `running` in the database and
+resume on the next start (`job_recovered`), skipping tracks that already finished.
+Partial transfers resume too while the container's `data/tmp` survives (a restart keeps
+it; recreating the container starts those tracks over). Each shutdown step is bounded,
+about 105 s in the worst case, so the container needs more than Docker's default 10 s:
+`docker-compose.yml` sets `stop_grace_period: 2m`, and `docker run` needs
+`--stop-timeout 120`. With less, Docker kills the process before it closes the database.
+The order of the steps is in [Architecture](architecture.md#1-process-and-lifecycle).
+
+SIGHUP re-reads `config.yaml` and applies its runtime keys and logging level, like
+`POST /api/v1/config/reload`: `docker compose kill -s SIGHUP amdl-backend`, or
+`docker kill -s HUP amdl-backend`. An invalid file is logged and the running config
+stays.
+
+## Behind a reverse proxy
+
+The service has no authentication of its own; put access control in the proxy in front
+of it. Its event streams (`/api/v1/downloads/events`, `/api/v1/downloads/{id}/events`,
+`/api/v1/logs/stream`) are Server-Sent Events and send `X-Accel-Buffering: no`, which
+nginx honors; for other proxies, or an nginx that ignores the header
+(`proxy_ignore_headers`), turn response buffering off for those paths
+(`proxy_buffering off;` in nginx), and allow a read timeout above the 15 s keepalive
+interval.
 
 ## Config seeding
 
@@ -87,9 +116,10 @@ Container-specific variables:
 Three ways to change configuration: runtime keys via `PUT /api/v1/config` (immediate);
 any key via an environment variable followed by `docker compose up -d`; or by editing
 `config.yaml` in the mounted directory — runtime keys apply on
-`POST /api/v1/config/reload` or SIGHUP, startup keys need a container restart. Inside the container the
-listen and wrapper addresses always come from the environment. Remember that a `PUT`
-rewrites the whole file and drops comments.
+`POST /api/v1/config/reload` or SIGHUP (see [Stopping and restarting](#stopping-and-restarting)),
+startup keys need a container restart. Inside the container the listen and wrapper
+addresses always come from the environment. Remember that a `PUT` rewrites the whole file
+and drops comments.
 
 > **Breaking change**: the old names `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR` were removed.
 > Leaving them set fails startup with an unknown-variable error.

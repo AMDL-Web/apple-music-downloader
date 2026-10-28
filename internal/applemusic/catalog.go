@@ -37,7 +37,7 @@ type CatalogClient struct {
 }
 
 // NewCatalogClient builds the client. It does no I/O; call InitDeveloperToken
-// and StartTokenRefresher once at startup.
+// once at startup, and run RunTokenRefresher for the process lifetime.
 func NewCatalogClient(cfg config.CatalogConfig, logger *slog.Logger) *CatalogClient {
 	c := &CatalogClient{
 		cfg:        cfg,

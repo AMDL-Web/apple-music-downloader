@@ -15,6 +15,14 @@ import (
 // job's SSE stream) without internal/hooks importing internal/jobs.
 type EventRecorder func(ctx context.Context, ev domain.Event) error
 
+// retryDelay is the wait between two attempts of one hook execution.
+const retryDelay = time.Second
+
+// recordTimeout bounds one hook_started/hook_succeeded/hook_failed write. The
+// writes run on a context of their own, so a hook cut short by Shutdown still
+// records its outcome.
+const recordTimeout = 5 * time.Second
+
 // Dispatcher fans a job-lifecycle event out to every enabled hook entry that
 // subscribes to it. Dispatch never blocks the caller: matching hooks run in
 // background goroutines bounded by a concurrency semaphore.
@@ -23,6 +31,15 @@ type Dispatcher struct {
 	recorder EventRecorder
 	logger   *slog.Logger
 	sem      chan struct{}
+
+	// runCtx is the parent of every hook attempt; abortRuns ends them all.
+	// retryCtx, its child, ends retry waits and keeps further attempts from
+	// starting. Shutdown cancels retryCtx when it begins and runCtx only when
+	// its wait expires, so in-flight attempts drain first and are cut last.
+	runCtx      context.Context
+	abortRuns   context.CancelFunc
+	retryCtx    context.Context
+	stopRetries context.CancelFunc
 
 	// mu guards wg.Add against a concurrent Shutdown. sync.WaitGroup requires
 	// that any Add(positive) happening when the counter could be zero
@@ -49,9 +66,12 @@ type Dispatcher struct {
 }
 
 func NewDispatcher(cfg Config, recorder EventRecorder, logger *slog.Logger) *Dispatcher {
+	runCtx, abortRuns := context.WithCancel(context.Background())
+	retryCtx, stopRetries := context.WithCancel(runCtx)
 	return &Dispatcher{
 		cfg: cfg, recorder: recorder, logger: logger,
-		sem:     make(chan struct{}, cfg.Concurrency()),
+		sem:    make(chan struct{}, cfg.Concurrency()),
+		runCtx: runCtx, abortRuns: abortRuns, retryCtx: retryCtx, stopRetries: stopRetries,
 		pending: map[string]int{},
 		done:    make(chan struct{}),
 	}
@@ -175,44 +195,64 @@ func (d *Dispatcher) Pending(jobID string) bool {
 func (d *Dispatcher) execute(entry Entry, payload Payload) {
 	defer d.wg.Done()
 	defer d.donePending(payload.Job.ID)
-	d.sem <- struct{}{}
+	logger := d.logger.With("job_id", payload.Job.ID, "hook", entry.Name, "hook_event", payload.Event)
+	select {
+	case d.sem <- struct{}{}:
+	case <-d.runCtx.Done():
+		d.record(logger, entry, payload.Job.ID, domain.EventHookFailed, "not run: the backend shut down first", map[string]any{"attempts": 0})
+		return
+	}
 	defer func() { <-d.sem }()
 
 	runner := runners[entry.Type]
 	timeout := entry.Timeout(d.cfg.Timeout())
-	ctx := context.Background()
-	logger := d.logger.With("job_id", payload.Job.ID, "hook", entry.Name, "hook_event", payload.Event)
 
-	d.record(ctx, entry, payload.Job.ID, domain.EventHookStarted, "", nil)
+	d.record(logger, entry, payload.Job.ID, domain.EventHookStarted, "", nil)
 	logger.Debug("hook execution started")
 
 	// max_attempts counts total attempts including the first; 0 (unset)
 	// behaves as a single attempt.
-	attempts := entry.MaxAttempts
-	if attempts < 1 {
-		attempts = 1
+	maxAttempts := entry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
 	}
 	var lastErr error
-	for attempt := 1; attempt <= attempts; attempt++ {
-		runCtx, cancel := context.WithTimeout(ctx, timeout)
+	attempt := 0
+	for attempt < maxAttempts {
+		attempt++
+		runCtx, cancel := context.WithTimeout(d.runCtx, timeout)
 		start := time.Now()
 		err := runner.Run(runCtx, entry, payload)
 		duration := time.Since(start)
 		cancel()
 		if err == nil {
-			d.record(ctx, entry, payload.Job.ID, domain.EventHookSucceeded, "", map[string]any{
+			d.record(logger, entry, payload.Job.ID, domain.EventHookSucceeded, "", map[string]any{
 				"attempt": attempt, "duration_ms": duration.Milliseconds(),
 			})
 			logger.Info("hook execution succeeded", "attempt", attempt, "duration_ms", duration.Milliseconds())
 			return
 		}
 		lastErr = err
-		logger.Warn("hook execution failed", "attempt", attempt, "max_attempts", attempts, "duration_ms", duration.Milliseconds(), "error", err)
-		if attempt < attempts {
-			time.Sleep(time.Second)
+		logger.Warn("hook execution failed", "attempt", attempt, "max_attempts", maxAttempts, "duration_ms", duration.Milliseconds(), "error", err)
+		if attempt < maxAttempts && !d.waitRetry() {
+			lastErr = fmt.Errorf("%w (not retried: the backend is shutting down)", lastErr)
+			break
 		}
 	}
-	d.record(ctx, entry, payload.Job.ID, domain.EventHookFailed, lastErr.Error(), map[string]any{"attempts": attempts})
+	d.record(logger, entry, payload.Job.ID, domain.EventHookFailed, lastErr.Error(), map[string]any{"attempts": attempt})
+}
+
+// waitRetry waits retryDelay before another attempt and reports whether to
+// make it: false as soon as Shutdown has begun.
+func (d *Dispatcher) waitRetry() bool {
+	timer := time.NewTimer(retryDelay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return d.retryCtx.Err() == nil
+	case <-d.retryCtx.Done():
+		return false
+	}
 }
 
 // donePending runs after this execution's terminal hook_succeeded/hook_failed
@@ -228,7 +268,10 @@ func (d *Dispatcher) donePending(jobID string) {
 	}
 }
 
-func (d *Dispatcher) record(ctx context.Context, entry Entry, jobID string, eventType domain.EventType, message string, extra map[string]any) {
+// record persists one hook lifecycle event through the recorder. It runs on
+// its own bounded context, detached from the attempt that may just have been
+// cut short. A failure is logged: the outcome then shows only in the logs.
+func (d *Dispatcher) record(logger *slog.Logger, entry Entry, jobID string, eventType domain.EventType, message string, extra map[string]any) {
 	if d.recorder == nil {
 		return
 	}
@@ -236,16 +279,26 @@ func (d *Dispatcher) record(ctx context.Context, entry Entry, jobID string, even
 	for k, v := range extra {
 		fields[k] = v
 	}
-	raw, _ := json.Marshal(fields)
-	_ = d.recorder(ctx, domain.Event{
+	raw, err := json.Marshal(fields)
+	if err != nil {
+		logger.Error("encode hook event payload", "event_type", string(eventType), "error", err)
+		raw = nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), recordTimeout)
+	defer cancel()
+	if err := d.recorder(ctx, domain.Event{
 		JobID: jobID, Type: eventType, Phase: entry.Name, Message: message, Payload: raw,
-	})
+	}); err != nil {
+		logger.Error("record hook event", "event_type", string(eventType), "error", err)
+	}
 }
 
-// Shutdown stops accepting new hook work and waits for in-flight executions
-// to finish, up to ctx's deadline, so the process doesn't exit mid-webhook on
-// SIGTERM. Any Dispatch call after Shutdown has begun is silently dropped
-// instead of racing wg.Add against wg.Wait.
+// Shutdown stops accepting new hook work, stops retries, and waits for
+// in-flight attempts to finish, up to ctx's deadline, so the process doesn't
+// exit mid-webhook on SIGTERM. When the deadline expires it cancels every
+// remaining attempt (each then records hook_failed) and returns ctx's error;
+// call Wait to see them exit. Any Dispatch call after Shutdown has begun is
+// silently dropped instead of racing wg.Add against wg.Wait.
 func (d *Dispatcher) Shutdown(ctx context.Context) error {
 	if d == nil {
 		return nil
@@ -253,7 +306,12 @@ func (d *Dispatcher) Shutdown(ctx context.Context) error {
 	d.mu.Lock()
 	d.closed = true
 	d.mu.Unlock()
-	return d.Wait(ctx)
+	d.stopRetries()
+	if err := d.Wait(ctx); err != nil {
+		d.abortRuns()
+		return err
+	}
+	return nil
 }
 
 // Wait waits for hook executions after Shutdown has stopped new dispatches.

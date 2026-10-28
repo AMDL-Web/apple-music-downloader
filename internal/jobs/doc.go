@@ -7,8 +7,10 @@
 // Invariants: canonicalKey is a job's dedup identity, backed by the database's
 // partial unique index over queued/running jobs. Every terminal status is
 // written by persistTerminal together with its terminal event in one store
-// call, and hooks are dispatched only after that write succeeds. Delete and
-// Retry refuse a job while m.cancels or m.finalizing still holds it.
+// call, and hooks are dispatched only after that write succeeds. A job
+// interrupted by Shutdown (cause ErrShutdown) gets no terminal write at all and
+// stays running for RecoverUnfinished. Delete and Retry refuse a job while
+// m.cancels or m.finalizing still holds it.
 //
 // Locking: submitMu serializes SubmitBatch, Retry and RecoverUnfinished. mu
 // guards cancels and finalizing, and serializes a worker's startup claim with

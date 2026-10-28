@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"log/slog"
 	"runtime/debug"
 	"time"
 
@@ -46,11 +48,24 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 		m.mu.Unlock()
 		return nil
 	}
+	// No worker holds the job, so nothing else ends its items. A recovered job
+	// can carry rows a previous process left mid-download; end them before the
+	// terminal write, then re-read the job so the counters in its row snapshot,
+	// terminal event and hook payload include them.
+	now := time.Now().UTC()
+	if err := m.store.CancelUnfinishedItems(ctx, jobID, cancelledItemMessage, now); err != nil {
+		m.mu.Unlock()
+		return fmt.Errorf("cancel unfinished items of job %s: %w", jobID, err)
+	}
+	if job, err = m.store.GetJob(ctx, jobID); err != nil {
+		m.mu.Unlock()
+		return fmt.Errorf("reload cancelled job %s: %w", jobID, err)
+	}
 	job.Status = domain.JobCancelled
 	job.Error = "cancelled"
 	job = withoutTerminalMediaUserToken(job)
-	job.UpdatedAt = time.Now().UTC()
-	persistErr := m.persistTerminal(ctx, job, domain.EventJobCancelled, "job cancelled")
+	job.UpdatedAt = now
+	job, persistErr := m.persistTerminal(ctx, job, domain.EventJobCancelled, "job cancelled")
 	if persistErr == nil {
 		// Mark the finalize sequence in flight before releasing m.mu: the
 		// status row (and its terminal event, written atomically alongside
@@ -128,7 +143,7 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	if err != nil {
 		m.mu.Unlock()
 		cancel()
-		m.logger.Error("load job", "job_id", jobID, "error", err)
+		m.logClaimFailure(parent, jobID, "load job", err)
 		return
 	}
 	if job.Status.IsTerminal() {
@@ -147,7 +162,7 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	if err := m.store.UpdateJob(ctx, job); err != nil {
 		m.mu.Unlock()
 		cancel()
-		m.logger.Error("mark job running", "job_id", jobID, "error", err)
+		m.logClaimFailure(parent, jobID, "mark job running", err)
 		return
 	}
 	m.cancels[jobID] = cancel
@@ -186,9 +201,20 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	}()
 
 	message := "job started"
-	_ = m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobStarted, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})})
+	if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobStarted, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
+		jobLogger.Warn("record job_started event", "error", err)
+	}
 
-	err = m.processor.ProcessJob(ctx, job, m)
+	err = m.processRecovered(ctx, job, jobLogger)
+	panicked := errors.Is(err, errProcessorPanic)
+	if !panicked && errors.Is(context.Cause(ctx), ErrShutdown) {
+		// Interrupted, not finished: the row stays running with its items,
+		// checkpoints and media-user-token, and no terminal event or hook
+		// fires, so RecoverUnfinished resumes it on the next start. A panic is
+		// excluded because recovery would only run into it again.
+		jobLogger.Info("job interrupted by shutdown; it resumes on the next start", "duration_ms", time.Since(started).Milliseconds())
+		return
+	}
 	// The reload carries the item counters the terminal decision and the
 	// terminal event payload use, derived by the store from job_items.
 	if latest, loadErr := m.store.GetJob(context.Background(), job.ID); loadErr == nil {
@@ -198,6 +224,12 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	}
 
 	switch {
+	case panicked:
+		// A panic is a defect, not a verdict on the input: fail the job so
+		// Retry stays available, whatever else happened meanwhile.
+		job.Status = domain.JobFailed
+		job.Error = err.Error()
+		m.finalizeLogged(job, domain.EventJobFailed, err.Error())
 	case errors.Is(ctx.Err(), context.Canceled):
 		// Cancellation takes priority over ProcessJob's return value: a job
 		// cancelled mid-flight must never be reported as completed, even if
@@ -236,6 +268,39 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	}
 }
 
+// logClaimFailure logs a worker that could not claim jobID. Losing the race
+// with Shutdown is expected: the row is still queued, and the next start
+// recovers it.
+func (m *Manager) logClaimFailure(parent context.Context, jobID, op string, err error) {
+	if errors.Is(context.Cause(parent), ErrShutdown) {
+		m.logger.Info("job left queued by shutdown; recovery runs it on the next start", "job_id", jobID)
+		return
+	}
+	m.logger.Error(op, "job_id", jobID, "error", err)
+}
+
+// errProcessorPanic wraps the value of a panic inside Processor.ProcessJob, so
+// the job fails with "internal error: panic: <value>" instead of taking the
+// process down.
+var errProcessorPanic = errors.New("internal error: panic")
+
+// processRecovered runs ProcessJob and turns a panic into an error wrapping
+// errProcessorPanic, logging the stack while it is still available. The worker
+// goroutine survives and the job finalizes like any other failure.
+func (m *Manager) processRecovered(ctx context.Context, job domain.Job, logger *slog.Logger) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("job processor panicked", "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+			err = fmt.Errorf("%w: %v", errProcessorPanic, r)
+		}
+	}()
+	return m.processor.ProcessJob(ctx, job, m)
+}
+
+// cancelledItemMessage is the status message of an item whose job the user
+// cancelled. internal/media writes the same text for items a running job ends.
+const cancelledItemMessage = "Cancelled"
+
 // finalizeJob persists a job's terminal status, emits the corresponding
 // domain event, and dispatches any post-download hooks subscribed to that
 // status. Shared by run() and Cancel() so every path that reaches a terminal
@@ -248,7 +313,8 @@ func (m *Manager) run(parent context.Context, jobID string) {
 func (m *Manager) finalizeJob(ctx context.Context, job domain.Job, eventType domain.EventType, message string) error {
 	job = withoutTerminalMediaUserToken(job)
 	job.UpdatedAt = time.Now().UTC()
-	if err := m.persistTerminal(ctx, job, eventType, message); err != nil {
+	job, err := m.persistTerminal(ctx, job, eventType, message)
+	if err != nil {
 		return err
 	}
 	m.dispatchHooks(ctx, job)
@@ -257,22 +323,22 @@ func (m *Manager) finalizeJob(ctx context.Context, job domain.Job, eventType dom
 
 // persistTerminal atomically persists job's terminal status, with finished_at
 // set to job.UpdatedAt, together with its terminal domain event
-// (Store.FinalizeJob), then publishes the stored event to the hub. The
-// atomicity matters to the per-job streams: they read a job's status and its
-// events table independently, so if these two writes ever landed as separate
-// statements, such a reader could observe the terminal status with the
-// terminal event still missing and wrongly conclude no more events are
-// pending.
-func (m *Manager) persistTerminal(ctx context.Context, job domain.Job, eventType domain.EventType, message string) error {
+// (Store.FinalizeJob), then publishes the stored event to the hub, and returns
+// job as persisted. The atomicity matters to the per-job streams: they read a
+// job's status and its events table independently, so if these two writes
+// ever landed as separate statements, such a reader could observe the
+// terminal status with the terminal event still missing and wrongly conclude
+// no more events are pending.
+func (m *Manager) persistTerminal(ctx context.Context, job domain.Job, eventType domain.EventType, message string) (domain.Job, error) {
 	finishedAt := job.UpdatedAt
 	job.FinishedAt = &finishedAt
 	ev := domain.Event{JobID: job.ID, Type: eventType, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}
 	stored, err := m.store.FinalizeJob(ctx, job, ev)
 	if err != nil {
-		return err
+		return job, err
 	}
 	m.hub.Publish(stored)
-	return nil
+	return job, nil
 }
 
 // withoutTerminalMediaUserToken drops a persisted credential once a job can
@@ -291,7 +357,13 @@ func withoutTerminalMediaUserToken(job domain.Job) domain.Job {
 // non-blocking, but the store read here should not extend the lock).
 func (m *Manager) dispatchHooks(ctx context.Context, job domain.Job) {
 	if hookEvent := hookEventForStatus(job.Status); hookEvent != "" {
-		items, _ := m.store.ListItems(ctx, job.ID)
+		items, err := m.store.ListItems(ctx, job.ID)
+		if err != nil {
+			// The hook still fires: its job counters are right, and a
+			// refresh-style hook needs no items. Only the per-item list and
+			// AMDL_OUTPUT_PATHS are missing.
+			m.logger.Error("list items for hook payload; dispatching without items", "job_id", job.ID, "hook_event", hookEvent, "error", err)
+		}
 		m.hooks.Dispatch(hookEvent, job, items)
 	}
 }

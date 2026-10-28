@@ -14,9 +14,13 @@
 #   - any field: override it with an AMDL_<SECTION>_<KEY> environment variable
 #     (upper-case section and key names; takes precedence over config.yaml and
 #     is not written back to the file on load), then docker compose up -d;
-#   - or edit ./configs/config.yaml directly, then docker compose restart
-#     (startup fields need a restart, and for fields overridden by an
-#     environment variable the environment variable wins).
+#   - or edit ./configs/config.yaml directly, then apply runtime fields with
+#     docker compose kill -s SIGHUP amdl-backend (or POST /api/v1/config/reload)
+#     and startup fields with docker compose restart (for fields overridden by
+#     an environment variable the environment variable wins).
+#
+# Stopping or restarting is safe mid-download: running jobs stay running in
+# the database and resume on the next start.
 services:
   amdl-backend:
     # Pulls the prebuilt image from GHCR by default (multi-arch linux/amd64 +
@@ -29,6 +33,12 @@ services:
     # build: .
     container_name: amdl-backend
     restart: unless-stopped
+    # Time between SIGTERM and SIGKILL. The backend's shutdown steps are each
+    # bounded (HTTP drain 5s + handlers 5s + library sync 10s + jobs 45s +
+    # downloader 15s + hooks 15s + 10s, about 105s worst case; see
+    # cmd/amdl-api/shutdown.go), and Docker's default of 10s would cut them
+    # before the database is closed. Keep this above that sum.
+    stop_grace_period: 2m
     ports:
       - "18080:18080"
     environment:

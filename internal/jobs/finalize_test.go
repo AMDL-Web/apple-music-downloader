@@ -712,7 +712,7 @@ func TestTerminalJobEventPayloadCarriesRESTJobSnapshot(t *testing.T) {
 	}
 	job.Status = domain.JobCompleted
 	job.UpdatedAt = now.Add(30 * time.Second)
-	if err := manager.persistTerminal(ctx, job, domain.EventJobFinished, "completed"); err != nil {
+	if _, err := manager.persistTerminal(ctx, job, domain.EventJobFinished, "completed"); err != nil {
 		t.Fatal(err)
 	}
 

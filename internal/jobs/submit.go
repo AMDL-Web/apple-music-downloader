@@ -121,8 +121,12 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 			results[c.index] = storeFailure(c.url, "create job", err)
 			continue
 		}
+		// Best-effort once the row is committed, like job_retried in Retry:
+		// the job must still be enqueued, or it would sit queued until restart.
 		message := "job queued"
-		_ = m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobQueued, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})})
+		if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobQueued, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
+			logging.FromContext(ctx, m.logger).Error("record job_queued event", "job_id", job.ID, "error", err)
+		}
 		// Fire creation hooks before enqueuing, so the job_queued hook is
 		// dispatched before a worker can claim the job and reach a terminal
 		// hook. The hook event name matches the job_queued domain event emitted

@@ -303,3 +303,41 @@ func TestGetWithUserTokenReturnsErrorAfterSingleRetryOn401Twice(t *testing.T) {
 		t.Fatalf("catalog calls = %d, want 2 (one retry, no infinite loop)", catalogCalls)
 	}
 }
+
+// RunTokenRefresher blocks until its context ends and returns only after a
+// refresh in flight has stopped, so shutdown can wait for it.
+func TestRunTokenRefresherReturnsAfterCancelAndInFlightRefresh(t *testing.T) {
+	entered := make(chan struct{})
+	var once sync.Once
+	var finished atomic.Bool
+	client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
+	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		once.Do(func() { close(entered) })
+		<-req.Context().Done()
+		finished.Store(true)
+		return nil, req.Context().Err()
+	})}
+	client.webToken.value = "stale"
+	client.webToken.until = time.Now().Add(tokenRefreshLead / 2)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		client.runTokenRefresher(ctx, time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("refresher never refreshed the expiring token")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("RunTokenRefresher did not return after its context ended")
+	}
+	if !finished.Load() {
+		t.Fatal("RunTokenRefresher returned while a refresh was still in flight")
+	}
+}

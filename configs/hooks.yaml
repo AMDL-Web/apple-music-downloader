@@ -51,7 +51,7 @@ entries:
   #   # list enum, required, at least one: job_queued, job_finished,
   #   # job_failed, job_cancelled.
   #   #   job_queued: job was just created and queued. Fires before any track
-  #   #     is resolved, so the payload's `items` list is empty and total_items
+  #   #     is resolved, so the payload has no `items` and total_items
   #   #     is 0; the job status is "queued". Cannot be combined with any
   #   #     terminal event in the same entry (that would run the entry twice
   #   #     for one job and collapse in the hook status summary) — put creation
@@ -60,11 +60,16 @@ entries:
   #   #   job_failed: job completed with at least one failed item, or aborted
   #   #     with an error.
   #   #   job_cancelled: job was cancelled via the API.
+  #   # A job that was running when the backend stopped fires none of these
+  #   # then: it resumes on the next start and fires its terminal event when it
+  #   # finishes.
   #   events: ["job_finished"]
   #   # list enum: song, album, playlist, artist, station. Empty list or
   #   # omitted = all job types match.
   #   job_types: ["album"]
   #   # string, required for type webhook: target URL for the POST request.
+  #   # Must be an absolute http:// or https:// URL with a host; anything else
+  #   # fails backend startup with an error naming this entry.
   #   url: "http://media-server.local/Library/Refresh"
   #   # map of string to string: extra HTTP headers sent with the request.
   #   headers:
@@ -75,6 +80,8 @@ entries:
   #   send_payload: false
   #   # integer: maximum total attempts including the first. Values <= 0 behave
   #   # as 1 (single attempt, no retry). Retries wait 1 second between attempts.
+  #   # When the backend shuts down, retries stop at once and an attempt still
+  #   # running after a short drain is cancelled and recorded as hook_failed.
   #   max_attempts: 2
   #   # integer seconds: per-hook timeout override. Values <= 0 use the
   #   # top-level timeout_seconds above.
@@ -85,26 +92,36 @@ entries:
   #   type: "exec"
   #   events: ["job_finished", "job_failed"]
   #   # string, required for type exec: command executed via `sh -c`. The JSON
-  #   # payload (see below) is written to the command's stdin, and these
-  #   # environment variables are also set:
-  #   #   AMDL_EVENT          - job_queued | job_finished | job_failed | job_cancelled
-  #   #   AMDL_JOB_ID         - job ID
-  #   #   AMDL_JOB_TYPE       - song | album | playlist | artist
-  #   #   AMDL_JOB_STATUS     - queued | completed | failed | cancelled
-  #   #   AMDL_JOB_INPUT      - original Apple Music URL
-  #   #   AMDL_STOREFRONT     - storefront code, e.g. "us", "cn"
-  #   #   AMDL_TOTAL_ITEMS    - total track count
-  #   #   AMDL_DONE_ITEMS     - completed/skipped track count
-  #   #   AMDL_FAILED_ITEMS   - failed track count
-  #   #   AMDL_OUTPUT_PATHS   - newline-separated absolute paths of every
-  #   #                         downloaded track's output file
+  #   # payload (see below) is written to the command's stdin. The command
+  #   # inherits the backend's environment (PATH, HOME, TZ, ...) WITHOUT any
+  #   # AMDL_* variable: those configure the backend and some are secrets
+  #   # (AMDL_CATALOG_MEDIA_USER_TOKEN), so pass what a script needs
+  #   # explicitly. These variables are set instead:
+  #   #   AMDL_EVENT           - job_queued | job_finished | job_failed | job_cancelled
+  #   #   AMDL_JOB_ID          - job ID
+  #   #   AMDL_JOB_TYPE        - song | album | playlist | artist | station
+  #   #   AMDL_JOB_STATUS      - queued | completed | failed | cancelled
+  #   #   AMDL_JOB_INPUT       - original Apple Music URL
+  #   #   AMDL_STOREFRONT      - storefront code, e.g. "us", "cn"
+  #   #   AMDL_TOTAL_ITEMS     - total track count
+  #   #   AMDL_COMPLETED_ITEMS - tracks this job wrote
+  #   #   AMDL_SKIPPED_ITEMS   - tracks already on disk
+  #   #   AMDL_FAILED_ITEMS    - failed tracks
+  #   #   AMDL_CANCELLED_ITEMS - tracks cancelled before they finished
+  #   #   AMDL_OUTPUT_PATHS    - newline-separated absolute paths of every
+  #   #                          downloaded track's output file
+  #   # A failing command records the last 4 KiB of its stderr in its
+  #   # hook_failed event.
   #   command: "/opt/amdl/hooks/on-complete.sh"
   #   # string: working directory for the command. Empty (default) uses the
   #   # backend process's working directory.
   #   workdir: ""
 
 # JSON payload sent as the webhook request body (when send_payload is true)
-# and written to an exec hook's stdin:
+# and written to an exec hook's stdin. The job counters are the API's job
+# counters; "error" is present only when the job has an error, "started_at" and
+# "finished_at" (RFC 3339) only once set, and "items" is absent for job_queued.
+# Every "output_path" is absolute.
 #
 # {
 #   "event": "job_finished",
@@ -116,9 +133,12 @@ entries:
 #     "storefront": "us",
 #     "status": "completed",
 #     "total_items": 12,
-#     "done_items": 12,
+#     "completed_items": 11,
+#     "skipped_items": 1,
 #     "failed_items": 0,
-#     "error": ""
+#     "cancelled_items": 0,
+#     "started_at": "2026-07-04T10:28:41Z",
+#     "finished_at": "2026-07-04T10:30:00Z"
 #   },
 #   "items": [
 #     {
@@ -128,7 +148,7 @@ entries:
 #       "album": "Album Name",
 #       "status": "completed",
 #       "codec": "alac",
-#       "output_path": "/data/downloads/albums/Album Name/01. Song 1.m4a"
+#       "output_path": "/app/data/downloads/albums/Album Name/01. Song 1.m4a"
 #     }
 #   ]
 # }

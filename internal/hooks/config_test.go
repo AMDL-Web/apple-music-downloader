@@ -189,3 +189,21 @@ func TestShippedHooksConfigLoads(t *testing.T) {
 		t.Fatalf("shipped config entries = %d, want 0 (all examples commented out)", len(cfg.Entries))
 	}
 }
+
+func TestLoadConfigRejectsInvalidWebhookURL(t *testing.T) {
+	for _, raw := range []string{"media-server.local/refresh", "ftp://media-server.local/refresh", "http://", "http//media-server.local", "://x"} {
+		t.Run(raw, func(t *testing.T) {
+			path := writeHooksConfig(t, `
+entries:
+  - name: "bad-url"
+    type: "webhook"
+    events: ["job_finished"]
+    url: "`+raw+`"
+`)
+			_, err := LoadConfig(path)
+			if err == nil || !strings.Contains(err.Error(), `hooks.entries["bad-url"]: url`) {
+				t.Fatalf("LoadConfig() error = %v, want an invalid url error naming the entry", err)
+			}
+		})
+	}
+}
