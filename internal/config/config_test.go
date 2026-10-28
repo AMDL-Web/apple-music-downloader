@@ -357,15 +357,15 @@ func TestLoadRejectsEmptyPathFormat(t *testing.T) {
 // spec stay allowed (they are preserved literally on purpose).
 func TestValidateRejectsUnsafePathFormats(t *testing.T) {
 	rejected := []string{
-		"/etc/{SongName}",                    // absolute
-		"/",                                  // absolute
-		"../../{SongName}",                   // parent segments
-		"albums/../{SongName}",               // inner parent segment
-		"albums/{ArtistName}/..",             // trailing parent segment
-		"{SongNumber:xx}. {SongName}",        // spec the builder cannot apply
-		"{TrackNumber:03d}. {SongName}",      // only :02d pads
-		"{SongNumber:}",                      // empty spec
-		"{ArtistName:02d:x}/{SongName}",      // compound spec
+		"/etc/{SongName}",               // absolute
+		"/",                             // absolute
+		"../../{SongName}",              // parent segments
+		"albums/../{SongName}",          // inner parent segment
+		"albums/{ArtistName}/..",        // trailing parent segment
+		"{SongNumber:xx}. {SongName}",   // spec the builder cannot apply
+		"{TrackNumber:03d}. {SongName}", // only :02d pads
+		"{SongNumber:}",                 // empty spec
+		"{ArtistName:02d:x}/{SongName}", // compound spec
 	}
 	for _, format := range rejected {
 		cfg := Default()
@@ -377,11 +377,11 @@ func TestValidateRejectsUnsafePathFormats(t *testing.T) {
 	}
 	for _, format := range []string{
 		"songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}", // the default
-		"{SongName}",                    // a single segment
-		"flat/{UnknownVar} - {SongName}", // unknown variables stay literal
-		"{Foo:02d} - {SongName}",         // unknown variable with the one applied spec
-		"a/./b/{SongName}",               // "." is not a parent reference
-		"~/{SongName}",                   // tilde is an ordinary folder name
+		"{SongName}",                        // a single segment
+		"flat/{UnknownVar} - {SongName}",    // unknown variables stay literal
+		"{Foo:02d} - {SongName}",            // unknown variable with the one applied spec
+		"a/./b/{SongName}",                  // "." is not a parent reference
+		"~/{SongName}",                      // tilde is an ordinary folder name
 		"best {of} {ArtistName}/{SongName}", // braces without a spec stay literal
 	} {
 		cfg := Default()
