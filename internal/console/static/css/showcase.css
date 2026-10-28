@@ -256,19 +256,6 @@
   line-height: var(--lh-13);
 }
 
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--s-5);
-}
-
-.config-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  min-width: 0;
-}
-
 .link-row {
   display: flex;
   flex-wrap: wrap;
