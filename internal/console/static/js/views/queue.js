@@ -134,7 +134,14 @@ export function QueuePage({ route }) {
   useEffect(() => {
     const filter = queueMatchFilter(filters);
     const opts = { append: queueAppends(filters) };
-    return app.subscribeFeed((batch) => setState((s) => ({ ...s, jobs: applyFeedToList(s.jobs, batch, filter, opts) })));
+    // The snapshot's total moves with the rows the feed adds and removes
+    // (an estimate: a change to a job past the loaded pages is not seen).
+    return app.subscribeFeed((batch) =>
+      setState((s) => {
+        const jobs = applyFeedToList(s.jobs, batch, filter, opts);
+        return jobs === s.jobs ? s : { ...s, jobs, total: Math.max(jobs.length, s.total + jobs.length - s.jobs.length) };
+      }),
+    );
   }, [key]);
 
   // Selection: a Set of ids, judged against the current list on every render,
@@ -163,11 +170,25 @@ export function QueuePage({ route }) {
   };
   const chosen = selectedJobs(selected, state.jobs);
   const plan = actionPlan(chosen);
+  // A run disables or removes the control that had focus (the action
+  // buttons, Retry all, the confirm dialog), and the feed then removes rows
+  // and buttons; until a moment after it ends, focus that falls to the body
+  // moves to the selection controls (the effect below).
+  const rescueUntil = useRef(0);
   const runAction = async (action, targets) => {
+    rescueUntil.current = Infinity;
     const reached = await bulk.start(action, targets);
     if (action === 'delete') setSelected((s) => setIds(s, reached, false));
     setConfirm(null);
+    rescueUntil.current = Date.now() + 3000;
   };
+  useEffect(() => {
+    if (Date.now() > rescueUntil.current) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    const target = RESCUE.map((q) => document.querySelector(q)).find(Boolean);
+    if (target) target.focus({ preventScroll: true });
+  });
   const onAction = (action) => {
     if (action === 'retry') runAction('retry', plan.retry);
     else setConfirm({ action, jobs: null });
@@ -317,6 +338,8 @@ export function QueuePage({ route }) {
       : null}
   </div>`;
 }
+
+const RESCUE = ['.bulk-bar .bulk-action:not(:disabled)', '.bulk-check:not(:disabled)', '.queue-retry-all:not(:disabled)', '.queue-select', '.page-title'];
 
 const typing = (el) =>
   Boolean(el) &&

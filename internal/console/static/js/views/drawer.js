@@ -213,6 +213,15 @@ export function JobDrawer({ jobId, onClose }) {
 
   const job = detail && detail.job;
   const deleted = (detail && detail.deleted) || (error && error.status === 404);
+  // Deleted elsewhere while the confirm asked: the question is gone, and
+  // focus, which was in it, goes to the drawer's Close.
+  useEffect(() => {
+    if (!deleted) return;
+    setDeleting((d) => (d === 'ask' ? null : d));
+    const active = document.activeElement;
+    const close = panel.current && panel.current.querySelector('.drawer-close');
+    if (close && (!active || active === document.body)) close.focus({ preventScroll: true });
+  }, [deleted]);
 
   return html`<div class="drawer-host">
     <div class="scrim" onClick=${onClose}></div>
@@ -245,7 +254,7 @@ export function JobDrawer({ jobId, onClose }) {
                 />`}
       </div>
     </aside>
-    ${deleting && job
+    ${deleting && job && !deleted
       ? html`<${ConfirmDialog}
           title="Delete this job?"
           confirmLabel="Delete job"

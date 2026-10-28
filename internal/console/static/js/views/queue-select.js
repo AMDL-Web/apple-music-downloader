@@ -76,7 +76,8 @@ function BulkProgress({ run }) {
  * selecting it holds the select-all checkbox (.bulk-all), the count
  * (.bulk-count) and one button per action the selection allows
  * (.bulk-action[data-action], count in .bulk-n, hidden at zero); during a run
- * the progress replaces the buttons. `plan` is actionPlan of the selection.
+ * the progress replaces the count and the buttons (rows leave through the
+ * feed before their requests settle, which would empty the count). `plan` is actionPlan of the selection.
  */
 export function SelectionBar({ jobs, selected, plan, selecting, run, onSelectAll, onAction }) {
   const state = selectionState(selected, jobs);
@@ -118,7 +119,7 @@ export function SelectionBar({ jobs, selected, plan, selecting, run, onSelectAll
               onClick=${onSelectAll}
             />
           </label>
-          <span class="bulk-count" aria-live="polite">${n === 0 ? 'None selected' : `${n} selected`}</span>`
+          ${run ? null : html`<span class="bulk-count" aria-live="polite">${n === 0 ? 'None selected' : `${n} selected`}</span>`}`
       : null}
     ${run ? html`<${BulkProgress} run=${run} />` : html`<div class="bulk-actions">${actions}${hint}</div>`}
   </div>`;
