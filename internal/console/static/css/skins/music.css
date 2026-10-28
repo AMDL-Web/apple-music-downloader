@@ -19,7 +19,14 @@
   --bg-selected: light-dark(#e3e3e8, #2c2c2e);
   --bg-chrome: light-dark(rgba(246, 246, 248, 0.86), rgba(28, 28, 30, 0.82));
   --bg-group: light-dark(#f5f5f7, #2c2c2e);
+  /* A cell or field inside a grouped surface (codec lists, text fields):
+     white on the gray surface in light, the second grouped level in dark. */
+  --bg-inset: light-dark(#ffffff, #2c2c2e);
   --bg-fill: light-dark(#e8e8ed, #2c2c2e);
+  /* A filled button on a raised frosted bar (save bar, selection bar), where
+     --bg-fill would match the bar in dark. */
+  --fill-raised: light-dark(#e8e8ed, #3a3a3c);
+  --fill-raised-hover: light-dark(#e3e3e8, #48484a);
   --seg-thumb: light-dark(#ffffff, #636366);
   --topbar-bg: light-dark(rgba(255, 255, 255, 0.78), rgba(0, 0, 0, 0.72));
   --toast-bg: light-dark(rgba(255, 255, 255, 0.92), rgba(44, 44, 46, 0.92));
@@ -155,6 +162,11 @@
 
   /* Hero actions (Tracks, Open in Apple Music). */
   --hero-act-h: 36px;
+  /* Large pills: Download N, dialog and save bar buttons. */
+  --btn-lg-h: 36px;
+  /* Switches and selection circles: a white thumb in both themes. */
+  --switch-thumb: #ffffff;
+  --check-size: 22px;
 }
 
 @media (max-width: 1023px) {
@@ -185,6 +197,7 @@
     --card-pad-x: var(--s-4);
     --main-x: var(--s-4);
     --hero-act-h: var(--touch);
+    --btn-lg-h: var(--touch);
   }
 }
 
@@ -364,15 +377,61 @@
   padding: var(--s-3) var(--main-x) var(--s-16);
 }
 
+/* A large title over its summary line; page actions (Overview: New download)
+   sit at the right, centered on the two lines, like an Apple Music header. */
 :root[data-skin="music"] .page-head {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-1);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s-1) var(--s-4);
+}
+
+:root[data-skin="music"] .page-title,
+:root[data-skin="music"] .page-sub {
+  grid-column: 1;
+}
+
+:root[data-skin="music"] .page-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  margin-left: 0;
+}
+
+/* Restated in full: download.css lays out the New download page as
+   .page-new, the class this button also carries. */
+:root[data-skin="music"] .page-actions > .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  height: var(--btn-lg-h);
+  padding: 0 var(--s-4);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
 }
 
 :root[data-skin="music"] .page-sub {
   font-size: var(--fs-15);
   line-height: var(--lh-15);
+}
+
+/* New download: the primary action above the nav, a red pill as tall as a
+   nav row; while its page is open a soft red ring marks it current. */
+:root[data-skin="music"] .sidebar .sidebar-new {
+  height: 36px;
+  margin: 0;
+  gap: var(--s-2);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .sidebar .sidebar-new .icon {
+  width: 18px;
+  height: 18px;
+}
+
+:root[data-skin="music"] .sidebar-new[aria-current="page"] {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 :root[data-skin="music"] .banners {
@@ -426,6 +485,12 @@
 :root[data-skin="music"] .card-actions .btn-ghost:hover:not(:disabled) {
   background: transparent;
   text-decoration: underline;
+}
+
+/* The chevron marks a link to another page; an action in place (Clear,
+   Reset) is red text alone. */
+:root[data-skin="music"] .card-actions button.btn-ghost::after {
+  content: none;
 }
 
 /* Segmented controls: a filled track with a raised thumb. */
@@ -607,7 +672,7 @@
   font-weight: var(--w-semibold);
 }
 
-/* Grouped label/value rows (About, Runtime, config): hairlines between rows. */
+/* Grouped label/value rows (About, Runtime, library sync, account): hairlines between rows. */
 :root[data-skin="music"] .kv {
   gap: 0;
 }
@@ -622,7 +687,7 @@
 
 /* In a card, hairlines start at the text and run to the card's right edge,
    the same keyline as the health list. */
-:root[data-skin="music"] .card-body > .kv:not(.kv-mono) > .kv-row {
+:root[data-skin="music"] .card-body > .kv > .kv-row {
   margin-right: calc(-1 * var(--card-pad));
   padding-right: var(--card-pad);
 }
@@ -636,29 +701,6 @@
 :root[data-skin="music"] .kv dd {
   color: var(--text-secondary);
   font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .kv-mono {
-  gap: 0 var(--s-4);
-}
-
-:root[data-skin="music"] .kv-mono .kv-row > * {
-  padding: var(--s-2) 0;
-  border-top: var(--row-divider);
-}
-
-:root[data-skin="music"] .kv-mono .kv-row:first-child > * {
-  border-top: 0;
-}
-
-:root[data-skin="music"] .kv-mono dt {
-  font-size: var(--fs-12);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .kv-mono dd {
-  font-size: var(--fs-13);
   line-height: var(--lh-14);
 }
 
@@ -1382,10 +1424,10 @@
   border-top: var(--row-divider);
 }
 
-/* In the list, per-track cells join into one capsule bar: the cell count
-   changes from row to row, so separate capsules would turn into dots, ticks
-   or hairlines depending on the album. */
-:root[data-skin="music"] [data-section="jobs"] .pcells {
+/* In the list (and New download's Submitted list), per-track cells join into
+   one capsule bar: the cell count changes from row to row, so separate
+   capsules would turn into dots, ticks or hairlines depending on the album. */
+:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .pcells {
   gap: 0;
   height: var(--bar-h);
   border-radius: var(--r-bar);
@@ -1393,11 +1435,11 @@
   overflow: hidden;
 }
 
-:root[data-skin="music"] [data-section="jobs"] .pcell {
+:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .pcell {
   border-radius: 0;
 }
 
-:root[data-skin="music"] [data-section="jobs"] .pcell[data-state="remaining"] {
+:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .pcell[data-state="remaining"] {
   background: transparent;
   box-shadow: none;
 }
@@ -1434,6 +1476,137 @@
   :root[data-skin="music"] [data-section="jobs"] .job-row {
     grid-template-columns: 48px minmax(0, 1fr) 128px 140px 16px;
   }
+}
+
+/* ---- Queue selection ----------------------------------------------- */
+
+/* Select and Pause/Wrap are toggles of one kind: outlined (light) or filled
+   (dark) while off, the pressed fill while on. */
+:root[data-skin="music"] .queue-select[aria-pressed] {
+  background: var(--chip-off-bg);
+  box-shadow: var(--chip-off-ring);
+}
+
+:root[data-skin="music"] .queue-select[aria-pressed="true"] {
+  background: var(--chip-on-bg);
+  box-shadow: var(--chip-on-shadow);
+}
+
+:root[data-skin="music"] .queue-select[aria-pressed]:hover:not(:disabled) {
+  background: var(--bg-selected);
+}
+
+/* The bar floats over the list while it scrolls (it sticks under the top
+   bar), so it is a frosted raised capsule with the float shadow, like the
+   save bar and the toasts. */
+:root[data-skin="music"] .bulk-bar {
+  gap: var(--s-2) var(--s-3);
+  min-height: 52px;
+  padding: var(--s-1_5) var(--s-2) var(--s-1_5) var(--s-1);
+  border: 0;
+  border-radius: var(--r-card);
+  background: var(--toast-bg);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+:root[data-skin="music"] .bulk-count {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .bulk-hint {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .bulk-progress-text {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .bulk-meter-fill {
+  border-radius: var(--r-bar);
+}
+
+/* Selection circles, as in an Apple list in edit mode: an outlined ring,
+   then a red disc with a white check (a bar while only some are chosen). */
+:root[data-skin="music"] .job-check-input,
+:root[data-skin="music"] .bulk-check {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: var(--check-size);
+  height: var(--check-size);
+  margin: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--border-control);
+  transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+:root[data-skin="music"] .job-check-input:checked,
+:root[data-skin="music"] .bulk-check:checked,
+:root[data-skin="music"] .bulk-check:indeterminate {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+:root[data-skin="music"] .job-check-input:checked::after,
+:root[data-skin="music"] .bulk-check:checked::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  width: 6px;
+  height: 11px;
+  border: solid var(--switch-thumb);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+:root[data-skin="music"] .bulk-check:indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 6px;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--switch-thumb);
+}
+
+:root[data-skin="music"] .bulk-check:disabled {
+  opacity: 0.55;
+}
+
+/* Rows in selection mode: the checkbox sits one row gap before the cover
+   (the skin's row padding would otherwise widen it), and the hairline starts
+   at the text. The whole row, checkbox included, hovers and selects as one. */
+:root[data-skin="music"] [data-section="jobs"] .job-list.is-selecting > li > .job-row {
+  padding-inline-start: var(--s-3);
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-list.is-selecting > li + li > .job-row::before {
+  left: calc(var(--s-3) + 48px + var(--s-3));
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li:hover {
+  background: var(--bg-hover);
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li[data-selected] {
+  background: var(--bg-selected);
+}
+
+:root[data-skin="music"] .job-list.is-selecting > li > .job-row:hover {
+  background: transparent;
 }
 
 /* ---- Drawer -------------------------------------------------------- */
@@ -1526,6 +1699,13 @@
 
 :root[data-skin="music"] .drawer-actions .btn-ghost:hover:not(:disabled) {
   background: var(--bg-selected);
+}
+
+/* Delete is the one destructive cell: red text and glyph, as in an Apple
+   action list; the confirm dialog asks before anything goes. */
+:root[data-skin="music"] .drawer-actions .drawer-delete,
+:root[data-skin="music"] .drawer-delete .icon {
+  color: var(--danger-text);
 }
 
 :root[data-skin="music"] .confirm {
@@ -1874,8 +2054,491 @@
   line-height: var(--lh-14);
 }
 
-:root[data-skin="music"] .config-grid {
-  gap: var(--s-6) var(--s-8);
+/* ---- Fields inside grouped surfaces --------------------------------- */
+
+/* Text fields, selects and lists inside a card are inset cells (white on the
+   gray surface in light, the second grouped level in dark), still outlined
+   in --border-control so a field reads as a field. */
+:root[data-skin="music"] .new-input,
+:root[data-skin="music"] .new-token-input,
+:root[data-skin="music"] .field-input,
+:root[data-skin="music"] .card-body .select {
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .field-key,
+:root[data-skin="music"] .list-code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ---- New download -------------------------------------------------- */
+
+:root[data-skin="music"] .new-input {
+  min-height: 168px;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-art);
+  line-height: var(--lh-mono-12);
+}
+
+:root[data-skin="music"] .new-token-input {
+  border-radius: var(--r-control);
+}
+
+:root[data-skin="music"] .new-hint {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .new-count {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .new-options-jump {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .new-submit-btn {
+  height: var(--btn-lg-h);
+  padding: 0 var(--s-5);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+/* Detected links: Queue-style rows. 48 px covers with an album-tinted
+   shadow, quiet filled tags, hairlines from the text to the right edge. */
+:root[data-skin="music"] .new-links > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-link {
+  position: relative;
+  column-gap: var(--s-3);
+  padding: var(--s-3) var(--s-4) var(--s-3) var(--card-pad-x);
+}
+
+:root[data-skin="music"] .new-links > .new-link + .new-link::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--card-pad-x) + 48px + var(--s-3));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .new-link-art {
+  border-radius: var(--r-art-sm);
+  box-shadow: 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-link.has-palette .new-link-art {
+  box-shadow: 0 10px 20px -12px var(--art-bg), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-link-main {
+  gap: var(--s-0_5);
+}
+
+:root[data-skin="music"] .new-link-tags {
+  margin-bottom: var(--s-0_5);
+}
+
+:root[data-skin="music"] .new-link-tags .chip {
+  height: 18px;
+  padding: 0 var(--s-1_5);
+  border-color: transparent;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-link-title {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-link-sub,
+:root[data-skin="music"] .new-link-issue,
+:root[data-skin="music"] .new-link-loading,
+:root[data-skin="music"] .new-link-note {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .new-link-remove {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .new-links-more {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* Submitted: Queue rows (covers, capsule bar, hairlines from the text) and
+   the per-link outcomes with their role glyph and word. */
+:root[data-skin="music"] .new-results-summary {
+  position: relative;
+  padding: var(--s-3) var(--card-pad-x);
+  border-bottom: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .new-results-summary::after,
+:root[data-skin="music"] .new-results > li + li > :is(.job-row, .new-result-row)::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .new-results-summary::after {
+  bottom: 0;
+  left: var(--card-pad-x);
+}
+
+:root[data-skin="music"] .new-results > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-results > li + li > :is(.job-row, .new-result-row)::before {
+  top: 0;
+  left: calc(var(--card-pad-x) + 40px + var(--s-3));
+}
+
+:root[data-skin="music"] .new-results .job-row,
+:root[data-skin="music"] .new-result-row {
+  position: relative;
+  padding-top: var(--row-pad-y);
+  padding-bottom: var(--row-pad-y);
+}
+
+:root[data-skin="music"] .new-results .job-row > .art {
+  border-radius: var(--r-art-sm);
+  box-shadow: 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-result-label {
+  color: var(--role-text, var(--text-primary));
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-result-url,
+:root[data-skin="music"] .new-result-msg,
+:root[data-skin="music"] .new-result-detail {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* Options: Edit and Done are red text, as in an Apple list header (Done in
+   semibold). The open form groups each fieldset under a small caps title;
+   the codec ranking is an inset list. */
+:root[data-skin="music"] .card-actions .new-options-toggle {
+  height: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .card-actions .new-options-toggle[aria-expanded="true"] {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .card-actions .new-options-toggle:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+}
+
+:root[data-skin="music"] .new-options-summary {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .new-options-count {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-options-form {
+  gap: var(--s-6);
+}
+
+:root[data-skin="music"] .new-fieldset {
+  gap: var(--s-2_5);
+}
+
+:root[data-skin="music"] .new-check {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .new-check-hint {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .new-codec-list {
+  border: 0;
+  border-radius: var(--r-art);
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .new-codec {
+  position: relative;
+  min-height: 44px;
+  padding: var(--s-1_5) var(--s-1) var(--s-1_5) var(--s-2);
+}
+
+:root[data-skin="music"] .new-codec + .new-codec {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-codec + .new-codec::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--s-2) + 20px + var(--s-2));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .new-codec-name {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .new-codec-add-label {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* Bookmarklet: the code is an inset cell, the steps quiet secondary text. */
+:root[data-skin="music"] .new-bookmarklet-code {
+  padding: var(--s-3);
+  border: 0;
+  border-radius: var(--r-art);
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .new-steps {
+  gap: var(--s-1_5);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* ---- Settings ------------------------------------------------------ */
+
+/* The section list repeats the sidebar: red glyphs, 15 px labels, the
+   current section a filled pill in semibold. */
+:root[data-skin="music"] .settings-nav-list {
+  gap: var(--s-0_5);
+}
+
+:root[data-skin="music"] .settings-nav-item {
+  gap: var(--s-3);
+  min-height: 36px;
+  padding: var(--s-1_5) var(--s-2_5);
+  color: var(--text-primary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .settings-nav-item > .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--mark);
+}
+
+:root[data-skin="music"] .settings-nav-item:hover {
+  background: color-mix(in srgb, var(--bg-selected) 60%, transparent);
+}
+
+:root[data-skin="music"] .settings-nav-item[aria-current="true"] {
+  background: var(--bg-selected);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .settings-intro {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Fields: grouped rows whose hairlines start at the text and run to the
+   card's right edge (the keyline of every other grouped list here). */
+:root[data-skin="music"] .field,
+:root[data-skin="music"] .settings-panel,
+:root[data-skin="music"] .account-block + .account-block,
+:root[data-skin="music"] :is(.settings-panel, .account-block) > .kv > .kv-row {
+  margin-right: calc(-1 * var(--card-pad));
+  padding-right: var(--card-pad);
+}
+
+:root[data-skin="music"] .field-label {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .field-changed {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .field-revert {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="music"] .field-input {
+  height: 34px;
+  padding: 0 var(--s-3);
+}
+
+:root[data-skin="music"] .field .select {
+  height: 34px;
+  padding: 0 var(--s-2_5);
+}
+
+:root[data-skin="music"] .field-unit,
+:root[data-skin="music"] .field-switch-state {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Switch: an Apple toggle, a white thumb with a soft shadow on the gray
+   track, the red accent when on. The outline stays on the off track for
+   3:1; "On" / "Off" beside it says the state in words. */
+:root[data-skin="music"] .field-switch {
+  width: 44px;
+  height: 26px;
+}
+
+:root[data-skin="music"] .field-switch::before {
+  width: 20px;
+  height: 20px;
+  background: var(--switch-thumb);
+  box-shadow: var(--shadow-thumb);
+}
+
+:root[data-skin="music"] .field-switch:checked::before {
+  transform: translateX(18px);
+  background: var(--switch-thumb);
+}
+
+/* The ordered list (codec priority) is an inset list like the one on New
+   download; hairlines start at the label. */
+:root[data-skin="music"] .list-items {
+  border: 0;
+  border-radius: var(--r-art);
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .list-item {
+  position: relative;
+  min-height: 44px;
+  border-top: 0;
+}
+
+:root[data-skin="music"] .list-item + .list-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--s-3) + 20px + var(--s-2));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .list-label {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .list-add .select {
+  height: var(--control-h);
+}
+
+:root[data-skin="music"] .field-pin,
+:root[data-skin="music"] .field-error,
+:root[data-skin="music"] .field-warning {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .template-ref {
+  border: 0;
+  border-radius: var(--r-art);
+  background: var(--bg-inset);
+}
+
+:root[data-skin="music"] .template-ref-summary {
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .template-ref-body {
+  padding: 0 var(--s-4) var(--s-4);
+}
+
+:root[data-skin="music"] .settings-panel-head .btn-ghost,
+:root[data-skin="music"] .account-block-head .btn-ghost {
+  color: var(--accent-text);
+}
+
+:root[data-skin="music"] .settings-panel-head .btn-ghost:hover:not(:disabled),
+:root[data-skin="music"] .account-block-head .btn-ghost:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+}
+
+:root[data-skin="music"] .account-name {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Save bar: a frosted floating capsule, like the toasts, above the section. */
+:root[data-skin="music"] .save-bar {
+  gap: var(--s-2) var(--s-4);
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-5);
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--toast-bg);
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+:root[data-skin="music"] .save-bar-count {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .save-bar-where {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .save-bar-actions .btn {
+  height: var(--btn-lg-h);
+  padding: 0 var(--s-4);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .save-bar-discard,
+:root[data-skin="music"] .bulk-bar .btn-secondary {
+  background: var(--fill-raised);
+}
+
+:root[data-skin="music"] .save-bar-discard:hover:not(:disabled),
+:root[data-skin="music"] .bulk-bar .btn-secondary:hover:not(:disabled) {
+  background: var(--fill-raised-hover);
 }
 
 /* ---- Overlays ------------------------------------------------------ */
@@ -1944,6 +2607,174 @@
   font-size: var(--fs-14);
   line-height: var(--lh-14);
   font-weight: var(--w-medium);
+}
+
+/* ---- Dialogs ------------------------------------------------------- */
+
+:root[data-skin="music"] .sheet {
+  border-radius: var(--r-card);
+}
+
+/* Confirm: an Apple alert. Centered title and consequence, then Cancel and
+   the confirm button as two equal pills. */
+:root[data-skin="music"] .dialog-confirm {
+  width: min(400px, 100%);
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-5) var(--s-5);
+  text-align: center;
+}
+
+:root[data-skin="music"] .dialog-title {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--w-bold);
+}
+
+:root[data-skin="music"] .dialog-body {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .dialog-body > p + p {
+  margin-top: var(--s-2);
+}
+
+:root[data-skin="music"] .dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+:root[data-skin="music"] .dialog-actions .btn {
+  height: var(--btn-lg-h);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+/* More (phones): an inset grouped list on the frosted sheet, red glyphs as
+   in the sidebar, hairlines from the text, the current page in semibold. */
+:root[data-skin="music"] .sheet-more {
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-3) var(--s-3);
+}
+
+:root[data-skin="music"] .sheet-more .card-title {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+}
+
+:root[data-skin="music"] .more-list {
+  gap: 0;
+  border-radius: var(--r-notice);
+  background: var(--bg-group);
+  overflow: hidden;
+}
+
+:root[data-skin="music"] .more-list > li {
+  position: relative;
+}
+
+:root[data-skin="music"] .more-list > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--s-4) + var(--icon-nav) + var(--s-3));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .more-item {
+  gap: var(--s-3);
+  min-height: 48px;
+  padding: 0 var(--s-3) 0 var(--s-4);
+  border-radius: 0;
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+}
+
+:root[data-skin="music"] .more-item > .icon:first-child {
+  color: var(--mark);
+}
+
+:root[data-skin="music"] .more-item > .icon:last-child {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .more-item:hover {
+  background: var(--bg-hover);
+}
+
+:root[data-skin="music"] .more-item[aria-current="page"] {
+  background: transparent;
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .more-current {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+/* Qualities: per-slot summaries are grouped cells, each track's formats are
+   filled pills, and hairlines between tracks start at the title. */
+:root[data-skin="music"] .sheet-quality {
+  width: min(760px, 100%);
+  gap: var(--s-4);
+  padding: var(--s-6);
+}
+
+:root[data-skin="music"] .quality-for {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="music"] .quality-slot {
+  gap: var(--s-1);
+  padding: var(--s-3) var(--s-4);
+  border: 0;
+  border-radius: var(--r-notice);
+  background: var(--bg-group);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="music"] .quality-slot-label {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .quality-track {
+  position: relative;
+  padding: var(--s-2_5) 0;
+}
+
+:root[data-skin="music"] .quality-track + .quality-track {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .quality-track + .quality-track::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(2.5ch + var(--s-2));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .quality-track-name {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .quality-opt {
+  padding: var(--s-0_5) var(--s-2);
+  border: 0;
+  background: var(--bg-group);
+}
+
+:root[data-skin="music"] .quality-opt-label {
+  font-weight: var(--w-semibold);
 }
 
 /* ---- States -------------------------------------------------------- */
@@ -2030,6 +2861,25 @@
     font-weight: var(--w-semibold);
   }
 
+  /* On the rail New download is a red disc above the glyphs. */
+  :root[data-skin="music"] .sidebar .sidebar-new {
+    width: 40px;
+    height: 40px;
+    margin: 0 0 var(--s-1);
+  }
+
+  :root[data-skin="music"] .sidebar .sidebar-new .icon {
+    width: var(--icon-nav);
+    height: var(--icon-nav);
+  }
+
+  :root[data-skin="music"] .settings-nav-item {
+    gap: var(--s-2);
+    padding: var(--s-1_5) var(--s-2);
+    font-size: var(--fs-14);
+    line-height: var(--lh-14);
+  }
+
   :root[data-skin="music"] .kpis {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
@@ -2107,6 +2957,34 @@
 
   :root[data-skin="music"] .tab[aria-current="page"]::before {
     display: none;
+  }
+
+  /* New, the center tab: a red capsule around the plus with a soft red
+     shadow, the word under it like every other tab. */
+  :root[data-skin="music"] .tab-new-mark {
+    width: 48px;
+    height: 30px;
+    border-radius: var(--r-full);
+    box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+
+  :root[data-skin="music"] .tab-new-mark .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Two lines on a phone, so the capsule becomes the card radius. */
+  :root[data-skin="music"] .save-bar {
+    padding: var(--s-3);
+    border-radius: var(--r-card);
+  }
+
+  :root[data-skin="music"] .save-bar-text {
+    padding: 0 var(--s-1);
+  }
+
+  :root[data-skin="music"] .bulk-bar {
+    padding: var(--s-1);
   }
 
   :root[data-skin="music"] :where(.card:has(> .card-head)) > .card-head {
@@ -2365,5 +3243,16 @@
   :root[data-skin="music"] .health-icon,
   :root[data-skin="music"] .seg-btn[aria-pressed="true"] {
     border: 1px solid CanvasText;
+  }
+
+  /* The drawn selection circles lose their fill here; the system box shows the state. */
+  :root[data-skin="music"] .job-check-input,
+  :root[data-skin="music"] .bulk-check {
+    appearance: auto;
+  }
+
+  :root[data-skin="music"] .job-check-input::after,
+  :root[data-skin="music"] .bulk-check::after {
+    content: none;
   }
 }
