@@ -116,10 +116,17 @@ export function JobDrawer({ jobId, onClose }) {
   // A finished job's stream ends (204), so later changes made elsewhere reach
   // the drawer only through the overview feed: a delete, or a retry that starts
   // a new run, which reopens the per-job stream from the snapshot's cursor.
-  const reopen = () =>
+  // One reopen at a time: the feed can deliver several upserts (and the
+  // drawer's own Retry its own) before the reopened stream renders.
+  const reopening = useRef(false);
+  const reopen = (always) => {
+    if (reopening.current) return;
+    reopening.current = true;
     refetch().then((body) => {
-      if (body && body.job && !isTerminal(body.job.status)) setStreamKey((k) => k + 1);
+      reopening.current = false;
+      if (always || (body && body.job && !isTerminal(body.job.status))) setStreamKey((k) => k + 1);
     });
+  };
   useEffect(
     () =>
       app.subscribeFeed((batch) => {
@@ -129,7 +136,7 @@ export function JobDrawer({ jobId, onClose }) {
             return;
           }
           if (msg.type === 'download_upserted' && msg.job && msg.job.id === jobIdRef.current && streamEndedRef.current) {
-            reopen();
+            reopen(false);
             return;
           }
         }
@@ -138,7 +145,7 @@ export function JobDrawer({ jobId, onClose }) {
   );
   // A feed resync (new epoch) may have skipped messages; catch up the same way.
   useEffect(() => {
-    if (app.epoch && streamEndedRef.current) reopen();
+    if (app.epoch && streamEndedRef.current) reopen(false);
   }, [app.epoch]);
 
   // Events that change the item set (resolved_input, retry, recovery) or
@@ -204,9 +211,7 @@ export function JobDrawer({ jobId, onClose }) {
               : html`<${DrawerBody}
                   detail=${detail}
                   streamEnded=${streamEnded}
-                  onChanged=${() => {
-                    refetch().then(() => setStreamKey((k) => k + 1));
-                  }}
+                  onChanged=${() => reopen(true)}
                   app=${app}
                 />`}
       </div>

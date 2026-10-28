@@ -229,9 +229,12 @@ export function Throughput({ daily }) {
   const maxBytes = Math.max(0, ...daily.map((d) => d.bytes_written || 0));
   const mid = Math.floor((daily.length - 1) / 2);
   const series = [
-    { key: 'tracks', title: 'Tracks completed per day', field: 'tracks_completed', max: maxTracks, fmt: (v) => compact(v) },
-    { key: 'bytes', title: 'Data written per day', field: 'bytes_written', max: maxBytes, fmt: (v) => bytes(v) },
+    { key: 'tracks', title: 'Tracks completed per day', field: 'tracks_completed', max: maxTracks, fmt: (v) => compact(v), whole: true },
+    { key: 'bytes', title: 'Data written per day', field: 'bytes_written', max: maxBytes, fmt: (v) => bytes(v), whole: false },
   ];
+  // The max/2 gridline sits at half height, so its label is exactly max/2; a
+  // count series shows it only when that is a whole number of tracks.
+  const hasMid = (s) => s.max >= 2 && (!s.whole || s.max % 2 === 0);
   return html`<div class="chart" onMouseLeave=${() => setHover(null)}>
     <p class="chart-readout" aria-live="off">
       <span class="chart-readout-day">${dayLabel(shown.date)}${hover === null ? ' (latest)' : ''}</span>
@@ -245,10 +248,10 @@ export function Throughput({ daily }) {
         <div class="chart-plot">
           <div class="chart-yaxis">
             <span>${s.fmt(s.max)}</span>
-            ${s.max >= 2 ? html`<span>${s.fmt(s.max / 2)}</span>` : null}
+            ${hasMid(s) ? html`<span>${s.fmt(s.max / 2)}</span>` : null}
             <span>0</span>
           </div>
-          <div class=${s.max >= 2 ? 'chart-bars has-mid' : 'chart-bars'} style=${{ '--n': String(daily.length) }}>
+          <div class=${hasMid(s) ? 'chart-bars has-mid' : 'chart-bars'} style=${{ '--n': String(daily.length) }}>
             ${daily.map((d, i) => {
               const v = d[s.field] || 0;
               return html`<div

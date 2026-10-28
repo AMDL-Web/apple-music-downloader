@@ -123,8 +123,8 @@ on floating layers (`--shadow-float`); no gradients or blur.
 
 Motion: 120 ms hover color fades, 200 ms drawer/palette/toast/insert,
 `--ease-out` in. Movement uses only `transform` and `opacity` (stage and meter
-fills: `scaleX`, linear). Showcase covers lift 2 px on hover or focus and press
-to 98 %; the title underlines on hover in every mode. The running pulse is the
+fills: `scaleX`, linear). Showcase grid covers lift 2 px on hover or focus and
+press to 98 %; tile and hero titles underline on hover in every mode. The running pulse is the
 only loop besides the skeleton pulse. `prefers-reduced-motion` removes both, the
 drawer slide, cover movement and motion covers.
 
@@ -151,7 +151,7 @@ drawer slide, cover movement and motion covers.
   `verified=false` shows a hollow "Not verified" segment, never red.
 - **Job drawer**: dialog with focus trap, Esc and Back close it, focus returns
   to the row. Header with 64 px cover, artist link, meta, status, live tag;
-  created/started/finished/duration; Cancel (inline confirm) for queued or
+  created/started/finished/duration in two columns; Cancel (inline confirm) for queued or
   running, Retry for failed, View logs, Open in Apple Music; palette swatches;
   per-track strip; track list (codec chip such as `ALAC 24/96`, length, size,
   error); hooks; recent non-progress events under Activity.
@@ -163,7 +163,8 @@ drawer slide, cover movement and motion covers.
   and motion is allowed.
 - **Throughput**: two small multiples sharing the date axis (tracks per day,
   bytes per day), each with its own 0/max axis plus a max/2 gridline and label
-  once max reaches 2, a hover readout, and a screen-reader table.
+  once max reaches 2 (for tracks only when max/2 is whole), a hover readout, and
+  a screen-reader table.
 - **Log viewer**: `role="log"`, `aria-live="off"`, mono 12/18 rows (time, level
   marker, component, message), job/request chips that filter, expandable pretty
   JSON with Copy, follow-bottom within 24 px else an "N new lines" pill, at most
