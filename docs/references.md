@@ -109,7 +109,7 @@ skin in `internal/console/skins/`.
 | MDN ARIA `log` role for the log viewer | `internal/console/static/js/views/logs.js` | adopted | `aria-live="off"` while streaming; milestones go to one polite status region. |
 | cmdk command menu | `internal/console/static/js/views/palette.js` | adapted | cmdk is React-only; a small Preact combobox reproduces groups, empty and loading rows. |
 | Vercel dashboard: status in the tab, every view usable on mobile | `internal/console/static/js/app.js` | adapted | The tab title shows the running count. |
-| Dataviz basics: one axis per chart, small multiples for two measures, thin bars, a table view | `internal/console/static/js/views/overview.js` | adopted | Tracks and bytes per day are two charts sharing the date axis. |
+| Dataviz basics: one axis per chart, small multiples for two measures, thin bars, a table view | `internal/console/static/js/views/throughput.js` | adopted | Tracks and bytes per day are two charts sharing the date axis. |
 
 ### Stack
 
