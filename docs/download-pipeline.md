@@ -43,10 +43,12 @@ A job stops in one of two ways, and they end its items differently:
 
 - **Cancelled by the user** (`POST /downloads/{id}/cancel`): every item that has not
   finished ends `cancelled`, including tracks that were still waiting for a permit or
-  never started. Each gets an `item_progress` event with `phase: cancelled` carrying
-  the full item, so a client that follows only the stream sees it stop. These writes
-  run on a context detached from the cancelled job, with a short timeout. The job's
-  resume checkpoints are deleted.
+  never started. For a running job each gets an `item_progress` event with
+  `phase: cancelled` carrying the full item, so a client that follows only the stream
+  sees it stop; these writes run on a context detached from the cancelled job, with a
+  short timeout. A job cancelled while still queued has its items ended in one store
+  write with no per-item events, so clients read the job again. The job's resume
+  checkpoints are deleted.
 - **Interrupted by shutdown**: items are left exactly as they were and the resume
   checkpoints stay, so the recovered job continues the transfers on the next start
   (see [Architecture](architecture.md#1-process-and-lifecycle)).

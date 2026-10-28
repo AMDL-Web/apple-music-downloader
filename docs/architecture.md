@@ -9,26 +9,36 @@ changes against 1.x are listed in [Upgrading to 2.0](upgrading-to-2.0.md).
 ## 1. Process and lifecycle
 
 `cmd/amdl-api/main.go` only parses the environment and calls `run(ctx) error`; every
-deferred close runs on every exit path. `run` builds the components, starts them, and
-on SIGINT/SIGTERM stops them in this order:
+deferred close runs on every exit path, and a startup failure is returned, logged and
+turned into exit status 1 by `main`. `run` builds the components, starts them, and on
+SIGINT/SIGTERM (or a failing HTTP server) stops them in this order
+(`cmd/amdl-api/shutdown.go`):
 
 1. HTTP: stop accepting connections, give ordinary requests a short drain, then cancel
    the base context so long-lived SSE streams end instead of holding the shutdown
    deadline.
 2. Library watcher and catalog token refresher: stop and wait.
 3. Job manager: cancel workers with the cause `jobs.ErrShutdown`. A job interrupted by
-   shutdown is **not** cancelled: it stays `running` in the database, keeps its resume
-   checkpoints and media-user-token, emits no terminal event and fires no hook. The next
-   start requeues it through recovery (`job_recovered`).
+   shutdown is **not** cancelled: it stays `running` in the database, keeps its items,
+   resume checkpoints and media-user-token, emits no terminal event and fires no hook.
+   The next start requeues it through recovery (`job_recovered`).
 4. Downloader background work (motion-artwork backfill): wait.
-5. Hook dispatcher: drain in-flight hooks.
-6. Store: close.
+5. Hook dispatcher: stop retries at once, drain running attempts, then cancel what is
+   still running (each records `hook_failed`).
+6. Wrapper client, then store: close.
 
-SIGHUP reloads the config file (same as `POST /api/v1/config/reload`).
+Each step waits at most its own named timeout and then logs and moves on, so a stuck
+component cannot keep the process alive. The timeouts add up to about 105 s;
+`docker-compose.yml` sets `stop_grace_period: 2m` above that, and a test in
+`cmd/amdl-api` fails when the sum outgrows it.
+
+SIGHUP reloads the config file and applies its logging level (same as
+`POST /api/v1/config/reload`); an invalid file is logged and the previous snapshot stays.
 
 Every long-lived component has the same shape: a constructor that does no I/O, a
-`Start`/`Run` that owns its goroutines, and a `Stop`/`Shutdown(ctx)` or `Wait(ctx)` that
-returns only after they exit. Nothing outlives `Store.Close`.
+`Start` that owns its goroutines or a blocking `Run(ctx)` that the caller runs on its
+own goroutine, and a `Shutdown(ctx)` or `Wait(ctx)` (or `Run` itself) that returns only
+after they exit. Nothing outlives `Store.Close`.
 
 ## 2. Packages
 
@@ -68,34 +78,45 @@ Every non-2xx JSON response is
 
 `code` is a stable snake_case identifier from the `ErrorCode` enum in the spec (Go:
 constants in `internal/api`). `message` is for humans and may change. `details` is
-optional and code-specific (for example `{"storefront": "jp", "supported_storefronts":
-["us"]}` for `unsupported_storefront`). Unknown routes under `/api/` answer
+optional and code-specific: the batch body for a submit that accepted nothing, `{"keys":
+[…]}` for a rejected config write. Unknown routes under `/api/` answer
 `route_not_found` with the same envelope; a path that exists with other methods answers
 `405 method_not_allowed` with an `Allow` header (computed from the route table, since
-`http.ServeMux` writes its own plain-text 404/405 before any handler runs).
+`http.ServeMux` writes its own plain-text 404/405 before any handler runs). The one
+non-envelope error is the `503` of `GET /health`, which keeps its `HealthResponse` body
+(`{"status": "degraded", "database_error": "…"}`) because monitors read it.
 
 | Status | Codes |
 | --- | --- |
-| 400 | `invalid_request` (query/body validation), `invalid_json` |
+| 400 | `invalid_request` (query/body validation, a malformed stream cursor), `invalid_json` |
 | 401 | `authentication_failed` (wrapper login) |
 | 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
 | 405 | `method_not_allowed` |
-| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `signing_disabled` |
+| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending`, `signing_disabled` |
 | 413 | `request_too_large` |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `config_key_pinned`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` |
 | 502 | `upstream_error` |
 | 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
+| 504 | `upstream_timeout` (wrapper login) |
+
+`feature_unavailable` means an optional dependency of the route is not wired into the
+process (a nil field of `internal/api#Deps`), and on `GET /logs` and `GET /logs/stream`
+also that `logging.buffer_size` is `0`, so no log history is kept.
 
 Per-URL submit results keep the coarse `status` enum (`accepted`, `invalid`,
-`duplicate_in_request`, `duplicate_active`, `queue_full`, plus `error` for a store
-failure) and carry the detail in `results[].error` (`{code, message, details?}`), with
-codes `invalid_url`, `unsupported_type`, `unsupported_storefront`,
-`decryptor_unavailable`, `duplicate_in_request`, `duplicate_active`, `queue_full`,
-`store_error`. `POST /downloads` answers `202` with the batch body when at least one URL
-was accepted. When none was, it answers `500 store_error` if any rejection was a store
-failure (the client should retry) and `422 no_urls_accepted` otherwise; either way the
-batch body is in `error.details`.
+`duplicate_in_request`, `duplicate_active`, `queue_full`, plus `error` for a server-side
+failure) and carry the detail in `results[].error` (`{code, message, details?}`). The
+codes are the spec's `SubmitErrorCode` enum: with `invalid`, `invalid_url`,
+`unsupported_input`, `unsupported_storefront` (`details` carries the storefront and the
+supported ones), `decryptor_unavailable` and `invalid_configuration`; with the status of
+the same name, `duplicate_in_request`, `duplicate_active` and `queue_full`; with
+`error`, `store_error` and `internal_error` (the validator failed unexpectedly).
+`POST /downloads` answers `202` with the batch body when at least one URL was accepted.
+When none was, it answers `500 store_error` if any rejection was a store failure,
+`500 internal_error` if the only server-side failures came from the validator (the
+client should retry either), and `422 no_urls_accepted` otherwise; the batch body is in
+`error.details` in every case.
 
 ### 3.2 Jobs
 
@@ -109,7 +130,12 @@ batch body is in `error.details`.
   and retry; `finished_at` is set on the terminal transition and cleared by retry. Both
   are RFC 3339 or absent.
 - A user cancel marks every non-terminal item `cancelled`, persisted with a
-  non-cancelled context. A shutdown leaves items as they are so recovery can resume them.
+  non-cancelled context; for a queued job (a recovered one can carry rows from the
+  interrupted run) that happens in one write before the terminal one, so the terminal
+  event and hook count them. A shutdown leaves items as they are so recovery can resume
+  them.
+- A panic while processing a job fails that job with `internal error: panic: <value>`
+  (retryable); the stack is logged and the worker keeps running.
 - `GET /downloads` and `GET /downloads/{id}` return `event_cursor`: pass it as
   `?cursor=` (or `Last-Event-ID`) to the matching stream. It is read before the
   snapshot, so resuming from it never skips an event.
@@ -134,7 +160,9 @@ batch body is in `error.details`.
   as a generic `error`, so a client that sees its stream close refetches the job to tell
   "finished" from "broken".
 - `GET /logs` and `GET /logs/stream` page with `cursor` (log sequence) as well; the list
-  returns `next_cursor`.
+  returns `next_cursor`. With `logging.buffer_size: 0` both answer
+  `503 feature_unavailable`; `buffer_size` is a startup key, so the API decides this
+  once, in `internal/api#New`.
 - Only milestone events reach the overview feed. `item_progress` events are kept while a
   job runs and pruned when it finishes.
 
@@ -160,24 +188,40 @@ batch body is in `error.details`.
    "pools": {"downloads": 16, "decrypts": 32, "wrapper_requests": 24},
    "tools": [{"name": "ffmpeg", "available": true, "path": "/usr/bin/ffmpeg"}],
    "storage": [{"name": "downloads_dir", "path": "data/downloads", "free_bytes": 1, "total_bytes": 2},
-               {"name": "temp_dir", "path": "data/tmp", "error": "statfs unsupported"}]}
+               {"name": "temp_dir", "path": "data/tmp", "error": "statfs data/tmp: no such file or directory"}]}
   ```
 
-  `version` is `dev` and `commit`/`build_date` are empty for builds without ldflags;
-  `signing_mode` is `local` when the developer-token signing keys are set.
-- `GET /stats?days=N` (1-90, default 14): totals over retained history plus a per-day
-  series (UTC dates, oldest first, every day present) of completed tracks, bytes
-  written and finished jobs, codec mix, and hook outcomes. Results are cached for 30 s;
-  the numbers cover jobs that still exist.
+  `version`, `commit` and `build_date` are stamped by `-ldflags -X` into
+  `internal/buildinfo` (the Makefile from git, the Dockerfile from the `VERSION`,
+  `COMMIT` and `BUILD_DATE` build args that the image workflows pass). Without the
+  stamp `version` is `dev`, and `commit`/`build_date` come from the VCS settings that
+  `go build` records in a git checkout (`build_date` is then the commit time), or stay
+  empty. `signing_mode` is `local` when the developer-token signing keys are set
+  (`internal/config#CatalogConfig.DeveloperTokenSigningEnabled`), else `legacy`; no key
+  material is returned. `jobs` comes from `internal/jobs#Manager.QueueStats`; `workers`
+  and `pools` are startup values. `tools` is the `internal/media#ToolChecker` result.
+  `storage` is `statfs` on Linux, macOS and FreeBSD; elsewhere, or when the directory
+  cannot be inspected, the entry carries `error` instead of the byte counts.
+- `GET /stats?days=N` (1-90, default 14; anything else is `400 invalid_request`).
+  `totals` and `codecs` cover every retained job; `daily` and `hooks` cover the last
+  `days` UTC calendar days, today included. `daily` has exactly `days` entries, oldest
+  first, with zeros for a day without activity: a track counts on the day of its last
+  `item_completed` event (its `file_size` is the day's `bytes_written`), a job once per
+  `job_finished` or `job_failed` event. `hooks` groups `hook_succeeded`/`hook_failed`
+  events by hook name. The numbers cover jobs that still exist, since deleting a job
+  deletes its items and events. The window queries use the `job_events(type,
+  created_at)` index of migration 2 (`internal/db#Store.Stats`). A result is cached for
+  30 s per `days` value (`statsCacheTTL` in `internal/api`); `generated_at` says when it
+  was computed.
 
   ```json
-  {"generated_at": "…", "days": 14,
+  {"generated_at": "2026-10-28T13:00:00Z", "days": 14,
    "totals": {"jobs": 12, "tracks_completed": 210, "tracks_skipped": 4, "tracks_failed": 1,
               "bytes_written": 9876543210, "duration_ms": 52000000},
    "daily": [{"date": "2026-10-28", "tracks_completed": 21, "bytes_written": 987654321,
               "jobs_completed": 1, "jobs_failed": 0}],
    "codecs": [{"codec": "alac", "bit_depth": 24, "sample_rate": 96000, "tracks": 120}],
-   "hooks": [{"name": "notify", "succeeded": 10, "failed": 1, "last_failed_at": "…"}]}
+   "hooks": [{"name": "notify", "succeeded": 10, "failed": 1, "last_failed_at": "2026-10-28T09:15:00Z"}]}
   ```
 
 ## 4. Storage
@@ -205,9 +249,15 @@ rune boundary.
 
 ## 6. Hooks
 
-Exec hooks receive absolute output paths and an environment without the backend's own
-`AMDL_*` configuration variables (only the documented hook variables are added).
-Webhook URLs must be absolute `http`/`https` URLs; an invalid one fails startup.
+The hook payload's job carries the API counters of 3.2 (`completed_items`,
+`skipped_items`, `failed_items`, `cancelled_items`) and `started_at`/`finished_at`; its
+items' `output_path` and `AMDL_OUTPUT_PATHS` are absolute (resolved in
+`internal/hooks`, so REST and the database keep the stored form). Exec hooks get the
+backend's environment without any `AMDL_*` variable (each is a config key override or a
+config file path, some of them secret) plus the documented hook variables, and a failed
+one records at most the last 4 KiB of its stderr. Webhook URLs must be absolute
+`http`/`https` URLs; an invalid one fails startup naming the entry. Attempts run on a
+dispatcher-owned context, so shutdown can stop retries and cancel running attempts.
 
 ## 7. Web console
 

@@ -38,6 +38,7 @@ below before they work against 2.0.
 | Wrapper login password | trimmed | sent as typed; only an all-whitespace password is `400` | account screens |
 | Config `PUT` with an invalid file on disk | `500` | `422 invalid_config` | settings screens |
 | Optional component missing | mixed (`/logs` answered an empty `200`, `/developer-token` `409`) | `503 feature_unavailable` on every route that needs it | none in a normal install |
+| Logs with `logging.buffer_size: 0` | `GET /logs` an empty `200`; `GET /logs/stream` live records only | `503 feature_unavailable` on both | log viewers |
 | Stream cursor in snapshots | `last_event_id` on `GET /downloads` and `GET /downloads/{id}` | `event_cursor` | stream clients |
 | Job counters | `done_items` (completed + skipped), `failed_items` | `completed_items`, `skipped_items`, `failed_items`, `cancelled_items` | job lists, progress bars |
 | Job timing | none | `started_at`, `finished_at` | new |
@@ -79,10 +80,16 @@ below before they work against 2.0.
 
 ## Hooks
 
-- `AMDL_OUTPUT_PATHS` and payload `output_paths` are absolute.
-- Exec hooks no longer inherit the backend's `AMDL_*` configuration variables
-  (for example `AMDL_CATALOG_MEDIA_USER_TOKEN`); pass what a script needs explicitly.
-- Failed exec hooks record at most the last 4 KiB of stderr.
+| Area | 1.x | 2.0 | Affects |
+| --- | --- | --- | --- |
+| Job counters in the payload | `job.done_items` (completed + skipped), `job.failed_items` | `job.completed_items`, `job.skipped_items`, `job.failed_items`, `job.cancelled_items`, the API's counters | webhook receivers |
+| Job counters in the exec environment | `AMDL_DONE_ITEMS`, `AMDL_FAILED_ITEMS` | `AMDL_COMPLETED_ITEMS`, `AMDL_SKIPPED_ITEMS`, `AMDL_FAILED_ITEMS`, `AMDL_CANCELLED_ITEMS` | exec scripts |
+| Job timing in the payload | none | `job.started_at`, `job.finished_at` (RFC 3339, absent until set) | new |
+| Output paths | as stored, relative when `download.downloads_dir` is (the default `data/downloads`) | absolute, in `items[].output_path` and `AMDL_OUTPUT_PATHS` | scripts and media servers that resolved them |
+| Exec environment | the whole backend environment, `AMDL_*` overrides included (for example `AMDL_CATALOG_MEDIA_USER_TOKEN`) | the backend environment without any `AMDL_*` variable, plus the hook variables; pass what a script needs explicitly | exec scripts |
+| Failed exec hook message | all of stderr | the last 4 KiB of stderr | hook status views |
+| Restart while a job runs | the job ended `cancelled` and fired `job_cancelled` | no hook: the job resumes on the next start and fires its terminal hook when it finishes | `job_cancelled` receivers |
+| Shutdown while a hook retries | slept out every remaining retry | retries stop; an attempt still running after the drain is cancelled and recorded as `hook_failed` | |
 
 ## Output paths
 
@@ -101,10 +108,14 @@ Unchanged, with three exceptions that only affect unusual titles:
 
 ## Downloads
 
-- Cancelling a job ends each of its unfinished items `cancelled`, with an
-  `item_progress` event whose `phase` is `cancelled`; 1.x left them in their last
-  state, such as `downloading`. Job detail views and stream clients see the new
-  terminal item status.
+- Cancelling a job ends each of its unfinished items `cancelled`; 1.x left them in
+  their last state, such as `downloading`. Items of a running job each get an
+  `item_progress` event whose `phase` is `cancelled`; a queued job's leftover items
+  (from a run a restart interrupted) are ended in one write before its `job_cancelled`
+  event. Job detail views and stream clients see the new terminal item status.
+- Stopping the backend no longer cancels running jobs: they stay `running` and resume
+  on the next start (`job_recovered`), keeping finished tracks and, while the temp
+  directory survives, partial transfers.
 - Media transfers no longer have a 90 s whole-request timeout: a transfer fails only
   when no data arrives for 60 s, so a large Hi-Res track on a slow link finishes.
 - A song without an Enhanced HLS manifest falls back to the next codec at once instead
