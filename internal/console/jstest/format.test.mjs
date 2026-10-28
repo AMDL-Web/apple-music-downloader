@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   capitalized,
+  punctuated,
   sentence,
   artworkUrl,
   artworkSrcset,
@@ -271,4 +272,5 @@ test('server messages read as row text or as a sentence', () => {
   assert.equal(sentence('database is locked'), 'Database is locked.');
   assert.equal(sentence('Already a sentence!'), 'Already a sentence!');
   assert.equal(sentence(undefined), '');
+  assert.equal(punctuated('download.cover_size must be {width}x{height}'), 'download.cover_size must be {width}x{height}.');
 });

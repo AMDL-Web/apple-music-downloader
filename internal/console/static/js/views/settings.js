@@ -20,10 +20,12 @@ import {
   fieldErrors,
   validateDraft,
   changesLabel,
+  draftAfterSave,
 } from '../lib/settings.js';
+import { punctuated } from '../lib/format.js';
 import { settingsSection, settingsHash, parseHash } from '../lib/route.js';
 import { useApp, Card, Icon, Button, Notice, ErrorNote, SkeletonRows, Unavailable } from '../ui/components.js';
-import { ConfirmDialog } from '../ui/dialogs.js';
+import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
 import { LibrarySyncPanel, ConfigFilePanel, TemplateReference } from './settings-panels.js';
@@ -59,8 +61,8 @@ export function SettingsPage({ route }) {
     });
   }, []);
 
-  // Load on mount and after a reconnect, but never under unsaved edits:
-  // Discard is the way to see the server's values again.
+  // Load on mount, after a reconnect and on Discard, but never under
+  // unsaved edits: Discard is the way to see the server's values again.
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
   useEffect(() => {
@@ -86,6 +88,7 @@ export function SettingsPage({ route }) {
   const discard = () => {
     setDraft({});
     setSaveError(null);
+    setLoadSeq((n) => n + 1);
     app.toast({ message: 'Changes discarded' });
   };
 
@@ -101,12 +104,15 @@ export function SettingsPage({ route }) {
       setDraft({});
       return;
     }
+    // Fields stay editable while the request runs; an edit made meanwhile
+    // stays in the draft.
+    const sent = draft;
     setSaving(true);
     setSaveError(null);
     try {
       const res = await putConfig(body);
       apply(res);
-      setDraft({});
+      setDraft((d) => draftAfterSave(d, sent));
       app.toast({ message: `Saved ${dirtyKeys.length === 1 ? '1 setting' : `${dirtyKeys.length} settings`}`, role: 'success' });
     } catch (err) {
       setSaveError(fieldErrors(err));
@@ -124,12 +130,13 @@ export function SettingsPage({ route }) {
     if (failSeq > 0 && errorRef.current) errorRef.current.focus({ preventScroll: false });
   }, [failSeq]);
 
-  // Cmd/Ctrl+S saves while this page is open.
+  // Cmd/Ctrl+S saves while this page is open and no dialog (the leave
+  // confirmation among them) is up.
   useEffect(() => {
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
-        saveRef.current();
+        if (!isDialogOpen()) saveRef.current();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -157,6 +164,19 @@ export function SettingsPage({ route }) {
       if (app.setLeaveGuard) app.setLeaveGuard(null);
     };
   }, [dirty, app.setLeaveGuard]);
+
+  // The leave question is moot once nothing is unsaved.
+  useEffect(() => {
+    if (!dirty && !saving) setLeaveTo(null);
+  }, [dirty, saving]);
+
+  // A new section opens at its top (the section list is sticky).
+  const shownSection = useRef(section.id);
+  useEffect(() => {
+    if (shownSection.current === section.id) return;
+    shownSection.current = section.id;
+    window.scrollTo(0, 0);
+  }, [section.id]);
 
   const leave = () => {
     const to = leaveTo;
@@ -252,7 +272,7 @@ export function SettingsPage({ route }) {
       ${saveError
         ? html`<div class="settings-error" tabindex="-1" ref=${errorRef} role="alert">
             <${Notice} role="danger" icon="circle-x">
-              <strong>Not saved.</strong> <span class="wrap-any">${saveError.message}</span>
+              <strong>Not saved.</strong> <span class="wrap-any">${punctuated(saveError.message)}</span>
               ${faultSections.length
                 ? html` <span>See ${faultSections.map((s, i) => html`${i ? ', ' : ''}<a key=${s.id} class="link" href=${settingsHash(s.id)}>${s.label}</a>`)}.</span>`
                 : null}

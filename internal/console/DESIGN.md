@@ -275,8 +275,10 @@ and motion covers.
   (switch, select, number with unit, text, path, template, secret with
   reveal, ordered list, checkbox set). A key in `ConfigResponse.pinned` is
   disabled and names its variable. Edits stay in a draft; the sticky save bar
-  counts them, Discard drops them, Save (or Cmd/Ctrl+S) sends `PUT /config`
-  with only the changed leaves, lists whole (`buildPatch`). A refused save
+  counts them, Discard drops them and reads `GET /config` again, Save (or
+  Cmd/Ctrl+S, unless a dialog is up) sends `PUT /config` with only the
+  changed leaves, lists whole (`buildPatch`); an edit made while the save
+  runs stays in the draft (`draftAfterSave`). A section opens at its top. A refused save
   keeps the draft: a notice says why, and `fieldErrors` puts the message on
   each field it names (`details.keys` for `config_key_pinned` and
   `config_key_not_mutable`, the dotted keys in the message for

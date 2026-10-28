@@ -10,6 +10,7 @@ import {
   sameValue,
   changedKeys,
   buildPatch,
+  draftAfterSave,
   pinnedMap,
   parseLockedKey,
   keysInMessage,
@@ -151,6 +152,9 @@ test('validateDraft blocks unsendable numbers and warns on odd values', () => {
   assert.deepEqual(Object.keys(errors).sort(), ['download.max_attempts', 'download.quality_priority', 'simulate.min_speed_kbps']);
   assert.ok(!('library_sync.interval_minutes' in errors), 'bounds stay with the server');
   assert.match(warnings['download.cover_size'], /3000x3000/);
+  for (const [v, warned] of [['0x0', true], ['05000x5000', true], ['5000x0', true], ['5000x5000', false], ['1400x1400', false]]) {
+    assert.equal('download.cover_size' in validateDraft({ 'download.cover_size': v }).warnings, warned, v);
+  }
   assert.match(warnings['download.album_path_format'], /\{Track\}/);
   assert.ok(!('download.song_path_format' in warnings));
 });
@@ -188,4 +192,13 @@ test('wrapperErrorText per status and code', () => {
   assert.match(wrapperErrorText(e(0, 'timeout')).message, /in time/);
   assert.match(wrapperErrorText(e(0, 'network_error')).message, /Cannot reach/);
   assert.match(wrapperErrorText(e(401, '')).message, /Apple ID/, 'a bare 401 reads like authentication_failed');
+});
+
+test('draftAfterSave keeps only what changed while the save ran', () => {
+  const list = ['alac', 'aac'];
+  const sent = { 'download.max_attempts': 4, 'download.quality_priority': list, 'logging.level': 'warn' };
+  const now = { ...sent, 'logging.level': 'error', 'download.progress_event_interval_ms': 750 };
+  assert.deepEqual(draftAfterSave(now, sent), { 'logging.level': 'error', 'download.progress_event_interval_ms': 750 });
+  assert.deepEqual(draftAfterSave({ 'download.quality_priority': [...list] }, sent), { 'download.quality_priority': ['alac', 'aac'] }, 'a list edited again is a new value');
+  assert.deepEqual(draftAfterSave(sent, sent), {});
 });

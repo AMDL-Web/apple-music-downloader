@@ -156,8 +156,9 @@ export const FIELDS = [
     type: 'text',
     label: 'Cover size',
     help: 'Width x height in pixels, for example 5000x5000, 3000x3000 or 1400x1400. Default: 5000x5000.',
-    pattern: '^[0-9]+x[0-9]+$',
-    patternHint: 'Write it as width x height, for example 3000x3000.',
+    // The backend's rule (internal/config Validate).
+    pattern: '^[1-9][0-9]*x[1-9][0-9]*$',
+    patternHint: 'Write it as width x height in whole pixels above 0, for example 3000x3000.',
   },
   {
     key: 'download.cover_format',
@@ -339,6 +340,16 @@ export function sameValue(a, b) {
 /** Keys whose draft value differs from the base, in field order. */
 export function changedKeys(base, draft) {
   return FIELD_KEYS.filter((k) => Object.hasOwn(draft, k) && !sameValue(draft[k], base[k]));
+}
+
+/**
+ * The draft left after a save of `sent` (the draft the PUT was built from):
+ * a key edited again while the request ran keeps its newer value, every
+ * other sent key leaves. Values compare by identity, since every edit
+ * stores a new value.
+ */
+export function draftAfterSave(draft, sent) {
+  return Object.fromEntries(Object.entries(draft).filter(([k, v]) => !Object.hasOwn(sent, k) || sent[k] !== v));
 }
 
 /**

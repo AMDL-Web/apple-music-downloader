@@ -253,11 +253,16 @@ export function capitalized(s) {
   return t ? t[0].toUpperCase() + t.slice(1) : '';
 }
 
-/** "database is locked" -> "Database is locked.": a server message as a sentence in running text. */
-export function sentence(s) {
-  const t = capitalized(s);
+/** A message with its closing period: "x must be at most 10" -> "x must be at most 10." (a leading config key keeps its case). */
+export function punctuated(s) {
+  const t = String(s || '').trim();
   if (!t) return '';
   return /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
+/** "database is locked" -> "Database is locked.": a server message as a sentence in running text. */
+export function sentence(s) {
+  return punctuated(capitalized(s));
 }
 
 export function shortId(id) {
