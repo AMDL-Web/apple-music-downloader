@@ -2,7 +2,7 @@
 // state, theme, keyboard shortcuts, the global link paste, toasts and live
 // announcements.
 
-import { html, useState, useEffect, useRef, useCallback, useMemo } from './ui/preact.js';
+import { html, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from './ui/preact.js';
 import { listDownloads, getSystem, getConfig, feedStreamUrl, parseData } from './api.js';
 import { parseHash, buildHash, newDownloadHash, newDownloadUrls } from './lib/route.js';
 import { extractLinks } from './lib/links.js';
@@ -288,8 +288,10 @@ export function App() {
     }
     prevPage.current = route.page;
   }, [route.page]);
+  // A layout effect: it reads the opener at commit, before the drawer's own
+  // effect (a child's, so it runs first) moves focus into the panel.
   const prevJob = useRef(route.jobId);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (route.jobId && !prevJob.current) opener.current = document.activeElement;
     if (!route.jobId && prevJob.current) {
       const el = opener.current;
