@@ -1,0 +1,16 @@
+# Move-only commits (tools/splitdecls). GitHub blame skips them; locally:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# refactor(api): split server.go and observability.go by resource (move-only)
+db356c28efc0c5316bd2f251e4f8016d4bb2325e
+# refactor(db): split db.go into schema, jobs, items and events (move-only)
+93cecad086b72870a0451762c2f8514050f9070d
+# refactor(jobs): split manager.go into manager, submit, finalize, processor and reporter (move-only)
+3f66db08aeed49d6ed272e656081f84f1975a25e
+# refactor(domain): split domain.go into job, item, event, submit and library (move-only)
+edc8852e0c76687042425a4350ad8f1262d6b595
+# refactor(media): split downloader.go and m3u8.go by pipeline stage (move-only)
+d6167fe51814436c33be6b7454cc1b795cae045f
+# refactor(applemusic): split catalog.go into catalog, auth, transport, ampapi, artwork and mapping (move-only)
+9855ae561b932d62d3b1a5a90ca5399f3e6cc8ba
+# refactor(config): split config.go into config, load and validate (move-only)
+9e3b407a47bc59c1c17ea65f815db83404e3a4e8
