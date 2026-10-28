@@ -156,7 +156,7 @@ function HealthCard({ backend, wrapper, sync, hooks, loading }) {
             ([name, view]) => html`<li key=${name} class="health-row">
               <span class="health-name">${name}</span>
               <${Badge} view=${view} />
-              ${view.detail ? html`<span class="health-detail wrap-any">${view.detail}</span>` : null}
+              ${view.detail ? html`<span class="health-detail wrap-any" title=${view.title || undefined}>${view.detail}</span>` : null}
             </li>`,
           )}
         </ul>`
@@ -168,7 +168,16 @@ function WrapperCard({ res, loading }) {
   const [reveal, setReveal] = useState(false);
   let body;
   if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
-  else if (!res || res.error) body = html`<${Badge} view=${wrapperView(res)} />`;
+  else if (!res || res.error) {
+    const view = wrapperView(res);
+    body = html`<${KV}
+        rows=${[
+          ['State', html`<${Badge} view=${view} />`],
+          ['Error', view.detail ? html`<span class="wrap-any" title=${view.title || undefined}>${view.detail}</span>` : null],
+        ]}
+      />
+      <p class="muted small">The backend reaches wrapper-manager at <code>wrapper.address</code>; downloads need it, simulate mode does not.</p>`;
+  }
   else {
     const wr = res.data;
     const accounts = Array.isArray(wr.accounts) ? wr.accounts : [];

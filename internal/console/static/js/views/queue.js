@@ -22,7 +22,7 @@ export function JobRow({ job, href }) {
     <span class="job-main">
       <span class="job-title" dir="auto" title=${title}>${title}</span>
       <span class="job-sub">
-        ${sub ? html`<span dir="auto">${sub}</span>` : null}
+        ${sub ? html`<span class="job-sub-artist" dir="auto">${sub}</span>` : null}
         <span class="job-sub-type">${typeLabel(job.type)}</span>
         ${job.storefront ? html`<span class="job-sub-sf">${job.storefront.toUpperCase()}</span>` : null}
       </span>

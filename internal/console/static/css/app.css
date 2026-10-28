@@ -1029,6 +1029,14 @@ kbd {
   text-overflow: ellipsis;
 }
 
+/* A dot separates the artist from whichever of type (mobile) or storefront
+   (desktop) is visible; with no artist neither gets one. */
+.job-sub-artist ~ .job-sub-type::before,
+.job-sub-artist ~ .job-sub-sf::before {
+  content: "·";
+  margin-inline-end: var(--s-1_5);
+}
+
 .job-sub-type {
   display: none;
 }

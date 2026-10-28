@@ -117,6 +117,20 @@ export function shortDate(value) {
   return `${monthNames[d.getMonth()]} ${d.getDate()}`;
 }
 
+/**
+ * "Downloaded Oct 28 · took 3m 12s" for a finished job; '' when it has no
+ * finish time. The duration needs started_at, which a job cancelled while
+ * queued never gets.
+ */
+export function finishedLine(job) {
+  if (!job || !job.finished_at) return '';
+  const parts = [`Downloaded ${shortDate(job.finished_at)}`];
+  const start = toDate(job.started_at);
+  const end = toDate(job.finished_at);
+  if (start && end && end >= start) parts.push(`took ${elapsed(end - start)}`);
+  return parts.join(' · ');
+}
+
 /** Formats a UTC calendar date ("2026-10-28") as "Oct 28" without a time zone shift. */
 export function dayLabel(isoDate) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate || '');

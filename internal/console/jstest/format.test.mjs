@@ -25,8 +25,7 @@ import {
   contrastRatio,
   artTextColor,
   artPalette,
-  paletteStyle,
-} from '../static/js/lib/format.js';
+  paletteStyle, finishedLine } from '../static/js/lib/format.js';
 
 const TEMPLATE = 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/{w}x{h}bb.{f}';
 const PRESIGNED = 'https://example-bucket.s3.amazonaws.com/cover.jpg?X-Amz-Signature=abc';
@@ -157,4 +156,10 @@ test('artPalette uses the motion asset palette only when asked', () => {
   assert.equal(artPalette({ artwork_bg_color: 'red' }), null);
   assert.deepEqual(paletteStyle({ bg: '#000000', text1: 'a', text2: 'b' }), { '--art-bg': '#000000', '--art-text1': 'a', '--art-text2': 'b' });
   assert.equal(paletteStyle(null), undefined);
+});
+
+test('finishedLine shows the finish date and the duration when both stamps exist', () => {
+  assert.equal(finishedLine({ started_at: '2026-10-28T12:00:00Z', finished_at: '2026-10-28T12:03:12Z' }).replace(/Oct \d+/, 'Oct D'), 'Downloaded Oct D · took 3m 12s');
+  assert.equal(finishedLine({ finished_at: '2026-10-28T12:03:12Z' }).startsWith('Downloaded '), true);
+  assert.equal(finishedLine({ started_at: '2026-10-28T12:00:00Z' }), '');
 });

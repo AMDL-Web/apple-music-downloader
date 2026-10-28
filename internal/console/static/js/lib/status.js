@@ -123,16 +123,36 @@ export function backendHealthView(res) {
     if (res && res.error && res.error.status === 503 && res.error.body && res.error.body.status === 'degraded') {
       return { icon: 'circle-x', role: 'danger', label: 'Degraded', detail: res.error.body.database_error || 'Database unavailable' };
     }
-    return { icon: 'circle-x', role: 'danger', label: 'Unreachable', detail: res && res.error ? res.error.message : undefined };
+    return failedView(res, 'Unreachable');
   }
   if (res.data.status === 'ok') return { icon: 'circle-check', role: 'success', label: 'Healthy' };
   return { icon: 'circle-x', role: 'danger', label: 'Degraded', detail: res.data.database_error || 'Database unavailable' };
 }
 
+/**
+ * One readable line for an upstream failure. gRPC and dial errors arrive as
+ * nested "rpc error: code = … desc = …" chains that bury the cause; the full
+ * text stays available as the view's title.
+ */
+export function summarizeError(message) {
+  if (!message) return undefined;
+  const text = String(message);
+  const addr = /dial tcp ([^\s:]+:\d+)/.exec(text);
+  const at = addr ? ` (${addr[1]})` : '';
+  if (/connection refused/i.test(text)) return `Connection refused${at}`;
+  if (/no such host/i.test(text)) return `Host not found${at}`;
+  if (/deadline exceeded|timed? ?out/i.test(text)) return `Timed out${at}`;
+  const desc = text.replace(/^rpc error: code = \w+ desc = /, '');
+  return desc.length > 80 ? `${desc.slice(0, 79)}…` : desc;
+}
+
+function failedView(res, label) {
+  const message = res && res.error ? res.error.message : undefined;
+  return { icon: 'circle-x', role: 'danger', label, detail: summarizeError(message), title: message };
+}
+
 export function wrapperView(res) {
-  if (!res || res.error) {
-    return { icon: 'circle-x', role: 'danger', label: 'Unreachable', detail: res && res.error ? res.error.message : undefined };
-  }
+  if (!res || res.error) return failedView(res, 'Unreachable');
   const w = res.data;
   const regions = Array.isArray(w.regions) && w.regions.length ? w.regions.join(', ').toUpperCase() : '';
   if (w.ready) {
@@ -148,7 +168,7 @@ export function librarySyncView(res) {
     if (res && res.error && res.error.status === 503) {
       return { icon: 'circle-minus', role: 'neutral', label: 'Not configured' };
     }
-    return { icon: 'circle-x', role: 'danger', label: 'Unavailable', detail: res && res.error ? res.error.message : undefined };
+    return failedView(res, 'Unavailable');
   }
   const s = res.data;
   if (!s.enabled) return { icon: 'circle-minus', role: 'neutral', label: 'Off' };
@@ -158,7 +178,7 @@ export function librarySyncView(res) {
 
 export function hooksView(res) {
   if (!res || res.error) {
-    return { icon: 'circle-x', role: 'danger', label: 'Unavailable', detail: res && res.error ? res.error.message : undefined };
+    return failedView(res, 'Unavailable');
   }
   const h = res.data;
   const entries = Array.isArray(h.entries) ? h.entries : [];

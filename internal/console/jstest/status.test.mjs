@@ -8,6 +8,7 @@ import {
   hookStatusView,
   backendHealthView,
   wrapperView,
+  summarizeError,
   librarySyncView,
   hooksView,
   logLevelView,
@@ -155,4 +156,16 @@ test('isTerminal', () => {
   assert.equal(isTerminal('failed'), true);
   assert.equal(isTerminal('cancelled'), true);
   assert.equal(isTerminal('running'), false);
+});
+
+test('summarizeError turns gRPC dial chains into one line and keeps the full text as title', () => {
+  const raw = 'rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:8080: connect: connection refused"';
+  assert.equal(summarizeError(raw), 'Connection refused (127.0.0.1:8080)');
+  assert.equal(summarizeError('rpc error: code = DeadlineExceeded desc = context deadline exceeded'), 'Timed out');
+  assert.equal(summarizeError('rpc error: code = Internal desc = boom'), 'boom');
+  assert.equal(summarizeError('x'.repeat(100)).length, 80);
+  assert.equal(summarizeError(undefined), undefined);
+  const view = wrapperView({ error: { status: 503, message: raw } });
+  assert.equal(view.detail, 'Connection refused (127.0.0.1:8080)');
+  assert.equal(view.title, raw);
 });

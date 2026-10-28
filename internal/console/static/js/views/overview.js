@@ -132,7 +132,7 @@ function HealthCard() {
             ([name, view]) => html`<li key=${name} class="health-row">
               <span class="health-name">${name}</span>
               <${Badge} view=${view} />
-              ${view.detail ? html`<span class="health-detail" title=${view.detail}>${view.detail}</span>` : null}
+              ${view.detail ? html`<span class="health-detail" title=${view.title || view.detail}>${view.detail}</span>` : null}
             </li>`,
           )}
         </ul>`

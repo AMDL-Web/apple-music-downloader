@@ -18,7 +18,7 @@ export function Icon({ name, size }) {
 /** A status badge: icon (or the running pulse) + label on the role's tint. */
 export function Badge({ view, title }) {
   if (!view) return null;
-  return html`<span class="badge" data-role=${view.role} title=${title || view.detail || undefined}>
+  return html`<span class="badge" data-role=${view.role} title=${title || view.title || view.detail || undefined}>
     ${view.pulse ? html`<span class="pulse" aria-hidden="true"></span>` : html`<${Icon} name=${view.icon} size="sm" />`}
     <span class="badge-label">${view.label}</span>
   </span>`;

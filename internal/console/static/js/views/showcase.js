@@ -4,7 +4,7 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { jobTitle, jobSubtitle, artPalette, paletteStyle, artworkUrl, typeLabel, count } from '../lib/format.js';
+import { jobTitle, jobSubtitle, artPalette, paletteStyle, artworkUrl, typeLabel, count, finishedLine } from '../lib/format.js';
 import { isAlreadyInLibrary, jobCounts } from '../lib/status.js';
 import { upsertJob, removeJob, appendPage, jobMatches } from '../lib/store.js';
 import { buildHash, showcaseType, showcaseQuery, SHOWCASE_TYPES } from '../lib/route.js';
@@ -170,6 +170,7 @@ function Hero({ job, href, playing, hover }) {
       <span class="hero-title" dir="auto">${jobTitle(job)}</span>
       <span class="hero-artist" dir="auto">${jobSubtitle(job)}</span>
       ${meta ? html`<span class="hero-meta">${meta}</span>` : null}
+      ${job.finished_at ? html`<span class="hero-meta num">${finishedLine(job)}</span>` : null}
       ${isAlreadyInLibrary(job) ? html`<span class="tag-library"><${Icon} name="archive" size="sm" />Already in library</span>` : null}
     </div>
   </a>`;
