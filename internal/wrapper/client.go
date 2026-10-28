@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +46,46 @@ const (
 	LoginStatusLoggedIn     = "logged_in"
 	LoginStatusNeedsTwoStep = "needs_2fa"
 )
+
+// Reply codes wrapper-manager puts in ReplyHeader.code. The proto declares the
+// field as a bare int32; these values are what wrapper-manager's handlers send
+// (handler.go and main.go in AMDL-Web/wrapper-manager).
+const (
+	replyOK int32 = 0
+	// replyNeedsTwoStep answers a login whose account needs a two-step code,
+	// which the client sends on the same stream.
+	replyNeedsTwoStep int32 = 2
+	replyFailed       int32 = -1
+)
+
+// Substrings of wrapper-manager reply messages that carry meaning the reply code
+// does not; both arrive with replyFailed and match case-insensitively.
+// TestUpstreamReplyWording pins them to wrapper-manager's wording.
+const (
+	// msgAlreadyLoggedIn answers a second login of an account that already has
+	// a wrapper, from wrapper-manager releases that run one wrapper per
+	// account. Releases that run several wrappers per account start another
+	// one instead and never send it.
+	msgAlreadyLoggedIn = "already login"
+	// msgNoSuchAccount answers a logout of an account with no wrapper.
+	msgNoSuchAccount = "no such account"
+)
+
+// loginFailure maps the message of a replyFailed login answer to its error.
+func loginFailure(msg string) error {
+	if strings.Contains(strings.ToLower(msg), msgAlreadyLoggedIn) {
+		return ErrAlreadyLoggedIn
+	}
+	return ErrAuthenticationFailed
+}
+
+// logoutFailure maps a logout answer other than replyOK to its error.
+func logoutFailure(code int32, msg string) error {
+	if strings.Contains(strings.ToLower(msg), msgNoSuchAccount) {
+		return ErrAccountNotFound
+	}
+	return fmt.Errorf("%w: logout code %d: %s", ErrWrapperResponse, code, msg)
+}
 
 type LoginResult struct {
 	Status  string `json:"status"`
@@ -166,10 +207,10 @@ func (c *Client) StartLogin(ctx context.Context, username, password string) (Log
 		return LoginResult{}, err
 	}
 	switch reply.GetHeader().GetCode() {
-	case 0:
+	case replyOK:
 		cancel()
 		return LoginResult{Status: LoginStatusLoggedIn}, nil
-	case 2:
+	case replyNeedsTwoStep:
 		id, err := randomLoginID()
 		if err != nil {
 			cancel()
@@ -182,12 +223,9 @@ func (c *Client) StartLogin(ctx context.Context, username, password string) (Log
 		session.timer = time.AfterFunc(timeout, func() { c.expireSession(id, session) })
 		c.sessionsMu.Unlock()
 		return LoginResult{Status: LoginStatusNeedsTwoStep, LoginID: id}, nil
-	case -1:
+	case replyFailed:
 		cancel()
-		if strings.Contains(strings.ToLower(reply.GetHeader().GetMsg()), "already login") {
-			return LoginResult{}, ErrAlreadyLoggedIn
-		}
-		return LoginResult{}, ErrAuthenticationFailed
+		return LoginResult{}, loginFailure(reply.GetHeader().GetMsg())
 	default:
 		cancel()
 		return LoginResult{}, fmt.Errorf("%w: login code %d: %s", ErrWrapperResponse, reply.GetHeader().GetCode(), reply.GetHeader().GetMsg())
@@ -208,9 +246,9 @@ func (c *Client) SubmitTwoStepCode(ctx context.Context, loginID, code string) (L
 		return LoginResult{}, err
 	}
 	switch reply.GetHeader().GetCode() {
-	case 0:
+	case replyOK:
 		return LoginResult{Status: LoginStatusLoggedIn}, nil
-	case -1:
+	case replyFailed:
 		return LoginResult{}, ErrAuthenticationFailed
 	default:
 		return LoginResult{}, fmt.Errorf("%w: two-step code %d: %s", ErrWrapperResponse, reply.GetHeader().GetCode(), reply.GetHeader().GetMsg())
@@ -224,13 +262,10 @@ func (c *Client) Logout(ctx context.Context, username string) error {
 	if err != nil {
 		return err
 	}
-	if reply.GetHeader().GetCode() == 0 {
+	if reply.GetHeader().GetCode() == replyOK {
 		return nil
 	}
-	if strings.Contains(strings.ToLower(reply.GetHeader().GetMsg()), "no such account") {
-		return ErrAccountNotFound
-	}
-	return fmt.Errorf("%w: logout code %d: %s", ErrWrapperResponse, reply.GetHeader().GetCode(), reply.GetHeader().GetMsg())
+	return logoutFailure(reply.GetHeader().GetCode(), reply.GetHeader().GetMsg())
 }
 
 func receiveLoginReply(ctx context.Context, stream pb.WrapperManagerService_LoginClient, timeout time.Duration) (*pb.LoginReply, error) {
@@ -338,7 +373,7 @@ func (c *Client) M3U8(ctx context.Context, adamID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if resp.GetHeader().GetCode() != 0 {
+	if resp.GetHeader().GetCode() != replyOK {
 		return "", fmt.Errorf("wrapper m3u8: %s", resp.GetHeader().GetMsg())
 	}
 	return resp.GetData().GetM3U8(), nil
@@ -359,7 +394,7 @@ func (c *Client) Lyrics(ctx context.Context, adamID string, opts LyricsRequestOp
 	if err != nil {
 		return "", err
 	}
-	if resp.GetHeader().GetCode() != 0 {
+	if resp.GetHeader().GetCode() != replyOK {
 		return "", fmt.Errorf("wrapper lyrics: %s", resp.GetHeader().GetMsg())
 	}
 	return resp.GetData().GetLyrics(), nil
@@ -377,7 +412,7 @@ func (c *Client) WebPlayback(ctx context.Context, adamID string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	if resp.GetHeader().GetCode() != 0 {
+	if resp.GetHeader().GetCode() != replyOK {
 		return "", fmt.Errorf("wrapper web playback: %s", resp.GetHeader().GetMsg())
 	}
 	return resp.GetData().GetM3U8(), nil
@@ -397,7 +432,7 @@ func (c *Client) License(ctx context.Context, adamID, challenge, uri string) (st
 	if err != nil {
 		return "", err
 	}
-	if resp.GetHeader().GetCode() != 0 {
+	if resp.GetHeader().GetCode() != replyOK {
 		return "", fmt.Errorf("wrapper license: %s", resp.GetHeader().GetMsg())
 	}
 	return resp.GetData().GetLicense(), nil
@@ -465,6 +500,9 @@ func (s *grpcDecryptSession) DecryptFragment(key string, samples [][]byte) ([][]
 func (s *grpcDecryptSession) decryptFragment(key string, samples [][]byte) ([][]byte, error) {
 	n := len(samples)
 	base := s.next
+	if last := int64(base) + int64(n) - 1; last > math.MaxInt32 {
+		return nil, fmt.Errorf("wrapper decrypt: sample index %d does not fit the protocol's int32 sample_index", last)
+	}
 	s.next += n
 	// Send in the background while receiving: a fragment can carry more sample
 	// bytes than the gRPC flow-control window, so sending everything before
@@ -500,9 +538,13 @@ func (s *grpcDecryptSession) decryptFragment(key string, samples [][]byte) ([][]
 	return out, nil
 }
 
-// receiveBatch reads exactly len(out) decrypt replies into out, correlating each
-// reply's sample index against base.
+// receiveBatch reads one reply per slot of out, placing each sample by its
+// index relative to base. An index outside the batch, or one that already
+// arrived, is an error: either would leave another slot without its sample
+// and produce a silently short fragment. With both rejected, len(out) replies
+// fill every slot.
 func (s *grpcDecryptSession) receiveBatch(out [][]byte, base int) error {
+	filled := make([]bool, len(out))
 	for received := 0; received < len(out); received++ {
 		resp, err := s.stream.Recv()
 		if err != nil {
@@ -511,13 +553,18 @@ func (s *grpcDecryptSession) receiveBatch(out [][]byte, base int) error {
 			}
 			return err
 		}
-		if resp.GetHeader().GetCode() != 0 {
+		if resp.GetHeader().GetCode() != replyOK {
 			return fmt.Errorf("wrapper decrypt: %s", resp.GetHeader().GetMsg())
 		}
-		idx := int(resp.GetData().GetSampleIndex()) - base
+		index := resp.GetData().GetSampleIndex()
+		idx := int(index) - base
 		if idx < 0 || idx >= len(out) {
-			return fmt.Errorf("wrapper decrypt returned out-of-range sample index %d", resp.GetData().GetSampleIndex())
+			return fmt.Errorf("wrapper decrypt returned out-of-range sample index %d", index)
 		}
+		if filled[idx] {
+			return fmt.Errorf("wrapper decrypt returned sample index %d twice", index)
+		}
+		filled[idx] = true
 		out[idx] = resp.GetData().GetSample()
 	}
 	return nil

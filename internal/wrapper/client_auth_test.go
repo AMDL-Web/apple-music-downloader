@@ -408,3 +408,36 @@ func TestLyricsSendsTypeAndLocalizationOptions(t *testing.T) {
 		t.Fatalf("lyrics = %q, want <tt/>", got)
 	}
 }
+
+// TestUpstreamReplyWording pins the reply messages wrapper-manager sends with
+// replyFailed (its handler.go and main.go) to the errors they map to. A
+// wording change upstream must show up here, not as a silent switch to
+// ErrAuthenticationFailed or ErrWrapperResponse.
+func TestUpstreamReplyWording(t *testing.T) {
+	login := []struct {
+		msg  string
+		want error
+	}{
+		{msg: "already login", want: ErrAlreadyLoggedIn},
+		{msg: "login failed", want: ErrAuthenticationFailed},
+		{msg: "login already pending", want: ErrAuthenticationFailed},
+		{msg: "no pending login", want: ErrAuthenticationFailed},
+	}
+	for _, tt := range login {
+		if got := loginFailure(tt.msg); !errors.Is(got, tt.want) {
+			t.Errorf("loginFailure(%q) = %v, want %v", tt.msg, got, tt.want)
+		}
+	}
+	logout := []struct {
+		msg  string
+		want error
+	}{
+		{msg: "no such account", want: ErrAccountNotFound},
+		{msg: "failed to kill wrapper", want: ErrWrapperResponse},
+	}
+	for _, tt := range logout {
+		if got := logoutFailure(replyFailed, tt.msg); !errors.Is(got, tt.want) {
+			t.Errorf("logoutFailure(%q) = %v, want %v", tt.msg, got, tt.want)
+		}
+	}
+}
