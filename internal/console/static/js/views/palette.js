@@ -137,6 +137,7 @@ const SHORTCUTS = [
   ['Enter', 'Open the focused row (select it while selecting)'],
   ['x', 'Select the focused job (Queue)'],
   ['Esc', 'Close the drawer or dialog, then leave selection'],
+  ['Esc in a field', 'Clear the search, then leave the field'],
   ['Paste a link', 'New download with that link, outside a text field'],
   ['Cmd/Ctrl + S', 'Save settings (Settings)'],
   ['Cmd/Ctrl + K', 'Command palette'],
@@ -152,6 +153,6 @@ export function ShortcutSheet({ onClose }) {
     <dl class="kv">
       ${SHORTCUTS.map(([k, v]) => html`<div class="kv-row" key=${k}><dt><kbd>${k}</kbd></dt><dd>${v}</dd></div>`)}
     </dl>
-    <p class="muted small">Single-key shortcuts are off while you type in a field.</p>
+    <p class="muted small">Single-key shortcuts are off while you type in a field; Esc leaves it.</p>
   </${Dialog}>`;
 }

@@ -49,8 +49,8 @@ System and Settings with the current page marked, and the More tab is
 
 Filters live in the hash query, so a filtered view is a link. KPI tiles open the
 matching Queue tab; the drawer's "View logs" opens `#/logs?job_id=…`; a log
-row's job chip filters to that job. The tab title reads `"{n} running · AMDL"`
-while jobs run.
+row's job chip filters to that job. The tab title reads `"{Page} · AMDL"`, and
+`"{n} running · {Page} · AMDL"` while jobs run.
 
 ## Layout
 
@@ -333,7 +333,9 @@ and motion covers.
   `ConfirmDialog` asks before a destructive or irreversible action: an
   alertdialog with the title, the consequence, Cancel (focused) and the
   confirm button; while busy both are disabled and Escape does nothing. The
-  More sheet and the shortcut sheet are `Dialog`s.
+  More sheet and the shortcut sheet are `Dialog`s. Any route change (a link,
+  Back, a shortcut) closes the palette and the shell's sheets; a sheet pushes
+  no history entry, so Back leaves the page rather than closing it first.
 - **Queue selection** (`views/queue-select.js`, rules in `lib/jobactions.js`):
   Select (or `x` on a row) adds a checkbox column; a plain click on a row
   then selects it (Shift selects a range), Cmd/Ctrl-click still opens it.
@@ -435,7 +437,9 @@ Landmarks (`nav`, `header`, `main`), a skip button, one `h1` per page (focused o
 navigation). Every control shows the 2 px focus ring in `--focus`. Keyboard: `n`
 opens New download, `g` then `o/q/s/l/y/,/n` (`,` is Settings), `/` focuses
 the page filter, `j`/`k` move between rows, Enter opens, `x` selects the
-focused Queue row, Esc closes (then leaves selection mode), Cmd/Ctrl+K,
+focused Queue row, Esc closes (then leaves selection mode; in a field it
+clears a search first, then leaves the field), Cmd/Ctrl+K, Cmd/Ctrl+S saves
+Settings,
 `?`; single keys and the global paste are ignored while typing,
 while the palette or a sheet is open and while any `[data-dialog]` is up. The
 skin and theme controls are button groups with `aria-pressed` and an

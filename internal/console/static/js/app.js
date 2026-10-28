@@ -78,6 +78,25 @@ const TOAST_DANGER_MS = 10000;
 const isTyping = (el) =>
   el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 
+/**
+ * Escape in a field outside a dialog: a search field with text is cleared
+ * first (an input event, so the page's own state follows); otherwise the
+ * field gives up focus, so j/k and the other single keys work again. Other
+ * fields (the New download box, settings) are never cleared.
+ */
+function leaveField(e) {
+  const el = e.target;
+  if (el.tagName === 'INPUT' && (el.type === 'search' || el.hasAttribute('data-filter')) && el.value !== '') {
+    e.preventDefault();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(el, '');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  e.preventDefault();
+  el.blur();
+}
+
 export function App() {
   const { route, navigate, resumeLeave, setLeaveGuard } = useHashRouter();
   const [feed, setFeed] = useState({ counts: null, cursor: null });
@@ -392,7 +411,7 @@ export function App() {
   const running = counts ? counts.running : 0;
   useEffect(() => {
     const page = TITLES[route.page] || 'AMDL';
-    document.title = running > 0 ? `${count(running)} running · AMDL` : `${page} · AMDL`;
+    document.title = running > 0 ? `${count(running)} running · ${page} · AMDL` : `${page} · AMDL`;
   }, [running, route.page]);
 
   // Focus: a new page focuses its heading; the drawer returns focus to the row that opened it.
@@ -421,8 +440,13 @@ export function App() {
 
   const closeDrawer = useCallback(() => navigate(buildHash(route.page, route.params)), [route.page, route.params, navigate]);
 
-  // The More sheet belongs to the page it opened over.
-  useEffect(() => setOverlay((o) => (o === 'more' ? null : o)), [route.page]);
+  // The palette and the sheets belong to the page they opened over: any
+  // route change (a link, Back, a shortcut) closes them. No history entry is
+  // pushed for a sheet, which would fight the leave guard's bookkeeping.
+  // #/new rewrites ?url= as its text box changes, so there only the page and
+  // the drawer count.
+  const routeKey = route.page === 'new' ? `new|${route.jobId || ''}` : buildHash(route.page, route.params, route.jobId);
+  useEffect(() => setOverlay(null), [routeKey]);
 
   // Keyboard shortcuts.
   const gPending = useRef(0);
@@ -439,6 +463,8 @@ export function App() {
         if (overlay) {
           e.preventDefault();
           setOverlay(null);
+        } else if (isTyping(e.target)) {
+          leaveField(e);
         } else if (route.jobId) {
           e.preventDefault();
           closeDrawer();
