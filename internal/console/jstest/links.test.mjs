@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLink, extractLinks, LINK_KINDS } from '../static/js/lib/links.js';
+import { parseLink, extractLinks, scanLinks, removeLink, duplicateCount, pasteStorefront, mergeLinks, LINK_KINDS } from '../static/js/lib/links.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
 const MIDNIGHTS = 'https://music.apple.com/us/album/midnights/1650841512';
@@ -15,6 +15,7 @@ test('parseLink reads each kind the backend accepts', () => {
     trackId: null,
     private: false,
     needsToken: false,
+    noStorefront: false,
   });
   assert.equal(parseLink('https://music.apple.com/jp/song/one-last-kiss/1542953970').kind, 'song');
   assert.equal(parseLink('https://music.apple.com/us/artist/tyler-the-creator/420368335').id, '420368335');
@@ -99,4 +100,48 @@ test('percent-encoded and non-ASCII slugs survive', () => {
   const encoded = 'https://music.apple.com/jp/album/%E3%82%A2/1';
   assert.equal(parseLink(encoded).url, encoded);
   assert.deepEqual(extractLinks(`https://music.apple.com/jp/album/ア/1`), [encoded]);
+});
+
+test('two links pasted without a separator are two links', () => {
+  const lover = 'https://music.apple.com/us/album/lover/1468058165';
+  assert.deepEqual(extractLinks(`${IGOR}${lover}`), [IGOR, lover]);
+  assert.deepEqual(scanLinks(`see ${IGOR}https://example.com/x`).map((e) => e.url), [IGOR, 'https://example.com/x']);
+});
+
+test('legacy iTunes links read as Apple Music links without the id prefix', () => {
+  const p = parseLink('https://itunes.apple.com/us/album/igor/id1463409338?uo=4');
+  assert.equal(p.url, IGOR);
+  assert.equal(p.kind, 'album');
+  assert.equal(p.id, '1463409338');
+  assert.equal(parseLink('https://itunes.apple.com/us/album/igor/id1463409338?i=1463409342').trackId, '1463409342');
+  assert.deepEqual(extractLinks(`old: itunes.apple.com/us/album/igor/id1463409338 and ${IGOR}`), [IGOR]);
+  assert.equal(parseLink('https://itunes.apple.com/us/app/some-app/id123').kind, 'unknown');
+});
+
+test('a link without a storefront borrows one from the paste, else stays unknown', () => {
+  const bare = 'https://music.apple.com/album/igor/1463409338';
+  const alone = parseLink(bare);
+  assert.equal(alone.kind, 'unknown');
+  assert.equal(alone.noStorefront, true);
+  const filled = parseLink(bare, { storefront: 'jp' });
+  assert.equal(filled.url, 'https://music.apple.com/jp/album/igor/1463409338');
+  assert.equal(filled.kind, 'album');
+  assert.equal(filled.noStorefront, true);
+  const text = `${bare}\n${MIDNIGHTS}`;
+  assert.equal(pasteStorefront(text), 'us');
+  assert.deepEqual(scanLinks(text).map((e) => e.url), [IGOR, MIDNIGHTS]);
+  // Removed under the storefront it was listed with, even once the link that lent it is gone.
+  assert.equal(removeLink(removeLink(text, MIDNIGHTS), IGOR), '');
+});
+
+test('duplicateCount counts repeats that scanLinks merges', () => {
+  assert.equal(duplicateCount(`${IGOR}\n${MIDNIGHTS}\n${IGOR}?l=en\n${IGOR}`), 2);
+  assert.equal(duplicateCount(`${IGOR} ${FOLKLORE}`), 0);
+  assert.equal(duplicateCount(''), 0);
+});
+
+test('mergeLinks appends new links once, normalized', () => {
+  assert.equal(mergeLinks('', [IGOR]), IGOR);
+  assert.equal(mergeLinks(`${IGOR}\n`, [`${IGOR}?l=en`, MIDNIGHTS]), `${IGOR}\n${MIDNIGHTS}`);
+  assert.equal(mergeLinks('notes', []), 'notes');
 });
