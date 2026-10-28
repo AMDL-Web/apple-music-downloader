@@ -99,7 +99,17 @@ type Watcher struct {
 	// idleReason is remembered so a watcher that cannot run (no token) says so
 	// once per distinct reason rather than every tick.
 	idleReason string
+	// clientErrorPasses counts, per library album id, the consecutive passes
+	// whose catalog lookup failed with a non-retryable client error; see
+	// giveUpOnAlbum.
+	clientErrorPasses map[string]int
 }
+
+// maxClientErrorPasses is how many passes in a row one album's lookup may fail
+// with the same kind of non-retryable client error before the watcher skips it.
+// Until then it stays pending and pins the anchor, because a pending album
+// keeps every later addition "new" and resubmitted each pass.
+const maxClientErrorPasses = 3
 
 // pollTick is how often the poll loop checks whether a pass is due.
 const pollTick = 15 * time.Second
@@ -286,6 +296,7 @@ func (w *Watcher) saveAnchor(ctx context.Context, generation uint64, songs []app
 		return fmt.Errorf("save anchor: %w", err)
 	}
 	w.setAnchorSize(len(songs))
+	w.clearClientErrors()
 	return nil
 }
 
@@ -353,11 +364,17 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 		info := albums[albumID]
 		catalogURL, ok, err := w.library.LibraryAlbumCatalogURL(ctx, token, albumID)
 		if err != nil {
+			if w.giveUpOnAlbum(albumID, err) {
+				w.logger.Warn("library album lookup keeps failing with a client error; skipping it",
+					"album", info.name, "artist", info.artist, "library_album_id", albumID, "passes", maxClientErrorPasses, "error", err)
+				continue
+			}
 			w.logger.Warn("resolve library album failed; retrying next pass",
 				"album", info.name, "artist", info.artist, "library_album_id", albumID, "error", err)
 			pending = append(pending, describe(albumID, err.Error()))
 			continue
 		}
+		w.forgetClientErrors(albumID)
 		if !ok {
 			w.logger.Info("library album has no catalog entry; skipping",
 				"album", info.name, "artist", info.artist, "library_album_id", albumID)
@@ -506,6 +523,46 @@ func toEntries(songs []applemusic.LibrarySong) []domain.LibraryAnchorEntry {
 		})
 	}
 	return out
+}
+
+// giveUpOnAlbum records a failed catalog lookup and reports whether the album
+// should be skipped instead of left pending. Only a non-retryable error counts
+// (a 4xx other than 408 and 429, see applemusic's NonRetryable marker), and
+// only maxClientErrorPasses passes in a row. An expired media-user-token is
+// not mistaken for one: the library listing at the start of the pass uses the
+// same token and fails first, so no lookup runs. A transient error resets the
+// count.
+func (w *Watcher) giveUpOnAlbum(albumID string, err error) bool {
+	var marker interface{ NonRetryable() bool }
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !errors.As(err, &marker) || !marker.NonRetryable() {
+		delete(w.clientErrorPasses, albumID)
+		return false
+	}
+	if w.clientErrorPasses == nil {
+		w.clientErrorPasses = map[string]int{}
+	}
+	// The count stays at or above the limit, so an album given up on is skipped
+	// again at once while another pending album still holds the anchor; a saved
+	// anchor clears every count (clearClientErrors).
+	w.clientErrorPasses[albumID]++
+	return w.clientErrorPasses[albumID] >= maxClientErrorPasses
+}
+
+func (w *Watcher) forgetClientErrors(albumID string) {
+	w.mu.Lock()
+	delete(w.clientErrorPasses, albumID)
+	w.mu.Unlock()
+}
+
+// clearClientErrors drops every count once an anchor is saved: the albums
+// counted are then below it, or forgotten by a re-anchor, and never looked up
+// again.
+func (w *Watcher) clearClientErrors() {
+	w.mu.Lock()
+	w.clientErrorPasses = nil
+	w.mu.Unlock()
 }
 
 func head[T any](items []T, n int) []T {

@@ -151,7 +151,7 @@ Enabling it for the first time only drops the anchor and submits **nothing** —
 already in the library at that moment counts as existing. Backfilling an entire library was
 never the point.
 
-Two details worth stating outright:
+Three details worth stating outright:
 
 - Each pass deliberately reads a little past the anchor so an ordinary addition resolves in
   a single request. Those extra entries are by definition *older* than every anchored one;
@@ -161,6 +161,12 @@ Two details worth stating outright:
 - If that oldest anchored song has disappeared from the library, there is no comparable
   boundary left. The watcher re-anchors and submits nothing, rather than queueing every
   album it just scanned.
+- When a new album's library-to-catalog lookup fails, the anchor stays where it was so the
+  next pass tries that album again; the albums that did resolve are submitted again too,
+  which an active job dedupes and a finished one answers by skipping files on disk. A
+  lookup that fails with a client error (a 4xx other than 408 and 429) three passes in a
+  row is skipped with a warning, so one album Apple refuses cannot hold the anchor back
+  forever. An album with no catalog counterpart (404) is skipped at once.
 
 ### Cost
 

@@ -23,6 +23,8 @@ type fakeLibrary struct {
 	pageCalls int
 	catalog   map[string]string // library album id -> catalog URL; missing = no counterpart
 	failURL   map[string]bool
+	// clientErrorURL fails these lookups with a non-retryable client error.
+	clientErrorURL map[string]bool
 	// onResolve, when set, runs at the start of every LibraryAlbumCatalogURL
 	// call, i.e. in the middle of a pass.
 	onResolve func()
@@ -50,9 +52,19 @@ func (f *fakeLibrary) LibraryAlbumCatalogURL(_ context.Context, _ string, librar
 	if f.failURL[libraryAlbumID] {
 		return "", false, fmt.Errorf("catalog request failed: 503 Service Unavailable")
 	}
+	if f.clientErrorURL[libraryAlbumID] {
+		return "", false, clientError("catalog request failed: 403 Forbidden")
+	}
 	url, ok := f.catalog[libraryAlbumID]
 	return url, ok, nil
 }
+
+// clientError carries applemusic's NonRetryable marker, like a 4xx catalog
+// response other than 408 and 429.
+type clientError string
+
+func (e clientError) Error() string    { return string(e) }
+func (clientError) NonRetryable() bool { return true }
 
 type fakeStore struct {
 	anchor []domain.LibraryAnchorEntry
@@ -361,6 +373,64 @@ func TestTransientResolveFailureKeepsAnchorAndRetries(t *testing.T) {
 	}
 	if status := w.Status(); status.LastError != "" {
 		t.Fatalf("last_error = %q after a clean pass, want empty", status.LastError)
+	}
+}
+
+// An album whose lookup keeps failing with a client error pins the anchor for
+// maxClientErrorPasses passes, then is skipped so later additions stop being
+// resubmitted every pass. A transient error never gives up.
+func TestPersistentClientErrorIsSkippedAfterBoundedPasses(t *testing.T) {
+	songs, catalog := library(200, nil)
+	lib := &fakeLibrary{songs: songs, catalog: catalog, clientErrorURL: map[string]bool{"l.album1": true}, failURL: map[string]bool{"l.album0": true}}
+	initial := toEntries(songs[2 : 2+anchorSize])
+	store := &fakeStore{anchor: initial}
+	jobs := &fakeSubmitter{}
+	w := newWatcher(t, lib, store, jobs, nil)
+
+	for pass := 1; pass < maxClientErrorPasses; pass++ {
+		w.RunOnce(context.Background())
+		if store.writes != 0 {
+			t.Fatalf("pass %d rewrote the anchor while album1 is still pending", pass)
+		}
+	}
+	w.RunOnce(context.Background())
+	if store.writes != 0 {
+		t.Fatal("anchor rewritten while album0 (transient) is still pending")
+	}
+	if status := w.Status(); strings.Contains(status.LastError, "l.album1") || !strings.Contains(status.LastError, "l.album0") {
+		t.Fatalf("last_error = %q after %d passes, want album1 given up and album0 still pending", status.LastError, maxClientErrorPasses)
+	}
+
+	lib.failURL = nil
+	w.RunOnce(context.Background())
+	if store.writes != 1 || store.anchor[0].SongID != "i.song0" {
+		t.Fatalf("anchor writes = %d head = %q, want the anchor advanced once album0 resolves", store.writes, store.anchor[0].SongID)
+	}
+	last := jobs.batches[len(jobs.batches)-1]
+	if !slices.Contains(last, catalog["l.album0"]) || slices.Contains(last, catalog["l.album1"]) {
+		t.Fatalf("last batch = %v, want album0 and not album1", last)
+	}
+}
+
+// A client error that clears before the limit resets the count: the album is
+// submitted, not skipped.
+func TestClientErrorThatClearsIsSubmitted(t *testing.T) {
+	songs, catalog := library(200, nil)
+	lib := &fakeLibrary{songs: songs, catalog: catalog, clientErrorURL: map[string]bool{"l.album1": true}}
+	store := &fakeStore{anchor: toEntries(songs[2 : 2+anchorSize])}
+	jobs := &fakeSubmitter{}
+	w := newWatcher(t, lib, store, jobs, nil)
+
+	for pass := 1; pass < maxClientErrorPasses; pass++ {
+		w.RunOnce(context.Background())
+	}
+	lib.clientErrorURL = nil
+	w.RunOnce(context.Background())
+	if last := jobs.batches[len(jobs.batches)-1]; !slices.Contains(last, catalog["l.album1"]) {
+		t.Fatalf("last batch = %v, want album1 submitted once its lookup works", last)
+	}
+	if store.anchor[0].SongID != "i.song0" {
+		t.Fatalf("anchor head = %q, want i.song0 after a clean pass", store.anchor[0].SongID)
 	}
 }
 
