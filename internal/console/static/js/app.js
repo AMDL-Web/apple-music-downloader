@@ -189,7 +189,10 @@ export function App() {
             if (msg) coalescer.push(msg);
           },
           onState: (s) => setConn(s),
-          onResync: () => {
+          // Live again after an outage: the feed replays what it missed from
+          // the cursor, and a new epoch tells every page to refetch what it
+          // could not load meanwhile (error panels, defaults, previews).
+          onReconnect: () => {
             refreshCounts();
             setEpoch((e) => e + 1);
           },
@@ -212,8 +215,17 @@ export function App() {
         };
       }
     };
+    // The device came back online: retry now instead of at the end of the
+    // backoff, and let pages refetch what failed while requests could not
+    // leave (the open stream itself may never have noticed).
+    const onOnline = () => {
+      retryRef.current();
+      setEpoch((e) => e + 1);
+    };
+    window.addEventListener('online', onOnline);
     boot();
     return () => {
+      window.removeEventListener('online', onOnline);
       stopped = true;
       if (bootTimer !== null) clearTimeout(bootTimer);
       coalescer.cancel();

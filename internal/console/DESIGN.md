@@ -448,7 +448,9 @@ the fields that would be lost. Moving between settings sections never asks.
 resumes from that cursor and every page applies its batches (at most 10 a
 second) to its own list (`lib/store.js`). The drawer and logs page each open one
 secondary stream from their snapshot cursor. Streams pause 30 s after the tab
-hides and resume from the stored cursor; after a 5-minute outage pages refetch.
+hides and resume from the stored cursor. When the feed is live again after
+any outage, or the browser fires `online`, `app.epoch` (AppContext) goes up:
+every page refetches what it loads, and a page showing a load error reloads.
 
 ## Verification
 

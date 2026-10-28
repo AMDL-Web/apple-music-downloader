@@ -235,6 +235,45 @@ test('failures back off, turn offline after a minute and resync after five', asy
   client.stop();
 });
 
+test('a short outage reports onReconnect once and no resync', async () => {
+  const env = fakeEnv();
+  let fail = false;
+  let open = null;
+  env.fetch = async (url, init) => {
+    if (fail) throw new TypeError('network down');
+    open = liveBody(init.signal);
+    return new Response(open.body, { status: 200 });
+  };
+  let reconnects = 0;
+  let resyncs = 0;
+  const client = new StreamClient({
+    url: 'http://h/x',
+    cursor: 3,
+    env,
+    onEvent: () => {},
+    onReconnect: () => reconnects++,
+    onResync: () => resyncs++,
+  }).start();
+  await settle();
+  assert.equal(client.state, 'live');
+  assert.equal(reconnects, 0, 'the first connect is not a reconnect');
+  fail = true;
+  open.close();
+  await settle();
+  assert.equal(client.state, 'reconnecting');
+  env.runNext();
+  await settle();
+  assert.equal(client.state, 'reconnecting', 'the server is still down');
+  fail = false;
+  env.advance(20000);
+  env.runNext();
+  await settle();
+  assert.equal(client.state, 'live');
+  assert.equal(reconnects, 1);
+  assert.equal(resyncs, 0, 'twenty seconds is not a long outage');
+  client.stop();
+});
+
 test('a silent connection is dropped by the idle watchdog and retried', async () => {
   const env = fakeEnv();
   let calls = 0;

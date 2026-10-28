@@ -78,7 +78,11 @@ export class StreamClient {
    * @param {(s: {state: string, retryAt: number|null, downSince: number|null}) => void} [opts.onState]
    * @param {(r: {status: number, body: any}) => void} [opts.onEnd]
    * @param {() => void} [opts.onClose] an established stream closed; it will reconnect
-   * @param {() => void} [opts.onResync] reconnected after a long outage
+   * @param {() => void} [opts.onReconnect] live again after any outage (a
+   *   failed connect or a closed stream); events in between are replayed from
+   *   the cursor, but whatever else a page fetched meanwhile may have failed
+   * @param {() => void} [opts.onResync] live again after an outage of at least
+   *   resyncAfterMs, after onReconnect
    */
   constructor(opts) {
     this.url = opts.url;
@@ -87,6 +91,7 @@ export class StreamClient {
     this.onState = opts.onState || (() => {});
     this.onEnd = opts.onEnd || (() => {});
     this.onClose = opts.onClose || (() => {});
+    this.onReconnect = opts.onReconnect || (() => {});
     this.onResync = opts.onResync || (() => {});
     this.env = { ...defaultEnv(), ...(opts.env || {}) };
     this.hiddenPauseMs = opts.hiddenPauseMs ?? 30000;
@@ -201,7 +206,11 @@ export class StreamClient {
     this.attempt = 0;
     this.downSince = null;
     this.setState('live');
-    if (wasDownSince !== null && now() - wasDownSince >= this.resyncAfterMs) this.onResync();
+    if (wasDownSince !== null) {
+      this.onReconnect();
+      if (gen !== this.generation) return;
+      if (now() - wasDownSince >= this.resyncAfterMs) this.onResync();
+    }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     const parser = new SSEParser();
