@@ -18,6 +18,20 @@
   transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
 
+/* A tap shows the control pressed (opacity works under any skin's colors);
+   the browser's own tap flash is off. */
+:root {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn:active:not(:disabled):not([aria-disabled="true"]),
+.seg-btn:active,
+.nav-item:active,
+.tab:active,
+.settings-nav-list .settings-nav-item:active {
+  opacity: 0.6;
+}
+
 .btn:disabled,
 .btn[aria-disabled="true"] {
   cursor: not-allowed;

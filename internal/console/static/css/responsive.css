@@ -156,6 +156,13 @@
     gap: var(--s-1);
   }
 
+  .search-trigger {
+    width: var(--touch);
+    height: var(--touch);
+    border-color: transparent;
+    background: transparent;
+  }
+
   .conn-label {
     position: absolute;
     width: 1px;
@@ -163,30 +170,6 @@
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
-  }
-
-  .conn {
-    min-width: var(--touch);
-    min-height: var(--touch);
-    justify-content: center;
-  }
-
-  .search-trigger {
-    justify-content: center;
-    width: var(--touch);
-    height: var(--touch);
-    border-color: transparent;
-    background: transparent;
-  }
-
-  .seg-icons,
-  .seg-skin {
-    display: none;
-  }
-
-  .theme-cycle,
-  .skin-cycle {
-    display: inline-flex;
   }
 
   .main {
@@ -264,30 +247,6 @@
 
   .tab-new[aria-current="page"]::before {
     content: none;
-  }
-
-  .btn,
-  .select,
-  .search,
-  .seg-btn,
-  .level-chip {
-    min-height: var(--touch);
-  }
-
-  .btn-sm.btn-icon,
-  .btn-icon {
-    min-width: var(--touch);
-  }
-
-  .attr-chip::after,
-  .filter-chip-x::after {
-    content: "";
-    position: absolute;
-    inset: calc(-1 * var(--s-3)) calc(-1 * var(--s-1));
-  }
-
-  .filter-chip-x {
-    position: relative;
   }
 
   .toolbar {
@@ -563,6 +522,98 @@
   }
 }
 
+/* Touch. A coarse pointer gets the phone's 44px targets at any width, so a
+   phone in landscape (844 wide, 390 tall) and a tablet match portrait; the
+   top bar swaps the theme and style switches for the one-tap cycle buttons.
+   Targets grow with min-height / min-width or an invisible hit area, never
+   the drawn size of a chip or a switch. */
+@media (max-width: 639px), (pointer: coarse) {
+  .btn,
+  .select,
+  .search,
+  .seg-btn,
+  .level-chip,
+  .field-input,
+  .nav-item,
+  .new-options-jump,
+  .check,
+  .conn,
+  .search-trigger,
+  .job-check,
+  .bulk-all {
+    min-height: var(--touch);
+  }
+
+  .btn,
+  .seg-btn,
+  .nav-item,
+  .job-check,
+  .bulk-all,
+  .search-trigger,
+  .sidebar .sidebar-new {
+    min-width: var(--touch);
+  }
+
+  .sidebar .sidebar-new {
+    min-height: var(--touch);
+  }
+
+  /* A skin sets its own min-height on these; data-skin outranks it. */
+  :root[data-skin] .settings-nav-list .settings-nav-item,
+  :root[data-skin] .log-row .log-line {
+    min-height: var(--touch);
+  }
+
+  .log-line {
+    align-content: center;
+  }
+
+  .conn {
+    min-width: var(--touch);
+    justify-content: center;
+  }
+
+  .search-trigger {
+    justify-content: center;
+  }
+
+  .seg-icons,
+  .seg-skin {
+    display: none;
+  }
+
+  .theme-cycle,
+  .skin-cycle {
+    display: inline-flex;
+  }
+
+  .attr-chip::after,
+  .filter-chip-x::after,
+  .field-switch::after {
+    content: "";
+    position: absolute;
+    inset: calc(-1 * var(--s-3)) calc(-1 * var(--s-1));
+  }
+
+  /* The switch is 26px tall: 100% is its own height. */
+  .field-switch::after {
+    inset: calc((100% - var(--touch)) / 2) calc(-1 * var(--s-1));
+  }
+
+  .filter-chip-x {
+    position: relative;
+  }
+
+  /* Text links keep their line; padding grows the hit box up and down and
+     the negative margin gives the room back. */
+  .link,
+  .drawer-artist,
+  .filter-chip-link {
+    padding-block: var(--s-3);
+    margin-block: calc(-1 * var(--s-3));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -586,6 +637,11 @@
   .level-chip[aria-pressed="true"],
   .palette-item[aria-selected="true"] {
     border: 1px solid CanvasText;
+  }
+
+  /* Skins draw a badge without padding; the border would touch the text. */
+  :root:root:root .badge {
+    padding-inline: var(--s-1_5);
   }
 
   .pbar,

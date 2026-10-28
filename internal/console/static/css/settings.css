@@ -818,16 +818,29 @@
 }
 
 @media (forced-colors: active) {
-  .field-switch,
   .settings-nav-item[aria-current="true"] {
     border: 1px solid CanvasText;
   }
 
-  .field-switch::before {
-    background: CanvasText;
+  /* A skin restyles the switch with a longer selector, and its colors are
+     replaced here, so these repeat :root to win. Off is a hollow track with
+     the thumb at the start; on is a filled track with the thumb at the end. */
+  :root:root:root .field-switch {
+    border: 1px solid CanvasText;
+    background: Canvas;
   }
 
-  .field-switch:checked::before {
+  :root:root:root .field-switch::before {
+    background: CanvasText;
+    box-shadow: none;
+  }
+
+  :root:root:root .field-switch:checked {
+    border-color: Highlight;
     background: Highlight;
+  }
+
+  :root:root:root .field-switch:checked::before {
+    background: HighlightText;
   }
 }

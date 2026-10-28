@@ -70,7 +70,7 @@ sidebar into a horizontal masthead at 640 px and up).
 | --- | --- | --- |
 | ≥1024 | `--sidebar-w` sidebar, `--topbar-h` top bar | Overview is a 12-column grid: `live` spans 8, `health` 4, the rest 12 |
 | 640-1023 | `--rail-w` icon rail (labels kept for screen readers) | two-column cards stack |
-| <640 | top bar, `--tabbar-h` bottom tab bar + safe area, 16 px gutters | single column, 44 px targets, theme and skin become cycle buttons |
+| <640 | top bar, `--tabbar-h` bottom tab bar + safe area, 16 px gutters | single column, 44 px targets (also on any coarse pointer at any width), theme and skin become cycle buttons |
 
 Siblings are spaced by the parent's `gap` (`--page-gap` between sections,
 `--grid-gap` inside grids, `--card-gap` inside cards), never by child margins.
@@ -200,8 +200,11 @@ Every skin meets these; its spec lists the measured values.
   another (the editorial skin keeps running and completed in ink) as long as
   the icon and label differ.
 - The danger and warning roles never look like the accent of a healthy state.
-- Under `forced-colors`, badges, bars, cells and dots get borders (base);
-  a progress cell with an outcome stays filled in `CanvasText`.
+- Under `forced-colors`, badges (with inline padding, so the border clears the
+  text), bars, cells and dots get borders (base); a progress cell with an
+  outcome stays filled in `CanvasText`; a switch is a hollow track with the
+  thumb at the start when off and a `Highlight` track with the thumb at the end
+  when on.
 
 ## Type, spacing, shape, motion
 
@@ -213,7 +216,9 @@ update live use `tabular-nums`. Long titles truncate with the full text in
 `title`.
 
 Spacing steps (px): 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64 (`--s-0_5` …
-`--s-16`). Controls are 32 px (28 in toolbars), 44 px under 640 px. Radii and
+`--s-16`). Controls are 32 px (28 in toolbars), 44 px under 640 px and on any coarse
+pointer (a phone in landscape, a tablet), where the theme and skin switches
+become cycle buttons and the icon rail scrolls. Radii and
 shadows are skin tokens.
 
 Motion: 120 ms hover color fades, 200 ms drawer/palette/toast/insert,

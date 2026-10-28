@@ -2831,8 +2831,12 @@
 /* ---- Icon rail (640-1023) ------------------------------------------- */
 
 @media (max-width: 1023px) {
+  /* The rail is a column: on a phone in landscape it scrolls instead of
+     clipping the last link. */
   :root[data-skin="music"] .sidebar {
     padding: var(--s-3) var(--s-1_5);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   :root[data-skin="music"] .brand {
