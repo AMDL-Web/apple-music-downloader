@@ -823,24 +823,12 @@ kbd {
   white-space: nowrap;
 }
 
-/* Skin opt-in: the long progress text ("12 of 14 tracks, 1 failed") and a
-   count per cell state. Shown, the legend is a wrapping row of keys whose
-   swatch takes the cell's role. */
-.jprog-long,
+/* Skin opt-in: a count per cell state. Shown, the legend is a wrapping row
+   of keys whose swatch takes the cell's role. */
 .jprog-legend {
   display: none;
-}
-
-.jprog-legend {
   flex-wrap: wrap;
   gap: var(--s-1) var(--s-3);
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-  font-variant-numeric: tabular-nums;
-}
-
-.jprog-long {
   color: var(--text-secondary);
   font-size: var(--fs-12);
   line-height: var(--lh-12);

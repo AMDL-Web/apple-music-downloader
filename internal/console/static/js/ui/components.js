@@ -40,10 +40,9 @@ export function Chip({ children, title, mono }) {
 /**
  * Job progress, never a percentage. Up to CELL_MAX tracks it is one cell per
  * track (completed, already on disk, failed, cancelled, remaining); above that
- * a segmented bar. Either way the counter text follows, then two opt-in hooks
- * the base hides: .jprog-long (the progressbar's value text) and
- * .jprog-legend (a count per cell state). Both repeat aria-valuetext, so they
- * are hidden from screen readers.
+ * a segmented bar. Either way the counter text follows, then an opt-in hook
+ * the base hides: .jprog-legend (a count per cell state), hidden from screen
+ * readers because it repeats aria-valuetext.
  */
 export function JobProgress({ job }) {
   const p = jobProgress(job);
@@ -51,7 +50,6 @@ export function JobProgress({ job }) {
   const legend = progressLegend(job);
   const text = [
     html`<span key="text" class="jprog-text">${p.text}</span>`,
-    p.indeterminate ? null : html`<span key="long" class="jprog-long" aria-hidden="true">${p.aria}</span>`,
     legend
       ? html`<span key="legend" class="jprog-legend" aria-hidden="true">
           ${legend.map(

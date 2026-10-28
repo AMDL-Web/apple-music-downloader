@@ -130,7 +130,7 @@ Stable class names and attributes a skin can style without touching JS:
 | Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub`, `.banners`, `.page.page-<name>` |
 | KPI | `a.kpi[data-key=queued\|running\|completed\|failed\|total][data-role][data-zero]` > `.kpi-label`, `.kpi-icon`, `.kpi-value`, `.kpi-meta` |
 | Job row | `a.job-row[data-status][.has-palette]` > `.art`, `.job-main` (`.job-facts` > `.job-fact[data-key=type\|genre\|year\|started]`, `.job-title`, `.job-sub`), `.job-type`, `.job-progress`, `.job-status`, `.job-updated`, `.job-chevron` |
-| Progress | `.jprog[data-mode=cells\|bar]`: up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14"), `.jprog-long` ("12 of 14 tracks, 1 failed") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
+| Progress | `.jprog[data-mode=cells\|bar]`: up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
 | Health | `.health-row[data-role]` > `.health-icon`, `.health-name`, `.health-status` (badge), `.health-detail`; runtime facts `dl.facts.health-facts` |
 | Facts | `dl.facts` > `.fact[data-key][data-role]` > `dt.fact-label` + `dd.fact-value` (health facts, throughput totals `.tp-totals` with `tracks`, `tracks-failed`, `bytes`, `jobs`, `jobs-failed`, the failed rows only when non-zero and `data-role=danger`, hero facts `.hero-facts`) |
 | Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`, `.strip-meta`; every completed job renders, those past the whole-tile count carry `.is-overflow` |
@@ -151,7 +151,7 @@ behind a cover while it loads or when it fails.
 
 **Opt-in hooks** are hidden by the base and shown by a skin that wants them:
 `.brand-sub`, `.job-facts`, `.health-icon`, `.hero-no`, `.hero-actions`,
-`.tile-head`, `.strip-tile.is-overflow`, `.jprog-long`, `.jprog-legend`,
+`.tile-head`, `.strip-tile.is-overflow`, `.jprog-legend`,
 `.attention`, and the x-axis day labels other than the first, middle and
 latest.
 
