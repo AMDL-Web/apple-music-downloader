@@ -16,8 +16,8 @@
 **丢一条 Apple Music 链接进去。它解析出曲目，取回加密的 Enhanced HLS 媒体，解密、重封装、
 打标签，把成品文件写到你自己的磁盘上——每一步都实时推送出来。**
 
-一个 Go 二进制、一个 SQLite 文件，`/api/v1` 上的 REST + Server-Sent Events 接口，以及 AMDL
-网页端与 iOS 端所依据的 OpenAPI 3.1 规范。支持单曲、专辑、歌单、艺人和电台。
+一个 Go 二进制、一个 SQLite 文件，`/api/v1` 上由 OpenAPI 3.1 规范描述的 REST + Server-Sent
+Events 接口，以及建立在这套接口上的网页控制台。支持单曲、专辑、歌单、艺人和电台。
 
 ---
 
@@ -66,7 +66,7 @@ data/downloads/albums/<艺人>/<专辑>/01. Song.m4a   ← ALAC，封面与歌�
 
 <p align="center">
   <img src="./assets/readme/architecture.svg" width="100%"
-       alt="网页端与 iOS 端通过 REST 和 Server-Sent Events 调用后端；后端把任务队列放在 SQLite 里，跑下载流水线并把文件写到磁盘；它依赖 gRPC 上的 wrapper-manager，并从两个不同的 Apple 主机读取数据">
+       alt="网页控制台与你的脚本通过 REST 和 Server-Sent Events 调用后端；后端把任务队列放在 SQLite 里，跑下载流水线并把文件写到磁盘；它依赖 gRPC 上的 wrapper-manager，并从两个不同的 Apple 主机读取数据">
 </p>
 
 **`wrapper-manager` 不是可选项。** 它持有 Apple Music 账号登录态，通过 gRPC 提供设备清单、

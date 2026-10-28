@@ -39,8 +39,8 @@ image. The maintainer merges; agents prepare and verify.
   `Claude … <noreply@anthropic.com>` co-author, whatever the model name, is
   `@claude`. Gather them with
   `git log --format='%an <%ae>%n%(trailers:key=Co-authored-by,valueonly)' origin/main..origin/dev | sort -u`.
-- Call out breaking or migration-relevant changes (config keys, schema, output
-  paths) and client follow-ups at the top.
+- Call out breaking or migration-relevant changes (API, config keys, schema,
+  output paths) at the top.
 - Commit the notes to `dev` with a sign-off:
   `git commit -s -m "docs(release): add <version> notes"`.
 

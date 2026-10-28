@@ -34,7 +34,7 @@ fit a Go open-source backend with English docs.
 | Doc types with an enforced index | [docs/README.md](README.md), `internal/repocheck` | adopted | English `> Type:` markers. |
 | Machine-checked links, anchors, backticked paths and `path#Symbol` pointers | `internal/repocheck` | adapted | A Go test instead of a TypeScript script; also accepts `package-dir#Symbol`, which survives file splits. |
 | One fact, one source; docs updated in the same commit, found with `rg` | [AGENTS.md](../AGENTS.md#working-agreements), `.claude/rules/docs.md` | adopted | |
-| Contract done-conditions; rename directly, no compatibility shims | [AGENTS.md](../AGENTS.md#contracts-and-breaking-changes), `internal/api/AGENTS.md` | adapted | Breaking changes allowed when they fix a defect or remove duplication, but marked `!` and listed in the upgrade guide, because installs and hand-mirrored clients must act on them. Output paths stay frozen without the maintainer's OK. |
+| Contract done-conditions; rename directly, no compatibility shims | [AGENTS.md](../AGENTS.md#contracts-and-breaking-changes), `internal/api/AGENTS.md` | adapted | Breaking changes allowed when they fix a defect or remove duplication, but marked `!` and listed in the upgrade guide, because installs and API clients must act on them. Output paths stay frozen without the maintainer's OK. |
 | Maintainer-facing collaboration protocol | [HUMAN.md](../HUMAN.md) | adapted | Short; outside contributors read CONTRIBUTING.md. |
 | README reading map from question to entry symbol | [README.md](../README.md#reading-map) | adopted | |
 | Skill conventions and the `.agents/skills` link | `.claude/skills/`, `.agents/skills` | adopted | |
@@ -119,7 +119,7 @@ skin in `internal/console/skins/`.
 | Go `embed` with `all:` and a content-hash ETag (embedded files have no ModTime) | `internal/console/console.go` | adopted | |
 | Server-Sent Events read with `fetch` instead of `EventSource` | `internal/console/static/js/lib/stream.js` | adopted | The client must tell 204 (finished) from 404 and 5xx, and own its backoff and hidden-tab pause. |
 | Alpine.js, petite-vue, htmx with Go templates, plain DOM | none | not adopting | Larger or less testable; htmx would add a second rendering path that bypasses the public API. |
-| A bundler (Vite) and a committed `dist/` | none | not adopting | The image has no Node stage; amdl-web is already the full React app. |
+| A bundler (Vite) and a committed `dist/` | none | not adopting | The image has no Node stage, and the console stays plain ES modules. |
 | hls.js for motion covers outside Safari | none | not adopting | Motion covers play only where the browser plays HLS natively; revisit if the showcase needs them everywhere. |
 | Sparklines in KPI tiles | none | not adopting | Throughput history has its own chart from `/stats`; tiles stay single numbers. |
 | Favicon status dot | none | not adopting | It would need color literals outside the token file; the tab title carries the running count. |

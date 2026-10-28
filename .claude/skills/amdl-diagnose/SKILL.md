@@ -101,4 +101,4 @@ removing anything left makes the command green.
 - [ ] The report names the root cause: which hypothesis held and the evidence
 - [ ] Verified with [amdl-verify](../amdl-verify/SKILL.md); commits signed off
       (`git commit -s`) and pushed to `dev`
-- [ ] Contract follow-ups named (iOS app, amdl-web) if the fix changed the API
+- [ ] The console updated in the same change if the fix changed an API it uses

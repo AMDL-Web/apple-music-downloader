@@ -53,8 +53,8 @@ two and proceeds on that reading; one reply corrects it.
   confirm it.
 - What was not verified, and why (for example, no wrapper-manager in a cloud
   session, so real downloads were simulated).
-- Follow-ups outside this repository named explicitly, such as "the iOS app and
-  amdl-web need the new field"; never reported as done.
+- Follow-ups outside this repository named explicitly, such as a wrapper-manager
+  change; never reported as done.
 
 ## Review bots
 

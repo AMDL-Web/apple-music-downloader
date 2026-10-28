@@ -2,7 +2,7 @@
      width="1200" height="480" viewBox="0 0 1200 480"
      role="img" aria-labelledby="archTitle archDesc">
   <title id="archTitle">Where AMDL Backend sits</title>
-  <desc id="archDesc">Web and iOS clients call the backend over REST and Server-Sent Events. The backend keeps a job queue in SQLite and runs the download pipeline, writing finished files to disk. It requires wrapper-manager over gRPC for device manifests, licenses and lyrics, and reads Apple Music over HTTPS from two hosts: api.music.apple.com for catalog metadata and amp-api.music.apple.com, which alone serves enhancedHls.</desc>
+  <desc id="archDesc">The web console and your scripts call the backend over REST and Server-Sent Events. The backend keeps a job queue in SQLite and runs the download pipeline, writing finished files to disk. It requires wrapper-manager over gRPC for device manifests, licenses and lyrics, and reads Apple Music over HTTPS from two hosts: api.music.apple.com for catalog metadata and amp-api.music.apple.com, which alone serves enhancedHls.</desc>
 
   <rect width="1200" height="480" rx="24" fill="#0A0C0E"/>
   <rect x="0.75" y="0.75" width="1198.5" height="478.5" rx="23.25" fill="none" stroke="#1B2127" stroke-width="1.5"/>
@@ -19,8 +19,8 @@
     <rect x="56" y="170" width="260" height="54" rx="10"/>
   </g>
   <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#AEB7C0">
-    <text x="80" y="137">amdl-frontend · web</text>
-    <text x="80" y="203">amdl-ios · SwiftUI</text>
+    <text x="80" y="137">console · /console/</text>
+    <text x="80" y="203">your scripts · curl</text>
   </g>
 
   <path d="M316 164 H 378" stroke="#3A434C" stroke-width="2" fill="none"/>

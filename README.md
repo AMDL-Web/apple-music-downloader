@@ -17,9 +17,9 @@
 media, decrypts it, remuxes and tags it, and writes a finished file to your disk —
 publishing every stage as it happens.**
 
-One Go binary, one SQLite file, a REST + Server-Sent Events API on `/api/v1`, and an
-OpenAPI 3.1 spec that the AMDL web and iOS clients are built against. It handles
-songs, albums, playlists, artists and radio stations.
+One Go binary, one SQLite file, a REST + Server-Sent Events API on `/api/v1` described by
+an OpenAPI 3.1 spec, and a web console built on that API. It handles songs, albums,
+playlists, artists and radio stations.
 
 ---
 
@@ -69,7 +69,7 @@ Interactive API reference: <http://localhost:18080/docs>.
 
 <p align="center">
   <img src="./assets/readme/architecture.svg" width="100%"
-       alt="Web and iOS clients call the backend over REST and Server-Sent Events; the backend keeps its job queue in SQLite, runs the download pipeline and writes files to disk; it requires wrapper-manager over gRPC and reads Apple Music from two different hosts">
+       alt="The web console and your scripts call the backend over REST and Server-Sent Events; the backend keeps its job queue in SQLite, runs the download pipeline and writes files to disk; it requires wrapper-manager over gRPC and reads Apple Music from two different hosts">
 </p>
 
 **`wrapper-manager` is not optional.** It holds the Apple Music account session and

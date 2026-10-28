@@ -1,8 +1,8 @@
 # internal/api
 
 The HTTP surface: the route table in `Server.routes`, the handlers, the SSE
-streams, and `internal/api/openapi.yaml`, the contract that the iOS app and
-amdl-web mirror by hand. Built by `New(Deps)`; `Server.Routes` is the handler.
+streams, and `internal/api/openapi.yaml`, the contract the web console
+(`internal/console`) is built on. Built by `New(Deps)`; `Server.Routes` is the handler.
 
 ## Invariants
 
@@ -59,8 +59,8 @@ A route, request or response change lands in one commit with:
    checked with `assertErrorCode`) and the parity tests passing;
 4. [docs/api.md](../../docs/api.md) and the API table in
    [README.md](../../README.md#api) plus its `README.zh-CN.md` mirror;
-5. a line in the report or PR naming the iOS app and amdl-web as clients to
-   update. Never write that they are synced.
+5. the console (`internal/console`) when it calls the route or reads the field.
+   The iOS app and amdl-web are set aside: no follow-ups for them.
 
 A new error code needs its constant in `errors.go`, the spec's `ErrorCode` enum
 and the table in docs/api.md. A new per-URL submit code needs the spec's

@@ -2,8 +2,8 @@
 
 Go service that resolves Apple Music links and runs the download → decrypt →
 remux → tag pipeline. REST + SSE on `/api/v1`, SQLite store. It owns
-`internal/api/openapi.yaml`, which the iOS app and the web frontend mirror by hand
-(see [Related repositories](#related-repositories)).
+`internal/api/openapi.yaml` and the one maintained client, the web console in
+`internal/console`.
 
 Its HTTP API, config keys, DB schema and output paths are contracts that installs
 and clients depend on; see [Contracts and breaking changes](#contracts-and-breaking-changes).
@@ -40,7 +40,7 @@ The API, config keys, DB schema and output paths may change, breaking changes in
 - A config key needs its full comment in `configs/config.example.yaml` ([Config](#config)).
 - A schema change needs a row-preserving migration ([Data safety](#data-safety)).
 - Output paths are the exception: a change to path templates, `{Quality}` labels or name cleaning makes the "already downloaded" check miss, and libraries download again. Change them only with the maintainer's OK and an upgrade note; see `internal/media/AGENTS.md`.
-- The iOS app and amdl-web mirror `internal/api/openapi.yaml` by hand. Name them as clients to update in the report or PR; never claim they are synced.
+- A route or response the console uses changes together with the console. API changes are not held back for other clients ([Related repositories](#related-repositories)).
 
 ## Config
 
@@ -145,8 +145,7 @@ conversation resolution block the merge, report what's blocking and wait.
 
 ## Related repositories
 
-- amdl-web (AMDL-Web/amdl-web): the web frontend. Mirrors the OpenAPI shapes and SSE event names by hand.
-- The AMDL iOS app: mirrors the same contract by hand; its MusicKit calls go to the public Apple host only.
+- amdl-web and the AMDL iOS app: set aside, not kept in sync with this API.
 - [wrapper-manager](https://github.com/AMDL-Web/wrapper-manager): the Apple Music account session and decryptor, over gRPC; its proto module is a Go dependency.
 
 ## Rule -> enforced by
@@ -163,7 +162,7 @@ conversation resolution block the merge, report what's blocking and wait.
 | No `--admin` merge without approval for that bypass | guard hook on `gh pr merge` (Claude Code only); text elsewhere |
 | Never commit config, keys or data | `.gitignore`; guard hook on `git add -f` |
 | No auth middleware | text only; `REVIEW.md` tells reviewers not to ask for it |
-| Breaking changes marked `!` with an upgrade-guide row; clients named; full config comments | text only; `REVIEW.md` defects; the changelog's Breaking section |
+| Breaking changes marked `!` with an upgrade-guide row; console updated with the API; full config comments | text only; `REVIEW.md` defects; the changelog's Breaking section |
 | Row-preserving migrations, confirmed before applying | text only; `REVIEW.md` defect |
 | amp-api reads degrade instead of failing a job | text only; `REVIEW.md` defect |
 | Codex-only footer, release-note attribution, language policy | text only |

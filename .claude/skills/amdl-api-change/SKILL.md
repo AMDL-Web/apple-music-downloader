@@ -1,14 +1,15 @@
 ---
 name: amdl-api-change
-description: Checklist for changing an amdl-backend contract surface: HTTP routes, request and response schemas, SSE event types, config keys, DB columns and output paths. Covers when a breaking change is justified and how to mark it, what must change in the same commit (openapi.yaml, handler, route table, parity test, docs/api.md, README API table, config example, migration) and the hand-mirrored iOS and web follow-ups. Use when adding or changing an endpoint, field, enum value, event, config key or column, or when asked to "add an API", "expose X", "add a setting".
+description: Checklist for changing an amdl-backend contract surface: HTTP routes, request and response schemas, SSE event types, config keys, DB columns and output paths. Covers when a breaking change is justified and how to mark it, what must change in the same commit (openapi.yaml, handler, route table, parity test, docs/api.md, README API table, config example, migration) and the console update that goes with an API change. Use when adding or changing an endpoint, field, enum value, event, config key or column, or when asked to "add an API", "expose X", "add a setting".
 ---
 
 # Change a contract surface
 
-Installs and the iOS app and amdl-web, which mirror `internal/api/openapi.yaml` by
-hand, depend on these surfaces. Breaking changes are allowed when they fix a defect,
-remove duplication or make a contract checkable (AGENTS.md "Contracts and breaking
-changes"); they are marked and documented so every client knows what to change.
+Installs, scripts and the embedded console (`internal/console`) depend on these
+surfaces; the iOS app and amdl-web are set aside and not kept in sync. Breaking
+changes are allowed when they fix a defect, remove duplication or make a contract
+checkable (AGENTS.md "Contracts and breaking changes"); they are marked and
+documented so every client knows what to change.
 Output paths are the exception: they stay as they are without the maintainer's OK.
 
 ```
@@ -16,7 +17,7 @@ Output paths are the exception: they stay as they are without the maintainer's O
 - [ ] 2 Design it
 - [ ] 3 Change everything that moves together, in one commit
 - [ ] 4 Verify
-- [ ] 5 Report, naming the clients to update
+- [ ] 5 Report
 ```
 
 ## 1. Classify
@@ -53,6 +54,7 @@ Route, request or response:
 - [ ] a handler test via httptest, and the route/OpenAPI parity test passing
 - [ ] [docs/api.md](../../../docs/api.md) section and curl example
 - [ ] README API table in `README.md` and `README.zh-CN.md`
+- [ ] the console (`internal/console`) when it calls the route or reads the field
 
 Event type: the `internal/domain` constant, the OpenAPI event enum, the stream close
 rules in internal/api, the Events section of docs/api.md, and for hook-visible
@@ -86,5 +88,5 @@ including the error cases.
 ## 5. Report
 
 State the surface, compatible or breaking, the files changed, and the verification
-evidence. End with the clients to update, for example: "The iOS app and amdl-web
-need `<field>` on `<schema>`; not done here." Never write that they are synced.
+evidence. Say whether the console uses the change and where it was updated; if it
+does not use it yet, say so. No follow-ups are owed to the iOS app or amdl-web.

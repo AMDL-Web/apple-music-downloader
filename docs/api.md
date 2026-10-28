@@ -11,9 +11,9 @@ Examples assume the service listens on `http://localhost:18080`.
 - Web console: <http://localhost:18080/console/>; `/` redirects there
 
 The spec is the source of truth for every request and response shape; its `info.version`
-is the contract version, while the URL prefix stays `/api/v1`. The iOS and web clients
-mirror those JSON shapes by hand, so a response-shape change here is normally a
-multi-repository change.
+is the contract version, while the URL prefix stays `/api/v1`. The web console is the
+maintained client and changes together with the API; other clients, the iOS app and
+amdl-web included, are not kept in sync.
 
 ## Errors
 

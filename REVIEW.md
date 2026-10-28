@@ -20,7 +20,9 @@ Write the review summary and comments in Simplified Chinese; keep identifiers, p
   existing libraries download again.
 - A handler, route, request or response changed without the matching
   `internal/api/openapi.yaml`, [docs/api.md](docs/api.md) and README API table
-  update, or without naming the iOS app and amdl-web as clients to update.
+  update, or a route or response the console uses changed without updating the
+  console (`internal/console`) in the same change. The iOS app and amdl-web are
+  set aside; never ask for follow-ups there.
 - A config key added or changed without its full comment in
   `configs/config.example.yaml` (allowed values, units, default when absent,
   runtime or startup). `configs/config.yaml` is generated and untracked; never ask

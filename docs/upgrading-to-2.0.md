@@ -3,9 +3,9 @@
 > Type: runbook
 
 2.0 changes the HTTP contract, removes 1.x upgrade shims and migrates the database. The
-target design is in [Architecture](architecture.md). Clients that mirror
-`internal/api/openapi.yaml` by hand (the iOS app and amdl-web) need the API changes
-below before they work against 2.0.
+target design is in [Architecture](architecture.md). The embedded console ships with
+the new API; any other client of `internal/api/openapi.yaml`, such as your scripts,
+needs the API changes below before it works against 2.0.
 
 ## Before you upgrade
 
