@@ -3,11 +3,15 @@ package applemusic
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"strings"
 )
+
+// ErrNoEnhancedHLS reports that the catalog lists no Enhanced HLS master
+// playlist for a song, so its lossless and spatial variants cannot be read.
+// It is deterministic: errors wrapping it report NonRetryable, and callers
+// match it with errors.Is.
+var ErrNoEnhancedHLS error = nonRetryableError("no enhanced hls manifest")
 
 // MotionArtworkViaWebToken fetches an album's animated cover loops.
 //
@@ -28,27 +32,13 @@ func (c *CatalogClient) MotionArtworkViaWebToken(ctx context.Context, storefront
 		"l":      []string{c.cfg.Language},
 	}
 	endpoint := fmt.Sprintf("https://amp-api.music.apple.com/v1/catalog/%s/albums/%s?%s", storefront, id, params.Encode())
-	resp, err := c.doWithWebAuth(ctx, func(token string) (*http.Request, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Origin", "https://music.apple.com")
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		return req, nil
-	})
+	resp, err := c.doWithWebAuth(ctx, appleRequest{method: http.MethodGet, url: endpoint})
 	if err != nil {
 		return MotionArtwork{}, fmt.Errorf("fetch motion artwork with web token: %w", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return MotionArtwork{}, fmt.Errorf("catalog request failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
 	var out catalogMotionArtworkResponse
-	if err := decodeJSONLimited(resp.Body, maxCatalogResponseBytes, &out); err != nil {
-		return MotionArtwork{}, err
+	if err := decodeCatalogResponse(resp, &out); err != nil {
+		return MotionArtwork{}, fmt.Errorf("fetch motion artwork with web token: %w", err)
 	}
 	if len(out.Data) == 0 {
 		return MotionArtwork{}, fmt.Errorf("album %s not found", id)
@@ -90,34 +80,20 @@ func (c *CatalogClient) EnhancedHLSViaWebToken(ctx context.Context, storefront, 
 		"l":      []string{c.cfg.Language},
 	}
 	endpoint := fmt.Sprintf("https://amp-api.music.apple.com/v1/catalog/%s/songs/%s?%s", storefront, id, params.Encode())
-	resp, err := c.doWithWebAuth(ctx, func(token string) (*http.Request, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Origin", "https://music.apple.com")
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		return req, nil
-	})
+	resp, err := c.doWithWebAuth(ctx, appleRequest{method: http.MethodGet, url: endpoint})
 	if err != nil {
 		return "", fmt.Errorf("fetch enhanced hls with web token: %w", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return "", fmt.Errorf("catalog request failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
 	var out catalogSongResponse
-	if err := decodeJSONLimited(resp.Body, maxCatalogResponseBytes, &out); err != nil {
-		return "", err
+	if err := decodeCatalogResponse(resp, &out); err != nil {
+		return "", fmt.Errorf("fetch enhanced hls with web token: %w", err)
 	}
 	if len(out.Data) == 0 {
 		return "", fmt.Errorf("song %s not found", id)
 	}
 	master := out.Data[0].Attributes.ExtendedAssetURLs.EnhancedHLS
 	if master == "" {
-		return "", fmt.Errorf("song %s has no enhanced hls manifest", id)
+		return "", fmt.Errorf("song %s: %w", id, ErrNoEnhancedHLS)
 	}
 	return master, nil
 }

@@ -15,8 +15,8 @@ import (
 
 func TestPlaylistFetchesAllTrackPages(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var paths []string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		paths = append(paths, req.URL.RequestURI())
@@ -45,8 +45,8 @@ func TestPlaylistFetchesAllTrackPages(t *testing.T) {
 
 func TestPlaylistPrivateCoverFallsBackToLibraryArtwork(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	type seen struct{ mediaToken, include string }
 	var requests []seen
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -75,8 +75,8 @@ func TestPlaylistPrivateCoverFallsBackToLibraryArtwork(t *testing.T) {
 
 func TestPlaylistLibraryArtworkOverridesCatalogMosaic(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var calls int
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		calls++
@@ -101,8 +101,8 @@ func TestPlaylistLibraryArtworkOverridesCatalogMosaic(t *testing.T) {
 
 func TestPlaylistPublicIDWithTokenSkipsEnrichment(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var calls int
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		calls++
@@ -124,8 +124,8 @@ func TestPlaylistPublicIDWithTokenSkipsEnrichment(t *testing.T) {
 
 func TestPlaylistLibraryLookupFailureIsNonFatal(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var calls int
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		calls++
@@ -154,8 +154,8 @@ func TestPlaylistLibraryLookupFailureIsNonFatal(t *testing.T) {
 
 func TestPlaylistWithoutTokenSkipsLibraryInclude(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var sawMediaToken bool
 	var gotInclude string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

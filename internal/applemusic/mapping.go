@@ -4,7 +4,12 @@ import (
 	"strings"
 )
 
-func enrichSongWithAlbum(song Song, album Collection) Song {
+// EnrichWithAlbum fills song's album-level fields from album, the full album
+// resource it belongs to: album artwork and palette, album artist (name, id
+// and artwork), track and disc totals, and the artist page when the song's own
+// artist relationship carried none. Track and disc totals come from album's
+// entry for the same song when present, otherwise from the album's track list.
+func EnrichWithAlbum(song Song, album Collection) Song {
 	song.AlbumArtworkURL = album.ArtworkURL
 	song.AlbumArtworkColors = album.ArtworkColors
 	song.AlbumArtistID = album.ArtistID
@@ -27,15 +32,6 @@ func enrichSongWithAlbum(song Song, album Collection) Song {
 		song.ArtistURL = album.ArtistURL
 	}
 	return song
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func mapSong(raw catalogSongData) Song {
@@ -122,17 +118,13 @@ func DiscTrackCount(tracks []Song, discNumber int) int {
 	return len(tracks)
 }
 
+// maxDisc is the highest disc number in tracks, or 1 when none carries one.
 func maxDisc(tracks []Song) int {
-	max := 0
+	highest := 1
 	for _, track := range tracks {
-		if track.DiscNumber > max {
-			max = track.DiscNumber
-		}
+		highest = max(highest, track.DiscNumber)
 	}
-	if max == 0 {
-		return 1
-	}
-	return max
+	return highest
 }
 
 func firstNonEmpty(vals ...string) string {

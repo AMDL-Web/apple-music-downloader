@@ -45,7 +45,7 @@ func (r *trackMetadataResolver) song(ctx context.Context, initial applemusic.Son
 			// collection resolve, retain the old pipeline's recovery opportunity
 			// without repeating the successful song request.
 			if album, err := r.album(ctx, initial.AlbumID); err == nil && len(album.Tracks) > 0 {
-				initial = enrichTrackWithAlbum(initial, album)
+				initial = applemusic.EnrichWithAlbum(initial, album)
 			}
 		}
 		return initial, nil
@@ -78,7 +78,7 @@ func (r *trackMetadataResolver) song(ctx context.Context, initial applemusic.Son
 	// track from that album and every concurrent worker in this job.
 	album, err := r.album(ctx, song.AlbumID)
 	if err == nil && len(album.Tracks) > 0 {
-		song = enrichTrackWithAlbum(song, album)
+		song = applemusic.EnrichWithAlbum(song, album)
 	}
 	return song, nil
 }
@@ -167,38 +167,4 @@ func preserveCollectionTrackContext(song, initial applemusic.Song) applemusic.So
 		song.DiscNumber = initial.DiscNumber
 	}
 	return song
-}
-
-func enrichTrackWithAlbum(song applemusic.Song, album applemusic.Collection) applemusic.Song {
-	song.AlbumArtworkURL = album.ArtworkURL
-	song.AlbumArtistID = album.ArtistID
-	song.AlbumArtistArtworkURL = album.ArtistArtworkURL
-	for _, track := range album.Tracks {
-		if track.ID == song.ID {
-			song.TrackCount = track.TrackCount
-			song.DiscCount = track.DiscCount
-			break
-		}
-	}
-	if song.TrackCount == 0 {
-		song.TrackCount = applemusic.DiscTrackCount(album.Tracks, song.DiscNumber)
-	}
-	if song.DiscCount == 0 {
-		song.DiscCount = maxTrackDisc(album.Tracks)
-	}
-	song.AlbumArtist = album.Artist
-	return song
-}
-
-func maxTrackDisc(tracks []applemusic.Song) int {
-	maximum := 0
-	for _, track := range tracks {
-		if track.DiscNumber > maximum {
-			maximum = track.DiscNumber
-		}
-	}
-	if maximum == 0 {
-		return 1
-	}
-	return maximum
 }

@@ -52,8 +52,8 @@ func TestInitDeveloperTokenCachesForHalfTheSignedLifetime(t *testing.T) {
 
 	minUntil := before.Add(internalDeveloperTokenTTL / 2)
 	maxUntil := after.Add(internalDeveloperTokenTTL / 2)
-	if client.tokenUntil.Before(minUntil) || client.tokenUntil.After(maxUntil) {
-		t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v, not exp-5m)", client.tokenUntil, minUntil, maxUntil, internalDeveloperTokenTTL)
+	if client.catalogToken.until.Before(minUntil) || client.catalogToken.until.After(maxUntil) {
+		t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v, not exp-5m)", client.catalogToken.until, minUntil, maxUntil, internalDeveloperTokenTTL)
 	}
 }
 
@@ -68,19 +68,19 @@ func TestTokenRefreshUsesHalfLifeForBothModes(t *testing.T) {
 		client := newTestCatalogClient(cfg, slog.Default())
 		client.signer, _ = newDeveloperTokenSigner(path, "KID1234567", "TEAM123456")
 		// Force a refresh by expiring the cached token.
-		client.token = "stale"
-		client.tokenUntil = time.Now().Add(-time.Minute)
+		client.catalogToken.value = "stale"
+		client.catalogToken.until = time.Now().Add(-time.Minute)
 
 		before := time.Now()
-		if _, err := client.Token(context.Background()); err != nil {
+		if _, err := client.catalogToken.get(context.Background()); err != nil {
 			t.Fatalf("Token: %v", err)
 		}
 		after := time.Now()
 
 		minUntil := before.Add(internalDeveloperTokenTTL / 2)
 		maxUntil := after.Add(internalDeveloperTokenTTL / 2)
-		if client.tokenUntil.Before(minUntil) || client.tokenUntil.After(maxUntil) {
-			t.Fatalf("tokenUntil = %v, want within [%v, %v]", client.tokenUntil, minUntil, maxUntil)
+		if client.catalogToken.until.Before(minUntil) || client.catalogToken.until.After(maxUntil) {
+			t.Fatalf("tokenUntil = %v, want within [%v, %v]", client.catalogToken.until, minUntil, maxUntil)
 		}
 	})
 
@@ -94,7 +94,7 @@ func TestTokenRefreshUsesHalfLifeForBothModes(t *testing.T) {
 		})}
 
 		before := time.Now()
-		if _, err := client.Token(context.Background()); err != nil {
+		if _, err := client.catalogToken.get(context.Background()); err != nil {
 			t.Fatalf("Token: %v", err)
 		}
 		after := time.Now()
@@ -102,8 +102,8 @@ func TestTokenRefreshUsesHalfLifeForBothModes(t *testing.T) {
 		wantTTL := client.cfg.TokenTTL()
 		minUntil := before.Add(wantTTL / 2)
 		maxUntil := after.Add(wantTTL / 2)
-		if client.tokenUntil.Before(minUntil) || client.tokenUntil.After(maxUntil) {
-			t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v)", client.tokenUntil, minUntil, maxUntil, wantTTL)
+		if client.catalogToken.until.Before(minUntil) || client.catalogToken.until.After(maxUntil) {
+			t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v)", client.catalogToken.until, minUntil, maxUntil, wantTTL)
 		}
 	})
 }
@@ -128,43 +128,43 @@ func TestProactiveTokenRefresh(t *testing.T) {
 	t.Run("renews a legacy token near expiry", func(t *testing.T) {
 		var calls int32
 		client := newScrapingClient(&calls)
-		client.token = "stale"
-		client.tokenUntil = time.Now().Add(tokenRefreshLead / 2) // inside the lead window
+		client.catalogToken.value = "stale"
+		client.catalogToken.until = time.Now().Add(tokenRefreshLead / 2) // inside the lead window
 
 		client.refreshExpiringWebTokens(context.Background())
 
 		if got := atomic.LoadInt32(&calls); got != 1 {
 			t.Fatalf("scrape calls = %d, want 1", got)
 		}
-		if client.token == "stale" || client.token == "" {
-			t.Fatalf("token = %q, want a freshly scraped value", client.token)
+		if client.catalogToken.value == "stale" || client.catalogToken.value == "" {
+			t.Fatalf("token = %q, want a freshly scraped value", client.catalogToken.value)
 		}
-		if !client.tokenUntil.After(time.Now().Add(tokenRefreshLead)) {
-			t.Fatalf("tokenUntil = %v, want pushed well past the lead window", client.tokenUntil)
+		if !client.catalogToken.until.After(time.Now().Add(tokenRefreshLead)) {
+			t.Fatalf("tokenUntil = %v, want pushed well past the lead window", client.catalogToken.until)
 		}
 	})
 
 	t.Run("renews a web token near expiry", func(t *testing.T) {
 		var calls int32
 		client := newScrapingClient(&calls)
-		client.webToken = "stale"
-		client.webTokenUntil = time.Now().Add(tokenRefreshLead / 2)
+		client.webToken.value = "stale"
+		client.webToken.until = time.Now().Add(tokenRefreshLead / 2)
 
 		client.refreshExpiringWebTokens(context.Background())
 
 		if got := atomic.LoadInt32(&calls); got != 1 {
 			t.Fatalf("scrape calls = %d, want 1", got)
 		}
-		if client.webToken == "stale" || client.webToken == "" {
-			t.Fatalf("webToken = %q, want a freshly scraped value", client.webToken)
+		if client.webToken.value == "stale" || client.webToken.value == "" {
+			t.Fatalf("webToken = %q, want a freshly scraped value", client.webToken.value)
 		}
 	})
 
 	t.Run("leaves a token that is not near expiry", func(t *testing.T) {
 		var calls int32
 		client := newScrapingClient(&calls)
-		client.token, client.tokenUntil = "still-good", time.Now().Add(time.Hour)
-		client.webToken, client.webTokenUntil = "still-good", time.Now().Add(time.Hour)
+		client.catalogToken.value, client.catalogToken.until = "still-good", time.Now().Add(time.Hour)
+		client.webToken.value, client.webToken.until = "still-good", time.Now().Add(time.Hour)
 
 		client.refreshExpiringWebTokens(context.Background())
 
@@ -215,7 +215,7 @@ func TestConcurrentTokenCacheMissScrapesOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := client.Token(context.Background())
+			_, err := client.catalogToken.get(context.Background())
 			errCh <- err
 		}()
 	}
@@ -236,8 +236,8 @@ func TestConcurrentTokenCacheMissScrapesOnce(t *testing.T) {
 
 func TestGetWithUserTokenRetriesOnce401ThenSucceeds(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "stale-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "stale-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 
 	var catalogCalls int
 	var authHeaders []string
@@ -277,8 +277,8 @@ func TestGetWithUserTokenRetriesOnce401ThenSucceeds(t *testing.T) {
 
 func TestGetWithUserTokenReturnsErrorAfterSingleRetryOn401Twice(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "stale-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "stale-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 
 	var catalogCalls int
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

@@ -34,8 +34,17 @@ degrade to "this album doesn't have that" rather than failing a job.
   request gate and its HTTP client with a timeout; response bodies are read
   through a size cap. Build new requests on those helpers, not a bare
   `http.Client`, so rate limits and bounds stay in one place.
-- The developer-token cache and the web-player JWT cache are separate; a 401 drops
-  only the rejected token and retries once.
+- The catalog token and the web-player JWT are two separate `tokenCache` values;
+  `CatalogClient.doWithAuth` is the one authorized-request path, and a 401 drops
+  only the rejected token and retries once. Add a request through
+  `doWithCatalogAuth` or `doWithWebAuth`, never with its own token handling.
+- A non-2xx JSON answer goes through `decodeCatalogResponse` and becomes a
+  `catalogRequestError`: `NonRetryable` for a 4xx, `RetryDelay` from
+  `Retry-After`. Other deterministic failures wrap a `nonRetryableError`
+  sentinel such as `ErrNoEnhancedHLS`, so retry helpers in internal/media stop
+  at once instead of backing off.
+- `EnrichWithAlbum` is the only place album-level fields are merged into a song;
+  callers in other packages use it rather than a copy.
 - Never log or persist a token, the scraped JWT or a media-user-token; strip
   `Authorization`, `Media-User-Token` and cookies from any captured request before
   saving it as a fixture.

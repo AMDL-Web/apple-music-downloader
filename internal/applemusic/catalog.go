@@ -3,18 +3,20 @@ package applemusic
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"amdl/internal/config"
 	"amdl/internal/limits"
 )
 
+// CatalogClient reads Apple Music catalog, artwork and library metadata. One
+// client is shared process-wide; it owns the Apple request gate and both token
+// caches.
 type CatalogClient struct {
 	cfg    config.CatalogConfig
 	http   *http.Client
@@ -23,31 +25,30 @@ type CatalogClient struct {
 	// retryDelay is replaceable by same-package tests so 429 behavior can be
 	// verified without sleeping through the production fallback delay.
 	retryDelay func(http.Header) time.Duration
-	mu         sync.Mutex
-	// Refresh locks serialize cache misses without holding mu across network
-	// requests. The cache is checked again after acquiring each lock so a burst
-	// of callers shares one scrape/sign operation instead of stampeding Apple.
-	tokenRefreshMu sync.Mutex
-	webRefreshMu   sync.Mutex
-	signer         *developerTokenSigner
-	token          string
-	tokenUntil     time.Time
-	// webToken/webTokenUntil cache a scraped music.apple.com web-player JWT,
-	// kept separate from token/tokenUntil above so that fetching it for
-	// EnhancedHLSViaWebToken never disturbs the signed developer-token cache
-	// used by every other catalog request.
-	webToken      string
-	webTokenUntil time.Time
+	signer     *developerTokenSigner
+	// catalogToken authorizes requests to apiBase: the signed developer token
+	// once InitDeveloperToken configured a signer, a scraped web-player JWT
+	// otherwise.
+	catalogToken tokenCache
+	// webToken is always a scraped web-player JWT, for the amp-api-only reads.
+	// It is separate from catalogToken so those reads work in signed mode
+	// without disturbing the signed token every other request uses.
+	webToken tokenCache
 }
 
+// NewCatalogClient builds the client. It does no I/O; call InitDeveloperToken
+// and StartTokenRefresher once at startup.
 func NewCatalogClient(cfg config.CatalogConfig, logger *slog.Logger) *CatalogClient {
-	return &CatalogClient{
+	c := &CatalogClient{
 		cfg:        cfg,
 		http:       &http.Client{Timeout: 30 * time.Second},
 		logger:     logger,
 		gate:       limits.NewRequestGate(cfg.MaxParallelRequests, cfg.RequestsPerSecond, cfg.RequestBurst),
 		retryDelay: defaultRetryDelay,
 	}
+	c.catalogToken.fetch = c.fetchCatalogToken
+	c.webToken.fetch = c.scrapeWebToken
+	return c
 }
 
 // RequestGate exposes the process-wide Apple small-request gate owned by this
@@ -57,6 +58,9 @@ func (c *CatalogClient) RequestGate() *limits.RequestGate {
 	return c.gate
 }
 
+// Song reads a catalog song and, when it belongs to an album, enriches it from
+// that album (EnrichWithAlbum). A failed album read leaves the song as the song
+// resource describes it.
 func (c *CatalogClient) Song(ctx context.Context, storefront, id string) (Song, error) {
 	song, err := c.SongMetadata(ctx, storefront, id)
 	if err != nil {
@@ -64,7 +68,7 @@ func (c *CatalogClient) Song(ctx context.Context, storefront, id string) (Song, 
 	}
 	if song.AlbumID != "" {
 		if album, err := c.Album(ctx, storefront, song.AlbumID); err == nil && len(album.Tracks) > 0 {
-			song = enrichSongWithAlbum(song, album)
+			song = EnrichWithAlbum(song, album)
 		}
 	}
 	return song, nil
@@ -94,6 +98,8 @@ func (c *CatalogClient) SongMetadata(ctx context.Context, storefront, id string)
 	return mapSong(resp.Data[0]), nil
 }
 
+// Album reads a catalog album with every page of its tracks, each carrying the
+// album-level fields (album artist, release, label, disc and track totals).
 func (c *CatalogClient) Album(ctx context.Context, storefront, id string) (Collection, error) {
 	var resp catalogAlbumResponse
 	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/albums/%s", c.apiBase(), storefront, id), url.Values{
@@ -295,41 +301,35 @@ func (c *CatalogClient) StationTracks(ctx context.Context, storefront, id, media
 	return Collection{ID: info.ID, Type: TypeStation, Name: info.Name, Artist: "Apple Music Station", ArtworkURL: info.ArtworkURL, ArtworkColors: info.ArtworkColors, Tracks: tracks}, nil
 }
 
+// stationNextTracksLimit is the limit sent to next-tracks, and so the most
+// songs one station job resolves. The endpoint is absent from Apple's
+// documented API (its station reference covers metadata reads only), so there
+// is no published ceiling to use instead. Every station download has requested
+// 10; whether Apple honors a larger value is unverified, so raising it needs a
+// live check first.
+const stationNextTracksLimit = 10
+
 // stationNextTracks performs the authenticated POST to the personalized
-// next-tracks endpoint. It mirrors get() (bearer developer token, legacy Origin
-// header) but adds the Media-User-Token header and uses POST, which get() does
-// not support.
+// next-tracks endpoint, with the user's Media-User-Token next to the catalog
+// token.
 func (c *CatalogClient) stationNextTracks(ctx context.Context, id, mediaUserToken string, out any) error {
 	params := url.Values{
 		"include[songs]": []string{"artists,albums"},
-		"limit":          []string{"10"},
+		"limit":          []string{strconv.Itoa(stationNextTracksLimit)},
 		"l":              []string{c.cfg.Language},
 	}
 	endpoint := fmt.Sprintf("%s/v1/me/stations/next-tracks/%s?%s", c.apiBase(), id, params.Encode())
-	resp, err := c.doWithCatalogAuth(ctx, func(token string) (*http.Request, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Media-User-Token", mediaUserToken)
-		if !c.cfg.DeveloperTokenSigningEnabled() {
-			req.Header.Set("Origin", "https://music.apple.com")
-		}
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		return req, nil
-	})
+	resp, err := c.doWithCatalogAuth(ctx, appleRequest{method: http.MethodPost, url: endpoint, mediaUserToken: mediaUserToken})
 	if err != nil {
-		return err
+		return fmt.Errorf("station next-tracks: %w", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return fmt.Errorf("station next-tracks request failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
+	if err := decodeCatalogResponse(resp, out); err != nil {
+		return fmt.Errorf("station next-tracks: %w", err)
 	}
-	return decodeJSONLimited(resp.Body, maxCatalogResponseBytes, out)
+	return nil
 }
 
+// ArtistAlbums reads an artist and every page of its albums, deduplicated by id.
 func (c *CatalogClient) ArtistAlbums(ctx context.Context, storefront, id string) (ArtistAlbums, error) {
 	var resp catalogArtistResponse
 	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s", c.apiBase(), storefront, id), url.Values{
@@ -400,6 +400,7 @@ func (c *CatalogClient) catalogNextURL(next string) string {
 	return c.apiBase() + "/" + next
 }
 
+// Artist reads a catalog artist's name and artwork.
 func (c *CatalogClient) Artist(ctx context.Context, storefront, id string) (Artist, error) {
 	var resp catalogArtistResponse
 	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s", c.apiBase(), storefront, id), url.Values{

@@ -104,6 +104,8 @@ func TestTrackMetadataResolverCoalescesPlaylistAlbumReads(t *testing.T) {
 		albums: map[string]applemusic.Collection{
 			"album-1": {
 				ID: "album-1", Artist: "Album Artist", ArtworkURL: "album-art", ArtistID: "artist-1", ArtistArtworkURL: "artist-art",
+				ArtworkColors: applemusic.ArtworkColors{BgColor: "102030"},
+				ArtistURL:     "https://music.apple.com/cn/artist/album-artist/artist-1",
 				Tracks: []applemusic.Song{
 					{ID: "song-1", TrackCount: 2, DiscNumber: 1, DiscCount: 1},
 					{ID: "song-2", TrackCount: 2, DiscNumber: 1, DiscCount: 1},
@@ -140,6 +142,12 @@ func TestTrackMetadataResolverCoalescesPlaylistAlbumReads(t *testing.T) {
 		song := <-results
 		if song.AlbumArtist != "Album Artist" || song.AlbumArtworkURL != "album-art" || song.TrackCount != 2 || song.DiscCount != 1 {
 			t.Fatalf("playlist song was not enriched: %+v", song)
+		}
+		// Playlist tracks get the same album palette and artist page as a
+		// single-song job, so tags and covers do not depend on how the song
+		// was submitted.
+		if song.AlbumArtworkColors.BgColor != "102030" || song.ArtistURL != "https://music.apple.com/cn/artist/album-artist/artist-1" {
+			t.Fatalf("playlist song missed album palette or artist URL: colors=%+v artist_url=%q", song.AlbumArtworkColors, song.ArtistURL)
 		}
 	}
 	_, metadataCalls, albumCalls := catalog.counts()

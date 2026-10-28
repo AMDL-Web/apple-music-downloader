@@ -7,10 +7,9 @@ import (
 	"strings"
 )
 
-func (c *CatalogClient) Cover(ctx context.Context, artworkURL, format, size string) ([]byte, error) {
-	return c.FetchCover(ctx, []string{artworkURL}, format, size)
-}
-
+// FetchCover downloads the first artwork in artworkURLs that answers, trying
+// size first and then smaller standard sizes for each URL. format is the image
+// extension (jpg when empty).
 func (c *CatalogClient) FetchCover(ctx context.Context, artworkURLs []string, format, size string) ([]byte, error) {
 	if format == "" {
 		format = "jpg"

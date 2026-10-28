@@ -14,6 +14,7 @@ import (
 	"amdl/internal/limits"
 )
 
+// catalogRequestError is a non-2xx answer from an Apple JSON endpoint.
 type catalogRequestError struct {
 	statusCode int
 	status     string
@@ -35,6 +36,16 @@ func (e catalogRequestError) NonRetryable() bool {
 // RetryDelay exposes Apple's Retry-After hint without coupling the generic
 // retry helper to the catalog package.
 func (e catalogRequestError) RetryDelay() time.Duration { return e.retryAfter }
+
+// nonRetryableError is a deterministic failure that carries the same
+// NonRetryable marker as a 4xx catalogRequestError, so retry helpers give up at
+// once. Values are comparable, so a sentinel of this type works with errors.Is.
+type nonRetryableError string
+
+func (e nonRetryableError) Error() string { return string(e) }
+
+// NonRetryable always reports true.
+func (nonRetryableError) NonRetryable() bool { return true }
 
 func parseRetryAfter(value string, now time.Time) time.Duration {
 	value = strings.TrimSpace(value)
@@ -59,6 +70,9 @@ const (
 	maxArtworkBytes         int64 = 64 << 20
 	maxWebPlayerPageBytes   int64 = 16 << 20
 	maxWebPlayerJSBytes     int64 = 64 << 20
+	// maxErrorBodyExcerptBytes is how much of a non-2xx body an error message
+	// quotes.
+	maxErrorBodyExcerptBytes int64 = 2048
 )
 
 // apiBase returns the catalog host. A self-signed developer token uses the
@@ -82,29 +96,22 @@ func (c *CatalogClient) getWithUserToken(ctx context.Context, endpoint string, p
 	if len(params) > 0 {
 		endpoint += "?" + params.Encode()
 	}
-	resp, err := c.doWithCatalogAuth(ctx, func(token string) (*http.Request, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		if mediaUserToken != "" {
-			req.Header.Set("Media-User-Token", mediaUserToken)
-		}
-		if !c.cfg.DeveloperTokenSigningEnabled() {
-			// The web player token is scoped to music.apple.com; a self-signed
-			// developer token carries no origin claim, so no Origin header is sent.
-			req.Header.Set("Origin", "https://music.apple.com")
-		}
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		return req, nil
-	})
+	resp, err := c.doWithCatalogAuth(ctx, appleRequest{method: http.MethodGet, url: endpoint, mediaUserToken: mediaUserToken})
 	if err != nil {
 		return err
 	}
+	return decodeCatalogResponse(resp, out)
+}
+
+// decodeCatalogResponse decodes a 2xx JSON body into out and closes it. Any
+// other status becomes a catalogRequestError, so retry helpers see whether it
+// is worth retrying and how long Apple asked to wait.
+func decodeCatalogResponse(resp *http.Response, out any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		// The body is only an excerpt for the error message; a failed read
+		// leaves it shorter and changes nothing else.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyExcerptBytes))
 		return catalogRequestError{
 			statusCode: resp.StatusCode,
 			status:     resp.Status,

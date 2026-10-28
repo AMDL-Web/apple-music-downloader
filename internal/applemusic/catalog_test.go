@@ -15,8 +15,8 @@ import (
 
 func TestSongRequestsAndMapsExtendedAssetURLs(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if got := req.URL.Query().Get("extend"); got != "extendedAssetUrls" {
 			t.Fatalf("extend query = %q, want extendedAssetUrls", got)
@@ -36,8 +36,8 @@ func TestSongRequestsAndMapsExtendedAssetURLs(t *testing.T) {
 
 func TestSongMetadataDoesNotFollowAlbumRelationship(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var paths []string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		paths = append(paths, req.URL.Path)
@@ -59,8 +59,8 @@ func TestSongMetadataDoesNotFollowAlbumRelationship(t *testing.T) {
 
 func TestSongStillFollowsAlbumRelationshipForFullMetadata(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var paths []string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		paths = append(paths, req.URL.Path)
@@ -95,8 +95,8 @@ func TestSongStillFollowsAlbumRelationshipForFullMetadata(t *testing.T) {
 
 func TestAlbumFallsBackToTheExtendedArtistURL(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var extend string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		extend = req.URL.Query().Get("extend")
@@ -120,8 +120,8 @@ func TestAlbumFallsBackToTheExtendedArtistURL(t *testing.T) {
 
 func TestAlbumFetchesAllTrackPages(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var paths []string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		paths = append(paths, req.URL.RequestURI())
@@ -157,8 +157,8 @@ func TestAlbumFetchesAllTrackPages(t *testing.T) {
 // track of both discs as N of 48.
 func TestAlbumCountsTracksPerDiscOnMultiDiscReleases(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":3},"relationships":{"tracks":{"data":[` +
 			`{"id":"song-1","type":"songs","attributes":{"name":"One","trackNumber":1,"discNumber":1}},` +
@@ -191,8 +191,8 @@ func TestAlbumCountsTracksPerDiscOnMultiDiscReleases(t *testing.T) {
 // total comes from Apple's trackNumber instead.
 func TestAlbumInfersDiscTotalsFromTrackNumbersWhenTracksAreWithheld(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		// Disc 1 track 2 and disc 2 track 1 are both missing from the payload.
 		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":5},"relationships":{"tracks":{"data":[` +
@@ -219,8 +219,8 @@ func TestAlbumInfersDiscTotalsFromTrackNumbersWhenTracksAreWithheld(t *testing.T
 // the full length when a storefront withholds individual tracks.
 func TestAlbumKeepsAppleTrackCountOnSingleDiscReleases(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","trackCount":12},"relationships":{"tracks":{"data":[` +
 			`{"id":"song-1","type":"songs","attributes":{"name":"One","trackNumber":1,"discNumber":1}},` +
@@ -244,8 +244,8 @@ func TestAlbumKeepsAppleTrackCountOnSingleDiscReleases(t *testing.T) {
 // colors from every collection.
 func TestAlbumDecodesArtworkColors(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body := `{"data":[{"id":"album-1","type":"albums","attributes":{"name":"Album","artistName":"Album Artist","artwork":{"url":"album-art","bgColor":"1a1a1a","textColor1":"ffffff","textColor2":"eeeeee","textColor3":"cccccc","textColor4":"aaaaaa"}},"relationships":{"tracks":{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artwork":{"url":"song-art","bgColor":"0b0b0b","textColor1":"f1f1f1"}}}]}}}]}`
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
@@ -270,8 +270,8 @@ func TestAlbumDecodesArtworkColors(t *testing.T) {
 
 func TestArtistAlbumsFetchesIncludedAlbumsAndNextPages(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "zh-Hans_CN"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var paths []string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		paths = append(paths, req.URL.RequestURI())
@@ -343,8 +343,8 @@ func TestSongMapsHasLyrics(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-			client.token = "test-token"
-			client.tokenUntil = time.Now().Add(time.Hour)
+			client.catalogToken.value = "test-token"
+			client.catalogToken.until = time.Now().Add(time.Hour)
 
 			var body string
 			if tt.hasLyrics && tt.hasTimeSyncedLyrics {

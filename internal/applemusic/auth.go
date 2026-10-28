@@ -20,18 +20,8 @@ func (c *CatalogClient) InitDeveloperToken() error {
 		return err
 	}
 	c.signer = signer
-	token, _, err := signer.sign(time.Now(), internalDeveloperTokenTTL, nil)
-	if err != nil {
-		return err
-	}
-	c.mu.Lock()
-	c.token = token
-	// Cache for only half the signed lifetime: a still-valid-on-paper token
-	// can start getting rejected by Apple before its exp claim, so refreshing
-	// proactively at the half-life avoids waiting for a 401 to notice.
-	c.tokenUntil = cacheUntil(time.Now(), internalDeveloperTokenTTL)
-	c.mu.Unlock()
-	return nil
+	_, err = c.catalogToken.get(context.Background())
+	return err
 }
 
 // MintDeveloperToken signs a fresh developer token for external clients using
@@ -51,188 +41,57 @@ var (
 	jwtPattern     = regexp.MustCompile(`eyJ[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+`)
 )
 
-// cacheUntil is the half-life proactive-refresh policy: a token is only
-// trusted from the cache for half of its validity window (ttl), so it
-// rotates well before Apple's own expiry - or an early rejection of a
-// still-technically-valid token - could otherwise stall catalog requests
-// until a full TTL passes.
-func cacheUntil(now time.Time, ttl time.Duration) time.Time {
-	return now.Add(ttl / 2)
-}
-
-func (c *CatalogClient) Token(ctx context.Context) (string, error) {
-	c.mu.Lock()
-	if c.token != "" && time.Now().Before(c.tokenUntil) {
-		token := c.token
-		c.mu.Unlock()
-		return token, nil
-	}
-	c.mu.Unlock()
-
-	c.tokenRefreshMu.Lock()
-	defer c.tokenRefreshMu.Unlock()
-	// Another caller may have refreshed while this one waited.
-	c.mu.Lock()
-	if c.token != "" && time.Now().Before(c.tokenUntil) {
-		token := c.token
-		c.mu.Unlock()
-		return token, nil
-	}
-	c.mu.Unlock()
-
+// fetchCatalogToken is catalogToken's fetch: a locally signed developer token
+// once InitDeveloperToken configured a signer, otherwise a scraped web-player
+// JWT.
+func (c *CatalogClient) fetchCatalogToken(ctx context.Context) (string, time.Duration, error) {
 	if c.signer != nil {
 		token, _, err := c.signer.sign(time.Now(), internalDeveloperTokenTTL, nil)
-		if err != nil {
-			return "", err
-		}
-		c.mu.Lock()
-		c.token = token
-		c.tokenUntil = cacheUntil(time.Now(), internalDeveloperTokenTTL)
-		c.mu.Unlock()
-		return token, nil
+		return token, internalDeveloperTokenTTL, err
 	}
-
-	token, err := c.fetchToken(ctx)
-	if err != nil {
-		return "", err
-	}
-	c.mu.Lock()
-	c.token = token
-	c.tokenUntil = cacheUntil(time.Now(), c.cfg.TokenTTL())
-	c.mu.Unlock()
-	return token, nil
+	return c.scrapeWebToken(ctx)
 }
 
-// invalidateToken clears rejected only when it is still the cached token. A
-// concurrent request may already have refreshed the cache after this request
-// was sent; an old 401 must not evict that newer token.
-func (c *CatalogClient) invalidateToken(rejected string) {
-	c.mu.Lock()
-	if c.token == rejected {
-		c.token = ""
-		c.tokenUntil = time.Time{}
-	}
-	c.mu.Unlock()
-}
-
-// doWithCatalogAuth sends a request built by buildReq (called with the
-// current bearer token) and, if Apple responds 401, invalidates the cached
-// token, re-authenticates once via Token(), and retries the same request
-// exactly once with the new token. Any other status - including a second
-// 401 - is returned as-is; callers keep their existing status/body handling.
-func (c *CatalogClient) doWithCatalogAuth(ctx context.Context, buildReq func(token string) (*http.Request, error)) (*http.Response, error) {
-	token, err := c.Token(ctx)
-	if err != nil {
-		return nil, err
-	}
-	req, err := buildReq(token)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.doAppleRequest(ctx, req, true)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusUnauthorized {
-		return resp, nil
-	}
-	resp.Body.Close()
-
-	c.invalidateToken(token)
-	token, err = c.Token(ctx)
-	if err != nil {
-		return nil, err
-	}
-	req, err = buildReq(token)
-	if err != nil {
-		return nil, err
-	}
-	return c.doAppleRequest(ctx, req, true)
-}
-
-func (c *CatalogClient) fetchToken(ctx context.Context) (string, error) {
+// scrapeWebToken is webToken's fetch: it reads the web-player JWT out of
+// music.apple.com's JS bundle.
+func (c *CatalogClient) scrapeWebToken(ctx context.Context) (string, time.Duration, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://music.apple.com", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	resp, err := c.doAppleRequest(ctx, req, false)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("fetch Apple Music web player failed: %s", resp.Status)
+		return "", 0, fmt.Errorf("fetch Apple Music web player failed: %s", resp.Status)
 	}
 	body, err := readLimited(resp.Body, maxWebPlayerPageBytes)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	jsPath := indexJSPattern.FindString(string(body))
 	if jsPath == "" {
-		return "", fmt.Errorf("cannot find Apple Music index js")
+		return "", 0, fmt.Errorf("cannot find Apple Music index js")
 	}
 	req, _ = http.NewRequestWithContext(ctx, http.MethodGet, "https://music.apple.com"+jsPath, nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	jsResp, err := c.doAppleRequest(ctx, req, false)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer jsResp.Body.Close()
 	if jsResp.StatusCode >= 300 {
-		return "", fmt.Errorf("fetch Apple Music web player script failed: %s", jsResp.Status)
+		return "", 0, fmt.Errorf("fetch Apple Music web player script failed: %s", jsResp.Status)
 	}
 	jsBody, err := readLimited(jsResp.Body, maxWebPlayerJSBytes)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	token := jwtPattern.FindString(string(jsBody))
 	if token == "" {
-		return "", fmt.Errorf("cannot find Apple Music authorization token")
+		return "", 0, fmt.Errorf("cannot find Apple Music authorization token")
 	}
-	return token, nil
-}
-
-// webJWTToken returns a cached music.apple.com web-player JWT, scraping a
-// fresh one when the cache is empty or expired. It is independent of Token,
-// which serves the signed developer token once signing is enabled; this
-// cache exists so EnhancedHLSViaWebToken can keep working in signed mode
-// without touching the signed-token cache.
-func (c *CatalogClient) webJWTToken(ctx context.Context) (string, error) {
-	c.mu.Lock()
-	if c.webToken != "" && time.Now().Before(c.webTokenUntil) {
-		token := c.webToken
-		c.mu.Unlock()
-		return token, nil
-	}
-	c.mu.Unlock()
-
-	c.webRefreshMu.Lock()
-	defer c.webRefreshMu.Unlock()
-	// Another caller may have refreshed while this one waited.
-	c.mu.Lock()
-	if c.webToken != "" && time.Now().Before(c.webTokenUntil) {
-		token := c.webToken
-		c.mu.Unlock()
-		return token, nil
-	}
-	c.mu.Unlock()
-
-	token, err := c.fetchToken(ctx)
-	if err != nil {
-		return "", err
-	}
-	c.mu.Lock()
-	c.webToken = token
-	c.webTokenUntil = cacheUntil(time.Now(), c.cfg.TokenTTL())
-	c.mu.Unlock()
-	return token, nil
-}
-
-func (c *CatalogClient) invalidateWebToken(rejected string) {
-	c.mu.Lock()
-	if c.webToken == rejected {
-		c.webToken = ""
-		c.webTokenUntil = time.Time{}
-	}
-	c.mu.Unlock()
+	return token, c.cfg.TokenTTL(), nil
 }
 
 // tokenRefreshCheckInterval bounds how often the background refresher started
@@ -272,88 +131,67 @@ func (c *CatalogClient) StartTokenRefresher(ctx context.Context) {
 }
 
 // refreshExpiringWebTokens renews any scraped token within tokenRefreshLead of
-// its cached expiry. The self-signed developer token is skipped: when a signer
-// is configured Token mints it locally with no scrape, so there is nothing to
-// keep warm.
+// its cached expiry. The catalog cache is skipped when a signer is configured:
+// it then holds a locally minted token with nothing to keep warm.
 func (c *CatalogClient) refreshExpiringWebTokens(ctx context.Context) {
 	if c.signer == nil {
-		c.refreshLegacyTokenIfExpiring(ctx)
+		if err := c.catalogToken.refreshIfExpiring(ctx, tokenRefreshLead); err != nil {
+			c.logger.Warn("proactive legacy token refresh failed; keeping cached token until it expires", "error", err)
+		}
 	}
-	c.refreshWebTokenIfExpiring(ctx)
-}
-
-func (c *CatalogClient) refreshLegacyTokenIfExpiring(ctx context.Context) {
-	c.mu.Lock()
-	cached, until := c.token, c.tokenUntil
-	c.mu.Unlock()
-	if cached == "" || time.Now().Before(until.Add(-tokenRefreshLead)) {
-		return
-	}
-
-	c.tokenRefreshMu.Lock()
-	defer c.tokenRefreshMu.Unlock()
-	// An inline caller may have refreshed while this loop waited; re-read under
-	// the same lock Token uses so the two never scrape at once.
-	c.mu.Lock()
-	cached, until = c.token, c.tokenUntil
-	c.mu.Unlock()
-	if cached == "" || time.Now().Before(until.Add(-tokenRefreshLead)) {
-		return
-	}
-
-	token, err := c.fetchToken(ctx)
-	if err != nil {
-		c.logger.Warn("proactive legacy token refresh failed; keeping cached token until it expires", "error", err)
-		return
-	}
-	c.mu.Lock()
-	c.token = token
-	c.tokenUntil = cacheUntil(time.Now(), c.cfg.TokenTTL())
-	c.mu.Unlock()
-}
-
-func (c *CatalogClient) refreshWebTokenIfExpiring(ctx context.Context) {
-	c.mu.Lock()
-	cached, until := c.webToken, c.webTokenUntil
-	c.mu.Unlock()
-	if cached == "" || time.Now().Before(until.Add(-tokenRefreshLead)) {
-		return
-	}
-
-	c.webRefreshMu.Lock()
-	defer c.webRefreshMu.Unlock()
-	// Re-read under the same lock webJWTToken uses so a concurrent inline miss
-	// and this proactive refresh never scrape at once.
-	c.mu.Lock()
-	cached, until = c.webToken, c.webTokenUntil
-	c.mu.Unlock()
-	if cached == "" || time.Now().Before(until.Add(-tokenRefreshLead)) {
-		return
-	}
-
-	token, err := c.fetchToken(ctx)
-	if err != nil {
+	if err := c.webToken.refreshIfExpiring(ctx, tokenRefreshLead); err != nil {
 		c.logger.Warn("proactive web token refresh failed; keeping cached token until it expires", "error", err)
-		return
 	}
-	c.mu.Lock()
-	c.webToken = token
-	c.webTokenUntil = cacheUntil(time.Now(), c.cfg.TokenTTL())
-	c.mu.Unlock()
 }
 
-// doWithWebAuth mirrors doWithCatalogAuth for the independent web-player JWT
-// cache used by signed_mode_hls_source=web_token.
-func (c *CatalogClient) doWithWebAuth(ctx context.Context, buildReq func(token string) (*http.Request, error)) (*http.Response, error) {
-	token, err := c.webJWTToken(ctx)
+// appleRequest is an authorized Apple request as doWithAuth rebuilds it for
+// its retry. Every caller sends no body.
+type appleRequest struct {
+	method string
+	url    string
+	// mediaUserToken, when set, is sent as Media-User-Token for reads that
+	// need the user's subscription identity.
+	mediaUserToken string
+}
+
+// doWithCatalogAuth sends r to apiBase's host with catalogToken. The Origin
+// header goes only with a scraped token (legacy mode): a self-signed developer
+// token carries no origin claim.
+func (c *CatalogClient) doWithCatalogAuth(ctx context.Context, r appleRequest) (*http.Response, error) {
+	return c.doWithAuth(ctx, &c.catalogToken, !c.cfg.DeveloperTokenSigningEnabled(), r)
+}
+
+// doWithWebAuth sends r to amp-api.music.apple.com with the scraped web-player
+// JWT and the Origin header that token is scoped to, whatever the signing mode.
+func (c *CatalogClient) doWithWebAuth(ctx context.Context, r appleRequest) (*http.Response, error) {
+	return c.doWithAuth(ctx, &c.webToken, true, r)
+}
+
+// doWithAuth sends r with a bearer token from cache. On a 401 it drops that
+// token (only if it is still the cached one), fetches another and sends r once
+// more; any other status, a second 401 included, goes back to the caller as-is.
+func (c *CatalogClient) doWithAuth(ctx context.Context, cache *tokenCache, origin bool, r appleRequest) (*http.Response, error) {
+	send := func(token string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, r.method, r.url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		if r.mediaUserToken != "" {
+			req.Header.Set("Media-User-Token", r.mediaUserToken)
+		}
+		if origin {
+			req.Header.Set("Origin", "https://music.apple.com")
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		return c.doAppleRequest(ctx, req, true)
+	}
+
+	token, err := cache.get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	req, err := buildReq(token)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.doAppleRequest(ctx, req, true)
+	resp, err := send(token)
 	if err != nil {
 		return nil, err
 	}
@@ -362,14 +200,10 @@ func (c *CatalogClient) doWithWebAuth(ctx context.Context, buildReq func(token s
 	}
 	resp.Body.Close()
 
-	c.invalidateWebToken(token)
-	token, err = c.webJWTToken(ctx)
+	cache.invalidate(token)
+	token, err = cache.get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	req, err = buildReq(token)
-	if err != nil {
-		return nil, err
-	}
-	return c.doAppleRequest(ctx, req, true)
+	return send(token)
 }

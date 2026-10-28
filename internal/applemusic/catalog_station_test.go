@@ -15,10 +15,11 @@ import (
 
 func TestStationTracksResolvesTracksFormat(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	var gotMediaToken string
 	var nextTracksMethod string
+	var nextTracksLimit string
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		switch req.URL.Path {
 		case "/v1/catalog/us/stations/ra.1":
@@ -27,6 +28,7 @@ func TestStationTracksResolvesTracksFormat(t *testing.T) {
 		case "/v1/me/stations/next-tracks/ra.1":
 			gotMediaToken = req.Header.Get("Media-User-Token")
 			nextTracksMethod = req.Method
+			nextTracksLimit = req.URL.Query().Get("limit")
 			body := `{"data":[{"id":"song-1","type":"songs","attributes":{"name":"One","artistName":"Artist"}},{"id":"video-1","type":"music-videos","attributes":{"name":"Video"}},{"id":"song-2","type":"songs","attributes":{"name":"Two","artistName":"Artist"}}]}`
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 		}
@@ -49,12 +51,17 @@ func TestStationTracksResolvesTracksFormat(t *testing.T) {
 	if nextTracksMethod != http.MethodPost {
 		t.Fatalf("next-tracks method = %q, want POST", nextTracksMethod)
 	}
+	// The limit is how many songs a station job captures; changing it changes
+	// what every station download resolves to.
+	if nextTracksLimit != "10" {
+		t.Fatalf("next-tracks limit = %q, want 10", nextTracksLimit)
+	}
 }
 
 func TestStationTracksRejectsLiveStream(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/v1/catalog/us/stations/ra.live" {
 			body := `{"data":[{"id":"ra.live","type":"stations","attributes":{"name":"Apple Music 1","isLive":true,"playParams":{"format":"stream"}}}]}`
@@ -71,8 +78,8 @@ func TestStationTracksRejectsLiveStream(t *testing.T) {
 
 func TestStationTracksRequiresMediaUserToken(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "test-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "test-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/v1/catalog/us/stations/ra.1" {
 			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","playParams":{"format":"tracks"}}}]}`
@@ -89,8 +96,8 @@ func TestStationTracksRequiresMediaUserToken(t *testing.T) {
 
 func TestStationNextTracksRetriesOnce401ThenSucceeds(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.token = "stale-token"
-	client.tokenUntil = time.Now().Add(time.Hour)
+	client.catalogToken.value = "stale-token"
+	client.catalogToken.until = time.Now().Add(time.Hour)
 
 	var nextTracksCalls int
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
