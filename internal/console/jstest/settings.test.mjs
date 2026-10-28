@@ -18,10 +18,20 @@ import {
   validateDraft,
   parseNumberInput,
   changesLabel,
+  fieldWarning,
+  savedWarnings,
+  diffConfig,
+  labelList,
+  reloadSummary,
+  lossSummary,
+  unsavedAnnouncement,
+  librarySyncState,
+  anchorResetState,
 } from '../static/js/lib/settings.js';
 import { templateUnknownVars } from '../static/js/lib/settings-template.js';
-import { wrapperErrorText } from '../static/js/lib/settings-account.js';
+import { wrapperErrorText, wrapperUnreachable } from '../static/js/lib/settings-account.js';
 import { ApiError } from '../static/js/api.js';
+import { readFileSync } from 'node:fs';
 
 // A trimmed GET /api/v1/config "config" as the preview server returned it.
 const CONFIG = {
@@ -201,4 +211,101 @@ test('draftAfterSave keeps only what changed while the save ran', () => {
   assert.deepEqual(draftAfterSave(now, sent), { 'logging.level': 'error', 'download.progress_event_interval_ms': 750 });
   assert.deepEqual(draftAfterSave({ 'download.quality_priority': [...list] }, sent), { 'download.quality_priority': ['alac', 'aac'] }, 'a list edited again is a new value');
   assert.deepEqual(draftAfterSave(sent, sent), {});
+});
+
+// The upgrade-safe way to state defaults: the page shows them, and they must
+// be the ones configs/config.example.yaml sets (a key missing from the file
+// takes those).
+const EXAMPLE = readFileSync(new URL('../../../configs/config.example.yaml', import.meta.url), 'utf8');
+const exampleValue = (name) => new RegExp(`^  ${name}: "(.*)"$`, 'm').exec(EXAMPLE)?.[1];
+
+test('every field states its default, and the path defaults match config.example.yaml', () => {
+  // The token's help says "Empty means none".
+  const exempt = new Set(['catalog.media_user_token']);
+  for (const f of FIELDS) {
+    if (exempt.has(f.key)) continue;
+    assert.ok(/Default: /.test(f.help) || f.defaultValue, `${f.key} states no default`);
+  }
+  const templates = FIELDS.filter((f) => f.type === 'template' || f.type === 'path');
+  assert.equal(templates.length, 7);
+  for (const f of templates) {
+    assert.ok(f.defaultValue, `${f.key} has no defaultValue`);
+    assert.equal(f.defaultValue, exampleValue(f.key.split('.')[1]), `${f.key} drifted from config.example.yaml`);
+  }
+});
+
+test('fieldWarning and savedWarnings keep an unknown variable flagged after the save', () => {
+  const song = FIELDS.find((f) => f.key === 'download.song_path_format');
+  assert.equal(fieldWarning(song, 'songs/{SongName}'), '');
+  assert.match(fieldWarning(song, 'songs/{Foo}/{SongName}'), /\{Foo\}/);
+  const base = { 'download.song_path_format': 'songs/{Foo}', 'download.album_path_format': 'a/{SongName}', 'download.cover_size': '5000x5000' };
+  assert.deepEqual(Object.keys(savedWarnings(base)), ['download.song_path_format']);
+  assert.deepEqual(savedWarnings(base, { 'download.song_path_format': 'songs/{SongName}' }), {}, 'a field under edit has its own warning');
+});
+
+test('diffConfig, reloadSummary and labelList', () => {
+  const a = { 'logging.level': 'info', 'download.max_attempts': 3, 'download.quality_priority': ['alac'] };
+  assert.deepEqual(diffConfig(a, { ...a }), []);
+  assert.deepEqual(diffConfig(a, { ...a, 'logging.level': 'warn', 'download.max_attempts': 7 }), ['download.max_attempts', 'logging.level'], 'field order');
+  assert.deepEqual(diffConfig(a, { ...a, 'download.quality_priority': ['alac', 'aac'] }), ['download.quality_priority']);
+  assert.equal(labelList(['download.max_attempts']), 'Attempts per step');
+  assert.equal(labelList(['download.max_attempts', 'logging.level']), 'Attempts per step and Log level');
+  assert.match(labelList(['download.max_attempts', 'logging.level', 'simulate.enabled', 'download.cover_size', 'library_sync.enabled'], 3), /and 2 more$/);
+  assert.match(reloadSummary([], 0).long, /no changes\.$/);
+  assert.equal(reloadSummary([], 0).short, 'Reloaded from the file: no changes');
+  const two = reloadSummary(['logging.level', 'download.max_attempts'], 3);
+  assert.match(two.long, /2 settings changed \(Log level and Attempts per step\)/);
+  assert.match(two.long, /3 pinned keys keep their environment values/);
+  assert.match(reloadSummary(['logging.level'], 1).short, /1 setting changed/);
+});
+
+test('lossSummary and unsavedAnnouncement', () => {
+  const t = lossSummary(['download.max_attempts', 'download.song_path_format', 'logging.level']);
+  assert.equal(t.count, 3);
+  assert.equal(t.sections, 'Downloads, Files and paths and Logging');
+  assert.equal(t.fields, 'Attempts per step, Songs and Log level');
+  assert.equal(unsavedAnnouncement(1), '1 unsaved change');
+  assert.equal(unsavedAnnouncement(4), '4 unsaved changes');
+  assert.equal(unsavedAnnouncement(0), 'No unsaved changes');
+});
+
+test('fieldErrors marks only the keys of the PUT when the message names others', () => {
+  const err = new ApiError(422, 'invalid_config', 'download.song_path_format must stay inside download.downloads_dir');
+  assert.deepEqual(Object.keys(fieldErrors(err).fields), ['download.downloads_dir', 'download.song_path_format'], 'without the PUT keys, every named key');
+  assert.deepEqual(Object.keys(fieldErrors(err, ['download.song_path_format']).fields), ['download.song_path_format']);
+  assert.deepEqual(Object.keys(fieldErrors(err, ['logging.level']).fields), ['download.downloads_dir', 'download.song_path_format'], 'none of the PUT keys named: keep all');
+});
+
+test('librarySyncState: on but idle is not Off', () => {
+  const base = { enabled: true, interval_minutes: 15, anchor_size: 0 };
+  assert.equal(librarySyncState({ ...base, enabled: false }, true).label, 'Off');
+  const idle = librarySyncState({ ...base, last_error: 'media user token is empty' }, false);
+  assert.equal(idle.label, 'On, idle');
+  assert.equal(idle.role, 'warning');
+  assert.equal(librarySyncState({ ...base, last_error: 'boom' }, true).label, 'Error');
+  assert.match(librarySyncState(base, true).detail, /first poll pending/);
+  assert.equal(librarySyncState({ ...base, last_poll_at: '2026-01-01T00:00:00Z' }, true).detail, 'Every 15 min');
+});
+
+test('anchorResetState disables Reset anchor without an anchor', () => {
+  assert.equal(anchorResetState(undefined).allowed, false);
+  const none = anchorResetState({ anchor_size: 0 });
+  assert.equal(none.allowed, false);
+  assert.match(none.reason, /no anchor/);
+  assert.deepEqual(anchorResetState({ anchor_size: 120 }), { allowed: true, reason: '' });
+});
+
+test('wrapperUnreachable reads the address out of a gRPC dial error', () => {
+  const raw = 'rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:8080: connect: connection refused"';
+  const status = wrapperUnreachable(new ApiError(503, 'wrapper_unavailable', raw));
+  assert.equal(status.address, '127.0.0.1:8080');
+  const msg = wrapperErrorText(new ApiError(503, 'wrapper_unavailable', raw), 'status');
+  assert.equal(msg.message, 'The Apple Music session service (wrapper-manager) at 127.0.0.1:8080 is not reachable.');
+  assert.equal(msg.detail, raw, 'the raw text stays in the details');
+  const login = wrapperErrorText(new ApiError(502, 'upstream_error', raw), 'login');
+  assert.match(login.message, /session service/, 'a gRPC Unavailable behind a 502 reads the same');
+  assert.equal(wrapperUnreachable(new ApiError(502, 'upstream_error', 'some other failure')), null);
+  assert.equal(wrapperUnreachable(new ApiError(503, 'feature_unavailable', 'no wrapper')), null, 'no wrapper connection is a different state');
+  assert.equal(wrapperUnreachable(new ApiError(0, 'network_error', 'Cannot reach the server.')), null, 'the console server itself being down is not the wrapper');
+  assert.equal(wrapperErrorText(new ApiError(503, 'wrapper_unavailable', 'dns lookup failed'), 'status').message, 'The Apple Music session service (wrapper-manager) is not reachable.');
 });

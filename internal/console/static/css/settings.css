@@ -156,6 +156,11 @@
   margin-left: auto;
 }
 
+/* Keyboard focus and scrolled-to targets stop above the bar, not under it. */
+:root:has(.save-bar) {
+  scroll-padding-bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
+}
+
 /* While the save bar shows, toasts rise above it so they never cover Save. */
 :root:has(.save-bar) .toasts {
   bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
@@ -272,6 +277,21 @@
   line-height: var(--lh-13);
 }
 
+.field-default {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.field-default-value {
+  padding: 0;
+  background: none;
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  overflow-wrap: anywhere;
+}
+
 .field-key {
   align-self: flex-start;
   padding: 0;
@@ -361,6 +381,20 @@
   max-width: 640px;
 }
 
+/* A value the environment pins: the whole path, wrapped, selectable. */
+.field-fixed {
+  max-width: 640px;
+  padding: var(--s-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 /* A checkbox drawn as a switch; "On"/"Off" beside it says the state in text. */
 .field-switch-wrap {
   display: inline-flex;
@@ -434,6 +468,12 @@
 }
 
 /* Ordered list editor (codec priority). */
+.list-min-note {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
 .list-editor {
   display: flex;
   flex-direction: column;
@@ -578,6 +618,40 @@
 .settings-reload-error,
 .account-error-detail {
   display: block;
+}
+
+.settings-elsewhere-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+
+.sync-state {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+}
+
+.account-error-details summary {
+  display: inline-block;
+  margin-top: var(--s-1);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  cursor: pointer;
+}
+
+.login-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-1_5);
+  color: var(--warning-text);
+}
+
+.login-blocked .icon {
+  margin-top: var(--s-0_5);
+  flex: none;
 }
 
 .settings-error:focus {
@@ -727,6 +801,10 @@
 
   .save-bar-actions .btn {
     flex: 1;
+  }
+
+  :root:has(.save-bar) {
+    scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--touch) + var(--lh-14) + var(--s-8) + var(--s-4));
   }
 
   :root:has(.save-bar) .toasts {

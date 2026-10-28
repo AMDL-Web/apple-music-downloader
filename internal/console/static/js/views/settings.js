@@ -19,6 +19,11 @@ import {
   pinnedMap,
   fieldErrors,
   validateDraft,
+  savedWarnings,
+  diffConfig,
+  labelList,
+  lossSummary,
+  unsavedAnnouncement,
   changesLabel,
   draftAfterSave,
 } from '../lib/settings.js';
@@ -30,6 +35,20 @@ import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
 import { LibrarySyncPanel, ConfigFilePanel, TemplateReference } from './settings-panels.js';
 
+/** What a confirmation would lose: the count, the sections and the field names. */
+function LossText({ keys, lead }) {
+  const t = lossSummary(keys);
+  return html`<p>${lead} ${changesLabel(t.count)} in ${t.sections}: ${t.fields}.</p>
+    <p>Saved settings are not affected.</p>`;
+}
+
+/** The notice for saved values that changed elsewhere while edits are pending. */
+function elsewhereText(keys, edits) {
+  const changed = `The saved ${keys.length === 1 ? 'value' : 'values'} of ${labelList(keys, 4)} changed in another tab or in the file.`;
+  const mine = edits === 1 ? 'Your unsaved change stays pending' : `Your ${edits} unsaved changes stay pending`;
+  return `${changed} ${mine}; saving sends only ${edits === 1 ? 'it' : 'those'}, and if the same setting changed elsewhere, yours wins.`;
+}
+
 const EMPTY = { loaded: false, error: null, base: {}, pinned: {}, pinnedList: [], persisted: true, reloadError: '' };
 
 export function SettingsPage({ route }) {
@@ -40,6 +59,12 @@ export function SettingsPage({ route }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [leaveTo, setLeaveTo] = useState(null);
+  const [discarding, setDiscarding] = useState(false);
+  // Saved values that changed in another tab or in the file: a quiet note
+  // after a silent refresh, or (under unsaved edits) a notice with a choice.
+  const [updatedNote, setUpdatedNote] = useState('');
+  const [elsewhere, setElsewhere] = useState(null);
+  const [live, setLive] = useState('');
   const [loadSeq, setLoadSeq] = useState(0);
   const [failSeq, setFailSeq] = useState(0);
   const errorRef = useRef(null);
@@ -48,8 +73,15 @@ export function SettingsPage({ route }) {
   const dirty = dirtyKeys.length > 0;
   const checks = useMemo(() => validateDraft(Object.fromEntries(dirtyKeys.map((k) => [k, draft[k]]))), [dirtyKeys, draft]);
   const errors = { ...(saveError ? saveError.fields : {}), ...checks.errors };
+  // A saved value keeps its warning; a field under edit has its own.
+  const warnings = useMemo(
+    () => ({ ...savedWarnings(cfg.base, Object.fromEntries(dirtyKeys.map((k) => [k, true]))), ...checks.warnings }),
+    [cfg.base, dirtyKeys, checks],
+  );
 
+  const applySeq = useRef(0);
   const apply = useCallback((res) => {
+    applySeq.current += 1;
     setCfg({
       loaded: true,
       error: null,
@@ -61,8 +93,8 @@ export function SettingsPage({ route }) {
     });
   }, []);
 
-  // Load on mount, after a reconnect and on Discard, but never under
-  // unsaved edits: Discard is the way to see the server's values again.
+  // Load on mount, on Retry and after Discard, but never under unsaved
+  // edits: Discard is the way to see the server's values again.
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
   useEffect(() => {
@@ -75,7 +107,100 @@ export function SettingsPage({ route }) {
     return () => {
       cancelled = true;
     };
-  }, [app.epoch, loadSeq, apply]);
+  }, [loadSeq, apply]);
+
+  // Look at the server's values again when the tab comes back, and after a
+  // reconnect (app.epoch). Nothing changed: nothing happens. Changed with no
+  // local edits: refresh quietly and say so. Changed under local edits: a
+  // notice, and the draft stays. Save still sends only the edited keys, so
+  // the last write wins.
+  const cfgRef = useRef(cfg);
+  cfgRef.current = cfg;
+  const savingRef = useRef(false);
+  savingRef.current = saving;
+  const checking = useRef(false);
+  const lastCheck = useRef(0);
+  const acked = useRef('');
+  const checkElsewhere = useCallback(
+    async (force) => {
+      const before = cfgRef.current;
+      // A load that failed is tried again when the tab returns.
+      if (!before.loaded) {
+        if (before.error && !dirtyRef.current) setLoadSeq((n) => n + 1);
+        return;
+      }
+      if (checking.current || savingRef.current) return;
+      if (!force && Date.now() - lastCheck.current < 1500) return;
+      checking.current = true;
+      lastCheck.current = Date.now();
+      const seq = applySeq.current;
+      try {
+        const res = await getConfig();
+        if (seq !== applySeq.current) return;
+        const next = flattenConfig(res && res.config);
+        const changed = diffConfig(cfgRef.current.base, next);
+        if (changed.length === 0) return;
+        if (!dirtyRef.current) {
+          apply(res);
+          const note = `Updated from another tab or the file: ${labelList(changed, 4)} changed.`;
+          setUpdatedNote(note);
+          setLive(note);
+        } else {
+          const sig = JSON.stringify(changed.map((k) => [k, next[k]]));
+          if (sig !== acked.current) {
+            setElsewhere({ res, keys: changed, sig });
+            setUpdatedNote('');
+            setLive(`The saved values of ${labelList(changed, 4)} changed elsewhere. Your unsaved changes stay pending.`);
+          }
+        }
+      } catch {
+        // A failed look is not worth a message; the next focus tries again.
+      } finally {
+        checking.current = false;
+      }
+    },
+    [apply],
+  );
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') checkElsewhere(false);
+    };
+    const onFocus = () => checkElsewhere(false);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [checkElsewhere]);
+  const seenEpoch = useRef(app.epoch);
+  useEffect(() => {
+    if (seenEpoch.current === app.epoch) return;
+    seenEpoch.current = app.epoch;
+    if (cfgRef.current.loaded) checkElsewhere(true);
+    else if (!dirtyRef.current) setLoadSeq((n) => n + 1);
+  }, [app.epoch, checkElsewhere]);
+  // The notices are moot once nothing is edited: a save or discard shows the server's values.
+  useEffect(() => {
+    if (!dirty) setElsewhere(null);
+  }, [dirty]);
+
+  // Announce the unsaved count politely, after the typing pauses. A save or
+  // discard that empties the draft has its own toast, so it stays quiet here.
+  const prevCount = useRef(0);
+  const quietZero = useRef(false);
+  useEffect(() => {
+    const n = dirtyKeys.length;
+    if (n === prevCount.current) return undefined;
+    prevCount.current = n;
+    if (n > 0) quietZero.current = false;
+    else if (quietZero.current) {
+      quietZero.current = false;
+      return undefined;
+    }
+    const t = setTimeout(() => setLive(unsavedAnnouncement(n)), 700);
+    return () => clearTimeout(t);
+  }, [dirtyKeys.length]);
 
   const setValue = useCallback((key, value) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -86,11 +211,16 @@ export function SettingsPage({ route }) {
     setSaveError((e) => (e && e.fields[key] ? { ...e, fields: Object.fromEntries(Object.entries(e.fields).filter(([k]) => k !== key)) } : e));
   }, []);
   const discard = () => {
+    quietZero.current = true;
+    setDiscarding(false);
     setDraft({});
     setSaveError(null);
+    setElsewhere(null);
     setLoadSeq((n) => n + 1);
     app.toast({ message: 'Changes discarded' });
   };
+  // One edited field goes straight back; several ask first.
+  const askDiscard = () => (dirtyKeys.length > 1 ? setDiscarding(true) : discard());
 
   const save = async () => {
     if (!dirty || saving) return;
@@ -111,11 +241,13 @@ export function SettingsPage({ route }) {
     setSaveError(null);
     try {
       const res = await putConfig(body);
+      quietZero.current = true;
       apply(res);
+      setUpdatedNote('');
       setDraft((d) => draftAfterSave(d, sent));
       app.toast({ message: `Saved ${dirtyKeys.length === 1 ? '1 setting' : `${dirtyKeys.length} settings`}`, role: 'success' });
     } catch (err) {
-      setSaveError(fieldErrors(err));
+      setSaveError(fieldErrors(err, Object.keys(body).flatMap((sec) => Object.keys(body[sec]).map((k) => `${sec}.${k}`))));
       setFailSeq((n) => n + 1);
     } finally {
       setSaving(false);
@@ -201,7 +333,7 @@ export function SettingsPage({ route }) {
         : html`<${ErrorNote} title="Couldn't load the settings" error=${cfg.error} onRetry=${() => setLoadSeq((n) => n + 1)} />`;
   else if (!cfg.loaded) body = html`<${SkeletonRows} n=${6} kind="line" />`;
   else if (section.id === 'config_file')
-    body = html`<${ConfigFilePanel} persisted=${cfg.persisted} pinned=${cfg.pinnedList} reloadError=${cfg.reloadError} dirty=${dirty} onReloaded=${apply} />`;
+    body = html`<${ConfigFilePanel} persisted=${cfg.persisted} pinned=${cfg.pinnedList} reloadError=${cfg.reloadError} dirty=${dirty} base=${cfg.base} onReloaded=${apply} />`;
   else {
     const fields = sectionFields(section.id);
     body = html`
@@ -220,7 +352,7 @@ export function SettingsPage({ route }) {
             changed=${dirtyKeys.includes(f.key)}
             pinnedEnv=${cfg.pinned[f.key]}
             error=${errors[f.key]}
-            warning=${checks.warnings[f.key]}
+            warning=${warnings[f.key]}
             onChange=${(v) => setValue(f.key, v)}
             onRevert=${() => revert(f.key)}
           />`,
@@ -228,7 +360,7 @@ export function SettingsPage({ route }) {
       </div>
       ${section.id === 'files' ? html`<${TemplateReference} />` : null}
       ${section.id === 'library_sync'
-        ? html`<${LibrarySyncPanel} enabled=${cfg.base['library_sync.enabled'] === true} tokenSet=${Boolean(cfg.base['catalog.media_user_token'])} />`
+        ? html`<${LibrarySyncPanel} enabled=${cfg.base['library_sync.enabled'] === true} interval=${cfg.base['library_sync.interval_minutes']} tokenSet=${Boolean(cfg.base['catalog.media_user_token'])} />`
         : null}`;
   }
 
@@ -280,6 +412,35 @@ export function SettingsPage({ route }) {
             </${Notice}>
           </div>`
         : null}
+      ${updatedNote
+        ? html`<div class="settings-updated">
+            <${Notice} role="neutral" icon="info" action=${html`<${Button} variant="ghost" size="sm" onClick=${() => setUpdatedNote('')}>Dismiss</${Button}>`}>${updatedNote}</${Notice}>
+          </div>`
+        : null}
+      ${elsewhere
+        ? html`<div class="settings-elsewhere">
+            <${Notice} role="warning" icon="triangle-alert">
+              <p>${elsewhereText(elsewhere.keys, dirtyKeys.length)}</p>
+              <div class="settings-elsewhere-actions">
+                <${Button}
+                  size="sm"
+                  onClick=${() => {
+                    apply(elsewhere.res);
+                    setElsewhere(null);
+                  }}
+                >Show the saved values</${Button}>
+                <${Button}
+                  variant="ghost"
+                  size="sm"
+                  onClick=${() => {
+                    acked.current = elsewhere.sig;
+                    setElsewhere(null);
+                  }}
+                >Keep editing</${Button}>
+              </div>
+            </${Notice}>
+          </div>`
+        : null}
       <${Card} section=${section.id} className="settings-section" title=${section.label} labelId="settings-section-title">
         <p class="settings-intro">${section.intro}</p>
         ${body}
@@ -292,7 +453,7 @@ export function SettingsPage({ route }) {
             <span class="save-bar-where">${SETTINGS_SECTIONS.filter((s) => dirtySections.has(s.id)).map((s) => s.label).join(', ')}</span>
           </p>
           <div class="save-bar-actions">
-            <${Button} variant="ghost" className="save-bar-discard" onClick=${discard} disabled=${saving}>Discard</${Button}>
+            <${Button} variant="ghost" className="save-bar-discard" onClick=${askDiscard} disabled=${saving}>Discard</${Button}>
             <${Button}
               variant="primary"
               icon="save"
@@ -313,9 +474,22 @@ export function SettingsPage({ route }) {
           onConfirm=${leave}
           onCancel=${() => setLeaveTo(null)}
         >
-          <p>${changesLabel(dirtyKeys.length)} will be lost.</p>
+          <${LossText} keys=${dirtyKeys} lead="Leaving loses" />
         </${ConfirmDialog}>`
       : null}
+    ${discarding
+      ? html`<${ConfirmDialog}
+          title="Discard all unsaved changes?"
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          danger
+          onConfirm=${discard}
+          onCancel=${() => setDiscarding(false)}
+        >
+          <${LossText} keys=${dirtyKeys} lead="Discarding loses" />
+        </${ConfirmDialog}>`
+      : null}
+    <div class="sr-only" role="status" aria-live="polite">${live}</div>
   </div>`;
 }
 

@@ -2,6 +2,27 @@
 // login, two-step code, logout), keyed by the API's error codes. Pure.
 
 /**
+ * Whether a failed wrapper call means the wrapper-manager service itself
+ * cannot be reached (as opposed to Apple refusing a login): the API's
+ * wrapper_unavailable code or a raw gRPC "Unavailable" text.
+ * Returns null otherwise, else {address, detail}: the address read from the
+ * dial error when there is one ('' when not), and the server's own text.
+ */
+export function wrapperUnreachable(err) {
+  if (!err || !err.status) return null;
+  const raw = err.message || '';
+  const grpc = /code = Unavailable/.test(raw);
+  if (err.code !== 'wrapper_unavailable' && !grpc) return null;
+  const m = /dial tcp (\S+?):\s/.exec(raw);
+  return { address: m ? m[1] : '', detail: raw };
+}
+
+/** The plain-words sentence for an unreachable wrapper-manager. */
+export function unreachableText(u) {
+  return `The Apple Music session service (wrapper-manager) ${u.address ? `at ${u.address} ` : ''}is not reachable.`;
+}
+
+/**
  * Text for a failed wrapper call (an ApiError). `step` is login, code (the
  * two-step code), logout or status. {message, detail}: detail is the
  * server's own text when it adds something.
@@ -10,6 +31,8 @@ export function wrapperErrorText(err, step = 'login') {
   const raw = (err && err.message) || '';
   const status = err ? err.status : 0;
   const code = (err && err.code) || '';
+  const down = wrapperUnreachable(err);
+  if (down) return { message: unreachableText(down), detail: raw };
   if (status === 0) {
     return { message: code === 'timeout' ? 'The wrapper did not answer in time. Try again.' : 'Cannot reach the server.', detail: '' };
   }

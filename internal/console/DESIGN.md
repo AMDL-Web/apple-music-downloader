@@ -158,7 +158,7 @@ Stable class names and attributes a skin can style without touching JS:
 | Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus; it rises over the icon line with a negative `margin-top`, so its label shares the other labels' line, and a skin that resizes the mark or the tab icons restates it) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.skin`/`.seg-skin`/`.skin-cycle`, `.theme`/`.seg-icons`/`.theme-cycle` |
 | Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive); a busy button is `.btn[aria-disabled=true]`. Shortcut sheet `[data-dialog=shortcuts]` |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
-| Settings | `.page-settings[data-section-active][data-dirty]` > `nav.settings-nav` (`ul.settings-nav-list` > `a.settings-nav-item[data-section][aria-current=true][data-dirty][data-invalid]` > `.icon`, `.settings-nav-label`, `.settings-nav-mark` (`.settings-nav-dot` when unsaved); `label.settings-jump` > `.settings-jump-label` + `select`, shown under 640 px), `.settings-main` (a size container) > `.settings-error` + `section.card.settings-section[data-section=<id>]` > `.settings-intro`, `.field-list` > `.field[data-key][data-type][data-wide][data-changed][data-pinned][data-invalid]` > `.field-text` (`.field-label`, `.field-changed`, `button.field-revert`, `.field-help`, `code.field-key`), `.field-control` (`input.field-switch[role=switch]` + `.field-switch-state`, `.field-select` > `.select` + `.field-option-hint`, `.field-number` > `.field-input` + `.field-unit`, `.field-input`, `.field-secret`, `.list-editor` > `ol.list-items` > `li.list-item[data-item]` (`.list-rank`, `.list-label`, `.list-code`, `.list-actions` > `.list-up`, `.list-down`, `.list-remove`) + `.list-add`, `.check-group` > `label.check`), then `.field-pin`, `.field-error`, `.field-warning`; panels `.settings-panel[data-panel=library-sync\|config-file]` (`.settings-panel-head`, `.settings-panel-actions`, `.sync-reset`, `.config-reload`, `.pinned-table`), `details.template-ref`, `.account` > `.account-block` (`.account-block-head`, `ul.account-rows` > `.account-row` > `.account-name` + `.account-logout`), `form.login-form[data-step=credentials\|code]` > `.form-row`, `.form-actions`; `.save-bar[data-state=dirty\|saving]` > `.save-bar-text` (`.save-bar-count`, `.save-bar-where`) + `.save-bar-actions` (`.save-bar-discard`, `.save-bar-save`) |
+| Settings | `.page-settings[data-section-active][data-dirty]` > `nav.settings-nav` (`ul.settings-nav-list` > `a.settings-nav-item[data-section][aria-current=true][data-dirty][data-invalid]` > `.icon`, `.settings-nav-label`, `.settings-nav-mark` (`.settings-nav-dot` when unsaved); `label.settings-jump` > `.settings-jump-label` + `select`, shown under 640 px), `.settings-main` (a size container) > `.settings-error` + `section.card.settings-section[data-section=<id>]` > `.settings-intro`, `.field-list` > `.field[data-key][data-type][data-wide][data-changed][data-pinned][data-invalid]` > `.field-text` (`.field-label`, `.field-changed`, `button.field-revert`, `.field-help`, `code.field-key`), `.field-control` (`input.field-switch[role=switch]` + `.field-switch-state`, `.field-select` > `.select` + `.field-option-hint`, `.field-number` > `.field-input` + `.field-unit`, `.field-input`, `.field-secret`, `.list-editor` > `ol.list-items` > `li.list-item[data-item]` (`.list-rank`, `.list-label`, `.list-code`, `.list-actions` > `.list-up`, `.list-down`, `.list-remove`) + `.list-add`, `.check-group` > `label.check`), then `.field-default` (`code.field-default-value`), `.field-fixed` (a pinned folder or template shown whole), `.field-pin`, `.field-error`, `.field-warning`; `.list-min-note`; `.settings-updated` and `.settings-elsewhere` (`.settings-elsewhere-actions`) above the section; panels `.settings-panel[data-panel=library-sync\|config-file]` (`.settings-panel-head`, `.settings-panel-actions`, `.sync-reset`, `.sync-state`, `.config-reload`, `.config-outcome`, `.pinned-table`), `details.template-ref`, `.account` > `.account-block` (`.account-block-head`, `ul.account-rows` > `.account-row` > `.account-name` + `.account-logout`), `form.login-form[data-step=credentials\|code]` > `.form-row`, `.login-blocked`, `.form-actions`; `.save-bar[data-state=dirty\|saving]` > `.save-bar-text` (`.save-bar-count`, `.save-bar-where`) + `.save-bar-actions` (`.save-bar-discard`, `.save-bar-save`) |
 | Job selection (Queue) | Toolbar `.queue-tools` > `.btn.queue-retry-all` (Failed tab) + `.btn.queue-select[aria-pressed]`; `.bulk-bar[data-state=select\|run]` (sticky at `top: var(--topbar-h)`; a skin whose top bar does not stick overrides `top`) > `label.bulk-all` > `input.bulk-check` (indeterminate when some), `.bulk-count`, `.bulk-actions` > `.btn.bulk-action[data-action=retry\|cancel\|delete]` > `.bulk-n` (count) or `.bulk-hint`, or during a run `.bulk-progress` > `.bulk-progress-text` + `.bulk-meter[role=progressbar]` > `.bulk-meter-fill` (`--f`); `ul.job-list.is-selecting` > `li.job-item[data-job-id][data-selected]` > `label.job-check` > `input.job-check-input` + `a.job-row[data-selected]`. Drawer: `.btn.drawer-delete` (finished jobs) |
 | New download | `.page.page-new` > `.new-main` (cards `compose`, `results`, `links`) + `.new-aside` (`options`, `bookmarklet`), two columns at 1024 px and up (the aside 260-300 px wide below 1280, 300-380 from 1280). Compose: `form.new-form` > `textarea#new-input.new-input`, `.new-hint`, `.new-token` > `input.new-token-input` (while a station or private playlist can be sent), `.new-submit` > `.new-submit-info` (`.new-count`, `button.new-options-jump`) + `.btn.new-submit-btn[aria-busy]`. Links: `ul.new-links` > `li.new-link[data-kind][data-state=queued\|loading\|ready\|error\|idle\|invalid][data-issue=not_apple\|unsupported\|music_video\|refused\|not_found\|needs_token\|preview_failed][data-blocking][.has-palette]` > `.art.art-48.new-link-art`, `.new-link-main` (`.new-link-tags` > `.chip`s and `.new-link-loading`, `.new-link-title[.is-url]`, `.new-link-sub` > `.new-link-artist`, `.new-link-album`, `.new-link-fact[data-key=tracks\|year\|length\|genre]`, mono `.new-link-url`, `.new-link-note`, `.new-link-issue.status-text[data-role]`), `.new-link-actions` > `.new-link-quality`, `.new-link-retry`, `.new-link-remove`; `.new-links-more`. Results: `.new-results-summary[role=status]`, `ul.job-list.job-list-compact.new-results` > `li.new-result[data-status=accepted\|invalid\|duplicate_active\|duplicate_in_request\|queue_full\|error\|deleted]` > a Job row, or `.new-result-row[data-role]` > `.new-result-icon`, `.new-result-main` (`.new-result-label`, `.new-result-url`, `.new-result-msg`, `.new-result-detail`), `.new-result-actions`; head `.new-results-retry`, `.new-results-clear`. Options: `section.card.new-options` > `.new-options-toggle[aria-expanded]`, `.new-options-reset`, `#new-options-body.new-options-body[data-open]` > `.new-options-summary[data-changed]` (`.new-options-count`, `.new-options-text`) or `.new-options-form` > `fieldset.new-fieldset[data-group=quality\|lyrics\|covers\|behavior\|hooks][data-changed]` > `label.new-check[data-key][data-changed]` (`.new-check-label`, `.new-check-hint`), `.new-field[data-key][data-changed]` (`.new-field-label` + `.select`), `.new-field-row`, `.new-check-group`, `.new-codecs` > `ol.new-codec-list` > `li.new-codec[data-codec]` (`.new-codec-rank`, `.new-codec-name` > `.new-codec-hint`, `.new-codec-actions` > `.new-codec-up`) + `.new-codec-add` > `.new-codec-add-btn[data-codec]`, then `.new-options-foot`; the base puts an accent dot after the label of a value that differs from the server default. Bookmarklet: `.new-bookmarklet` > `code#new-bookmarklet-code.new-bookmarklet-code` + `.new-bookmarklet-copy`, `ol.new-steps`. Quality sheet `.sheet.sheet-quality[data-dialog=quality]` > `.quality-for`, `.quality-wait`, `.quality-body[role=region][tabindex=0]` (the part that scrolls, so the head and its Close stay) > `ul.quality-slots` > `li.quality-slot[data-id]` (`.quality-slot-label` > `.quality-slot-codec`, `.quality-slot-count`, `.quality-slot-best`), `ol.quality-tracks` > `li.quality-track` > `.quality-track-head` (`.quality-track-no`, `.quality-track-name`, `.chip`) + `.quality-track-opts` > `.quality-opt[data-id]` (`.quality-opt-label`, `.quality-opt-spec`) |
 
@@ -274,10 +274,14 @@ and motion covers.
   neither a field nor a `NOT_EDITED` reason): label, help condensed from
   `configs/config.example.yaml`, the dotted key, and a control by type
   (switch, select, number with unit, text, path, template, secret with
-  reveal, ordered list, checkbox set). A key in `ConfigResponse.pinned` is
-  disabled and names its variable; a long value ends in an ellipsis with the
-  whole of it in `title`. Edits stay in a draft; the sticky save bar
-  counts them, Discard drops them and reads `GET /config` again, Save (or
+  reveal, ordered list, checkbox set); every field states its default (the
+  five path templates and two folders carry `defaultValue`, which a test holds
+  to `configs/config.example.yaml`). A key in `ConfigResponse.pinned` is
+  disabled and names its variable; a pinned folder or template shows whole
+  and wrapped (`.field-fixed`), not cut off. The codec list says why its last
+  entry cannot be removed. Edits stay in a draft; the sticky save bar
+  counts them (announced politely, debounced), Discard drops them and reads
+  `GET /config` again (it asks first when more than one field is edited), Save (or
   Cmd/Ctrl+S, unless a dialog is up) sends `PUT /config` with only the
   changed leaves, lists whole (`buildPatch`); an edit made while the save
   runs stays in the draft (`draftAfterSave`). A section opens at its top. A refused save
@@ -285,12 +289,19 @@ and motion covers.
   each field it names (`details.keys` for `config_key_pinned` and
   `config_key_not_mutable`, the dotted keys in the message for
   `invalid_config` and 400). Only unsendable numbers block Save on the
-  client; an odd cover size or unknown template variable is a warning.
-  Library sync shows `GET /library-sync` and "Reset anchor" (a
-  `ConfirmDialog`); Apple Music account shows the wrapper status, Log out per
-  account (a `ConfirmDialog`) and the login form with its two-step code step;
-  Configuration file shows `persisted`, the pinned keys, `reload_error` and
-  "Reload from file".
+  client; an odd cover size or unknown template variable is a warning, and a
+  saved template keeps its warning. When the tab regains focus (and after a
+  reconnect) the page reads `GET /config` again: with no edits it refreshes and
+  says "Updated from another tab or the file"; under edits it shows a notice
+  with "Show the saved values" and "Keep editing", and the last write wins.
+  Library sync shows `GET /library-sync` (read again after a save changes the
+  switch; "On, idle" without a token) and "Reset anchor" (a `ConfirmDialog`,
+  disabled with a reason while there is no anchor); Apple Music account shows
+  the wrapper status, Log out per account (a `ConfirmDialog`) and the login
+  form with its two-step code step, which is disabled with a reason while the
+  wrapper-manager service is unreachable; Configuration file shows
+  `persisted`, the pinned keys, `reload_error` and "Reload from file", which
+  reports how many settings changed.
 - **Primitives**: buttons (primary, secondary, ghost, danger), segmented
   control, search field, select, chips, notices, toasts (`role="status"`,
   errors stay until dismissed), command palette (Cmd/Ctrl+K, never over a
@@ -371,7 +382,7 @@ and motion covers.
 | Showcase | skeleton hero and tiles (cover plus two text lines) | "Completed albums will appear here." with a link to the Queue and "Start a download" | inline note + Retry; broken cover shows bg color + glyph |
 | Logs | 12 skeleton lines | "No records match" + Clear filters | the API's validation message |
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |
-| Settings | 6 skeleton lines in the section | | inline note + Retry; a refused save keeps the draft with a notice and per-field errors; wrapper errors as notices with the server's text |
+| Settings | 6 skeleton lines in the section | | inline note + Retry; a refused save keeps the draft with a notice and per-field errors; wrapper errors as notices in plain words with the server's text under "Details"; a load error reloads after a reconnect |
 | New download | a skeleton cover and line per link being looked up; 3 skeleton lines for the options until `GET /config` answers | "No links yet" under the text box | a failed lookup flags its row (warning, Retry) and the link is still sent; options: inline note + Retry, and a submit sends no overrides; a refused submit shows a notice, `invalid_overrides` on the Options card |
 | Feed | | | Reconnecting · Ns; banner after 10 s; Disconnected after 60 s with Retry |
 
@@ -397,7 +408,8 @@ history, so no entry is added (a pushed entry is dropped with Back, a Back
 or Forward is reversed; entries carry `history.state.amdlIdx`,
 `lib/route.js` `refusedMove`) while the page shows its `ConfirmDialog`;
 leaving after all repeats the same move (`resumeLeave`). The browser's own
-prompt covers closing the tab. Moving between settings sections never asks.
+prompt covers closing the tab. The dialog names the count, the sections and
+the fields that would be lost. Moving between settings sections never asks.
 
 ## Data flow
 

@@ -22,9 +22,12 @@ const GROUPED = new Set(['list', 'set']);
 export function SettingsField({ field, value, changed, pinnedEnv, error, warning, onChange, onRevert }) {
   const id = fieldId(field.key);
   const pinned = Boolean(pinnedEnv);
-  const described = [`${id}-help`, pinned ? `${id}-pin` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
+  const described = [`${id}-help`, field.defaultValue ? `${id}-default` : '', pinned ? `${id}-pin` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
   const ctl = { field, id, value, disabled: pinned, invalid: Boolean(error), described, onChange };
-  const grouped = GROUPED.has(field.type);
+  // A pinned folder or template shows whole, wrapped, instead of a disabled
+  // one-line input that cuts a long path off.
+  const fixed = isFixedValue(field, pinned, value);
+  const grouped = GROUPED.has(field.type) || fixed;
   return html`<div
     class="field"
     data-key=${field.key}
@@ -45,6 +48,9 @@ export function SettingsField({ field, value, changed, pinnedEnv, error, warning
           : null}
       </div>
       <p class="field-help" id=${`${id}-help`}>${field.help}</p>
+      ${field.defaultValue
+        ? html`<p class="field-default" id=${`${id}-default`}>Default: <code class="field-default-value">${field.defaultValue}</code>${field.defaultNote ? html`. ${field.defaultNote}` : null}</p>`
+        : null}
       <code class="field-key">${field.key}</code>
     </div>
     <div class="field-control">${control(ctl)}</div>
@@ -56,7 +62,10 @@ export function SettingsField({ field, value, changed, pinnedEnv, error, warning
   </div>`;
 }
 
+const isFixedValue = (field, pinned, value) => pinned && Boolean(value) && (field.type === 'path' || field.type === 'template');
+
 function control(p) {
+  if (isFixedValue(p.field, p.disabled, p.value)) return html`<${FixedValue} ...${p} />`;
   switch (p.field.type) {
     case 'switch':
       return html`<${SwitchControl} ...${p} />`;
@@ -73,6 +82,11 @@ function control(p) {
     default:
       return html`<${TextControl} ...${p} />`;
   }
+}
+
+/** A value the environment pins, shown in full and wrapped; focusable so it can be selected by keyboard. */
+function FixedValue({ id, value, described }) {
+  return html`<div class="field-fixed mono" id=${id} role="group" tabindex="0" aria-labelledby=${`${id}-label`} aria-describedby=${described}>${String(value)}</div>`;
 }
 
 function SwitchControl({ id, value, disabled, described, onChange }) {
@@ -240,7 +254,7 @@ function ListEditor({ field, id, value, disabled, described, onChange }) {
           <span class="list-actions">
             <${Button} variant="ghost" size="sm" icon="chevron-up" className="list-up" aria-label=${`Move ${label(v)} up`} disabled=${disabled || i === 0} onClick=${() => move(i, -1)} />
             <${Button} variant="ghost" size="sm" icon="chevron-down" className="list-down" aria-label=${`Move ${label(v)} down`} disabled=${disabled || i === items.length - 1} onClick=${() => move(i, 1)} />
-            <${Button} variant="ghost" size="sm" icon="x" className="list-remove" aria-label=${`Remove ${label(v)}`} disabled=${disabled || items.length <= min} onClick=${() => remove(i)} />
+            <${Button} variant="ghost" size="sm" icon="x" className="list-remove" aria-label=${`Remove ${label(v)}`} disabled=${disabled || items.length <= min} aria-describedby=${items.length <= min && field.minItemsNote ? `${id}-min` : undefined} onClick=${() => remove(i)} />
           </span>
         </li>`,
       )}
@@ -254,6 +268,7 @@ function ListEditor({ field, id, value, disabled, described, onChange }) {
           <${Button} size="sm" icon="plus" disabled=${!adding} onClick=${add}>Add</${Button}>
         </div>`
       : null}
+    ${field.minItemsNote && items.length <= min && !disabled ? html`<p class="list-min-note" id=${`${id}-min`}>${field.minItemsNote}</p>` : null}
     <span class="sr-only" role="status" aria-live="polite">${said}</span>
   </div>`;
 }

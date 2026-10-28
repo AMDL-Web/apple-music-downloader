@@ -3,10 +3,10 @@
 
 import { html, useState } from '../ui/preact.js';
 import { getWrapperStatus, loginWrapper, submitWrapperTwoStep, logoutWrapper, settle } from '../api.js';
-import { wrapperErrorText } from '../lib/settings-account.js';
+import { wrapperErrorText, wrapperUnreachable } from '../lib/settings-account.js';
 import { wrapperView } from '../lib/status.js';
 import { count, maskAccount } from '../lib/format.js';
-import { useApp, Badge, Button, KV, Notice, SkeletonRows } from '../ui/components.js';
+import { useApp, Badge, Button, Icon, KV, Notice, SkeletonRows } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { usePoll } from '../ui/hooks.js';
 
@@ -16,7 +16,7 @@ function WrapperError({ error, step, role = 'danger' }) {
   const t = wrapperErrorText(error, step);
   return html`<${Notice} role=${role} icon=${role === 'danger' ? 'circle-x' : 'triangle-alert'}>
     <span class="account-error-msg">${t.message}</span>
-    ${t.detail ? html` <span class="mono small wrap-any account-error-detail">${t.detail}</span>` : null}
+    ${t.detail ? html`<details class="account-error-details"><summary>Details from the server</summary><span class="mono small wrap-any account-error-detail">${t.detail}</span></details>` : null}
   </${Notice}>`;
 }
 
@@ -24,6 +24,8 @@ export function AccountPanel() {
   const app = useApp();
   const status = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch]);
   const res = status.data;
+  // Login needs the session service; say why it cannot be used instead of failing late.
+  const down = res && res.error ? wrapperUnreachable(res.error) : null;
   const [reveal, setReveal] = useState(false);
   const [logout, setLogout] = useState(null);
 
@@ -32,7 +34,10 @@ export function AccountPanel() {
   else if (res.error) {
     state = html`<${KV} rows=${[['State', html`<${Badge} view=${wrapperView(res)} />`]]} />
       <${WrapperError} error=${res.error} step="status" role="warning" />
-      <p class="muted small">The backend reaches wrapper-manager at <code>wrapper.address</code> (a startup key in the config file). Downloads need it; simulate mode does not.</p>`;
+      <p class="muted small">
+        wrapper-manager is the separate service that keeps your Apple Music login and decrypts the audio. This backend finds it at${' '}
+        <code>wrapper.address</code> (a startup key in configs/config.yaml, changed with a restart). Downloads need it; simulate mode does not.
+      </p>`;
   } else {
     const w = res.data;
     state = html`<${KV}
@@ -49,7 +54,7 @@ export function AccountPanel() {
   return html`<div class="account">
     <section class="account-block" aria-labelledby="account-status-title">
       <div class="account-block-head">
-        <h3 class="section-title" id="account-status-title">wrapper-manager</h3>
+        <h3 class="section-title" id="account-status-title">Session service (wrapper-manager)</h3>
         <${Button} variant="ghost" size="sm" icon="rotate" onClick=${status.reload}>Refresh</${Button}>
       </div>
       ${state}
@@ -76,7 +81,7 @@ export function AccountPanel() {
             : html`<p class="muted small">No account is logged in. Log in below so downloads can be decrypted.</p>`}
         </section>`
       : null}
-    <${LoginForm} onDone=${status.reload} again=${accounts.length > 0} />
+    <${LoginForm} onDone=${status.reload} again=${accounts.length > 0} blocked=${down ? 'Log in is off until the session service is reachable. This page checks again every 30 seconds.' : ''} />
     ${logout
       ? html`<${LogoutDialog}
           account=${logout}
@@ -126,7 +131,7 @@ function LogoutDialog({ account, masked, onClose, onDone }) {
  * wrapper answers 202 needs_2fa. The password goes to wrapper-manager and is
  * kept only in this form's state; it is cleared on success.
  */
-function LoginForm({ onDone, again }) {
+function LoginForm({ onDone, again, blocked }) {
   const app = useApp();
   const [step, setStep] = useState('credentials');
   const [username, setUsername] = useState('');
@@ -152,7 +157,7 @@ function LoginForm({ onDone, again }) {
 
   const submitCredentials = async (e) => {
     e.preventDefault();
-    if (busy) return;
+    if (busy || blocked) return;
     setBusy(true);
     setError(null);
     try {
@@ -253,8 +258,16 @@ function LoginForm({ onDone, again }) {
       />
     </div>
     <${WrapperError} error=${error} step="login" />
+    ${blocked ? html`<p class="small login-blocked" id="login-blocked"><${Icon} name="triangle-alert" size="sm" /><span>${blocked}</span></p>` : null}
     <div class="form-actions">
-      <${Button} type="submit" variant="primary" icon="key" aria-disabled=${busy ? 'true' : undefined}>${busy ? 'Logging in…' : 'Log in'}</${Button}>
+      <${Button}
+        type="submit"
+        variant="primary"
+        icon="key"
+        disabled=${Boolean(blocked)}
+        aria-describedby=${blocked ? 'login-blocked' : undefined}
+        aria-disabled=${busy ? 'true' : undefined}
+      >${busy ? 'Logging in…' : 'Log in'}</${Button}>
     </div>
   </form>`;
 }

@@ -3,9 +3,9 @@
 // and the path template reference.
 
 import { html, useState } from '../ui/preact.js';
+import { flattenConfig, diffConfig, reloadSummary, librarySyncState, anchorResetState } from '../lib/settings.js';
 import { getLibrarySync, resetLibrarySync, reloadConfig } from '../api.js';
 import { TEMPLATE_VARIABLES, PADDED_VARIABLES } from '../lib/settings-template.js';
-import { librarySyncView } from '../lib/status.js';
 import { count } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
 import { useApp, Badge, Button, KV, Notice, RelTime, SkeletonRows, ErrorNote } from '../ui/components.js';
@@ -15,17 +15,18 @@ import { usePoll } from '../ui/hooks.js';
 const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 
 /**
- * Live state from GET /library-sync (polled every 30 s) and Reset anchor.
- * `enabled` and `tokenSet` are the saved config values, for the
- * missing-token warning.
+ * Live state from GET /library-sync (polled every 30 s, and again when a
+ * save changes the switch or the interval) and Reset anchor. `enabled`,
+ * `interval` and `tokenSet` are the saved config values.
  */
-export function LibrarySyncPanel({ enabled, tokenSet }) {
+export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
   const app = useApp();
-  const poll = usePoll(getLibrarySync, 30000, [app.epoch]);
+  const poll = usePoll(getLibrarySync, 30000, [app.epoch, enabled, interval]);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const s = poll.data;
+  const resetState = anchorResetState(s);
 
   const reset = async () => {
     setBusy(true);
@@ -52,7 +53,7 @@ export function LibrarySyncPanel({ enabled, tokenSet }) {
   else
     body = html`<${KV}
       rows=${[
-        ['State', html`<${Badge} view=${librarySyncView({ data: s })} />`],
+        ['State', html`<${SyncState} view=${librarySyncState(s, tokenSet)} />`],
         ['Last poll', s.last_poll_at ? html`<${RelTime} value=${s.last_poll_at} />` : 'Never'],
         ['Last error', s.last_error ? html`<span class="text-warning wrap-any">${s.last_error}</span>` : null],
         ['Anchor', s.anchor_size > 0 ? plural(s.anchor_size, 'track', 'tracks') : 'Not set; the next poll sets it'],
@@ -67,14 +68,23 @@ export function LibrarySyncPanel({ enabled, tokenSet }) {
     </div>
     ${enabled && !tokenSet
       ? html`<${Notice} role="warning" icon="triangle-alert">
-          Library sync is on but the media user token is empty, so the monitor idles.
+          Library sync is on but the media user token is empty, so the monitor idles.${' '}
           <a class="link" href=${settingsHash('catalog')}>Set the token in Catalog</a>.
         </${Notice}>`
       : null}
     ${body}
     <div class="settings-panel-actions">
-      <${Button} variant="secondary" icon="rotate" className="sync-reset" onClick=${() => setAsking(true)} disabled=${!s}>Reset anchor…</${Button}>
-      <p class="muted small">Forgets which songs the monitor has seen. Nothing is downloaded by the reset.</p>
+      <${Button}
+        variant="secondary"
+        icon="rotate"
+        className="sync-reset"
+        onClick=${() => setAsking(true)}
+        disabled=${!resetState.allowed}
+        aria-describedby="sync-reset-note"
+      >Reset anchor…</${Button}>
+      <p class="muted small" id="sync-reset-note">
+        ${resetState.allowed ? 'Forgets which songs the monitor has seen. Nothing is downloaded by the reset.' : resetState.reason}
+      </p>
     </div>
     ${asking
       ? html`<${ConfirmDialog}
@@ -97,31 +107,41 @@ export function LibrarySyncPanel({ enabled, tokenSet }) {
   </section>`;
 }
 
+/** The State badge with its detail (why it is idle, how often it polls) beside it. */
+function SyncState({ view }) {
+  return html`<span class="sync-state"><${Badge} view=${view} />${view.detail ? html`<span class="muted small wrap-any">${view.detail}</span>` : null}</span>`;
+}
+
 /**
  * Where the settings live: whether PUT writes them to the file, the keys an
  * environment variable pins, the last reload error, and "Reload from file"
  * (POST /config/reload). onReloaded gets the ConfigResponse.
  */
-export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, onReloaded }) {
+export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, onReloaded }) {
   const app = useApp();
   const [busy, setBusy] = useState(false);
+  // What the last Reload did, kept on the page: {role, text} or null.
+  const [outcome, setOutcome] = useState(null);
+  const list = Array.isArray(pinned) ? pinned : [];
   const reload = async () => {
+    if (busy) return;
     setBusy(true);
     try {
       const res = await reloadConfig();
       onReloaded(res);
-      app.toast(
-        res.reload_error
-          ? { message: 'The config file could not be used; the previous settings stay active', role: 'warning', sticky: true }
-          : { message: 'Settings reloaded from the config file', role: 'success' },
-      );
+      if (res.reload_error) {
+        setOutcome({ role: 'warning', text: 'The config file could not be used; the previous settings stay active.' });
+      } else {
+        const sum = reloadSummary(diffConfig(base, flattenConfig(res.config)), list.length);
+        setOutcome({ role: 'success', text: sum.long });
+        app.toast({ message: sum.short, role: 'success' });
+      }
     } catch (e) {
-      app.toast({ message: e.message, role: 'danger' });
+      setOutcome({ role: 'danger', text: `Reload failed: ${e.message}` });
     } finally {
       setBusy(false);
     }
   };
-  const list = Array.isArray(pinned) ? pinned : [];
   return html`<div class="settings-panel" data-panel="config-file">
     <${KV}
       rows=${[
@@ -151,6 +171,11 @@ export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, onReloa
       <${Button} variant="secondary" icon="rotate" className="config-reload" onClick=${reload} aria-disabled=${busy ? 'true' : undefined}>${busy ? 'Reloading…' : 'Reload from file'}</${Button}>
       <p class="muted small">Reads configs/config.yaml again, for example after a hand edit.${dirty ? ' Your unsaved changes stay pending.' : ''}</p>
     </div>
+    ${outcome
+      ? html`<div class="config-outcome" role=${outcome.role === 'success' ? undefined : 'alert'}>
+          <${Notice} role=${outcome.role} icon=${outcome.role === 'danger' ? 'circle-x' : outcome.role === 'warning' ? 'triangle-alert' : 'circle-check'}>${outcome.text}</${Notice}>
+        </div>`
+      : null}
     <p class="muted small">
       Startup settings (listen address, database, log outputs, wrapper address, tools, catalog signing and request limits, worker pools) are not on this page: edit configs/config.yaml and restart. configs/config.example.yaml documents every key.
     </p>
