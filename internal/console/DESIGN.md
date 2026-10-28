@@ -312,8 +312,14 @@ and motion covers.
   `persisted`, the pinned keys, `reload_error` and "Reload from file", which
   reports how many settings changed.
 - **Primitives**: buttons (primary, secondary, ghost, danger), segmented
-  control, search field, select, chips, notices, toasts (`role="status"`,
-  errors stay until dismissed), command palette (Cmd/Ctrl+K, never over a
+  control, search field, select, chips, notices, toasts (`role="status"`; 5 s,
+  8 s with an action, errors 10 s, every timer paused while the pointer or
+  focus is on them; `sticky` ones stay until dismissed or the page changes;
+  `.toast` > `.icon`, `.toast-msg`, `a.toast-action`, Dismiss),
+  completion toasts (`app.watchJobs(ids)`: when watched jobs end, one toast
+  per 3 s burst, "Album X finished" with Open to its drawer or "3 downloads
+  finished" with a link to the Queue, `lib/watch.js`; such a job is not also
+  sent to the milestone region), command palette (Cmd/Ctrl+K, never over a
   modal dialog; combobox + listbox; focus handling from `useDialog`, so
   focus returns to the opener), shortcut sheet (`?`).
 - **Dialogs** (`ui/dialogs.js`): `Dialog` is a scrim plus a modal panel

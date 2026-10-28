@@ -10,6 +10,8 @@ import { THEME_KEY, SKIN_KEY, normalizeTheme, normalizeSkin, readPref, writePref
 import { applyFeedMessage, EMPTY_COUNTS } from './lib/store.js';
 import { StreamClient, createCoalescer, backoffDelay } from './lib/stream.js';
 import { jobTitle, typeLabel, count, pageSummary } from './lib/format.js';
+import { isTerminal } from './lib/status.js';
+import { BURST_MS, endsWatch, finishedToast } from './lib/watch.js';
 import { AppContext, Icon, Button, LinkButton } from './ui/components.js';
 import { isDialogOpen } from './ui/dialogs.js';
 import { loadSprite, spriteLoaded } from './ui/icons.js';
@@ -66,7 +68,12 @@ export function applySkin(skin) {
 }
 
 const ANNOUNCE_GAP_MS = 5000;
+// How long a toast stays: errors longer, a toast with an action (Open) a
+// little longer; a sticky one until dismissed or the page changes. Every
+// timer pauses while the pointer or focus is on the toasts.
 const TOAST_MS = 5000;
+const TOAST_ACTION_MS = 8000;
+const TOAST_DANGER_MS = 10000;
 
 const isTyping = (el) =>
   el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
@@ -124,13 +131,110 @@ export function App() {
     return () => mq.removeEventListener('change', sync);
   }, [theme, skin]);
 
-  const toast = useCallback((t) => {
-    const id = `${Date.now()}-${Math.random()}`;
-    const role = t.role || 'neutral';
-    setToasts((list) => [...list.slice(-3), { id, message: t.message, role }]);
-    if (!t.sticky && role !== 'danger') setTimeout(() => setToasts((list) => list.filter((x) => x.id !== id)), TOAST_MS);
+  // Toasts: {id, message, role, sticky, action: {label, hash}}.
+  const toastTimers = useRef(new Map());
+  const toastsHeld = useRef(false);
+  const toastsRef = useRef(null);
+  const dismissToast = useCallback((id) => {
+    const t = toastTimers.current.get(id);
+    if (t && t.timer !== null) clearTimeout(t.timer);
+    toastTimers.current.delete(id);
+    setToasts((list) => list.filter((x) => x.id !== id));
   }, []);
-  const dismissToast = (id) => setToasts((list) => list.filter((x) => x.id !== id));
+  const toast = useCallback(
+    (t) => {
+      const id = `${Date.now()}-${Math.random()}`;
+      const role = t.role || 'neutral';
+      setToasts((list) => [...list.slice(-3), { id, message: t.message, role, sticky: Boolean(t.sticky), action: t.action || null }]);
+      if (t.sticky) return;
+      const ms = role === 'danger' ? TOAST_DANGER_MS : t.action ? TOAST_ACTION_MS : TOAST_MS;
+      const timer = toastsHeld.current ? null : setTimeout(() => dismissToast(id), ms);
+      toastTimers.current.set(id, { timer, left: ms, at: Date.now() });
+    },
+    [dismissToast],
+  );
+  useEffect(() => {
+    const el = toastsRef.current;
+    if (!el) return undefined;
+    let hover = false;
+    const hold = () => {
+      if (toastsHeld.current) return;
+      toastsHeld.current = true;
+      for (const t of toastTimers.current.values()) {
+        if (t.timer === null) continue;
+        clearTimeout(t.timer);
+        t.timer = null;
+        t.left -= Date.now() - t.at;
+      }
+    };
+    const release = () => {
+      if (!toastsHeld.current || hover || el.contains(document.activeElement)) return;
+      toastsHeld.current = false;
+      for (const [id, t] of toastTimers.current) {
+        t.at = Date.now();
+        t.timer = setTimeout(() => dismissToast(id), Math.max(1500, t.left));
+      }
+    };
+    const enter = () => {
+      hover = true;
+      hold();
+    };
+    const leave = () => {
+      hover = false;
+      release();
+    };
+    const focusOut = () => setTimeout(release, 0);
+    el.addEventListener('mouseenter', enter);
+    el.addEventListener('mouseleave', leave);
+    el.addEventListener('focusin', hold);
+    el.addEventListener('focusout', focusOut);
+    return () => {
+      el.removeEventListener('mouseenter', enter);
+      el.removeEventListener('mouseleave', leave);
+      el.removeEventListener('focusin', hold);
+      el.removeEventListener('focusout', focusOut);
+    };
+  }, [dismissToast]);
+  // A sticky toast is about the page it was raised on.
+  useEffect(() => setToasts((list) => (list.some((t) => t.sticky) ? list.filter((t) => !t.sticky) : list)), [route.page, route.jobId]);
+
+  // Jobs a page asked to watch (app.watchJobs, after New download submits
+  // them): when they end, one visible toast per burst (lib/watch.js).
+  const watched = useRef(new Set());
+  const recentEnded = useRef(new Map());
+  const endedBurst = useRef([]);
+  const burstTimer = useRef(null);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const flushEnded = useCallback(() => {
+    burstTimer.current = null;
+    const jobs = endedBurst.current;
+    endedBurst.current = [];
+    if (jobs.length) toast(finishedToast(jobs, routeRef.current));
+  }, [toast]);
+  const noteEnded = useCallback(
+    (job) => {
+      watched.current.delete(job.id);
+      endedBurst.current.push(job);
+      if (burstTimer.current === null) burstTimer.current = setTimeout(flushEnded, BURST_MS);
+    },
+    [flushEnded],
+  );
+  const watchJobs = useCallback(
+    (ids) => {
+      for (const id of ids || []) {
+        if (!id) continue;
+        // The feed can report the end before the submit answer arrives.
+        const done = recentEnded.current.get(id);
+        if (done) noteEnded(done);
+        else watched.current.add(id);
+      }
+      if (watched.current.size > 500) watched.current = new Set([...watched.current].slice(-500));
+    },
+    [noteEnded],
+  );
+  const noteEndedRef = useRef(noteEnded);
+  noteEndedRef.current = noteEnded;
 
   const flushAnnouncements = useCallback(() => {
     announceTimer.current = null;
@@ -169,7 +273,14 @@ export function App() {
         if (!job) continue;
         const prev = lastStatus.current.get(job.id);
         lastStatus.current.set(job.id, job.status);
-        if (prev && prev !== job.status && (job.status === 'completed' || job.status === 'failed')) {
+        if (isTerminal(job.status)) {
+          recentEnded.current.set(job.id, job);
+          if (recentEnded.current.size > 50) recentEnded.current.delete(recentEnded.current.keys().next().value);
+        } else recentEnded.current.delete(job.id);
+        if (watched.current.has(job.id) && endsWatch(job)) {
+          // Its toast is announced through the toasts' own live region.
+          noteEndedRef.current(job);
+        } else if (prev && prev !== job.status && (job.status === 'completed' || job.status === 'failed')) {
           announce(`${typeLabel(job.type)} ${jobTitle(job)} ${job.status}`);
         }
       }
@@ -246,6 +357,7 @@ export function App() {
     boot();
     return () => {
       window.removeEventListener('online', onOnline);
+      if (burstTimer.current !== null) clearTimeout(burstTimer.current);
       stopped = true;
       if (bootTimer !== null) clearTimeout(bootTimer);
       coalescer.cancel();
@@ -404,6 +516,7 @@ export function App() {
     () => ({
       navigate,
       toast,
+      watchJobs,
       announce,
       subscribeFeed,
       counts,
@@ -414,7 +527,7 @@ export function App() {
       resumeLeave,
       retryFeed: () => retryRef.current(),
     }),
-    [navigate, toast, announce, subscribeFeed, counts, conn, epoch, simulate, setLeaveGuard, resumeLeave],
+    [navigate, toast, watchJobs, announce, subscribeFeed, counts, conn, epoch, simulate, setLeaveGuard, resumeLeave],
   );
 
   const title = TITLES[route.page] || 'AMDL';
@@ -483,11 +596,14 @@ export function App() {
     ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} setSkin=${setSkin} />` : null}
     ${overlay === 'shortcuts' ? html`<${ShortcutSheet} onClose=${() => setOverlay(null)} />` : null}
     ${overlay === 'more' ? html`<${MoreSheet} route=${route} onClose=${() => setOverlay(null)} />` : null}
-    <div class="toasts" role="status" aria-live="polite">
+    <div class="toasts" role="status" aria-live="polite" ref=${toastsRef}>
       ${toasts.map(
         (t) => html`<div key=${t.id} class="toast" data-role=${t.role}>
           <${Icon} name=${t.role === 'danger' ? 'circle-x' : t.role === 'success' ? 'circle-check' : t.role === 'warning' ? 'triangle-alert' : 'info'} />
           <span class="toast-msg">${t.message}</span>
+          ${t.action
+            ? html`<${LinkButton} variant="ghost" size="sm" className="toast-action" href=${t.action.hash} onClick=${() => dismissToast(t.id)}>${t.action.label}</${LinkButton}>`
+            : null}
           <${Button} variant="ghost" size="sm" icon="x" aria-label="Dismiss" onClick=${() => dismissToast(t.id)} />
         </div>`,
       )}
