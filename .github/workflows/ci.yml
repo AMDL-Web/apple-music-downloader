@@ -1,12 +1,19 @@
 name: CI
 
-# 持续集成：每次 push 到 main 以及所有 PR 都会构建并跑测试。
-# 此前只有 release.yml 在发版时才执行 go test，问题会拖到发版才暴露。
+# Build, test and scan every push to main and dev (agents push to dev directly)
+# and every pull request. Each step calls one Makefile target, so `make check`
+# locally runs exactly what this workflow runs.
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
+
+# Pushes get one group per commit so every commit on main and dev keeps its own
+# verdict; pull requests share a group per ref and cancel superseded runs.
+concurrency:
+  group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -32,29 +39,48 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Test release tooling
-        run: node --test .github/scripts/generate-changelog.test.mjs
-
       - name: Check formatting
-        run: |
-          UNFORMATTED=$(gofmt -l .)
-          if [ -n "$UNFORMATTED" ]; then
-            echo "以下文件未通过 gofmt，请运行 gofmt -w ." >&2
-            echo "$UNFORMATTED" >&2
-            exit 1
-          fi
+        run: make fmt-check
 
       - name: Build
-        run: go build ./...
+        run: make build
 
       - name: Vet
-        run: go vet ./...
+        run: make vet
 
       - name: Test
-        run: go test ./...
+        run: make test
 
       - name: Race detector
-        run: go test -race ./...
+        run: make race
 
       - name: Vulnerability scan
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+        run: make vuln
+
+      - name: Script tests
+        run: make node-test
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Single-arch and never pushed: this only proves the Dockerfile and
+      # .dockerignore still produce an image before a release tag depends on it.
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha
+          # Fork pull requests may only read the cache; a failed export must
+          # not fail a build that succeeded.
+          cache-to: type=gha,mode=max,ignore-error=true

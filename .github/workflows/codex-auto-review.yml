@@ -1,30 +1,33 @@
 name: Codex Auto Review Trigger
 
-# 自动触发 Codex 审查开关：仓库变量 CODEX_AUTO_REVIEW
-# - 未设置或设为其他值：开启（默认开）
-# - 设为 "false"：关闭
-# 修改方式：Settings → Secrets and variables → Actions → Variables，
-# 或命令行：gh variable set CODEX_AUTO_REVIEW --body false
+# Kill switch: the repository variable CODEX_AUTO_REVIEW.
+# - unset or any other value: on (the default)
+# - "false": off
+# Change it under Settings -> Secrets and variables -> Actions -> Variables,
+# or with: gh variable set CODEX_AUTO_REVIEW --body false
 #
-# 原理：Codex 的 GitHub 审查集成只认 An0nCh1hayaa 这个账号发出的评论来触发，
-# 默认的 GITHUB_TOKEN 发出的评论会显示为 github-actions[bot]，Codex 不会响应。
-# 所以这里改用该账号的 Personal Access Token（存为 secret CODEX_REVIEW_PAT）去发评论，
-# 让评论以该账号身份发出。PAT 需要对本仓库具备 Pull requests: Read and write 权限。
+# How it works: Codex's GitHub review integration only reacts to comments from
+# the An0nCh1hayaa account. A comment posted with the default GITHUB_TOKEN shows
+# up as github-actions[bot] and Codex ignores it, so this posts with that
+# account's personal access token (secret CODEX_REVIEW_PAT), which needs
+# "Pull requests: Read and write" on this repository.
 #
-# 只在 PR 创建（opened）时触发一次，后续 push（synchronize）不会重复评论。
+# Runs once when a PR is opened; later pushes (synchronize) don't comment again.
+#
+# What to report, what to skip and the output language are set in REVIEW.md.
 
 on:
   pull_request:
     types: [opened]
 
-# 这个 job 不 checkout 代码，也不使用默认 GITHUB_TOKEN（用自定义 PAT 覆盖了），
-# 所以显式收紧成零权限，满足最小权限原则。
+# The job checks out no code and doesn't use the default GITHUB_TOKEN (the PAT
+# replaces it), so it gets no permissions at all.
 permissions: {}
 
 jobs:
   trigger-codex-review:
-    # bot 开的 PR 不审：Renovate 的依赖升级 PR 内容是版本号，AI 审查读不出什么，
-    # 白烧额度。它们的安全网是 ci.yml 和 CodeQL，那两个照常跑。
+    # PRs opened by bots are skipped: Renovate's version bumps give an AI review
+    # nothing to work with. ci.yml and CodeQL still run on them.
     if: >-
       vars.CODEX_AUTO_REVIEW != 'false'
       && !github.event.pull_request.draft
@@ -37,12 +40,9 @@ jobs:
           REVIEW_BODY: |
             @codex review
 
-            请重点关注：
-            - 正确性问题（并发、错误处理、边界条件）
-            - 是否符合仓库架构与 CLAUDE.md 中的约定
-            - config.yaml / openapi.yaml 是否随改动同步更新
-            - 是否混入本地路径、密钥等不适合开源仓库的内容
-            - 是否存在破坏性改动（参数名、端口等）
+            Follow REVIEW.md at the repository root: it defines what counts as
+            a defect, what not to report, how to report, and the language to
+            write in.
         run: |
           gh pr comment "${{ github.event.pull_request.number }}" \
             --repo "${{ github.repository }}" \

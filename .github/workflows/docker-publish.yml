@@ -1,18 +1,18 @@
 name: Docker Publish
 
-# 构建多架构镜像(linux/amd64 + linux/arm64)并推送到 GHCR:
+# Build the multi-arch image (linux/amd64 + linux/arm64) and push it to GHCR:
 #   ghcr.io/amdl-web/apple-music-downloader-backend
 #
-# 触发方式(三选一):
-#   - workflow_call:release.yml 发版成功后调用,这是主路径。release.yml
-#     用 GITHUB_TOKEN 创建 tag 和 release,GitHub 不会让这类事件级联触发
-#     其他 workflow,所以靠下面的 release 触发器接不到自动发版,必须由
-#     release.yml 显式调用。
-#   - release published:手工在 GitHub 页面创建并发布 release 时触发。
-#   - workflow_dispatch:对已存在的 tag 手动补发/重发镜像。
+# Triggers (one of three):
+#   - workflow_call: called by release.yml after a successful release; the main
+#     path. release.yml creates the tag and release with GITHUB_TOKEN, and
+#     GitHub does not let such events trigger other workflows, so the release
+#     trigger below never sees automatic releases; release.yml must call this.
+#   - release published: a release created and published by hand on GitHub.
+#   - workflow_dispatch: build or rebuild the image for an existing tag by hand.
 #
-# 首次推送会在 GHCR 创建私有 package,如需公开拉取,到 GitHub 的
-# Packages 设置里把该 package 改为 public。
+# The first push creates a private package on GHCR; to allow public pulls, make
+# the package public in its GitHub Packages settings.
 
 on:
   release:
@@ -20,24 +20,24 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '要构建的版本标签 (例如: v1.0.0)'
+        description: 'Version tag to build (e.g. v1.0.0)'
         required: true
         type: string
-      # 手动补发/重发旧版本镜像时不应移动 latest,默认关闭;
-      # 只有重发的就是最新版本时才勾选。
+      # Rebuilding an older version by hand must not move latest, so this is
+      # off by default; tick it only when the rebuilt version is the newest.
       latest:
-        description: '同时把 latest 指向该版本'
+        description: 'Also point latest at this version'
         required: false
         type: boolean
         default: false
   workflow_call:
     inputs:
       tag:
-        description: '要构建的版本标签'
+        description: 'Version tag to build'
         required: true
         type: string
       latest:
-        description: '同时把 latest 指向该版本'
+        description: 'Also point latest at this version'
         required: false
         type: boolean
         default: true
@@ -61,8 +61,9 @@ jobs:
           ref: ${{ steps.ref.outputs.tag }}
           fetch-depth: 1
 
-      # Dockerfile 的构建阶段在构建平台上交叉编译 Go,但运行阶段
-      # (alpine + apk)要在目标平台执行,arm64 需要 QEMU 仿真。
+      # The Dockerfile's build stage cross-compiles Go on the build platform,
+      # but the runtime stage (alpine + apk) runs on the target platform, so
+      # arm64 needs QEMU emulation.
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
@@ -76,12 +77,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 从版本标签展开镜像 tag:v1.2.3 → 1.2.3、1.2,以及(视情况)latest。
-      # latest 仅在以下情况移动:release.yml 发版调用(workflow_call 默认
-      # latest=true)、页面手工发布非预发布 release、手动 dispatch 且勾选
-      # 了 latest。手动补发旧版本镜像默认不会把 latest 拉回旧版。
-      # metadata-action 会自动把仓库名转小写,并写入 OCI 标签
-      # (org.opencontainers.image.source 等),让 GHCR package 关联到本仓库。
+      # Expand the version tag into image tags: v1.2.3 -> 1.2.3, 1.2 and, when
+      # applicable, latest. latest moves only for a release.yml call
+      # (workflow_call defaults latest=true), a non-prerelease release
+      # published by hand, or a manual dispatch with latest ticked, so
+      # rebuilding an old version never pulls latest back.
+      # metadata-action lowercases the repository name and writes OCI labels
+      # (org.opencontainers.image.source and others) that link the GHCR
+      # package to this repository.
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -101,6 +104,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          # 合并 PR 触发的自动发版可能只有缓存读取权限。缓存只是构建优化，
-          # 导出失败不应让已经成功构建并推送的镜像发布失败。
+          # A release triggered by a merged PR may only have read access to the
+          # cache. The cache is an optimization; a failed export must not fail
+          # an image that was built and pushed.
           cache-to: type=gha,mode=max,ignore-error=true
