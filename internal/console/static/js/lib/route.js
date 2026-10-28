@@ -1,7 +1,7 @@
 // Pure hash routing and filter mapping. Routes are #/, #/queue,
-// #/queue/:id, #/showcase, #/showcase/:id, #/logs, #/system, #/new and
-// #/settings; filters live in the hash query so a filtered view is a
-// shareable link.
+// #/queue/:id, #/showcase, #/showcase/:id, #/logs, #/system, #/new,
+// #/new/:id and #/settings; filters live in the hash query so a filtered
+// view is a shareable link.
 
 export const PAGES = ['overview', 'queue', 'showcase', 'logs', 'system', 'new', 'settings'];
 
@@ -9,7 +9,7 @@ const PAGE_PATHS = { overview: '', queue: 'queue', showcase: 'showcase', logs: '
 const PATH_PAGES = Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k]));
 
 /** Pages whose route may carry a job id that opens the job drawer. */
-const DRAWER_PAGES = new Set(['queue', 'showcase']);
+const DRAWER_PAGES = new Set(['queue', 'showcase', 'new']);
 
 /**
  * Parses location.hash into {page, jobId, params}. Unknown paths give

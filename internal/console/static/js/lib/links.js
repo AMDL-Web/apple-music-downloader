@@ -108,3 +108,66 @@ export function extractLinks(text) {
   }
   return out;
 }
+
+// Any other http(s) link, so the page can flag a line that is not Apple Music.
+const OTHER_URL = /(?<![\w.@-])https?:\/\/[^\s<>"'`()[\]{}|\\^,]+/gi;
+// What a line may still hold once its links are cut out and it counts as empty.
+const LEFTOVER = /^[\s,;:<>()[\]"'`|*_~.-]*$/;
+
+/** Link-shaped spans of one string in order: Apple Music candidates first, then other URLs that do not overlap them. */
+function spans(text) {
+  const out = [];
+  for (const m of text.matchAll(CANDIDATE)) {
+    out.push({ start: m.index, raw: m[0].replace(TRAILING, ''), apple: true });
+  }
+  for (const m of text.matchAll(OTHER_URL)) {
+    const end = m.index + m[0].length;
+    if (out.some((s) => s.apple && m.index < s.start + s.raw.length + 1 && s.start < end)) continue;
+    out.push({ start: m.index, raw: m[0].replace(TRAILING, ''), apple: false });
+  }
+  out.sort((a, b) => a.start - b.start);
+  for (const s of out) {
+    s.link = parseLink(s.raw);
+    s.url = s.link ? s.link.url : s.raw;
+  }
+  return out;
+}
+
+/**
+ * Every link in arbitrary text, in order and without duplicates:
+ * {url, raw, link}. Apple Music links carry parseLink()'s result in `link`
+ * and its normalized URL in `url`; any other http(s) URL has `link: null`
+ * and `url` equal to the text as written (minus trailing punctuation), so
+ * the page can say it is not an Apple Music link. Free text around the
+ * links is ignored.
+ */
+export function scanLinks(text) {
+  if (typeof text !== 'string' || !text) return [];
+  const seen = new Set();
+  const out = [];
+  for (const s of spans(text)) {
+    if (seen.has(s.url)) continue;
+    seen.add(s.url);
+    out.push({ url: s.url, raw: s.raw, link: s.link });
+  }
+  return out;
+}
+
+/**
+ * Removes every occurrence of one link (a scanLinks() `url`) from text. A
+ * line left with nothing but separators and brackets is dropped; other
+ * text on the line stays.
+ */
+export function removeLink(text, url) {
+  if (typeof text !== 'string' || !text || !url) return text || '';
+  const lines = [];
+  for (const line of text.split('\n')) {
+    let next = line;
+    for (const s of spans(line).reverse()) {
+      if (s.url === url) next = next.slice(0, s.start) + next.slice(s.start + s.raw.length);
+    }
+    if (next !== line && LEFTOVER.test(next)) continue;
+    lines.push(next);
+  }
+  return lines.join('\n');
+}

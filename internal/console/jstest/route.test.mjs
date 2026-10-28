@@ -51,7 +51,8 @@ test('#/new carries one or more links in ?url=', () => {
   assert.deepEqual(newDownloadUrls({ url: ` ${a}\n\n ${b}  ` }), [a, b], 'newlines and spaces both separate');
   assert.deepEqual(newDownloadUrls(parseHash(`#/new?url=${encodeURIComponent(`${a} ${b}`)}`).params), [a, b]);
   assert.deepEqual(newDownloadUrls({}), []);
-  assert.equal(parseHash('#/new/job_1').page, 'notfound', 'new has no drawer route');
+  const drawer = parseHash(buildHash('new', { url: a }, 'job_1'));
+  assert.deepEqual(drawer, { page: 'new', jobId: 'job_1', params: { url: a } }, 'the drawer opens over New download and keeps its links');
 });
 
 test('#/settings takes an optional section', () => {

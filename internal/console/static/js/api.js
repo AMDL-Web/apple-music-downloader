@@ -23,6 +23,8 @@ const REQUEST_TIMEOUT_MS = 15000;
 // track and has no server-side deadline. Both outlast the default bound.
 const LOGIN_TIMEOUT_MS = 130000;
 const QUALITY_TIMEOUT_MS = 180000;
+// The server bounds a lookup at 15 s and answers 504; wait a little longer.
+const LOOKUP_TIMEOUT_MS = 20000;
 
 /** Resolves an "/api/..." or "/docs" path against the server root above /console/. */
 export function resolveUrl(path, query, base = globalThis.document ? globalThis.document.baseURI : 'http://localhost/console/') {
@@ -45,12 +47,18 @@ export function toApiError(status, body, fallback) {
 
 /**
  * One bounded API call. `opts.body` is sent as JSON; `opts.timeoutMs`
- * replaces the default bound for calls the server may hold longer.
+ * replaces the default bound for calls the server may hold longer;
+ * `opts.signal` cancels the call, which then rejects with code "aborted".
  */
 async function request(method, path, query, opts = {}) {
-  const { body: payload, timeoutMs = REQUEST_TIMEOUT_MS } = opts;
+  const { body: payload, timeoutMs = REQUEST_TIMEOUT_MS, signal } = opts;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const cancel = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) cancel();
+    else signal.addEventListener('abort', cancel, { once: true });
+  }
   const headers = { Accept: 'application/json' };
   const init = { method, headers, cache: 'no-store', signal: controller.signal };
   if (payload !== undefined) {
@@ -62,6 +70,8 @@ async function request(method, path, query, opts = {}) {
     res = await fetch(resolveUrl(path, query), init);
   } catch (e) {
     clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', cancel);
+    if (signal && signal.aborted) throw new ApiError(0, 'aborted', 'The request was cancelled.');
     const timedOut = e && e.name === 'AbortError';
     throw new ApiError(0, timedOut ? 'timeout' : 'network_error', timedOut ? 'The server did not answer in time.' : 'Cannot reach the server.');
   }
@@ -73,6 +83,7 @@ async function request(method, path, query, opts = {}) {
     body = null;
   } finally {
     clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', cancel);
   }
   if (!res.ok) throw toApiError(res.status, body, `${method} ${path} failed with HTTP ${res.status}.`);
   return body;
@@ -111,7 +122,18 @@ export const createDownload = (body) => request('POST', '/api/v1/downloads', und
 /** Deletes a finished job; 409 job_active while it is queued or running. */
 export const deleteDownload = (id) => request('DELETE', `/api/v1/downloads/${encodeURIComponent(id)}`);
 /** The qualities each track of a link offers (QualityResponse); 502 upstream_error when the lookup fails. */
-export const queryQuality = (url) => request('POST', '/api/v1/quality', undefined, { body: { url }, timeoutMs: QUALITY_TIMEOUT_MS });
+export const queryQuality = (url, signal) =>
+  request('POST', '/api/v1/quality', undefined, { body: { url }, timeoutMs: QUALITY_TIMEOUT_MS, signal });
+/**
+ * Previews one link without creating a job (LookupResponse). Errors after the
+ * link parsed carry it in details.link; mediaUserToken is sent only when given.
+ */
+export const lookupLink = (url, { mediaUserToken, signal } = {}) =>
+  request('POST', '/api/v1/lookup', undefined, {
+    body: mediaUserToken ? { url, media_user_token: mediaUserToken } : { url },
+    timeoutMs: LOOKUP_TIMEOUT_MS,
+    signal,
+  });
 /**
  * Merges `partial` into the runtime config and answers the new ConfigResponse.
  * Send only the changed fields of a fresh GET; 422 config_key_pinned,
