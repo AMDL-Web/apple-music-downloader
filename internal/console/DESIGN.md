@@ -107,11 +107,13 @@ axis; every skin supports all three.
 | `static/css/skins/<name>.css` | One `:root[data-skin="<name>"]` token block (light and dark via `light-dark()`), responsive token overrides, and that skin's component rules, every selector prefixed `:root[data-skin="<name>"]` | set any token, override any base rule (repeating its selector chain when it is deeper than two classes), show opt-in hooks, reorder overview sections, use CSS counters and `::before` text | touch another skin's scope, add JS, use `font-size` other than `var(--fs-*)`, use `transition: all`, rely on `color-scheme` it sets itself |
 | `skins/<name>.md` | The skin's spec: intent, token table with contrast, component notes | | restate the shared contract |
 
-The prefix `:root[data-skin="<name>"]` adds (0,1,1), so a skin selector wins
-over any base selector of up to two classes, including those inside base media
-queries; a skin therefore carries its own responsive overrides. For a deeper
-base selector (`.card-flush > .card-body > .empty`,
-`.level-chip[aria-pressed="false"] .log-dot`, the chart hover chain), repeat
+The prefix `:root[data-skin="<name>"]` adds (0,2,0) (`:root` is a
+pseudo-class), so a skin selector with one class wins over any base selector
+of up to three classes, attributes and pseudo-classes (a tie goes to the
+skin, linked later), including those inside base media queries; a skin
+therefore carries its own responsive overrides. For a deeper base selector
+(the chart hover chain, the Submitted row chain
+`.job-list.job-list-compact.new-results > .new-result > .job-row`), repeat
 its chain under the skin prefix.
 
 ### Tokens a skin must declare
@@ -334,6 +336,10 @@ and motion covers.
   (Cmd/Ctrl+Enter) posts `POST /downloads` in chunks of 100, and the per-URL
   results replace the previous ones: accepted jobs as live Job rows (feed
   batches through `applyFeedToResults`) that open the drawer over the page,
+  from 640 px up in two lines so the title and artist keep the main
+  column's width (the art beside both, title and artist across the row,
+  progress and status under them, no relative time; the base sets it with a
+  five-class chain that outranks the skins' `.job-list-compact` rules),
   the rest with their reason, View job for `duplicate_active`, Retry for
   `queue_full`, `decryptor_unavailable` and server errors. The text then
   keeps only the links that were not handled. The results stay until Clear

@@ -272,6 +272,47 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A Submitted job row sits in the main column, about 300-700 px wide from
+   640 px up, where the compact row's fixed progress and status columns
+   would squeeze the title to nothing. Here the title and artist take the
+   whole row and the progress and status run under them. Five classes, so
+   the layout outranks the skins' .job-list-compact and .job-row rules (four
+   at most with the :root[data-skin] prefix); a skin that restyles it
+   repeats the chain. Under 640 px the phone job card applies. */
+.new-results .job-row {
+  row-gap: var(--s-2);
+}
+
+@media (min-width: 640px) {
+  .job-list.job-list-compact.new-results > .new-result > .job-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "art main main"
+      "art prog status";
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .art {
+    grid-area: art;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-main {
+    grid-area: main;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-progress {
+    grid-area: prog;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-status {
+    grid-area: status;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-updated {
+    display: none;
+  }
+}
+
 .new-result-row {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
