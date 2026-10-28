@@ -274,9 +274,10 @@ func TestRetryRequeuesFailedJobAndResetsOnlyUnfinishedItems(t *testing.T) {
 	if got.Status != domain.JobQueued || got.Error != "" {
 		t.Fatalf("job after retry = status %s error %q, want queued with empty error", got.Status, got.Error)
 	}
-	// started_at survives a retry; finished_at belongs to the previous run.
-	if got.StartedAt == nil || !got.StartedAt.Equal(started) || got.FinishedAt != nil {
-		t.Fatalf("job timing after retry = started %v finished %v, want started %v and no finished_at", got.StartedAt, got.FinishedAt, started)
+	// A retry is a new run: both timestamps belong to the previous one, so the
+	// next run's duration does not count the time the job sat failed.
+	if got.StartedAt != nil || got.FinishedAt != nil {
+		t.Fatalf("job timing after retry = started %v finished %v, want both cleared", got.StartedAt, got.FinishedAt)
 	}
 	items, err := store.ListItems(ctx, job.ID)
 	if err != nil {

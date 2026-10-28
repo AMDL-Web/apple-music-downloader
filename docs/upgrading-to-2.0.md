@@ -127,7 +127,8 @@ Unchanged, with three exceptions that only affect unusual titles:
 The first start applies migrations in one transaction each:
 
 - records the schema version (`PRAGMA user_version`);
-- adds `jobs.started_at` / `jobs.finished_at`, backfilled from job events;
+- adds `jobs.started_at` / `jobs.finished_at`, backfilled from job events (`started_at`
+  from the latest run, after the last retry);
 - folds a 1.x `jobs.force = 1` into `overrides.force_overwrite = true`, then drops
   `jobs.force`, `jobs.done_items` and `jobs.failed_items` (counters are derived from
   items);

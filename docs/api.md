@@ -331,9 +331,9 @@ Every job carries `total_items` (tracks the input resolved to) and four disjoint
 counters, always present: `completed_items` (written by this job), `skipped_items`
 (already on disk), `failed_items` and `cancelled_items`. They are derived from the job's
 items on every read, so a running job's counters match its `items`. `started_at` is set
-the first time a worker starts the job and kept across restarts and retries;
-`finished_at` is set when the job reaches a terminal status and cleared by a retry. Both
-are RFC 3339 and absent until set. Forcing an overwrite is `overrides.force_overwrite`.
+when a worker first starts the current run and kept across restarts; a retry starts a
+new run and clears it. `finished_at` is set when the job reaches a terminal status and
+cleared by a retry. Both are RFC 3339 and absent until set. Forcing an overwrite is `overrides.force_overwrite`.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/cancel

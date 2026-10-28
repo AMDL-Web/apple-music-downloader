@@ -212,8 +212,11 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 		return err
 	}
 
+	// A retry is a new run: its worker sets started_at again, so the run's
+	// duration does not count the time the job sat failed.
 	job.Status = domain.JobQueued
 	job.Error = ""
+	job.StartedAt = nil
 	job.FinishedAt = nil
 	job.UpdatedAt = now
 	if err := m.store.UpdateJob(ctx, job); err != nil {

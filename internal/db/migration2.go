@@ -10,7 +10,8 @@ import (
 // constants that may change later.
 //
 //   - jobs.started_at / jobs.finished_at (NULL = unset) are added and
-//     backfilled from job_events: started_at from the earliest job_started,
+//     backfilled from job_events: started_at from the first job_started of
+//     the latest run (after the job's last job_retried, by event id),
 //     finished_at, for terminal jobs only, from the latest terminal event.
 //   - jobs.force is folded into overrides.force_overwrite, which is where the
 //     pipeline reads forcing from; a row whose overrides are not a JSON
@@ -29,8 +30,11 @@ func migrateTo2(ctx context.Context, tx *sql.Tx) error {
 			WHERE type = 'item_progress'
 			AND job_id IN (SELECT id FROM jobs WHERE status IN ('completed','failed','cancelled'))`,
 		`UPDATE jobs SET started_at = s.started_at
-			FROM (SELECT job_id, MIN(created_at) AS started_at FROM job_events
-				WHERE type = 'job_started' GROUP BY job_id) AS s
+			FROM (SELECT e.job_id, MIN(e.created_at) AS started_at FROM job_events e
+				WHERE e.type = 'job_started'
+				AND e.id > COALESCE((SELECT MAX(r.id) FROM job_events r
+					WHERE r.job_id = e.job_id AND r.type = 'job_retried'), 0)
+				GROUP BY e.job_id) AS s
 			WHERE s.job_id = jobs.id`,
 		`UPDATE jobs SET finished_at = f.finished_at
 			FROM (SELECT job_id, MAX(created_at) AS finished_at FROM job_events

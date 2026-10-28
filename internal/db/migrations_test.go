@@ -394,9 +394,10 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 		"j-running":   {"2024-07-12T09:00:00Z", ""},
 		"j-queued":    {"", ""},
 		"j-cancelled": {"", "2024-07-12T11:00:30Z"},
-		"j-retried":   {"2024-07-10T12:00:01Z", "2024-07-10T12:00:02Z"},
-		"j-refailed":  {"2024-07-14T13:00:00Z", "2024-07-14T13:00:05.5Z"},
-		"j-corrupt":   {"", "2024-07-13T00:00:00Z"},
+		// A retried job's started_at is its latest run's first job_started.
+		"j-retried":  {"2024-07-10T12:00:01.5Z", "2024-07-10T12:00:02Z"},
+		"j-refailed": {"2024-07-14T13:00:05.2Z", "2024-07-14T13:00:05.5Z"},
+		"j-corrupt":  {"", "2024-07-13T00:00:00Z"},
 	}
 	for id, want := range wantTiming {
 		var started, finished sql.NullString

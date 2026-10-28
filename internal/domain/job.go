@@ -137,9 +137,10 @@ type Job struct {
 	FailedItems    int    `json:"failed_items"`
 	CancelledItems int    `json:"cancelled_items"`
 	Error          string `json:"error,omitempty"`
-	// StartedAt is set the first time a worker starts the job and kept across
-	// recovery and retry. FinishedAt is set on the terminal transition and
-	// cleared by retry. Both are nil (omitted) until then.
+	// StartedAt is set when a worker first starts the current run and kept
+	// across recovery after a restart; a retry starts a new run and clears it.
+	// FinishedAt is set on the terminal transition and cleared by retry. Both
+	// are nil (omitted) until then.
 	StartedAt  *time.Time `json:"started_at,omitempty"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`

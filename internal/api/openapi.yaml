@@ -2381,9 +2381,9 @@ components:
           type: string
           format: date-time
           description: >-
-            When a worker first started the job; kept across recovery after a
-            restart and across retry. Absent until the job first starts (a job
-            cancelled while queued never has one).
+            When a worker first started the current run; kept across recovery
+            after a restart. A retry starts a new run and clears it. Absent
+            until the run starts (a job cancelled while queued never has one).
         finished_at:
           type: string
           format: date-time
