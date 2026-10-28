@@ -174,7 +174,9 @@ func (c *CatalogClient) Album(ctx context.Context, storefront, id string) (Colle
 		ID: album.ID, Type: TypeAlbum, Name: album.Attributes.Name, Artist: album.Attributes.ArtistName,
 		ArtworkURL: album.Attributes.Artwork.URL, ArtworkColors: album.Attributes.Artwork.colors(),
 		ArtistID: albumArtistID, ArtistArtworkURL: albumArtistArtworkURL, ArtistURL: albumArtistURL,
-		ReleaseDate: album.Attributes.ReleaseDate, GenreNames: album.Attributes.GenreNames, Tracks: tracks,
+		ReleaseDate: album.Attributes.ReleaseDate, GenreNames: album.Attributes.GenreNames,
+		ContentRating: album.Attributes.ContentRating, AppleDigitalMaster: album.Attributes.IsMasteredForItunes,
+		Tracks: tracks,
 	}, nil
 }
 
@@ -281,7 +283,7 @@ func (c *CatalogClient) StationTracks(ctx context.Context, storefront, id, media
 	if err != nil {
 		return Collection{}, err
 	}
-	if info.Format != "tracks" {
+	if !info.Downloadable() {
 		return Collection{}, fmt.Errorf("station %q is not downloadable: only track-based stations (playParams.format=tracks) are supported, not live/stream stations", info.Name)
 	}
 	if strings.TrimSpace(mediaUserToken) == "" {
@@ -298,7 +300,7 @@ func (c *CatalogClient) StationTracks(ctx context.Context, storefront, id, media
 		}
 		tracks = append(tracks, mapSong(raw))
 	}
-	return Collection{ID: info.ID, Type: TypeStation, Name: info.Name, Artist: "Apple Music Station", ArtworkURL: info.ArtworkURL, ArtworkColors: info.ArtworkColors, Tracks: tracks}, nil
+	return Collection{ID: info.ID, Type: TypeStation, Name: info.Name, Artist: StationCuratorName, ArtworkURL: info.ArtworkURL, ArtworkColors: info.ArtworkColors, Tracks: tracks}, nil
 }
 
 // stationNextTracksLimit is the limit sent to next-tracks, and so the most
@@ -400,7 +402,7 @@ func (c *CatalogClient) catalogNextURL(next string) string {
 	return c.apiBase() + "/" + next
 }
 
-// Artist reads a catalog artist's name and artwork.
+// Artist reads a catalog artist's name, page, genres and artwork.
 func (c *CatalogClient) Artist(ctx context.Context, storefront, id string) (Artist, error) {
 	var resp catalogArtistResponse
 	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s", c.apiBase(), storefront, id), url.Values{
@@ -412,5 +414,8 @@ func (c *CatalogClient) Artist(ctx context.Context, storefront, id string) (Arti
 		return Artist{}, fmt.Errorf("artist %s not found", id)
 	}
 	raw := resp.Data[0]
-	return Artist{ID: raw.ID, Name: raw.Attributes.Name, ArtworkURL: raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors()}, nil
+	return Artist{
+		ID: raw.ID, Name: raw.Attributes.Name, URL: raw.Attributes.URL, GenreNames: raw.Attributes.GenreNames,
+		ArtworkURL: raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
+	}, nil
 }

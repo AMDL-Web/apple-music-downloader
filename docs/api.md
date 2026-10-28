@@ -26,7 +26,7 @@ Every non-2xx JSON response has one shape:
 Switch on `code`, a stable value of the `ErrorCode` enum in the spec (Go: the constants in
 `internal/api/errors.go`). `message` is for humans and may change. `details` is present
 only for some codes: on `POST /downloads` it holds the batch body, on a rejected config
-write it lists the offending keys.
+write it lists the offending keys, on a failed `POST /lookup` it holds the parsed link.
 
 | Status | Codes |
 | --- | --- |
@@ -44,8 +44,8 @@ write it lists the offending keys.
 
 An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
 methods answers `405 method_not_allowed`. `feature_unavailable` means the component behind
-the route (log buffer, wrapper client, quality probe, developer-token signing, library
-watcher) is not wired into this process; the log routes also answer it when
+the route (log buffer, wrapper client, quality probe, catalog client, developer-token
+signing, library watcher) is not wired into this process; the log routes also answer it when
 `logging.buffer_size` is `0`. A job lookup answers `404 job_not_found` only
 when the job does not exist; a store failure is `500 store_error`, so a client never drops
 a job because of a transient error.
@@ -411,6 +411,48 @@ publish immediately. A value held back by the interval is flushed just before wh
 event supersedes it, so the last percentage before a state change is never lost and a
 client resuming from a cursor sees the same sequence as a live one. It is read once when
 a job starts.
+
+## Link lookup
+
+```bash
+curl -X POST http://localhost:18080/api/v1/lookup \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://music.apple.com/us/album/igor/1463409338"}'
+```
+
+```json
+{"input":"https://music.apple.com/us/album/igor/1463409338","type":"album","storefront":"us",
+ "id":"1463409338","title":"IGOR","artist_name":"Tyler, The Creator",
+ "artist_url":"https://music.apple.com/us/artist/tyler-the-creator/420368335",
+ "artwork_url":"https://is1-ssl.mzstatic.com/image/thumb/…/886447710180.jpg/{w}x{h}bb.jpg",
+ "artwork_bg_color":"f1a8bf","artwork_text_color1":"171615","artwork_text_color2":"272021",
+ "artwork_text_color3":"423337","artwork_text_color4":"4f3b41","release_date":"2019-05-17",
+ "genre":"Hip-Hop/Rap","track_count":12,"content_rating":"explicit","apple_digital_master":true}
+```
+
+Previews one link without creating a job, so a client can show the cover, title and artist
+as soon as a link is pasted. The link is parsed exactly as a submission parses it: `type`
+and `id` are what the job would be, and the `?i=` of an album link follows
+`catalog.album_track_url_mode` (reported as `track_id` either way). The metadata fields
+have the names and meaning of the job fields; `track_count` is the number of songs a
+download would contain (absent for artists and stations, whose track lists are not read),
+and a station adds `needs_media_user_token`. Each type costs one light catalog read: never
+the amp-api-only reads, never a station's next-tracks feed, at most 15 seconds in all.
+
+The optional `media_user_token` overrides `catalog.media_user_token` for this lookup (an
+empty string clears it); only a private playlist's cover uses it, and it is never echoed.
+
+| Case | Answer |
+| --- | --- |
+| `url` missing, unknown body field | `400 invalid_request` |
+| Not an Apple Music link the backend parses | `400 invalid_request` |
+| A music video or a live radio station | `400 invalid_request`, `details.link` |
+| The catalog read fails (Apple's 404 for an unknown id included) | `502 upstream_error`, `details.link` |
+| No answer within 15 seconds | `504 upstream_timeout`, `details.link` |
+| No catalog client in this process | `503 feature_unavailable` |
+
+`details.link` carries `input`, `type`, `storefront`, `id` and `track_id` of the parsed
+link, so the client can still show what was pasted.
 
 ## Quality probe
 

@@ -182,6 +182,7 @@ func run(ctx context.Context, files configFiles) (err error) {
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperClient, Quality: qualityService, DeveloperToken: catalog, LibrarySync: libraryWatcher,
+		Catalog: catalog,
 	})
 	routes := apiServer.Routes()
 	httpServer := &http.Server{

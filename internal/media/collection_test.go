@@ -275,25 +275,6 @@ func TestResolveCollectionBackfillsDisplayMetadata(t *testing.T) {
 	}
 }
 
-func TestPrimaryGenreSkipsMusicUmbrella(t *testing.T) {
-	tests := []struct {
-		names []string
-		want  string
-	}{
-		{nil, ""},
-		{[]string{}, ""},
-		{[]string{"Music"}, ""},
-		{[]string{"Music", "Pop"}, "Pop"},
-		{[]string{"Hip-Hop/Rap", "Music"}, "Hip-Hop/Rap"},
-		{[]string{"", "Music", "Jazz"}, "Jazz"},
-	}
-	for _, tt := range tests {
-		if got := primaryGenre(tt.names); got != tt.want {
-			t.Fatalf("primaryGenre(%v) = %q, want %q", tt.names, got, tt.want)
-		}
-	}
-}
-
 func trackIDsForTest(tracks []applemusic.Song) []string {
 	out := make([]string, 0, len(tracks))
 	for _, track := range tracks {

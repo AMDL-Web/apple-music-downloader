@@ -47,17 +47,6 @@ type resolvedCollection struct {
 	ArtworkColors applemusic.ArtworkColors
 }
 
-// primaryGenre picks the job-level display genre from Apple's genreNames
-// list: the first entry that is not the generic "Music" umbrella genre.
-func primaryGenre(names []string) string {
-	for _, name := range names {
-		if name != "" && name != "Music" {
-			return name
-		}
-	}
-	return ""
-}
-
 // mediaUserToken returns the token from this job's effective config. ProcessJob
 // has already layered overrides.media_user_token over the current runtime
 // catalog value, so retries and post-restart recovery follow the same path.
@@ -72,15 +61,10 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 		if err != nil {
 			return resolvedCollection{}, err
 		}
-		// The palette must describe the artwork picked for ArtworkURL, so it
-		// follows the same song-then-album fallback.
-		colors := song.ArtworkColors
-		if song.ArtworkURL == "" {
-			colors = song.AlbumArtworkColors
-		}
+		artworkURL, colors := song.DisplayArtwork()
 		return resolvedCollection{
-			Tracks: []applemusic.Song{song}, Name: song.Name, ArtworkURL: firstNonEmpty(song.ArtworkURL, song.AlbumArtworkURL),
-			ArtistName: song.ArtistName, ArtistURL: song.ArtistURL, ReleaseDate: song.ReleaseDate, Genre: primaryGenre(song.GenreNames),
+			Tracks: []applemusic.Song{song}, Name: song.Name, ArtworkURL: artworkURL,
+			ArtistName: song.ArtistName, ArtistURL: song.ArtistURL, ReleaseDate: song.ReleaseDate, Genre: applemusic.PrimaryGenre(song.GenreNames),
 			ArtworkColors: colors,
 		}, nil
 	case applemusic.TypeAlbum:
@@ -90,7 +74,7 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 		}
 		return resolvedCollection{
 			Tracks: album.Tracks, ID: album.ID, Name: album.Name, ArtworkURL: album.ArtworkURL,
-			ArtistName: album.Artist, ArtistURL: album.ArtistURL, ReleaseDate: album.ReleaseDate, Genre: primaryGenre(album.GenreNames),
+			ArtistName: album.Artist, ArtistURL: album.ArtistURL, ReleaseDate: album.ReleaseDate, Genre: applemusic.PrimaryGenre(album.GenreNames),
 			ArtworkColors: album.ArtworkColors,
 		}, nil
 	case applemusic.TypePlaylist:
@@ -112,8 +96,7 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 		}
 		return resolvedCollection{
 			Tracks: station.Tracks, ID: station.ID, Name: station.Name, ArtworkURL: station.ArtworkURL,
-			// The catalog has no curator attribute for stations; Artist holds
-			// the provider label ("Apple Music Station").
+			// Artist holds applemusic.StationCuratorName.
 			CuratorName:   station.Artist,
 			ArtworkColors: station.ArtworkColors,
 		}, nil

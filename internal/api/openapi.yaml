@@ -583,6 +583,121 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
           $ref: '#/components/responses/FeatureUnavailable'
+  /api/v1/lookup:
+    post:
+      tags: [Downloads]
+      summary: Preview an Apple Music link without creating a job
+      description: |
+        Parses one link the way POST /api/v1/downloads does (the i parameter of an
+        album URL follows the runtime catalog.album_track_url_mode) and reads the
+        catalog metadata a job row shows once it resolves: title, artist or
+        curator, artwork with its palette, release date, genre and track count. No
+        job is created and nothing is downloaded.
+
+        Each link type costs one light catalog read on the backend's catalog host:
+        a song reads the song resource, an album the album with its track list, a
+        playlist the playlist with its track list, a station its metadata (never
+        the next-tracks feed), an artist the artist alone (so track_count is
+        absent). The amp-api-only reads (animated covers, Enhanced HLS) are never
+        made. The whole lookup is bounded by 15 seconds.
+
+        media_user_token overrides catalog.media_user_token for this lookup, like
+        overrides.media_user_token on a submission: absent uses the runtime value,
+        an empty string clears it. Only a private (pl.u-) playlist's cover uses it.
+        It is never echoed.
+
+        Once the link has parsed, every error carries it in details.link
+        (LookupLink), so a client can still show what was pasted.
+      operationId: lookupLink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LookupRequest'
+            examples:
+              album:
+                value: {url: 'https://music.apple.com/us/album/igor/1463409338'}
+      responses:
+        '200':
+          description: The parsed link and its catalog metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LookupResponse'
+              examples:
+                album:
+                  value:
+                    input: https://music.apple.com/us/album/igor/1463409338
+                    type: album
+                    storefront: us
+                    id: '1463409338'
+                    title: IGOR
+                    artist_name: Tyler, The Creator
+                    artist_url: https://music.apple.com/us/artist/tyler-the-creator/420368335
+                    artwork_url: https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/0c/06/05/0c060581-6242-6a2a-a677-20170f2cf8da/886447710180.jpg/{w}x{h}bb.jpg
+                    artwork_bg_color: f1a8bf
+                    artwork_text_color1: '171615'
+                    artwork_text_color2: '272021'
+                    artwork_text_color3: '423337'
+                    artwork_text_color4: 4f3b41
+                    release_date: '2019-05-17'
+                    genre: Hip-Hop/Rap
+                    track_count: 12
+                    content_rating: explicit
+                    apple_digital_master: true
+                album_track:
+                  value:
+                    input: https://music.apple.com/us/album/midnights/1650841512?i=1650841515
+                    type: song
+                    storefront: us
+                    id: '1650841515'
+                    track_id: '1650841515'
+                    title: Anti-Hero
+                    artist_name: Taylor Swift
+                    artist_url: https://music.apple.com/us/artist/taylor-swift/159260351
+                    album_name: Midnights (3am Edition)
+                    artwork_url: https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/59/13/5c/59135ccc-8425-415c-7f89-8aeada60088e/22UM1IM22440.rgb.jpg/{w}x{h}bb.jpg
+                    artwork_bg_color: eae7e3
+                    artwork_text_color1: 0d0c13
+                    artwork_text_color2: '291216'
+                    artwork_text_color3: 39383d
+                    artwork_text_color4: 4f3c3f
+                    release_date: '2022-10-21'
+                    genre: Pop
+                    track_count: 1
+                    duration_ms: 200690
+                    apple_digital_master: true
+        '400':
+          description: >-
+            invalid_json: the body is not well-formed JSON; invalid_request: url is
+            missing, the body has an unknown field, the link is not a supported
+            Apple Music link, or it is one the backend does not download (a music
+            video, a live radio station). The last two carry details.link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/JSONBodyTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '502':
+          description: >-
+            upstream_error; the catalog read failed (including Apple answering
+            404 for an id it does not have). details.link carries the parsed link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/FeatureUnavailable'
+        '504':
+          description: upstream_timeout; the catalog did not answer within 15 seconds. details.link carries the parsed link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/downloads:
     get:
       tags: [Downloads]
@@ -1169,7 +1284,8 @@ components:
               description: >-
                 Code-specific data. no_urls_accepted and store_error from POST
                 /downloads: the BatchSubmitResponse. config_key_not_mutable and
-                config_key_pinned: {"keys": [...]}, the rejected fields.
+                config_key_pinned: {"keys": [...]}, the rejected fields. Errors
+                of POST /lookup after the link parsed: {"link": LookupLink}.
     ErrorCode:
       type: string
       description: |
@@ -2174,6 +2290,126 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/QualityTrack'
+    LookupRequest:
+      type: object
+      required: [url]
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          description: One Apple Music link; surrounding whitespace is ignored.
+          example: https://music.apple.com/us/album/igor/1463409338
+        media_user_token:
+          type: string
+          writeOnly: true
+          description: >-
+            Overrides catalog.media_user_token for this lookup; an empty string
+            clears it. Only a private playlist's cover uses it. Never echoed.
+    LookupLink:
+      type: object
+      description: >-
+        A link as a submission would parse it. type and id are what a download
+        job of this link would be.
+      required: [input, type, storefront, id]
+      properties:
+        input:
+          type: string
+          description: The url as sent, trimmed.
+        type:
+          type: string
+          enum: [song, album, playlist, artist, station, music-video]
+          description: music-video only appears in details.link; the backend does not download music videos.
+        storefront:
+          type: string
+          description: Two-letter storefront from the link path.
+        id:
+          type: string
+          description: Catalog id of the song, album, playlist, artist or station.
+        track_id:
+          type: string
+          description: >-
+            The i parameter of an album link, present whatever
+            catalog.album_track_url_mode decided: with song it equals id
+            (type song); with album the job downloads the whole album (type
+            album) and this names the track the link pointed at.
+    LookupResponse:
+      description: >-
+        The parsed link plus the catalog metadata a job row shows once it
+        resolves. The metadata fields have the names and meaning of the Job
+        fields of the same name; each is absent when the catalog has no value or
+        the link type has none.
+      allOf:
+        - $ref: '#/components/schemas/LookupLink'
+        - type: object
+          required: [title]
+          properties:
+            type:
+              type: string
+              enum: [song, album, playlist, artist, station]
+            title:
+              type: string
+              description: Song, album, playlist, station or artist name.
+            artist_name:
+              type: string
+              description: Song or album artist; for an artist link the artist's own name. Absent for playlists and stations.
+            artist_url:
+              type: string
+              description: That artist's own music.apple.com page, when the catalog reports one. Absent for playlists and stations.
+            curator_name:
+              type: string
+              description: >-
+                Playlist curator (curatorName, falling back to artistName), or
+                "Apple Music Station" for a station. Absent for other types.
+            album_name:
+              type: string
+              description: The album a song belongs to. Song links only.
+            artwork_url:
+              type: string
+              description: >-
+                Artwork URL template with {w}x{h} (and optionally {f})
+                placeholders, as on Job. A song without its own artwork uses its
+                album's. A private playlist may expose the owner's pre-signed
+                artwork URL verbatim, without placeholders.
+            artwork_bg_color:
+              type: string
+              description: Background color of that artwork, hex without "#".
+            artwork_text_color1: {type: string}
+            artwork_text_color2: {type: string}
+            artwork_text_color3: {type: string}
+            artwork_text_color4: {type: string}
+            release_date:
+              type: string
+              description: Release date (YYYY-MM-DD) of the song or album.
+            genre:
+              type: string
+              description: >-
+                First genreNames entry that is not the "Music" umbrella genre;
+                for songs, albums and artists.
+            track_count:
+              type: integer
+              description: >-
+                Songs a download of this link would contain: 1 for a song, the
+                album's or playlist's song count (music videos excluded). Absent
+                for artists and stations, whose track lists are not read.
+            duration_ms:
+              type: integer
+              description: Song duration in milliseconds. Song links only.
+            content_rating:
+              type: string
+              enum: [explicit, clean]
+              description: The catalog's content rating of a song or album; absent when unrated.
+            apple_digital_master:
+              type: boolean
+              description: >-
+                True when the catalog marks the song (isAppleDigitalMaster) or
+                album (isMasteredForItunes) as an Apple Digital Master; absent
+                otherwise.
+            needs_media_user_token:
+              type: boolean
+              description: >-
+                True for a station: its download reads the next-tracks feed,
+                which needs a media-user-token (catalog.media_user_token or
+                overrides.media_user_token). Absent for other types.
     Job:
       type: object
       required: [id, input, type, status, total_items, completed_items, skipped_items, failed_items, cancelled_items, created_at, updated_at]

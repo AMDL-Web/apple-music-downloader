@@ -167,6 +167,7 @@ the source of truth for every request and response shape. Every path below is un
 | --- | --- |
 | **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
 | **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed (SSE) |
+| **Lookup** | `POST /lookup` — preview a link's title, artist and cover without creating a job |
 | **Quality** | `POST /quality` — probe a URL's declared codecs and audio quality without creating a job |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |

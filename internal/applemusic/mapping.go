@@ -34,6 +34,26 @@ func EnrichWithAlbum(song Song, album Collection) Song {
 	return song
 }
 
+// PrimaryGenre picks the display genre from Apple's genreNames list: the
+// first entry that is not the generic "Music" umbrella genre.
+func PrimaryGenre(names []string) string {
+	for _, name := range names {
+		if name != "" && name != "Music" {
+			return name
+		}
+	}
+	return ""
+}
+
+// DisplayArtwork returns the artwork a song is shown with, its own or else its
+// album's, together with the palette of that same image.
+func (s Song) DisplayArtwork() (string, ArtworkColors) {
+	if s.ArtworkURL != "" {
+		return s.ArtworkURL, s.ArtworkColors
+	}
+	return s.AlbumArtworkURL, s.AlbumArtworkColors
+}
+
 func mapSong(raw catalogSongData) Song {
 	s := Song{
 		ID: raw.ID, Name: raw.Attributes.Name, ArtistName: raw.Attributes.ArtistName, AlbumName: raw.Attributes.AlbumName,
@@ -41,7 +61,8 @@ func mapSong(raw catalogSongData) Song {
 		TrackNumber: raw.Attributes.TrackNumber, DiscNumber: raw.Attributes.DiscNumber, ISRC: raw.Attributes.ISRC,
 		DurationInMillis: raw.Attributes.DurationInMillis,
 		ContentRating:    raw.Attributes.ContentRating, HasLyrics: raw.Attributes.HasLyrics || raw.Attributes.HasTimeSyncedLyrics,
-		ArtworkURL: raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
+		AppleDigitalMaster: raw.Attributes.IsAppleDigitalMaster,
+		ArtworkURL:         raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
 		EnhancedHLS: raw.Attributes.ExtendedAssetURLs.EnhancedHLS,
 	}
 	if len(raw.Relationships.Albums.Data) > 0 {

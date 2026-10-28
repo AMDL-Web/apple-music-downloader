@@ -36,6 +36,8 @@ type Deps struct {
 	Quality        QualityService
 	DeveloperToken DeveloperTokenService
 	LibrarySync    LibrarySyncService
+	// Catalog backs POST /lookup.
+	Catalog CatalogService
 }
 
 // Server holds the HTTP handlers; build it with New and serve Routes.
@@ -54,6 +56,7 @@ type Server struct {
 	quality     QualityService
 	devToken    DeveloperTokenService
 	librarySync LibrarySyncService
+	catalog     CatalogService
 	// now is the clock of GET /system uptime and the GET /stats window and
 	// cache; nil means time.Now.
 	now        func() time.Time
@@ -69,6 +72,7 @@ func New(deps Deps) *Server {
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, devToken: deps.DeveloperToken, librarySync: deps.LibrarySync,
+		catalog: deps.Catalog,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())
 	// logging.buffer_size is a startup key, so the snapshot read here is the
@@ -126,6 +130,7 @@ func (s *Server) routes() []route {
 		{http.MethodPost, "/api/v1/wrapper/login/{login_id}/2fa", h(s.wrapperTwoStep)},
 		{http.MethodPost, "/api/v1/wrapper/logout", h(s.wrapperLogout)},
 		{http.MethodPost, "/api/v1/quality", h(s.queryQuality)},
+		{http.MethodPost, "/api/v1/lookup", h(s.lookupLink)},
 		{http.MethodPost, "/api/v1/downloads", h(s.createDownload)},
 		{http.MethodGet, "/api/v1/downloads", h(s.listDownloads)},
 		// The literal "events" segment is more specific than "{id}", so the

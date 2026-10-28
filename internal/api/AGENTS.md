@@ -23,7 +23,7 @@ amdl-web mirror by hand. Built by `New(Deps)`; `Server.Routes` is the handler.
 - A job lookup is 404 `job_not_found` only for a missing row
   (`writeJobLookupError`); any other store error is 500 `store_error`.
 - `Deps`: Config, Store, Hub and Manager are required. Logging, Wrapper, Quality,
-  DeveloperToken and LibrarySync are optional; a route whose dependency is nil
+  DeveloperToken, LibrarySync and Catalog are optional; a route whose dependency is nil
   answers 503 `feature_unavailable`, as do the log routes when
   `logging.buffer_size` is 0 (decided once in `New`; it is a startup key).
 - `GET /stats` results are cached per `days` for `statsCacheTTL`; the queries

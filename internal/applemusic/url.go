@@ -23,6 +23,10 @@ type ParsedURL struct {
 	Storefront string  `json:"storefront"`
 	Type       URLType `json:"type"`
 	ID         string  `json:"id"`
+	// TrackID is the ?i= song id of an album link, whichever Type the album
+	// track mode picked: with mode song it equals ID, with mode album it names
+	// the track the link pointed at inside the album. Empty for other links.
+	TrackID string `json:"track_id,omitempty"`
 }
 
 var storefrontPattern = regexp.MustCompile(`^[a-z]{2}$`)
@@ -59,10 +63,11 @@ func ParseWithAlbumTrackMode(raw, albumTrackURLMode string) (ParsedURL, error) {
 	id := parts[len(parts)-1]
 	switch kind {
 	case TypeAlbum:
-		if songID := u.Query().Get("i"); songID != "" && albumTrackURLMode == "song" {
-			return ParsedURL{Raw: raw, Storefront: storefront, Type: TypeSong, ID: songID}, nil
+		songID := u.Query().Get("i")
+		if songID != "" && albumTrackURLMode == "song" {
+			return ParsedURL{Raw: raw, Storefront: storefront, Type: TypeSong, ID: songID, TrackID: songID}, nil
 		}
-		return ParsedURL{Raw: raw, Storefront: storefront, Type: TypeAlbum, ID: id}, nil
+		return ParsedURL{Raw: raw, Storefront: storefront, Type: TypeAlbum, ID: id, TrackID: songID}, nil
 	case TypeSong:
 		return ParsedURL{Raw: raw, Storefront: storefront, Type: TypeSong, ID: id}, nil
 	case TypePlaylist:

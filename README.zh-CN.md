@@ -153,6 +153,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 | --- | --- |
 | **下载** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
 | **事件** | 单任务 `GET /downloads/{id}/events` · 总览 feed `GET /downloads/events`（SSE） |
+| **预览** | `POST /lookup` —— 不建任务，预览一条链接的标题、艺人与封面 |
 | **音质** | `POST /quality` —— 不建任务，探测一条链接当前声明的编码与音质 |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |

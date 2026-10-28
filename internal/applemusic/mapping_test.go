@@ -121,3 +121,35 @@ func TestMaxDisc(t *testing.T) {
 		})
 	}
 }
+
+func TestPrimaryGenreSkipsMusicUmbrella(t *testing.T) {
+	tests := []struct {
+		names []string
+		want  string
+	}{
+		{nil, ""},
+		{[]string{}, ""},
+		{[]string{"Music"}, ""},
+		{[]string{"Music", "Pop"}, "Pop"},
+		{[]string{"Hip-Hop/Rap", "Music"}, "Hip-Hop/Rap"},
+		{[]string{"", "Music", "Jazz"}, "Jazz"},
+	}
+	for _, tt := range tests {
+		if got := PrimaryGenre(tt.names); got != tt.want {
+			t.Fatalf("PrimaryGenre(%v) = %q, want %q", tt.names, got, tt.want)
+		}
+	}
+}
+
+// The palette must describe the image that is shown, so it follows the same
+// song-then-album fallback as the URL.
+func TestSongDisplayArtworkKeepsURLAndPaletteTogether(t *testing.T) {
+	own := Song{ArtworkURL: "song-art", ArtworkColors: ArtworkColors{BgColor: "111111"}, AlbumArtworkURL: "album-art", AlbumArtworkColors: ArtworkColors{BgColor: "222222"}}
+	if url, colors := own.DisplayArtwork(); url != "song-art" || colors.BgColor != "111111" {
+		t.Fatalf("own artwork = %q %+v", url, colors)
+	}
+	albumOnly := Song{AlbumArtworkURL: "album-art", ArtworkColors: ArtworkColors{BgColor: "111111"}, AlbumArtworkColors: ArtworkColors{BgColor: "222222"}}
+	if url, colors := albumOnly.DisplayArtwork(); url != "album-art" || colors.BgColor != "222222" {
+		t.Fatalf("album fallback = %q %+v", url, colors)
+	}
+}

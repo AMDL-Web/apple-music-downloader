@@ -7,7 +7,7 @@ func TestParseAlbumTrackURLAsSong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Type != TypeSong || got.ID != "987654321" || got.Storefront != "us" {
+	if got.Type != TypeSong || got.ID != "987654321" || got.Storefront != "us" || got.TrackID != "987654321" {
 		t.Fatalf("unexpected parse result: %+v", got)
 	}
 }
@@ -17,7 +17,7 @@ func TestParseAlbumTrackURLAsAlbum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Type != TypeAlbum || got.ID != "123456789" || got.Storefront != "us" {
+	if got.Type != TypeAlbum || got.ID != "123456789" || got.Storefront != "us" || got.TrackID != "987654321" {
 		t.Fatalf("unexpected parse result: %+v", got)
 	}
 }
@@ -62,8 +62,8 @@ func TestParseClassicalSupportedURLs(t *testing.T) {
 		want ParsedURL
 	}{
 		{name: "album", raw: "https://classical.music.apple.com/cn/album/89286124?l=zh-Hans-CN", mode: "song", want: ParsedURL{Storefront: "cn", Type: TypeAlbum, ID: "89286124"}},
-		{name: "album track as song", raw: "https://classical.music.apple.com/us/album/foo/123456789?i=987654321", mode: "song", want: ParsedURL{Storefront: "us", Type: TypeSong, ID: "987654321"}},
-		{name: "album track as album", raw: "https://classical.music.apple.com/us/album/foo/123456789?i=987654321", mode: "album", want: ParsedURL{Storefront: "us", Type: TypeAlbum, ID: "123456789"}},
+		{name: "album track as song", raw: "https://classical.music.apple.com/us/album/foo/123456789?i=987654321", mode: "song", want: ParsedURL{Storefront: "us", Type: TypeSong, ID: "987654321", TrackID: "987654321"}},
+		{name: "album track as album", raw: "https://classical.music.apple.com/us/album/foo/123456789?i=987654321", mode: "album", want: ParsedURL{Storefront: "us", Type: TypeAlbum, ID: "123456789", TrackID: "987654321"}},
 		{name: "song", raw: "https://classical.music.apple.com/gb/song/foo/987654321", mode: "song", want: ParsedURL{Storefront: "gb", Type: TypeSong, ID: "987654321"}},
 		{name: "playlist", raw: "https://classical.music.apple.com/jp/playlist/foo/pl.abcdef", mode: "song", want: ParsedURL{Storefront: "jp", Type: TypePlaylist, ID: "pl.abcdef"}},
 		{name: "artist", raw: "https://classical.music.apple.com/de/artist/foo/123456789", mode: "song", want: ParsedURL{Storefront: "de", Type: TypeArtist, ID: "123456789"}},
@@ -75,7 +75,7 @@ func TestParseClassicalSupportedURLs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Storefront != tt.want.Storefront || got.Type != tt.want.Type || got.ID != tt.want.ID {
+			if got.Storefront != tt.want.Storefront || got.Type != tt.want.Type || got.ID != tt.want.ID || got.TrackID != tt.want.TrackID {
 				t.Fatalf("unexpected parse result: %+v", got)
 			}
 		})

@@ -28,9 +28,11 @@ type Song struct {
 	ISRC             string
 	ContentRating    string
 	HasLyrics        bool
-	ArtworkURL       string
-	AlbumArtworkURL  string
-	ArtistArtworkURL string
+	// AppleDigitalMaster is attributes.isAppleDigitalMaster.
+	AppleDigitalMaster bool
+	ArtworkURL         string
+	AlbumArtworkURL    string
+	ArtistArtworkURL   string
 	// ArtworkColors/AlbumArtworkColors are the palettes of the artwork behind
 	// ArtworkURL and AlbumArtworkURL respectively.
 	ArtworkColors         ArtworkColors
@@ -69,7 +71,12 @@ type Collection struct {
 	// catalog does not expose them on playlists or stations.
 	ReleaseDate string
 	GenreNames  []string
-	Tracks      []Song
+	// ContentRating ("explicit", "clean" or empty) and AppleDigitalMaster
+	// (attributes.isMasteredForItunes) are album attributes; only Album fills
+	// them.
+	ContentRating      string
+	AppleDigitalMaster bool
+	Tracks             []Song
 }
 
 type Artist struct {
@@ -77,6 +84,7 @@ type Artist struct {
 	Name string
 	// URL is the artist's own music.apple.com page (attributes.url).
 	URL           string
+	GenreNames    []string
 	ArtworkURL    string
 	ArtworkColors ArtworkColors
 }
@@ -93,6 +101,14 @@ type StationInfo struct {
 	Format        string
 	IsLive        bool
 }
+
+// StationCuratorName is the display curator of a station: the catalog has no
+// curator attribute for stations, so jobs and link previews show this label.
+const StationCuratorName = "Apple Music Station"
+
+// Downloadable reports whether the station resolves to a finite track list
+// (format "tracks"); a live stream has none.
+func (s StationInfo) Downloadable() bool { return s.Format == "tracks" }
 
 type ArtistAlbums struct {
 	Artist
@@ -211,21 +227,22 @@ type catalogPlaylistData struct {
 }
 
 type songAttributes struct {
-	Name                string            `json:"name"`
-	ArtistName          string            `json:"artistName"`
-	AlbumName           string            `json:"albumName"`
-	ComposerName        string            `json:"composerName"`
-	GenreNames          []string          `json:"genreNames"`
-	ReleaseDate         string            `json:"releaseDate"`
-	TrackNumber         int               `json:"trackNumber"`
-	DiscNumber          int               `json:"discNumber"`
-	DurationInMillis    int               `json:"durationInMillis"`
-	ISRC                string            `json:"isrc"`
-	ContentRating       string            `json:"contentRating"`
-	HasTimeSyncedLyrics bool              `json:"hasTimeSyncedLyrics"`
-	HasLyrics           bool              `json:"hasLyrics"`
-	Artwork             artwork           `json:"artwork"`
-	ExtendedAssetURLs   extendedAssetURLs `json:"extendedAssetUrls"`
+	Name                 string            `json:"name"`
+	ArtistName           string            `json:"artistName"`
+	AlbumName            string            `json:"albumName"`
+	ComposerName         string            `json:"composerName"`
+	GenreNames           []string          `json:"genreNames"`
+	ReleaseDate          string            `json:"releaseDate"`
+	TrackNumber          int               `json:"trackNumber"`
+	DiscNumber           int               `json:"discNumber"`
+	DurationInMillis     int               `json:"durationInMillis"`
+	ISRC                 string            `json:"isrc"`
+	ContentRating        string            `json:"contentRating"`
+	IsAppleDigitalMaster bool              `json:"isAppleDigitalMaster"`
+	HasTimeSyncedLyrics  bool              `json:"hasTimeSyncedLyrics"`
+	HasLyrics            bool              `json:"hasLyrics"`
+	Artwork              artwork           `json:"artwork"`
+	ExtendedAssetURLs    extendedAssetURLs `json:"extendedAssetUrls"`
 }
 
 type albumAttributes struct {
@@ -242,6 +259,10 @@ type albumAttributes struct {
 	RecordLabel string   `json:"recordLabel"`
 	UPC         string   `json:"upc"`
 	Artwork     artwork  `json:"artwork"`
+	// ContentRating and IsMasteredForItunes are documented, non-extended
+	// attributes of the public catalog's Albums resource.
+	ContentRating       string `json:"contentRating"`
+	IsMasteredForItunes bool   `json:"isMasteredForItunes"`
 }
 
 type playlistAttributes struct {
@@ -327,9 +348,10 @@ type artistData struct {
 }
 
 type artistAttributes struct {
-	Name    string  `json:"name"`
-	URL     string  `json:"url"`
-	Artwork artwork `json:"artwork"`
+	Name       string   `json:"name"`
+	URL        string   `json:"url"`
+	GenreNames []string `json:"genreNames"`
+	Artwork    artwork  `json:"artwork"`
 }
 
 type artistRelationships struct {
