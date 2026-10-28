@@ -32,7 +32,8 @@ wins when they disagree, so details are not copied here.
 | Quality priority | The ordered codec list a track is tried in | `configs/config.example.yaml#download.quality_priority` |
 | Codec fallback | Moving to the next codec when one codec's attempts run out; AAC-LC over WebPlayback is the implicit last resort | [docs/download-pipeline.md](docs/download-pipeline.md#retries-and-codec-fallback) |
 | Memory mode | `low` checkpoints the encrypted track to disk, `high` keeps it in RAM | `configs/config.example.yaml#download.memory_mode` |
-| Simulate mode | Real catalog data and media selection with a simulated transfer and no disk writes; no wrapper needed | `internal/media#Downloader.simulateTrack` |
+| Simulate mode | Real catalog data and media selection, then the real pipeline over a pretend media backend: paced transfers, no disk writes, no wrapper or ffmpeg | `internal/media#simulatedMedia` |
+| Media backend | The I/O side of the per-track pipeline (transfers, wrapper, ffmpeg, disk); production and simulate mode differ only here | `internal/media#mediaBackend` |
 | Path template | The per-job-type format that decides where a finished track lands | `internal/media#outputPath` |
 | Quality label | The `{Quality}` path value, such as `24-bit/96 kHz` or `256Kbps` | `internal/media#qualityLabel` |
 | Standalone cover | `cover.<ext>` or `artist.<ext>` written next to the audio | [docs/download-pipeline.md](docs/download-pipeline.md#standalone-covers) |
@@ -43,6 +44,8 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | Event | A persisted job event; its id is the SSE resume cursor | `internal/domain#Event` |
 | Overview feed | `GET /api/v1/downloads/events`: one message per changed job for list views | `internal/api#Server.downloadsFeed` |
+| Event cursor | `event_cursor` in `GET /downloads` and `GET /downloads/{id}`: the event id a client resumes the matching stream from (`?cursor=` or `Last-Event-ID`) | `internal/api#Server.listDownloads` |
+| Error code | The stable `code` of an error response; clients switch on it, never on the message | `internal/api#ErrorCode` |
 | Runtime key, startup key | Config keys that apply through `PUT /api/v1/config` vs keys that need a restart | `internal/config#isRuntimeKey` |
 | Env override | `AMDL_<SECTION>_<KEY>` variables that sit on top of the config file | `internal/config#envFields` |
 | Job overrides | The per-submission `overrides` object that overlays the runtime config for one batch | `internal/config#DownloadOverrides` |

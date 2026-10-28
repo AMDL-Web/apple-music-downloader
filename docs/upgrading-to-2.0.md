@@ -27,22 +27,31 @@ below before they work against 2.0.
 
 | Area | 1.x | 2.0 | Affects |
 | --- | --- | --- | --- |
-| Error body | `{"error": "text"}` | `{"error": {"code", "message", "details?"}}` | every client error handler |
-| Submit result error | `results[].error: "code: message"` | `results[].error: {code, message, details?}` | submit flows |
+| Error body | `{"error": "text"}` | `{"error": {"code", "message", "details?"}}`; codes are the spec's `ErrorCode` enum (`GET /health` keeps its `503` body) | every client error handler |
+| Unknown route, wrong method | `http.ServeMux` plain text `404` / `405` | JSON `404 route_not_found`; `405 method_not_allowed` with an `Allow` header | generic error handlers |
+| Job lookup on a store error | `404` (`GET /downloads/{id}`, its stream) | `500 store_error`; `404 job_not_found` only for a missing job | job detail and stream clients |
+| Submit result error | `results[].error: "code: message"`, only on some rejections | `results[].error: {code, message, details?}` on every result that is not `accepted`; codes are the spec's `SubmitErrorCode` enum | submit flows |
+| Submit store failure | `status: "invalid"` with the raw error text | `status: "error"`, `error.code: "store_error"` (retry the submit) | submit flows, status enums |
 | Submit, nothing accepted | `422` with the batch body | `422 no_urls_accepted` (or `500 store_error`) envelope; the batch body is in `error.details` | submit flows |
+| Wrapper login already pending | `401` (wrapper-manager's `login already pending` reply) | `409 login_pending`; a two-step code already being verified is also `login_pending` | account screens |
+| Wrapper login timeout | `504` | `504 upstream_timeout` | account screens |
+| Wrapper login password | trimmed | sent as typed; only an all-whitespace password is `400` | account screens |
+| Config `PUT` with an invalid file on disk | `500` | `422 invalid_config` | settings screens |
+| Optional component missing | mixed (`/logs` answered an empty `200`, `/developer-token` `409`) | `503 feature_unavailable` on every route that needs it | none in a normal install |
 | Stream cursor in snapshots | `last_event_id` on `GET /downloads` and `GET /downloads/{id}` | `event_cursor` | stream clients |
 | Job counters | `done_items` (completed + skipped), `failed_items` | `completed_items`, `skipped_items`, `failed_items`, `cancelled_items` | job lists, progress bars |
 | Job timing | none | `started_at`, `finished_at` | new |
 | Job `force` | legacy boolean | removed; use `overrides.force_overwrite` | submit forms |
 | Event `payload` | JSON string (parse twice) | JSON object | per-job event consumers |
 | WebSocket streams | `/logs/stream/ws`, `/downloads/events/ws`, `/downloads/{id}/events/ws` | removed; use the SSE endpoints | cross-origin clients |
-| Stream resume | header only on SSE; `last_event_id` / `after` query on WS and logs | `Last-Event-ID` header or `?cursor=` on every stream; CORS allows the header | stream clients |
+| Stream resume | header only on SSE; `last_event_id` / `after` query on WS and logs | `Last-Event-ID` header or `?cursor=` on every stream (the header wins); a malformed cursor is `400 invalid_request` instead of being read as `0`; CORS allows the header | stream clients |
 | Logs paging | `after`, `next_cursor` | `cursor`, `next_cursor` | log viewers |
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
-| Wrapper status | `accounts_supported`, `accounts` omitted when empty | `accounts_supported` removed; `accounts` always present (possibly empty) | account screens |
+| Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays (possibly empty) | account screens |
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` or SIGHUP | settings screens |
-| New | | `GET /system`, `GET /stats`, `POST /config/reload`, web console at `/console/` | |
+| Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | |
+| New | | `GET /system`, `GET /stats`, `POST /config/reload`, web console at `/console/` (`/` redirects there) | |
 
 ## Config and environment
 
@@ -77,13 +86,30 @@ below before they work against 2.0.
 
 ## Output paths
 
-Unchanged, with two exceptions that only affect unusual titles:
+Unchanged, with three exceptions that only affect unusual titles:
 
-- Leading dots are stripped from path segments, so a title such as
-  "...Baby One More Time" is no longer written as a hidden file. Files written by 1.x
-  under the dotted name are not recognized and are downloaded again.
-- Segments longer than 240 bytes are truncated on a character boundary. 1.x could not
-  write these files at all.
+- Leading dots (and spaces between them) are stripped from path segments, so a title
+  such as "...Baby One More Time" is no longer written as a hidden file. Files written
+  by 1.x under the dotted name are not recognized and are downloaded again.
+- Dots and spaces are trimmed from the end of a segment together: 1.x left a trailing
+  space when a name ended in a dot, a space and more dots ("Title . ." became
+  "Title . "); 2.0 writes "Title", so such a track downloads again.
+- Segments longer than 240 bytes are truncated on a character boundary. 1.x failed
+  longer names only after the whole download (file names over 251 bytes, folder names
+  over 255); a name between 241 bytes and those limits is now shorter, so that track
+  downloads again.
+
+## Downloads
+
+- Cancelling a job ends each of its unfinished items `cancelled`, with an
+  `item_progress` event whose `phase` is `cancelled`; 1.x left them in their last
+  state, such as `downloading`. Job detail views and stream clients see the new
+  terminal item status.
+- Media transfers no longer have a 90 s whole-request timeout: a transfer fails only
+  when no data arrives for 60 s, so a large Hi-Res track on a slow link finishes.
+- A song without an Enhanced HLS manifest falls back to the next codec at once instead
+  of after `download.max_attempts` retries, and a failed integrity check reports
+  ffmpeg's own message.
 
 ## Database
 
