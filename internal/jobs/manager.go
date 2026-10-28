@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,12 @@ import (
 	"amdl/internal/events"
 	"amdl/internal/hooks"
 )
+
+// ErrShutdown is the cancellation cause of a job interrupted because the
+// process is stopping. Such a job is not cancelled: it stays running in the
+// store with its checkpoints, and recovery resumes it on the next start.
+// Check it with errors.Is(context.Cause(ctx), ErrShutdown).
+var ErrShutdown = errors.New("job manager is shutting down")
 
 type Manager struct {
 	store     *db.Store
