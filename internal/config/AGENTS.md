@@ -37,7 +37,10 @@ Loads, validates and persists the service config (`Load`, `Config.Validate`,
 
 A new key lands in one commit with: the struct field (yaml and json tags),
 `Default()`, `Config.Validate`, the full comment in `configs/config.example.yaml`,
-the runtime or startup classification, and, for a runtime `download.*` key, either
+the runtime or startup classification, for a runtime key its `RuntimeConfig`
+property in `internal/api/openapi.yaml` and its Settings field in
+`internal/console/static/js/lib/settings.js` (`TestSettingsFieldsCoverRuntimeConfig`
+checks the two match), and, for a runtime `download.*` key, either
 a same-named `DownloadOverrides` field with its `DownloadOverrides.Apply` branch plus
 the `DownloadOverrides` schema in `internal/api/openapi.yaml` and the overrides table
 in [docs/api.md](../../docs/api.md), or an entry in `overrideExclusions` with the

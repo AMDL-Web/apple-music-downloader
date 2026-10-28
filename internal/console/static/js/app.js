@@ -90,9 +90,21 @@ export function App() {
   const mainRef = useRef(null);
   const h1Ref = useRef(null);
 
+  // A page holding unsaved work sets a leave guard (ctx.setLeaveGuard): it
+  // gets the hash about to be shown and returns false to stay, then asks
+  // the user itself. Links, the palette, shortcuts and Back all end in
+  // hashchange, so the guard runs there (and on navigate's replace).
+  const leaveGuard = useRef(null);
+  const shownUrl = useRef(window.location.href);
+  const setLeaveGuard = useCallback((fn) => {
+    leaveGuard.current = fn;
+  }, []);
+
   const navigate = useCallback((hash, opts = {}) => {
     if (opts.replace) {
+      if (leaveGuard.current && !leaveGuard.current(hash)) return;
       window.history.replaceState(null, '', hash);
+      shownUrl.current = window.location.href;
       setRoute(parseHash(hash));
     } else if (window.location.hash !== hash) {
       window.location.hash = hash;
@@ -100,7 +112,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const on = () => setRoute(parseHash(window.location.hash));
+    const on = () => {
+      if (leaveGuard.current && !leaveGuard.current(window.location.hash)) {
+        window.history.replaceState(null, '', shownUrl.current);
+        return;
+      }
+      shownUrl.current = window.location.href;
+      setRoute(parseHash(window.location.hash));
+    };
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
@@ -383,9 +402,10 @@ export function App() {
       conn,
       epoch,
       simulate,
+      setLeaveGuard,
       retryFeed: () => retryRef.current(),
     }),
-    [navigate, toast, announce, subscribeFeed, counts, conn, epoch, simulate],
+    [navigate, toast, announce, subscribeFeed, counts, conn, epoch, simulate, setLeaveGuard],
   );
 
   const title = TITLES[route.page] || 'AMDL';

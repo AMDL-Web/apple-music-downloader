@@ -30,9 +30,9 @@ wins and this page is fixed in the same change. Sources are listed in
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, activity, Cancel/Retry/Delete |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
-| `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, read-only config with Reload, API links |
+| `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings, API links |
 | `#/new?url=` | New download | Sections `compose` (text box, media-user-token when needed, Download N), `results` (after a submit), `links` (a row per link found), and beside them at 1024 px and up `options` and `bookmarklet`. `url` carries one or more links, newline- or space-separated and URL-encoded (`lib/route.js` `newDownloadHash`, `newDownloadUrls`), and follows the text box; `lib/links.js` parses them |
-| `#/settings?section=` | Settings | Runtime configuration, the Apple Music account, library sync. `section` (lowercase words joined by `_`, `settingsSection`) scrolls to or opens one; the palette links to `account` and `library_sync` |
+| `#/settings?section=` | Settings | A section list (a select under 640 px) and one open section: `downloads` (the default), `files`, `artwork`, `lyrics`, `catalog`, `library_sync`, `logging`, `simulate`, `account`, `config_file` (`lib/settings.js` `SETTINGS_SECTIONS`; `section` is lowercase words joined by `_`, `settingsSection`). The palette links to `account` and `library_sync` |
 
 New download is the primary action and has these entry points: the
 `.sidebar-new` button first in the sidebar (icon-only with a tooltip on the
@@ -156,6 +156,7 @@ Stable class names and attributes a skin can style without touching JS:
 | Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.skin`/`.seg-skin`/`.skin-cycle`, `.theme`/`.seg-icons`/`.theme-cycle` |
 | Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive); a busy button is `.btn[aria-disabled=true]`. Shortcut sheet `[data-dialog=shortcuts]` |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
+| Settings | `.page-settings[data-section-active][data-dirty]` > `nav.settings-nav` (`ul.settings-nav-list` > `a.settings-nav-item[data-section][aria-current=true][data-dirty][data-invalid]` > `.icon`, `.settings-nav-label`, `.settings-nav-mark` (`.settings-nav-dot` when unsaved); `label.settings-jump` > `.settings-jump-label` + `select`, shown under 640 px), `.settings-main` (a size container) > `.settings-error` + `section.card.settings-section[data-section=<id>]` > `.settings-intro`, `.field-list` > `.field[data-key][data-type][data-wide][data-changed][data-pinned][data-invalid]` > `.field-text` (`.field-label`, `.field-changed`, `button.field-revert`, `.field-help`, `code.field-key`), `.field-control` (`input.field-switch[role=switch]` + `.field-switch-state`, `.field-select` > `.select` + `.field-option-hint`, `.field-number` > `.field-input` + `.field-unit`, `.field-input`, `.field-secret`, `.list-editor` > `ol.list-items` > `li.list-item[data-item]` (`.list-rank`, `.list-label`, `.list-code`, `.list-actions` > `.list-up`, `.list-down`, `.list-remove`) + `.list-add`, `.check-group` > `label.check`), then `.field-pin`, `.field-error`, `.field-warning`; panels `.settings-panel[data-panel=library-sync\|config-file]` (`.settings-panel-head`, `.settings-panel-actions`, `.sync-reset`, `.config-reload`, `.pinned-table`), `details.template-ref`, `.account` > `.account-block` (`.account-block-head`, `ul.account-rows` > `.account-row` > `.account-name` + `.account-logout`), `form.login-form[data-step=credentials\|code]` > `.form-row`, `.form-actions`; `.save-bar[data-state=dirty\|saving]` > `.save-bar-text` (`.save-bar-count`, `.save-bar-where`) + `.save-bar-actions` (`.save-bar-discard`, `.save-bar-save`) |
 | Job selection (Queue) | Toolbar `.queue-tools` > `.btn.queue-retry-all` (Failed tab) + `.btn.queue-select[aria-pressed]`; `.bulk-bar[data-state=select\|run]` (sticky at `top: var(--topbar-h)`; a skin whose top bar does not stick overrides `top`) > `label.bulk-all` > `input.bulk-check` (indeterminate when some), `.bulk-count`, `.bulk-actions` > `.btn.bulk-action[data-action=retry\|cancel\|delete]` > `.bulk-n` (count) or `.bulk-hint`, or during a run `.bulk-progress` > `.bulk-progress-text` + `.bulk-meter[role=progressbar]` > `.bulk-meter-fill` (`--f`); `ul.job-list.is-selecting` > `li.job-item[data-job-id][data-selected]` > `label.job-check` > `input.job-check-input` + `a.job-row[data-selected]`. Drawer: `.btn.drawer-delete` (finished jobs) |
 | New download | `.page-new` > `.new-main` (cards `compose`, `results`, `links`) + `.new-aside` (`options`, `bookmarklet`), two columns at 1024 px and up. Compose: `form.new-form` > `textarea#new-input.new-input`, `.new-hint`, `.new-token` > `input.new-token-input` (while a station or private playlist is listed), `.new-submit` > `.new-submit-info` (`.new-count`, `button.new-options-jump`) + `.btn.new-submit-btn[aria-busy]`. Links: `ul.new-links` > `li.new-link[data-kind][data-state=queued\|loading\|ready\|error\|idle\|invalid][data-issue=not_apple\|unsupported\|music_video\|refused\|not_found\|needs_token\|preview_failed][data-blocking][.has-palette]` > `.art.art-48.new-link-art`, `.new-link-main` (`.new-link-tags` > `.chip`s and `.new-link-loading`, `.new-link-title[.is-url]`, `.new-link-sub` > `.new-link-artist`, `.new-link-album`, `.new-link-fact[data-key=tracks\|year\|length\|genre]`, mono `.new-link-url`, `.new-link-note`, `.new-link-issue.status-text[data-role]`), `.new-link-actions` > `.new-link-quality`, `.new-link-retry`, `.new-link-remove`; `.new-links-more`. Results: `.new-results-summary[role=status]`, `ul.job-list.job-list-compact.new-results` > `li.new-result[data-status=accepted\|invalid\|duplicate_active\|duplicate_in_request\|queue_full\|error\|deleted]` > a Job row, or `.new-result-row[data-role]` > `.new-result-icon`, `.new-result-main` (`.new-result-label`, `.new-result-url`, `.new-result-msg`, `.new-result-detail`), `.new-result-actions`; head `.new-results-retry`, `.new-results-clear`. Options: `section.card.new-options` > `.new-options-toggle[aria-expanded]`, `.new-options-reset`, `#new-options-body.new-options-body[data-open]` > `.new-options-summary[data-changed]` (`.new-options-count`, `.new-options-text`) or `.new-options-form` > `fieldset.new-fieldset[data-group=quality\|lyrics\|covers\|behavior\|hooks][data-changed]` > `label.new-check[data-key][data-changed]` (`.new-check-label`, `.new-check-hint`), `.new-field[data-key][data-changed]` (`.new-field-label` + `.select`), `.new-field-row`, `.new-check-group`, `.new-codecs` > `ol.new-codec-list` > `li.new-codec[data-codec]` (`.new-codec-rank`, `.new-codec-name` > `.new-codec-hint`, `.new-codec-actions` > `.new-codec-up`) + `.new-codec-add` > `.new-codec-add-btn[data-codec]`, then `.new-options-foot`; the base puts an accent dot after the label of a value that differs from the server default. Bookmarklet: `.new-bookmarklet` > `code#new-bookmarklet-code.new-bookmarklet-code` + `.new-bookmarklet-copy`, `ol.new-steps`. Quality sheet `.sheet.sheet-quality[data-dialog=quality]` > `.quality-for`, `.quality-wait`, `.quality-body` > `ul.quality-slots` > `li.quality-slot[data-id]` (`.quality-slot-label` > `.quality-slot-codec`, `.quality-slot-count`, `.quality-slot-best`), `ol.quality-tracks` > `li.quality-track` > `.quality-track-head` (`.quality-track-no`, `.quality-track-name`, `.chip`) + `.quality-track-opts` > `.quality-opt[data-id]` (`.quality-opt-label`, `.quality-opt-spec`) |
 
@@ -262,9 +263,28 @@ and motion covers.
 - **Health rows**: name · status · detail for backend, wrapper, library sync
   (503 is "Not configured", not an error) and hooks, plus workers, queue,
   downloads disk and uptime from `/system`; polled every 30 s and on focus.
-- **Config summary**: read-only `GET /config` by section; `media_user_token`
-  shows only Set/Not set; "Reload config" posts `/config/reload` and shows
-  `reload_error` as a warning.
+- **Config summary** (System): a few `GET /config` values (codec priority,
+  downloads folder, simulate, library sync, log level, whether the media user
+  token is set, pinned key count) and "Open settings".
+- **Settings**: one field per `RuntimeConfig` leaf (`lib/settings.js`
+  `FIELDS`; `TestSettingsFieldsCoverRuntimeConfig` fails on a leaf with
+  neither a field nor a `NOT_EDITED` reason): label, help condensed from
+  `configs/config.example.yaml`, the dotted key, and a control by type
+  (switch, select, number with unit, text, path, template, secret with
+  reveal, ordered list, checkbox set). A key in `ConfigResponse.pinned` is
+  disabled and names its variable. Edits stay in a draft; the sticky save bar
+  counts them, Discard drops them, Save (or Cmd/Ctrl+S) sends `PUT /config`
+  with only the changed leaves, lists whole (`buildPatch`). A refused save
+  keeps the draft: a notice says why, and `fieldErrors` puts the message on
+  each field it names (`details.keys` for `config_key_pinned` and
+  `config_key_not_mutable`, the dotted keys in the message for
+  `invalid_config` and 400). Only unsendable numbers block Save on the
+  client; an odd cover size or unknown template variable is a warning.
+  Library sync shows `GET /library-sync` and "Reset anchor" (a
+  `ConfirmDialog`); Apple Music account shows the wrapper status, Log out per
+  account (a `ConfirmDialog`) and the login form with its two-step code step;
+  Configuration file shows `persisted`, the pinned keys, `reload_error` and
+  "Reload from file".
 - **Primitives**: buttons (primary, secondary, ghost, danger), segmented
   control, search field, select, chips, notices, toasts (`role="status"`,
   errors stay until dismissed), command palette (Cmd/Ctrl+K, combobox +
@@ -327,6 +347,7 @@ and motion covers.
 | Showcase | skeleton hero and tiles (cover plus two text lines) | "Completed albums will appear here." with a link to the Queue and "Start a download" | inline note + Retry; broken cover shows bg color + glyph |
 | Logs | 12 skeleton lines | "No records match" + Clear filters | the API's validation message |
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |
+| Settings | 6 skeleton lines in the section | | inline note + Retry; a refused save keeps the draft with a notice and per-field errors; wrapper errors as notices with the server's text |
 | New download | a skeleton cover and line per link being looked up; 3 skeleton lines for the options until `GET /config` answers | "No links yet" under the text box | a failed lookup flags its row (warning, Retry) and the link is still sent; options: inline note + Retry, and a submit sends no overrides; a refused submit shows a notice, `invalid_overrides` on the Options card |
 | Feed | | | Reconnecting · Ns; banner after 10 s; Disconnected after 60 s with Retry |
 
@@ -345,6 +366,11 @@ polite status region, at most one announcement per 5 s. Progress carries
 `role="progressbar"` with `aria-valuetext` such as "12 of 14 tracks, 1 failed",
 whether it renders cells or a bar. Text a skin adds with `::before` (section
 numbers, "No.") is decoration and repeats nothing a screen reader needs.
+With unsaved settings, leaving the page asks first: a page sets
+`setLeaveGuard` from the app context, every hash change passes it (links,
+the palette, shortcuts, Back), and a refused change restores the URL while
+the page shows its `ConfirmDialog`; the browser's own prompt covers closing
+the tab. Moving between settings sections never asks.
 
 ## Data flow
 

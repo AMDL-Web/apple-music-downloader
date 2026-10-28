@@ -1,12 +1,12 @@
 // System: build and runtime facts from /system, health of each part, the
-// wrapper, library sync, hooks with outcomes, and a read-only config summary.
+// wrapper, library sync, hooks with outcomes, and a short config summary
+// that links to Settings, where the config is edited.
 
 import { html, useState } from '../ui/preact.js';
 import {
   getSystem,
   getStats,
   getConfig,
-  reloadConfig,
   getHealth,
   getWrapperStatus,
   getLibrarySync,
@@ -16,6 +16,7 @@ import {
   specUrl,
 } from '../api.js';
 import { count, bytes, elapsed, absTime, maskAccount, relTime } from '../lib/format.js';
+import { settingsHash } from '../lib/route.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
 import { useApp, Card, Badge, StatusText, KV, Icon, Button, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, Empty, RelTime, HealthList } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
@@ -40,8 +41,10 @@ export function SystemPage() {
       <${LibrarySyncCard} res=${ls} loading=${!health.data} />
     </div>
     <${HooksCard} res=${hk} stats=${stats} loading=${!health.data} />
-    <${ConfigCard} />
-    <${LinksCard} />
+    <div class="grid-2">
+      <${ConfigCard} />
+      <${LinksCard} />
+    </div>
   </div>`;
 }
 
@@ -170,7 +173,7 @@ function WrapperCard({ res, loading }) {
           ['Error', view.detail ? html`<span class="wrap-any" title=${view.title || undefined}>${view.detail}</span>` : null],
         ]}
       />
-      <p class="muted small">The backend reaches wrapper-manager at <code>wrapper.address</code>; downloads need it, simulate mode does not.</p>`;
+      <p class="muted small">The backend reaches wrapper-manager at <code>wrapper.address</code>; downloads need it, simulate mode does not. Accounts are managed in <a class="link" href=${settingsHash('account')}>Settings › Apple Music account</a>.</p>`;
   }
   else {
     const wr = res.data;
@@ -194,7 +197,7 @@ function WrapperCard({ res, loading }) {
             </${Button}>
           </div>`
         : null}
-      <p class="muted small">Log in and out of accounts from amdl-web or the iOS app.</p>`;
+      <p class="muted small">Log in and out of accounts in <a class="link" href=${settingsHash('account')}>Settings › Apple Music account</a>.</p>`;
   }
   return html`<${Card} className="span-6" title="Wrapper" labelId="wrapper-title">${body}</${Card}>`;
 }
@@ -256,69 +259,46 @@ function HooksCard({ res, stats, loading }) {
   return html`<${Card} title="Hooks" labelId="hooks-title">${body}</${Card}>`;
 }
 
-const CONFIG_SECTIONS = ['download', 'catalog', 'logging', 'simulate', 'library_sync'];
+const CODEC_NAMES = { alac: 'ALAC', ec3: 'Dolby Atmos', ac3: 'Dolby Digital', aac: 'AAC', 'aac-binaural': 'AAC binaural', 'aac-downmix': 'AAC downmix' };
+const onOff = (v) => (v === undefined ? null : v ? 'On' : 'Off');
 
-function formatValue(key, value) {
-  if (key === 'media_user_token') return value ? 'Set' : 'Not set';
-  if (typeof value === 'boolean') return value ? 'On' : 'Off';
-  if (Array.isArray(value)) return value.length ? value.join(', ') : '(empty)';
-  if (value === null || value === undefined || value === '') return '';
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
+/** A few runtime settings at a glance; Settings edits them. */
 function ConfigCard() {
   const app = useApp();
   const cfg = usePoll(getConfig, 0, [app.epoch]);
-  const [reloading, setReloading] = useState(false);
-  const [reloadResult, setReloadResult] = useState(null);
-  const doReload = async () => {
-    setReloading(true);
-    try {
-      const body = await reloadConfig();
-      setReloadResult(body);
-      app.toast(body.reload_error ? { message: 'Config file is invalid; the previous config stays active', role: 'warning', sticky: true } : { message: 'Config reloaded', role: 'success' });
-      cfg.reload();
-    } catch (e) {
-      app.toast({ message: e.status === 404 ? 'This backend cannot reload its config from the API' : e.message, role: 'danger', sticky: true });
-    } finally {
-      setReloading(false);
-    }
-  };
   const data = cfg.data;
-  const reloadError = (reloadResult && reloadResult.reload_error) || (data && data.reload_error);
   let body;
   if (cfg.error && !data) body = html`<${ErrorNote} title="Couldn't load the config" error=${cfg.error} onRetry=${cfg.reload} />`;
-  else if (!data) body = html`<${SkeletonRows} n=${8} kind="line" />`;
-  else
-    body = html`
-      ${reloadError
-        ? html`<${Notice} role="warning" icon="triangle-alert">Config file is unreadable; showing the last valid config. <span class="mono wrap-any">${reloadError}</span></${Notice}>`
-        : null}
-      ${data.persisted === false ? html`<${Notice}>Changes are not persisted to a file.</${Notice}>` : null}
-      <div class="config-grid">
-        ${CONFIG_SECTIONS.filter((s) => data.config && data.config[s]).map(
-          (section) => html`<section key=${section} class="config-section" aria-labelledby=${`cfg-${section}`}>
-            <h3 class="section-title mono" id=${`cfg-${section}`}>${section}</h3>
-            <dl class="kv kv-mono">
-              ${Object.entries(data.config[section]).map(
-                ([k, v]) => html`<div class="kv-row" key=${k}><dt>${k}</dt><dd class="wrap-any">${formatValue(k, v) || html`<span class="muted">—</span>`}</dd></div>`,
-              )}
-            </dl>
-          </section>`,
-        )}
-      </div>
-      <p class="muted small">Startup-only settings are not exposed by the API. Edit settings in amdl-web or configs/config.yaml.</p>`;
+  else if (!data) body = html`<${SkeletonRows} n=${6} kind="line" />`;
+  else {
+    const c = data.config || {};
+    const d = c.download || {};
+    const pinned = Array.isArray(data.pinned) ? data.pinned.length : 0;
+    body = html`<${KV}
+        rows=${[
+          ['Codec priority', Array.isArray(d.quality_priority) ? d.quality_priority.map((q) => CODEC_NAMES[q] || q).join(' → ') : null],
+          ['Downloads folder', d.downloads_dir ? html`<span class="mono wrap-any">${d.downloads_dir}</span>` : null],
+          ['Simulate', onOff(c.simulate && c.simulate.enabled)],
+          ['Library sync', onOff(c.library_sync && c.library_sync.enabled)],
+          ['Log level', c.logging ? c.logging.level : null],
+          ['Media user token', c.catalog ? (c.catalog.media_user_token ? 'Set' : 'Not set') : null],
+          ['Pinned by environment', pinned ? `${count(pinned)} ${pinned === 1 ? 'key' : 'keys'}` : 'None'],
+          ['Saved to a file', data.persisted === false ? 'No' : 'Yes'],
+        ]}
+      />
+      <p class="muted small">Startup-only settings are not exposed by the API; edit configs/config.yaml and restart for those.</p>`;
+  }
   return html`<${Card}
+    className="span-6"
     title="Configuration"
     labelId="config-title"
-    note="Read-only"
-    actions=${html`<${Button} size="sm" icon="rotate" onClick=${doReload} disabled=${reloading}>${reloading ? 'Reloading…' : 'Reload config'}</${Button}>`}
+    section="config"
+    actions=${html`<${LinkButton} size="sm" icon="settings" href=${settingsHash()}>Open settings</${LinkButton}>`}
   >${body}</${Card}>`;
 }
 
 function LinksCard() {
-  return html`<${Card} title="API" labelId="api-title">
+  return html`<${Card} className="span-6" title="API" labelId="api-title">
     <div class="link-row">
       <${LinkButton} href=${docsUrl()} icon="book" external>API docs</${LinkButton}>
       <${LinkButton} href=${specUrl()} icon="braces" external>OpenAPI spec</${LinkButton}>

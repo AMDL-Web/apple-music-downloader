@@ -1,5 +1,754 @@
 /*
- * The Settings page (#/settings, views/settings.js): runtime configuration
+ * The Settings page (#/settings, views/settings*.js): runtime configuration
  * sections, the Apple Music account and library sync. Base structure only;
  * it reads tokens like every other base stylesheet, and the skins restyle it.
+ * This file is linked after responsive.css, so it carries its own media
+ * queries. Fields stack by the width of .settings-main (a size container),
+ * not the viewport, so the rail and the masthead layouts get the same rule.
  */
+
+/* ---- Frame: section list, open section, save bar ------------------- */
+
+.page-settings {
+  display: grid;
+  grid-template-columns: minmax(168px, 220px) minmax(0, 1fr);
+  grid-template-areas:
+    "nav main"
+    ". bar";
+  align-items: start;
+  gap: var(--page-gap) var(--grid-gap);
+}
+
+.settings-nav {
+  grid-area: nav;
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--s-4));
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.settings-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--control-h);
+  padding: var(--s-1_5) var(--s-2);
+  border-radius: var(--r-control);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.settings-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-nav-item[aria-current="true"] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+  font-weight: var(--w-medium);
+}
+
+.settings-nav-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-nav-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.settings-nav-mark .icon {
+  color: var(--role);
+}
+
+/* A section with unsaved changes. */
+.settings-nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
+
+/* The section select replaces the list under 640 px. */
+.settings-jump {
+  display: none;
+}
+
+.settings-jump-label {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--w-medium);
+}
+
+.settings-main {
+  grid-area: main;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+.settings-intro {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.save-bar {
+  grid-area: bar;
+  position: sticky;
+  bottom: var(--s-4);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  animation: rise var(--dur-base) var(--ease-out);
+}
+
+.save-bar-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-3);
+  min-width: 0;
+}
+
+.save-bar-count {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.save-bar-where {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.save-bar-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+/* While the save bar shows, toasts rise above it so they never cover Save. */
+:root:has(.save-bar) .toasts {
+  bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
+}
+
+/* ---- Fields --------------------------------------------------------- */
+
+.field-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 300px);
+  align-items: center;
+  gap: var(--s-2) var(--s-6);
+  padding: var(--s-4) 0;
+  border-top: var(--row-divider);
+}
+
+.field:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.field-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.field-control {
+  min-width: 0;
+}
+
+.field[data-type="switch"],
+.field[data-type="number"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.field[data-wide] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.field-pin,
+.field-error,
+.field-warning {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-1_5);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.field-pin .icon,
+.field-error .icon,
+.field-warning .icon {
+  margin-top: var(--s-0_5);
+  color: var(--role, var(--text-secondary));
+}
+
+.field-pin {
+  color: var(--text-secondary);
+}
+
+.field-error {
+  color: var(--danger-text);
+}
+
+.field-warning {
+  color: var(--warning-text);
+}
+
+.field-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+}
+
+.field-label {
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-medium);
+}
+
+.field-changed {
+  padding: 0 var(--s-1_5);
+  border-radius: var(--r-badge);
+  background: var(--info-tint);
+  color: var(--text-primary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-weight: var(--w-medium);
+}
+
+.field-revert {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  cursor: pointer;
+}
+
+.field-help,
+.field-option-hint {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.field-key {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+}
+
+.field-input {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--s-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-control);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.field-input.mono {
+  font-size: var(--fs-13);
+}
+
+.field-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.field-input[aria-invalid="true"],
+.field .select[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.field-input:disabled,
+.field .select:disabled,
+.field-switch:disabled,
+.check input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.field-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.field-select .select {
+  width: 100%;
+}
+
+.field-number {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.field-number .field-input {
+  width: 112px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.field-unit {
+  min-width: 2.5em;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.field-secret {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  max-width: 560px;
+}
+
+.field-secret .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field[data-type="path"] .field-input,
+.field[data-type="template"] .field-input {
+  max-width: 640px;
+}
+
+/* A checkbox drawn as a switch; "On"/"Off" beside it says the state in text. */
+.field-switch-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.field-switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-full);
+  background: var(--track);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.field-switch::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-full);
+  background: var(--text-secondary);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.field-switch:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.field-switch:checked::before {
+  transform: translateX(16px);
+  background: var(--on-accent);
+}
+
+.field-switch-state {
+  min-width: 2em;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  cursor: pointer;
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Ordered list editor (codec priority). */
+.list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  max-width: 560px;
+}
+
+.list-items {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+}
+
+.list-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 40px;
+  padding: var(--s-1) var(--s-1) var(--s-1) var(--s-3);
+  border-top: var(--row-divider);
+}
+
+.list-item:first-child {
+  border-top: 0;
+}
+
+.list-rank {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  text-align: center;
+}
+
+.list-label {
+  min-width: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.list-code {
+  padding: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+}
+
+.list-actions {
+  display: flex;
+  gap: var(--s-0_5);
+}
+
+.list-add {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.list-add .select {
+  flex: 0 1 320px;
+  min-width: 0;
+  height: var(--control-h-sm);
+}
+
+/* ---- Panels: template reference, library sync, config file, account -- */
+
+.template-ref {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+}
+
+.template-ref-summary {
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+  cursor: pointer;
+}
+
+.template-ref-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: 0 var(--s-3) var(--s-3);
+}
+
+.template-vars {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s-2) var(--s-5);
+}
+
+.template-var {
+  display: grid;
+  grid-template-columns: 10.5em minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--s-2);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.template-var dd {
+  color: var(--text-secondary);
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  padding-top: var(--s-4);
+  border-top: var(--row-divider);
+}
+
+.settings-panel[data-panel="config-file"] {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-panel-head,
+.account-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.settings-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.settings-panel-actions > .muted {
+  flex: 1 1 240px;
+}
+
+.settings-reload-error,
+.account-error-detail {
+  display: block;
+}
+
+.settings-error:focus {
+  outline: none;
+}
+
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.account-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.account-block + .account-block {
+  padding-top: var(--s-5);
+  border-top: var(--row-divider);
+}
+
+.account-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: 44px;
+  border-top: var(--row-divider);
+}
+
+.account-row:first-child {
+  border-top: 0;
+}
+
+.account-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.login-form .form-row,
+.login-form .notice,
+.login-form > p {
+  max-width: 440px;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.login-code {
+  max-width: 12em;
+  letter-spacing: 0.2em;
+}
+
+/* ---- Narrow content: one column per field --------------------------- */
+
+@container (max-width: 560px) {
+  .field,
+  .field[data-type="number"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field-number .field-input {
+    width: 100%;
+    max-width: 160px;
+    text-align: left;
+  }
+}
+
+@media (max-width: 1023px) {
+  .page-settings {
+    grid-template-columns: minmax(150px, 184px) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .page-settings {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "nav"
+      "main"
+      "bar";
+  }
+
+  .settings-nav {
+    position: static;
+  }
+
+  .settings-nav-list {
+    display: none;
+  }
+
+  .settings-jump {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+  }
+
+  .settings-jump .select,
+  .field-input,
+  .field-input.mono,
+  .field .select {
+    width: 100%;
+    min-height: var(--touch);
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+
+  .field-switch-wrap {
+    min-height: var(--touch);
+  }
+
+  .list-add .select {
+    height: auto;
+  }
+
+  /* Above the fixed tab bar and its safe area. */
+  .save-bar {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+    padding: var(--s-2) var(--s-3);
+  }
+
+  .save-bar-actions {
+    width: 100%;
+  }
+
+  .save-bar-actions .btn {
+    flex: 1;
+  }
+
+  :root:has(.save-bar) .toasts {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--touch) + var(--lh-14) + var(--s-8) + var(--s-4));
+  }
+
+  .template-var {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-0_5);
+  }
+}
+
+@media (forced-colors: active) {
+  .field-switch,
+  .settings-nav-item[aria-current="true"] {
+    border: 1px solid CanvasText;
+  }
+
+  .field-switch::before {
+    background: CanvasText;
+  }
+
+  .field-switch:checked::before {
+    background: Highlight;
+  }
+}

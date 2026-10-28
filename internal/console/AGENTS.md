@@ -68,7 +68,9 @@ paths); add a `<symbol id="i-name">` and use `Icon`.
   `index.html` links tokens, every base stylesheet, then the skins;
 - contract guard: each `/api/v1/...` literal in `static/js` is a path in
   `internal/api/openapi.yaml`;
-- `LOG_COMPONENTS` equals the `"component"` log tags in the Go code.
+- `LOG_COMPONENTS` equals the `"component"` log tags in the Go code;
+- every `RuntimeConfig` leaf in `internal/api/openapi.yaml` has a Settings field
+  in `static/js/lib/settings.js` or a `NOT_EDITED` reason, and the reverse.
 
 ## Run and verify
 

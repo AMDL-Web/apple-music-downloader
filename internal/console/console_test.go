@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+
+	"gopkg.in/yaml.v3"
 )
 
 // wantCSP is written out independently of ContentSecurityPolicy so a change
@@ -639,6 +641,101 @@ func TestStylesheetsLinkedInOrder(t *testing.T) {
 	for i, l := range links {
 		if i > firstSkin && !strings.HasPrefix(l, "css/skins/") {
 			t.Errorf("index.html links %s after the first skin; base stylesheets precede every skin", l)
+		}
+	}
+}
+
+var (
+	settingsFieldKey = regexp.MustCompile(`\bkey:\s*'([a-z_]+\.[a-z0-9_]+)'`)
+	notEditedBlock   = regexp.MustCompile(`(?s)export const NOT_EDITED = \{(.*?)\};`)
+	notEditedEntry   = regexp.MustCompile(`'([a-z_]+\.[a-z0-9_]+)'\s*:\s*'([^']*)'`)
+)
+
+// TestSettingsFieldsCoverRuntimeConfig keeps the Settings page complete in
+// both directions: every leaf of the RuntimeConfig schema in
+// internal/api/openapi.yaml (what GET /api/v1/config returns and PUT accepts)
+// has a field in static/js/lib/settings.js or an entry with a reason in its
+// NOT_EDITED list, and no field or entry names a key the API does not return.
+// A new runtime key therefore fails here until the page can edit it or says
+// why it does not.
+func TestSettingsFieldsCoverRuntimeConfig(t *testing.T) {
+	spec, err := os.ReadFile("../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read the API contract: %v", err)
+	}
+	type schema struct {
+		Type       string            `yaml:"type"`
+		Properties map[string]schema `yaml:"properties"`
+	}
+	var doc struct {
+		Components struct {
+			Schemas map[string]schema `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(spec, &doc); err != nil {
+		t.Fatalf("parse openapi.yaml: %v", err)
+	}
+	runtime, ok := doc.Components.Schemas["RuntimeConfig"]
+	if !ok {
+		t.Fatal("openapi.yaml has no RuntimeConfig schema")
+	}
+	api := map[string]bool{}
+	for section, body := range runtime.Properties {
+		if len(body.Properties) == 0 {
+			t.Errorf("RuntimeConfig.%s has no properties; the settings guard expects section.key leaves", section)
+		}
+		for name, leaf := range body.Properties {
+			if leaf.Type == "object" {
+				t.Errorf("RuntimeConfig.%s.%s is an object; lib/settings.js addresses two-level keys only", section, name)
+				continue
+			}
+			api[section+"."+name] = true
+		}
+	}
+	if len(api) < 30 {
+		t.Fatalf("RuntimeConfig has only %d leaves; the schema walk is broken", len(api))
+	}
+
+	src := readStatic(t, "js/lib/settings.js")
+	fields := map[string]bool{}
+	for _, m := range settingsFieldKey.FindAllStringSubmatch(src, -1) {
+		if fields[m[1]] {
+			t.Errorf("lib/settings.js has two fields for %s", m[1])
+		}
+		fields[m[1]] = true
+	}
+	if len(fields) < 30 {
+		t.Fatalf("found only %d field keys in lib/settings.js; the key pattern is broken", len(fields))
+	}
+	block := notEditedBlock.FindStringSubmatch(src)
+	if block == nil {
+		t.Fatal("lib/settings.js has no `export const NOT_EDITED = {...};` list")
+	}
+	excluded := map[string]string{}
+	for _, m := range notEditedEntry.FindAllStringSubmatch(block[1], -1) {
+		excluded[m[1]] = m[2]
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(api)) {
+		_, skip := excluded[key]
+		switch {
+		case !fields[key] && !skip:
+			t.Errorf("GET /api/v1/config returns %s, but lib/settings.js has no field for it and NOT_EDITED does not say why", key)
+		case fields[key] && skip:
+			t.Errorf("%s has a field in lib/settings.js and is also listed in NOT_EDITED", key)
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(fields)) {
+		if !api[key] {
+			t.Errorf("lib/settings.js has a field for %s, which RuntimeConfig in openapi.yaml does not have", key)
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(excluded)) {
+		if !api[key] {
+			t.Errorf("NOT_EDITED lists %s, which RuntimeConfig in openapi.yaml does not have", key)
+		}
+		if strings.TrimSpace(excluded[key]) == "" {
+			t.Errorf("NOT_EDITED lists %s without a reason", key)
 		}
 	}
 }
