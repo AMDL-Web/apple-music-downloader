@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: AMDL Backend API
   version: 1.0.0
-  description: Apple Music 下载任务与 wrapper-manager 管理接口。
+  description: Apple Music download jobs and wrapper-manager management API.
 servers:
   - url: /
 tags:
@@ -14,17 +14,17 @@ paths:
   /api/v1/health:
     get:
       tags: [System]
-      summary: 后端健康检查
+      summary: Backend health check
       operationId: getHealth
       responses:
         '200':
-          description: 后端可用。
+          description: The backend is available.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
         '503':
-          description: 本地数据库不可用。
+          description: The local database is unavailable.
           content:
             application/json:
               schema:
@@ -32,13 +32,16 @@ paths:
   /api/v1/logs:
     get:
       tags: [System]
-      summary: 查询进程日志
+      summary: Query process logs
       description: >-
-        查询 logging.buffer_size 保留的最近结构化日志，按时间正序返回。
-        首次查询返回最近的 limit 条；带 after 的后续查询从游标向前分页，
-        next_cursor 可直接用于下一页。oldest_sequence 是当前最早保留序号，
-        truncated 表示 after 与它之间已有记录被内存环淘汰。敏感属性在进入
-        缓冲区和外部输出前已统一脱敏。
+        Queries the recent structured logs retained by logging.buffer_size, returned
+        in ascending time order. The first query returns the most recent `limit`
+        entries; follow-up queries with `after` page onward from that cursor, and
+        next_cursor can be used directly for the next page. oldest_sequence is the
+        oldest sequence number still retained; truncated means entries between
+        `after` and it have already been evicted from the in-memory ring. Sensitive
+        attributes are redacted uniformly before they enter the buffer or any
+        external output.
       operationId: listLogs
       parameters:
         - $ref: '#/components/parameters/LogLevel'
@@ -52,7 +55,7 @@ paths:
         - $ref: '#/components/parameters/LogLimit'
       responses:
         '200':
-          description: 匹配的日志和下一次查询游标。
+          description: Matching logs and the cursor for the next query.
           content:
             application/json:
               schema:
@@ -62,13 +65,17 @@ paths:
   /api/v1/logs/stream:
     get:
       tags: [System]
-      summary: 实时订阅进程日志
+      summary: Stream process logs live
       description: >-
-        SSE 日志流。先重放内存中游标后的匹配记录，再持续推送新记录；每条
-        事件名为 log，SSE id 等于日志 sequence。after 缺省时使用
-        Last-Event-ID 请求头；有游标时完整重放仍在内存中的匹配记录，二者都
-        缺省时按 limit 重放最近记录。服务端每 15 秒发送 keepalive 注释；
-        客户端持续读取过慢时连接会关闭，应携带最后收到的 id 重连补齐。
+        SSE log stream. Matching entries still in memory after the cursor are
+        replayed first, then new entries keep being pushed; every event is named log
+        and its SSE id equals the log sequence. When `after` is omitted, the
+        Last-Event-ID request header is used; with a cursor, every matching entry
+        still in memory is replayed, and when both are omitted the most recent
+        entries are replayed up to `limit`. The server sends a keepalive comment
+        every 15 seconds; if the client keeps reading too slowly the connection is
+        closed, and the client should reconnect with the last id it received to
+        catch up.
       operationId: streamLogs
       parameters:
         - $ref: '#/components/parameters/LogLevel'
@@ -88,7 +95,7 @@ paths:
             pattern: '^[0-9]+$'
       responses:
         '200':
-          description: text/event-stream；data 为 LogEntry JSON。
+          description: text/event-stream; data is LogEntry JSON.
           content:
             text/event-stream:
               schema:
@@ -100,16 +107,20 @@ paths:
   /api/v1/logs/stream/ws:
     get:
       tags: [System]
-      summary: 实时订阅进程日志（WebSocket）
+      summary: Stream process logs live (WebSocket)
       description: |
-        /api/v1/logs/stream 的 WebSocket 版本，面向移动端（如 iOS
-        URLSessionWebSocketTask），过滤语义与 SSE 端点完全一致。握手成功后服务端
-        先重放内存中匹配的记录，再持续推送新记录；每条 LogEntry 作为一条 JSON
-        文本消息发送，内容与 SSE 端点 data 字段完全一致。断线重连时通过 after
-        查询参数续接（WebSocket 无 Last-Event-ID 请求头约定），传入最后收到的
-        sequence。服务端每 15 秒发送一次 WebSocket ping 探测半开连接；连接为
-        服务端单向推送，客户端发送数据帧会导致连接关闭。客户端持续读取过慢时
-        服务端会关闭连接，应携带最后收到的 sequence 重连补齐。
+        WebSocket version of /api/v1/logs/stream for mobile clients (e.g. iOS
+        URLSessionWebSocketTask), with filter semantics identical to the SSE
+        endpoint. After a successful handshake the server first replays the matching
+        entries in memory, then keeps pushing new ones; each LogEntry is sent as one
+        JSON text message whose content is identical to the SSE endpoint's data
+        field. To resume after a disconnect, pass the last sequence received in the
+        `after` query parameter (WebSocket has no Last-Event-ID header convention).
+        The server sends a WebSocket ping every 15 seconds to detect half-open
+        connections; the connection is a server-to-client push only, and a data
+        frame sent by the client closes it. If the client keeps reading too slowly
+        the server closes the connection, and the client should reconnect with the
+        last sequence it received to catch up.
       operationId: streamLogsWebSocket
       parameters:
         - $ref: '#/components/parameters/LogLevel'
@@ -123,66 +134,85 @@ paths:
         - $ref: '#/components/parameters/LogLimit'
       responses:
         '101':
-          description: 协议切换成功，开始重放并推送日志。
+          description: Protocol switch succeeded; log replay and push begin.
         '400':
           $ref: '#/components/responses/BadRequest'
         '426':
-          description: 请求不是 WebSocket 握手（缺少 Upgrade/Connection 等升级头），由握手库直接拒绝。
+          description: The request is not a WebSocket handshake (it lacks upgrade headers such as Upgrade/Connection) and is rejected directly by the handshake library.
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/config:
     get:
       tags: [System]
-      summary: 读取当前运行时配置（仅可修改字段）
+      summary: Read the current runtime configuration (mutable fields only)
       description: >-
-        返回当前生效配置中可运行时修改的部分：download 段（max_running_jobs、
-        max_parallel_downloads、max_parallel_decrypts、max_parallel_wrapper_requests 除外）、logging.level/access_log、simulate 段、
-        library_sync 段、
-        catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled。
-        仅启动时生效的字段（server、database、logging 其它字段、wrapper、tools、catalog 其它字段）不返回——
-        它们无法通过本 API 修改，请编辑启动配置 configs/config.yaml 并重启。
+        Returns the runtime-mutable part of the effective configuration: the download
+        section (except max_running_jobs, max_parallel_downloads,
+        max_parallel_decrypts and max_parallel_wrapper_requests),
+        logging.level/access_log, the simulate section, the library_sync section, and
+        catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
+        Startup-only fields (server, database, the other logging fields, wrapper,
+        tools, the other catalog fields) are not returned — they cannot be changed
+        through this API; edit the startup configuration configs/config.yaml and
+        restart instead.
 
-        所有字段统一存放在 configs/config.yaml。每次 GET 会先重读该文件的
-        运行时字段再返回，因此运行期间手工编辑的可修改字段在下一次 GET 后
-        即生效、无需重启；仅启动时生效的字段仍需重启。
-        AMDL_<大写段名>_<大写键名> 环境变量覆盖在每次重读时同样生效并
-        优先于文件值。文件当前不可读或校验失败时（例如正编辑到一半），
-        继续返回上一份有效配置，并附 reload_error 字段说明原因。
+        All fields live in configs/config.yaml. Every GET re-reads that file's
+        runtime fields before responding, so mutable fields hand-edited while the
+        service runs take effect on the next GET without a restart; startup-only
+        fields still require a restart. AMDL_<SECTION>_<KEY> environment variable
+        overrides (section and key names in upper case) are applied on every
+        re-read as well and take precedence over file values. While the file is
+        unreadable or fails validation (for example when it is half-edited), the
+        last valid configuration keeps being returned, together with a reload_error
+        field explaining why.
       operationId: getConfig
       responses:
         '200':
-          description: 当前可运行时修改的配置。
+          description: The current runtime-mutable configuration.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConfigResponse'
     put:
       tags: [System]
-      summary: 更新运行时配置
+      summary: Update the runtime configuration
       description: >-
-        请求体按合并语义覆盖当前运行时配置：省略的字段保持现值，出现的字段
-        （含整段）被替换。合并结果必须通过与配置文件相同的完整校验。
+        The request body overrides the current runtime configuration with merge
+        semantics: omitted fields keep their current values, and fields that are
+        present (including whole sections) are replaced. The merged result must pass
+        the same full validation as the configuration file.
 
-        仅 GET 返回的字段可以修改：download 段（max_running_jobs、max_parallel_downloads、
-        max_parallel_decrypts、max_parallel_wrapper_requests 除外）、
-        logging.level/access_log、simulate 段、library_sync 段、catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled。其余字段只在进程启动时
-        被消费，修改请求会被 422 拒绝——请改启动配置 configs/config.yaml 并重启。
-        作为唯一例外，旧客户端提交的 catalog.media_user_token_priority 仍会被
-        接受，但该字段已弃用且值会被忽略，不再参与令牌选择。
-        被 AMDL_<大写段名>_<大写键名> 环境变量覆盖的字段同样返回 422：
-        写入会在下一次配置重载时被环境变量的值重新遮盖，请改环境变量并
-        重启。
+        Only the fields returned by GET can be changed: the download section (except
+        max_running_jobs, max_parallel_downloads, max_parallel_decrypts and
+        max_parallel_wrapper_requests), logging.level/access_log, the simulate
+        section, the library_sync section, and
+        catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
+        Every other field is consumed only at process startup, and a request that
+        changes one is rejected with 422 — edit the startup configuration
+        configs/config.yaml and restart instead. As the only exception,
+        catalog.media_user_token_priority sent by old clients is still accepted,
+        but the field is deprecated, its value is ignored, and it no longer takes
+        part in token selection. Fields overridden by an AMDL_<SECTION>_<KEY>
+        environment variable (section and key names in upper case) also return 422:
+        the write would be masked again by the environment variable's value on the
+        next configuration reload, so change the environment variable and restart
+        instead.
 
-        修改立即对新请求和新开始的任务生效（运行中的任务继续使用其启动时的
-        配置快照），并将包含启动字段在内的完整配置写回
-        configs/config.yaml，重启后依然生效。该文件由后端管理（每次 PUT
-        整体重写，注释不保留）；带完整注释的字段文档在
-        configs/config.example.yaml，首次启动时会以它为模板生成 config.yaml。
+        Changes take effect immediately for new requests and newly started jobs
+        (running jobs keep the configuration snapshot taken when they started), and
+        the complete configuration, startup fields included, is written back to
+        configs/config.yaml, so it still applies after a restart. That file is
+        managed by the backend (rewritten in full on every PUT, comments are not
+        kept); the fully commented field documentation is
+        configs/config.example.yaml, which serves as the template for config.yaml
+        on first start.
 
-        前端注意：确认写入前请先 GET 一次并基于其返回值构造请求体。PUT 的
-        合并基准是后端内存中的当前配置，而 GET 会先重读配置文件、把运行
-        期间的手工文件编辑同步进内存——跳过 GET 直接 PUT，可能基于过期
-        视图覆盖掉别处（其它页面或手工编辑）刚改过的值。
+        Note for frontends: before confirming a write, GET once and build the
+        request body from its response. PUT merges onto the backend's current
+        in-memory configuration, while GET first re-reads the configuration file and
+        syncs hand edits made while the service runs into memory — a PUT without
+        the preceding GET may, working from a stale view, overwrite values just
+        changed elsewhere (another page or a hand edit).
       operationId: updateConfig
       requestBody:
         required: true
@@ -192,13 +222,13 @@ paths:
               $ref: '#/components/schemas/RuntimeConfig'
       responses:
         '200':
-          description: 更新后的运行时配置。
+          description: The updated runtime configuration.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConfigResponse'
         '400':
-          description: 请求体不是合法 JSON 或包含未知字段。
+          description: The request body is not valid JSON or contains unknown fields.
           content:
             application/json:
               schema:
@@ -207,8 +237,9 @@ paths:
           $ref: '#/components/responses/JSONBodyTooLarge'
         '422':
           description: >-
-            合并结果未通过配置校验，或试图修改仅启动时生效的字段，
-            或试图修改被 AMDL_* 环境变量覆盖的字段。
+            The merged result fails configuration validation, or the request tries
+            to change a startup-only field, or a field overridden by an AMDL_*
+            environment variable.
           content:
             application/json:
               schema:
@@ -216,16 +247,18 @@ paths:
   /api/v1/hooks:
     get:
       tags: [System]
-      summary: 查询可用的任务 hooks
+      summary: List the available job hooks
       description: >-
-        返回进程启动时从 hooks.yaml 加载的全局开关和 entry 元数据，顺序与文件
-        一致，供客户端构造 overrides.hooks 允许列表。entry 的 enabled 是应用
-        默认值后的结果；job_types 为空数组表示匹配所有任务类型。响应不会包含
-        URL、headers、command、workdir 或其它可能携带秘密的配置字段。
+        Returns the global switch and entry metadata loaded from hooks.yaml at
+        process startup, in file order, so clients can build an overrides.hooks
+        allow-list. An entry's enabled value is the result after defaults are
+        applied; an empty job_types array matches every job type. The response never
+        includes the URL, headers, command, workdir or any other configuration field
+        that may carry secrets.
       operationId: listHooks
       responses:
         '200':
-          description: 已脱敏的 hooks 配置；未配置时 enabled 为 false 且 entries 为空数组。
+          description: The redacted hooks configuration; when nothing is configured, enabled is false and entries is an empty array.
           content:
             application/json:
               schema:
@@ -233,22 +266,23 @@ paths:
   /api/v1/developer-token:
     get:
       tags: [System]
-      summary: 获取本地签名的 Apple Music developer token
+      summary: Get a locally signed Apple Music developer token
       description: >-
-        仅本地签名模式可用：用配置的 .p8 私钥现签一个 JWT，有效期由
-        catalog.developer_token_ttl_hours 控制（默认 1 小时）；配置了
-        catalog.allowed_origins 时会附加 origin claim。传统抓取模式下返回
-        409（抓取的 token 有 origin 限制，无法外发）。
+        Available only in local signing mode: signs a fresh JWT with the configured
+        .p8 private key, valid for catalog.developer_token_ttl_hours (default 1
+        hour); when catalog.allowed_origins is configured, an origin claim is added.
+        Returns 409 in legacy scraping mode (the scraped token is origin-restricted
+        and cannot be handed out).
       operationId: getDeveloperToken
       responses:
         '200':
-          description: 新签发的 developer token。
+          description: A newly issued developer token.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeveloperTokenResponse'
         '409':
-          description: 当前为传统抓取模式，不支持签发 developer token。
+          description: The service is in legacy scraping mode, which does not support issuing a developer token.
           content:
             application/json:
               schema:
@@ -258,26 +292,30 @@ paths:
   /api/v1/library-sync:
     get:
       tags: [System]
-      summary: 查询资料库监视器状态
+      summary: Get the library monitor status
       description: >-
-        返回监视器的当前状态：配置里的开关与间隔，加上最近一轮观察到的结果。
-        功能关闭时同样返回，客户端不必猜测开关状态。
+        Returns the monitor's current state: the switch and interval from the
+        configuration, plus what the most recent poll observed. It is returned even
+        when the feature is off, so clients do not have to guess the switch state.
 
-        Apple 不提供资料库曲目的加入时间（library-songs 没有 dateAdded 属性，
-        library-albums 的 dateAdded 是该专辑首曲入库的时刻、之后补歌不会变），
-        但 sort=-dateAdded 的**顺序**是可靠的。所以水位线是位置而非时间：记住最新
-        一批曲目 id 作为锚点，每轮倒序读到锚点里最老那一首为止，中间凡是锚点没有
-        的即为新增。anchor_size 就是这批 id 的数量。
+        Apple does not expose when a track was added to the library (library-songs
+        has no dateAdded attribute, and a library album's dateAdded is when the
+        album's first track was added and does not change when songs are added to it
+        later), but the **order** of sort=-dateAdded is reliable. So the watermark is
+        a position rather than a time: the newest batch of track ids is remembered
+        as the anchor, each poll reads newest-first until it reaches the oldest
+        track in the anchor, and anything in between that is not in the anchor is
+        new. anchor_size is the number of ids in that batch.
       operationId: getLibrarySyncStatus
       responses:
         '200':
-          description: 监视器状态。
+          description: Monitor status.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LibrarySyncStatus'
         '503':
-          description: 本进程未装配资料库监视器。
+          description: This process has no library monitor wired in.
           content:
             application/json:
               schema:
@@ -285,24 +323,26 @@ paths:
   /api/v1/library-sync/reset:
     post:
       tags: [System]
-      summary: 重置资料库监视器的锚点
+      summary: Reset the library monitor anchor
       description: >-
-        清空锚点。下一轮找不到锚点，会以**当时**的资料库重新落锚，并且
-        **不提交任何专辑**——所以这是「忘记历史」而不是「重放历史」，不会让
-        下载队列被灌满。
+        Clears the anchor. The next poll finds no anchor, so it re-anchors on the
+        library as it is **at that moment** and **submits no albums** — this
+        "forgets history" rather than "replays history", and will not flood the
+        download queue.
 
-        适用于监视器对「已经有了」的认知与实际情况脱节时。想重新下载某张专辑
-        请直接用 POST /api/v1/downloads 提交它，这个接口做不到那件事。
+        Use it when the monitor's idea of what is "already there" has drifted from
+        reality. To download a particular album again, submit it directly with
+        POST /api/v1/downloads; this endpoint cannot do that.
       operationId: resetLibrarySyncAnchor
       responses:
         '200':
-          description: 锚点已清空。
+          description: The anchor has been cleared.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LibrarySyncResetResponse'
         '503':
-          description: 本进程未装配资料库监视器。
+          description: This process has no library monitor wired in.
           content:
             application/json:
               schema:
@@ -312,12 +352,12 @@ paths:
   /api/v1/wrapper/status:
     get:
       tags: [Wrapper]
-      summary: 查询 wrapper-manager 状态
-      description: 探测 wrapper-manager 连通性与登录/区域等运行状态；下载前或账号管理前使用。
+      summary: Get wrapper-manager status
+      description: Probes wrapper-manager connectivity and runtime state such as login and regions; use it before downloading or managing accounts.
       operationId: getWrapperStatus
       responses:
         '200':
-          description: Wrapper 状态。
+          description: Wrapper status.
           content:
             application/json:
               schema:
@@ -327,8 +367,8 @@ paths:
   /api/v1/wrapper/login:
     post:
       tags: [Wrapper]
-      summary: 登录 wrapper 账号
-      description: 登录可能直接成功，也可能返回 login_id 要求两步验证码。
+      summary: Log in to a wrapper account
+      description: Login may succeed immediately, or return a login_id that requires a two-step verification code.
       operationId: loginWrapper
       requestBody:
         required: true
@@ -338,13 +378,13 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: 登录成功。
+          description: Login succeeded.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoggedInResponse'
         '202':
-          description: 需要提交两步验证码。
+          description: A two-step verification code must be submitted.
           content:
             application/json:
               schema:
@@ -364,7 +404,7 @@ paths:
   /api/v1/wrapper/login/{login_id}/2fa:
     post:
       tags: [Wrapper]
-      summary: 提交两步验证码
+      summary: Submit a two-step verification code
       operationId: submitWrapperTwoStepCode
       parameters:
         - $ref: '#/components/parameters/LoginID'
@@ -376,7 +416,7 @@ paths:
               $ref: '#/components/schemas/TwoStepRequest'
       responses:
         '200':
-          description: 登录成功。
+          description: Login succeeded.
           content:
             application/json:
               schema:
@@ -398,7 +438,7 @@ paths:
   /api/v1/wrapper/logout:
     post:
       tags: [Wrapper]
-      summary: 登出 wrapper 账号
+      summary: Log out of a wrapper account
       operationId: logoutWrapper
       requestBody:
         required: true
@@ -408,7 +448,7 @@ paths:
               $ref: '#/components/schemas/LogoutRequest'
       responses:
         '200':
-          description: 登出成功。
+          description: Logout succeeded.
           content:
             application/json:
               schema:
@@ -424,19 +464,26 @@ paths:
   /api/v1/quality:
     post:
       tags: [Quality]
-      summary: 查询链接内歌曲的可用音质
+      summary: Query the available audio qualities of the songs in a link
       description: |
-        解析后端支持的 Apple Music 单曲、专辑、歌单、艺人或电台 URL，返回每首歌曲
-        master playlist 当前声明的 codec、码率、采样率和位深摘要；不会创建下载任务。
-        所有链接类型统一返回 tracks 数组：单曲包含一个元素，集合保持 Apple Music 原顺序
-        和重复曲目出现项。
-        album URL 上的 i 参数继续服从运行时 catalog.album_track_url_mode；电台解析使用
-        运行时 catalog.media_user_token。内部复用下载任务的区域校验、集合解析、曲目
-        元数据刷新、重试、并发调度、HLS 来源选择及 codec/ALAC 筛选规则。正常成功路径为
-        每个曲目出现项读取一次 master playlist 并从中汇总全部音质；失败时按
-        download.max_attempts 重新取得来源并读取 master。查询不读取具体 media playlist、
-        不验证媒体分片，也不进入加密媒体传输。区域校验要求 wrapper/decryptor 已就绪，且
-        URL storefront 位于其上报的 regions 中。music-video 不受支持。
+        Resolves an Apple Music song, album, playlist, artist or station URL that the
+        backend supports and returns, for each song, a summary of the codecs,
+        bitrates, sample rates and bit depths its master playlist currently declares;
+        no download job is created.
+        Every link type returns a tracks array: a song has one element, and
+        collections keep Apple Music's original order and repeated track occurrences.
+        The i parameter on an album URL still follows the runtime
+        catalog.album_track_url_mode; station resolution uses the runtime
+        catalog.media_user_token. Internally this reuses the download jobs' region
+        check, collection resolution, track metadata refresh, retries, concurrency
+        scheduling, HLS source selection and codec/ALAC filtering rules. On the
+        normal success path, each track occurrence reads its master playlist once
+        and all qualities are summarized from it; on failure the source is fetched
+        again and the master re-read, up to download.max_attempts. The query does
+        not read individual media playlists, does not verify media segments, and
+        never enters the encrypted media transfer. The region check requires the
+        wrapper/decryptor to be ready and the URL's storefront to be among the
+        regions it reports. music-video is not supported.
       operationId: queryQuality
       requestBody:
         required: true
@@ -446,7 +493,7 @@ paths:
               $ref: '#/components/schemas/QualityRequest'
       responses:
         '200':
-          description: 可用音质摘要。
+          description: Summary of the available qualities.
           content:
             application/json:
               schema:
@@ -462,17 +509,20 @@ paths:
   /api/v1/downloads:
     get:
       tags: [Downloads]
-      summary: 列出下载任务
+      summary: List download jobs
       description: |
-        返回下载任务列表快照，支持分页、状态/类型/区域筛选、标题与输入 URL
-        子串搜索，以及按创建/更新时间窗口过滤。默认按 created_at 降序。
-        多值参数（status、type）支持重复键或逗号分隔，例如
-        `status=failed&status=cancelled` 与 `status=failed,cancelled` 等价。
+        Returns a snapshot of the download job list, with pagination,
+        status/type/storefront filters, substring search over title and input URL,
+        and filtering by creation/update time windows. Sorted by created_at
+        descending by default.
+        Multi-value parameters (status, type) accept repeated keys or comma
+        separation; for example `status=failed&status=cancelled` is equivalent to
+        `status=failed,cancelled`.
       operationId: listDownloads
       parameters:
         - name: limit
           in: query
-          description: 返回数量，默认 50，最大 200。
+          description: Number of jobs to return; default 50, maximum 200.
           schema:
             type: integer
             minimum: 1
@@ -480,7 +530,7 @@ paths:
             default: 50
         - name: offset
           in: query
-          description: 跳过的任务数，用于分页；默认 0。
+          description: Number of jobs to skip, for pagination; default 0.
           schema:
             type: integer
             minimum: 0
@@ -488,8 +538,8 @@ paths:
         - name: status
           in: query
           description: >-
-            按任务状态筛选；可重复或逗号分隔。允许值：queued, running,
-            completed, failed, cancelled。
+            Filter by job status; repeat the parameter or separate values with
+            commas. Allowed values: queued, running, completed, failed, cancelled.
           schema:
             type: array
             items:
@@ -500,8 +550,8 @@ paths:
         - name: type
           in: query
           description: >-
-            按任务类型筛选；可重复或逗号分隔。允许值：song, album, playlist,
-            artist, station。
+            Filter by job type; repeat the parameter or separate values with commas.
+            Allowed values: song, album, playlist, artist, station.
           schema:
             type: array
             items:
@@ -511,71 +561,73 @@ paths:
           explode: true
         - name: storefront
           in: query
-          description: 按 Apple Music storefront 精确匹配，例如 us、cn、jp。
+          description: Exact match on the Apple Music storefront, e.g. us, cn, jp.
           schema:
             type: string
         - name: q
           in: query
           description: >-
-            在任务 title 与 input 上做子串搜索（SQLite LIKE；ASCII 字母不区分大小写）。
-            `%` 与 `_` 按字面匹配。
+            Substring search over the job's title and input (SQLite LIKE;
+            case-insensitive for ASCII letters). `%` and `_` match literally.
           schema:
             type: string
         - name: created_after
           in: query
           description: >-
-            仅返回 created_at >= 该时刻的任务。接受 RFC3339（含可选纳秒）或
-            YYYY-MM-DD（按 UTC 日初 00:00:00）。
+            Only return jobs with created_at >= this instant. Accepts RFC3339 (with
+            optional nanoseconds) or YYYY-MM-DD (start of the UTC day, 00:00:00).
           schema:
             type: string
             format: date-time
         - name: created_before
           in: query
           description: >-
-            仅返回 created_at <= 该时刻的任务。接受 RFC3339（含可选纳秒）或
-            YYYY-MM-DD（按 UTC 日末 23:59:59.999999999）。
+            Only return jobs with created_at <= this instant. Accepts RFC3339 (with
+            optional nanoseconds) or YYYY-MM-DD (end of the UTC day,
+            23:59:59.999999999).
           schema:
             type: string
             format: date-time
         - name: updated_after
           in: query
           description: >-
-            仅返回 updated_at >= 该时刻的任务。接受 RFC3339（含可选纳秒）或
-            YYYY-MM-DD（按 UTC 日初 00:00:00）。
+            Only return jobs with updated_at >= this instant. Accepts RFC3339 (with
+            optional nanoseconds) or YYYY-MM-DD (start of the UTC day, 00:00:00).
           schema:
             type: string
             format: date-time
         - name: updated_before
           in: query
           description: >-
-            仅返回 updated_at <= 该时刻的任务。接受 RFC3339（含可选纳秒）或
-            YYYY-MM-DD（按 UTC 日末 23:59:59.999999999）。
+            Only return jobs with updated_at <= this instant. Accepts RFC3339 (with
+            optional nanoseconds) or YYYY-MM-DD (end of the UTC day,
+            23:59:59.999999999).
           schema:
             type: string
             format: date-time
         - name: sort
           in: query
-          description: 排序字段；默认 created_at。
+          description: Sort field; default created_at.
           schema:
             type: string
             enum: [created_at, updated_at]
             default: created_at
         - name: order
           in: query
-          description: 排序方向；默认 desc。
+          description: Sort direction; default desc.
           schema:
             type: string
             enum: [asc, desc]
             default: desc
       responses:
         '200':
-          description: 下载任务列表快照。
+          description: Snapshot of the download job list.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DownloadList'
         '400':
-          description: 查询参数无效（非法枚举、时间格式、limit/offset 越界等）。
+          description: Invalid query parameters (unknown enum value, bad time format, limit/offset out of range, and so on).
           content:
             application/json:
               schema:
@@ -584,14 +636,17 @@ paths:
           $ref: '#/components/responses/InternalError'
     post:
       tags: [Downloads]
-      summary: 批量创建下载任务
+      summary: Create download jobs in bulk
       description: >-
-        提交一批 URL，逐条返回入队结果；重复、不支持或队列已满的 URL 在
-        results 中单独标记，不影响其他 URL 入队。可选的 overrides 字段
-        对本次请求创建的任务生效，覆盖运行时配置的 download 段；其中
-        overrides.media_user_token 覆盖 catalog.media_user_token fallback，
-        并采用单独的按需持久化、终态清理和响应脱敏规则；overrides.hooks
-        筛选本批任务允许运行的 hooks.yaml entries。
+        Submits a batch of URLs and returns the enqueue result for each one;
+        duplicate, unsupported or queue-full URLs are flagged individually in
+        results without affecting the other URLs. The optional overrides field
+        applies to the jobs created by this request and overrides the download
+        section of the runtime configuration; overrides.media_user_token overrides
+        the catalog.media_user_token fallback and follows its own rules for
+        on-demand persistence, clearing at terminal states, and redaction from
+        responses; overrides.hooks selects which hooks.yaml entries the jobs in this
+        batch may run.
       operationId: createDownload
       requestBody:
         required: true
@@ -601,15 +656,17 @@ paths:
               $ref: '#/components/schemas/DownloadRequest'
       responses:
         '202':
-          description: 至少一条 URL 已入队；逐条结果见 results。
+          description: At least one URL was enqueued; see results for the per-URL outcome.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BatchSubmitResponse'
         '400':
           description: >-
-            请求体无法解析、包含未知字段（例如旧顶层 media_user_token，或
-            overrides 内的键拼写错误）、urls 为空或超过单次上限（100 条）。
+            The request body cannot be parsed, contains unknown fields (for example
+            the old top-level media_user_token, or a misspelled key inside
+            overrides), urls is empty, or it exceeds the per-request limit (100
+            URLs).
           content:
             application/json:
               schema:
@@ -618,9 +675,9 @@ paths:
           $ref: '#/components/responses/JSONBodyTooLarge'
         '422':
           description: >-
-            所有 URL 均被拒绝（响应体为 BatchSubmitResponse，逐条原因见
-            results），或 overrides 未通过配置校验（包括 hooks 中存在未知
-            entry 名称；响应体为 ErrorResponse）。
+            Every URL was rejected (the body is a BatchSubmitResponse; see results
+            for each reason), or overrides failed configuration validation
+            (including unknown entry names in hooks; the body is an ErrorResponse).
           content:
             application/json:
               schema:
@@ -630,35 +687,41 @@ paths:
   /api/v1/downloads/events:
     get:
       tags: [Downloads]
-      summary: 订阅下载列表变化（SSE）
+      summary: Subscribe to download list changes (SSE)
       description: |
-        总览事件流：GET /downloads 是列表的一次性快照，本端点则在列表发生变化时
-        实时推送增量，二者是同一份状态的两种获取方式。每条推送是一个
-        DownloadFeedMessage：
-        - download_upserted：某个任务被新建或发生变化（排队、开始、每完成一首歌
-          的进度、终态），data.job 为该任务的最新快照（done_items/failed_items
-          按实时进度计算）；
-        - download_deleted：某个任务被删除，data.job_id 为被删任务 id。
-        两类消息都带 status_counts，表示消息生成时全部任务的最新状态计数；删除消息
-        中已经扣除被删除的任务。
-        只有影响列表展示的「里程碑」事件才会触发推送（新建/恢复/开始/解析完成/
-        动态封面解析完成/单曲完成或跳过或失败/终态/删除），逐曲下载进度等高频细节
-        不会推送。动态封面是任务进入终态之后仍可能到达的唯一一类变化：它在带外解析，
-        逐任务的事件流那时通常已经结束，因此只有本端点会送到它。
-        断线续接：先 GET /downloads 取得 last_event_id，再用 Last-Event-ID 头
-        续接，只接收此后新增的变化。download_upserted 与 download_deleted 都带
-        event_id，客户端每处理完一条消息后将该值作为新的续接游标。
+        Overview event stream: GET /downloads is a one-off snapshot of the list,
+        while this endpoint pushes incremental changes live as the list changes;
+        both are ways to read the same state. Each push is a DownloadFeedMessage:
+        - download_upserted: a job was created or changed (queued, started,
+          progress as each song finishes, terminal state); data.job is the job's
+          latest snapshot (done_items/failed_items computed from live progress);
+        - download_deleted: a job was deleted; data.job_id is the deleted job's id.
+        Both message types carry status_counts, the latest status counts of all
+        jobs at the moment the message was generated; in a delete message the
+        deleted job has already been subtracted.
+        Only "milestone" events that affect how the list is displayed trigger a
+        push (created/recovered/started/input resolved/animated cover
+        resolved/song completed, skipped or failed/terminal state/deleted);
+        high-frequency details such as per-track download progress are not pushed.
+        The animated cover is the only kind of change that can still arrive after a
+        job reaches a terminal state: it is resolved out of band, and by then the
+        per-job event stream has usually closed, so only this endpoint delivers it.
+        Resuming after a disconnect: first GET /downloads to obtain last_event_id,
+        then resume with the Last-Event-ID header to receive only the changes made
+        after it. download_upserted and download_deleted both carry event_id;
+        after processing each message, the client uses that value as its new
+        resume cursor.
       operationId: streamDownloadsFeed
       parameters:
         - name: Last-Event-ID
           in: header
-          description: 已处理到的最新 event_id（取自 GET /downloads 的 last_event_id 或上一条推送的 event_id）。
+          description: The latest event_id already processed (taken from last_event_id of GET /downloads or from the event_id of the previous push).
           schema:
             type: integer
             format: int64
       responses:
         '200':
-          description: SSE 事件流，每条 data 为一个 DownloadFeedMessage。
+          description: SSE event stream; each data is one DownloadFeedMessage.
           content:
             text/event-stream:
               schema:
@@ -668,36 +731,38 @@ paths:
   /api/v1/downloads/events/ws:
     get:
       tags: [Downloads]
-      summary: 订阅下载列表变化（WebSocket）
+      summary: Subscribe to download list changes (WebSocket)
       description: |
-        /api/v1/downloads/events 的 WebSocket 版本，语义一致。握手成功后服务端将
-        每条 DownloadFeedMessage 作为一条 JSON 文本消息推送。断线重连时通过
-        last_event_id 查询参数续接；download_upserted 与 download_deleted 都带
-        event_id，客户端每处理完一条消息后将该值作为新的续接游标。
+        WebSocket version of /api/v1/downloads/events, with the same semantics.
+        After a successful handshake the server pushes each DownloadFeedMessage as
+        one JSON text message. To resume after a disconnect, use the last_event_id
+        query parameter; download_upserted and download_deleted both carry
+        event_id, and after processing each message the client uses that value as
+        its new resume cursor.
       operationId: streamDownloadsFeedWebSocket
       parameters:
         - name: last_event_id
           in: query
-          description: 已处理到的最新 event_id，续接时只推送此后新增的变化。默认 0（从头推送当前所有任务的最新快照）。
+          description: The latest event_id already processed; when resuming, only changes made after it are pushed. Default 0 (push the latest snapshot of every current job from the start).
           schema:
             type: integer
             format: int64
             default: 0
       responses:
         '101':
-          description: 协议切换成功，开始推送列表变化。
+          description: Protocol switch succeeded; list changes start being pushed.
         '400':
-          description: WebSocket 握手失败（缺少升级头等）。
+          description: WebSocket handshake failed (missing upgrade headers, etc.).
   /api/v1/downloads/{job_id}:
     get:
       tags: [Downloads]
-      summary: 查询下载任务详情
+      summary: Get download job details
       operationId: getDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
       responses:
         '200':
-          description: 任务、任务项与重试策略。
+          description: The job, its items and the retry policy.
           content:
             application/json:
               schema:
@@ -708,14 +773,14 @@ paths:
           $ref: '#/components/responses/InternalError'
     delete:
       tags: [Downloads]
-      summary: 删除下载任务
-      description: 删除处于终态（completed/failed/cancelled）的任务及其任务项与事件记录。排队中或进行中的任务需先取消。
+      summary: Delete a download job
+      description: Deletes a job in a terminal state (completed/failed/cancelled) together with its items and event records. A queued or running job must be cancelled first.
       operationId: deleteDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
       responses:
         '200':
-          description: 任务已删除。
+          description: The job has been deleted.
           content:
             application/json:
               schema:
@@ -728,7 +793,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 任务未处于终态，需先取消。
+          description: The job is not in a terminal state and must be cancelled first.
           content:
             application/json:
               schema:
@@ -738,13 +803,13 @@ paths:
   /api/v1/downloads/{job_id}/cancel:
     post:
       tags: [Downloads]
-      summary: 取消下载任务
+      summary: Cancel a download job
       operationId: cancelDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
       responses:
         '200':
-          description: 任务已取消。
+          description: The job has been cancelled.
           content:
             application/json:
               schema:
@@ -761,18 +826,21 @@ paths:
   /api/v1/downloads/{job_id}/retry:
     post:
       tags: [Downloads]
-      summary: 重试失败的下载任务
+      summary: Retry a failed download job
       description: |
-        将处于 failed 终态的任务重新入队执行，实际重试只针对未完成的轨道：
-        已完成（completed）或已跳过（skipped_existing）的任务项保持原状、不会重新下载；
-        其余任务项（failed 等）被重置为 queued 后在原任务项 id 下重新处理。
-        重新入队会记录并推送 job_retried 事件（属于总览里程碑事件，会驱动 GET /downloads 总览流）。
+        Re-enqueues a job in the failed terminal state; only unfinished tracks are
+        actually retried: items that already completed (completed) or were skipped
+        (skipped_existing) keep their state and are not downloaded again; the
+        remaining items (failed, etc.) are reset to queued and reprocessed under
+        their original item ids.
+        Re-enqueueing records and pushes a job_retried event (an overview milestone
+        event, which drives the GET /downloads overview feed).
       operationId: retryDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
       responses:
         '202':
-          description: 任务已重新入队。
+          description: The job has been re-enqueued.
           content:
             application/json:
               schema:
@@ -786,15 +854,16 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: |
-            任务不处于 failed 状态；或相同链接已存在排队/进行中的任务；
-            或上一次运行仍在收尾（终态刚写入、worker 清理/hook 分发还未完成，
-            窗口极短，稍后重试即可）。
+            The job is not in the failed state; or a queued/running job for the
+            same link already exists; or the previous run is still wrapping up (the
+            terminal state was just written but worker cleanup/hook dispatch has not
+            finished; the window is very short, so simply retry a moment later).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: 任务队列已满，稍后重试。
+          description: The job queue is full; retry later.
           content:
             application/json:
               schema:
@@ -804,23 +873,27 @@ paths:
   /api/v1/downloads/{job_id}/events:
     get:
       tags: [Downloads]
-      summary: 订阅下载任务事件
+      summary: Subscribe to download job events
       description: |
-        Server-Sent Events 流，支持 Last-Event-ID 断点续接。
-        每条 SSE 的 data 是 Event JSON；其中 payload 本身是 JSON 字符串，需要
-        二次解析。任务生命周期事件（job_queued/job_recovered/job_retried/
-        job_started/resolved_input/job_finished/job_failed/job_cancelled）的 payload
-        包含与 REST `Job` 相同的公开字段；曲目状态事件的 payload 包含与 REST
-        `JobItem` 相同的公开字段，并保留该事件原有的专属字段（例如
-        download_attempts、will_retry）。因此客户端可直接合并事件，不必在终态
-        事件后额外 GET 才能取得完整最终状态。
-        任务已处于终态（completed/failed/cancelled）时：若还有未推送给该客户端
-        的历史事件（含终态事件本身，以及仍在执行中的下载后 hook 产生的
-        hook_started/hook_succeeded/hook_failed 事件——hook 是异步触发的，
-        可能在任务终态之后才陆续记录），会先原样回放这些事件；只要 hook 还没
-        跑完就保持连接，直到 hook 结束才关闭。只有当客户端已经追上全部事件、
-        且没有 hook 仍在执行时才直接拒绝订阅（409）——这种情况下最终状态请改用
-        GET .../downloads/{job_id}。
+        Server-Sent Events stream with Last-Event-ID resumption.
+        Each SSE data is Event JSON; its payload is itself a JSON string and must
+        be parsed a second time. The payload of job lifecycle events
+        (job_queued/job_recovered/job_retried/job_started/resolved_input/job_finished/job_failed/job_cancelled)
+        contains the same public fields as the REST `Job`; the payload of track
+        status events contains the same public fields as the REST `JobItem` and
+        keeps the event's own specific fields (e.g. download_attempts,
+        will_retry). Clients can therefore merge events directly, without an extra
+        GET after the terminal event to obtain the complete final state.
+        When the job is already in a terminal state (completed/failed/cancelled):
+        if there are historical events not yet delivered to this client (including
+        the terminal event itself, and the hook_started/hook_succeeded/hook_failed
+        events of post-download hooks still running — hooks fire asynchronously
+        and may be recorded only after the job reaches its terminal state), those
+        events are replayed as-is first; the connection stays open while any hook
+        is still running and closes only once the hooks finish. The subscription
+        is rejected outright (409) only when the client has already caught up on
+        every event and no hook is still running — in that case use
+        GET .../downloads/{job_id} for the final state.
       operationId: streamDownloadEvents
       parameters:
         - $ref: '#/components/parameters/JobID'
@@ -831,7 +904,7 @@ paths:
             format: int64
       responses:
         '200':
-          description: SSE 事件流。
+          description: SSE event stream.
           content:
             text/event-stream:
               schema:
@@ -839,7 +912,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 任务已处于终态、没有 hook 仍在执行、且客户端已追上全部历史事件，不再产生新事件，拒绝订阅。
+          description: The job is in a terminal state, no hook is still running, and the client has caught up on every historical event; no new events will be produced, so the subscription is rejected.
           content:
             application/json:
               schema:
@@ -847,41 +920,50 @@ paths:
   /api/v1/downloads/{job_id}/events/ws:
     get:
       tags: [Downloads]
-      summary: 订阅下载任务事件（WebSocket）
+      summary: Subscribe to download job events (WebSocket)
       description: |
-        SSE 端点的 WebSocket 版本，面向移动端（如 iOS URLSessionWebSocketTask）。
-        握手成功后，服务端将每条事件作为一条 JSON 文本消息推送，内容与 SSE 端点
-        data 字段完全一致（Event 对象；payload 字段本身是 JSON 字符串，需二次解析）。
-        Job/JobItem 快照字段及事件专属字段的 payload 约定也与 SSE 完全一致。
-        断线重连时通过 last_event_id 查询参数续接，只接收更新的事件。
-        服务端每 10 秒发送一次 WebSocket ping 探测半开连接；连接为服务端单向推送，
-        客户端发送的数据帧会导致连接被关闭。
-        任务已处于终态（completed/failed/cancelled）时：若还有未推送给该客户端
-        的历史事件（含终态事件本身，以及仍在执行中的下载后 hook 产生的
-        hook_started/hook_succeeded/hook_failed 事件——hook 是异步触发的，
-        可能在任务终态之后才陆续记录），握手仍会成功并回放这些事件；只要 hook
-        还没跑完就保持连接，直到 hook 结束才关闭。只有当客户端已经追上全部
-        事件、且没有 hook 仍在执行时才拒绝握手（409）——这种情况下最终状态请
-        改用 GET .../downloads/{job_id}。
+        WebSocket version of the SSE endpoint for mobile clients (e.g. iOS
+        URLSessionWebSocketTask).
+        After a successful handshake the server pushes each event as one JSON text
+        message whose content is identical to the SSE endpoint's data field (an
+        Event object; the payload field is itself a JSON string and must be parsed
+        a second time).
+        The payload conventions for Job/JobItem snapshot fields and event-specific
+        fields are also identical to SSE.
+        To resume after a disconnect, use the last_event_id query parameter to
+        receive only newer events.
+        The server sends a WebSocket ping every 10 seconds to detect half-open
+        connections; the connection is a server-to-client push only, and a data
+        frame sent by the client closes it.
+        When the job is already in a terminal state (completed/failed/cancelled):
+        if there are historical events not yet delivered to this client (including
+        the terminal event itself, and the hook_started/hook_succeeded/hook_failed
+        events of post-download hooks still running — hooks fire asynchronously
+        and may be recorded only after the job reaches its terminal state), the
+        handshake still succeeds and those events are replayed; the connection
+        stays open while any hook is still running and closes only once the hooks
+        finish. The handshake is rejected (409) only when the client has already
+        caught up on every event and no hook is still running — in that case use
+        GET .../downloads/{job_id} for the final state.
       operationId: streamDownloadEventsWebSocket
       parameters:
         - $ref: '#/components/parameters/JobID'
         - name: last_event_id
           in: query
-          description: 已收到的最后一条事件 id，续接时只推送更新的事件。默认 0（从头推送）。
+          description: The id of the last event received; when resuming, only newer events are pushed. Default 0 (push from the beginning).
           schema:
             type: integer
             format: int64
             default: 0
       responses:
         '101':
-          description: 协议切换成功，开始推送事件流。
+          description: Protocol switch succeeded; the event stream starts.
         '400':
-          description: WebSocket 握手失败（缺少升级头等）。
+          description: WebSocket handshake failed (missing upgrade headers, etc.).
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: 任务已处于终态、没有 hook 仍在执行、且客户端已追上全部历史事件，不再产生新事件，拒绝握手。
+          description: The job is in a terminal state, no hook is still running, and the client has caught up on every historical event; no new events will be produced, so the handshake is rejected.
           content:
             application/json:
               schema:
@@ -905,101 +987,101 @@ components:
     LogLevel:
       name: level
       in: query
-      description: 逗号分隔的精确严重级别，可选 debug、info、warn、error。
+      description: Comma-separated exact severity levels; allowed values are debug, info, warn and error.
       schema:
         type: string
       example: warn,error
     LogComponent:
       name: component
       in: query
-      description: 精确匹配 component 属性，例如 api、jobs、media、catalog、hooks、main。
+      description: Exact match on the component attribute, e.g. api, jobs, media, catalog, hooks, main.
       schema: {type: string}
     LogRequestID:
       name: request_id
       in: query
-      description: 精确匹配 HTTP 请求关联 ID。
+      description: Exact match on the HTTP request correlation ID.
       schema: {type: string}
     LogJobID:
       name: job_id
       in: query
-      description: 精确匹配下载任务 ID。
+      description: Exact match on the download job ID.
       schema: {type: string}
     LogQuery:
       name: q
       in: query
-      description: 在消息与结构化属性中进行不区分大小写的包含匹配。
+      description: Case-insensitive substring match over the message and structured attributes.
       schema: {type: string}
     LogSince:
       name: since
       in: query
-      description: 包含该时刻，RFC3339 时间戳。
+      description: Inclusive lower bound (entries at this instant are included); RFC3339 timestamp.
       schema: {type: string, format: date-time}
     LogUntil:
       name: until
       in: query
-      description: 包含该时刻，RFC3339 时间戳。
+      description: Inclusive upper bound (entries at this instant are included); RFC3339 timestamp.
       schema: {type: string, format: date-time}
     LogAfter:
       name: after
       in: query
-      description: 只返回 sequence 大于此值的记录。
+      description: Only return entries whose sequence is greater than this value.
       schema: {type: integer, format: int64, minimum: 0}
     LogLimit:
       name: limit
       in: query
-      description: 最多返回或重放的记录数，默认查询 200、SSE 500。
+      description: Maximum number of entries to return or replay; default 200 for queries and 500 for SSE.
       schema: {type: integer, minimum: 1, maximum: 1000}
   responses:
     BadRequest:
-      description: 请求参数错误。
+      description: Invalid request parameters.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     JSONBodyTooLarge:
-      description: JSON 请求体超过 1 MiB 上限。
+      description: The JSON request body exceeds the 1 MiB limit.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Unauthorized:
-      description: 登录或验证码错误。
+      description: Wrong login credentials or verification code.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: 资源不存在或登录会话已过期。
+      description: The resource does not exist or the login session has expired.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: 账号已经登录或会话正在验证。
+      description: The account is already logged in or the session is being verified.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     BadGateway:
-      description: wrapper-manager 返回异常。
+      description: wrapper-manager returned an error.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     ServiceUnavailable:
-      description: 服务暂时不可用。
+      description: The service is temporarily unavailable.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     GatewayTimeout:
-      description: wrapper 登录超时。
+      description: The wrapper login timed out.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     InternalError:
-      description: 服务器内部错误。
+      description: Internal server error.
       content:
         application/json:
           schema:
@@ -1025,7 +1107,7 @@ components:
       properties:
         token:
           type: string
-          description: ES256 签名的 Apple Music developer token (JWT)。过期时间从 payload 的 exp claim 读取。
+          description: ES256-signed Apple Music developer token (JWT). Read the expiry time from the exp claim in the payload.
     WrapperStatus:
       type: object
       required: [ready, status, regions, client_count, accounts_supported]
@@ -1065,10 +1147,10 @@ components:
       properties:
         enabled:
           type: boolean
-          description: hooks.yaml 的全局 enabled 开关。
+          description: The global enabled switch of hooks.yaml.
         entries:
           type: array
-          description: hooks.yaml 中的 entries，保持文件中的配置顺序。
+          description: The entries in hooks.yaml, in their configured file order.
           items:
             $ref: '#/components/schemas/HookEntry'
     HookEntry:
@@ -1080,7 +1162,7 @@ components:
           type: string
         enabled:
           type: boolean
-          description: 应用“省略 enabled 时默认为 true”规则后的启用状态。
+          description: Enabled state after applying the rule that an omitted enabled defaults to true.
         type:
           type: string
           enum: [webhook, exec]
@@ -1091,7 +1173,7 @@ components:
             enum: [job_queued, job_finished, job_failed, job_cancelled]
         job_types:
           type: array
-          description: 空数组表示该 entry 匹配所有任务类型。
+          description: An empty array means the entry matches every job type.
           items:
             type: string
             enum: [song, album, playlist, artist, station]
@@ -1113,7 +1195,7 @@ components:
           type: string
         source:
           type: string
-          description: logging.include_source 为 true 时出现，格式为 Go 源文件路径与行号。
+          description: Present when logging.include_source is true; formatted as the Go source file path and line number.
         attributes:
           type: object
           additionalProperties: true
@@ -1133,10 +1215,10 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: 当前内存缓冲区中最早的全局序号；缓冲区为空时为 0。
+          description: The oldest global sequence number currently in the in-memory buffer; 0 when the buffer is empty.
         truncated:
           type: boolean
-          description: after 游标之后、oldest_sequence 之前是否已有记录被淘汰。
+          description: Whether entries after the after cursor and before oldest_sequence have already been evicted.
     LoginRequest:
       type: object
       required: [username, password]
@@ -1196,11 +1278,15 @@ components:
         urls:
           type: array
           description: >-
-            Apple Music 链接列表（单曲/专辑/歌单/艺人/电台）。每个元素内允许包含换行或空白分隔的多个
-            URL，服务端会自动拆分；拆分后单次最多 100 条。电台（station，形如
-            .../station/.../ra.xxxx）仅支持可解析为曲目列表的个性化/精选电台，需要
-            overrides.media_user_token 或运行时配置中的 catalog.media_user_token fallback；
-            直播电台（Apple Music 1 等）没有静态曲目列表，无法下载。
+            List of Apple Music links (song/album/playlist/artist/station). Each
+            element may contain several URLs separated by newlines or whitespace,
+            which the server splits automatically; at most 100 URLs per request
+            after splitting. Stations (station, shaped like
+            .../station/.../ra.xxxx) are supported only for personalized/curated
+            stations that resolve to a track list, and require
+            overrides.media_user_token or the catalog.media_user_token fallback from
+            the runtime configuration; live radio stations (Apple Music 1, etc.)
+            have no static track list and cannot be downloaded.
           minItems: 1
           items:
             type: string
@@ -1210,49 +1296,63 @@ components:
         overrides:
           $ref: '#/components/schemas/DownloadOverrides'
           description: >-
-            可选：仅对本次请求创建的任务生效的配置覆盖。省略的字段沿用
-            当前运行时配置。下载配置覆盖随每个任务持久化，重试和重启恢复后
-            依然生效；media_user_token 采用 DownloadOverrides 中说明的更严格
-            生命周期与脱敏规则；hooks 用于筛选任务事件 hook。所有覆盖均不
-            影响其它任务。
+            Optional configuration overrides that apply only to the jobs created by
+            this request. Omitted fields keep the current runtime configuration.
+            Download overrides are persisted with each job and still apply after a
+            retry or a restart recovery; media_user_token follows the stricter
+            lifecycle and redaction rules described in DownloadOverrides; hooks
+            selects the job event hooks. No override affects any other job.
     DownloadOverrides:
       type: object
       description: >-
-        按任务配置覆盖层：除 media_user_token 和 hooks 外，字段与运行时配置
-        download 段一一对应。max_running_jobs、max_parallel_downloads、max_parallel_decrypts、
-        max_parallel_wrapper_requests 在启动时确定并全局共享，无法按任务覆盖；
-        progress_event_interval_ms 描述的是所有订阅者共享的事件流形状，同样不接受按任务覆盖。
-        所有字段可选；提交时会以“当前运行时配置 + 覆盖”做完整校验。
-        downloads_dir 和 temp_dir 只能选择管理员配置根目录本身或其子目录，
-        不能通过绝对路径、.. 或符号链接逃出对应根目录。media_user_token 具有
-        三态语义：省略时沿用 catalog.media_user_token fallback，非空字符串覆盖
-        fallback，显式空字符串清空该任务的 fallback。该令牌只持久化到实际需要
-        它的 station 和私人歌单（pl.u-xxx）任务；同批其它类型任务不保存。任务
-        完成或取消时清除，失败时保留以支持 retry，且在创建、列表、详情及
-        SSE/WebSocket 等任何任务响应中永不回显。
+        Per-job configuration override layer: apart from media_user_token and
+        hooks, the fields map one-to-one onto the download section of the runtime
+        configuration. max_running_jobs, max_parallel_downloads,
+        max_parallel_decrypts and max_parallel_wrapper_requests are fixed at
+        startup and shared globally, so they cannot be overridden per job;
+        progress_event_interval_ms describes the shape of the event stream shared
+        by all subscribers and likewise cannot be overridden per job. All fields
+        are optional; on submission the full validation runs against "current
+        runtime configuration + overrides". downloads_dir and temp_dir may only
+        select the administrator-configured root directory itself or one of its
+        subdirectories, and cannot escape that root through absolute paths, .. or
+        symlinks. media_user_token has three-state semantics: when omitted, the
+        catalog.media_user_token fallback is used; a non-empty string overrides
+        the fallback; an explicit empty string clears the fallback for that job.
+        The token is persisted only for the station and private playlist
+        (pl.u-xxx) jobs that actually need it; jobs of other types in the same
+        batch do not store it. It is cleared when the job completes or is
+        cancelled, kept on failure so retry works, and never echoed back in any
+        job response, whether create, list, detail, SSE/WebSocket or otherwise.
       properties:
         media_user_token:
           type: string
           writeOnly: true
           description: >-
-            Apple Music 订阅令牌（media-user-token），用于电台解析和私人歌单封面
-            获取。省略、非空和显式空字符串的三态语义，以及持久化、清理和响应
-            脱敏规则见 DownloadOverrides 描述。
+            Apple Music subscription token (media-user-token), used to resolve
+            stations and fetch private playlist covers. See the DownloadOverrides
+            description for the three-state semantics of omitted, non-empty and
+            explicitly empty values, and for the persistence, clearing and response
+            redaction rules.
         hooks:
           type: array
           items:
             type: string
           uniqueItems: false
           description: >-
-            configs/hooks.yaml entry 名称的任务级允许列表，适用于 job_queued 和
-            所有终态事件。job_queued hook 仅在首次提交时派发一次，retry 与重启
-            恢复不会重发；允许列表随任务持久化，因此 retry 或重启恢复后到达的
-            终态事件仍受同一列表约束。省略字段时
-            所有已启用且匹配 events/job_types 的 entries 均可运行；显式 [] 时
-            本批任务不运行任何 hook；非空列表只允许同名 entries 继续参与正常
-            enabled/events/job_types 筛选，不能启用已禁用或不匹配的 entry。重复
-            名称允许并等同于一次；配置存在时未知名称返回 422。没有任何已配置
-            entry 时任意列表均接受但无效果。
+            Per-job allow-list of configs/hooks.yaml entry names, applying to
+            job_queued and every terminal-state event. A job_queued hook is
+            dispatched only once, on the first submission; retry and restart
+            recovery do not send it again. The allow-list is persisted with the
+            job, so terminal events that arrive after a retry or restart recovery
+            are still bound by the same list. When the field is omitted, every
+            enabled entry matching events/job_types may run; an explicit [] runs no
+            hook for this batch; a non-empty list only lets the entries with those
+            names continue through the normal enabled/events/job_types filtering,
+            and cannot enable a disabled or non-matching entry. Duplicate names are
+            allowed and count once; when a hooks configuration exists, unknown
+            names return 422. When no entry is configured at all, any list is
+            accepted but has no effect.
         quality_priority:
           type: array
           items:
@@ -1263,16 +1363,20 @@ components:
           type: string
           enum: [low, high]
           description: >-
-            任务级 Enhanced HLS 内存模式。正常路径中，low 使用片段级有界内存并以更多
-            临时磁盘换取较低 RAM；high 将一份加密整轨保留在内存，减少临时磁盘和磁盘往返（单轨内存媒体上限
-            512 MiB；受 Go GC 分配余量影响，实际堆峰值可能接近整轨大小的两倍）。省略时
-            沿用运行时配置。AAC-LC 不受此选项影响，在两种模式下均整轨驻留内存；罕见的
-            ALAC 完整性修复也会读取并复制整轨。两种模式写标签时都会在系统临时目录短暂
-            创建一份整轨重写文件。
+            Per-job Enhanced HLS memory mode. On the normal path, low uses bounded
+            per-fragment memory, trading more temporary disk for lower RAM; high
+            keeps one encrypted copy of the whole track in memory, reducing
+            temporary disk use and disk round trips (in-memory media is capped at
+            512 MiB per track; because of Go GC allocation headroom, the actual heap
+            peak can approach twice the track size). When omitted, the runtime
+            configuration applies. AAC-LC is unaffected by this option and is held
+            in memory as a whole track in both modes; the rare ALAC integrity repair
+            also reads and copies the whole track. In both modes, tagging briefly
+            creates a whole-track rewrite file in the system temp directory.
         max_attempts:
           type: integer
           maximum: 10
-          description: 正数允许 1-10；值 <=0 按 1 处理；提交时超过 10 返回 422（早于该上限持久化的任务覆盖在运行时按 10 截断，不会因此失败）。
+          description: Positive values 1-10 are allowed; values <=0 are treated as 1; values above 10 are rejected with 422 at submission (job overrides persisted before this limit existed are clamped to 10 at run time instead of failing).
         downloads_dir: {type: string}
         song_path_format: {type: string}
         album_path_format: {type: string}
@@ -1307,20 +1411,22 @@ components:
         force_overwrite:
           type: boolean
           description: >-
-            是否强制重新下载并覆盖已存在的输出文件及其歌词边车文件。省略时沿用
-            运行时配置 download.force_overwrite（默认 false）。
+            Whether to force a re-download that overwrites existing output files
+            and their lyrics sidecar files. When omitted, the runtime configuration
+            value download.force_overwrite applies (default false).
     RuntimeConfig:
       type: object
       description: >-
-        可运行时修改的配置子集（字段含义、枚举值和默认行为见
-        configs/config.example.yaml 内注释）。GET 返回此形状；PUT 时可只
-        提交需要修改的字段，省略的字段保持现值。
+        The runtime-mutable configuration subset (see the comments in
+        configs/config.example.yaml for field meanings, enum values and default
+        behavior). GET returns this shape; a PUT may submit only the fields to
+        change, and omitted fields keep their current values.
       properties:
         catalog:
           type: object
           description: >-
-            max_parallel_requests、requests_per_second、request_burst 仅启动时生效，
-            不在此出现、不可修改。
+            max_parallel_requests, requests_per_second and request_burst take
+            effect only at startup; they do not appear here and cannot be changed.
           properties:
             album_track_url_mode:
               type: string
@@ -1328,40 +1434,47 @@ components:
             media_user_token:
               type: string
               description: >-
-                电台下载和私人歌单封面获取使用的全局 media-user-token fallback。
-                可通过 PUT 修改并写回配置文件；GET 会返回当前值。请求中的
-                overrides.media_user_token 可以按任务覆盖或显式清空它。
+                Global media-user-token fallback used for station downloads and
+                private playlist cover fetching. It can be changed through PUT and
+                is written back to the configuration file; GET returns the current
+                value. overrides.media_user_token in a request can override it or
+                explicitly clear it per job.
             media_user_token_priority:
               type: string
               enum: [request, config]
               deprecated: true
               writeOnly: true
               description: >-
-                已弃用、仅为旧客户端兼容而接受的输入字段；值会被忽略，不再
-                参与令牌选择。新客户端必须使用 overrides.media_user_token。
+                Deprecated input field accepted only for compatibility with old
+                clients; its value is ignored and no longer takes part in token
+                selection. New clients must use overrides.media_user_token.
             signed_mode_hls_source:
               type: string
               enum: [wrapper, web_token]
               description: >-
-                仅在启用 developer-token 签名时生效（自签 token 无法读取
-                enhancedHls）；legacy 模式下忽略。wrapper（默认）取
-                wrapper.M3U8 的授权设备清单；web_token 抓取
-                music.apple.com 网页端 JWT，从 amp-api 读取 enhancedHls。
+                Takes effect only when developer-token signing is enabled (a
+                self-signed token cannot read enhancedHls); ignored in legacy mode.
+                wrapper (default) takes the authorized-device manifest from
+                wrapper.M3U8; web_token scrapes the music.apple.com web player JWT
+                and reads enhancedHls from amp-api.
             motion_artwork_enabled:
               type: boolean
               description: >-
-                是否查询 Apple Music 动态专辑封面（attributes.editorialVideo），
-                默认 true。true 时每张专辑在解析完成后额外发起一次 amp-api
-                请求（脱离任务上下文，不阻塞也不会让下载失败），成功则通过
-                motion_artwork_resolved 事件补上任务上的 motion_artwork_*
-                字段。false 时不发请求也不抓取网页端令牌，任务不带这些字段，
-                对客户端而言与「这张专辑没有动态封面」完全一致。修改在新启动
-                的任务上生效。
+                Whether to look up Apple Music animated album covers
+                (attributes.editorialVideo); default true. When true, each album
+                makes one extra amp-api request after it resolves (detached from the
+                job context, so it never blocks the download or makes it fail), and
+                on success a motion_artwork_resolved event fills in the job's
+                motion_artwork_* fields. When false, no request is made and no web
+                player token is scraped; jobs carry none of these fields, which to a
+                client is exactly the same as "this album has no animated cover".
+                Changes take effect for newly started jobs.
         download:
           type: object
           description: >-
-            max_running_jobs、max_parallel_downloads、max_parallel_decrypts、
-            max_parallel_wrapper_requests 仅启动时生效，不在此出现、不可修改。
+            max_running_jobs, max_parallel_downloads, max_parallel_decrypts and
+            max_parallel_wrapper_requests take effect only at startup; they do not
+            appear here and cannot be changed.
           properties:
             quality_priority:
               type: array
@@ -1374,34 +1487,44 @@ components:
               type: string
               enum: [low, high]
               description: >-
-                控制 Enhanced HLS 路径。正常路径中，low（默认）使用片段级有界内存，临时
-                磁盘峰值通常约为每并行曲目三份文件；
-                high 将一份加密整轨保留在内存并逐片段解密（单轨内存媒体上限 512 MiB；
-                受 Go GC 分配余量影响，实际堆峰值可能接近整轨大小的两倍），配置的临时目录
-                通常仅保留最终展平输出。AAC-LC 在两种模式下均整轨驻留内存；罕见 ALAC
-                完整性修复也会读取并复制整轨。两种模式写标签时还会在系统临时目录短暂创建
-                一份整轨重写文件。
+                Controls the Enhanced HLS path. On the normal path, low (default)
+                uses bounded per-fragment memory, and the temporary disk peak is
+                usually about three files per parallel track; high keeps one
+                encrypted copy of the whole track in memory and decrypts it fragment
+                by fragment (in-memory media is capped at 512 MiB per track; because
+                of Go GC allocation headroom, the actual heap peak can approach
+                twice the track size), and the configured temp directory usually
+                holds only the final flattened output. AAC-LC is held in memory as a
+                whole track in both modes; the rare ALAC integrity repair also reads
+                and copies the whole track. In both modes, tagging also briefly
+                creates a whole-track rewrite file in the system temp directory.
             max_attempts:
               type: integer
               maximum: 10
-              description: 正数允许 1-10；值 <=0 按 1 处理。
+              description: Positive values 1-10 are allowed; values <=0 are treated as 1.
             progress_event_interval_ms:
               type: integer
               maximum: 10000
               description: >-
-                同一 item 在同一状态内两条 item_progress 事件的最小间隔（毫秒）。
-                只节流 download/decrypt 两个进度条的推进；状态变更
-                （waiting_download、downloading、waiting_decrypt、decrypting、
-                remuxing、saving、tagging）和阶段完成标记（resolved、remuxed、
-                verified、tagged、saved）以及 item_completed / item_failed /
-                item_skipped 等一次性事件始终立即推送，不受此值影响。被该间隔
-                压下的进度值会在取代它的事件之前补发，因此状态变更前的最后一个
-                百分比不会丢失，用 last_event_id 续传的客户端与实时客户端看到的
-                事件序列完全一致。这是叠加在“整数百分比取整”门限之上的时间下限，
-                因此无论设多小，单个进度条每阶段仍不会超过约 101 条事件。
-                允许 0-10000；值 <=0 关闭时间合并，仅保留百分比门限；本文件中超过
-                10000 会被截断为 10000，配置 API 直接拒绝。默认 500。
-                在任务启动时读取一次，因此修改只影响此后启动的任务，不影响运行中的任务。
+                Minimum interval in milliseconds between two item_progress events
+                for the same item within the same status. Only the advance of the
+                download/decrypt meters is throttled; status changes
+                (waiting_download, downloading, waiting_decrypt, decrypting,
+                remuxing, saving, tagging), stage-completion flags (resolved,
+                remuxed, verified, tagged, saved) and one-off events such as
+                item_completed / item_failed / item_skipped are always pushed
+                immediately and are unaffected by this value. A progress value held
+                back by the interval is emitted before the event that supersedes
+                it, so the last percentage before a status change is never lost,
+                and a client resuming with last_event_id sees exactly the same event
+                sequence as a live client. This is a time floor layered on top of
+                the "whole-percentage rounding" threshold, so however small it is
+                set, a single meter still emits no more than about 101 events per
+                stage. 0-10000 is allowed; values <=0 disable time coalescing and
+                keep only the percentage threshold; values above 10000 in the
+                configuration file are clamped to 10000, while the config API
+                rejects them outright. Default 500. Read once when a job starts, so
+                changes only affect jobs started afterwards, not running ones.
             downloads_dir: {type: string}
             song_path_format: {type: string}
             album_path_format: {type: string}
@@ -1412,7 +1535,7 @@ components:
             cover_size:
               type: string
               description: >-
-                "{width}x{height}"，例如 5000x5000、3000x3000、1400x1400、600x600。
+                "{width}x{height}", e.g. 5000x5000, 3000x3000, 1400x1400, 600x600.
             cover_format:
               type: string
               enum: [jpg, jpeg, png]
@@ -1435,19 +1558,20 @@ components:
                 enum: [translation, pronunciation]
             alac_max_sample_rate:
               type: integer
-              description: Hz；常见取值 44100、48000、96000、192000。
+              description: Hz; common values are 44100, 48000, 96000 and 192000.
             alac_max_bit_depth:
               type: integer
-              description: 常见取值 16、24。
+              description: Common values are 16 and 24.
             check_integrity: {type: boolean}
             force_overwrite:
               type: boolean
               description: >-
-                是否强制重新下载并覆盖已存在的输出文件及其歌词边车文件；默认
-                false。可通过请求的 overrides.force_overwrite 按批次覆盖。
+                Whether to force a re-download that overwrites existing output
+                files and their lyrics sidecar files; default false. Can be
+                overridden per batch with overrides.force_overwrite in the request.
         logging:
           type: object
-          description: 只有日志级别和 HTTP 访问日志开关可运行时修改；输出与轮转配置需重启。
+          description: Only the log level and the HTTP access log switch are runtime-mutable; output and rotation settings require a restart.
           properties:
             level:
               type: string
@@ -1462,60 +1586,66 @@ components:
         library_sync:
           type: object
           description: >-
-            资料库监视器：轮询已登录 Apple Music 资料库，把新加入曲目所属的专辑
-            当作普通下载任务提交（与手动提交共用同一套去重、校验和 hooks）。
-            依赖 catalog.media_user_token —— 个人资料库只有订阅令牌读得到；该字段
-            为空时监视器保持空转，状态见 GET /api/v1/library-sync 的 last_error。
+            Library monitor: polls the signed-in Apple Music library and submits
+            the albums of newly added tracks as ordinary download jobs (sharing the
+            same deduplication, validation and hooks as manual submissions).
+            Requires catalog.media_user_token — a personal library can be read only
+            with the subscription token; while that field is empty the monitor
+            idles, and last_error in GET /api/v1/library-sync shows the status.
           properties:
             enabled:
               type: boolean
               description: >-
-                是否启用轮询。默认 false —— 这是唯一会自行创建下载任务的功能。
-                关闭是真的停止轮询，而不只是丢弃结果。
+                Whether polling is enabled. Default false — this is the only
+                feature that creates download jobs on its own. Turning it off really
+                stops polling, rather than just discarding the results.
             interval_minutes:
               type: integer
               minimum: 1
               maximum: 1440
               description: >-
-                轮询间隔（分钟），默认 15。上限 1440 不是资源限制（一轮通常只有
-                1 次 Apple 请求），而是避免出现「显示为已启用但实际上永不触发」
-                的取值。修改立即生效，不需要重启。
+                Polling interval in minutes; default 15. The 1440 cap is not a
+                resource limit (a poll usually makes only 1 Apple request); it rules
+                out values that would show as enabled but never actually fire.
+                Changes take effect immediately, with no restart needed.
     LibrarySyncStatus:
       type: object
       required: [enabled, interval_minutes, anchor_size, last_submitted, total_submitted]
       properties:
         enabled:
           type: boolean
-          description: 取自当前运行时配置 library_sync.enabled。
+          description: Taken from library_sync.enabled in the current runtime configuration.
         interval_minutes:
           type: integer
         anchor_size:
           type: integer
           description: >-
-            当前锚点里记住的曲目数。0 表示尚未落锚（首次启用或刚被重置），
-            下一轮会以当时的资料库落锚且不提交任何专辑。
+            Number of tracks remembered in the current anchor. 0 means no anchor
+            has been set yet (first enable, or just reset); the next poll anchors
+            on the library as it is then and submits no albums.
         last_poll_at:
           type: string
           format: date-time
-          description: 最近一次实际执行轮询的时刻；从未轮询过时不出现。
+          description: When a poll last actually ran; absent if it has never polled.
         last_error:
           type: string
           description: >-
-            最近一次轮询的失败原因；成功则不出现。监视器已启用但
-            catalog.media_user_token 为空时，这里说明它为何空转。
+            Failure reason of the most recent poll; absent on success. When the
+            monitor is enabled but catalog.media_user_token is empty, this explains
+            why it is idling.
         last_submitted:
           type: integer
-          description: 最近一轮入队的专辑数。
+          description: Number of albums enqueued in the most recent poll.
         total_submitted:
           type: integer
-          description: 本进程启动以来累计入队的专辑数（重启归零）。
+          description: Total number of albums enqueued since this process started (reset to zero on restart).
     LibrarySyncResetResponse:
       type: object
       required: [cleared, status]
       properties:
         cleared:
           type: integer
-          description: 被清除的锚点条目数。
+          description: Number of anchor entries cleared.
         status:
           $ref: '#/components/schemas/LibrarySyncStatus'
     ConfigResponse:
@@ -1527,45 +1657,47 @@ components:
         persisted:
           type: boolean
           description: >-
-            配置存储是否有持久化文件。正常部署下恒为 true：PUT 的修改写回
-            configs/config.yaml，重启后依然生效。
+            Whether the configuration store has a persisted file. Always true in a
+            normal deployment: changes made through PUT are written back to
+            configs/config.yaml and still apply after a restart.
         reload_error:
           type: string
           description: >-
-            仅 GET 且重读配置文件失败时出现：说明文件为何不可用（不可读或
-            校验失败），此时 config 为最后一份有效配置。
+            Present only on GET when re-reading the configuration file failed:
+            explains why the file is unusable (unreadable or failing validation);
+            config is then the last valid configuration.
     SubmitResult:
       type: object
       required: [url, status]
       properties:
         url:
           type: string
-          description: 拆分归一化后的单条输入 URL。
+          description: A single input URL after splitting and normalization.
         status:
           type: string
           enum: [accepted, invalid, duplicate_in_request, duplicate_active, queue_full]
         job:
           $ref: '#/components/schemas/Job'
-          description: status 为 accepted 时返回新建的任务。
+          description: The newly created job, returned when status is accepted.
         existing_job_id:
           type: string
-          description: status 为 duplicate_active 时指向已在进行中的同内容任务。
+          description: When status is duplicate_active, points to the job with the same content that is already in progress.
         error:
           type: string
-          description: 被拒绝时的原因说明。
+          description: Explanation of why the URL was rejected.
     BatchSubmitResponse:
       type: object
       required: [accepted, rejected, results]
       properties:
         accepted:
           type: integer
-          description: 成功入队的 URL 数。
+          description: Number of URLs enqueued successfully.
         rejected:
           type: integer
-          description: 被拒绝的 URL 数。
+          description: Number of URLs rejected.
         results:
           type: array
-          description: 与请求内 URL 一一对应的逐条结果。
+          description: Per-URL results, one for each URL in the request.
           items:
             $ref: '#/components/schemas/SubmitResult'
     QualityRequest:
@@ -1600,7 +1732,7 @@ components:
         label: {type: string}
         available:
           type: boolean
-          description: master playlist 是否声明符合当前 codec 与 ALAC 上限的 variant；不代表具体 media playlist 或媒体分片已验证。
+          description: Whether the master playlist declares a variant that fits the current codec and ALAC limits; it does not mean a specific media playlist or the media segments have been verified.
         codec: {type: string}
         codec_id: {type: string}
         channels: {type: integer}
@@ -1620,14 +1752,14 @@ components:
           $ref: '#/components/schemas/QualitySong'
         qualities:
           type: array
-          description: 按后端支持的 codec 固定顺序返回全部音质槽位，包括 available=false 的项。
+          description: Every quality slot in the backend's fixed codec order, including entries with available=false.
           minItems: 6
           maxItems: 6
           items:
             $ref: '#/components/schemas/QualityOption'
     QualityResponse:
       type: object
-      description: 所有受支持 Apple Music URL 类型共用的逐曲音质响应结构。
+      description: Per-track quality response shape shared by every supported Apple Music URL type.
       required: [input, storefront, type, adam_id, tracks]
       properties:
         input: {type: string}
@@ -1819,8 +1951,10 @@ components:
         overrides:
           $ref: '#/components/schemas/DownloadOverrides'
           description: >-
-            提交时附带的配置覆盖；未附带时省略。media_user_token 是 writeOnly，
-            即使失败任务仍在内部保留它以供重试，任何任务响应也不会包含该值。
+            The configuration overrides submitted with the job; omitted when none
+            were given. media_user_token is writeOnly: even while a failed job
+            keeps it internally for retries, no job response ever includes its
+            value.
         status:
           type: string
           enum: [queued, running, completed, failed, cancelled]
@@ -2019,34 +2153,37 @@ components:
         downloads:
           type: array
           description: >-
-            当前页的下载任务；每个任务的 done_items/failed_items 按其 job_items
-            的实时进度计算（而非仅在终态刷新的存储计数）。
+            Download jobs on the current page; each job's done_items/failed_items
+            are computed from the live progress of its job_items (rather than the
+            stored counts that are refreshed only at terminal states).
           items:
             $ref: '#/components/schemas/Job'
         status_counts:
           allOf:
             - $ref: '#/components/schemas/DownloadStatusCounts'
-          description: 满足当前查询筛选条件的任务状态计数，不受 limit/offset 影响。
+          description: Job status counts matching the current query filters, unaffected by limit/offset.
         total:
           type: integer
-          description: 满足当前筛选条件的任务总数（不受 limit/offset 影响）。
+          description: Total number of jobs matching the current filters (unaffected by limit/offset).
         limit:
           type: integer
-          description: 本次实际使用的分页大小。
+          description: The page size actually used.
         offset:
           type: integer
-          description: 本次实际使用的偏移量。
+          description: The offset actually used.
         last_event_id:
           type: integer
           format: int64
           description: >-
-            当前全局已持久化的最新事件 id（跨所有任务，尚无事件时为 0）。客户端可
-            将此值作为总览事件流 GET /downloads/events(/ws) 的续接起点，只接收本
-            快照之后的列表变化。
+            The latest persisted event id globally (across all jobs; 0 when there
+            are no events yet). Clients can use it as the resume point for the
+            overview event stream GET /downloads/events(/ws) to receive only list
+            changes after this snapshot.
     DownloadStatusCounts:
       type: object
       description: >-
-        固定返回全部五种任务状态；没有匹配任务的状态为 0，total 为五种状态之和。
+        Always returns all five job statuses; statuses with no matching jobs are
+        0, and total is the sum of the five statuses.
       required: [queued, running, completed, failed, cancelled, total]
       properties:
         queued: {type: integer, minimum: 0}
@@ -2059,34 +2196,40 @@ components:
       type: object
       required: [type, status_counts]
       description: >-
-        总览事件流（GET /downloads/events(/ws)）的一条推送。每次任务新增、状态变化
-        或删除时都附带最新的全局任务状态计数。
+        One push on the overview event stream (GET /downloads/events(/ws)). Every
+        job creation, status change or deletion carries the latest global job
+        status counts.
       properties:
         type:
           type: string
           enum: [download_upserted, download_deleted]
           description: >-
-            download_upserted：某任务被新建或发生变化，job 为其最新快照；
-            download_deleted：某任务被删除，job_id 为被删任务 id。
+            download_upserted: a job was created or changed, and job is its latest
+            snapshot; download_deleted: a job was deleted, and job_id is the
+            deleted job's id.
         job:
           $ref: '#/components/schemas/Job'
         job_id:
           type: string
-          description: 仅 download_deleted 时存在，为被删除任务的 id。
+          description: Present only for download_deleted; the id of the deleted job.
         status_counts:
           allOf:
             - $ref: '#/components/schemas/DownloadStatusCounts'
           description: >-
-            当前全部任务的状态计数；实时推送端点没有列表筛选参数，因此这里始终是
-            全局计数。download_deleted 中已经扣除被删除的任务。
+            Status counts of all current jobs; the live push endpoints have no list
+            filter parameters, so these are always global counts. In
+            download_deleted the deleted job has already been subtracted.
         event_id:
           type: integer
           format: int64
           description: >-
-            续接游标；download_upserted 为触发该任务快照的里程碑事件自身 id，
-            download_deleted 为删除 tombstone 事件 id（都不是同批推送的最大 id）。
-            客户端处理后作为下次续接起点，逐条严格递增。断线重连时未送达的更新
-            只会被重发（upsert/delete 均幂等），不会被跳过。
+            Resume cursor. For download_upserted it is the id of the milestone
+            event that triggered this job snapshot; for download_deleted it is the
+            id of the deletion tombstone event (neither is the largest id pushed in
+            the same batch). After processing, clients use it as the next resume
+            point; it strictly increases from message to message. On reconnect,
+            undelivered updates are only ever resent (upsert and delete are both
+            idempotent), never skipped.
     DownloadDetail:
       type: object
       required: [job, items, hooks, last_event_id]
@@ -2100,33 +2243,38 @@ components:
         hooks:
           type: array
           description: >-
-            每个已触发的下载后 hook 的最新状态，由事件流中的
-            hook_started/hook_succeeded/hook_failed 事件推导而来——快照接口与
-            SSE/WS 事件流是同一份状态的两种获取方式。任务尚未触发任何 hook
-            （包括未配置 hook、任务还没结束）时为空数组。
+            The latest state of each post-download hook that has fired, derived
+            from the hook_started/hook_succeeded/hook_failed events in the event
+            stream — the snapshot endpoint and the SSE/WS event stream are two ways
+            to read the same state. An empty array when the job has not fired any
+            hook yet (including when no hook is configured or the job has not
+            finished).
           items:
             $ref: '#/components/schemas/HookState'
         last_event_id:
           type: integer
           format: int64
           description: >-
-            该任务当前已持久化的最新事件 id（尚无事件时为 0）。客户端可将此值作为
-            events/ws（或 SSE 的 Last-Event-ID）的续接起点，从而跳过本响应已经
-            体现过的历史事件，只接收此后的增量更新。
+            The latest persisted event id for this job (0 when there are no events
+            yet). Clients can use it as the resume point for events/ws (or SSE's
+            Last-Event-ID) to skip the historical events already reflected in this
+            response and receive only later incremental updates.
     HookState:
       type: object
       required: [name, status]
       properties:
         name:
           type: string
-          description: hooks.yaml 中该 hook 条目的 name。
+          description: The name of this hook entry in hooks.yaml.
         status:
           type: string
           enum: [running, succeeded, failed, interrupted]
           description: >-
-            running：hook 正在执行；succeeded：执行成功；failed：重试次数用尽后
-            仍失败；interrupted：事件记录显示 hook 已开始但没有终态记录、且当前
-            也没有在执行（通常是执行期间服务重启，该 hook 不会再有结果）。
+            running: the hook is executing; succeeded: it ran successfully; failed:
+            it still failed after its retries were exhausted; interrupted: the event
+            records show the hook started but have no terminal record, and it is
+            not running now either (usually the service restarted while it ran, so
+            this hook will never produce a result).
         error:
           type: string
-          description: status 为 failed 时的最后一次错误信息，其余状态省略。
+          description: The last error message when status is failed; omitted for other statuses.
