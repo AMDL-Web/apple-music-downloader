@@ -443,10 +443,9 @@ export function App() {
   // The palette and the sheets belong to the page they opened over: any
   // route change (a link, Back, a shortcut) closes them. No history entry is
   // pushed for a sheet, which would fight the leave guard's bookkeeping.
-  // #/new rewrites ?url= as its text box changes, so there only the page and
-  // the drawer count.
-  const routeKey = route.page === 'new' ? `new|${route.jobId || ''}` : buildHash(route.page, route.params, route.jobId);
-  useEffect(() => setOverlay(null), [routeKey]);
+  // Only the page and the drawer count: pages rewrite their query as filters
+  // or the New download box change (debounced), which may land after Cmd+K.
+  useEffect(() => setOverlay(null), [route.page, route.jobId]);
 
   // Keyboard shortcuts.
   const gPending = useRef(0);
