@@ -16,16 +16,18 @@ states, accessibility, the skin mechanism); each skin's look is specified in
   [docs/architecture.md](../../docs/architecture.md#3-http-api-conventions).
   A widget whose endpoint answers 404 hides behind a quiet note; it never
   breaks the page.
-- URLs are relative (`css/app.css`, `../api/v1/...` via `resolveUrl`), so the
+- URLs are relative (`css/base.css`, `../api/v1/...` via `resolveUrl`), so the
   console works under any path prefix.
 - CSP (`ContentSecurityPolicy`): no inline scripts, styles or `style="..."`;
   dynamic colors go through Preact style objects (CSSOM custom properties).
   No `innerHTML`; htm escapes data.
 - Colors live only in `static/css/tokens.css` (skin-neutral) and
   `static/css/skins/*.css` (one per skin, scoped under
-  `:root[data-skin="<name>"]`); `static/css/app.css` is structure and reads
-  tokens only. Font sizes use `--fs-*`; never `transition: all`; UI copy is
-  English, Apple-provided text gets `dir="auto"`.
+  `:root[data-skin="<name>"]`); the base stylesheets (every other
+  `static/css/*.css`, one per area) are structure and read tokens only, and
+  their link order in `index.html` is the cascade order. Font sizes use
+  `--fs-*`; never `transition: all`; UI copy is English, Apple-provided text
+  gets `dir="auto"`.
 - Skins never need JS: a skin changes only its own CSS file and spec page. A
   hook both skins need (class, data attribute, custom property) lands in the
   base with a DESIGN.md "DOM hooks" row. The theme (`data-theme`) and the skin
@@ -61,9 +63,9 @@ paths); add a `<symbol id="i-name">` and use `Icon`.
 - vendor checksum;
 - design guard (color literals outside `css/tokens.css` and `css/skins/*.css`,
   `transition: all`, CJK copy, raw HTML writes, raw font sizes in any CSS);
-- skin parity: every token `app.css` reads and `tokens.css` does not declare is
-  declared by each skin, each skin is linked from `index.html` and scoped by
-  its file name;
+- skin parity: every token a base stylesheet reads and `tokens.css` does not
+  declare is declared by each skin, each skin is scoped by its file name;
+  `index.html` links tokens, every base stylesheet, then the skins;
 - contract guard: each `/api/v1/...` literal in `static/js` is a path in
   `internal/api/openapi.yaml`;
 - `LOG_COMPONENTS` equals the `"component"` log tags in the Go code.

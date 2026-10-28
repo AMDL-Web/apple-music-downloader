@@ -1,0 +1,192 @@
+/*
+ * Structural base shared by every skin: layout, component structure and
+ * behavior. Everything visual is a token: neutral scales from tokens.css,
+ * colors, radii, shadows, font stacks and display type from the active skin
+ * (css/skins/<name>.css under :root[data-skin]). No color literals here (a Go
+ * test rejects them), no !important outside reduced motion, so a skin rule
+ * always wins. Breakpoints: >=1024 sidebar, 640-1023 icon rail, <640 tab bar.
+ * Hooks marked "skin opt-in" are hidden here and shown by a skin that wants them.
+ */
+
+/* ---- Base ---------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html.has-overlay {
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--w-regular);
+  letter-spacing: var(--tracking-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+}
+
+code {
+  font-size: var(--fs-12);
+  padding: 0 var(--s-1);
+  border-radius: var(--r-badge);
+  background: var(--bg-hover);
+}
+
+kbd {
+  display: inline-block;
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  padding: 0 var(--s-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-badge);
+  background: var(--bg-canvas);
+  color: var(--text-secondary);
+}
+
+.noscript {
+  padding: var(--s-6);
+}
+
+/* ---- Utilities ----------------------------------------------------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+.small {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.wrap-any {
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.text-warning {
+  color: var(--warning-text);
+}
+
+[data-role="info"] {
+  --role: var(--info);
+  --role-tint: var(--info-tint);
+}
+
+[data-role="success"] {
+  --role: var(--success);
+  --role-tint: var(--success-tint);
+}
+
+[data-role="danger"] {
+  --role: var(--danger);
+  --role-tint: var(--danger-tint);
+}
+
+[data-role="warning"] {
+  --role: var(--warning);
+  --role-tint: var(--warning-tint);
+}
+
+[data-role="neutral"] {
+  --role: var(--neutral);
+  --role-tint: var(--neutral-tint);
+}
+
+[data-role="skipped"] {
+  --role: var(--skipped);
+  --role-tint: var(--skipped-tint);
+}
+
+/* ---- Icons --------------------------------------------------------- */
+
+.icon {
+  width: var(--icon);
+  height: var(--icon);
+  flex: none;
+  vertical-align: middle;
+}
+
+.icon-sm {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+.icon-nav {
+  width: var(--icon-nav);
+  height: var(--icon-nav);
+}
+

@@ -2,8 +2,8 @@
  * Skin-neutral tokens: the color-scheme switch, the type scale, spacing,
  * sizes and motion that every skin shares. Colors, radii, shadows, font
  * stacks and display type belong to a skin (css/skins/<name>.css), which
- * must declare every token app.css uses that is not declared here; a Go test
- * checks that. Color literals are allowed only here and in css/skins/*.css.
+ * must declare every token the base stylesheets (css/*.css) use that is not
+ * declared here; a Go test checks that. Color literals are allowed only here and in css/skins/*.css.
  * The contract is DESIGN.md "Skins".
  */
 

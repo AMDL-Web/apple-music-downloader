@@ -86,10 +86,10 @@ skin in `internal/console/skins/`.
 | Radix Colors 12-step scale and Geist color roles | none | not adopting | The single neutral palette was replaced by per-skin palettes; the role names (canvas, surface, raised, hover, selected) stay as token names. |
 | Geist typography: 14/20 label default, tabular figures for numbers | [DESIGN.md](../internal/console/DESIGN.md#type-spacing-shape-motion) | adapted | The type scale is skin-neutral; display roles are skin tokens. System fonts only, so the console works offline and renders CJK titles. |
 | Geist materials radius tiers; elevation only on floating layers | none | not adopting | Radii and shadows are skin tokens; the 4/6/12 px scale was the retired default look. |
-| Linear's redesign: inverted-L chrome | `internal/console/static/css/app.css` | adapted | The sidebar plus top bar frame is the base; a skin may restyle it (the editorial masthead). |
+| Linear's redesign: inverted-L chrome | `internal/console/static/css/shell.css` | adapted | The sidebar plus top bar frame is the base; a skin may restyle it (the editorial masthead). |
 | Monochrome ink accent instead of the amdl-web brand orange | none | not adopting | Each skin picks its own accent; the danger role still never looks like a healthy accent. |
 | Carbon status indicator pattern: two of color, shape and symbol; purple for outliers | `internal/console/static/js/lib/status.js` | adopted | "Already on disk" uses the purple skipped role; red/green fail under deuteranopia, so labels are mandatory. |
-| Geist Status Dot: only in-progress states animate, no separate spinner | `internal/console/static/css/app.css` | adopted | The running pulse is the only loop. |
+| Geist Status Dot: only in-progress states animate, no separate spinner | `internal/console/static/css/controls.css` | adopted | The running pulse is the only loop. |
 | Stripe badge discipline: a small semantic set, badges are read-only | `internal/console/static/js/ui/components.js` | adopted | |
 | lyjwpage DESIGN.md structure: token tables, the doc as target and code as state, a guard against off-scale values | [DESIGN.md](../internal/console/DESIGN.md), `internal/console/console_test.go` | adapted | Structure only; the look is not borrowed. The guard is a Go test instead of a pnpm script. |
 

@@ -101,7 +101,7 @@ func loadAssets() (map[string]asset, error) {
 
 // Handler serves the console's embedded files. It expects request paths
 // relative to the console root, so mount it behind http.StripPrefix: "/"
-// and "" serve index.html, "/css/app.css" serves static/css/app.css.
+// and "" serve index.html, "/css/base.css" serves static/css/base.css.
 // Directories are never listed. Every response, including 304 and 404,
 // carries the Content-Security-Policy and the other security headers.
 func Handler() http.Handler {

@@ -1,0 +1,379 @@
+/* ---- Drawer -------------------------------------------------------- */
+
+.drawer-host,
+.overlay-host {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.overlay-host {
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20vh var(--s-2) var(--s-2);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  animation: fade-in var(--dur-base) var(--ease-out);
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--drawer-w), 100vw);
+  border-left: var(--chrome-border);
+  border-radius: var(--r-drawer);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  animation: slide-in var(--dur-base) var(--ease-out);
+}
+
+.drawer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: var(--topbar-h);
+  padding: 0 var(--s-3) 0 var(--s-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.drawer-bar-id {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.drawer-back {
+  display: none;
+}
+
+.drawer-close {
+  margin-left: auto;
+}
+
+.drawer-scroll {
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.drawer-scroll > .empty,
+.drawer-scroll > .error-note,
+.drawer-scroll > .skel-list {
+  padding: var(--s-5);
+}
+
+.drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  padding: var(--s-5);
+}
+
+.drawer-head {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-4);
+}
+
+.drawer-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+  min-width: 0;
+}
+
+.drawer-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-title);
+  overflow-wrap: anywhere;
+}
+
+.drawer-artist {
+  align-self: flex-start;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  text-underline-offset: 2px;
+}
+
+.drawer-meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.drawer-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-1_5);
+}
+
+.drawer-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.drawer-times dt {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.drawer-times dd {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-control);
+  background: var(--danger-tint);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+
+.section-head .jprog {
+  flex: 1;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+}
+
+.swatch-dot {
+  width: var(--icon);
+  height: var(--icon);
+  border-radius: var(--r-full);
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.swatch-label {
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+}
+
+.track-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-0_5);
+}
+
+.track-block {
+  width: 8px;
+  height: 12px;
+  border-radius: var(--r-bar);
+  background: var(--role);
+}
+
+.tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.track {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 96px 44px 64px;
+  grid-template-areas:
+    "idx main codec len size"
+    "idx stages status status status"
+    "idx note note note note";
+  align-items: center;
+  column-gap: var(--s-3);
+  row-gap: var(--s-1_5);
+  padding: var(--s-2) 0;
+  border-top: var(--row-divider);
+}
+
+.track:focus-visible {
+  outline-offset: -2px;
+}
+
+.track-index {
+  grid-area: idx;
+  align-self: start;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-13);
+  text-align: right;
+}
+
+.track-main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.track-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-artist {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-codec {
+  grid-area: codec;
+}
+
+.track-len {
+  grid-area: len;
+  text-align: right;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.track-size {
+  grid-area: size;
+  text-align: right;
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+
+.track-stages {
+  grid-area: stages;
+}
+
+.track-status {
+  grid-area: status;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.track-error,
+.track-note {
+  grid-area: note;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  overflow-wrap: anywhere;
+}
+
+.track-error {
+  color: var(--danger-text);
+}
+
+.track-note {
+  color: var(--text-secondary);
+}
+
+.hook-list,
+.activity-list,
+.tool-list,
+.storage-list,
+.account-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.hook-row,
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.hook-error {
+  flex-basis: 100%;
+  color: var(--danger-text);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  overflow-wrap: anywhere;
+}
+
+.activity summary {
+  cursor: pointer;
+}
+
+.activity-list {
+  margin-top: var(--s-3);
+  gap: var(--s-1);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.activity-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.activity-msg {
+  overflow-wrap: anywhere;
+}
+

@@ -1,0 +1,407 @@
+/* ---- Overview ------------------------------------------------------ */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(144px, 1fr));
+  gap: var(--grid-gap);
+}
+
+.kpi {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--s-1);
+  min-height: 96px;
+  padding: var(--s-3);
+  border-radius: var(--r-control);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.kpi:hover {
+  background: var(--bg-hover);
+}
+
+.kpi-label,
+.kpi-meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.kpi-meta {
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-icon {
+  position: absolute;
+  top: var(--s-4);
+  right: var(--s-4);
+  display: flex;
+}
+
+.kpi-icon .pulse,
+.kpi-icon [data-role] {
+  margin: 0;
+}
+
+.kpi-value {
+  align-self: center;
+  font-family: var(--font-display);
+  font-size: var(--fs-kpi);
+  line-height: var(--lh-kpi);
+  font-weight: var(--w-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-display);
+}
+
+.health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.health-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+}
+
+/* Skin opt-in: an icon per service. */
+.health-icon {
+  display: none;
+}
+
+.health-status {
+  min-width: 0;
+}
+
+.health-name {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.health-detail {
+  grid-column: 2;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  min-width: 0;
+}
+
+.health-facts {
+  padding-top: var(--s-3);
+  border-top: var(--row-divider);
+}
+
+/* Label/value facts (Facts): a wrapping row of small pairs by default. */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-5);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.fact {
+  display: flex;
+  gap: var(--s-1_5);
+  min-width: 0;
+}
+
+.fact-label {
+  color: var(--text-secondary);
+}
+
+.fact-value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fact[data-role="danger"] .fact-value {
+  color: var(--danger-text);
+}
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--s-4);
+}
+
+.strip > .empty,
+.strip > .error-note {
+  grid-column: 1 / -1;
+}
+
+.strip-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1_5);
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-art);
+}
+
+/* Tiles past the whole-tile count; a skin may show them as a scrolling shelf. */
+.strip-tile.is-overflow {
+  display: none;
+}
+
+.strip-meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip-title,
+.tile-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip-sub,
+.tile-sub {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.chart-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-readout-day {
+  color: var(--text-primary);
+  font-weight: var(--w-medium);
+}
+
+.chart-multiple {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.chart-title {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.chart-plot {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: var(--s-2);
+  height: 88px;
+}
+
+.chart-yaxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: right;
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-bars {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  gap: var(--s-0_5);
+  height: 100%;
+  border-top: 1px solid var(--chart-grid);
+  border-bottom: 1px solid var(--chart-grid);
+}
+
+/* Gridline at max/2, matching the middle y-axis label; behind the bars. */
+.chart-bars.has-mid::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1px solid var(--chart-grid);
+  z-index: -1;
+}
+
+.chart-col {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 100%;
+}
+
+.chart-bar {
+  width: 100%;
+  max-width: 24px;
+  height: calc(var(--v) * 100%);
+  min-height: 2px;
+  border-radius: var(--r-bar) var(--r-bar) 0 0;
+  background: var(--chart-bar);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.chart-bar.is-zero {
+  min-height: 0;
+  height: 0;
+}
+
+.chart-bars:hover .chart-bar {
+  opacity: 0.45;
+}
+
+.chart-bars:hover .chart-col.is-hover .chart-bar {
+  opacity: 1;
+}
+
+.chart-xaxis {
+  display: flex;
+  justify-content: space-between;
+  padding-left: calc(56px + var(--s-2));
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+}
+
+/* One label per day; the base keeps the first, middle and latest. */
+.chart-xaxis > span:not(.is-first, .is-mid, .is-latest) {
+  display: none;
+}
+
+/* Formats (/stats codecs): a decorative stacked bar and a labelled list. */
+.tp-formats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.tp-formats-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.formats-bar {
+  display: flex;
+  gap: var(--s-0_5);
+  height: var(--bar-h);
+  border-radius: var(--r-bar);
+  background: var(--track);
+  overflow: hidden;
+}
+
+/* The base tells formats apart by position only; each element also carries
+   --i (its index) for a skin that colors them. */
+.formats-seg,
+.formats-swatch {
+  background: var(--chart-bar);
+}
+
+.formats-seg:nth-child(2),
+.formats-item:nth-child(2) .formats-swatch {
+  opacity: 0.75;
+}
+
+.formats-seg:nth-child(3),
+.formats-item:nth-child(3) .formats-swatch {
+  opacity: 0.5;
+}
+
+.formats-seg:nth-child(n + 4),
+.formats-item:nth-child(n + 4) .formats-swatch {
+  opacity: 0.3;
+}
+
+.formats-seg {
+  flex: 0 1 calc(var(--w) * 100%);
+}
+
+.formats-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.formats-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  min-width: 0;
+}
+
+.formats-swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+}
+
+.formats-count {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-tail {
+  list-style: none;
+  margin: 0;
+  padding: var(--s-2) 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-mono-12);
+}
+
+.log-tail-row {
+  display: grid;
+  grid-template-columns: 64px 44px 64px minmax(0, 1fr);
+  gap: var(--s-2);
+  padding: var(--s-0_5) var(--card-pad-x);
+}
+
+.log-attrs {
+  color: var(--text-secondary);
+}
+
+.log-tail-row .log-msg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+

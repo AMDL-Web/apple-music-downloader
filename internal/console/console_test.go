@@ -113,12 +113,12 @@ func TestIndexAtExplicitPath(t *testing.T) {
 }
 
 func TestConditionalGetReturns304(t *testing.T) {
-	first := get(t, mounted(), http.MethodGet, "/console/css/app.css", nil)
+	first := get(t, mounted(), http.MethodGet, "/console/css/base.css", nil)
 	etag := first.Result().Header.Get("ETag")
 	if etag == "" {
 		t.Fatal("no ETag on first response")
 	}
-	rec := get(t, mounted(), http.MethodGet, "/console/css/app.css", map[string]string{"If-None-Match": etag})
+	rec := get(t, mounted(), http.MethodGet, "/console/css/base.css", map[string]string{"If-None-Match": etag})
 	if rec.Code != http.StatusNotModified {
 		t.Fatalf("If-None-Match with the current ETag = %d, want 304", rec.Code)
 	}
@@ -127,14 +127,14 @@ func TestConditionalGetReturns304(t *testing.T) {
 	}
 	assertSecurityHeaders(t, rec)
 
-	stale := get(t, mounted(), http.MethodGet, "/console/css/app.css", map[string]string{"If-None-Match": `"0000"`})
+	stale := get(t, mounted(), http.MethodGet, "/console/css/base.css", map[string]string{"If-None-Match": `"0000"`})
 	if stale.Code != http.StatusOK {
 		t.Errorf("If-None-Match with another ETag = %d, want 200", stale.Code)
 	}
 }
 
 func TestETagFollowsContent(t *testing.T) {
-	a := get(t, mounted(), http.MethodGet, "/console/css/app.css", nil).Result().Header.Get("ETag")
+	a := get(t, mounted(), http.MethodGet, "/console/css/base.css", nil).Result().Header.Get("ETag")
 	b := get(t, mounted(), http.MethodGet, "/console/css/tokens.css", nil).Result().Header.Get("ETag")
 	if a == b {
 		t.Errorf("two different files share ETag %s", a)
@@ -171,7 +171,7 @@ func TestContentTypes(t *testing.T) {
 		{"/console/js/main.js", "text/javascript; charset=utf-8"},
 		{"/console/" + vendorFile, "text/javascript; charset=utf-8"},
 		{"/console/icons.svg", "image/svg+xml"},
-		{"/console/css/app.css", "text/css; charset=utf-8"},
+		{"/console/css/base.css", "text/css; charset=utf-8"},
 	}
 	for _, c := range cases {
 		rec := get(t, mounted(), http.MethodGet, c.path, nil)
@@ -380,14 +380,14 @@ func TestDesignGuardCatchesViolations(t *testing.T) {
 	cases := []struct {
 		name, file, text string
 	}{
-		{"hex color", "css/app.css", "a { color: #e35e38; }"},
+		{"hex color", "css/base.css", "a { color: #e35e38; }"},
 		{"short hex", "js/x.js", "const c = '#fff';"},
-		{"rgb", "css/app.css", "a { color: rgb(0 0 0); }"},
-		{"oklch", "css/app.css", "a { color: oklch(0.5 0.1 20); }"},
-		{"transition all", "css/app.css", "a { transition: all 200ms; }"},
+		{"rgb", "css/base.css", "a { color: rgb(0 0 0); }"},
+		{"oklch", "css/base.css", "a { color: oklch(0.5 0.1 20); }"},
+		{"transition all", "css/base.css", "a { transition: all 200ms; }"},
 		{"cjk", "js/x.js", "const label = '下载';"},
 		{"innerHTML", "js/x.js", "el.innerHTML = name;"},
-		{"raw font size", "css/app.css", "a { font-size: 13px; }"},
+		{"raw font size", "css/base.css", "a { font-size: 13px; }"},
 		{"raw font size in a skin", "css/skins/music.css", "a { font-size: 13px; }"},
 		{"color in a js file under a skins-like path", "js/skins/x.js", "const c = '#fff';"},
 		{"color in a non-css skin file", "css/skins/notes.txt", "#ffffff"},
@@ -402,7 +402,7 @@ func TestDesignGuardCatchesViolations(t *testing.T) {
 		{"css/skins/music.css", ":root[data-skin=\"music\"] { --x: light-dark(#ffffff, rgba(0, 0, 0, 0.5)); }"},
 		{"css/skins/editorial.css", "a { font-size: var(--fs-page-title); }"},
 		{"js/x.js", "location.hash = '#/queue'; const bg = `#${hex}`;"},
-		{"css/app.css", "a { font-size: var(--fs-12); transition: opacity 120ms; }"},
+		{"css/shell.css", "a { font-size: var(--fs-12); transition: opacity 120ms; }"},
 	}
 	for _, c := range clean {
 		if v := designViolations(c.file, c.text); len(v) != 0 {
@@ -530,7 +530,7 @@ var (
 	varRef  = regexp.MustCompile(`var\(\s*(--[A-Za-z0-9_-]+)`)
 	varDecl = regexp.MustCompile(`(?m)(?:^|[;{\s])(--[A-Za-z0-9_-]+)\s*:`)
 	// Custom properties set per element from JS style objects or by the
-	// role mapping in app.css itself, not by a skin.
+	// role mapping in the base CSS itself, not by a skin.
 	runtimeVars = map[string]bool{
 		"--art-bg": true, "--art-t1": true, "--art-t2": true, "--art-t3": true,
 		"--w": true, "--f": true, "--v": true, "--n": true, "--swatch": true,
@@ -546,24 +546,42 @@ func cssNames(re *regexp.Regexp, text string) map[string]bool {
 	return out
 }
 
+// baseCSS returns the base stylesheets, every css/*.css except tokens.css:
+// the structure both skins share, split by area.
+func baseCSS(t *testing.T) []string {
+	t.Helper()
+	names, err := fs.Glob(staticFS(t), "css/*.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := slices.DeleteFunc(names, func(n string) bool { return n == "css/tokens.css" })
+	if len(out) < 5 {
+		t.Fatalf("found only %d base stylesheets under css/", len(out))
+	}
+	return out
+}
+
 // TestSkinsDeclareEveryBaseToken keeps the skins interchangeable: every
-// custom property app.css reads that tokens.css does not declare (colors,
-// radii, shadows, fonts, display type, card shape) must be declared by each
-// css/skins/*.css, so a skin designer who forgets one gets a failing test
-// instead of a transparent badge in the other skin. It runs with the
-// package tests (make test, CI); the failure names the skin and the token.
+// custom property a base stylesheet (css/*.css other than tokens.css) reads
+// that tokens.css does not declare (colors, radii, shadows, fonts, display
+// type, card shape) must be declared by each css/skins/*.css, so a skin
+// designer who forgets one gets a failing test instead of a transparent badge
+// in the other skin. It runs with the package tests (make test, CI); the
+// failure names the skin, the token and a base file that reads it.
 func TestSkinsDeclareEveryBaseToken(t *testing.T) {
 	files := staticFS(t)
 	neutral := cssNames(varDecl, readStatic(t, "css/tokens.css"))
-	var required []string
-	for name := range cssNames(varRef, readStatic(t, "css/app.css")) {
-		if !neutral[name] && !runtimeVars[name] {
-			required = append(required, name)
+	readBy := map[string]string{}
+	for _, base := range baseCSS(t) {
+		for name := range cssNames(varRef, readStatic(t, base)) {
+			if _, seen := readBy[name]; !seen && !neutral[name] && !runtimeVars[name] {
+				readBy[name] = base
+			}
 		}
 	}
-	sort.Strings(required)
+	required := slices.Sorted(maps.Keys(readBy))
 	if len(required) < 20 {
-		t.Fatalf("app.css reads only %d skin tokens; the var() pattern is broken", len(required))
+		t.Fatalf("the base stylesheets read only %d skin tokens; the var() pattern is broken", len(required))
 	}
 	skins, err := fs.Glob(files, "css/skins/*.css")
 	if err != nil {
@@ -577,7 +595,7 @@ func TestSkinsDeclareEveryBaseToken(t *testing.T) {
 		declared := cssNames(varDecl, readStatic(t, skin))
 		for _, name := range required {
 			if !declared[name] {
-				t.Errorf("static/%s does not declare %s, which css/app.css reads", skin, name)
+				t.Errorf("static/%s does not declare %s, which %s reads", skin, name, readBy[name])
 			}
 		}
 		if !strings.Contains(index, `href="`+skin+`"`) {
@@ -586,6 +604,41 @@ func TestSkinsDeclareEveryBaseToken(t *testing.T) {
 		scope := `:root[data-skin="` + strings.TrimSuffix(path.Base(skin), ".css") + `"]`
 		if !strings.Contains(readStatic(t, skin), scope) {
 			t.Errorf("static/%s has no %s block; a skin is scoped by its file name", skin, scope)
+		}
+	}
+}
+
+var stylesheetLink = regexp.MustCompile(`<link rel="stylesheet" href="([^"]+)">`)
+
+// TestStylesheetsLinkedInOrder checks the cascade order index.html sets:
+// tokens.css first, then every base stylesheet, then the skins, so a skin
+// rule always follows the base rule it overrides. An embedded stylesheet
+// that index.html does not link would ship without ever applying.
+func TestStylesheetsLinkedInOrder(t *testing.T) {
+	var links []string
+	for _, m := range stylesheetLink.FindAllStringSubmatch(readStatic(t, "index.html"), -1) {
+		links = append(links, m[1])
+	}
+	if len(links) == 0 || links[0] != "css/tokens.css" {
+		t.Fatalf("index.html stylesheets = %v, want css/tokens.css first", links)
+	}
+	skins, err := fs.Glob(staticFS(t), "css/skins/*.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := append(append([]string{"css/tokens.css"}, baseCSS(t)...), skins...)
+	for _, name := range all {
+		if !slices.Contains(links, name) {
+			t.Errorf("index.html does not link %s", name)
+		}
+	}
+	firstSkin := slices.IndexFunc(links, func(l string) bool { return strings.HasPrefix(l, "css/skins/") })
+	if firstSkin < 0 {
+		t.Fatal("index.html links no skin")
+	}
+	for i, l := range links {
+		if i > firstSkin && !strings.HasPrefix(l, "css/skins/") {
+			t.Errorf("index.html links %s after the first skin; base stylesheets precede every skin", l)
 		}
 	}
 }

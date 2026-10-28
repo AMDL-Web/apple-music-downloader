@@ -1,0 +1,281 @@
+/* ---- Logs ---------------------------------------------------------- */
+
+.log-time {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.log-level {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  color: var(--text-secondary);
+}
+
+.log-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--role, var(--neutral));
+}
+
+.log-comp {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-level="debug"] .log-msg {
+  color: var(--text-secondary);
+}
+
+[data-level="warn"] {
+  box-shadow: inset 2px 0 0 var(--warning);
+}
+
+[data-level="error"] {
+  box-shadow: inset 2px 0 0 var(--danger);
+  background: color-mix(in srgb, var(--danger-tint) 50%, transparent);
+}
+
+.level-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+
+.level-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  height: var(--control-h-sm);
+  padding: 0 var(--s-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  cursor: pointer;
+}
+
+.level-chip[aria-pressed="true"] {
+  border-color: var(--border-control);
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.level-chip[aria-pressed="false"] .log-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--role);
+}
+
+/* Toolbar controls are 28 px, as the level chips and buttons beside them (DESIGN.md). */
+.toolbar-logs .search {
+  flex: 1 1 200px;
+  height: var(--control-h-sm);
+}
+
+.toolbar-logs .select {
+  height: var(--control-h-sm);
+}
+
+.log-filters {
+  display: contents;
+}
+
+.filters-toggle {
+  display: none;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  height: var(--control-h-sm);
+  padding: 0 var(--s-1) 0 var(--s-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-control);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.filter-chip-link {
+  color: var(--text-secondary);
+}
+
+.filter-chip-x {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--r-badge);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.filter-chip-x:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.log-card {
+  position: relative;
+}
+
+.log-view {
+  height: max(320px, calc(100dvh - 280px));
+  overflow: auto;
+  padding: var(--s-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-mono-12);
+}
+
+.log-view:focus-visible {
+  outline-offset: -2px;
+}
+
+/* States inside the mono log view are UI copy, not log records. */
+.log-view .empty,
+.log-view .error-note {
+  font-family: var(--font-sans);
+}
+
+.log-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  padding: var(--s-1) var(--s-3);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+}
+
+.log-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: var(--s-2);
+  padding-right: var(--s-3);
+}
+
+.log-line {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 96px 44px 64px minmax(0, 1fr);
+  gap: var(--s-2);
+  align-items: baseline;
+  min-height: 24px;
+  padding: var(--s-0_5) var(--s-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.log-line:hover {
+  background: var(--bg-hover);
+}
+
+.log-line:focus-visible {
+  outline-offset: -2px;
+}
+
+.log-view:not(.is-wrap) .log-msg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.log-view.is-wrap .log-msg {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.log-chips {
+  display: flex;
+  gap: var(--s-1);
+  padding-top: var(--s-0_5);
+}
+
+.attr-chip {
+  position: relative;
+  height: 20px;
+  padding: 0 var(--s-1_5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-badge);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.attr-chip:hover {
+  border-color: var(--border-control);
+  color: var(--text-primary);
+}
+
+.log-detail {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-2) 0 var(--s-3) calc(96px + var(--s-3) + var(--s-2));
+}
+
+.log-detail-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  font-family: var(--font-sans);
+}
+
+.log-json {
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+  background: var(--bg-canvas);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.new-lines {
+  position: absolute;
+  left: 50%;
+  bottom: var(--s-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  height: var(--control-h);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-full);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+

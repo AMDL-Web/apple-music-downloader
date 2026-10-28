@@ -88,7 +88,7 @@ axis; every skin supports all three.
 | File | Holds | May | May not |
 | --- | --- | --- | --- |
 | `static/css/tokens.css` | Skin-neutral scales: type scale `--fs-*`/`--lh-*`, weights, spacing `--s-*`, sizes, motion, `--on-art-light/dark`, system font fallbacks | change a scale every skin shares | hold a skin's color, radius, shadow or font stack |
-| `static/css/app.css` | Structure: layout, component structure and behavior, all visual values through tokens | add structure both skins need | contain a color literal, `!important` (outside reduced motion) or a skin-specific choice |
+| `static/css/*.css` (the base: `base.css`, `shell.css`, `controls.css`, `layout.css`, one file per page area, `overlays.css`, `responsive.css`) | Structure: layout, component structure and behavior, all visual values through tokens, one file per area. `index.html` links them after `tokens.css` and before the skins, and that link order is the cascade order (`responsive.css` last) | add structure both skins need, in the file of its area | contain a color literal, `!important` (outside reduced motion) or a skin-specific choice |
 | `static/css/skins/<name>.css` | One `:root[data-skin="<name>"]` token block (light and dark via `light-dark()`), responsive token overrides, and that skin's component rules, every selector prefixed `:root[data-skin="<name>"]` | set any token, override any base rule (repeating its selector chain when it is deeper than two classes), show opt-in hooks, reorder overview sections, use CSS counters and `::before` text | touch another skin's scope, add JS, use `font-size` other than `var(--fs-*)`, use `transition: all`, rely on `color-scheme` it sets itself |
 | `skins/<name>.md` | The skin's spec: intent, token table with contrast, component notes | | restate the shared contract |
 
@@ -101,8 +101,8 @@ its chain under the skin prefix.
 
 ### Tokens a skin must declare
 
-`TestSkinsDeclareEveryBaseToken` fails when a skin misses one that `app.css`
-reads and `tokens.css` does not declare. Declare the whole table anyway (for
+`TestSkinsDeclareEveryBaseToken` fails when a skin misses one that a base
+stylesheet reads and `tokens.css` does not declare. Declare the whole table anyway (for
 example every role's `-text`, though the base reads only `--danger-text` and
 `--warning-text`), so skin rules can rely on it.
 
@@ -161,7 +161,8 @@ latest.
    test case in `jstest/prefs.test.mjs`.
 2. Create `static/css/skins/<value>.css` with a `:root[data-skin="<value>"]`
    block declaring every token in the table above, then its rules.
-3. Link it from `index.html` after `css/app.css`.
+3. Link it from `index.html` after the base stylesheets (`css/responsive.css`
+   is the last of them).
 4. Write `skins/<value>.md`.
 5. `go test ./internal/console/` checks the token set, the link, the scope and
    the color and font-size guards; then check every page in light and dark at
