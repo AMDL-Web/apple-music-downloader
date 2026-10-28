@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,6 +123,64 @@ func TestRunStopsCleanlyWhenItsContextEnds(t *testing.T) {
 		t.Fatalf("reopen database: %v", err)
 	}
 	_ = store.Close()
+}
+
+// An open SSE stream must not hold shutdown for the HTTP drain timeout: run
+// registers api.Server.EndStreams with RegisterOnShutdown, so the stream ends
+// when the drain starts.
+func TestRunEndsOpenStreamsAtShutdown(t *testing.T) {
+	files := newRunEnv(t, "")
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := probe.Addr().String()
+	_ = probe.Close()
+	t.Setenv("AMDL_SERVER_LISTEN", addr)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, files) }()
+
+	base := "http://" + addr + "/api/v1"
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		resp, err := http.Get(base + "/health")
+		if err == nil {
+			_ = resp.Body.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server did not come up on %s: %v", addr, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	stream, err := http.Get(base + "/downloads/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
+	if stream.StatusCode != http.StatusOK {
+		t.Fatalf("feed status = %d, want an open stream", stream.StatusCode)
+	}
+
+	started := time.Now()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run() = %v, want nil", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("run did not return after its context ended")
+	}
+	if took := time.Since(started); took >= httpDrainTimeout {
+		t.Fatalf("shutdown with an open stream took %v, want well under the %v drain timeout", took, httpDrainTimeout)
+	}
+	if _, err := io.ReadAll(stream.Body); err != nil {
+		t.Fatalf("stream did not end cleanly: %v", err)
+	}
 }
 
 // SIGHUP re-reads the config file and applies its logging level; an invalid

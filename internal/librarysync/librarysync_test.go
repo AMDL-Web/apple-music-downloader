@@ -434,6 +434,38 @@ func TestClientErrorThatClearsIsSubmitted(t *testing.T) {
 	}
 }
 
+// The count is for passes in a row: a transient error or a working lookup in
+// between starts it again, so the album stays pending instead of being skipped.
+func TestClientErrorCountResetsBetweenPasses(t *testing.T) {
+	for _, interruption := range []string{"transient error", "working lookup"} {
+		t.Run(interruption, func(t *testing.T) {
+			songs, catalog := library(200, nil)
+			// album0 keeps failing transiently, so the anchor never moves and
+			// album1 comes back on every pass.
+			lib := &fakeLibrary{songs: songs, catalog: catalog, failURL: map[string]bool{"l.album0": true}, clientErrorURL: map[string]bool{"l.album1": true}}
+			store := &fakeStore{anchor: toEntries(songs[2 : 2+anchorSize])}
+			w := newWatcher(t, lib, store, &fakeSubmitter{}, nil)
+
+			for pass := 1; pass < maxClientErrorPasses; pass++ {
+				w.RunOnce(context.Background())
+			}
+			lib.clientErrorURL = nil
+			if interruption == "transient error" {
+				lib.failURL["l.album1"] = true
+			}
+			w.RunOnce(context.Background())
+			delete(lib.failURL, "l.album1")
+			lib.clientErrorURL = map[string]bool{"l.album1": true}
+			for pass := 1; pass < maxClientErrorPasses; pass++ {
+				w.RunOnce(context.Background())
+			}
+			if status := w.Status(); !strings.Contains(status.LastError, "l.album1") || store.writes != 0 {
+				t.Fatalf("last_error = %q, anchor writes = %d; want album1 still pending after a broken run of client errors", status.LastError, store.writes)
+			}
+		})
+	}
+}
+
 // A submission the job manager rejects for a reason that can pass leaves the
 // album for the next pass; one it will never accept, or already has, is done.
 func TestRejectedSubmissionKeepsAnchorOnlyWhenRetryable(t *testing.T) {

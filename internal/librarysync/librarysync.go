@@ -106,7 +106,8 @@ type Watcher struct {
 }
 
 // maxClientErrorPasses is how many passes in a row one album's lookup may fail
-// with the same kind of non-retryable client error before the watcher skips it.
+// with a non-retryable client error (any 4xx other than 408 and 429) before the
+// watcher skips it.
 // Until then it stays pending and pins the anchor, because a pending album
 // keeps every later addition "new" and resubmitted each pass.
 const maxClientErrorPasses = 3
