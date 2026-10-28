@@ -165,12 +165,12 @@ for every request and response shape.
 | | |
 | --- | --- |
 | **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
-| **Events** | `GET /downloads/{id}/events` (+ `/ws`) per job · `GET /downloads/events` (+ `/ws`) overview feed |
+| **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed |
 | **Quality** | `POST /quality` — probe a URL's declared codecs and audio quality without creating a job |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `GET /hooks` |
 | **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
-| **System** | `GET /health` · `GET /developer-token` · `GET /logs` · `GET /logs/stream` (+ `/ws`) |
+| **System** | `GET /health` · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
 
 Submissions take `url` or `urls`, and an `overrides` object that overlays the runtime
 config for that batch only — quality priority, memory mode, path templates, lyrics

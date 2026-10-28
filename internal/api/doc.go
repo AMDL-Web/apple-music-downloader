@@ -1,4 +1,4 @@
-// Package api is the HTTP layer of amdl: the REST, SSE and WebSocket handlers
+// Package api is the HTTP layer of amdl: the REST and SSE handlers
 // under /api/v1, the Swagger UI at /docs and the embedded openapi.yaml served
 // at /api/openapi.yaml. NewServer builds a Server from the runtime config
 // store, the SQLite store, the event hub, the job manager and the wrapper,

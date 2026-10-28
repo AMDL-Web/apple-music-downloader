@@ -71,7 +71,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/health", s.health)
 	mux.HandleFunc("GET /api/v1/logs", s.listLogs)
 	mux.HandleFunc("GET /api/v1/logs/stream", s.streamLogs)
-	mux.HandleFunc("GET /api/v1/logs/stream/ws", s.streamLogsWS)
 	mux.HandleFunc("GET /api/v1/config", s.getConfig)
 	mux.HandleFunc("PUT /api/v1/config", s.updateConfig)
 	mux.HandleFunc("GET /api/v1/hooks", s.listHooks)
@@ -85,17 +84,15 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/quality", s.queryQuality)
 	mux.HandleFunc("POST /api/v1/downloads", s.createDownload)
 	mux.HandleFunc("GET /api/v1/downloads", s.listDownloads)
-	// The literal "events" segment is more specific than "{id}", so these two
-	// overview-feed routes take precedence over GET /api/v1/downloads/{id} for
-	// that exact path (a real job id is never "events").
+	// The literal "events" segment is more specific than "{id}", so the
+	// overview feed takes precedence over GET /api/v1/downloads/{id} for that
+	// exact path (a real job id is never "events").
 	mux.HandleFunc("GET /api/v1/downloads/events", s.downloadsFeed)
-	mux.HandleFunc("GET /api/v1/downloads/events/ws", s.downloadsFeedWS)
 	mux.HandleFunc("GET /api/v1/downloads/{id}", s.getDownload)
 	mux.HandleFunc("DELETE /api/v1/downloads/{id}", s.deleteDownload)
 	mux.HandleFunc("POST /api/v1/downloads/{id}/cancel", s.cancelDownload)
 	mux.HandleFunc("POST /api/v1/downloads/{id}/retry", s.retryDownload)
 	mux.HandleFunc("GET /api/v1/downloads/{id}/events", s.events)
-	mux.HandleFunc("GET /api/v1/downloads/{id}/events/ws", s.eventsWS)
 	return s.observeHTTP(cors(mux))
 }
 

@@ -76,7 +76,7 @@ func assertJobCounters(t *testing.T, job map[string]any) {
 }
 
 // TestGetDownloadReportsHookStates verifies the snapshot endpoint carries the
-// same hook information the SSE/WS stream pushes as hook_* events — the two
+// same hook information the SSE stream pushes as hook_* events — the two
 // are access modes of one state, so a client that never subscribes must still
 // see hook outcomes.
 func TestGetDownloadReportsHookStates(t *testing.T) {

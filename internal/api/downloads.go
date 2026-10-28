@@ -175,7 +175,7 @@ func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 	// cursor never races ahead of what the response actually reflects.
 	// Reading it after the snapshot instead would let a concurrent event land
 	// in between: the cursor would include it, but the snapshot wouldn't,
-	// and events/ws?last_event_id= filters strictly by id, so a client would
+	// and the stream's Last-Event-ID filters strictly by id, so a client would
 	// skip that event and never see its effect until a later one arrives.
 	lastEventID, err := s.store.LatestEventID(r.Context(), id)
 	if err != nil {
@@ -192,7 +192,7 @@ func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	// The snapshot and the SSE/WS stream are two access modes of one state, so
+	// The snapshot and the SSE stream are two access modes of one state, so
 	// hook outcomes — which the stream pushes as hook_* events — must be
 	// visible here too, derived from those same persisted events.
 	hookEvents, err := s.store.ListHookEvents(r.Context(), id)

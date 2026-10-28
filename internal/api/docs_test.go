@@ -51,7 +51,6 @@ func TestOpenAPISpecification(t *testing.T) {
 		"/api/v1/health":                       {"get"},
 		"/api/v1/logs":                         {"get"},
 		"/api/v1/logs/stream":                  {"get"},
-		"/api/v1/logs/stream/ws":               {"get"},
 		"/api/v1/config":                       {"get", "put"},
 		"/api/v1/hooks":                        {"get"},
 		"/api/v1/library-sync":                 {"get"},
@@ -63,12 +62,10 @@ func TestOpenAPISpecification(t *testing.T) {
 		"/api/v1/quality":                      {"post"},
 		"/api/v1/downloads":                    {"get", "post"},
 		"/api/v1/downloads/events":             {"get"},
-		"/api/v1/downloads/events/ws":          {"get"},
 		"/api/v1/downloads/{job_id}":           {"get", "delete"},
 		"/api/v1/downloads/{job_id}/cancel":    {"post"},
 		"/api/v1/downloads/{job_id}/retry":     {"post"},
 		"/api/v1/downloads/{job_id}/events":    {"get"},
-		"/api/v1/downloads/{job_id}/events/ws": {"get"},
 	}
 	for path, methods := range wantOperations {
 		operations, ok := spec.Paths[path]

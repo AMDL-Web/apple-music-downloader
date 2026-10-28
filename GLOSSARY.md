@@ -41,7 +41,7 @@ wins when they disagree, so details are not copied here.
 
 | Term | Meaning | Source |
 | --- | --- | --- |
-| Event | A persisted job event; its id is the SSE and WebSocket resume cursor | `internal/domain#Event` |
+| Event | A persisted job event; its id is the SSE resume cursor | `internal/domain#Event` |
 | Overview feed | `GET /api/v1/downloads/events`: one message per changed job for list views | `internal/api#Server.downloadsFeed` |
 | Runtime key, startup key | Config keys that apply through `PUT /api/v1/config` vs keys that need a restart | `internal/config#isRuntimeKey` |
 | Env override | `AMDL_<SECTION>_<KEY>` variables that sit on top of the config file | `internal/config#envFields` |

@@ -104,43 +104,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
-  /api/v1/logs/stream/ws:
-    get:
-      tags: [System]
-      summary: Stream process logs live (WebSocket)
-      description: |
-        WebSocket version of /api/v1/logs/stream for mobile clients (e.g. iOS
-        URLSessionWebSocketTask), with filter semantics identical to the SSE
-        endpoint. After a successful handshake the server first replays the matching
-        entries in memory, then keeps pushing new ones; each LogEntry is sent as one
-        JSON text message whose content is identical to the SSE endpoint's data
-        field. To resume after a disconnect, pass the last sequence received in the
-        `after` query parameter (WebSocket has no Last-Event-ID header convention).
-        The server sends a WebSocket ping every 15 seconds to detect half-open
-        connections; the connection is a server-to-client push only, and a data
-        frame sent by the client closes it. If the client keeps reading too slowly
-        the server closes the connection, and the client should reconnect with the
-        last sequence it received to catch up.
-      operationId: streamLogsWebSocket
-      parameters:
-        - $ref: '#/components/parameters/LogLevel'
-        - $ref: '#/components/parameters/LogComponent'
-        - $ref: '#/components/parameters/LogRequestID'
-        - $ref: '#/components/parameters/LogJobID'
-        - $ref: '#/components/parameters/LogQuery'
-        - $ref: '#/components/parameters/LogSince'
-        - $ref: '#/components/parameters/LogUntil'
-        - $ref: '#/components/parameters/LogAfter'
-        - $ref: '#/components/parameters/LogLimit'
-      responses:
-        '101':
-          description: Protocol switch succeeded; log replay and push begin.
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '426':
-          description: The request is not a WebSocket handshake (it lacks upgrade headers such as Upgrade/Connection) and is rejected directly by the handshake library.
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/config:
     get:
       tags: [System]
@@ -728,31 +691,6 @@ paths:
                 type: string
         '500':
           $ref: '#/components/responses/InternalError'
-  /api/v1/downloads/events/ws:
-    get:
-      tags: [Downloads]
-      summary: Subscribe to download list changes (WebSocket)
-      description: |
-        WebSocket version of /api/v1/downloads/events, with the same semantics.
-        After a successful handshake the server pushes each DownloadFeedMessage as
-        one JSON text message. To resume after a disconnect, use the last_event_id
-        query parameter; download_upserted and download_deleted both carry
-        event_id, and after processing each message the client uses that value as
-        its new resume cursor.
-      operationId: streamDownloadsFeedWebSocket
-      parameters:
-        - name: last_event_id
-          in: query
-          description: The latest event_id already processed; when resuming, only changes made after it are pushed. Default 0 (push the latest snapshot of every current job from the start).
-          schema:
-            type: integer
-            format: int64
-            default: 0
-      responses:
-        '101':
-          description: Protocol switch succeeded; list changes start being pushed.
-        '400':
-          description: WebSocket handshake failed (missing upgrade headers, etc.).
   /api/v1/downloads/{job_id}:
     get:
       tags: [Downloads]
@@ -913,56 +851,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: The job is in a terminal state, no hook is still running, and the client has caught up on every historical event; no new events will be produced, so the subscription is rejected.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/v1/downloads/{job_id}/events/ws:
-    get:
-      tags: [Downloads]
-      summary: Subscribe to download job events (WebSocket)
-      description: |
-        WebSocket version of the SSE endpoint for mobile clients (e.g. iOS
-        URLSessionWebSocketTask).
-        After a successful handshake the server pushes each event as one JSON text
-        message whose content is identical to the SSE endpoint's data field (an
-        Event object).
-        The payload conventions for Job/JobItem snapshot fields and event-specific
-        fields are also identical to SSE.
-        To resume after a disconnect, use the last_event_id query parameter to
-        receive only newer events.
-        The server sends a WebSocket ping every 10 seconds to detect half-open
-        connections; the connection is a server-to-client push only, and a data
-        frame sent by the client closes it.
-        When the job is already in a terminal state (completed/failed/cancelled):
-        if there are historical events not yet delivered to this client (including
-        the terminal event itself, and the hook_started/hook_succeeded/hook_failed
-        events of post-download hooks still running — hooks fire asynchronously
-        and may be recorded only after the job reaches its terminal state), the
-        handshake still succeeds and those events are replayed; the connection
-        stays open while any hook is still running and closes only once the hooks
-        finish. The handshake is rejected (409) only when the client has already
-        caught up on every event and no hook is still running — in that case use
-        GET .../downloads/{job_id} for the final state.
-      operationId: streamDownloadEventsWebSocket
-      parameters:
-        - $ref: '#/components/parameters/JobID'
-        - name: last_event_id
-          in: query
-          description: The id of the last event received; when resuming, only newer events are pushed. Default 0 (push from the beginning).
-          schema:
-            type: integer
-            format: int64
-            default: 0
-      responses:
-        '101':
-          description: Protocol switch succeeded; the event stream starts.
-        '400':
-          description: WebSocket handshake failed (missing upgrade headers, etc.).
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: The job is in a terminal state, no hook is still running, and the client has caught up on every historical event; no new events will be produced, so the handshake is rejected.
           content:
             application/json:
               schema:
@@ -1322,7 +1210,7 @@ components:
         (pl.u-xxx) jobs that actually need it; jobs of other types in the same
         batch do not store it. It is cleared when the job completes or is
         cancelled, kept on failure so retry works, and never echoed back in any
-        job response, whether create, list, detail, SSE/WebSocket or otherwise.
+        job response, whether create, list, detail, SSE or otherwise.
       properties:
         media_user_token:
           type: string
@@ -2204,7 +2092,7 @@ components:
           description: >-
             The latest persisted event id globally (across all jobs; 0 when there
             are no events yet). Clients can use it as the resume point for the
-            overview event stream GET /downloads/events(/ws) to receive only list
+            overview event stream GET /downloads/events to receive only list
             changes after this snapshot.
     DownloadStatusCounts:
       type: object
@@ -2223,7 +2111,7 @@ components:
       type: object
       required: [type, status_counts]
       description: >-
-        One push on the overview event stream (GET /downloads/events(/ws)). Every
+        One push on the overview event stream (GET /downloads/events). Every
         job creation, status change or deletion carries the latest global job
         status counts.
       properties:
@@ -2272,7 +2160,7 @@ components:
           description: >-
             The latest state of each post-download hook that has fired, derived
             from the hook_started/hook_succeeded/hook_failed events in the event
-            stream — the snapshot endpoint and the SSE/WS event stream are two ways
+            stream — the snapshot endpoint and the SSE event stream are two ways
             to read the same state. An empty array when the job has not fired any
             hook yet (including when no hook is configured or the job has not
             finished).
@@ -2283,8 +2171,8 @@ components:
           format: int64
           description: >-
             The latest persisted event id for this job (0 when there are no events
-            yet). Clients can use it as the resume point for events/ws (or SSE's
-            Last-Event-ID) to skip the historical events already reflected in this
+            yet). Clients can use it as the resume point for the SSE stream's
+            Last-Event-ID to skip the historical events already reflected in this
             response and receive only later incremental updates.
     EventType:
       type: string

@@ -41,8 +41,7 @@ curl 'http://localhost:18080/api/v1/logs?level=error&limit=100'
 curl -N 'http://localhost:18080/api/v1/logs/stream?job_id=job_01JZ0000000000000000000000'
 ```
 
-The SSE `id` works as `Last-Event-ID` on reconnect. A WebSocket equivalent is available
-at `GET /api/v1/logs/stream/ws`.
+The SSE `id` works as `Last-Event-ID` on reconnect.
 
 Every HTTP response carries an `X-Request-ID`. Send your own header of the same name and
 `GET /api/v1/logs?request_id=<id>` aggregates that request's access log with the
@@ -143,8 +142,8 @@ and an explicit `""` clears the fallback for this batch.
 The token is persisted only onto the jobs that actually need it — stations and private
 playlists (`pl.u-xxx`). Songs, albums, artists and other playlists in the same batch do
 not store it. It is cleared when a job completes or is cancelled, and retained on failure
-so a retry can still resolve. It is never echoed back in create, list, detail, SSE or
-WebSocket responses. The global fallback in `catalog.media_user_token` does persist to the
+so a retry can still resolve. It is never echoed back in create, list, detail or SSE
+responses. The global fallback in `catalog.media_user_token` does persist to the
 config file and may be returned by `GET /api/v1/config`.
 
 `catalog.media_user_token_priority` is kept only for old configs; it is deprecated and no
@@ -219,10 +218,7 @@ Deletes a terminal job and its records.
 curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 ```
 
-`GET /api/v1/downloads/{job_id}/events/ws` is the equivalent WebSocket stream for clients
-that prefer WS.
-
-`GET /api/v1/downloads/events` (and `/events/ws`) is the cross-job overview feed: it
+`GET /api/v1/downloads/events` is the cross-job overview feed: it
 pushes only the milestones that change how a job appears in the list, so a client can
 render the whole downloads page without subscribing to each job.
 

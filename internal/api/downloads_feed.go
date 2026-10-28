@@ -13,8 +13,6 @@ import (
 
 	"amdl/internal/db"
 	"amdl/internal/domain"
-
-	"github.com/coder/websocket"
 )
 
 // downloadsFeed is the SSE overview feed: it pushes one DownloadFeedMessage
@@ -62,38 +60,7 @@ func (s *Server) downloadsFeed(w http.ResponseWriter, r *http.Request) {
 	s.runDownloadsFeed(r.Context(), lastID, ch, ticker.C, write, keepalive)
 }
 
-// downloadsFeedWS is the WebSocket twin of downloadsFeed. Resume via the
-// last_event_id query parameter (WebSocket has no Last-Event-ID header). Each
-// DownloadFeedMessage is one JSON text message with event_id as the resume
-// cursor.
-func (s *Server) downloadsFeedWS(w http.ResponseWriter, r *http.Request) {
-	lastID, _ := strconv.ParseInt(r.URL.Query().Get("last_event_id"), 10, 64)
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
-	if err != nil {
-		return
-	}
-	defer conn.CloseNow()
-	ctx := conn.CloseRead(r.Context())
-
-	ch, cancel := s.hub.SubscribeAll()
-	defer cancel()
-
-	write := func(msg domain.DownloadFeedMessage) error {
-		raw, _ := json.Marshal(msg)
-		return conn.Write(ctx, websocket.MessageText, raw)
-	}
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	keepalive := func() error {
-		pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
-		defer pingCancel()
-		return conn.Ping(pingCtx)
-	}
-	s.runDownloadsFeed(ctx, lastID, ch, ticker.C, write, keepalive)
-}
-
-// runDownloadsFeed drives the overview feed loop shared by the SSE and WS
-// endpoints. It drains milestone events newer than the cursor into one message
+// runDownloadsFeed drives the overview feed loop. It drains milestone events newer than the cursor into one message
 // per affected job (deduped to the latest action/snapshot) and calls keepalive
 // on each tick. write returning an error (client gone) ends the loop.
 func (s *Server) runDownloadsFeed(ctx context.Context, lastID int64, ch <-chan struct{}, tick <-chan time.Time, write func(domain.DownloadFeedMessage) error, keepalive func() error) {

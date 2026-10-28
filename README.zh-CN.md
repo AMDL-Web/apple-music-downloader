@@ -151,12 +151,12 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 | | |
 | --- | --- |
 | **下载** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
-| **事件** | 单任务 `GET /downloads/{id}/events`（+ `/ws`） · 总览 feed `GET /downloads/events`（+ `/ws`） |
+| **事件** | 单任务 `GET /downloads/{id}/events` · 总览 feed `GET /downloads/events` |
 | **音质** | `POST /quality` —— 不建任务，探测一条链接当前声明的编码与音质 |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `GET /hooks` |
 | **资料库同步** | `GET /library-sync` · `POST /library-sync/reset` |
-| **系统** | `GET /health` · `GET /developer-token` · `GET /logs` · `GET /logs/stream`（+ `/ws`） |
+| **系统** | `GET /health` · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
 
 提交接口接受 `url` 或 `urls`，以及一个只对该批任务生效的 `overrides` 对象——编码优先级、
 内存模式、路径模板、歌词选项、`force_overwrite`、hooks 允许列表，以及电台和私人歌单所需的

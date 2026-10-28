@@ -17,8 +17,6 @@ import (
 	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
-
-	"github.com/coder/websocket"
 )
 
 // TestDownloadsFeedPushesUpsertsAndDeletes exercises the overview SSE feed:
@@ -192,62 +190,6 @@ func TestDownloadsFeedReplaysDeleteAfterSnapshotCursor(t *testing.T) {
 			}
 			return
 		}
-	}
-}
-
-// TestDownloadsFeedWSResumesFromCursor verifies the WebSocket overview feed
-// replays only milestones after the last_event_id cursor, so a client that
-// already has an up-to-date GET /downloads snapshot receives just the delta.
-func TestDownloadsFeedWSResumesFromCursor(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	hub := events.NewHub()
-	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
-	server := &Server{store: store, hub: hub, manager: manager}
-
-	ctx := context.Background()
-	for _, id := range []string{"job1", "job2"} {
-		if err := store.CreateJob(ctx, domain.Job{ID: id, Input: "song|us|" + id, Type: "song", CanonicalKey: "song:" + id, Status: domain.JobRunning}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	e1, err := store.AddEvent(ctx, domain.Event{JobID: "job1", Type: "job_started"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// job2's milestone lands after the cursor the client will resume from.
-	if _, err := store.AddEvent(ctx, domain.Event{JobID: "job2", Type: "job_started"}); err != nil {
-		t.Fatal(err)
-	}
-
-	ts := httptest.NewServer(server.Routes())
-	defer ts.Close()
-	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/api/v1/downloads/events/ws?last_event_id=" + strconv.FormatInt(e1.ID, 10)
-	dialCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	conn, _, err := websocket.Dial(dialCtx, wsURL, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.CloseNow()
-
-	_, raw, err := conn.Read(dialCtx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var msg domain.DownloadFeedMessage
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		t.Fatalf("bad feed JSON %q: %v", raw, err)
-	}
-	// Only job2 is newer than the cursor; job1 must not be replayed.
-	if msg.Type != "download_upserted" || msg.Job == nil || msg.Job.ID != "job2" {
-		t.Fatalf("first WS message = %+v, want download_upserted for job2 only", msg)
-	}
-	if msg.StatusCounts != (domain.JobStatusCounts{Running: 2, Total: 2}) {
-		t.Fatalf("WS status_counts = %+v, want running=2 total=2", msg.StatusCounts)
 	}
 }
 

@@ -1,8 +1,8 @@
 # internal/api
 
-The HTTP surface: the route table in `Server.Routes`, the handlers, the SSE and
-WebSocket streams, and `internal/api/openapi.yaml`, the contract that the iOS app
-and amdl-web mirror by hand.
+The HTTP surface: the route table in `Server.Routes`, the handlers, the SSE
+streams, and `internal/api/openapi.yaml`, the contract that the iOS app and
+amdl-web mirror by hand.
 
 ## Invariants
 
@@ -18,10 +18,9 @@ and amdl-web mirror by hand.
   `download_upserted` and `download_deleted`. Renaming a type breaks every client
   that switches on it.
 - Resume cursors only move forward. Per-job streams resume from `Last-Event-ID`
-  (SSE) or `?last_event_id=` (WebSocket) and replay persisted events with a greater
-  id; the overview feed resumes the same way on its own `event_id`. Never advance a
-  cursor past an event the client was not sent; the comments in the feed loop
-  explain the store-error cases.
+  and replay persisted events with a greater id; the overview feed resumes the
+  same way on its own `event_id`. Never advance a cursor past an event the client
+  was not sent; the comments in the feed loop explain the store-error cases.
 - A stream subscribes to the hub before it reads the backlog, and closes only when
   `eventsExhausted` says no more events can arrive (job terminal, finalize done,
   hooks no longer pending, in that order). The handler comments explain each race;
