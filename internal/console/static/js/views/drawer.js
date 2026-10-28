@@ -1,9 +1,9 @@
 // Job drawer: one job's header, palette, per-track strip and stage meters,
-// hooks and actions, kept live by the per-job event stream and, once that
-// stream has ended, by the overview feed.
+// hooks and actions (Cancel, Retry, Delete), kept live by the per-job event
+// stream and, once that stream has ended, by the overview feed.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { getDownload, cancelDownload, retryDownload, jobStreamUrl, parseData } from '../api.js';
+import { getDownload, cancelDownload, retryDownload, deleteDownload, jobStreamUrl, parseData } from '../api.js';
 import {
   jobTitle,
   jobSubtitle,
@@ -21,6 +21,7 @@ import {
   safeHttpUrl,
 } from '../lib/format.js';
 import { jobStatusView, itemStatusView, hookStatusView, isTerminal } from '../lib/status.js';
+import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
 import { detailFromSnapshot, applyJobEvents, mergeSnapshot } from '../lib/store.js';
 import { StreamClient, claimSecondary, releaseSecondary, createCoalescer } from '../lib/stream.js';
 import { buildHash } from '../lib/route.js';
@@ -41,6 +42,7 @@ import {
   CopyButton,
   RelTime,
 } from '../ui/components.js';
+import { ConfirmDialog } from '../ui/dialogs.js';
 import { useClock } from '../ui/hooks.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
@@ -183,6 +185,32 @@ export function JobDrawer({ jobId, onClose }) {
     return () => el.removeEventListener('keydown', onKey);
   }, [jobId]);
 
+  // Delete asks first (the dialog sits beside the panel, outside its Tab
+  // trap); on success the drawer closes and the feed's download_deleted
+  // takes the row out of every list.
+  const [deleting, setDeleting] = useState(null);
+  useEffect(() => setDeleting(null), [jobId]);
+  const confirmDelete = async () => {
+    const id = jobId;
+    const title = jobTitle(detailRef.current && detailRef.current.job);
+    setDeleting('busy');
+    try {
+      await deleteDownload(id);
+      app.toast({ message: `Deleted ${title}`, role: 'success' });
+    } catch (e) {
+      if (!actionDone('delete', e)) {
+        if (jobIdRef.current === id) setDeleting(null);
+        app.toast({ message: actionError('delete', e), role: 'danger' });
+        return;
+      }
+      app.toast({ message: `${title} was already deleted` });
+    }
+    if (jobIdRef.current === id) {
+      setDeleting(null);
+      onClose();
+    }
+  };
+
   const job = detail && detail.job;
   const deleted = (detail && detail.deleted) || (error && error.status === 404);
 
@@ -212,14 +240,29 @@ export function JobDrawer({ jobId, onClose }) {
                   detail=${detail}
                   streamEnded=${streamEnded}
                   onChanged=${() => reopen(true)}
+                  onDelete=${() => setDeleting('ask')}
                   app=${app}
                 />`}
       </div>
     </aside>
+    ${deleting && job
+      ? html`<${ConfirmDialog}
+          title="Delete this job?"
+          confirmLabel="Delete job"
+          busyLabel="Deleting…"
+          danger
+          busy=${deleting === 'busy'}
+          onConfirm=${confirmDelete}
+          onCancel=${() => setDeleting(null)}
+        >
+          <strong dir="auto">${jobTitle(job)}</strong> leaves the console with its ${count(detail.items.length)}
+          ${detail.items.length === 1 ? ' track record' : ' track records'} and event history. Downloaded files stay on disk.
+        </${ConfirmDialog}>`
+      : null}
   </div>`;
 }
 
-function DrawerBody({ detail, streamEnded, onChanged, app }) {
+function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
   const { job, items, hooks, activity } = detail;
   const title = jobTitle(job);
   const sub = jobSubtitle(job);
@@ -258,7 +301,7 @@ function DrawerBody({ detail, streamEnded, onChanged, app }) {
       <div><dt>Duration</dt><dd class="num">${duration !== null && duration >= 0 ? elapsed(duration) : html`<span class="muted">—</span>`}</dd></div>
     </dl>
 
-    <${Actions} job=${job} app=${app} onChanged=${onChanged} />
+    <${Actions} job=${job} app=${app} onChanged=${onChanged} onDelete=${onDelete} />
 
     ${job.status === 'failed' && job.error
       ? html`<div class="notice" data-role="danger"><${Icon} name="circle-x" /><div class="notice-body">${job.error}</div></div>`
@@ -310,25 +353,25 @@ function DrawerBody({ detail, streamEnded, onChanged, app }) {
   </div>`;
 }
 
-function Actions({ job, app, onChanged }) {
+function Actions({ job, app, onChanged, onDelete }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => setConfirming(false), [job.id, job.status]);
-  const run = async (fn, okMessage) => {
+  const run = async (action, fn, okMessage) => {
     setBusy(true);
     try {
       await fn(job.id);
       app.toast({ message: okMessage, role: 'success' });
       onChanged();
     } catch (e) {
-      app.toast({ message: e.message || 'The request failed', role: 'danger', sticky: true });
+      app.toast({ message: actionError(action, e), role: 'danger', sticky: true });
     } finally {
       setBusy(false);
       setConfirming(false);
     }
   };
-  const canCancel = job.status === 'queued' || job.status === 'running';
-  const canRetry = job.status === 'failed';
+  const canCancel = jobAllows(job, 'cancel');
+  const canRetry = jobAllows(job, 'retry');
   return html`<div class="drawer-actions">
     ${canCancel && !confirming
       ? html`<${Button} variant="secondary" icon="circle-slash" onClick=${() => setConfirming(true)} disabled=${busy}>Cancel job</${Button}>`
@@ -336,13 +379,14 @@ function Actions({ job, app, onChanged }) {
     ${canCancel && confirming
       ? html`<div class="confirm" role="group" aria-label="Confirm cancel">
           <span>Cancel this job? Finished tracks stay on disk.</span>
-          <${Button} variant="danger" onClick=${() => run(cancelDownload, 'Job cancelled')} disabled=${busy}>Cancel job</${Button}>
+          <${Button} variant="danger" onClick=${() => run('cancel', cancelDownload, 'Job cancelled')} disabled=${busy}>Cancel job</${Button}>
           <${Button} variant="ghost" onClick=${() => setConfirming(false)}>Keep running</${Button}>
         </div>`
       : null}
-    ${canRetry ? html`<${Button} variant="primary" icon="rotate" onClick=${() => run(retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>` : null}
+    ${canRetry ? html`<${Button} variant="primary" icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>` : null}
     <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
     ${safeHttpUrl(job.input) ? html`<${LinkButton} href=${safeHttpUrl(job.input)} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
+    ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Delete</${Button}>` : null}
   </div>`;
 }
 

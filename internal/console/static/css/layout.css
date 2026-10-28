@@ -296,6 +296,161 @@
   display: none;
 }
 
+/* ---- Queue selection (views/queue-select.js) ----------------------- */
+
+/* Retry all (Failed tab) and the Select toggle, after the filters. */
+.queue-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.queue-select[aria-pressed="true"] {
+  background: var(--bg-selected);
+}
+
+.bulk-n {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The bar over the list: select all, count, actions or a run's progress.
+   It sticks under the top bar while the list scrolls. */
+.bulk-bar {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-height: 48px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  box-shadow: var(--card-shadow);
+}
+
+.bulk-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  cursor: pointer;
+}
+
+.bulk-check,
+.job-check-input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.bulk-count {
+  font-weight: var(--w-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.bulk-hint {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.bulk-progress {
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.bulk-progress-text {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bulk-meter {
+  position: relative;
+  flex: 1;
+  height: var(--bar-h);
+  border-radius: var(--r-bar);
+  background: var(--track);
+  overflow: hidden;
+}
+
+.bulk-meter-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--info);
+  transform-origin: left center;
+  transform: scaleX(var(--f));
+  transition: transform var(--dur-base) linear;
+}
+
+/* Selection mode: a checkbox column before each row; a plain click on the
+   row selects it, so text selection is off. */
+.job-list.is-selecting {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.job-list.is-selecting > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.job-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-h);
+  padding-inline-start: var(--card-pad-x);
+  cursor: pointer;
+}
+
+.job-list.is-selecting > li > .job-row {
+  padding-inline-start: var(--s-2);
+}
+
+.job-item[data-selected] {
+  background: var(--bg-selected);
+}
+
+@media (max-width: 639px) {
+  .queue-tools {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+
+  .job-check {
+    min-width: var(--touch);
+  }
+
+  .bulk-all {
+    width: var(--touch);
+    height: var(--touch);
+  }
+
+  .bulk-bar {
+    padding: var(--s-2);
+  }
+}
+
 /* Skin opt-in: the latest failures (24 h) under the live list, each with
    Retry. Shown, a row is icon, title and detail, then the button. */
 .attention {

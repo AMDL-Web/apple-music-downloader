@@ -1,5 +1,6 @@
 // Queue page: Active / Failed / All tabs, search and type filter, a dense
-// job list kept live from the downloads feed.
+// job list kept live from the downloads feed, and a selection mode for
+// Retry, Cancel and Delete on many jobs (views/queue-select.js).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
@@ -7,8 +8,11 @@ import { jobTitle, jobSubtitle, typeLabel, artPalette, paletteStyle, jobFacts } 
 import { jobStatusView } from '../lib/status.js';
 import { upsertJob, removeJob, appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
+import { toggleId, setIds, pruneSelection, rangeIds, selectedJobs, selectionState } from '../lib/selection.js';
+import { actionPlan, jobAllows } from '../lib/jobactions.js';
 import { useApp, Artwork, Badge, JobProgress, RelTime, Icon, Segmented, Empty, ErrorNote, SkeletonRows, Button, LinkButton } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
+import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 
 const PAGE_SIZE = 50;
 
@@ -16,13 +20,31 @@ const PAGE_SIZE = 50;
  * One job in a list: artwork, title, type, progress, status, last update.
  * The row carries the job's status (data-status) and Apple palette
  * (--art-bg, --art-t1..t3) for skins; .job-facts is hidden unless a skin shows it.
+ * Selection is opt-in (the Queue's selection mode; the Overview passes
+ * neither prop): `selected` sets data-selected, and with `onSelect` a plain
+ * click selects instead of opening the drawer (Cmd/Ctrl-click still opens).
  */
-export function JobRow({ job, href }) {
+export function JobRow({ job, href, selected, onSelect }) {
   const title = jobTitle(job);
   const sub = jobSubtitle(job);
   const palette = artPalette(job);
   const f = jobFacts(job);
-  return html`<a class=${palette ? 'job-row has-palette' : 'job-row'} href=${href} data-row data-status=${job.status} style=${paletteStyle(palette)}>
+  const onClick = onSelect
+    ? (e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey) return;
+        e.preventDefault();
+        onSelect(e);
+      }
+    : undefined;
+  return html`<a
+    class=${palette ? 'job-row has-palette' : 'job-row'}
+    href=${href}
+    data-row
+    data-status=${job.status}
+    data-selected=${selected ? '' : undefined}
+    style=${paletteStyle(palette)}
+    onClick=${onClick}
+  >
     <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${160} className="art-40" />
     <span class="job-main">
       <span class="job-facts">
@@ -115,6 +137,71 @@ export function QueuePage({ route }) {
     return app.subscribeFeed((batch) => setState((s) => ({ ...s, jobs: applyFeedToList(s.jobs, batch, filter, opts) })));
   }, [key]);
 
+  // Selection: a Set of ids, judged against the current list on every render,
+  // so a job the feed removes leaves it and a status change drops actions.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [confirm, setConfirm] = useState(null);
+  const bulk = useBulkRun(app);
+  const jobsRef = useRef(state.jobs);
+  jobsRef.current = state.jobs;
+  const anchorId = useRef(null);
+  useEffect(() => setSelected((s) => pruneSelection(s, state.jobs)), [state.jobs]);
+
+  const toggle = (id, range) => {
+    const from = anchorId.current;
+    anchorId.current = id;
+    setSelected((s) => {
+      const on = !s.has(id);
+      return range && from ? setIds(s, rangeIds(jobsRef.current, from, id), on) : toggleId(s, id, on);
+    });
+  };
+  const leaveSelection = () => {
+    setSelecting(false);
+    setSelected(new Set());
+    anchorId.current = null;
+  };
+  const chosen = selectedJobs(selected, state.jobs);
+  const plan = actionPlan(chosen);
+  const runAction = async (action, targets) => {
+    const reached = await bulk.start(action, targets);
+    if (action === 'delete') setSelected((s) => setIds(s, reached, false));
+    setConfirm(null);
+  };
+  const onAction = (action) => {
+    if (action === 'retry') runAction('retry', plan.retry);
+    else setConfirm({ action, jobs: null });
+  };
+  const retryable = state.jobs.filter((j) => jobAllows(j, 'retry'));
+
+  // Escape leaves selection mode; x toggles the focused row (and enters the
+  // mode). Both stand down while typing, under the drawer or any overlay.
+  const selectingRef = useRef(selecting);
+  selectingRef.current = selecting;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || route.jobId || typing(e.target)) return;
+      if (document.querySelector('.overlay-host, .drawer-host')) return;
+      if (e.key === 'Escape') {
+        if (!selectingRef.current) return;
+        e.preventDefault();
+        const inList = document.activeElement && document.activeElement.closest('.bulk-bar, .job-check');
+        leaveSelection();
+        const btn = document.querySelector('.queue-select');
+        if (inList && btn) btn.focus();
+        return;
+      }
+      if (e.key !== 'x') return;
+      const li = document.activeElement && document.activeElement.closest('.page-queue [data-job-id]');
+      if (!li) return;
+      e.preventDefault();
+      setSelecting(true);
+      toggle(li.getAttribute('data-job-id'), false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [route.jobId]);
+
   const c = app.counts;
   const tabs = [
     { value: 'active', label: 'Active', count: c ? c.queued + c.running : undefined },
@@ -129,8 +216,29 @@ export function QueuePage({ route }) {
     body = html`<${ErrorNote} title="Couldn't load downloads" error=${state.error} onRetry=${() => load(0)} />`;
   else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} />`;
   else
-    body = html`<ul class="job-list" aria-label="Jobs">
-        ${state.jobs.map((job) => html`<li key=${job.id}><${JobRow} job=${job} href=${rowHref(job)} /></li>`)}
+    body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs">
+        ${state.jobs.map((job) => {
+          const on = selecting && selected.has(job.id);
+          return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined}>
+            ${selecting
+              ? html`<label class="job-check">
+                  <input
+                    type="checkbox"
+                    class="job-check-input"
+                    checked=${on}
+                    aria-label=${`Select ${jobTitle(job)}`}
+                    onClick=${(e) => toggle(job.id, e.shiftKey)}
+                  />
+                </label>`
+              : null}
+            <${JobRow}
+              job=${job}
+              href=${rowHref(job)}
+              selected=${selecting ? on : undefined}
+              onSelect=${selecting ? (e) => toggle(job.id, e.shiftKey) : undefined}
+            />
+          </li>`;
+        })}
       </ul>
       ${state.jobs.length < state.total
         ? html`<div class="load-more">
@@ -157,11 +265,65 @@ export function QueuePage({ route }) {
           ${TYPE_OPTIONS.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}
         </select>
       </div>
+      ${selecting || state.jobs.length > 0
+        ? html`<div class="queue-tools">
+            ${filters.tab === 'failed' && retryable.length > 0
+              ? html`<${Button}
+                  icon="rotate"
+                  className="queue-retry-all"
+                  aria-label=${`Retry all ${retryable.length} loaded failed jobs`}
+                  disabled=${Boolean(bulk.run)}
+                  onClick=${() => runAction('retry', retryable)}
+                >Retry all <span class="bulk-n">${retryable.length}</span></${Button}>`
+              : null}
+            <${Button}
+              icon="square-check"
+              className="queue-select"
+              aria-pressed=${String(selecting)}
+              aria-keyshortcuts="x"
+              title="Select jobs (x selects the focused one, Esc leaves)"
+              onClick=${() => (selecting ? leaveSelection() : setSelecting(true))}
+            >Select</${Button}>
+          </div>`
+        : null}
     </div>
     ${state.error && state.jobs.length > 0 ? html`<${ErrorNote} title="Couldn't refresh downloads" error=${state.error} onRetry=${() => load(0)} />` : null}
+    ${selecting || bulk.run
+      ? html`<${SelectionBar}
+          jobs=${state.jobs}
+          selected=${selected}
+          plan=${plan}
+          selecting=${selecting}
+          run=${bulk.run}
+          onSelectAll=${() => setSelected(selectionState(selected, state.jobs) === 'all' ? new Set() : new Set(state.jobs.map((j) => j.id)))}
+          onAction=${onAction}
+        />`
+      : null}
     <div class="card card-flush" data-section="jobs"><div class="card-body">${body}</div></div>
+    ${confirm
+      ? html`<${BulkConfirm}
+          action=${confirm.action}
+          jobs=${confirm.jobs || plan[confirm.action]}
+          skipped=${confirm.jobs ? confirm.skipped : chosen.length - plan[confirm.action].length}
+          run=${bulk.run}
+          onConfirm=${() => {
+            // The targets freeze here: rows the run deletes leave the live plan.
+            const targets = plan[confirm.action];
+            setConfirm({ action: confirm.action, jobs: targets, skipped: chosen.length - targets.length });
+            runAction(confirm.action, targets);
+          }}
+          onCancel=${() => setConfirm(null)}
+        />`
+      : null}
   </div>`;
 }
+
+const typing = (el) =>
+  Boolean(el) &&
+  ((el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes(el.type)) ||
+    el.tagName === 'TEXTAREA' ||
+    el.tagName === 'SELECT' ||
+    el.isContentEditable);
 
 const startAction = () => html`<${LinkButton} variant="primary" size="sm" icon="plus" href=${buildHash('new')}>Start a download</${LinkButton}>`;
 

@@ -26,8 +26,8 @@ wins and this page is fixed in the same change. Sources are listed in
 | Route | Page | Content |
 | --- | --- | --- |
 | `#/` | Overview | Sections (in DOM order) `kpis`, `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `health`, `recent`, `throughput` (from `/stats`), `logs` (12-line tail) |
-| `#/queue?tab=active\|failed\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search, type filter, dense job list, Load more |
-| `#/queue/:id`, `#/showcase/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, activity, Cancel/Retry |
+| `#/queue?tab=active\|failed\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed tab |
+| `#/queue/:id`, `#/showcase/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, activity, Cancel/Retry/Delete |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
 | `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, read-only config with Reload, API links |
@@ -156,6 +156,7 @@ Stable class names and attributes a skin can style without touching JS:
 | Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.skin`/`.seg-skin`/`.skin-cycle`, `.theme`/`.seg-icons`/`.theme-cycle` |
 | Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive); a busy button is `.btn[aria-disabled=true]`. Shortcut sheet `[data-dialog=shortcuts]` |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
+| Job selection (Queue) | Toolbar `.queue-tools` > `.btn.queue-retry-all` (Failed tab) + `.btn.queue-select[aria-pressed]`; `.bulk-bar[data-state=select\|run]` (sticky at `top: var(--topbar-h)`; a skin whose top bar does not stick overrides `top`) > `label.bulk-all` > `input.bulk-check` (indeterminate when some), `.bulk-count`, `.bulk-actions` > `.btn.bulk-action[data-action=retry\|cancel\|delete]` > `.bulk-n` (count) or `.bulk-hint`, or during a run `.bulk-progress` > `.bulk-progress-text` + `.bulk-meter[role=progressbar]` > `.bulk-meter-fill` (`--f`); `ul.job-list.is-selecting` > `li.job-item[data-job-id][data-selected]` > `label.job-check` > `input.job-check-input` + `a.job-row[data-selected]`. Drawer: `.btn.drawer-delete` (finished jobs) |
 
 **Artwork palette.** `.job-row`, `.strip-tile`, `.tile` and `.hero` carry
 `--art-bg` and `--art-t1`, `--art-t2`, `--art-t3` (from `lib/format.js`
@@ -236,7 +237,9 @@ and motion covers.
 - **Job drawer**: dialog with focus trap, Esc and Back close it, focus returns
   to the row. Header with cover, artist link, meta, status, live tag;
   created/started/finished/duration; Cancel (inline confirm) for queued or
-  running, Retry for failed, View logs, Open in Apple Music; palette swatches;
+  running, Retry for failed, View logs, Open in Apple Music, Delete (a
+  `ConfirmDialog` beside the panel) for completed, failed or cancelled jobs,
+  which closes the drawer; palette swatches;
   per-track strip; track list (codec chip such as `ALAC 24/96`, length, size,
   error); hooks; recent non-progress events under Activity.
 - **Showcase**: hero for the newest release, then a grid with `srcset`
@@ -272,6 +275,17 @@ and motion covers.
   alertdialog with the title, the consequence, Cancel (focused) and the
   confirm button; while busy both are disabled and Escape does nothing. The
   More sheet and the shortcut sheet are `Dialog`s.
+- **Queue selection** (`views/queue-select.js`, rules in `lib/jobactions.js`):
+  Select (or `x` on a row) adds a checkbox column; a plain click on a row
+  then selects it (Shift selects a range), Cmd/Ctrl-click still opens it.
+  The bar offers only what the selection allows, with counts: Retry for
+  failed jobs (the API retries nothing else), Cancel for queued or running,
+  Delete for completed, failed or cancelled; Cancel and Delete ask first.
+  Requests run at most 4 at a time (`lib/bulk.js` `runLimited`) with
+  "Deleting 3 of 12" in the bar and the dialog, then one toast names the
+  failures by reason. The selection is a set of ids checked against the live
+  list, so a deleted job leaves it and a changed status changes the actions;
+  rows leave through the feed, never by hand.
 
 ## States
 
@@ -290,8 +304,9 @@ and motion covers.
 Landmarks (`nav`, `header`, `main`), a skip button, one `h1` per page (focused on
 navigation). Every control shows the 2 px focus ring in `--focus`. Keyboard: `n`
 opens New download, `g` then `o/q/s/l/y/,/n` (`,` is Settings), `/` focuses
-the page filter, `j`/`k` move between rows, Enter opens, Esc closes,
-Cmd/Ctrl+K, `?`; single keys and the global paste are ignored while typing,
+the page filter, `j`/`k` move between rows, Enter opens, `x` selects the
+focused Queue row, Esc closes (then leaves selection mode), Cmd/Ctrl+K,
+`?`; single keys and the global paste are ignored while typing,
 while the palette or a sheet is open and while any `[data-dialog]` is up. The
 skin and theme controls are button groups with `aria-pressed` and an
 accessible name ("Style", "Theme"). Milestones ("Album X completed") go to one

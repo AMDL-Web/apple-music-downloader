@@ -150,6 +150,15 @@
   gap: var(--s-2);
 }
 
+/* Delete (finished jobs only) sits last, apart from the everyday actions. */
+.drawer-delete {
+  margin-left: auto;
+}
+
+.drawer-delete .icon {
+  color: var(--danger);
+}
+
 .confirm {
   display: flex;
   flex-wrap: wrap;
