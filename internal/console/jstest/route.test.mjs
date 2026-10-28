@@ -31,6 +31,21 @@ test('parseHash', () => {
   assert.equal(parseHash('#/nope').page, 'notfound');
 });
 
+test('#/overview is an alias of #/, and buildHash keeps #/', () => {
+  assert.deepEqual(parseHash('#/overview'), { page: 'overview', jobId: null, params: {} });
+  assert.deepEqual(parseHash('#/overview?x=1'), { page: 'overview', jobId: null, params: { x: '1' } });
+  assert.equal(parseHash('#/overview/job_1').page, 'notfound', 'overview has no drawer route');
+  assert.equal(buildHash('overview'), '#/');
+});
+
+test('a job id with a malformed percent escape is Not found, not a thrown URIError', () => {
+  for (const h of ['#/queue/foo%80', '#/showcase/%E0%A4%A', '#/new/%', '#/queue/%E0%A4%A?tab=all']) {
+    assert.equal(parseHash(h).page, 'notfound', h);
+    assert.equal(parseHash(h).jobId, null, h);
+  }
+  assert.equal(parseHash('#/queue/a%20b').jobId, 'a b', 'a valid escape still decodes');
+});
+
 test('buildHash round-trips and drops empty params', () => {
   assert.equal(buildHash('overview'), '#/');
   assert.equal(buildHash('queue', { tab: '', q: 'a b' }, 'job_1'), '#/queue/job_1?q=a+b');

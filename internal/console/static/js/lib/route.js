@@ -1,19 +1,30 @@
-// Pure hash routing and filter mapping. Routes are #/, #/queue,
-// #/queue/:id, #/showcase, #/showcase/:id, #/logs, #/system, #/new,
+// Pure hash routing and filter mapping. Routes are #/ (also #/overview),
+// #/queue, #/queue/:id, #/showcase, #/showcase/:id, #/logs, #/system, #/new,
 // #/new/:id and #/settings; filters live in the hash query so a filtered
 // view is a shareable link.
 
 export const PAGES = ['overview', 'queue', 'showcase', 'logs', 'system', 'new', 'settings'];
 
 const PAGE_PATHS = { overview: '', queue: 'queue', showcase: 'showcase', logs: 'logs', system: 'system', new: 'new', settings: 'settings' };
-const PATH_PAGES = Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k]));
+// #/overview is an alias of #/: a natural guess at the address. buildHash
+// always writes #/.
+const PATH_PAGES = { ...Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k])), overview: 'overview' };
 
 /** Pages whose route may carry a job id that opens the job drawer. */
 const DRAWER_PAGES = new Set(['queue', 'showcase', 'new']);
 
+/** decodeURIComponent, or null for a malformed escape such as "%E0%A4%A". */
+function decodeSegment(s) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Parses location.hash into {page, jobId, params}. Unknown paths give
- * page "notfound".
+ * Parses location.hash into {page, jobId, params}. Unknown paths, and a job
+ * id with a malformed percent escape, give page "notfound".
  */
 export function parseHash(hash) {
   let h = typeof hash === 'string' ? hash : '';
@@ -27,7 +38,10 @@ export function parseHash(hash) {
   const page = PATH_PAGES[parts[0] || ''];
   if (!page) return { page: 'notfound', jobId: null, params };
   if (parts.length === 1 || parts.length === 0) return { page, jobId: null, params };
-  if (parts.length === 2 && DRAWER_PAGES.has(page)) return { page, jobId: decodeURIComponent(parts[1]), params };
+  if (parts.length === 2 && DRAWER_PAGES.has(page)) {
+    const jobId = decodeSegment(parts[1]);
+    if (jobId !== null) return { page, jobId, params };
+  }
   return { page: 'notfound', jobId: null, params };
 }
 

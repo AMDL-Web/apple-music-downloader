@@ -25,7 +25,7 @@ wins and this page is fixed in the same change. Sources are listed in
 
 | Route | Page | Content |
 | --- | --- | --- |
-| `#/` | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `recent`, `kpis`, `health`, `throughput` (from `/stats`), `logs` (12-line tail) |
+| `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `recent`, `kpis`, `health`, `throughput` (from `/stats`), `logs` (12-line tail) |
 | `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed tab |
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, Activity (persisted history plus live events), Saved to (completed jobs), Cancel/Retry/Delete |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
