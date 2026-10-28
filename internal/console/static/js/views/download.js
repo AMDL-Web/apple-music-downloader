@@ -33,11 +33,20 @@ import { QualitySheet } from './download-quality.js';
 import { ResultsCard, BookmarkletCard, useResults } from './download-results.js';
 
 // Previews outlive the page, so coming back does not look links up again.
+// An album ?i= link previews as a song or the album depending on
+// catalog.album_track_url_mode, so those answers hold only for the mode
+// they were read under (LOOKUPS_MODE).
 const LOOKUPS = new Map();
+let LOOKUPS_MODE = null;
 
 const isPrivate = (url) => {
   const link = parseLink(url);
   return Boolean(link && link.private);
+};
+
+const isAlbumTrack = (url) => {
+  const link = parseLink(url);
+  return Boolean(link && link.trackId);
 };
 
 const storage = () => {
@@ -68,6 +77,13 @@ function mergeLinks(text, urls) {
 
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
+/** The sent URLs the server took or already runs (lib/submit.js keptAfterSubmit keeps the rest). */
+function handled(pairs) {
+  const done = new Set(pairs.map((p) => p.url));
+  for (const u of keptAfterSubmit(pairs)) done.delete(u);
+  return done;
+}
+
 export function DownloadPage({ route }) {
   const app = useApp();
   const incoming = newDownloadUrls(route.params);
@@ -83,15 +99,24 @@ export function DownloadPage({ route }) {
     if (incoming.length) setText((t) => mergeLinks(t, incoming));
   }, [urlParam]);
 
-  // text -> ?url=: the links follow the text, so a reload keeps them.
+  // text -> ?url=: the links follow the text, so a reload keeps them, also
+  // after the address lost them (n, the sidebar and the palette open bare
+  // #/new). When only the address changed and it holds links the text does
+  // not, the effect above is merging them; the next settled text writes
+  // the address.
   const routeRef = useRef(route);
   routeRef.current = route;
+  const settledSeen = useRef(settled);
   useEffect(() => {
     const r = routeRef.current;
     const urls = scanLinks(settled).map((e) => e.url);
-    if (sameList(urls, newDownloadUrls(r.params))) return;
+    const inParam = newDownloadUrls(r.params);
+    const textMoved = settledSeen.current !== settled;
+    settledSeen.current = settled;
+    if (sameList(urls, inParam)) return;
+    if (!textMoved && scanLinks(inParam.join('\n')).some((e) => !urls.includes(e.url))) return;
     app.navigate(buildHash('new', { ...r.params, url: urls.join('\n') }, r.jobId), { replace: true });
-  }, [settled]);
+  }, [settled, urlParam]);
 
   // Focus the text box once the shell has focused the heading (a fine
   // pointer only: on a phone it would open the keyboard unasked).
@@ -135,6 +160,7 @@ export function DownloadPage({ route }) {
   }, [app.epoch]);
 
   const download = cfg.data && cfg.data.config ? cfg.data.config.download : null;
+  const trackMode = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.album_track_url_mode || '' : null;
   const defaults = useMemo(() => (download ? optionDefaults(download) : null), [JSON.stringify(download)]);
   const serverToken = Boolean(cfg.data && cfg.data.config && cfg.data.config.catalog && cfg.data.config.catalog.media_user_token);
   const enabledHooks = hooks.data && hooks.data.enabled ? hooks.data.entries.filter((e) => e.enabled).map((e) => e.name) : [];
@@ -207,6 +233,12 @@ export function DownloadPage({ route }) {
   const previewable = (list) => list.filter((e) => e.link && PREVIEW_KINDS.includes(e.link.kind));
   const wanted = useMemo(() => previewable(scanLinks(settled)).slice(0, PREVIEW_LIMIT).map((e) => e.url), [settled]);
   useEffect(() => queue.current.want(wanted), [wanted.join('\n')]);
+  // A changed album_track_url_mode reads album ?i= links again.
+  useEffect(() => {
+    if (trackMode === null) return;
+    if (LOOKUPS_MODE !== null && LOOKUPS_MODE !== trackMode) queue.current.forget([...LOOKUPS.keys()].filter(isAlbumTrack));
+    LOOKUPS_MODE = trackMode;
+  }, [trackMode]);
   // A changed token reads private playlists again.
   const tokenSeen = useRef(settledToken);
   useEffect(() => {
@@ -228,7 +260,7 @@ export function DownloadPage({ route }) {
   const sendable = submittable(entries, issueOf);
   const flagged = entries.filter((e) => issueOf(e)).length;
   const lookupStatus = (url) => queue.current.status(url);
-  const needsToken = needsMediaUserToken(entries.map((e) => e.url), lookupStatus);
+  const needsToken = needsMediaUserToken(sendable, lookupStatus);
 
   // Submit and results (kept for the life of the tab, without the token).
   const [busy, setBusy] = useState(false);
@@ -285,12 +317,9 @@ export function DownloadPage({ route }) {
     const queued = rows.some((r) => r.view.status === 'accepted');
     app.toast({ message: queued ? `Download started: ${summary}` : summary, role: queued ? 'success' : 'warning' });
     // Keep what was not handled: links not sent (flagged, or after a failed
-    // chunk) and links the server did not take.
-    const sent = new Set(pairs.map((p) => p.url));
-    const kept = new Set(keptAfterSubmit(pairs));
-    const rest = entries.filter((e) => !sent.has(e.url) || kept.has(e.url)).map((e) => e.url);
-    setText(rest.join('\n'));
-    app.navigate(buildHash('new', { ...route.params, url: rest.join('\n') }, route.jobId), { replace: true });
+    // chunk), links the server did not take, and anything typed meanwhile.
+    // ?url= follows the text.
+    setText((t) => [...handled(pairs)].reduce(removeLink, t));
   };
 
   const retry = async (urls) => {
@@ -301,10 +330,21 @@ export function DownloadPage({ route }) {
     if (!pairs.length) return;
     const fresh = new Map(resultRows(pairs).map((r) => [r.url, r]));
     setResults((r) => ({ ...r, rows: r.rows.map((row) => fresh.get(row.url) || row) }));
-    const done = new Set(pairs.map((p) => p.url));
-    for (const u of keptAfterSubmit(pairs)) done.delete(u);
+    const done = handled(pairs);
     if (done.size) setText((t) => [...done].reduce(removeLink, t));
     app.toast({ message: submitSummary([...fresh.values()]), role: [...fresh.values()].some((r) => r.job) ? 'success' : 'warning' });
+  };
+
+  // Clear removes the card that held focus; the text box takes it (the
+  // heading on a touch screen, where focusing the box opens the keyboard).
+  const clearResults = () => {
+    setResults({ rows: [], overrides: {} });
+    requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      const fine = window.matchMedia('(pointer: fine)').matches;
+      const el = fine ? inputRef.current : document.querySelector('.page-title');
+      if (el) el.focus({ preventScroll: true });
+    });
   };
 
   const removeEntry = (url) => {
@@ -371,8 +411,8 @@ export function DownloadPage({ route }) {
                   onInput=${(e) => setToken(e.currentTarget.value)}
                 />
                 <p id="new-token-hint" class="new-hint">
-                  Stations and private playlists are read with your Apple Music media-user-token. It goes with this download only and is never
-                  stored here.${serverToken ? ' Leave it empty to use the token saved on the server.' : ''}
+                  Stations download with your Apple Music media-user-token; a private playlist uses it only to find the cover you chose. It goes with
+                  this download only and is never stored here.${serverToken ? ' Leave it empty to use the token saved on the server.' : ''}
                 </p>
               </div>`
             : null}
@@ -400,7 +440,7 @@ export function DownloadPage({ route }) {
             params=${route.params}
             busy=${retrying}
             onRetry=${retry}
-            onClear=${() => setResults({ rows: [], overrides: {} })}
+            onClear=${clearResults}
           />`
         : null}
       ${entries.length

@@ -51,9 +51,14 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
   assert.equal(linkIssue(entry(STATION)).code, 'needs_token');
   assert.equal(linkIssue(entry(STATION)).blocking, false);
   assert.equal(linkIssue(entry(STATION), null, { hasToken: true }), null);
-  assert.equal(linkIssue(entry(PRIVATE)).message, 'Private playlists need a media-user-token');
+  assert.equal(linkIssue(entry(PRIVATE)), null, 'a private playlist downloads without a token; the token only finds its cover');
   const live = { state: 'error', error: { status: 400, code: 'invalid_request', message: 'station "Apple Music 1" is a live radio stream' } };
-  assert.deepEqual(linkIssue(entry(STATION), live, { hasToken: true }), { code: 'refused', role: 'danger', blocking: true, message: live.error.message });
+  assert.deepEqual(linkIssue(entry(STATION), live, { hasToken: true }), {
+    code: 'refused',
+    role: 'danger',
+    blocking: true,
+    message: 'Station "Apple Music 1" is a live radio stream',
+  });
   const upstream = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'wrapper: dial failed: {"code":14}' } };
   assert.deepEqual(linkIssue(entry(IGOR), upstream), {
     code: 'preview_failed',
@@ -69,15 +74,19 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
     ['not_found', true],
     "Apple's 404 keeps the link out of the submit",
   );
-  // A private playlist answers 404 without a token, and with a wrong one.
-  assert.equal(linkIssue(entry(PRIVATE), missing).code, 'needs_token');
-  const typed = linkIssue(entry(PRIVATE), missing, { hasToken: true });
-  assert.deepEqual([typed.code, typed.blocking], ['preview_failed', false]);
-  assert.equal(typed.message, 'No preview: Apple Music found no playlist here with this media-user-token');
-  assert.equal(linkIssue(entry(PRIVATE), upstream, { hasToken: true }).message, 'No preview: wrapper: dial failed');
+  // The catalog read of a playlist never carries the token, so Apple's 404
+  // for a private playlist means it is not there, with or without one.
+  for (const hasToken of [false, true]) {
+    const issue = linkIssue(entry(PRIVATE), missing, { hasToken });
+    assert.deepEqual([issue.code, issue.blocking], ['not_found', true]);
+  }
+  assert.equal(linkIssue(entry(PRIVATE), upstream).message, 'No preview: wrapper: dial failed');
+  const says = { state: 'ready', data: { needs_media_user_token: true } };
+  assert.equal(linkIssue(entry(IGOR), says).code, 'needs_token', 'the preview can ask for the token');
+  assert.equal(linkIssue(entry(IGOR), says, { hasToken: true }), null);
 });
 
-test('needsMediaUserToken: stations, private playlists and previews that say so', () => {
+test('needsMediaUserToken: stations, private playlists (their cover) and previews that say so', () => {
   const none = () => null;
   assert.equal(needsMediaUserToken([], none), false);
   assert.equal(needsMediaUserToken([IGOR, FOLKLORE, 'https://example.com/x'], none), false);

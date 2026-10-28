@@ -247,6 +247,19 @@ export function safeHttpUrl(url) {
 }
 
 /** First 8 characters of an id after its type prefix: "job_a1b2c3d4..." -> "a1b2c3d4". */
+/** "database is locked" -> "Database is locked": a server message as a row's text, which carries no end punctuation. */
+export function capitalized(s) {
+  const t = String(s || '').trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : '';
+}
+
+/** "database is locked" -> "Database is locked.": a server message as a sentence in running text. */
+export function sentence(s) {
+  const t = capitalized(s);
+  if (!t) return '';
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+}
+
 export function shortId(id) {
   if (typeof id !== 'string') return '';
   const i = id.indexOf('_');

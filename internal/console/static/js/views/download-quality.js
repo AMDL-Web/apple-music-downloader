@@ -73,7 +73,7 @@ export function QualitySheet({ url, title, onClose }) {
             ${offered.map(
               (s) => html`<li key=${s.id} class="quality-slot" data-id=${s.id}>
                 <span class="quality-slot-label">${s.label}<span class="quality-slot-codec">${s.codec}</span></span>
-                <span class="quality-slot-count">${s.tracks === s.total ? `All ${count(s.total)} tracks` : `${count(s.tracks)} of ${count(s.total)} tracks`}</span>
+                <span class="quality-slot-count">${s.total === 1 ? '1 track' : s.tracks === s.total ? `All ${count(s.total)} tracks` : `${count(s.tracks)} of ${count(s.total)} tracks`}</span>
                 ${s.best ? html`<span class="quality-slot-best">Up to ${s.best}</span>` : null}
               </li>`,
             )}

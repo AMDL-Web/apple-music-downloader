@@ -2,8 +2,9 @@
 // paste: find the links in pasted text and tell what each one points at.
 // Hosts, the storefront rule, the kinds and "the id is the last path part"
 // follow internal/applemusic (ParseWithAlbumTrackMode), and needsToken
-// follows internal/jobs (stations and pl.u- playlists need a
-// media-user-token), so the console and the backend agree on a link.
+// follows internal/jobs needsMediaUserToken (stations and pl.u- playlists
+// can use a media-user-token), so the console and the backend agree on a
+// link.
 
 /** Link kinds the backend downloads ("music-video" only through a collection). */
 export const LINK_KINDS = ['album', 'song', 'playlist', 'artist', 'station', 'music-video'];
@@ -53,8 +54,10 @@ function toUrl(raw) {
  *   kind stays 'album': the backend downloads that song or the whole album
  *   depending on the runtime catalog.album_track_url_mode ("song" by default).
  * - private: a user playlist (id starts with "pl.u-").
- * - needsToken: a station or a private playlist, which the backend resolves
- *   only with a media-user-token (overrides or catalog.media_user_token).
+ * - needsToken: a job of this link can use a media-user-token (overrides or
+ *   catalog.media_user_token): a station cannot download without one, and a
+ *   private playlist, which resolves without one, uses it for the owner's
+ *   cover.
  */
 export function parseLink(input) {
   if (typeof input !== 'string') return null;

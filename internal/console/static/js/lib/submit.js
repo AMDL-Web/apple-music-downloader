@@ -6,6 +6,7 @@
 
 import { parseLink } from './links.js';
 import { PREVIEW_KINDS, shortError } from './lookup.js';
+import { capitalized, sentence } from './format.js';
 
 /** The backend's per-request URL limit; larger batches are sent in chunks. */
 export const MAX_URLS_PER_REQUEST = 100;
@@ -26,35 +27,30 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
     return { code: 'unsupported', role: 'danger', blocking: true, message: 'Not an album, song, playlist, artist or station link' };
   }
   const err = lookup && lookup.state === 'error' ? lookup.error : null;
-  if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: err.message || 'The backend does not download this link' };
-  // Apple answered 404 for the id: a job of this link could only fail. A
-  // private playlist is read with a media-user-token (typed or the
-  // server's), and a missing or wrong token reads as 404 too, so it is not
-  // judged by its preview.
+  if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: capitalized(err.message) || 'The backend does not download this link' };
+  // Apple answered 404 for the id: a job of this link could only fail. The
+  // catalog read never carries the media-user-token (internal/applemusic
+  // Playlist), so this holds for private playlists too.
   const notFound = Boolean(err && err.status === 502 && /catalog/i.test(err.message || '') && /\b404\b/.test(err.message || ''));
-  if (notFound && !link.private) {
+  if (notFound) {
     return { code: 'not_found', role: 'danger', blocking: true, message: 'Apple Music has nothing at this link', title: err.message };
   }
-  const needsToken = link.needsToken || Boolean(lookup && lookup.state === 'ready' && lookup.data && lookup.data.needs_media_user_token);
-  if (needsToken && !hasToken) {
-    return {
-      code: 'needs_token',
-      role: 'warning',
-      blocking: false,
-      message: link.kind === 'station' ? 'Stations need a media-user-token' : 'Private playlists need a media-user-token',
-    };
+  // Only a station cannot download without the token; a private playlist
+  // uses it for its cover alone (lib/links.js needsToken).
+  const required = link.kind === 'station' || Boolean(lookup && lookup.state === 'ready' && lookup.data && lookup.data.needs_media_user_token);
+  if (required && !hasToken) {
+    return { code: 'needs_token', role: 'warning', blocking: false, message: link.kind === 'station' ? 'Stations need a media-user-token' : 'This link needs a media-user-token' };
   }
   if (err && err.code !== 'aborted') {
-    const why = notFound ? 'Apple Music found no playlist here with this media-user-token' : shortError(err.message) || 'the lookup failed';
-    return { code: 'preview_failed', role: 'warning', blocking: false, message: `No preview: ${why}`, title: err.message };
+    return { code: 'preview_failed', role: 'warning', blocking: false, message: `No preview: ${shortError(err.message) || 'the lookup failed'}`, title: err.message };
   }
   return null;
 }
 
 /**
- * Whether sending `urls` needs a media-user-token: one of them is a
- * station or a private playlist (lib/links.js needsToken), or its preview
- * (`statusOf(url)`, a lib/lookup.js status) says so.
+ * Whether a job of one of `urls` can use a media-user-token: a station or
+ * a private playlist (lib/links.js needsToken), or a link whose preview
+ * (`statusOf(url)`, a lib/lookup.js status) says it needs one.
  */
 export function needsMediaUserToken(urls, statusOf = () => null) {
   return (urls || []).some((url) => {
@@ -68,8 +64,8 @@ export function needsMediaUserToken(urls, statusOf = () => null) {
 
 /**
  * The overrides for one request of `urls`: `overrides` plus the typed
- * `token` as media_user_token, only while some of these links need it, so
- * the token never travels with links that do not use it.
+ * `token` as media_user_token, only while some of these links can use it,
+ * so the token never travels with links that do not.
  */
 export function requestOverrides(overrides, urls, token, statusOf) {
   const t = typeof token === 'string' ? token.trim() : '';
@@ -106,14 +102,6 @@ const SERVER_DETAIL = new Set(['invalid_url', 'invalid_configuration', 'unsuppor
 const RETRYABLE = new Set(['queue_full', 'decryptor_unavailable', 'store_error', 'internal_error']);
 const ROLES = { duplicate_active: 'info', duplicate_in_request: 'neutral', queue_full: 'warning', decryptor_unavailable: 'warning' };
 const ICONS = { duplicate_active: 'rotate', duplicate_in_request: 'layers', queue_full: 'clock', decryptor_unavailable: 'triangle-alert' };
-
-/** "database is locked" -> "Database is locked." */
-const sentence = (s) => {
-  const t = String(s || '').trim();
-  if (!t) return '';
-  const head = t[0].toUpperCase() + t.slice(1);
-  return /[.!?]$/.test(head) ? head : `${head}.`;
-};
 
 /**
  * How one SubmitResult reads: {status, code, role, icon, label, message,

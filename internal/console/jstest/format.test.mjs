@@ -3,6 +3,8 @@ process.env.TZ = 'UTC';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  capitalized,
+  sentence,
   artworkUrl,
   artworkSrcset,
   isArtworkTemplate,
@@ -261,4 +263,12 @@ test('formatShares turns the stats codec mix into shares and folds the tail', ()
   assert.deepEqual(formatShares([]), []);
   assert.deepEqual(formatShares(undefined), []);
   assert.deepEqual(formatShares([{ codec: 'alac', tracks: 0 }]), []);
+});
+
+test('server messages read as row text or as a sentence', () => {
+  assert.equal(capitalized('station "X" is a live radio stream'), 'Station "X" is a live radio stream');
+  assert.equal(capitalized('  '), '');
+  assert.equal(sentence('database is locked'), 'Database is locked.');
+  assert.equal(sentence('Already a sentence!'), 'Already a sentence!');
+  assert.equal(sentence(undefined), '');
 });

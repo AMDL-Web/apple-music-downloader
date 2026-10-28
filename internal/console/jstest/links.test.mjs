@@ -35,7 +35,7 @@ test('an album link with ?i= keeps kind album and carries the track id', () => {
   assert.equal(parseLink('https://music.apple.com/us/song/x/1?i=2').trackId, null, '?i= means a track only on album links');
 });
 
-test('private playlists and stations need a media-user-token', () => {
+test('private playlists and stations can use a media-user-token', () => {
   const priv = parseLink('https://music.apple.com/us/playlist/my-mix/pl.u-abcDEF123');
   assert.equal(priv.private, true);
   assert.equal(priv.needsToken, true);
