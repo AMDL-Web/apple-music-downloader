@@ -32,9 +32,11 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
   }
   const err = lookup && lookup.state === 'error' ? lookup.error : null;
   const msg = err ? String(err.message || '') : '';
-  // Apple refuses a storefront it does not have with a 400 the lookup
-  // passes on as 502 upstream_error; a job of the link could only fail.
-  if (err && /storefront/i.test(msg) && (/\b400\b/.test(msg) || /unknown storefront/i.test(msg))) {
+  // Apple refuses a storefront it does not have (its 400, which the lookup
+  // passes on as 502 upstream_error); a job of the link could only fail.
+  // Only the word "storefront" is matched, so a reworded message still
+  // counts, and the row's text is built from the link, not the message.
+  if (err && (err.status === 502 || err.status === 400) && /storefront/i.test(msg)) {
     return { code: 'bad_storefront', role: 'danger', blocking: true, message: `Apple Music has no storefront “${link.storefront.toUpperCase()}”`, title: msg };
   }
   if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: capitalized(err.message) || 'The backend does not download this link' };

@@ -214,6 +214,8 @@ test('linkIssue blocks a storefront Apple does not have and a link without one',
   const entries = [entry(IGOR), zz];
   const issueOf = (e) => linkIssue(e, e === zz ? bad : null);
   assert.deepEqual(submittable(entries, issueOf), [IGOR], 'flagged, so never also counted to download');
+  const reworded = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'Apple Music does not know the storefront zz' } };
+  assert.equal(linkIssue(zz, reworded).code, 'bad_storefront', 'a reworded server message still blocks');
   const bare = entry('https://music.apple.com/album/igor/1463409338');
   assert.deepEqual([linkIssue(bare).code, linkIssue(bare).blocking], ['no_storefront', true]);
 });
