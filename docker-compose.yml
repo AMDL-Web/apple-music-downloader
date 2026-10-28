@@ -1,73 +1,91 @@
-# AMDL Backend 容器化部署。
+# Containerized deployment of the AMDL Backend.
 #
 #   docker compose up -d
 #
-# 默认拉取 GHCR 上的多架构预构建镜像,无需本地构建。想从源码构建见下方
-# amdl-backend.image 附近的说明。
+# By default this pulls the multi-arch prebuilt image from GHCR; no local build
+# is needed. To build from source, see the note next to amdl-backend.image
+# below.
 #
-# 首次启动会在 ./configs 里生成 config.yaml(后端从 config.example.yaml
-# 引导,带注释的字段文档见同目录示例文件),之后修改配置:
-#   - 运行期字段:PUT /api/v1/config,立即生效并整体重写 config.yaml;
-#   - 任意字段:用 AMDL_<大写段名>_<大写键名> 环境变量覆盖(优先于
-#     config.yaml,加载时不写回文件),改完 docker compose up -d;
-#   - 或直接编辑 ./configs/config.yaml 后 docker compose restart
-#     (启动期字段需重启,且被环境变量覆盖的字段以环境变量为准)。
+# The first start generates config.yaml in ./configs (the backend bootstraps it
+# from config.example.yaml; the commented field documentation is the example
+# file in the same directory). To change the configuration afterwards:
+#   - runtime fields: PUT /api/v1/config, which takes effect immediately and
+#     rewrites config.yaml in full;
+#   - any field: override it with an AMDL_<SECTION>_<KEY> environment variable
+#     (upper-case section and key names; takes precedence over config.yaml and
+#     is not written back to the file on load), then docker compose up -d;
+#   - or edit ./configs/config.yaml directly, then docker compose restart
+#     (startup fields need a restart, and for fields overridden by an
+#     environment variable the environment variable wins).
 services:
   amdl-backend:
-    # 默认拉取 GHCR 上的预构建镜像(多架构 linux/amd64 + linux/arm64)。
-    # 想固定版本就把 latest 换成具体 tag,例如 :1.1 或 :1.1.0。
+    # Pulls the prebuilt image from GHCR by default (multi-arch linux/amd64 +
+    # linux/arm64). To pin a version, replace latest with a specific tag, for
+    # example :1.1 or :1.1.0.
     image: ghcr.io/amdl-web/apple-music-downloader-backend:latest
-    # 想从源码本地构建而不是拉镜像:取消下面 build 的注释(此时 image 行会
-    # 变成本地构建镜像的 tag),然后 docker compose up -d --build。
+    # To build locally from source instead of pulling the image: uncomment the
+    # build line below (the image line then becomes the tag of the locally built
+    # image), then run docker compose up -d --build.
     # build: .
     container_name: amdl-backend
     restart: unless-stopped
     ports:
       - "18080:18080"
     environment:
-      # 运行用户:容器以 root 启动入口脚本,修正挂载目录属主后降权到
-      # PUID:PGID 运行后端,默认 1000:1000。设成宿主机目录属主的 uid/gid
-      # 即可。每次启动都生效,变更后挂载目录会自动递归修正一次属主。
+      # Runtime user: the container starts the entrypoint as root, which fixes
+      # the ownership of mounted directories and then drops to PUID:PGID to run
+      # the backend; default 1000:1000. Set them to the uid/gid that owns the
+      # host directories. Applied on every start; after a change, ownership of
+      # the mounted directories is fixed recursively once, automatically.
       # PUID: "1000"
       # PGID: "1000"
-      # 时区,影响日志时间戳与 exec hooks 里命令看到的本地时间,
-      # 默认 UTC。镜像已内置 tzdata,填 IANA 时区名即可。
+      # Time zone for log timestamps and for the local time seen by commands in
+      # exec hooks; default UTC. The image ships tzdata, so an IANA time zone
+      # name is all that is needed.
       # TZ: "Asia/Shanghai"
-      # 任何配置项都可以用 AMDL_<大写段名>_<大写键名> 环境变量覆盖,
-      # 例如 AMDL_DOWNLOAD_QUALITY_PRIORITY: "alac,aac"、
-      # AMDL_SIMULATE_ENABLED: "true"。列表值用逗号分隔,布尔用 true/false。
-      # wrapper-manager gRPC 地址(覆盖 wrapper.address):
-      #   - wrapper 跑在宿主机上:保持 host.docker.internal:8080(也是
-      #     入口脚本的容器默认值,不设该变量效果相同);
-      #   - wrapper 也是 compose 服务:改成 "<服务名>:8080" 并取消下方
-      #     wrapper-manager 服务注释。
+      # Any configuration key can be overridden with an AMDL_<SECTION>_<KEY>
+      # environment variable (upper-case section and key names), for example
+      # AMDL_DOWNLOAD_QUALITY_PRIORITY: "alac,aac" or
+      # AMDL_SIMULATE_ENABLED: "true". List values are comma-separated; booleans
+      # are true/false.
+      # wrapper-manager gRPC address (overrides wrapper.address):
+      #   - wrapper runs on the host: keep host.docker.internal:8080 (also the
+      #     entrypoint's container default, so leaving the variable unset has
+      #     the same effect);
+      #   - wrapper is also a compose service: change it to "<service name>:8080"
+      #     and uncomment the wrapper-manager service below.
       AMDL_WRAPPER_ADDRESS: "host.docker.internal:8080"
-      # API 监听地址(覆盖 server.listen),容器内必须监听非回环地址,
-      # 入口脚本默认 :18080。改端口时需同步调整上方 ports 映射;健康
-      # 检查端口也从它推导。
+      # API listen address (overrides server.listen). Inside the container it
+      # must listen on a non-loopback address; the entrypoint defaults to
+      # :18080. When changing the port, adjust the ports mapping above to match;
+      # the health check also derives its port from it.
       # AMDL_SERVER_LISTEN: ":18080"
     extra_hosts:
-      # 让 Linux 上的容器也能通过 host.docker.internal 访问宿主机。
+      # Lets containers on Linux reach the host through host.docker.internal too.
       - "host.docker.internal:host-gateway"
     volumes:
-      # 配置目录:config.yaml(后端管理、PUT 时整体重写)、
-      # config.example.yaml(完整字段文档)、hooks.yaml。
+      # Config directory: config.yaml (managed by the backend, rewritten in full
+      # on PUT), config.example.yaml (full field documentation), hooks.yaml.
       - ./configs:/app/configs
-      # SQLite 数据库目录(database.path 默认 data/db/amdl.db)。
+      # SQLite database directory (database.path defaults to data/db/amdl.db).
       - ./data/db:/app/data/db
-      # 可选轮转日志目录(logging.file_enabled 默认 false,启用后写入此处)。
+      # Optional rotating log directory (logging.file_enabled defaults to false;
+      # once enabled, logs are written here).
       - ./data/logs:/app/data/logs
-      # 下载产物目录;想放到宿主机其它位置改冒号左边即可,
-      # 例如 /path/to/music:/app/data/downloads。
+      # Download output directory; to put it elsewhere on the host, change the
+      # left side of the colon, for example /path/to/music:/app/data/downloads.
       - ./data/downloads:/app/data/downloads
-      # 临时目录 data/tmp 留在容器内,无需挂载。
-      # 启用开发者令牌签名时挂载 .p8 私钥(只读),并在 config.yaml 中把
-      # catalog.apple_music_private_key_path 指向 /app/keys/<文件名>.p8:
+      # The temp directory data/tmp stays inside the container and needs no
+      # mount.
+      # When developer-token signing is enabled, mount the .p8 private key
+      # (read-only) and point catalog.apple_music_private_key_path in
+      # config.yaml at /app/keys/<file name>.p8:
       # - ./keys:/app/keys:ro
 
-  # 如果 wrapper-manager 也做了容器化,取消注释并按实际镜像补全,
-  # 然后把上面的 AMDL_WRAPPER_ADDRESS 改成 "wrapper-manager:8080"。
+  # If wrapper-manager is containerized too, uncomment this and fill it in for
+  # the actual image, then change AMDL_WRAPPER_ADDRESS above to
+  # "wrapper-manager:8080".
   # wrapper-manager:
-  #   image: <wrapper-manager 镜像>
+  #   image: <wrapper-manager image>
   #   container_name: wrapper-manager
   #   restart: unless-stopped

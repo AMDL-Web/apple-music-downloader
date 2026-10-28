@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# ---- 构建阶段 ----------------------------------------------------------
-# 交叉编译在构建平台上进行(--platform=$BUILDPLATFORM),配合 buildx
-# 可以直接产出 linux/amd64 与 linux/arm64 镜像。
+# ---- Build stage -------------------------------------------------------
+# Cross-compilation runs on the build platform (--platform=$BUILDPLATFORM),
+# so buildx can produce linux/amd64 and linux/arm64 images directly.
 FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS build
 
 WORKDIR /src
@@ -14,38 +14,45 @@ COPY . .
 
 ARG TARGETOS
 ARG TARGETARCH
-# modernc.org/sqlite 是纯 Go 实现,CGO_ENABLED=0 产出静态二进制。
+# modernc.org/sqlite is pure Go, so CGO_ENABLED=0 produces a static binary.
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/amdl-api ./cmd/amdl-api
 
-# ---- 运行阶段 ----------------------------------------------------------
+# ---- Runtime stage -----------------------------------------------------
 FROM alpine:3.24
 
-# ffmpeg:重封装扁平化与可选完整性校验(tools.ffmpeg,默认命令名即可)。
-# ca-certificates:访问 Apple Music API 的 HTTPS 请求。
-# tzdata:日志与 hooks 时间戳的时区支持。
-# su-exec:入口脚本以 root 修正卷属主后降权到 PUID:PGID 运行后端。
+# ffmpeg: remux flattening and the optional integrity check (tools.ffmpeg; the
+#   default command name works as is).
+# ca-certificates: HTTPS requests to the Apple Music API.
+# tzdata: time zone support for log and hook timestamps.
+# su-exec: the entrypoint runs as root to fix volume ownership, then drops to
+#   PUID:PGID to run the backend.
 RUN apk add --no-cache ca-certificates ffmpeg tzdata su-exec \
     && addgroup -g 1000 amdl \
     && adduser -D -u 1000 -G amdl amdl
 
 WORKDIR /app
 
-# 示例配置内置到 /opt/amdl,入口脚本首次启动时播种到配置目录 /app/configs。
+# The example configs are baked into /opt/amdl; on first start the entrypoint
+# seeds them into the config directory /app/configs.
 COPY configs/config.example.yaml configs/hooks.yaml /opt/amdl/
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=build /out/amdl-api /app/amdl-api
 
-# 预建配置与数据目录并交给默认运行用户(uid 1000)。容器以 root 启动
-# 入口脚本,由脚本按 PUID/PGID(默认 1000:1000)修正挂载目录属主后降权
-# 运行后端;也可用 docker run --user 直接指定非 root 用户,此时跳过
-# 降权逻辑。
+# Pre-create the config and data directories and hand them to the default
+# runtime user (uid 1000). The container starts the entrypoint as root; the
+# script fixes the ownership of mounted directories according to PUID/PGID
+# (default 1000:1000) and then drops privileges to run the backend. A non-root
+# user can also be set directly with docker run --user, in which case the
+# privilege-drop logic is skipped.
 RUN mkdir -p /app/configs /app/data && chown -R amdl:amdl /app
 
 EXPOSE 18080
 
-# 端口跟随 AMDL_SERVER_LISTEN(环境变量覆盖 server.listen,每次启动生效,
-# 默认 :18080)。改监听端口请直接改该环境变量,健康检查从它推导端口。
+# The port follows AMDL_SERVER_LISTEN (the environment override of
+# server.listen, applied on every start, default :18080). To change the listen
+# port, change that environment variable; the health check derives its port
+# from it.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD p="${AMDL_SERVER_LISTEN:-:18080}"; wget -qO /dev/null "http://127.0.0.1:${p##*:}/api/v1/health" || exit 1
 

@@ -1,5 +1,6 @@
-# 构建上下文只需要 Go 源码和示例配置;其余一律排除,
-# 避免把运行数据、密钥或本地产物打进镜像。
+# The build context needs only the Go sources and the example configs;
+# everything else is excluded so runtime data, keys or local artifacts never
+# end up in the image.
 .git
 .github
 .claude
@@ -8,33 +9,33 @@
 .vscode
 .DS_Store
 
-# 参考仓库与本地运行数据。
-explore/
+# Local runtime data, tests and docs.
 data/
 test/
 docs/
 
-# 密钥永远不进镜像,需要时用卷挂载。
+# Keys never go into the image; mount them as a volume when needed.
 keys/
 *.p8
 
-# 本地构建产物与覆盖率文件。
+# Local build output and coverage files.
 /amdl-api
 *.out
 coverage.txt
 
-# 本地/运行时配置;镜像里只保留 config.example.yaml 和 hooks.yaml。
+# Local/runtime configs; the image keeps only config.example.yaml and
+# hooks.yaml.
 *.local.yaml
 configs/config.yaml
-# 旧版双文件运行时配置及其合并后留下的一次性备份。
+# The old two-file runtime config and the one-off backups left by merging it.
 configs/runtime.yaml
 configs/runtime.yaml.pre-merge.bak*
 configs/config.yaml.pre-split.bak
 
-# 发版脚本等与镜像无关的工具。
+# Release scripts and other tools unrelated to the image.
 tools/
 
-# Docker 自身的文件不需要进上下文。
+# Docker's own files do not need to be in the context.
 Dockerfile
 docker-compose.yml
 .dockerignore

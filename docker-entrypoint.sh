@@ -1,13 +1,15 @@
 #!/bin/sh
-# 容器入口:把镜像内置的示例配置同步到配置卷,然后以目标用户启动后端。
-# config.yaml 由后端首次启动时
-# 从同目录的 config.example.yaml 引导生成，并可能由 PUT /api/v1/config
-# 整体重写，入口脚本不改写它。
+# Container entrypoint: syncs the example configs baked into the image to the
+# config volume, then starts the backend as the target user. config.yaml is
+# bootstrapped by the backend on first start from config.example.yaml in the
+# same directory and may be rewritten in full by PUT /api/v1/config; this
+# script never rewrites it.
 #
-# 运行用户:镜像默认以 root 启动本脚本,播种并修正卷属主后通过 su-exec
-# 降权到 PUID:PGID(默认 1000:1000)运行后端。用 docker run --user(或
-# compose 的 user:)以非 root 启动时,PUID/PGID 被忽略,跳过属主修正,
-# 直接以该用户运行。
+# Runtime user: by default the image runs this script as root; after seeding
+# and fixing volume ownership it drops to PUID:PGID (default 1000:1000) with
+# su-exec to run the backend. When started as a non-root user with
+# docker run --user (or compose's user:), PUID/PGID are ignored, the ownership
+# fix is skipped, and the backend runs directly as that user.
 set -eu
 
 CONFIG_PATH="${AMDL_CONFIG:-/app/configs/config.yaml}"
@@ -17,37 +19,49 @@ DIST_DIR="/opt/amdl"
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 
-# 容器默认值:两个仓库默认值在容器里不可用,通过后端的
-# AMDL_<大写段名>_<大写键名> 环境变量覆盖机制在每次启动时改写:
-#   - server.listen   默认 127.0.0.1:18080,容器外无法访问,改为 :18080
-#   - wrapper.address 默认 127.0.0.1:8080,指向容器自身,改为宿主机
-# 环境变量优先于 config.yaml 且不写回文件。
+# Container defaults: two of the repository defaults do not work inside a
+# container, so they are replaced on every start through the backend's
+# AMDL_<SECTION>_<KEY> environment override mechanism (upper-case section and
+# key names):
+#   - server.listen   defaults to 127.0.0.1:18080, unreachable from outside
+#                     the container; changed to :18080
+#   - wrapper.address defaults to 127.0.0.1:8080, which points at the
+#                     container itself; changed to the host
+# Environment variables take precedence over config.yaml and are not written
+# back to the file.
 export AMDL_SERVER_LISTEN="${AMDL_SERVER_LISTEN:-:18080}"
 export AMDL_WRAPPER_ADDRESS="${AMDL_WRAPPER_ADDRESS:-host.docker.internal:8080}"
 
 mkdir -p "$CONFIG_DIR"
 
-# config.example.yaml 是随版本更新的字段文档，不是用户配置；每次启动都
-# 从镜像同步，确保从旧双文件版本升级后不会继续看到缺少运行时字段的旧示例。
+# config.example.yaml is field documentation that changes with each release,
+# not user configuration; it is synced from the image on every start so that
+# installs upgraded from the old two-file layout do not keep seeing an old
+# example that lacks the runtime fields.
 cp "$DIST_DIR/config.example.yaml" "$CONFIG_DIR/config.example.yaml"
 
-# hooks.yaml 缺失时后端只是禁用 hooks,播种一份注释完整的模板方便编辑。
+# Without hooks.yaml the backend merely disables hooks; seed a fully commented
+# template to make editing easy.
 if [ ! -f "$HOOKS_PATH" ]; then
     mkdir -p "$(dirname "$HOOKS_PATH")"
     cp "$DIST_DIR/hooks.yaml" "$HOOKS_PATH"
 fi
 
-# 以 root 启动时修正卷属主并降权;以 --user 指定的非 root 用户启动时
-# 直接运行(此时卷属主需自行保证可写)。
+# When started as root, fix volume ownership and drop privileges; when started
+# as a non-root user given by --user, run directly (the volumes must then be
+# made writable by that user beforehand).
 if [ "$(id -u)" = "0" ]; then
-    # 配置目录很小,每次启动整体修正,PUID/PGID 变更后立即生效。
+    # The config directory is small, so it is fixed in full on every start and
+    # a PUID/PGID change takes effect immediately.
     chown -R "$PUID:$PGID" "$CONFIG_DIR"
     if [ -f "$HOOKS_PATH" ]; then
         chown "$PUID:$PGID" "$HOOKS_PATH"
     fi
-    # 数据目录逐个挂载点检查:绑定挂载的宿主机目录首次由 Docker 创建时
-    # 属主是 root,而下载目录可能包含大量文件,所以只在顶层属主不匹配时
-    # 递归修正一次(对应首次挂载或 PUID/PGID 变更的情况)。
+    # Data directories are checked mount point by mount point: a bind-mounted
+    # host directory is owned by root when Docker first creates it, and the
+    # downloads directory may hold a large number of files, so ownership is
+    # fixed recursively only once, when the top level does not match (the
+    # first mount or a PUID/PGID change).
     for dir in /app/data /app/data/db /app/data/logs /app/data/downloads; do
         mkdir -p "$dir"
         if [ "$(stat -c '%u:%g' "$dir")" != "$PUID:$PGID" ]; then
