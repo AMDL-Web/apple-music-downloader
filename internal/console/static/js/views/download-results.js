@@ -1,14 +1,68 @@
 // New download: what the last submit did, per link (accepted jobs as live
 // job rows that open the drawer over this page, the rest with the reason
-// and, where a later try may work, Retry), and the bookmarklet card.
+// and, where a later try may work, Retry), the state behind it, and the
+// bookmarklet card.
 
-import { html, useMemo } from '../ui/preact.js';
+import { html, useMemo, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
+import { getDownload } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { submitSummary, bookmarklet } from '../lib/submit.js';
+import { submitSummary, bookmarklet, applyFeedToResults } from '../lib/submit.js';
 import { useApp, Card, Button, LinkButton, Icon } from '../ui/components.js';
 import { JobRow } from './queue.js';
 
 const bare = (url) => url.replace(/^https?:\/\//i, '');
+
+// The last results outlive the page for the life of the tab, so leaving
+// New download and coming back shows them again. Module state rather than
+// sessionStorage: nothing is serialized or written to disk. They never hold
+// the media-user-token; the page adds it to each request that needs it.
+const EMPTY = { rows: [], overrides: {} };
+let kept = EMPTY;
+
+/** Accepted jobs read again when the page has not seen their feed batches; the rest wait for the feed. */
+const REFRESH_MAX = 25;
+
+/**
+ * The page's results, {rows, overrides} (rows from lib/submit.js
+ * resultRows, overrides without the token), and a setter taking a value or
+ * an updater. Rows stay live through the feed; restored rows and those
+ * left after a feed resync (app.epoch) are read again with GET downloads/:id.
+ */
+export function useResults() {
+  const app = useApp();
+  const [results, setState] = useState(kept);
+  const setResults = useCallback((next) => setState((cur) => (kept = typeof next === 'function' ? next(cur) : next || EMPTY)), []);
+
+  useEffect(
+    () => app.subscribeFeed((batch) => setResults((r) => (r.rows.length ? { ...r, rows: applyFeedToResults(r.rows, batch) } : r))),
+    [],
+  );
+
+  const rowsRef = useRef(results.rows);
+  rowsRef.current = results.rows;
+  const firstEpoch = useRef(null);
+  useEffect(() => {
+    // On mount only rows restored from an earlier visit are stale.
+    const mount = firstEpoch.current === null;
+    if (mount) firstEpoch.current = app.epoch;
+    const ids = rowsRef.current.filter((r) => r.job && !r.deleted).map((r) => r.job.id).slice(0, REFRESH_MAX);
+    if (ids.length === 0 || (!mount && app.epoch === firstEpoch.current)) return undefined;
+    let off = false;
+    Promise.all(
+      ids.map((id) =>
+        getDownload(id).then(
+          (body) => ({ type: 'download_upserted', job: body.job }),
+          (err) => (err.status === 404 ? { type: 'download_deleted', job_id: id } : null),
+        ),
+      ),
+    ).then((msgs) => !off && setResults((r) => ({ ...r, rows: applyFeedToResults(r.rows, msgs) })));
+    return () => {
+      off = true;
+    };
+  }, [app.epoch]);
+
+  return [results, setResults];
+}
 
 /**
  * Props: rows (lib/submit.js resultRows, kept live by the page), params

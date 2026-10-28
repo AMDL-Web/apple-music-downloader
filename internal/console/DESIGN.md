@@ -336,7 +336,11 @@ and motion covers.
   batches through `applyFeedToResults`) that open the drawer over the page,
   the rest with their reason, View job for `duplicate_active`, Retry for
   `queue_full`, `decryptor_unavailable` and server errors. The text then
-  keeps only the links that were not handled. The bookmarklet card shows
+  keeps only the links that were not handled. The results stay until Clear
+  or the next submit, for the life of the tab (module state in
+  `views/download-results.js` `useResults`, without the token): coming back
+  to the page shows them, and their jobs (at most 25) are read again since
+  the page missed the feed meanwhile. The bookmarklet card shows
   `javascript:location.href='<this page>#/new?url='+encodeURIComponent(location.href)`
   as copyable text, never as a link.
 

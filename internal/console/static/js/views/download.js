@@ -7,7 +7,7 @@
 // is pure in lib/links.js, lib/lookup.js, lib/submit.js and lib/overrides.js.
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
-import { createDownload, getConfig, getDownload, getHooks, lookupLink } from '../api.js';
+import { createDownload, getConfig, getHooks, lookupLink } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, parseLink } from '../lib/links.js';
 import { createLookupQueue, PREVIEW_KINDS, PREVIEW_LIMIT } from '../lib/lookup.js';
@@ -18,7 +18,6 @@ import {
   pairResults,
   keptAfterSubmit,
   resultRows,
-  applyFeedToResults,
   submitSummary,
   classifySubmitError,
   needsMediaUserToken,
@@ -31,7 +30,7 @@ import { useDebounced } from '../ui/hooks.js';
 import { LinksCard } from './download-links.js';
 import { OptionsCard } from './download-options.js';
 import { QualitySheet } from './download-quality.js';
-import { ResultsCard, BookmarkletCard } from './download-results.js';
+import { ResultsCard, BookmarkletCard, useResults } from './download-results.js';
 
 // Previews outlive the page, so coming back does not look links up again.
 const LOOKUPS = new Map();
@@ -229,38 +228,13 @@ export function DownloadPage({ route }) {
   const lookupStatus = (url) => queue.current.status(url);
   const needsToken = needsMediaUserToken(entries.map((e) => e.url), lookupStatus);
 
-  // Submit and results (without the token).
+  // Submit and results (kept for the life of the tab, without the token).
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [refusal, setRefusal] = useState('');
-  const [results, setResults] = useState({ rows: [], overrides: {} });
+  const [results, setResults] = useResults();
   const [retrying, setRetrying] = useState(() => new Set());
   const [quality, setQuality] = useState(null);
-
-  useEffect(
-    () => app.subscribeFeed((batch) => setResults((r) => (r.rows.length ? { ...r, rows: applyFeedToResults(r.rows, batch) } : r))),
-    [],
-  );
-  // After the feed resyncs (an outage), the accepted jobs are read again.
-  const rowsRef = useRef(results.rows);
-  rowsRef.current = results.rows;
-  const firstEpoch = useRef(app.epoch);
-  useEffect(() => {
-    if (app.epoch === firstEpoch.current) return undefined;
-    let off = false;
-    const ids = rowsRef.current.filter((r) => r.job && !r.deleted).map((r) => r.job.id).slice(0, 25);
-    Promise.all(
-      ids.map((id) =>
-        getDownload(id).then(
-          (body) => ({ type: 'download_upserted', job: body.job }),
-          (err) => (err.status === 404 ? { type: 'download_deleted', job_id: id } : null),
-        ),
-      ),
-    ).then((msgs) => !off && setResults((r) => ({ ...r, rows: applyFeedToResults(r.rows, msgs) })));
-    return () => {
-      off = true;
-    };
-  }, [app.epoch]);
 
   /**
    * Sends `urls` in chunks the backend accepts, the typed token only with
