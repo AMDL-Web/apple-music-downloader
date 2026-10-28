@@ -2006,7 +2006,8 @@ components:
               description: >-
                 "{width}x{height}" in pixels, e.g. 5000x5000, 3000x3000, 1400x1400,
                 600x600; any other value is rejected with 422 invalid_config. If Apple
-                cannot serve that size, smaller standard sizes are tried in turn.
+                cannot serve that size, the standard sizes 5000x5000, 3000x3000,
+                1400x1400, 600x600 and 300x300 are tried in turn.
             cover_format:
               type: string
               enum: [jpg, jpeg, png]

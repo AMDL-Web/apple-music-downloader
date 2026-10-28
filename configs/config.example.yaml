@@ -307,8 +307,8 @@ download:
   # and deleted tasks remove them.
   temp_dir: "data/tmp"
   # string: cover artwork size as "{width}x{height}" in pixels, for example "5000x5000", "3000x3000",
-  # "1400x1400"; any other value is rejected. If Apple cannot serve that size, smaller standard sizes
-  # are tried in turn.
+  # "1400x1400"; any other value is rejected. If Apple cannot serve that size, the standard sizes
+  # 5000x5000, 3000x3000, 1400x1400, 600x600 and 300x300 are tried in turn.
   cover_size: "5000x5000"
   # enum: jpg, jpeg, png.
   cover_format: "jpg"
