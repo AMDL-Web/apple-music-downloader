@@ -142,11 +142,6 @@ func (s *Server) applyLoggingConfig() {
 	if s.logSystem == nil {
 		return
 	}
-	for {
-		level := s.currentConfig().Logging.Level
-		_ = s.logSystem.SetLevel(level)
-		if s.currentConfig().Logging.Level == level {
-			return
-		}
-	}
+	// The level was validated with the config, so SetLevel cannot fail here.
+	_ = s.logSystem.FollowLevel(func() string { return s.currentConfig().Logging.Level })
 }

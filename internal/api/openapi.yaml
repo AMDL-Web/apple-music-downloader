@@ -2648,8 +2648,9 @@ components:
           description: >-
             Resume cursor. For download_upserted it is the id of the milestone
             event that triggered this job snapshot; for download_deleted it is the
-            id of the deletion tombstone event (neither is the largest id pushed in
-            the same batch). After processing, clients use it as the next resume
+            id of the deletion tombstone event, or of the job's latest event when
+            the job no longer exists (neither is the largest id pushed in the same
+            batch). After processing, clients use it as the next resume
             point; it strictly increases from message to message. On reconnect,
             undelivered updates are only ever resent (upsert and delete are both
             idempotent), never skipped.

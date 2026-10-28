@@ -100,8 +100,14 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 				}
 				snap, err := s.jobSnapshot(ctx, jobID)
 				if errors.Is(err, sql.ErrNoRows) {
-					// Advance past a stale upsert so a deletion in a later page can
-					// be reached instead of replaying this row forever.
+					// The job is gone although its latest event here is not the
+					// tombstone: the tombstone is in a later page, or an event was
+					// filed after it (a motion artwork lookup racing the delete).
+					// Say so now; a later tombstone repeats it, and clients apply
+					// download_deleted idempotently.
+					if err := write(domain.DownloadFeedMessage{Type: "download_deleted", JobID: jobID, EventID: pending.eventID, StatusCounts: statusCounts}); err != nil {
+						return err
+					}
 					lastID = pending.eventID
 					continue
 				}

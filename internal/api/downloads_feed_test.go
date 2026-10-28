@@ -330,6 +330,51 @@ func TestDownloadsFeedReplaysMilestonesAcrossDatabasePages(t *testing.T) {
 	}
 }
 
+// An event filed after a job's tombstone (a motion artwork lookup racing the
+// delete) must not hide the delete from a client replaying past both.
+func TestDownloadsFeedDeletesAJobWhoseLatestEventFollowsItsTombstone(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	// The deadline ends the loop when no frame comes, so a regression fails
+	// instead of hanging.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	hub := events.NewHub()
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
+	job := domain.Job{ID: "raced", Input: "album|us|1", Type: "album", CanonicalKey: "album:1", Status: domain.JobCompleted}
+	if err := store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	finished, err := store.AddEvent(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobFinished})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Delete(ctx, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	orphan, err := store.AddEvent(ctx, domain.Event{JobID: job.ID, Type: domain.EventMotionArtworkResolved, Phase: "motion_artwork"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := &Server{store: store, hub: hub, manager: manager}
+	sink := &recordingSink{onSend: func(int) { cancel() }}
+	server.runDownloadsFeed(ctx, sink, finished.ID, make(chan struct{}), streamTicks{})
+	if len(sink.frames) != 1 {
+		t.Fatalf("frames = %d, want one download_deleted", len(sink.frames))
+	}
+	var msg domain.DownloadFeedMessage
+	if err := json.Unmarshal(sink.frames[0].data, &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg.Type != "download_deleted" || msg.JobID != job.ID || msg.EventID != orphan.ID {
+		t.Fatalf("message = %+v, want download_deleted for %s at event %d", msg, job.ID, orphan.ID)
+	}
+}
+
 // recordingSink is an sseSink that keeps every frame in memory.
 type recordingSink struct {
 	frames     []sseFrame

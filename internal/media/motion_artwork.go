@@ -66,11 +66,11 @@ func (d *Downloader) startMotionArtworkBackfill(ctx context.Context, jobID strin
 			return
 		}
 		if !applied {
-			// The job was deleted while this was in flight. Announcing a cover
-			// for a row that no longer exists would file the event behind the
-			// job_deleted tombstone, which the overview feed replays as the
-			// last word on that job — an orphan event after it would resurrect
-			// a deleted download in any client replaying from a cursor.
+			// The job was deleted while this was in flight, so there is nothing
+			// to announce. A delete that lands between the update above and the
+			// event below still files the event after the tombstone; the overview
+			// feed answers an event of a missing job with download_deleted
+			// (internal/api runDownloadsFeed), so no client resurrects the job.
 			log.Debug("motion artwork discarded, job is gone", "job_id", jobID, "album_id", albumID)
 			return
 		}

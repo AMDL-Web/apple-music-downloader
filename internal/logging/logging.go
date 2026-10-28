@@ -94,6 +94,22 @@ func (s *System) SetLevel(value string) error {
 	return nil
 }
 
+// FollowLevel applies the level current returns and repeats until current
+// still returns the level just applied. Two config writes can each apply their
+// level after the other committed; the loop lets the newest snapshot win, so
+// an older writer cannot leave its level in place.
+func (s *System) FollowLevel(current func() string) error {
+	for {
+		level := current()
+		if err := s.SetLevel(level); err != nil {
+			return err
+		}
+		if current() == level {
+			return nil
+		}
+	}
+}
+
 // Close closes the rotating log file, if any. It is nil-safe.
 func (s *System) Close() error {
 	if s == nil || s.closer == nil {

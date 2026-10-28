@@ -89,10 +89,12 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 			Workers: queue.Workers, Active: queue.Active, QueueDepth: queue.QueueDepth,
 			QueueCapacity: queue.QueueCapacity, RecoveryBacklog: queue.RecoveryBacklog,
 		},
+		// The pools treat a value <= 0 as 1 (limits.NewSemaphore), as the
+		// config example documents; report the size in effect.
 		Pools: systemPools{
-			Downloads:       cfg.Download.MaxParallelDownloads,
-			Decrypts:        cfg.Download.MaxParallelDecrypts,
-			WrapperRequests: cfg.Download.MaxParallelWrapperRequests,
+			Downloads:       max(1, cfg.Download.MaxParallelDownloads),
+			Decrypts:        max(1, cfg.Download.MaxParallelDecrypts),
+			WrapperRequests: max(1, cfg.Download.MaxParallelWrapperRequests),
 		},
 		Tools: tools,
 		Storage: []storageInfo{

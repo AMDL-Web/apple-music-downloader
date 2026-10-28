@@ -119,6 +119,32 @@ func TestSystemUpdatesLevel(t *testing.T) {
 	}
 }
 
+// A config write that commits while an older writer applies its level wins:
+// FollowLevel re-reads after applying and settles on the newest value.
+func TestFollowLevelSettlesOnTheNewestSnapshot(t *testing.T) {
+	system, err := New(testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := 0
+	current := func() string {
+		reads++
+		if reads == 1 {
+			return "debug" // the older writer's snapshot
+		}
+		return "warn" // a newer write committed after that read
+	}
+	if err := system.FollowLevel(current); err != nil {
+		t.Fatal(err)
+	}
+	if got := system.level.Level(); got != slog.LevelWarn {
+		t.Fatalf("level = %v, want warn from the newest snapshot", got)
+	}
+	if err := system.FollowLevel(func() string { return "trace" }); err == nil {
+		t.Fatal("an invalid level must fail")
+	}
+}
+
 func TestStoreEvictionAndFilteredSubscription(t *testing.T) {
 	store := NewStore(2)
 	store.append(Entry{Time: time.Now(), Level: "info", Message: "one", Attributes: map[string]any{"component": "api"}})

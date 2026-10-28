@@ -283,11 +283,13 @@ func reloadConfig(cfgStore *config.Store, logSystem *logging.System, logger *slo
 		logger.Error("config reload on SIGHUP failed; keeping the previous config", "error", err)
 		return
 	}
-	level := cfgStore.Get().Logging.Level
-	if err := logSystem.SetLevel(level); err != nil {
-		logger.Error("apply reloaded logging level", "level", level, "error", err)
+	// FollowLevel, as the HTTP config routes do, so a PUT /config racing this
+	// reload cannot be overwritten by the level read here.
+	current := func() string { return cfgStore.Get().Logging.Level }
+	if err := logSystem.FollowLevel(current); err != nil {
+		logger.Error("apply reloaded logging level", "level", current(), "error", err)
 	}
-	logger.Info("config reloaded on SIGHUP", "logging_level", level)
+	logger.Info("config reloaded on SIGHUP", "logging_level", current())
 }
 
 // closeLogged runs a deferred close and logs its error, which has no caller

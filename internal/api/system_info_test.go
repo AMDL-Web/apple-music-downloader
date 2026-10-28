@@ -140,6 +140,24 @@ func TestSystemInfoLegacySigning(t *testing.T) {
 	}
 }
 
+// A pool size <= 0 runs as 1 (limits.NewSemaphore), so /system reports 1.
+func TestSystemInfoReportsEffectivePoolSizes(t *testing.T) {
+	server := newTestServerWithManager(t)
+	cfg := config.Default()
+	cfg.Download.MaxParallelDownloads, cfg.Download.MaxParallelDecrypts, cfg.Download.MaxParallelWrapperRequests = 0, -3, 2
+	server.cfg = config.NewStore(cfg)
+	rec := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/system", "")
+	var body struct {
+		Pools map[string]int `json:"pools"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil {
+		t.Fatalf("status %d, body %s", rec.Code, rec.Body.String())
+	}
+	if want := map[string]int{"downloads": 1, "decrypts": 1, "wrapper_requests": 2}; !equalCounts(body.Pools, want) {
+		t.Fatalf("pools = %v, want %v", body.Pools, want)
+	}
+}
+
 func equalCounts(got, want map[string]int) bool {
 	if len(got) != len(want) {
 		return false
