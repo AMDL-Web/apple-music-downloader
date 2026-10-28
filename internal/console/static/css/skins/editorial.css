@@ -2,84 +2,112 @@
  * Skin "editorial": Swiss editorial, a record label's catalogue page. Paper
  * white and ink black, a strict 12-column grid, heavy grotesk display type,
  * numbered sections with a left label column, hairline rules instead of boxes,
- * no shadows, no radius, one red used only for what needs attention.
+ * no shadows, no radius, and one red (--signal) used only for what needs
+ * attention: the simulate band, failures, unreachable services, error logs.
  * Everything here is scoped under :root[data-skin="editorial"]; colors are
  * light-dark(<light>, <dark>). Spec: internal/console/skins/editorial.md.
- * First-pass values from the design mockup; the skin designer refines them.
  */
 
-/* ---- Tokens -------------------------------------------------------- */
+/* ==== Tokens ======================================================== */
 
 :root[data-skin="editorial"] {
-  /* Paper and ink. Contrast on paper: ink-2 9.2 / 10.3, ink-3 5.6 / 6.6. */
+  /* Paper and ink. Contrast on paper (light / dark) in editorial.md. */
   --bg-canvas: light-dark(#fbfbf8, #0c0c0b);
   --bg-surface: light-dark(#fbfbf8, #0c0c0b);
-  --bg-raised: light-dark(#fbfbf8, #161615);
+  --bg-raised: light-dark(#fbfbf8, #121211);
   --bg-hover: light-dark(#f0f0eb, #1a1a18);
-  --bg-selected: light-dark(#e6e6e0, #242422);
+  --bg-selected: light-dark(#e6e6e0, #262624);
   --bg-chrome: light-dark(#fbfbf8, #0c0c0b);
   --border-subtle: light-dark(#d6d6d0, #2c2c2a);
   --border-control: light-dark(#8e8e89, #6f6e6a);
   --border-strong: light-dark(#0b0b0b, #f2f1ec);
   --text-primary: light-dark(#0b0b0b, #f2f1ec);
   --text-secondary: light-dark(#464644, #bdbcb6);
-  --text-tertiary: light-dark(#686865, #94938e);
-  --text-disabled: light-dark(#686865, #94938e);
+  --text-tertiary: light-dark(#636360, #94938e);
+  --text-disabled: light-dark(#636360, #94938e);
+
+  /* Ink is the only "accent" a control gets; red is the signal. */
   --ink: light-dark(#0b0b0b, #f2f1ec);
   --on-ink: light-dark(#fbfbf8, #0c0c0b);
-  --accent: light-dark(#d6001c, #ff3b30);
-  --accent-text: light-dark(#d6001c, #ff3b30);
-  --on-accent: light-dark(#ffffff, #0c0c0b);
-  --focus: light-dark(#d6001c, #ff3b30);
-  --brand: light-dark(#0b0b0b, #f2f1ec);
-  --on-brand: light-dark(#fbfbf8, #0c0c0b);
-  --track: light-dark(#e6e6e0, #2c2c2a);
-  --scrim: light-dark(rgba(11, 11, 11, 0.4), rgba(0, 0, 0, 0.7));
+  --accent: var(--ink);
+  --on-accent: var(--on-ink);
+  --accent-text: var(--text-primary);
+  --focus: var(--ink);
+  --brand: var(--ink);
+  --on-brand: var(--on-ink);
+  --signal: light-dark(#d6001c, #ff3b30);
+  --signal-text: light-dark(#d6001c, #ff3b30);
+  --on-signal: light-dark(#ffffff, #0c0c0b);
 
-  /* Status: ink glyph plus word; red only for what needs attention. */
+  /* Status: a glyph plus a word; running, completed and healthy share ink. */
   --info: var(--ink);
   --info-tint: transparent;
   --info-text: var(--text-primary);
   --success: var(--ink);
   --success-tint: transparent;
   --success-text: var(--text-primary);
-  --danger: var(--accent);
+  --danger: var(--signal);
   --danger-tint: transparent;
-  --danger-text: var(--accent-text);
-  --warning: var(--accent);
+  --danger-text: var(--signal-text);
+  --warning: var(--signal);
   --warning-tint: transparent;
-  --warning-text: var(--accent-text);
-  --neutral: light-dark(#686865, #94938e);
+  --warning-text: var(--signal-text);
+  --neutral: light-dark(#636360, #94938e);
   --neutral-tint: transparent;
   --neutral-text: var(--text-secondary);
-  --skipped: light-dark(#6b6b67, #9a9994);
+  --skipped: light-dark(#636360, #94938e);
   --skipped-tint: transparent;
   --skipped-text: var(--text-secondary);
+
+  /* Data */
+  --track: light-dark(#e6e6e0, #2c2c2a);
   --chart-bar: var(--ink);
   --chart-grid: var(--border-subtle);
+  --scrim: light-dark(rgba(11, 11, 11, 0.4), rgba(0, 0, 0, 0.72));
 
-  /* Type: heavy grotesk display, tabular numerals */
-  --font-sans: "Helvetica Neue", Helvetica, "SF Pro Display", -apple-system, "PingFang SC", Arial, var(--font-system);
+  /* Type: system grotesk, heavy display, tabular numerals */
+  --font-sans: "Helvetica Neue", Helvetica, "SF Pro Text", -apple-system, "PingFang SC", Arial, var(--font-system);
   --font-display: "Helvetica Neue", Helvetica, "SF Pro Display", -apple-system, "PingFang SC", Arial, var(--font-system);
   --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, var(--font-system-mono);
   --fs-body: var(--fs-15);
   --lh-body: var(--lh-15);
   --tracking-body: 0;
   --fs-page-title: clamp(64px, 9.4vw, 148px);
-  --lh-page-title: 0.84;
+  --lh-page-title: 0.86;
   --fs-card-title: 19px;
   --lh-card-title: 22px;
-  --fs-kpi: clamp(64px, 7.5vw, 124px);
-  --lh-kpi: 0.9;
-  --fs-hero-title: clamp(56px, 9vw, 176px);
-  --lh-hero-title: 0.86;
-  --fs-kicker: 11px;
+  --fs-kpi: clamp(64px, 6.8vw, 112px);
+  --lh-kpi: 0.86;
+  --fs-hero-title: clamp(52px, 8vw, 144px);
+  --lh-hero-title: 0.98;
   --w-display: var(--w-heavy);
   --w-title: var(--w-bold);
   --tracking-display: -0.055em;
   --tracking-title: -0.015em;
 
-  /* Shape: no radius anywhere */
+  /* Display roles particular to this skin */
+  --fs-brand: 26px;
+  --lh-brand: 28px;
+  --fs-kicker: 11px;
+  --lh-kicker: 16px;
+  --fs-figure: clamp(40px, 3.9vw, 56px);
+  --lh-figure: 0.92;
+  --fs-row-title: 28px;
+  --lh-row-title: 32px;
+  --fs-list-title: 20px;
+  --lh-list-title: 26px;
+  --fs-status-lg: 26px;
+  --lh-status-lg: 32px;
+  --fs-tile-title: 19px;
+  --lh-tile-title: 22px;
+  --fs-hero-artist: clamp(22px, 2.6vw, 36px);
+  --lh-hero-artist: 1.15;
+  --fs-tab-lg: 30px;
+  --lh-tab-lg: 36px;
+  --fs-drawer-title: 32px;
+  --lh-drawer-title: 34px;
+
+  /* Shape: no radius anywhere (the live dot is the one exception) */
   --r-badge: 0;
   --r-bar: 0;
   --r-control: 0;
@@ -104,44 +132,120 @@
   --row-divider: 1px solid var(--border-subtle);
   --chrome-border: 0 solid transparent;
 
-  /* Layout */
+  /* Layout: page gutter, 12-column gap */
+  --gutter: var(--s-12);
   --page-gap: var(--s-12);
   --grid-gap: var(--s-6);
 
   /* No shadows; floating layers get a rule instead */
   --shadow-art: none;
-  --shadow-float: 0 0 0 1px var(--border-strong);
+  --shadow-float: none;
 }
 
-@media (max-width: 900px) {
+/* Whole-pixel line heights for the display roles, so the 1 px rules below
+   them land on a pixel row instead of blurring across two. */
+@supports (line-height: round(1.5px, 1px)) {
   :root[data-skin="editorial"] {
-    --grid-gap: var(--s-3);
-    --page-gap: var(--s-8);
+    --lh-page-title: round(calc(var(--fs-page-title) * 0.86), 1px);
+    --lh-kpi: round(calc(var(--fs-kpi) * 0.86), 1px);
+    --lh-hero-title: round(calc(var(--fs-hero-title) * 0.98), 1px);
+    --lh-figure: round(calc(var(--fs-figure) * 0.92), 1px);
+    --lh-hero-artist: round(calc(var(--fs-hero-artist) * 1.15), 1px);
   }
 }
 
-/* ---- Masthead ------------------------------------------------------ */
+@media (max-width: 1023px) {
+  :root[data-skin="editorial"] {
+    --gutter: var(--s-6);
+    --page-gap: var(--s-10);
+  }
+}
 
-/* At >= 640 px the sidebar becomes a horizontal masthead over the page. */
+@media (max-width: 899px) {
+  :root[data-skin="editorial"] {
+    --grid-gap: var(--s-3);
+    --fs-row-title: 22px;
+    --lh-row-title: 26px;
+    --fs-tab-lg: 22px;
+    --lh-tab-lg: 28px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] {
+    --gutter: var(--s-4);
+    --page-gap: var(--s-8);
+    --fs-kpi: 72px;
+    --fs-list-title: 17px;
+    --lh-list-title: 22px;
+    --fs-status-lg: 22px;
+    --lh-status-lg: 28px;
+    --fs-tile-title: 16px;
+    --lh-tile-title: 20px;
+    --fs-drawer-title: 26px;
+    --lh-drawer-title: 30px;
+  }
+}
+
+/* ==== Base ========================================================== */
+
+:root[data-skin="editorial"] body {
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-skin="editorial"] .link {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+:root[data-skin="editorial"] kbd {
+  border-color: var(--border-control);
+}
+
+:root[data-skin="editorial"] .muted {
+  color: var(--text-secondary);
+}
+
+/* ==== Masthead (>= 640 px) ========================================== */
+/*
+ * The sidebar becomes a masthead across the top: wordmark, numbered section
+ * nav and a 3 px ink rule. The top bar's controls are laid over its right end
+ * (same grid cell), so the masthead is one band. Below 1440 px the nav wraps
+ * under the wordmark.
+ */
+
 @media (min-width: 640px) {
   :root[data-skin="editorial"] .shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1fr;
   }
 
+  :root[data-skin="editorial"] .main-col {
+    display: contents;
+  }
+
   :root[data-skin="editorial"] .sidebar {
+    grid-row: 1;
+    grid-column: 1;
     position: static;
     height: auto;
     flex-direction: row;
-    align-items: baseline;
-    gap: var(--s-8);
-    padding: var(--s-5) var(--s-12) 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 var(--s-6);
+    padding: var(--s-3) var(--gutter) 0;
+    border-right: 0;
     border-bottom: 3px solid var(--border-strong);
   }
 
   :root[data-skin="editorial"] .brand {
-    height: auto;
-    padding: 0 0 var(--s-3);
+    flex: 0 0 100%;
+    align-items: baseline;
+    gap: var(--s-3);
+    height: var(--topbar-h);
+    padding: 0;
+    align-self: flex-start;
+    align-items: center;
   }
 
   :root[data-skin="editorial"] .brand-mark {
@@ -157,11 +261,25 @@
     clip: auto;
   }
 
+  :root[data-skin="editorial"] .brand-text {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--s-3);
+  }
+
   :root[data-skin="editorial"] .brand-name {
-    font-size: var(--fs-24);
-    line-height: var(--lh-24);
+    font-size: var(--fs-brand);
+    line-height: var(--lh-brand);
     font-weight: var(--w-heavy);
-    letter-spacing: -0.03em;
+    letter-spacing: -0.035em;
+  }
+
+  :root[data-skin="editorial"] .brand-sub {
+    display: block;
+    max-width: 9em;
+    color: var(--text-tertiary);
+    font-size: var(--fs-12);
+    line-height: 1.2;
   }
 
   :root[data-skin="editorial"] .nav {
@@ -176,31 +294,40 @@
 
   :root[data-skin="editorial"] .nav-item {
     width: auto;
-    height: auto;
-    padding: 0 0 var(--s-3);
+    height: 44px;
+    padding: 0;
+    gap: var(--s-1_5);
+    align-items: center;
     border-radius: 0;
     background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--fs-15);
+    line-height: var(--lh-15);
+    font-weight: var(--w-medium);
   }
 
-  :root[data-skin="editorial"] .nav-item .icon {
+  :root[data-skin="editorial"] .sidebar .nav-item .icon-nav {
     display: none;
   }
 
   :root[data-skin="editorial"] .nav .nav-label::before {
-    content: counter(nav, decimal-leading-zero) " ";
+    content: counter(nav, decimal-leading-zero);
+    margin-right: var(--s-1_5);
     color: var(--text-tertiary);
     font-family: var(--font-mono);
     font-size: var(--fs-11);
     font-weight: var(--w-regular);
+    vertical-align: 1px;
   }
 
   :root[data-skin="editorial"] .nav-item:hover {
     background: transparent;
-    text-decoration: underline;
+    color: var(--text-primary);
   }
 
   :root[data-skin="editorial"] .nav-item[aria-current="page"] {
     background: transparent;
+    color: var(--text-primary);
     font-weight: var(--w-bold);
     box-shadow: inset 0 -4px 0 var(--border-strong);
   }
@@ -209,56 +336,250 @@
     position: static;
     padding: 0;
     background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--fs-11);
+    line-height: var(--lh-11);
+    font-weight: var(--w-regular);
+    vertical-align: super;
   }
 
   :root[data-skin="editorial"] .sidebar-foot {
+    flex-direction: row;
     margin: 0 0 0 auto;
   }
 
-  :root[data-skin="editorial"] .main,
+  :root[data-skin="editorial"] .sidebar-foot .nav-item {
+    font-size: var(--fs-13);
+  }
+
+  :root[data-skin="editorial"] .sidebar-foot .icon-sm {
+    display: inline-block;
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+  }
+
+  /* The top bar's controls sit on the wordmark's line, at the right. */
   :root[data-skin="editorial"] .topbar {
-    padding-left: var(--s-12);
-    padding-right: var(--s-12);
+    grid-row: 1;
+    grid-column: 1;
+    justify-self: end;
+    align-self: start;
+    position: relative;
+    z-index: 1;
+    margin-top: var(--s-3);
+    padding: 0 var(--gutter);
+    background: transparent;
+    border-bottom: 0;
+  }
+
+  :root[data-skin="editorial"] .main {
+    grid-row: 2;
+    grid-column: 1;
   }
 }
 
+@media (min-width: 1440px) {
+  /* Wide: wordmark, nav and controls on one line. */
+  :root[data-skin="editorial"] .sidebar {
+    flex-wrap: nowrap;
+    gap: var(--s-8);
+  }
+
+  :root[data-skin="editorial"] .brand {
+    flex: none;
+    height: auto;
+    align-self: center;
+  }
+
+  :root[data-skin="editorial"] .nav-item {
+    height: var(--topbar-h);
+  }
+
+  :root[data-skin="editorial"] .sidebar-foot {
+    margin-left: 0;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  :root[data-skin="editorial"] .brand-sub {
+    display: none;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 899px) {
+  :root[data-skin="editorial"] .nav {
+    flex: 1;
+    justify-content: space-between;
+    gap: var(--s-3);
+  }
+
+  :root[data-skin="editorial"] .nav .nav-label::before {
+    content: none;
+  }
+}
+
+/* Top-bar controls: text, not boxes. */
 :root[data-skin="editorial"] .topbar {
   position: static;
 }
 
-:root[data-skin="editorial"] .seg,
+:root[data-skin="editorial"] .topbar-right {
+  gap: var(--s-4);
+}
+
+:root[data-skin="editorial"] .conn {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="editorial"] .conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-skin="editorial"] .conn[data-role="success"] .conn-dot {
+    animation: editorial-live 2s ease-in-out infinite;
+  }
+}
+
+@keyframes editorial-live {
+  50% {
+    opacity: 0.25;
+  }
+}
+
 :root[data-skin="editorial"] .search-trigger {
-  border-color: var(--border-control);
+  width: 176px;
+  padding: 0 0 0 var(--s-0_5);
+  border: 0;
+  border-bottom: 1px solid var(--border-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
 }
 
-:root[data-skin="editorial"] .seg-btn[aria-pressed="true"],
-:root[data-skin="editorial"] .seg-btn[aria-pressed="true"] .seg-count {
-  background: var(--ink);
-  color: var(--on-ink);
+:root[data-skin="editorial"] .search-trigger:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
-/* The simulate band: the one full band of red. */
-:root[data-skin="editorial"] .banners {
-  order: -1;
+:root[data-skin="editorial"] .topbar .seg {
+  gap: var(--s-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
-:root[data-skin="editorial"] .notice[data-role="warning"],
-:root[data-skin="editorial"] .notice[data-role="danger"] {
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: var(--w-medium);
+:root[data-skin="editorial"] .topbar .seg-btn {
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
 }
 
-:root[data-skin="editorial"] .notice[data-role="warning"] > .icon,
-:root[data-skin="editorial"] .notice[data-role="danger"] > .icon {
-  color: var(--on-accent);
+:root[data-skin="editorial"] .topbar .seg-btn[aria-pressed="true"] {
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: var(--w-bold);
+  box-shadow: inset 0 -2px 0 var(--border-strong);
 }
 
-/* ---- Sections ------------------------------------------------------ */
+:root[data-skin="editorial"] .topbar .seg-icons .seg-btn {
+  width: 24px;
+}
 
+:root[data-skin="editorial"] .topbar .skin + .theme {
+  padding-left: var(--s-4);
+  border-left: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 1023px) {
+  :root[data-skin="editorial"] .search-trigger {
+    width: var(--control-h);
+    padding: 0;
+    justify-content: center;
+    border-bottom-color: transparent;
+  }
+}
+
+/* ==== Mobile masthead and tab bar (< 640 px) ======================== */
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .topbar {
+    position: static;
+    justify-content: space-between;
+    height: 56px;
+    padding: 0 var(--s-2) 0 var(--gutter);
+    border-bottom: 3px solid var(--border-strong);
+  }
+
+  /* The wordmark; decorative here (alt text empty), the h1 names the page. */
+  :root[data-skin="editorial"] .topbar::before {
+    content: "AMDL" / "";
+    font-family: var(--font-display);
+    font-size: var(--fs-24);
+    line-height: var(--lh-24);
+    font-weight: var(--w-heavy);
+    letter-spacing: -0.035em;
+  }
+
+  :root[data-skin="editorial"] .topbar-right {
+    gap: 0;
+  }
+
+  :root[data-skin="editorial"] .search-trigger {
+    width: var(--touch);
+    height: var(--touch);
+    border: 0;
+  }
+
+  :root[data-skin="editorial"] .topbar .skin + .theme {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  :root[data-skin="editorial"] .tabbar {
+    border-top: 1px solid var(--border-strong);
+    background: var(--bg-chrome);
+  }
+
+  :root[data-skin="editorial"] .tab {
+    color: var(--text-secondary);
+  }
+
+  :root[data-skin="editorial"] .tab[aria-current="page"] {
+    color: var(--text-primary);
+    font-weight: var(--w-bold);
+  }
+
+  :root[data-skin="editorial"] .tab[aria-current="page"]::before {
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 4px;
+    border-radius: 0;
+    background: var(--border-strong);
+  }
+}
+
+/* ==== Page frame ==================================================== */
+
+:root[data-skin="editorial"] .main {
+  padding: var(--s-10) var(--gutter) var(--s-16);
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .main {
+    padding: var(--s-6) var(--gutter) calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-10));
+  }
+}
+
+/* The page title is set huge; its summary sits in a right-hand column. */
 :root[data-skin="editorial"] .page-head {
   align-items: flex-end;
   justify-content: space-between;
+  gap: var(--s-4) var(--s-8);
 }
 
 :root[data-skin="editorial"] .page-title {
@@ -266,9 +587,69 @@
 }
 
 :root[data-skin="editorial"] .page-sub {
-  padding-left: var(--s-4);
+  max-width: 34ch;
+  padding: var(--s-1) 0 var(--s-1) var(--s-4);
   border-left: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
 }
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .page-sub {
+    flex-basis: 100%;
+    max-width: none;
+    padding: var(--s-2) 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+
+/* Banners: full-bleed bands under the masthead. Red for what needs you. */
+:root[data-skin="editorial"] .banners {
+  order: -1;
+  gap: 0;
+  margin: calc(-1 * var(--s-10)) calc(-1 * var(--gutter)) 0;
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .banners {
+    margin-top: calc(-1 * var(--s-6));
+  }
+}
+
+:root[data-skin="editorial"] .banners .notice {
+  align-items: center;
+  padding: var(--s-2) var(--gutter);
+  border: 0;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="editorial"] .banners .notice[data-role="warning"],
+:root[data-skin="editorial"] .banners .notice[data-role="danger"] {
+  background: var(--signal);
+  color: var(--on-signal);
+}
+
+:root[data-skin="editorial"] .banners .notice > .icon {
+  margin-top: 0;
+  color: currentColor;
+}
+
+:root[data-skin="editorial"] .banners .notice .btn {
+  border-color: currentColor;
+  background: transparent;
+  color: currentColor;
+}
+
+/* In-page notices: a rule in the role's color, no fill. */
+:root[data-skin="editorial"] .notice {
+  padding: var(--s-2) var(--s-3);
+  border-left: 3px solid var(--role, var(--border-control));
+  background: transparent;
+}
+
+/* ==== Sections ====================================================== */
 
 /* Every section: a 1 px ink rule, a numbered label column, a 10-column body. */
 :root[data-skin="editorial"] .main .card {
@@ -280,12 +661,6 @@
   counter-reset: section;
 }
 
-:root[data-skin="editorial"] .card-head {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-1);
-}
-
 :root[data-skin="editorial"] .page-overview > .card,
 :root[data-skin="editorial"] .page-system .card {
   counter-increment: section;
@@ -295,42 +670,74 @@
 :root[data-skin="editorial"] .page-system .card .card-title::before {
   content: counter(section, decimal-leading-zero);
   display: block;
-  margin-bottom: var(--s-1);
+  margin-bottom: var(--s-1_5);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: var(--fs-11);
+  line-height: var(--lh-11);
   font-weight: var(--w-regular);
   letter-spacing: 0;
 }
 
 :root[data-skin="editorial"] .card-note {
   color: var(--text-tertiary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
-:root[data-skin="editorial"] .card-actions {
-  margin: var(--s-2) 0 0;
-}
-
-:root[data-skin="editorial"] .card-actions .btn {
-  padding: 0;
+:root[data-skin="editorial"] .card-actions a.btn {
   height: auto;
+  padding: 0;
+  background: transparent;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   font-weight: var(--w-semibold);
 }
 
-@media (min-width: 901px) {
-  :root[data-skin="editorial"] .page-overview > .card {
+:root[data-skin="editorial"] .card-actions a.btn::after {
+  content: "\2192";
+}
+
+:root[data-skin="editorial"] .card-actions a.btn:hover {
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* System: every card is a full numbered row, like the overview. */
+:root[data-skin="editorial"] .page-system .grid-2 {
+  row-gap: var(--page-gap);
+}
+
+:root[data-skin="editorial"] .page-system .grid-2 > * {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 900px) {
+  :root[data-skin="editorial"] .page-overview > .card,
+  :root[data-skin="editorial"] .page-system .card {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
     column-gap: var(--grid-gap);
+    align-items: start;
   }
 
-  :root[data-skin="editorial"] .page-overview > .card > .card-head {
+  :root[data-skin="editorial"] .page-overview > .card > .card-head,
+  :root[data-skin="editorial"] .page-system .card > .card-head {
     grid-column: 1 / span 2;
-    align-self: start;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-1);
   }
 
-  :root[data-skin="editorial"] .page-overview > .card > .card-body {
+  :root[data-skin="editorial"] .page-overview > .card > .card-body,
+  :root[data-skin="editorial"] .page-system .card > .card-body {
     grid-column: 3 / -1;
+  }
+
+  :root[data-skin="editorial"] .page-overview > .card .card-actions,
+  :root[data-skin="editorial"] .page-system .card .card-actions {
+    margin: var(--s-3) 0 0;
   }
 
   /* The overview is one section per row. */
@@ -339,83 +746,314 @@
   }
 }
 
-/* ---- Status: glyph plus word, no pills ------------------------------ */
+@media (max-width: 899px) {
+  :root[data-skin="editorial"] .card-head {
+    align-items: baseline;
+    gap: var(--s-1) var(--s-3);
+  }
+
+  :root[data-skin="editorial"] .page-overview > .card .card-title::before,
+  :root[data-skin="editorial"] .page-system .card .card-title::before {
+    display: inline;
+    margin: 0 var(--s-2) 0 0;
+    vertical-align: 2px;
+  }
+}
+
+/* ==== Status: glyph plus word, no pills ============================ */
 
 :root[data-skin="editorial"] .badge {
+  height: auto;
   padding: 0;
   background: transparent;
+  color: var(--text-primary);
   font-weight: var(--w-semibold);
 }
 
 :root[data-skin="editorial"] .badge[data-role="danger"],
-:root[data-skin="editorial"] .badge[data-role="warning"] {
-  color: var(--accent-text);
+:root[data-skin="editorial"] .badge[data-role="warning"],
+:root[data-skin="editorial"] .status-text[data-role="danger"],
+:root[data-skin="editorial"] .status-text[data-role="warning"] {
+  color: var(--signal-text);
+}
+
+:root[data-skin="editorial"] .badge[data-role="neutral"],
+:root[data-skin="editorial"] .badge[data-role="skipped"] {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="editorial"] .pulse,
+:root[data-skin="editorial"] .pulse-static {
+  width: 7px;
+  height: 7px;
 }
 
 :root[data-skin="editorial"] .chip,
 :root[data-skin="editorial"] .attr-chip {
   border-color: var(--border-control);
+  background: transparent;
 }
 
-/* ---- Overview ------------------------------------------------------ */
+:root[data-skin="editorial"] .tag-library {
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+:root[data-skin="editorial"] .confirm {
+  border: 1px solid var(--signal);
+  background: transparent;
+}
+
+/* ==== Controls ====================================================== */
+
+:root[data-skin="editorial"] .btn {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="editorial"] .btn-secondary {
+  border-color: var(--border-strong);
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .btn-secondary:hover:not(:disabled),
+:root[data-skin="editorial"] .btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+:root[data-skin="editorial"] .btn-danger {
+  border-color: var(--signal);
+  background: transparent;
+  color: var(--signal-text);
+}
+
+/* Toggle buttons (Pause, Wrap, Reveal) share one look: a control outline at
+   rest; pressed, an ink outline with a 3 px ink bar along the bottom. */
+:root[data-skin="editorial"] .btn[aria-pressed] {
+  border-color: var(--border-control);
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .btn[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: transparent;
+  color: var(--text-primary);
+  box-shadow: inset 0 -3px 0 var(--ink);
+}
+
+/* Fields are a rule to write on, not a box. */
+:root[data-skin="editorial"] .search,
+:root[data-skin="editorial"] .select {
+  border-width: 0 0 1px;
+  border-color: var(--border-control);
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .search {
+  padding-left: 0;
+}
+
+:root[data-skin="editorial"] .select {
+  padding-left: 0;
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="editorial"] .search:hover,
+:root[data-skin="editorial"] .select:hover {
+  border-color: var(--border-strong);
+}
+
+/* Focus on a field thickens its own rule to 2 px ink instead of drawing a
+   box around it (a box would double the rule along the bottom). */
+:root[data-skin="editorial"] .search:focus-within,
+:root[data-skin="editorial"] .select:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+  box-shadow: inset 0 -2px 0 var(--focus);
+}
+
+:root[data-skin="editorial"] .search:focus-within {
+  color: var(--text-primary);
+}
+
+:root[data-skin="editorial"] .select option {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+}
+
+/* Page toolbars: segmented filters read as tabs on a rule. */
+:root[data-skin="editorial"] .page .seg {
+  gap: var(--s-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .page .seg-btn {
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="editorial"] .page .seg-btn:hover {
+  color: var(--text-primary);
+}
+
+:root[data-skin="editorial"] .page .seg-btn[aria-pressed="true"],
+:root[data-skin="editorial"] .page .seg-btn[aria-pressed="true"] .seg-count {
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: var(--w-bold);
+}
+
+:root[data-skin="editorial"] .page .seg-btn[aria-pressed="true"] {
+  box-shadow: inset 0 -4px 0 var(--border-strong);
+}
+
+:root[data-skin="editorial"] .page .seg-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-weight: var(--w-regular);
+  align-self: flex-start;
+  margin-top: var(--s-2);
+}
+
+:root[data-skin="editorial"] .page-queue,
+:root[data-skin="editorial"] .page-logs {
+  gap: var(--s-5);
+}
+
+:root[data-skin="editorial"] .page-queue > .toolbar,
+:root[data-skin="editorial"] .page-logs > .toolbar {
+  align-items: flex-end;
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .page .seg {
+    gap: var(--s-4);
+    overflow-x: auto;
+  }
+
+  :root[data-skin="editorial"] .page .seg-btn {
+    flex: none;
+    min-height: var(--touch);
+  }
+}
+
+/* ==== Overview: KPIs ================================================ */
 
 :root[data-skin="editorial"] .kpis {
-  gap: var(--grid-gap);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s-8) var(--grid-gap);
 }
 
 :root[data-skin="editorial"] .kpi {
-  padding: 0;
+  grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto auto auto;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
 }
 
 :root[data-skin="editorial"] .kpi:hover {
   background: transparent;
 }
 
-:root[data-skin="editorial"] .kpi-label {
-  padding-bottom: var(--s-2);
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  font-weight: var(--w-semibold);
+:root[data-skin="editorial"] .kpi:hover .kpi-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 :root[data-skin="editorial"] .kpi-icon {
-  display: none;
+  position: static;
+  grid-row: 1;
+  grid-column: 1;
+  align-items: center;
+  padding: 0 var(--s-1_5) var(--s-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-:root[data-skin="editorial"] .kpi[data-key="failed"]:not([data-zero]) .kpi-value {
-  color: var(--accent-text);
+:root[data-skin="editorial"] .kpi-icon .icon {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
 }
 
-:root[data-skin="editorial"] .job-row {
-  grid-template-columns: 80px minmax(0, 1fr) minmax(200px, 30%) 148px;
-  min-height: 112px;
-}
-
-:root[data-skin="editorial"] .job-row > .art-40 {
-  width: 80px;
-  height: 80px;
-}
-
-:root[data-skin="editorial"] .job-type,
-:root[data-skin="editorial"] .job-updated,
-:root[data-skin="editorial"] .job-chevron {
-  display: none;
-}
-
-:root[data-skin="editorial"] .job-facts {
-  display: flex;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+:root[data-skin="editorial"] .kpi-label {
+  grid-row: 1;
+  grid-column: 2;
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   font-weight: var(--w-semibold);
 }
 
-:root[data-skin="editorial"] .job-title {
-  font-family: var(--font-display);
-  font-size: var(--fs-24);
-  line-height: var(--lh-24);
-  font-weight: var(--w-bold);
-  letter-spacing: -0.02em;
+:root[data-skin="editorial"] .kpi-value {
+  grid-column: 1 / -1;
+  margin: var(--s-4) 0 var(--s-3) -0.04em;
+  letter-spacing: -0.06em;
+}
+
+:root[data-skin="editorial"] .kpi-meta {
+  grid-column: 1 / -1;
+  color: var(--text-tertiary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="editorial"] .kpi[data-key="failed"]:not([data-zero]) .kpi-value,
+:root[data-skin="editorial"] .kpi[data-key="failed"]:not([data-zero]) .kpi-label {
+  color: var(--signal-text);
+}
+
+:root[data-skin="editorial"] .kpi .skel-kpi {
+  grid-column: 1 / -1;
+  width: 50%;
+  height: 72px;
+  margin: var(--s-4) 0 var(--s-3);
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-6) var(--grid-gap);
+  }
+
+  /* Total keeps its big numeral, full width (base makes it an inline row). */
+  :root[data-skin="editorial"] .kpi[data-key="total"] {
+    grid-column: 1 / -1;
+    display: grid;
+    align-items: stretch;
+    gap: 0;
+    min-height: 0;
+  }
+
+  :root[data-skin="editorial"] .kpi[data-key="total"] .kpi-icon {
+    position: static;
+    order: 0;
+  }
+
+  :root[data-skin="editorial"] .kpi[data-key="total"] .kpi-value {
+    font-size: var(--fs-kpi);
+    line-height: var(--lh-kpi);
+  }
+
+  :root[data-skin="editorial"] .kpi[data-key="total"] .kpi-meta {
+    margin-left: 0;
+  }
+}
+
+/* ==== Job rows (live queue and Queue) =============================== */
+
+:root[data-skin="editorial"] .job-row {
+  padding-top: var(--s-4);
+  padding-bottom: var(--s-4);
 }
 
 :root[data-skin="editorial"] .job-row:hover {
@@ -424,60 +1062,807 @@
 
 :root[data-skin="editorial"] .job-row:hover .job-title {
   text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
-/* Per-track cells: outlined, solid when saved. */
+:root[data-skin="editorial"] .job-type,
+:root[data-skin="editorial"] .job-chevron {
+  display: none;
+}
+
+:root[data-skin="editorial"] .job-facts {
+  display: block;
+  margin-bottom: var(--s-1);
+  text-overflow: ellipsis;
+  color: var(--text-tertiary);
+  font-size: var(--fs-kicker);
+  line-height: var(--lh-kicker);
+  font-weight: var(--w-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+:root[data-skin="editorial"] .job-fact + .job-fact::before {
+  margin-inline: var(--s-1_5);
+}
+
+/* Under 900 the kicker keeps type, genre and year; the start time would be
+   cut off (the live list shows "Updated …", the drawer has the times). */
+@media (max-width: 899px) {
+  :root[data-skin="editorial"] .job-fact[data-key="started"] {
+    display: none;
+  }
+}
+
+:root[data-skin="editorial"] .job-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-list-title);
+  line-height: var(--lh-list-title);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+}
+
+:root[data-skin="editorial"] .job-sub {
+  margin-top: var(--s-0_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="editorial"] .job-updated {
+  color: var(--text-tertiary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="editorial"] .job-status .badge {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* Queue list */
+@media (min-width: 1024px) {
+  :root[data-skin="editorial"] .job-row {
+    grid-template-columns: 64px minmax(0, 1fr) minmax(180px, 26%) 136px 80px;
+    gap: var(--grid-gap);
+  }
+
+  :root[data-skin="editorial"] .job-row > .art-40 {
+    width: 64px;
+    height: 64px;
+  }
+}
+
+/* Tablet: the cells get the row's full width under the cover and title,
+   like the live queue, so each track stays wide enough to read its shape. */
+@media (min-width: 640px) and (max-width: 1023px) {
+  :root[data-skin="editorial"] .job-row {
+    grid-template-columns: 56px minmax(0, 1fr) 120px;
+    grid-template-areas:
+      "art main status"
+      "prog prog prog";
+    column-gap: var(--s-4);
+    row-gap: var(--s-3);
+  }
+
+  :root[data-skin="editorial"] .job-row > .art-40 {
+    grid-area: art;
+    width: 56px;
+    height: 56px;
+  }
+
+  :root[data-skin="editorial"] .job-main {
+    grid-area: main;
+  }
+
+  :root[data-skin="editorial"] .job-progress {
+    grid-area: prog;
+  }
+
+  :root[data-skin="editorial"] .job-status {
+    grid-area: status;
+  }
+}
+
+/* Live queue: big rows with a fraction, per-track cells and a "when" column. */
+:root[data-skin="editorial"] .job-list-compact .job-updated {
+  display: block;
+  text-align: left;
+}
+
+:root[data-skin="editorial"] .job-list-compact .job-title {
+  font-size: var(--fs-row-title);
+  line-height: var(--lh-row-title);
+  letter-spacing: -0.025em;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+:root[data-skin="editorial"] .job-list-compact .job-sub {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+}
+
+:root[data-skin="editorial"] .job-list-compact .pcells {
+  --cell-h: 24px;
+  --cell-gap: 3px;
+}
+
+:root[data-skin="editorial"] .job-list-compact .jprog {
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: var(--s-2);
+}
+
+:root[data-skin="editorial"] .job-list-compact .pcells,
+:root[data-skin="editorial"] .job-list-compact .pbar {
+  flex: 1 0 100%;
+}
+
+:root[data-skin="editorial"] .job-list-compact .jprog-text {
+  order: -1;
+  min-width: 0;
+  text-align: left;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: var(--fs-row-title);
+  line-height: var(--lh-row-title);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+}
+
+:root[data-skin="editorial"] .job-list-compact .jprog[data-mode="cells"] .jprog-text::after {
+  content: "tracks";
+  margin-left: var(--s-2);
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  font-weight: var(--w-regular);
+  letter-spacing: 0;
+}
+
+:root[data-skin="editorial"] .job-list-compact .jprog[data-mode="bar"] .jprog-text {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-semibold);
+  letter-spacing: 0;
+}
+
+@media (min-width: 640px) {
+  :root[data-skin="editorial"] .job-list-compact .job-row {
+    grid-template-columns: 80px minmax(0, 1fr) minmax(200px, 34%) 148px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "art main prog status"
+      "art main prog updated";
+    align-items: start;
+    column-gap: var(--grid-gap);
+    row-gap: var(--s-1);
+    padding-top: var(--s-5);
+    padding-bottom: var(--s-5);
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-row > .art-40 {
+    grid-area: art;
+    width: 80px;
+    height: 80px;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-main {
+    grid-area: main;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-progress {
+    grid-area: prog;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-status,
+  :root[data-skin="editorial"] .job-list-compact .job-updated {
+    padding-left: var(--s-4);
+    border-left: 1px solid var(--border-subtle);
+  }
+
+  /* One unbroken keyline: the status cell reaches over the row gap. */
+  :root[data-skin="editorial"] .job-list-compact .job-status {
+    grid-area: status;
+    align-self: stretch;
+    margin-bottom: calc(-1 * var(--s-1));
+    padding-top: var(--s-1);
+    padding-bottom: var(--s-1);
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-updated {
+    grid-area: updated;
+    align-self: stretch;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-updated::before {
+    content: "Updated ";
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  :root[data-skin="editorial"] .job-list-compact .job-row {
+    grid-template-columns: 64px minmax(0, 1fr) 128px;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "art main status"
+      "art main updated"
+      "prog prog prog";
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-row > .art-40 {
+    width: 64px;
+    height: 64px;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-progress {
+    margin-top: var(--s-3);
+  }
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .job-row,
+  :root[data-skin="editorial"] .job-list-compact .job-row {
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    column-gap: var(--s-3);
+    padding: var(--s-4) 0;
+  }
+
+  :root[data-skin="editorial"] .job-row > .art-40 {
+    width: 56px;
+    height: 56px;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-row {
+    grid-template-areas:
+      "art main main"
+      "prog prog prog"
+      "status status updated";
+    row-gap: var(--s-3);
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-updated {
+    grid-area: updated;
+    align-self: center;
+    text-align: right;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-updated::before {
+    content: "Updated ";
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .pcells {
+    --cell-h: 18px;
+    --cell-gap: 2px;
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-title {
+    font-size: var(--fs-20);
+    line-height: var(--lh-20);
+  }
+
+  :root[data-skin="editorial"] .job-list-compact .job-sub {
+    font-size: var(--fs-14);
+    line-height: var(--lh-14);
+  }
+}
+
+/* ==== Progress ====================================================== */
+
+/* Per-track cells: outlined while waiting, solid when saved, half when
+   skipped (already on disk), red when failed, dashed when cancelled. */
 :root[data-skin="editorial"] .pcell {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--border-control);
 }
 
-:root[data-skin="editorial"] .pcell[data-state="completed"],
-:root[data-skin="editorial"] .pcell[data-state="skipped"] {
+:root[data-skin="editorial"] .pcell[data-state="remaining"] {
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .pcell[data-state="completed"] {
   background: var(--ink);
   box-shadow: none;
 }
 
+:root[data-skin="editorial"] .pcell[data-state="skipped"] {
+  background: linear-gradient(to top, var(--ink) 50%, transparent 50%);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
 :root[data-skin="editorial"] .pcell[data-state="failed"] {
-  background: var(--accent);
+  background: var(--signal);
   box-shadow: none;
 }
 
-:root[data-skin="editorial"] .tp-totals .fact {
-  flex-direction: column-reverse;
+:root[data-skin="editorial"] .pcell[data-state="cancelled"] {
+  box-shadow: none;
+  outline: 1px dashed var(--border-control);
+  outline-offset: -1px;
+}
+
+:root[data-skin="editorial"] .pbar {
+  gap: 0;
+}
+
+:root[data-skin="editorial"] .jprog-text {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+:root[data-skin="editorial"] .meter {
+  background: var(--track);
+}
+
+/* ==== Overview: health ============================================== */
+
+@media (min-width: 900px) {
+  :root[data-skin="editorial"] .health-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s-6) var(--grid-gap);
+  }
+}
+
+@media (max-width: 899px) {
+  :root[data-skin="editorial"] .health-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-6) var(--grid-gap);
+  }
+}
+
+:root[data-skin="editorial"] .health-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1_5);
+  min-width: 0;
+}
+
+:root[data-skin="editorial"] .health-name {
+  color: var(--text-tertiary);
+  font-size: var(--fs-kicker);
+  line-height: var(--lh-kicker);
+  font-weight: var(--w-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+:root[data-skin="editorial"] .health-status {
+  display: flex;
+}
+
+:root[data-skin="editorial"] .health-status .badge {
+  gap: var(--s-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-status-lg);
+  line-height: var(--lh-status-lg);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+  white-space: normal;
+}
+
+:root[data-skin="editorial"] .health-status .badge .icon {
+  width: 22px;
+  height: 22px;
+}
+
+:root[data-skin="editorial"] .health-status .badge[data-role="neutral"] {
+  color: var(--text-primary);
+}
+
+:root[data-skin="editorial"] .health-detail {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-mono-12);
+  overflow-wrap: anywhere;
+}
+
+/* Facts: label over value, each under a hairline. */
+:root[data-skin="editorial"] .health-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-4) var(--grid-gap);
+  margin-top: var(--s-4);
+  padding-top: 0;
+  border-top: 0;
 }
 
 :root[data-skin="editorial"] .health-facts .fact {
   flex-direction: column;
+  gap: var(--s-0_5);
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+:root[data-skin="editorial"] .facts .fact-label {
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+:root[data-skin="editorial"] .health-facts .fact-value {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+@media (max-width: 899px) {
+  :root[data-skin="editorial"] .health-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ==== Overview: recently completed ================================== */
+
+/* Exactly one row of whole covers: five wide, four in two rows on phones. */
+:root[data-skin="editorial"] .strip {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s-6) var(--grid-gap);
+}
+
+:root[data-skin="editorial"] .strip-tile.is-overflow {
+  display: flex;
+}
+
+:root[data-skin="editorial"] .strip > :nth-child(n + 6) {
+  display: none;
+}
+
+@media (min-width: 640px) and (max-width: 899px) {
+  :root[data-skin="editorial"] .strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  :root[data-skin="editorial"] .strip > :nth-child(n + 5) {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* The link stays on the title line; the count drops below. */
+  :root[data-skin="editorial"] [data-section="recent"] .card-note {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  :root[data-skin="editorial"] .strip > :nth-child(n + 5) {
+    display: none;
+  }
+}
+
+:root[data-skin="editorial"] .strip > .empty,
+:root[data-skin="editorial"] .strip > .error-note {
+  display: flex;
+}
+
+:root[data-skin="editorial"] .strip-tile {
+  gap: 0;
+}
+
+:root[data-skin="editorial"] .strip-tile > .art {
+  margin-bottom: var(--s-3);
+}
+
+:root[data-skin="editorial"] .strip-title {
+  font-size: var(--fs-16);
+  line-height: 20px;
+  font-weight: var(--w-bold);
+  letter-spacing: -0.01em;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+:root[data-skin="editorial"] .strip-sub {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="editorial"] .strip-meta {
+  margin-top: var(--s-1);
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+:root[data-skin="editorial"] .strip-tile:hover .strip-title {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+/* ==== Overview: throughput ========================================== */
+
+:root[data-skin="editorial"] .tp-totals {
+  gap: var(--s-6) var(--s-12);
+}
+
+:root[data-skin="editorial"] .tp-totals .fact {
+  flex-direction: column-reverse;
+  gap: var(--s-2);
+}
+
+:root[data-skin="editorial"] .tp-totals .fact-label {
+  color: var(--text-tertiary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
 :root[data-skin="editorial"] .tp-totals .fact-value {
   font-family: var(--font-display);
-  font-size: var(--fs-kpi-sm);
-  line-height: 1;
+  font-size: var(--fs-figure);
+  line-height: var(--lh-figure);
   font-weight: var(--w-heavy);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
 }
 
-:root[data-skin="editorial"] {
-  --fs-kpi-sm: clamp(32px, 4vw, 56px);
+:root[data-skin="editorial"] .formats-swatch {
+  border-radius: 0;
 }
 
-:root[data-skin="editorial"] .art {
-  background: var(--art-bg, var(--border-subtle));
+:root[data-skin="editorial"] .chart {
+  gap: var(--s-6);
+  margin-top: var(--s-4);
 }
 
-/* ---- Showcase ------------------------------------------------------ */
+:root[data-skin="editorial"] .chart-readout {
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
 
+:root[data-skin="editorial"] .chart-multiple {
+  gap: var(--s-3);
+}
+
+:root[data-skin="editorial"] .chart-title {
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-bold);
+}
+
+:root[data-skin="editorial"] .chart-plot {
+  height: 140px;
+}
+
+:root[data-skin="editorial"] .chart-yaxis,
+:root[data-skin="editorial"] .chart-xaxis {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+:root[data-skin="editorial"] .chart-bars {
+  gap: var(--s-1);
+  border-bottom-color: var(--border-strong);
+}
+
+:root[data-skin="editorial"] .chart-bar {
+  max-width: none;
+}
+
+/* A day with nothing done is a short tick on the baseline, not a gap. */
+:root[data-skin="editorial"] .chart-bar.is-zero {
+  width: 40%;
+  height: 1px;
+  min-height: 1px;
+  margin-bottom: var(--s-1);
+  background: var(--border-control);
+}
+
+:root[data-skin="editorial"] .chart-bars:hover .chart-col.is-hover .chart-bar {
+  opacity: 1;
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .chart-plot {
+    height: 112px;
+  }
+
+  :root[data-skin="editorial"] .tp-totals {
+    gap: var(--s-5) var(--s-8);
+  }
+}
+
+/* ==== Overview: log tail ============================================ */
+
+:root[data-skin="editorial"] .log-tail {
+  padding: 0;
+}
+
+:root[data-skin="editorial"] .log-tail-row {
+  grid-template-columns: 76px 52px 64px minmax(0, 1fr);
+  column-gap: var(--s-4);
+  padding: var(--s-1_5) 0;
+}
+
+:root[data-skin="editorial"] .log-tail-row + .log-tail-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .log-tail-row {
+    grid-template-columns: 64px 44px minmax(0, 1fr);
+    column-gap: var(--s-2);
+  }
+}
+
+/* ==== Logs ========================================================== */
+
+:root[data-skin="editorial"] .log-time {
+  color: var(--text-tertiary);
+}
+
+/* The level is a word; red and bold only for errors, red for warnings. */
+:root[data-skin="editorial"] .log-entry .log-dot {
+  display: none;
+}
+
+:root[data-skin="editorial"] .log-level {
+  color: var(--text-tertiary);
+}
+
+:root[data-skin="editorial"] [data-level="warn"],
+:root[data-skin="editorial"] [data-level="error"] {
+  box-shadow: none;
+  background: transparent;
+}
+
+:root[data-skin="editorial"] [data-level="warn"] .log-level {
+  color: var(--signal-text);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="editorial"] [data-level="error"] .log-level {
+  color: var(--signal-text);
+  font-weight: var(--w-bold);
+}
+
+:root[data-skin="editorial"] .log-comp {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="editorial"] .log-row + .log-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+:root[data-skin="editorial"] .log-line {
+  padding: var(--s-1) 0;
+  column-gap: var(--s-4);
+}
+
+:root[data-skin="editorial"] .log-line:hover {
+  background: var(--bg-hover);
+}
+
+:root[data-skin="editorial"] .log-view {
+  padding: 0;
+}
+
+:root[data-skin="editorial"] .log-json {
+  border-color: var(--border-control);
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .level-chip {
+  border-color: var(--border-control);
+  color: var(--text-secondary);
+}
+
+:root[data-skin="editorial"] .level-chip[aria-pressed="true"] {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="editorial"] .level-chip[aria-pressed="false"] .log-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--role);
+}
+
+:root[data-skin="editorial"] .filter-chip {
+  border-color: var(--border-strong);
+}
+
+:root[data-skin="editorial"] .new-lines {
+  border: 0;
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: var(--w-semibold);
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .log-line {
+    grid-template-columns: 64px 40px minmax(0, 1fr);
+    column-gap: var(--s-2);
+  }
+}
+
+/* ==== Showcase ====================================================== */
+
+/* Filter tabs set large, like the catalogue's section heads. */
+:root[data-skin="editorial"] .page-showcase > .toolbar {
+  align-items: flex-end;
+  padding-bottom: 0;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+:root[data-skin="editorial"] .page-showcase > .toolbar .seg {
+  gap: var(--s-10);
+}
+
+:root[data-skin="editorial"] .page-showcase > .toolbar .seg-btn {
+  height: auto;
+  padding: 0 0 var(--s-3);
+  font-family: var(--font-display);
+  font-size: var(--fs-tab-lg);
+  line-height: var(--lh-tab-lg);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.025em;
+  color: var(--text-tertiary);
+}
+
+:root[data-skin="editorial"] .page-showcase > .toolbar .seg-btn:hover,
+:root[data-skin="editorial"] .page-showcase > .toolbar .seg-btn[aria-pressed="true"] {
+  color: var(--text-primary);
+}
+
+/* The page summary already gives the count; the tab row doesn't repeat it. */
+:root[data-skin="editorial"] .page-showcase > .toolbar .toolbar-note {
+  display: none;
+}
+
+/* An empty or failed load sits right under the tab row's rule; the card's
+   own rule would double it. */
+:root[data-skin="editorial"] .page-showcase > .card {
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* Hero: a full-bleed band in the album's own Apple colors. */
 :root[data-skin="editorial"] .hero {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   align-items: stretch;
-  gap: var(--s-12);
-  padding: var(--s-12);
+  column-gap: var(--grid-gap);
+  row-gap: var(--s-6);
+  margin: 0 calc(-1 * var(--gutter));
+  padding: var(--s-12) var(--gutter);
+  border: 0;
+}
+
+:root[data-skin="editorial"] .hero-art {
+  grid-column: 1 / span 5;
 }
 
 :root[data-skin="editorial"] .hero-text {
-  justify-content: space-between;
+  grid-column: 7 / -1;
+  gap: 0;
+}
+
+:root[data-skin="editorial"] .hero-kicker {
+  align-self: stretch;
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--art-t2, var(--text-secondary)) 55%, transparent);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--w-bold);
+  letter-spacing: 0.1em;
 }
 
 :root[data-skin="editorial"] .hero-no {
@@ -486,64 +1871,508 @@
 
 :root[data-skin="editorial"] .hero-title {
   max-width: none;
+  margin: var(--s-6) 0 0 -0.05em;
+  letter-spacing: -0.06em;
+}
+
+:root[data-skin="editorial"] .hero:hover .hero-title {
+  text-decoration-thickness: 4px;
+  text-underline-offset: 8px;
+}
+
+:root[data-skin="editorial"] .hero-artist {
+  max-width: none;
+  margin-top: var(--s-5);
+  color: var(--art-t1, var(--text-primary));
+  font-size: var(--fs-hero-artist);
+  line-height: var(--lh-hero-artist);
+  font-weight: var(--w-medium);
+  letter-spacing: -0.02em;
 }
 
 :root[data-skin="editorial"] .hero-facts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--s-4);
-  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--s-4) var(--grid-gap);
+  align-self: stretch;
+  margin-top: auto;
+  padding-top: var(--s-8);
+  color: var(--art-t1, var(--text-primary));
 }
 
 :root[data-skin="editorial"] .hero-facts .fact {
   flex-direction: column;
+  gap: var(--s-1);
   padding-top: var(--s-2);
-  border-top: 1px solid currentColor;
+  border-top: 1px solid color-mix(in srgb, var(--art-t2, var(--text-secondary)) 55%, transparent);
 }
 
+:root[data-skin="editorial"] .hero-facts .fact-label {
+  color: var(--art-t2, var(--text-secondary));
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-weight: var(--w-bold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+:root[data-skin="editorial"] .hero-facts .fact-value {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="editorial"] .skel-hero {
+  height: 480px;
+}
+
+/* The numbered cover grid. */
 :root[data-skin="editorial"] .gallery {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--s-10) var(--grid-gap);
+}
+
+@media (max-width: 1279px) {
+  :root[data-skin="editorial"] .gallery {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+:root[data-skin="editorial"] .tile {
+  gap: 0;
 }
 
 :root[data-skin="editorial"] .tile-head {
   display: flex;
+  padding-bottom: var(--s-2);
+  color: var(--text-tertiary);
+}
+
+:root[data-skin="editorial"] .tile-art {
+  margin-bottom: var(--s-3);
 }
 
 :root[data-skin="editorial"] .tile-title {
-  font-size: var(--fs-16);
-  line-height: var(--lh-16);
+  font-family: var(--font-display);
+  font-size: var(--fs-tile-title);
+  line-height: var(--lh-tile-title);
   font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
   white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+:root[data-skin="editorial"] .tile:hover .tile-title {
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+:root[data-skin="editorial"] .tile-sub {
+  margin-top: var(--s-0_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+}
+
+:root[data-skin="editorial"] .tile-facts {
+  margin-top: var(--s-2);
+  color: var(--text-tertiary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* Each fact stays whole and every fact carries a fixed-width dot before
+   it; the list is pulled out by one dot and clipped back, so the dot that
+   opens each line (the first, or one after a wrap) is cut off and no line
+   starts or ends with a separator. */
+:root[data-skin="editorial"] .tile-facts {
+  column-gap: 0;
+  margin-inline-start: -1.25em;
+  clip-path: inset(0 0 0 1.25em);
+}
+
+:root[data-skin="editorial"] .tile-fact {
+  white-space: nowrap;
+}
+
+:root[data-skin="editorial"] .tile-fact::before,
+:root[data-skin="editorial"] .tile-fact + .tile-fact::before {
+  content: "\00B7";
+  display: inline-block;
+  width: 1.25em;
+  margin: 0;
+  text-align: center;
+}
+
+/* The catalogue head already gives the year. */
+:root[data-skin="editorial"] .tile-fact[data-key="year"] {
+  display: none;
+}
+
+:root[data-skin="editorial"] .tile-motion {
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+:root[data-skin="editorial"] .skel-tile {
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-skin="editorial"] .tile:hover .tile-art,
+  :root[data-skin="editorial"] .tile:focus-visible .tile-art {
+    transform: none;
+  }
 }
 
 @media (max-width: 639px) {
+  :root[data-skin="editorial"] .page-showcase > .toolbar .seg {
+    gap: var(--s-5);
+  }
+
   :root[data-skin="editorial"] .hero {
     grid-template-columns: minmax(0, 1fr);
-    padding: var(--s-5);
-    gap: var(--s-5);
+    padding: var(--s-6) var(--gutter) var(--s-8);
+  }
+
+  :root[data-skin="editorial"] .hero-art,
+  :root[data-skin="editorial"] .hero-text {
+    grid-column: 1;
+  }
+
+  :root[data-skin="editorial"] .hero-art {
+    width: 72%;
+  }
+
+  :root[data-skin="editorial"] .hero-title {
+    margin-top: var(--s-4);
   }
 
   :root[data-skin="editorial"] .hero-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-top: var(--s-6);
   }
 
-  :root[data-skin="editorial"] .job-row {
-    grid-template-columns: 56px minmax(0, 1fr) auto;
-    min-height: 0;
+  :root[data-skin="editorial"] .gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-8) var(--grid-gap);
+  }
+}
+
+/* ==== System ======================================================== */
+
+:root[data-skin="editorial"] .kv dt {
+  color: var(--text-tertiary);
+}
+
+:root[data-skin="editorial"] .kv-row {
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+:root[data-skin="editorial"] .kv-mono .kv-row {
+  border-bottom: 0;
+}
+
+:root[data-skin="editorial"] .section-title {
+  color: var(--text-primary);
+  font-weight: var(--w-bold);
+  letter-spacing: 0.09em;
+}
+
+:root[data-skin="editorial"] .config-section {
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Wide: one group per row, so paths and templates get the full measure. */
+@media (min-width: 1024px) {
+  :root[data-skin="editorial"] .config-grid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--s-8);
   }
 
-  :root[data-skin="editorial"] .job-row > .art-40 {
-    width: 56px;
-    height: 56px;
+  /* Values line up with the other sections' key-value rows. */
+  :root[data-skin="editorial"] .config-grid .kv-mono {
+    grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+  }
+}
+
+:root[data-skin="editorial"] .tool-list {
+  border-top-color: var(--border-subtle);
+}
+
+:root[data-skin="editorial"] .table th,
+:root[data-skin="editorial"] .table td {
+  border-bottom-color: var(--border-subtle);
+}
+
+:root[data-skin="editorial"] .table thead th {
+  border-bottom-color: var(--border-strong);
+  color: var(--text-primary);
+  font-weight: var(--w-semibold);
+}
+
+/* ==== Drawer ======================================================== */
+
+:root[data-skin="editorial"] .drawer {
+  border-left: 1px solid var(--border-strong);
+  box-shadow: none;
+}
+
+:root[data-skin="editorial"] .drawer-bar {
+  border-bottom: 3px solid var(--border-strong);
+}
+
+:root[data-skin="editorial"] .drawer-bar-id {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+
+:root[data-skin="editorial"] .drawer-body {
+  gap: var(--s-8);
+  padding: var(--s-6);
+}
+
+:root[data-skin="editorial"] .drawer-head {
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--s-5);
+}
+
+:root[data-skin="editorial"] .drawer-head > .art,
+:root[data-skin="editorial"] .drawer-head > .art-64 {
+  width: 120px;
+  height: 120px;
+}
+
+:root[data-skin="editorial"] .drawer-title {
+  font-size: var(--fs-drawer-title);
+  line-height: var(--lh-drawer-title);
+  font-weight: var(--w-heavy);
+  letter-spacing: -0.035em;
+}
+
+:root[data-skin="editorial"] .drawer-artist {
+  margin-top: var(--s-1);
+  color: var(--text-primary);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+}
+
+:root[data-skin="editorial"] .drawer-meta {
+  color: var(--text-tertiary);
+}
+
+:root[data-skin="editorial"] .drawer-times {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-3) var(--s-4);
+  padding: 0;
+  border: 0;
+}
+
+:root[data-skin="editorial"] .drawer-times > div {
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+:root[data-skin="editorial"] .drawer-times dt {
+  color: var(--text-tertiary);
+  font-size: var(--fs-kicker);
+  line-height: var(--lh-kicker);
+  font-weight: var(--w-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+:root[data-skin="editorial"] .drawer-section {
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border-strong);
+}
+
+:root[data-skin="editorial"] .section-head .section-title,
+:root[data-skin="editorial"] .drawer-section > .section-title,
+:root[data-skin="editorial"] .activity summary {
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-bold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root[data-skin="editorial"] .drawer-section > .section-head .jprog .pcells {
+  display: none;
+}
+
+/* The ghost buttons' labels start on the drawer's left keyline. */
+:root[data-skin="editorial"] .drawer-actions .btn-ghost:first-child {
+  margin-left: calc(-1 * var(--s-3));
+}
+
+/* A finished track's stage strip would only repeat its status. */
+:root[data-skin="editorial"] .track .stages:not(:has(.stage:not([data-state="done"]))) {
+  visibility: hidden;
+}
+
+:root[data-skin="editorial"] .swatch-dot {
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--border-control);
+}
+
+:root[data-skin="editorial"] .track-block {
+  width: 10px;
+  height: 14px;
+}
+
+:root[data-skin="editorial"] .track-block[data-role="skipped"] {
+  background: linear-gradient(to top, var(--ink) 50%, transparent 50%);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+:root[data-skin="editorial"] .track-index {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+
+:root[data-skin="editorial"] .track-title {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-medium);
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .drawer {
+    border-left: 0;
   }
 
-  :root[data-skin="editorial"] .job-title {
-    font-size: var(--fs-16);
-    line-height: var(--lh-16);
+  :root[data-skin="editorial"] .drawer-body {
+    padding: var(--s-4);
   }
 
-  :root[data-skin="editorial"] .tab[aria-current="page"] {
-    font-weight: var(--w-bold);
+  :root[data-skin="editorial"] .drawer-head {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: var(--s-4);
   }
+
+  :root[data-skin="editorial"] .drawer-head > .art,
+  :root[data-skin="editorial"] .drawer-head > .art-64 {
+    width: 88px;
+    height: 88px;
+  }
+
+  :root[data-skin="editorial"] .drawer-times {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ==== Overlays ====================================================== */
+
+:root[data-skin="editorial"] .palette,
+:root[data-skin="editorial"] .sheet {
+  border: 1px solid var(--border-strong);
+  box-shadow: none;
+}
+
+:root[data-skin="editorial"] .palette-input {
+  height: 56px;
+  border-bottom: 3px solid var(--border-strong);
+}
+
+:root[data-skin="editorial"] .palette-input:focus-within {
+  box-shadow: none;
+}
+
+:root[data-skin="editorial"] .palette-input input {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="editorial"] .palette-list {
+  padding: var(--s-1) 0;
+}
+
+:root[data-skin="editorial"] .palette-group {
+  padding: var(--s-3) var(--s-4) var(--s-1);
+  color: var(--text-tertiary);
+  font-size: var(--fs-kicker);
+  line-height: var(--lh-kicker);
+  font-weight: var(--w-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+:root[data-skin="editorial"] .palette-item {
+  padding: 0 var(--s-4);
+}
+
+:root[data-skin="editorial"] .palette-item[aria-selected="true"] {
+  background: var(--bg-selected);
+  box-shadow: inset 4px 0 0 var(--border-strong);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="editorial"] .palette-foot {
+  border-top: 1px solid var(--border-strong);
+}
+
+/* Toasts: a ruled slip; errors carry a red rule. */
+:root[data-skin="editorial"] .toast {
+  border: 1px solid var(--border-strong);
+  border-left-width: 4px;
+  box-shadow: none;
+}
+
+:root[data-skin="editorial"] .toast[data-role="danger"],
+:root[data-skin="editorial"] .toast[data-role="warning"] {
+  border-left-color: var(--signal);
+}
+
+/* ==== States ======================================================== */
+
+:root[data-skin="editorial"] .skel {
+  background: var(--bg-selected);
+}
+
+/* Empty states: left-aligned, set in the display face, no icon. */
+:root[data-skin="editorial"] .empty {
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-10) 0 var(--s-12);
+  text-align: left;
+}
+
+:root[data-skin="editorial"] .card-flush > .card-body > .empty {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+:root[data-skin="editorial"] .empty-icon {
+  display: none;
+}
+
+:root[data-skin="editorial"] .empty-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-24);
+  line-height: var(--lh-24);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+}
+
+:root[data-skin="editorial"] .empty-body {
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+:root[data-skin="editorial"] .error-note {
+  padding-left: var(--s-3);
+  border-left: 3px solid var(--signal);
+}
+
+:root[data-skin="editorial"] .card-flush > .card-body > .error-note {
+  padding-left: var(--s-3);
 }
