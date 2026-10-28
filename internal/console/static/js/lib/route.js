@@ -69,9 +69,9 @@ export function refusedMove(shownIdx, state) {
   return { undo: shownIdx - idx, redo: idx - shownIdx };
 }
 
-export const QUEUE_TABS = ['active', 'failed', 'all'];
+export const QUEUE_TABS = ['active', 'completed', 'failed', 'cancelled', 'all'];
 
-const TAB_STATUSES = { active: ['running', 'queued'], failed: ['failed'], all: [] };
+const TAB_STATUSES = { active: ['running', 'queued'], completed: ['completed'], failed: ['failed'], cancelled: ['cancelled'], all: [] };
 
 /** Normalizes queue route params: tab, type and q. */
 export function queueFilters(params = {}) {
@@ -88,7 +88,8 @@ export function queueMatchFilter(filters) {
 
 /**
  * GET /api/v1/downloads query for a queue view. Active jobs read oldest
- * first, which approximates execution order; failures newest first.
+ * first, which approximates execution order; finished ones by when they
+ * finished, newest first.
  */
 export function queueQuery(filters, offset = 0, limit = 50) {
   const query = { limit, offset };
@@ -99,7 +100,7 @@ export function queueQuery(filters, offset = 0, limit = 50) {
   if (filters.tab === 'active') {
     query.sort = 'created_at';
     query.order = 'asc';
-  } else if (filters.tab === 'failed') {
+  } else if (filters.tab !== 'all') {
     query.sort = 'updated_at';
     query.order = 'desc';
   }

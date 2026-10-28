@@ -25,9 +25,9 @@ wins and this page is fixed in the same change. Sources are listed in
 
 | Route | Page | Content |
 | --- | --- | --- |
-| `#/` | Overview | Sections (in DOM order) `kpis`, `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `health`, `recent`, `throughput` (from `/stats`), `logs` (12-line tail) |
-| `#/queue?tab=active\|failed\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed tab |
-| `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, activity, Cancel/Retry/Delete |
+| `#/` | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `recent`, `kpis`, `health`, `throughput` (from `/stats`), `logs` (12-line tail) |
+| `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed tab |
+| `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, Activity (persisted history plus live events), Saved to (completed jobs), Cancel/Retry/Delete |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
 | `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings, API links |
@@ -143,15 +143,16 @@ Stable class names and attributes a skin can style without touching JS:
 
 | Surface | Hooks |
 | --- | --- |
-| Section / card | `section.card[data-section]` > `header.card-head` (`h2.card-title`, `.card-note`, `.card-actions`) + `.card-body`; `.card-flush` for edge-to-edge lists. Overview sections: `kpis`, `live`, `health`, `recent`, `throughput`, `logs`; Queue `jobs`; Logs `log` |
+| Section / card | `section.card[data-section]` > `header.card-head` (`h2.card-title`, `.card-note`, `.card-actions`) + `.card-body`; `.card-flush` for edge-to-edge lists. Overview sections: `live`, `recent`, `kpis`, `health`, `throughput`, `logs`; Queue `jobs`; Logs `log` |
 | Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub`, `.page-actions` (Overview: `a.btn.btn-primary.page-new`), `.banners`, `.page.page-<name>` (`page-new`, `page-settings` included) |
 | KPI | `a.kpi[data-key=queued\|running\|completed\|failed\|total][data-role][data-zero]` > `.kpi-label`, `.kpi-icon`, `.kpi-value`, `.kpi-meta` |
-| Job row | `a.job-row[data-status][.has-palette]` > `.art`, `.job-main` (`.job-facts` > `.job-fact[data-key=type\|genre\|year\|started]`, `.job-title`, `.job-sub`), `.job-type`, `.job-progress`, `.job-status`, `.job-updated`, `.job-chevron` |
-| Progress | `.jprog[data-mode=cells\|bar]`: up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
+| Job row | `a.job-row[data-status][.has-palette]` > `.art`, `.job-main` (`.job-facts` > `.job-fact[data-key=type\|genre\|year\|started]`, `.job-title[.is-unresolved]`, `.job-sub`, `.job-error` (failed jobs: one trimmed line, full text in the title attribute)), `.job-type`, `.job-progress`, `.job-status`, `.job-updated`, `.job-chevron` |
+| Progress | `.jprog[data-mode=cells\|bar][data-working]` (a running job with nothing finished yet shows a striped remaining track): up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
 | Health | `.health-row[data-role]` > `.health-icon`, `.health-name`, `.health-status` (badge), `.health-detail`; runtime facts `dl.facts.health-facts` |
 | Facts | `dl.facts` > `.fact[data-key][data-role]` > `dt.fact-label` + `dd.fact-value` (health facts, throughput totals `.tp-totals` with `tracks`, `tracks-failed`, `bytes`, `jobs`, `jobs-failed`, the failed rows only when non-zero and `data-role=danger`, hero facts `.hero-facts`) |
 | Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`, `.strip-meta`; every completed job renders, those past the whole-tile count carry `.is-overflow` |
 | Showcase | `a.hero.has-palette` > `.hero-art`, `.hero-text` (`.hero-kicker` > `.hero-no`, `.hero-title`, `.hero-artist`, `.hero-facts`), then its sibling `div.hero-actions` (same palette properties) > `.btn` "Tracks" (the drawer) and "Open in Apple Music"; `a.tile[.has-palette]` > `.tile-head` (`.tile-index`, `.tile-year`), `.tile-art`, `.tile-title`, `.tile-sub`, `.tile-facts` > `.tile-fact[data-key=genre\|year\|tracks\|finished]` |
+| Status strip, Activity, failure | Overview `p.health-strip[data-state=ok]` or `.health-strip.notice[data-state=problem][data-role=danger\|warning]` > `.health-strip-link`; drawer `details.drawer-section.activity[open]` > `ul.activity-list` > `li.activity-row[data-role]` (`.activity-time`, `.activity-label`, `.activity-msg`), failure notice with `details.notice-more` > `pre.notice-raw`, `.drawer-files` > `code.drawer-files-dir`; Logs `.log-err`, `.attr-chip-job` > `.attr-chip-name`, `.filter-chip-name`, rows `[data-seq]` with the one tab stop |
 | Live failures | `ul.attention` after the live list > `li.attention-row[data-role=danger]` > `.attention-icon`, `.attention-title` (`.attention-label` "Failed", `a.attention-link` to the drawer, mono `.attention-input`), `.attention-detail` (`.attention-error`, relative time), Retry `.btn` |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
@@ -234,7 +235,9 @@ and motion covers.
   Values switch without count-up; "—" while disconnected.
 - **Job row**: cover, facts, title, artist/curator · type · storefront,
   progress, status badge, relative time, chevron. Indeterminate "Resolving"
-  while `total_items` is 0. Under 640 px it is a two-line card.
+  while `total_items` is 0. A job without a title shows its link (host and path)
+  muted, with a hint line instead of an artist. A failed job shows a one-line
+  reason (`errorSummary` in `lib/format.js`), never raw JSON. Under 640 px it is a two-line card.
 - **Stage track**: seven segments (Resolve, Download, Decrypt, Remux, Verify,
   Tag, Save). Download and decrypt fill to their fraction; download at 0 while
   downloading is striped ("size unknown"); a completed item with
@@ -246,7 +249,12 @@ and motion covers.
   `ConfirmDialog` beside the panel) for completed, failed or cancelled jobs,
   which closes the drawer; palette swatches;
   per-track strip; track list (codec chip such as `ALAC 24/96`, length, size,
-  error); hooks; recent non-progress events under Activity.
+  error); hooks; Activity: the job's persisted events (the job stream replays
+  them from the start; `lib/store.js` keeps those at or before the snapshot cursor
+  out of the job and items) plus live ones, newest first, without per-item
+  progress. A failed job shows a notice with the trimmed reason and the full error
+  under a disclosure; a completed job shows the downloads folder with a link to
+  Settings, since the API has no per-job path.
 - **Showcase**: hero for the newest release, then a grid with `srcset`
   300w/600w and lazy loading. Covers keep pre-signed URLs without placeholders
   verbatim. Motion covers play muted on hover or focus, one at a time, only
@@ -259,7 +267,8 @@ and motion covers.
   max/2 gridline and label once max reaches 2 (for tracks only when max/2 is
   whole), a hover readout, and a screen-reader table.
 - **Log viewer**: `role="log"`, `aria-live="off"`, mono rows (time, level
-  marker, component, message), job/request chips that filter, expandable pretty
+  marker, component, message), job/request chips that filter (the job chip shows the job's title),
+  a trimmed `attrs.error` inline, one tab stop for the list with arrow keys, Home and End moving between rows, expandable pretty
   JSON with Copy, follow-bottom within 24 px else an "N new lines" pill, at most
   2,000 rows. Warn and error rows are marked in the skin's warning and danger
   roles.
@@ -378,7 +387,7 @@ and motion covers.
 | --- | --- | --- | --- |
 | KPI | skeleton of final size | zeros | "—" while disconnected |
 | Queue | 6 skeleton rows | per tab, with Clear filters when filtered; Active and All offer "Start a download" | inline note + Retry |
-| Drawer | skeleton tracks | "No tracks resolved yet" | 404 "This job was deleted"; 204 on the stream means finished |
+| Drawer | skeleton tracks | "No tracks resolved yet" | 404 on first load "No download with this id"; 404 after it loaded "This job was deleted"; a failed first load retries when the feed reconnects; 204 on the stream means finished |
 | Showcase | skeleton hero and tiles (cover plus two text lines) | "Completed albums will appear here." with a link to the Queue and "Start a download" | inline note + Retry; broken cover shows bg color + glyph |
 | Logs | 12 skeleton lines | "No records match" + Clear filters | the API's validation message |
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |

@@ -235,6 +235,50 @@ export function jobTitle(job) {
   }
 }
 
+/** Whether Apple has not named the job yet (no title): a queued job before it resolves, a link that never resolved. */
+export function isUnresolved(job) {
+  return Boolean(job) && !job.title;
+}
+
+/** An input URL without its scheme and query, "music.apple.com/us/album/x/1": what an unresolved job shows instead of a guessed title. */
+export function inputLabel(input) {
+  const text = String(input || '').trim();
+  try {
+    const u = new URL(text);
+    return `${u.host}${u.pathname}`.replace(/\/$/, '') || text;
+  } catch {
+    return text;
+  }
+}
+
+/** The line that stands where an unresolved job's artist would be, by status. */
+export function unresolvedHint(job) {
+  switch (job && job.status) {
+    case 'failed':
+      return "Couldn't be resolved";
+    case 'cancelled':
+      return 'Cancelled before it resolved';
+    default:
+      return 'Not resolved yet';
+  }
+}
+
+const ERROR_SUMMARY_MAX = 140;
+
+/**
+ * One readable line from a job's error text: the first line, cut before an
+ * embedded JSON body ("404 Not Found: {"errors":...}" -> "404 Not Found"), at
+ * most 140 characters. Clean one-line text passes through unchanged; the full
+ * text stays available to the caller (a title attribute).
+ */
+export function errorSummary(error) {
+  let text = String(error || '').split(/\r?\n/)[0];
+  const brace = text.search(/[{[]/);
+  if (brace > 0) text = text.slice(0, brace);
+  text = text.replace(/[\s:;,]+$/, '').trim();
+  return text.length > ERROR_SUMMARY_MAX ? `${text.slice(0, ERROR_SUMMARY_MAX - 1).trimEnd()}…` : text;
+}
+
 /** Secondary line of a job: artist for songs and albums, curator for playlists. */
 export function jobSubtitle(job) {
   if (!job) return '';
@@ -269,6 +313,11 @@ export function shortId(id) {
   if (typeof id !== 'string') return '';
   const i = id.indexOf('_');
   return (i >= 0 ? id.slice(i + 1) : id).slice(0, 8);
+}
+
+/** The id a header shows: 8 hex digits of a real "job_<hex>" id, any other text as typed (a link with a typo). */
+export function displayId(id) {
+  return typeof id === 'string' && /^job_[0-9a-f]{8,}$/i.test(id) ? shortId(id) : String(id || '');
 }
 
 const TYPE_LABELS = { song: 'Song', album: 'Album', playlist: 'Playlist', artist: 'Artist', station: 'Station' };

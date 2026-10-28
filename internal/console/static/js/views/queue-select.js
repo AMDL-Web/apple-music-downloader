@@ -104,7 +104,7 @@ export function SelectionBar({ jobs, selected, plan, selecting, run, onSelectAll
     });
   let hint = null;
   if (selecting && !run && actions.length === 0) {
-    hint = html`<span class="bulk-hint">${n === 0 ? 'Select jobs to retry, cancel or delete them.' : 'No action applies to these jobs.'}</span>`;
+    hint = html`<span class=${n === 0 ? 'bulk-hint is-intro' : 'bulk-hint'}>${n === 0 ? 'Select jobs to retry, cancel or delete them.' : 'No action applies to these jobs.'}</span>`;
   }
   return html`<div class="bulk-bar" data-state=${run ? 'run' : 'select'} role="group" aria-label="Selection">
     ${selecting

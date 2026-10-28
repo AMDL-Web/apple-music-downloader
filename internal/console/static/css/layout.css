@@ -221,6 +221,25 @@
   text-overflow: ellipsis;
 }
 
+/* Not named by Apple yet: the link stands in, muted, never a guessed title. */
+.job-title.is-unresolved {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  font-weight: var(--w-regular);
+}
+
+/* A failed job's reason: its first line, the full text in the title. */
+.job-error {
+  min-width: 0;
+  color: var(--danger-text);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .job-sub {
   display: flex;
   gap: var(--s-1_5);
@@ -420,6 +439,24 @@
   .queue-tools {
     flex-basis: 100%;
     justify-content: flex-end;
+  }
+
+  /* A title wraps to a second line instead of cutting at the status. */
+  .job-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* Five tabs do not fit 358 px with every count; the open tab keeps its. */
+  .page-queue .seg-btn[aria-pressed="false"] .seg-count {
+    display: none;
+  }
+
+  .bulk-hint.is-intro {
+    display: none;
   }
 
   .job-check {

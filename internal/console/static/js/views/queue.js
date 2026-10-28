@@ -4,8 +4,8 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { jobTitle, jobSubtitle, typeLabel, artPalette, paletteStyle, jobFacts } from '../lib/format.js';
-import { jobStatusView } from '../lib/status.js';
+import { jobTitle, jobSubtitle, typeLabel, artPalette, paletteStyle, jobFacts, isUnresolved, inputLabel, unresolvedHint, errorSummary } from '../lib/format.js';
+import { jobStatusView, runningFirst } from '../lib/status.js';
 import { upsertJob, removeJob, appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
 import { toggleId, setIds, pruneSelection, rangeIds, selectedJobs, selectionState } from '../lib/selection.js';
@@ -25,8 +25,12 @@ const PAGE_SIZE = 50;
  * click selects instead of opening the drawer (Cmd/Ctrl-click still opens).
  */
 export function JobRow({ job, href, selected, onSelect }) {
-  const title = jobTitle(job);
-  const sub = jobSubtitle(job);
+  // Before Apple names the job it shows its link (muted) and says so, rather
+  // than a title guessed from the URL.
+  const unresolved = isUnresolved(job);
+  const title = unresolved ? inputLabel(job.input) || jobTitle(job) : jobTitle(job);
+  const sub = unresolved ? unresolvedHint(job) : jobSubtitle(job);
+  const reason = job.status === 'failed' ? errorSummary(job.error) : '';
   const palette = artPalette(job);
   const f = jobFacts(job);
   const onClick = onSelect
@@ -53,12 +57,13 @@ export function JobRow({ job, href, selected, onSelect }) {
         ${f.year ? html`<span class="job-fact" data-key="year">${f.year}</span>` : null}
         ${f.started ? html`<span class="job-fact" data-key="started">Started ${f.started}</span>` : null}
       </span>
-      <span class="job-title" dir="auto" title=${title}>${title}</span>
+      <span class=${unresolved ? 'job-title is-unresolved' : 'job-title'} dir="auto" title=${unresolved ? job.input || title : title}>${title}</span>
       <span class="job-sub">
         ${sub ? html`<span class="job-sub-artist" dir="auto">${sub}</span>` : null}
         <span class="job-sub-type">${typeLabel(job.type)}</span>
         ${job.storefront ? html`<span class="job-sub-sf">${job.storefront.toUpperCase()}</span>` : null}
       </span>
+      ${reason ? html`<span class="job-error" title=${job.error}>${reason}</span>` : null}
     </span>
     <span class="job-type">${typeLabel(job.type)}</span>
     <span class="job-progress"><${JobProgress} job=${job} /></span>
@@ -100,11 +105,21 @@ export function QueuePage({ route }) {
     app.navigate(buildHash('queue', { ...route.params, ...patch }, route.jobId), { replace: true });
   };
 
+  // The search box and the route's q follow each other. A q this page wrote
+  // itself (ownQ) comes back through the route and must not reset a box the
+  // user has typed on; any other change of the route's q (Back, Forward, a
+  // link) replaces the box, and drops a debounced value that is now stale.
+  const ownQ = useRef(null);
   useEffect(() => {
-    if (q !== filters.q) setParams({ q });
+    if (q !== filters.q) {
+      ownQ.current = q;
+      setParams({ q });
+    }
   }, [q]);
   useEffect(() => {
-    if (filters.q !== qInput && filters.q !== q) setQInput(filters.q);
+    if (filters.q === ownQ.current) return;
+    ownQ.current = null;
+    if (filters.q !== qInput) setQInput(filters.q);
   }, [filters.q]);
 
   const load = (offset) => {
@@ -150,8 +165,11 @@ export function QueuePage({ route }) {
   const [selected, setSelected] = useState(() => new Set());
   const [confirm, setConfirm] = useState(null);
   const bulk = useBulkRun(app);
-  const jobsRef = useRef(state.jobs);
-  jobsRef.current = state.jobs;
+  // The rows as shown (the Active tab lifts running jobs), which is the order
+  // Shift-click ranges follow.
+  const rows = filters.tab === 'active' ? runningFirst(state.jobs) : state.jobs;
+  const jobsRef = useRef(rows);
+  jobsRef.current = rows;
   const anchorId = useRef(null);
   useEffect(() => setSelected((s) => pruneSelection(s, state.jobs)), [state.jobs]);
 
@@ -226,7 +244,9 @@ export function QueuePage({ route }) {
   const c = app.counts;
   const tabs = [
     { value: 'active', label: 'Active', count: c ? c.queued + c.running : undefined },
+    { value: 'completed', label: 'Completed', count: c ? c.completed : undefined },
     { value: 'failed', label: 'Failed', count: c ? c.failed : undefined },
+    { value: 'cancelled', label: 'Cancelled', count: c ? c.cancelled : undefined },
     { value: 'all', label: 'All', count: c ? c.total : undefined },
   ];
   const rowHref = (job) => buildHash('queue', route.params, job.id);
@@ -235,10 +255,10 @@ export function QueuePage({ route }) {
   if (state.loading && state.jobs.length === 0) body = html`<${SkeletonRows} n=${6} kind="row" />`;
   else if (state.error && state.jobs.length === 0)
     body = html`<${ErrorNote} title="Couldn't load downloads" error=${state.error} onRetry=${() => load(0)} />`;
-  else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} />`;
+  else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} />`;
   else
     body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs">
-        ${state.jobs.map((job) => {
+        ${rows.map((job) => {
           const on = selecting && selected.has(job.id);
           return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined}>
             ${selecting
@@ -247,7 +267,7 @@ export function QueuePage({ route }) {
                     type="checkbox"
                     class="job-check-input"
                     checked=${on}
-                    aria-label=${`Select ${jobTitle(job)}`}
+                    aria-label=${`Select ${isUnresolved(job) ? inputLabel(job.input) : jobTitle(job)}`}
                     onClick=${(e) => toggle(job.id, e.shiftKey)}
                   />
                 </label>`
@@ -276,7 +296,7 @@ export function QueuePage({ route }) {
           <input
             type="search"
             data-filter
-            placeholder="Search title or URL"
+            placeholder="Search title, artist or URL"
             aria-label="Search jobs"
             value=${qInput}
             onInput=${(e) => setQInput(e.currentTarget.value)}
@@ -350,11 +370,20 @@ const typing = (el) =>
 
 const startAction = () => html`<${LinkButton} variant="primary" size="sm" icon="plus" href=${buildHash('new')}>Start a download</${LinkButton}>`;
 
-function QueueEmpty({ filters, onClear }) {
+function QueueEmpty({ filters, tabs, onClear }) {
   if (filters.q || filters.type) {
-    return html`<${Empty} icon="search" title="No jobs match these filters" action=${html`<${Button} size="sm" onClick=${onClear}>Clear filters</${Button}>`} />`;
+    // The search covers the current tab only; say so, and which tab.
+    const tab = tabs.find((t) => t.value === filters.tab);
+    const inTab = filters.tab !== 'all' && tab ? ` on the ${tab.label} tab` : '';
+    return html`<${Empty}
+      icon="search"
+      title=${`No jobs match these filters${inTab}`}
+      action=${html`<${Button} size="sm" onClick=${onClear}>Clear filters</${Button}>`}
+    >${filters.tab !== 'all' ? 'Other tabs may match; All searches every job.' : null}</${Empty}>`;
   }
   if (filters.tab === 'failed') return html`<${Empty} icon="circle-check" title="No failed jobs" />`;
+  if (filters.tab === 'completed') return html`<${Empty} icon="list" title="No completed jobs yet" />`;
+  if (filters.tab === 'cancelled') return html`<${Empty} icon="list" title="No cancelled jobs" />`;
   if (filters.tab === 'active') {
     return html`<${Empty} icon="list" title="No active downloads" action=${startAction()}>
       Paste an Apple Music link anywhere in the console, or start one here.

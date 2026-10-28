@@ -25,13 +25,14 @@ test('feed messages replace counts and only move the cursor forward', () => {
 });
 
 test('jobMatches filters by status, type and case-insensitive text', () => {
-  const job = { status: 'running', type: 'album', title: 'Midnights', input: 'https://music.apple.com/us/album/x/1' };
+  const job = { status: 'running', type: 'album', title: 'Midnights', artist_name: 'Taylor Swift', input: 'https://music.apple.com/us/album/x/1' };
   assert.equal(jobMatches(job, { statuses: ['running', 'queued'] }), true);
   assert.equal(jobMatches(job, { statuses: ['failed'] }), false);
   assert.equal(jobMatches(job, { types: ['playlist'] }), false);
   assert.equal(jobMatches(job, { q: 'MIDNI' }), true);
   assert.equal(jobMatches(job, { q: 'music.apple.com/us' }), true);
   assert.equal(jobMatches(job, { q: 'folklore' }), false);
+  assert.equal(jobMatches(job, { q: 'swift' }), true, 'the artist is searched too');
 });
 
 const T = (s) => `2026-10-28T12:00:${String(s).padStart(2, '0')}Z`;
@@ -92,7 +93,34 @@ test('per-job events merge payload objects by item and skip anything at or befor
   assert.equal(s.items[1].status, 'completed');
   assert.equal(s.items[1].file_size, 123);
   assert.equal(s.items[1].message, undefined, 'the event message is not an item field');
-  assert.deepEqual(s.activity.map((a) => a.type), ['item_completed'], 'progress events stay out of the activity list');
+  assert.deepEqual(s.activity, [], 'progress and per-track completion events stay out of the activity list');
+});
+
+test('events at or before the cursor fill Activity without touching the job or its tracks', () => {
+  let s = snapshot();
+  const replay = [
+    { id: 10, type: 'job_queued', created_at: T(1), payload: { id: 'job_1', status: 'queued', total_items: 0 } },
+    { id: 11, type: 'job_started', created_at: T(2), payload: { id: 'job_1', status: 'queued' } },
+    { id: 12, type: 'codec_selected', item_id: 'item_1', payload: { id: 'item_1', status: 'queued' } },
+    { id: 13, type: 'item_progress', item_id: 'item_1', payload: { id: 'item_1', status: 'queued', progress: {} } },
+  ];
+  s = applyJobEvents(s, replay);
+  assert.deepEqual(s.activity.map((a) => a.type), ['job_queued', 'job_started']);
+  assert.equal(s.job.status, 'running', 'a replayed lifecycle payload must not undo the snapshot');
+  assert.equal(s.items[0].status, 'downloading');
+  assert.equal(s.cursor, 50);
+  const again = applyJobEvents(s, replay);
+  assert.equal(again.activity.length, 2, 'a second replay adds nothing');
+  assert.equal(again, s, 'and changes nothing');
+  const live = applyJobEvents(s, [{ id: 51, type: 'operation_retry', phase: 'download', created_at: T(3) }]);
+  assert.deepEqual(live.activity.map((a) => a.id), [10, 11, 51], 'activity stays in id order');
+});
+
+test('Activity is capped at 200 events and keeps the newest', () => {
+  const lots = Array.from({ length: 250 }, (_, i) => ({ id: i + 1, type: 'operation_retry', phase: 'x' }));
+  const s = applyJobEvents(snapshot(), lots);
+  assert.equal(s.activity.length, 200);
+  assert.equal(s.activity[199].id, 250);
 });
 
 test('lifecycle events merge the job; item-set changes ask for a fresh snapshot', () => {

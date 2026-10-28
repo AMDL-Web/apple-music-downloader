@@ -2,8 +2,8 @@
 // a live tail with pause, expandable rows, and follow-bottom scrolling.
 
 import { html, useState, useEffect, useRef, useLayoutEffect } from '../ui/preact.js';
-import { listLogs, logStreamUrl, parseData } from '../api.js';
-import { clockTime, absTime, shortId, count } from '../lib/format.js';
+import { listLogs, listDownloads, getDownload, logStreamUrl, parseData } from '../api.js';
+import { clockTime, absTime, shortId, count, errorSummary, inputLabel } from '../lib/format.js';
 import { logLevelView } from '../lib/status.js';
 import { appendLogs, emptyLogs, LOG_CAP } from '../lib/store.js';
 import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
@@ -14,6 +14,57 @@ import { connectionView, LOG_RETENTION_OFF } from '../lib/status.js';
 
 const FOLLOW_SLACK_PX = 24;
 const INITIAL_LIMIT = 200;
+
+/**
+ * Titles of the jobs the log mentions, by id: the most recently updated 200
+ * jobs, kept current by the feed. A job outside them keeps its short id
+ * (the filter chip also reads the one job it filters to).
+ */
+function useJobNames(app, filterJobId) {
+  const [names, setNames] = useState(() => new Map());
+  useEffect(() => {
+    let live = true;
+    const name = (job) => job.title || inputLabel(job.input);
+    listDownloads({ limit: 200, sort: 'updated_at', order: 'desc' }).then(
+      (body) => {
+        if (!live) return;
+        setNames((m) => {
+          const next = new Map(m);
+          for (const job of body.downloads || []) if (!next.has(job.id)) next.set(job.id, name(job));
+          return next;
+        });
+      },
+      () => {},
+    );
+    const off = app.subscribeFeed((batch) => {
+      const fresh = batch.filter((msg) => msg.type === 'download_upserted' && msg.job);
+      if (fresh.length === 0) return;
+      setNames((m) => {
+        const next = new Map(m);
+        for (const msg of fresh) next.set(msg.job.id, name(msg.job));
+        return next;
+      });
+    });
+    return () => {
+      live = false;
+      off();
+    };
+  }, [app.epoch]);
+  useEffect(() => {
+    if (!filterJobId || names.has(filterJobId)) return undefined;
+    let live = true;
+    getDownload(filterJobId).then(
+      (body) => {
+        if (live && body && body.job) setNames((m) => new Map(m).set(filterJobId, body.job.title || inputLabel(body.job.input)));
+      },
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [filterJobId]);
+  return names;
+}
 
 export function LogsPage({ route }) {
   const app = useApp();
@@ -36,6 +87,25 @@ export function LogsPage({ route }) {
   followRef.current = follow;
   const lastSeqRef = useRef(0);
   lastSeqRef.current = logs.lastSeq;
+  const names = useJobNames(app, filters.job_id);
+  // One Tab stop for the whole list (roving tabindex): the row last focused,
+  // else the newest. Up and Down (and j and k) move between rows.
+  const [activeSeq, setActiveSeq] = useState(null);
+  const tabSeq = activeSeq !== null && logs.entries.some((e) => e.sequence === activeSeq) ? activeSeq : logs.entries.length ? logs.entries[logs.entries.length - 1].sequence : null;
+  const onRowKey = (e) => {
+    const keys = { ArrowDown: 1, ArrowUp: -1, Home: -Infinity, End: Infinity };
+    if (!(e.key in keys) || e.metaKey || e.ctrlKey || e.altKey || !e.target.closest('.log-line, .attr-chip')) return;
+    const lines = Array.from(view.current.querySelectorAll('.log-line'));
+    const at = lines.findIndex((n) => n.closest('.log-row').contains(e.target));
+    if (at < 0) return;
+    e.preventDefault();
+    const next = lines[Math.max(0, Math.min(lines.length - 1, keys[e.key] === Infinity ? lines.length - 1 : keys[e.key] === -Infinity ? 0 : at + keys[e.key]))];
+    next.focus();
+  };
+  const onRowFocus = (e) => {
+    const row = e.target.closest && e.target.closest('.log-row');
+    if (row) setActiveSeq(Number(row.getAttribute('data-seq')));
+  };
 
   const key = `${filters.levels.join(',')}|${filters.component}|${filters.job_id}|${filters.request_id}|${filters.q}|${app.epoch}`;
 
@@ -179,6 +249,8 @@ export function LogsPage({ route }) {
           key=${e.sequence}
           entry=${e}
           open=${expanded.has(e.sequence)}
+          stop=${e.sequence === tabSeq}
+          names=${names}
           onToggle=${() => toggleRow(e.sequence)}
           onFilter=${(patch) => setParams(patch)}
           narrow=${narrow}
@@ -224,7 +296,7 @@ export function LogsPage({ route }) {
     ${filters.job_id || filters.request_id
       ? html`<div class="filter-chips" aria-label="Active filters">
           ${filters.job_id
-            ? html`<span class="filter-chip">job_id: <span class="mono">${shortId(filters.job_id)}</span>
+            ? html`<span class="filter-chip">job: <span class="filter-chip-name" dir="auto" title=${filters.job_id}>${names.get(filters.job_id) || shortId(filters.job_id)}</span>
                 <a class="filter-chip-link" href=${buildHash('queue', {}, filters.job_id)}>Open job</a>
                 <button type="button" class="filter-chip-x" aria-label="Remove job filter" onClick=${() => setParams({ job_id: '' })}><${Icon} name="x" size="sm" /></button></span>`
             : null}
@@ -242,9 +314,10 @@ export function LogsPage({ route }) {
         role="log"
         aria-label="Process logs"
         aria-live="off"
-        tabindex="0"
         ref=${view}
         onScroll=${onScroll}
+        onKeyDown=${onRowKey}
+        onFocusCapture=${onRowFocus}
       >
         ${body}
       </div>
@@ -256,24 +329,30 @@ export function LogsPage({ route }) {
   </div>`;
 }
 
-function LogRow({ entry, open, onToggle, onFilter, narrow }) {
+function LogRow({ entry, open, stop, names, onToggle, onFilter, narrow }) {
   const lv = logLevelView(entry.level);
   const attrs = entry.attributes || {};
   const jobId = typeof attrs.job_id === 'string' ? attrs.job_id : '';
   const requestId = typeof attrs.request_id === 'string' ? attrs.request_id : '';
   const component = typeof attrs.component === 'string' ? attrs.component : '';
   const json = JSON.stringify(attrs, null, 2);
-  return html`<div class=${open ? 'log-entry log-row is-open' : 'log-entry log-row'} data-level=${entry.level} data-row tabindex="-1">
-    <button type="button" class="log-line" aria-expanded=${String(open)} onClick=${onToggle}>
+  // A failure's reason is on the row, not behind a click.
+  const reason = typeof attrs.error === 'string' && entry.level !== 'debug' ? errorSummary(attrs.error) : '';
+  const tab = stop ? 0 : -1;
+  const jobName = jobId ? names.get(jobId) : '';
+  return html`<div class=${open ? 'log-entry log-row is-open' : 'log-entry log-row'} data-level=${entry.level} data-seq=${entry.sequence} data-row tabindex="-1">
+    <button type="button" class="log-line" tabindex=${tab} aria-expanded=${String(open)} onClick=${onToggle}>
       <span class="log-time" title=${absTime(entry.time)}>${clockTime(entry.time, !narrow)}</span>
       <span class="log-level" data-role=${lv.role}><span class="log-dot"></span>${lv.short}</span>
       ${component ? html`<span class="log-comp">${component}</span>` : html`<span class="log-comp"></span>`}
-      <span class="log-msg">${entry.message}</span>
+      <span class="log-msg">${entry.message}${reason && !entry.message.includes(reason) ? html` <span class="log-err" title=${attrs.error}>${reason}</span>` : null}</span>
     </button>
     ${jobId || requestId
       ? html`<span class="log-chips">
-          ${jobId ? html`<button type="button" class="attr-chip" title=${`Filter to job ${jobId}`} onClick=${() => onFilter({ job_id: jobId })}>job ${shortId(jobId)}</button>` : null}
-          ${requestId ? html`<button type="button" class="attr-chip" title=${`Filter to request ${requestId}`} onClick=${() => onFilter({ request_id: requestId })}>req ${requestId.slice(0, 8)}</button>` : null}
+          ${jobId
+            ? html`<button type="button" class="attr-chip attr-chip-job" tabindex=${tab} title=${`Filter to ${jobName ? `${jobName} (${jobId})` : `job ${jobId}`}`} onClick=${() => onFilter({ job_id: jobId })}>${jobName ? html`<span class="attr-chip-name" dir="auto">${jobName}</span>` : `job ${shortId(jobId)}`}</button>`
+            : null}
+          ${requestId ? html`<button type="button" class="attr-chip" tabindex=${tab} title=${`Filter to request ${requestId}`} onClick=${() => onFilter({ request_id: requestId })}>req ${requestId.slice(0, 8)}</button>` : null}
         </span>`
       : null}
     ${open

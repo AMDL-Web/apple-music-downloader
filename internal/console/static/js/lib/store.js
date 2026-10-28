@@ -25,7 +25,7 @@ const time = (v) => {
 
 /**
  * Whether a job matches a list filter {statuses?, types?, q?}. q mirrors the
- * API's substring search over title and input.
+ * API's substring search over title, input and artist.
  */
 export function jobMatches(job, filter = {}) {
   if (!job) return false;
@@ -33,7 +33,7 @@ export function jobMatches(job, filter = {}) {
   if (filter.types && filter.types.length && !filter.types.includes(job.type)) return false;
   const q = (filter.q || '').trim().toLowerCase();
   if (q) {
-    const hay = `${job.title || ''}\n${job.input || ''}`.toLowerCase();
+    const hay = `${job.title || ''}\n${job.input || ''}\n${job.artist_name || ''}`.toLowerCase();
     if (!hay.includes(q)) return false;
   }
   return true;
@@ -89,7 +89,18 @@ const REFETCH_EVENTS = new Set(['resolved_input', 'job_retried', 'job_recovered'
 
 const HOOK_STATUS = { hook_started: 'running', hook_succeeded: 'succeeded', hook_failed: 'failed' };
 
-const ACTIVITY_LIMIT = 50;
+const ACTIVITY_LIMIT = 200;
+
+/** Per-track and per-codec events the track list already shows; Activity keeps the rest. */
+const QUIET_EVENTS = new Set(['item_progress', 'item_completed', 'item_skipped', 'codec_selected']);
+
+/** Activity with `ev` added in id order; a quiet event or one already held leaves it as is. */
+function addActivity(activity, ev) {
+  if (QUIET_EVENTS.has(ev.type) || activity.some((a) => a.id === ev.id)) return activity;
+  const next = [...activity, { id: ev.id, type: ev.type, phase: ev.phase, message: ev.message, item_id: ev.item_id, created_at: ev.created_at }];
+  next.sort((a, b) => Number(a.id) - Number(b.id));
+  return next.length > ACTIVITY_LIMIT ? next.slice(next.length - ACTIVITY_LIMIT) : next;
+}
 
 /** Initial drawer state from GET /downloads/{id}. */
 export function detailFromSnapshot(body) {
@@ -121,7 +132,14 @@ export function applyJobEvents(state, events) {
   let hooks = null;
   let activity = null;
   for (const ev of events) {
-    if (!ev || !isNewerCursor(s.cursor, ev.id)) continue;
+    if (!ev) continue;
+    // At or before the cursor: the snapshot already holds its effect, so a
+    // replayed event (the stream opens from the start for the history) only
+    // fills Activity.
+    if (!isNewerCursor(s.cursor, ev.id)) {
+      activity = addActivity(activity || s.activity, ev);
+      continue;
+    }
     s = { ...s, cursor: ev.id };
     const payload = ev.payload && typeof ev.payload === 'object' ? ev.payload : null;
     if (ev.type === 'job_deleted') {
@@ -149,15 +167,11 @@ export function applyJobEvents(state, events) {
         else hooks.push(entry);
       }
     }
-    if (ev.type !== 'item_progress') {
-      activity = activity || s.activity.slice();
-      activity.push({ id: ev.id, type: ev.type, phase: ev.phase, message: ev.message, item_id: ev.item_id, created_at: ev.created_at });
-      if (activity.length > ACTIVITY_LIMIT) activity.splice(0, activity.length - ACTIVITY_LIMIT);
-    }
+    activity = addActivity(activity || s.activity, ev);
   }
   if (items) s = { ...s, items };
   if (hooks) s = { ...s, hooks };
-  if (activity) s = { ...s, activity };
+  if (activity && activity !== s.activity) s = { ...s, activity };
   return s;
 }
 

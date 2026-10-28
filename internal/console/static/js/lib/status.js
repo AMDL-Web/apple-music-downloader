@@ -2,6 +2,8 @@
 // {icon, role, label, detail?} view, so color is never the only cue.
 // Roles are the status token families in css/tokens.css.
 
+import { errorSummary } from './format.js';
+
 /** @typedef {{icon: string, role: 'info'|'success'|'danger'|'warning'|'neutral'|'skipped', label: string, detail?: string, pulse?: boolean}} StatusView */
 
 /** Counters of a job, with the 2.0 disjoint fields defaulted to 0. */
@@ -229,13 +231,18 @@ export function connectionView(state) {
 export function jobProgress(job) {
   const c = jobCounts(job);
   const indeterminate = c.total === 0 && job && (job.status === 'running' || job.status === 'queued');
+  // Running with tracks resolved but none finished: the list payload has no
+  // byte progress, so the row shows motion instead of an empty bar.
+  const working = Boolean(job) && job.status === 'running' && c.total > 0 && c.done === 0 && c.failed === 0 && c.cancelled === 0;
   let aria = `${c.done} of ${c.total} tracks`;
   if (c.skipped) aria += `, ${c.skipped} already on disk`;
   if (c.failed) aria += `, ${c.failed} failed`;
   if (c.cancelled) aria += `, ${c.cancelled} cancelled`;
+  if (working) aria += ', working';
   return {
     ...c,
     indeterminate,
+    working,
     text: indeterminate ? 'Resolving' : `${c.done} / ${c.total}`,
     aria: indeterminate ? 'Resolving tracks' : aria,
   };
@@ -335,6 +342,56 @@ export function stageText(segments) {
       return `${s.label}: ${s.state === 'done' ? 'done' : 'not started'}`;
     })
     .join(', ');
+}
+
+const ACTIVITY_VIEWS = {
+  job_queued: ['Queued', 'neutral'],
+  job_started: ['Started', 'info'],
+  job_retried: ['Retried', 'info'],
+  job_recovered: ['Recovered after a restart', 'warning'],
+  job_finished: ['Finished', 'success'],
+  job_failed: ['Failed', 'danger'],
+  job_cancelled: ['Cancelled', 'neutral'],
+  resolved_input: ['Resolved', 'neutral'],
+  motion_artwork_resolved: ['Motion cover found', 'neutral'],
+  standalone_cover_failed: ['Cover failed', 'warning'],
+  item_failed: ['Track failed', 'danger'],
+  item_overwrite: ['Track replaced', 'neutral'],
+  codec_fallback: ['Codec fallback', 'warning'],
+  codec_failed: ['Codec failed', 'warning'],
+  alac_repaired: ['ALAC repaired', 'neutral'],
+  operation_retry: ['Retrying', 'warning'],
+  operation_exhausted: ['Gave up', 'danger'],
+  operation_recovered: ['Recovered', 'neutral'],
+  hook_started: ['Hook started', 'info'],
+  hook_succeeded: ['Hook succeeded', 'success'],
+  hook_failed: ['Hook failed', 'danger'],
+};
+
+/**
+ * One Activity entry of the job drawer as {label, role, text}: a word for the
+ * event type, and the event's own message as one line when it adds something
+ * (the default "job queued" repeats the label; an error loses its JSON body).
+ */
+export function activityView(entry) {
+  const type = (entry && entry.type) || '';
+  const known = ACTIVITY_VIEWS[type];
+  const plain = type.replaceAll('_', ' ');
+  const label = known ? known[0] : plain.charAt(0).toUpperCase() + plain.slice(1);
+  const message = errorSummary(entry && entry.message);
+  const phase = entry && entry.phase ? String(entry.phase).replaceAll('_', ' ') : '';
+  const text = message && message.toLowerCase() !== plain ? message : phase;
+  return { label, role: known ? known[1] : 'neutral', text };
+}
+
+/**
+ * The Active list with running jobs first, each group in the order given: a
+ * batch shares one created_at, so the server cannot say which of its jobs
+ * run first, but the ones already running belong on top.
+ */
+export function runningFirst(jobs) {
+  const running = jobs.filter((j) => j.status === 'running');
+  return running.length === 0 || running.length === jobs.length ? jobs : [...running, ...jobs.filter((j) => j.status !== 'running')];
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);

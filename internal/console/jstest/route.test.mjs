@@ -80,6 +80,9 @@ test('queue tabs map to API queries', () => {
     order: 'desc',
   });
   assert.deepEqual(queueQuery(queueFilters({ tab: 'all' })), { limit: 50, offset: 0 });
+  assert.deepEqual(queueQuery(queueFilters({ tab: 'completed' })), { limit: 50, offset: 0, status: 'completed', sort: 'updated_at', order: 'desc' });
+  assert.deepEqual(queueQuery(queueFilters({ tab: 'cancelled' })), { limit: 50, offset: 0, status: 'cancelled', sort: 'updated_at', order: 'desc' });
+  assert.equal(queueFilters({ tab: 'cancelled' }).tab, 'cancelled');
   assert.equal(queueFilters({ tab: 'bogus', type: 'bogus' }).tab, 'active');
   assert.deepEqual(queueMatchFilter({ tab: 'failed', type: 'song', q: 'z' }), { statuses: ['failed'], types: ['song'], q: 'z' });
 });

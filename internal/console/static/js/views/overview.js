@@ -3,22 +3,28 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, listLogs, logStreamUrl, settle, parseData } from '../api.js';
-import { count, jobTitle, jobSubtitle, artPalette, paletteStyle, clockTime, jobFacts, systemFacts, attrPairs } from '../lib/format.js';
+import { count, jobTitle, jobSubtitle, artPalette, paletteStyle, clockTime, jobFacts, systemFacts, attrPairs, isUnresolved, inputLabel, unresolvedHint, errorSummary } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, logLevelView, isAlreadyInLibrary, LOG_RETENTION_OFF } from '../lib/status.js';
 import { upsertJob, appendLogs, emptyLogs } from '../lib/store.js';
 import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
 import { buildHash } from '../lib/route.js';
-import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, LinkButton, Button, RelTime, HealthList, Facts } from '../ui/components.js';
+import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, LinkButton, Button, RelTime, HealthList, Facts, StatusText } from '../ui/components.js';
 import { usePoll, useColumns, useNow } from '../ui/hooks.js';
 import { JobRow, applyFeedToList } from './queue.js';
 import { ThroughputCard } from './throughput.js';
 
+// Sections follow the reading order of both skins, so Tab order equals the
+// visual order: the server status line, Live queue, Recently completed, Jobs,
+// System health, Throughput, Log tail.
 export function OverviewPage() {
+  const app = useApp();
+  const health = usePoll(loadHealth, 30000, [app.epoch]);
   return html`<div class="page page-overview">
-    <${KpiRow} />
+    <${HealthStrip} poll=${health} />
     <${LiveQueue} />
-    <${HealthCard} />
     <${RecentStrip} />
+    <${KpiRow} />
+    <${HealthCard} poll=${health} />
     <${ThroughputCard} />
     <${LogTail} />
   </div>`;
@@ -56,11 +62,20 @@ function LiveQueue() {
   const app = useApp();
   const [state, setState] = useState({ jobs: [], loading: true, error: null });
   const [stamp, setStamp] = useState(0);
-  const load = () =>
-    listDownloads({ status: 'running,queued', sort: 'created_at', order: 'asc', limit: LIVE_LIMIT }).then(
-      (body) => setState({ jobs: body.downloads, loading: false, error: null }),
-      (error) => setState((s) => ({ ...s, loading: false, error })),
+  // A read that is not the latest one is dropped, so a slow older answer
+  // cannot overwrite a newer list.
+  const seq = useRef(0);
+  const load = () => {
+    const mine = ++seq.current;
+    return listDownloads({ status: 'running,queued', sort: 'created_at', order: 'asc', limit: LIVE_LIMIT }).then(
+      (body) => {
+        if (mine === seq.current) setState({ jobs: body.downloads, loading: false, error: null });
+      },
+      (error) => {
+        if (mine === seq.current) setState((s) => ({ ...s, loading: false, error }));
+      },
     );
+  };
   useEffect(() => {
     load();
   }, [app.epoch, stamp]);
@@ -120,18 +135,19 @@ function Attention() {
   const [jobs, setJobs] = useState([]);
   const [stamp, setStamp] = useState(0);
   const [busy, setBusy] = useState(null);
+  const seq = useRef(0);
   useEffect(() => {
-    let cancelled = false;
+    const mine = ++seq.current;
     listDownloads({ status: 'failed', sort: 'updated_at', order: 'desc', limit: ATTENTION_LIMIT }).then(
       (body) => {
-        if (!cancelled) setJobs(body.downloads);
+        if (mine === seq.current) setJobs(body.downloads);
       },
       () => {
-        if (!cancelled) setJobs([]);
+        if (mine === seq.current) setJobs([]);
       },
     );
     return () => {
-      cancelled = true;
+      seq.current++;
     };
   }, [app.epoch, stamp]);
   const jobsRef = useRef(jobs);
@@ -148,7 +164,12 @@ function Attention() {
       }),
     [],
   );
+  // Retrying disables the button that had focus and the feed then removes
+  // its row; until a moment after, focus that falls to the body moves to the
+  // next Retry, or to the card's "Open queue" link.
+  const rescueUntil = useRef(0);
   const retry = async (job) => {
+    rescueUntil.current = Infinity;
     setBusy(job.id);
     try {
       await retryDownload(job.id);
@@ -157,8 +178,16 @@ function Attention() {
       app.toast({ message: e.message || 'The request failed', role: 'danger', sticky: true });
     } finally {
       setBusy(null);
+      rescueUntil.current = Date.now() + 3000;
     }
   };
+  useEffect(() => {
+    if (Date.now() > rescueUntil.current) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.disabled) return;
+    const target = document.querySelector('.attention .btn:not(:disabled)') || document.querySelector('[data-section="live"] .card-actions a');
+    if (target) target.focus({ preventScroll: true });
+  });
   const recent = jobs.filter((j) => now - Date.parse(j.finished_at || j.updated_at) < ATTENTION_WINDOW_MS);
   if (recent.length === 0) return null;
   return html`<ul class="attention" aria-label="Recent failures">
@@ -167,11 +196,15 @@ function Attention() {
         <span class="attention-icon"><${Icon} name="circle-x" /></span>
         <span class="attention-title">
           <span class="attention-label">Failed</span>
-          <a class="attention-link" href=${buildHash('queue', {}, job.id)} dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</a>
-          <span class="attention-input" title=${job.input}>${job.input}</span>
+          ${isUnresolved(job)
+            ? null
+            : html`<a class="attention-link" href=${buildHash('queue', {}, job.id)} dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</a>`}
+          ${isUnresolved(job)
+            ? html`<a class="attention-link attention-input" href=${buildHash('queue', {}, job.id)} title=${job.input}>${inputLabel(job.input)}</a>`
+            : html`<span class="attention-input" title=${job.input}>${job.input}</span>`}
         </span>
         <span class="attention-detail">
-          ${job.error ? html`<span class="attention-error" title=${job.error}>${job.error}</span>` : null}
+          ${job.error ? html`<span class="attention-error" title=${job.error}>${errorSummary(job.error)}</span>` : null}
           <${RelTime} value=${job.finished_at || job.updated_at} />
         </span>
         <${Button} size="sm" icon="rotate" onClick=${() => retry(job)} disabled=${busy === job.id}>Retry</${Button}>
@@ -195,8 +228,35 @@ export function healthRows(results) {
   ];
 }
 
-function HealthCard() {
-  const poll = usePoll(loadHealth, 30000);
+/**
+ * One line under the page head that answers "is the server healthy?": a quiet
+ * status when everything is fine, a notice naming each service that is not
+ * (the wrapper unreachable, library sync failing), with a link to System.
+ * Nothing renders until the first read settles.
+ */
+function HealthStrip({ poll }) {
+  if (!poll.data) return null;
+  const rows = healthRows(poll.data);
+  const bad = rows.filter(([, v]) => v.role === 'danger' || v.role === 'warning');
+  const details = html`<a class="health-strip-link" href=${buildHash('system')}>Details</a>`;
+  if (bad.length === 0) {
+    return html`<p class="health-strip" data-state="ok" data-role="success">
+      <${StatusText} view=${{ icon: 'circle-check', role: 'success', label: 'All systems healthy' }} />${details}
+    </p>`;
+  }
+  const worst = bad.some(([, v]) => v.role === 'danger') ? 'danger' : 'warning';
+  return html`<div class="health-strip notice" data-state="problem" data-role=${worst} role="status">
+    <${Icon} name=${worst === 'danger' ? 'circle-x' : 'triangle-alert'} />
+    <div class="notice-body">
+      ${bad.map(
+        ([name, v]) => html`<span key=${name} class="health-strip-item"><strong>${name}</strong> ${v.label.toLowerCase()}${v.detail ? `: ${v.detail}` : ''}</span>`,
+      )}
+      ${details}
+    </div>
+  </div>`;
+}
+
+function HealthCard({ poll }) {
   const sys = poll.data && poll.data[4] && !poll.data[4].error ? poll.data[4].data : null;
   const facts = systemFacts(sys);
   return html`<${Card}
@@ -219,11 +279,18 @@ function RecentStrip() {
   const ref = useRef(null);
   const cols = useColumns(ref, TILE_MIN, TILE_GAP);
   const [state, setState] = useState({ jobs: [], loading: true, error: null });
-  const load = () =>
-    listDownloads({ status: 'completed', sort: 'updated_at', order: 'desc', limit: 16 }).then(
-      (body) => setState({ jobs: body.downloads, loading: false, error: null }),
-      (error) => setState((s) => ({ ...s, loading: false, error })),
+  const seq = useRef(0);
+  const load = () => {
+    const mine = ++seq.current;
+    return listDownloads({ status: 'completed', sort: 'updated_at', order: 'desc', limit: 16 }).then(
+      (body) => {
+        if (mine === seq.current) setState({ jobs: body.downloads, loading: false, error: null });
+      },
+      (error) => {
+        if (mine === seq.current) setState((s) => ({ ...s, loading: false, error }));
+      },
     );
+  };
   useEffect(() => {
     load();
   }, [app.epoch]);

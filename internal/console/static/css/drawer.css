@@ -369,20 +369,93 @@
   cursor: pointer;
 }
 
+/* Newest first, about eight rows tall; a longer history scrolls inside. */
 .activity-list {
+  max-height: calc(8 * var(--lh-12) + 7 * var(--s-1));
   margin-top: var(--s-3);
   gap: var(--s-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   font-size: var(--fs-12);
   line-height: var(--lh-12);
 }
 
-.activity-list li {
-  display: flex;
-  flex-wrap: wrap;
+.activity-row {
+  display: grid;
+  grid-template-columns: 5.5em auto minmax(0, 1fr);
+  align-items: baseline;
   gap: var(--s-2);
+}
+
+.activity-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-label {
+  font-weight: var(--w-medium);
+}
+
+.activity-row[data-role="danger"] .activity-label {
+  color: var(--danger-text);
+}
+
+.activity-row[data-role="warning"] .activity-label {
+  color: var(--warning-text);
 }
 
 .activity-msg {
   overflow-wrap: anywhere;
 }
 
+/* A failed job's full upstream text, behind the one-line reason. */
+.notice-more {
+  margin-top: var(--s-1);
+}
+
+.notice-more summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.notice-raw {
+  margin: var(--s-1) 0 0;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-mono-12);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Where a finished job's files are. */
+.drawer-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.drawer-files-dir {
+  min-width: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.drawer-files-link {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Before Apple names the job, its link stands in for a title. */
+.drawer-title.is-unresolved {
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-regular);
+  color: var(--text-secondary);
+}

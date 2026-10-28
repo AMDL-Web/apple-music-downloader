@@ -719,31 +719,8 @@
 /* ---- Overview layout ----------------------------------------------- */
 
 /* Mockup order: Now Downloading, Recently Completed, then jobs and throughput
-   beside System Health, then the log. */
-:root[data-skin="music"] .page-overview > [data-section="live"] {
-  order: 1;
-}
-
-:root[data-skin="music"] .page-overview > [data-section="recent"] {
-  order: 2;
-}
-
-:root[data-skin="music"] .page-overview > [data-section="kpis"] {
-  order: 3;
-}
-
-:root[data-skin="music"] .page-overview > [data-section="health"] {
-  order: 4;
-}
-
-:root[data-skin="music"] .page-overview > [data-section="throughput"] {
-  order: 5;
-}
-
-:root[data-skin="music"] .page-overview > [data-section="logs"] {
-  order: 6;
-}
-
+   beside System Health, then the log. The DOM is in that order, so Tab order
+   follows it. */
 @media (min-width: 1024px) {
   :root[data-skin="music"] .page-overview > [data-section="live"] {
     grid-column: span 12;
@@ -758,18 +735,6 @@
     grid-column: span 4;
     grid-row: span 2;
     align-self: start;
-  }
-}
-
-/* Stacked, the sections follow the desktop reading order: Jobs and
-   Throughput (the left column), then System health, then the log. */
-@media (max-width: 1023px) {
-  :root[data-skin="music"] .page-overview > [data-section="throughput"] {
-    order: 4;
-  }
-
-  :root[data-skin="music"] .page-overview > [data-section="health"] {
-    order: 5;
   }
 }
 
@@ -1449,6 +1414,11 @@
   box-shadow: none;
 }
 
+/* Running with nothing finished: the joined capsule is striped, not empty. */
+:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .jprog[data-working] .pcells {
+  background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
+}
+
 :root[data-skin="music"] [data-section="jobs"] .job-row > .art {
   width: 48px;
   height: 48px;
@@ -1652,6 +1622,14 @@
   letter-spacing: var(--tracking-title);
 }
 
+:root[data-skin="music"] .drawer-title.is-unresolved {
+  font-family: var(--font-mono);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-regular);
+  letter-spacing: 0;
+}
+
 :root[data-skin="music"] .drawer-artist {
   color: var(--art-t2, var(--text-secondary));
   font-size: var(--fs-15);
@@ -1744,6 +1722,10 @@
 
 :root[data-skin="music"] .track:has(.track-status [data-role="info"]) .stage-fill {
   background: var(--info);
+}
+
+:root[data-skin="music"] .track:has(.track-status [data-role="success"]) .stage-fill {
+  background: var(--success);
 }
 
 :root[data-skin="music"] .swatch-dot {

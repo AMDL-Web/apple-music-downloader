@@ -1898,7 +1898,7 @@
 }
 
 :root[data-skin="editorial"] .log-line {
-  padding: var(--s-1) 0;
+  padding: var(--s-1) var(--s-2);
   column-gap: var(--s-4);
 }
 
@@ -2287,6 +2287,14 @@
   line-height: var(--lh-drawer-title);
   font-weight: var(--w-heavy);
   letter-spacing: -0.035em;
+}
+
+:root[data-skin="editorial"] .drawer-title.is-unresolved {
+  font-family: var(--font-mono);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-regular);
+  letter-spacing: 0;
 }
 
 :root[data-skin="editorial"] .drawer-artist {

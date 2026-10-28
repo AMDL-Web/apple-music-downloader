@@ -14,6 +14,8 @@ import {
   logLevelView,
   connectionView,
   jobProgress,
+  activityView,
+  runningFirst,
   stageSegments,
   stageText,
   isTerminal,
@@ -130,6 +132,16 @@ test('jobProgress counts tracks and never reports a percentage', () => {
   assert.equal(resolving.text, 'Resolving');
 });
 
+test('a running job with tracks and nothing finished is working, not empty', () => {
+  const song = jobProgress({ status: 'running', total_items: 1 });
+  assert.equal(song.working, true);
+  assert.equal(song.aria, '0 of 1 tracks, working');
+  assert.equal(jobProgress({ status: 'running', total_items: 5, completed_items: 1 }).working, false);
+  assert.equal(jobProgress({ status: 'running', total_items: 0 }).working, false);
+  assert.equal(jobProgress({ status: 'queued', total_items: 3 }).working, false);
+  assert.equal(jobProgress({ status: 'failed', total_items: 3 }).working, false);
+});
+
 test('stage segments follow ItemProgress', () => {
   const states = (item) => stageSegments(item).map((s) => s.state);
   assert.deepEqual(states({ status: 'queued', progress: {} }), ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty']);
@@ -203,4 +215,21 @@ test('progressLegend counts every cell state in cell order, zeros included', () 
     progressLegend({ total_items: 2, completed_items: 5, failed_items: 1 }).map((k) => k.n),
     [2, 0, 0, 0, 0],
   );
+});
+
+test('activityView names the event and keeps one useful line', () => {
+  assert.deepEqual(activityView({ type: 'job_queued', message: 'job queued' }), { label: 'Queued', role: 'neutral', text: '' });
+  assert.deepEqual(activityView({ type: 'resolved_input', message: 'album' }), { label: 'Resolved', role: 'neutral', text: 'album' });
+  const failed = activityView({ type: 'job_failed', message: 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q"}]}' });
+  assert.equal(failed.role, 'danger');
+  assert.equal(failed.text, 'catalog request failed: 404 Not Found');
+  assert.equal(activityView({ type: 'operation_exhausted', phase: 'resolve_tracks' }).text, 'resolve tracks');
+  assert.equal(activityView({ type: 'some_new_event' }).label, 'Some new event');
+});
+
+test('runningFirst lifts running jobs and keeps each group in order', () => {
+  const jobs = [{ id: 'a', status: 'queued' }, { id: 'b', status: 'running' }, { id: 'c', status: 'queued' }, { id: 'd', status: 'running' }];
+  assert.deepEqual(runningFirst(jobs).map((j) => j.id), ['b', 'd', 'a', 'c']);
+  const queuedOnly = jobs.filter((j) => j.status === 'queued');
+  assert.equal(runningFirst(queuedOnly), queuedOnly, 'nothing to move returns the same list');
 });

@@ -191,6 +191,29 @@
   background: var(--bg-hover);
 }
 
+/* A failure's reason, in the row's own text. */
+.log-err {
+  color: var(--danger-text);
+}
+
+.attr-chip-job {
+  max-width: 24ch;
+}
+
+.attr-chip-name,
+.filter-chip-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-chip-name {
+  display: inline-block;
+  max-width: 28ch;
+  vertical-align: bottom;
+}
+
 .log-line:focus-visible {
   outline-offset: -2px;
 }

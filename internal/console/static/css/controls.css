@@ -377,6 +377,12 @@
   background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
 }
 
+/* Running, tracks resolved, none finished: striped instead of empty. */
+.jprog[data-working] .pcell[data-state="remaining"],
+.jprog[data-working] .pbar {
+  background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
+}
+
 .jprog-text {
   min-width: 3.5em;
   text-align: right;

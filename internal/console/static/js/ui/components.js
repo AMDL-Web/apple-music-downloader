@@ -61,7 +61,7 @@ export function JobProgress({ job }) {
       : null,
   ];
   if (cells) {
-    return html`<div class="jprog" data-mode="cells">
+    return html`<div class="jprog" data-mode="cells" data-working=${p.working ? '' : undefined}>
       <div
         class="pcells"
         role="progressbar"
@@ -79,7 +79,7 @@ export function JobProgress({ job }) {
   }
   const seg = (role, n) =>
     n > 0 ? html`<span key=${role} class="pbar-seg" data-role=${role} style=${{ '--w': String(n / p.total) }}></span>` : null;
-  return html`<div class="jprog" data-mode="bar">
+  return html`<div class="jprog" data-mode="bar" data-working=${p.working ? '' : undefined}>
     <div
       class=${p.indeterminate ? 'pbar is-indeterminate' : 'pbar'}
       role="progressbar"

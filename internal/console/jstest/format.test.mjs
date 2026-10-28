@@ -23,7 +23,12 @@ import {
   isHiRes,
   jobTitle,
   jobSubtitle,
+  isUnresolved,
+  inputLabel,
+  unresolvedHint,
+  errorSummary,
   shortId,
+  displayId,
   maskAccount,
   safeHttpUrl,
   contrastRatio,
@@ -130,6 +135,9 @@ test('jobTitle falls back to the input URL slug before the input resolves', () =
 
 test('shortId, maskAccount and safeHttpUrl', () => {
   assert.equal(shortId('job_0123456789abcdef0123456789abcdef'), '01234567');
+  assert.equal(displayId('job_0123456789abcdef0123456789abcdef'), '01234567');
+  assert.equal(displayId('job_doesnotexist'), 'job_doesnotexist', 'an id that cannot be real is shown whole');
+  assert.equal(displayId(undefined), '');
   assert.equal(maskAccount('jane@example.com'), 'j•••@example.com');
   assert.equal(maskAccount('operator'), 'o•••r');
   assert.equal(safeHttpUrl('https://music.apple.com/us/album/1'), 'https://music.apple.com/us/album/1');
@@ -273,4 +281,28 @@ test('server messages read as row text or as a sentence', () => {
   assert.equal(sentence('Already a sentence!'), 'Already a sentence!');
   assert.equal(sentence(undefined), '');
   assert.equal(punctuated('download.cover_size must be {width}x{height}'), 'download.cover_size must be {width}x{height}.');
+});
+
+test('an unresolved job is shown by its link, not by a guessed title', () => {
+  assert.equal(isUnresolved({ input: 'https://music.apple.com/us/album/x/1' }), true);
+  assert.equal(isUnresolved({ title: 'Blonde' }), false);
+  assert.equal(isUnresolved(null), false);
+  assert.equal(inputLabel('https://music.apple.com/us/album/after-hours/1499378108?i=3&l=en'), 'music.apple.com/us/album/after-hours/1499378108');
+  assert.equal(inputLabel('https://music.apple.com/us/album/x/'), 'music.apple.com/us/album/x');
+  assert.equal(inputLabel('not a url'), 'not a url');
+  assert.equal(unresolvedHint({ status: 'queued' }), 'Not resolved yet');
+  assert.equal(unresolvedHint({ status: 'failed' }), "Couldn't be resolved");
+  assert.equal(unresolvedHint({ status: 'cancelled' }), 'Cancelled before it resolved');
+});
+
+test('errorSummary keeps the first line and drops an embedded JSON body', () => {
+  assert.equal(errorSummary('catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}'), 'catalog request failed: 404 Not Found');
+  assert.equal(errorSummary('Apple Music has nothing at this link.'), 'Apple Music has nothing at this link.');
+  assert.equal(errorSummary('first line\nsecond line'), 'first line');
+  assert.equal(errorSummary('{"error":"x"}'), '{"error":"x"}');
+  assert.equal(errorSummary(''), '');
+  assert.equal(errorSummary(undefined), '');
+  const long = errorSummary('x'.repeat(300));
+  assert.equal(long.length, 140);
+  assert.ok(long.endsWith('…'));
 });
