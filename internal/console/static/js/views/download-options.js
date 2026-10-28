@@ -3,7 +3,7 @@
 // lyrics, covers, attempts and hooks. The page owns the values and turns
 // them into overrides (lib/overrides.js); this card only renders and edits.
 
-import { html } from '../ui/preact.js';
+import { html, useRef, useLayoutEffect } from '../ui/preact.js';
 import {
   CODECS,
   SAMPLE_RATES,
@@ -115,11 +115,12 @@ function OptionsForm({ defaults, values, setValue, hooks, hookSel, setHookSel, r
     <fieldset class="new-fieldset" data-group="quality">
       <legend class="section-title">Quality</legend>
       <${CodecPriority} list=${values.quality_priority} changedMark=${ch('quality_priority')} onChange=${(v) => setValue('quality_priority', v)} />
-      ${bool('codec_alternative', 'Try the next codec when one fails', 'Off: only the first codec is tried, then AAC-LC.')}
-      <div class="new-field-row">
+      ${bool('codec_alternative', 'Fall back to the next codec', 'Off: only the first codec is tried, then AAC-LC.')}
+      ${values.quality_priority.includes('alac')
+        ? html`<div class="new-field-row">
         <${Select}
           name="alac_max_sample_rate"
-          labelText="ALAC sample rate up to"
+          labelText="Highest ALAC sample rate"
           value=${values.alac_max_sample_rate}
           options=${choices(SAMPLE_RATES, defaults.alac_max_sample_rate)}
           format=${rateLabel}
@@ -128,14 +129,15 @@ function OptionsForm({ defaults, values, setValue, hooks, hookSel, setHookSel, r
         />
         <${Select}
           name="alac_max_bit_depth"
-          labelText="ALAC bit depth up to"
+          labelText="Highest ALAC bit depth"
           value=${values.alac_max_bit_depth}
           options=${choices(BIT_DEPTHS, defaults.alac_max_bit_depth)}
           format=${(v) => `${v}-bit`}
           changedMark=${ch('alac_max_bit_depth')}
           onChange=${(v) => setValue('alac_max_bit_depth', num(v))}
         />
-      </div>
+      </div>`
+        : null}
     </fieldset>
     <fieldset class="new-fieldset" data-group="lyrics">
       <legend class="section-title">Lyrics</legend>
@@ -189,13 +191,41 @@ function OptionsForm({ defaults, values, setValue, hooks, hookSel, setHookSel, r
   </div>`;
 }
 
-/** The ordered codec list: move up and down, remove (never the last), add an excluded codec. */
+/**
+ * The ordered codec list: move up and down, remove (never the last), add an
+ * excluded codec. Focus stays in the list: an added codec's row takes it,
+ * and a removed row hands it to its neighbour.
+ */
 function CodecPriority({ list, onChange, changedMark }) {
+  const box = useRef(null);
+  const pending = useRef('');
   const excluded = CODECS.filter((c) => !list.includes(c.value));
   const info = (v) => CODECS.find((c) => c.value === v) || { value: v, label: v, hint: '' };
-  return html`<div class="new-codecs" data-changed=${changedMark ? '' : undefined} data-key="quality_priority">
+  // Moves focus right after the list re-renders, before the browser can
+  // drop it on the body with the removed button.
+  const focusLater = (selector) => {
+    pending.current = selector;
+  };
+  useLayoutEffect(() => {
+    const selector = pending.current;
+    pending.current = '';
+    const el = selector && box.current ? box.current.querySelector(selector) : null;
+    if (el) el.focus();
+  }, [list.join(',')]);
+  const add = (v) => {
+    onChange([...list, v]);
+    focusLater(`.new-codec[data-codec="${v}"] .new-codec-up`);
+  };
+  const remove = (i) => {
+    const next = list.filter((_, j) => j !== i);
+    onChange(next);
+    const neighbour = next[Math.min(i, next.length - 1)];
+    focusLater(next.length > 1 ? `.new-codec[data-codec="${neighbour}"] .new-codec-remove` : '.new-codec-add-btn');
+  };
+  const only = list.length === 1 ? info(list[0]).label : '';
+  return html`<div class="new-codecs" ref=${box} data-changed=${changedMark ? '' : undefined} data-key="quality_priority">
     <span class="new-field-label" id="new-codecs-label">Codec priority</span>
-    <ol class="new-codec-list" aria-labelledby="new-codecs-label">
+    <ol class="new-codec-list" aria-labelledby="new-codecs-label" aria-describedby="new-codecs-hint">
       ${list.map((v, i) => {
         const c = info(v);
         return html`<li key=${v} class="new-codec" data-codec=${v}>
@@ -204,7 +234,7 @@ function CodecPriority({ list, onChange, changedMark }) {
           <span class="new-codec-actions">
             <${Button} variant="ghost" size="sm" icon="arrow-down" className="new-codec-up" aria-label=${`Move ${c.label} up`} title="Move up" disabled=${i === 0} onClick=${() => onChange(moveItem(list, i, -1))} />
             <${Button} variant="ghost" size="sm" icon="arrow-down" aria-label=${`Move ${c.label} down`} title="Move down" disabled=${i === list.length - 1} onClick=${() => onChange(moveItem(list, i, 1))} />
-            <${Button} variant="ghost" size="sm" icon="x" aria-label=${`Remove ${c.label}`} title=${list.length === 1 ? 'At least one codec is needed' : 'Remove'} disabled=${list.length === 1} onClick=${() => onChange(list.filter((x) => x !== v))} />
+            <${Button} variant="ghost" size="sm" icon="x" className="new-codec-remove" aria-label=${`Remove ${c.label}`} title=${only ? 'At least one codec is needed' : 'Remove'} disabled=${Boolean(only)} onClick=${() => remove(i)} />
           </span>
         </li>`;
       })}
@@ -213,11 +243,13 @@ function CodecPriority({ list, onChange, changedMark }) {
       ? html`<div class="new-codec-add" role="group" aria-label="Add a codec">
           <span class="new-codec-add-label">Add</span>
           ${excluded.map(
-            (c) => html`<${Button} key=${c.value} variant="secondary" size="sm" icon="plus" className="new-codec-add-btn" data-codec=${c.value} title=${c.hint} onClick=${() => onChange([...list, c.value])}>${c.label}</${Button}>`,
+            (c) => html`<${Button} key=${c.value} variant="secondary" size="sm" icon="plus" className="new-codec-add-btn" data-codec=${c.value} title=${c.hint} onClick=${() => add(c.value)}>${c.label}</${Button}>`,
           )}
         </div>`
       : null}
-    <p class="new-hint">AAC-LC is always the last fallback and is not listed.</p>
+    <p class="new-hint" id="new-codecs-hint">
+      ${only ? `At least one codec is needed: add another before removing ${only}. ` : ''}Tried top to bottom. AAC-LC, the plain AAC every track has, is always the last fallback and needs no entry.
+    </p>
   </div>`;
 }
 

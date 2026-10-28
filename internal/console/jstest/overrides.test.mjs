@@ -154,7 +154,16 @@ test('describeOverrides names each change in display order', () => {
       cover_size: '1400x1400',
       media_user_token: 'secret',
     }),
-    ['Quality: Dolby Atmos, ALAC', 'Lyrics file on', 'Word-timed lyrics', 'Cover 1400 × 1400', '1 attempt', 'Hooks: none'],
+    ['Quality: Dolby Atmos (E-AC-3), ALAC (lossless)', 'Lyrics file on', 'Word-timed lyrics', 'Cover 1400 × 1400', '1 attempt', 'Hooks: none'],
   );
   assert.deepEqual(describeOverrides({ hooks: ['notify'], force_overwrite: true }), ['Overwrite existing files', 'Hooks: notify']);
+});
+
+test('codec labels and ALAC choices match the Settings fields', async () => {
+  const { fieldByKey } = await import('../static/js/lib/settings.js');
+  const { CODECS, SAMPLE_RATES, BIT_DEPTHS } = await import('../static/js/lib/overrides.js');
+  assert.deepEqual(CODECS.map((c) => [c.value, c.label]), fieldByKey('download.quality_priority').options.map((o) => [o.value, o.label]));
+  assert.deepEqual(SAMPLE_RATES, fieldByKey('download.alac_max_sample_rate').options.map((o) => o.value));
+  assert.deepEqual(BIT_DEPTHS, [16, 24]);
+  assert.ok(CODECS.every((c) => c.hint), 'every codec has a description');
 });

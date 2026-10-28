@@ -5,23 +5,34 @@
 // internal/api/openapi.yaml (DownloadOverrides) and the comments in
 // configs/config.example.yaml.
 
+import { fieldByKey } from './settings.js';
+
 /** localStorage key for options remembered on this device (never the token). */
 export const OPTIONS_KEY = 'amdl.console.download.options';
 
-/** Codecs of quality_priority in the config's documented order. AAC-LC is always the last fallback and is not listed. */
-export const CODECS = [
-  { value: 'alac', label: 'ALAC', hint: 'Apple Lossless' },
-  { value: 'aac', label: 'AAC', hint: 'Enhanced HLS AAC' },
-  { value: 'aac-binaural', label: 'AAC Binaural', hint: 'Binaural AAC' },
-  { value: 'aac-downmix', label: 'AAC Downmix', hint: 'Dolby downmix AAC' },
-  { value: 'ec3', label: 'Dolby Atmos', hint: 'Dolby Digital Plus (E-AC-3)' },
-  { value: 'ac3', label: 'Dolby Digital', hint: 'AC-3' },
-];
+// Labels and value lists come from the Settings fields of the same keys
+// (lib/settings.js FIELDS), so both pages use one vocabulary.
+const settingsOptions = (key) => fieldByKey(`download.${key}`).options;
+const CODEC_HINTS = {
+  alac: 'Apple Lossless, up to the sample rate and bit depth below',
+  aac: 'The Enhanced HLS AAC stream, not the AAC-LC fallback',
+  'aac-binaural': 'Spatial audio rendered for headphones',
+  'aac-downmix': 'Spatial audio downmixed to stereo AAC',
+  ec3: 'Dolby Atmos in Dolby Digital Plus',
+  ac3: 'Dolby Digital surround',
+};
+
+/**
+ * Codecs of quality_priority, in the order Settings lists them, with
+ * Settings' label and a one-line description. AAC-LC is always the last
+ * fallback and is not listed.
+ */
+export const CODECS = settingsOptions('quality_priority').map((o) => ({ value: o.value, label: o.label, hint: CODEC_HINTS[o.value] || '' }));
 const CODEC_VALUES = CODECS.map((c) => c.value);
 
-/** Selectable values; a server default outside a list is added by choices(). */
-export const SAMPLE_RATES = [44100, 48000, 96000, 192000];
-export const BIT_DEPTHS = [16, 24];
+/** Selectable values, as in Settings; a server default outside a list is added by choices(). */
+export const SAMPLE_RATES = settingsOptions('alac_max_sample_rate').map((o) => o.value);
+export const BIT_DEPTHS = settingsOptions('alac_max_bit_depth').map((o) => o.value);
 export const COVER_SIZES = ['5000x5000', '3000x3000', '1400x1400', '600x600'];
 // jpeg is accepted as an alias of jpg; the select offers jpg and png.
 export const COVER_FORMATS = ['jpg', 'png'];
