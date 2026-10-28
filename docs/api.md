@@ -1,5 +1,7 @@
 # API
 
+> Type: reference
+
 Examples assume the service listens on `http://localhost:18080`.
 
 - Interactive Swagger UI: <http://localhost:18080/docs>

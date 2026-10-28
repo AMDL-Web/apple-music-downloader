@@ -1,5 +1,7 @@
 # Configuration
 
+> Type: reference
+
 Everything lives in one file. `AMDL_CONFIG` picks its path; the default is:
 
 ```text

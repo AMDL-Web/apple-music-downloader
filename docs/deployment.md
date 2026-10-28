@@ -1,5 +1,7 @@
 # Deployment
 
+> Type: runbook
+
 ## Docker
 
 `docker-compose.yml` pulls the prebuilt multi-arch image (linux/amd64 + linux/arm64) from

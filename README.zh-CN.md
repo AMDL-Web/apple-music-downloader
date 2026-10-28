@@ -218,14 +218,42 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 
 > `docs/` 正文为英文，与 `config.example.yaml` 的字段注释保持一致。
 
+## 源码导读
+
+按问题找从哪里读起。每个指针写的是包加符号，包内文件拆分后依然有效。
+
+| 想了解 | 从这里读 |
+| --- | --- |
+| 进程是怎么组装起来的？ | `cmd/amdl-api/main.go` |
+| 有哪些 HTTP 路由？ | `internal/api#Server.Routes` |
+| API 到底收什么、回什么？ | `internal/api/openapi.yaml` |
+| 任务怎么排队、运行、取消和重试？ | `internal/jobs#Manager` |
+| 一首曲目怎么下载、解密、重封装和写标签？ | `internal/media#Downloader` |
+| 请求由哪个 Apple 主机应答？ | `internal/applemusic#CatalogClient.apiBase`、`internal/applemusic#CatalogClient.doWithWebAuth` |
+| 后端怎么和 wrapper-manager 通信？ | `internal/wrapper#Client` |
+| 任务存在哪里，表结构怎么迁移？ | `internal/db#Store` |
+| 配置怎么加载和校验？ | `internal/config#Load`、`internal/config#Config.Validate` |
+| 任务 hooks 发出什么？ | `internal/hooks#Dispatcher` |
+| 资料库同步怎么挑专辑？ | `internal/librarysync#Watcher` |
+| 网页控制台 | internal/console（网页控制台） |
+
 ## 开发
 
-```bash
-go test ./...
-```
+需要 [`go.mod`](go.mod) 指定的 Go 版本、`PATH` 上的 `ffmpeg`，以及跑脚本测试用的 Node.js 24。
 
-加 `-count=1` 可绕过 Go 测试缓存。CI 在每次推送 `main` 和每个 PR 上执行 `gofmt`、`go vet`、
-完整测试、race detector 和 `govulncheck`。
+| 命令 | 作用 |
+| --- | --- |
+| `make check` | 与 CI 相同的门禁：gofmt 检查、构建、vet、测试、race detector、`govulncheck`、Node 脚本测试 |
+| `make test`、`make race` | 跑测试，不带或带 race detector |
+| `make dev` | 以模拟模式在 `127.0.0.1:18080` 启动 API，配置和数据库放在一次性的 `data/dev/` 下 |
+| `make docker` | 在本地构建容器镜像 |
+| `make help` | 列出全部目标 |
+
+`make dev` 不需要 wrapper-manager：模拟模式会解析真实的目录数据、选择真实的媒体，
+再模拟传输、解密和写文件，同时发布与真实下载相同的状态和事件。这是在本地验证 API、
+SSE 流和客户端最快的办法。
+
+CI 在每次推送 `main`、`dev` 和每个 PR 上跑同样的步骤，并构建 Docker 镜像。
 
 `ffmpeg` 是流水线唯一需要的外部命令；样本抽取、重封装、元数据与封面写入都由进程内的
 `mp4ff` / `go-mp4tag` 完成。
@@ -234,6 +262,10 @@ go test ./...
 （`git commit -s`），见 [CONTRIBUTING.md](CONTRIBUTING.md)。发版方式为合并标题带版本号的
 `dev` → `main` PR，或手动运行 `Release` workflow；两者都会创建 GitHub Release 并推送多架构
 镜像到 GHCR。
+
+编码 agent 从 [AGENTS.md](AGENTS.md)（规则、验证、契约）读起；评审机器人看
+[REVIEW.md](REVIEW.md)，项目术语见 [GLOSSARY.md](GLOSSARY.md)，验证改动、发版等流程在
+`.claude/skills/`，文档索引在 [docs/README.md](docs/README.md)。
 
 ## 许可证
 

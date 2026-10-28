@@ -1,5 +1,9 @@
 # Benchmarks
 
+> Type: record
+>
+> Verified at a6a6b46 on 2026-08-10; snapshot, not maintained.
+
 Two measurements, both on the current implementation: a post-decrypt micro-benchmark that
 isolates the flatten/verify/tag path, and an end-to-end run over two real albums with the
 CDN taken out of the picture.

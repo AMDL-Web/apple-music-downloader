@@ -236,23 +236,60 @@ Both are covered in [docs/automation.md](docs/automation.md).
 | [docs/automation.md](docs/automation.md) | Job hooks and library sync |
 | [docs/benchmarks.md](docs/benchmarks.md) | Measured post-decrypt and end-to-end results |
 
+## Reading map
+
+Where to start reading for a given question. Each pointer names a package and a
+symbol, so it stays valid when files inside the package are split.
+
+| Question | Start at |
+| --- | --- |
+| How is the process wired together? | `cmd/amdl-api/main.go` |
+| Which HTTP routes exist? | `internal/api#Server.Routes` |
+| What exactly does the API accept and return? | `internal/api/openapi.yaml` |
+| How are jobs queued, run, cancelled and retried? | `internal/jobs#Manager` |
+| How is one track downloaded, decrypted, remuxed and tagged? | `internal/media#Downloader` |
+| Which Apple host answers a request? | `internal/applemusic#CatalogClient.apiBase`, `internal/applemusic#CatalogClient.doWithWebAuth` |
+| How does the backend talk to wrapper-manager? | `internal/wrapper#Client` |
+| Where are jobs stored, and how does the schema migrate? | `internal/db#Store` |
+| How is config loaded and validated? | `internal/config#Load`, `internal/config#Config.Validate` |
+| What do job hooks send? | `internal/hooks#Dispatcher` |
+| How does library sync pick albums? | `internal/librarysync#Watcher` |
+| Web console | internal/console (web console) |
+
 ## Development
 
-```bash
-go test ./...
-```
+You need Go per [`go.mod`](go.mod), `ffmpeg` on `PATH`, and Node.js 24 for the script
+tests.
 
-Add `-count=1` to bypass the Go test cache. CI runs `gofmt`, `go vet`, the full test suite,
-the race detector and `govulncheck` on every push to `main` and every pull request.
+| Command | What it does |
+| --- | --- |
+| `make check` | The CI gate: gofmt check, build, vet, tests, race detector, `govulncheck`, Node script tests |
+| `make test`, `make race` | The test suite, without or with the race detector |
+| `make dev` | The API in simulate mode on `127.0.0.1:18080`, with a throwaway config and database under `data/dev/` |
+| `make docker` | Build the container image locally |
+| `make help` | Every target |
+
+`make dev` needs no wrapper-manager: simulate mode resolves real catalog data and
+selects real media, then simulates the transfer, decryption and file writes while
+publishing the same statuses and events as a real download. It is the quickest way
+to exercise the API, SSE streams and clients locally.
+
+CI runs the same steps on every push to `main` and `dev` and on every pull request,
+and also builds the Docker image.
 
 `ffmpeg` is the only external command the pipeline needs. Sample extraction, remuxing,
 metadata and cover art are all done in-process with `mp4ff` and `go-mp4tag`.
 
 Work lands on `dev`; `main` is release-only and requires a pull request. Every commit
-needs a DCO sign-off (`git commit -s`) — see [CONTRIBUTING.md](CONTRIBUTING.md).
+needs a DCO sign-off (`git commit -s`); see [CONTRIBUTING.md](CONTRIBUTING.md).
 Releases are cut by merging the `dev` → `main` PR with a version in its title, or by
 running the `Release` workflow manually; both create the GitHub Release and push the
 multi-arch image to GHCR.
+
+Coding agents start at [AGENTS.md](AGENTS.md) (rules, verification, contracts), with
+[REVIEW.md](REVIEW.md) for review bots, [GLOSSARY.md](GLOSSARY.md) for project
+vocabulary, `.claude/skills/` for procedures such as verifying a change or cutting a
+release, and [docs/README.md](docs/README.md) for the docs index.
 
 ## License
 

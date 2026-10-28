@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "amdl-dev",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["dev"],
+      "port": 18080,
+      "autoPort": false
+    }
+  ]
+}

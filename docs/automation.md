@@ -1,5 +1,7 @@
 # Automation
 
+> Type: reference
+
 Two features act without you asking each time: **job hooks** react to jobs you created,
 and **library sync** creates jobs of its own. Both are off by default.
 

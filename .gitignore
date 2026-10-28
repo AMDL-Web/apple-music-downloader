@@ -1,9 +1,8 @@
 .DS_Store
 .worktrees/
 .claude/worktrees/
-
-# Reference projects and old app snapshots used for analysis only.
-explore/
+# Personal Claude Code settings; the shared hooks live in .claude/settings.json.
+.claude/settings.local.json
 
 # Runtime data produced by the rewritten backend.
 data/

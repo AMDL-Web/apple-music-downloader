@@ -1,5 +1,7 @@
 # Download pipeline
 
+> Type: reference
+
 Audio only. Apple Music music videos will not be supported: under L3 the pipeline can
 only reach low-resolution video, which does not meet this project's quality bar.
 

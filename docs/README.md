@@ -1,0 +1,26 @@
+# Docs
+
+Reference documentation for the backend. Every page states its type on the line
+after its title, and `internal/repocheck` fails when a page is missing here or its
+type here disagrees with the page.
+
+| Type | Meaning |
+| --- | --- |
+| reference | Current facts. When a reference page and the code disagree, the code wins and the page is fixed. |
+| runbook | Steps to perform. |
+| decision | A settled trade-off; not edited afterwards, superseded by a newer decision. |
+| record | A point-in-time measurement or audit, stamped with the commit it was verified at; a snapshot, not maintained. |
+
+| Page | Type | What it covers |
+| --- | --- | --- |
+| [api.md](api.md) | reference | Every endpoint with curl examples, job overrides, SSE and WebSocket semantics |
+| [configuration.md](configuration.md) | reference | Config file, env overrides, runtime vs startup keys, simulate mode |
+| [download-pipeline.md](download-pipeline.md) | reference | Stages, retries, codec fallback, concurrency pools, memory modes, lyrics, output paths |
+| [automation.md](automation.md) | reference | Job hooks and library sync |
+| [deployment.md](deployment.md) | runbook | Docker, mounts, `PUID`/`PGID`, config seeding, releases and image tags |
+| [benchmarks.md](benchmarks.md) | record | Measured post-decrypt and end-to-end results |
+| [references.md](references.md) | reference | Outside practices this repo adopted, adapted or declined, and where they landed |
+
+New pages get a row here in the same commit. Agent-facing rules live elsewhere:
+[AGENTS.md](../AGENTS.md), [REVIEW.md](../REVIEW.md), [GLOSSARY.md](../GLOSSARY.md)
+and `.claude/`.
