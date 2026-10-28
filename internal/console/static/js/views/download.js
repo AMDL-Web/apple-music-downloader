@@ -221,7 +221,9 @@ export function DownloadPage({ route }) {
     return s.state === 'idle' && previewSet.has(url) ? { state: 'queued' } : s;
   };
 
-  const hasToken = token.trim() !== '' || serverToken;
+  // The settled token, like the lookups: a preview read without it is not
+  // judged against a token it was never read with.
+  const hasToken = settledToken !== '' || serverToken;
   const issueOf = (e) => linkIssue(e, e.link && PREVIEW_KINDS.includes(e.link.kind) ? queue.current.status(e.url) : null, { hasToken });
   const sendable = submittable(entries, issueOf);
   const flagged = entries.filter((e) => issueOf(e)).length;
