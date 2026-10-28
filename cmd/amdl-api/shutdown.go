@@ -14,11 +14,11 @@ import (
 // it.
 const (
 	// httpDrainTimeout is how long ordinary requests get after the listener
-	// closes. An open SSE stream holds http.Server.Shutdown for all of it, so
-	// it stays short.
+	// closes. SSE streams end when the drain starts (api.Server.EndStreams,
+	// registered with RegisterOnShutdown), so they do not hold it.
 	httpDrainTimeout = 5 * time.Second
-	// httpHandlerExitTimeout bounds the wait for handlers, SSE streams
-	// included, after their base context is cancelled.
+	// httpHandlerExitTimeout bounds the wait for handlers still running after
+	// the drain, once their base context is cancelled.
 	httpHandlerExitTimeout = 5 * time.Second
 	// backgroundStopTimeout bounds the wait for the library watcher and the
 	// token refresher; a pass in flight ends with its context.
@@ -63,8 +63,8 @@ type shutdownSteps struct {
 	http interface {
 		Shutdown(context.Context) error
 	}
-	// cancelHTTPBase cancels the base context of every request, which ends
-	// the SSE streams.
+	// cancelHTTPBase cancels the base context of every request still running
+	// after the drain.
 	cancelHTTPBase   func()
 	waitHTTPHandlers func(context.Context) error
 	// stopBackground cancels the library watcher and the token refresher.
@@ -86,10 +86,10 @@ func (s shutdownSteps) run() {
 	started := time.Now()
 	s.logger.Info("shutting down")
 
-	// 1. HTTP: stop accepting and drain ordinary requests, then end the
-	// streams that Shutdown does not wait out on its own.
+	// 1. HTTP: stop accepting, end the SSE streams (the RegisterOnShutdown
+	// hook) and drain ordinary requests, then cancel whatever is left.
 	if err := s.within(s.timeouts.httpDrain, s.http.Shutdown); err != nil {
-		s.logger.Info("HTTP drain ended with requests still open; ending streams", "timeout", s.timeouts.httpDrain, "error", err)
+		s.logger.Warn("HTTP drain ended with requests still open; cancelling them", "timeout", s.timeouts.httpDrain, "error", err)
 	}
 	s.cancelHTTPBase()
 	s.wait("HTTP handlers", s.timeouts.httpHandlerExit, s.waitHTTPHandlers)

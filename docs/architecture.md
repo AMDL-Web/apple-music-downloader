@@ -14,9 +14,10 @@ turned into exit status 1 by `main`. `run` builds the components, starts them, a
 SIGINT/SIGTERM (or a failing HTTP server) stops them in this order
 (`cmd/amdl-api/shutdown.go`):
 
-1. HTTP: stop accepting connections, give ordinary requests a short drain, then cancel
-   the base context so long-lived SSE streams end instead of holding the shutdown
-   deadline.
+1. HTTP: stop accepting connections and end every SSE stream at once
+   (`internal/api#Server.EndStreams`, so a connected client never holds the drain;
+   EventSource reconnects and resumes from `Last-Event-ID`), give ordinary requests a
+   short drain, then cancel the base context of whatever is still running.
 2. Library watcher and catalog token refresher: stop and wait.
 3. Job manager: cancel workers with the cause `jobs.ErrShutdown`. A job interrupted by
    shutdown is **not** cancelled: it stays `running` in the database, keeps its items,

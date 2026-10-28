@@ -35,7 +35,9 @@ func (s *Server) downloadsFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	ticks, stop := newStreamTicks()
 	defer stop()
-	s.runDownloadsFeed(r.Context(), stream, int64(cursor), wake, ticks)
+	ctx, end := s.streamContext(r)
+	defer end()
+	s.runDownloadsFeed(ctx, stream, int64(cursor), wake, ticks)
 }
 
 // runDownloadsFeed drives the overview feed loop. It drains milestone events

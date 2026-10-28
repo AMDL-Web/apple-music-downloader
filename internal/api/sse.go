@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,6 +35,32 @@ func newStreamTicks() (ticks streamTicks, stop func()) {
 	return streamTicks{redrain: redrain.C, keepalive: keepalive.C}, func() {
 		redrain.Stop()
 		keepalive.Stop()
+	}
+}
+
+// EndStreams ends every open SSE stream, and every stream opened later, without
+// touching other requests. Shutdown calls it first (http.Server.RegisterOnShutdown):
+// http.Server.Shutdown waits for every handler to return, and a stream returns
+// only when its client leaves, so without this the HTTP drain would always run
+// to its timeout while a client is connected. EventSource clients reconnect on
+// their own and resume from Last-Event-ID.
+func (s *Server) EndStreams() {
+	if s.endStreams != nil {
+		s.endStreams()
+	}
+}
+
+// streamContext is r's context, also cancelled by EndStreams. A Server built
+// without New (tests) has no streams context and ends streams with r only.
+func (s *Server) streamContext(r *http.Request) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(r.Context())
+	if s.streams == nil {
+		return ctx, cancel
+	}
+	stop := context.AfterFunc(s.streams, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
 	}
 }
 

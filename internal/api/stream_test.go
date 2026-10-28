@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -179,6 +180,44 @@ func TestStreamHeaders(t *testing.T) {
 	server.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/downloads/job1/events", nil))
 	if recorder.Code != http.StatusOK || recorder.Header().Get("Connection") != "" {
 		t.Fatalf("status %d, Connection header %q, want 200 without Connection", recorder.Code, recorder.Header().Get("Connection"))
+	}
+}
+
+// EndStreams runs when http.Server.Shutdown starts, so an open stream must not
+// hold the drain until its timeout.
+func TestEndStreamsLetsShutdownDrain(t *testing.T) {
+	server, _ := newStreamServer(t)
+	running := domain.Job{ID: "live", Input: "song|us|live", Type: "song", CanonicalKey: "song:live", Status: domain.JobRunning}
+	if err := server.store.CreateJob(context.Background(), running); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewUnstartedServer(server.Routes())
+	ts.Config.RegisterOnShutdown(server.EndStreams)
+	ts.Start()
+	defer ts.Close()
+
+	var bodies []io.Reader
+	for _, path := range []string{"/api/v1/downloads/events", "/api/v1/downloads/live/events", "/api/v1/logs/stream"} {
+		resp, err := ts.Client().Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: status %d, want an open stream", path, resp.StatusCode)
+		}
+		bodies = append(bodies, resp.Body)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := ts.Config.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown with open streams: %v, want a drain that ends them", err)
+	}
+	for _, body := range bodies {
+		if _, err := io.ReadAll(body); err != nil {
+			t.Errorf("stream did not end cleanly: %v", err)
+		}
 	}
 }
 

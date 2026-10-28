@@ -86,7 +86,9 @@ func (s *Server) jobEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	ticks, stop := newStreamTicks()
 	defer stop()
-	s.runJobEventStream(r.Context(), stream, id, lastID, backlog, wake, ticks)
+	ctx, end := s.streamContext(r)
+	defer end()
+	s.runJobEventStream(ctx, stream, id, lastID, backlog, wake, ticks)
 }
 
 // runJobEventStream sends backlog, then every persisted event of jobID after

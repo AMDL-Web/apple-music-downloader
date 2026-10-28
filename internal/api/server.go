@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -57,6 +58,9 @@ type Server struct {
 	// cache; nil means time.Now.
 	now        func() time.Time
 	statsCache statsCache
+	// streams is cancelled by EndStreams; every SSE loop also watches it.
+	streams    context.Context
+	endStreams context.CancelFunc
 }
 
 // New returns a Server for deps. It does no I/O.
@@ -66,6 +70,7 @@ func New(deps Deps) *Server {
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, devToken: deps.DeveloperToken, librarySync: deps.LibrarySync,
 	}
+	s.streams, s.endStreams = context.WithCancel(context.Background())
 	// logging.buffer_size is a startup key, so the snapshot read here is the
 	// size the log store was built with. A store without retention keeps no
 	// history for the log routes to serve.

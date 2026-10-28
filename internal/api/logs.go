@@ -50,7 +50,9 @@ func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	keepalive := time.NewTicker(sseKeepaliveInterval)
 	defer keepalive.Stop()
-	runLogStream(r.Context(), stream, backlog, live, keepalive.C)
+	ctx, end := s.streamContext(r)
+	defer end()
+	runLogStream(ctx, stream, backlog, live, keepalive.C)
 }
 
 // writeLogsUnavailable answers a log route that has no log history to serve.

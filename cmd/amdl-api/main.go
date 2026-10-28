@@ -178,11 +178,12 @@ func run(ctx context.Context, files configFiles) (err error) {
 	httpHandlerCtx, cancelHTTPHandlers := context.WithCancel(context.Background())
 	defer cancelHTTPHandlers()
 	var activeHTTPHandlers sync.WaitGroup
-	routes := api.New(api.Deps{
+	apiServer := api.New(api.Deps{
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperClient, Quality: qualityService, DeveloperToken: catalog, LibrarySync: libraryWatcher,
-	}).Routes()
+	})
+	routes := apiServer.Routes()
 	httpServer := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			activeHTTPHandlers.Add(1)
@@ -191,7 +192,7 @@ func run(ctx context.Context, files configFiles) (err error) {
 		}),
 		ErrorLog: slog.NewLogLogger(logSystem.Logger.With("component", "http").Handler(), slog.LevelError),
 		// Request contexts derive from httpHandlerCtx, which shutdown cancels
-		// after the drain so SSE streams end instead of holding it.
+		// after the drain as a backstop for handlers that outlive it.
 		BaseContext:       func(net.Listener) context.Context { return httpHandlerCtx },
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -199,6 +200,9 @@ func run(ctx context.Context, files configFiles) (err error) {
 		// No WriteTimeout: SSE responses are long-lived on purpose and must
 		// not be cut off by a whole-response deadline.
 	}
+	// SSE streams end as soon as Shutdown starts, so the drain waits only for
+	// ordinary requests; clients reconnect and resume from Last-Event-ID.
+	httpServer.RegisterOnShutdown(apiServer.EndStreams)
 
 	// Workers live until shutdownSteps stops them with jobs.ErrShutdown, not
 	// until the signal: cancelling Start's context would read as a user cancel.
