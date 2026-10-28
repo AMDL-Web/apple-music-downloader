@@ -16,12 +16,21 @@
   min-width: 0;
 }
 
+/* .page.page-new: the Overview's New download button carries .page-new
+   too. Beside a 1024-1279 px sidebar the options take 300 px at most, so
+   the links and results stay the wider column. */
 @media (min-width: 1024px) {
-  .page-new {
+  .page.page-new {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
     align-items: start;
     gap: var(--page-gap) var(--grid-gap);
+  }
+}
+
+@media (min-width: 1280px) {
+  .page.page-new {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
   }
 }
 
@@ -621,9 +630,20 @@
   max-height: calc(80vh - var(--s-2));
 }
 
-/* The panel scrolls as a whole; its parts keep their height. */
+/* The head, the title and any notice stay; the slots and tracks scroll. */
+.sheet-quality {
+  overflow: hidden;
+}
+
 .sheet-quality > * {
   flex-shrink: 0;
+}
+
+.sheet-quality > .quality-body {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 /* A long track list opens nearer the top than the usual 20vh. */
@@ -810,6 +830,13 @@
     justify-content: flex-end;
   }
 
+  /* With nothing but Remove, the button stays beside the text instead of
+     taking a line of its own. */
+  .new-link:not(:has(.new-link-quality, .new-link-retry)) {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    grid-template-areas: "art main actions";
+  }
+
   .new-result-row {
     grid-template-columns: 24px minmax(0, 1fr);
     grid-template-areas:
@@ -834,6 +861,15 @@
 
   .new-check input {
     margin-top: 0;
+  }
+
+  /* With a hint under the label, the box stays on the label's line. */
+  .new-check:has(.new-check-hint) {
+    align-items: flex-start;
+  }
+
+  .new-check:has(.new-check-hint) input {
+    margin-top: var(--s-0_5);
   }
 
   .new-bookmarklet {

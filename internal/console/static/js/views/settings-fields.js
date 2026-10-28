@@ -141,6 +141,7 @@ function TextControl({ field, id, value, disabled, invalid, described, onChange 
     class=${mono ? 'field-input mono' : 'field-input'}
     id=${id}
     value=${value === undefined ? '' : String(value)}
+    title=${disabled && value ? String(value) : undefined}
     disabled=${disabled}
     autocomplete="off"
     autocapitalize="off"

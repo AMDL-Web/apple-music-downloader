@@ -129,21 +129,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.kv-mono {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: var(--s-2) var(--s-3);
-}
-
-.kv-mono .kv-row {
-  display: contents;
-}
-
-.kv-mono dt {
-  font-family: var(--font-mono);
-  font-size: var(--fs-12);
-}
-
 .table-wrap {
   overflow-x: auto;
 }

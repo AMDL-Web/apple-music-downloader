@@ -68,7 +68,7 @@ export function QualitySheet({ url, title, onClose }) {
         </${Notice}>`
       : null}
     ${data
-      ? html`<div class="quality-body">
+      ? html`<div class="quality-body" tabindex="0" role="region" aria-label="Qualities by track">
           <ul class="quality-slots" aria-label="Qualities offered">
             ${offered.map(
               (s) => html`<li key=${s.id} class="quality-slot" data-id=${s.id}>

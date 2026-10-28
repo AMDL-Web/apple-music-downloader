@@ -168,18 +168,21 @@ export function previewFacts(data) {
   };
 }
 
+const NBSP = '\u00a0';
+
 /**
  * The format of one QualityOption as the response gives it: bit depth and
  * sample rate ("24-bit / 96 kHz"), bitrate ("263 kbps"), channels
- * ("6 ch"), each part only when present.
+ * ("6 ch"), each part only when present. A number and its unit are joined
+ * by a no-break space, so a wrapped line never splits them.
  */
 export function qualitySpec(opt) {
   if (!opt) return '';
   const parts = [];
-  if (opt.bit_depth > 0 && opt.sample_rate > 0) parts.push(`${opt.bit_depth}-bit / ${kHz(opt.sample_rate)} kHz`);
-  else if (opt.sample_rate > 0) parts.push(`${kHz(opt.sample_rate)} kHz`);
-  if (opt.bitrate > 0) parts.push(`${count(Math.round(opt.bitrate / 1000))} kbps`);
-  if (opt.channels > 0) parts.push(`${opt.channels} ch`);
+  if (opt.bit_depth > 0 && opt.sample_rate > 0) parts.push(`${opt.bit_depth}-bit / ${kHz(opt.sample_rate)}${NBSP}kHz`);
+  else if (opt.sample_rate > 0) parts.push(`${kHz(opt.sample_rate)}${NBSP}kHz`);
+  if (opt.bitrate > 0) parts.push(`${count(Math.round(opt.bitrate / 1000))}${NBSP}kbps`);
+  if (opt.channels > 0) parts.push(`${opt.channels}${NBSP}ch`);
   return parts.join(' · ');
 }
 

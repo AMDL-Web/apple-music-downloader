@@ -247,12 +247,16 @@
     cursor: pointer;
   }
 
-  /* New download, the center tab, is the primary action. */
+  /* New download, the center tab, is the primary action. The mark rises
+     above the icon line instead of pushing its label down, so all five
+     labels share a line; a skin that resizes the mark or the tab icons
+     restates margin-top as icon height minus mark height. */
   .tab-new-mark {
     display: grid;
     place-items: center;
     width: var(--touch);
-    height: var(--control-h);
+    height: calc(var(--icon-nav) + var(--s-2));
+    margin-top: calc(-1 * var(--s-2));
     border-radius: var(--r-control);
     background: var(--accent);
     color: var(--on-accent);
@@ -585,6 +589,7 @@
   }
 
   .pbar,
+  .pcell,
   .stage,
   .meter,
   .track-block,
@@ -595,5 +600,11 @@
   .formats-seg,
   .formats-swatch {
     border: 1px solid CanvasText;
+  }
+
+  /* A track that has an outcome stays filled; remaining cells are hollow. */
+  .pcell:not([data-state="remaining"]) {
+    forced-color-adjust: none;
+    background: CanvasText;
   }
 }

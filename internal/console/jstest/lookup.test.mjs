@@ -168,8 +168,10 @@ const IGOR_TRACK = (alac, aac) => ({
 });
 
 test('qualitySpec formats what the response gives', () => {
-  assert.equal(qualitySpec({ bit_depth: 24, sample_rate: 44100, bitrate: 1580218, channels: 2 }), '24-bit / 44.1 kHz · 1,580 kbps · 2 ch');
-  assert.equal(qualitySpec({ bitrate: 263673, channels: 2 }), '264 kbps · 2 ch');
+  const sp = (text) => text.replace(/\u00a0/g, ' ');
+  assert.equal(sp(qualitySpec({ bit_depth: 24, sample_rate: 44100, bitrate: 1580218, channels: 2 })), '24-bit / 44.1 kHz · 1,580 kbps · 2 ch');
+  assert.equal(sp(qualitySpec({ bitrate: 263673, channels: 2 })), '264 kbps · 2 ch');
+  assert.equal(qualitySpec({ bitrate: 1633000 }), '1,633\u00a0kbps', 'a number keeps its unit on its line');
   assert.equal(qualitySpec({ codec: 'E-AC-3' }), '');
 });
 
@@ -179,7 +181,7 @@ test('qualityOverview counts tracks per slot and keeps the best format', () => {
   };
   const o = qualityOverview(resp);
   assert.deepEqual(o.map((s) => [s.id, s.tracks, s.total]), [['aac', 3, 3], ['alac', 2, 3], ['ec3', 0, 3]]);
-  assert.equal(o.find((s) => s.id === 'alac').best, '24-bit / 96 kHz · 2 ch');
+  assert.equal(o.find((s) => s.id === 'alac').best.replace(/\u00a0/g, ' '), '24-bit / 96 kHz · 2 ch');
   assert.equal(o.find((s) => s.id === 'ec3').best, '');
   assert.deepEqual(qualityOverview({}), []);
 });
