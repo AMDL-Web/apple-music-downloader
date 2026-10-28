@@ -155,7 +155,7 @@ conversation resolution block the merge, report what's blocking and wait.
 | gofmt, build, vet, tests, race detector, govulncheck, Node script tests | CI `.github/workflows/ci.yml`, one step per `make` target |
 | The Docker image builds | CI docker build job |
 | Config example key set matches the config struct | test in `internal/config` |
-| Every route is in `internal/api/openapi.yaml` and the reverse | internal/api route/OpenAPI parity test |
+| Every route and runtime config key is in `internal/api/openapi.yaml` and the reverse | internal/api route and RuntimeConfig parity tests |
 | Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md sizes, CLAUDE.md pairs, docs types and index | `internal/repocheck` tests |
 | DCO sign-off on every commit | DCO GitHub App on PRs; `scripts/guard-commands.mjs` on `git commit` |
 | `main` changes only through a PR | branch protection on `main`; guard hook on `git push` |

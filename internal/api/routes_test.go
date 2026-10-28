@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"amdl/internal/config"
 	"amdl/internal/console"
 
 	"gopkg.in/yaml.v3"
@@ -169,6 +170,61 @@ func TestSubmitErrorCodesMatchProducers(t *testing.T) {
 	want := specEnum(t, "SubmitErrorCode")
 	if !slices.Equal(produced, want) {
 		t.Fatalf("produced submit codes = %v\nopenapi.yaml SubmitErrorCode enum = %v", produced, want)
+	}
+}
+
+// The RuntimeConfig schema in openapi.yaml has a property for exactly the
+// runtime config keys, which GET /api/v1/config returns (config.MutableView,
+// derived from the config package's runtime classification). The console's
+// Settings page is checked against this schema
+// (TestSettingsFieldsCoverRuntimeConfig in internal/console), so a runtime key
+// missing here would silently get no setting.
+func TestRuntimeConfigSchemaMatchesRuntimeKeys(t *testing.T) {
+	type schema struct {
+		Properties map[string]schema `yaml:"properties"`
+	}
+	var spec struct {
+		Components struct {
+			Schemas map[string]schema `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(openAPISpec, &spec); err != nil {
+		t.Fatal(err)
+	}
+	var documented []string
+	for section, body := range spec.Components.Schemas["RuntimeConfig"].Properties {
+		for leaf := range body.Properties {
+			documented = append(documented, section+"."+leaf)
+		}
+	}
+	view, err := config.MutableView(config.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runtime []string
+	for section, body := range view {
+		leaves, ok := body.(map[string]any)
+		if !ok {
+			t.Fatalf("runtime config section %s is %T, want a map of keys", section, body)
+		}
+		for leaf := range leaves {
+			runtime = append(runtime, section+"."+leaf)
+		}
+	}
+	if len(documented) < 30 || len(runtime) < 30 {
+		t.Fatalf("found %d RuntimeConfig properties and %d runtime keys; one of the walks is broken", len(documented), len(runtime))
+	}
+	slices.Sort(documented)
+	slices.Sort(runtime)
+	for _, key := range runtime {
+		if _, found := slices.BinarySearch(documented, key); !found {
+			t.Errorf("runtime config key %s has no RuntimeConfig property in openapi.yaml", key)
+		}
+	}
+	for _, key := range documented {
+		if _, found := slices.BinarySearch(runtime, key); !found {
+			t.Errorf("openapi.yaml RuntimeConfig property %s is not a runtime config key", key)
+		}
 	}
 }
 

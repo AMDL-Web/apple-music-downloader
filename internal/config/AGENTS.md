@@ -51,11 +51,13 @@ Configuration section.
 ## Verify
 
 ```bash
-go test ./internal/config/
+go test ./internal/config/ ./internal/api/
 ```
 
 `TestCommittedExampleDocumentsEveryConfigKey` (example key set),
 `TestDefaultMatchesExample` and `TestExampleDefaultAnnotationsMatchDefault`
-(defaults), `TestEnvFieldsCoverConfig` (env names) and
-`TestDownloadOverridesCoverRuntimeDownloadKeys` (job overrides) catch drift; none
-can judge whether a comment is complete, so reread it.
+(defaults), `TestEnvFieldsCoverConfig` (env names),
+`TestDownloadOverridesCoverRuntimeDownloadKeys` (job overrides) and, in
+internal/api, `TestRuntimeConfigSchemaMatchesRuntimeKeys` (the `RuntimeConfig`
+schema lists exactly the runtime keys) catch drift; none can judge whether a
+comment is complete, so reread it.
