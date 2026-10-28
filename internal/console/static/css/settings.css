@@ -1,0 +1,5 @@
+/*
+ * The Settings page (#/settings, views/settings.js): runtime configuration
+ * sections, the Apple Music account and library sync. Base structure only;
+ * it reads tokens like every other base stylesheet, and the skins restyle it.
+ */

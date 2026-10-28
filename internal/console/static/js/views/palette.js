@@ -3,21 +3,26 @@
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, docsUrl } from '../api.js';
 import { jobTitle, jobSubtitle, typeLabel } from '../lib/format.js';
-import { buildHash } from '../lib/route.js';
+import { buildHash, settingsHash } from '../lib/route.js';
 import { Icon, Button } from '../ui/components.js';
+import { Dialog } from '../ui/dialogs.js';
 import { useDebounced } from '../ui/hooks.js';
 import { SKINS } from '../lib/prefs.js';
 
 const STATIC_ITEMS = [
+  { id: 'act-new', group: 'Actions', label: 'New download', icon: 'plus', hash: buildHash('new'), keys: 'n' },
   { id: 'nav-overview', group: 'Navigate', label: 'Overview', icon: 'grid', hash: buildHash('overview'), keys: 'g o' },
   { id: 'nav-queue', group: 'Navigate', label: 'Queue', icon: 'list', hash: buildHash('queue'), keys: 'g q' },
   { id: 'nav-showcase', group: 'Navigate', label: 'Showcase', icon: 'disc', hash: buildHash('showcase'), keys: 'g s' },
   { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
   { id: 'nav-system', group: 'Navigate', label: 'System', icon: 'server', hash: buildHash('system'), keys: 'g y' },
+  { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,' },
   { id: 'nav-docs', group: 'Navigate', label: 'API docs', icon: 'book', external: true },
   { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },
   { id: 'f-running', group: 'Filters', label: 'Show active jobs', icon: 'dot', hash: buildHash('queue') },
   { id: 'f-errors', group: 'Filters', label: 'Show error logs', icon: 'triangle-alert', hash: buildHash('logs', { level: 'warn,error' }) },
+  { id: 'set-account', group: 'Settings', label: 'Apple Music account', icon: 'key', hash: settingsHash('account') },
+  { id: 'set-library-sync', group: 'Settings', label: 'Library sync', icon: 'rotate', hash: settingsHash('library_sync') },
   { id: 'theme-system', group: 'Theme', label: 'Use system theme', icon: 'monitor', theme: 'system' },
   { id: 'theme-light', group: 'Theme', label: 'Use light theme', icon: 'sun', theme: 'light' },
   { id: 'theme-dark', group: 'Theme', label: 'Use dark theme', icon: 'moon', theme: 'dark' },
@@ -150,36 +155,31 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
 }
 
 const SHORTCUTS = [
+  ['n', 'New download'],
   ['g then o', 'Overview'],
   ['g then q', 'Queue'],
   ['g then s', 'Showcase'],
   ['g then l', 'Logs'],
   ['g then y', 'System'],
+  ['g then ,', 'Settings'],
   ['/', 'Focus the page filter'],
   ['j / k', 'Next / previous row'],
   ['Enter', 'Open the focused row'],
   ['Esc', 'Close the drawer or dialog'],
+  ['Paste a link', 'New download with that link, outside a text field'],
   ['Cmd/Ctrl + K', 'Command palette'],
   ['?', 'This list'],
 ];
 
 export function ShortcutSheet({ onClose }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const btn = ref.current && ref.current.querySelector('button');
-    if (btn) btn.focus();
-  }, []);
-  return html`<div class="overlay-host">
-    <div class="scrim" onClick=${onClose}></div>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" ref=${ref}>
-      <div class="sheet-head">
-        <h2 id="shortcuts-title" class="card-title">Keyboard shortcuts</h2>
-        <${Button} variant="ghost" icon="x" aria-label="Close" onClick=${onClose} />
-      </div>
-      <dl class="kv">
-        ${SHORTCUTS.map(([k, v]) => html`<div class="kv-row" key=${k}><dt><kbd>${k}</kbd></dt><dd>${v}</dd></div>`)}
-      </dl>
-      <p class="muted small">Single-key shortcuts are off while you type in a field.</p>
+  return html`<${Dialog} name="shortcuts" labelledBy="shortcuts-title" onClose=${onClose}>
+    <div class="sheet-head">
+      <h2 id="shortcuts-title" class="card-title">Keyboard shortcuts</h2>
+      <${Button} variant="ghost" icon="x" aria-label="Close" onClick=${onClose} data-autofocus />
     </div>
-  </div>`;
+    <dl class="kv">
+      ${SHORTCUTS.map(([k, v]) => html`<div class="kv-row" key=${k}><dt><kbd>${k}</kbd></dt><dd>${v}</dd></div>`)}
+    </dl>
+    <p class="muted small">Single-key shortcuts are off while you type in a field.</p>
+  </${Dialog}>`;
 }

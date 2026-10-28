@@ -31,6 +31,21 @@ wins and this page is fixed in the same change. Sources are listed in
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
 | `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, read-only config with Reload, API links |
+| `#/new?url=` | New download | Submit Apple Music links. `url` carries one or more links, newline- or space-separated and URL-encoded (`lib/route.js` `newDownloadHash`, `newDownloadUrls`); `lib/links.js` parses them |
+| `#/settings?section=` | Settings | Runtime configuration, the Apple Music account, library sync. `section` (lowercase words joined by `_`, `settingsSection`) scrolls to or opens one; the palette links to `account` and `library_sync` |
+
+New download is the primary action and has these entry points: the
+`.sidebar-new` button first in the sidebar (icon-only with a tooltip on the
+640-1023 rail), the Overview page head's `.page-actions` button, "Start a
+download" in the Overview live-queue, Queue and Showcase empty states, the
+tab bar's center tab under 640 px, `n` (and `g n`), the palette's "New
+download", and a global paste: pasting text that holds at least one
+music.apple.com link while focus is outside a text field and no overlay or
+dialog is open opens `#/new?url=<the links>` (on `#/new` the links join those
+already in `url`). Under 640 px the tab bar holds Overview, Queue, New,
+Showcase and More; More opens a bottom sheet (`MoreSheet`) listing Logs,
+System and Settings with the current page marked, and the More tab is
+`aria-current` while one of them is shown.
 
 Filters live in the hash query, so a filtered view is a link. KPI tiles open the
 matching Queue tab; the drawer's "View logs" opens `#/logs?job_id=…`; a log
@@ -44,11 +59,11 @@ sidebar into a horizontal masthead at 640 px and up).
 
 ```
 .shell
-  .sidebar (nav: .brand > .brand-mark + .brand-text > .brand-name, .brand-sub; .nav > .nav-item; .sidebar-foot)
+  .sidebar (nav: .brand > .brand-mark + .brand-text > .brand-name, .brand-sub; a.sidebar-new; .nav > .nav-item; .sidebar-foot)
   .main-col
     header.topbar (.topbar-right: .conn, .search-trigger, .skin, .theme)
-    main.main[data-page] (.page-head > h1.page-title + .page-sub; .banners; .page.page-<name>)
-  nav.tabbar (> .tab, under 640 px)
+    main.main[data-page] (.page-head > h1.page-title + .page-sub + .page-actions; .banners; .page.page-<name>)
+  nav.tabbar (> .tab x2, a.tab.tab-new, .tab, button.tab.tab-more, under 640 px)
 ```
 
 | Width | Base frame | Notes |
@@ -88,7 +103,7 @@ axis; every skin supports all three.
 | File | Holds | May | May not |
 | --- | --- | --- | --- |
 | `static/css/tokens.css` | Skin-neutral scales: type scale `--fs-*`/`--lh-*`, weights, spacing `--s-*`, sizes, motion, `--on-art-light/dark`, system font fallbacks | change a scale every skin shares | hold a skin's color, radius, shadow or font stack |
-| `static/css/*.css` (the base: `base.css`, `shell.css`, `controls.css`, `layout.css`, one file per page area, `overlays.css`, `responsive.css`) | Structure: layout, component structure and behavior, all visual values through tokens, one file per area. `index.html` links them after `tokens.css` and before the skins, and that link order is the cascade order (`responsive.css` last) | add structure both skins need, in the file of its area | contain a color literal, `!important` (outside reduced motion) or a skin-specific choice |
+| `static/css/*.css` (the base: `base.css`, `shell.css`, `controls.css`, `layout.css`, one file per page area, `overlays.css`, `responsive.css`, then the newer pages' `download.css` and `settings.css`) | Structure: layout, component structure and behavior, all visual values through tokens, one file per area. `index.html` links them after `tokens.css` and before the skins, and that link order is the cascade order: `responsive.css` follows the older areas, and `download.css` and `settings.css` follow it, so each carries its own media queries | add structure both skins need, in the file of its area | contain a color literal, `!important` (outside reduced motion) or a skin-specific choice |
 | `static/css/skins/<name>.css` | One `:root[data-skin="<name>"]` token block (light and dark via `light-dark()`), responsive token overrides, and that skin's component rules, every selector prefixed `:root[data-skin="<name>"]` | set any token, override any base rule (repeating its selector chain when it is deeper than two classes), show opt-in hooks, reorder overview sections, use CSS counters and `::before` text | touch another skin's scope, add JS, use `font-size` other than `var(--fs-*)`, use `transition: all`, rely on `color-scheme` it sets itself |
 | `skins/<name>.md` | The skin's spec: intent, token table with contrast, component notes | | restate the shared contract |
 
@@ -127,7 +142,7 @@ Stable class names and attributes a skin can style without touching JS:
 | Surface | Hooks |
 | --- | --- |
 | Section / card | `section.card[data-section]` > `header.card-head` (`h2.card-title`, `.card-note`, `.card-actions`) + `.card-body`; `.card-flush` for edge-to-edge lists. Overview sections: `kpis`, `live`, `health`, `recent`, `throughput`, `logs`; Queue `jobs`; Logs `log` |
-| Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub`, `.banners`, `.page.page-<name>` |
+| Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub`, `.page-actions` (Overview: `a.btn.btn-primary.page-new`), `.banners`, `.page.page-<name>` (`page-new`, `page-settings` included) |
 | KPI | `a.kpi[data-key=queued\|running\|completed\|failed\|total][data-role][data-zero]` > `.kpi-label`, `.kpi-icon`, `.kpi-value`, `.kpi-meta` |
 | Job row | `a.job-row[data-status][.has-palette]` > `.art`, `.job-main` (`.job-facts` > `.job-fact[data-key=type\|genre\|year\|started]`, `.job-title`, `.job-sub`), `.job-type`, `.job-progress`, `.job-status`, `.job-updated`, `.job-chevron` |
 | Progress | `.jprog[data-mode=cells\|bar]`: up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
@@ -138,7 +153,8 @@ Stable class names and attributes a skin can style without touching JS:
 | Live failures | `ul.attention` after the live list > `li.attention-row[data-role=danger]` > `.attention-icon`, `.attention-title` (`.attention-label` "Failed", `a.attention-link` to the drawer, mono `.attention-input`), `.attention-detail` (`.attention-error`, relative time), Retry `.btn` |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
-| Shell | `.brand-sub`, `.nav-item[aria-current]`, `.nav-badge`, `.tab[aria-current]`, `.skin`/`.seg-skin`/`.skin-cycle`, `.theme`/`.seg-icons`/`.theme-cycle` |
+| Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.skin`/`.seg-skin`/`.skin-cycle`, `.theme`/`.seg-icons`/`.theme-cycle` |
+| Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive); a busy button is `.btn[aria-disabled=true]`. Shortcut sheet `[data-dialog=shortcuts]` |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
 
 **Artwork palette.** `.job-row`, `.strip-tile`, `.tile` and `.hero` carry
@@ -249,15 +265,22 @@ and motion covers.
   control, search field, select, chips, notices, toasts (`role="status"`,
   errors stay until dismissed), command palette (Cmd/Ctrl+K, combobox +
   listbox), shortcut sheet (`?`).
+- **Dialogs** (`ui/dialogs.js`): `Dialog` is a scrim plus a modal panel
+  (`useDialog`: focus the first `[data-autofocus]`, trap Tab, Escape closes
+  without reaching the page shortcuts, focus returns to the opener).
+  `ConfirmDialog` asks before a destructive or irreversible action: an
+  alertdialog with the title, the consequence, Cancel (focused) and the
+  confirm button; while busy both are disabled and Escape does nothing. The
+  More sheet and the shortcut sheet are `Dialog`s.
 
 ## States
 
 | Surface | Loading | Empty | Error |
 | --- | --- | --- | --- |
 | KPI | skeleton of final size | zeros | "—" while disconnected |
-| Queue | 6 skeleton rows | per tab, with Clear filters when filtered | inline note + Retry |
+| Queue | 6 skeleton rows | per tab, with Clear filters when filtered; Active and All offer "Start a download" | inline note + Retry |
 | Drawer | skeleton tracks | "No tracks resolved yet" | 404 "This job was deleted"; 204 on the stream means finished |
-| Showcase | skeleton hero and tiles (cover plus two text lines) | "Completed albums will appear here." with a link to the Queue | inline note + Retry; broken cover shows bg color + glyph |
+| Showcase | skeleton hero and tiles (cover plus two text lines) | "Completed albums will appear here." with a link to the Queue and "Start a download" | inline note + Retry; broken cover shows bg color + glyph |
 | Logs | 12 skeleton lines | "No records match" + Clear filters | the API's validation message |
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |
 | Feed | | | Reconnecting · Ns; banner after 10 s; Disconnected after 60 s with Retry |
@@ -265,9 +288,11 @@ and motion covers.
 ## Accessibility
 
 Landmarks (`nav`, `header`, `main`), a skip button, one `h1` per page (focused on
-navigation). Every control shows the 2 px focus ring in `--focus`. Keyboard: `g`
-then `o/q/s/l/y`, `/` focuses the page filter, `j`/`k` move between rows, Enter
-opens, Esc closes, Cmd/Ctrl+K, `?`; single keys are ignored while typing. The
+navigation). Every control shows the 2 px focus ring in `--focus`. Keyboard: `n`
+opens New download, `g` then `o/q/s/l/y/,/n` (`,` is Settings), `/` focuses
+the page filter, `j`/`k` move between rows, Enter opens, Esc closes,
+Cmd/Ctrl+K, `?`; single keys and the global paste are ignored while typing,
+while the palette or a sheet is open and while any `[data-dialog]` is up. The
 skin and theme controls are button groups with `aria-pressed` and an
 accessible name ("Style", "Theme"). Milestones ("Album X completed") go to one
 polite status region, at most one announcement per 5 s. Progress carries
@@ -287,6 +312,7 @@ hides and resume from the stored cursor; after a 5-minute outage pages refetch.
 
 Run the backend with `make dev` (simulate mode), open `/console/`, switch the
 style in the top bar, and check each skin at 1440 and 390 px wide in light and
-dark: Overview, Queue with the drawer, Showcase, Logs, System, the command
-palette. No horizontal scroll at 390 px, status icon plus label everywhere,
+dark: Overview, Queue with the drawer, Showcase, Logs, System, New
+download, Settings, the command palette, and under 640 px the tab bar and its
+More sheet. No horizontal scroll at 390 px, status icon plus label everywhere,
 visible focus rings.

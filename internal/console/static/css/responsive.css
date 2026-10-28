@@ -47,7 +47,8 @@
   }
 
   .brand-text,
-  .nav-label {
+  .nav-label,
+  .sidebar-new-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -70,6 +71,13 @@
 
   .sidebar-foot .icon-sm {
     display: none;
+  }
+
+  .sidebar .sidebar-new {
+    width: var(--touch);
+    height: 40px;
+    margin: 0;
+    padding: 0;
   }
 
   .nav-badge {
@@ -230,6 +238,28 @@
     height: 2px;
     border-radius: var(--r-badge);
     background: var(--ink);
+  }
+
+  /* More is a button that opens the More sheet; it reads as a tab. */
+  .tab-more {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  /* New download, the center tab, is the primary action. */
+  .tab-new-mark {
+    display: grid;
+    place-items: center;
+    width: var(--touch);
+    height: var(--control-h);
+    border-radius: var(--r-control);
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .tab-new[aria-current="page"]::before {
+    content: none;
   }
 
   .btn,

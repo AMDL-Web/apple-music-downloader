@@ -243,3 +243,24 @@
   display: none;
 }
 
+/* New download: the primary action, first in the sidebar, above the nav. */
+.sidebar .sidebar-new {
+  flex: none;
+  margin: 0 var(--s-1);
+}
+
+.sidebar .sidebar-new .icon {
+  width: var(--icon-nav);
+  height: var(--icon-nav);
+}
+
+/* Page actions sit at the end of the page head (Overview: New download). */
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+  align-self: center;
+}
+

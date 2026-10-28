@@ -1,10 +1,11 @@
 // Pure hash routing and filter mapping. Routes are #/, #/queue,
-// #/queue/:id, #/showcase, #/showcase/:id, #/logs and #/system; filters live
-// in the hash query so a filtered view is a shareable link.
+// #/queue/:id, #/showcase, #/showcase/:id, #/logs, #/system, #/new and
+// #/settings; filters live in the hash query so a filtered view is a
+// shareable link.
 
-export const PAGES = ['overview', 'queue', 'showcase', 'logs', 'system'];
+export const PAGES = ['overview', 'queue', 'showcase', 'logs', 'system', 'new', 'settings'];
 
-const PAGE_PATHS = { overview: '', queue: 'queue', showcase: 'showcase', logs: 'logs', system: 'system' };
+const PAGE_PATHS = { overview: '', queue: 'queue', showcase: 'showcase', logs: 'logs', system: 'system', new: 'new', settings: 'settings' };
 const PATH_PAGES = Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k]));
 
 /** Pages whose route may carry a job id that opens the job drawer. */
@@ -95,6 +96,36 @@ export function showcaseType(params = {}) {
 /** GET /api/v1/downloads query for the showcase grid. */
 export function showcaseQuery(type, offset = 0, limit = 24) {
   return { status: 'completed', type, sort: 'updated_at', order: 'desc', limit, offset };
+}
+
+/**
+ * The links #/new?url= carries: one or more, separated by whitespace or
+ * newlines (URL-encoded in the hash). Not validated here; lib/links.js
+ * parses them.
+ */
+export function newDownloadUrls(params = {}) {
+  return typeof params.url === 'string' ? params.url.split(/\s+/).filter(Boolean) : [];
+}
+
+/** The #/new hash pre-filled with these links, newline-separated; none gives #/new. */
+export function newDownloadHash(urls = []) {
+  return buildHash('new', { url: urls.join('\n') });
+}
+
+/**
+ * The section #/settings?section= names, or '' (the page's first section).
+ * Section names are lowercase words joined by underscores; the settings page
+ * owns the list, and the command palette links to "account" and
+ * "library_sync".
+ */
+export function settingsSection(params = {}) {
+  const s = params.section;
+  return typeof s === 'string' && /^[a-z][a-z0-9_]*$/.test(s) ? s : '';
+}
+
+/** The #/settings hash for a section ('' for the page itself). */
+export function settingsHash(section = '') {
+  return buildHash('settings', { section });
 }
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'];

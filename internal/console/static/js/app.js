@@ -1,24 +1,41 @@
 // Shell: hash router, the downloads feed shared by every page, connection
-// state, theme, keyboard shortcuts, toasts and live announcements.
+// state, theme, keyboard shortcuts, the global link paste, toasts and live
+// announcements.
 
 import { html, useState, useEffect, useRef, useCallback, useMemo } from './ui/preact.js';
 import { listDownloads, getSystem, getConfig, feedStreamUrl, parseData } from './api.js';
-import { parseHash, buildHash } from './lib/route.js';
+import { parseHash, buildHash, newDownloadHash, newDownloadUrls } from './lib/route.js';
+import { extractLinks } from './lib/links.js';
 import { THEME_KEY, SKIN_KEY, normalizeTheme, normalizeSkin, readPref, writePref } from './lib/prefs.js';
 import { applyFeedMessage, EMPTY_COUNTS } from './lib/store.js';
 import { StreamClient, createCoalescer, backoffDelay } from './lib/stream.js';
 import { jobTitle, typeLabel, count, pageSummary } from './lib/format.js';
-import { AppContext, Icon, Button } from './ui/components.js';
+import { AppContext, Icon, Button, LinkButton } from './ui/components.js';
+import { isDialogOpen } from './ui/dialogs.js';
 import { OverviewPage } from './views/overview.js';
 import { QueuePage } from './views/queue.js';
 import { ShowcasePage } from './views/showcase.js';
 import { LogsPage } from './views/logs.js';
 import { SystemPage } from './views/system.js';
+import { DownloadPage } from './views/download.js';
+import { SettingsPage } from './views/settings.js';
 import { JobDrawer } from './views/drawer.js';
 import { CommandPalette, ShortcutSheet } from './views/palette.js';
-import { NAV, Sidebar, TabBar, ConnectionIndicator, ThemeControl, SkinControl, Banners } from './views/shell.js';
+import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, ThemeControl, SkinControl, Banners } from './views/shell.js';
 
-const TITLES = { overview: 'Overview', queue: 'Queue', showcase: 'Showcase', logs: 'Logs', system: 'System', notfound: 'Not found' };
+const TITLES = {
+  overview: 'Overview',
+  queue: 'Queue',
+  showcase: 'Showcase',
+  logs: 'Logs',
+  system: 'System',
+  new: 'New download',
+  settings: 'Settings',
+  notfound: 'Not found',
+};
+
+// Pages a g-chord reaches: the nav plus New download.
+const CHORDS = [...NAV, NEW_DOWNLOAD];
 
 const storage = () => {
   try {
@@ -267,6 +284,9 @@ export function App() {
 
   const closeDrawer = useCallback(() => navigate(buildHash(route.page, route.params)), [route.page, route.params, navigate]);
 
+  // The More sheet belongs to the page it opened over.
+  useEffect(() => setOverlay((o) => (o === 'more' ? null : o)), [route.page]);
+
   // Keyboard shortcuts.
   const gPending = useRef(0);
   useEffect(() => {
@@ -286,10 +306,10 @@ export function App() {
         }
         return;
       }
-      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || overlay) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || overlay || isDialogOpen()) return;
       if (gPending.current && Date.now() - gPending.current < 1200) {
         gPending.current = 0;
-        const target = NAV.find((n) => n.key === e.key);
+        const target = CHORDS.find((n) => n.key === e.key);
         if (target) {
           e.preventDefault();
           navigate(buildHash(target.page));
@@ -303,6 +323,11 @@ export function App() {
       if (e.key === '?') {
         e.preventDefault();
         setOverlay('shortcuts');
+        return;
+      }
+      if (e.key === NEW_DOWNLOAD.key) {
+        e.preventDefault();
+        navigate(buildHash('new'));
         return;
       }
       if (e.key === '/') {
@@ -331,6 +356,22 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [overlay, route.jobId, closeDrawer, navigate]);
+
+  // Pasting Apple Music links outside a text field opens New download with
+  // them; on that page they join the links already in ?url=.
+  useEffect(() => {
+    const onPaste = (e) => {
+      if (isTyping(e.target) || overlay || isDialogOpen() || !e.clipboardData) return;
+      const links = extractLinks(e.clipboardData.getData('text/plain'));
+      if (links.length === 0) return;
+      e.preventDefault();
+      const onNew = route.page === 'new';
+      const urls = onNew ? [...new Set([...newDownloadUrls(route.params), ...links])] : links;
+      navigate(newDownloadHash(urls), { replace: onNew });
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [overlay, route.page, route.params, navigate]);
 
   const ctx = useMemo(
     () => ({
@@ -366,6 +407,12 @@ export function App() {
     case 'system':
       page = html`<${SystemPage} />`;
       break;
+    case 'new':
+      page = html`<${DownloadPage} route=${route} />`;
+      break;
+    case 'settings':
+      page = html`<${SettingsPage} route=${route} />`;
+      break;
     default:
       page = html`<div class="card"><div class="card-body"><p>This page does not exist. <a class="link" href=${buildHash('overview')}>Go to the overview</a>.</p></div></div>`;
   }
@@ -391,16 +438,22 @@ export function App() {
           <div class="page-head">
             <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
             ${summary ? html`<p class="page-sub">${summary}</p>` : null}
+            ${route.page === 'overview'
+              ? html`<div class="page-actions">
+                  <${LinkButton} variant="primary" icon="plus" className="page-new" href=${buildHash('new')}>${NEW_DOWNLOAD.label}</${LinkButton}>
+                </div>`
+              : null}
           </div>
           <${Banners} simulate=${simulate} conn=${conn} onRetry=${() => retryRef.current()} />
           ${page}
         </main>
       </div>
-      <${TabBar} route=${route} />
+      <${TabBar} route=${route} moreOpen=${overlay === 'more'} onMore=${() => setOverlay('more')} />
     </div>
     ${route.jobId ? html`<${JobDrawer} jobId=${route.jobId} onClose=${closeDrawer} />` : null}
     ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} setSkin=${setSkin} />` : null}
     ${overlay === 'shortcuts' ? html`<${ShortcutSheet} onClose=${() => setOverlay(null)} />` : null}
+    ${overlay === 'more' ? html`<${MoreSheet} route=${route} onClose=${() => setOverlay(null)} />` : null}
     <div class="toasts" role="status" aria-live="polite">
       ${toasts.map(
         (t) => html`<div key=${t.id} class="toast" data-role=${t.role}>

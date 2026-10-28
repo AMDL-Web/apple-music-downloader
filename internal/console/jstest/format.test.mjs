@@ -189,6 +189,7 @@ test('pageSummary reads the feed counts per page', () => {
   assert.equal(pageSummary('queue', null, now), '');
   assert.equal(pageSummary('showcase', counts, now), '13 completed');
   assert.equal(pageSummary('notfound', counts, now), '');
+  for (const page of ['new', 'settings']) assert.ok(pageSummary(page, null, now), `${page} has a summary before the feed loads`);
 });
 
 test('jobFacts gives kicker and meta parts, empty when unknown', () => {

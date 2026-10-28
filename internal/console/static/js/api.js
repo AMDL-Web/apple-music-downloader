@@ -18,6 +18,11 @@ export class ApiError extends Error {
 }
 
 const REQUEST_TIMEOUT_MS = 15000;
+// The wrapper waits up to wrapper.login_timeout_seconds (120 s by default)
+// for a login or 2FA answer; a quality probe reads one master playlist per
+// track and has no server-side deadline. Both outlast the default bound.
+const LOGIN_TIMEOUT_MS = 130000;
+const QUALITY_TIMEOUT_MS = 180000;
 
 /** Resolves an "/api/..." or "/docs" path against the server root above /console/. */
 export function resolveUrl(path, query, base = globalThis.document ? globalThis.document.baseURI : 'http://localhost/console/') {
@@ -38,17 +43,23 @@ export function toApiError(status, body, fallback) {
   return new ApiError(status, '', fallback, undefined, body);
 }
 
-async function request(method, path, query) {
+/**
+ * One bounded API call. `opts.body` is sent as JSON; `opts.timeoutMs`
+ * replaces the default bound for calls the server may hold longer.
+ */
+async function request(method, path, query, opts = {}) {
+  const { body: payload, timeoutMs = REQUEST_TIMEOUT_MS } = opts;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const headers = { Accept: 'application/json' };
+  const init = { method, headers, cache: 'no-store', signal: controller.signal };
+  if (payload !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(payload);
+  }
   let res;
   try {
-    res = await fetch(resolveUrl(path, query), {
-      method,
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
+    res = await fetch(resolveUrl(path, query), init);
   } catch (e) {
     clearTimeout(timer);
     const timedOut = e && e.name === 'AbortError';
@@ -89,6 +100,33 @@ export const getDownload = (id) => request('GET', `/api/v1/downloads/${encodeURI
 export const cancelDownload = (id) => request('POST', `/api/v1/downloads/${encodeURIComponent(id)}/cancel`);
 export const retryDownload = (id) => request('POST', `/api/v1/downloads/${encodeURIComponent(id)}/retry`);
 export const listLogs = (query) => request('GET', '/api/v1/logs', query);
+
+/**
+ * Submits links: body {urls: string[], overrides?: DownloadOverrides}.
+ * Resolves to the BatchSubmitResponse (202, at least one URL accepted).
+ * When none was, it rejects with ApiError 422 no_urls_accepted (or 500
+ * store_error) whose `details` is that BatchSubmitResponse.
+ */
+export const createDownload = (body) => request('POST', '/api/v1/downloads', undefined, { body });
+/** Deletes a finished job; 409 job_active while it is queued or running. */
+export const deleteDownload = (id) => request('DELETE', `/api/v1/downloads/${encodeURIComponent(id)}`);
+/** The qualities each track of a link offers (QualityResponse); 502 upstream_error when the lookup fails. */
+export const queryQuality = (url) => request('POST', '/api/v1/quality', undefined, { body: { url }, timeoutMs: QUALITY_TIMEOUT_MS });
+/**
+ * Merges `partial` into the runtime config and answers the new ConfigResponse.
+ * Send only the changed fields of a fresh GET; 422 config_key_pinned,
+ * config_key_not_mutable or invalid_config name what was refused.
+ */
+export const putConfig = (partial) => request('PUT', '/api/v1/config', undefined, { body: partial });
+/** Resolves to {status: 'logged_in'} or {status: 'needs_2fa', login_id}. */
+export const loginWrapper = ({ username, password }) =>
+  request('POST', '/api/v1/wrapper/login', undefined, { body: { username, password }, timeoutMs: LOGIN_TIMEOUT_MS });
+/** Completes a needs_2fa login; resolves to {status: 'logged_in'}. */
+export const submitWrapperTwoStep = (loginId, code) =>
+  request('POST', `/api/v1/wrapper/login/${encodeURIComponent(loginId)}/2fa`, undefined, { body: { two_step_code: code }, timeoutMs: LOGIN_TIMEOUT_MS });
+export const logoutWrapper = (username) => request('POST', '/api/v1/wrapper/logout', undefined, { body: { username } });
+/** Clears the library-sync anchor; the next poll re-anchors without submitting albums. */
+export const resetLibrarySync = () => request('POST', '/api/v1/library-sync/reset');
 
 /** Stream URLs; StreamClient appends ?cursor=. */
 export const feedStreamUrl = () => resolveUrl('/api/v1/downloads/events');

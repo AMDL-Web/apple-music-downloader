@@ -12,6 +12,10 @@ import {
   logParams,
   logQuery,
   encodeQuery,
+  newDownloadUrls,
+  newDownloadHash,
+  settingsSection,
+  settingsHash,
 } from '../static/js/lib/route.js';
 import { resolveUrl, toApiError } from '../static/js/api.js';
 
@@ -34,6 +38,29 @@ test('buildHash round-trips and drops empty params', () => {
   const back = parseHash(h);
   assert.equal(back.jobId, 'job_9');
   assert.deepEqual(back.params, { tab: 'failed', type: 'album' });
+});
+
+test('#/new carries one or more links in ?url=', () => {
+  assert.deepEqual(parseHash('#/new'), { page: 'new', jobId: null, params: {} });
+  assert.equal(newDownloadHash([]), '#/new');
+  const a = 'https://music.apple.com/us/album/igor/1463409338';
+  const b = 'https://music.apple.com/us/album/midnights/1650841512?i=1650841515';
+  const h = newDownloadHash([a, b]);
+  assert.ok(!/[\s]/.test(h), 'the hash has no raw whitespace');
+  assert.deepEqual(newDownloadUrls(parseHash(h).params), [a, b], 'two links round-trip through the hash');
+  assert.deepEqual(newDownloadUrls({ url: ` ${a}\n\n ${b}  ` }), [a, b], 'newlines and spaces both separate');
+  assert.deepEqual(newDownloadUrls(parseHash(`#/new?url=${encodeURIComponent(`${a} ${b}`)}`).params), [a, b]);
+  assert.deepEqual(newDownloadUrls({}), []);
+  assert.equal(parseHash('#/new/job_1').page, 'notfound', 'new has no drawer route');
+});
+
+test('#/settings takes an optional section', () => {
+  assert.deepEqual(parseHash('#/settings'), { page: 'settings', jobId: null, params: {} });
+  assert.equal(settingsHash(), '#/settings');
+  assert.equal(settingsHash('library_sync'), '#/settings?section=library_sync');
+  assert.equal(settingsSection(parseHash('#/settings?section=account').params), 'account');
+  assert.equal(settingsSection({ section: 'Bad Name' }), '');
+  assert.equal(settingsSection({}), '');
 });
 
 test('queue tabs map to API queries', () => {

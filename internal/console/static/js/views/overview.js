@@ -85,7 +85,12 @@ function LiveQueue() {
   let body;
   if (state.loading) body = html`<${SkeletonRows} n=${4} kind="row" />`;
   else if (state.error) body = html`<${ErrorNote} title="Couldn't load the queue" error=${state.error} onRetry=${load} />`;
-  else if (state.jobs.length === 0) body = html`<${Empty} icon="list" title="Nothing in the queue">Submit links from the iOS app, amdl-web or <code>POST /api/v1/downloads</code>.</${Empty}>`;
+  else if (state.jobs.length === 0)
+    body = html`<${Empty}
+      icon="list"
+      title="Nothing in the queue"
+      action=${html`<${LinkButton} variant="primary" size="sm" icon="plus" href=${buildHash('new')}>Start a download</${LinkButton}>`}
+    >Paste an Apple Music link anywhere in the console, or start one here.</${Empty}>`;
   else
     body = html`<ul class="job-list job-list-compact" aria-label="Active jobs">
       ${state.jobs.map((job) => html`<li key=${job.id}><${JobRow} job=${job} href=${buildHash('queue', {}, job.id)} /></li>`)}

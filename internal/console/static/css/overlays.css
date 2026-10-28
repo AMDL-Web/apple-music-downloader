@@ -157,6 +157,82 @@
   line-height: var(--lh-13);
 }
 
+/* Dialog panels (ui/dialogs.js) take focus only when they hold no control. */
+[data-dialog]:focus {
+  outline: none;
+}
+
+/* A bottom sheet (the tab bar's More) rises above the tab bar. */
+.overlay-host[data-placement="bottom"] {
+  align-items: flex-end;
+  padding: var(--s-2) var(--s-2) calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+}
+
+.sheet-more {
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-4);
+}
+
+.sheet-more .sheet-head {
+  padding-left: var(--s-2);
+}
+
+.more-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+}
+
+.more-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: var(--touch);
+  padding: 0 var(--s-3);
+  border-radius: var(--r-control);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.more-item:hover {
+  background: var(--bg-hover);
+}
+
+.more-item[aria-current="page"] {
+  background: var(--bg-selected);
+  font-weight: var(--w-medium);
+}
+
+.more-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.more-current {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.dialog-confirm {
+  width: min(420px, 100%);
+}
+
+.dialog-body {
+  color: var(--text-secondary);
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
 /* ---- States -------------------------------------------------------- */
 
 .skel {

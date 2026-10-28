@@ -149,6 +149,10 @@ export function pageSummary(page, counts, now = new Date()) {
       return 'Structured backend log, newest last';
     case 'system':
       return 'Build, runtime, health and configuration';
+    case 'new':
+      return 'Paste Apple Music links to queue albums, songs, playlists, artists or stations';
+    case 'settings':
+      return 'Runtime configuration, Apple Music account and library sync';
     default:
       return '';
   }

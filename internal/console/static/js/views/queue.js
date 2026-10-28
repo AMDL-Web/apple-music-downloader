@@ -7,7 +7,7 @@ import { jobTitle, jobSubtitle, typeLabel, artPalette, paletteStyle, jobFacts } 
 import { jobStatusView } from '../lib/status.js';
 import { upsertJob, removeJob, appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
-import { useApp, Artwork, Badge, JobProgress, RelTime, Icon, Segmented, Empty, ErrorNote, SkeletonRows, Button } from '../ui/components.js';
+import { useApp, Artwork, Badge, JobProgress, RelTime, Icon, Segmented, Empty, ErrorNote, SkeletonRows, Button, LinkButton } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
 
 const PAGE_SIZE = 50;
@@ -163,15 +163,17 @@ export function QueuePage({ route }) {
   </div>`;
 }
 
+const startAction = () => html`<${LinkButton} variant="primary" size="sm" icon="plus" href=${buildHash('new')}>Start a download</${LinkButton}>`;
+
 function QueueEmpty({ filters, onClear }) {
   if (filters.q || filters.type) {
     return html`<${Empty} icon="search" title="No jobs match these filters" action=${html`<${Button} size="sm" onClick=${onClear}>Clear filters</${Button}>`} />`;
   }
   if (filters.tab === 'failed') return html`<${Empty} icon="circle-check" title="No failed jobs" />`;
   if (filters.tab === 'active') {
-    return html`<${Empty} icon="list" title="No active downloads">
-      Submit links from the iOS app, amdl-web or <code>POST /api/v1/downloads</code>.
+    return html`<${Empty} icon="list" title="No active downloads" action=${startAction()}>
+      Paste an Apple Music link anywhere in the console, or start one here.
     </${Empty}>`;
   }
-  return html`<${Empty} icon="list" title="No jobs yet" />`;
+  return html`<${Empty} icon="list" title="No jobs yet" action=${startAction()} />`;
 }

@@ -1,0 +1,5 @@
+/*
+ * The New download page (#/new, views/download.js): link entry, link
+ * previews, quality probe and submit results. Base structure only; it reads
+ * tokens like every other base stylesheet, and the skins restyle it.
+ */
