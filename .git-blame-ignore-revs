@@ -20,3 +20,7 @@ d6167fe51814436c33be6b7454cc1b795cae045f
 d8937e1eb4f143ef85e80eab9d470a5ceff91328
 # refactor(console): move the throughput card out of overview.js (move-only)
 9b30a44031639269acee1ab17bd4a8fdc24b38f3
+# refactor(console): move the hash router out of app.js (move-only)
+bb9c223f7ba045d681a236b037925b14936d8c4d
+# refactor(console): move the link previews out of download.js (move-only)
+a4eec34aa055806380d257b378937056af8bf3f9
