@@ -98,7 +98,9 @@ export function showcaseQuery(type, offset = 0, limit = 24) {
 }
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
-export const LOG_COMPONENTS = ['api', 'jobs', 'media', 'catalog', 'hooks', 'main'];
+// Every component tag the backend logs with; TestLogComponentsMatchBackend keeps
+// this list equal to the tags in the Go code.
+export const LOG_COMPONENTS = ['api', 'jobs', 'media', 'catalog', 'hooks', 'librarysync', 'http', 'limits', 'main'];
 
 /** Normalizes log route params. `level` is a comma list of exact levels. */
 export function logFilters(params = {}) {

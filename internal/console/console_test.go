@@ -4,11 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -448,6 +451,61 @@ func TestAPIPathsExistInSpec(t *testing.T) {
 			files := used[p]
 			sort.Strings(files)
 			t.Errorf("static/js calls %s (in %s), which is not a path in internal/api/openapi.yaml", p, strings.Join(files, ", "))
+		}
+	}
+}
+
+var (
+	componentTag  = regexp.MustCompile(`"component",\s*"([a-z_]+)"`)
+	logComponents = regexp.MustCompile(`export const LOG_COMPONENTS = \[([^\]]*)\]`)
+	quotedWord    = regexp.MustCompile(`'([a-z_]+)'`)
+)
+
+// The Logs page offers a component filter; a tag the backend logs with but the
+// list lacks can only be reached by editing the URL.
+func TestLogComponentsMatchBackend(t *testing.T) {
+	backend := map[string]bool{}
+	for _, root := range []string{"../../cmd", "../../internal"} {
+		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+				return err
+			}
+			src, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			for _, m := range componentTag.FindAllStringSubmatch(string(src), -1) {
+				backend[m[1]] = true
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(backend) < 5 {
+		t.Fatalf("found only %d component tags in the Go code; the pattern is broken", len(backend))
+	}
+	src, err := fs.ReadFile(embedded, "static/js/lib/route.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := logComponents.FindStringSubmatch(string(src))
+	if list == nil {
+		t.Fatal("LOG_COMPONENTS not found in lib/route.js")
+	}
+	console := map[string]bool{}
+	for _, m := range quotedWord.FindAllStringSubmatch(list[1], -1) {
+		console[m[1]] = true
+	}
+	for _, name := range slices.Sorted(maps.Keys(backend)) {
+		if !console[name] {
+			t.Errorf("the backend logs component %q, but LOG_COMPONENTS in lib/route.js lacks it", name)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(console)) {
+		if !backend[name] {
+			t.Errorf("LOG_COMPONENTS lists %q, which no Go code logs as a component", name)
 		}
 	}
 }

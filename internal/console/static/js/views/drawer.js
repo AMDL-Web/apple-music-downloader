@@ -1,5 +1,6 @@
 // Job drawer: one job's header, palette, per-track strip and stage meters,
-// hooks and actions, kept live by the per-job event stream.
+// hooks and actions, kept live by the per-job event stream and, once that
+// stream has ended, by the overview feed.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { getDownload, cancelDownload, retryDownload, jobStreamUrl, parseData } from '../api.js';
@@ -55,6 +56,8 @@ export function JobDrawer({ jobId, onClose }) {
   detailRef.current = detail;
   const jobIdRef = useRef(jobId);
   jobIdRef.current = jobId;
+  const streamEndedRef = useRef(streamEnded);
+  streamEndedRef.current = streamEnded;
 
   const refetch = () =>
     getDownload(jobId).then(
@@ -109,6 +112,34 @@ export function JobDrawer({ jobId, onClose }) {
       releaseSecondary(client);
     };
   }, [loaded, jobId, streamKey]);
+
+  // A finished job's stream ends (204), so later changes made elsewhere reach
+  // the drawer only through the overview feed: a delete, or a retry that starts
+  // a new run, which reopens the per-job stream from the snapshot's cursor.
+  const reopen = () =>
+    refetch().then((body) => {
+      if (body && body.job && !isTerminal(body.job.status)) setStreamKey((k) => k + 1);
+    });
+  useEffect(
+    () =>
+      app.subscribeFeed((batch) => {
+        for (const msg of batch) {
+          if (msg.type === 'download_deleted' && msg.job_id === jobIdRef.current) {
+            setError({ status: 404, message: 'This job was deleted.' });
+            return;
+          }
+          if (msg.type === 'download_upserted' && msg.job && msg.job.id === jobIdRef.current && streamEndedRef.current) {
+            reopen();
+            return;
+          }
+        }
+      }),
+    [jobId],
+  );
+  // A feed resync (new epoch) may have skipped messages; catch up the same way.
+  useEffect(() => {
+    if (app.epoch && streamEndedRef.current) reopen();
+  }, [app.epoch]);
 
   // Events that change the item set (resolved_input, retry, recovery) or
   // that the stream does not carry (motion artwork) need a fresh snapshot.

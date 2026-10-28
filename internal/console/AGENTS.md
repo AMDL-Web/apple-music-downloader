@@ -53,7 +53,8 @@ paths); add a `<symbol id="i-name">` and use `Icon`.
 - design guard (color literals, `transition: all`, CJK copy, raw HTML writes,
   raw font sizes);
 - contract guard: each `/api/v1/...` literal in `static/js` is a path in
-  `internal/api/openapi.yaml`.
+  `internal/api/openapi.yaml`;
+- `LOG_COMPONENTS` equals the `"component"` log tags in the Go code.
 
 ## Run and verify
 
