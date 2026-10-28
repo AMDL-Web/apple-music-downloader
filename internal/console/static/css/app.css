@@ -823,6 +823,37 @@ kbd {
   white-space: nowrap;
 }
 
+/* Skin opt-in: the long progress text ("12 of 14 tracks, 1 failed") and a
+   count per cell state. Shown, the legend is a wrapping row of keys whose
+   swatch takes the cell's role. */
+.jprog-long,
+.jprog-legend {
+  display: none;
+}
+
+.jprog-legend {
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.jprog-long {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.jprog-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  white-space: nowrap;
+}
+
 .stages {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1179,6 +1210,91 @@ kbd {
   display: none;
 }
 
+/* Skin opt-in: the latest failures (24 h) under the live list, each with
+   Retry. Shown, a row is icon, title and detail, then the button. */
+.attention {
+  display: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--row-divider);
+}
+
+.attention-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon title action"
+    "icon detail action";
+  align-items: center;
+  column-gap: var(--s-3);
+  padding: var(--s-3) var(--card-pad-x);
+}
+
+.attention-row + .attention-row {
+  border-top: var(--row-divider);
+}
+
+.attention-icon {
+  grid-area: icon;
+  display: inline-flex;
+  color: var(--danger-text);
+}
+
+.attention-title,
+.attention-detail {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.attention-title {
+  grid-area: title;
+}
+
+.attention-detail {
+  grid-area: detail;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.attention-row > .btn {
+  grid-area: action;
+}
+
+.attention-label {
+  font-weight: var(--w-medium);
+}
+
+.attention-link {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+
+.attention-link:hover {
+  text-decoration: underline;
+}
+
+.attention-input,
+.attention-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attention-input {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
 /* ---- Artwork ------------------------------------------------------- */
 
 .art {
@@ -1347,6 +1463,10 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+.fact[data-role="danger"] .fact-value {
+  color: var(--danger-text);
+}
+
 .strip {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -1511,6 +1631,91 @@ kbd {
   color: var(--text-secondary);
   font-size: var(--fs-11);
   line-height: var(--lh-11);
+}
+
+/* One label per day; the base keeps the first, middle and latest. */
+.chart-xaxis > span:not(.is-first, .is-mid, .is-latest) {
+  display: none;
+}
+
+/* Formats (/stats codecs): a decorative stacked bar and a labelled list. */
+.tp-formats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.tp-formats-title {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.formats-bar {
+  display: flex;
+  gap: var(--s-0_5);
+  height: var(--bar-h);
+  border-radius: var(--r-bar);
+  background: var(--track);
+  overflow: hidden;
+}
+
+/* The base tells formats apart by position only; each element also carries
+   --i (its index) for a skin that colors them. */
+.formats-seg,
+.formats-swatch {
+  background: var(--chart-bar);
+}
+
+.formats-seg:nth-child(2),
+.formats-item:nth-child(2) .formats-swatch {
+  opacity: 0.75;
+}
+
+.formats-seg:nth-child(3),
+.formats-item:nth-child(3) .formats-swatch {
+  opacity: 0.5;
+}
+
+.formats-seg:nth-child(n + 4),
+.formats-item:nth-child(n + 4) .formats-swatch {
+  opacity: 0.3;
+}
+
+.formats-seg {
+  flex: 0 1 calc(var(--w) * 100%);
+}
+
+.formats-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.formats-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  min-width: 0;
+}
+
+.formats-swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+}
+
+.formats-count {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .log-tail {
@@ -1686,6 +1891,12 @@ kbd {
 
 .log-view:focus-visible {
   outline-offset: -2px;
+}
+
+/* States inside the mono log view are UI copy, not log records. */
+.log-view .empty,
+.log-view .error-note {
+  font-family: var(--font-sans);
 }
 
 .log-notice {
@@ -2269,6 +2480,14 @@ kbd {
 .hero-skel {
   display: block;
   padding: 0;
+}
+
+/* Skin opt-in: the hero's actions, the hero link's next sibling (carrying
+   the same palette properties), so they are never nested inside it. */
+.hero-actions {
+  display: none;
+  flex-wrap: wrap;
+  gap: var(--s-2);
 }
 
 .tag-library {
@@ -3347,7 +3566,9 @@ kbd {
   .conn-dot,
   .log-dot,
   .pulse,
-  .chart-bar {
+  .chart-bar,
+  .formats-seg,
+  .formats-swatch {
     border: 1px solid CanvasText;
   }
 }

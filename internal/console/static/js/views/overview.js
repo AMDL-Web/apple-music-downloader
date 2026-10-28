@@ -2,14 +2,14 @@
 // artwork, throughput from /stats and a log tail.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { listDownloads, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, getStats, listLogs, logStreamUrl, settle, parseData } from '../api.js';
-import { count, bytes, dayLabel, jobTitle, jobSubtitle, artPalette, paletteStyle, clockTime, jobFacts, systemFacts, attrPairs } from '../lib/format.js';
+import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, getStats, listLogs, logStreamUrl, settle, parseData } from '../api.js';
+import { count, bytes, dayLabel, jobTitle, jobSubtitle, artPalette, paletteStyle, clockTime, jobFacts, systemFacts, attrPairs, formatShares } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, logLevelView, isAlreadyInLibrary, LOG_RETENTION_OFF } from '../lib/status.js';
 import { upsertJob, appendLogs, emptyLogs } from '../lib/store.js';
 import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
 import { buildHash } from '../lib/route.js';
-import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, Unavailable, LinkButton, HealthList, Facts } from '../ui/components.js';
-import { usePoll, useColumns } from '../ui/hooks.js';
+import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, Unavailable, LinkButton, Button, RelTime, HealthList, Facts } from '../ui/components.js';
+import { usePoll, useColumns, useNow } from '../ui/hooks.js';
 import { JobRow, applyFeedToList } from './queue.js';
 
 export function OverviewPage() {
@@ -96,7 +96,82 @@ function LiveQueue() {
     labelId="live-queue-title"
     note=${c ? `${count(c.running)} running · ${count(c.queued)} queued` : null}
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('queue', {})}>Open queue</${LinkButton}>`}
-  >${body}</${Card}>`;
+  >${body}<${Attention} /></${Card}>`;
+}
+
+const ATTENTION_LIMIT = 2;
+const ATTENTION_WINDOW_MS = 24 * 60 * 60 * 1000;
+const FAILED_FILTER = { statuses: ['failed'] };
+
+/**
+ * Opt-in hook (hidden by the base): the latest failed jobs of the last 24
+ * hours under the live list, each with Retry. A retried or deleted job
+ * leaves through the feed, and the next one in line comes from a fresh read.
+ */
+function Attention() {
+  const app = useApp();
+  const now = useNow();
+  const [jobs, setJobs] = useState([]);
+  const [stamp, setStamp] = useState(0);
+  const [busy, setBusy] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    listDownloads({ status: 'failed', sort: 'updated_at', order: 'desc', limit: ATTENTION_LIMIT }).then(
+      (body) => {
+        if (!cancelled) setJobs(body.downloads);
+      },
+      () => {
+        if (!cancelled) setJobs([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [app.epoch, stamp]);
+  const jobsRef = useRef(jobs);
+  jobsRef.current = jobs;
+  useEffect(
+    () =>
+      app.subscribeFeed((batch) => {
+        const held = new Set(jobsRef.current.map((j) => j.id));
+        const leaving = batch.some(
+          (m) => (m.type === 'download_deleted' && held.has(m.job_id)) || (m.job && held.has(m.job.id) && m.job.status !== 'failed'),
+        );
+        setJobs((list) => applyFeedToList(list, batch, FAILED_FILTER, { limit: ATTENTION_LIMIT }));
+        if (leaving) setStamp((n) => n + 1);
+      }),
+    [],
+  );
+  const retry = async (job) => {
+    setBusy(job.id);
+    try {
+      await retryDownload(job.id);
+      app.toast({ message: 'Job queued again', role: 'success' });
+    } catch (e) {
+      app.toast({ message: e.message || 'The request failed', role: 'danger', sticky: true });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const recent = jobs.filter((j) => now - Date.parse(j.finished_at || j.updated_at) < ATTENTION_WINDOW_MS);
+  if (recent.length === 0) return null;
+  return html`<ul class="attention" aria-label="Recent failures">
+    ${recent.map(
+      (job) => html`<li key=${job.id} class="attention-row" data-role="danger">
+        <span class="attention-icon"><${Icon} name="circle-x" /></span>
+        <span class="attention-title">
+          <span class="attention-label">Failed</span>
+          <a class="attention-link" href=${buildHash('queue', {}, job.id)} dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</a>
+          <span class="attention-input" title=${job.input}>${job.input}</span>
+        </span>
+        <span class="attention-detail">
+          ${job.error ? html`<span class="attention-error" title=${job.error}>${job.error}</span>` : null}
+          <${RelTime} value=${job.finished_at || job.updated_at} />
+        </span>
+        <${Button} size="sm" icon="rotate" onClick=${() => retry(job)} disabled=${busy === job.id}>Retry</${Button}>
+      </li>`,
+    )}
+  </ul>`;
 }
 
 function loadHealth() {
@@ -206,18 +281,46 @@ function ThroughputCard() {
           className="tp-totals"
           label=${`Totals, ${period.toLowerCase()}`}
           rows=${[
-            ['tracks', 'Tracks completed', `${count(totals.tracks_completed)}${totals.tracks_failed ? `, ${count(totals.tracks_failed)} failed` : ''}`],
+            ['tracks', 'Tracks completed', count(totals.tracks_completed)],
+            totals.tracks_failed ? ['tracks-failed', 'Tracks failed', count(totals.tracks_failed), 'danger'] : null,
             ['bytes', 'Written to disk', bytes(totals.bytes_written)],
-            ['jobs', 'Jobs finished', `${count(jobsDone)}${jobsFailed ? `, ${count(jobsFailed)} failed` : ''}`],
-          ]}
+            ['jobs', 'Jobs finished', count(jobsDone)],
+            jobsFailed ? ['jobs-failed', 'Jobs failed', count(jobsFailed), 'danger'] : null,
+          ].filter(Boolean)}
         />`
       : null}
+    ${stats ? html`<${Formats} codecs=${stats.codecs} />` : null}
     ${stats
       ? html`<${Throughput} daily=${daily} />`
       : poll.error
         ? html`<${ErrorNote} title="Couldn't load stats" error=${poll.error} onRetry=${poll.reload} />`
         : html`<${Skeleton} kind="chart" />`}
   </${Card}>`;
+}
+
+/**
+ * The codec mix of every retained job (/stats `codecs`): a stacked bar
+ * (decorative) and a list with label and track count. Nothing renders
+ * before any track has completed.
+ */
+function Formats({ codecs }) {
+  const shares = formatShares(codecs);
+  if (shares.length === 0) return null;
+  return html`<div class="tp-formats" role="group" aria-labelledby="tp-formats-title">
+    <p class="tp-formats-title" id="tp-formats-title">Formats, all jobs</p>
+    <div class="formats-bar" aria-hidden="true">
+      ${shares.map((f, i) => html`<span key=${f.key} class="formats-seg" data-key=${f.key} style=${{ '--w': String(f.share), '--i': String(i) }}></span>`)}
+    </div>
+    <ul class="formats-list">
+      ${shares.map(
+        (f, i) => html`<li key=${f.key} class="formats-item" data-key=${f.key} style=${{ '--i': String(i) }}>
+          <span class="formats-swatch" aria-hidden="true"></span>
+          <span class="formats-label">${f.label}</span>
+          <span class="formats-count">${count(f.tracks)} ${f.tracks === 1 ? 'track' : 'tracks'}</span>
+        </li>`,
+      )}
+    </ul>
+  </div>`;
 }
 
 /** Compact tick value: 1284 -> "1.3K". */
@@ -276,10 +379,12 @@ export function Throughput({ daily }) {
         </div>
       </figure>`,
     )}
-    <div class="chart-xaxis" aria-hidden="true">
-      <span>${dayLabel(daily[0].date)}</span>
-      ${daily.length > 2 ? html`<span>${dayLabel(daily[mid].date)}</span>` : null}
-      <span>${dayLabel(daily[daily.length - 1].date)}</span>
+    <div class="chart-xaxis" aria-hidden="true" style=${{ '--n': String(daily.length) }}>
+      ${daily.map((d, i) => {
+        const last = i === daily.length - 1;
+        const cls = [i === 0 ? 'is-first' : '', i === mid && i > 0 && !last ? 'is-mid' : '', last ? 'is-latest' : ''].filter(Boolean).join(' ');
+        return html`<span key=${d.date} class=${cls || undefined} data-day=${String(Number(d.date.slice(8, 10)) || '')}>${dayLabel(d.date)}</span>`;
+      })}
     </div>
     <div class="sr-only"><table>
       <caption>Completed tracks and bytes written per day (UTC)</caption>

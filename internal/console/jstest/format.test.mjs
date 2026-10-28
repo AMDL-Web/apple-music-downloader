@@ -16,6 +16,7 @@ import {
   dayLabel,
   kHz,
   codecLabel,
+  formatShares,
   isHiRes,
   jobTitle,
   jobSubtitle,
@@ -235,4 +236,28 @@ test('systemFacts picks workers, queue, downloads disk and uptime', () => {
 test('attrPairs sorts keys and leaves out the omitted ones', () => {
   assert.deepEqual(attrPairs({ job_type: 'album', component: 'jobs', n: 3, ok: true }, ['component']), ['job_type=album', 'n=3', 'ok=true']);
   assert.deepEqual(attrPairs(null), []);
+});
+
+test('formatShares turns the stats codec mix into shares and folds the tail', () => {
+  const two = formatShares([
+    { codec: 'alac', bit_depth: 24, sample_rate: 96000, tracks: 30 },
+    { codec: 'alac', bit_depth: 16, sample_rate: 44100, tracks: 10 },
+  ]);
+  assert.deepEqual(two.map((f) => [f.key, f.label, f.tracks, f.share]), [
+    ['alac-24-96000', 'ALAC 24/96', 30, 0.75],
+    ['alac-16-44100', 'ALAC 16/44.1', 10, 0.25],
+  ]);
+  const many = formatShares(
+    [
+      { codec: 'alac', bit_depth: 24, sample_rate: 96000, tracks: 4 },
+      { codec: 'alac', bit_depth: 24, sample_rate: 48000, tracks: 3 },
+      { codec: 'aac', bit_depth: 0, sample_rate: 0, tracks: 2 },
+      { codec: 'ec3', bit_depth: 0, sample_rate: 0, tracks: 1 },
+    ],
+    3,
+  );
+  assert.deepEqual(many.map((f) => [f.key, f.tracks]), [['alac-24-96000', 4], ['alac-24-48000', 3], ['other', 3]]);
+  assert.deepEqual(formatShares([]), []);
+  assert.deepEqual(formatShares(undefined), []);
+  assert.deepEqual(formatShares([{ codec: 'alac', tracks: 0 }]), []);
 });

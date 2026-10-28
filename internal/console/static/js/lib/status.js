@@ -268,6 +268,29 @@ export function progressCells(job) {
   return out;
 }
 
+const LEGEND_LABELS = { completed: 'saved', skipped: 'on disk', failed: 'failed', cancelled: 'cancelled', remaining: 'remaining' };
+
+/**
+ * The progress legend: one entry per cell state, in cell order, with its
+ * count. Every state is listed, zeros included (a skin may hide zeros);
+ * "remaining" covers tracks in flight and waiting alike, because the list
+ * payload does not tell them apart. Null while the job has no tracks.
+ * @returns {{state: string, role: string, n: number, label: string}[] | null}
+ */
+export function progressLegend(job) {
+  const c = jobCounts(job);
+  if (c.total === 0) return null;
+  let left = c.total;
+  const take = (n) => {
+    const v = Math.min(n, left);
+    left -= v;
+    return v;
+  };
+  const counts = { completed: take(c.completed), skipped: take(c.skipped), failed: take(c.failed), cancelled: take(c.cancelled) };
+  counts.remaining = left;
+  return Object.keys(LEGEND_LABELS).map((state) => ({ state, role: CELL_ROLES[state], n: counts[state], label: LEGEND_LABELS[state] }));
+}
+
 const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 
 /**

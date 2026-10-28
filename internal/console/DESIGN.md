@@ -25,7 +25,7 @@ wins and this page is fixed in the same change. Sources are listed in
 
 | Route | Page | Content |
 | --- | --- | --- |
-| `#/` | Overview | Sections (in DOM order) `kpis`, `live` (8 active jobs), `health`, `recent`, `throughput` (from `/stats`), `logs` (12-line tail) |
+| `#/` | Overview | Sections (in DOM order) `kpis`, `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `health`, `recent`, `throughput` (from `/stats`), `logs` (12-line tail) |
 | `#/queue?tab=active\|failed\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search, type filter, dense job list, Load more |
 | `#/queue/:id`, `#/showcase/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, activity, Cancel/Retry |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
@@ -130,11 +130,13 @@ Stable class names and attributes a skin can style without touching JS:
 | Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub`, `.banners`, `.page.page-<name>` |
 | KPI | `a.kpi[data-key=queued\|running\|completed\|failed\|total][data-role][data-zero]` > `.kpi-label`, `.kpi-icon`, `.kpi-value`, `.kpi-meta` |
 | Job row | `a.job-row[data-status][.has-palette]` > `.art`, `.job-main` (`.job-facts` > `.job-fact[data-key=type\|genre\|year\|started]`, `.job-title`, `.job-sub`), `.job-type`, `.job-progress`, `.job-status`, `.job-updated`, `.job-chevron` |
-| Progress | `.jprog[data-mode=cells\|bar]`: up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14") |
+| Progress | `.jprog[data-mode=cells\|bar]`: up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14"), `.jprog-long` ("12 of 14 tracks, 1 failed") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
 | Health | `.health-row[data-role]` > `.health-icon`, `.health-name`, `.health-status` (badge), `.health-detail`; runtime facts `dl.facts.health-facts` |
-| Facts | `dl.facts` > `.fact[data-key]` > `dt.fact-label` + `dd.fact-value` (health facts, throughput totals `.tp-totals`, hero facts `.hero-facts`) |
+| Facts | `dl.facts` > `.fact[data-key][data-role]` > `dt.fact-label` + `dd.fact-value` (health facts, throughput totals `.tp-totals` with `tracks`, `tracks-failed`, `bytes`, `jobs`, `jobs-failed`, the failed rows only when non-zero and `data-role=danger`, hero facts `.hero-facts`) |
 | Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`, `.strip-meta`; every completed job renders, those past the whole-tile count carry `.is-overflow` |
-| Showcase | `a.hero.has-palette` > `.hero-art`, `.hero-text` (`.hero-kicker` > `.hero-no`, `.hero-title`, `.hero-artist`, `.hero-facts`); `a.tile[.has-palette]` > `.tile-head` (`.tile-index`, `.tile-year`), `.tile-art`, `.tile-title`, `.tile-sub`, `.tile-facts` > `.tile-fact[data-key=genre\|year\|tracks\|finished]` |
+| Showcase | `a.hero.has-palette` > `.hero-art`, `.hero-text` (`.hero-kicker` > `.hero-no`, `.hero-title`, `.hero-artist`, `.hero-facts`), then its sibling `div.hero-actions` (same palette properties) > `.btn` "Tracks" (the drawer) and "Open in Apple Music"; `a.tile[.has-palette]` > `.tile-head` (`.tile-index`, `.tile-year`), `.tile-art`, `.tile-title`, `.tile-sub`, `.tile-facts` > `.tile-fact[data-key=genre\|year\|tracks\|finished]` |
+| Live failures | `ul.attention` after the live list > `li.attention-row[data-role=danger]` > `.attention-icon`, `.attention-title` (`.attention-label` "Failed", `a.attention-link` to the drawer, mono `.attention-input`), `.attention-detail` (`.attention-error`, relative time), Retry `.btn` |
+| Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
 | Shell | `.brand-sub`, `.nav-item[aria-current]`, `.nav-badge`, `.tab[aria-current]`, `.skin`/`.seg-skin`/`.skin-cycle`, `.theme`/`.seg-icons`/`.theme-cycle` |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
@@ -148,8 +150,10 @@ drawer's `.drawer-head` carries the properties without the class. Each `--art-t*
 behind a cover while it loads or when it fails.
 
 **Opt-in hooks** are hidden by the base and shown by a skin that wants them:
-`.brand-sub`, `.job-facts`, `.health-icon`, `.hero-no`, `.tile-head`, and
-`.strip-tile.is-overflow`.
+`.brand-sub`, `.job-facts`, `.health-icon`, `.hero-no`, `.hero-actions`,
+`.tile-head`, `.strip-tile.is-overflow`, `.jprog-long`, `.jprog-legend`,
+`.attention`, and the x-axis day labels other than the first, middle and
+latest.
 
 ### Adding a skin
 
@@ -223,7 +227,9 @@ and motion covers.
   verbatim. Motion covers play muted on hover or focus, one at a time, only
   where `video.canPlayType` accepts HLS and motion is allowed. Titles underline
   on hover in every skin.
-- **Throughput**: totals as facts, then two small multiples sharing the date
+- **Throughput**: totals as facts, the formats mix of every retained job
+  (`/stats` `codecs`, the top four with the rest as "Other"; nothing before
+  a track completes), then two small multiples sharing the date
   axis (tracks per day, bytes per day), each with its own 0/max axis plus a
   max/2 gridline and label once max reaches 2 (for tracks only when max/2 is
   whole), a hover readout, and a screen-reader table.

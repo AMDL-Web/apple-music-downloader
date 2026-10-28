@@ -18,6 +18,7 @@ import {
   stageText,
   isTerminal,
   progressCells,
+  progressLegend,
   CELL_MAX,
 } from '../static/js/lib/status.js';
 
@@ -187,4 +188,19 @@ test('progressCells gives one cell per track in ordered runs', () => {
   assert.equal(progressCells({ total_items: 0, status: 'running' }), null);
   // Counters that overrun the total never add cells.
   assert.equal(progressCells({ total_items: 2, completed_items: 5 }).length, 2);
+});
+
+test('progressLegend counts every cell state in cell order, zeros included', () => {
+  const legend = progressLegend({ total_items: 6, completed_items: 2, skipped_items: 1, failed_items: 1 });
+  assert.deepEqual(
+    legend.map((k) => [k.state, k.n]),
+    [['completed', 2], ['skipped', 1], ['failed', 1], ['cancelled', 0], ['remaining', 2]],
+  );
+  assert.equal(legend.find((k) => k.state === 'failed').role, 'danger');
+  assert.equal(progressLegend({ total_items: 0, status: 'running' }), null);
+  // Counters that overrun the total are clamped, like the cells.
+  assert.deepEqual(
+    progressLegend({ total_items: 2, completed_items: 5, failed_items: 1 }).map((k) => k.n),
+    [2, 0, 0, 0, 0],
+  );
 });

@@ -186,6 +186,29 @@ export function codecLabel(item) {
   return name;
 }
 
+/**
+ * The codec mix from /stats `codecs` (most tracks first) as shares of all
+ * completed tracks. Past `max` formats, the tail is folded into "Other".
+ * @returns {{key: string, label: string, tracks: number, share: number}[]}
+ */
+export function formatShares(codecs, max = 4) {
+  const rows = (Array.isArray(codecs) ? codecs : []).filter((c) => c && c.tracks > 0);
+  const total = rows.reduce((n, c) => n + c.tracks, 0);
+  if (total === 0) return [];
+  const head = rows.length > max ? rows.slice(0, max - 1) : rows;
+  const out = head.map((c) => ({
+    key: [c.codec, c.bit_depth, c.sample_rate].filter((v) => v).join('-') || 'unknown',
+    label: codecLabel(c) || 'Unknown',
+    tracks: c.tracks,
+    share: c.tracks / total,
+  }));
+  if (rows.length > max) {
+    const tracks = rows.slice(max - 1).reduce((n, c) => n + c.tracks, 0);
+    out.push({ key: 'other', label: 'Other', tracks, share: tracks / total });
+  }
+  return out;
+}
+
 /** Whether an item's format is high resolution (more than 16-bit/48 kHz). */
 export function isHiRes(item) {
   return Boolean(item && item.bit_depth >= 24 && item.sample_rate > 48000);

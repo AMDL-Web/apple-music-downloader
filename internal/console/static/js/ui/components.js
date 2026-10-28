@@ -2,7 +2,7 @@
 
 import { html, useState, useEffect, createContext, useContext } from './preact.js';
 import { artworkUrl, artworkSrcset, relTime, absTime } from '../lib/format.js';
-import { jobProgress, progressCells, stageSegments, stageText } from '../lib/status.js';
+import { jobProgress, progressCells, progressLegend, stageSegments, stageText } from '../lib/status.js';
 import { useNow } from './hooks.js';
 
 /** App-wide services: navigate, toast, announce, feed subscription, counts, connection, system info. */
@@ -40,12 +40,28 @@ export function Chip({ children, title, mono }) {
 /**
  * Job progress, never a percentage. Up to CELL_MAX tracks it is one cell per
  * track (completed, already on disk, failed, cancelled, remaining); above that
- * a segmented bar. Either way the counter text follows.
+ * a segmented bar. Either way the counter text follows, then two opt-in hooks
+ * the base hides: .jprog-long (the progressbar's value text) and
+ * .jprog-legend (a count per cell state). Both repeat aria-valuetext, so they
+ * are hidden from screen readers.
  */
 export function JobProgress({ job }) {
   const p = jobProgress(job);
   const cells = progressCells(job);
-  const text = html`<span class="jprog-text">${p.text}</span>`;
+  const legend = progressLegend(job);
+  const text = [
+    html`<span key="text" class="jprog-text">${p.text}</span>`,
+    p.indeterminate ? null : html`<span key="long" class="jprog-long" aria-hidden="true">${p.aria}</span>`,
+    legend
+      ? html`<span key="legend" class="jprog-legend" aria-hidden="true">
+          ${legend.map(
+            (k) => html`<span key=${k.state} class="jprog-key" data-state=${k.state} data-role=${k.role || undefined} data-zero=${k.n === 0 ? '' : undefined}>
+              <span class="jprog-key-n">${k.n}</span> <span class="jprog-key-label">${k.label}</span>
+            </span>`,
+          )}
+        </span>`
+      : null,
+  ];
   if (cells) {
     return html`<div class="jprog" data-mode="cells">
       <div
@@ -171,11 +187,15 @@ export function HealthList({ rows, wrapDetail }) {
   </ul>`;
 }
 
-/** Label/value facts: dl.facts > .fact[data-key] > dt.fact-label + dd.fact-value. */
+/**
+ * Label/value facts: dl.facts > .fact[data-key][data-role] > dt.fact-label +
+ * dd.fact-value. A row is [key, label, value] or [key, label, value, role].
+ */
 export function Facts({ rows, className, label }) {
   return html`<dl class=${className ? `facts ${className}` : 'facts'} aria-label=${label}>
     ${rows.map(
-      ([key, k, v]) => html`<div key=${key} class="fact" data-key=${key}><dt class="fact-label">${k}</dt><dd class="fact-value">${v}</dd></div>`,
+      ([key, k, v, role]) =>
+        html`<div key=${key} class="fact" data-key=${key} data-role=${role || undefined}><dt class="fact-label">${k}</dt><dd class="fact-value">${v}</dd></div>`,
     )}
   </dl>`;
 }

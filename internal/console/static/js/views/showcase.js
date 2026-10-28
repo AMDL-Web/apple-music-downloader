@@ -4,11 +4,11 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { jobTitle, jobSubtitle, artPalette, paletteStyle, artworkUrl, typeLabel, count, jobFacts } from '../lib/format.js';
+import { jobTitle, jobSubtitle, artPalette, paletteStyle, artworkUrl, typeLabel, count, jobFacts, safeHttpUrl } from '../lib/format.js';
 import { isAlreadyInLibrary } from '../lib/status.js';
 import { upsertJob, removeJob, appendPage, jobMatches } from '../lib/store.js';
 import { buildHash, showcaseType, showcaseQuery, SHOWCASE_TYPES } from '../lib/route.js';
-import { useApp, Artwork, Icon, Segmented, Empty, ErrorNote, Skeleton, Button, Facts } from '../ui/components.js';
+import { useApp, Artwork, Icon, Segmented, Empty, ErrorNote, Skeleton, Button, LinkButton, Facts } from '../ui/components.js';
 import { useReducedMotion } from '../ui/hooks.js';
 
 const PAGE_SIZE = 24;
@@ -110,6 +110,7 @@ export function ShowcasePage({ route }) {
           ? html`<div class="card"><div class="card-body"><${Empty} icon="disc" title=${`Completed ${TYPE_LABELS[type].toLowerCase()} will appear here.`}>Jobs still in progress are listed in <a class="link" href=${buildHash('queue')}>the Queue</a>.</${Empty}></div></div>`
           : [
               html`<${Hero} key="hero" job=${hero} href=${href(hero)} playing=${playing === hero.id} hover=${hover} />`,
+              html`<${HeroActions} key="hero-actions" job=${hero} href=${href(hero)} />`,
               rest.length
                 ? html`<ul key="grid" class="gallery" aria-label=${TYPE_LABELS[type]}>
                     ${rest.map(
@@ -180,6 +181,20 @@ function Hero({ job, href, playing, hover }) {
       ${isAlreadyInLibrary(job) ? html`<span class="tag-library"><${Icon} name="archive" size="sm" />Already in library</span>` : null}
     </div>
   </a>`;
+}
+
+/**
+ * Opt-in hook (hidden by the base): pill actions for the hero. The hero is
+ * one link, so these are its next sibling rather than nested inside it, and
+ * carry the same palette custom properties for a skin to place them over it.
+ */
+function HeroActions({ job, href }) {
+  const palette = artPalette(job);
+  const apple = safeHttpUrl(job.input);
+  return html`<div class="hero-actions" style=${paletteStyle(palette)}>
+    <${LinkButton} href=${href} icon="list" size="sm">Tracks</${LinkButton}>
+    ${apple ? html`<${LinkButton} href=${apple} icon="music" size="sm" external>Open in Apple Music</${LinkButton}>` : null}
+  </div>`;
 }
 
 /**
