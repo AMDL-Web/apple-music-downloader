@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"amdl/internal/applemusic"
+	"amdl/internal/logging"
 )
 
 // CatalogService reads the Apple Music catalog metadata that POST /lookup
@@ -132,6 +133,13 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 		writeErrorDetails(w, http.StatusGatewayTimeout, CodeUpstreamTimeout,
 			fmt.Sprintf("the Apple Music catalog did not answer within %s", lookupTimeout), details)
 	default:
+		// The response carries only err.Error(); a raw upstream body an
+		// Apple error holds stays in the log line.
+		attrs := []any{"link", link.Input, "error", err}
+		if body := logging.UpstreamBody(err); body != "" {
+			attrs = append(attrs, "upstream_body", body)
+		}
+		logging.FromContext(r.Context(), s.logger).Warn("lookup failed", attrs...)
 		writeErrorDetails(w, http.StatusBadGateway, CodeUpstreamError, "read Apple Music catalog: "+err.Error(), details)
 	}
 }

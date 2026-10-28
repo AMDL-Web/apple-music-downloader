@@ -2,6 +2,8 @@ package applemusic
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -140,5 +142,68 @@ func TestCatalogRequestErrorClassificationAndRetryAfter(t *testing.T) {
 	}
 	if got := parseRetryAfter(now.Add(5*time.Second).Format(http.TimeFormat), now); got != 5*time.Second {
 		t.Fatalf("date Retry-After=%s, want 5s", got)
+	}
+}
+
+// A catalogRequestError is what job rows and API responses show, so Error()
+// must read like a sentence and never quote Apple's raw JSON; the body is
+// reachable for logs through UpstreamBody (logging.UpstreamBody unwraps to it).
+func TestCatalogRequestErrorMessage(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		err  catalogRequestError
+		want string
+	}{
+		{"404 names the resource", catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/us/albums/123"},
+			"Apple Music has no album 123 in storefront us (404)"},
+		{"type without id names both", catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/zz/albums"},
+			"Apple Music catalog albums request in storefront zz failed: 404 Not Found"},
+		{"unparseable path names the path", catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/zz"},
+			"Apple Music request /v1/catalog/zz failed: 404 Not Found"},
+		{"429 keeps the status", catalogRequestError{statusCode: 429, status: "429 Too Many Requests", path: "/v1/catalog/us/albums/123"},
+			"Apple Music request for album 123 in storefront us failed: 429 Too Many Requests"},
+		{"non-catalog path names the path", catalogRequestError{statusCode: 401, status: "401 Unauthorized", path: "/v1/me/library/songs"},
+			"Apple Music request /v1/me/library/songs failed: 401 Unauthorized"},
+		{"empty path falls back to status", catalogRequestError{statusCode: 503, status: "503 Service Unavailable"},
+			"Apple Music request failed: 503 Service Unavailable"},
+		{"missing status synthesizes one", catalogRequestError{statusCode: 404, path: "/v1/catalog/us/songs/9"},
+			"Apple Music has no song 9 in storefront us (404)"},
+		{"plural unknown type stays plural", catalogRequestError{statusCode: 404, path: "/v1/catalog/us/widgets/7"},
+			"Apple Music has no widgets 7 in storefront us (404)"},
+	} {
+		if got := tt.err.Error(); got != tt.want {
+			t.Errorf("%s: Error() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	raw := `{"errors":[{"id":"E1","status":"404","title":"Resource Not Found"}]}`
+	err := catalogRequestError{statusCode: 404, status: "404 Not Found", path: "/v1/catalog/us/albums/123", body: raw}
+	if strings.Contains(err.Error(), raw) || strings.Contains(err.Error(), "Resource Not Found") {
+		t.Fatalf("Error() leaks the upstream body: %q", err.Error())
+	}
+	wrapped := fmt.Errorf("resolve tracks: %w", err)
+	var carrier interface{ UpstreamBody() string }
+	if !errors.As(wrapped, &carrier) || carrier.UpstreamBody() != raw {
+		t.Fatal("UpstreamBody() did not reach the body through wrapping")
+	}
+}
+
+// decodeCatalogResponse records the request path so the message can name the
+// resource; a synthetic response without a Request still yields a clean error.
+func TestDecodeCatalogResponseKeepsRequestPath(t *testing.T) {
+	req, _ := http.NewRequest(http.MethodGet, "https://api.music.apple.com/v1/catalog/zz/albums/abc", nil)
+	resp := &http.Response{StatusCode: 404, Status: "404 Not Found", Request: req, Body: io.NopCloser(strings.NewReader(`{"errors":[]}`)), Header: make(http.Header)}
+	var out struct{}
+	err := decodeCatalogResponse(resp, &out)
+	if err == nil || err.Error() != "Apple Music has no album abc in storefront zz (404)" {
+		t.Fatalf("decodeCatalogResponse() error = %v", err)
+	}
+	var requestErr catalogRequestError
+	if !errors.As(err, &requestErr) || requestErr.UpstreamBody() != `{"errors":[]}` {
+		t.Fatalf("decodeCatalogResponse() error = %#v, want the body kept for logs", err)
+	}
+	resp = &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("oops")), Header: make(http.Header)}
+	err = decodeCatalogResponse(resp, &out)
+	if err == nil || err.Error() != "Apple Music request failed: 500 Internal Server Error" {
+		t.Fatalf("decodeCatalogResponse() without Request error = %v", err)
 	}
 }

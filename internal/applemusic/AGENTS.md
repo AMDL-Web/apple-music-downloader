@@ -40,7 +40,10 @@ degrade to "this album doesn't have that" rather than failing a job.
   `doWithCatalogAuth` or `doWithWebAuth`, never with its own token handling.
 - A non-2xx JSON answer goes through `decodeCatalogResponse` and becomes a
   `catalogRequestError`: `NonRetryable` for a 4xx, `RetryDelay` from
-  `Retry-After`. Other deterministic failures wrap a `nonRetryableError`
+  `Retry-After`. Its `Error()` is the short message job rows and API responses
+  show and never quotes the response body; the raw excerpt stays on the value
+  for log lines via `UpstreamBody` (`logging.UpstreamBody` finds it through
+  wrapping). Other deterministic failures wrap a `nonRetryableError`
   sentinel such as `ErrNoEnhancedHLS`, so retry helpers in internal/media stop
   at once instead of backing off.
 - `EnrichWithAlbum` is the only place album-level fields are merged into a song;

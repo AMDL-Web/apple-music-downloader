@@ -15,15 +15,81 @@ import (
 )
 
 // catalogRequestError is a non-2xx answer from an Apple JSON endpoint.
+// Error() is the short message job and lookup error text shows; the raw body
+// excerpt stays on the value for log lines, which reach it through
+// logging.UpstreamBody.
 type catalogRequestError struct {
 	statusCode int
 	status     string
+	path       string
 	body       string
 	retryAfter time.Duration
 }
 
 func (e catalogRequestError) Error() string {
-	return fmt.Sprintf("catalog request failed: %s: %s", e.status, e.body)
+	resourceType, id, storefront := catalogResource(e.path)
+	status := e.statusText()
+	switch {
+	case id != "" && e.statusCode == http.StatusNotFound:
+		return fmt.Sprintf("Apple Music has no %s %s in storefront %s (%d)", singularCatalogType(resourceType), id, storefront, e.statusCode)
+	case id != "":
+		return fmt.Sprintf("Apple Music request for %s %s in storefront %s failed: %s", singularCatalogType(resourceType), id, storefront, status)
+	case storefront != "":
+		return fmt.Sprintf("Apple Music catalog %s request in storefront %s failed: %s", resourceType, storefront, status)
+	case e.path != "":
+		return fmt.Sprintf("Apple Music request %s failed: %s", e.path, status)
+	default:
+		return fmt.Sprintf("Apple Music request failed: %s", status)
+	}
+}
+
+// UpstreamBody exposes the raw response body excerpt for log lines. It stays
+// out of Error() because that text is persisted in job and item errors and
+// returned in API responses.
+func (e catalogRequestError) UpstreamBody() string { return e.body }
+
+// statusText renders the failure as "404 Not Found". resp.Status carries that
+// on a real response; a synthesized one may hold only "Not Found" or "".
+func (e catalogRequestError) statusText() string {
+	code := strconv.Itoa(e.statusCode)
+	if strings.HasPrefix(e.status, code) {
+		return e.status
+	}
+	if text := http.StatusText(e.statusCode); text != "" {
+		return code + " " + text
+	}
+	return code
+}
+
+// catalogTypeSingular is how a catalog resource type reads in a message. A
+// type missing here (a newer or private Apple type) reads as its path word.
+var catalogTypeSingular = map[string]string{
+	"albums": "album", "songs": "song", "artists": "artist",
+	"playlists": "playlist", "stations": "station", "music-videos": "music video",
+	"curators": "curator", "apple-curators": "curator", "genres": "genre",
+	"activities": "activity",
+}
+
+func singularCatalogType(resourceType string) string {
+	if singular, ok := catalogTypeSingular[resourceType]; ok {
+		return singular
+	}
+	return resourceType
+}
+
+// catalogResource splits a "/v1/catalog/<storefront>/<type>[/<id>/…]" request
+// path into the resource type, id and storefront an error names. A path in
+// another shape ("/v1/me/library/…") returns empty strings.
+func catalogResource(path string) (resourceType, id, storefront string) {
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	if len(segments) < 4 || segments[0] != "v1" || segments[1] != "catalog" {
+		return "", "", ""
+	}
+	resourceType, storefront = segments[3], segments[2]
+	if len(segments) > 4 {
+		id = segments[4]
+	}
+	return resourceType, id, storefront
 }
 
 // NonRetryable lets download operations stop immediately on deterministic
@@ -70,8 +136,8 @@ const (
 	maxArtworkBytes         int64 = 64 << 20
 	maxWebPlayerPageBytes   int64 = 16 << 20
 	maxWebPlayerJSBytes     int64 = 64 << 20
-	// maxErrorBodyExcerptBytes is how much of a non-2xx body an error message
-	// quotes.
+	// maxErrorBodyExcerptBytes is how much of a non-2xx body a
+	// catalogRequestError keeps for log lines.
 	maxErrorBodyExcerptBytes int64 = 2048
 )
 
@@ -109,12 +175,17 @@ func (c *CatalogClient) getWithUserToken(ctx context.Context, endpoint string, p
 func decodeCatalogResponse(resp *http.Response, out any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		// The body is only an excerpt for the error message; a failed read
-		// leaves it shorter and changes nothing else.
+		// The body is only an excerpt for the error's UpstreamBody; a failed
+		// read leaves it shorter and changes nothing else.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyExcerptBytes))
+		requestPath := ""
+		if resp.Request != nil && resp.Request.URL != nil {
+			requestPath = resp.Request.URL.Path
+		}
 		return catalogRequestError{
 			statusCode: resp.StatusCode,
 			status:     resp.Status,
+			path:       requestPath,
 			body:       strings.TrimSpace(string(body)),
 			retryAfter: parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()),
 		}

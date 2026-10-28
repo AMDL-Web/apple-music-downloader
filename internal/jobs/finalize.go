@@ -272,6 +272,9 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	}
 	if err != nil {
 		attrs = append(attrs, "error", err)
+		if body := logging.UpstreamBody(err); body != "" {
+			attrs = append(attrs, "upstream_body", body)
+		}
 	}
 	switch job.Status {
 	case domain.JobFailed:

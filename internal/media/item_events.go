@@ -23,9 +23,14 @@ func (d *Downloader) reportCodecFailed(ctx context.Context, reporter jobs.Report
 	if isNonRetryableError(err) {
 		attemptMaximum = attempts
 	}
-	logging.FromContext(ctx, d.logger).Warn("codec attempt failed",
+	attrs := []any{
 		"item_id", item.ID, "adam_id", item.AdamID, "title", item.Title,
-		"codec", codec, "phase", phase, "attempts", attempts, "max_attempts", attemptMaximum, "error", err)
+		"codec", codec, "phase", phase, "attempts", attempts, "max_attempts", attemptMaximum, "error", err,
+	}
+	if body := logging.UpstreamBody(err); body != "" {
+		attrs = append(attrs, "upstream_body", body)
+	}
+	logging.FromContext(ctx, d.logger).Warn("codec attempt failed", attrs...)
 	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventCodecFailed, Phase: codec, Message: err.Error(), Payload: domain.MarshalEventPayload(item, map[string]any{
 		"codec": codec, "phase": phase, "attempts": attempts, "max_attempts": attemptMaximum, "error": err.Error(),
 	})})

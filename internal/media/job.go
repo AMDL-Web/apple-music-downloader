@@ -176,7 +176,11 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 		}
 		err := d.newTrackRun(job, items[i], tracks[i], target, metadata, reporter).run(trackCtx)
 		if err != nil && trackCtx.Err() == nil {
-			logging.FromContext(trackCtx, d.logger).Error("track failed", "item_id", items[i].ID, "adam_id", tracks[i].ID, "error", err)
+			attrs := []any{"item_id", items[i].ID, "adam_id", tracks[i].ID, "error", err}
+			if body := logging.UpstreamBody(err); body != "" {
+				attrs = append(attrs, "upstream_body", body)
+			}
+			logging.FromContext(trackCtx, d.logger).Error("track failed", attrs...)
 		}
 		return err
 	})

@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -349,6 +350,19 @@ func valueAny(value slog.Value) any {
 }
 
 type contextKey struct{}
+
+// UpstreamBody returns the raw response body excerpt an upstream-service error
+// exposes through an "UpstreamBody() string" method (internal/applemusic's
+// catalog error does), found through error wrapping. Such errors keep the
+// body out of Error() because that text is persisted in job rows and returned
+// in API responses; the log line is where the excerpt belongs.
+func UpstreamBody(err error) string {
+	var carrier interface{ UpstreamBody() string }
+	if errors.As(err, &carrier) {
+		return carrier.UpstreamBody()
+	}
+	return ""
+}
 
 // NewContext returns ctx carrying logger for FromContext.
 func NewContext(ctx context.Context, logger *slog.Logger) context.Context {
