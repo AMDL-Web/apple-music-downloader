@@ -373,6 +373,24 @@ func TestApplyValidatedStrictRejectsOverLimitOverrides(t *testing.T) {
 	}
 }
 
+// A malformed cover_size override is rejected at submission and also when a
+// persisted job runs; unlike numeric limits there is no value to clamp it to.
+func TestApplyValidatedRejectsMalformedCoverSizeOverride(t *testing.T) {
+	size := "big"
+	overrides := &DownloadOverrides{CoverSize: &size}
+	if _, err := overrides.ApplyValidatedStrict(Default()); err == nil || !strings.Contains(err.Error(), "download.cover_size") {
+		t.Fatalf("ApplyValidatedStrict() error = %v, want download.cover_size error", err)
+	}
+	if _, err := overrides.ApplyValidated(Default()); err == nil || !strings.Contains(err.Error(), "download.cover_size") {
+		t.Fatalf("ApplyValidated() error = %v, want download.cover_size error", err)
+	}
+	size = "3000x3000"
+	applied, err := overrides.ApplyValidatedStrict(Default())
+	if err != nil || applied.Download.CoverSize != "3000x3000" {
+		t.Fatalf("ApplyValidatedStrict() = %q, %v; want 3000x3000 applied", applied.Download.CoverSize, err)
+	}
+}
+
 // overrideExclusions are runtime download keys a job deliberately cannot
 // override; the reason is in the DownloadOverrides godoc.
 var overrideExclusions = map[string]bool{

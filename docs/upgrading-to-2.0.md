@@ -77,6 +77,12 @@ needs the API changes below before it works against 2.0.
 - A hand edit to `config.yaml` is no longer applied by `GET /config`; send SIGHUP or
   `POST /config/reload`. `PUT /config` re-reads the file first, so it keeps hand edits.
 - An invalid webhook URL in `hooks.yaml` fails startup instead of failing every run.
+- `download.cover_size` must be `{width}x{height}` in pixels. 1.x accepted any string,
+  empty included, and silently fell back to the standard sizes when Apple could not
+  serve it; 2.0 fails startup, `PUT /config` (`422 invalid_config`) and a submission's
+  `overrides.cover_size` (`422 invalid_overrides`). Set it in `config.yaml` or
+  `AMDL_DOWNLOAD_COVER_SIZE` to a size such as `5000x5000`. A job submitted with such
+  an override before the upgrade fails when it next runs; submit it again.
 
 ## Hooks
 

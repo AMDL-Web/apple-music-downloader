@@ -1856,7 +1856,12 @@ components:
         playlist_path_format: {type: string}
         station_path_format: {type: string}
         temp_dir: {type: string}
-        cover_size: {type: string}
+        cover_size:
+          type: string
+          pattern: '^[1-9][0-9]*x[1-9][0-9]*$'
+          description: >-
+            "{width}x{height}" in pixels, e.g. 5000x5000; any other value is
+            rejected with 422 invalid_overrides.
         cover_format:
           type: string
           enum: [jpg, jpeg, png]
@@ -1997,8 +2002,11 @@ components:
             temp_dir: {type: string}
             cover_size:
               type: string
+              pattern: '^[1-9][0-9]*x[1-9][0-9]*$'
               description: >-
-                "{width}x{height}", e.g. 5000x5000, 3000x3000, 1400x1400, 600x600.
+                "{width}x{height}" in pixels, e.g. 5000x5000, 3000x3000, 1400x1400,
+                600x600; any other value is rejected with 422 invalid_config. If Apple
+                cannot serve that size, smaller standard sizes are tried in turn.
             cover_format:
               type: string
               enum: [jpg, jpeg, png]
@@ -2021,10 +2029,14 @@ components:
                 enum: [translation, pronunciation]
             alac_max_sample_rate:
               type: integer
-              description: Hz; common values are 44100, 48000, 96000 and 192000.
+              description: >-
+                Hz, a ceiling; 0 or less sets none. Apple Music serves ALAC from 44100
+                to 192000 Hz, so a value below 44100 skips every ALAC stream.
             alac_max_bit_depth:
               type: integer
-              description: Common values are 16 and 24.
+              description: >-
+                Bits, a ceiling; 0 or less sets none. Apple Music serves 16- and 24-bit
+                ALAC.
             check_integrity: {type: boolean}
             force_overwrite:
               type: boolean

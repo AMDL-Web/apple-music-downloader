@@ -306,7 +306,9 @@ download:
   # task: failed/recoverable tasks retain them for retry, while completed, cancelled,
   # and deleted tasks remove them.
   temp_dir: "data/tmp"
-  # string: cover artwork size as "{width}x{height}", for example "5000x5000", "3000x3000", "1400x1400".
+  # string: cover artwork size as "{width}x{height}" in pixels, for example "5000x5000", "3000x3000",
+  # "1400x1400"; any other value is rejected. If Apple cannot serve that size, smaller standard sizes
+  # are tried in turn.
   cover_size: "5000x5000"
   # enum: jpg, jpeg, png.
   cover_format: "jpg"
@@ -333,9 +335,11 @@ download:
   lyrics_type: "lyrics"
   # list enum: translation, pronunciation. Empty list disables extra localized lines.
   lyrics_extras: []
-  # integer Hz: maximum selected ALAC sample rate. Use 192000 for up to 192 kHz.
+  # integer Hz: maximum selected ALAC sample rate; 0 or less sets no ceiling. Use 192000 for up to
+  # 192 kHz. Apple Music serves ALAC at 44100 Hz and above, so a lower value skips every ALAC stream.
   alac_max_sample_rate: 192000
-  # integer bits: maximum selected ALAC bit depth. Use 24 for up to 24-bit.
+  # integer bits: maximum selected ALAC bit depth; 0 or less sets no ceiling. Use 24 for up to 24-bit.
+  # Apple Music serves 16- and 24-bit ALAC, so 16 to 23 keeps 16-bit streams only.
   alac_max_bit_depth: 24
   # bool: true verifies output MP4 integrity and repairs known ALAC terminator issues; false skips the integrity gate.
   check_integrity: true

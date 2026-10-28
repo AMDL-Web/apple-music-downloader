@@ -282,6 +282,33 @@ func TestLoadRejectsUnknownCoverFormat(t *testing.T) {
 	}
 }
 
+// Apple's artwork URLs take a "{width}x{height}" size; anything else is an
+// error there, after which the fetcher falls back to its standard sizes, so
+// the setting would silently never apply.
+func TestValidateCoverSize(t *testing.T) {
+	for _, size := range []string{"5000x5000", "600x600", "1200x800", "1x1"} {
+		cfg := Default()
+		cfg.Download.CoverSize = size
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() rejected cover_size %q: %v", size, err)
+		}
+	}
+	for _, size := range []string{"big", "", "0x0", "5000x0", "05000x5000", "5000", "5000x", "x5000", "5000X5000", "5000x5000bb", " 5000x5000", "-1x-1"} {
+		cfg := Default()
+		cfg.Download.CoverSize = size
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "download.cover_size ") {
+			t.Errorf("Validate() with cover_size %q = %v, want a download.cover_size error", size, err)
+		}
+	}
+}
+
+func TestLoadRejectsMalformedCoverSize(t *testing.T) {
+	path := writeConfig(t, "download:\n  cover_size: big\n")
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "download.cover_size") {
+		t.Fatalf("Load() error = %v, want download.cover_size validation error", err)
+	}
+}
+
 func TestLoadRejectsUnknownLyricsFormat(t *testing.T) {
 	path := writeConfig(t, "download:\n  lyrics_format: json\n")
 	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_format") {

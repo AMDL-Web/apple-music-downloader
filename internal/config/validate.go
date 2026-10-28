@@ -2,8 +2,15 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+// coverSizePattern is the "{width}x{height}" form the artwork fetcher puts into
+// Apple's artwork URL template. Anything else makes Apple answer an error and
+// the fetcher fall back to its standard sizes, so the configured value would
+// silently never apply.
+var coverSizePattern = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
 
 // maxLogBufferSize caps logging.buffer_size. The ring lives in memory and every
 // GET /api/v1/logs scans and copies matching entries under the store's lock;
@@ -120,6 +127,9 @@ func (c Config) Validate() error {
 	case MemoryModeLow, MemoryModeHigh:
 	default:
 		return fmt.Errorf("download.memory_mode must be low or high")
+	}
+	if !coverSizePattern.MatchString(c.Download.CoverSize) {
+		return fmt.Errorf("download.cover_size must be {width}x{height} in pixels, for example 5000x5000")
 	}
 	switch c.Download.CoverFormat {
 	case "jpg", "jpeg", "png":
