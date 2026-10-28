@@ -2,6 +2,7 @@ package media
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"amdl/internal/applemusic"
@@ -159,6 +160,46 @@ func TestOutputPathSanitizesEachSegmentIndependently(t *testing.T) {
 	want := filepath.Join("downloads", "albums", "AC_DC", "Back in Black", "04. Hells_ Bells_.m4a")
 	if got != want {
 		t.Fatalf("outputPath() = %q, want %q", got, want)
+	}
+}
+
+// No template can write outside downloads_dir: every segment is sanitized on
+// its own, so ".." collapses to "_" and an absolute template starts with a "_"
+// segment under the root. Config.Validate rejects such templates up front; this
+// pins the containment invariant should one ever reach the builder.
+func TestOutputPathCannotEscapeDownloadsDir(t *testing.T) {
+	cfg := config.Default()
+	cfg.Download.DownloadsDir = "downloads"
+	cfg.Download.SongPathFormat = "../../{SongName}"
+	cfg.Download.AlbumPathFormat = "/etc/{SongName}"
+	cfg.Download.PlaylistPathFormat = "{SongNumber:xx}. {SongName}"
+
+	song := applemusic.Song{ArtistName: "Artist", AlbumName: "Album", Name: "Song"}
+	for _, got := range []string{
+		outputPath(cfg, song, applemusic.TypeSong, 1, "", "", "", "", ""),
+		outputPath(cfg, song, applemusic.TypeAlbum, 1, "", "", "", "", ""),
+		outputPath(cfg, song, applemusic.TypePlaylist, 1, "", "List", "pl.1", "", ""),
+	} {
+		if got != filepath.Clean(got) || strings.HasPrefix(got, "..") || filepath.IsAbs(got) {
+			t.Fatalf("outputPath() escaped downloads_dir: %q", got)
+		}
+		root, err := filepath.Abs(cfg.Download.DownloadsDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		abs, err := filepath.Abs(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rel, err := filepath.Rel(root, abs); err != nil || strings.HasPrefix(rel, "..") {
+			t.Fatalf("outputPath() = %q outside %q", got, cfg.Download.DownloadsDir)
+		}
+	}
+	if got := outputPath(cfg, song, applemusic.TypeSong, 1, "", "", "", "", ""); got != filepath.Join("downloads", "_", "_", "Song.m4a") {
+		t.Fatalf("parent-segment template produced %q, want sanitized _ segments", got)
+	}
+	if got := outputPath(cfg, song, applemusic.TypePlaylist, 1, "", "List", "pl.1", "", ""); got != filepath.Join("downloads", "{SongNumber_xx}. Song.m4a") {
+		t.Fatalf("unsupported spec produced %q, want it kept literally with : sanitized", got)
 	}
 }
 

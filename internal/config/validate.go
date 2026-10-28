@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -11,6 +12,35 @@ import (
 // the fetcher fall back to its standard sizes, so the configured value would
 // silently never apply.
 var coverSizePattern = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
+
+// formatSpecPattern finds "{Name:spec}" tokens in a path template. The path
+// builder (internal/media) applies only the "02d" padding spec; every other
+// spec stays in the name literally, with ":" sanitized to "_", which reads as
+// a typo the user meant differently. Unknown "{Variable}" names without a spec
+// are allowed: they are kept literally on purpose.
+var formatSpecPattern = regexp.MustCompile(`\{[A-Za-z]+:([^}]*)\}`)
+
+// validatePathFormat checks one *_path_format template beyond non-emptiness.
+// Each segment is sanitized independently at expansion time, so an absolute
+// template or a ".." segment can never escape download.downloads_dir — they
+// collapse to "_" folders instead of failing, which is why they are rejected
+// here instead.
+func validatePathFormat(key, format string) error {
+	if filepath.IsAbs(format) {
+		return fmt.Errorf("%s must be a relative path inside download.downloads_dir, not an absolute path", key)
+	}
+	for _, segment := range strings.Split(format, "/") {
+		if segment == ".." {
+			return fmt.Errorf("%s cannot contain .. path segments", key)
+		}
+	}
+	for _, match := range formatSpecPattern.FindAllStringSubmatch(format, -1) {
+		if match[1] != "02d" {
+			return fmt.Errorf("%s contains unsupported format spec %s: only :02d padding is applied", key, match[0])
+		}
+	}
+	return nil
+}
 
 // maxLogBufferSize caps logging.buffer_size. The ring lives in memory and every
 // GET /api/v1/logs scans and copies matching entries under the store's lock;
@@ -103,6 +133,9 @@ func (c Config) Validate() error {
 	} {
 		if strings.TrimSpace(format.value) == "" {
 			return fmt.Errorf("%s cannot be empty", format.key)
+		}
+		if err := validatePathFormat(format.key, format.value); err != nil {
+			return err
 		}
 	}
 	if c.Download.MaxRunningJobs > maxRunningJobsLimit {

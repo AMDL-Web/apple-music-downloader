@@ -247,13 +247,16 @@ download:
   # Per-task-type output path templates, relative to downloads_dir. Each is a single
   # "/"-separated path template, non-empty; the last segment is the file name and gets
   # the .m4a extension appended automatically. Every segment is sanitized independently,
-  # so template values cannot create extra directories.
+  # so template values cannot create extra directories. Absolute templates and ".."
+  # segments are rejected (they would only collapse into "_" folders): the path must
+  # stay relative to downloads_dir.
   # Variables: {SongId}, {SongNumber}, {SongName}, {ArtistName}, {UrlArtistName}, {ArtistId},
   # {AlbumName}, {AlbumId}, {AlbumArtist}, {ReleaseDate}, {ReleaseYear}, {UPC}, {Copyright},
   # {RecordLabel}, {DiscNumber}, {DiscCount}, {TrackNumber}, {TrackCount}, {PlaylistName},
   # {PlaylistId}, {StationName}, {StationId}, {Quality}, {Codec}, {Tag}. Numeric variables {SongNumber}, {DiscNumber},
   # {DiscCount}, {TrackNumber}, and {TrackCount} also support :02d padding, for example
-  # {TrackNumber:02d}. Unknown variables are preserved literally.
+  # {TrackNumber:02d}; it is the only spec, and other "{Variable:spec}" forms are
+  # rejected. Unknown variables are preserved literally.
   # {UrlArtistName} is an alias of {ArtistName} and resolves exactly like it.
   # {Tag} always expands to an empty string; it is accepted so templates that use it
   # still parse, and contributes nothing to the path.

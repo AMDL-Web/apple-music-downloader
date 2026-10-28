@@ -83,6 +83,15 @@ needs the API changes below before it works against 2.0.
   `overrides.cover_size` (`422 invalid_overrides`). Set it in `config.yaml` or
   `AMDL_DOWNLOAD_COVER_SIZE` to a size such as `5000x5000`. A job submitted with such
   an override before the upgrade fails when it next runs; submit it again.
+- `download.*_path_format` templates must stay relative to `download.downloads_dir`
+  and may carry only the `:02d` format spec. 1.x stored absolute templates, `..`
+  segments and other `{Variable:spec}` forms verbatim; expansion sanitized them into
+  `_` folders or literal braces rather than escaping the downloads folder, so nothing
+  was ever written outside it, but the result never matched the intent. 2.0 fails
+  startup and `PUT /config` (`422 invalid_config`) on them, and a submission's
+  `overrides.*_path_format` (`422 invalid_overrides`). Fix the template to a relative
+  path; a job submitted with such an override before the upgrade fails when it next
+  runs and must be submitted again.
 
 ## Hooks
 

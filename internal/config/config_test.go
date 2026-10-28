@@ -350,6 +350,73 @@ func TestLoadRejectsEmptyPathFormat(t *testing.T) {
 	}
 }
 
+// Absolute templates, ".." segments and unsupported "{Var:spec}" forms are
+// rejected on every *_path_format key. They could never escape downloads_dir —
+// expansion sanitizes each segment to "_" — but they silently wrote folders
+// and literals the user did not mean. Unknown "{Variable}" names without a
+// spec stay allowed (they are preserved literally on purpose).
+func TestValidateRejectsUnsafePathFormats(t *testing.T) {
+	rejected := []string{
+		"/etc/{SongName}",                    // absolute
+		"/",                                  // absolute
+		"../../{SongName}",                   // parent segments
+		"albums/../{SongName}",               // inner parent segment
+		"albums/{ArtistName}/..",             // trailing parent segment
+		"{SongNumber:xx}. {SongName}",        // spec the builder cannot apply
+		"{TrackNumber:03d}. {SongName}",      // only :02d pads
+		"{SongNumber:}",                      // empty spec
+		"{ArtistName:02d:x}/{SongName}",      // compound spec
+	}
+	for _, format := range rejected {
+		cfg := Default()
+		cfg.Download.SongPathFormat = format
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "download.song_path_format") {
+			t.Errorf("Validate() with song_path_format %q error = %v, want a download.song_path_format rejection", format, err)
+		}
+	}
+	for _, format := range []string{
+		"songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}", // the default
+		"{SongName}",                    // a single segment
+		"flat/{UnknownVar} - {SongName}", // unknown variables stay literal
+		"{Foo:02d} - {SongName}",         // unknown variable with the one applied spec
+		"a/./b/{SongName}",               // "." is not a parent reference
+		"~/{SongName}",                   // tilde is an ordinary folder name
+		"best {of} {ArtistName}/{SongName}", // braces without a spec stay literal
+	} {
+		cfg := Default()
+		cfg.Download.SongPathFormat = format
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() with song_path_format %q error = %v, want nil", format, err)
+		}
+	}
+	// Every path-format key is checked, not just song_path_format.
+	for _, key := range []string{"album_path_format", "artist_path_format", "playlist_path_format", "song_path_format", "station_path_format"} {
+		cfg := Default()
+		switch key {
+		case "album_path_format":
+			cfg.Download.AlbumPathFormat = "../{SongName}"
+		case "artist_path_format":
+			cfg.Download.ArtistPathFormat = "../{SongName}"
+		case "playlist_path_format":
+			cfg.Download.PlaylistPathFormat = "../{SongName}"
+		case "song_path_format":
+			cfg.Download.SongPathFormat = "../{SongName}"
+		case "station_path_format":
+			cfg.Download.StationPathFormat = "../{SongName}"
+		}
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "download."+key) {
+			t.Errorf("Validate() with %s \"../{SongName}\" error = %v, want a download.%s rejection", key, err, key)
+		}
+	}
+	// The file path reaches the same validation at startup.
+	path := writeConfig(t, "download:\n  song_path_format: \"../{SongName}\"\n")
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "download.song_path_format") {
+		t.Fatalf("Load() error = %v, want download.song_path_format validation error", err)
+	}
+}
+
 // TestLoadClampsResourceLimitsFromFile covers machine-managed config files
 // that may hold values above limits introduced by a newer backend.
 func TestLoadClampsResourceLimitsFromFile(t *testing.T) {
