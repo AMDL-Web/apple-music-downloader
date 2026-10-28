@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"amdl/internal/applemusic"
@@ -19,6 +22,9 @@ type fakeLibrary struct {
 	pageCalls int
 	catalog   map[string]string // library album id -> catalog URL; missing = no counterpart
 	failURL   map[string]bool
+	// onResolve, when set, runs at the start of every LibraryAlbumCatalogURL
+	// call, i.e. in the middle of a pass.
+	onResolve func()
 }
 
 func (f *fakeLibrary) LibrarySongsNewestFirst(_ context.Context, token string, offset, limit int) ([]applemusic.LibrarySong, bool, error) {
@@ -37,8 +43,11 @@ func (f *fakeLibrary) LibrarySongsNewestFirst(_ context.Context, token string, o
 }
 
 func (f *fakeLibrary) LibraryAlbumCatalogURL(_ context.Context, _ string, libraryAlbumID string) (string, bool, error) {
+	if f.onResolve != nil {
+		f.onResolve()
+	}
 	if f.failURL[libraryAlbumID] {
-		return "", false, fmt.Errorf("boom")
+		return "", false, fmt.Errorf("catalog request failed: 503 Service Unavailable")
 	}
 	url, ok := f.catalog[libraryAlbumID]
 	return url, ok, nil
@@ -67,15 +76,28 @@ func (s *fakeStore) ClearLibrarySyncAnchor(context.Context) (int64, error) {
 
 type fakeSubmitter struct {
 	batches [][]string
+	// rejections answers the listed URLs with this result instead of
+	// accepting them.
+	rejections map[string]domain.SubmitResult
 }
 
 func (f *fakeSubmitter) SubmitBatch(_ context.Context, urls []string, _ *config.DownloadOverrides) domain.BatchSubmitResponse {
 	f.batches = append(f.batches, append([]string(nil), urls...))
-	results := make([]domain.SubmitResult, 0, len(urls))
+	resp := domain.BatchSubmitResponse{Results: make([]domain.SubmitResult, 0, len(urls))}
 	for _, u := range urls {
-		results = append(results, domain.SubmitResult{URL: u, Status: domain.SubmitAccepted})
+		result, rejected := f.rejections[u]
+		if !rejected {
+			result = domain.SubmitResult{Status: domain.SubmitAccepted}
+		}
+		result.URL = u
+		if result.Status == domain.SubmitAccepted {
+			resp.Accepted++
+		} else {
+			resp.Rejected++
+		}
+		resp.Results = append(resp.Results, result)
 	}
-	return domain.BatchSubmitResponse{Accepted: len(urls), Results: results}
+	return resp
 }
 
 // library builds n songs, newest first, each on its own album unless albumOf
@@ -200,13 +222,22 @@ func TestAlbumWithoutCatalogCounterpartIsSkipped(t *testing.T) {
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
 	store := &fakeStore{anchor: toEntries(songs[2 : 2+anchorSize])}
 	jobs := &fakeSubmitter{}
-	newWatcher(t, lib, store, jobs, nil).RunOnce(context.Background())
+	w := newWatcher(t, lib, store, jobs, nil)
+	w.RunOnce(context.Background())
 
 	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 1 {
 		t.Fatalf("batches = %v, want just the resolvable album", jobs.batches)
 	}
 	if jobs.batches[0][0] != catalog["l.album1"] {
 		t.Fatalf("submitted %v, want album1", jobs.batches[0])
+	}
+	// No counterpart is a property of the album, not a failure: the anchor
+	// moves past it and the pass is clean.
+	if store.anchor[0].SongID != "i.song0" {
+		t.Fatalf("anchor head = %q, want it advanced past the skipped album", store.anchor[0].SongID)
+	}
+	if status := w.Status(); status.LastError != "" {
+		t.Fatalf("last_error = %q, want a clean pass", status.LastError)
 	}
 }
 
@@ -291,5 +322,151 @@ func TestLargeBurstPagesBeyondTheMargin(t *testing.T) {
 	}
 	if lib.pageCalls < 2 {
 		t.Fatalf("used %d requests, want more than one for a burst past the margin", lib.pageCalls)
+	}
+}
+
+// A transient failure to resolve one new album (Apple 5xx, network) must not
+// lose it: the anchor stays where it was, the pass reports the failure, and the
+// next pass submits the album once Apple answers.
+func TestTransientResolveFailureKeepsAnchorAndRetries(t *testing.T) {
+	songs, catalog := library(200, nil)
+	lib := &fakeLibrary{songs: songs, catalog: catalog, failURL: map[string]bool{"l.album1": true}}
+	initial := toEntries(songs[2 : 2+anchorSize])
+	store := &fakeStore{anchor: initial}
+	jobs := &fakeSubmitter{}
+	w := newWatcher(t, lib, store, jobs, nil)
+
+	w.RunOnce(context.Background())
+
+	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 1 || jobs.batches[0][0] != catalog["l.album0"] {
+		t.Fatalf("batches = %v, want only album0 submitted while album1 fails", jobs.batches)
+	}
+	if store.writes != 0 || !reflect.DeepEqual(store.anchor, initial) {
+		t.Fatalf("anchor rewritten (%d writes, head %q) although album1 was not submitted", store.writes, store.anchor[0].SongID)
+	}
+	status := w.Status()
+	if !strings.Contains(status.LastError, "l.album1") || status.LastSubmitted != 1 {
+		t.Fatalf("status = %+v, want last_error naming l.album1 and last_submitted 1", status)
+	}
+
+	lib.failURL = nil
+	w.RunOnce(context.Background())
+
+	if len(jobs.batches) != 2 || !slices.Contains(jobs.batches[1], catalog["l.album1"]) {
+		t.Fatalf("second pass batches = %v, want album1 submitted", jobs.batches)
+	}
+	if store.anchor[0].SongID != "i.song0" {
+		t.Fatalf("anchor head = %q after a clean pass, want i.song0", store.anchor[0].SongID)
+	}
+	if status := w.Status(); status.LastError != "" {
+		t.Fatalf("last_error = %q after a clean pass, want empty", status.LastError)
+	}
+}
+
+// A submission the job manager rejects for a reason that can pass leaves the
+// album for the next pass; one it will never accept, or already has, is done.
+func TestRejectedSubmissionKeepsAnchorOnlyWhenRetryable(t *testing.T) {
+	tests := []struct {
+		name         string
+		result       domain.SubmitResult
+		wantAdvanced bool
+	}{
+		{name: "queue full", result: domain.SubmitResult{Status: domain.SubmitQueueFull}, wantAdvanced: false},
+		{name: "decryptor unavailable", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: "decryptor_unavailable: decryptor is not ready"}, wantAdvanced: false},
+		{name: "store failure", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: "database is locked"}, wantAdvanced: false},
+		{name: "unknown status", result: domain.SubmitResult{Status: domain.SubmitStatus("error"), Error: "store_error: disk I/O error"}, wantAdvanced: false},
+		{name: "unsupported storefront", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: "unsupported_storefront: storefront \"cn\" is not supported by decryptor"}, wantAdvanced: true},
+		{name: "already downloading", result: domain.SubmitResult{Status: domain.SubmitDuplicateActive, ExistingJobID: "job_1"}, wantAdvanced: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			songs, catalog := library(200, nil)
+			lib := &fakeLibrary{songs: songs, catalog: catalog}
+			initial := toEntries(songs[1 : 1+anchorSize])
+			store := &fakeStore{anchor: initial}
+			jobs := &fakeSubmitter{rejections: map[string]domain.SubmitResult{catalog["l.album0"]: tt.result}}
+			w := newWatcher(t, lib, store, jobs, nil)
+
+			w.RunOnce(context.Background())
+
+			if len(jobs.batches) != 1 {
+				t.Fatalf("batches = %v, want one submission", jobs.batches)
+			}
+			advanced := store.anchor[0].SongID == "i.song0"
+			if advanced != tt.wantAdvanced {
+				t.Fatalf("anchor advanced = %v (head %q), want %v", advanced, store.anchor[0].SongID, tt.wantAdvanced)
+			}
+			lastError := w.Status().LastError
+			if tt.wantAdvanced && lastError != "" {
+				t.Fatalf("last_error = %q, want a clean pass", lastError)
+			}
+			if !tt.wantAdvanced && !strings.Contains(lastError, "l.album0") {
+				t.Fatalf("last_error = %q, want it to name the unsubmitted album", lastError)
+			}
+		})
+	}
+}
+
+// A reset that lands while a pass is between reading the library and saving its
+// anchor must win: the pass may still submit what it found, but it must not
+// write its anchor back over the reset.
+func TestResetDuringPassIsNotUndone(t *testing.T) {
+	songs, catalog := library(200, nil)
+	lib := &fakeLibrary{songs: songs, catalog: catalog}
+	store := &fakeStore{anchor: toEntries(songs[1 : 1+anchorSize])}
+	jobs := &fakeSubmitter{}
+	w := newWatcher(t, lib, store, jobs, nil)
+	resets := 0
+	lib.onResolve = func() {
+		if resets == 0 {
+			resets++
+			if _, err := w.ResetAnchor(context.Background()); err != nil {
+				t.Errorf("reset: %v", err)
+			}
+		}
+	}
+
+	w.RunOnce(context.Background())
+
+	if resets != 1 {
+		t.Fatalf("reset ran %d times, want once mid-pass", resets)
+	}
+	if store.writes != 0 || len(store.anchor) != 0 {
+		t.Fatalf("pass rewrote the anchor after a reset: %d writes, %d entries", store.writes, len(store.anchor))
+	}
+	if status := w.Status(); status.AnchorSize != 0 || status.LastError != "" {
+		t.Fatalf("status = %+v, want an empty anchor and no error", status)
+	}
+
+	// The next pass re-anchors from scratch and submits nothing new.
+	w.RunOnce(context.Background())
+	if len(store.anchor) != anchorSize || len(jobs.batches) != 1 {
+		t.Fatalf("after reset: anchor %d entries, batches %v; want a fresh anchor and no new submission", len(store.anchor), jobs.batches)
+	}
+}
+
+// A reset during a pass that also failed to submit an album still wins: the
+// reset forgets those albums along with the rest of the history, so the pass
+// reports no retry and leaves the anchor empty.
+func TestResetDuringFailingPassForgetsPendingAlbums(t *testing.T) {
+	songs, catalog := library(200, nil)
+	lib := &fakeLibrary{songs: songs, catalog: catalog, failURL: map[string]bool{"l.album0": true}}
+	store := &fakeStore{anchor: toEntries(songs[1 : 1+anchorSize])}
+	jobs := &fakeSubmitter{}
+	w := newWatcher(t, lib, store, jobs, nil)
+	lib.onResolve = func() {
+		lib.onResolve = nil
+		if _, err := w.ResetAnchor(context.Background()); err != nil {
+			t.Errorf("reset: %v", err)
+		}
+	}
+
+	w.RunOnce(context.Background())
+
+	if store.writes != 0 || len(store.anchor) != 0 {
+		t.Fatalf("anchor after reset = %d entries in %d writes, want it left empty", len(store.anchor), store.writes)
+	}
+	if status := w.Status(); status.LastError != "" || status.AnchorSize != 0 {
+		t.Fatalf("status = %+v, want no retry error and an empty anchor", status)
 	}
 }

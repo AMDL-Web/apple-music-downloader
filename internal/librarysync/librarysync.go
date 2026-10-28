@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,6 +83,13 @@ type Watcher struct {
 	jobs    Submitter
 	logger  *slog.Logger
 
+	// anchorMu makes ResetAnchor's clear and a pass's "was the anchor reset
+	// since I loaded it?" check plus save one step each, so a pass that was in
+	// flight during a reset cannot write its anchor back over the reset.
+	anchorMu sync.Mutex
+	// generation counts resets; guarded by anchorMu.
+	generation uint64
+
 	mu             sync.Mutex
 	lastPollAt     *time.Time
 	lastError      string
@@ -93,6 +101,7 @@ type Watcher struct {
 	idleReason string
 }
 
+// New builds a watcher over the live config. It does no I/O; Start runs it.
 func New(cfg *config.Store, library Library, store AnchorStore, jobs Submitter, logger *slog.Logger) *Watcher {
 	return &Watcher{cfg: cfg, library: library, store: store, jobs: jobs, logger: logger}
 }
@@ -159,7 +168,7 @@ func (w *Watcher) RunOnce(ctx context.Context) {
 }
 
 func (w *Watcher) pass(ctx context.Context, token string) (int, error) {
-	anchor, err := w.store.LoadLibrarySyncAnchor(ctx)
+	generation, anchor, err := w.loadAnchor(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("load anchor: %w", err)
 	}
@@ -172,10 +181,9 @@ func (w *Watcher) pass(ctx context.Context, token string) (int, error) {
 		if err != nil {
 			return 0, fmt.Errorf("read library: %w", err)
 		}
-		if err := w.store.ReplaceLibrarySyncAnchor(ctx, toEntries(songs)); err != nil {
-			return 0, fmt.Errorf("save anchor: %w", err)
+		if err := w.saveAnchor(ctx, generation, songs); err != nil {
+			return 0, err
 		}
-		w.setAnchorSize(len(songs))
 		w.logger.Info("library sync anchored", "songs", len(songs),
 			"newest", firstName(songs), "submitted", 0)
 		return 0, nil
@@ -192,11 +200,7 @@ func (w *Watcher) pass(ctx context.Context, token string) (int, error) {
 		// queue hundreds of albums, so re-anchor quietly instead.
 		w.logger.Warn("library sync anchor not found; re-anchoring without submitting",
 			"scanned", len(scanned), "oldest_anchor_song", oldest)
-		if err := w.store.ReplaceLibrarySyncAnchor(ctx, toEntries(head(scanned, anchorSize))); err != nil {
-			return 0, fmt.Errorf("save anchor: %w", err)
-		}
-		w.setAnchorSize(min(len(scanned), anchorSize))
-		return 0, nil
+		return 0, w.saveAnchor(ctx, generation, head(scanned, anchorSize))
 	}
 
 	// Only songs ahead of the oldest remembered one can be new. The margin read
@@ -221,14 +225,62 @@ func (w *Watcher) pass(ctx context.Context, token string) (int, error) {
 	}
 
 	submitted := 0
+	var pending []string
 	if len(added) > 0 {
-		submitted = w.submitAlbums(ctx, token, added)
+		submitted, pending = w.submitAlbums(ctx, token, added)
 	}
-	if err := w.store.ReplaceLibrarySyncAnchor(ctx, toEntries(head(scanned, anchorSize))); err != nil {
-		return submitted, fmt.Errorf("save anchor: %w", err)
+	if len(pending) > 0 {
+		// Keeping the previous anchor leaves every song above it "new" for the
+		// next pass, which retries the albums that failed here. Albums this pass
+		// did submit come round again too: an active job answers
+		// duplicate_active, and a finished one skips the files already on disk.
+		w.anchorMu.Lock()
+		reset := w.generation != generation
+		if !reset {
+			w.setAnchorSize(len(anchor))
+		}
+		w.anchorMu.Unlock()
+		if reset {
+			// A reset forgets history, unsubmitted albums included: the next
+			// pass re-anchors and submits nothing, so there is nothing to retry.
+			return submitted, nil
+		}
+		return submitted, fmt.Errorf("%d new album(s) not submitted, retrying next pass: %s",
+			len(pending), strings.Join(head(pending, maxReportedPending), "; "))
 	}
-	w.setAnchorSize(min(len(scanned), anchorSize))
+	if err := w.saveAnchor(ctx, generation, head(scanned, anchorSize)); err != nil {
+		return submitted, err
+	}
 	return submitted, nil
+}
+
+// maxReportedPending bounds how many unsubmitted albums the pass error names.
+const maxReportedPending = 3
+
+// loadAnchor reads the stored anchor together with the reset generation it
+// belongs to.
+func (w *Watcher) loadAnchor(ctx context.Context) (uint64, []domain.LibraryAnchorEntry, error) {
+	w.anchorMu.Lock()
+	defer w.anchorMu.Unlock()
+	anchor, err := w.store.LoadLibrarySyncAnchor(ctx)
+	return w.generation, anchor, err
+}
+
+// saveAnchor stores songs as the new anchor unless ResetAnchor ran since the
+// pass loaded generation's anchor: the reset wins, and the next pass
+// re-anchors from scratch.
+func (w *Watcher) saveAnchor(ctx context.Context, generation uint64, songs []applemusic.LibrarySong) error {
+	w.anchorMu.Lock()
+	defer w.anchorMu.Unlock()
+	if w.generation != generation {
+		w.logger.Info("library sync anchor was reset during the pass; not saving it")
+		return nil
+	}
+	if err := w.store.ReplaceLibrarySyncAnchor(ctx, toEntries(songs)); err != nil {
+		return fmt.Errorf("save anchor: %w", err)
+	}
+	w.setAnchorSize(len(songs))
+	return nil
 }
 
 // scanUntil reads newest-first until untilID reappears, the library ends, or
@@ -257,9 +309,12 @@ func (w *Watcher) scanUntil(ctx context.Context, token, untilID string, want int
 }
 
 // submitAlbums turns new songs into a deduplicated album submission. Several
-// new songs from one album produce one job, and a library album with no catalog
-// counterpart is skipped rather than failing the pass.
-func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applemusic.LibrarySong) int {
+// new songs from one album produce one job. It returns the number of jobs
+// accepted and a description of each album that was not consumed: one whose
+// catalog link could not be resolved, or whose submission was rejected for a
+// reason that can pass (submissionConsumed). A library album with no catalog
+// counterpart is consumed: it can never be submitted.
+func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applemusic.LibrarySong) (int, []string) {
 	type albumInfo struct {
 		name   string
 		artist string
@@ -281,13 +336,20 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 		info.songs++
 	}
 
+	var pending []string
+	describe := func(albumID, reason string) string {
+		info := albums[albumID]
+		return fmt.Sprintf("%q by %q (%s): %s", info.name, info.artist, albumID, reason)
+	}
 	urls := make([]string, 0, len(order))
+	urlAlbums := make([]string, 0, len(order))
 	for _, albumID := range order {
 		info := albums[albumID]
 		catalogURL, ok, err := w.library.LibraryAlbumCatalogURL(ctx, token, albumID)
 		if err != nil {
-			w.logger.Warn("resolve library album failed; skipping",
+			w.logger.Warn("resolve library album failed; retrying next pass",
 				"album", info.name, "artist", info.artist, "library_album_id", albumID, "error", err)
+			pending = append(pending, describe(albumID, err.Error()))
 			continue
 		}
 		if !ok {
@@ -296,24 +358,78 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 			continue
 		}
 		urls = append(urls, catalogURL)
+		urlAlbums = append(urlAlbums, albumID)
 		w.logger.Info("library addition detected",
 			"album", info.name, "artist", info.artist, "new_songs", info.songs, "url", catalogURL)
 	}
 	if len(urls) == 0 {
-		return 0
+		return 0, pending
 	}
 	// No overrides: these are ordinary jobs, so they honour the same runtime
 	// config and the same hooks as anything submitted by hand.
 	resp := w.jobs.SubmitBatch(ctx, urls, nil)
-	for _, result := range resp.Results {
-		if result.Status != domain.SubmitAccepted {
-			w.logger.Info("library submission not queued",
-				"url", result.URL, "status", string(result.Status))
+	for i, albumID := range urlAlbums {
+		if i >= len(resp.Results) {
+			pending = append(pending, describe(albumID, "no submission result"))
+			continue
 		}
+		result := resp.Results[i]
+		if submissionConsumed(result) {
+			if result.Status != domain.SubmitAccepted {
+				w.logger.Info("library submission not queued",
+					"url", result.URL, "status", string(result.Status), "error", result.Error)
+			}
+			continue
+		}
+		w.logger.Warn("library submission rejected; retrying next pass",
+			"url", result.URL, "status", string(result.Status), "error", result.Error)
+		pending = append(pending, describe(albumID, rejectionReason(result)))
 	}
 	w.logger.Info("library sync submitted albums",
 		"accepted", resp.Accepted, "rejected", resp.Rejected)
-	return resp.Accepted
+	return resp.Accepted, pending
+}
+
+// permanentRejections are the jobs.RequestError codes for an input that will
+// never be accepted, however often it is retried. Every other rejection
+// (decryptor_unavailable, a store failure, a code this list does not know)
+// leaves the album to be retried. The codes are set by the job processor's
+// request validation (internal/media Downloader.ValidateRequest).
+var permanentRejections = map[string]bool{
+	"invalid_url":            true,
+	"unsupported_input":      true,
+	"unsupported_storefront": true,
+}
+
+// submissionConsumed reports whether a submission result settles its album for
+// good, so the anchor may move past it. Accepted and duplicate submissions are
+// consumed; a full queue or a transient rejection is not.
+func submissionConsumed(result domain.SubmitResult) bool {
+	switch result.Status {
+	case domain.SubmitAccepted, domain.SubmitDuplicateActive, domain.SubmitDuplicateInRequest:
+		return true
+	case domain.SubmitInvalid:
+		return permanentRejections[rejectionCode(result)]
+	default:
+		return false
+	}
+}
+
+// rejectionCode extracts the code from a rejection's "code: message" error
+// text, or "" when it carries none (a store failure's raw error).
+func rejectionCode(result domain.SubmitResult) string {
+	code, _, found := strings.Cut(result.Error, ": ")
+	if !found {
+		return ""
+	}
+	return code
+}
+
+func rejectionReason(result domain.SubmitResult) string {
+	if result.Error == "" {
+		return string(result.Status)
+	}
+	return string(result.Status) + ": " + result.Error
 }
 
 // ResetAnchor forgets the watermark and reports how many entries went.
@@ -322,11 +438,17 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 // re-anchors to the library as it stands then, and submits nothing. Use it when
 // the watcher's idea of "already had" has drifted from reality — not to
 // re-download something, which is what submitting the album directly is for.
+//
+// A pass already in flight still submits what it found, but does not save its
+// anchor afterwards, so the reset holds.
 func (w *Watcher) ResetAnchor(ctx context.Context) (int64, error) {
+	w.anchorMu.Lock()
+	defer w.anchorMu.Unlock()
 	cleared, err := w.store.ClearLibrarySyncAnchor(ctx)
 	if err != nil {
 		return 0, err
 	}
+	w.generation++
 	w.setAnchorSize(0)
 	w.logger.Info("library sync anchor reset", "cleared", cleared)
 	return cleared, nil
@@ -380,11 +502,11 @@ func toEntries(songs []applemusic.LibrarySong) []domain.LibraryAnchorEntry {
 	return out
 }
 
-func head(songs []applemusic.LibrarySong, n int) []applemusic.LibrarySong {
-	if len(songs) <= n {
-		return songs
+func head[T any](items []T, n int) []T {
+	if len(items) <= n {
+		return items
 	}
-	return songs[:n]
+	return items[:n]
 }
 
 func firstName(songs []applemusic.LibrarySong) string {
