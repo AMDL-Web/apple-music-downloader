@@ -112,14 +112,18 @@ base durations (120 ms color, 200 ms overlays).
 - **Shell**: brand mark is a 34 px red gradient tile; "Console" group label via
   `.nav::before`; red nav glyphs; the current item is a filled 9 px pill. The top
   bar is the frosted canvas with a "Live" pill, a filled search trigger and two
-  Apple segmented controls. On phones the pill loses its fill but keeps the
+  Apple segmented controls; a segment's count (the Queue tabs) is primary
+  ink in regular weight, since secondary text falls under 4.5:1 on the track
+  and on the dark thumb. Inline code is primary ink on `--bg-fill` for the
+  same reason. On phones the pill loses its fill but keeps the
   word next to the dot. The icon rail (640-1023) keeps red glyphs and shows
   the active count as a red badge.
 - **New download entry points**: in the sidebar a red pill as tall as a nav
   row (36 px, 15 px semibold) above the "Console" label, ringed in a soft red
   halo while New download is open; on the rail a 40 px red disc. Under 640
-  px the center tab's mark is a 48 x 30 red capsule with a soft red shadow,
-  "New" under it like the other labels; More turns red like any current tab
+  px the center tab's mark is a 48 x 30 red capsule with a soft red shadow
+  that rises 6 px over the 24 px icon line, so "New" sits on the other
+  labels' line; More turns red like any current tab
   while Logs, System or Settings is shown.
 - **More sheet** (phones): the frosted sheet holds an inset grouped list on
   `--bg-group` (16 px radius, 48 px rows, 16 px labels), red glyphs as in the
@@ -207,7 +211,7 @@ base durations (120 ms color, 200 ms overlays).
   tags on `--bg-inset`, a 15 px semibold title over 13 px facts and the mono
   link, Qualities a filled pill and remove a secondary glyph. Submitted reuses
   the Queue list language (covers, the joined capsule bar, hairlines from the
-  text); an outcome row names its result in its role color beside the role
+  text; on phones the bar starts under the title); an outcome row names its result in its role color beside the role
   glyph. Options: Edit and Done are red text in the head (Done semibold);
   the open form's fieldsets sit under small caps titles, the codec ranking is
   an inset list with hairlines from the name, and Add buttons are filled
@@ -219,8 +223,8 @@ base durations (120 ms color, 200 ms overlays).
 - **Settings**: the section list repeats the sidebar (red 18 px glyphs, 15 px
   labels, the current section a filled pill in semibold; 14 px on the rail).
   Fields are grouped rows whose hairlines run from the text to the card's
-  right edge, as do panel rules and the library sync and account status
-  rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
+  right edge, as do panel rules, the pinned keys table and the library sync
+  and account status rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
   soft shadow, red when on, the off track keeping its `--border-control`
   outline, "On" / "Off" beside it). The ordered list is an inset list like
   the codec ranking; the template reference is an inset cell. Panel actions

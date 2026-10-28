@@ -237,6 +237,8 @@
 :root[data-skin="music"] code {
   border-radius: var(--r-icon-tile);
   background: var(--bg-fill);
+  /* Secondary text inherited from a note reads 4.15:1 on the fill. */
+  color: var(--text-primary);
 }
 
 :root[data-skin="music"] kbd {
@@ -514,7 +516,10 @@
 }
 
 :root[data-skin="music"] .seg-count {
-  color: var(--text-secondary);
+  /* Primary ink in regular weight: secondary text falls under 4.5:1 on the
+     track (light) and on the pressed thumb (dark). */
+  color: var(--text-primary);
+  font-weight: var(--w-regular);
 }
 
 :root[data-skin="music"] .seg-icons .seg-btn {
@@ -2382,6 +2387,17 @@
   padding-right: var(--card-pad);
 }
 
+/* The pinned keys table's rules run to the card's edge like the rows above. */
+@media (min-width: 640px) {
+  :root[data-skin="music"] .settings-panel > .table-wrap {
+    margin-right: calc(-1 * var(--card-pad));
+  }
+
+  :root[data-skin="music"] .pinned-table :is(th, td):last-child {
+    padding-right: var(--card-pad);
+  }
+}
+
 :root[data-skin="music"] .field-label {
   font-size: var(--fs-15);
   line-height: var(--lh-15);
@@ -2964,6 +2980,8 @@
   :root[data-skin="music"] .tab-new-mark {
     width: 48px;
     height: 30px;
+    /* Tab icons are 24 px here: the capsule rises 6 px above their line. */
+    margin-top: -6px;
     border-radius: var(--r-full);
     box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent) 70%, transparent);
   }
@@ -2984,7 +3002,7 @@
   }
 
   :root[data-skin="music"] .bulk-bar {
-    padding: var(--s-1);
+    padding: var(--s-2);
   }
 
   :root[data-skin="music"] :where(.card:has(> .card-head)) > .card-head {
@@ -3120,6 +3138,16 @@
   }
 
   :root[data-skin="music"] [data-section="jobs"] .job-progress {
+    grid-column: 2 / -1;
+  }
+
+  /* Submitted rows too: the bar starts under the title, as in the Queue. */
+  :root[data-skin="music"] .new-results .job-row > .art {
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+
+  :root[data-skin="music"] .new-results .job-progress {
     grid-column: 2 / -1;
   }
 
