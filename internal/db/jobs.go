@@ -140,7 +140,7 @@ func (s *Store) GetJob(ctx context.Context, id string) (domain.Job, error) {
 }
 
 // JobListFilter controls GET /downloads listing: pagination, status/type/
-// storefront filters, title/input substring search, and created/updated
+// storefront filters, title/input/artist substring search, and created/updated
 // time windows. Zero values mean "no constraint" except Limit, which the
 // store clamps to [1, 200] with a default of 50.
 type JobListFilter struct {
@@ -214,8 +214,8 @@ func (f JobListFilter) whereClause() (string, []any) {
 	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		like := "%" + escapeLike(q) + "%"
-		conds = append(conds, `(j.title LIKE ? ESCAPE '\' OR j.input LIKE ? ESCAPE '\')`)
-		args = append(args, like, like)
+		conds = append(conds, `(j.title LIKE ? ESCAPE '\' OR j.input LIKE ? ESCAPE '\' OR j.artist_name LIKE ? ESCAPE '\')`)
+		args = append(args, like, like, like)
 	}
 	if f.CreatedAfter != nil {
 		conds = append(conds, "j.created_at>=?")

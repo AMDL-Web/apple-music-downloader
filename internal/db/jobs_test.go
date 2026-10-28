@@ -469,7 +469,7 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 	jobs := []domain.Job{
 		{ID: "j1", Input: "https://music.apple.com/us/song/one/1", Type: "song", Storefront: "us", Title: "Alpha Song", CanonicalKey: "song|us|1", Status: domain.JobCompleted, CreatedAt: base, UpdatedAt: base.Add(3 * time.Hour)},
 		{ID: "j2", Input: "https://music.apple.com/cn/album/two/2", Type: "album", Storefront: "cn", Title: "Beta Album", CanonicalKey: "album|cn|2", Status: domain.JobFailed, CreatedAt: base.Add(1 * time.Hour), UpdatedAt: base.Add(2 * time.Hour)},
-		{ID: "j3", Input: "https://music.apple.com/jp/playlist/three/3", Type: "playlist", Storefront: "jp", Title: "Gamma Playlist", CanonicalKey: "playlist|jp|3", Status: domain.JobRunning, CreatedAt: base.Add(2 * time.Hour), UpdatedAt: base.Add(4 * time.Hour)},
+		{ID: "j3", Input: "https://music.apple.com/jp/playlist/three/3", Type: "playlist", Storefront: "jp", Title: "Gamma Playlist", ArtistName: "Omega Quartet", CanonicalKey: "playlist|jp|3", Status: domain.JobRunning, CreatedAt: base.Add(2 * time.Hour), UpdatedAt: base.Add(4 * time.Hour)},
 		{ID: "j4", Input: "https://music.apple.com/us/artist/four/4", Type: "artist", Storefront: "us", Title: "Delta Artist", CanonicalKey: "artist|us|4", Status: domain.JobQueued, CreatedAt: base.Add(3 * time.Hour), UpdatedAt: base.Add(1 * time.Hour)},
 	}
 	for _, job := range jobs {
@@ -547,6 +547,14 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 	}
 	if total != 1 || listed[0].ID != "j2" {
 		t.Fatalf("q=beta = ids=%v total=%d, want [j2]", idsOf(listed), total)
+	}
+
+	listed, total, err = store.ListJobs(ctx, JobListFilter{Query: "omega", Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || listed[0].ID != "j3" {
+		t.Fatalf("q=omega (an artist name) = ids=%v total=%d, want [j3]", idsOf(listed), total)
 	}
 
 	listed, total, err = store.ListJobs(ctx, JobListFilter{Query: "%", Limit: 50})

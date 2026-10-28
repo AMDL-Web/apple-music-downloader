@@ -710,7 +710,7 @@ paths:
       summary: List download jobs
       description: |
         Returns a snapshot of the download job list, with pagination,
-        status/type/storefront filters, substring search over title and input URL,
+        status/type/storefront filters, substring search over title, artist and input URL,
         and filtering by creation/update time windows. Sorted by created_at
         descending by default.
         Multi-value parameters (status, type) accept repeated keys or comma
@@ -765,7 +765,7 @@ paths:
         - name: q
           in: query
           description: >-
-            Substring search over the job's title and input (SQLite LIKE;
+            Substring search over the job's title, artist name and input (SQLite LIKE;
             case-insensitive for ASCII letters). `%` and `_` match literally.
           schema:
             type: string
