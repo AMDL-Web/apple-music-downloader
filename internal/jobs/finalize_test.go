@@ -671,7 +671,7 @@ func TestFinalizeJobSkipsHookWhenPersistenceFails(t *testing.T) {
 	}
 
 	job := domain.Job{ID: "job-x", Type: "song", Status: domain.JobCancelled, Error: "cancelled"}
-	if err := manager.finalizeJob(context.Background(), job, "job_cancelled", "job cancelled"); err == nil {
+	if err := manager.finalizeJob(context.Background(), job, domain.EventJobCancelled, "job cancelled"); err == nil {
 		t.Fatal("finalizeJob returned nil, want a persistence error when the store is closed")
 	}
 
@@ -691,37 +691,169 @@ func TestTerminalJobEventPayloadCarriesRESTJobSnapshot(t *testing.T) {
 	defer store.Close()
 
 	embed := false
+	ctx := context.Background()
 	now := time.Now().UTC().Add(-time.Minute)
 	job := domain.Job{
 		ID: "job-terminal-payload", Input: "song|us|1", Type: "song", Storefront: "us",
 		CanonicalKey: "song:us:1", Status: domain.JobRunning, TotalItems: 1,
 		Overrides: &config.DownloadOverrides{EmbedCover: &embed}, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := store.CreateJob(context.Background(), job); err != nil {
+	if err := store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CreateItem(ctx, domain.JobItem{ID: "item-1", JobID: job.ID, AdamID: "1", Kind: "song", Index: 1, Status: domain.ItemCompleted, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 
 	manager := NewManager(store, events.NewHub(), keyedProcessor{}, 1, slog.Default())
+	job, err = store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	job.Status = domain.JobCompleted
-	job.DoneItems = 1
-	if err := manager.persistTerminal(context.Background(), job, "job_finished", "completed"); err != nil {
+	job.UpdatedAt = now.Add(30 * time.Second)
+	if err := manager.persistTerminal(ctx, job, domain.EventJobFinished, "completed"); err != nil {
 		t.Fatal(err)
 	}
 
-	recorded, err := store.ListEventsAfter(context.Background(), job.ID, 0)
+	recorded, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
 	if err != nil || len(recorded) != 1 {
 		t.Fatalf("terminal events = %+v, err=%v, want one", recorded, err)
 	}
 	var snapshot domain.Job
-	if err := json.Unmarshal([]byte(recorded[0].Payload), &snapshot); err != nil {
+	if err := json.Unmarshal(recorded[0].Payload, &snapshot); err != nil {
 		t.Fatal(err)
 	}
 	var fields map[string]any
-	if err := json.Unmarshal([]byte(recorded[0].Payload), &fields); err != nil {
+	if err := json.Unmarshal(recorded[0].Payload, &fields); err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.ID != job.ID || snapshot.Status != domain.JobCompleted || snapshot.DoneItems != 1 || snapshot.UpdatedAt.IsZero() || fields["message"] != "completed" {
+	if snapshot.ID != job.ID || snapshot.Status != domain.JobCompleted || snapshot.CompletedItems != 1 || snapshot.UpdatedAt.IsZero() || fields["message"] != "completed" {
 		t.Fatalf("terminal payload = %s, want complete REST job snapshot plus message", recorded[0].Payload)
+	}
+	if snapshot.FinishedAt == nil || !snapshot.FinishedAt.Equal(job.UpdatedAt) {
+		t.Fatalf("terminal payload finished_at = %v, want %v", snapshot.FinishedAt, job.UpdatedAt)
+	}
+	stored, err := store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.FinishedAt == nil || !stored.FinishedAt.Equal(job.UpdatedAt) {
+		t.Fatalf("stored finished_at = %v, want %v", stored.FinishedAt, job.UpdatedAt)
+	}
+}
+
+// itemsProcessor reports one item per status through the Reporter, the way
+// the media pipeline does, and returns nil.
+type itemsProcessor struct{ statuses []domain.ItemStatus }
+
+func (itemsProcessor) ValidateRequest(_ context.Context, url string) (ValidationResult, error) {
+	return keyedProcessor{}.ValidateRequest(context.Background(), url)
+}
+
+func (p itemsProcessor) ProcessJob(ctx context.Context, job domain.Job, reporter Reporter) error {
+	job.TotalItems = len(p.statuses)
+	if err := reporter.SetJob(ctx, &job); err != nil {
+		return err
+	}
+	for i, status := range p.statuses {
+		item := domain.JobItem{JobID: job.ID, AdamID: strconv.Itoa(i + 1), Kind: "song", Index: i + 1, Status: status}
+		if err := reporter.AddItem(ctx, &item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func waitForTerminal(t *testing.T, store *db.Store, jobID string) domain.Job {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err := store.GetJob(context.Background(), jobID)
+		if err == nil && job.Status.IsTerminal() {
+			return job
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("job %s did not reach a terminal status", jobID)
+	return domain.Job{}
+}
+
+func TestRunDecidesTerminalStatusFromStoreCounters(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		statuses   []domain.ItemStatus
+		wantStatus domain.JobStatus
+		completed  int
+		skipped    int
+		failed     int
+	}{
+		{"all written or present", []domain.ItemStatus{domain.ItemCompleted, domain.ItemSkipped, domain.ItemCompleted}, domain.JobCompleted, 2, 1, 0},
+		{"one failed item fails the job", []domain.ItemStatus{domain.ItemCompleted, domain.ItemFailed}, domain.JobFailed, 1, 0, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			manager := NewManager(store, events.NewHub(), itemsProcessor{statuses: tc.statuses}, 1, slog.Default())
+			ctx, stop := context.WithCancel(context.Background())
+			defer func() {
+				stop()
+				_ = manager.Wait(context.Background())
+			}()
+			manager.Start(ctx)
+
+			before := time.Now().UTC().Add(-time.Second)
+			resp := manager.SubmitBatch(ctx, []string{"album|us|1"}, nil)
+			if resp.Accepted != 1 {
+				t.Fatalf("submit = %+v", resp)
+			}
+			got := waitForTerminal(t, store, resp.Results[0].Job.ID)
+			if got.Status != tc.wantStatus || got.TotalItems != len(tc.statuses) ||
+				got.CompletedItems != tc.completed || got.SkippedItems != tc.skipped || got.FailedItems != tc.failed || got.CancelledItems != 0 {
+				t.Fatalf("job = status %s total %d completed %d skipped %d failed %d cancelled %d, want %s %d %d %d %d 0",
+					got.Status, got.TotalItems, got.CompletedItems, got.SkippedItems, got.FailedItems, got.CancelledItems,
+					tc.wantStatus, len(tc.statuses), tc.completed, tc.skipped, tc.failed)
+			}
+			if got.StartedAt == nil || got.FinishedAt == nil || got.StartedAt.Before(before) || got.FinishedAt.Before(*got.StartedAt) {
+				t.Fatalf("job timing = started %v finished %v, want both set, started after %v and finished after started", got.StartedAt, got.FinishedAt, before)
+			}
+
+			recorded, err := store.ListEventsAfterLimit(context.Background(), got.ID, 0, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			terminal := recorded[len(recorded)-1]
+			var snapshot domain.Job
+			if err := json.Unmarshal(terminal.Payload, &snapshot); err != nil {
+				t.Fatalf("terminal payload %s: %v", terminal.Payload, err)
+			}
+			if snapshot.CompletedItems != tc.completed || snapshot.SkippedItems != tc.skipped || snapshot.FailedItems != tc.failed {
+				t.Fatalf("terminal payload counters = %d/%d/%d, want %d/%d/%d", snapshot.CompletedItems, snapshot.SkippedItems, snapshot.FailedItems, tc.completed, tc.skipped, tc.failed)
+			}
+		})
+	}
+}
+
+func TestCancelQueuedJobSetsFinishedAtWithoutStartedAt(t *testing.T) {
+	manager := newTestManager(t)
+	ctx := context.Background()
+	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	if resp.Accepted != 1 {
+		t.Fatalf("submit = %+v", resp)
+	}
+	jobID := resp.Results[0].Job.ID
+	if err := manager.Cancel(ctx, jobID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := manager.store.GetJob(ctx, jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.JobCancelled || got.StartedAt != nil || got.FinishedAt == nil {
+		t.Fatalf("cancelled queued job = status %s started %v finished %v, want cancelled, never started, finished set", got.Status, got.StartedAt, got.FinishedAt)
 	}
 }
 

@@ -120,25 +120,30 @@ type Job struct {
 	MotionArtworkTallTextColor3 string `json:"motion_artwork_tall_text_color3,omitempty"`
 	MotionArtworkTallTextColor4 string `json:"motion_artwork_tall_text_color4,omitempty"`
 	CanonicalKey                string `json:"-"`
-	// Force is legacy: it was the submission-time overwrite flag before
-	// download.force_overwrite existed as a global config key with a
-	// per-request override (Overrides.ForceOverwrite). New jobs never set it;
-	// it is kept so jobs persisted before the migration still force-overwrite
-	// on retry and post-restart requeue.
-	Force bool `json:"force"`
 	// Overrides is the per-request job config overlay attached at submission;
 	// nil for jobs submitted without one. It is persisted with the job and
 	// applied on top of the live runtime config each time the job runs
 	// (including retries and post-restart requeues). Credential fields are
 	// redacted from its public JSON representation.
-	Overrides   *config.DownloadOverrides `json:"overrides,omitempty"`
-	Status      JobStatus                 `json:"status"`
-	TotalItems  int                       `json:"total_items"`
-	DoneItems   int                       `json:"done_items"`
-	FailedItems int                       `json:"failed_items"`
-	Error       string                    `json:"error,omitempty"`
-	CreatedAt   time.Time                 `json:"created_at"`
-	UpdatedAt   time.Time                 `json:"updated_at"`
+	Overrides *config.DownloadOverrides `json:"overrides,omitempty"`
+	Status    JobStatus                 `json:"status"`
+	// TotalItems is stored when the input resolves. The four item counters
+	// are disjoint, never stored, and filled from job_items by every store
+	// read: CompletedItems were written by this job, SkippedItems were already
+	// on disk (skipped_existing).
+	TotalItems     int    `json:"total_items"`
+	CompletedItems int    `json:"completed_items"`
+	SkippedItems   int    `json:"skipped_items"`
+	FailedItems    int    `json:"failed_items"`
+	CancelledItems int    `json:"cancelled_items"`
+	Error          string `json:"error,omitempty"`
+	// StartedAt is set the first time a worker starts the job and kept across
+	// recovery and retry. FinishedAt is set on the terminal transition and
+	// cleared by retry. Both are nil (omitted) until then.
+	StartedAt  *time.Time `json:"started_at,omitempty"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 // MarshalJSON is the public job representation used by create/list/detail and

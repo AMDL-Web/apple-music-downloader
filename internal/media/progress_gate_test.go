@@ -98,7 +98,7 @@ func TestProgressGatePassesNonProgressEventsStraightThrough(t *testing.T) {
 	gate, _ := newTestGate(base, time.Hour)
 	gate.emit = func() { t.Fatal("nothing was held; emit must not be called") }
 
-	for _, ty := range []string{"codec_selected", "item_failed", "item_skipped", "operation_retry"} {
+	for _, ty := range []domain.EventType{"codec_selected", "item_failed", "item_skipped", "operation_retry"} {
 		if err := gate.Event(context.Background(), domain.Event{ItemID: "item-1", Type: ty}); err != nil {
 			t.Fatal(err)
 		}
@@ -160,7 +160,7 @@ func simulateTrackEvents(t *testing.T, intervalMS, durationMS, minKBps, maxKBps 
 func itemProgressSnapshot(t *testing.T, ev domain.Event) domain.JobItem {
 	t.Helper()
 	var snapshot domain.JobItem
-	if err := json.Unmarshal([]byte(ev.Payload), &snapshot); err != nil {
+	if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
 		t.Fatalf("decode %s payload: %v", ev.Type, err)
 	}
 	return snapshot

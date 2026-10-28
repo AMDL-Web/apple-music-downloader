@@ -40,7 +40,7 @@ func (d *Downloader) selectEnhancedMedia(ctx context.Context, job domain.Job, it
 		return selectedDownloadMedia{}, err
 	}
 	d.setItemQuality(ctx, reporter, item, info.BitDepth, info.SampleRate, info.Bandwidth)
-	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "codec_selected", Phase: codec, Payload: domain.MarshalEventPayload(*item, map[string]any{
+	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventCodecSelected, Phase: codec, Payload: domain.MarshalEventPayload(*item, map[string]any{
 		"codec_id": info.CodecID, "bit_depth": info.BitDepth, "sample_rate": info.SampleRate, "bitrate": info.Bandwidth,
 		"attempt": item.Attempt, "max_attempts": item.MaxAttempts,
 	})})
@@ -304,7 +304,7 @@ func (d *Downloader) repairALACFile(ctx context.Context, job domain.Job, item *d
 		return fmt.Errorf("integrity check failed; alac repair found no malformed packets")
 	}
 	payload, _ := json.Marshal(map[string]any{"patched_packets": patched})
-	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "alac_repaired", Phase: codec, Payload: string(payload)})
+	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventALACRepaired, Phase: codec, Payload: payload})
 	if err := os.WriteFile(path, repaired, 0o644); err != nil {
 		return fmt.Errorf("integrity check failed; write repaired alac: %w", err)
 	}

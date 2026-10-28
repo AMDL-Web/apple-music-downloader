@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,26 +12,123 @@ import (
 	"amdl/internal/domain"
 )
 
-func TestJobForceRoundTrip(t *testing.T) {
+func TestJobCountersAreDerivedFromItemsOnEveryRead(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	ctx := context.Background()
 	now := time.Now().UTC()
-	want := domain.Job{
-		ID: "job-force", Input: "https://music.apple.com/cn/song/test/1", Type: "song", Storefront: "cn",
-		Force: true, Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
+	job := domain.Job{
+		ID: "job-counters", Input: "album|us|1", Type: "album", Storefront: "us", CanonicalKey: "album:us:1",
+		Status: domain.JobRunning, TotalItems: 9, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := store.CreateJob(context.Background(), want); err != nil {
+	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
 	}
-	got, err := store.GetJob(context.Background(), want.ID)
+	// 3 completed, 2 skipped_existing, 1 failed, 1 cancelled, 2 still pending.
+	statuses := []domain.ItemStatus{
+		domain.ItemCompleted, domain.ItemCompleted, domain.ItemCompleted,
+		domain.ItemSkipped, domain.ItemSkipped,
+		domain.ItemFailed, domain.ItemCancelled,
+		domain.ItemDownloading, domain.ItemQueued,
+	}
+	for i, status := range statuses {
+		item := domain.JobItem{ID: fmt.Sprintf("item-%d", i), JobID: job.ID, AdamID: "1", Kind: "song", Index: i + 1, Status: status, CreatedAt: now, UpdatedAt: now}
+		if err := store.CreateItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Another job's items must not leak into this job's counters.
+	if err := store.CreateItem(ctx, domain.JobItem{ID: "other", JobID: "job-other", AdamID: "2", Kind: "song", Index: 1, Status: domain.ItemCompleted, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+
+	check := func(source string, got domain.Job) {
+		t.Helper()
+		if got.TotalItems != 9 || got.CompletedItems != 3 || got.SkippedItems != 2 || got.FailedItems != 1 || got.CancelledItems != 1 {
+			t.Fatalf("%s counters = total %d completed %d skipped %d failed %d cancelled %d, want 9/3/2/1/1",
+				source, got.TotalItems, got.CompletedItems, got.SkippedItems, got.FailedItems, got.CancelledItems)
+		}
+	}
+	got, err := store.GetJob(ctx, job.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.Force {
-		t.Fatal("Force was not persisted")
+	check("GetJob", got)
+	listed, _, err := store.ListJobs(ctx, JobListFilter{})
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("ListJobs = %+v, %v", listed, err)
+	}
+	check("ListJobs", listed[0])
+	recoverable, err := store.ListRecoverableJobs(ctx)
+	if err != nil || len(recoverable) != 1 {
+		t.Fatalf("ListRecoverableJobs = %+v, %v", recoverable, err)
+	}
+	check("ListRecoverableJobs", recoverable[0])
+	active, found, err := store.FindActiveJobByKey(ctx, job.CanonicalKey)
+	if err != nil || !found {
+		t.Fatalf("FindActiveJobByKey = %v, %v", found, err)
+	}
+	check("FindActiveJobByKey", active)
+
+	// Writing a job never stores counters: a stale in-memory value is ignored.
+	got.CompletedItems, got.FailedItems = 0, 7
+	if err := store.UpdateJob(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("GetJob after UpdateJob", got)
+}
+
+func TestJobTimingRoundTrip(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	created := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	job := domain.Job{ID: "job-timing", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobQueued, CreatedAt: created, UpdatedAt: created}
+	if err := store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.StartedAt != nil || got.FinishedAt != nil {
+		t.Fatalf("new job timing = %v / %v, want both nil", got.StartedAt, got.FinishedAt)
+	}
+
+	started := created.Add(1500 * time.Millisecond)
+	finished := created.Add(time.Minute)
+	got.Status, got.StartedAt, got.FinishedAt = domain.JobFailed, &started, &finished
+	if err := store.UpdateJob(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.StartedAt == nil || !got.StartedAt.Equal(started) || got.FinishedAt == nil || !got.FinishedAt.Equal(finished) {
+		t.Fatalf("timing = %v / %v, want %v / %v", got.StartedAt, got.FinishedAt, started, finished)
+	}
+
+	got.FinishedAt = nil
+	if err := store.UpdateJob(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	var finishedCol sql.NullString
+	if err := store.db.QueryRowContext(ctx, `SELECT finished_at FROM jobs WHERE id=?`, job.ID).Scan(&finishedCol); err != nil {
+		t.Fatal(err)
+	}
+	if finishedCol.Valid {
+		t.Fatalf("cleared finished_at stored as %q, want NULL", finishedCol.String)
 	}
 }
 
@@ -47,8 +145,22 @@ func TestFinalizeJobPersistsStatusAndEventTogether(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	for _, ev := range []domain.Event{
+		{JobID: job.ID, Type: "job_started"},
+		{JobID: job.ID, ItemID: "item-1", Type: "item_progress", Phase: "downloading"},
+		{JobID: job.ID, ItemID: "item-1", Type: "item_progress", Phase: "decrypting"},
+		{JobID: job.ID, ItemID: "item-1", Type: "item_completed"},
+		{JobID: "job-other", ItemID: "item-2", Type: "item_progress", Phase: "downloading"},
+	} {
+		if _, err := store.AddEvent(ctx, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	finishedAt := now.Add(time.Second)
 	job.Status = domain.JobCompleted
-	job.UpdatedAt = now.Add(time.Second)
+	job.UpdatedAt = finishedAt
+	job.FinishedAt = &finishedAt
 	ev := domain.Event{JobID: job.ID, Type: "job_finished", Message: string(job.Status)}
 	stored, err := store.FinalizeJob(ctx, job, ev)
 	if err != nil {
@@ -65,44 +177,27 @@ func TestFinalizeJobPersistsStatusAndEventTogether(t *testing.T) {
 	if got.Status != domain.JobCompleted {
 		t.Fatalf("job status = %s, want %s", got.Status, domain.JobCompleted)
 	}
-	events, err := store.ListEventsAfter(ctx, job.ID, 0)
+	if got.FinishedAt == nil || !got.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("finished_at = %v, want %v", got.FinishedAt, finishedAt)
+	}
+	events, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].Type != "job_finished" {
-		t.Fatalf("events after FinalizeJob = %+v, want a single job_finished event", events)
+	// item_progress is live telemetry and is pruned in the same transaction;
+	// milestone events and other jobs' progress stay.
+	want := []domain.EventType{"job_started", "item_completed", "job_finished"}
+	if len(events) != len(want) {
+		t.Fatalf("events after FinalizeJob = %+v, want types %v", events, want)
 	}
-}
-
-func TestUpdateJobStatusPreservesCountsAndError(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
+	for i := range want {
+		if events[i].Type != want[i] {
+			t.Fatalf("events after FinalizeJob = %+v, want types %v", events, want)
+		}
 	}
-	defer store.Close()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	job := domain.Job{
-		ID: "job-status", Input: "https://music.apple.com/cn/artist/example/1", Type: "artist", Storefront: "cn",
-		Status: domain.JobRunning, TotalItems: 4, DoneItems: 2, FailedItems: 1, Error: "partial", CreatedAt: now, UpdatedAt: now,
-	}
-	if err := store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := store.UpdateJobStatus(ctx, job.ID, domain.JobCancelled, now.Add(time.Second)); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := store.GetJob(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != domain.JobCancelled {
-		t.Fatalf("status = %s, want %s", got.Status, domain.JobCancelled)
-	}
-	if got.TotalItems != 4 || got.DoneItems != 2 || got.FailedItems != 1 || got.Error != "partial" {
-		t.Fatalf("job fields were overwritten: %+v", got)
+	other, err := store.ListEventsAfterLimit(ctx, "job-other", 0, 0)
+	if err != nil || len(other) != 1 {
+		t.Fatalf("other job's progress events = %+v, %v; want the one kept", other, err)
 	}
 }
 
@@ -346,16 +441,16 @@ func TestDeleteJobPersistsOverviewTombstone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tombstone.Type != domain.EventDeleted || tombstone.JobID != job.ID || tombstone.ID <= finished.ID {
+	if tombstone.Type != "job_deleted" || tombstone.JobID != job.ID || tombstone.ID <= finished.ID {
 		t.Fatalf("tombstone = %+v, want job_deleted for %s after event %d", tombstone, job.ID, finished.ID)
 	}
 
-	events, err := store.ListMilestoneEventsAfter(ctx, finished.ID)
+	events, err := store.ListMilestoneEventsAfterLimit(ctx, finished.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].Type != domain.EventDeleted || events[0].ID != tombstone.ID {
-		t.Fatalf("ListMilestoneEventsAfter(%d) = %+v, want tombstone %d", finished.ID, events, tombstone.ID)
+	if len(events) != 1 || events[0].Type != "job_deleted" || events[0].ID != tombstone.ID {
+		t.Fatalf("ListMilestoneEventsAfterLimit(%d) = %+v, want tombstone %d", finished.ID, events, tombstone.ID)
 	}
 	if _, err := store.GetJob(ctx, job.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("GetJob after delete err = %v, want sql.ErrNoRows", err)
@@ -405,8 +500,8 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 	if len(listed) != 2 || listed[0].ID != "j3" || listed[1].ID != "j2" {
 		t.Fatalf("page = %+v, want j3 then j2", idsOf(listed))
 	}
-	if listed[0].DoneItems != 1 || listed[0].FailedItems != 1 {
-		t.Fatalf("j3 progress done=%d failed=%d, want 1/1", listed[0].DoneItems, listed[0].FailedItems)
+	if listed[0].CompletedItems != 1 || listed[0].FailedItems != 1 {
+		t.Fatalf("j3 progress completed=%d failed=%d, want 1/1", listed[0].CompletedItems, listed[0].FailedItems)
 	}
 	counts, err := store.CountJobsByStatus(ctx, JobListFilter{})
 	if err != nil {

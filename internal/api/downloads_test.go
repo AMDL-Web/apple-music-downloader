@@ -51,18 +51,27 @@ func TestGetDownloadDerivesProgressFromItems(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 	var resp struct {
-		Job domain.Job `json:"job"`
+		Job map[string]any `json:"job"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	// completed + skipped = 2 done, 1 failed — must match the returned items even
-	// though the persisted job row still has DoneItems=0 (never finalized).
-	if resp.Job.DoneItems != 2 {
-		t.Fatalf("done_items = %d, want 2", resp.Job.DoneItems)
+	assertJobCounters(t, resp.Job)
+}
+
+// assertJobCounters checks the wire counters of a running job with one
+// completed, one skipped, one failed and one downloading item.
+func assertJobCounters(t *testing.T, job map[string]any) {
+	t.Helper()
+	for key, want := range map[string]float64{
+		"total_items": 4, "completed_items": 1, "skipped_items": 1, "failed_items": 1, "cancelled_items": 0,
+	} {
+		if got, ok := job[key].(float64); !ok || got != want {
+			t.Errorf("%s = %#v, want %v", key, job[key], want)
+		}
 	}
-	if resp.Job.FailedItems != 1 {
-		t.Fatalf("failed_items = %d, want 1", resp.Job.FailedItems)
+	if _, ok := job["done_items"]; ok {
+		t.Errorf("job still carries done_items: %v", job)
 	}
 }
 
@@ -145,7 +154,7 @@ func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 	var resp struct {
-		Downloads    []domain.Job           `json:"downloads"`
+		Downloads    []map[string]any       `json:"downloads"`
 		StatusCounts domain.JobStatusCounts `json:"status_counts"`
 		LastEventID  int64                  `json:"last_event_id"`
 		Total        int                    `json:"total"`
@@ -164,14 +173,7 @@ func TestListDownloadsDerivesProgressFromItems(t *testing.T) {
 	if resp.StatusCounts != (domain.JobStatusCounts{Running: 1, Total: 1}) {
 		t.Fatalf("status_counts = %+v, want running=1 total=1 with other statuses zero", resp.StatusCounts)
 	}
-	// completed + skipped = 2 done, 1 failed — the persisted job row still has
-	// DoneItems=0 (never finalized), so the list must count from job_items.
-	if resp.Downloads[0].DoneItems != 2 {
-		t.Fatalf("done_items = %d, want 2", resp.Downloads[0].DoneItems)
-	}
-	if resp.Downloads[0].FailedItems != 1 {
-		t.Fatalf("failed_items = %d, want 1", resp.Downloads[0].FailedItems)
-	}
+	assertJobCounters(t, resp.Downloads[0])
 }
 
 func TestDownloadResponsesIncludeArtworkURLTemplate(t *testing.T) {
@@ -330,8 +332,8 @@ func TestDeleteDownload(t *testing.T) {
 	if err != nil || len(items) != 0 {
 		t.Fatalf("items after delete = %v (err %v), want none", items, err)
 	}
-	events, err := server.store.ListEventsAfter(ctx, terminal.ID, 0)
-	if err != nil || len(events) != 1 || events[0].Type != domain.EventDeleted {
+	events, err := server.store.ListEventsAfterLimit(ctx, terminal.ID, 0, 0)
+	if err != nil || len(events) != 1 || events[0].Type != domain.EventJobDeleted {
 		t.Fatalf("events after delete = %v (err %v), want one delete tombstone", events, err)
 	}
 

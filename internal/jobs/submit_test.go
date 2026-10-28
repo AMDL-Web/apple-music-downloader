@@ -97,7 +97,12 @@ func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T)
 		t.Fatalf("second submit = %+v, want duplicate_active for %s", second.Results[0], jobID)
 	}
 
-	if err := manager.store.UpdateJobStatus(ctx, jobID, domain.JobCompleted, time.Now().UTC()); err != nil {
+	done, err := manager.store.GetJob(ctx, jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done.Status = domain.JobCompleted
+	if err := manager.store.UpdateJob(ctx, done); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,7 +213,8 @@ func TestRetryRequeuesFailedJobAndResetsOnlyUnfinishedItems(t *testing.T) {
 	defer store.Close()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	job := domain.Job{ID: "job-failed", Input: "https://music.apple.com/cn/album/example/1", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:1", Status: domain.JobFailed, TotalItems: 2, DoneItems: 1, FailedItems: 1, Error: "boom", CreatedAt: now, UpdatedAt: now}
+	started, finished := now.Add(-time.Minute), now.Add(-time.Second)
+	job := domain.Job{ID: "job-failed", Input: "https://music.apple.com/cn/album/example/1", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:1", Status: domain.JobFailed, TotalItems: 2, Error: "boom", StartedAt: &started, FinishedAt: &finished, CreatedAt: now, UpdatedAt: now}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
 	}
@@ -233,6 +239,10 @@ func TestRetryRequeuesFailedJobAndResetsOnlyUnfinishedItems(t *testing.T) {
 	if got.Status != domain.JobQueued || got.Error != "" {
 		t.Fatalf("job after retry = status %s error %q, want queued with empty error", got.Status, got.Error)
 	}
+	// started_at survives a retry; finished_at belongs to the previous run.
+	if got.StartedAt == nil || !got.StartedAt.Equal(started) || got.FinishedAt != nil {
+		t.Fatalf("job timing after retry = started %v finished %v, want started %v and no finished_at", got.StartedAt, got.FinishedAt, started)
+	}
 	items, err := store.ListItems(ctx, job.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +261,7 @@ func TestRetryRequeuesFailedJobAndResetsOnlyUnfinishedItems(t *testing.T) {
 	if len(manager.queue) != 1 || <-manager.queue != job.ID {
 		t.Fatal("retry did not enqueue the job")
 	}
-	events, err := store.ListEventsAfter(ctx, job.ID, 0)
+	events, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

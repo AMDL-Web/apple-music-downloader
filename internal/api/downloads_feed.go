@@ -96,7 +96,7 @@ func (s *Server) downloadsFeedWS(w http.ResponseWriter, r *http.Request) {
 // endpoints. It drains milestone events newer than the cursor into one message
 // per affected job (deduped to the latest action/snapshot) and calls keepalive
 // on each tick. write returning an error (client gone) ends the loop.
-func (s *Server) runDownloadsFeed(ctx context.Context, lastID int64, ch <-chan domain.Event, tick <-chan time.Time, write func(domain.DownloadFeedMessage) error, keepalive func() error) {
+func (s *Server) runDownloadsFeed(ctx context.Context, lastID int64, ch <-chan struct{}, tick <-chan time.Time, write func(domain.DownloadFeedMessage) error, keepalive func() error) {
 	drain := func() error {
 		for {
 			events, err := s.store.ListMilestoneEventsAfterLimit(ctx, lastID, streamEventPageSize)
@@ -128,7 +128,7 @@ func (s *Server) runDownloadsFeed(ctx context.Context, lastID int64, ch <-chan d
 					order = append(order, ev.JobID)
 				}
 				if ev.ID > latest[ev.JobID].eventID {
-					latest[ev.JobID] = pendingMessage{eventID: ev.ID, deleted: ev.Type == domain.EventDeleted}
+					latest[ev.JobID] = pendingMessage{eventID: ev.ID, deleted: ev.Type == domain.EventJobDeleted}
 				}
 			}
 			// Send in ascending per-job cursor order so Last-Event-ID only moves

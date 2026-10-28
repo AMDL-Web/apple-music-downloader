@@ -226,7 +226,7 @@ func (m *Manager) RecoverUnfinished(ctx context.Context) (int, error) {
 			}
 		}
 		message := "job recovered after backend restart"
-		if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: "job_recovered", Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
+		if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobRecovered, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
 			// The row has already been restored to a claimable queued state.
 			// Enqueue it before returning so a partial recovery never strands
 			// the jobs successfully processed earlier in this pass.

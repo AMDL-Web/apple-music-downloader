@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"amdl/internal/domain"
-	"amdl/internal/storage"
+	"amdl/internal/ids"
 )
 
 func (m *Manager) SetJob(ctx context.Context, job *domain.Job) error {
@@ -23,7 +23,7 @@ func (m *Manager) AddItem(ctx context.Context, item *domain.JobItem) error {
 	item.CreatedAt = now
 	item.UpdatedAt = now
 	if item.ID == "" {
-		item.ID = storage.NewID("item")
+		item.ID = ids.NewID("item")
 	}
 	return m.store.CreateItem(ctx, *item)
 }
@@ -42,9 +42,8 @@ func (m *Manager) ListItems(ctx context.Context, jobID string) ([]domain.JobItem
 }
 
 func (m *Manager) Event(ctx context.Context, ev domain.Event) error {
-	if ev.Payload == "" && ev.Message != "" {
-		raw, _ := json.Marshal(map[string]string{"message": ev.Message})
-		ev.Payload = string(raw)
+	if len(ev.Payload) == 0 && ev.Message != "" {
+		ev.Payload, _ = json.Marshal(map[string]string{"message": ev.Message})
 	}
 	stored, err := m.store.AddEvent(ctx, ev)
 	if err != nil {

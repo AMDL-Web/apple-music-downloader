@@ -18,9 +18,7 @@ func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Rep
 	item.OutputPath = outPath
 	// d.cfg is the job's effective config (runtime snapshot plus overrides),
 	// so overrides.force_overwrite already won over the global key here.
-	// job.Force keeps forcing for jobs persisted before the flag moved into
-	// the config/overrides.
-	force := d.cfg.Download.ForceOverwrite || job.Force
+	force := d.cfg.Download.ForceOverwrite
 	if fi, err := os.Stat(outPath); err == nil && !force {
 		cleanupResumeForKey(d.cfg.Download.TempDir, job.ID, outPath)
 		item.Status = domain.ItemSkipped
@@ -34,12 +32,12 @@ func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Rep
 		item.MaxAttempts = 0
 		item.StatusMessage = "File already exists; skipped"
 		_ = reporter.UpdateItem(ctx, item)
-		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "item_skipped", Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})})
+		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})})
 		return true, nil
 	}
 	if force {
 		cleanupFailedOutput(outPath)
-		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "item_overwrite", Message: "force overwrite enabled", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "force overwrite enabled"})})
+		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemOverwrite, Message: "force overwrite enabled", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "force overwrite enabled"})})
 	}
 	return false, nil
 }

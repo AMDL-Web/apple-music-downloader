@@ -31,10 +31,16 @@ func isUniqueConstraintErr(err error) bool {
 	return false
 }
 
+// Store is the SQLite-backed persistence for jobs, items, events and the
+// library-sync anchor. It is safe for concurrent use; the pool has one
+// connection, so statements run one at a time.
 type Store struct {
 	db *sql.DB
 }
 
+// Open opens (creating if needed) the database at path and applies every
+// pending schema migration (see migrations) before returning. Nothing
+// schema-shaped runs after that.
 func Open(path string) (*Store, error) {
 	database, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -53,8 +59,7 @@ func Open(path string) (*Store, error) {
 			return nil, fmt.Errorf("apply %s: %w", pragma, err)
 		}
 	}
-	s := &Store{db: database}
-	if err := s.initSchema(context.Background()); err != nil {
+	if err := migrate(context.Background(), database, latestSchemaVersion()); err != nil {
 		_ = database.Close()
 		return nil, err
 	}
@@ -70,7 +75,7 @@ func Open(path string) (*Store, error) {
 			}
 		}
 	}
-	return s, nil
+	return &Store{db: database}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }

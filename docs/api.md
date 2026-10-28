@@ -188,6 +188,14 @@ Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `storefro
 (`created_at` | `updated_at`), `order` (`asc` | `desc`). Multi-value parameters accept
 repeated keys or comma-separated values. The response adds `total`, `limit` and `offset`.
 
+Every job carries `total_items` (tracks the input resolved to) and four disjoint item
+counters, always present: `completed_items` (written by this job), `skipped_items`
+(already on disk), `failed_items` and `cancelled_items`. They are derived from the job's
+items on every read, so a running job's counters match its `items`. `started_at` is set
+the first time a worker starts the job and kept across restarts and retries;
+`finished_at` is set when the job reaches a terminal status and cleared by a retry. Both
+are RFC 3339 and absent until set. Forcing an overwrite is `overrides.force_overwrite`.
+
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/cancel
 ```
@@ -218,24 +226,31 @@ that prefer WS.
 pushes only the milestones that change how a job appears in the list, so a client can
 render the whole downloads page without subscribing to each job.
 
-In per-job streams, `payload` is a JSON **string** that needs a second parse. Job
-lifecycle events carry the same public snapshot fields as the REST `Job`; item events
-carry the same fields as the REST `JobItem`, plus event-only fields such as
-`download_attempts` and `will_retry`. So after one initial `GET`, a client can merge
-subsequent events directly — no re-fetch is needed on `item_completed`, `item_failed`,
-`item_skipped` or job-terminal events. `media_user_token` stays hidden here exactly as in
-every other response.
+Each event is `{id, job_id, item_id?, type, phase?, message?, payload?, created_at}`
+(the `Event` schema), and `payload` is a JSON object. Job lifecycle events carry the same
+public snapshot fields as the REST `Job`; item events carry the same fields as the REST
+`JobItem`, plus event-only fields such as `download_attempts` and `will_retry`. So after
+one initial `GET`, a client can merge subsequent events directly — no re-fetch is needed
+on `item_completed`, `item_failed`, `item_skipped` or job-terminal events.
+`media_user_token` stays hidden here exactly as in every other response.
 
-Event types you will see:
+Event types (the `EventType` enum in the spec; Go constants in `internal/domain`):
 
 | | |
 | --- | --- |
 | Job lifecycle | `job_queued`, `job_started`, `job_retried`, `job_recovered`, `job_finished`, `job_failed`, `job_cancelled`, `job_deleted` |
 | Resolution | `resolved_input`, `motion_artwork_resolved` |
 | Item progress | `item_progress` (its `phase` is the item status), `item_completed`, `item_failed`, `item_skipped`, `item_overwrite` |
-| Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `codec_retry`, `codec_exhausted`, `codec_recovered`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired` |
+| Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired` |
 | Hooks | `hook_started`, `hook_succeeded`, `hook_failed` |
 | Other | `standalone_cover_failed` |
+
+A retry inside a codec attempt is an `operation_*` event whose `phase` is the codec.
+`job_deleted` and `motion_artwork_resolved` have no payload. Only the list-level
+milestones reach the overview feed: the job lifecycle types, `resolved_input`,
+`motion_artwork_resolved`, `item_completed`, `item_skipped` and `item_failed`.
+`item_progress` events are kept while a job runs and deleted when it finishes; the
+item rows keep their final state.
 
 `download.progress_event_interval_ms` (default 500, range 0–10000) is the minimum gap
 between two `item_progress` events for the same item in the same state. It throttles only

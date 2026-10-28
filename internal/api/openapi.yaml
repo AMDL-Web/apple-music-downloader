@@ -694,7 +694,7 @@ paths:
         both are ways to read the same state. Each push is a DownloadFeedMessage:
         - download_upserted: a job was created or changed (queued, started,
           progress as each song finishes, terminal state); data.job is the job's
-          latest snapshot (done_items/failed_items computed from live progress);
+          latest snapshot (item counters derived from its items);
         - download_deleted: a job was deleted; data.job_id is the deleted job's id.
         Both message types carry status_counts, the latest status counts of all
         jobs at the moment the message was generated; in a delete message the
@@ -876,8 +876,8 @@ paths:
       summary: Subscribe to download job events
       description: |
         Server-Sent Events stream with Last-Event-ID resumption.
-        Each SSE data is Event JSON; its payload is itself a JSON string and must
-        be parsed a second time. The payload of job lifecycle events
+        Each SSE event is named after its EventType and its data is an Event
+        object, whose payload is a JSON object. The payload of job lifecycle events
         (job_queued/job_recovered/job_retried/job_started/resolved_input/job_finished/job_failed/job_cancelled)
         contains the same public fields as the REST `Job`; the payload of track
         status events contains the same public fields as the REST `JobItem` and
@@ -926,8 +926,7 @@ paths:
         URLSessionWebSocketTask).
         After a successful handshake the server pushes each event as one JSON text
         message whose content is identical to the SSE endpoint's data field (an
-        Event object; the payload field is itself a JSON string and must be parsed
-        a second time).
+        Event object).
         The payload conventions for Job/JobItem snapshot fields and event-specific
         fields are also identical to SSE.
         To resume after a disconnect, use the last_event_id query parameter to
@@ -1781,7 +1780,7 @@ components:
             $ref: '#/components/schemas/QualityTrack'
     Job:
       type: object
-      required: [id, input, type, force, status, total_items, done_items, failed_items, created_at, updated_at]
+      required: [id, input, type, status, total_items, completed_items, skipped_items, failed_items, cancelled_items, created_at, updated_at]
       properties:
         id:
           type: string
@@ -1946,8 +1945,6 @@ components:
         motion_artwork_tall_text_color4:
           type: string
           description: Quaternary text color paired with motion_artwork_tall_bg_color.
-        force:
-          type: boolean
         overrides:
           $ref: '#/components/schemas/DownloadOverrides'
           description: >-
@@ -1960,12 +1957,43 @@ components:
           enum: [queued, running, completed, failed, cancelled]
         total_items:
           type: integer
-        done_items:
+          minimum: 0
+          description: >-
+            Number of tracks the input resolved to; 0 until the input resolves.
+        completed_items:
           type: integer
+          minimum: 0
+          description: >-
+            Items this job wrote to disk (item status completed). The four item
+            counters are disjoint and derived from the job's items on every
+            read, so they always agree with the items of GET /downloads/{job_id}.
+        skipped_items:
+          type: integer
+          minimum: 0
+          description: Items whose output file already existed (item status skipped_existing).
         failed_items:
           type: integer
+          minimum: 0
+          description: Items that failed (item status failed).
+        cancelled_items:
+          type: integer
+          minimum: 0
+          description: Items that were cancelled (item status cancelled).
         error:
           type: string
+        started_at:
+          type: string
+          format: date-time
+          description: >-
+            When a worker first started the job; kept across recovery after a
+            restart and across retry. Absent until the job first starts (a job
+            cancelled while queued never has one).
+        finished_at:
+          type: string
+          format: date-time
+          description: >-
+            When the job reached its current terminal status. Absent while the
+            job is queued or running; a retry clears it.
         created_at:
           type: string
           format: date-time
@@ -2153,9 +2181,8 @@ components:
         downloads:
           type: array
           description: >-
-            Download jobs on the current page; each job's done_items/failed_items
-            are computed from the live progress of its job_items (rather than the
-            stored counts that are refreshed only at terminal states).
+            Download jobs on the current page; each job's item counters are
+            derived from its items at the time of the request.
           items:
             $ref: '#/components/schemas/Job'
         status_counts:
@@ -2259,6 +2286,84 @@ components:
             yet). Clients can use it as the resume point for events/ws (or SSE's
             Last-Event-ID) to skip the historical events already reflected in this
             response and receive only later incremental updates.
+    EventType:
+      type: string
+      description: >-
+        Type of a persisted job event, and the SSE event name on
+        GET /downloads/{job_id}/events. Retries inside a codec attempt are
+        operation_retry / operation_exhausted / operation_recovered with the codec
+        as phase. Only job_queued, job_recovered, job_retried, job_started,
+        resolved_input, motion_artwork_resolved, item_completed, item_skipped,
+        item_failed, job_finished, job_failed, job_cancelled and job_deleted
+        reach the overview feed. Clients should ignore types they do not know.
+      enum:
+        - job_queued
+        - job_started
+        - job_retried
+        - job_recovered
+        - job_finished
+        - job_failed
+        - job_cancelled
+        - job_deleted
+        - resolved_input
+        - motion_artwork_resolved
+        - standalone_cover_failed
+        - item_progress
+        - item_completed
+        - item_failed
+        - item_skipped
+        - item_overwrite
+        - codec_selected
+        - codec_fallback
+        - codec_failed
+        - alac_repaired
+        - operation_retry
+        - operation_exhausted
+        - operation_recovered
+        - hook_started
+        - hook_succeeded
+        - hook_failed
+    Event:
+      type: object
+      required: [id, job_id, type, created_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Resume cursor (SSE id); strictly increasing across all jobs.
+        job_id:
+          type: string
+        item_id:
+          type: string
+          description: Present on events about one item.
+        type:
+          $ref: '#/components/schemas/EventType'
+        phase:
+          type: string
+          description: >-
+            item_progress: the item status. codec_* and operation_* events: the
+            codec, or the operation (resolve_tracks, metadata, cover, lyrics,
+            download, decrypt) when no codec applies. hook_*: the hook name.
+            standalone_cover_failed for a playlist cover: playlist_cover.
+        message:
+          type: string
+          description: Human-readable summary; its wording may change between releases.
+        payload:
+          type: object
+          additionalProperties: true
+          description: >-
+            A JSON object, absent when the event has none. Job lifecycle events
+            and resolved_input: the public Job snapshot plus message. Events
+            with an item_id: the public JobItem snapshot plus event-specific
+            fields (for example attempts, will_retry, delay_ms, codec), except
+            alac_repaired, which carries only patched_packets. operation_*
+            without an item_id: operation, codec, attempt, max_attempts and the
+            retry fields. hook_*: hook plus attempt and duration_ms, or attempts.
+            Any other event with a message: {message}. job_deleted and
+            motion_artwork_resolved have none.
+        created_at:
+          type: string
+          format: date-time
     HookState:
       type: object
       required: [name, status]

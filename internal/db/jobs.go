@@ -26,25 +26,43 @@ func encodeOverrides(o *config.DownloadOverrides) (string, error) {
 	return string(raw), nil
 }
 
+// CreateJob inserts a new job row. Its item counters are not stored; reads
+// derive them from job_items. ErrDuplicateActive reports a canonical_key that
+// another queued or running job already holds.
 func (s *Store) CreateJob(ctx context.Context, job domain.Job) error {
 	overrides, err := encodeOverrides(job.Overrides)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO jobs(id,input,type,storefront,title,artwork_url,artist_name,artist_url,curator_name,release_date,genre,artwork_bg_color,artwork_text_color1,artwork_text_color2,artwork_text_color3,artwork_text_color4,canonical_key,force,overrides,status,total_items,done_items,failed_items,error,created_at,updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, job.ID, job.Input, job.Type, job.Storefront, job.Title, job.ArtworkURL, job.ArtistName, job.ArtistURL, job.CuratorName, job.ReleaseDate, job.Genre,
-		job.ArtworkBgColor, job.ArtworkTextColor1, job.ArtworkTextColor2, job.ArtworkTextColor3, job.ArtworkTextColor4, job.CanonicalKey, job.Force, overrides, string(job.Status), job.TotalItems,
-		job.DoneItems, job.FailedItems, job.Error, formatTime(job.CreatedAt), formatTime(job.UpdatedAt))
+	_, err = s.db.ExecContext(ctx, `INSERT INTO jobs(id,input,type,storefront,title,artwork_url,artist_name,artist_url,curator_name,release_date,genre,artwork_bg_color,artwork_text_color1,artwork_text_color2,artwork_text_color3,artwork_text_color4,canonical_key,overrides,status,total_items,error,started_at,finished_at,created_at,updated_at)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, job.ID, job.Input, job.Type, job.Storefront, job.Title, job.ArtworkURL, job.ArtistName, job.ArtistURL, job.CuratorName, job.ReleaseDate, job.Genre,
+		job.ArtworkBgColor, job.ArtworkTextColor1, job.ArtworkTextColor2, job.ArtworkTextColor3, job.ArtworkTextColor4, job.CanonicalKey, overrides, string(job.Status), job.TotalItems,
+		job.Error, formatOptionalTime(job.StartedAt), formatOptionalTime(job.FinishedAt), formatTime(job.CreatedAt), formatTime(job.UpdatedAt))
 	if err != nil && isUniqueConstraintErr(err) {
 		return ErrDuplicateActive
 	}
 	return err
 }
 
+// jobColumns is the select list of every query that feeds scanJob, over
+// "jobs j". The four item counters are derived from job_items here and nowhere
+// else, so every Job the store returns carries current counters.
+const jobColumns = `j.id, j.input, j.type, j.storefront, j.title, j.artwork_url, j.artist_name, j.artist_url, j.curator_name, j.release_date, j.genre,
+	j.artwork_bg_color, j.artwork_text_color1, j.artwork_text_color2, j.artwork_text_color3, j.artwork_text_color4,
+	j.motion_artwork_url, j.motion_artwork_tall_url,
+	j.motion_artwork_bg_color, j.motion_artwork_text_color1, j.motion_artwork_text_color2, j.motion_artwork_text_color3, j.motion_artwork_text_color4,
+	j.motion_artwork_tall_bg_color, j.motion_artwork_tall_text_color1, j.motion_artwork_tall_text_color2, j.motion_artwork_tall_text_color3, j.motion_artwork_tall_text_color4,
+	j.canonical_key, j.overrides, j.status, j.total_items,
+	(SELECT COUNT(*) FROM job_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemCompleted) + `'),
+	(SELECT COUNT(*) FROM job_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemSkipped) + `'),
+	(SELECT COUNT(*) FROM job_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemFailed) + `'),
+	(SELECT COUNT(*) FROM job_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemCancelled) + `'),
+	j.error, j.started_at, j.finished_at, j.created_at, j.updated_at`
+
 // FindActiveJobByKey returns the queued/running job matching canonicalKey, if any.
 func (s *Store) FindActiveJobByKey(ctx context.Context, canonicalKey string) (domain.Job, bool, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,input,type,storefront,title,artwork_url,artist_name,artist_url,curator_name,release_date,genre,artwork_bg_color,artwork_text_color1,artwork_text_color2,artwork_text_color3,artwork_text_color4,motion_artwork_url,motion_artwork_tall_url,motion_artwork_bg_color,motion_artwork_text_color1,motion_artwork_text_color2,motion_artwork_text_color3,motion_artwork_text_color4,motion_artwork_tall_bg_color,motion_artwork_tall_text_color1,motion_artwork_tall_text_color2,motion_artwork_tall_text_color3,motion_artwork_tall_text_color4,canonical_key,force,overrides,status,total_items,done_items,failed_items,error,created_at,updated_at
-		FROM jobs WHERE canonical_key=? AND status IN (?,?)`, canonicalKey, string(domain.JobQueued), string(domain.JobRunning))
+	row := s.db.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.canonical_key=? AND j.status IN (?,?)`,
+		canonicalKey, string(domain.JobQueued), string(domain.JobRunning))
 	job, err := scanJob(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -56,10 +74,10 @@ func (s *Store) FindActiveJobByKey(ctx context.Context, canonicalKey string) (do
 }
 
 func updateJob(ctx context.Context, x execer, job domain.Job) error {
-	_, err := x.ExecContext(ctx, `UPDATE jobs SET type=?, storefront=?, title=?, artwork_url=?, artist_name=?, artist_url=?, curator_name=?, release_date=?, genre=?, artwork_bg_color=?, artwork_text_color1=?, artwork_text_color2=?, artwork_text_color3=?, artwork_text_color4=?, force=?, status=?, total_items=?, done_items=?, failed_items=?, error=?, updated_at=? WHERE id=?`,
+	_, err := x.ExecContext(ctx, `UPDATE jobs SET type=?, storefront=?, title=?, artwork_url=?, artist_name=?, artist_url=?, curator_name=?, release_date=?, genre=?, artwork_bg_color=?, artwork_text_color1=?, artwork_text_color2=?, artwork_text_color3=?, artwork_text_color4=?, status=?, total_items=?, error=?, started_at=?, finished_at=?, updated_at=? WHERE id=?`,
 		job.Type, job.Storefront, job.Title, job.ArtworkURL, job.ArtistName, job.ArtistURL, job.CuratorName, job.ReleaseDate, job.Genre,
 		job.ArtworkBgColor, job.ArtworkTextColor1, job.ArtworkTextColor2, job.ArtworkTextColor3, job.ArtworkTextColor4,
-		job.Force, string(job.Status), job.TotalItems, job.DoneItems, job.FailedItems, job.Error, formatTime(job.UpdatedAt), job.ID)
+		string(job.Status), job.TotalItems, job.Error, formatOptionalTime(job.StartedAt), formatOptionalTime(job.FinishedAt), formatTime(job.UpdatedAt), job.ID)
 	return err
 }
 
@@ -72,29 +90,30 @@ func updateFinalJob(ctx context.Context, x execer, job domain.Job) error {
 	if err != nil {
 		return err
 	}
-	_, err = x.ExecContext(ctx, `UPDATE jobs SET type=?, storefront=?, title=?, artwork_url=?, artist_name=?, artist_url=?, curator_name=?, release_date=?, genre=?, artwork_bg_color=?, artwork_text_color1=?, artwork_text_color2=?, artwork_text_color3=?, artwork_text_color4=?, force=?, overrides=?, status=?, total_items=?, done_items=?, failed_items=?, error=?, updated_at=? WHERE id=?`,
+	_, err = x.ExecContext(ctx, `UPDATE jobs SET type=?, storefront=?, title=?, artwork_url=?, artist_name=?, artist_url=?, curator_name=?, release_date=?, genre=?, artwork_bg_color=?, artwork_text_color1=?, artwork_text_color2=?, artwork_text_color3=?, artwork_text_color4=?, overrides=?, status=?, total_items=?, error=?, started_at=?, finished_at=?, updated_at=? WHERE id=?`,
 		job.Type, job.Storefront, job.Title, job.ArtworkURL, job.ArtistName, job.ArtistURL, job.CuratorName, job.ReleaseDate, job.Genre,
 		job.ArtworkBgColor, job.ArtworkTextColor1, job.ArtworkTextColor2, job.ArtworkTextColor3, job.ArtworkTextColor4,
-		job.Force, overrides, string(job.Status), job.TotalItems, job.DoneItems, job.FailedItems, job.Error, formatTime(job.UpdatedAt), job.ID)
+		overrides, string(job.Status), job.TotalItems, job.Error, formatOptionalTime(job.StartedAt), formatOptionalTime(job.FinishedAt), formatTime(job.UpdatedAt), job.ID)
 	return err
 }
 
+// UpdateJob writes a job's mutable columns from job, including started_at and
+// finished_at. It leaves overrides and the animated-cover columns alone (see
+// FinalizeJob and SetJobMotionArtwork); the item counters are not stored.
 func (s *Store) UpdateJob(ctx context.Context, job domain.Job) error {
 	return updateJob(ctx, s.db, job)
 }
 
-// SetJobMotionArtwork writes only the animated-cover columns.
+// SetJobMotionArtwork writes only the animated-cover columns and reports
+// whether a row matched.
 //
-// Deliberately not folded into updateJob: the motion artwork is resolved
-// asynchronously, so the in-memory Job the downloader holds while a job runs
-// predates it. A generic UPDATE carrying that stale struct would blank the
-// columns right after this fills them. updated_at is left alone too — gaining an
-// animated cover is not job progress and should not reorder a list sorted by it.
-// SetJobMotionArtwork writes the animated-cover columns and reports whether a
-// row actually matched. The caller runs on a context detached from the job's,
-// so the job can be deleted between the lookup starting and this landing; an
-// UPDATE that matches nothing is not an error, but it must not be mistaken for
-// a successful write.
+// It is separate from UpdateJob because the motion artwork resolves
+// asynchronously: the Job a running pipeline holds predates it, and a generic
+// UPDATE carrying that stale struct would blank the columns right after this
+// fills them. updated_at is left alone too, because gaining an animated cover
+// is not job progress and should not reorder a list sorted by it. The caller
+// runs detached from the job's context, so the job can be deleted before this
+// lands; an UPDATE that matches nothing is not an error, but returns false.
 func (s *Store) SetJobMotionArtwork(ctx context.Context, id string, art domain.MotionArtwork) (bool, error) {
 	res, err := s.db.ExecContext(ctx, `UPDATE jobs SET
 		motion_artwork_url=?, motion_artwork_tall_url=?,
@@ -115,14 +134,9 @@ func (s *Store) SetJobMotionArtwork(ctx context.Context, id string, art domain.M
 	return affected > 0, nil
 }
 
-func (s *Store) UpdateJobStatus(ctx context.Context, id string, status domain.JobStatus, updatedAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE jobs SET status=?, updated_at=? WHERE id=?`, string(status), formatTime(updatedAt), id)
-	return err
-}
-
+// GetJob returns the job with id, or an error wrapping sql.ErrNoRows.
 func (s *Store) GetJob(ctx context.Context, id string) (domain.Job, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,input,type,storefront,title,artwork_url,artist_name,artist_url,curator_name,release_date,genre,artwork_bg_color,artwork_text_color1,artwork_text_color2,artwork_text_color3,artwork_text_color4,motion_artwork_url,motion_artwork_tall_url,motion_artwork_bg_color,motion_artwork_text_color1,motion_artwork_text_color2,motion_artwork_text_color3,motion_artwork_text_color4,motion_artwork_tall_bg_color,motion_artwork_tall_text_color1,motion_artwork_tall_text_color2,motion_artwork_tall_text_color3,motion_artwork_tall_text_color4,canonical_key,force,overrides,status,total_items,done_items,failed_items,error,created_at,updated_at FROM jobs WHERE id=?`, id)
-	return scanJob(row)
+	return scanJob(s.db.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.id=?`, id))
 }
 
 // JobListFilter controls GET /downloads listing: pagination, status/type/
@@ -240,10 +254,6 @@ func (s *Store) ListJobs(ctx context.Context, filter JobListFilter) ([]domain.Jo
 		return nil, 0, err
 	}
 
-	// done_items/failed_items are derived live from job_items instead of the
-	// stored jobs columns: the stored counters are only written back when a job
-	// finalizes, so running jobs (or jobs interrupted before finalize) would
-	// report stale counts. Status buckets must mirror domain.CountItemProgress.
 	orderCol := "j.created_at"
 	if filter.Sort == JobListSortUpdatedAt {
 		orderCol = "j.updated_at"
@@ -252,12 +262,8 @@ func (s *Store) ListJobs(ctx context.Context, filter JobListFilter) ([]domain.Jo
 	if filter.Order == JobListOrderAsc {
 		orderDir = "ASC"
 	}
-	listArgs := append([]any{string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemFailed)}, args...)
-	listArgs = append(listArgs, filter.Limit, filter.Offset)
-	rows, err := s.db.QueryContext(ctx, `SELECT j.id,j.input,j.type,j.storefront,j.title,j.artwork_url,j.artist_name,j.artist_url,j.curator_name,j.release_date,j.genre,j.artwork_bg_color,j.artwork_text_color1,j.artwork_text_color2,j.artwork_text_color3,j.artwork_text_color4,j.motion_artwork_url,j.motion_artwork_tall_url,j.motion_artwork_bg_color,j.motion_artwork_text_color1,j.motion_artwork_text_color2,j.motion_artwork_text_color3,j.motion_artwork_text_color4,j.motion_artwork_tall_bg_color,j.motion_artwork_tall_text_color1,j.motion_artwork_tall_text_color2,j.motion_artwork_tall_text_color3,j.motion_artwork_tall_text_color4,j.canonical_key,j.force,j.overrides,j.status,j.total_items,
-			(SELECT COUNT(*) FROM job_items i WHERE i.job_id=j.id AND i.status IN (?,?)) AS done_items,
-			(SELECT COUNT(*) FROM job_items i WHERE i.job_id=j.id AND i.status=?) AS failed_items,
-			j.error,j.created_at,j.updated_at FROM jobs j`+where+` ORDER BY `+orderCol+` `+orderDir+`, j.id `+orderDir+` LIMIT ? OFFSET ?`,
+	listArgs := append(args, filter.Limit, filter.Offset)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j`+where+` ORDER BY `+orderCol+` `+orderDir+`, j.id `+orderDir+` LIMIT ? OFFSET ?`,
 		listArgs...)
 	if err != nil {
 		return nil, 0, err
@@ -337,7 +343,7 @@ func (s *Store) DeleteJob(ctx context.Context, id string) (domain.Event, error) 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM jobs WHERE id=?`, id); err != nil {
 		return domain.Event{}, err
 	}
-	tombstone, err := addEvent(ctx, tx, domain.Event{JobID: id, Type: domain.EventDeleted})
+	tombstone, err := addEvent(ctx, tx, domain.Event{JobID: id, Type: domain.EventJobDeleted})
 	if err != nil {
 		return domain.Event{}, err
 	}
@@ -347,8 +353,10 @@ func (s *Store) DeleteJob(ctx context.Context, id string) (domain.Event, error) 
 	return tombstone, nil
 }
 
+// ListRecoverableJobs returns the queued and running jobs, oldest first: the
+// work a previous process left unfinished.
 func (s *Store) ListRecoverableJobs(ctx context.Context) ([]domain.Job, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,input,type,storefront,title,artwork_url,artist_name,artist_url,curator_name,release_date,genre,artwork_bg_color,artwork_text_color1,artwork_text_color2,artwork_text_color3,artwork_text_color4,motion_artwork_url,motion_artwork_tall_url,motion_artwork_bg_color,motion_artwork_text_color1,motion_artwork_text_color2,motion_artwork_text_color3,motion_artwork_text_color4,motion_artwork_tall_bg_color,motion_artwork_tall_text_color1,motion_artwork_tall_text_color2,motion_artwork_tall_text_color3,motion_artwork_tall_text_color4,canonical_key,force,overrides,status,total_items,done_items,failed_items,error,created_at,updated_at FROM jobs WHERE status IN (?,?) ORDER BY created_at ASC`,
+	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.status IN (?,?) ORDER BY j.created_at ASC`,
 		string(domain.JobQueued), string(domain.JobRunning))
 	if err != nil {
 		return nil, err
@@ -369,15 +377,19 @@ type jobScanner interface {
 	Scan(dest ...any) error
 }
 
+// scanJob reads one row selected with jobColumns.
 func scanJob(row jobScanner) (domain.Job, error) {
 	var job domain.Job
 	var overrides, status, created, updated string
+	var started, finished sql.NullString
 	err := row.Scan(&job.ID, &job.Input, &job.Type, &job.Storefront, &job.Title, &job.ArtworkURL, &job.ArtistName, &job.ArtistURL, &job.CuratorName, &job.ReleaseDate, &job.Genre,
 		&job.ArtworkBgColor, &job.ArtworkTextColor1, &job.ArtworkTextColor2, &job.ArtworkTextColor3, &job.ArtworkTextColor4,
 		&job.MotionArtworkURL, &job.MotionArtworkTallURL,
 		&job.MotionArtworkBgColor, &job.MotionArtworkTextColor1, &job.MotionArtworkTextColor2, &job.MotionArtworkTextColor3, &job.MotionArtworkTextColor4,
 		&job.MotionArtworkTallBgColor, &job.MotionArtworkTallTextColor1, &job.MotionArtworkTallTextColor2, &job.MotionArtworkTallTextColor3, &job.MotionArtworkTallTextColor4,
-		&job.CanonicalKey, &job.Force, &overrides, &status, &job.TotalItems, &job.DoneItems, &job.FailedItems, &job.Error, &created, &updated)
+		&job.CanonicalKey, &overrides, &status, &job.TotalItems,
+		&job.CompletedItems, &job.SkippedItems, &job.FailedItems, &job.CancelledItems,
+		&job.Error, &started, &finished, &created, &updated)
 	if err == nil && overrides != "" {
 		parsed := &config.DownloadOverrides{}
 		// A corrupt overrides column must fail loudly: silently dropping it
@@ -389,19 +401,18 @@ func scanJob(row jobScanner) (domain.Job, error) {
 		job.Overrides = parsed
 	}
 	job.Status = domain.JobStatus(status)
+	job.StartedAt = parseOptionalTime(started)
+	job.FinishedAt = parseOptionalTime(finished)
 	job.CreatedAt = parseTime(created)
 	job.UpdatedAt = parseTime(updated)
 	return job, err
 }
 
 // FinalizeJob persists a job's terminal status together with its terminal
-// domain event in a single transaction. A caller connection pool of size 1
-// (see Open) already serializes every query onto one connection, but wrapping
-// both writes in a transaction additionally guarantees no reader ever
-// observes the status as terminal without the corresponding event already
-// committed: previously the two writes landed as separate statements, so a
-// GetJob/ListEventsAfter pair issued between them could see a terminal status
-// with the terminal event still missing.
+// event in one transaction, so no reader observes a terminal status without
+// the terminal event already committed. The same transaction deletes the
+// job's item_progress events: they are live telemetry, and each item row keeps
+// its final state.
 func (s *Store) FinalizeJob(ctx context.Context, job domain.Job, event domain.Event) (domain.Event, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -411,6 +422,9 @@ func (s *Store) FinalizeJob(ctx context.Context, job domain.Job, event domain.Ev
 
 	if err := updateFinalJob(ctx, tx, job); err != nil {
 		return domain.Event{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM job_events WHERE job_id=? AND type=?`, job.ID, string(domain.EventItemProgress)); err != nil {
+		return domain.Event{}, fmt.Errorf("prune item_progress events of job %s: %w", job.ID, err)
 	}
 	stored, err := addEvent(ctx, tx, event)
 	if err != nil {

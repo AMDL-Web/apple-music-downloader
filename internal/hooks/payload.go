@@ -35,7 +35,9 @@ type ItemPayload struct {
 func jobPayload(job domain.Job) JobPayload {
 	return JobPayload{
 		ID: job.ID, Input: job.Input, Type: job.Type, Storefront: job.Storefront,
-		Status: string(job.Status), TotalItems: job.TotalItems, DoneItems: job.DoneItems,
+		Status: string(job.Status), TotalItems: job.TotalItems,
+		// done_items keeps its hook-contract meaning: completed plus skipped.
+		DoneItems:   job.CompletedItems + job.SkippedItems,
 		FailedItems: job.FailedItems, Error: job.Error,
 	}
 }

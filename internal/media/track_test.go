@@ -37,7 +37,7 @@ func TestProcessTrackEventsCarryRESTItemSnapshot(t *testing.T) {
 			continue
 		}
 		var snapshot domain.JobItem
-		if err := json.Unmarshal([]byte(ev.Payload), &snapshot); err != nil {
+		if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
 			t.Fatalf("decode %s payload: %v", ev.Type, err)
 		}
 		if snapshot.ID != item.ID || snapshot.ArtworkURL != item.ArtworkURL || !snapshot.CreatedAt.Equal(createdAt) || snapshot.UpdatedAt.IsZero() {

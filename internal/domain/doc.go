@@ -1,15 +1,17 @@
 // Package domain defines the job, item, event and submission types shared by
 // the API, job manager, media pipeline, hooks and SQLite store; it performs no
-// I/O. Main types: Job, JobItem, ItemProgress, Event, DownloadFeedMessage,
-// DownloadRequest, SubmitResult and LibraryAnchorEntry. Helpers:
-// MarshalEventPayload, SummarizeHooks, IsOverviewMilestone, CountItemProgress.
+// I/O. Main types: Job, JobItem, ItemProgress, Event and its EventType
+// constants, DownloadFeedMessage, DownloadRequest, SubmitResult and
+// LibraryAnchorEntry. Helpers: MarshalEventPayload, SummarizeHooks,
+// IsOverviewMilestone.
 //
-// Invariants: JSON tags and status string values are the /api/v1 wire
-// contract mirrored by internal/api/openapi.yaml, so renaming one breaks
-// clients. Job.MarshalJSON strips the media-user-token from Overrides, and
-// MarshalEventPayload marshals snapshots through it so event payloads carry the
-// same redaction. IsOverviewMilestone tests exactly PersistedOverviewMilestones
-// plus EventDeleted, the same set the store replays from a cursor; add overview
-// event types to that slice only. JobItem.Finished and CountItemProgress both
-// treat completed and skipped_existing items as done.
+// Invariants: JSON tags, status values and EventType values are the /api/v1
+// wire contract mirrored by internal/api/openapi.yaml, so renaming one breaks
+// clients. Every emitted event type is a constant listed in EventTypes.
+// Job.MarshalJSON strips the media-user-token from Overrides, and
+// MarshalEventPayload marshals snapshots through it so event payloads carry
+// the same redaction. Job's item counters are never stored: internal/db fills
+// them from job_items on every read. OverviewMilestones is the one list of
+// types the overview feed reacts to, live (IsOverviewMilestone) and on cursor
+// replay (the store's SQL filter).
 package domain

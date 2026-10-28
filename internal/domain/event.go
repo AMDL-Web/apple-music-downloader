@@ -5,52 +5,133 @@ import (
 	"time"
 )
 
-type Event struct {
-	ID        int64     `json:"id"`
-	JobID     string    `json:"job_id"`
-	ItemID    string    `json:"item_id,omitempty"`
-	Type      string    `json:"type"`
-	Phase     string    `json:"phase,omitempty"`
-	Message   string    `json:"message,omitempty"`
-	Payload   string    `json:"payload,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+// EventType names a persisted job event. The values are wire contract: the
+// type field of Event, the SSE event name on a per-job stream, the EventType
+// enum in internal/api/openapi.yaml, and, for job_queued and the three terminal
+// job types, the hook event names in hooks.yaml.
+type EventType string
+
+// Job lifecycle events. Their payload is the public Job snapshot plus
+// "message"; job_deleted has no payload.
+const (
+	EventJobQueued    EventType = "job_queued"
+	EventJobStarted   EventType = "job_started"
+	EventJobRetried   EventType = "job_retried"
+	EventJobRecovered EventType = "job_recovered"
+	EventJobFinished  EventType = "job_finished"
+	EventJobFailed    EventType = "job_failed"
+	EventJobCancelled EventType = "job_cancelled"
+	// EventJobDeleted is the tombstone Store.DeleteJob persists in the same
+	// transaction that removes the job and its other events, so the overview
+	// feed replays a deletion from a cursor like any other milestone.
+	EventJobDeleted EventType = "job_deleted"
+)
+
+// Input resolution events.
+const (
+	EventResolvedInput EventType = "resolved_input"
+	// EventMotionArtworkResolved carries no payload: the animated-cover fields
+	// reach clients through the next job snapshot.
+	EventMotionArtworkResolved EventType = "motion_artwork_resolved"
+	EventStandaloneCoverFailed EventType = "standalone_cover_failed"
+)
+
+// Item events. Their payload is the public JobItem snapshot plus event fields.
+const (
+	// EventItemProgress is the only high-frequency type; its phase is the item
+	// status. Store.FinalizeJob deletes a job's item_progress events when the
+	// job reaches a terminal status.
+	EventItemProgress  EventType = "item_progress"
+	EventItemCompleted EventType = "item_completed"
+	EventItemFailed    EventType = "item_failed"
+	EventItemSkipped   EventType = "item_skipped"
+	EventItemOverwrite EventType = "item_overwrite"
+)
+
+// Codec and retry events. phase is the codec, or the operation when no codec
+// applies; retries inside a codec attempt are operation_* with phase = codec.
+const (
+	EventCodecSelected      EventType = "codec_selected"
+	EventCodecFallback      EventType = "codec_fallback"
+	EventCodecFailed        EventType = "codec_failed"
+	EventALACRepaired       EventType = "alac_repaired"
+	EventOperationRetry     EventType = "operation_retry"
+	EventOperationExhausted EventType = "operation_exhausted"
+	EventOperationRecovered EventType = "operation_recovered"
+)
+
+// Hook events, recorded by the hook dispatcher; phase is the hook name.
+const (
+	EventHookStarted   EventType = "hook_started"
+	EventHookSucceeded EventType = "hook_succeeded"
+	EventHookFailed    EventType = "hook_failed"
+)
+
+// EventTypes is every event type the backend emits. The EventType enum in
+// internal/api/openapi.yaml and the Events section of docs/api.md list the
+// same set; a test in internal/api compares them.
+var EventTypes = []EventType{
+	EventJobQueued, EventJobStarted, EventJobRetried, EventJobRecovered,
+	EventJobFinished, EventJobFailed, EventJobCancelled, EventJobDeleted,
+	EventResolvedInput, EventMotionArtworkResolved, EventStandaloneCoverFailed,
+	EventItemProgress, EventItemCompleted, EventItemFailed, EventItemSkipped, EventItemOverwrite,
+	EventCodecSelected, EventCodecFallback, EventCodecFailed, EventALACRepaired,
+	EventOperationRetry, EventOperationExhausted, EventOperationRecovered,
+	EventHookStarted, EventHookSucceeded, EventHookFailed,
 }
 
-// MarshalEventPayload serializes a public API snapshot and overlays
-// event-specific fields on the resulting JSON object. Event payloads use this
-// helper so a Job/JobItem snapshot stays aligned with the REST representation
-// as fields are added, while existing event-specific keys remain available to
-// clients. Custom MarshalJSON implementations (notably Job's credential
-// redaction) are honored before the overlay is applied.
-func MarshalEventPayload(snapshot any, fields map[string]any) string {
+// HookEventTypes are the events the hook dispatcher records for one hook
+// execution. Store.ListHookEvents filters on exactly this set and
+// SummarizeHooks folds it.
+var HookEventTypes = []EventType{EventHookStarted, EventHookSucceeded, EventHookFailed}
+
+// Event is one persisted job event. ID is the stream resume cursor and only
+// ever increases.
+type Event struct {
+	ID     int64     `json:"id"`
+	JobID  string    `json:"job_id"`
+	ItemID string    `json:"item_id,omitempty"`
+	Type   EventType `json:"type"`
+	Phase  string    `json:"phase,omitempty"`
+	// Message is a human-readable summary and may change between releases.
+	Message string `json:"message,omitempty"`
+	// Payload is a JSON object (stored as TEXT); nil when the event has none.
+	Payload   json.RawMessage `json:"payload,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+// MarshalEventPayload serializes a public API snapshot (Job or JobItem) and
+// overlays event-specific fields on the resulting JSON object, so an event's
+// payload carries the same fields as the REST representation of that
+// snapshot. Custom MarshalJSON implementations are honored first, which is how
+// Job's media-user-token redaction reaches event payloads. It returns nil when
+// the snapshot or a field cannot be encoded as a JSON object.
+func MarshalEventPayload(snapshot any, fields map[string]any) json.RawMessage {
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
-		return ""
+		return nil
 	}
 	payload := make(map[string]json.RawMessage)
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return ""
+		return nil
 	}
 	for key, value := range fields {
 		encoded, err := json.Marshal(value)
 		if err != nil {
-			return ""
+			return nil
 		}
 		payload[key] = encoded
 	}
 	raw, err = json.Marshal(payload)
 	if err != nil {
-		return ""
+		return nil
 	}
-	return string(raw)
+	return raw
 }
 
 // HookState is the snapshot-shaped view of one post-download hook's latest
-// known status, derived from the hook_started/hook_succeeded/hook_failed
-// events the dispatcher records. It exists so GET /downloads/{id} conveys
-// the same information the SSE/WS event stream pushes incrementally — the
-// snapshot and the stream are two access modes of one state, and a client
-// that never subscribes must not be blind to hook outcomes.
+// known status, derived from the hook events the dispatcher records, so
+// GET /downloads/{id} conveys what the event stream pushes incrementally.
 type HookState struct {
 	Name   string `json:"name"`
 	Status string `json:"status"` // running | succeeded | failed | interrupted
@@ -68,7 +149,7 @@ func SummarizeHooks(events []Event, stillRunning bool) []HookState {
 	latest := map[string]Event{}
 	for _, ev := range events {
 		switch ev.Type {
-		case "hook_started", "hook_succeeded", "hook_failed":
+		case EventHookStarted, EventHookSucceeded, EventHookFailed:
 		default:
 			continue
 		}
@@ -82,9 +163,9 @@ func SummarizeHooks(events []Event, stillRunning bool) []HookState {
 		ev := latest[name]
 		state := HookState{Name: name}
 		switch ev.Type {
-		case "hook_succeeded":
+		case EventHookSucceeded:
 			state.Status = "succeeded"
-		case "hook_failed":
+		case EventHookFailed:
 			state.Status = "failed"
 			state.Error = ev.Message
 		default: // hook_started
@@ -99,66 +180,53 @@ func SummarizeHooks(events []Event, stillRunning bool) []HookState {
 	return out
 }
 
-// EventDeleted is the tombstone event the manager records and broadcasts when a
-// job is deleted. DeleteJob removes the job row and its old per-job events, then
-// persists this global event so the overview feed can replay deletions from a
-// snapshot cursor even if a client misses the live broadcast.
-const EventDeleted = "job_deleted"
-
-// PersistedOverviewMilestones are the persisted event types that change how a
-// job appears in the GET /downloads list — its status, resolved
-// title/total_items, done/failed progress counters, or the artwork it is drawn
-// with. The overview feed reacts only to these (plus the unpersisted
-// EventDeleted) and ignores the higher-frequency per-item detail events
-// (item_progress, codec_selected, retries, …) that don't alter the list-level
-// view.
+// OverviewMilestones are the event types that change how a job appears in the
+// GET /downloads list: its existence, status, resolved title and total_items,
+// item counters, or the artwork it is drawn with. The overview feed wakes on
+// and replays only these, never the per-item detail events (item_progress,
+// codec_selected, retries, ...). Store.ListMilestoneEventsAfterLimit builds its
+// SQL filter from this slice and IsOverviewMilestone tests the same set.
 //
-// This is the single source of truth for non-deletion overview milestones: the
-// DB query that replays a cursor appends EventDeleted to this slice, and
-// IsOverviewMilestone tests against the same combined set, so the two can never
-// drift.
-var PersistedOverviewMilestones = []string{
-	"job_queued",
-	"job_recovered",
-	"job_retried",
-	"job_started",
-	"resolved_input", // title/total_items are populated by now
-	// The animated cover lands out of band, routinely after the job is already
-	// terminal and its per-job stream has closed as exhausted. Without this the
-	// fields would only ever appear to a client that happened to poll: the
-	// overview feed would neither wake nor replay them from a cursor.
-	"motion_artwork_resolved",
-	"item_completed",
-	"item_skipped",
-	"item_failed",
-	"job_finished",
-	"job_failed",
-	"job_cancelled",
+// motion_artwork_resolved is here because the animated cover routinely lands
+// after the job is terminal and its per-job stream has closed; the overview
+// feed is then the only channel that can announce it.
+var OverviewMilestones = []EventType{
+	EventJobQueued,
+	EventJobRecovered,
+	EventJobRetried,
+	EventJobStarted,
+	EventResolvedInput,
+	EventMotionArtworkResolved,
+	EventItemCompleted,
+	EventItemSkipped,
+	EventItemFailed,
+	EventJobFinished,
+	EventJobFailed,
+	EventJobCancelled,
+	EventJobDeleted,
 }
 
-// overviewMilestones is the set membership form of PersistedOverviewMilestones
-// plus EventDeleted, for O(1) live-event filtering.
-var overviewMilestones = func() map[string]struct{} {
-	m := map[string]struct{}{EventDeleted: {}}
-	for _, t := range PersistedOverviewMilestones {
+var overviewMilestones = func() map[EventType]struct{} {
+	m := make(map[EventType]struct{}, len(OverviewMilestones))
+	for _, t := range OverviewMilestones {
 		m[t] = struct{}{}
 	}
 	return m
 }()
 
-// IsOverviewMilestone reports whether an event of this type should wake the
-// GET /downloads overview feed. Used to decide which live events reach
-// overview subscribers at all.
-func IsOverviewMilestone(eventType string) bool {
+// IsOverviewMilestone reports whether an event of this type is one of
+// OverviewMilestones, i.e. whether it should wake the GET /downloads overview
+// feed.
+func IsOverviewMilestone(eventType EventType) bool {
 	_, ok := overviewMilestones[eventType]
 	return ok
 }
 
-// DownloadFeedMessage is one push on the overview (GET /downloads) SSE/WS
-// feed. Type is download_upserted (Job carries the affected job's latest
-// snapshot, with live-derived progress counters) or download_deleted (only
-// JobID is set). StatusCounts is the current global summary after the change.
-// EventID is the persisted-event cursor a client hands back to resume.
+// DownloadFeedMessage is one push on the overview (GET /downloads) feed. Type
+// is download_upserted (Job carries the affected job's latest snapshot) or
+// download_deleted (only JobID is set). StatusCounts is the current global
+// summary after the change. EventID is the persisted-event cursor a client
+// hands back to resume.
 type DownloadFeedMessage struct {
 	Type         string          `json:"type"`
 	Job          *Job            `json:"job,omitempty"`

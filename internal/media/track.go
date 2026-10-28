@@ -153,7 +153,7 @@ func (d *Downloader) processTrackWithMetadata(ctx context.Context, job domain.Jo
 		if coverErr := d.saveStandaloneCovers(ctx, song, collectionType, storefront, albumCoverDir, artistCoverDir); coverErr != nil {
 			item.StatusMessage = "Standalone cover save failed; continuing download: " + coverErr.Error()
 			_ = reporter.UpdateItem(ctx, &item)
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "standalone_cover_failed", Message: coverErr.Error(), Payload: domain.MarshalEventPayload(item, map[string]any{"message": coverErr.Error()})})
+			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventStandaloneCoverFailed, Message: coverErr.Error(), Payload: domain.MarshalEventPayload(item, map[string]any{"message": coverErr.Error()})})
 		}
 	}
 	var cover []byte
@@ -256,7 +256,7 @@ func (d *Downloader) processTrackWithMetadata(ctx context.Context, job domain.Jo
 		if codecIndex > 0 {
 			item.StatusMessage = fmt.Sprintf("Codec %s failed; falling back to %s", strings.ToUpper(codecs[codecIndex-1]), strings.ToUpper(codec))
 			_ = reporter.UpdateItem(ctx, &item)
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "codec_fallback", Phase: codec, Message: item.StatusMessage, Payload: domain.MarshalEventPayload(item, map[string]any{
+			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventCodecFallback, Phase: codec, Message: item.StatusMessage, Payload: domain.MarshalEventPayload(item, map[string]any{
 				"from_codec": codecs[codecIndex-1], "to_codec": codec, "reason": codecFailureReason(lastErr),
 			})})
 		}
@@ -389,7 +389,7 @@ func (d *Downloader) processTrackWithMetadata(ctx context.Context, job domain.Jo
 			item.StatusMessage = fmt.Sprintf("%s download completed", codecName)
 		}
 		_ = reporter.UpdateItem(ctx, &item)
-		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "item_completed", Message: item.StatusMessage, Payload: domain.MarshalEventPayload(item, map[string]any{
+		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemCompleted, Message: item.StatusMessage, Payload: domain.MarshalEventPayload(item, map[string]any{
 			"codec": codec, "download_attempts": fetchAttempts, "decrypt_attempts": decryptAttempts,
 			"max_attempts": clampAttempts(codecMaxAttempts), "fallback_from": fallbackCodec(codecs, codecIndex),
 		})})

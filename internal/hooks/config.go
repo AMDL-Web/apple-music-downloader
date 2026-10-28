@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"amdl/internal/domain"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -116,11 +118,13 @@ func LoadConfig(path string) (Config, error) {
 	return cfg, nil
 }
 
+// allowedEvents are the hook event names, which are the event types of the
+// job lifecycle events that trigger them.
 var allowedEvents = map[string]struct{}{
-	"job_queued":    {},
-	"job_finished":  {},
-	"job_failed":    {},
-	"job_cancelled": {},
+	string(domain.EventJobQueued):    {},
+	string(domain.EventJobFinished):  {},
+	string(domain.EventJobFailed):    {},
+	string(domain.EventJobCancelled): {},
 }
 
 var allowedJobTypes = map[string]struct{}{
@@ -151,7 +155,7 @@ func (c Config) validate() error {
 			if _, ok := allowedEvents[ev]; !ok {
 				return fmt.Errorf("%s: unsupported event %q, must be one of %s", label, ev, strings.Join(sortedKeys(allowedEvents), ", "))
 			}
-			if ev == "job_queued" {
+			if ev == string(domain.EventJobQueued) {
 				hasCreation = true
 			} else {
 				hasTerminal = true

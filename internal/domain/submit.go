@@ -10,9 +10,9 @@ type DownloadRequest struct {
 	// job created from this request. Omitted fields keep the runtime values;
 	// media_user_token overlays catalog.media_user_token for jobs that need
 	// it, force_overwrite overlays download.force_overwrite, and hooks limits
-	// hook dispatch to named configured entries. The former request-level
-	// `force` field moved into overrides.force_overwrite and is now rejected as
-	// an unknown field.
+	// hook dispatch to named configured entries. A request-level `force`
+	// field is rejected as an unknown field; forcing is
+	// overrides.force_overwrite.
 	Overrides *config.DownloadOverrides `json:"overrides,omitempty"`
 }
 

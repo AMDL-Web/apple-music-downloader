@@ -42,7 +42,8 @@ func TestRecoverUnfinishedRequeuesQueuedAndRunningJobs(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	queued := domain.Job{ID: "job-queued", Input: "https://music.apple.com/cn/song/queued/1", Type: "song", Storefront: "cn", CanonicalKey: "song:cn:1", Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now}
-	running := domain.Job{ID: "job-running", Input: "https://music.apple.com/cn/song/running/2", Type: "song", Storefront: "cn", CanonicalKey: "song:cn:2", Status: domain.JobRunning, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second)}
+	startedAt := now.Add(time.Second)
+	running := domain.Job{ID: "job-running", Input: "https://music.apple.com/cn/song/running/2", Type: "song", Storefront: "cn", CanonicalKey: "song:cn:2", Status: domain.JobRunning, StartedAt: &startedAt, CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second)}
 	completed := domain.Job{ID: "job-completed", Input: "https://music.apple.com/cn/song/completed/3", Type: "song", Storefront: "cn", CanonicalKey: "song:cn:3", Status: domain.JobCompleted, CreatedAt: now.Add(2 * time.Second), UpdatedAt: now.Add(2 * time.Second)}
 	for _, job := range []domain.Job{queued, running, completed} {
 		if err := store.CreateJob(ctx, job); err != nil {
@@ -66,6 +67,9 @@ func TestRecoverUnfinishedRequeuesQueuedAndRunningJobs(t *testing.T) {
 	if gotRunning.Status != domain.JobQueued {
 		t.Fatalf("running job status = %s, want %s", gotRunning.Status, domain.JobQueued)
 	}
+	if gotRunning.StartedAt == nil || !gotRunning.StartedAt.Equal(startedAt) || gotRunning.FinishedAt != nil {
+		t.Fatalf("recovered job timing = started %v finished %v, want started_at kept at %v", gotRunning.StartedAt, gotRunning.FinishedAt, startedAt)
+	}
 	gotCompleted, err := store.GetJob(ctx, completed.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +86,7 @@ func TestRecoverUnfinishedRequeuesQueuedAndRunningJobs(t *testing.T) {
 	if first, second := recoveryQueue[0], recoveryQueue[1]; first != queued.ID || second != running.ID {
 		t.Fatalf("queued ids = [%s, %s], want [%s, %s]", first, second, queued.ID, running.ID)
 	}
-	events, err := store.ListEventsAfter(ctx, running.ID, 0)
+	events, err := store.ListEventsAfterLimit(ctx, running.ID, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

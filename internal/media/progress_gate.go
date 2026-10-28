@@ -12,7 +12,7 @@ import (
 // eventItemProgress is the one high-frequency event type: the per-item
 // download/decrypt meter feed. Every other item event is a one-shot pipeline
 // milestone.
-const eventItemProgress = "item_progress"
+const eventItemProgress = domain.EventItemProgress
 
 // progressGate coalesces one item's item_progress feed down to at most one
 // event per download.progress_event_interval_ms.

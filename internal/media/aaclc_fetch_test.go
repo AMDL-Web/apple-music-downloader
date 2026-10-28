@@ -78,14 +78,14 @@ func TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot(t *testing.T) {
 		}
 		found = true
 		var snapshot domain.JobItem
-		if err := json.Unmarshal([]byte(ev.Payload), &snapshot); err != nil {
+		if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
 			t.Fatalf("decode codec_selected payload: %v", err)
 		}
 		if snapshot.ID != item.ID || snapshot.ArtworkURL != item.ArtworkURL || !snapshot.CreatedAt.Equal(createdAt) {
 			t.Fatalf("codec_selected snapshot = %+v, want REST item identity/artwork/timestamps", snapshot)
 		}
 		var raw map[string]any
-		if err := json.Unmarshal([]byte(ev.Payload), &raw); err != nil {
+		if err := json.Unmarshal(ev.Payload, &raw); err != nil {
 			t.Fatalf("decode codec_selected payload as map: %v", err)
 		}
 		if raw["codec_id"] != "aac-lc" || raw["attempt"] != float64(2) || raw["max_attempts"] != float64(5) {

@@ -75,7 +75,7 @@ func (d *Downloader) startMotionArtworkBackfill(ctx context.Context, jobID strin
 		}
 		_ = reporter.Event(detached, domain.Event{
 			JobID: jobID,
-			Type:  "motion_artwork_resolved",
+			Type:  domain.EventMotionArtworkResolved,
 			Phase: "motion_artwork",
 		})
 	}()

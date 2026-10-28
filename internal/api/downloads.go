@@ -91,8 +91,6 @@ func (s *Server) listDownloads(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	// ListJobs already derives done_items/failed_items from live job_items,
-	// matching getDownload and the overview feed's pushed snapshots.
 	jobs, total, err := s.store.ListJobs(r.Context(), filter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -121,21 +119,15 @@ func makeJobStatusCounts(counts map[domain.JobStatus]int, total int) domain.JobS
 	}
 }
 
-// jobSnapshot returns a job with progress counters derived from its live
-// items, the same shape the GET /downloads list and getDownload return. A
-// sql.ErrNoRows error means the job no longer exists (e.g. deleted between a
-// milestone event and this read); the overview feed treats any other error as
-// transient and retries.
+// jobSnapshot returns a job as the GET /downloads list and getDownload return
+// it; the store fills its item counters. A sql.ErrNoRows error means the job
+// no longer exists (e.g. deleted between a milestone event and this read); the
+// overview feed treats any other error as transient and retries.
 func (s *Server) jobSnapshot(ctx context.Context, id string) (*domain.Job, error) {
 	job, err := s.store.GetJob(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	items, err := s.store.ListItems(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	job.DoneItems, job.FailedItems = domain.CountItemProgress(items)
 	return &job, nil
 }
 
@@ -200,11 +192,6 @@ func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Derive the progress counters from the live item list rather than trusting
-	// the job row's stored counters, which are only refreshed when the job
-	// reaches a terminal status. Without this a running job reports done_items=0
-	// while the items array already shows completed items in the same response.
-	job.DoneItems, job.FailedItems = domain.CountItemProgress(items)
 	// The snapshot and the SSE/WS stream are two access modes of one state, so
 	// hook outcomes — which the stream pushes as hook_* events — must be
 	// visible here too, derived from those same persisted events.

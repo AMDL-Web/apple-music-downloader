@@ -183,7 +183,7 @@ func (d *Dispatcher) execute(entry Entry, payload Payload) {
 	ctx := context.Background()
 	logger := d.logger.With("job_id", payload.Job.ID, "hook", entry.Name, "hook_event", payload.Event)
 
-	d.record(ctx, entry, payload.Job.ID, "hook_started", "", nil)
+	d.record(ctx, entry, payload.Job.ID, domain.EventHookStarted, "", nil)
 	logger.Debug("hook execution started")
 
 	// max_attempts counts total attempts including the first; 0 (unset)
@@ -200,7 +200,7 @@ func (d *Dispatcher) execute(entry Entry, payload Payload) {
 		duration := time.Since(start)
 		cancel()
 		if err == nil {
-			d.record(ctx, entry, payload.Job.ID, "hook_succeeded", "", map[string]any{
+			d.record(ctx, entry, payload.Job.ID, domain.EventHookSucceeded, "", map[string]any{
 				"attempt": attempt, "duration_ms": duration.Milliseconds(),
 			})
 			logger.Info("hook execution succeeded", "attempt", attempt, "duration_ms", duration.Milliseconds())
@@ -212,7 +212,7 @@ func (d *Dispatcher) execute(entry Entry, payload Payload) {
 			time.Sleep(time.Second)
 		}
 	}
-	d.record(ctx, entry, payload.Job.ID, "hook_failed", lastErr.Error(), map[string]any{"attempts": attempts})
+	d.record(ctx, entry, payload.Job.ID, domain.EventHookFailed, lastErr.Error(), map[string]any{"attempts": attempts})
 }
 
 // donePending runs after this execution's terminal hook_succeeded/hook_failed
@@ -228,7 +228,7 @@ func (d *Dispatcher) donePending(jobID string) {
 	}
 }
 
-func (d *Dispatcher) record(ctx context.Context, entry Entry, jobID, eventType, message string, extra map[string]any) {
+func (d *Dispatcher) record(ctx context.Context, entry Entry, jobID string, eventType domain.EventType, message string, extra map[string]any) {
 	if d.recorder == nil {
 		return
 	}
@@ -238,7 +238,7 @@ func (d *Dispatcher) record(ctx context.Context, entry Entry, jobID, eventType, 
 	}
 	raw, _ := json.Marshal(fields)
 	_ = d.recorder(ctx, domain.Event{
-		JobID: jobID, Type: eventType, Phase: entry.Name, Message: message, Payload: string(raw),
+		JobID: jobID, Type: eventType, Phase: entry.Name, Message: message, Payload: raw,
 	})
 }
 

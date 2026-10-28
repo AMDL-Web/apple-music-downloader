@@ -24,7 +24,7 @@ func (d *Downloader) reportCodecFailed(ctx context.Context, reporter jobs.Report
 	logging.FromContext(ctx, d.logger).Warn("codec attempt failed",
 		"item_id", item.ID, "adam_id", item.AdamID, "title", item.Title,
 		"codec", codec, "phase", phase, "attempts", attempts, "max_attempts", attemptMaximum, "error", err)
-	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "codec_failed", Phase: codec, Message: err.Error(), Payload: domain.MarshalEventPayload(item, map[string]any{
+	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventCodecFailed, Phase: codec, Message: err.Error(), Payload: domain.MarshalEventPayload(item, map[string]any{
 		"codec": codec, "phase": phase, "attempts": attempts, "max_attempts": attemptMaximum, "error": err.Error(),
 	})})
 }
@@ -60,16 +60,13 @@ func (d *Downloader) setRetryFailure(ctx context.Context, reporter jobs.Reporter
 	_ = reporter.UpdateItem(ctx, item)
 }
 
+// emitRetryEvent records one failed attempt of operation: operation_retry when
+// another attempt follows, operation_exhausted when none does. Retries inside
+// a codec attempt carry the codec as phase.
 func (d *Downloader) emitRetryEvent(ctx context.Context, reporter jobs.Reporter, jobID string, item *domain.JobItem, operation, codec string, failure retryFailure) {
-	eventType := "operation_exhausted"
-	if operation == "codec" {
-		eventType = "codec_exhausted"
-	}
+	eventType := domain.EventOperationExhausted
 	if failure.WillRetry {
-		eventType = "operation_retry"
-		if operation == "codec" {
-			eventType = "codec_retry"
-		}
+		eventType = domain.EventOperationRetry
 	}
 	message := fmt.Sprintf("%s attempt %d/%d failed: %v", operation, failure.Attempt, failure.MaxAttempts, failure.Err)
 	fields := map[string]any{
@@ -86,10 +83,6 @@ func (d *Downloader) emitRetryEvent(ctx context.Context, reporter jobs.Reporter,
 }
 
 func (d *Downloader) emitRecoveredEvent(ctx context.Context, reporter jobs.Reporter, jobID string, item *domain.JobItem, operation, codec string, attempt int) {
-	eventType := "operation_recovered"
-	if operation == "codec" {
-		eventType = "codec_recovered"
-	}
 	fields := map[string]any{"operation": operation, "codec": codec, "attempt": attempt}
 	payload := marshalPayload(fields)
 	itemID := ""
@@ -97,12 +90,12 @@ func (d *Downloader) emitRecoveredEvent(ctx context.Context, reporter jobs.Repor
 		itemID = item.ID
 		payload = domain.MarshalEventPayload(*item, fields)
 	}
-	_ = reporter.Event(ctx, domain.Event{JobID: jobID, ItemID: itemID, Type: eventType, Phase: firstNonEmpty(codec, operation), Message: fmt.Sprintf("%s succeeded on attempt %d", operation, attempt), Payload: payload})
+	_ = reporter.Event(ctx, domain.Event{JobID: jobID, ItemID: itemID, Type: domain.EventOperationRecovered, Phase: firstNonEmpty(codec, operation), Message: fmt.Sprintf("%s succeeded on attempt %d", operation, attempt), Payload: payload})
 }
 
-func marshalPayload(value any) string {
+func marshalPayload(value any) json.RawMessage {
 	raw, _ := json.Marshal(value)
-	return string(raw)
+	return raw
 }
 
 func (d *Downloader) failItem(ctx context.Context, reporter jobs.Reporter, job domain.Job, item domain.JobItem, err error) error {
@@ -112,6 +105,6 @@ func (d *Downloader) failItem(ctx context.Context, reporter jobs.Reporter, job d
 		item.StatusMessage = "Download failed: " + err.Error()
 	}
 	_ = reporter.UpdateItem(ctx, &item)
-	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: "item_failed", Message: err.Error(), Payload: domain.MarshalEventPayload(item, map[string]any{"message": err.Error()})})
+	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemFailed, Message: err.Error(), Payload: domain.MarshalEventPayload(item, map[string]any{"message": err.Error()})})
 	return err
 }

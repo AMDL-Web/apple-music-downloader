@@ -10,8 +10,8 @@ import (
 	"amdl/internal/config"
 	"amdl/internal/db"
 	"amdl/internal/domain"
+	"amdl/internal/ids"
 	"amdl/internal/logging"
-	"amdl/internal/storage"
 )
 
 var ErrQueueFull = errors.New("job queue is full")
@@ -108,7 +108,7 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 			jobOverrides = overrides.WithoutMediaUserToken()
 		}
 		job := domain.Job{
-			ID: storage.NewID("job"), Input: c.url, Type: c.valid.Type, Storefront: c.valid.Storefront, CanonicalKey: c.key,
+			ID: ids.NewID("job"), Input: c.url, Type: c.valid.Type, Storefront: c.valid.Storefront, CanonicalKey: c.key,
 			Overrides: jobOverrides, Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := m.store.CreateJob(ctx, job); err != nil {
@@ -120,7 +120,7 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 			continue
 		}
 		message := "job queued"
-		_ = m.Event(ctx, domain.Event{JobID: job.ID, Type: "job_queued", Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})})
+		_ = m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobQueued, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})})
 		// Fire creation hooks before enqueuing, so the job_queued hook is
 		// dispatched before a worker can claim the job and reach a terminal
 		// hook. The hook event name matches the job_queued domain event emitted
@@ -130,7 +130,7 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 		// holding submitMu is safe. Ordering between the job_queued hook and a
 		// later terminal hook is best-effort only: both are independent async
 		// deliveries, so a fast job's terminal webhook may still arrive first.
-		m.hooks.Dispatch("job_queued", job, nil)
+		m.hooks.Dispatch(string(domain.EventJobQueued), job, nil)
 		m.queue <- job.ID
 		logging.FromContext(ctx, m.logger).Info("job queued", "job_id", job.ID, "job_type", job.Type, "storefront", job.Storefront)
 		accepted := job
@@ -208,6 +208,7 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 
 	job.Status = domain.JobQueued
 	job.Error = ""
+	job.FinishedAt = nil
 	job.UpdatedAt = now
 	if err := m.store.UpdateJob(ctx, job); err != nil {
 		return err
@@ -218,7 +219,7 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	// until a restart's RecoverUnfinished. Mirrors SubmitBatch, which also
 	// treats the job_queued event as best-effort once the row is committed.
 	message := "job re-queued to retry failed tracks"
-	if err := m.Event(ctx, domain.Event{JobID: jobID, Type: "job_retried", Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
+	if err := m.Event(ctx, domain.Event{JobID: jobID, Type: domain.EventJobRetried, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
 		m.logger.Error("record job_retried event", "job_id", jobID, "error", err)
 	}
 	m.queue <- jobID

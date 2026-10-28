@@ -8,10 +8,10 @@ import (
 
 	"amdl/internal/applemusic"
 	"amdl/internal/domain"
+	"amdl/internal/ids"
 	"amdl/internal/jobs"
 	"amdl/internal/limits"
 	"amdl/internal/logging"
-	"amdl/internal/storage"
 )
 
 func (d *Downloader) ProcessJob(ctx context.Context, job domain.Job, reporter jobs.Reporter) error {
@@ -130,13 +130,13 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 	if (parsed.Type == applemusic.TypePlaylist || parsed.Type == applemusic.TypeStation) && d.cfg.Download.SavePlaylistCover && len(tracks) > 0 && !d.cfg.Simulate.Enabled {
 		folder := collectionFolderPath(d.cfg, tracks[0], parsed.Type, collectionName, collectionID)
 		if coverErr := d.savePlaylistCover(ctx, resolved.ArtworkURL, folder); coverErr != nil {
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, Type: "standalone_cover_failed", Phase: "playlist_cover", Message: coverErr.Error()})
+			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventStandaloneCoverFailed, Phase: "playlist_cover", Message: coverErr.Error()})
 		}
 	}
 	// Emit after title/total_items/artwork are persisted so the overview feed
 	// can push a download_upserted with the real name (not just the URL).
 	message := string(parsed.Type)
-	if err := reporter.Event(ctx, domain.Event{JobID: job.ID, Type: "resolved_input", Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
+	if err := reporter.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventResolvedInput, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
 		return err
 	}
 	if len(tracks) == 0 {
@@ -253,7 +253,7 @@ func syncJobItems(ctx context.Context, job domain.Job, tracks []applemusic.Song,
 			continue
 		}
 		items[i] = domain.JobItem{
-			ID: storage.NewID("item"), JobID: job.ID, AdamID: track.ID, Kind: "song", Index: i + 1,
+			ID: ids.NewID("item"), JobID: job.ID, AdamID: track.ID, Kind: "song", Index: i + 1,
 			Title: track.Name, Artist: track.ArtistName, Album: track.AlbumName, DurationMS: track.DurationInMillis,
 			ArtworkURL: firstNonEmpty(track.ArtworkURL, track.AlbumArtworkURL), HasLyrics: track.HasLyrics,
 			Status: domain.ItemQueued,

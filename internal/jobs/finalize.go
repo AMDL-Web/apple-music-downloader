@@ -50,7 +50,7 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 	job.Error = "cancelled"
 	job = withoutTerminalMediaUserToken(job)
 	job.UpdatedAt = time.Now().UTC()
-	persistErr := m.persistTerminal(ctx, job, "job_cancelled", "job cancelled")
+	persistErr := m.persistTerminal(ctx, job, domain.EventJobCancelled, "job cancelled")
 	if persistErr == nil {
 		// Mark the finalize sequence in flight before releasing m.mu: the
 		// status row (and its terminal event, written atomically alongside
@@ -140,6 +140,10 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	}
 	job.Status = domain.JobRunning
 	job.UpdatedAt = time.Now().UTC()
+	if job.StartedAt == nil {
+		startedAt := job.UpdatedAt
+		job.StartedAt = &startedAt
+	}
 	if err := m.store.UpdateJob(ctx, job); err != nil {
 		m.mu.Unlock()
 		cancel()
@@ -182,13 +186,16 @@ func (m *Manager) run(parent context.Context, jobID string) {
 	}()
 
 	message := "job started"
-	_ = m.Event(ctx, domain.Event{JobID: job.ID, Type: "job_started", Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})})
+	_ = m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobStarted, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})})
 
 	err = m.processor.ProcessJob(ctx, job, m)
+	// The reload carries the item counters the terminal decision and the
+	// terminal event payload use, derived by the store from job_items.
 	if latest, loadErr := m.store.GetJob(context.Background(), job.ID); loadErr == nil {
 		job = latest
+	} else {
+		jobLogger.Error("reload job before finalize", "error", loadErr)
 	}
-	m.refreshCounts(&job)
 
 	switch {
 	case errors.Is(ctx.Err(), context.Canceled):
@@ -198,22 +205,23 @@ func (m *Manager) run(parent context.Context, jobID string) {
 		// just as the cancel arrived, or it doesn't surface ctx errors).
 		job.Status = domain.JobCancelled
 		job.Error = "cancelled"
-		m.finalizeLogged(job, "job_cancelled", "job cancelled")
+		m.finalizeLogged(job, domain.EventJobCancelled, "job cancelled")
 	case err != nil:
 		job.Status = domain.JobFailed
 		job.Error = err.Error()
-		m.finalizeLogged(job, "job_failed", err.Error())
+		m.finalizeLogged(job, domain.EventJobFailed, err.Error())
 	default:
 		if job.FailedItems > 0 {
 			job.Status = domain.JobFailed
 		} else {
 			job.Status = domain.JobCompleted
 		}
-		m.finalizeLogged(job, "job_finished", string(job.Status))
+		m.finalizeLogged(job, domain.EventJobFinished, string(job.Status))
 	}
 	attrs := []any{
 		"status", string(job.Status), "duration_ms", time.Since(started).Milliseconds(),
-		"total_items", job.TotalItems, "done_items", job.DoneItems, "failed_items", job.FailedItems,
+		"total_items", job.TotalItems, "completed_items", job.CompletedItems, "skipped_items", job.SkippedItems,
+		"failed_items", job.FailedItems, "cancelled_items", job.CancelledItems,
 	}
 	if err != nil {
 		attrs = append(attrs, "error", err)
@@ -237,7 +245,7 @@ func (m *Manager) run(parent context.Context, jobID string) {
 // an external system must not be told a job completed/cancelled when the
 // backend could not even record that fact. A persistence failure is returned
 // so callers can propagate or log it, and no hook fires.
-func (m *Manager) finalizeJob(ctx context.Context, job domain.Job, eventType, message string) error {
+func (m *Manager) finalizeJob(ctx context.Context, job domain.Job, eventType domain.EventType, message string) error {
 	job = withoutTerminalMediaUserToken(job)
 	job.UpdatedAt = time.Now().UTC()
 	if err := m.persistTerminal(ctx, job, eventType, message); err != nil {
@@ -247,14 +255,17 @@ func (m *Manager) finalizeJob(ctx context.Context, job domain.Job, eventType, me
 	return nil
 }
 
-// persistTerminal atomically persists job's terminal status together with its
-// terminal domain event (Store.FinalizeJob), then publishes the stored event
-// to the hub. The atomicity matters to callers of GET .../events(/ws): they
-// read a job's status and its events table independently, so if these two
-// writes ever landed as separate statements, such a reader could observe the
-// terminal status with the terminal event still missing and wrongly conclude
-// no more events are pending.
-func (m *Manager) persistTerminal(ctx context.Context, job domain.Job, eventType, message string) error {
+// persistTerminal atomically persists job's terminal status, with finished_at
+// set to job.UpdatedAt, together with its terminal domain event
+// (Store.FinalizeJob), then publishes the stored event to the hub. The
+// atomicity matters to the per-job streams: they read a job's status and its
+// events table independently, so if these two writes ever landed as separate
+// statements, such a reader could observe the terminal status with the
+// terminal event still missing and wrongly conclude no more events are
+// pending.
+func (m *Manager) persistTerminal(ctx context.Context, job domain.Job, eventType domain.EventType, message string) error {
+	finishedAt := job.UpdatedAt
+	job.FinishedAt = &finishedAt
 	ev := domain.Event{JobID: job.ID, Type: eventType, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}
 	stored, err := m.store.FinalizeJob(ctx, job, ev)
 	if err != nil {
@@ -288,7 +299,7 @@ func (m *Manager) dispatchHooks(ctx context.Context, job domain.Job) {
 // finalizeLogged is the worker-path wrapper around finalizeJob: there is no
 // caller to return an error to, so a persistence failure is logged (and the
 // hook is correctly skipped by finalizeJob).
-func (m *Manager) finalizeLogged(job domain.Job, eventType, message string) {
+func (m *Manager) finalizeLogged(job domain.Job, eventType domain.EventType, message string) {
 	if err := m.finalizeJob(context.Background(), job, eventType, message); err != nil {
 		m.logger.Error("finalize job", "job_id", job.ID, "status", string(job.Status), "error", err)
 	}
@@ -299,17 +310,12 @@ func (m *Manager) finalizeLogged(job domain.Job, eventType, message string) {
 func hookEventForStatus(status domain.JobStatus) string {
 	switch status {
 	case domain.JobCompleted:
-		return "job_finished"
+		return string(domain.EventJobFinished)
 	case domain.JobFailed:
-		return "job_failed"
+		return string(domain.EventJobFailed)
 	case domain.JobCancelled:
-		return "job_cancelled"
+		return string(domain.EventJobCancelled)
 	default:
 		return ""
 	}
-}
-
-func (m *Manager) refreshCounts(job *domain.Job) {
-	items, _ := m.store.ListItems(context.Background(), job.ID)
-	job.DoneItems, job.FailedItems = domain.CountItemProgress(items)
 }

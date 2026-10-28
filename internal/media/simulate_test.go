@@ -42,6 +42,7 @@ func TestSimulateUsesSharedPipelinedMediaPools(t *testing.T) {
 	cfg.Download.CodecAlternative = false
 	cfg.Download.MaxParallelDownloads = 1
 	cfg.Download.MaxParallelDecrypts = 1
+	cfg.Download.ForceOverwrite = true
 	base := (&Downloader{cfg: cfg}).withConfig(cfg)
 
 	start := time.Now()
@@ -52,7 +53,7 @@ func TestSimulateUsesSharedPipelinedMediaPools(t *testing.T) {
 			defer wg.Done()
 			reporter := &recordingReporter{}
 			item := domain.JobItem{ID: fmt.Sprintf("item-%d", i), JobID: fmt.Sprintf("job-%d", i)}
-			err := base.withConfig(cfg).simulateTrack(context.Background(), domain.Job{ID: item.JobID, Force: true}, &item,
+			err := base.withConfig(cfg).simulateTrack(context.Background(), domain.Job{ID: item.JobID}, &item,
 				applemusic.Song{ID: item.ID, Name: "Track", DurationInMillis: 1000}, applemusic.TypeAlbum,
 				"Album", "album", 1, "Artist", reporter, func(domain.ItemStatus, string, func(*domain.ItemProgress)) {})
 			if err != nil {
@@ -123,7 +124,7 @@ func TestSimulateTrackSelectsRealMediaButNeverDownloadsOrWrites(t *testing.T) {
 				t.Fatalf("codec_selected phase = %q, want alac (first quality_priority codec)", ev.Phase)
 			}
 			var snapshot domain.JobItem
-			if err := json.Unmarshal([]byte(ev.Payload), &snapshot); err != nil {
+			if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
 				t.Fatalf("decode codec_selected payload: %v", err)
 			}
 			if snapshot.BitDepth != 24 || snapshot.SampleRate != 96000 || snapshot.Bitrate != 2500000 {
@@ -132,7 +133,7 @@ func TestSimulateTrackSelectsRealMediaButNeverDownloadsOrWrites(t *testing.T) {
 		case "item_completed":
 			itemCompleted = true
 			var snapshot domain.JobItem
-			if err := json.Unmarshal([]byte(ev.Payload), &snapshot); err != nil {
+			if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
 				t.Fatalf("decode item_completed payload: %v", err)
 			}
 			if snapshot.Status != domain.ItemCompleted || snapshot.Progress != wantSimulatedProgress(cfg) || snapshot.Bitrate != 2500000 || snapshot.UpdatedAt.IsZero() {
@@ -203,11 +204,11 @@ func TestSimulateTrackFallsBackToAACLCWithoutManifest(t *testing.T) {
 		case "codec_fallback":
 			fallbacks++
 			var raw map[string]any
-			if err := json.Unmarshal([]byte(ev.Payload), &raw); err != nil {
+			if err := json.Unmarshal(ev.Payload, &raw); err != nil {
 				t.Fatalf("decode codec_fallback payload: %v", err)
 			}
 			var snapshot domain.JobItem
-			if err := json.Unmarshal([]byte(ev.Payload), &snapshot); err != nil {
+			if err := json.Unmarshal(ev.Payload, &snapshot); err != nil {
 				t.Fatalf("decode codec_fallback snapshot: %v", err)
 			}
 			if snapshot.Codec != raw["to_codec"] {

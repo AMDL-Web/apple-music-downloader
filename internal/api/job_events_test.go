@@ -91,7 +91,7 @@ func TestEventsWebSocketStreamsBacklogLiveAndResume(t *testing.T) {
 		t.Fatalf("second event = %+v, want item_progress with id > %d", second, first.ID)
 	}
 	var streamed domain.JobItem
-	if err := json.Unmarshal([]byte(second.Payload), &streamed); err != nil {
+	if err := json.Unmarshal(second.Payload, &streamed); err != nil {
 		t.Fatalf("decode streamed item snapshot: %v", err)
 	}
 	if streamed.ID != item.ID || streamed.ArtworkURL != item.ArtworkURL || streamed.Bitrate != item.Bitrate || !streamed.UpdatedAt.Equal(item.UpdatedAt) {
@@ -215,7 +215,7 @@ func TestEventsWSClosesWhenLiveJobBecomesTerminal(t *testing.T) {
 	}
 	defer conn.CloseNow()
 
-	readType := func() (string, error) {
+	readType := func() (domain.EventType, error) {
 		_, raw, err := conn.Read(streamCtx)
 		if err != nil {
 			return "", err
@@ -591,7 +591,7 @@ func TestEventsWSWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 	}
 	defer conn.CloseNow()
 
-	readEventType := func() string {
+	readEventType := func() domain.EventType {
 		t.Helper()
 		_, raw, err := conn.Read(dialCtx)
 		if err != nil {

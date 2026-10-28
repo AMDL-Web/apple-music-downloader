@@ -370,7 +370,7 @@ func TestDownloadsFeedReplaysMilestonesAcrossDatabasePages(t *testing.T) {
 	hub := events.NewHub()
 	server := &Server{store: store, hub: hub, manager: jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())}
 	var got []domain.DownloadFeedMessage
-	server.runDownloadsFeed(ctx, 0, make(chan domain.Event), make(chan time.Time), func(msg domain.DownloadFeedMessage) error {
+	server.runDownloadsFeed(ctx, 0, make(chan struct{}), make(chan time.Time), func(msg domain.DownloadFeedMessage) error {
 		got = append(got, msg)
 		if len(got) == 2 {
 			cancel()
