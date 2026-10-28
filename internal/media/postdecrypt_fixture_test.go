@@ -137,12 +137,12 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 	cfg.Download.SaveLyricsFile = false
 	cfg.Tools.FFmpeg = ffmpeg
 
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		wrapper: postDecryptFixtureWrapper{fixture: fixture},
 		http:    client,
 		mp4:     newMP4Processor(cfg),
-	}
+	})
 	selected := selectedDownloadMedia{info: selectedMediaInfo{
 		MediaURI:   mediaURL,
 		Keys:       []string{"offline-fixture-key-slot"},
@@ -264,8 +264,8 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 	// The production path already decoded the whole file during its integrity
 	// phase. Checking once more after metadata proves the tail-moov rewrite did
 	// not invalidate the finalized container.
-	if !downloader.mp4.checkIntegrityFile(context.Background(), outputPath) {
-		t.Fatal("finalized, tagged output failed the post-tag integrity check")
+	if err := downloader.mp4.checkIntegrityFile(context.Background(), outputPath); err != nil {
+		t.Fatalf("finalized, tagged output failed the post-tag integrity check: %v", err)
 	}
 	postDecryptEmitMetrics(t, resultPath, metrics)
 }

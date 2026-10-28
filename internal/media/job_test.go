@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func TestRunTrackTasksJoinsStartedTasksAndHonorsCancellation(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- runTrackTasks(ctx, 3, []bool{false, true, false}, func(trackCtx context.Context, index int) error {
+		done <- runTrackTasks(ctx, slog.Default(), 3, []bool{false, true, false}, false, func(trackCtx context.Context, index int) error {
 			if priority, ok := limits.SubpriorityFromContext(trackCtx); !ok || priority != int64(index) {
 				return errors.New("track context does not carry its index as subpriority")
 			}
@@ -68,7 +69,7 @@ func TestRunTrackTasksJoinsStartedTasksAndHonorsCancellation(t *testing.T) {
 
 	preCanceled, preCancel := context.WithCancel(context.Background())
 	preCancel()
-	if err := runTrackTasks(preCanceled, 1, []bool{false}, func(context.Context, int) error {
+	if err := runTrackTasks(preCanceled, slog.Default(), 1, []bool{false}, false, func(context.Context, int) error {
 		t.Fatal("task started after cancellation")
 		return nil
 	}); !errors.Is(err, context.Canceled) {
@@ -97,7 +98,7 @@ func TestProcessJobAvoidsDuplicateSingleSongMetadataReads(t *testing.T) {
 	cfg.Download.EmbedCover = false
 	cfg.Download.EmbedLyrics = false
 	cfg.Download.QualityPriority = []string{"alac"}
-	downloader := &Downloader{cfg: cfg, catalog: catalog}
+	downloader := newTestDownloader(&Downloader{cfg: cfg, catalog: catalog})
 	reporter := &recordingReporter{}
 	force := true
 	job := domain.Job{
@@ -143,7 +144,7 @@ func TestProcessJobDoesNotRefetchResolvedAlbumPerTrack(t *testing.T) {
 	cfg.Download.EmbedCover = false
 	cfg.Download.EmbedLyrics = false
 	cfg.Download.QualityPriority = []string{"alac"}
-	downloader := &Downloader{cfg: cfg, catalog: catalog}
+	downloader := newTestDownloader(&Downloader{cfg: cfg, catalog: catalog})
 	reporter := &recordingReporter{}
 	force := true
 	job := domain.Job{

@@ -398,7 +398,7 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 						}
 						t.Fatalf("ftyp major_brand = %q, want \"M4A \"", got)
 					}
-					if !p.checkIntegrityFile(ctx, flatPath) {
+					if err := p.checkIntegrityFile(ctx, flatPath); err != nil {
 						t.Fatal("flat output failed integrity check")
 					}
 					if gotPCM := decode(t, flatPath); !bytes.Equal(gotPCM, referencePCM) {
@@ -455,7 +455,7 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 				})
 			}
 
-			// downloader.go documents fixEncapsulate as writing an "M4A " ftyp
+			// flattenFileToFile documents writing an "M4A " ftyp
 			// brand; the generic mp4 muxer needed for EC-3 support defaults to
 			// "isom" instead, so -brand must be passed explicitly to keep that
 			// comment accurate.
@@ -467,7 +467,7 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 				t.Fatalf("ftyp major_brand = %q, want \"M4A \"", got)
 			}
 
-			if !p.checkIntegrity(ctx, flat) {
+			if err := p.checkIntegrity(ctx, flat); err != nil {
 				dir, _ := os.MkdirTemp(cfg.Download.TempDir, "diag-*")
 				inPath := filepath.Join(dir, "song.m4a")
 				_ = os.WriteFile(inPath, flat, 0o644)
@@ -477,7 +477,7 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 			}
 
 			// go-mp4tag needs an existing moov.udta.meta.ilst container to write
-			// into (see downloader.go's downloadEnhancedCodec comment); confirm
+			// into (see decryptAACLC's comment); confirm
 			// the flattened file still has one under the -f mp4 muxer used by
 			// fixEncapsulate, and that tagging doesn't corrupt playback.
 			outPath := filepath.Join(tmp, "tagged.m4a")
@@ -485,14 +485,14 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 				t.Fatal(err)
 			}
 			song := applemusic.Song{Name: "Test Track", ArtistName: "Test Artist", AlbumName: "Test Album", TrackNumber: 1}
-			if err := p.writeMetadata(ctx, outPath, song, "", nil, info); err != nil {
+			if err := p.writeMetadata(ctx, outPath, song, "", nil); err != nil {
 				t.Fatalf("writeMetadata: %v", err)
 			}
 			tagged, err := os.ReadFile(outPath)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !p.checkIntegrity(ctx, tagged) {
+			if err := p.checkIntegrity(ctx, tagged); err != nil {
 				t.Fatal("integrity check failed after writeMetadata")
 			}
 			probe := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format_tags=title,artist,album", "-of", "default=nw=1", outPath)

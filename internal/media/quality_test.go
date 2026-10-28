@@ -56,7 +56,7 @@ atmos/media.m3u8
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 1
 	cfg.Download.ALACMaxSampleRate = 96000
-	service := NewQualityServiceWithCatalog(cfg, fakeQualityCatalog{song: applemusic.Song{
+	service := newTestQualityService(cfg, fakeQualityCatalog{song: applemusic.Song{
 		ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album", EnhancedHLS: manifest.URL + "/master.m3u8",
 	}}, countingQualityWrapper{})
 	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
@@ -218,7 +218,7 @@ func TestQualityQueryUsesDownloadStorefrontValidation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service := NewQualityServiceWithCatalog(cfg, catalog, tt.wrapper)
+			service := newTestQualityService(cfg, catalog, tt.wrapper)
 			_, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
 			var requestErr *jobs.RequestError
 			if !errors.As(err, &requestErr) || requestErr.Code != tt.wantCode {
@@ -239,7 +239,7 @@ audio.m3u8
 	}))
 	defer manifest.Close()
 
-	service := NewQualityServiceWithCatalog(config.Default(), fakeQualityCatalog{song: applemusic.Song{
+	service := newTestQualityService(config.Default(), fakeQualityCatalog{song: applemusic.Song{
 		ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album", HasLyrics: true, EnhancedHLS: manifest.URL + "/master.m3u8",
 	}}, countingQualityWrapper{})
 
@@ -278,7 +278,7 @@ audio.m3u8
 		webTokenHLS:       manifest.URL + "/master.m3u8",
 		webTokenCallCount: &webCalls,
 	}
-	service := NewQualityServiceWithCatalog(cfg, catalog, countingQualityWrapper{m3u8: "https://wrapper.invalid/master.m3u8", callCount: &wrapperCalls})
+	service := newTestQualityService(cfg, catalog, countingQualityWrapper{m3u8: "https://wrapper.invalid/master.m3u8", callCount: &wrapperCalls})
 
 	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
 	if err != nil {
@@ -317,7 +317,7 @@ audio.m3u8
 		song:              applemusic.Song{ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album"},
 		webTokenCallCount: &webCalls,
 	}
-	service := NewQualityServiceWithCatalog(cfg, catalog, countingQualityWrapper{m3u8: manifest.URL + "/master.m3u8", callCount: &wrapperCalls})
+	service := newTestQualityService(cfg, catalog, countingQualityWrapper{m3u8: manifest.URL + "/master.m3u8", callCount: &wrapperCalls})
 
 	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
 	if err != nil {
@@ -355,7 +355,7 @@ audio.m3u8
 	cfg.Catalog.AppleMusicKeyID = "KEY"
 	cfg.Catalog.AppleMusicTeamID = "TEAM"
 	var wrapperCalls int
-	service := NewQualityServiceWithCatalog(cfg, fakeQualityCatalog{song: applemusic.Song{
+	service := newTestQualityService(cfg, fakeQualityCatalog{song: applemusic.Song{
 		ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album",
 	}}, countingQualityWrapper{m3u8: manifest.URL + "/master.m3u8", callCount: &wrapperCalls})
 

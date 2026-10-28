@@ -113,3 +113,9 @@ func TestStageEntryMutatorsRestateMeters(t *testing.T) {
 		t.Fatalf("meters after entering decrypt = %+v, want download=1 decrypt=0", midDownload)
 	}
 }
+
+// progressChanged is the value gate trackRun.stageSetter applies: any stage flag
+// flipping, or either meter rounding to a different whole percent.
+func progressChanged(prev, next domain.ItemProgress) bool {
+	return stagesChanged(prev, next) || metersChanged(prev, next)
+}

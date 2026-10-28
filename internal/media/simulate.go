@@ -2,305 +2,124 @@ package media
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
-	"os"
-	"strings"
+	"errors"
+	"math/rand/v2"
 	"time"
 
 	"amdl/internal/applemusic"
-	"amdl/internal/domain"
-	"amdl/internal/jobs"
+	"amdl/internal/config"
+	"amdl/internal/wrapper"
 )
 
-// simulateTrack replays the lifecycle of processTrack — identical statuses,
-// progress bands, status messages, DB fields, and events — without touching
-// the wrapper, ffmpeg, or the disk. Media selection runs for real (the
-// enhanced HLS manifest is fetched and parsed, so codec_selected events and
-// the item's quality fields carry real values, and selection failures fall
-// back through the configured codecs exactly like a real download); only the
-// encrypted transfer, decryption, remux, and disk writes are simulated. The
-// transfer phases are paced by a random speed drawn from the configured
-// simulate speed range.
-func (d *Downloader) simulateTrack(ctx context.Context, job domain.Job, item *domain.JobItem, song applemusic.Song, collectionType applemusic.URLType, collectionName, collectionID string, collectionIndex int, folderArtist string, reporter jobs.Reporter, set publishStage) error {
-	d.ensureMediaLimits()
-	maxAttempts := clampAttempts(d.cfg.Download.MaxAttempts)
-	if d.cfg.Download.EmbedCover {
-		d.setItemAttempt(ctx, reporter, item, "cover", 1, maxAttempts, fmt.Sprintf("Fetching cover (1/%d)", maxAttempts))
-	}
-	// Simulated lyrics always "fetch" successfully; the disabled/none outcomes
-	// mirror the real path so lyrics_status behaves identically in test mode.
-	if (d.cfg.Download.EmbedLyrics || d.cfg.Download.SaveLyricsFile) && song.HasLyrics {
-		d.setItemAttempt(ctx, reporter, item, "lyrics", 1, maxAttempts, fmt.Sprintf("Fetching lyrics (1/%d)", maxAttempts))
-		item.LyricsStatus = domain.LyricsFetched
-	} else if song.HasLyrics {
-		item.LyricsStatus = domain.LyricsDisabled
-	} else {
-		item.LyricsStatus = domain.LyricsNone
-	}
-	_ = reporter.UpdateItem(ctx, item)
+// simulatedMedia is the simulate-mode backend. Catalog metadata and enhanced
+// media selection run for real before it is reached; everything it is asked to
+// do it only pretends, pacing transfers by a speed drawn from the configured
+// simulate range. It never touches the wrapper, ffmpeg or the disk (it only
+// reads whether an output already exists), so test mode needs neither a
+// decryptor nor ffmpeg, and never deletes a real download even under force.
+type simulatedMedia struct{ cfg config.Config }
 
-	codecs, err := configuredCodecs(d.cfg.Download)
-	if err != nil {
-		return d.failItem(ctx, reporter, job, *item, err)
-	}
-	// Mirrors handleExistingOutput without ever mutating the disk: simulate
-	// mode must not delete a previously real-downloaded file even under force.
-	existingSkip := func(outPath string) bool {
-		item.OutputPath = outPath
-		// Same effective-force rule as handleExistingOutput: the job-scoped
-		// config already carries overrides.force_overwrite.
-		force := d.cfg.Download.ForceOverwrite
-		if fi, statErr := os.Stat(outPath); statErr == nil && !force {
-			item.Status = domain.ItemSkipped
-			// Breakdown left as it stands, same as handleExistingOutput:
-			// resolved true, every later stage false.
-			item.FileSize = fi.Size()
-			item.RetryKind = ""
-			item.Attempt = 0
-			item.MaxAttempts = 0
-			item.StatusMessage = "File already exists; skipped"
-			_ = reporter.UpdateItem(ctx, item)
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})})
-			return true
-		}
-		if force {
-			// The real path deletes stale outputs here; simulate mode only
-			// emits the same event and never touches the disk.
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemOverwrite, Message: "force overwrite enabled", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "force overwrite enabled"})})
-		}
-		return false
-	}
-	var lastErr error
-	for codecIndex, codec := range codecs {
-		codecName := strings.ToUpper(codec)
-		item.Codec = codec
-		item.BitDepth, item.SampleRate, item.Bitrate = 0, 0, 0
-		// Same per-attempt reset as the real codec loop, so a simulated
-		// fallback walks the breakdown exactly like a real one.
-		item.Progress.ResetForAttempt()
-		if codecIndex > 0 {
-			item.StatusMessage = fmt.Sprintf("Codec %s failed; falling back to %s", strings.ToUpper(codecs[codecIndex-1]), codecName)
-			_ = reporter.UpdateItem(ctx, item)
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventCodecFallback, Phase: codec, Message: item.StatusMessage, Payload: domain.MarshalEventPayload(*item, map[string]any{
-				"from_codec": codecs[codecIndex-1], "to_codec": codec, "reason": codecFailureReason(lastErr),
-			})})
-		}
+// simulatedLyricsTTML stands in for the wrapper's lyrics document, so the
+// lyrics conversion and lyrics_status behave as in a real download.
+const simulatedLyricsTTML = `<tt><body><div><p begin="00:00.000">Simulated lyrics</p></div></body></tt>`
 
-		var info selectedMediaInfo
-		var outPath string
-		fetchAttempts := 1
-		if codec == "aac-lc" {
-			// Like the real AAC-LC path, the existing-output check runs before
-			// any WebPlayback traffic or codec_selected event. The playlist
-			// itself comes from wrapper.WebPlayback, which test mode must not
-			// depend on, so the selection is faked with the same event.
-			d.setItemAttempt(ctx, reporter, item, "download", 1, maxAttempts, fmt.Sprintf("Downloading %s (1/%d)", codecName, maxAttempts))
-			outPath = outputPath(d.cfg, song, collectionType, collectionIndex, folderArtist, collectionName, collectionID, codec, "256Kbps")
-			if existingSkip(outPath) {
-				return nil
-			}
-			set(domain.ItemDownloading, "requesting AAC-LC WebPlayback asset", nil)
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventCodecSelected, Phase: "aac-lc", Payload: domain.MarshalEventPayload(*item, map[string]any{
-				"codec_id": "aac-lc", "bit_depth": item.BitDepth, "sample_rate": item.SampleRate, "bitrate": item.Bitrate,
-				"attempt": item.Attempt, "max_attempts": item.MaxAttempts,
-			})})
-			info = selectedMediaInfo{CodecID: "aac-lc", Bandwidth: 256000}
-		} else {
-			// Selection is a real network operation, so it keeps the real
-			// path's retry envelope: per-attempt messages, operation_retry
-			// events, and recovery events with true attempt counts.
-			codecMaxAttempts := attemptsForCodec(d.cfg.Download.MaxAttempts, codecIndex)
-			var selected selectedDownloadMedia
-			_, attempts, selectErr := retryValue(ctx, codecMaxAttempts, retryBackoff, func(attempt int) (struct{}, error) {
-				d.setItemAttempt(ctx, reporter, item, "download", attempt, clampAttempts(codecMaxAttempts), fmt.Sprintf("Selecting %s (%d/%d)", codecName, attempt, clampAttempts(codecMaxAttempts)))
-				s, err := d.selectEnhancedMedia(ctx, job, item, song, codec, reporter, set)
-				if err != nil {
-					return struct{}{}, err
-				}
-				selected = s
-				return struct{}{}, nil
-			}, func(failure retryFailure) {
-				operation := codecName
-				if isNonRetryableError(failure.Err) {
-					operation = "select " + operation
-				}
-				d.setRetryFailure(ctx, reporter, item, "download", operation, failure)
-				d.emitRetryEvent(ctx, reporter, job.ID, item, "download", codec, failure)
-			})
-			fetchAttempts = attempts
-			if selectErr != nil {
-				lastErr = selectErr
-				d.reportCodecFailed(ctx, reporter, job, *item, codec, "download", codecMaxAttempts, attempts, selectErr)
-				continue
-			}
-			if attempts > 1 {
-				d.emitRecoveredEvent(ctx, reporter, job.ID, item, "download", codec, attempts)
-			}
-			info = selected.info
-			outPath = outputPath(d.cfg, song, collectionType, collectionIndex, folderArtist, collectionName, collectionID, codec, qualityLabel(info))
-			if existingSkip(outPath) {
-				return nil
-			}
-		}
+// Pauses for the steps that have no byte count. They only need to be long
+// enough for a client to see each state.
+const (
+	simulatedKeyPause    = 100 * time.Millisecond
+	simulatedAACLCPause  = 200 * time.Millisecond
+	simulatedRemuxPause  = 200 * time.Millisecond
+	simulatedVerifyPause = 100 * time.Millisecond
+	simulatedTagPause    = 150 * time.Millisecond
+)
 
-		totalBytes := simulatedSizeBytes(song, info)
-		set(domain.ItemWaitingDownload, "waiting for download slot", nil)
-		releaseInFlight, acquireErr := d.inFlightLimit.Acquire(ctx)
-		if acquireErr != nil {
-			return d.failItem(ctx, reporter, job, *item, acquireErr)
-		}
-		releaseDownload, acquireErr := d.downloadLimit.Acquire(ctx)
-		if acquireErr != nil {
-			releaseInFlight()
-			return d.failItem(ctx, reporter, job, *item, acquireErr)
-		}
-		var transferErr error
-		if codec == "aac-lc" {
-			set(domain.ItemDownloading, "downloading encrypted AAC-LC media", startDownload)
-			transferErr = d.simulateTransfer(ctx, totalBytes, func(p float64) {
-				set(domain.ItemDownloading, fmt.Sprintf("downloading %.0f%%", p*100), downloadFrac(p))
-			})
-		} else {
-			set(domain.ItemDownloading, fmt.Sprintf("Downloading %s encrypted media", codecName), startDownload)
-			transferErr = d.simulateTransfer(ctx, totalBytes, func(p float64) {
-				set(domain.ItemDownloading, fmt.Sprintf("%s download %.0f%%", codecName, p*100), downloadFrac(p))
-			})
-		}
-		releaseDownload()
-		if transferErr != nil {
-			releaseInFlight()
-			return d.failItem(ctx, reporter, job, *item, transferErr)
-		}
-
-		d.setItemAttempt(ctx, reporter, item, "decrypt", 1, maxAttempts, fmt.Sprintf("Decrypting %s (1/%d)", codecName, maxAttempts))
-		set(domain.ItemWaitingDecrypt, "waiting for decrypt slot", nil)
-		releaseDecrypt, acquireErr := d.decryptLimit.Acquire(ctx)
-		if acquireErr != nil {
-			releaseInFlight()
-			return d.failItem(ctx, reporter, job, *item, acquireErr)
-		}
-		decryptErr := d.simulateDecryptPhase(ctx, song, codec, info.SampleRate, totalBytes, set)
-		releaseDecrypt()
-		releaseInFlight()
-		if decryptErr != nil {
-			return d.failItem(ctx, reporter, job, *item, decryptErr)
-		}
-		if err := d.simulatePostprocess(ctx, codec, set); err != nil {
-			return d.failItem(ctx, reporter, job, *item, err)
-		}
-
-		item.Status = domain.ItemCompleted
-		markSaved(&item.Progress)
-		item.Progress.CompleteTransfers()
-		item.OutputPath = outPath
-		item.Codec = codec
-		item.FileSize = totalBytes
-		switch {
-		case codecIndex > 0:
-			item.StatusMessage = fmt.Sprintf("Completed after fallback to %s", codecName)
-		case fetchAttempts > 1:
-			item.StatusMessage = fmt.Sprintf("%s completed (download took %d attempts)", codecName, fetchAttempts)
-		default:
-			item.StatusMessage = fmt.Sprintf("%s download completed", codecName)
-		}
-		_ = reporter.UpdateItem(ctx, item)
-		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemCompleted, Message: item.StatusMessage, Payload: domain.MarshalEventPayload(*item, map[string]any{
-			"codec": codec, "download_attempts": fetchAttempts, "decrypt_attempts": 1,
-			"max_attempts": maxAttempts, "fallback_from": fallbackCodec(codecs, codecIndex),
-		})})
-		return nil
-	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("no configured codec succeeded")
-	}
-	return d.failItem(ctx, reporter, job, *item, lastErr)
+func (simulatedMedia) coverArt(context.Context, []string, string, string) ([]byte, error) {
+	return nil, nil
 }
 
-// simulateDecryptPhase covers only the actual decrypt work and therefore only
-// this portion holds the global decrypt permit.
-func (d *Downloader) simulateDecryptPhase(ctx context.Context, song applemusic.Song, codec string, sampleRate int, totalBytes int64, set publishStage) error {
-	if codec == "aac-lc" {
-		set(domain.ItemDecrypting, "acquiring Widevine license", startDecrypt)
-		if err := simulatePause(ctx, 200*time.Millisecond); err != nil {
-			return err
-		}
-		// Mirrors the real AAC-LC path: one opaque pass, so the meter only
-		// resolves to 1 at the remux boundary in simulatePostprocess.
-		set(domain.ItemDecrypting, "decrypting AAC-LC", nil)
-		return simulatePause(ctx, 200*time.Millisecond)
+func (simulatedMedia) lyrics(context.Context, string, wrapper.LyricsRequestOptions) (string, error) {
+	return simulatedLyricsTTML, nil
+}
+
+func (simulatedMedia) requireTools(context.Context) error { return nil }
+
+func (simulatedMedia) resolveAACLC(context.Context, string) (aacLCMedia, error) {
+	return aacLCMedia{}, nil
+}
+
+func (m simulatedMedia) fetch(ctx context.Context, req fetchRequest, progress func(float64)) (encryptedMedia, error) {
+	size := req.estimatedBytes
+	if size <= 0 {
+		size = estimatedMediaBytes(0, 0)
 	}
-	set(domain.ItemDecrypting, "extracting samples", startDecrypt)
-	totalSamples := simulatedSampleCount(song, codec, sampleRate)
-	// Decrypt works on bytes already in memory, so pace it faster than the
-	// network transfer: the same speed range over roughly a third of the size.
-	if err := d.simulateTransfer(ctx, totalBytes/3, func(p float64) {
-		done := int(p * float64(totalSamples))
-		if done > totalSamples {
-			done = totalSamples
-		}
-		set(domain.ItemDecrypting, fmt.Sprintf("decrypting %d/%d samples", done, totalSamples), decryptFrac(p))
-	}); err != nil {
+	if err := m.transfer(ctx, size, progress); err != nil {
+		return encryptedMedia{}, err
+	}
+	return encryptedMedia{size: size}, nil
+}
+
+func (simulatedMedia) discardCheckpoint(string, string) {}
+
+func (simulatedMedia) discardOutput(string) {}
+
+func (simulatedMedia) stage(media encryptedMedia) (stagedFile, func(), error) {
+	return stagedFile{size: media.size}, func() {}, nil
+}
+
+func (m simulatedMedia) decrypt(ctx context.Context, req decryptRequest, hooks decryptHooks) error {
+	if err := simulatePause(ctx, simulatedKeyPause); err != nil {
 		return err
 	}
-	return nil
-}
-
-// simulatePostprocess mirrors local remux/save/tag work after both the decrypt
-// and in-flight permits have been released.
-func (d *Downloader) simulatePostprocess(ctx context.Context, codec string, set publishStage) error {
-	// Each step is announced, paused through, then marked done — the same
-	// enter/complete split the real pipeline uses, so a simulated item walks
-	// the breakdown through exactly the states a real one does.
-	type postprocessStep struct {
-		status   domain.ItemStatus
-		message  string
-		enter    func(*domain.ItemProgress)
-		complete func(*domain.ItemProgress)
-		pause    time.Duration
-	}
-	suffix := ""
-	if codec == "aac-lc" {
-		suffix = " AAC-LC"
-	}
-	steps := []postprocessStep{
-		// Decrypt is finished by the time remuxing starts, matching the real
-		// path's meter pin at the same boundary.
-		{domain.ItemRemuxing, "remuxing" + suffix, decryptFrac(1), markRemuxed, 300 * time.Millisecond},
-		{domain.ItemSaving, "saving" + suffix, nil, nil, 150 * time.Millisecond},
-		{domain.ItemTagging, "writing" + suffix + " metadata", nil, markTagged, 200 * time.Millisecond},
-	}
-	if d.cfg.Download.CheckIntegrity {
-		// Same condition as the real path: no check configured, no mark.
-		steps[1].complete = markVerified
-	}
-	for _, step := range steps {
-		set(step.status, step.message, step.enter)
-		if err := simulatePause(ctx, step.pause); err != nil {
+	hooks.ready()
+	if req.codec == "aac-lc" {
+		if err := simulatePause(ctx, simulatedAACLCPause); err != nil {
 			return err
 		}
-		if step.complete != nil {
-			set(step.status, step.message, step.complete)
+	} else {
+		// Decrypt works on bytes already held, so pace it faster than the
+		// network transfer: the same speed range over a third of the size.
+		progress := hooks.progress
+		if progress == nil {
+			progress = func(float64) {}
+		}
+		if err := m.transfer(ctx, req.size/3, progress); err != nil {
+			return err
 		}
 	}
-	return nil
+	hooks.afterInput()
+	return simulatePause(ctx, simulatedRemuxPause)
 }
 
-// simulateTransfer advances a fake transfer of totalBytes, re-rolling the
-// speed inside [min_speed_kbps, max_speed_kbps] every tick and reporting
-// completion in [0,1] through progress.
-func (d *Downloader) simulateTransfer(ctx context.Context, totalBytes int64, progress func(float64)) error {
+func (simulatedMedia) verify(ctx context.Context, _ stagedFile) error {
+	return simulatePause(ctx, simulatedVerifyPause)
+}
+
+func (simulatedMedia) repairALAC(context.Context, stagedFile, func(int)) error {
+	// verify never fails here, so the pipeline never asks.
+	return errors.New("simulated media has nothing to repair")
+}
+
+func (simulatedMedia) mkdirAll(string) error { return nil }
+
+func (simulatedMedia) writeFile(string, []byte) error { return nil }
+
+func (simulatedMedia) tag(ctx context.Context, _ stagedFile, _ applemusic.Song, _ string, _ []byte) error {
+	return simulatePause(ctx, simulatedTagPause)
+}
+
+func (simulatedMedia) commit(staged stagedFile, _ string) (int64, error) {
+	return staged.size, nil
+}
+
+// transfer advances a fake transfer of totalBytes, re-rolling the speed inside
+// [min_speed_kbps, max_speed_kbps] every tick and reporting completion in
+// [0,1] through progress.
+func (m simulatedMedia) transfer(ctx context.Context, totalBytes int64, progress func(float64)) error {
 	if totalBytes <= 0 {
 		totalBytes = 1
 	}
-	minSpeed := d.cfg.Simulate.MinSpeedKBps
-	if minSpeed < 1 {
-		minSpeed = 1
-	}
-	maxSpeed := d.cfg.Simulate.MaxSpeedKBps
-	if maxSpeed < minSpeed {
-		maxSpeed = minSpeed
-	}
+	minSpeed := max(m.cfg.Simulate.MinSpeedKBps, 1)
+	maxSpeed := max(m.cfg.Simulate.MaxSpeedKBps, minSpeed)
 	const tick = 200 * time.Millisecond
 	var done float64
 	for done < float64(totalBytes) {
@@ -312,11 +131,7 @@ func (d *Downloader) simulateTransfer(ctx context.Context, totalBytes int64, pro
 			speed += rand.Float64() * float64(maxSpeed-minSpeed)
 		}
 		done += speed * 1024 * tick.Seconds()
-		p := done / float64(totalBytes)
-		if p > 1 {
-			p = 1
-		}
-		progress(p)
+		progress(min(1, done/float64(totalBytes)))
 	}
 	return nil
 }
@@ -330,38 +145,4 @@ func simulatePause(ctx context.Context, delay time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
-}
-
-func simulatedSizeBytes(song applemusic.Song, info selectedMediaInfo) int64 {
-	seconds := float64(song.DurationInMillis) / 1000
-	if seconds <= 0 {
-		seconds = 210
-	}
-	bandwidth := info.Bandwidth
-	if bandwidth <= 0 {
-		bandwidth = 256000
-	}
-	return int64(float64(bandwidth) / 8 * seconds)
-}
-
-// simulatedSampleCount estimates the packet count of the decrypted stream
-// from the track duration and the sample rate reported by the selected
-// manifest (falling back to 44.1 kHz when the manifest carries none).
-func simulatedSampleCount(song applemusic.Song, codec string, sampleRate int) int {
-	seconds := float64(song.DurationInMillis) / 1000
-	if seconds <= 0 {
-		seconds = 210
-	}
-	if sampleRate <= 0 {
-		sampleRate = 44100
-	}
-	framesPerPacket := 1024.0 // AAC-family samples per packet
-	if codec == "alac" {
-		framesPerPacket = 4096
-	}
-	count := int(seconds * float64(sampleRate) / framesPerPacket)
-	if count < 1 {
-		count = 1
-	}
-	return count
 }

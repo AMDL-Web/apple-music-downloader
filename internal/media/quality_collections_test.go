@@ -209,7 +209,7 @@ func TestQualityQuerySupportsCollectionURLTypes(t *testing.T) {
 			catalog := newCollectionQualityCatalog(manifest.URL)
 			cfg := config.Default()
 			cfg.Catalog.MediaUserToken = "  user-token  "
-			service := NewQualityServiceWithCatalog(cfg, catalog, &collectionQualityWrapper{})
+			service := newTestQualityService(cfg, catalog, &collectionQualityWrapper{})
 
 			result, err := service.QueryQuality(context.Background(), QualityRequest{URL: tt.url})
 			if err != nil {
@@ -260,7 +260,7 @@ func TestQualityQueryAlbumTrackModeUsesUnifiedTracks(t *testing.T) {
 	catalog := newCollectionQualityCatalog(manifest.URL)
 	cfg := config.Default()
 	cfg.Catalog.AlbumTrackURLMode = "song"
-	service := NewQualityServiceWithCatalog(cfg, catalog, &collectionQualityWrapper{})
+	service := newTestQualityService(cfg, catalog, &collectionQualityWrapper{})
 	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/album/example/a1?i=s1"})
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +277,7 @@ func TestQualityQueryAlbumTrackModeUsesUnifiedTracks(t *testing.T) {
 	}
 
 	cfg.Catalog.AlbumTrackURLMode = "album"
-	service = NewQualityServiceWithCatalog(cfg, catalog, &collectionQualityWrapper{})
+	service = newTestQualityService(cfg, catalog, &collectionQualityWrapper{})
 	result, err = service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/album/example/a1?i=s1"})
 	if err != nil {
 		t.Fatal(err)
@@ -298,7 +298,7 @@ func TestQualityQueryReadsLiveMediaUserToken(t *testing.T) {
 	cfg := config.Default()
 	cfg.Catalog.MediaUserToken = "first"
 	store := config.NewStore(cfg)
-	service := NewQualityService(&Downloader{store: store, cfg: cfg, catalog: catalog, wrapper: &collectionQualityWrapper{}, http: newHTTPClient()})
+	service := NewQualityService(newTestDownloader(&Downloader{store: store, cfg: cfg, catalog: catalog, wrapper: &collectionQualityWrapper{}, http: newHTTPClient()}))
 	url := "https://music.apple.com/cn/station/example/ra.1"
 	if _, err := service.QueryQuality(context.Background(), QualityRequest{URL: url}); err != nil {
 		t.Fatal(err)
@@ -363,7 +363,7 @@ func TestQualityQueryCollectionSignedManifestSources(t *testing.T) {
 			cfg.Catalog.AppleMusicTeamID = "TEAM"
 			cfg.Catalog.SignedModeHLSSource = source
 			wrapper := &collectionQualityWrapper{hls: catalog.webHLS}
-			service := NewQualityServiceWithCatalog(cfg, catalog, wrapper)
+			service := newTestQualityService(cfg, catalog, wrapper)
 			result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/album/example/a1"})
 			if err != nil {
 				t.Fatal(err)
@@ -396,7 +396,7 @@ func TestQualityQueryRejectsUnsupportedAndEmptyCollections(t *testing.T) {
 	catalog := newCollectionQualityCatalog("https://example.invalid")
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 1
-	service := NewQualityServiceWithCatalog(cfg, catalog, &collectionQualityWrapper{})
+	service := newTestQualityService(cfg, catalog, &collectionQualityWrapper{})
 	if _, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/music-video/example/mv.1"}); err == nil || !strings.Contains(err.Error(), "not implemented") {
 		t.Fatalf("music-video error = %v", err)
 	}
@@ -454,7 +454,7 @@ func TestQualityQueryUsesSharedRequestGateAndPreservesOrder(t *testing.T) {
 	catalog.albums["many"] = applemusic.Collection{ID: "many", Tracks: tracks}
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 1
-	service := NewQualityServiceWithCatalog(cfg, catalog, &collectionQualityWrapper{})
+	service := newTestQualityService(cfg, catalog, &collectionQualityWrapper{})
 	service.downloader.requestGate = limits.NewRequestGate(maxParallelRequests, 1000, len(tracks))
 	type queryResult struct {
 		result QualityResult
@@ -497,8 +497,12 @@ func TestQualityQueryUsesSharedRequestGateAndPreservesOrder(t *testing.T) {
 	}
 }
 
-func TestQualityQueryJoinsSiblingProbesAfterFailureLikeDownloads(t *testing.T) {
+// One failed probe fails the whole response, so it cancels the probes still
+// running: the query returns that failure while a sibling's manifest request
+// is still hanging, instead of waiting for it.
+func TestQualityQueryCancelsSiblingProbesAfterFirstFailure(t *testing.T) {
 	blockedStarted := make(chan struct{})
+	blockedCancelled := make(chan struct{})
 	releaseBlocked := make(chan struct{})
 	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -515,20 +519,18 @@ func TestQualityQueryJoinsSiblingProbesAfterFailureLikeDownloads(t *testing.T) {
 			default:
 				close(blockedStarted)
 			}
-			<-releaseBlocked
-			writeQualityTestPlaylist(w, r, qualityTestMaster)
+			select {
+			case <-r.Context().Done():
+				close(blockedCancelled)
+			case <-releaseBlocked:
+				writeQualityTestPlaylist(w, r, qualityTestMaster)
+			}
 		default:
 			writeQualityTestPlaylist(w, r, qualityTestMaster)
 		}
 	}))
 	defer manifest.Close()
-	defer func() {
-		select {
-		case <-releaseBlocked:
-		default:
-			close(releaseBlocked)
-		}
-	}()
+	defer close(releaseBlocked)
 
 	catalog := newCollectionQualityCatalog(manifest.URL)
 	catalog.albums["cancel"] = applemusic.Collection{ID: "cancel", Tracks: []applemusic.Song{{ID: "failed"}, {ID: "blocked"}}}
@@ -536,21 +538,23 @@ func TestQualityQueryJoinsSiblingProbesAfterFailureLikeDownloads(t *testing.T) {
 	catalog.songs["blocked"] = applemusic.Song{ID: "blocked", EnhancedHLS: manifest.URL + "/blocked.m3u8"}
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 1
-	service := NewQualityServiceWithCatalog(cfg, catalog, &collectionQualityWrapper{})
+	service := newTestQualityService(cfg, catalog, &collectionQualityWrapper{})
 	done := make(chan error, 1)
 	go func() {
 		_, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/album/example/cancel"})
 		done <- err
 	}()
-	<-blockedStarted
 	select {
 	case err := <-done:
-		t.Fatalf("quality query returned before its started sibling exited: %v", err)
-	case <-time.After(100 * time.Millisecond):
+		if err == nil || !strings.Contains(err.Error(), "502 Bad Gateway") {
+			t.Fatalf("query error = %v, want the failed probe's 502", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("query waited for the hanging sibling probe after the first failure")
 	}
-	close(releaseBlocked)
-	err := <-done
-	if err == nil || !strings.Contains(err.Error(), "502 Bad Gateway") {
-		t.Fatalf("query error = %v", err)
+	select {
+	case <-blockedCancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the sibling probe's request was not cancelled")
 	}
 }

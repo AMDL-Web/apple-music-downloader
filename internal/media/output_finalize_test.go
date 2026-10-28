@@ -24,7 +24,7 @@ func TestHandleExistingOutputHonorsForceOverwriteConfig(t *testing.T) {
 	cfg.Download.TempDir = t.TempDir()
 
 	t.Run("default skips existing file", func(t *testing.T) {
-		d := &Downloader{cfg: cfg}
+		d := newTestDownloader(&Downloader{cfg: cfg})
 		reporter := &recordingReporter{}
 		outPath := newExisting(t)
 		item := domain.JobItem{ID: "item-1", JobID: "job-1"}
@@ -43,7 +43,7 @@ func TestHandleExistingOutputHonorsForceOverwriteConfig(t *testing.T) {
 	t.Run("global force_overwrite redownloads", func(t *testing.T) {
 		forcedCfg := cfg
 		forcedCfg.Download.ForceOverwrite = true
-		d := &Downloader{cfg: forcedCfg}
+		d := newTestDownloader(&Downloader{cfg: forcedCfg})
 		reporter := &recordingReporter{}
 		outPath := newExisting(t)
 		item := domain.JobItem{ID: "item-1", JobID: "job-1"}

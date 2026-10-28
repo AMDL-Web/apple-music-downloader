@@ -27,8 +27,8 @@ func (f fakeAACLCWrapper) WebPlayback(context.Context, string) (string, error) {
 // TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot guards against the
 // real (non-simulate) AAC-LC codec_selected event regressing back to the
 // bare codec/attempt payload used before MarshalEventPayload was introduced;
-// simulate.go's aac-lc branch and selectEnhancedMedia already cover the
-// REST-snapshot fields, this covers the real download path.
+// selectEnhancedMedia's tests cover the REST-snapshot fields of the enhanced
+// codecs, this covers the real AAC-LC path.
 func TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -46,11 +46,11 @@ func TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot(t *testing.T) {
 
 	cfg := config.Default()
 	cfg.Download.TempDir = t.TempDir()
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		http:    server.Client(),
 		wrapper: fakeAACLCWrapper{webPlaybackURL: server.URL + "/track.m3u8"},
-	}
+	})
 	createdAt := time.Now().UTC().Add(-time.Minute)
 	item := &domain.JobItem{
 		ID: "item-1", ArtworkURL: "https://example.com/track/{w}x{h}bb.jpg",
@@ -58,7 +58,7 @@ func TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot(t *testing.T) {
 	}
 	reporter := &recordingReporter{}
 
-	if _, _, release, err := downloader.fetchAACLCMedia(
+	if download, err := downloader.fetchAACLCMedia(
 		context.Background(),
 		domain.Job{ID: "job-1"},
 		item,
@@ -67,8 +67,8 @@ func TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot(t *testing.T) {
 		func(domain.ItemStatus, string, func(*domain.ItemProgress)) {},
 	); err != nil {
 		t.Fatal(err)
-	} else if release != nil {
-		defer release()
+	} else {
+		defer download.release()
 	}
 
 	var found bool

@@ -104,8 +104,8 @@ func TestWidevineDecryptStreamsRealCENCToFlatFile(t *testing.T) {
 	if len(flat) < 12 || string(flat[8:12]) != "M4A " {
 		t.Fatalf("flat output has invalid M4A brand: %q", flat[:min(len(flat), 12)])
 	}
-	if !p.checkIntegrityFile(context.Background(), flatPath) {
-		t.Fatal("streamed AAC-LC output failed integrity check")
+	if err := p.checkIntegrityFile(context.Background(), flatPath); err != nil {
+		t.Fatalf("streamed AAC-LC output failed integrity check: %v", err)
 	}
 
 	decode := func(path string) []byte {
@@ -155,17 +155,5 @@ func TestConfiguredCodecsCanDisableFallback(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "alac" {
 		t.Fatalf("configuredCodecs() = %#v, want [alac]", got)
-	}
-}
-
-func TestAttemptsForCodecAppliesToEveryCodec(t *testing.T) {
-	if got := attemptsForCodec(3, 0); got != 3 {
-		t.Fatalf("first codec attempts = %d, want 3", got)
-	}
-	if got := attemptsForCodec(3, 1); got != 3 {
-		t.Fatalf("fallback codec attempts = %d, want 3", got)
-	}
-	if got := attemptsForCodec(3, 2); got != 3 {
-		t.Fatalf("final fallback attempts = %d, want 3", got)
 	}
 }

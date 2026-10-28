@@ -13,7 +13,7 @@ func TestTrackMetadataResolverReusesResolvedSingleSong(t *testing.T) {
 		metadataCalls: make(map[string]int),
 		albumCalls:    make(map[string]int),
 	}
-	downloader := &Downloader{cfg: config.Default(), catalog: catalog}
+	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	initial := applemusic.Song{
 		ID: "song-1", Name: "Song", AlbumID: "album-1", AlbumArtist: "Album Artist",
 		TrackCount: 10, DiscCount: 2, HasLyrics: true,
@@ -40,7 +40,7 @@ func TestTrackMetadataResolverMergesResolvedAlbumWithoutRefetch(t *testing.T) {
 		metadataCalls: make(map[string]int),
 		albumCalls:    make(map[string]int),
 	}
-	downloader := &Downloader{cfg: config.Default(), catalog: catalog}
+	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	initial := applemusic.Song{
 		ID: "song-1", Name: "Old Song", AlbumID: "album-1", AlbumName: "Album",
 		AlbumArtist: "Album Artist", AlbumArtistID: "artist-1", AlbumArtworkURL: "album-art",
@@ -75,7 +75,7 @@ func TestTrackMetadataResolverPreservesArtistAlbumPlacement(t *testing.T) {
 		metadataCalls: make(map[string]int),
 		albumCalls:    make(map[string]int),
 	}
-	downloader := &Downloader{cfg: config.Default(), catalog: catalog}
+	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	initial := applemusic.Song{
 		ID: "song-1", Name: "Song", AlbumID: "second-album", AlbumName: "Second Album",
 		ArtworkURL: "second-art", TrackNumber: 7, DiscNumber: 2,
@@ -117,7 +117,7 @@ func TestTrackMetadataResolverCoalescesPlaylistAlbumReads(t *testing.T) {
 		albumWait:     albumWait,
 		albumStarted:  albumStarted,
 	}
-	downloader := &Downloader{cfg: config.Default(), catalog: catalog}
+	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	resolver := newTrackMetadataResolver(downloader, "cn")
 	results := make(chan applemusic.Song, 2)
 	errs := make(chan error, 2)
@@ -174,7 +174,7 @@ func TestTrackMetadataResolverEnrichesStationTracksWithAlbum(t *testing.T) {
 		metadataCalls: make(map[string]int),
 		albumCalls:    make(map[string]int),
 	}
-	downloader := &Downloader{cfg: config.Default(), catalog: catalog}
+	downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
 	resolver := newTrackMetadataResolver(downloader, "cn")
 
 	// Station tracks come from the next-tracks feed: their album relationship

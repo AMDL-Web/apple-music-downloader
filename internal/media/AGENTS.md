@@ -13,22 +13,46 @@ every install, so it needs the maintainer's OK and a release note:
 - template expansion in `outputPath` and its variables (`{Quality}`, `{Codec}`,
   `{SongNumber}`, `{TrackNumber}`, ...). The defaults and the variable list live in
   `configs/config.example.yaml`; README "Where files land" explains them.
-- `safeName`: which characters become `_` and what is trimmed. Changing it renames
-  existing folders.
-- `qualityLabel` strings such as `24-bit/96 kHz` and `256Kbps`, which `{Quality}`
-  puts into names after `safeName`.
-- Sidecar names: `<track>.lrc` or `<track>.ttml` next to the `.m4a`, `cover.<ext>`
-  in an album or playlist folder, `artist.<ext>` in an artist folder.
+- `safeName`: which characters become `_`, what is trimmed and the 240-byte segment
+  cap. Changing it renames existing folders.
+- `qualityLabel` strings such as `24-bit/96 kHz` and `256Kbps` (`aacLCQualityLabel`),
+  which `{Quality}` puts into names after `safeName`.
+- Sidecar names: `lyricsSidecarPath` (`<track>.lrc` or `<track>.ttml` next to the
+  `.m4a`), `cover.<ext>` in an album or playlist folder, `artist.<ext>` in an artist
+  folder.
 - A finished file reaches its path only through `finalizeToOutput`;
   `Downloader.handleExistingOutput` relies on that to skip files already there.
 
-## Simulate mode mirrors the real lifecycle
+`paths_golden_test.go` pins all of these. A golden that has to change is a path
+change, not a test fix.
 
-`Downloader.simulateTrack` replays `Downloader.processTrack` (statuses, progress
-bands, DB fields, events) with real catalog data and media selection but a
-simulated transfer, and never touches the disk. A change to the real lifecycle
-changes simulate in the same commit: `make dev` and client development rely on
-the two matching.
+## One pipeline, two backends
+
+`trackRun` and the stage functions it calls (`downloadEnhancedCodec`,
+`decryptAACLC`, `finalizeTrackOutput`, ...) own every status, message, progress
+band, permit, retry and event. All I/O goes through `mediaBackend`: `realMedia` in
+production, `simulatedMedia` in simulate mode. Never branch on `Simulate.Enabled`
+inside the pipeline; give the backend a method instead, so simulate keeps matching
+the real lifecycle (`TestSimulatedTrackMatchesTheRealLifecycle`). The simulated
+backend must never write, delete or run anything.
+
+## Stopping a job
+
+- User cancel: every unfinished item ends `cancelled` with an `item_progress` event,
+  written on a detached context (`markCancelled`, `cancelUnfinishedItems`); the job's
+  resume checkpoints are removed.
+- Shutdown (`errors.Is(context.Cause(ctx), jobs.ErrShutdown)`, see `isShutdown`):
+  items and checkpoints are left as they are for recovery. Don't write a terminal
+  item state or delete a checkpoint on that path.
+- Terminal item writes go through `persistTerminal` (log and retry once); don't
+  `_ =` them.
+
+## Transfers
+
+Media transfers have no `http.Client.Timeout`: transport timeouts bound the
+connection and `mediaStallTimeout` bounds a body that stops arriving. Both the
+in-memory and checkpoint downloads use `rangeTransfer`; change resume rules there,
+once.
 
 ## External tools
 

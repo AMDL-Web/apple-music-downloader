@@ -2,7 +2,9 @@ package media
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,17 +12,23 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	"amdl/internal/applemusic"
 	"amdl/internal/domain"
 	"amdl/internal/jobs"
 )
 
+// handleExistingOutput decides whether outPath is already downloaded. Without
+// force_overwrite an existing file finishes the item as skipped_existing (and
+// drops any resume checkpoint for it); with it, the stale output is removed
+// and the item_overwrite event says so.
 func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Reporter, job domain.Job, item *domain.JobItem, outPath string) (bool, error) {
+	backend := d.backend()
 	item.OutputPath = outPath
 	// d.cfg is the job's effective config (runtime snapshot plus overrides),
 	// so overrides.force_overwrite already won over the global key here.
 	force := d.cfg.Download.ForceOverwrite
 	if fi, err := os.Stat(outPath); err == nil && !force {
-		cleanupResumeForKey(d.cfg.Download.TempDir, job.ID, outPath)
+		backend.discardCheckpoint(job.ID, outPath)
 		item.Status = domain.ItemSkipped
 		// The breakdown is left as it stands: resolved is already true — the
 		// catalog lookup is what produced the path checked just above — and
@@ -31,15 +39,148 @@ func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Rep
 		item.Attempt = 0
 		item.MaxAttempts = 0
 		item.StatusMessage = "File already exists; skipped"
-		_ = reporter.UpdateItem(ctx, item)
-		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})})
+		d.persistTerminal(ctx, reporter, item, func() domain.Event {
+			return domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})}
+		})
 		return true, nil
 	}
 	if force {
-		cleanupFailedOutput(outPath)
+		backend.discardOutput(outPath)
 		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemOverwrite, Message: "force overwrite enabled", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "force overwrite enabled"})})
 	}
 	return false, nil
+}
+
+// outputLabels are the status messages and error prefixes of the finalize
+// stage. Enhanced codecs and AAC-LC word them differently, and clients show
+// them, so each keeps its own.
+type outputLabels struct {
+	saving, verified, tagging, tagged     string
+	integrityFailed, tagFailed, commitErr string
+}
+
+var (
+	enhancedOutputLabels = outputLabels{
+		saving: "saving", verified: "integrity verified", tagging: "writing metadata", tagged: "metadata written",
+		integrityFailed: "integrity check failed", tagFailed: "write metadata", commitErr: "finalize output file",
+	}
+	aacLCOutputLabels = outputLabels{
+		saving: "saving AAC-LC", verified: "AAC-LC integrity verified", tagging: "writing AAC-LC metadata", tagged: "AAC-LC metadata written",
+		integrityFailed: "AAC-LC integrity check failed", tagFailed: "write AAC-LC metadata", commitErr: "finalize AAC-LC output file",
+	}
+)
+
+// trackOutput is a decrypted, remuxed track on temp storage and everything
+// needed to finish it.
+type trackOutput struct {
+	job      domain.Job
+	item     *domain.JobItem
+	reporter jobs.Reporter
+	song     applemusic.Song
+	codec    string
+	lyrics   string
+	cover    []byte
+	staged   stagedFile
+	outPath  string
+	labels   outputLabels
+	// allowALACRepair lets a failed integrity check try repairing malformed
+	// ALAC packet terminators before giving up.
+	allowALACRepair bool
+}
+
+// finalizeTrackOutput verifies, writes the lyrics sidecar, tags and commits a
+// staged track, then records the completed item's output fields. Verify and
+// tag run on temp storage (typically fast local disk), so a possibly slow
+// downloads volume sees one sequential write: the commit.
+func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBackend, out trackOutput, set publishStage) error {
+	set(domain.ItemSaving, out.labels.saving, nil)
+	if d.cfg.Download.CheckIntegrity {
+		if err := backend.verify(ctx, out.staged); err != nil {
+			if !out.allowALACRepair {
+				return fmt.Errorf("%s: %w", out.labels.integrityFailed, err)
+			}
+			// The repair re-verifies, so reaching the mark below still means
+			// the file passed a real check.
+			if err := d.repairALACOutput(ctx, backend, out); err != nil {
+				return err
+			}
+		}
+		set(domain.ItemSaving, out.labels.verified, markVerified)
+	}
+	if err := backend.mkdirAll(filepath.Dir(out.outPath)); err != nil {
+		return fmt.Errorf("create output directory: %w", err)
+	}
+	if d.cfg.Download.SaveLyricsFile && out.lyrics != "" {
+		if err := backend.writeFile(lyricsSidecarPath(out.outPath, d.cfg.Download.LyricsFormat), []byte(out.lyrics)); err != nil {
+			return fmt.Errorf("write lyrics file: %w", err)
+		}
+	}
+	set(domain.ItemTagging, out.labels.tagging, nil)
+	if err := backend.tag(ctx, out.staged, out.song, out.lyrics, out.cover); err != nil {
+		return fmt.Errorf("%s: %w", out.labels.tagFailed, err)
+	}
+	set(domain.ItemTagging, out.labels.tagged, markTagged)
+	// Only ever expose a complete, tagged file at outPath (see
+	// finalizeToOutput), so handleExistingOutput's "bare existence = done" skip
+	// stays correct even if the process dies mid-move.
+	size, err := backend.commit(out.staged, out.outPath)
+	if err != nil {
+		return fmt.Errorf("%s: %w", out.labels.commitErr, err)
+	}
+	item := out.item
+	item.Status = domain.ItemCompleted
+	markSaved(&item.Progress)
+	item.Progress.CompleteTransfers()
+	item.OutputPath = out.outPath
+	item.Codec = out.codec
+	item.FileSize = size
+	return nil
+}
+
+// repairALACOutput is the ALAC integrity-repair fallback, run only when the
+// flattened file fails the decode check: patch, report, re-verify.
+func (d *Downloader) repairALACOutput(ctx context.Context, backend mediaBackend, out trackOutput) error {
+	err := backend.repairALAC(ctx, out.staged, func(patched int) {
+		payload, _ := json.Marshal(map[string]any{"patched_packets": patched})
+		_ = out.reporter.Event(ctx, domain.Event{JobID: out.job.ID, ItemID: out.item.ID, Type: domain.EventALACRepaired, Phase: out.codec, Payload: payload})
+	})
+	if err != nil {
+		return err
+	}
+	if err := backend.verify(ctx, out.staged); err != nil {
+		return fmt.Errorf("integrity check failed after alac repair: %w", err)
+	}
+	return nil
+}
+
+// writeFileAtomic writes data to path through a temp file in the same
+// directory and a rename, so a crash, kill or full disk never leaves a
+// truncated file at path. Standalone covers depend on this: an existing cover
+// is never fetched again. The file ends up 0644 like every other output.
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), stagingPattern(path))
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	_, writeErr := tmp.Write(data)
+	if writeErr == nil {
+		writeErr = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); writeErr == nil {
+		writeErr = closeErr
+	}
+	if writeErr == nil {
+		writeErr = os.Chmod(tmpPath, 0o644)
+	}
+	if writeErr == nil {
+		writeErr = os.Rename(tmpPath, path)
+	}
+	if writeErr != nil {
+		_ = os.Remove(tmpPath)
+		return writeErr
+	}
+	return nil
 }
 
 // outputFileSize returns the size in bytes of the finished output file, or 0
@@ -203,11 +344,13 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
+// cleanupFailedOutput removes outPath, its staged parts and both possible
+// lyrics sidecars.
 func cleanupFailedOutput(outPath string) {
 	_ = os.Remove(outPath)
 	removeStagedParts(outPath)
-	_ = os.Remove(strings.TrimSuffix(outPath, ".m4a") + ".lrc")
-	_ = os.Remove(strings.TrimSuffix(outPath, ".m4a") + ".ttml")
+	_ = os.Remove(lyricsSidecarPath(outPath, "lrc"))
+	_ = os.Remove(lyricsSidecarPath(outPath, "ttml"))
 }
 
 // removeStagedParts drops copyIntoPlace staging files for outPath. copyIntoPlace

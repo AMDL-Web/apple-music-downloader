@@ -32,7 +32,7 @@ const eventItemProgress = domain.EventItemProgress
 // keep that from losing anything:
 //
 //   - Status changes and pipeline-stage completions bypass the gate entirely
-//     and are emitted immediately (see set in downloader.go), so no terminal or
+//     and are emitted immediately (see trackRun.stageSetter), so no terminal or
 //     transition event is ever delayed.
 //   - Every other item event carries a full JobItem snapshot, so a held meter
 //     value can never be the last word: Event flushes the held update ahead of
@@ -57,8 +57,8 @@ type progressGate struct {
 	lastEmit time.Time
 	held     bool
 	// emit publishes the item's current state as an item_progress event. Owned
-	// by processTrackWithMetadata, which is where the live item value lives.
-	emit func()
+	// by trackRun, which is where the live item value lives.
+	emit func(context.Context)
 }
 
 func newProgressGate(base jobs.Reporter, interval time.Duration) *progressGate {
@@ -97,20 +97,24 @@ func (g *progressGate) emitted() {
 }
 
 // flush publishes a suppressed progress update, if one is pending.
-func (g *progressGate) flush() {
+func (g *progressGate) flush(ctx context.Context) {
 	if !g.held || g.emit == nil {
 		return
 	}
 	g.held = false
-	g.emit()
+	g.emit(ctx)
 }
+
+// discard drops a suppressed progress update without publishing it, for a
+// terminal write whose own event carries the full snapshot anyway.
+func (g *progressGate) discard() { g.held = false }
 
 // Event publishes any held meter value before the event that supersedes it, so
 // the last progress value before a state change is never dropped and never
 // arrives after the state change it preceded.
 func (g *progressGate) Event(ctx context.Context, ev domain.Event) error {
 	if ev.Type != eventItemProgress {
-		g.flush()
+		g.flush(ctx)
 	}
 	return g.Reporter.Event(ctx, ev)
 }

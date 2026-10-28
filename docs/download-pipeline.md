@@ -33,6 +33,30 @@ If `temp_dir` and `downloads_dir` share a filesystem, the final move is an atomi
 across filesystems it is one copy through a `.part` file, which preserves complete-file
 publication and failure-cleanup semantics.
 
+Lyrics sidecars and standalone covers are written through a temp file in the same
+folder and a rename, so an interrupted write never leaves a truncated file behind. That
+matters for covers in particular: a cover already on disk is never fetched again.
+
+### Cancel and shutdown
+
+A job stops in one of two ways, and they end its items differently:
+
+- **Cancelled by the user** (`POST /downloads/{id}/cancel`): every item that has not
+  finished ends `cancelled`, including tracks that were still waiting for a permit or
+  never started. Each gets an `item_progress` event with `phase: cancelled` carrying
+  the full item, so a client that follows only the stream sees it stop. These writes
+  run on a context detached from the cancelled job, with a short timeout. The job's
+  resume checkpoints are deleted.
+- **Interrupted by shutdown**: items are left exactly as they were and the resume
+  checkpoints stay, so the recovered job continues the transfers on the next start
+  (see [Architecture](architecture.md#1-process-and-lifecycle)).
+
+A terminal item write (completed, skipped, failed, cancelled) that fails is retried
+once on a context that is not cancelled and logged with the job and item ids, because
+it is the only record of how the track ended. Intermediate progress writes are
+best-effort. A panic inside one track's pipeline fails that item with the panic as its
+error, logs the stack, and leaves the other tracks running.
+
 `ffmpeg` (`tools.ffmpeg`) is the only external command required — it flattens the remuxed
 MP4 and runs the optional integrity check. Sample extraction, re-encapsulation, metadata
 and cover art are all handled in-process by the Go `mp4ff` and `go-mp4tag` libraries, so
@@ -54,10 +78,29 @@ and cover art are all handled in-process by the Go `mp4ff` and `go-mp4tag` libra
 - Retryable errors use exponential backoff with jitter. When Apple's Catalog API returns
   `Retry-After`, the wait is never shorter than that hint, so a batch of requests cannot
   synchronously replay.
+- Errors that cannot change on retry stop a codec at once. A song without an Enhanced
+  HLS manifest, or whose manifest lacks the codec, falls back to the next codec after
+  one attempt.
+- A failed integrity check carries ffmpeg's own output (the first 1 KiB), so the item's
+  error says what was wrong with the file.
 - Retries, exhaustion, recovery and codec fallback all surface as job SSE events. Each
   item in the job detail also carries `retry_kind`, `attempt`, `max_attempts` and
   `status_message`, where `attempt` is the 1-based try number within the current
   `retry_kind` phase.
+
+## Transfers
+
+Encrypted media transfers have no whole-request deadline, because a 24-bit/192 kHz
+track can be several hundred MB. Connecting, the TLS handshake and waiting for the
+response headers are bounded by the HTTP transport; after that a transfer fails only
+when no byte of the body arrives for 60 seconds, with an error naming the stall. A
+low-memory checkpoint keeps the bytes that did arrive, so the retry resumes from there.
+Playlists and manifests keep a 30-second limit on the whole request.
+
+The in-memory and on-disk transfers share one `Range`/`If-Range` resume state machine:
+a resumed response is used only when its `Content-Range` and validator prove it belongs
+to the bytes already held, and a server that ignores the range restarts the transfer
+from zero rather than mixing two representations.
 
 ## Concurrency
 
@@ -144,11 +187,24 @@ never aborts the audio download: the file is saved without lyrics and the item's
 explains why. Each item also carries a `lyrics_status` of `fetched`, `failed`, `none`
 (catalog reports no lyrics) or `disabled` (neither embedding nor sidecars are on).
 
+## Simulate mode
+
+`simulate.enabled` swaps the media backend, not the pipeline. Catalog metadata and
+Enhanced HLS media selection run for real, and then the same pipeline code runs as for
+a real download: the same statuses, progress bands, status messages, events, retries
+and codec fallback. Only the backend's work is pretended: transfers and decryption are
+paced by a speed drawn from `simulate.min_speed_kbps`..`max_speed_kbps`, the AAC-LC
+WebPlayback asset, cover art and lyrics are stand-ins, and nothing is written, deleted
+or run (no ffmpeg, no wrapper). An output that already exists on disk is still reported
+as skipped, and `force_overwrite` never deletes it in simulate mode.
+
 ## Output paths
 
 One template per task type, resolved relative to `download.downloads_dir`. The last
 segment is the file name and gets `.m4a` appended. Every segment is sanitised
-independently, so a template value can never create extra directories.
+independently, so a template value can never create extra directories. How a segment is
+cleaned (reserved characters, leading and trailing dots, the 240-byte cap) is in
+[Architecture](architecture.md#5-output-paths).
 
 | Key | Default |
 | --- | --- |

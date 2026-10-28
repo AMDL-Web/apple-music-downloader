@@ -79,7 +79,7 @@ func TestEncapsulateRoundTripProducesPlayableFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixEncapsulate: %v", err)
 	}
-	if !p.checkIntegrity(ctx, flat) {
+	if err := p.checkIntegrity(ctx, flat); err != nil {
 		t.Fatal("integrity check failed on round-tripped output")
 	}
 }

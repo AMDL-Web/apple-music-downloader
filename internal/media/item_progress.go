@@ -52,17 +52,9 @@ func clampFrac(v float64) float64 {
 	return math.Max(0, math.Min(1, v))
 }
 
-// progressChanged reports whether the breakdown moved enough to justify a DB
-// write and an SSE frame: any stage flag flipping, or either meter rounding to
-// a different whole percent. Movement that rounds to the same percent is
-// dropped — see the throttle comment on set.
-func progressChanged(prev, next domain.ItemProgress) bool {
-	return stagesChanged(prev, next) || metersChanged(prev, next)
-}
-
 // stagesChanged reports whether a one-shot pipeline stage completed. These are
 // state transitions, not progress within a state, so they are never rate
-// limited — see the two gates documented on set.
+// limited (see the two gates documented on trackRun.stageSetter).
 func stagesChanged(prev, next domain.ItemProgress) bool {
 	return prev.Resolved != next.Resolved || prev.Remuxed != next.Remuxed ||
 		prev.Verified != next.Verified || prev.Tagged != next.Tagged || prev.Saved != next.Saved

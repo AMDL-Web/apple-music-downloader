@@ -11,7 +11,7 @@ import (
 )
 
 func TestSetItemQualityUpdatesItemAndPersists(t *testing.T) {
-	downloader := &Downloader{}
+	downloader := newTestDownloader(&Downloader{})
 	reporter := &recordingReporter{}
 	item := domain.JobItem{ID: "item-1"}
 	downloader.setItemQuality(context.Background(), reporter, &item, 24, 96000, 3000000)
@@ -30,7 +30,7 @@ func TestSetItemQualityUpdatesItemAndPersists(t *testing.T) {
 // A failed attempt inside a codec is an operation_* event whose phase is the
 // codec; there are no codec_retry/codec_exhausted/codec_recovered types.
 func TestRetryEventsAreOperationTypesWithCodecPhase(t *testing.T) {
-	d := &Downloader{}
+	d := newTestDownloader(&Downloader{})
 	reporter := &recordingReporter{}
 	item := &domain.JobItem{ID: "item-1", JobID: "job-1"}
 	ctx := context.Background()

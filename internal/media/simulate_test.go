@@ -34,6 +34,9 @@ func wantSimulatedProgress(cfg config.Config) domain.ItemProgress {
 	}
 }
 
+// Two simulated tracks share one download and one decrypt permit: the second
+// downloads while the first decrypts, so the pair takes well under twice one
+// track's time (about 0.95 s each at this speed, 1.25 s pipelined, 1.9 s serial).
 func TestSimulateUsesSharedPipelinedMediaPools(t *testing.T) {
 	cfg := config.Default()
 	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
@@ -42,24 +45,22 @@ func TestSimulateUsesSharedPipelinedMediaPools(t *testing.T) {
 	cfg.Download.CodecAlternative = false
 	cfg.Download.MaxParallelDownloads = 1
 	cfg.Download.MaxParallelDecrypts = 1
-	cfg.Download.ForceOverwrite = true
-	base := (&Downloader{cfg: cfg}).withConfig(cfg)
+	cfg.Download.EmbedCover = false
+	base := newTestDownloader(&Downloader{cfg: cfg}).withConfig(cfg)
 
 	start := time.Now()
 	var wg sync.WaitGroup
 	for i := range 2 {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			reporter := &recordingReporter{}
 			item := domain.JobItem{ID: fmt.Sprintf("item-%d", i), JobID: fmt.Sprintf("job-%d", i)}
-			err := base.withConfig(cfg).simulateTrack(context.Background(), domain.Job{ID: item.JobID}, &item,
-				applemusic.Song{ID: item.ID, Name: "Track", DurationInMillis: 1000}, applemusic.TypeAlbum,
-				"Album", "album", 1, "Artist", reporter, func(domain.ItemStatus, string, func(*domain.ItemProgress)) {})
+			song := applemusic.Song{ID: item.ID, Name: fmt.Sprintf("Track %d", i), DurationInMillis: 1000}
+			err := base.withConfig(cfg).processTrack(context.Background(), domain.Job{ID: item.JobID}, item, song,
+				"cn", applemusic.TypeSong, "", "", 1, "", reporter)
 			if err != nil {
-				t.Errorf("simulateTrack: %v", err)
+				t.Errorf("simulated track %d: %v", i, err)
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
 	if elapsed := time.Since(start); elapsed >= 1700*time.Millisecond {
@@ -96,11 +97,11 @@ func TestSimulateTrackSelectsRealMediaButNeverDownloadsOrWrites(t *testing.T) {
 		ID: "song-1", Name: "Track", ArtistName: "Artist", AlbumName: "Album",
 		DurationInMillis: 1000, EnhancedHLS: server.URL + "/master.m3u8",
 	}
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		catalog: fakeDownloaderCatalog{song: song},
 		http:    server.Client(),
-	}
+	})
 	reporter := &recordingReporter{}
 	job := domain.Job{ID: "job-1"}
 	item := domain.JobItem{ID: "item-1", JobID: "job-1"}
@@ -188,10 +189,10 @@ func TestSimulateTrackFallsBackToAACLCWithoutManifest(t *testing.T) {
 	cfg.Download.MaxAttempts = 1 // avoid retry backoff delays; selection retries mirror the real path
 	// No EnhancedHLS manifest: every enhanced codec fails selection and the
 	// simulated run must walk the same fallback chain down to AAC-LC.
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}},
-	}
+	})
 	reporter := &recordingReporter{}
 
 	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); err != nil {
@@ -243,7 +244,7 @@ func TestSimulateTrackFallsBackToAACLCWithoutManifest(t *testing.T) {
 func TestSimulateModeSkipsWrapperStorefrontCheck(t *testing.T) {
 	cfg := config.Default()
 	cfg.Simulate.Enabled = true
-	downloader := &Downloader{cfg: cfg} // no wrapper wired at all
+	downloader := newTestDownloader(&Downloader{cfg: cfg}) // no wrapper wired at all
 	if err := downloader.validateStorefront(context.Background(), "cn"); err != nil {
 		t.Fatalf("simulate mode must not require a running wrapper, got: %v", err)
 	}

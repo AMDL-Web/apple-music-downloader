@@ -45,10 +45,10 @@ func TestSelectEnhancedMediaDoesNotDownloadEncryptedMedia(t *testing.T) {
 
 	cfg := config.Default()
 	cfg.Download.TempDir = t.TempDir()
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:  cfg,
 		http: server.Client(),
-	}
+	})
 	item := &domain.JobItem{ID: "item-1"}
 	reporter := &recordingReporter{}
 	selected, err := downloader.selectEnhancedMedia(
@@ -123,7 +123,7 @@ func TestDownloadSelectedEnhancedMediaHighKeepsOnlyMemoryCopy(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.MemoryMode = config.MemoryModeHigh
 	cfg.Download.TempDir = tempDir
-	downloader := &Downloader{cfg: cfg, http: server.Client()}
+	downloader := newTestDownloader(&Downloader{cfg: cfg, http: server.Client()})
 	selected, err := downloader.downloadSelectedEnhancedMedia(
 		context.Background(),
 		selectedDownloadMedia{info: selectedMediaInfo{MediaURI: server.URL}},
@@ -179,7 +179,7 @@ func TestDownloadSelectedEnhancedMediaHighResumesInterruptedTransfer(t *testing.
 	cfg := config.Default()
 	cfg.Download.MemoryMode = config.MemoryModeHigh
 	cfg.Download.TempDir = tempDir
-	downloader := &Downloader{cfg: cfg, http: server.Client()}
+	downloader := newTestDownloader(&Downloader{cfg: cfg, http: server.Client()})
 	selected, err := downloader.downloadSelectedEnhancedMedia(
 		context.Background(),
 		selectedDownloadMedia{info: selectedMediaInfo{MediaURI: server.URL}},

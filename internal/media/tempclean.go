@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// tempArtifactPrefixes are the basename prefixes of the scratch files and
-// directories the downloader creates under Download.TempDir: legacy encrypted
-// downloads (raw-), streamed decrypt output (dec-), flattened/tagged staging
-// files (flat-), and ffmpeg working dirs (fix-, check-). Resumable encrypted
-// downloads use the separate resume- prefix and intentionally survive startup
-// cleanup so RecoverUnfinished can continue them.
+// tempArtifactPrefixes are the basename prefixes of scratch files and
+// directories under Download.TempDir: the flattened/tagged staging files the
+// pipeline creates (flat-), and leftovers of earlier builds (raw- encrypted
+// downloads, dec- decrypt output, fix- and check- ffmpeg working dirs).
+// Resumable encrypted downloads use the separate resume- prefix and
+// intentionally survive startup cleanup so RecoverUnfinished can continue them.
 var tempArtifactPrefixes = []string{"raw-", "dec-", "flat-", "fix-", "check-"}
 
 // CleanupStaleTemp removes leftover downloader scratch files and directories

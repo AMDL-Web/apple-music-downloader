@@ -15,10 +15,10 @@ import (
 func TestProcessTrackEventsCarryRESTItemSnapshot(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 1 // avoid retry backoff delays; the fetch failure is the point of this test
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		catalog: fakeDownloaderCatalog{songErr: errors.New("boom")},
-	}
+	})
 	reporter := &recordingReporter{}
 	createdAt := time.Now().UTC().Add(-time.Minute)
 	item := domain.JobItem{
@@ -70,10 +70,10 @@ func TestProcessTrackRefreshesHasLyricsFromCatalogSong(t *testing.T) {
 	cfg.Download.MaxAttempts = 1
 	cfg.Simulate.Enabled = true
 	cfg.Download.QualityPriority = nil
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     cfg,
 		catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "One", HasLyrics: true}},
-	}
+	})
 	reporter := &recordingReporter{}
 	item := domain.JobItem{ID: "item-1", JobID: "job-1", AdamID: "song-1"}
 	job := domain.Job{ID: "job-1"}
@@ -126,12 +126,12 @@ func TestProcessTrackRecordsLyricsStatus(t *testing.T) {
 			cfg.Download.SaveLyricsFile = false
 			cfg.Download.LyricsFormat = "ttml" // pass the fetched raw through unconverted
 			cfg.Tools.FFmpeg = "amdl-test-missing-ffmpeg"
-			downloader := &Downloader{
+			downloader := newTestDownloader(&Downloader{
 				cfg:     cfg,
 				catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "One", HasLyrics: tc.hasLyrics}},
 				wrapper: fakeDownloaderWrapper{lyrics: tc.lyrics, lyricsErr: tc.lyricsErr},
 				tools:   NewToolChecker(cfg.Tools),
-			}
+			})
 			reporter := &recordingReporter{}
 			item := domain.JobItem{ID: "item-1", JobID: "job-1", AdamID: "song-1"}
 

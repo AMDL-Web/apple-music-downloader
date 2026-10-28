@@ -10,10 +10,10 @@ import (
 )
 
 func TestValidateRequestAcceptsArtistURL(t *testing.T) {
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     config.Default(),
 		wrapper: fakeDownloaderWrapper{status: wrapper.Status{Ready: true, Status: true, Regions: []string{"cn"}}},
-	}
+	})
 	result, err := downloader.ValidateRequest(context.Background(), "https://music.apple.com/cn/artist/example/1495777901")
 	if err != nil {
 		t.Fatal(err)

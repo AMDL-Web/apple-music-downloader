@@ -43,7 +43,7 @@ func TestDownloadPublishesWaitingUntilGlobalPermitIsGranted(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.TempDir = t.TempDir()
 	cfg.Download.MaxParallelDownloads = 1
-	d := (&Downloader{cfg: cfg, http: server.Client()}).withConfig(cfg)
+	d := (newTestDownloader(&Downloader{cfg: cfg, http: server.Client()})).withConfig(cfg)
 	releaseHeldPermit, err := d.downloadLimit.Acquire(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestMediaDownloadLimitSharedAcrossJobClones(t *testing.T) {
 	cfg.Download.TempDir = t.TempDir()
 	cfg.Download.MaxParallelDownloads = 1
 	cfg.Download.MaxParallelDecrypts = 1
-	base := (&Downloader{cfg: cfg, http: server.Client()}).withConfig(cfg)
+	base := (newTestDownloader(&Downloader{cfg: cfg, http: server.Client()})).withConfig(cfg)
 	a, b := base.withConfig(cfg), base.withConfig(cfg)
 	if a.downloadLimit != b.downloadLimit || a.decryptLimit != b.decryptLimit || a.inFlightLimit != b.inFlightLimit {
 		t.Fatal("withConfig clones did not share process-wide media limiters")
@@ -191,10 +191,10 @@ func TestMediaInFlightBackpressureAndDownloadFailureRelease(t *testing.T) {
 	defer server.Close()
 	cfg := config.Default()
 	cfg.Download.TempDir = t.TempDir()
-	d := &Downloader{
+	d := newTestDownloader(&Downloader{
 		cfg: cfg, http: server.Client(),
 		downloadLimit: limits.NewSemaphore(2), decryptLimit: limits.NewSemaphore(1), inFlightLimit: limits.NewSemaphore(3),
-	}
+	})
 	input := selectedDownloadMedia{info: selectedMediaInfo{MediaURI: server.URL}}
 	if _, err := d.downloadSelectedEnhancedMedia(context.Background(), input, "alac", "job-backpressure", "out-first.m4a", func(domain.ItemStatus, string, func(*domain.ItemProgress)) {}); err == nil {
 		t.Fatal("first failed media response unexpectedly succeeded")
@@ -248,9 +248,9 @@ func TestDecryptLimitIsGlobalAndCanceledWaiterDoesNotEnter(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := &blockingDecryptWrapper{entered: make(chan struct{}, 2), allow: make(chan struct{}, 1)}
-	base := (&Downloader{cfg: cfg, wrapper: w, http: http.DefaultClient}).withConfig(cfg)
+	base := (newTestDownloader(&Downloader{cfg: cfg, wrapper: w, http: http.DefaultClient})).withConfig(cfg)
 	base.decryptLimit = limits.NewSemaphore(1)
-	selected := selectedDownloadMedia{rawPath: rawPath, info: selectedMediaInfo{}}
+	selected := selectedDownloadMedia{encryptedMedia: encryptedMedia{rawPath: rawPath}}
 	call := func(ctx context.Context, d *Downloader) error {
 		return d.downloadEnhancedCodec(ctx, domain.Job{ID: "job"}, &domain.JobItem{ID: "item"}, applemusic.Song{ID: "song"},
 			"alac", "", nil, cfg.Download.TempDir+"/out.m4a", selected, &recordingReporter{}, func(domain.ItemStatus, string, func(*domain.ItemProgress)) {})

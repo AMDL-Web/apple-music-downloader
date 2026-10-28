@@ -36,7 +36,7 @@ func newTrackMetadataResolver(d *Downloader, storefront string) *trackMetadataRe
 
 func (r *trackMetadataResolver) song(ctx context.Context, initial applemusic.Song, collectionType applemusic.URLType) (applemusic.Song, error) {
 	// A single-song resolve already used CatalogClient.Song, including its album
-	// enrichment, immediately before processTrack. Reusing it avoids fetching
+	// enrichment, immediately before the track run. Reusing it avoids fetching
 	// both the song and its album twice. The name guard retains a defensive
 	// fallback for callers that provide only an Adam ID.
 	if collectionType == applemusic.TypeSong && strings.TrimSpace(initial.Name) != "" {

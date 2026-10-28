@@ -66,7 +66,7 @@ func TestMotionArtworkAlbumIDPicksTheAlbumBehindTheJob(t *testing.T) {
 // and silently never persist a cover the album actually has.
 func TestMotionArtworkBackfillOutlivesTheJobContext(t *testing.T) {
 	reporter := &recordingReporter{}
-	d := &Downloader{
+	d := newTestDownloader(&Downloader{
 		cfg: motionArtworkEnabledConfig(),
 		catalog: fakeDownloaderCatalog{motionArtwork: applemusic.MotionArtwork{
 			Square:       "https://mvod.example/square.m3u8",
@@ -75,7 +75,7 @@ func TestMotionArtworkBackfillOutlivesTheJobContext(t *testing.T) {
 			TallColors:   applemusic.ArtworkColors{BgColor: "05104b", TextColor1: "d5d9ed"},
 		}},
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	d.startMotionArtworkBackfill(ctx, "job-1", applemusic.ParsedURL{
@@ -100,11 +100,11 @@ func TestMotionArtworkBackfillOutlivesTheJobContext(t *testing.T) {
 // already returned and the download is in flight by now.
 func TestMotionArtworkBackfillSwallowsCatalogFailure(t *testing.T) {
 	reporter := &recordingReporter{}
-	d := &Downloader{
+	d := newTestDownloader(&Downloader{
 		cfg:     motionArtworkEnabledConfig(),
 		catalog: fakeDownloaderCatalog{motionArtworkErr: errors.New("amp-api unavailable")},
 		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	})
 
 	d.startMotionArtworkBackfill(context.Background(), "job-1", applemusic.ParsedURL{
 		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
@@ -127,11 +127,11 @@ func TestMotionArtworkBackfillSwallowsCatalogFailure(t *testing.T) {
 // An album with no animated cover writes nothing rather than blanking the row.
 func TestMotionArtworkBackfillIgnoresEmptyResult(t *testing.T) {
 	reporter := &recordingReporter{}
-	d := &Downloader{
+	d := newTestDownloader(&Downloader{
 		cfg:     motionArtworkEnabledConfig(),
 		catalog: fakeDownloaderCatalog{motionArtwork: applemusic.MotionArtwork{}},
 		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	})
 
 	d.startMotionArtworkBackfill(context.Background(), "job-1", applemusic.ParsedURL{
 		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
@@ -176,11 +176,11 @@ func TestMotionArtworkBackfillDisabledByConfig(t *testing.T) {
 	catalog := &countingMotionArtworkCatalog{art: applemusic.MotionArtwork{
 		Square: "https://example.test/square.m3u8",
 	}}
-	d := &Downloader{
+	d := newTestDownloader(&Downloader{
 		cfg:     config.Config{Catalog: config.CatalogConfig{MotionArtworkEnabled: false}},
 		catalog: catalog,
 		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	})
 
 	d.startMotionArtworkBackfill(context.Background(), "job-1", applemusic.ParsedURL{
 		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",
@@ -220,13 +220,13 @@ func (c *countingMotionArtworkCatalog) MotionArtworkViaWebToken(context.Context,
 // the overview feed replays as that job's last word.
 func TestMotionArtworkBackfillSkipsTheEventWhenTheJobIsGone(t *testing.T) {
 	reporter := &recordingReporter{missingJobs: true}
-	d := &Downloader{
+	d := newTestDownloader(&Downloader{
 		cfg: motionArtworkEnabledConfig(),
 		catalog: fakeDownloaderCatalog{motionArtwork: applemusic.MotionArtwork{
 			Square: "https://example.test/square.m3u8",
 		}},
 		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-	}
+	})
 
 	d.startMotionArtworkBackfill(context.Background(), "job-gone", applemusic.ParsedURL{
 		Storefront: "cn", Type: applemusic.TypeAlbum, ID: "1858184006",

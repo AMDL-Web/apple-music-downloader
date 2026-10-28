@@ -15,7 +15,16 @@ import (
 
 const prefetchKey = "skd://itunes.apple.com/P000000000/s1/e1"
 
-type m3u8Info = selectedMediaInfo
+// selectedMediaInfo is one codec's chosen variant: the encrypted media URI,
+// its key URIs and the quality the master playlist advertises for it.
+type selectedMediaInfo struct {
+	MediaURI   string
+	Keys       []string
+	CodecID    string
+	BitDepth   int
+	SampleRate int
+	Bandwidth  int
+}
 
 type variant struct {
 	URI        string
@@ -46,24 +55,24 @@ var codecPatterns = map[string]*regexp.Regexp{
 	"ac3":          regexp.MustCompile(`audio-ac3-\d{3}$`),
 }
 
-func extractMedia(ctx context.Context, httpClient *http.Client, masterURL, codec string, maxSampleRate, maxBitDepth int, gates ...*limits.RequestGate) (m3u8Info, error) {
+func extractMedia(ctx context.Context, httpClient *http.Client, masterURL, codec string, maxSampleRate, maxBitDepth int, gates ...*limits.RequestGate) (selectedMediaInfo, error) {
 	variants, err := fetchMasterVariants(ctx, httpClient, masterURL, gates...)
 	if err != nil {
-		return m3u8Info{}, err
+		return selectedMediaInfo{}, err
 	}
 	selected, err := selectVariant(variants, codec, maxSampleRate, maxBitDepth)
 	if err != nil {
-		return m3u8Info{}, err
+		return selectedMediaInfo{}, err
 	}
 	media, err := downloadText(ctx, httpClient, selected.URI, gates...)
 	if err != nil {
-		return m3u8Info{}, err
+		return selectedMediaInfo{}, err
 	}
 	mediaURI, keys, err := parseMedia(media, selected.URI, codec)
 	if err != nil {
-		return m3u8Info{}, err
+		return selectedMediaInfo{}, err
 	}
-	return m3u8Info{MediaURI: mediaURI, Keys: keys, CodecID: selected.Audio, BitDepth: selected.BitDepth, SampleRate: selected.SampleRate, Bandwidth: selected.Bandwidth}, nil
+	return selectedMediaInfo{MediaURI: mediaURI, Keys: keys, CodecID: selected.Audio, BitDepth: selected.BitDepth, SampleRate: selected.SampleRate, Bandwidth: selected.Bandwidth}, nil
 }
 
 func fetchMasterVariants(ctx context.Context, httpClient *http.Client, masterURL string, gates ...*limits.RequestGate) ([]variant, error) {
@@ -209,13 +218,4 @@ func absURL(base, ref string) string {
 		return ref
 	}
 	return b.ResolveReference(r).String()
-}
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

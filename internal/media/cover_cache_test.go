@@ -197,7 +197,7 @@ func TestStandaloneAndEmbeddedCoversShareJobCache(t *testing.T) {
 		},
 	}
 	cfg := config.Default()
-	downloader := &Downloader{cfg: cfg, catalog: catalog, covers: newCoverCache(catalog)}
+	downloader := newTestDownloader(&Downloader{cfg: cfg, catalog: catalog, covers: newCoverCache(catalog)})
 	path := filepath.Join(t.TempDir(), "album", "cover.jpg")
 	if err := downloader.ensureStandaloneCover(context.Background(), path, func(context.Context) (string, error) {
 		return "album-art", nil
@@ -224,7 +224,7 @@ func TestStandaloneAndEmbeddedCoversShareJobCache(t *testing.T) {
 func TestStandaloneCoverFailureIsHandledOncePerJob(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 1
-	downloader := &Downloader{cfg: cfg, standaloneCoverState: newStandaloneCoverState()}
+	downloader := newTestDownloader(&Downloader{cfg: cfg, standaloneCoverState: newStandaloneCoverState()})
 	path := filepath.Join(t.TempDir(), "artist", "artist.jpg")
 	wantErr := errors.New("artist not found")
 	var calls int
@@ -265,9 +265,9 @@ func TestStandaloneCoversForDifferentPathsProceedConcurrently(t *testing.T) {
 	}
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 1
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg: cfg, catalog: catalog, standaloneCoverState: newStandaloneCoverState(),
-	}
+	})
 	dir := t.TempDir()
 	type request struct {
 		path string

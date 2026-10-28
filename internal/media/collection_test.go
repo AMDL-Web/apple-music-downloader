@@ -76,13 +76,13 @@ func TestResolveCollectionStationUsesEffectiveConfigToken(t *testing.T) {
 	var gotToken string
 	cfg := config.Default()
 	cfg.Catalog.MediaUserToken = " configured-token "
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg: cfg,
 		catalog: fakeDownloaderCatalog{
 			station:      applemusic.Collection{ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station"},
 			stationToken: &gotToken,
 		},
-	}
+	})
 
 	if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
 		Storefront: "us", Type: applemusic.TypeStation, ID: "ra.1",
@@ -108,10 +108,10 @@ func TestResolveCollectionStationUsesEffectiveConfigToken(t *testing.T) {
 }
 
 func TestResolveCollectionStationPropagatesError(t *testing.T) {
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		cfg:     config.Default(),
 		catalog: fakeDownloaderCatalog{stationErr: errors.New("live radio stations are not downloadable")},
-	}
+	})
 	if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
 		Storefront: "us", Type: applemusic.TypeStation, ID: "ra.live",
 	}); err == nil {
@@ -154,7 +154,7 @@ func TestResolveCollectionPropagatesArtwork(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			downloader := &Downloader{cfg: config.Default(), catalog: tt.catalog}
+			downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: tt.catalog})
 			resolved, err := downloader.resolveCollection(context.Background(), tt.parsed)
 			if err != nil {
 				t.Fatal(err)
@@ -254,7 +254,7 @@ func TestResolveCollectionBackfillsDisplayMetadata(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			downloader := &Downloader{cfg: config.Default(), catalog: tt.catalog}
+			downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: tt.catalog})
 			resolved, err := downloader.resolveCollection(context.Background(), tt.parsed)
 			if err != nil {
 				t.Fatal(err)

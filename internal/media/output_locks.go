@@ -23,10 +23,6 @@ type outputLockEntry struct {
 
 var processOutputLocks outputLockTable
 
-func (t *outputLockTable) acquire(path string) (func(), error) {
-	return t.acquireContext(context.Background(), path)
-}
-
 // acquireContext is cancellation-aware so a cancelled job waiting behind a
 // writer of the same output does not remain stuck until that writer finishes.
 func (t *outputLockTable) acquireContext(ctx context.Context, path string) (func(), error) {

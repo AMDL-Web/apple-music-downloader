@@ -91,6 +91,8 @@ func (d *Downloader) saveStandaloneCovers(ctx context.Context, song applemusic.S
 	return errors.Join(saveErrors...)
 }
 
+// ensureStandaloneCover writes the cover at path unless a file is already
+// there. Every outcome is final for the job: the path is not tried again.
 func (d *Downloader) ensureStandaloneCover(ctx context.Context, path string, resolveURL func(context.Context) (string, error)) error {
 	// Reuse the process-wide keyed output locks: callers targeting the same
 	// canonical path remain serialized, while unrelated album and artist covers
@@ -124,16 +126,19 @@ func (d *Downloader) ensureStandaloneCover(ctx context.Context, path string, res
 	if artworkURL == "" {
 		return nil
 	}
+	backend := d.backend()
 	data, _, err := retryValue(ctx, d.cfg.Download.MaxAttempts, retryBackoff, func(int) ([]byte, error) {
-		return d.fetchCover(ctx, []string{artworkURL}, d.cfg.Download.CoverFormat, d.cfg.Download.CoverSize)
+		return backend.coverArt(ctx, []string{artworkURL}, d.cfg.Download.CoverFormat, d.cfg.Download.CoverSize)
 	}, nil)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := backend.mkdirAll(filepath.Dir(path)); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	// Atomic: the existence check above treats any file at path as done, so a
+	// truncated cover must never be visible there.
+	return backend.writeFile(path, data)
 }
 
 func standaloneCoverExt(format string) (string, error) {

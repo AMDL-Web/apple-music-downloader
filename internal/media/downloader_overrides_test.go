@@ -17,7 +17,7 @@ func TestCleanupJobArtifactsUsesJobTempOverride(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.TempDir = filepath.Join(root, "temp")
 	overrideDir := filepath.Join(cfg.Download.TempDir, "job-scratch")
-	downloader := &Downloader{store: config.NewStore(cfg)}
+	downloader := newTestDownloader(&Downloader{store: config.NewStore(cfg)})
 	job := domain.Job{ID: "job-clean", Overrides: &config.DownloadOverrides{TempDir: &overrideDir}}
 	path, metadataPath := resumableDownloadPaths(overrideDir, job.ID, "output")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -47,10 +47,10 @@ func TestProcessJobAppliesPerJobOverrides(t *testing.T) {
 	cfg.Download.MaxAttempts = 1
 
 	song := applemusic.Song{ID: "987654321", Name: "Track", ArtistName: "Artist", AlbumName: "Album", DurationInMillis: 1000}
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		store:   config.NewStore(cfg),
 		catalog: fakeDownloaderCatalog{song: song},
-	}
+	})
 
 	overrideFormat := "override-dir/{SongName}"
 	runJob := func(t *testing.T, overrides *config.DownloadOverrides) domain.JobItem {
@@ -90,7 +90,7 @@ func TestProcessJobRejectsPersistedOverrideOutsideConfiguredRoots(t *testing.T) 
 	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
 	cfg.Download.DownloadsDir = filepath.Join(dir, "downloads")
 	cfg.Download.TempDir = filepath.Join(dir, "temp")
-	downloader := &Downloader{store: config.NewStore(cfg)}
+	downloader := newTestDownloader(&Downloader{store: config.NewStore(cfg)})
 	escaped := filepath.Join(dir, "outside")
 	err := downloader.ProcessJob(context.Background(), domain.Job{
 		ID: "job-unsafe", Overrides: &config.DownloadOverrides{DownloadsDir: &escaped},
@@ -114,13 +114,13 @@ func TestProcessJobHonorsCanonicalKeyOverReparse(t *testing.T) {
 	cfg.Catalog.AlbumTrackURLMode = "album" // changed after the job was submitted
 
 	song := applemusic.Song{ID: "987654321", Name: "Track", ArtistName: "Artist", AlbumName: "Album", DurationInMillis: 1000}
-	downloader := &Downloader{
+	downloader := newTestDownloader(&Downloader{
 		store: config.NewStore(cfg),
 		// Only the song fake is populated: if processJob re-parsed the input
 		// under the current "album" mode it would resolve via catalog.Album
 		// (empty) and fail with "no downloadable songs found".
 		catalog: fakeDownloaderCatalog{song: song},
-	}
+	})
 	reporter := &recordingReporter{}
 	job := domain.Job{
 		ID:           "job-1",

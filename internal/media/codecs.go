@@ -63,7 +63,3 @@ func codecFailureReason(err error) string {
 	}
 	return err.Error()
 }
-
-func attemptsForCodec(configuredMaxAttempts, _ int) int {
-	return configuredMaxAttempts
-}

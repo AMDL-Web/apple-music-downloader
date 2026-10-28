@@ -2,13 +2,59 @@ package media
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"sync"
 	"time"
 
 	"amdl/internal/applemusic"
+	"amdl/internal/config"
 	"amdl/internal/domain"
+	"amdl/internal/jobs"
+	"amdl/internal/limits"
 	"amdl/internal/wrapper"
 )
+
+// newTestDownloader completes a Downloader literal with the process-wide
+// pieces NewDownloader creates: media pools sized from the literal's config and
+// the background-work tracker. Pools a test set itself are kept.
+func newTestDownloader(d *Downloader) *Downloader {
+	cfg := d.cfg
+	if d.store != nil {
+		cfg = d.store.Get()
+	}
+	if d.downloadLimit == nil {
+		d.downloadLimit = limits.NewSemaphore(cfg.Download.MaxParallelDownloads)
+	}
+	if d.decryptLimit == nil {
+		d.decryptLimit = limits.NewSemaphore(cfg.Download.MaxParallelDecrypts)
+	}
+	if d.inFlightLimit == nil {
+		d.inFlightLimit = limits.NewSemaphore(cfg.Download.MaxParallelDownloads + cfg.Download.MaxParallelDecrypts)
+	}
+	if d.background == nil {
+		d.background = &sync.WaitGroup{}
+	}
+	if d.mp4 == nil {
+		d.mp4 = newMP4Processor(cfg)
+	}
+	return d
+}
+
+// newTestQualityService builds a QualityService around fakes.
+func newTestQualityService(cfg config.Config, catalog downloaderCatalog, wrapperClient downloaderWrapper) *QualityService {
+	return NewQualityService(newTestDownloader(&Downloader{cfg: cfg, catalog: catalog, wrapper: wrapperClient, http: newHTTPClient()}))
+}
+
+// processTrack runs one track through the pipeline the way processJob does,
+// with its own metadata resolver.
+func (d *Downloader) processTrack(ctx context.Context, job domain.Job, item domain.JobItem, initial applemusic.Song, storefront string, collectionType applemusic.URLType, collectionName, collectionID string, collectionIndex int, folderArtist string, reporter jobs.Reporter) error {
+	target := trackTarget{
+		storefront: storefront, collectionType: collectionType, collectionName: collectionName,
+		collectionID: collectionID, collectionIndex: collectionIndex, folderArtist: folderArtist,
+	}
+	return d.newTrackRun(job, item, initial, target, newTrackMetadataResolver(d, storefront), reporter).run(ctx)
+}
 
 type fakeDownloaderWrapper struct {
 	status    wrapper.Status
@@ -258,3 +304,5 @@ func (r *recordingReporter) Event(_ context.Context, ev domain.Event) error {
 	r.events = append(r.events, ev)
 	return nil
 }
+
+func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }

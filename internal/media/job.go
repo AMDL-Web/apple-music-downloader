@@ -3,7 +3,9 @@ package media
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"runtime/debug"
 	"sync"
 
 	"amdl/internal/applemusic"
@@ -14,6 +16,10 @@ import (
 	"amdl/internal/logging"
 )
 
+// ProcessJob implements jobs.Processor: it downloads every unfinished track
+// of job under the job's effective config. A user cancel finishes every
+// unfinished item as cancelled; a cancel whose cause is jobs.ErrShutdown leaves
+// items and resume checkpoints for recovery.
 func (d *Downloader) ProcessJob(ctx context.Context, job domain.Job, reporter jobs.Reporter) error {
 	// Bind this job to its effective config: the live runtime snapshot with
 	// the job's submission-time overrides layered on top. Read once here so
@@ -36,10 +42,20 @@ func (d *Downloader) ProcessJob(ctx context.Context, job domain.Job, reporter jo
 	jobDownloader.covers = newCoverCache(jobDownloader.catalog)
 	jobDownloader.standaloneCoverState = newStandaloneCoverState()
 	err = jobDownloader.processJob(ctx, job, reporter)
-	// Failed jobs retain their checkpoints for Retry. Completed and cancelled
-	// jobs cannot be retried, so remove every codec/track checkpoint owned by
-	// this job, including an earlier codec that later fell back successfully.
-	if err == nil || ctx.Err() != nil {
+	switch {
+	case ctx.Err() != nil && isShutdown(ctx):
+		// Interrupted by shutdown, the job is not over: its items stay as they
+		// are and its checkpoints stay for the recovered run to resume.
+	case ctx.Err() != nil:
+		// Cancelled by the user. Tracks that never started, and rows from an
+		// earlier run the cancel arrived before, still need a terminal state.
+		jobDownloader.cancelUnfinishedItems(ctx, job.ID, reporter)
+		cleanupResumeOwner(cfg.Download.TempDir, job.ID)
+	case err == nil:
+		// Failed jobs retain their checkpoints for Retry. Completed and
+		// cancelled jobs cannot be retried, so remove every codec/track
+		// checkpoint owned by this job, including an earlier codec that later
+		// fell back successfully.
 		cleanupResumeOwner(cfg.Download.TempDir, job.ID)
 	}
 	return err
@@ -125,11 +141,10 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 	if err := reporter.SetJob(ctx, &job); err != nil {
 		return err
 	}
-	// Simulate mode never fetches artwork or writes files, so the standalone
-	// playlist cover is skipped along with the per-track disk writes.
-	if (parsed.Type == applemusic.TypePlaylist || parsed.Type == applemusic.TypeStation) && d.cfg.Download.SavePlaylistCover && len(tracks) > 0 && !d.cfg.Simulate.Enabled {
+	// The simulate backend makes this a no-op that writes nothing.
+	if (parsed.Type == applemusic.TypePlaylist || parsed.Type == applemusic.TypeStation) && d.cfg.Download.SavePlaylistCover && len(tracks) > 0 {
 		folder := collectionFolderPath(d.cfg, tracks[0], parsed.Type, collectionName, collectionID)
-		if coverErr := d.savePlaylistCover(ctx, resolved.ArtworkURL, folder); coverErr != nil {
+		if coverErr := d.savePlaylistCover(ctx, resolved.ArtworkURL, folder); coverErr != nil && ctx.Err() == nil {
 			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventStandaloneCoverFailed, Phase: "playlist_cover", Message: coverErr.Error()})
 		}
 	}
@@ -153,9 +168,14 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 
 	indexes := collectionIndexes(d.cfg, parsed.Type, tracks)
 
-	return runTrackTasks(ctx, len(tracks), finished, func(trackCtx context.Context, i int) error {
-		err := d.processTrackWithMetadata(trackCtx, job, items[i], tracks[i], parsed.Storefront, parsed.Type, collectionName, collectionID, indexes[i], folderArtist, metadata, reporter)
-		if err != nil {
+	log := logging.FromContext(ctx, d.logger)
+	return runTrackTasks(ctx, log, len(tracks), finished, false, func(trackCtx context.Context, i int) error {
+		target := trackTarget{
+			storefront: parsed.Storefront, collectionType: parsed.Type, collectionName: collectionName,
+			collectionID: collectionID, collectionIndex: indexes[i], folderArtist: folderArtist,
+		}
+		err := d.newTrackRun(job, items[i], tracks[i], target, metadata, reporter).run(trackCtx)
+		if err != nil && trackCtx.Err() == nil {
 			logging.FromContext(trackCtx, d.logger).Error("track failed", "item_id", items[i].ID, "adam_id", tracks[i].ID, "error", err)
 		}
 		return err
@@ -168,35 +188,58 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 // the job priority already on ctx, so contended capacity favors earlier tracks
 // within the same job. It never returns before tasks already started have
 // exited, and it stops launching new work once cancellation is observed.
-func runTrackTasks(ctx context.Context, total int, finished []bool, task func(context.Context, int) error) error {
+//
+// It returns the first task error. With cancelOnError that error also cancels
+// the tasks still running, for callers whose result is worthless once one task
+// failed; a download job leaves it off, because one failed track must not stop
+// the rest of an album. A panicking task is logged with its stack and counts as
+// that task's error.
+func runTrackTasks(ctx context.Context, log *slog.Logger, total int, finished []bool, cancelOnError bool, task func(context.Context, int) error) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
-	for i := 0; i < total; i++ {
+	record := func(err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if firstErr == nil {
+			firstErr = err
+			if cancelOnError {
+				cancel(err)
+			}
+		}
+	}
+	var stopped error
+	for i := range total {
 		if finished[i] {
 			// Finished in a previous run of this job; keep the item as-is.
 			continue
 		}
 		if err := ctx.Err(); err != nil {
-			wg.Wait()
-			return err
+			stopped = err
+			break
 		}
-		wg.Add(1)
-		i := i
 		trackCtx := limits.WithSubpriority(ctx, int64(i))
-		go func() {
-			defer wg.Done()
-			if err := task(trackCtx, i); err != nil {
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = err
+		wg.Go(func() {
+			defer func() {
+				if p := recover(); p != nil {
+					log.Error("track task panicked", "index", i, "panic", p, "stack", string(debug.Stack()))
+					record(fmt.Errorf("track %d panicked: %v", i, p))
 				}
-				mu.Unlock()
+			}()
+			if err := task(trackCtx, i); err != nil {
+				record(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
-	return firstErr
+	mu.Lock()
+	defer mu.Unlock()
+	if firstErr != nil {
+		return firstErr
+	}
+	return stopped
 }
 
 // syncJobItems reconciles the resolved track list with the item rows a

@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
@@ -23,24 +24,30 @@ type pathTemplateContext struct {
 	quality         string
 }
 
-type selectedMediaInfo struct {
-	MediaURI   string
-	Keys       []string
-	CodecID    string
-	BitDepth   int
-	SampleRate int
-	Bandwidth  int
-}
+// maxSegmentBytes caps one cleaned path segment. 255 bytes is the per-name
+// limit of every filesystem the downloads root realistically lives on; the
+// remaining 15 bytes hold ".m4a", a ".ttml" sidecar extension and most of the
+// staging suffix (stagingPrefix trims the rest).
+const maxSegmentBytes = 240
 
+// safeName cleans one path segment: reserved characters become "_", dots and
+// whitespace go from both ends (a leading dot would hide the file, a trailing
+// one or a trailing space breaks Windows and SMB clients), and the result is
+// capped at maxSegmentBytes on a rune boundary. Output names depend on every
+// rule here.
 func safeName(v string) string {
 	v = invalidPathChars.ReplaceAllString(v, "_")
-	v = strings.TrimSpace(v)
-	v = strings.TrimRight(v, ".")
+	v = strings.TrimFunc(v, isDotOrSpace)
+	if len(v) > maxSegmentBytes {
+		v = strings.TrimRightFunc(trimToRuneBoundary(v, maxSegmentBytes), isDotOrSpace)
+	}
 	if v == "" {
 		return "_"
 	}
 	return v
 }
+
+func isDotOrSpace(r rune) bool { return r == '.' || unicode.IsSpace(r) }
 
 // outputPath expands the task type's path template into the final .m4a path.
 // The template is split on "/"; every segment is expanded and sanitized
@@ -237,6 +244,9 @@ func templateValue(key string, ctx pathTemplateContext) (string, bool) {
 	}
 }
 
+// qualityLabel is the {Quality} value of an enhanced codec: "24-bit/96 kHz"
+// (integer kHz) when the manifest names a bit depth and sample rate, else
+// "256Kbps" from the bandwidth. The strings end up in output paths.
 func qualityLabel(info selectedMediaInfo) string {
 	if info.BitDepth > 0 && info.SampleRate > 0 {
 		return fmt.Sprintf("%d-bit/%d kHz", info.BitDepth, info.SampleRate/1000)
@@ -252,9 +262,17 @@ func atoi(v string) int {
 	return i
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
+// aacLCQualityLabel is the {Quality} value of every AAC-LC download, which
+// has no manifest to read a quality from. Like qualityLabel's formats it is
+// part of on-disk names.
+const aacLCQualityLabel = "256Kbps"
+
+// lyricsSidecarPath is the lyrics file written next to outPath: <track>.ttml
+// for the ttml format and <track>.lrc otherwise.
+func lyricsSidecarPath(outPath, format string) string {
+	ext := ".lrc"
+	if format == "ttml" {
+		ext = ".ttml"
 	}
-	return b
+	return strings.TrimSuffix(outPath, ".m4a") + ext
 }

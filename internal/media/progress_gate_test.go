@@ -61,7 +61,7 @@ func TestProgressGateWithoutIntervalNeverWithholds(t *testing.T) {
 func TestProgressGateFlushesHeldUpdateAheadOfTerminalEvent(t *testing.T) {
 	base := &recordingReporter{}
 	gate, _ := newTestGate(base, time.Hour) // nothing may pass on the time gate
-	gate.emit = func() {
+	gate.emit = func(context.Context) {
 		gate.emitted()
 		_ = base.Event(context.Background(), domain.Event{
 			ItemID: "item-1", Type: eventItemProgress, Phase: "downloading", Message: "held 100%",
@@ -96,7 +96,7 @@ func TestProgressGateFlushesHeldUpdateAheadOfTerminalEvent(t *testing.T) {
 func TestProgressGatePassesNonProgressEventsStraightThrough(t *testing.T) {
 	base := &recordingReporter{}
 	gate, _ := newTestGate(base, time.Hour)
-	gate.emit = func() { t.Fatal("nothing was held; emit must not be called") }
+	gate.emit = func(context.Context) { t.Fatal("nothing was held; emit must not be called") }
 
 	for _, ty := range []domain.EventType{"codec_selected", "item_failed", "item_skipped", "operation_retry"} {
 		if err := gate.Event(context.Background(), domain.Event{ItemID: "item-1", Type: ty}); err != nil {
@@ -142,11 +142,11 @@ func simulateTrackEvents(t *testing.T, intervalMS, durationMS, minKBps, maxKBps 
 		ID: "song-1", Name: "Track", ArtistName: "Artist", AlbumName: "Album",
 		DurationInMillis: durationMS, EnhancedHLS: server.URL + "/master.m3u8",
 	}
-	downloader := (&Downloader{
+	downloader := (newTestDownloader(&Downloader{
 		cfg:     cfg,
 		catalog: fakeDownloaderCatalog{song: song},
 		http:    server.Client(),
-	}).withConfig(cfg)
+	})).withConfig(cfg)
 
 	reporter := &recordingReporter{}
 	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"},

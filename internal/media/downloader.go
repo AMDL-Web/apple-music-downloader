@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
@@ -14,6 +15,9 @@ import (
 	"amdl/internal/wrapper"
 )
 
+// Downloader runs the per-track pipeline for the job manager. One instance is
+// shared by every job; each job works on a withConfig clone bound to its
+// effective config.
 type Downloader struct {
 	// store is the live runtime config; every ProcessJob/ValidateRequest call
 	// reads a fresh snapshot from it. cfg is the effective config the current
@@ -40,6 +44,11 @@ type Downloader struct {
 	// (written, unavailable, or exhausted). The state has its own mutex because
 	// different cover paths are allowed to proceed concurrently.
 	standaloneCoverState *standaloneCoverState
+
+	// background tracks work a job starts but does not wait for (the
+	// motion-artwork backfill). A pointer, so every withConfig clone adds to
+	// the one Wait drains.
+	background *sync.WaitGroup
 }
 
 type downloaderCatalog interface {
@@ -64,6 +73,8 @@ type downloaderWrapper interface {
 	License(context.Context, string, string, string) (string, error)
 }
 
+// NewDownloader builds the process-wide Downloader. It creates the shared media
+// pools from the current config; changing their sizes needs a restart.
 func NewDownloader(store *config.Store, catalog *applemusic.CatalogClient, wrapperClient *wrapper.Client, tools *ToolChecker, logger *slog.Logger) *Downloader {
 	cfg := store.Get()
 	return &Downloader{
@@ -73,6 +84,23 @@ func NewDownloader(store *config.Store, catalog *applemusic.CatalogClient, wrapp
 		decryptLimit:  limits.NewSemaphore(cfg.Download.MaxParallelDecrypts),
 		inFlightLimit: limits.NewSemaphore(cfg.Download.MaxParallelDownloads + cfg.Download.MaxParallelDecrypts),
 		requestGate:   catalog.RequestGate(),
+		background:    &sync.WaitGroup{},
+	}
+}
+
+// Wait blocks until the background work jobs started has finished, or ctx is
+// done. Call it after the job manager has stopped, so no job starts more.
+func (d *Downloader) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		d.background.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for background downloader work: %w", ctx.Err())
 	}
 }
 
@@ -95,33 +123,11 @@ func (d *Downloader) withConfig(cfg config.Config) *Downloader {
 	clone.mp4 = newMP4Processor(cfg)
 	clone.covers = nil
 	clone.standaloneCoverState = nil
-	// Direct Downloader literals are common in unit tests. Production always
-	// arrives with the process-wide instances from NewDownloader; initialize a
-	// private fallback only when such a test literal has no limiter at all.
-	if clone.downloadLimit == nil {
-		clone.downloadLimit = limits.NewSemaphore(cfg.Download.MaxParallelDownloads)
-	}
-	if clone.decryptLimit == nil {
-		clone.decryptLimit = limits.NewSemaphore(cfg.Download.MaxParallelDecrypts)
-	}
-	if clone.inFlightLimit == nil {
-		clone.inFlightLimit = limits.NewSemaphore(cfg.Download.MaxParallelDownloads + cfg.Download.MaxParallelDecrypts)
-	}
 	return &clone
 }
 
-func (d *Downloader) ensureMediaLimits() {
-	if d.downloadLimit == nil {
-		d.downloadLimit = limits.NewSemaphore(d.cfg.Download.MaxParallelDownloads)
-	}
-	if d.decryptLimit == nil {
-		d.decryptLimit = limits.NewSemaphore(d.cfg.Download.MaxParallelDecrypts)
-	}
-	if d.inFlightLimit == nil {
-		d.inFlightLimit = limits.NewSemaphore(d.cfg.Download.MaxParallelDownloads + d.cfg.Download.MaxParallelDecrypts)
-	}
-}
-
+// ValidateRequest implements jobs.Processor: it parses url and checks that the
+// decryptor serves its storefront (skipped in simulate mode).
 func (d *Downloader) ValidateRequest(ctx context.Context, url string) (jobs.ValidationResult, error) {
 	return d.withConfig(d.baseConfig()).validateRequest(ctx, url)
 }

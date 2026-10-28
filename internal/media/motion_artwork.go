@@ -27,7 +27,8 @@ const motionArtworkTimeout = 30 * time.Second
 //
 // The context is detached from the job's, which is cancelled the moment the job
 // finishes. Short jobs would otherwise routinely cancel this mid-flight and never
-// persist a cover they are entitled to.
+// persist a cover they are entitled to. The goroutine is tracked in
+// d.background, so shutdown can wait for it before the store closes.
 // catalog.motion_artwork_enabled turns the lookup off outright, before the
 // request is built: this is the only amp-api traffic the backend generates
 // purely for decoration, so an install that never shows animated covers should
@@ -41,7 +42,7 @@ func (d *Downloader) startMotionArtworkBackfill(ctx context.Context, jobID strin
 		return
 	}
 	detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), motionArtworkTimeout)
-	go func() {
+	d.background.Go(func() {
 		defer cancel()
 		log := logging.FromContext(ctx, d.logger)
 		art, err := d.catalog.MotionArtworkViaWebToken(detached, parsed.Storefront, albumID)
@@ -78,7 +79,7 @@ func (d *Downloader) startMotionArtworkBackfill(ctx context.Context, jobID strin
 			Type:  domain.EventMotionArtworkResolved,
 			Phase: "motion_artwork",
 		})
-	}()
+	})
 }
 
 // motionArtworkAlbumID picks the album whose animated cover represents the job.
