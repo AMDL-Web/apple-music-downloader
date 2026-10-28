@@ -173,6 +173,15 @@ kbd {
 
 /* ---- Icons --------------------------------------------------------- */
 
+/* The in-document sprite (ui/icons.js): rendered but sized away, because
+   WebKit does not paint <use> from a display:none sprite. */
+.sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 .icon {
   width: var(--icon);
   height: var(--icon);
@@ -190,3 +199,33 @@ kbd {
   height: var(--icon-nav);
 }
 
+/* ---- Loading shell (static markup in index.html, replaced on mount) ---- */
+
+.boot {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  /* Fast loads replace it before it shows. */
+  animation: fade-in var(--dur-base) var(--ease-out) 300ms both;
+}
+
+.boot-mark {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--text-secondary);
+  border-radius: var(--r-full);
+  animation: boot-spin 900ms linear infinite;
+}
+
+@keyframes boot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

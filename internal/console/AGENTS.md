@@ -53,7 +53,9 @@ under a new versioned name (vendor files are served `immutable`), then update
 table. The bundle has no `Fragment`; return keyed arrays instead.
 
 `static/icons.svg` is a hand-drawn sprite in the Lucide style (not copied
-paths); add a `<symbol id="i-name">` and use `Icon`.
+paths); add a `<symbol id="i-name">` and use `Icon`. `main.js` imports its
+symbols into the document before mounting (`ui/icons.js`), so icons keep
+painting while the server is unreachable; nothing else references the file.
 
 ## Guards (`console_test.go`)
 

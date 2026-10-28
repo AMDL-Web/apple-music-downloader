@@ -4,6 +4,7 @@ import { html, useState, useEffect, createContext, useContext } from './preact.j
 import { artworkUrl, artworkSrcset, relTime, absTime } from '../lib/format.js';
 import { jobProgress, progressCells, progressLegend, stageSegments, stageText } from '../lib/status.js';
 import { useNow } from './hooks.js';
+import { iconHref } from './icons.js';
 
 /** App-wide services: navigate, toast, announce, feed subscription, counts, connection, system info. */
 export const AppContext = createContext(null);
@@ -12,7 +13,7 @@ export const useApp = () => useContext(AppContext);
 
 export function Icon({ name, size }) {
   const cls = size ? `icon icon-${size}` : 'icon';
-  return html`<svg class=${cls} aria-hidden="true" focusable="false"><use href=${`icons.svg#i-${name}`} /></svg>`;
+  return html`<svg class=${cls} aria-hidden="true" focusable="false"><use href=${iconHref(name)} /></svg>`;
 }
 
 /** A status badge: icon (or the running pulse) + label on the role's tint. */

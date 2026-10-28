@@ -12,6 +12,7 @@ import { StreamClient, createCoalescer, backoffDelay } from './lib/stream.js';
 import { jobTitle, typeLabel, count, pageSummary } from './lib/format.js';
 import { AppContext, Icon, Button, LinkButton } from './ui/components.js';
 import { isDialogOpen } from './ui/dialogs.js';
+import { loadSprite, spriteLoaded } from './ui/icons.js';
 import { useHashRouter } from './ui/router.js';
 import { OverviewPage } from './views/overview.js';
 import { QueuePage } from './views/queue.js';
@@ -103,6 +104,25 @@ export function App() {
     writePref(storage(), SKIN_KEY, v);
   }, []);
   useEffect(() => applySkin(skin), [skin]);
+
+  // The browser chrome (theme-color) follows the page background of the
+  // active skin and theme; with the system theme it follows the OS switch.
+  useEffect(() => {
+    const sync = () => {
+      let meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        document.head.append(meta);
+      }
+      meta.setAttribute('content', getComputedStyle(document.body).backgroundColor);
+    };
+    sync();
+    const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    if (theme !== 'system' || !mq) return undefined;
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, [theme, skin]);
 
   const toast = useCallback((t) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -232,6 +252,11 @@ export function App() {
       if (client) client.stop();
     };
   }, []);
+
+  // A sprite that could not load at startup is tried again after an outage.
+  useEffect(() => {
+    if (epoch > 0 && !spriteLoaded()) loadSprite();
+  }, [epoch]);
 
   // Simulate mode comes from /system; a backend without it still reports it in /config.
   useEffect(() => {
