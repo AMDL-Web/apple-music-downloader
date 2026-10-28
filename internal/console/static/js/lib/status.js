@@ -241,6 +241,33 @@ export function jobProgress(job) {
   };
 }
 
+/** Jobs with at most this many tracks get one progress cell per track. */
+export const CELL_MAX = 60;
+
+const CELL_ROLES = { completed: 'success', skipped: 'skipped', failed: 'danger', cancelled: 'neutral', remaining: '' };
+
+/**
+ * One cell per track for the per-track progress strip, as ordered runs:
+ * completed, skipped (already on disk), failed, cancelled, then remaining.
+ * The list payload carries counts only, so cells are not in track order.
+ * Null when the job has no tracks yet or more than CELL_MAX.
+ * @returns {{state: string, role: string}[] | null}
+ */
+export function progressCells(job) {
+  const c = jobCounts(job);
+  if (c.total === 0 || c.total > CELL_MAX) return null;
+  const out = [];
+  const push = (state, n) => {
+    for (let i = 0; i < n && out.length < c.total; i++) out.push({ state, role: CELL_ROLES[state] });
+  };
+  push('completed', c.completed);
+  push('skipped', c.skipped);
+  push('failed', c.failed);
+  push('cancelled', c.cancelled);
+  push('remaining', c.total - out.length);
+  return out;
+}
+
 const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 
 /**

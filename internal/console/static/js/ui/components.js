@@ -2,7 +2,7 @@
 
 import { html, useState, useEffect, createContext, useContext } from './preact.js';
 import { artworkUrl, artworkSrcset, relTime, absTime } from '../lib/format.js';
-import { jobProgress, stageSegments, stageText } from '../lib/status.js';
+import { jobProgress, progressCells, stageSegments, stageText } from '../lib/status.js';
 import { useNow } from './hooks.js';
 
 /** App-wide services: navigate, toast, announce, feed subscription, counts, connection, system info. */
@@ -37,12 +37,35 @@ export function Chip({ children, title, mono }) {
   return html`<span class=${mono ? 'chip chip-mono' : 'chip'} title=${title}>${children}</span>`;
 }
 
-/** Segmented job progress: done, already on disk, failed, cancelled, remaining. Never a percentage. */
+/**
+ * Job progress, never a percentage. Up to CELL_MAX tracks it is one cell per
+ * track (completed, already on disk, failed, cancelled, remaining); above that
+ * a segmented bar. Either way the counter text follows.
+ */
 export function JobProgress({ job }) {
   const p = jobProgress(job);
+  const cells = progressCells(job);
+  const text = html`<span class="jprog-text">${p.text}</span>`;
+  if (cells) {
+    return html`<div class="jprog" data-mode="cells">
+      <div
+        class="pcells"
+        role="progressbar"
+        aria-label="Tracks"
+        aria-valuemin="0"
+        aria-valuemax=${p.total}
+        aria-valuenow=${p.done}
+        aria-valuetext=${p.aria}
+        style=${{ '--n': String(cells.length) }}
+      >
+        ${cells.map((c, i) => html`<span key=${i} class="pcell" data-state=${c.state} data-role=${c.role || undefined}></span>`)}
+      </div>
+      ${text}
+    </div>`;
+  }
   const seg = (role, n) =>
     n > 0 ? html`<span key=${role} class="pbar-seg" data-role=${role} style=${{ '--w': String(n / p.total) }}></span>` : null;
-  return html`<div class="jprog">
+  return html`<div class="jprog" data-mode="bar">
     <div
       class=${p.indeterminate ? 'pbar is-indeterminate' : 'pbar'}
       role="progressbar"
@@ -54,7 +77,7 @@ export function JobProgress({ job }) {
     >
       ${p.total > 0 ? [seg('success', p.completed), seg('skipped', p.skipped), seg('danger', p.failed), seg('neutral', p.cancelled)] : null}
     </div>
-    <span class="jprog-text">${p.text}</span>
+    ${text}
   </div>`;
 }
 
@@ -112,8 +135,12 @@ export function LinkButton({ variant = 'secondary', size, icon, children, classN
   return html`<a class=${cls} ...${ext} ...${rest}>${icon ? html`<${Icon} name=${icon} />` : null}<span>${children}</span>${external ? html`<${Icon} name="external" size="sm" />` : null}</a>`;
 }
 
-export function Card({ title, actions, children, className, labelId, note }) {
-  return html`<section class=${className ? `card ${className}` : 'card'} aria-labelledby=${labelId}>
+/**
+ * A titled section: .card > .card-head (.card-title, .card-note,
+ * .card-actions) + .card-body. `section` names it for skins (data-section).
+ */
+export function Card({ title, actions, children, className, labelId, note, section }) {
+  return html`<section class=${className ? `card ${className}` : 'card'} data-section=${section} aria-labelledby=${labelId}>
     ${title
       ? html`<header class="card-head">
           <h2 class="card-title" id=${labelId}>${title}</h2>
@@ -121,8 +148,36 @@ export function Card({ title, actions, children, className, labelId, note }) {
           ${actions ? html`<div class="card-actions">${actions}</div>` : null}
         </header>`
       : null}
-    ${children}
+    <div class="card-body">${children}</div>
   </section>`;
+}
+
+const HEALTH_ICONS = { Backend: 'server', Wrapper: 'key', 'Library sync': 'rotate', Hooks: 'layers' };
+
+/**
+ * Health rows: .health-row[data-role] > .health-icon, .health-name,
+ * .health-status (the badge), .health-detail.
+ */
+export function HealthList({ rows, wrapDetail }) {
+  return html`<ul class="health-list">
+    ${rows.map(
+      ([name, view]) => html`<li key=${name} class="health-row" data-role=${view.role}>
+        <span class="health-icon" aria-hidden="true"><${Icon} name=${HEALTH_ICONS[name] || 'info'} /></span>
+        <span class="health-name">${name}</span>
+        <span class="health-status"><${Badge} view=${view} /></span>
+        ${view.detail ? html`<span class=${wrapDetail ? 'health-detail wrap-any' : 'health-detail'} title=${view.title || view.detail}>${view.detail}</span>` : null}
+      </li>`,
+    )}
+  </ul>`;
+}
+
+/** Label/value facts: dl.facts > .fact[data-key] > dt.fact-label + dd.fact-value. */
+export function Facts({ rows, className, label }) {
+  return html`<dl class=${className ? `facts ${className}` : 'facts'} aria-label=${label}>
+    ${rows.map(
+      ([key, k, v]) => html`<div key=${key} class="fact" data-key=${key}><dt class="fact-label">${k}</dt><dd class="fact-value">${v}</dd></div>`,
+    )}
+  </dl>`;
 }
 
 export function Empty({ icon = 'info', title, children, action }) {

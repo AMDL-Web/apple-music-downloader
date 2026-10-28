@@ -1,5 +1,5 @@
 // Shell chrome: primary navigation (sidebar and tab bar), the connection
-// indicator, the theme control and the page banners.
+// indicator, the skin and theme controls and the page banners.
 
 import { html } from '../ui/preact.js';
 import { docsUrl } from '../api.js';
@@ -8,6 +8,7 @@ import { connectionView } from '../lib/status.js';
 import { clockTime, count } from '../lib/format.js';
 import { Icon, Button, Notice } from '../ui/components.js';
 import { useClock } from '../ui/hooks.js';
+import { THEMES, SKINS, nextSkin } from '../lib/prefs.js';
 
 export const NAV = [
   { page: 'overview', label: 'Overview', icon: 'grid', key: 'o' },
@@ -17,14 +18,15 @@ export const NAV = [
   { page: 'system', label: 'System', icon: 'server', key: 'y' },
 ];
 
-export const THEMES = ['system', 'light', 'dark'];
-
 export function Sidebar({ route, counts }) {
   const active = counts ? counts.queued + counts.running : 0;
   return html`<nav class="sidebar" aria-label="Primary">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><${Icon} name="music" /></span>
-      <span class="brand-name">AMDL</span>
+      <span class="brand-text">
+        <span class="brand-name">AMDL</span>
+        <span class="brand-sub">Apple Music Downloader</span>
+      </span>
     </div>
     <ul class="nav">
       ${NAV.map(
@@ -68,6 +70,24 @@ export function ConnectionIndicator({ conn, onRetry }) {
     <span class="conn-label">${view.label}${secs !== null && conn.state === 'reconnecting' ? ` · ${secs}s` : ''}</span>
     ${conn.state === 'offline' && onRetry ? html`<${Button} size="sm" variant="ghost" onClick=${onRetry}>Retry</${Button}>` : null}
   </span>`;
+}
+
+/** The skin switch: a compact segmented control, a cycle button under 640 px. */
+export function SkinControl({ skin, setSkin }) {
+  const current = SKINS.find((s) => s.value === skin) || SKINS[0];
+  const next = SKINS.find((s) => s.value === nextSkin(skin));
+  return html`<div class="skin">
+    <div class="seg seg-skin" role="group" aria-label="Style">
+      ${SKINS.map(
+        (s) => html`<button key=${s.value} type="button" class="seg-btn" aria-pressed=${String(s.value === skin)} title=${`Style: ${s.label}`} onClick=${() => setSkin(s.value)}>
+          <span>${s.short}</span>
+        </button>`,
+      )}
+    </div>
+    <button type="button" class="btn btn-ghost btn-icon skin-cycle" aria-label=${`Style: ${current.label}; switch to ${next.label}`} title=${`Style: ${current.label}`} onClick=${() => setSkin(next.value)}>
+      <${Icon} name="palette" />
+    </button>
+  </div>`;
 }
 
 const THEME_OPTIONS = [

@@ -4,9 +4,10 @@
 import { html, useState, useEffect, useRef, useCallback, useMemo } from './ui/preact.js';
 import { listDownloads, getSystem, getConfig, feedStreamUrl, parseData } from './api.js';
 import { parseHash, buildHash } from './lib/route.js';
+import { THEME_KEY, SKIN_KEY, normalizeTheme, normalizeSkin, readPref, writePref } from './lib/prefs.js';
 import { applyFeedMessage, EMPTY_COUNTS } from './lib/store.js';
 import { StreamClient, createCoalescer, backoffDelay } from './lib/stream.js';
-import { jobTitle, typeLabel, count } from './lib/format.js';
+import { jobTitle, typeLabel, count, pageSummary } from './lib/format.js';
 import { AppContext, Icon, Button } from './ui/components.js';
 import { OverviewPage } from './views/overview.js';
 import { QueuePage } from './views/queue.js';
@@ -15,21 +16,20 @@ import { LogsPage } from './views/logs.js';
 import { SystemPage } from './views/system.js';
 import { JobDrawer } from './views/drawer.js';
 import { CommandPalette, ShortcutSheet } from './views/palette.js';
-import { NAV, THEMES, Sidebar, TabBar, ConnectionIndicator, ThemeControl, Banners } from './views/shell.js';
+import { NAV, Sidebar, TabBar, ConnectionIndicator, ThemeControl, SkinControl, Banners } from './views/shell.js';
 
 const TITLES = { overview: 'Overview', queue: 'Queue', showcase: 'Showcase', logs: 'Logs', system: 'System', notfound: 'Not found' };
 
-const THEME_KEY = 'amdl.console.theme';
+const storage = () => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
 
 /** Reads the stored theme; storage can be unavailable (private mode, blocked site data). */
-export function loadTheme() {
-  try {
-    const v = window.localStorage.getItem(THEME_KEY);
-    return THEMES.includes(v) ? v : 'system';
-  } catch {
-    return 'system';
-  }
-}
+export const loadTheme = () => readPref(storage(), THEME_KEY, normalizeTheme);
 
 /** Applies a theme to <html>: "system" follows prefers-color-scheme. */
 export function applyTheme(theme) {
@@ -38,12 +38,12 @@ export function applyTheme(theme) {
   else root.removeAttribute('data-theme');
 }
 
-function saveTheme(theme) {
-  try {
-    window.localStorage.setItem(THEME_KEY, theme);
-  } catch {
-    // Storage blocked: the choice lasts for this page view only.
-  }
+/** Reads the stored skin; the default when storage is unavailable or the value unknown. */
+export const loadSkin = () => readPref(storage(), SKIN_KEY, normalizeSkin);
+
+/** Applies a skin to <html data-skin>, which scopes css/skins/<skin>.css. */
+export function applySkin(skin) {
+  document.documentElement.setAttribute('data-skin', normalizeSkin(skin));
 }
 
 const ANNOUNCE_GAP_MS = 5000;
@@ -59,6 +59,7 @@ export function App() {
   const [epoch, setEpoch] = useState(0);
   const [simulate, setSimulate] = useState(false);
   const [theme, setThemeState] = useState(loadTheme);
+  const [skin, setSkinState] = useState(loadSkin);
   const [toasts, setToasts] = useState([]);
   const [liveText, setLiveText] = useState('');
   const [overlay, setOverlay] = useState(null);
@@ -89,9 +90,16 @@ export function App() {
 
   const setTheme = useCallback((t) => {
     setThemeState(t);
-    saveTheme(t);
+    writePref(storage(), THEME_KEY, t);
   }, []);
   useEffect(() => applyTheme(theme), [theme]);
+
+  const setSkin = useCallback((s) => {
+    const v = normalizeSkin(s);
+    setSkinState(v);
+    writePref(storage(), SKIN_KEY, v);
+  }, []);
+  useEffect(() => applySkin(skin), [skin]);
 
   const toast = useCallback((t) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -340,6 +348,7 @@ export function App() {
   );
 
   const title = TITLES[route.page] || 'AMDL';
+  const summary = pageSummary(route.page, counts);
   let page;
   switch (route.page) {
     case 'overview':
@@ -358,7 +367,7 @@ export function App() {
       page = html`<${SystemPage} />`;
       break;
     default:
-      page = html`<div class="card"><p>This page does not exist. <a class="link" href=${buildHash('overview')}>Go to the overview</a>.</p></div>`;
+      page = html`<div class="card"><div class="card-body"><p>This page does not exist. <a class="link" href=${buildHash('overview')}>Go to the overview</a>.</p></div></div>`;
   }
 
   return html`<${AppContext.Provider} value=${ctx}>
@@ -367,7 +376,6 @@ export function App() {
       <${Sidebar} route=${route} counts=${counts} />
       <div class="main-col">
         <header class="topbar">
-          <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
           <div class="topbar-right">
             <${ConnectionIndicator} conn=${conn} onRetry=${() => retryRef.current()} />
             <button type="button" class="search-trigger" onClick=${() => setOverlay('palette')} aria-label="Search and commands" aria-keyshortcuts="Meta+K Control+K">
@@ -375,16 +383,23 @@ export function App() {
               <span class="search-trigger-text">Search jobs…</span>
               <kbd class="search-trigger-kbd">⌘K</kbd>
             </button>
+            <${SkinControl} skin=${skin} setSkin=${setSkin} />
             <${ThemeControl} theme=${theme} setTheme=${setTheme} />
           </div>
         </header>
-        <${Banners} simulate=${simulate} conn=${conn} onRetry=${() => retryRef.current()} />
-        <main id="main" class="main" tabindex="-1" ref=${mainRef}>${page}</main>
+        <main id="main" class="main" tabindex="-1" ref=${mainRef} data-page=${route.page}>
+          <div class="page-head">
+            <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
+            ${summary ? html`<p class="page-sub">${summary}</p>` : null}
+          </div>
+          <${Banners} simulate=${simulate} conn=${conn} onRetry=${() => retryRef.current()} />
+          ${page}
+        </main>
       </div>
       <${TabBar} route=${route} />
     </div>
     ${route.jobId ? html`<${JobDrawer} jobId=${route.jobId} onClose=${closeDrawer} />` : null}
-    ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} />` : null}
+    ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} setSkin=${setSkin} />` : null}
     ${overlay === 'shortcuts' ? html`<${ShortcutSheet} onClose=${() => setOverlay(null)} />` : null}
     <div class="toasts" role="status" aria-live="polite">
       ${toasts.map(

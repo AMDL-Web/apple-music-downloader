@@ -131,6 +131,29 @@ export function finishedLine(job) {
   return parts.join(' · ');
 }
 
+const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
+
+/**
+ * The line under a page title, from the feed's status counts (null before
+ * the first snapshot) and the current time.
+ */
+export function pageSummary(page, counts, now = new Date()) {
+  switch (page) {
+    case 'overview':
+      return counts ? `${shortDate(now)} · ${plural(counts.total, 'job', 'jobs')}` : shortDate(now);
+    case 'queue':
+      return counts ? `${count(counts.running)} running · ${count(counts.queued)} queued · ${count(counts.failed)} failed` : '';
+    case 'showcase':
+      return counts ? `${count(counts.completed)} completed` : '';
+    case 'logs':
+      return 'Structured backend log, newest last';
+    case 'system':
+      return 'Build, runtime, health and configuration';
+    default:
+      return '';
+  }
+}
+
 /** Formats a UTC calendar date ("2026-10-28") as "Oct 28" without a time zone shift. */
 export function dayLabel(isoDate) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate || '');
@@ -284,11 +307,70 @@ export function artPalette(job, motion = false) {
     bg: `#${bg}`,
     text1: artTextColor(bg, job[`${p}text_color1`]),
     text2: artTextColor(bg, job[`${p}text_color2`]),
+    text3: artTextColor(bg, job[`${p}text_color3`]),
   };
 }
 
-/** CSS custom properties for a palette, for a Preact style object. */
+/**
+ * CSS custom properties for a palette, for a Preact style object: --art-bg
+ * and --art-t1..t3 (each text color already reaches 4.5:1 on --art-bg).
+ */
 export function paletteStyle(palette) {
   if (!palette) return undefined;
-  return { '--art-bg': palette.bg, '--art-text1': palette.text1, '--art-text2': palette.text2 };
+  return { '--art-bg': palette.bg, '--art-t1': palette.text1, '--art-t2': palette.text2, '--art-t3': palette.text3 };
+}
+
+/** Year of an Apple release date ("2022-10-21" -> "2022"), or ''. */
+export function releaseYear(job) {
+  const m = /^(\d{4})/.exec((job && job.release_date) || '');
+  return m ? m[1] : '';
+}
+
+/**
+ * Facts about a job for kicker and meta lines, each '' when unknown: type,
+ * genre, year, tracks ("12 tracks"), started (clock time), finished
+ * ("Oct 28 00:14") and took (duration).
+ */
+export function jobFacts(job) {
+  if (!job) return { type: '', genre: '', year: '', tracks: '', started: '', finished: '', took: '' };
+  const total = typeof job.total_items === 'number' && job.total_items > 0 ? job.total_items : 0;
+  const start = toDate(job.started_at);
+  const end = toDate(job.finished_at);
+  return {
+    type: job.type ? typeLabel(job.type) : '',
+    genre: typeof job.genre === 'string' ? job.genre : '',
+    year: releaseYear(job),
+    tracks: total ? plural(total, 'track', 'tracks') : '',
+    started: start ? clockTime(start, false) : '',
+    finished: end ? `${shortDate(end)} ${pad(end.getHours())}:${pad(end.getMinutes())}` : '',
+    took: start && end && end >= start ? elapsed(end - start) : '',
+  };
+}
+
+/**
+ * Health-adjacent facts from GET /system: workers, queue, downloads disk and
+ * uptime as [key, label, value] rows; rows without data are left out.
+ */
+export function systemFacts(sys) {
+  if (!sys || typeof sys !== 'object') return [];
+  const out = [];
+  const jobs = sys.jobs || {};
+  if (typeof jobs.workers === 'number') out.push(['workers', 'Workers', `${count(jobs.active || 0)} of ${count(jobs.workers)} busy`]);
+  if (typeof jobs.queue_capacity === 'number') out.push(['queue', 'Queue', `${count(jobs.queue_depth || 0)} of ${count(jobs.queue_capacity)}`]);
+  const disk = (sys.storage || []).find((d) => d && d.name === 'downloads_dir');
+  if (disk && typeof disk.free_bytes === 'number') out.push(['storage', 'Storage', `${bytes(disk.free_bytes)} free of ${bytes(disk.total_bytes)}`]);
+  if (typeof sys.uptime_seconds === 'number') out.push(['uptime', 'Uptime', elapsed(sys.uptime_seconds * 1000)]);
+  return out;
+}
+
+/** Log attributes as "key=value" pairs in key order, without the keys in `omit`. */
+export function attrPairs(attrs, omit = []) {
+  if (!attrs || typeof attrs !== 'object') return [];
+  return Object.keys(attrs)
+    .filter((k) => !omit.includes(k))
+    .sort()
+    .map((k) => {
+      const v = attrs[k];
+      return `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`;
+    });
 }

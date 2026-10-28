@@ -2,23 +2,21 @@
 // artwork, throughput from /stats and a log tail.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { listDownloads, getHealth, getWrapperStatus, getLibrarySync, getHooks, getStats, listLogs, logStreamUrl, settle, parseData } from '../api.js';
-import { count, bytes, dayLabel, jobTitle, jobSubtitle, artPalette, clockTime } from '../lib/format.js';
+import { listDownloads, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, getStats, listLogs, logStreamUrl, settle, parseData } from '../api.js';
+import { count, bytes, dayLabel, jobTitle, jobSubtitle, artPalette, paletteStyle, clockTime, jobFacts, systemFacts, attrPairs } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, logLevelView, isAlreadyInLibrary, LOG_RETENTION_OFF } from '../lib/status.js';
 import { upsertJob, appendLogs, emptyLogs } from '../lib/store.js';
 import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
 import { buildHash } from '../lib/route.js';
-import { useApp, Card, Icon, Badge, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, Unavailable, LinkButton } from '../ui/components.js';
+import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, Unavailable, LinkButton, HealthList, Facts } from '../ui/components.js';
 import { usePoll, useColumns } from '../ui/hooks.js';
 import { JobRow, applyFeedToList } from './queue.js';
 
 export function OverviewPage() {
   return html`<div class="page page-overview">
     <${KpiRow} />
-    <div class="grid-2">
-      <${LiveQueue} />
-      <${HealthCard} />
-    </div>
+    <${LiveQueue} />
+    <${HealthCard} />
     <${RecentStrip} />
     <${ThroughputCard} />
     <${LogTail} />
@@ -31,26 +29,23 @@ const TILES = [
   { key: 'completed', label: 'Completed', icon: 'circle-check', role: 'success', href: buildHash('queue', { tab: 'all' }) },
   { key: 'failed', label: 'Failed', icon: 'circle-x', role: 'danger', href: buildHash('queue', { tab: 'failed' }) },
 ];
+const TOTAL_TILE = { key: 'total', label: 'Total', icon: 'list', role: 'neutral', href: buildHash('queue', { tab: 'all' }) };
 
 function KpiRow() {
   const { counts, conn } = useApp();
   const stale = conn.state === 'offline';
-  return html`<section class="kpis" aria-label="Job counts">
-    ${TILES.map(
-      (t) => html`<a key=${t.key} class="kpi" href=${t.href}>
-        <span class="kpi-label">${t.label}</span>
-        <span class="kpi-icon" data-role=${t.role}><${Icon} name=${t.icon} /></span>
-        ${counts ? html`<span class="kpi-value">${stale ? '—' : count(counts[t.key])}</span>` : html`<${Skeleton} kind="kpi" />`}
-        <span class="kpi-meta">${counts ? `of ${count(counts.total)} total` : ''}</span>
-      </a>`,
-    )}
-    <a class="kpi kpi-total" href=${buildHash('queue', { tab: 'all' })}>
-      <span class="kpi-label">Total</span>
-      <span class="kpi-icon" data-role="neutral"><${Icon} name="list" /></span>
-      ${counts ? html`<span class="kpi-value">${stale ? '—' : count(counts.total)}</span>` : html`<${Skeleton} kind="kpi" />`}
-      <span class="kpi-meta">${counts ? `${count(counts.cancelled)} cancelled` : ''}</span>
-    </a>
-  </section>`;
+  const tile = (t, value, meta) => html`<a key=${t.key} class="kpi" data-key=${t.key} data-role=${t.role} data-zero=${value === 0 ? '' : undefined} href=${t.href}>
+    <span class="kpi-label">${t.label}</span>
+    <span class="kpi-icon"><${Icon} name=${t.icon} /></span>
+    ${counts ? html`<span class="kpi-value">${stale ? '—' : count(value)}</span>` : html`<${Skeleton} kind="kpi" />`}
+    <span class="kpi-meta">${counts ? meta : ''}</span>
+  </a>`;
+  return html`<${Card} section="kpis" title="Jobs" labelId="kpis-title" note="All time">
+    <div class="kpis">
+      ${TILES.map((t) => tile(t, counts && counts[t.key], counts ? `of ${count(counts.total)} total` : ''))}
+      ${tile(TOTAL_TILE, counts && counts.total, counts ? `${count(counts.cancelled)} cancelled` : '')}
+    </div>
+  </${Card}>`;
 }
 
 const LIVE_LIMIT = 8;
@@ -85,7 +80,7 @@ function LiveQueue() {
       }),
     [],
   );
-  const active = app.counts ? app.counts.running + app.counts.queued : null;
+  const c = app.counts;
   let body;
   if (state.loading) body = html`<${SkeletonRows} n=${4} kind="row" />`;
   else if (state.error) body = html`<${ErrorNote} title="Couldn't load the queue" error=${state.error} onRetry=${load} />`;
@@ -95,16 +90,17 @@ function LiveQueue() {
       ${state.jobs.map((job) => html`<li key=${job.id}><${JobRow} job=${job} href=${buildHash('queue', {}, job.id)} /></li>`)}
     </ul>`;
   return html`<${Card}
-    className="card-flush span-8"
+    className="card-flush"
+    section="live"
     title="Live queue"
     labelId="live-queue-title"
-    note=${active !== null ? `${count(active)} active` : null}
+    note=${c ? `${count(c.running)} running · ${count(c.queued)} queued` : null}
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('queue', {})}>Open queue</${LinkButton}>`}
   >${body}</${Card}>`;
 }
 
 function loadHealth() {
-  return Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks())]);
+  return Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks()), settle(getSystem())]);
 }
 
 /** The four health rows shared by the Overview card and the System page. */
@@ -120,23 +116,16 @@ export function healthRows(results) {
 
 function HealthCard() {
   const poll = usePoll(loadHealth, 30000);
+  const sys = poll.data && poll.data[4] && !poll.data[4].error ? poll.data[4].data : null;
+  const facts = systemFacts(sys);
   return html`<${Card}
-    className="span-4"
+    section="health"
     title="System health"
     labelId="health-title"
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('system')}>Details</${LinkButton}>`}
   >
-    ${poll.data
-      ? html`<ul class="health-list">
-          ${healthRows(poll.data).map(
-            ([name, view]) => html`<li key=${name} class="health-row">
-              <span class="health-name">${name}</span>
-              <${Badge} view=${view} />
-              ${view.detail ? html`<span class="health-detail" title=${view.title || view.detail}>${view.detail}</span>` : null}
-            </li>`,
-          )}
-        </ul>`
-      : html`<${SkeletonRows} n=${4} kind="line" />`}
+    ${poll.data ? html`<${HealthList} rows=${healthRows(poll.data)} />` : html`<${SkeletonRows} n=${4} kind="line" />`}
+    ${facts.length ? html`<${Facts} className="health-facts" label="Runtime" rows=${facts} />` : null}
   </${Card}>`;
 }
 
@@ -161,10 +150,13 @@ function RecentStrip() {
     () => app.subscribeFeed((batch) => setState((s) => ({ ...s, jobs: applyFeedToList(s.jobs, batch, RECENT_FILTER, { limit: 16 }) }))),
     [],
   );
-  const shown = cols > 0 ? state.jobs.slice(0, cols) : [];
+  // Every tile renders; the ones past the whole-tile count carry is-overflow,
+  // which the base hides and a skin may show as a scrolling shelf.
   return html`<${Card}
+    section="recent"
     title="Recently completed"
     labelId="recent-title"
+    note=${app.counts ? `${count(app.counts.completed)} completed` : null}
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('showcase')}>Showcase</${LinkButton}>`}
   >
     <div class="strip" ref=${ref}>
@@ -174,12 +166,15 @@ function RecentStrip() {
           ? html`<${ErrorNote} title="Couldn't load completed jobs" error=${state.error} onRetry=${load} />`
           : state.jobs.length === 0
             ? html`<${Empty} icon="disc" title="Completed downloads will appear here" />`
-            : shown.map((job) => {
+            : state.jobs.map((job, i) => {
                 const p = artPalette(job);
-                return html`<a key=${job.id} class="strip-tile" href=${buildHash('showcase', {}, job.id)}>
+                const f = jobFacts(job);
+                const cls = ['strip-tile', p ? 'has-palette' : '', cols > 0 && i >= cols ? 'is-overflow' : ''].filter(Boolean).join(' ');
+                return html`<a key=${job.id} class=${cls} href=${buildHash('showcase', {}, job.id)} style=${paletteStyle(p)}>
                   <${Artwork} url=${job.artwork_url} bg=${p && p.bg} px=${240} className="art-square" />
                   <span class="strip-title" dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</span>
                   <span class="strip-sub" dir="auto">${isAlreadyInLibrary(job) ? 'Already in library' : jobSubtitle(job)}</span>
+                  <span class="strip-meta">${[f.tracks, f.finished, f.took].filter(Boolean).join(' · ')}</span>
                 </a>`;
               })}
     </div>
@@ -192,18 +187,33 @@ function ThroughputCard() {
   const app = useApp();
   const poll = usePoll(() => getStats(STATS_DAYS), 60000, [app.epoch]);
   if (poll.error && poll.error.status === 404) {
-    return html`<${Card} title="Throughput" labelId="throughput-title"><${Unavailable} what="Throughput history (GET /api/v1/stats)" /></${Card}>`;
+    return html`<${Card} section="throughput" title="Throughput" labelId="throughput-title"><${Unavailable} what="Throughput history (GET /api/v1/stats)" /></${Card}>`;
   }
   const stats = poll.data;
   const totals = stats && stats.totals;
   const period = `Last ${STATS_DAYS} days`;
+  const daily = (stats && stats.daily) || [];
+  const jobsDone = daily.reduce((n, d) => n + (d.jobs_completed || 0), 0);
+  const jobsFailed = daily.reduce((n, d) => n + (d.jobs_failed || 0), 0);
   return html`<${Card}
+    section="throughput"
     title="Throughput"
     labelId="throughput-title"
-    note=${totals ? `${period} · ${count(totals.tracks_completed)} tracks · ${bytes(totals.bytes_written)} written` : period}
+    note=${period}
   >
+    ${totals
+      ? html`<${Facts}
+          className="tp-totals"
+          label=${`Totals, ${period.toLowerCase()}`}
+          rows=${[
+            ['tracks', 'Tracks completed', `${count(totals.tracks_completed)}${totals.tracks_failed ? `, ${count(totals.tracks_failed)} failed` : ''}`],
+            ['bytes', 'Written to disk', bytes(totals.bytes_written)],
+            ['jobs', 'Jobs finished', `${count(jobsDone)}${jobsFailed ? `, ${count(jobsFailed)} failed` : ''}`],
+          ]}
+        />`
+      : null}
     ${stats
-      ? html`<${Throughput} daily=${stats.daily || []} />`
+      ? html`<${Throughput} daily=${daily} />`
       : poll.error
         ? html`<${ErrorNote} title="Couldn't load stats" error=${poll.error} onRetry=${poll.reload} />`
         : html`<${Skeleton} kind="chart" />`}
@@ -329,6 +339,7 @@ function LogTail() {
 
   return html`<${Card}
     className="card-flush"
+    section="logs"
     title="Log tail"
     labelId="logtail-title"
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('logs')}>Open logs</${LinkButton}>`}
@@ -344,10 +355,13 @@ function LogTail() {
           : html`<ol class="log-tail" aria-label="Latest log records">
               ${logs.entries.map((e) => {
                 const lv = logLevelView(e.level);
-                return html`<li key=${e.sequence} class="log-tail-row" data-level=${e.level}>
+                const attrs = e.attributes || {};
+                const pairs = attrPairs(attrs, ['component']);
+                return html`<li key=${e.sequence} class="log-entry log-tail-row" data-level=${e.level}>
                   <span class="log-time">${clockTime(e.time, false)}</span>
                   <span class="log-level" data-role=${lv.role}><span class="log-dot"></span>${lv.short}</span>
-                  <span class="log-msg">${e.message}</span>
+                  <span class="log-comp">${typeof attrs.component === 'string' ? attrs.component : ''}</span>
+                  <span class="log-msg">${e.message}${pairs.length ? html` <span class="log-attrs">${pairs.join('  ')}</span>` : null}</span>
                 </li>`;
               })}
             </ol>`}

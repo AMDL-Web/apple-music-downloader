@@ -14,3 +14,5 @@ d6167fe51814436c33be6b7454cc1b795cae045f
 9855ae561b932d62d3b1a5a90ca5399f3e6cc8ba
 # refactor(config): split config.go into config, load and validate (move-only)
 9e3b407a47bc59c1c17ea65f815db83404e3a4e8
+# refactor(console): move the shell chrome out of app.js (move-only)
+1d0bfed4ee59c8b28438e69c51f814cbc881a86b

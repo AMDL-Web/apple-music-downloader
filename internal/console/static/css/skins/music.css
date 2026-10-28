@@ -1,0 +1,383 @@
+/*
+ * Skin "music": Apple Music, immersive. Artwork leads: running jobs, the
+ * showcase hero and showcase tiles take each album's own Apple colors
+ * (--art-bg, --art-t1..t3, set per element by the page). Large radii, tight
+ * SF Pro Display-style headlines, an Apple Music red accent, grouped lists.
+ * Everything here is scoped under :root[data-skin="music"]; colors are
+ * light-dark(<light>, <dark>). Spec: internal/console/skins/music.md.
+ * First-pass values from the design mockup; the skin designer refines them.
+ */
+
+/* ---- Tokens -------------------------------------------------------- */
+
+:root[data-skin="music"] {
+  /* Surfaces and text. Contrast on --bg-surface: text-secondary 4.66 / 6.61. */
+  --bg-canvas: light-dark(#ffffff, #000000);
+  --bg-surface: light-dark(#f5f5f7, #1c1c1e);
+  --bg-raised: light-dark(#ffffff, #2c2c2e);
+  --bg-hover: light-dark(#e8e8ed, #2c2c2e);
+  --bg-selected: light-dark(#e8e8ed, #3a3a3c);
+  --bg-chrome: light-dark(rgba(246, 246, 248, 0.88), rgba(28, 28, 30, 0.86));
+  --border-subtle: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1));
+  --border-control: light-dark(#86868b, #6e6e73);
+  --text-primary: light-dark(#1d1d1f, #f5f5f7);
+  --text-secondary: light-dark(#6e6e73, #a1a1a6);
+  --text-disabled: light-dark(#86868b, #6e6e73);
+  --ink: light-dark(#1d1d1f, #f5f5f7);
+  --on-ink: light-dark(#ffffff, #000000);
+  --accent: #e0213a;
+  --accent-text: light-dark(#d60f2c, #ff4d61);
+  --on-accent: #ffffff;
+  --focus: light-dark(#0071e3, #0a84ff);
+  --brand: #e0213a;
+  --on-brand: #ffffff;
+  --track: light-dark(#e8e8ed, #3a3a3c);
+  --scrim: light-dark(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6));
+
+  /* Status roles: dot/icon, tint, text. Running wears the accent red. */
+  --info: #fa2d48;
+  --info-tint: light-dark(rgba(250, 45, 72, 0.12), rgba(250, 45, 72, 0.2));
+  --info-text: light-dark(#d60f2c, #ff4d61);
+  --success: light-dark(#248a3d, #30d158);
+  --success-tint: light-dark(rgba(36, 138, 61, 0.12), rgba(48, 209, 88, 0.16));
+  --success-text: light-dark(#248a3d, #30d158);
+  --danger: light-dark(#d70015, #ff6961);
+  --danger-tint: light-dark(rgba(215, 0, 21, 0.1), rgba(255, 105, 97, 0.16));
+  --danger-text: light-dark(#d70015, #ff6961);
+  --warning: light-dark(#b25000, #ffd60a);
+  --warning-tint: light-dark(rgba(255, 204, 0, 0.18), rgba(255, 214, 10, 0.13));
+  --warning-text: light-dark(#b25000, #ffd60a);
+  --neutral: light-dark(#8e8e93, #8e8e93);
+  --neutral-tint: light-dark(#e8e8ed, #2c2c2e);
+  --neutral-text: var(--text-secondary);
+  --skipped: light-dark(#8944ab, #bf5af2);
+  --skipped-tint: light-dark(rgba(137, 68, 171, 0.12), rgba(191, 90, 242, 0.18));
+  --skipped-text: light-dark(#8944ab, #da8fff);
+  --chart-bar: #fa2d48;
+  --chart-grid: var(--border-subtle);
+
+  /* Type */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", var(--font-system);
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "PingFang SC", var(--font-system);
+  --font-mono: ui-monospace, "SF Mono", Menlo, var(--font-system-mono);
+  --fs-body: var(--fs-14);
+  --lh-body: var(--lh-14);
+  --tracking-body: -0.01em;
+  --fs-page-title: 34px;
+  --lh-page-title: 40px;
+  --fs-card-title: 22px;
+  --lh-card-title: 28px;
+  --fs-kpi: 28px;
+  --lh-kpi: 34px;
+  --fs-hero-title: 56px;
+  --lh-hero-title: 60px;
+  --w-display: var(--w-bold);
+  --w-title: var(--w-bold);
+  --tracking-display: -0.03em;
+  --tracking-title: -0.02em;
+
+  /* Shape */
+  --r-badge: 999px;
+  --r-bar: 999px;
+  --r-control: 9px;
+  --r-control-inner: 7px;
+  --r-card: 22px;
+  --r-art: 12px;
+  --r-overlay: 16px;
+  --r-drawer: 0;
+  --r-notice: 16px;
+  --bar-h: 6px;
+  --cell-h: 6px;
+  --cell-gap: 3px;
+
+  /* Cards: flat filled surfaces, no borders or shadows */
+  --card-bg: var(--bg-surface);
+  --card-border: 0 solid transparent;
+  --card-shadow: none;
+  --card-pad: var(--s-5);
+  --card-pad-x: var(--s-5);
+  --card-gap: var(--s-4);
+  --card-divider: 1px solid var(--border-subtle);
+  --row-divider: 1px solid var(--border-subtle);
+  --chrome-border: 1px solid var(--border-subtle);
+
+  /* Layout */
+  --page-gap: var(--s-10);
+  --grid-gap: var(--s-4);
+
+  /* Elevation: only artwork and floating layers lift */
+  --shadow-art: 0 14px 30px -16px light-dark(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.9));
+  --shadow-float: 0 1px 2px light-dark(rgba(0, 0, 0, 0.06), transparent), 0 12px 32px light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.6));
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="music"] {
+    --fs-page-title: 30px;
+    --lh-page-title: 36px;
+    --fs-card-title: 20px;
+    --lh-card-title: 26px;
+    --fs-hero-title: 34px;
+    --lh-hero-title: 38px;
+    --page-gap: var(--s-8);
+    --card-pad: var(--s-4);
+    --card-pad-x: var(--s-4);
+  }
+}
+
+/* ---- Shell --------------------------------------------------------- */
+
+:root[data-skin="music"] .sidebar,
+:root[data-skin="music"] .tabbar {
+  backdrop-filter: saturate(180%) blur(24px);
+}
+
+:root[data-skin="music"] .topbar {
+  background: transparent;
+  border-bottom: 0;
+}
+
+:root[data-skin="music"] .brand-sub {
+  display: block;
+}
+
+:root[data-skin="music"] .sidebar .nav-item .icon {
+  color: var(--accent-text);
+}
+
+:root[data-skin="music"] .nav-item[aria-current="page"] {
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .tab[aria-current="page"] {
+  color: var(--accent-text);
+}
+
+:root[data-skin="music"] .tab[aria-current="page"]::before {
+  display: none;
+}
+
+:root[data-skin="music"] .card-flush > .card-head {
+  border-bottom: 0;
+}
+
+/* Section heads sit above their surface, Apple Music shelf style. */
+:root[data-skin="music"] .page-overview > .card {
+  padding: 0;
+  background: transparent;
+}
+
+:root[data-skin="music"] .page-overview > .card > .card-body {
+  padding: var(--card-pad);
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+}
+
+:root[data-skin="music"] .page-overview > .card-flush > .card-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+:root[data-skin="music"] .page-overview > .card > .card-head {
+  padding: 0 0 var(--s-3);
+}
+
+:root[data-skin="music"] .card-actions .btn {
+  color: var(--accent-text);
+}
+
+/* ---- Overview ------------------------------------------------------ */
+
+/* Now downloading: each live job is a card in its album's own colors. */
+:root[data-skin="music"] [data-section="live"] > .card-body {
+  background: transparent;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--grid-gap);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-list > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-row {
+  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-areas:
+    "art main"
+    "prog prog"
+    "status status";
+  gap: var(--s-3) var(--s-4);
+  padding: var(--s-5);
+  border-radius: 28px;
+  background: var(--art-bg, var(--bg-surface));
+  color: var(--art-t1, var(--text-primary));
+}
+
+:root[data-skin="music"] [data-section="live"] .job-row > .art {
+  grid-area: art;
+  width: 96px;
+  height: 96px;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-main {
+  grid-area: main;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-progress {
+  grid-area: prog;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-status {
+  grid-area: status;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-facts {
+  display: flex;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+:root[data-skin="music"] [data-section="live"] .job-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .badge {
+  color: inherit;
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .job-sub,
+:root[data-skin="music"] [data-section="live"] .has-palette .job-facts,
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog-text {
+  color: var(--art-t2);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .pcell[data-state="remaining"],
+:root[data-skin="music"] [data-section="live"] .has-palette .pbar {
+  background: color-mix(in srgb, var(--art-t1) 18%, transparent);
+}
+
+:root[data-skin="music"] [data-section="live"] .has-palette .pcell[data-state="completed"] {
+  background: var(--art-t1);
+}
+
+:root[data-skin="music"] [data-section="live"] .job-row:hover {
+  background: var(--art-bg, var(--bg-hover));
+}
+
+/* KPIs as one grouped surface with hairline separators. */
+:root[data-skin="music"] .kpis {
+  gap: 0;
+}
+
+:root[data-skin="music"] .kpi + .kpi {
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0;
+}
+
+:root[data-skin="music"] .kpi-icon {
+  position: static;
+  order: -1;
+}
+
+/* Health as an iOS grouped list. */
+:root[data-skin="music"] .health-row {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+:root[data-skin="music"] .health-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--role, var(--neutral));
+  color: var(--on-accent);
+}
+
+:root[data-skin="music"] .health-detail {
+  grid-column: 2 / -1;
+}
+
+:root[data-skin="music"] .badge {
+  background: transparent;
+  padding: 0;
+}
+
+/* ---- Showcase ------------------------------------------------------ */
+
+:root[data-skin="music"] .hero {
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-10);
+  padding: var(--s-10);
+  border-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .hero-title {
+  max-width: none;
+}
+
+:root[data-skin="music"] .gallery {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+:root[data-skin="music"] .tile {
+  padding: var(--s-3) var(--s-3) var(--s-4);
+  border-radius: var(--r-card);
+  background: var(--art-bg, var(--bg-surface));
+  color: var(--art-t1, var(--text-primary));
+}
+
+:root[data-skin="music"] .tile.has-palette .tile-sub,
+:root[data-skin="music"] .tile.has-palette .tile-facts {
+  color: var(--art-t2);
+}
+
+:root[data-skin="music"] .tile-title {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="music"] .hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--s-5);
+  }
+
+  :root[data-skin="music"] [data-section="live"] .job-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :root[data-skin="music"] [data-section="live"] .job-row {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  :root[data-skin="music"] [data-section="live"] .job-row > .art {
+    width: 72px;
+    height: 72px;
+  }
+
+  /* Recently completed becomes a horizontal shelf showing every tile. */
+  :root[data-skin="music"] .strip {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: 140px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+
+  :root[data-skin="music"] .strip-tile,
+  :root[data-skin="music"] .strip-tile.is-overflow {
+    display: flex;
+    scroll-snap-align: start;
+  }
+}

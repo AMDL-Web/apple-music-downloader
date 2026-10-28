@@ -73,18 +73,21 @@ fit a Go open-source backend with English docs.
 ## Console design references
 
 Sources behind the embedded console in `internal/console`; the resulting spec is
-[internal/console/DESIGN.md](../internal/console/DESIGN.md).
+[internal/console/DESIGN.md](../internal/console/DESIGN.md), with one page per
+skin in `internal/console/skins/`.
 
 ### Visual system
 
 | Practice | Landed in | Status | Note |
 | --- | --- | --- | --- |
-| Radix Colors 12-step scale (1-2 backgrounds, 3-5 states, 6-8 borders, 9-10 solids, 11-12 text), exact v3 hex values | `internal/console/static/css/tokens.css` | adopted | Light and dark each use their own steps; contrast computed per pair. Light amber uses step 11 because step 9 is 1.58:1 on white. |
-| Geist color roles and the background-100/200 split | `internal/console/static/css/tokens.css` | adapted | Named roles (canvas, surface, raised, hover, selected) instead of numbered steps. |
-| Geist typography: 14/20 label default, tabular figures for numbers | [DESIGN.md](../internal/console/DESIGN.md#type-spacing-shape-motion) | adapted | System fonts only, so the console works offline and renders CJK titles. |
-| Geist materials radius tiers; elevation only on floating layers | [DESIGN.md](../internal/console/DESIGN.md#type-spacing-shape-motion) | adapted | 4/6/12 px radius scale. |
-| Linear's redesign: inverted-L chrome, neutral unsaturated surfaces, depth through surface steps | `internal/console/static/css/app.css` | adopted | |
-| Monochrome ink accent instead of the amdl-web brand orange | `internal/console/static/css/tokens.css` | adopted | Brand `#e35e38` is 5.1 ΔE from failure red; it stays on the logo mark only. |
+| Switchable skins over one structural base: a skin is a token set plus a few scoped rules, the theme a separate axis | [DESIGN.md](../internal/console/DESIGN.md#skins), `internal/console/static/css/skins` | adopted | The maintainer chose two directions to ship side by side instead of one look. A Go test keeps every skin's token set complete. |
+| Apple Music's own look: artwork colors on album pages, large titles, inset grouped lists, the red accent | `internal/console/static/css/skins/music.css` | adapted | Apple's per-album palette arrives as `--art-bg` and `--art-t1..3`, contrast-checked before use. |
+| Swiss editorial typography: 12-column grid, heavy grotesk, numbered sections, rules instead of boxes | `internal/console/static/css/skins/editorial.css` | adapted | One red, reserved for what needs attention; every status keeps its glyph and word. |
+| Radix Colors 12-step scale and Geist color roles | none | not adopting | The single neutral palette was replaced by per-skin palettes; the role names (canvas, surface, raised, hover, selected) stay as token names. |
+| Geist typography: 14/20 label default, tabular figures for numbers | [DESIGN.md](../internal/console/DESIGN.md#type-spacing-shape-motion) | adapted | The type scale is skin-neutral; display roles are skin tokens. System fonts only, so the console works offline and renders CJK titles. |
+| Geist materials radius tiers; elevation only on floating layers | none | not adopting | Radii and shadows are skin tokens; the 4/6/12 px scale was the retired default look. |
+| Linear's redesign: inverted-L chrome | `internal/console/static/css/app.css` | adapted | The sidebar plus top bar frame is the base; a skin may restyle it (the editorial masthead). |
+| Monochrome ink accent instead of the amdl-web brand orange | none | not adopting | Each skin picks its own accent; the danger role still never looks like a healthy accent. |
 | Carbon status indicator pattern: two of color, shape and symbol; purple for outliers | `internal/console/static/js/lib/status.js` | adopted | "Already on disk" uses the purple skipped role; red/green fail under deuteranopia, so labels are mandatory. |
 | Geist Status Dot: only in-progress states animate, no separate spinner | `internal/console/static/css/app.css` | adopted | The running pulse is the only loop. |
 | Stripe badge discipline: a small semantic set, badges are read-only | `internal/console/static/js/ui/components.js` | adopted | |

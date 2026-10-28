@@ -1,0 +1,549 @@
+/*
+ * Skin "editorial": Swiss editorial, a record label's catalogue page. Paper
+ * white and ink black, a strict 12-column grid, heavy grotesk display type,
+ * numbered sections with a left label column, hairline rules instead of boxes,
+ * no shadows, no radius, one red used only for what needs attention.
+ * Everything here is scoped under :root[data-skin="editorial"]; colors are
+ * light-dark(<light>, <dark>). Spec: internal/console/skins/editorial.md.
+ * First-pass values from the design mockup; the skin designer refines them.
+ */
+
+/* ---- Tokens -------------------------------------------------------- */
+
+:root[data-skin="editorial"] {
+  /* Paper and ink. Contrast on paper: ink-2 9.2 / 10.3, ink-3 5.6 / 6.6. */
+  --bg-canvas: light-dark(#fbfbf8, #0c0c0b);
+  --bg-surface: light-dark(#fbfbf8, #0c0c0b);
+  --bg-raised: light-dark(#fbfbf8, #161615);
+  --bg-hover: light-dark(#f0f0eb, #1a1a18);
+  --bg-selected: light-dark(#e6e6e0, #242422);
+  --bg-chrome: light-dark(#fbfbf8, #0c0c0b);
+  --border-subtle: light-dark(#d6d6d0, #2c2c2a);
+  --border-control: light-dark(#8e8e89, #6f6e6a);
+  --border-strong: light-dark(#0b0b0b, #f2f1ec);
+  --text-primary: light-dark(#0b0b0b, #f2f1ec);
+  --text-secondary: light-dark(#464644, #bdbcb6);
+  --text-tertiary: light-dark(#686865, #94938e);
+  --text-disabled: light-dark(#686865, #94938e);
+  --ink: light-dark(#0b0b0b, #f2f1ec);
+  --on-ink: light-dark(#fbfbf8, #0c0c0b);
+  --accent: light-dark(#d6001c, #ff3b30);
+  --accent-text: light-dark(#d6001c, #ff3b30);
+  --on-accent: light-dark(#ffffff, #0c0c0b);
+  --focus: light-dark(#d6001c, #ff3b30);
+  --brand: light-dark(#0b0b0b, #f2f1ec);
+  --on-brand: light-dark(#fbfbf8, #0c0c0b);
+  --track: light-dark(#e6e6e0, #2c2c2a);
+  --scrim: light-dark(rgba(11, 11, 11, 0.4), rgba(0, 0, 0, 0.7));
+
+  /* Status: ink glyph plus word; red only for what needs attention. */
+  --info: var(--ink);
+  --info-tint: transparent;
+  --info-text: var(--text-primary);
+  --success: var(--ink);
+  --success-tint: transparent;
+  --success-text: var(--text-primary);
+  --danger: var(--accent);
+  --danger-tint: transparent;
+  --danger-text: var(--accent-text);
+  --warning: var(--accent);
+  --warning-tint: transparent;
+  --warning-text: var(--accent-text);
+  --neutral: light-dark(#686865, #94938e);
+  --neutral-tint: transparent;
+  --neutral-text: var(--text-secondary);
+  --skipped: light-dark(#6b6b67, #9a9994);
+  --skipped-tint: transparent;
+  --skipped-text: var(--text-secondary);
+  --chart-bar: var(--ink);
+  --chart-grid: var(--border-subtle);
+
+  /* Type: heavy grotesk display, tabular numerals */
+  --font-sans: "Helvetica Neue", Helvetica, "SF Pro Display", -apple-system, "PingFang SC", Arial, var(--font-system);
+  --font-display: "Helvetica Neue", Helvetica, "SF Pro Display", -apple-system, "PingFang SC", Arial, var(--font-system);
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, var(--font-system-mono);
+  --fs-body: var(--fs-15);
+  --lh-body: var(--lh-15);
+  --tracking-body: 0;
+  --fs-page-title: clamp(64px, 9.4vw, 148px);
+  --lh-page-title: 0.84;
+  --fs-card-title: 19px;
+  --lh-card-title: 22px;
+  --fs-kpi: clamp(64px, 7.5vw, 124px);
+  --lh-kpi: 0.9;
+  --fs-hero-title: clamp(56px, 9vw, 176px);
+  --lh-hero-title: 0.86;
+  --fs-kicker: 11px;
+  --w-display: var(--w-heavy);
+  --w-title: var(--w-bold);
+  --tracking-display: -0.055em;
+  --tracking-title: -0.015em;
+
+  /* Shape: no radius anywhere */
+  --r-badge: 0;
+  --r-bar: 0;
+  --r-control: 0;
+  --r-control-inner: 0;
+  --r-card: 0;
+  --r-art: 0;
+  --r-overlay: 0;
+  --r-drawer: 0;
+  --r-notice: 0;
+  --bar-h: 4px;
+  --cell-h: 14px;
+  --cell-gap: 2px;
+
+  /* Sections are a rule, not a box */
+  --card-bg: transparent;
+  --card-border: 0 solid transparent;
+  --card-shadow: none;
+  --card-pad: 0;
+  --card-pad-x: 0;
+  --card-gap: var(--s-5);
+  --card-divider: 0 solid transparent;
+  --row-divider: 1px solid var(--border-subtle);
+  --chrome-border: 0 solid transparent;
+
+  /* Layout */
+  --page-gap: var(--s-12);
+  --grid-gap: var(--s-6);
+
+  /* No shadows; floating layers get a rule instead */
+  --shadow-art: none;
+  --shadow-float: 0 0 0 1px var(--border-strong);
+}
+
+@media (max-width: 900px) {
+  :root[data-skin="editorial"] {
+    --grid-gap: var(--s-3);
+    --page-gap: var(--s-8);
+  }
+}
+
+/* ---- Masthead ------------------------------------------------------ */
+
+/* At >= 640 px the sidebar becomes a horizontal masthead over the page. */
+@media (min-width: 640px) {
+  :root[data-skin="editorial"] .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  :root[data-skin="editorial"] .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--s-8);
+    padding: var(--s-5) var(--s-12) 0;
+    border-bottom: 3px solid var(--border-strong);
+  }
+
+  :root[data-skin="editorial"] .brand {
+    height: auto;
+    padding: 0 0 var(--s-3);
+  }
+
+  :root[data-skin="editorial"] .brand-mark {
+    display: none;
+  }
+
+  :root[data-skin="editorial"] .brand-text,
+  :root[data-skin="editorial"] .nav-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+
+  :root[data-skin="editorial"] .brand-name {
+    font-size: var(--fs-24);
+    line-height: var(--lh-24);
+    font-weight: var(--w-heavy);
+    letter-spacing: -0.03em;
+  }
+
+  :root[data-skin="editorial"] .nav {
+    flex-direction: row;
+    gap: var(--s-6);
+    counter-reset: nav;
+  }
+
+  :root[data-skin="editorial"] .nav .nav-item {
+    counter-increment: nav;
+  }
+
+  :root[data-skin="editorial"] .nav-item {
+    width: auto;
+    height: auto;
+    padding: 0 0 var(--s-3);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  :root[data-skin="editorial"] .nav-item .icon {
+    display: none;
+  }
+
+  :root[data-skin="editorial"] .nav .nav-label::before {
+    content: counter(nav, decimal-leading-zero) " ";
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: var(--fs-11);
+    font-weight: var(--w-regular);
+  }
+
+  :root[data-skin="editorial"] .nav-item:hover {
+    background: transparent;
+    text-decoration: underline;
+  }
+
+  :root[data-skin="editorial"] .nav-item[aria-current="page"] {
+    background: transparent;
+    font-weight: var(--w-bold);
+    box-shadow: inset 0 -4px 0 var(--border-strong);
+  }
+
+  :root[data-skin="editorial"] .nav-badge {
+    position: static;
+    padding: 0;
+    background: transparent;
+  }
+
+  :root[data-skin="editorial"] .sidebar-foot {
+    margin: 0 0 0 auto;
+  }
+
+  :root[data-skin="editorial"] .main,
+  :root[data-skin="editorial"] .topbar {
+    padding-left: var(--s-12);
+    padding-right: var(--s-12);
+  }
+}
+
+:root[data-skin="editorial"] .topbar {
+  position: static;
+}
+
+:root[data-skin="editorial"] .seg,
+:root[data-skin="editorial"] .search-trigger {
+  border-color: var(--border-control);
+}
+
+:root[data-skin="editorial"] .seg-btn[aria-pressed="true"],
+:root[data-skin="editorial"] .seg-btn[aria-pressed="true"] .seg-count {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+/* The simulate band: the one full band of red. */
+:root[data-skin="editorial"] .banners {
+  order: -1;
+}
+
+:root[data-skin="editorial"] .notice[data-role="warning"],
+:root[data-skin="editorial"] .notice[data-role="danger"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: var(--w-medium);
+}
+
+:root[data-skin="editorial"] .notice[data-role="warning"] > .icon,
+:root[data-skin="editorial"] .notice[data-role="danger"] > .icon {
+  color: var(--on-accent);
+}
+
+/* ---- Sections ------------------------------------------------------ */
+
+:root[data-skin="editorial"] .page-head {
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+:root[data-skin="editorial"] .page-title {
+  margin-left: -0.05em;
+}
+
+:root[data-skin="editorial"] .page-sub {
+  padding-left: var(--s-4);
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* Every section: a 1 px ink rule, a numbered label column, a 10-column body. */
+:root[data-skin="editorial"] .main .card {
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--border-strong);
+}
+
+:root[data-skin="editorial"] .page {
+  counter-reset: section;
+}
+
+:root[data-skin="editorial"] .card-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+}
+
+:root[data-skin="editorial"] .page-overview > .card,
+:root[data-skin="editorial"] .page-system .card {
+  counter-increment: section;
+}
+
+:root[data-skin="editorial"] .page-overview > .card .card-title::before,
+:root[data-skin="editorial"] .page-system .card .card-title::before {
+  content: counter(section, decimal-leading-zero);
+  display: block;
+  margin-bottom: var(--s-1);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: var(--w-regular);
+  letter-spacing: 0;
+}
+
+:root[data-skin="editorial"] .card-note {
+  color: var(--text-tertiary);
+}
+
+:root[data-skin="editorial"] .card-actions {
+  margin: var(--s-2) 0 0;
+}
+
+:root[data-skin="editorial"] .card-actions .btn {
+  padding: 0;
+  height: auto;
+  font-weight: var(--w-semibold);
+}
+
+@media (min-width: 901px) {
+  :root[data-skin="editorial"] .page-overview > .card {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--grid-gap);
+  }
+
+  :root[data-skin="editorial"] .page-overview > .card > .card-head {
+    grid-column: 1 / span 2;
+    align-self: start;
+  }
+
+  :root[data-skin="editorial"] .page-overview > .card > .card-body {
+    grid-column: 3 / -1;
+  }
+
+  /* The overview is one section per row. */
+  :root[data-skin="editorial"] .page-overview > [data-section] {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---- Status: glyph plus word, no pills ------------------------------ */
+
+:root[data-skin="editorial"] .badge {
+  padding: 0;
+  background: transparent;
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="editorial"] .badge[data-role="danger"],
+:root[data-skin="editorial"] .badge[data-role="warning"] {
+  color: var(--accent-text);
+}
+
+:root[data-skin="editorial"] .chip,
+:root[data-skin="editorial"] .attr-chip {
+  border-color: var(--border-control);
+}
+
+/* ---- Overview ------------------------------------------------------ */
+
+:root[data-skin="editorial"] .kpis {
+  gap: var(--grid-gap);
+}
+
+:root[data-skin="editorial"] .kpi {
+  padding: 0;
+  grid-template-rows: auto auto auto;
+}
+
+:root[data-skin="editorial"] .kpi:hover {
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .kpi-label {
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="editorial"] .kpi-icon {
+  display: none;
+}
+
+:root[data-skin="editorial"] .kpi[data-key="failed"]:not([data-zero]) .kpi-value {
+  color: var(--accent-text);
+}
+
+:root[data-skin="editorial"] .job-row {
+  grid-template-columns: 80px minmax(0, 1fr) minmax(200px, 30%) 148px;
+  min-height: 112px;
+}
+
+:root[data-skin="editorial"] .job-row > .art-40 {
+  width: 80px;
+  height: 80px;
+}
+
+:root[data-skin="editorial"] .job-type,
+:root[data-skin="editorial"] .job-updated,
+:root[data-skin="editorial"] .job-chevron {
+  display: none;
+}
+
+:root[data-skin="editorial"] .job-facts {
+  display: flex;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="editorial"] .job-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-24);
+  line-height: var(--lh-24);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+}
+
+:root[data-skin="editorial"] .job-row:hover {
+  background: transparent;
+}
+
+:root[data-skin="editorial"] .job-row:hover .job-title {
+  text-decoration: underline;
+}
+
+/* Per-track cells: outlined, solid when saved. */
+:root[data-skin="editorial"] .pcell {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-control);
+}
+
+:root[data-skin="editorial"] .pcell[data-state="completed"],
+:root[data-skin="editorial"] .pcell[data-state="skipped"] {
+  background: var(--ink);
+  box-shadow: none;
+}
+
+:root[data-skin="editorial"] .pcell[data-state="failed"] {
+  background: var(--accent);
+  box-shadow: none;
+}
+
+:root[data-skin="editorial"] .tp-totals .fact {
+  flex-direction: column-reverse;
+}
+
+:root[data-skin="editorial"] .health-facts .fact {
+  flex-direction: column;
+}
+
+:root[data-skin="editorial"] .tp-totals .fact-value {
+  font-family: var(--font-display);
+  font-size: var(--fs-kpi-sm);
+  line-height: 1;
+  font-weight: var(--w-heavy);
+  letter-spacing: -0.04em;
+}
+
+:root[data-skin="editorial"] {
+  --fs-kpi-sm: clamp(32px, 4vw, 56px);
+}
+
+:root[data-skin="editorial"] .art {
+  background: var(--art-bg, var(--border-subtle));
+}
+
+/* ---- Showcase ------------------------------------------------------ */
+
+:root[data-skin="editorial"] .hero {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--s-12);
+  padding: var(--s-12);
+}
+
+:root[data-skin="editorial"] .hero-text {
+  justify-content: space-between;
+}
+
+:root[data-skin="editorial"] .hero-no {
+  display: inline;
+}
+
+:root[data-skin="editorial"] .hero-title {
+  max-width: none;
+}
+
+:root[data-skin="editorial"] .hero-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-4);
+  width: 100%;
+}
+
+:root[data-skin="editorial"] .hero-facts .fact {
+  flex-direction: column;
+  padding-top: var(--s-2);
+  border-top: 1px solid currentColor;
+}
+
+:root[data-skin="editorial"] .gallery {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--s-10) var(--grid-gap);
+}
+
+:root[data-skin="editorial"] .tile-head {
+  display: flex;
+}
+
+:root[data-skin="editorial"] .tile-title {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-bold);
+  white-space: normal;
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--s-5);
+    gap: var(--s-5);
+  }
+
+  :root[data-skin="editorial"] .hero-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :root[data-skin="editorial"] .job-row {
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    min-height: 0;
+  }
+
+  :root[data-skin="editorial"] .job-row > .art-40 {
+    width: 56px;
+    height: 56px;
+  }
+
+  :root[data-skin="editorial"] .job-title {
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+
+  :root[data-skin="editorial"] .tab[aria-current="page"] {
+    font-weight: var(--w-bold);
+  }
+}

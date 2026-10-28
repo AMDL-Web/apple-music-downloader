@@ -95,8 +95,12 @@ func TestIndexServedWithSecurityHeaders(t *testing.T) {
 	if etag := h.Get("ETag"); !regexp.MustCompile(`^"[0-9a-f]{32}"$`).MatchString(etag) {
 		t.Errorf("ETag = %q, want a quoted strong hash", etag)
 	}
-	if !strings.Contains(rec.Body.String(), `<html lang="en">`) {
+	if !regexp.MustCompile(`<html lang="en"[ >]`).MatchString(rec.Body.String()) {
 		t.Errorf("index.html does not declare lang=\"en\"")
+	}
+	// The default skin is static so the first frame, before main.js runs, has every skin token.
+	if !strings.Contains(rec.Body.String(), `data-skin="music"`) {
+		t.Errorf("index.html does not set the default data-skin=\"music\" on <html>")
 	}
 }
 
@@ -314,14 +318,21 @@ func hasCJK(s string) (rune, bool) {
 	return 0, false
 }
 
+// colorFile reports whether a static file may contain color literals: the
+// skin-neutral tokens and the skin files, which own every color.
+func colorFile(name string) bool {
+	return name == "css/tokens.css" || (strings.HasPrefix(name, "css/skins/") && path.Ext(name) == ".css")
+}
+
 // designViolations returns what the design guard rejects in one file:
-// color literals outside tokens.css, "transition: all", CJK characters in
-// UI copy, raw HTML writes, and font sizes that bypass the type scale.
+// color literals outside css/tokens.css and css/skins/*.css, "transition:
+// all", CJK characters in UI copy, raw HTML writes, and font sizes that
+// bypass the type scale.
 func designViolations(name, text string) []string {
 	var out []string
-	if name != "css/tokens.css" {
+	if !colorFile(name) {
 		for _, m := range colorLiteral.FindAllString(text, -1) {
-			out = append(out, "color literal "+m+" (colors live in css/tokens.css)")
+			out = append(out, "color literal "+m+" (colors live in css/tokens.css and css/skins/*.css)")
 		}
 	}
 	if m := transitionAll.FindString(text); m != "" {
@@ -335,7 +346,7 @@ func designViolations(name, text string) []string {
 			out = append(out, m+" (render through htm, which escapes data)")
 		}
 	}
-	if name == "css/app.css" {
+	if path.Ext(name) == ".css" {
 		for _, m := range fontSizeDecl.FindAllStringSubmatch(text, -1) {
 			if !strings.HasPrefix(strings.TrimSpace(m[1]), "var(--fs-") {
 				out = append(out, "font-size: "+m[1]+" (use a --fs-* token)")
@@ -377,6 +388,9 @@ func TestDesignGuardCatchesViolations(t *testing.T) {
 		{"cjk", "js/x.js", "const label = '下载';"},
 		{"innerHTML", "js/x.js", "el.innerHTML = name;"},
 		{"raw font size", "css/app.css", "a { font-size: 13px; }"},
+		{"raw font size in a skin", "css/skins/music.css", "a { font-size: 13px; }"},
+		{"color in a js file under a skins-like path", "js/skins/x.js", "const c = '#fff';"},
+		{"color in a non-css skin file", "css/skins/notes.txt", "#ffffff"},
 	}
 	for _, c := range cases {
 		if len(designViolations(c.file, c.text)) == 0 {
@@ -385,6 +399,8 @@ func TestDesignGuardCatchesViolations(t *testing.T) {
 	}
 	clean := []struct{ file, text string }{
 		{"css/tokens.css", "--x: light-dark(#ffffff, #111113);"},
+		{"css/skins/music.css", ":root[data-skin=\"music\"] { --x: light-dark(#ffffff, rgba(0, 0, 0, 0.5)); }"},
+		{"css/skins/editorial.css", "a { font-size: var(--fs-page-title); }"},
 		{"js/x.js", "location.hash = '#/queue'; const bg = `#${hex}`;"},
 		{"css/app.css", "a { font-size: var(--fs-12); transition: opacity 120ms; }"},
 	}
@@ -506,6 +522,70 @@ func TestLogComponentsMatchBackend(t *testing.T) {
 	for _, name := range slices.Sorted(maps.Keys(console)) {
 		if !backend[name] {
 			t.Errorf("LOG_COMPONENTS lists %q, which no Go code logs as a component", name)
+		}
+	}
+}
+
+var (
+	varRef  = regexp.MustCompile(`var\(\s*(--[A-Za-z0-9_-]+)`)
+	varDecl = regexp.MustCompile(`(?m)(?:^|[;{\s])(--[A-Za-z0-9_-]+)\s*:`)
+	// Custom properties set per element from JS style objects or by the
+	// role mapping in app.css itself, not by a skin.
+	runtimeVars = map[string]bool{
+		"--art-bg": true, "--art-t1": true, "--art-t2": true, "--art-t3": true,
+		"--w": true, "--f": true, "--v": true, "--n": true, "--swatch": true,
+		"--role": true, "--role-tint": true,
+	}
+)
+
+func cssNames(re *regexp.Regexp, text string) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range re.FindAllStringSubmatch(text, -1) {
+		out[m[1]] = true
+	}
+	return out
+}
+
+// TestSkinsDeclareEveryBaseToken keeps the skins interchangeable: every
+// custom property app.css reads that tokens.css does not declare (colors,
+// radii, shadows, fonts, display type, card shape) must be declared by each
+// css/skins/*.css, so a skin designer who forgets one gets a failing test
+// instead of a transparent badge in the other skin. It runs with the
+// package tests (make test, CI); the failure names the skin and the token.
+func TestSkinsDeclareEveryBaseToken(t *testing.T) {
+	files := staticFS(t)
+	neutral := cssNames(varDecl, readStatic(t, "css/tokens.css"))
+	var required []string
+	for name := range cssNames(varRef, readStatic(t, "css/app.css")) {
+		if !neutral[name] && !runtimeVars[name] {
+			required = append(required, name)
+		}
+	}
+	sort.Strings(required)
+	if len(required) < 20 {
+		t.Fatalf("app.css reads only %d skin tokens; the var() pattern is broken", len(required))
+	}
+	skins, err := fs.Glob(files, "css/skins/*.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(skins) < 2 {
+		t.Fatalf("found %d skins under css/skins, want at least 2", len(skins))
+	}
+	index := readStatic(t, "index.html")
+	for _, skin := range skins {
+		declared := cssNames(varDecl, readStatic(t, skin))
+		for _, name := range required {
+			if !declared[name] {
+				t.Errorf("static/%s does not declare %s, which css/app.css reads", skin, name)
+			}
+		}
+		if !strings.Contains(index, `href="`+skin+`"`) {
+			t.Errorf("index.html does not link %s", skin)
+		}
+		scope := `:root[data-skin="` + strings.TrimSuffix(path.Base(skin), ".css") + `"]`
+		if !strings.Contains(readStatic(t, skin), scope) {
+			t.Errorf("static/%s has no %s block; a skin is scoped by its file name", skin, scope)
 		}
 	}
 }

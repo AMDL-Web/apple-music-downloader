@@ -25,7 +25,14 @@ import {
   contrastRatio,
   artTextColor,
   artPalette,
-  paletteStyle, finishedLine } from '../static/js/lib/format.js';
+  paletteStyle,
+  finishedLine,
+  pageSummary,
+  releaseYear,
+  jobFacts,
+  systemFacts,
+  attrPairs,
+} from '../static/js/lib/format.js';
 
 const TEMPLATE = 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/{w}x{h}bb.{f}';
 const PRESIGNED = 'https://example-bucket.s3.amazonaws.com/cover.jpg?X-Amz-Signature=abc';
@@ -146,15 +153,22 @@ test('artPalette uses the motion asset palette only when asked', () => {
     artwork_bg_color: '598090',
     artwork_text_color1: '0a0a0a',
     artwork_text_color2: '1a1a1a', // 4.08:1 on 598090, below 4.5
+    artwork_text_color3: '000000',
     motion_artwork_bg_color: '05104b',
     motion_artwork_text_color1: 'f5f5f5',
     motion_artwork_text_color2: 'e0e0e0',
+    motion_artwork_text_color3: 'd0d0d0',
   };
-  assert.deepEqual(artPalette(job), { bg: '#598090', text1: '#0a0a0a', text2: 'var(--on-art-dark)' });
-  assert.deepEqual(artPalette(job, true), { bg: '#05104b', text1: '#f5f5f5', text2: '#e0e0e0' });
+  assert.deepEqual(artPalette(job), { bg: '#598090', text1: '#0a0a0a', text2: 'var(--on-art-dark)', text3: '#000000' });
+  assert.deepEqual(artPalette(job, true), { bg: '#05104b', text1: '#f5f5f5', text2: '#e0e0e0', text3: '#d0d0d0' });
   assert.equal(artPalette({}), null);
   assert.equal(artPalette({ artwork_bg_color: 'red' }), null);
-  assert.deepEqual(paletteStyle({ bg: '#000000', text1: 'a', text2: 'b' }), { '--art-bg': '#000000', '--art-text1': 'a', '--art-text2': 'b' });
+  assert.deepEqual(paletteStyle({ bg: '#000000', text1: 'a', text2: 'b', text3: 'c' }), {
+    '--art-bg': '#000000',
+    '--art-t1': 'a',
+    '--art-t2': 'b',
+    '--art-t3': 'c',
+  });
   assert.equal(paletteStyle(null), undefined);
 });
 
@@ -162,4 +176,63 @@ test('finishedLine shows the finish date and the duration when both stamps exist
   assert.equal(finishedLine({ started_at: '2026-10-28T12:00:00Z', finished_at: '2026-10-28T12:03:12Z' }).replace(/Oct \d+/, 'Oct D'), 'Downloaded Oct D · took 3m 12s');
   assert.equal(finishedLine({ finished_at: '2026-10-28T12:03:12Z' }).startsWith('Downloaded '), true);
   assert.equal(finishedLine({ started_at: '2026-10-28T12:00:00Z' }), '');
+});
+
+test('pageSummary reads the feed counts per page', () => {
+  const counts = { total: 16, running: 2, queued: 0, failed: 1, completed: 13, cancelled: 0 };
+  const now = new Date('2026-10-29T00:57:00Z');
+  assert.equal(pageSummary('overview', counts, now), 'Oct 29 · 16 jobs');
+  assert.equal(pageSummary('overview', { ...counts, total: 1 }, now), 'Oct 29 · 1 job');
+  assert.equal(pageSummary('overview', null, now), 'Oct 29');
+  assert.equal(pageSummary('queue', counts, now), '2 running · 0 queued · 1 failed');
+  assert.equal(pageSummary('queue', null, now), '');
+  assert.equal(pageSummary('showcase', counts, now), '13 completed');
+  assert.equal(pageSummary('notfound', counts, now), '');
+});
+
+test('jobFacts gives kicker and meta parts, empty when unknown', () => {
+  const job = {
+    type: 'album',
+    genre: 'Pop',
+    release_date: '2022-10-21',
+    total_items: 20,
+    started_at: '2026-10-28T16:57:07Z',
+    finished_at: '2026-10-28T16:58:19Z',
+  };
+  assert.deepEqual(jobFacts(job), {
+    type: 'Album',
+    genre: 'Pop',
+    year: '2022',
+    tracks: '20 tracks',
+    started: '16:57:07',
+    finished: 'Oct 28 16:58',
+    took: '1m 12s',
+  });
+  assert.equal(jobFacts({ total_items: 1 }).tracks, '1 track');
+  assert.deepEqual(jobFacts(null), { type: '', genre: '', year: '', tracks: '', started: '', finished: '', took: '' });
+  assert.equal(releaseYear({ release_date: 'soon' }), '');
+});
+
+test('systemFacts picks workers, queue, downloads disk and uptime', () => {
+  const sys = {
+    uptime_seconds: 306,
+    jobs: { workers: 3, active: 2, queue_depth: 0, queue_capacity: 256 },
+    storage: [
+      { name: 'temp_dir', free_bytes: 1, total_bytes: 2 },
+      { name: 'downloads_dir', free_bytes: 23051792384, total_bytes: 494384795648 },
+    ],
+  };
+  assert.deepEqual(systemFacts(sys), [
+    ['workers', 'Workers', '2 of 3 busy'],
+    ['queue', 'Queue', '0 of 256'],
+    ['storage', 'Storage', '23.1 GB free of 494 GB'],
+    ['uptime', 'Uptime', '5m 6s'],
+  ]);
+  assert.deepEqual(systemFacts({}), []);
+  assert.deepEqual(systemFacts(null), []);
+});
+
+test('attrPairs sorts keys and leaves out the omitted ones', () => {
+  assert.deepEqual(attrPairs({ job_type: 'album', component: 'jobs', n: 3, ok: true }, ['component']), ['job_type=album', 'n=3', 'ok=true']);
+  assert.deepEqual(attrPairs(null), []);
 });

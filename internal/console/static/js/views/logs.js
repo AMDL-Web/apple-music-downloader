@@ -235,7 +235,8 @@ export function LogsPage({ route }) {
         </div>`
       : null}
     ${error && !retentionOff && logs.entries.length > 0 ? html`<${ErrorNote} title="The filter was rejected" error=${error} />` : null}
-    <div class="card card-flush log-card">
+    <div class="card card-flush log-card" data-section="log">
+      <div class="card-body">
       <div
         class=${wrap ? 'log-view is-wrap' : 'log-view'}
         role="log"
@@ -246,6 +247,7 @@ export function LogsPage({ route }) {
         onScroll=${onScroll}
       >
         ${body}
+      </div>
       </div>
       ${unseen > 0 && !follow
         ? html`<button type="button" class="new-lines" onClick=${jumpToLatest}><${Icon} name="arrow-down" size="sm" />${count(unseen)} new ${unseen === 1 ? 'line' : 'lines'}</button>`
@@ -261,7 +263,7 @@ function LogRow({ entry, open, onToggle, onFilter, narrow }) {
   const requestId = typeof attrs.request_id === 'string' ? attrs.request_id : '';
   const component = typeof attrs.component === 'string' ? attrs.component : '';
   const json = JSON.stringify(attrs, null, 2);
-  return html`<div class=${open ? 'log-row is-open' : 'log-row'} data-level=${entry.level} data-row tabindex="-1">
+  return html`<div class=${open ? 'log-entry log-row is-open' : 'log-entry log-row'} data-level=${entry.level} data-row tabindex="-1">
     <button type="button" class="log-line" aria-expanded=${String(open)} onClick=${onToggle}>
       <span class="log-time" title=${absTime(entry.time)}>${clockTime(entry.time, !narrow)}</span>
       <span class="log-level" data-role=${lv.role}><span class="log-dot"></span>${lv.short}</span>

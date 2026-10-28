@@ -17,7 +17,7 @@ import {
 } from '../api.js';
 import { count, bytes, elapsed, absTime, maskAccount, relTime } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
-import { useApp, Card, Badge, StatusText, KV, Icon, Button, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, Empty, RelTime } from '../ui/components.js';
+import { useApp, Card, Badge, StatusText, KV, Icon, Button, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, Empty, RelTime, HealthList } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
 
 export function SystemPage() {
@@ -153,15 +153,7 @@ function HealthCard({ backend, wrapper, sync, hooks, loading }) {
       ];
   return html`<${Card} className="span-6" title="Health" labelId="sys-health-title" note="Checked every 30 s">
     ${rows
-      ? html`<ul class="health-list">
-          ${rows.map(
-            ([name, view]) => html`<li key=${name} class="health-row">
-              <span class="health-name">${name}</span>
-              <${Badge} view=${view} />
-              ${view.detail ? html`<span class="health-detail wrap-any" title=${view.title || undefined}>${view.detail}</span>` : null}
-            </li>`,
-          )}
-        </ul>`
+      ? html`<${HealthList} rows=${rows} wrapDetail />`
       : html`<${SkeletonRows} n=${4} kind="line" />`}
   </${Card}>`;
 }

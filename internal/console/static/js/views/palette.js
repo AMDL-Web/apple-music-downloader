@@ -6,6 +6,7 @@ import { jobTitle, jobSubtitle, typeLabel } from '../lib/format.js';
 import { buildHash } from '../lib/route.js';
 import { Icon, Button } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
+import { SKINS } from '../lib/prefs.js';
 
 const STATIC_ITEMS = [
   { id: 'nav-overview', group: 'Navigate', label: 'Overview', icon: 'grid', hash: buildHash('overview'), keys: 'g o' },
@@ -20,9 +21,10 @@ const STATIC_ITEMS = [
   { id: 'theme-system', group: 'Theme', label: 'Use system theme', icon: 'monitor', theme: 'system' },
   { id: 'theme-light', group: 'Theme', label: 'Use light theme', icon: 'sun', theme: 'light' },
   { id: 'theme-dark', group: 'Theme', label: 'Use dark theme', icon: 'moon', theme: 'dark' },
+  ...SKINS.map((s) => ({ id: `skin-${s.value}`, group: 'Style', label: `Style: ${s.label}`, icon: 'palette', skin: s.value })),
 ];
 
-export function CommandPalette({ onClose, navigate, setTheme }) {
+export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [jobs, setJobs] = useState({ items: [], loading: false });
@@ -71,6 +73,7 @@ export function CommandPalette({ onClose, navigate, setTheme }) {
     if (!it) return;
     onClose();
     if (it.theme) setTheme(it.theme);
+    else if (it.skin) setSkin(it.skin);
     else if (it.external) window.open(docsUrl(), '_blank', 'noopener,noreferrer');
     else if (it.hash) navigate(it.hash);
   };

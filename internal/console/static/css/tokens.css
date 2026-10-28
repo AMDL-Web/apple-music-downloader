@@ -1,65 +1,26 @@
 /*
- * Design tokens: the only file in static/ allowed to contain color literals
- * (a Go test enforces it). Values follow Radix Colors v3; each color is
- * light-dark(<light>, <dark>), resolved by color-scheme on :root. The
- * contrast table and the reasons behind each value are in DESIGN.md.
+ * Skin-neutral tokens: the color-scheme switch, the type scale, spacing,
+ * sizes and motion that every skin shares. Colors, radii, shadows, font
+ * stacks and display type belong to a skin (css/skins/<name>.css), which
+ * must declare every token app.css uses that is not declared here; a Go test
+ * checks that. Color literals are allowed only here and in css/skins/*.css.
+ * The contract is DESIGN.md "Skins".
  */
 
 :root {
+  /* light-dark() in the skins resolves against this; skins never set it. */
   color-scheme: light dark;
 
-  /* Neutrals and UI */
-  --bg-canvas: light-dark(#f9f9fb, #111113);
-  --bg-surface: light-dark(#ffffff, #18191b);
-  --bg-raised: light-dark(#ffffff, #212225);
-  --bg-hover: light-dark(#f0f0f3, #272a2d);
-  --bg-selected: light-dark(#e8e8ec, #2e3135);
-  --border-subtle: light-dark(#e0e1e6, #363a3f);
-  --border-control: light-dark(#8b8d98, #696e77);
-  --text-primary: light-dark(#1c2024, #edeef0);
-  --text-secondary: light-dark(#60646c, #b0b4ba);
-  --text-disabled: light-dark(#80838d, #777b84);
-  --ink: light-dark(#1c2024, #edeef0);
-  --on-ink: light-dark(#ffffff, #111113);
-  --focus: light-dark(#0d74ce, #70b8ff);
-  --brand: #e35e38;
-  --track: light-dark(#f0f0f3, #2e3135);
-  --scrim: light-dark(rgba(17, 17, 19, 0.32), rgba(0, 0, 0, 0.6));
-  --shadow-near: light-dark(rgba(0, 0, 0, 0.06), transparent);
-  --shadow-far: light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.5));
-
-  /* Status roles: dot/icon, tint (badge background), text (only on surface) */
-  --info: light-dark(#0588f0, #0090ff);
-  --info-tint: light-dark(#e6f4fe, #0d2847);
-  --info-text: light-dark(#0d74ce, #70b8ff);
-  --success: light-dark(#2b9a66, #30a46c);
-  --success-tint: light-dark(#e6f6eb, #132d21);
-  --success-text: light-dark(#218358, #3dd68c);
-  --danger: light-dark(#dc3e42, #e5484d);
-  --danger-tint: light-dark(#feebec, #3b1219);
-  --danger-text: light-dark(#ce2c31, #ff9592);
-  --warning: light-dark(#ab6400, #ffc53d);
-  --warning-tint: light-dark(#fff7c2, #302008);
-  --warning-text: light-dark(#ab6400, #ffca16);
-  --neutral: light-dark(#8b8d98, #696e77);
-  --neutral-tint: light-dark(#f0f0f3, #272a2d);
-  --neutral-text: var(--text-secondary);
-  --skipped: light-dark(#6e56cf, #7d66d9);
-  --skipped-tint: light-dark(#f4f0fe, #291f43);
-  --skipped-text: light-dark(#6550b9, #baa7ff);
-
-  /* Chart marks: one series color, text stays in text tokens */
-  --chart-bar: var(--info);
-  --chart-grid: var(--border-subtle);
-
-  /* Text over Apple artwork when its own palette fails 4.5:1 */
+  /* Text over Apple artwork when its own palette fails 4.5:1 (lib/format.js artTextColor). */
   --on-art-light: #ffffff;
   --on-art-dark: #000000;
 
-  /* Type */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
+  /* System font fallbacks; a skin sets --font-sans, --font-display and --font-mono. */
+  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial,
     "PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-system-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale (size / line height). Skins add display roles (--fs-page-title, --fs-kpi, ...). */
   --fs-11: 11px;
   --lh-11: 16px;
   --fs-12: 12px;
@@ -69,6 +30,8 @@
   --lh-13: 20px;
   --fs-14: 14px;
   --lh-14: 20px;
+  --fs-15: 15px;
+  --lh-15: 22px;
   --fs-16: 16px;
   --lh-16: 24px;
   --fs-20: 20px;
@@ -80,6 +43,8 @@
   --w-regular: 400;
   --w-medium: 500;
   --w-semibold: 600;
+  --w-bold: 700;
+  --w-heavy: 800;
 
   /* Spacing (4px base) */
   --s-0_5: 2px;
@@ -91,12 +56,10 @@
   --s-5: 20px;
   --s-6: 24px;
   --s-8: 32px;
+  --s-10: 40px;
   --s-12: 48px;
+  --s-16: 64px;
 
-  /* Radius */
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 12px;
   --r-full: 999px;
 
   /* Sizes */
@@ -112,9 +75,6 @@
   --icon-nav: 20px;
   --drawer-w: 520px;
   --content-max: 1600px;
-
-  /* Elevation (floating layers only) */
-  --shadow-float: 0 1px 2px var(--shadow-near), 0 8px 24px var(--shadow-far);
 
   /* Motion */
   --dur-fast: 120ms;

@@ -17,6 +17,8 @@ import {
   stageSegments,
   stageText,
   isTerminal,
+  progressCells,
+  CELL_MAX,
 } from '../static/js/lib/status.js';
 
 const ROLES = new Set(['info', 'success', 'danger', 'warning', 'neutral', 'skipped']);
@@ -168,4 +170,21 @@ test('summarizeError turns gRPC dial chains into one line and keeps the full tex
   const view = wrapperView({ error: { status: 503, message: raw } });
   assert.equal(view.detail, 'Connection refused (127.0.0.1:8080)');
   assert.equal(view.title, raw);
+});
+
+test('progressCells gives one cell per track in ordered runs', () => {
+  const cells = progressCells({ total_items: 6, completed_items: 2, skipped_items: 1, failed_items: 1, cancelled_items: 0 });
+  assert.deepEqual(
+    cells.map((c) => c.state),
+    ['completed', 'completed', 'skipped', 'failed', 'remaining', 'remaining'],
+  );
+  assert.deepEqual(
+    cells.map((c) => c.role),
+    ['success', 'success', 'skipped', 'danger', '', ''],
+  );
+  assert.equal(progressCells({ total_items: CELL_MAX, completed_items: 1 }).length, CELL_MAX);
+  assert.equal(progressCells({ total_items: CELL_MAX + 1 }), null);
+  assert.equal(progressCells({ total_items: 0, status: 'running' }), null);
+  // Counters that overrun the total never add cells.
+  assert.equal(progressCells({ total_items: 2, completed_items: 5 }).length, 2);
 });

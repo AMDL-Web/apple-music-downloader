@@ -3,7 +3,7 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { jobTitle, jobSubtitle, typeLabel, artPalette } from '../lib/format.js';
+import { jobTitle, jobSubtitle, typeLabel, artPalette, paletteStyle, jobFacts } from '../lib/format.js';
 import { jobStatusView } from '../lib/status.js';
 import { upsertJob, removeJob, appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
@@ -12,14 +12,25 @@ import { useDebounced } from '../ui/hooks.js';
 
 const PAGE_SIZE = 50;
 
-/** One job in a list: artwork, title, type, segmented progress, status, last update. */
+/**
+ * One job in a list: artwork, title, type, progress, status, last update.
+ * The row carries the job's status (data-status) and Apple palette
+ * (--art-bg, --art-t1..t3) for skins; .job-facts is hidden unless a skin shows it.
+ */
 export function JobRow({ job, href }) {
   const title = jobTitle(job);
   const sub = jobSubtitle(job);
   const palette = artPalette(job);
-  return html`<a class="job-row" href=${href} data-row>
-    <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${80} className="art-40" />
+  const f = jobFacts(job);
+  return html`<a class=${palette ? 'job-row has-palette' : 'job-row'} href=${href} data-row data-status=${job.status} style=${paletteStyle(palette)}>
+    <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${160} className="art-40" />
     <span class="job-main">
+      <span class="job-facts">
+        ${f.type ? html`<span class="job-fact" data-key="type">${f.type}</span>` : null}
+        ${f.genre ? html`<span class="job-fact" data-key="genre" dir="auto">${f.genre}</span>` : null}
+        ${f.year ? html`<span class="job-fact" data-key="year">${f.year}</span>` : null}
+        ${f.started ? html`<span class="job-fact" data-key="started">Started ${f.started}</span>` : null}
+      </span>
       <span class="job-title" dir="auto" title=${title}>${title}</span>
       <span class="job-sub">
         ${sub ? html`<span class="job-sub-artist" dir="auto">${sub}</span>` : null}
@@ -148,7 +159,7 @@ export function QueuePage({ route }) {
       </div>
     </div>
     ${state.error && state.jobs.length > 0 ? html`<${ErrorNote} title="Couldn't refresh downloads" error=${state.error} onRetry=${() => load(0)} />` : null}
-    <div class="card card-flush">${body}</div>
+    <div class="card card-flush" data-section="jobs"><div class="card-body">${body}</div></div>
   </div>`;
 }
 

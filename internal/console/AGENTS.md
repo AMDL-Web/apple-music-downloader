@@ -2,7 +2,9 @@
 
 The embedded web console: an operator dashboard and a showcase of downloaded
 music, served by `Handler` at `/console/`. Plain ES modules plus a vendored
-Preact+htm bundle; the design spec is [DESIGN.md](DESIGN.md).
+Preact+htm bundle. [DESIGN.md](DESIGN.md) is the shared contract (structure,
+states, accessibility, the skin mechanism); each skin's look is specified in
+`internal/console/skins/`.
 
 ## Rules
 
@@ -19,8 +21,15 @@ Preact+htm bundle; the design spec is [DESIGN.md](DESIGN.md).
 - CSP (`ContentSecurityPolicy`): no inline scripts, styles or `style="..."`;
   dynamic colors go through Preact style objects (CSSOM custom properties).
   No `innerHTML`; htm escapes data.
-- Colors live only in `static/css/tokens.css`; font sizes use `--fs-*`; never
-  `transition: all`; UI copy is English, Apple-provided text gets `dir="auto"`.
+- Colors live only in `static/css/tokens.css` (skin-neutral) and
+  `static/css/skins/*.css` (one per skin, scoped under
+  `:root[data-skin="<name>"]`); `static/css/app.css` is structure and reads
+  tokens only. Font sizes use `--fs-*`; never `transition: all`; UI copy is
+  English, Apple-provided text gets `dir="auto"`.
+- Skins never need JS: a skin changes only its own CSS file and spec page. A
+  hook both skins need (class, data attribute, custom property) lands in the
+  base with a DESIGN.md "DOM hooks" row. The theme (`data-theme`) and the skin
+  (`data-skin`, default `music`, static in `index.html`) are separate axes.
 - Modules in `static/js/lib/` are pure (no DOM at import, no vendor import) so
   `node --test` covers them; views and hooks live in `views/` and `ui/`.
 - Streams use `lib/stream.js` (fetch-based SSE, `?cursor=`, 1-30 s backoff,
@@ -50,8 +59,11 @@ paths); add a `<symbol id="i-name">` and use `Icon`.
 - every `src`/`href` in `index.html` and every relative import in `static/js`
   resolves to an embedded file; every embedded file has a known type;
 - vendor checksum;
-- design guard (color literals, `transition: all`, CJK copy, raw HTML writes,
-  raw font sizes);
+- design guard (color literals outside `css/tokens.css` and `css/skins/*.css`,
+  `transition: all`, CJK copy, raw HTML writes, raw font sizes in any CSS);
+- skin parity: every token `app.css` reads and `tokens.css` does not declare is
+  declared by each skin, each skin is linked from `index.html` and scoped by
+  its file name;
 - contract guard: each `/api/v1/...` literal in `static/js` is a path in
   `internal/api/openapi.yaml`;
 - `LOG_COMPONENTS` equals the `"component"` log tags in the Go code.
@@ -59,7 +71,8 @@ paths); add a `<symbol id="i-name">` and use `Icon`.
 ## Run and verify
 
 Mounted by `internal/api` at `GET /console/`. Run `make dev`, then open
-`http://127.0.0.1:18080/console/`; check 1280 and 375 px wide, light and dark.
+`http://127.0.0.1:18080/console/`; check each skin (Style switch in the top
+bar) at 1440 and 390 px wide, light and dark.
 
 ```bash
 for f in $(find internal/console/static -name '*.js' -o -name '*.mjs'); do node --check "$f"; done
