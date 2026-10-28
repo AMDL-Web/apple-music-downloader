@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -13,7 +14,7 @@ func isRuntimeKey(key string) bool {
 	switch key {
 	case "logging.level", "logging.access_log",
 		"catalog.album_track_url_mode", "catalog.media_user_token",
-		"catalog.media_user_token_priority", "catalog.signed_mode_hls_source",
+		"catalog.signed_mode_hls_source",
 		// Read per job when the input resolves, so flipping it takes effect on
 		// newly started jobs without a restart.
 		"catalog.motion_artwork_enabled":
@@ -96,16 +97,17 @@ func copyRuntimeFields(target *Config, source Config) {
 // GET/PUT /api/v1/config exchange with clients, which have no use for the
 // startup-bound fields the update endpoint refuses to change anyway. It is
 // derived from isRuntimeKey, so it always matches the hot-reloadable fields
-// in config.yaml; the deprecated catalog.media_user_token_priority is normalized
-// to empty before this runs and its omitempty tag keeps it out of the view.
-func MutableView(cfg Config) map[string]any {
+// in config.yaml.
+func MutableView(cfg Config) (map[string]any, error) {
 	raw, err := filterConfigYAML(cfg, isRuntimeKey)
 	if err != nil {
-		return map[string]any{}
+		return nil, fmt.Errorf("marshal runtime config view: %w", err)
 	}
 	view := map[string]any{}
-	_ = yaml.Unmarshal(raw, &view)
-	return view
+	if err := yaml.Unmarshal(raw, &view); err != nil {
+		return nil, fmt.Errorf("decode runtime config view: %w", err)
+	}
+	return view, nil
 }
 
 // RuntimeLockedChanges returns the dotted keys of fields that differ between

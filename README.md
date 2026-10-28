@@ -196,7 +196,7 @@ is the documentation — every key's allowed values, units and defaults live in 
   `AMDL_DOWNLOAD_QUALITY_PRIORITY=alac,aac`. Unknown `AMDL_*` variables fail startup
   rather than being silently ignored, and env-pinned fields are rejected by `PUT` with 422.
 
-Details, upgrade notes and the Docker specifics: [docs/configuration.md](docs/configuration.md)
+Defaults, hand edits and reload, and the Docker specifics: [docs/configuration.md](docs/configuration.md)
 and [docs/deployment.md](docs/deployment.md).
 
 ## Automation
@@ -230,7 +230,7 @@ Both are covered in [docs/automation.md](docs/automation.md).
 | | |
 | --- | --- |
 | [docs/api.md](docs/api.md) | Every endpoint with curl examples, job overrides, SSE/WS semantics |
-| [docs/configuration.md](docs/configuration.md) | Config file, env overrides, runtime vs startup keys, upgrade notes |
+| [docs/configuration.md](docs/configuration.md) | Config file, defaults, env overrides, runtime vs startup keys, reload |
 | [docs/deployment.md](docs/deployment.md) | Docker, mounts, `PUID`/`PGID`, seeding, releases and image tags |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | Retries, codec fallback, concurrency pools, memory modes, lyrics |
 | [docs/automation.md](docs/automation.md) | Job hooks and library sync |

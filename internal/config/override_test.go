@@ -288,7 +288,10 @@ func TestRuntimeLockedChanges(t *testing.T) {
 }
 
 func TestMutableViewOmitsStartupBoundFields(t *testing.T) {
-	view := MutableView(Default())
+	view, err := MutableView(Default())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(view) != 5 {
 		t.Fatalf("view sections = %v, want catalog/download/library_sync/logging/simulate only", view)
 	}
@@ -367,5 +370,53 @@ func TestApplyValidatedStrictRejectsOverLimitOverrides(t *testing.T) {
 	attempts := 50
 	if _, err := (&DownloadOverrides{MaxAttempts: &attempts}).ApplyValidatedStrict(Default()); err == nil || !strings.Contains(err.Error(), "max_attempts") {
 		t.Fatalf("ApplyValidatedStrict() error = %v, want max_attempts bounds error", err)
+	}
+}
+
+// overrideExclusions are runtime download keys a job deliberately cannot
+// override; the reason is in the DownloadOverrides godoc.
+var overrideExclusions = map[string]bool{
+	"download.progress_event_interval_ms": true,
+	// Startup keys, so never runtime; listed to keep the godoc's list whole.
+	"download.max_running_jobs":              true,
+	"download.max_parallel_downloads":        true,
+	"download.max_parallel_decrypts":         true,
+	"download.max_parallel_wrapper_requests": true,
+}
+
+// DownloadOverrides mirrors DownloadConfig by hand. A new runtime download key
+// must get a same-named override field (plus its Apply branch and the OpenAPI
+// schema) or an entry in overrideExclusions, and every override field must
+// still name a runtime download key.
+func TestDownloadOverridesCoverRuntimeDownloadKeys(t *testing.T) {
+	overrideFields := map[string]bool{}
+	overrideType := reflect.TypeOf(DownloadOverrides{})
+	for i := range overrideType.NumField() {
+		name, _, _ := strings.Cut(overrideType.Field(i).Tag.Get("json"), ",")
+		overrideFields[name] = true
+	}
+	known := knownKeys()
+	for _, field := range envFields() {
+		section, leaf, _ := strings.Cut(field.key, ".")
+		if section != "download" || !isRuntimeKey(field.key) {
+			continue
+		}
+		if overrideExclusions[field.key] {
+			if overrideFields[leaf] {
+				t.Errorf("%s is excluded but DownloadOverrides has a %s field", field.key, leaf)
+			}
+			continue
+		}
+		if !overrideFields[leaf] {
+			t.Errorf("runtime key %s has no DownloadOverrides field %q and is not in overrideExclusions", field.key, leaf)
+		}
+	}
+	for name := range overrideFields {
+		if name == "media_user_token" || name == "hooks" {
+			continue
+		}
+		if key := "download." + name; !known[key] || !isRuntimeKey(key) {
+			t.Errorf("DownloadOverrides field %q does not name a runtime download key", name)
+		}
 	}
 }

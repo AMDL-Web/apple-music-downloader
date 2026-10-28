@@ -5,9 +5,17 @@ import (
 	"strings"
 )
 
+// maxLogBufferSize caps logging.buffer_size. The ring lives in memory and every
+// GET /api/v1/logs scans and copies matching entries under the store's lock;
+// at a few hundred bytes per entry this keeps the ring within tens of MiB and a
+// full scan short enough not to stall loggers.
+const maxLogBufferSize = 100000
+
 // Validate checks the semantic rules every Config must satisfy, whether it
 // was loaded from YAML at startup or assembled at runtime (config update API,
-// per-request job overrides applied to a base config).
+// per-request job overrides applied to a base config). It reports the first
+// violation, checking keys in a fixed order so the same invalid config always
+// yields the same message.
 func (c Config) Validate() error {
 	switch c.Logging.Level {
 	case "debug", "info", "warn", "error":
@@ -22,8 +30,8 @@ func (c Config) Validate() error {
 	if !c.Logging.Console && !c.Logging.FileEnabled && c.Logging.BufferSize == 0 {
 		return fmt.Errorf("logging must enable console, file, or a non-zero buffer_size")
 	}
-	if c.Logging.BufferSize < 0 || c.Logging.BufferSize > 100000 {
-		return fmt.Errorf("logging.buffer_size must be between 0 and 100000")
+	if c.Logging.BufferSize < 0 || c.Logging.BufferSize > maxLogBufferSize {
+		return fmt.Errorf("logging.buffer_size must be between 0 and %d", maxLogBufferSize)
 	}
 	if c.Logging.FileEnabled && strings.TrimSpace(c.Logging.FilePath) == "" {
 		return fmt.Errorf("logging.file_path cannot be empty when file_enabled is true")
@@ -39,9 +47,6 @@ func (c Config) Validate() error {
 	}
 	if c.Catalog.AlbumTrackURLMode != "song" && c.Catalog.AlbumTrackURLMode != "album" {
 		return fmt.Errorf("catalog.album_track_url_mode must be song or album")
-	}
-	if p := c.Catalog.LegacyMediaUserTokenPriority; p != "" && p != "request" && p != "config" {
-		return fmt.Errorf("catalog.media_user_token_priority must be request or config")
 	}
 	if c.Catalog.SignedModeHLSSource != "wrapper" && c.Catalog.SignedModeHLSSource != "web_token" {
 		return fmt.Errorf("catalog.signed_mode_hls_source must be wrapper or web_token")
@@ -67,24 +72,30 @@ func (c Config) Validate() error {
 			return fmt.Errorf("catalog.allowed_origins must not contain empty entries")
 		}
 	}
-	for key, value := range map[string]int{
-		"catalog.max_parallel_requests": c.Catalog.MaxParallelRequests,
-		"catalog.requests_per_second":   c.Catalog.RequestsPerSecond,
-		"catalog.request_burst":         c.Catalog.RequestBurst,
+	for _, limit := range []struct {
+		key   string
+		value int
+	}{
+		{"catalog.max_parallel_requests", c.Catalog.MaxParallelRequests},
+		{"catalog.request_burst", c.Catalog.RequestBurst},
+		{"catalog.requests_per_second", c.Catalog.RequestsPerSecond},
 	} {
-		if value > maxGlobalPoolLimit {
-			return fmt.Errorf("%s must be at most %d", key, maxGlobalPoolLimit)
+		if limit.value > maxGlobalPoolLimit {
+			return fmt.Errorf("%s must be at most %d", limit.key, maxGlobalPoolLimit)
 		}
 	}
-	for name, value := range map[string]string{
-		"download.song_path_format":     c.Download.SongPathFormat,
-		"download.album_path_format":    c.Download.AlbumPathFormat,
-		"download.artist_path_format":   c.Download.ArtistPathFormat,
-		"download.playlist_path_format": c.Download.PlaylistPathFormat,
-		"download.station_path_format":  c.Download.StationPathFormat,
+	for _, format := range []struct {
+		key   string
+		value string
+	}{
+		{"download.album_path_format", c.Download.AlbumPathFormat},
+		{"download.artist_path_format", c.Download.ArtistPathFormat},
+		{"download.playlist_path_format", c.Download.PlaylistPathFormat},
+		{"download.song_path_format", c.Download.SongPathFormat},
+		{"download.station_path_format", c.Download.StationPathFormat},
 	} {
-		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("%s cannot be empty", name)
+		if strings.TrimSpace(format.value) == "" {
+			return fmt.Errorf("%s cannot be empty", format.key)
 		}
 	}
 	if c.Download.MaxRunningJobs > maxRunningJobsLimit {

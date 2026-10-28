@@ -1,9 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,32 +33,13 @@ func TestWrapperLoginTimeout(t *testing.T) {
 	}
 }
 
-func TestDefaultLyricsOptions(t *testing.T) {
-	defaults := Default().Download
-	if defaults.LyricsType != "lyrics" {
-		t.Fatalf("default lyrics type = %q, want lyrics", defaults.LyricsType)
-	}
-	if defaults.LyricsFormat != "lrc" {
-		t.Fatalf("default lyrics format = %q, want lrc", defaults.LyricsFormat)
-	}
-	if len(defaults.LyricsExtras) != 0 {
-		t.Fatalf("default lyrics extras = %#v, want empty", defaults.LyricsExtras)
-	}
-}
-
 func TestMemoryModeDefaultLoadAndValidate(t *testing.T) {
-	if got := Default().Download.MemoryMode; got != MemoryModeLow {
-		t.Fatalf("default memory mode = %q, want %q", got, MemoryModeLow)
-	}
-
-	// Configs written before memory_mode existed inherit the low-memory
-	// default, preserving the current production behavior.
 	cfg, err := Load(writeConfig(t, "download:\n  cover_format: jpg\n"))
 	if err != nil {
-		t.Fatalf("Load() legacy config: %v", err)
+		t.Fatalf("Load() config without memory_mode: %v", err)
 	}
 	if cfg.Download.MemoryMode != MemoryModeLow {
-		t.Fatalf("legacy config memory mode = %q, want %q", cfg.Download.MemoryMode, MemoryModeLow)
+		t.Fatalf("memory mode of a config without the key = %q, want %q", cfg.Download.MemoryMode, MemoryModeLow)
 	}
 
 	cfg, err = Load(writeConfig(t, "download:\n  memory_mode: high\n"))
@@ -67,26 +52,6 @@ func TestMemoryModeDefaultLoadAndValidate(t *testing.T) {
 
 	if _, err := Load(writeConfig(t, "download:\n  memory_mode: auto\n")); err == nil || !strings.Contains(err.Error(), "memory_mode") {
 		t.Fatalf("Load() invalid memory mode error = %v, want memory_mode validation error", err)
-	}
-}
-
-func TestDefaultLogging(t *testing.T) {
-	logging := Default().Logging
-	if logging.Level != "info" || logging.Format != "text" || !logging.Console || logging.AccessLog {
-		t.Fatalf("default logging = %+v", logging)
-	}
-	if logging.FileEnabled || logging.BufferSize != 2000 {
-		t.Fatalf("default logging outputs = %+v", logging)
-	}
-}
-
-func TestDefaultGlobalConcurrencyControls(t *testing.T) {
-	cfg := Default()
-	if cfg.Catalog.MaxParallelRequests != 16 || cfg.Catalog.RequestsPerSecond != 10 || cfg.Catalog.RequestBurst != 16 {
-		t.Fatalf("default catalog controls = %+v", cfg.Catalog)
-	}
-	if cfg.Download.MaxParallelDownloads != 16 || cfg.Download.MaxParallelDecrypts != 32 || cfg.Download.MaxParallelWrapperRequests != 24 {
-		t.Fatalf("default media pools = %+v", cfg.Download)
 	}
 }
 
@@ -179,19 +144,35 @@ func writeConfig(t *testing.T, body string) string {
 	return path
 }
 
-func TestLoadRejectsUnknownFields(t *testing.T) {
-	path := writeConfig(t, "download:\n  codec: alac\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "field codec not found") {
-		t.Fatalf("Load() error = %v, want unknown field error", err)
+// An unknown key fails startup with an error naming every unknown dotted key
+// and the upgrade guide, so an operator upgrading from 1.x learns what to edit.
+func TestLoadRejectsUnknownKeysNamingThemAndTheUpgradeGuide(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{name: "typo", body: "download:\n  codec: alac\n", want: []string{"download.codec"}},
+		{name: "unknown section", body: "storage:\n  path: x\n", want: []string{"storage"}},
+		{
+			name: "removed 1.x keys",
+			body: "catalog:\n  media_user_token_priority: request\ndownload:\n  max_parallel_tracks: 5\n  max_parallel_metadata_requests: 5\n  max_parallel_media_downloads: 5\n",
+			want: []string{
+				"catalog.media_user_token_priority",
+				"download.max_parallel_media_downloads, download.max_parallel_metadata_requests, download.max_parallel_tracks",
+			},
+		},
 	}
-}
-
-func TestLoadRejectsRemovedConcurrencyKeys(t *testing.T) {
-	for _, key := range []string{"max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads"} {
-		t.Run(key, func(t *testing.T) {
-			path := writeConfig(t, "download:\n  "+key+": 5\n")
-			if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "field "+key+" not found") {
-				t.Fatalf("Load() error = %v, want removed-field error for %s", err, key)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(writeConfig(t, tt.body))
+			if err == nil {
+				t.Fatal("Load() accepted an unknown key")
+			}
+			for _, want := range append(tt.want, "docs/upgrading-to-2.0.md") {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("Load() error = %v, want it to contain %q", err, want)
+				}
 			}
 		})
 	}
@@ -233,37 +214,6 @@ func TestDeveloperTokenSigningEnabled(t *testing.T) {
 	}
 	if !complete.DeveloperTokenSigningEnabled() {
 		t.Fatal("complete config should have signing enabled")
-	}
-}
-
-func TestLoadMigratesLegacyMediaUserTokenPriority(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  media_user_token: configured-token\n  media_user_token_priority: request\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() legacy priority: %v", err)
-	}
-	if cfg.Catalog.MediaUserToken != "configured-token" {
-		t.Fatalf("media_user_token = %q, want configured-token", cfg.Catalog.MediaUserToken)
-	}
-	if cfg.Catalog.LegacyMediaUserTokenPriority != "" {
-		t.Fatalf("legacy priority survived normalization: %q", cfg.Catalog.LegacyMediaUserTokenPriority)
-	}
-	if err := Save(path, cfg); err != nil {
-		t.Fatalf("Save() normalized config: %v", err)
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "media_user_token_priority") {
-		t.Fatalf("managed-file rewrite kept deprecated priority:\n%s", raw)
-	}
-}
-
-func TestLoadRejectsUnknownMediaUserTokenPriority(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  media_user_token_priority: always\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "media_user_token_priority") {
-		t.Fatalf("Load() error = %v, want media_user_token_priority validation error", err)
 	}
 }
 
@@ -390,7 +340,7 @@ func TestLoadClampsResourceLimitsFromFile(t *testing.T) {
 }
 
 func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
-	raw, err := os.ReadFile("../../configs/config.example.yaml")
+	raw, err := os.ReadFile(examplePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,9 +349,6 @@ func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := knownKeys()
-	// Accepted only to read old v1.2 files; it is normalized away and should
-	// not be advertised as a current setting.
-	delete(want, "catalog.media_user_token_priority")
 	got := map[string]bool{}
 	for section, fields := range doc {
 		for field := range fields {
@@ -424,7 +371,7 @@ func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
 	if len(missing) > 0 || len(extra) > 0 {
 		t.Fatalf("config.example.yaml keys: missing=%v extra=%v", missing, extra)
 	}
-	if _, err := load("../../configs/config.example.yaml", nil); err != nil {
+	if _, err := load(examplePath, nil); err != nil {
 		t.Fatalf("config.example.yaml does not load: %v", err)
 	}
 }
@@ -435,7 +382,7 @@ func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
 // artist templates live; Default() keeps the older {TrackNumber} layout for
 // configs that omit the keys, and the two are meant to disagree here.
 func TestExampleNumbersAlbumPathsByCollectionPosition(t *testing.T) {
-	cfg, err := load("../../configs/config.example.yaml", nil)
+	cfg, err := load(examplePath, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -456,6 +403,138 @@ func TestExampleNumbersAlbumPathsByCollectionPosition(t *testing.T) {
 			"artist": Default().Download.ArtistPathFormat,
 		}[kind]; defaultFormat == wantFormat {
 			t.Fatalf("default %s path format now matches the example; the fallback for configs omitting the key was meant to stay on {TrackNumber}", kind)
+		}
+	}
+}
+
+const examplePath = "../../configs/config.example.yaml"
+
+// pathFormatsPredatingSongNumber are the only keys whose Default differs from
+// the example; TestExampleNumbersAlbumPathsByCollectionPosition explains why.
+var pathFormatsPredatingSongNumber = map[string]bool{
+	"download.album_path_format":  true,
+	"download.artist_path_format": true,
+}
+
+// A key missing from config.yaml must behave the way the example documents,
+// so every Default value equals the example's. The example is decoded onto a
+// zero Config, so a key the example lacks shows up as a mismatch too.
+func TestDefaultMatchesExample(t *testing.T) {
+	raw, err := os.ReadFile(examplePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var example Config
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&example); err != nil {
+		t.Fatal(err)
+	}
+	defaults, documented := reflect.ValueOf(Default()), reflect.ValueOf(example)
+	for _, field := range envFields() {
+		if pathFormatsPredatingSongNumber[field.key] {
+			continue
+		}
+		got := defaults.FieldByIndex(field.index).Interface()
+		want := documented.FieldByIndex(field.index).Interface()
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Default() %s = %#v, config.example.yaml sets %#v", field.key, got, want)
+		}
+	}
+}
+
+// exampleDefaultAnnotation matches "Default: 16." in a comment line and
+// captures the value.
+var exampleDefaultAnnotation = regexp.MustCompile(`\bDefault:\s*([^\s.;,(]+)`)
+
+// Every "Default: X" written in an example comment must be what Default()
+// actually holds for the key the comment sits above. Values that do not
+// parse as the field's type (lists) are skipped; the test requires a minimum
+// number of checked annotations so a parser regression cannot pass silently.
+func TestExampleDefaultAnnotationsMatchDefault(t *testing.T) {
+	raw, err := os.ReadFile(examplePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := map[string]envField{}
+	for _, field := range envFields() {
+		fields[field.key] = field
+	}
+	defaults := reflect.ValueOf(Default())
+	sectionLine := regexp.MustCompile(`^([a-z_]+):\s*$`)
+	keyLine := regexp.MustCompile(`^  ([a-z_]+):`)
+	section, pending := "", ""
+	checked := 0
+	for n, line := range strings.Split(string(raw), "\n") {
+		if m := sectionLine.FindStringSubmatch(line); m != nil {
+			if pending != "" {
+				t.Errorf("line %d: annotation %q is not followed by a key in its section", n, pending)
+			}
+			section, pending = m[1], ""
+			continue
+		}
+		if comment := strings.TrimSpace(line); strings.HasPrefix(comment, "#") {
+			if m := exampleDefaultAnnotation.FindStringSubmatch(comment); m != nil {
+				if pending != "" {
+					t.Errorf("line %d: two Default annotations (%q, %q) before one key", n+1, pending, m[1])
+				}
+				pending = m[1]
+			}
+			continue
+		}
+		m := keyLine.FindStringSubmatch(line)
+		if m == nil || pending == "" {
+			continue
+		}
+		key := section + "." + m[1]
+		annotation := pending
+		pending = ""
+		field, ok := fields[key]
+		if !ok {
+			t.Errorf("annotation above unknown key %s", key)
+			continue
+		}
+		value := defaults.FieldByIndex(field.index)
+		var got string
+		switch value.Kind() {
+		case reflect.Int:
+			got = strconv.Itoa(int(value.Int()))
+		case reflect.Bool:
+			got = strconv.FormatBool(value.Bool())
+		case reflect.String:
+			got = value.String()
+		default:
+			continue
+		}
+		checked++
+		if got != annotation {
+			t.Errorf("config.example.yaml says %s Default: %s, Default() has %s", key, annotation, got)
+		}
+	}
+	if checked < 15 {
+		t.Fatalf("checked %d Default annotations, want at least 15; did the example's comment format change?", checked)
+	}
+}
+
+// Validate returns the first violation; with several invalid keys of one group
+// the message must not depend on map iteration order.
+func TestValidateReportsViolationsInKeyOrder(t *testing.T) {
+	cfg := Default()
+	cfg.Catalog.MaxParallelRequests = maxGlobalPoolLimit + 1
+	cfg.Catalog.RequestBurst = maxGlobalPoolLimit + 1
+	cfg.Catalog.RequestsPerSecond = maxGlobalPoolLimit + 1
+	cfg.Download.SongPathFormat = ""
+	cfg.Download.AlbumPathFormat = ""
+	cfg.Download.StationPathFormat = ""
+	for range 20 {
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "catalog.max_parallel_requests ") {
+			t.Fatalf("Validate() = %v, want the catalog.max_parallel_requests error every time", err)
+		}
+	}
+	cfg.Catalog = Default().Catalog
+	for range 20 {
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "download.album_path_format ") {
+			t.Fatalf("Validate() = %v, want the download.album_path_format error every time", err)
 		}
 	}
 }

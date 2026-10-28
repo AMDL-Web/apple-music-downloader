@@ -1,10 +1,13 @@
 package limits
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -150,5 +153,76 @@ func TestRequestGateDoWith429RetryClosesAndPenalizes(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed < 25*time.Millisecond {
 		t.Fatalf("retry ignored shared cooldown: %v", elapsed)
+	}
+}
+
+func cooldownRemaining(g *RequestGate) time.Duration {
+	g.cooldownMu.Lock()
+	defer g.cooldownMu.Unlock()
+	return time.Until(g.cooldownUntil)
+}
+
+// A huge Retry-After must not freeze every Apple request for its full length:
+// the shared cooldown is capped at 60 s and the clamp is logged.
+func TestRequestGatePenalizeCapsCooldownAndLogs(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	gate := NewRequestGate(1, 1, 1)
+	gate.Penalize(10 * time.Minute)
+	if remaining := cooldownRemaining(gate); remaining > 60*time.Second || remaining < 59*time.Second {
+		t.Fatalf("cooldown after a 10m penalty = %v, want about 60s", remaining)
+	}
+	if !strings.Contains(logs.String(), "clamping") || !strings.Contains(logs.String(), "requested=10m0s") {
+		t.Fatalf("clamp not logged with the requested delay: %q", logs.String())
+	}
+
+	logs.Reset()
+	short := NewRequestGate(1, 1, 1)
+	short.Penalize(2 * time.Second)
+	if remaining := cooldownRemaining(short); remaining > 2*time.Second || remaining < time.Second {
+		t.Fatalf("cooldown after a 2s penalty = %v, want about 2s", remaining)
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("an in-range penalty must not log: %q", logs.String())
+	}
+}
+
+func TestDefaultRetryDelay(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name       string
+		retryAfter string
+		want       time.Duration
+	}{
+		{name: "seconds", retryAfter: "5", want: 5 * time.Second},
+		{name: "zero seconds", retryAfter: "0", want: 0},
+		{name: "date in the past", retryAfter: "Wed, 21 Oct 2015 07:28:00 GMT", want: 0},
+	} {
+		header := http.Header{}
+		header.Set("Retry-After", tt.retryAfter)
+		if got := DefaultRetryDelay(header); got != tt.want {
+			t.Errorf("%s: DefaultRetryDelay(%q) = %v, want %v", tt.name, tt.retryAfter, got, tt.want)
+		}
+	}
+
+	// Without a usable hint the delay is 1s plus jitter in [0, 250ms); the
+	// draws must actually vary, or concurrent retries would fire together.
+	seen := map[time.Duration]bool{}
+	for _, retryAfter := range append(slices.Repeat([]string{""}, 99), "soon") {
+		header := http.Header{}
+		if retryAfter != "" {
+			header.Set("Retry-After", retryAfter)
+		}
+		got := DefaultRetryDelay(header)
+		if got < time.Second || got >= time.Second+250*time.Millisecond {
+			t.Fatalf("fallback delay = %v, want within [1s, 1.25s)", got)
+		}
+		seen[got] = true
+	}
+	if len(seen) < 2 {
+		t.Fatalf("100 fallback delays were all %v; jitter is not random", seen)
 	}
 }

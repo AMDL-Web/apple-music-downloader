@@ -3,13 +3,20 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
+// upgradeGuide names the document that lists removed keys and variables, so a
+// startup failure on one of them tells the operator where to look.
+const upgradeGuide = "docs/upgrading-to-2.0.md"
+
 // Load reads the combined config file, overlays AMDL_* environment variable
-// overrides, normalizes legacy fields, and validates the result.
+// overrides, clamps oversized limits, and validates the result.
 func Load(path string) (Config, error) {
 	return load(path, os.Environ())
 }
@@ -22,26 +29,60 @@ func load(path string, environ []string) (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
+	if unknown := unknownKeys(raw); len(unknown) > 0 {
+		return cfg, fmt.Errorf("%s: unknown config key(s) %s; removed keys and their replacements are listed in %s",
+			path, strings.Join(unknown, ", "), upgradeGuide)
+	}
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
-		return cfg, err
+		return cfg, fmt.Errorf("decode %s: %w", path, err)
 	}
 	if err := applyEnvOverrides(&cfg, environ); err != nil {
 		return cfg, err
 	}
-	if err := cfg.NormalizeDeprecated(); err != nil {
-		return cfg, err
-	}
-	// Config files written before the limits existed may hold larger values;
-	// clamp them instead of refusing to boot. New values submitted through the
-	// runtime config API still fail Validate with an explicit error.
+	// A file may hold values above the limits (hand edits, files written by an
+	// older backend); clamp them instead of refusing to boot. The runtime
+	// config API rejects the same values with an explicit error.
 	clampCatalogLimits(&cfg.Catalog)
 	clampDownloadLimits(&cfg.Download)
 	if err := cfg.Validate(); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// unknownKeys returns the dotted keys (or whole sections) in a YAML document
+// that Config does not have, sorted. A document that does not parse as a map
+// of sections yields nil, leaving the error to the typed decoder.
+func unknownKeys(raw []byte) []string {
+	var doc map[string]any
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return nil
+	}
+	known := knownKeys()
+	sections := map[string]bool{}
+	for key := range known {
+		section, _, _ := strings.Cut(key, ".")
+		sections[section] = true
+	}
+	var unknown []string
+	for _, section := range slices.Sorted(maps.Keys(doc)) {
+		if !sections[section] {
+			unknown = append(unknown, section)
+			continue
+		}
+		leaves, ok := doc[section].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, leaf := range slices.Sorted(maps.Keys(leaves)) {
+			if key := section + "." + leaf; !known[key] {
+				unknown = append(unknown, key)
+			}
+		}
+	}
+	return unknown
 }
 
 // clampCatalogLimits lowers startup-bound Apple request controls loaded from
@@ -59,8 +100,8 @@ func clampCatalogLimits(c *CatalogConfig) {
 }
 
 // clampDownloadLimits lowers the bounded download settings to their hard
-// limits in place. It accepts old managed files with oversized values and
-// legacy persisted job overrides whose mutable retry count predates its cap.
+// limits in place. It accepts files with oversized values and persisted job
+// overrides whose retry count predates its cap.
 func clampDownloadLimits(d *DownloadConfig) {
 	if d.MaxRunningJobs > maxRunningJobsLimit {
 		d.MaxRunningJobs = maxRunningJobsLimit
@@ -80,21 +121,4 @@ func clampDownloadLimits(d *DownloadConfig) {
 	if d.ProgressEventIntervalMS > maxProgressEventIntervalMSLimit {
 		d.ProgressEventIntervalMS = maxProgressEventIntervalMSLimit
 	}
-}
-
-// NormalizeDeprecated accepts compatibility-only fields from older config
-// files, environment variables, and API payloads, then removes them from the
-// effective snapshot so the next managed-file rewrite completes the migration.
-// media_user_token_priority became redundant when request tokens joined the
-// ordinary per-job override layer: a present override always wins, while an
-// absent one inherits catalog.media_user_token.
-func (c *Config) NormalizeDeprecated() error {
-	if c == nil {
-		return nil
-	}
-	if p := c.Catalog.LegacyMediaUserTokenPriority; p != "" && p != "request" && p != "config" {
-		return fmt.Errorf("catalog.media_user_token_priority must be request or config")
-	}
-	c.Catalog.LegacyMediaUserTokenPriority = ""
-	return nil
 }

@@ -30,7 +30,12 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.applyLoggingConfig()
-	resp["config"] = config.MutableView(s.currentConfig())
+	view, err := config.MutableView(s.currentConfig())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	resp["config"] = view
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -67,13 +72,6 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 			rejectStatus, rejectErr = http.StatusBadRequest, err
 			return config.Config{}, err
 		}
-		// v1.2 exposed catalog.media_user_token_priority. Keep accepting valid
-		// legacy payloads, but normalize the now-redundant field away so it is
-		// neither effective nor written back to the managed config.
-		if err := merged.NormalizeDeprecated(); err != nil {
-			rejectStatus, rejectErr = http.StatusUnprocessableEntity, err
-			return config.Config{}, err
-		}
 		if locked := config.RuntimeLockedChanges(current, merged); len(locked) > 0 {
 			rejectStatus, rejectErr = http.StatusUnprocessableEntity, fmt.Errorf("fields can only be changed in the config file and require a restart: %s", strings.Join(locked, ", "))
 			return config.Config{}, rejectErr
@@ -103,7 +101,12 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	// apply the store's final snapshot so an older request cannot restore its
 	// logging level after a newer write.
 	s.applyLoggingConfig()
-	writeJSON(w, http.StatusOK, map[string]any{"config": config.MutableView(updated), "persisted": s.cfg.Persistent()})
+	view, err := config.MutableView(updated)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"config": view, "persisted": s.cfg.Persistent()})
 }
 
 func (s *Server) applyLoggingConfig() {

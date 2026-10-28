@@ -2,15 +2,18 @@
 // sections, their defaults (Default), and the YAML file they are stored in.
 // EnsureFile bootstraps config.yaml from config.example.yaml in the same
 // directory when it is missing. Load reads the file with unknown keys
-// rejected, overlays AMDL_* environment variables, normalizes deprecated
-// fields, clamps oversized numeric limits and then runs Validate. Store holds
-// the live snapshot shared after startup, DownloadOverrides layers per-job
-// settings over a base Config, and MutableView, RuntimeLockedChanges and
-// EnvLockedChanges back the runtime config API.
+// rejected, overlays AMDL_* environment variables, clamps oversized numeric
+// limits and then runs Validate. Store holds the live snapshot shared after
+// startup (Reload applies hand edits, UpdateAndSave persists API changes),
+// DownloadOverrides layers per-job settings over a base Config, and
+// MutableView, RuntimeLockedChanges and EnvLockedChanges back the runtime
+// config API.
 //
 // Invariants: isRuntimeKey is the single list of fields that may change
 // without a restart; Load clamps out-of-range limits read from disk while
-// Validate and ApplyValidatedStrict reject them; Save writes owner-only files;
-// and the key set of configs/config.example.yaml must equal the keys derived
-// from Config's YAML tags (TestCommittedExampleDocumentsEveryConfigKey).
+// Validate and ApplyValidatedStrict reject them; written config files are
+// owner-only; Default equals the values configs/config.example.yaml sets
+// except the album and artist path formats (TestDefaultMatchesExample); and
+// the example's key set equals the keys derived from Config's YAML tags
+// (TestCommittedExampleDocumentsEveryConfigKey).
 package config

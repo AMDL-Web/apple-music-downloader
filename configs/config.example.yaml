@@ -1,10 +1,17 @@
 # Configuration example. The live config.yaml contains both startup-bound
 # and runtime-mutable keys. PUT /api/v1/config changes only runtime-mutable
 # keys while the backend runs and rewrites the live file (comments are
-# dropped there — this example is the documented reference). Manual edits to
-# runtime-mutable keys take effect on the next GET /api/v1/config; a PUT
-# issued before that overwrites them. Manual edits to startup-bound keys take
-# effect after a restart.
+# dropped there — this example is the documented reference). Hand edits to
+# runtime-mutable keys take effect on SIGHUP, POST /api/v1/config/reload or the
+# next PUT (which re-reads the file before applying its change, so it never
+# overwrites them); an invalid file keeps the previous config running. Hand
+# edits to startup-bound keys take effect after a restart.
+#
+# A key missing from config.yaml takes the value this example sets, which is
+# also the "Default" named in many comments below. The one exception: a config
+# without download.album_path_format or download.artist_path_format keeps the
+# older {TrackNumber} layout (see those keys). Unknown keys fail startup; keys
+# removed in 2.0 are listed in docs/upgrading-to-2.0.md.
 #
 # Every key can be overridden with an environment variable named
 # AMDL_<SECTION>_<KEY> (the yaml path uppercased, "_" as
@@ -17,7 +24,8 @@
 # strings verbatim, booleans true/false, integers as digits, string lists as
 # comma-separated items (an empty value means an empty list).
 # Unknown AMDL_* variables fail startup; fields pinned by an environment
-# variable are rejected by PUT /api/v1/config with 422.
+# variable are rejected by PUT /api/v1/config with 422. AMDL_CONFIG (path of
+# this file) and AMDL_HOOKS_CONFIG (path of hooks.yaml) are not keys.
 
 server:
   # string: API listen address in "host:port" form, for example "127.0.0.1:18080" or ":18080". Requires a restart.
@@ -29,7 +37,7 @@ database:
 
 logging:
   # enum: debug, info, warn, error. Records below this severity are discarded from every output.
-  # Runtime-mutable through PUT /api/v1/config and manual-file reload; no restart required.
+  # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   level: "info"
   # enum: text, json. Applies to both console and rotating-file output. Requires a restart.
   format: "text"
@@ -39,7 +47,7 @@ logging:
   include_source: false
   # bool: true emits one structured record per completed HTTP request; false disables HTTP access records.
   # Panic recovery and X-Request-ID propagation remain active when false.
-  # Runtime-mutable through PUT /api/v1/config and manual-file reload; no restart required.
+  # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   access_log: false
   # integer records: number of recent structured records retained for GET /api/v1/logs and its SSE stream.
   # 0 disables in-memory retention and the log APIs return an empty history; valid range: 0-100000. Requires a restart.
@@ -115,7 +123,7 @@ catalog:
   # a 12-hour window and refresh after 6 hours. Ignored when developer-token signing is enabled.
   token_cache_ttl_hours: 12
   # The following catalog behavior keys are runtime-mutable through PUT /api/v1/config
-  # and manual-file reload; no restart is required.
+  # and config reload; no restart is required.
   # enum: song, album. song means album URLs containing ?i= are single-song tasks; album downloads the full album.
   album_track_url_mode: "song"
   # string: optional global Apple Music subscription token (media-user-token) used as the fallback for station downloads
@@ -126,14 +134,15 @@ catalog:
   media_user_token: ""
   # enum: wrapper, web_token. Only meaningful when developer-token signing is enabled above (the self-signed token cannot
   # read enhancedHls); ignored in legacy mode, where enhancedHls already comes from the catalog response.
-  # - wrapper (default): the Enhanced HLS master playlist comes from wrapper.M3U8 (the authorized device manifest).
+  # Default: wrapper.
+  # - wrapper: the Enhanced HLS master playlist comes from wrapper.M3U8 (the authorized device manifest).
   # - web_token: the backend scrapes a music.apple.com web-player JWT (same technique as legacy mode) and reads
   #     enhancedHls from amp-api.music.apple.com with that token, independent of the signed developer token used
   #     for catalog metadata. Use this if the wrapper cannot supply a usable device manifest.
   signed_mode_hls_source: "wrapper"
   # bool: true/false. Whether to look up Apple Music animated album covers (attributes.editorialVideo) and
   # expose them on jobs as motion_artwork_url / motion_artwork_tall_url plus each variant's palette.
-  # Default when the key is absent: true (the behavior before this switch existed).
+  # Default: true.
   # - true: after a job's input resolves, one extra amp-api request per album runs out of band, on a context
   #     detached from the job. It never blocks or fails a download; the fields appear a moment later via the
   #     motion_artwork_resolved event. Requires a scraped music.apple.com web-player token — the public API
@@ -155,13 +164,13 @@ download:
   # - aac-downmix: Dolby downmix AAC
   # - ec3: Dolby Digital Plus / Dolby Atmos
   # - ac3: Dolby Digital
-  # AAC-LC does not need to be listed; it is always appended as the final fallback.
-  # Runtime-mutable through PUT /api/v1/config and manual-file reload; no restart required.
+  # AAC-LC does not need to be listed; it is always appended as the final fallback. Default: ["alac"].
+  # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   quality_priority: ["alac"]
   # bool: true tries the next codec in quality_priority after failure; false only tries the first codec.
-  # Runtime-mutable through PUT /api/v1/config and manual-file reload; no restart required.
+  # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   codec_alternative: true
-  # enum: low, high. Controls the per-track RAM/disk trade-off for Enhanced HLS processing; default: low.
+  # enum: low, high. Controls the per-track RAM/disk trade-off for Enhanced HLS processing. Default: low.
   # - low: streams encrypted Enhanced HLS media into a resumable checkpoint, then reads it fragment by fragment
   #     and decrypts directly into ffmpeg. The normal path uses bounded fragment-sized RAM; the encrypted
   #     checkpoint and flattened output can coexist in temp_dir, for roughly two track-sized files per parallel track.
@@ -186,7 +195,7 @@ download:
   # Total RAM and temporary disk usage scale with the startup pools below (max_parallel_downloads /
   # max_parallel_decrypts). A per-task overrides.memory_mode may select a different mode without changing the
   # runtime default.
-  # Runtime-mutable through PUT /api/v1/config and manual-file reload; no restart required.
+  # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   memory_mode: "low"
   # The following worker and process-wide pool sizes are startup-bound and require a restart.
   # integer: maximum concurrently running jobs; sizes the worker pool built at startup.
@@ -210,7 +219,7 @@ download:
   # This sizes a process-wide pool at startup, cannot be overridden per job, and requires a restart to change.
   max_parallel_wrapper_requests: 24
   # The remaining download keys are runtime-mutable through PUT /api/v1/config
-  # and manual-file reload; no restart is required.
+  # and config reload; no restart is required.
   # integer: maximum total attempts (including the first) for metadata, cover, lyrics,
   # and each codec's download/decrypt phase. Positive values allow 1-10; values <=0 behave as 1;
   # values above 10 in this file are clamped to 10 (the config API and new job submissions reject them;
@@ -244,6 +253,9 @@ download:
   # {PlaylistId}, {StationName}, {StationId}, {Quality}, {Codec}, {Tag}. Numeric variables {SongNumber}, {DiscNumber},
   # {DiscCount}, {TrackNumber}, and {TrackCount} also support :02d padding, for example
   # {TrackNumber:02d}. Unknown variables are preserved literally.
+  # {UrlArtistName} is an alias of {ArtistName} and resolves exactly like it.
+  # {Tag} always expands to an empty string; it is accepted so templates that use it
+  # still parse, and contributes nothing to the path.
   # In directory segments, {ArtistName} resolves to the collection's grouping artist
   # (album artist when available) so all tracks of a collection share one folder; in the
   # file-name segment it resolves to the track's own artist.
@@ -327,8 +339,8 @@ download:
   # bool: true verifies output MP4 integrity and repairs known ALAC terminator issues; false skips the integrity gate.
   check_integrity: true
   # bool: true overwrites an existing output file (and its lyrics sidecar) when
-  # a job downloads the same track again; false (default) skips tracks whose
-  # output file already exists. Can be overridden per submission via the
+  # a job downloads the same track again; false skips tracks whose output file
+  # already exists. Default: false. Can be overridden per submission via the
   # overrides.force_overwrite field of POST /api/v1/downloads.
   force_overwrite: false
 
@@ -343,7 +355,7 @@ tools:
 
 simulate:
   # All simulate keys are runtime-mutable through PUT /api/v1/config and
-  # manual-file reload; no restart is required.
+  # config reload; no restart is required.
   # bool: true enables local test mode. The encrypted media transfer, decryption, remux, and disk
   # writes are simulated: nothing is downloaded or decrypted, ffmpeg is not needed, and no output
   # file is written. Catalog metadata and enhanced-HLS media selection still run for real, so
@@ -367,7 +379,7 @@ library_sync:
   # newly added track as an ordinary download job. Add a song to your library on your phone and
   # the whole album downloads here automatically, with no manual submission.
   #
-  # Both keys are runtime-mutable through PUT /api/v1/config and manual-file reload; no restart
+  # Both keys are runtime-mutable through PUT /api/v1/config and config reload; no restart
   # is required. The polling loop re-reads them at the start of every round, so turning the
   # monitor off really stops polling rather than just discarding the results.
   #
@@ -384,7 +396,7 @@ library_sync:
   # it sees the oldest track of the anchor again; anything in between that is not in the
   # anchor is new.
   # bool: true enables polling. Default: false — this is the only feature that creates
-  # download jobs on its own, so installs upgrading to this version must enable it explicitly.
+  # download jobs on its own, so it stays off until enabled explicitly.
   enabled: false
   # integer minutes: polling interval, range 1..1440. Default: 15. In steady state a round
   # usually makes only 1 Apple request (one page covers the anchor window), plus 1 more per new

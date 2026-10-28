@@ -25,11 +25,8 @@ const envPrefix = "AMDL_"
 // envIgnored are AMDL_-prefixed variables that are not config-key overrides:
 // the file-path variables read in main.
 var envIgnored = map[string]struct{}{
-	"AMDL_CONFIG": {},
-	// Accepted by main only to locate and consume a legacy split runtime
-	// file during upgrade. It no longer selects a live configuration file.
-	"AMDL_RUNTIME_CONFIG": {},
-	"AMDL_HOOKS_CONFIG":   {},
+	"AMDL_CONFIG":       {},
+	"AMDL_HOOKS_CONFIG": {},
 }
 
 // envField ties one leaf field of Config to the environment variable that
@@ -98,7 +95,8 @@ func applyEnvOverrides(cfg *Config, environ []string) error {
 		delete(overrides, field.name)
 	}
 	if len(overrides) > 0 {
-		return fmt.Errorf("unknown configuration environment variable(s): %s", strings.Join(slices.Sorted(maps.Keys(overrides)), ", "))
+		return fmt.Errorf("unknown configuration environment variable(s): %s; removed variables are listed in %s",
+			strings.Join(slices.Sorted(maps.Keys(overrides)), ", "), upgradeGuide)
 	}
 	return nil
 }

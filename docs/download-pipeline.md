@@ -81,7 +81,8 @@ in-flight backpressure — with `D` download and `X` decrypt permits the interna
 ceiling is `D+X`.
 
 When Apple returns 429 the backend honours `Retry-After`, triggers a global cooldown and
-retries once automatically.
+retries once automatically. The global cooldown is capped at 60 seconds (a longer hint is
+logged and clamped), because it holds back every Apple request, interactive ones included.
 
 When several jobs compete for a full pool, permits go to the **earliest submitted**
 unfinished job, so jobs tend to complete one after another rather than all creeping

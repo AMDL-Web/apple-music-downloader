@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -229,5 +230,92 @@ func TestFileOutputFailsFastForUnwritableTarget(t *testing.T) {
 	cfg.FilePath = t.TempDir()
 	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "open log file") {
 		t.Fatalf("New() error = %v, want log-file probe failure", err)
+	}
+}
+
+func appendMessages(store *Store, messages ...string) {
+	for _, message := range messages {
+		store.append(Entry{Time: time.Now(), Level: "info", Message: message})
+	}
+}
+
+func sequences(entries []Entry) []uint64 {
+	out := []uint64{}
+	for _, entry := range entries {
+		out = append(out, entry.Sequence)
+	}
+	return out
+}
+
+// After the ring wraps, List and Subscribe still see the newest records in
+// order, and cursors, truncation and paging behave as on an unwrapped ring.
+func TestStoreRingWraparound(t *testing.T) {
+	store := NewStore(3)
+	appendMessages(store, "one", "two", "three", "four", "five", "six", "seven")
+
+	page := store.List(Filter{})
+	if got := sequences(page.Entries); !slices.Equal(got, []uint64{5, 6, 7}) || page.OldestSequence != 5 || page.NextCursor != 7 || page.Truncated {
+		t.Fatalf("full page = %v oldest=%d next=%d truncated=%v, want [5 6 7] 5 7 false", got, page.OldestSequence, page.NextCursor, page.Truncated)
+	}
+	if page.Entries[0].Message != "five" || page.Entries[2].Message != "seven" {
+		t.Fatalf("messages = %q..%q, want five..seven", page.Entries[0].Message, page.Entries[2].Message)
+	}
+	if page := store.List(Filter{Limit: 2}); !slices.Equal(sequences(page.Entries), []uint64{6, 7}) {
+		t.Fatalf("tail page = %v, want [6 7]", sequences(page.Entries))
+	}
+	if page := store.List(Filter{After: 2, Limit: 10}); !page.Truncated || !slices.Equal(sequences(page.Entries), []uint64{5, 6, 7}) {
+		t.Fatalf("cursor before the ring = %+v, want truncated [5 6 7]", page)
+	}
+	if page := store.List(Filter{After: 4, Limit: 10}); page.Truncated {
+		t.Fatalf("cursor just before the oldest record must not be truncated: %+v", page)
+	}
+	page = store.List(Filter{After: 5, Limit: 1})
+	if got := sequences(page.Entries); !slices.Equal(got, []uint64{6}) || page.NextCursor != 6 {
+		t.Fatalf("cursor page = %v next=%d, want [6] next=6", got, page.NextCursor)
+	}
+	page = store.List(Filter{After: page.NextCursor, Limit: 1})
+	if got := sequences(page.Entries); !slices.Equal(got, []uint64{7}) || page.NextCursor != 7 {
+		t.Fatalf("last cursor page = %v next=%d, want [7] next=7", got, page.NextCursor)
+	}
+	if page := store.List(Filter{After: 7, Limit: 5}); len(page.Entries) != 0 || page.Entries == nil || page.NextCursor != 7 {
+		t.Fatalf("caught-up page = %+v, want an empty non-nil page at 7", page)
+	}
+
+	backlog, _, stop := store.Subscribe(Filter{Limit: 2})
+	stop()
+	if got := sequences(backlog); !slices.Equal(got, []uint64{6, 7}) {
+		t.Fatalf("subscribe tail backlog = %v, want [6 7]", got)
+	}
+	backlog, _, stop = store.Subscribe(Filter{After: 5, Limit: 1})
+	stop()
+	if got := sequences(backlog); !slices.Equal(got, []uint64{6, 7}) {
+		t.Fatalf("subscribe cursor backlog = %v, want every match after 5: [6 7]", got)
+	}
+}
+
+// Query matches the message and the attribute JSON case-insensitively, for
+// records that wrapped around the ring as well as live ones.
+func TestStoreQueryMatchesMessageAndAttributes(t *testing.T) {
+	store := NewStore(2)
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "evicted", Attributes: map[string]any{"user": "Alice"}})
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "Login", Attributes: map[string]any{"user": "Alice"}})
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "logout", Attributes: map[string]any{"user": "bob"}})
+	if page := store.List(Filter{Query: "ALICE"}); len(page.Entries) != 1 || page.Entries[0].Message != "Login" {
+		t.Fatalf("attribute query = %#v, want only the retained Login record", page.Entries)
+	}
+	if page := store.List(Filter{Query: "log"}); len(page.Entries) != 2 {
+		t.Fatalf("message query = %#v, want Login and logout", page.Entries)
+	}
+	_, live, stop := store.Subscribe(Filter{After: 3, Query: "Carol"})
+	defer stop()
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "skip", Attributes: map[string]any{"user": "dave"}})
+	store.append(Entry{Time: time.Now(), Level: "info", Message: "hit", Attributes: map[string]any{"user": "carol"}})
+	select {
+	case entry := <-live:
+		if entry.Message != "hit" || entry.Sequence != 5 {
+			t.Fatalf("live entry = %#v, want hit with sequence 5", entry)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the matching live entry")
 	}
 }

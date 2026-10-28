@@ -104,20 +104,16 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	}
 }
 
-func TestUpdateConfigAcceptsAndDropsLegacyMediaUserTokenPriority(t *testing.T) {
+func TestUpdateConfigRejectsRemovedMediaUserTokenPriority(t *testing.T) {
 	store := config.NewStore(config.Default())
 	server := &Server{cfg: store}
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
 		`{"catalog":{"media_user_token":"configured-token","media_user_token_priority":"request"}}`)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "media_user_token_priority") {
+		t.Fatalf("status = %d, body = %s; want 400 naming the removed key", recorder.Code, recorder.Body.String())
 	}
-	if strings.Contains(recorder.Body.String(), "media_user_token_priority") {
-		t.Fatalf("deprecated priority was echoed in runtime config: %s", recorder.Body.String())
-	}
-	got := store.Get()
-	if got.Catalog.MediaUserToken != "configured-token" || got.Catalog.LegacyMediaUserTokenPriority != "" {
-		t.Fatalf("normalized catalog config = %+v", got.Catalog)
+	if got := store.Get().Catalog.MediaUserToken; got != "" {
+		t.Fatalf("rejected update changed media_user_token to %q", got)
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 
 func writeFullConfig(t *testing.T, path string, cfg Config) {
 	t.Helper()
-	if err := Save(path, cfg); err != nil {
+	if err := saveConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -20,7 +20,7 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 
-	if _, err := EnsureFile(path, filepath.Join(dir, "runtime.yaml")); err == nil {
+	if _, err := EnsureFile(path); err == nil {
 		t.Fatal("expected an error when neither config nor example exists")
 	}
 
@@ -30,12 +30,9 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, configExampleFileName), []byte(example), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := EnsureFile(path, filepath.Join(dir, "runtime.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.CreatedConfig || result.MergedRuntime || result.RuntimeBackupPath != "" {
-		t.Fatalf("bootstrap result = %+v", result)
+	created, err := EnsureFile(path)
+	if err != nil || !created {
+		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -59,124 +56,44 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	if err := os.WriteFile(path, []byte("server:\n  listen: \"127.0.0.1:20000\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err = EnsureFile(path, filepath.Join(dir, "runtime.yaml"))
-	if err != nil || result.CreatedConfig || result.MergedRuntime {
-		t.Fatalf("second bootstrap = (%+v, %v), want no-op", result, err)
+	created, err = EnsureFile(path)
+	if err != nil || created {
+		t.Fatalf("second bootstrap = (%v, %v), want no-op", created, err)
 	}
 	if cfg, err := load(path, nil); err != nil || cfg.Server.Listen != "127.0.0.1:20000" {
 		t.Fatalf("existing config overwritten: %+v, %v", cfg.Server, err)
 	}
 }
 
-func TestEnsureFileMergesLegacyRuntimeWithRuntimeValuesWinning(t *testing.T) {
+// A 1.x runtime.yaml next to config.yaml is neither merged nor moved: its
+// values never reach the config, and the file is left for the operator.
+func TestEnsureFileIgnoresLegacyRuntimeFile(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
 	runtimePath := filepath.Join(dir, "runtime.yaml")
-	startup := "server:\n  listen: \"127.0.0.1:19999\"\n" +
-		"wrapper:\n  address: \"wrapper.internal:8080\"\n" +
-		"catalog:\n  album_track_url_mode: \"song\"\n  media_user_token: \"stale-token\"\n" +
-		"download:\n  cover_format: \"jpg\"\n  max_running_jobs: 7\n"
-	legacyRuntime := "logging:\n  level: \"debug\"\n" +
-		"catalog:\n  album_track_url_mode: \"album\"\n  media_user_token: \"secret-token\"\n  media_user_token_priority: \"config\"\n" +
-		"download:\n  cover_format: \"png\"\n  embed_lyrics: false\n"
-	if err := os.WriteFile(configPath, []byte(startup), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(runtimePath, []byte(legacyRuntime), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := EnsureFile(configPath, runtimePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.CreatedConfig || !result.MergedRuntime || result.RuntimeBackupPath == "" {
-		t.Fatalf("migration result = %+v", result)
-	}
-	if _, err := os.Stat(runtimePath); !os.IsNotExist(err) {
-		t.Fatalf("legacy runtime remains live: %v", err)
-	}
-	backup, err := os.ReadFile(result.RuntimeBackupPath)
-	if err != nil || string(backup) != legacyRuntime {
-		t.Fatalf("runtime backup = %q, %v; want exact original", backup, err)
-	}
-	cfg, err := load(configPath, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Server.Listen != "127.0.0.1:19999" || cfg.Wrapper.Address != "wrapper.internal:8080" || cfg.Download.MaxRunningJobs != 7 {
-		t.Fatalf("startup values lost during merge: %+v", cfg)
-	}
-	if cfg.Logging.Level != "debug" || cfg.Catalog.AlbumTrackURLMode != "album" || cfg.Catalog.MediaUserToken != "secret-token" || cfg.Download.CoverFormat != "png" || cfg.Download.EmbedLyrics {
-		t.Fatalf("legacy runtime values did not win: %+v", cfg)
-	}
-	raw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"listen:", "address:", "album_track_url_mode:", "cover_format:", "max_running_jobs:"} {
-		if !strings.Contains(string(raw), want) {
-			t.Fatalf("merged config missing %q:\n%s", want, raw)
-		}
-	}
-	if strings.Contains(string(raw), "media_user_token_priority") {
-		t.Fatalf("deprecated key survived merge:\n%s", raw)
-	}
-	if info, err := os.Stat(configPath); err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("merged config permissions = %v, %v; want 0600", info.Mode().Perm(), err)
-	}
-
-	// Archiving the consumed runtime file makes all later starts no-ops.
-	second, err := EnsureFile(configPath, runtimePath)
-	if err != nil || second.CreatedConfig || second.MergedRuntime || second.RuntimeBackupPath != "" {
-		t.Fatalf("second migration = (%+v, %v), want no-op", second, err)
-	}
-}
-
-func TestEnsureFileBootstrapsThenMergesLegacyRuntime(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.yaml")
-	runtimePath := filepath.Join(dir, "runtime.yaml")
-	if err := os.WriteFile(filepath.Join(dir, configExampleFileName), []byte("server:\n  listen: \"127.0.0.1:19999\"\ndownload:\n  cover_format: \"jpg\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(runtimePath, []byte("download:\n  cover_format: \"png\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	result, err := EnsureFile(configPath, runtimePath)
-	if err != nil || !result.CreatedConfig || !result.MergedRuntime {
-		t.Fatalf("bootstrap and merge = (%+v, %v)", result, err)
-	}
-	cfg, err := load(configPath, nil)
-	if err != nil || cfg.Server.Listen != "127.0.0.1:19999" || cfg.Download.CoverFormat != "png" {
-		t.Fatalf("merged config = %+v, %v", cfg, err)
-	}
-}
-
-func TestEnsureFileRejectsInvalidLegacyRuntimeWithoutChangingFiles(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.yaml")
-	runtimePath := filepath.Join(dir, "runtime.yaml")
-	configRaw := []byte("server:\n  listen: \"127.0.0.1:19999\"\n")
-	runtimeRaw := []byte("server:\n  listen: \"127.0.0.1:20000\"\n")
-	if err := os.WriteFile(configPath, configRaw, 0o600); err != nil {
+	runtimeRaw := []byte("download:\n  cover_format: \"png\"\n")
+	if err := os.WriteFile(filepath.Join(dir, configExampleFileName), []byte("download:\n  cover_format: \"jpg\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(runtimePath, runtimeRaw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := EnsureFile(configPath, runtimePath); err == nil || !strings.Contains(err.Error(), "startup-bound") {
-		t.Fatalf("error = %v, want misplaced legacy key rejection", err)
+	if created, err := EnsureFile(configPath); err != nil || !created {
+		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
 	}
-	if got, _ := os.ReadFile(configPath); !reflect.DeepEqual(got, configRaw) {
-		t.Fatalf("failed migration changed config:\n%s", got)
+	cfg, err := Load(configPath)
+	if err != nil || cfg.Download.CoverFormat != "jpg" {
+		t.Fatalf("config = %q, %v; want the example's jpg, not runtime.yaml's png", cfg.Download.CoverFormat, err)
 	}
-	if got, _ := os.ReadFile(runtimePath); !reflect.DeepEqual(got, runtimeRaw) {
-		t.Fatalf("failed migration changed runtime:\n%s", got)
+	if got, err := os.ReadFile(runtimePath); err != nil || !reflect.DeepEqual(got, runtimeRaw) {
+		t.Fatalf("runtime.yaml = %q, %v; want it untouched", got, err)
+	}
+	if matches, _ := filepath.Glob(runtimePath + "*.bak*"); len(matches) != 0 {
+		t.Fatalf("unexpected backups %v", matches)
 	}
 }
 
-func TestSaveRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
+func TestSaveConfigRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
@@ -186,7 +103,7 @@ func TestSaveRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
 	cfg.Catalog.MediaUserToken = "secret-media-user-token"
 	cfg.Download.CoverFormat = "png"
 	cfg.Download.QualityPriority = []string{"aac"}
-	if err := Save(path, cfg); err != nil {
+	if err := saveConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(path)
@@ -207,7 +124,7 @@ func TestSaveRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
 		t.Fatalf("round trip lost fields: %+v", loaded)
 	}
 	second := filepath.Join(t.TempDir(), "config.yaml")
-	if err := Save(second, loaded); err != nil {
+	if err := saveConfig(second, loaded); err != nil {
 		t.Fatal(err)
 	}
 	again, _ := os.ReadFile(second)
@@ -216,7 +133,7 @@ func TestSaveRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
 	}
 }
 
-func TestSaveUsesRandomAtomicTempFile(t *testing.T) {
+func TestSaveConfigUsesRandomAtomicTempFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	victim := filepath.Join(dir, "victim.txt")
@@ -226,7 +143,7 @@ func TestSaveUsesRandomAtomicTempFile(t *testing.T) {
 	if err := os.Symlink(victim, path+".tmp"); err != nil {
 		t.Fatal(err)
 	}
-	if err := Save(path, Default()); err != nil {
+	if err := saveConfig(path, Default()); err != nil {
 		t.Fatal(err)
 	}
 	if raw, err := os.ReadFile(victim); err != nil || string(raw) != "do not overwrite" {
@@ -234,7 +151,7 @@ func TestSaveUsesRandomAtomicTempFile(t *testing.T) {
 	}
 }
 
-func TestStoreSetAndSavePersistsOnlyRuntimeFields(t *testing.T) {
+func TestStoreUpdateAndSavePersistsOnlyRuntimeFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	disk := Default()
 	disk.Server.Listen = "127.0.0.1:19000"
@@ -243,10 +160,13 @@ func TestStoreSetAndSavePersistsOnlyRuntimeFields(t *testing.T) {
 	running := disk
 	running.Server.Listen = "127.0.0.1:18080"
 	store := NewFileStore(running, path)
-	updated := running
-	updated.Server.Listen = "127.0.0.1:17000"
-	updated.Download.EmbedLyrics = false
-	if err := store.SetAndSave(updated); err != nil {
+	replace := func(Config) (Config, error) {
+		updated := running
+		updated.Server.Listen = "127.0.0.1:17000"
+		updated.Download.EmbedLyrics = false
+		return updated, nil
+	}
+	if _, err := store.UpdateAndSave(replace); err != nil {
 		t.Fatal(err)
 	}
 	if got := store.Get(); got.Server.Listen != "127.0.0.1:17000" || got.Download.EmbedLyrics {
@@ -267,8 +187,8 @@ func TestStoreSetAndSavePersistsOnlyRuntimeFields(t *testing.T) {
 	if mem.Persistent() {
 		t.Fatal("in-memory store must not report persistent")
 	}
-	if err := mem.SetAndSave(updated); err != nil || mem.Get().Download.EmbedLyrics {
-		t.Fatalf("in-memory SetAndSave = %v, %+v", err, mem.Get())
+	if _, err := mem.UpdateAndSave(replace); err != nil || mem.Get().Download.EmbedLyrics {
+		t.Fatalf("in-memory UpdateAndSave = %v, %+v", err, mem.Get())
 	}
 }
 
@@ -337,38 +257,95 @@ func TestStoreReloadResetsDeletedRuntimeKeysButNotStartupFields(t *testing.T) {
 	}
 }
 
-func TestStoreUpdateAndSavePreservesPendingStartupEdit(t *testing.T) {
+// PUT re-reads the file before applying its patch: a hand edit made since the
+// last reload survives (runtime fields become live, startup fields stay
+// pending on disk) instead of being overwritten by the stale snapshot.
+func TestStoreUpdateAndSaveKeepsHandEditsMadeSinceLastReload(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	base := Default()
 	writeFullConfig(t, path, base)
 	store := NewFileStore(base, path)
 
-	// The owner edits a startup field on disk but has not restarted yet.
 	diskEdit := base
 	diskEdit.Server.Listen = "127.0.0.1:19999"
 	diskEdit.Download.CoverFormat = "png"
 	writeFullConfig(t, path, diskEdit)
+	var seen Config
 	updated, err := store.UpdateAndSave(func(current Config) (Config, error) {
+		seen = current
 		current.Download.EmbedCover = false
 		return current, nil
 	})
-	if err != nil || updated.Download.EmbedCover {
-		t.Fatalf("update = (%+v, %v)", updated.Download, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen.Download.CoverFormat != "png" {
+		t.Fatalf("mutate saw cover_format %q, want the hand-edited png", seen.Download.CoverFormat)
+	}
+	if updated.Download.CoverFormat != "png" || updated.Download.EmbedCover || store.Get().Download.CoverFormat != "png" {
+		t.Fatalf("live config = %+v, want hand edit plus patch", store.Get().Download)
 	}
 	persisted, err := load(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if persisted.Download.CoverFormat != "png" || persisted.Download.EmbedCover {
+		t.Fatalf("persisted runtime fields = %+v, want hand edit plus patch", persisted.Download)
+	}
 	if persisted.Server.Listen != "127.0.0.1:19999" {
 		t.Fatalf("pending startup edit lost: %q", persisted.Server.Listen)
 	}
-	// PUT-before-GET semantics overwrite an unseen manual runtime edit with
-	// the running snapshot while retaining the pending startup edit.
-	if persisted.Download.CoverFormat != base.Download.CoverFormat || persisted.Download.EmbedCover {
-		t.Fatalf("persisted runtime fields = %+v", persisted.Download)
-	}
 	if store.Get().Server.Listen != base.Server.Listen {
 		t.Fatalf("pending startup edit became live: %q", store.Get().Server.Listen)
+	}
+}
+
+// An invalid hand edit makes PUT fail before mutate runs, leaving the file
+// (so the operator can fix it) and the running snapshot as they were.
+func TestStoreUpdateAndSaveRejectsInvalidFileWithoutChanges(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	store := NewFileStore(Default(), path)
+	broken := []byte("download:\n  cover_format: webp\n")
+	if err := os.WriteFile(path, broken, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	_, err := store.UpdateAndSave(func(current Config) (Config, error) {
+		called = true
+		return current, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "cover_format") || called {
+		t.Fatalf("UpdateAndSave = %v (mutate called: %v), want cover_format error before mutate", err, called)
+	}
+	if got, _ := os.ReadFile(path); !reflect.DeepEqual(got, broken) {
+		t.Fatalf("file changed to:\n%s", got)
+	}
+	if got := store.Get().Download.CoverFormat; got != Default().Download.CoverFormat {
+		t.Fatalf("snapshot cover_format = %q", got)
+	}
+}
+
+func TestStoreUpdateAndSaveRecreatesMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	store := NewFileStore(Default(), path)
+	if _, err := store.UpdateAndSave(func(current Config) (Config, error) {
+		current.Download.CoverFormat = "png"
+		return current, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := load(path, nil)
+	if err != nil || persisted.Download.CoverFormat != "png" {
+		t.Fatalf("recreated file = %q, %v", persisted.Download.CoverFormat, err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Reload(); err == nil {
+		t.Fatal("Reload of a missing file must report an error")
+	}
+	if got := store.Get().Download.CoverFormat; got != "png" {
+		t.Fatalf("failed reload changed snapshot: %q", got)
 	}
 }
 

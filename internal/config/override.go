@@ -13,13 +13,13 @@ import (
 //
 // Every field is optional: nil config fields keep the runtime config's value,
 // while nil Hooks keeps the default of running every enabled matching entry.
-// The Download-related JSON keys mirror the job-scoped subset of
-// configs/config.yaml. MediaUserToken overlays catalog.media_user_token for a
-// job that
-// needs Apple Music user identity. max_running_jobs, max_parallel_downloads,
-// max_parallel_decrypts, and max_parallel_wrapper_requests are deliberately
-// absent — they size process-wide pools at startup and cannot apply to a
-// single job.
+// The other JSON keys are named after the runtime download.* config keys they
+// override (TestDownloadOverridesCoverRuntimeDownloadKeys). MediaUserToken
+// overlays catalog.media_user_token for a job that needs Apple Music user
+// identity. Deliberately absent: max_running_jobs, max_parallel_downloads,
+// max_parallel_decrypts and max_parallel_wrapper_requests size process-wide
+// pools at startup, and progress_event_interval_ms shapes the event stream
+// that every subscriber of a job shares.
 // Slice fields are *[]string rather than []string so an explicit
 // empty list survives the JSON round trip through the jobs table: nil (field
 // absent, keep config) marshals away under omitempty, while a pointer to an

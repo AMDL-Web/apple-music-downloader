@@ -33,24 +33,13 @@ func main() {
 	if cfgPath == "" {
 		cfgPath = "configs/config.yaml"
 	}
-	// AMDL_RUNTIME_CONFIG is retained only as an upgrade aid: deployments from
-	// the former split-file format may have placed runtime.yaml elsewhere. Once
-	// merged, config.yaml is the only live configuration file.
-	legacyRuntimePath := os.Getenv("AMDL_RUNTIME_CONFIG")
-	if legacyRuntimePath == "" {
-		legacyRuntimePath = filepath.Join(filepath.Dir(cfgPath), "runtime.yaml")
-	}
-	bootstrap, err := config.EnsureFile(cfgPath, legacyRuntimePath)
+	created, err := config.EnsureFile(cfgPath)
 	if err != nil {
 		bootstrapLogger.Error("bootstrap config", "error", err)
 		os.Exit(1)
 	}
-	if bootstrap.CreatedConfig {
+	if created {
 		bootstrapLogger.Info("created config from example", "path", cfgPath)
-	}
-	if bootstrap.MergedRuntime {
-		bootstrapLogger.Info("merged legacy runtime config into config",
-			"config", cfgPath, "backup", bootstrap.RuntimeBackupPath)
 	}
 	cfg, err := config.Load(cfgPath)
 	if err != nil {

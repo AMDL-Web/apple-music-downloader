@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// Config is the whole service configuration, one field per top-level section
+// of config.yaml.
 type Config struct {
 	Server   ServerConfig   `yaml:"server" json:"server"`
 	Database DatabaseConfig `yaml:"database" json:"database"`
@@ -36,8 +38,7 @@ type LibrarySyncConfig struct {
 }
 
 // Interval returns the poll period. Values <= 0 fall back to 15 minutes;
-// Validate rejects them on the way in, so this only guards configs that
-// predate the key.
+// Validate rejects them, so the fallback only guards a hand-built Config.
 func (c LibrarySyncConfig) Interval() time.Duration {
 	if c.IntervalMinutes <= 0 {
 		return 15 * time.Minute
@@ -45,10 +46,12 @@ func (c LibrarySyncConfig) Interval() time.Duration {
 	return time.Duration(c.IntervalMinutes) * time.Minute
 }
 
+// ServerConfig is the HTTP listener section.
 type ServerConfig struct {
 	Listen string `yaml:"listen" json:"listen"`
 }
 
+// DatabaseConfig locates the SQLite database file.
 type DatabaseConfig struct {
 	Path string `yaml:"path" json:"path"`
 }
@@ -72,6 +75,7 @@ type LoggingConfig struct {
 	Compress      bool   `yaml:"compress" json:"compress"`
 }
 
+// WrapperConfig is the wrapper-manager gRPC connection.
 type WrapperConfig struct {
 	Address             string `yaml:"address" json:"address"`
 	Insecure            bool   `yaml:"insecure" json:"insecure"`
@@ -79,6 +83,8 @@ type WrapperConfig struct {
 	LoginTimeoutSeconds int    `yaml:"login_timeout_seconds" json:"login_timeout_seconds"`
 }
 
+// LoginTimeout bounds a wrapper login including its 2FA step; values <= 0 fall
+// back to 120 seconds.
 func (c WrapperConfig) LoginTimeout() time.Duration {
 	if c.LoginTimeoutSeconds <= 0 {
 		return 120 * time.Second
@@ -86,6 +92,8 @@ func (c WrapperConfig) LoginTimeout() time.Duration {
 	return time.Duration(c.LoginTimeoutSeconds) * time.Second
 }
 
+// Timeout bounds a wrapper unary RPC and each decrypt-fragment wait; values
+// <= 0 fall back to 30 seconds.
 func (c WrapperConfig) Timeout() time.Duration {
 	if c.TimeoutSeconds <= 0 {
 		return 30 * time.Second
@@ -93,6 +101,9 @@ func (c WrapperConfig) Timeout() time.Duration {
 	return time.Duration(c.TimeoutSeconds) * time.Second
 }
 
+// CatalogConfig controls Apple Music catalog access: storefront and language,
+// the shared Apple request limits, developer-token signing, and the
+// runtime-mutable catalog behavior keys.
 type CatalogConfig struct {
 	DefaultStorefront        string   `yaml:"default_storefront" json:"default_storefront"`
 	Language                 string   `yaml:"language" json:"language"`
@@ -107,20 +118,14 @@ type CatalogConfig struct {
 	TokenCacheTTLHours       int      `yaml:"token_cache_ttl_hours" json:"token_cache_ttl_hours"`
 	AlbumTrackURLMode        string   `yaml:"album_track_url_mode" json:"album_track_url_mode"`
 	MediaUserToken           string   `yaml:"media_user_token" json:"media_user_token"`
-	// LegacyMediaUserTokenPriority keeps v1.2 config files, environment
-	// variables, and config API payloads readable during migration. Request
-	// tokens now use the ordinary per-job override semantics, so this value is
-	// validated and discarded by Config.NormalizeDeprecated.
-	LegacyMediaUserTokenPriority string `yaml:"media_user_token_priority,omitempty" json:"media_user_token_priority,omitempty"`
-	SignedModeHLSSource          string `yaml:"signed_mode_hls_source" json:"signed_mode_hls_source"`
+	SignedModeHLSSource      string   `yaml:"signed_mode_hls_source" json:"signed_mode_hls_source"`
 	// MotionArtworkEnabled controls the out-of-band animated-cover lookup. It
 	// is the only feature that talks to amp-api purely for decoration, and it
 	// costs one undocumented-endpoint request plus a scraped web-player token
 	// per album, so an install that never renders animated covers can switch
 	// the traffic off entirely. Off simply means jobs carry no motion artwork
 	// fields, which clients already have to handle — an album without an
-	// animated cover looks the same. Defaults to true; load decodes onto
-	// Default(), so a config file predating this key keeps the lookup on.
+	// animated cover looks the same.
 	MotionArtworkEnabled bool `yaml:"motion_artwork_enabled" json:"motion_artwork_enabled"`
 }
 
@@ -134,6 +139,8 @@ func (c CatalogConfig) DeveloperTokenTTL() time.Duration {
 	return time.Duration(c.DeveloperTokenTTLHours) * time.Hour
 }
 
+// TokenTTL is the validity window of an auto-discovered (legacy mode) bearer
+// token; values <= 0 fall back to 12 hours.
 func (c CatalogConfig) TokenTTL() time.Duration {
 	if c.TokenCacheTTLHours <= 0 {
 		return 12 * time.Hour
@@ -158,6 +165,8 @@ func (c CatalogConfig) EnhancedHLSFromWebToken() bool {
 	return c.SignedModeHLSSource == "web_token"
 }
 
+// DownloadConfig controls the download pipeline: codec choice, retries, the
+// process-wide pools, output paths and post-processing.
 type DownloadConfig struct {
 	QualityPriority            []string `yaml:"quality_priority" json:"quality_priority"`
 	CodecAlternative           bool     `yaml:"codec_alternative" json:"codec_alternative"`
@@ -196,6 +205,7 @@ type DownloadConfig struct {
 	ForceOverwrite          bool     `yaml:"force_overwrite" json:"force_overwrite"`
 }
 
+// MemoryModeLow and MemoryModeHigh are the download.memory_mode values.
 const (
 	MemoryModeLow  = "low"
 	MemoryModeHigh = "high"
@@ -211,6 +221,7 @@ const (
 	maxProgressEventIntervalMSLimit = 10000
 )
 
+// ToolsConfig locates external executables.
 type ToolsConfig struct {
 	FFmpeg string `yaml:"ffmpeg" json:"ffmpeg"`
 }
@@ -226,6 +237,9 @@ type SimulateConfig struct {
 	MaxSpeedKBps int  `yaml:"max_speed_kbps" json:"max_speed_kbps"`
 }
 
+// Default returns the built-in configuration that a key missing from
+// config.yaml falls back to. Every value equals the one configs/config.example.yaml
+// sets, except AlbumPathFormat and ArtistPathFormat (TestDefaultMatchesExample).
 func Default() Config {
 	return Config{
 		Server:   ServerConfig{Listen: "127.0.0.1:18080"},
@@ -239,14 +253,15 @@ func Default() Config {
 			Address: "127.0.0.1:8080", Insecure: true, TimeoutSeconds: 30, LoginTimeoutSeconds: 120,
 		},
 		Catalog: CatalogConfig{
-			DefaultStorefront: "us", Language: "en-US",
+			DefaultStorefront: "cn", Language: "zh-Hans_CN",
 			MaxParallelRequests: 16, RequestsPerSecond: 10, RequestBurst: 16,
-			DeveloperTokenTTLHours: 1, TokenCacheTTLHours: 12, AlbumTrackURLMode: "song", SignedModeHLSSource: "wrapper",
+			DeveloperTokenTTLHours: 1, AllowedOrigins: []string{}, TokenCacheTTLHours: 12,
+			AlbumTrackURLMode: "song", SignedModeHLSSource: "wrapper",
 			MotionArtworkEnabled: true,
 		},
 		Download: DownloadConfig{
-			QualityPriority: []string{"alac", "aac"}, CodecAlternative: true, MemoryMode: MemoryModeLow,
-			MaxRunningJobs: 2, MaxParallelDownloads: 16, MaxParallelDecrypts: 32, MaxParallelWrapperRequests: 24, MaxAttempts: 4,
+			QualityPriority: []string{"alac"}, CodecAlternative: true, MemoryMode: MemoryModeLow,
+			MaxRunningJobs: 3, MaxParallelDownloads: 16, MaxParallelDecrypts: 32, MaxParallelWrapperRequests: 24, MaxAttempts: 3,
 			ProgressEventIntervalMS: 500,
 			DownloadsDir:            "data/downloads",
 			SongPathFormat:          "songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",
@@ -261,13 +276,14 @@ func Default() Config {
 			PlaylistPathFormat: "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}",
 			StationPathFormat:  "stations/{StationName}/{SongNumber:02d}. {SongName}",
 			TempDir:            "data/tmp", CoverSize: "5000x5000", CoverFormat: "jpg",
-			EmbedCover: true, EmbedLyrics: true, LyricsFormat: "lrc", LyricsType: "lyrics", LyricsExtras: []string{},
+			EmbedCover: true, SaveAlbumCover: true, SaveArtistCover: true, SavePlaylistCover: true,
+			EmbedLyrics: true, LyricsFormat: "lrc", LyricsType: "lyrics", LyricsExtras: []string{},
 			ALACMaxSampleRate: 192000, ALACMaxBitDepth: 24, CheckIntegrity: true,
 		},
 		Tools:    ToolsConfig{FFmpeg: "ffmpeg"},
 		Simulate: SimulateConfig{Enabled: false, MinSpeedKBps: 512, MaxSpeedKBps: 4096},
 		// Off by default: this is the one feature that creates download jobs
-		// nobody asked for, so an install that upgrades into it must opt in.
+		// nobody asked for, so an install must opt in.
 		LibrarySync: LibrarySyncConfig{Enabled: false, IntervalMinutes: 15},
 	}
 }

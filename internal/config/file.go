@@ -1,16 +1,11 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,133 +16,25 @@ const configExampleFileName = "config.example.yaml"
 // Detailed field documentation remains in config.example.yaml because YAML
 // marshaling does not preserve comments.
 const managedFileHeader = `# Managed by the amdl backend: PUT /api/v1/config rewrites this file and
-# does not preserve comments. Runtime-mutable fields take effect immediately;
-# startup-bound fields are read only when the process starts. Complete field
-# documentation lives in config.example.yaml.
+# does not preserve comments. Hand edits to runtime-mutable fields apply on
+# SIGHUP, POST /api/v1/config/reload or the next PUT; startup-bound fields are
+# read only when the process starts. Complete field documentation lives in
+# config.example.yaml.
 `
 
-// legacyRuntimeBackupSuffix names the consumed runtime.yaml left behind when
-// upgrading a deployment from the former split-file format.
-const legacyRuntimeBackupSuffix = ".pre-merge.bak"
-
-// BootstrapResult reports whether startup created config.yaml or merged a
-// legacy runtime.yaml into it.
-type BootstrapResult struct {
-	CreatedConfig     bool
-	MergedRuntime     bool
-	RuntimeBackupPath string
-}
-
-// decodeLegacyRuntimeFile overlays the runtime-only file used by the former
-// two-file format. It exists solely for the one-time upgrade into config.yaml.
-func decodeLegacyRuntimeFile(cfg *Config, path string) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if err := checkLegacyRuntimeKeys(raw, path); err != nil {
-		return err
-	}
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(cfg); err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("%s: %w", path, err)
-	}
-	return nil
-}
-
-func checkLegacyRuntimeKeys(raw []byte, path string) error {
-	var doc map[string]any
-	if err := yaml.Unmarshal(raw, &doc); err != nil {
-		return fmt.Errorf("%s: %w", path, err)
-	}
-	sections := map[string]bool{}
-	for key := range knownKeys() {
-		section, _, _ := strings.Cut(key, ".")
-		sections[section] = true
-	}
-	known := knownKeys()
-	for _, section := range slices.Sorted(maps.Keys(doc)) {
-		if !sections[section] {
-			return fmt.Errorf("%s: unknown configuration section %q", path, section)
-		}
-		leaves, ok := doc[section].(map[string]any)
-		if !ok {
-			continue
-		}
-		for _, leaf := range slices.Sorted(maps.Keys(leaves)) {
-			key := section + "." + leaf
-			if !known[key] {
-				return fmt.Errorf("%s: unknown configuration key %q", path, key)
-			}
-			if !isRuntimeKey(key) {
-				return fmt.Errorf("%s: %s is startup-bound and cannot appear in the legacy runtime config", path, key)
-			}
-		}
-	}
-	return nil
-}
-
-// EnsureFile makes sure config.yaml exists and folds a legacy runtime.yaml
-// into it exactly once. Values are read without AMDL_* overlays so environment
-// settings are never baked into a file merely by starting the process.
-//
-// The legacy file is renamed only after the merged config has been written
-// atomically. If the process stops between those operations, retrying the same
-// merge is harmless because the legacy runtime values are identical.
-func EnsureFile(configPath, legacyRuntimePath string) (BootstrapResult, error) {
-	var result BootstrapResult
+// EnsureFile creates configPath from config.example.yaml in the same
+// directory when it does not exist yet, and reports whether it did. The
+// example is copied verbatim (comments included) after it passes Load without
+// AMDL_* overlays, so environment settings are never baked into the file.
+func EnsureFile(configPath string) (created bool, err error) {
 	exists, err := fileExists(configPath)
-	if err != nil {
-		return result, err
+	if err != nil || exists {
+		return false, err
 	}
-	if !exists {
-		if err := bootstrapConfig(configPath); err != nil {
-			return result, err
-		}
-		result.CreatedConfig = true
+	if err := bootstrapConfig(configPath); err != nil {
+		return false, err
 	}
-
-	if legacyRuntimePath == "" || filepath.Clean(legacyRuntimePath) == filepath.Clean(configPath) {
-		return result, nil
-	}
-	runtimeExists, err := fileExists(legacyRuntimePath)
-	if err != nil {
-		return result, err
-	}
-	if !runtimeExists {
-		return result, nil
-	}
-
-	cfg, err := load(configPath, nil)
-	if err != nil {
-		return result, fmt.Errorf("load config before merging legacy runtime file: %w", err)
-	}
-	if err := decodeLegacyRuntimeFile(&cfg, legacyRuntimePath); err != nil {
-		return result, fmt.Errorf("merge legacy runtime config %s: %w", legacyRuntimePath, err)
-	}
-	if err := cfg.NormalizeDeprecated(); err != nil {
-		return result, err
-	}
-	clampCatalogLimits(&cfg.Catalog)
-	clampDownloadLimits(&cfg.Download)
-	if err := cfg.Validate(); err != nil {
-		return result, err
-	}
-	if err := saveConfig(configPath, cfg); err != nil {
-		return result, err
-	}
-
-	backupPath, err := availableBackupPath(legacyRuntimePath + legacyRuntimeBackupSuffix)
-	if err != nil {
-		return result, err
-	}
-	if err := os.Rename(legacyRuntimePath, backupPath); err != nil {
-		return result, fmt.Errorf("archive merged legacy runtime config: %w", err)
-	}
-	result.MergedRuntime = true
-	result.RuntimeBackupPath = backupPath
-	return result, nil
+	return true, nil
 }
 
 func bootstrapConfig(configPath string) error {
@@ -165,8 +52,9 @@ func bootstrapConfig(configPath string) error {
 	return writeFileAtomic(configPath, raw, 0o600)
 }
 
-// Save writes the complete configuration to path. The live file may contain a
-// media-user-token, so every generated replacement is owner-only.
+// Save writes the complete configuration to path, owner-only because the file
+// may hold a media-user-token. The running service persists through
+// Store.UpdateAndSave instead.
 func Save(path string, cfg Config) error {
 	return saveConfig(path, cfg)
 }
@@ -198,22 +86,6 @@ func saveRuntimeFields(path string, cfg Config) error {
 		copyRuntimeFields(&disk, cfg)
 	}
 	return saveConfig(path, disk)
-}
-
-func availableBackupPath(base string) (string, error) {
-	for i := 0; ; i++ {
-		candidate := base
-		if i > 0 {
-			candidate = fmt.Sprintf("%s.%d", base, i)
-		}
-		exists, err := fileExists(candidate)
-		if err != nil {
-			return "", err
-		}
-		if !exists {
-			return candidate, nil
-		}
-	}
 }
 
 // writeFileAtomic writes data via a random temporary file and rename, so a

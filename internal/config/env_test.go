@@ -25,7 +25,6 @@ func TestEnvOverrides(t *testing.T) {
 		"AMDL_CATALOG_REQUESTS_PER_SECOND=9",
 		"AMDL_CATALOG_REQUEST_BURST=14",
 		"AMDL_CATALOG_ALLOWED_ORIGINS=",
-		"AMDL_CATALOG_MEDIA_USER_TOKEN_PRIORITY=request",
 		"UNRELATED=1",
 	})
 	if err != nil {
@@ -66,9 +65,6 @@ func TestEnvOverrides(t *testing.T) {
 	if !reflect.DeepEqual(cfg.Catalog.AllowedOrigins, []string{}) {
 		t.Fatalf("allowed origins = %#v, want empty list", cfg.Catalog.AllowedOrigins)
 	}
-	if cfg.Catalog.LegacyMediaUserTokenPriority != "" {
-		t.Fatalf("legacy media-user-token priority was not normalized: %q", cfg.Catalog.LegacyMediaUserTokenPriority)
-	}
 }
 
 func TestEnvOverridesIgnoreNonConfigVariables(t *testing.T) {
@@ -87,8 +83,10 @@ func TestEnvOverridesRejectUnknownVariables(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unknown configuration environment variable") {
 		t.Fatalf("load error = %v, want unknown variable error", err)
 	}
-	if !strings.Contains(err.Error(), "AMDL_DOWNLOADS_DIR") || !strings.Contains(err.Error(), "AMDL_TYPO") {
-		t.Fatalf("error %v must name every unknown variable", err)
+	for _, want := range []string{"AMDL_DOWNLOADS_DIR", "AMDL_TYPO", "docs/upgrading-to-2.0.md"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %v must name every unknown variable and the upgrade guide; missing %q", err, want)
+		}
 	}
 	// The pre-override container variables are gone, not silently ignored:
 	// a deployment still setting them must fail loudly and switch to
@@ -100,6 +98,8 @@ func TestEnvOverridesRejectUnknownVariables(t *testing.T) {
 		}
 	}
 	for _, name := range []string{
+		"AMDL_RUNTIME_CONFIG",
+		"AMDL_CATALOG_MEDIA_USER_TOKEN_PRIORITY",
 		"AMDL_DOWNLOAD_MAX_PARALLEL_TRACKS",
 		"AMDL_DOWNLOAD_MAX_PARALLEL_METADATA_REQUESTS",
 		"AMDL_DOWNLOAD_MAX_PARALLEL_MEDIA_DOWNLOADS",
@@ -210,32 +210,21 @@ func TestBootstrapDoesNotBakeEnvOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(dir, "config.yaml")
-	runtime := filepath.Join(dir, "runtime.yaml")
-	if err := os.WriteFile(runtime, []byte("download:\n  embed_cover: false\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if result, err := EnsureFile(configPath, runtime); err != nil || !result.CreatedConfig || !result.MergedRuntime {
-		t.Fatalf("bootstrap = (%+v, %v), want config created and legacy runtime merged", result, err)
+	if created, err := EnsureFile(configPath); err != nil || !created {
+		t.Fatalf("bootstrap = (%v, %v), want config created", created, err)
 	}
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "wrapper-manager:8080") || strings.Contains(string(raw), "cover_format: png") {
+	if string(raw) != example {
 		t.Fatalf("env override leaked into bootstrapped config:\n%s", raw)
-	}
-	disk, err := load(configPath, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if disk.Wrapper.Address != "127.0.0.1:8080" || disk.Download.CoverFormat != "jpg" || disk.Download.EmbedCover {
-		t.Fatalf("disk config = wrapper %q cover %q embed_cover %v", disk.Wrapper.Address, disk.Download.CoverFormat, disk.Download.EmbedCover)
 	}
 	cfg, err := Load(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Wrapper.Address != "wrapper-manager:8080" || cfg.Download.CoverFormat != "png" {
-		t.Fatalf("loaded config = wrapper %q cover %q, want env overlay on top of the files", cfg.Wrapper.Address, cfg.Download.CoverFormat)
+		t.Fatalf("loaded config = wrapper %q cover %q, want env overlay on top of the file", cfg.Wrapper.Address, cfg.Download.CoverFormat)
 	}
 }

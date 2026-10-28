@@ -17,6 +17,9 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+// System is the process logger: an slog.Logger writing to the configured
+// console and file outputs, with every record also captured into Store for
+// the log API. Sensitive attribute keys and groups are redacted on all paths.
 type System struct {
 	Logger *slog.Logger
 	Store  *Store
@@ -24,6 +27,8 @@ type System struct {
 	level  slog.LevelVar
 }
 
+// New builds the logging system from cfg. It fails if the log file cannot be
+// opened, so a misconfigured path stops startup instead of losing logs.
 func New(cfg config.LoggingConfig) (*System, error) {
 	level, err := parseLevel(cfg.Level)
 	if err != nil {
@@ -79,6 +84,7 @@ func New(cfg config.LoggingConfig) (*System, error) {
 	return system, nil
 }
 
+// SetLevel changes the minimum level of every output at runtime.
 func (s *System) SetLevel(value string) error {
 	level, err := parseLevel(value)
 	if err != nil {
@@ -88,6 +94,7 @@ func (s *System) SetLevel(value string) error {
 	return nil
 }
 
+// Close closes the rotating log file, if any. It is nil-safe.
 func (s *System) Close() error {
 	if s == nil || s.closer == nil {
 		return nil
@@ -327,10 +334,13 @@ func valueAny(value slog.Value) any {
 
 type contextKey struct{}
 
+// NewContext returns ctx carrying logger for FromContext.
 func NewContext(ctx context.Context, logger *slog.Logger) context.Context {
 	return context.WithValue(ctx, contextKey{}, logger)
 }
 
+// FromContext returns the logger stored by NewContext, else fallback, else
+// slog.Default().
 func FromContext(ctx context.Context, fallback *slog.Logger) *slog.Logger {
 	if logger, ok := ctx.Value(contextKey{}).(*slog.Logger); ok && logger != nil {
 		return logger

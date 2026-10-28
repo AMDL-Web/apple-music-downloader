@@ -14,18 +14,38 @@ same directory. **The example file is the documentation** — allowed enum value
 defaults and template variables are written into its comments, key by key. `config.yaml`
 itself is managed by the backend and its comments do not survive a write.
 
+## Defaults
+
+A key missing from `config.yaml` takes the value `configs/config.example.yaml` sets, so a
+sparse file behaves the way the example documents. The one exception is
+`download.album_path_format` and `download.artist_path_format`: a config without them
+predates `{SongNumber}` paths and keeps the older `{TrackNumber}` layout, so files already
+downloaded are still found. Tests in `internal/config` hold `Default()` equal to the
+example and every `Default:` note in its comments equal to `Default()`.
+
+Unknown keys fail startup with an error naming each one; keys removed in 2.0 are listed in
+[Upgrading to 2.0](upgrading-to-2.0.md#config-and-environment). That includes the old
+per-job concurrency keys such as `download.max_parallel_tracks`, replaced by the
+process-wide pools in [download-pipeline.md](download-pipeline.md#concurrency).
+
 ## Runtime vs startup keys
 
 `PUT /api/v1/config` may only change runtime-mutable keys, but it rewrites the whole file
 including startup keys, dropping all comments in the process.
 
-Edit runtime keys by hand and the next `GET /api/v1/config` re-reads and applies them
-immediately. Startup keys still need a restart.
-
 | | |
 | --- | --- |
 | **Startup** | `server.listen`, `database.path`, `wrapper.*`, `tools.ffmpeg`, most of `logging.*`, the developer-token signing keys, and every pool size (`download.max_running_jobs`, `max_parallel_downloads`, `max_parallel_decrypts`, `max_parallel_wrapper_requests`, `catalog.max_parallel_requests`, `catalog.requests_per_second`, `catalog.request_burst`) |
 | **Runtime** | `logging.level`, `logging.access_log`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.signed_mode_hls_source`, `catalog.motion_artwork_enabled`, all remaining `download.*` keys, the whole `simulate` section and the whole `library_sync` section |
+
+Hand edits reach the running service like this:
+
+| Trigger | Effect |
+| --- | --- |
+| `GET /api/v1/config` | Returns the in-memory snapshot; never reads the file. |
+| `POST /api/v1/config/reload` or `SIGHUP` | Re-reads the file and applies its runtime keys. If the file is unreadable or invalid, the previous snapshot stays live; the endpoint reports the error as `reload_error`, and `SIGHUP` logs it. |
+| `PUT /api/v1/config` | Re-reads the file under the same lock first, then applies the patch, so a hand edit made since the last reload is kept rather than overwritten. An invalid file fails the `PUT` and changes nothing. |
+| Restart | Applies startup keys. A reload or `PUT` never makes a startup-key edit live, and a `PUT` keeps the edited value on disk for the next start. |
 
 Set these before first real use:
 
@@ -42,12 +62,15 @@ Any key can be overridden with `AMDL_<SECTION>_<KEY>` — the YAML path uppercas
 as the separator: `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_DATABASE_PATH`,
 `AMDL_LOGGING_LEVEL`, `AMDL_DOWNLOAD_QUALITY_PRIORITY`.
 
-- Overrides sit on top of the file on every start and every config reload. Loading alone
-  never writes them back.
+- Overrides sit on top of the file on every start, reload and `PUT`. Loading alone never
+  writes them back.
 - Value syntax: strings verbatim; booleans `true`/`false`; integers as digits; string
   lists comma-separated (`alac,aac`), with an empty value meaning an empty list.
 - Unrecognised `AMDL_*` variables **fail startup**, so a typo can never be silently
-  ignored. `AMDL_CONFIG` and `AMDL_HOOKS_CONFIG` are exempt.
+  ignored. Only `AMDL_CONFIG` (path of `config.yaml`) and `AMDL_HOOKS_CONFIG` (path of
+  `hooks.yaml`) are exempt; they are file locations, not keys. Variables that no longer
+  exist fail the same way, for example `AMDL_RUNTIME_CONFIG`, `AMDL_LISTEN` (use
+  `AMDL_SERVER_LISTEN`) and `AMDL_WRAPPER_ADDR` (use `AMDL_WRAPPER_ADDRESS`).
 - A field pinned by an environment variable cannot be changed through
   `PUT /api/v1/config` — it returns `422`. Change the variable and restart.
 - A `PUT` persists the effective runtime snapshot, so an unchanged runtime field pinned by
@@ -87,18 +110,3 @@ job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`.
 
 Note that with developer-token signing enabled, manifests normally come from the wrapper —
 without one, selection falls back to a faked AAC-LC.
-
-## Upgrade notes
-
-**From the two-file layout.** On first start the backend merges a legacy `runtime.yaml`
-into `config.yaml` and renames the old file to `runtime.yaml.pre-merge.bak` (a numeric
-suffix is appended if that name is taken). Delete the backup once you are satisfied.
-
-**Removed keys fail startup.** Old per-job concurrency keys such as
-`download.max_parallel_tracks` are rejected as unknown fields — remove them by hand before
-starting. They were replaced by the process-wide pools described in
-[download-pipeline.md](download-pipeline.md#concurrency).
-
-**Removed environment variables.** `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR` no longer exist;
-leaving them set fails startup with an unknown-variable error. Use `AMDL_SERVER_LISTEN`
-and `AMDL_WRAPPER_ADDRESS`.

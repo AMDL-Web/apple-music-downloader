@@ -180,7 +180,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
   `AMDL_DOWNLOAD_QUALITY_PRIORITY=alac,aac`。无法识别的 `AMDL_*` 变量会让启动失败，而不是被
   静默忽略；被环境变量固定的字段在 `PUT` 时返回 422。
 
-细节、升级注意事项与 Docker 部分见 [docs/configuration.md](docs/configuration.md) 和
+默认值、手工编辑与重新加载、Docker 部分见 [docs/configuration.md](docs/configuration.md) 和
 [docs/deployment.md](docs/deployment.md)。
 
 ## 自动化
@@ -210,7 +210,7 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 | | |
 | --- | --- |
 | [docs/api.md](docs/api.md) | 全部端点、curl 示例、任务 overrides、SSE/WS 语义 |
-| [docs/configuration.md](docs/configuration.md) | 配置文件、环境变量覆盖、运行期与启动期字段、升级说明 |
+| [docs/configuration.md](docs/configuration.md) | 配置文件、默认值、环境变量覆盖、运行期与启动期字段、重新加载 |
 | [docs/deployment.md](docs/deployment.md) | Docker、挂载、`PUID`/`PGID`、配置播种、发版与镜像 tag |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | 重试、编码回退、并发池、内存模式、歌词 |
 | [docs/automation.md](docs/automation.md) | 任务 hooks 与资料库同步 |
