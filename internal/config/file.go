@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -68,8 +70,12 @@ func saveConfig(path string, cfg Config) error {
 // saveRuntimeFields rewrites the combined file with cfg's runtime values while
 // retaining startup-bound values currently on disk. This prevents an API PUT
 // from undoing a valid config.yaml edit that is waiting for the next restart.
-func saveRuntimeFields(path string, cfg Config) error {
+// Every key an AMDL_* variable in environ pins keeps the file's own value
+// instead of cfg's effective one: the overlay is re-applied on every load, so
+// writing it would pin the environment value even after the variable is unset.
+func saveRuntimeFields(path string, cfg Config, environ []string) error {
 	disk := cfg
+	fileValues := Default()
 	if exists, err := fileExists(path); err != nil {
 		return err
 	} else if exists {
@@ -77,10 +83,31 @@ func saveRuntimeFields(path string, cfg Config) error {
 		if err != nil {
 			return fmt.Errorf("reload startup-bound config fields before save: %w", err)
 		}
+		fileValues = loaded
 		disk = loaded
 		copyRuntimeFields(&disk, cfg)
 	}
+	restorePinnedFields(&disk, fileValues, environ)
 	return saveConfig(path, disk)
+}
+
+// restorePinnedFields puts fileValues back into every field of disk whose
+// AMDL_* variable is set in environ. fileValues is the file's content (or the
+// defaults a missing file falls back to) with no environment overlay applied,
+// so an env-pinned key is saved as what the file itself says.
+func restorePinnedFields(disk *Config, fileValues Config, environ []string) {
+	set := make(map[string]bool, len(environ))
+	for _, kv := range environ {
+		name, _, _ := strings.Cut(kv, "=")
+		set[name] = true
+	}
+	diskValue := reflect.ValueOf(disk).Elem()
+	fileValue := reflect.ValueOf(fileValues)
+	for _, field := range envFields() {
+		if set[field.name] {
+			diskValue.FieldByIndex(field.index).Set(fileValue.FieldByIndex(field.index))
+		}
+	}
 }
 
 // writeFileAtomic writes data via a random temporary file and rename, so a

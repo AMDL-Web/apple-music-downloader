@@ -14,10 +14,12 @@ import (
 // for example AMDL_SERVER_LISTEN, AMDL_WRAPPER_ADDRESS, or
 // AMDL_DOWNLOAD_QUALITY_PRIORITY. Overrides sit on top of the config file:
 // they are applied on every Load (startup and Store.Reload alike) and never
-// written back by the loader. A PUT /api/v1/config rewrite persists effective
-// runtime values but retains startup values from disk. Value syntax: strings
-// verbatim, booleans per strconv.ParseBool, integers as digits, string lists
-// as comma-separated items (an empty value is an empty list).
+// written back. A PUT /api/v1/config rewrite persists the runtime values but
+// retains startup values from disk, and an env-pinned key keeps the file's own
+// value so unsetting the variable hands control back to the file. Value
+// syntax: strings verbatim, booleans per strconv.ParseBool, integers as
+// digits, string lists as comma-separated items (an empty value is an empty
+// list).
 
 // envPrefix is the shared prefix of every backend environment variable.
 const envPrefix = "AMDL_"

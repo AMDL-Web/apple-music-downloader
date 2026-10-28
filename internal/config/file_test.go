@@ -375,9 +375,11 @@ func TestStoreSaveDoesNotPersistStartupEnvironmentOverride(t *testing.T) {
 	}
 }
 
-func TestStoreSaveMayPersistEffectiveRuntimeEnvironmentValue(t *testing.T) {
-	// This preserves the existing contract: an unrelated PUT writes the
-	// effective runtime snapshot, including unchanged runtime env overrides.
+// An env-pinned key keeps the file's own value on save: writing the effective
+// (overridden) value would bake the environment into config.yaml, so unsetting
+// the variable later would not hand control back to the file. The in-memory
+// snapshot keeps the environment value either way.
+func TestStoreSaveKeepsFileValueForPinnedRuntimeKey(t *testing.T) {
 	t.Setenv("AMDL_DOWNLOAD_COVER_FORMAT", "png")
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	writeFullConfig(t, path, Default())
@@ -385,6 +387,87 @@ func TestStoreSaveMayPersistEffectiveRuntimeEnvironmentValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	store := NewFileStore(effective, path)
+	updated, err := store.UpdateAndSave(func(current Config) (Config, error) {
+		if current.Download.CoverFormat != "png" {
+			t.Fatalf("mutate saw cover_format %q, want the env override png", current.Download.CoverFormat)
+		}
+		current.Download.EmbedCover = false
+		return current, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Download.CoverFormat != Default().Download.CoverFormat {
+		t.Fatalf("pinned cover_format persisted as %q, want the file's own %q",
+			persisted.Download.CoverFormat, Default().Download.CoverFormat)
+	}
+	if persisted.Download.EmbedCover {
+		t.Fatal("requested runtime change was not persisted")
+	}
+	if updated.Download.CoverFormat != "png" || store.Get().Download.CoverFormat != "png" {
+		t.Fatalf("in-memory cover_format = %q, want the env override still applied", store.Get().Download.CoverFormat)
+	}
+}
+
+// The reported defect: with runtime and startup keys pinned by AMDL_*
+// variables, a PUT that only changed an unpinned key rewrote config.yaml with
+// every env value. The file must keep its own values so unsetting the
+// variables restores file control.
+func TestStoreSaveDoesNotBakeEnvOverrides(t *testing.T) {
+	t.Setenv("AMDL_DOWNLOAD_MAX_ATTEMPTS", "5")
+	t.Setenv("AMDL_DOWNLOAD_DOWNLOADS_DIR", "/env/downloads")
+	t.Setenv("AMDL_SIMULATE_ENABLED", "true")
+	t.Setenv("AMDL_SERVER_LISTEN", "127.0.0.1:19090")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	disk := Default()
+	disk.Download.MaxAttempts = 3
+	disk.Download.DownloadsDir = "data/downloads"
+	disk.Simulate.Enabled = false
+	disk.Server.Listen = "127.0.0.1:18080"
+	writeFullConfig(t, path, disk)
+
+	effective, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewFileStore(effective, path)
+	if _, err := store.UpdateAndSave(func(current Config) (Config, error) {
+		current.Download.ProgressEventIntervalMS = 250
+		return current, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Download.MaxAttempts != 3 || persisted.Download.DownloadsDir != "data/downloads" || persisted.Simulate.Enabled {
+		t.Fatalf("env-pinned values leaked into the file: %+v / %+v / %+v",
+			persisted.Download.MaxAttempts, persisted.Download.DownloadsDir, persisted.Simulate)
+	}
+	if persisted.Server.Listen != "127.0.0.1:18080" {
+		t.Fatalf("env-pinned startup key leaked into the file: %q", persisted.Server.Listen)
+	}
+	if persisted.Download.ProgressEventIntervalMS != 250 {
+		t.Fatalf("requested change not persisted: %d", persisted.Download.ProgressEventIntervalMS)
+	}
+	if got := store.Get(); got.Download.MaxAttempts != 5 || !got.Simulate.Enabled {
+		t.Fatalf("env overrides dropped from the live snapshot: %+v", got.Download)
+	}
+}
+
+// A missing file recreated by a save holds the defaults for env-pinned keys,
+// never the environment values.
+func TestStoreSaveToMissingFileDoesNotBakeEnvOverrides(t *testing.T) {
+	t.Setenv("AMDL_DOWNLOAD_COVER_FORMAT", "png")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	effective := Default()
+	effective.Download.CoverFormat = "png" // what Load yields with the variable set
 	store := NewFileStore(effective, path)
 	if _, err := store.UpdateAndSave(func(current Config) (Config, error) {
 		current.Download.EmbedCover = false
@@ -396,8 +479,11 @@ func TestStoreSaveMayPersistEffectiveRuntimeEnvironmentValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Download.CoverFormat != "png" || persisted.Download.EmbedCover {
-		t.Fatalf("persisted runtime snapshot = %+v", persisted.Download)
+	if persisted.Download.CoverFormat != Default().Download.CoverFormat {
+		t.Fatalf("recreated file baked the env override: %q", persisted.Download.CoverFormat)
+	}
+	if persisted.Download.EmbedCover {
+		t.Fatal("requested change not persisted")
 	}
 }
 
