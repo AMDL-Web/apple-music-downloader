@@ -225,7 +225,7 @@ kbd {
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--s-2);
+  gap: var(--s-1);
   height: var(--topbar-h);
   padding: 0 var(--s-2);
 }
@@ -262,7 +262,7 @@ kbd {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--s-1_5);
+  gap: var(--s-2);
   height: var(--control-h);
   padding: 0 var(--s-2);
   border-radius: var(--r-md);
@@ -292,14 +292,12 @@ kbd {
   min-width: 0;
 }
 
+/* A plain count, not a pill; the icon rail below keeps a chip so it reads over the icon. */
 .nav-badge {
   font-size: var(--fs-12);
   line-height: var(--lh-12);
   font-variant-numeric: tabular-nums;
-  padding: 0 var(--s-1_5);
-  border-radius: var(--r-sm);
-  background: var(--info-tint);
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 .sidebar-foot {
@@ -918,6 +916,7 @@ kbd {
   min-width: 0;
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
 }
 
 .kv-mono {
@@ -957,11 +956,9 @@ kbd {
 
 .table thead th {
   color: var(--text-secondary);
-  font-size: var(--fs-11);
-  line-height: var(--lh-11);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
   font-weight: var(--w-medium);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .table .num {
@@ -986,7 +983,7 @@ kbd {
   align-items: center;
   gap: var(--s-3);
   min-height: 56px;
-  padding: var(--s-2) var(--s-4);
+  padding: var(--s-2) var(--s-5);
   color: inherit;
   text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out);
@@ -1169,6 +1166,7 @@ kbd {
   line-height: var(--lh-32);
   font-weight: var(--w-semibold);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
 }
 
 .health-list {
@@ -1299,12 +1297,23 @@ kbd {
 }
 
 .chart-bars {
+  position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(var(--n), minmax(0, 1fr));
   gap: var(--s-0_5);
   height: 100%;
   border-top: 1px solid var(--chart-grid);
   border-bottom: 1px solid var(--chart-grid);
+}
+
+/* Gridline at max/2, matching the middle y-axis label; behind the bars. */
+.chart-bars.has-mid::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1px solid var(--chart-grid);
+  z-index: -1;
 }
 
 .chart-col {
@@ -1443,8 +1452,14 @@ kbd {
   box-shadow: inset 0 0 0 1px var(--role);
 }
 
+/* Toolbar controls are 28 px, as the level chips and buttons beside them (DESIGN.md). */
 .toolbar-logs .search {
   flex: 1 1 200px;
+  height: var(--control-h-sm);
+}
+
+.toolbar-logs .select {
+  height: var(--control-h-sm);
 }
 
 .log-filters {
@@ -1762,7 +1777,7 @@ kbd {
 
 .drawer-times {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-3);
   padding: var(--s-3) 0;
   border-top: 1px solid var(--border-subtle);
@@ -2055,23 +2070,27 @@ kbd {
 }
 
 .hero-title {
-  max-width: 100%;
+  max-width: min(100%, 680px);
   font-size: var(--fs-24);
   line-height: var(--lh-24);
   font-weight: var(--w-semibold);
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .hero-artist {
+  max-width: min(100%, 680px);
   color: var(--art-text2, var(--text-secondary));
   font-size: var(--fs-16);
   line-height: var(--lh-16);
+  text-wrap: pretty;
 }
 
 .hero-meta {
   color: var(--art-text2, var(--text-secondary));
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+  text-wrap: pretty;
 }
 
 .hero-skel {
@@ -2113,7 +2132,13 @@ kbd {
 }
 
 .gallery > li.is-new {
-  animation: fade-in var(--dur-base) var(--ease-out);
+  animation: rise var(--dur-base) var(--ease-out);
+}
+
+.tile-skel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1_5);
 }
 
 .tile {
@@ -2134,6 +2159,7 @@ kbd {
 .tile-art {
   position: relative;
   width: 100%;
+  transition: transform var(--dur-base) var(--ease-out);
 }
 
 .tile-motion {
@@ -2159,6 +2185,25 @@ kbd {
   border-radius: var(--r-md);
   background: var(--art-bg, var(--bg-hover));
   animation: fade-in var(--dur-base) var(--ease-out);
+}
+
+/* Hover underlines the title in every mode. Movement is added only where
+   motion is allowed, so reduced motion keeps the feedback as a plain change. */
+.tile:hover .tile-title,
+.hero:hover .hero-title {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tile:hover .tile-art,
+  .tile:focus-visible .tile-art {
+    transform: translateY(-2px);
+  }
+
+  .tile:active .tile-art {
+    transform: scale(0.98);
+  }
 }
 
 /* ---- System -------------------------------------------------------- */
@@ -2296,11 +2341,9 @@ kbd {
 .palette-group {
   padding: var(--s-2) var(--s-3) var(--s-1);
   color: var(--text-secondary);
-  font-size: var(--fs-11);
-  line-height: var(--lh-11);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
   font-weight: var(--w-medium);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .palette-item {
@@ -2401,7 +2444,7 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  padding: var(--s-2) var(--s-4);
+  padding: var(--s-2) var(--s-5);
 }
 
 .skel-text {
@@ -2631,6 +2674,9 @@ kbd {
     top: 0;
     right: 0;
     padding: 0 var(--s-1);
+    border-radius: var(--r-sm);
+    background: var(--info-tint);
+    color: var(--text-primary);
     font-size: var(--fs-11);
     line-height: var(--lh-11);
   }
@@ -2738,6 +2784,10 @@ kbd {
 
   .card-flush > .card-head {
     padding: var(--s-3) var(--s-4);
+  }
+
+  .skel-list {
+    padding: var(--s-2) var(--s-4);
   }
 
   .tabbar {
@@ -2949,10 +2999,6 @@ kbd {
 
   .drawer-body {
     padding: var(--s-4);
-  }
-
-  .drawer-times {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .track {

@@ -103,11 +103,11 @@ export function ShowcasePage({ route }) {
     </div>
     ${state.loading
       ? html`<div class="hero hero-skel" aria-hidden="true"><${Skeleton} kind="hero" /></div>
-          <ul class="gallery" aria-busy="true">${Array.from({ length: 8 }, (_, i) => html`<li key=${i}><${Skeleton} kind="tile" /></li>`)}</ul>`
+          <ul class="gallery" aria-busy="true">${Array.from({ length: 8 }, (_, i) => html`<li key=${i} class="tile-skel"><${Skeleton} kind="tile" /><${Skeleton} kind="line" /><${Skeleton} kind="text" /></li>`)}</ul>`
       : state.error
         ? html`<div class="card"><${ErrorNote} title="Couldn't load completed downloads" error=${state.error} onRetry=${() => load(0)} /></div>`
         : !hero
-          ? html`<div class="card"><${Empty} icon="disc" title=${`Completed ${TYPE_LABELS[type].toLowerCase()} will appear here.`} /></div>`
+          ? html`<div class="card"><${Empty} icon="disc" title=${`Completed ${TYPE_LABELS[type].toLowerCase()} will appear here.`}>Jobs still in progress are listed in <a class="link" href=${buildHash('queue')}>the Queue</a>.</${Empty}></div>`
           : [
               html`<${Hero} key="hero" job=${hero} href=${href(hero)} playing=${playing === hero.id} hover=${hover} />`,
               rest.length

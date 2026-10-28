@@ -35,8 +35,10 @@ export function SystemPage() {
       <${HealthCard} backend=${h} wrapper=${w} sync=${ls} hooks=${hk} loading=${!health.data} />
       <${StorageCard} sys=${sys} />
     </div>
-    <${WrapperCard} res=${w} loading=${!health.data} />
-    <${LibrarySyncCard} res=${ls} loading=${!health.data} />
+    <div class="grid-2">
+      <${WrapperCard} res=${w} loading=${!health.data} />
+      <${LibrarySyncCard} res=${ls} loading=${!health.data} />
+    </div>
     <${HooksCard} res=${hk} stats=${stats} loading=${!health.data} />
     <${ConfigCard} />
     <${LinksCard} />
@@ -202,7 +204,7 @@ function WrapperCard({ res, loading }) {
         : null}
       <p class="muted small">Log in and out of accounts from amdl-web or the iOS app.</p>`;
   }
-  return html`<${Card} title="Wrapper" labelId="wrapper-title">${body}</${Card}>`;
+  return html`<${Card} className="span-6" title="Wrapper" labelId="wrapper-title">${body}</${Card}>`;
 }
 
 function LibrarySyncCard({ res, loading }) {
@@ -222,7 +224,7 @@ function LibrarySyncCard({ res, loading }) {
       ]}
     />`;
   }
-  return html`<${Card} title="Library sync" labelId="sync-title">${body}</${Card}>`;
+  return html`<${Card} className="span-6" title="Library sync" labelId="sync-title">${body}</${Card}>`;
 }
 
 function HooksCard({ res, stats, loading }) {

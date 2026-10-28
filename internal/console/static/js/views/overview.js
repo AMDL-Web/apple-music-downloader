@@ -196,10 +196,11 @@ function ThroughputCard() {
   }
   const stats = poll.data;
   const totals = stats && stats.totals;
+  const period = `Last ${STATS_DAYS} days`;
   return html`<${Card}
-    title=${`Throughput · last ${STATS_DAYS} days`}
+    title="Throughput"
     labelId="throughput-title"
-    note=${totals ? `${count(totals.tracks_completed)} tracks · ${bytes(totals.bytes_written)} written` : null}
+    note=${totals ? `${period} · ${count(totals.tracks_completed)} tracks · ${bytes(totals.bytes_written)} written` : period}
   >
     ${stats
       ? html`<${Throughput} daily=${stats.daily || []} />`
@@ -244,9 +245,10 @@ export function Throughput({ daily }) {
         <div class="chart-plot">
           <div class="chart-yaxis">
             <span>${s.fmt(s.max)}</span>
+            ${s.max >= 2 ? html`<span>${s.fmt(s.max / 2)}</span>` : null}
             <span>0</span>
           </div>
-          <div class="chart-bars" style=${{ '--n': String(daily.length) }}>
+          <div class=${s.max >= 2 ? 'chart-bars has-mid' : 'chart-bars'} style=${{ '--n': String(daily.length) }}>
             ${daily.map((d, i) => {
               const v = d[s.field] || 0;
               return html`<div

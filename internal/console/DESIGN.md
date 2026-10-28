@@ -105,7 +105,7 @@ two palettes are never mixed.
 | Token | Size / line | Weight | Use |
 | --- | --- | --- | --- |
 | `--fs-11` | 11/16 | 500, +0.04em, uppercase | section titles, codec chips, tab labels (floor) |
-| `--fs-12` | 12/16 (mono 12/18) | 400/500 | badges, meta, counts, log rows |
+| `--fs-12` | 12/16 (mono 12/18) | 400/500 | badges, meta, counts, log rows, table and palette group headers (sentence case) |
 | `--fs-13` | 13/20 | 400/500 | dense rows, captions, track rows |
 | `--fs-14` | 14/20 | 400/500/600 | body, nav, card titles (600) |
 | `--fs-16` | 16/24 | 600 | drawer title, palette input |
@@ -123,9 +123,10 @@ on floating layers (`--shadow-float`); no gradients or blur.
 
 Motion: 120 ms hover color fades, 200 ms drawer/palette/toast/insert,
 `--ease-out` in. Movement uses only `transform` and `opacity` (stage and meter
-fills: `scaleX`, linear). The running pulse is the only loop besides the
-skeleton pulse. `prefers-reduced-motion` removes both, the drawer slide and
-motion covers.
+fills: `scaleX`, linear). Showcase covers lift 2 px on hover or focus and press
+to 98 %; the title underlines on hover in every mode. The running pulse is the
+only loop besides the skeleton pulse. `prefers-reduced-motion` removes both, the
+drawer slide, cover movement and motion covers.
 
 ## Components
 
@@ -134,8 +135,12 @@ motion covers.
   `hookStatusView`, health views), unit-tested. A completed job whose tracks were
   all on disk is "Already in library" (skipped role). An item with
   `attempt > 1` adds a warning "Retry n/m" badge.
-- **KPI tile**: label, 32 px value, "of N total" meta, role icon top right; the
-  tile links to its Queue tab. Values switch without count-up.
+- **KPI tile**: label, 32 px value (tracking -0.025em), "of N total" meta, role
+  icon top right; the tile links to its Queue tab. Values switch without
+  count-up.
+- **Sidebar**: the brand wordmark and the nav labels share one left keyline;
+  nav counts are plain secondary tabular numbers, a tinted chip only on the
+  640-1023 icon rail where they sit over the icon.
 - **Job row**: 40 px cover, title + artist/curator · type · storefront,
   segmented progress (completed, skipped, failed, cancelled of total) with
   "12 / 14", status badge, relative time, chevron. Indeterminate "Resolving"
@@ -150,14 +155,15 @@ motion covers.
   running, Retry for failed, View logs, Open in Apple Music; palette swatches;
   per-track strip; track list (codec chip such as `ALAC 24/96`, length, size,
   error); hooks; recent non-progress events under Activity.
-- **Showcase**: hero with 240 px cover (160 under 640 px); grid
+- **Showcase**: hero with 240 px cover (160 under 640 px), title and artist
+  capped at 680 px and balanced; grid
   `minmax(160px, 1fr)` with `srcset` 300w/600w and lazy loading. Covers keep
   pre-signed URLs without placeholders verbatim. Motion covers play muted on
   hover or focus, one at a time, only where `video.canPlayType` accepts HLS
   and motion is allowed.
 - **Throughput**: two small multiples sharing the date axis (tracks per day,
-  bytes per day), each with its own 0/max axis, a hover readout, and a
-  screen-reader table.
+  bytes per day), each with its own 0/max axis plus a max/2 gridline and label
+  once max reaches 2, a hover readout, and a screen-reader table.
 - **Log viewer**: `role="log"`, `aria-live="off"`, mono 12/18 rows (time, level
   marker, component, message), job/request chips that filter, expandable pretty
   JSON with Copy, follow-bottom within 24 px else an "N new lines" pill, at most
@@ -180,7 +186,7 @@ motion covers.
 | KPI | skeleton of final size | zeros | "—" while disconnected |
 | Queue | 6 skeleton rows | per tab, with Clear filters when filtered | inline note + Retry |
 | Drawer | skeleton tracks | "No tracks resolved yet" | 404 "This job was deleted"; 204 on the stream means finished |
-| Showcase | skeleton hero and tiles | "Completed albums will appear here." | inline note + Retry; broken cover shows bg color + glyph |
+| Showcase | skeleton hero and tiles (cover plus two text lines) | "Completed albums will appear here." with a link to the Queue | inline note + Retry; broken cover shows bg color + glyph |
 | Logs | 12 skeleton lines | "No records match" + Clear filters | the API's validation message |
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |
 | Feed | | | Reconnecting · Ns; banner after 10 s; Disconnected after 60 s with Retry |

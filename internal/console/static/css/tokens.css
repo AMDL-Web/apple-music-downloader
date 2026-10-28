@@ -50,7 +50,6 @@
 
   /* Chart marks: one series color, text stays in text tokens */
   --chart-bar: var(--info);
-  --chart-bar-muted: light-dark(#8ec8f6, #104d87);
   --chart-grid: var(--border-subtle);
 
   /* Text over Apple artwork when its own palette fails 4.5:1 */
