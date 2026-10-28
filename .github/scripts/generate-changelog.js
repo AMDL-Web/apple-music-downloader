@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const changelogPath = path.join(__dirname, '..', '..', 'CHANGELOG.md');
 
-// 分类映射
+const BREAKING = '破坏性变更 | Breaking';
+
 const typeMap = {
   feat: '新增 | New',
   fix: '修复 | Fix',
@@ -23,7 +24,7 @@ const typeMap = {
   chore: '其他 | Other',
 };
 
-// 中文关键词映射
+// Commits without a Conventional Commits prefix are classified by keyword.
 const chineseKeywords = {
   '新增': '新增 | New',
   '修复': '修复 | Fix',
@@ -34,8 +35,10 @@ const chineseKeywords = {
   '文档': '文档 | Docs',
 };
 
-// 忽略的前缀
-const IGNORE_PREFIXES = /^(?:build|style|debug)\s*(?:\([^)]*\))*:\s*/;
+const IGNORE_PREFIXES = /^(?:build|style|debug)\s*(?:\([^)]*\))*!?:\s*/;
+
+// type, optional (scope), optional "!" marking a breaking change.
+const CONVENTIONAL_PREFIX = /^(?<prefix>\w+)(?:\([\w\-]+\))?(?<breaking>!)?:\s*/;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -59,15 +62,15 @@ function parseArgs() {
       outputOnly = true;
     } else if (arg === '--help' || arg === '-h') {
       console.log(`
-用法: node generate-changelog.js [选项]
+Usage: node generate-changelog.js [options]
 
-选项:
-  --tag, -t <标签>      指定发布标签名称
-  --base, --latest, -b <标签>  指定基础标签
-  -wh, --with-hash      显示提交哈希
-  -wc, --with-commitizen  保留 commitizen 前缀
-  --output-only         仅输出 changelog 内容（用于 CI/CD）
-  -h, --help            显示帮助信息
+Options:
+  --tag, -t <tag>                release tag name
+  --base, --latest, -b <tag>     base tag to compare from
+  -wh, --with-hash               show commit hashes
+  -wc, --with-commitizen         keep the Conventional Commits prefix
+  --output-only                  print the changelog only (for CI)
+  -h, --help                     show this help
       `);
       process.exit(0);
     }
@@ -110,19 +113,17 @@ function getCurrentTag() {
 }
 
 function parseCategory(message) {
-  // 检查忽略前缀
   if (IGNORE_PREFIXES.test(message)) {
     return null;
   }
 
-  // 检查 commitizen 前缀
-  const m = message.match(/^(?<prefix>\w+)(?:\([\w\-]+\))?:\s*/);
+  const m = message.match(CONVENTIONAL_PREFIX);
   if (m) {
+    if (m.groups.breaking) return BREAKING;
     const prefix = m.groups.prefix.toLowerCase();
     return typeMap[prefix] || '其他 | Other';
   }
 
-  // 检查中文关键词
   for (const [keyword, category] of Object.entries(chineseKeywords)) {
     if (message.includes(keyword)) {
       return category;
@@ -183,26 +184,28 @@ function getCommits(latest = null) {
   return parseGitLog(callGit(args, false));
 }
 
-// 把 git 作者转成 changelog 里的署名。只有能可靠对应到 GitHub 账号时才加
-// "@" 产生提及;否则输出纯文本名字。直接 "@" + git 显示名会让 GitHub 把
-// "@Yangjunwei Liang" 这类带空格的名字解析成对无关账号 @Yangjunwei 的
-// 提及(v1.0.0 首次发布时实际发生过)。
+// Turns a git identity into a changelog credit. "@" is added only when the
+// identity maps reliably to a GitHub account: prefixing a display name such as
+// "Yangjunwei Liang" would make GitHub mention the unrelated account
+// @Yangjunwei. The agent mappings follow AGENTS.md "Commits and releases".
 function formatAuthor(author, email) {
-  // Codex 的提交 trailer 使用 noreply@openai.com，而不是 GitHub noreply
-  // 邮箱；名称和邮箱同时匹配时可可靠映射到 OpenAI 官方 @codex 账号。
-  if (author.toLowerCase() === 'codex' && (email || '').toLowerCase() === 'noreply@openai.com') {
+  const mail = (email || '').toLowerCase();
+  if (author.toLowerCase() === 'codex' && mail === 'noreply@openai.com') {
     return '@codex';
   }
+  // Any Claude model name ("Claude Opus 5.5", "Claude") credits @claude.
+  if (/^claude\b/i.test(author) && mail === 'noreply@anthropic.com') {
+    return '@claude';
+  }
 
-  // GitHub noreply 邮箱可确定性还原登录名:
-  // "153256373+LYJW131@users.noreply.github.com"(网页操作产生的提交)
-  // 或旧格式 "LYJW131@users.noreply.github.com"。
+  // GitHub noreply addresses carry the login: "123+LOGIN@users.noreply.github.com"
+  // for web-flow commits, or the older "LOGIN@users.noreply.github.com".
   const noreply = /^(?:\d+\+)?([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)@users\.noreply\.github\.com$/.exec(email || '');
   if (noreply) {
     return `@${noreply[1]}`;
   }
-  // 名字本身是合法 GitHub 用户名形状(无空格)且不是机器人的 noreply
-  // 邮箱(如 Claude <noreply@anthropic.com>)时,沿用 "@名字" 的旧约定。
+  // A name shaped like a GitHub login, from a non-bot address, is assumed to
+  // be that login.
   if (/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(author) && !/^no-?reply@/i.test(email || '')) {
     return `@${author}`;
   }
@@ -229,6 +232,7 @@ function formatAuthors(authors = []) {
 
 function classifyCommits(commits, withCommitizen = false) {
   const result = {
+    [BREAKING]: [],
     '新增 | New': [],
     '修复 | Fix': [],
     '改进 | Improved': [],
@@ -242,7 +246,7 @@ function classifyCommits(commits, withCommitizen = false) {
   for (const commit of commits) {
     if (commit.message.includes('[skip changelog]')) continue;
     
-    // 忽略 CI 自动提交的版本更新提交
+    // Version-bump commits made by CI are not release content.
     if (commit.message.match(/^chore:\s*update\s+version\s+to\s+.+/i)) continue;
 
     const category = parseCategory(commit.message);
@@ -250,9 +254,8 @@ function classifyCommits(commits, withCommitizen = false) {
 
     let message = commit.message;
 
-    // 剥掉 commitizen 前缀
     if (!withCommitizen) {
-      message = message.replace(/^(?<prefix>\w+)(?:\([\w\-]+\))?:\s*/, '');
+      message = message.replace(CONVENTIONAL_PREFIX, '');
     }
 
     const authors = [
@@ -260,7 +263,6 @@ function classifyCommits(commits, withCommitizen = false) {
       ...(commit.coAuthors || []),
     ];
 
-    // 添加贡献者
     for (const author of authors) {
       if (author.author && author.author !== 'web-flow') {
         contributors.add(formatAuthor(author.author, author.email));
@@ -282,7 +284,7 @@ function getGitHubRepoUrl() {
     const remoteUrl = callCommand('git remote get-url origin');
     if (!remoteUrl) return null;
     
-    // 转换 git@github.com:owner/repo.git 或 https://github.com/owner/repo.git 格式
+    // git@github.com:owner/repo.git or https://github.com/owner/repo.git
     let repoPath = remoteUrl;
     if (repoPath.startsWith('git@')) {
       repoPath = repoPath.replace('git@github.com:', 'https://github.com/');
@@ -300,7 +302,6 @@ function generateMd(classifiedData, tagName, latest, withHash = false) {
   const lines = [];
   const repoUrl = getGitHubRepoUrl();
 
-  // 标题
   if (tagName) {
     lines.push(`## ${tagName}`);
   } else {
@@ -315,8 +316,7 @@ function generateMd(classifiedData, tagName, latest, withHash = false) {
   }
   lines.push('');
 
-  // 按分类顺序输出
-  const order = ['新增 | New', '修复 | Fix', '改进 | Improved', '文档 | Docs', '自动化 | CI', '其他 | Other'];
+  const order = [BREAKING, '新增 | New', '修复 | Fix', '改进 | Improved', '文档 | Docs', '自动化 | CI', '其他 | Other'];
   for (const category of order) {
     if (categories[category].length === 0) continue;
 
@@ -330,7 +330,6 @@ function generateMd(classifiedData, tagName, latest, withHash = false) {
       } else if (withHash) {
         line += ` (${item.hash})`;
       }*/
-      // 添加提交者及 Co-authored-by 协作者信息
       const authors = formatAuthors(item.authors);
       if (authors) {
         line += ` ${authors}`;
@@ -359,12 +358,12 @@ function main() {
   const resolvedTagName = tagName || getCurrentTag();
 
   if (!outputOnly) {
-    console.log('📊 正在生成变更日志...');
+    console.log('📊 Generating changelog...');
     if (resolvedLatest) {
-      console.log(`📌 从: ${resolvedLatest}`);
+      console.log(`📌 From: ${resolvedLatest}`);
     }
     if (resolvedTagName) {
-      console.log(`🏷️  到: ${resolvedTagName}`);
+      console.log(`🏷️  To: ${resolvedTagName}`);
     }
     console.log('');
   }
@@ -372,7 +371,7 @@ function main() {
   const commits = getCommits(resolvedLatest);
   if (commits.length === 0) {
     if (!outputOnly) {
-      console.log('⚠️  没有找到提交记录');
+      console.log('⚠️  No commits found');
     }
     return;
   }
@@ -385,7 +384,7 @@ function main() {
   if (outputOnly) {
     console.log(markdown);
   } else {
-    console.log('✅ 变更日志已更新: CHANGELOG.md');
+    console.log('✅ Changelog updated: CHANGELOG.md');
     console.log('\n' + markdown);
   }
 }

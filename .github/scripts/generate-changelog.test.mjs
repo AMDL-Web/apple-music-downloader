@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-// 回归测试仅服务于 GitHub Actions 的自动发版说明生成流程。
-
 import {
   classifyCommits,
   formatAuthors,
@@ -65,4 +63,22 @@ test('generated changelog appends the author and all co-authors to each entry', 
   const markdown = generateMd(classified, 'v1.4.0', null);
   assert.match(markdown, /\* add release notes @Alice, @Bob, @codex/);
   assert.doesNotMatch(markdown, /### 协作者 \| Contributors/);
+});
+
+test('breaking commits get their own first section and lose the prefix', () => {
+  const classified = classifyCommits([
+    { hash: 'a'.repeat(16), author: 'Alice', email: 'Alice@users.noreply.github.com', message: 'feat(api)!: switch errors to an envelope', coAuthors: [] },
+    { hash: 'b'.repeat(16), author: 'Alice', email: 'Alice@users.noreply.github.com', message: 'fix(db): keep rows', coAuthors: [] },
+  ]);
+  const markdown = generateMd(classified, 'v2.0.0', null);
+  const breaking = markdown.indexOf('### 破坏性变更 | Breaking');
+  assert.ok(breaking >= 0 && breaking < markdown.indexOf('### 修复 | Fix'));
+  assert.match(markdown, /\* switch errors to an envelope @Alice/);
+});
+
+test('Claude co-authors are credited as @claude whatever the model name', () => {
+  assert.equal(formatAuthors([
+    { author: 'Claude Opus 5.5', email: 'noreply@anthropic.com' },
+    { author: 'Claude', email: 'noreply@anthropic.com' },
+  ]), '@claude');
 });
