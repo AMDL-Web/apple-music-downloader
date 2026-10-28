@@ -15,6 +15,8 @@ import {
   bookmarklet,
   needsMediaUserToken,
   requestOverrides,
+  storedResults,
+  parseStoredResults,
 } from '../static/js/lib/submit.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
@@ -199,4 +201,43 @@ test('bookmarklet sends the current page to this console under any prefix', () =
     "javascript:location.href='http://127.0.0.1:18161/console/#/new?url='+encodeURIComponent(location.href)",
   );
   assert.equal(bookmarklet("https://nas.local/amdl/console/it's/"), "javascript:location.href='https://nas.local/amdl/console/it%27s/#/new?url='+encodeURIComponent(location.href)");
+});
+
+test('linkIssue blocks a storefront Apple does not have and a link without one', () => {
+  const zz = { ...entry('https://music.apple.com/zz/album/igor/1463409338') };
+  const bad = {
+    state: 'error',
+    error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: catalog request failed: 400 Bad Request: {"errors":[{"title":"Unknown Storefront"}]}' },
+  };
+  const issue = linkIssue(zz, bad);
+  assert.deepEqual([issue.code, issue.blocking, issue.message], ['bad_storefront', true, 'Apple Music has no storefront “ZZ”']);
+  const entries = [entry(IGOR), zz];
+  const issueOf = (e) => linkIssue(e, e === zz ? bad : null);
+  assert.deepEqual(submittable(entries, issueOf), [IGOR], 'flagged, so never also counted to download');
+  const bare = entry('https://music.apple.com/album/igor/1463409338');
+  assert.deepEqual([linkIssue(bare).code, linkIssue(bare).blocking], ['no_storefront', true]);
+});
+
+test('submitSummary follows the live status of each queued job', () => {
+  const rows = resultRows([
+    { url: IGOR, result: { url: IGOR, status: 'accepted', job: job('a', 'queued', '2026-10-29T00:00:00Z') } },
+    { url: FOLKLORE, result: { url: FOLKLORE, status: 'accepted', job: job('b', 'queued', '2026-10-29T00:00:00Z') } },
+  ]);
+  assert.equal(submitSummary(rows), '2 queued');
+  const later = applyFeedToResults(rows, [
+    { type: 'download_upserted', job: job('a', 'running', '2026-10-29T00:00:05Z') },
+    { type: 'download_deleted', job_id: 'b' },
+  ]);
+  assert.equal(submitSummary(later), '1 running · 1 deleted');
+  const done = applyFeedToResults(later, [{ type: 'download_upserted', job: job('a', 'completed', '2026-10-29T00:01:00Z') }]);
+  assert.equal(submitSummary(done), '1 completed · 1 deleted');
+});
+
+test('stored results round-trip without the media-user-token', () => {
+  const rows = resultRows([{ url: IGOR, result: { url: IGOR, status: 'accepted', job: job('a', 'queued', '2026-10-29T00:00:00Z') } }]);
+  const text = storedResults({ rows, overrides: { max_attempts: 5, media_user_token: 'secret' } });
+  assert.ok(!text.includes('secret'));
+  assert.deepEqual(parseStoredResults(text), { rows, overrides: { max_attempts: 5 } });
+  assert.equal(storedResults({ rows: [], overrides: {} }), '');
+  for (const bad of [null, '', '{', '{"rows":[{"url":1}]}', '[]']) assert.equal(parseStoredResults(bad), null);
 });

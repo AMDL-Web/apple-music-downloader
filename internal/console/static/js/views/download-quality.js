@@ -13,7 +13,8 @@ import { useMedia } from '../ui/hooks.js';
 
 const TRACKS_SHOWN = 50;
 
-export function QualitySheet({ url, title, onClose }) {
+/** Props: url, title, tracks (the preview's track count, when known), onClose. */
+export function QualitySheet({ url, title, tracks: expected, onClose }) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
   const [all, setAll] = useState(false);
   const [run, setRun] = useState(0);
@@ -53,7 +54,7 @@ export function QualitySheet({ url, title, onClose }) {
     ${state.loading
       ? html`<div class="quality-wait" role="status">
           <span class="pulse" data-role="info" aria-hidden="true"></span>
-          <span>Reading each track's master playlist. A long album can take a minute.</span>
+          <span>${expected > 1 ? `Reading the master playlist of each of ${count(expected)} tracks.` : "Reading the track's master playlist."} ${expected > 30 ? 'This can take a minute.' : ''}</span>
           <${Button} size="sm" className="quality-cancel" onClick=${onClose}>Cancel</${Button}>
         </div>`
       : null}

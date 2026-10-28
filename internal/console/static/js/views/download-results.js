@@ -6,18 +6,34 @@
 import { html, useMemo, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
 import { getDownload } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { submitSummary, bookmarklet, applyFeedToResults } from '../lib/submit.js';
+import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, RESULTS_KEY } from '../lib/submit.js';
+import { readPref, writePref } from '../lib/prefs.js';
+import { jobTitle, sentence } from '../lib/format.js';
 import { useApp, Card, Button, LinkButton, Icon } from '../ui/components.js';
 import { JobRow } from './queue.js';
 
 const bare = (url) => url.replace(/^https?:\/\//i, '');
 
+const session = () => {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+};
+
 // The last results outlive the page for the life of the tab, so leaving
-// New download and coming back shows them again. Module state rather than
-// sessionStorage: nothing is serialized or written to disk. They never hold
-// the media-user-token; the page adds it to each request that needs it.
+// New download and coming back shows them again, and sessionStorage keeps
+// them over a reload of the tab (where storage is refused, they last for
+// the page view). They never hold the media-user-token; the page adds it to
+// each request that needs it.
 const EMPTY = { rows: [], overrides: {} };
-let kept = EMPTY;
+let kept = null;
+const keep = (next) => {
+  kept = next;
+  writePref(session(), RESULTS_KEY, storedResults(next));
+  return next;
+};
 
 /** Accepted jobs read again when the page has not seen their feed batches; the rest wait for the feed. */
 const REFRESH_MAX = 25;
@@ -30,8 +46,9 @@ const REFRESH_MAX = 25;
  */
 export function useResults() {
   const app = useApp();
+  if (kept === null) kept = readPref(session(), RESULTS_KEY, parseStoredResults) || EMPTY;
   const [results, setState] = useState(kept);
-  const setResults = useCallback((next) => setState((cur) => (kept = typeof next === 'function' ? next(cur) : next || EMPTY)), []);
+  const setResults = useCallback((next) => setState((cur) => keep(typeof next === 'function' ? next(cur) : next || EMPTY)), []);
 
   useEffect(
     () => app.subscribeFeed((batch) => setResults((r) => (r.rows.length ? { ...r, rows: applyFeedToResults(r.rows, batch) } : r))),
@@ -79,7 +96,7 @@ export function ResultsCard({ rows, params, busy, onRetry, onClear }) {
     html`<${Button} key="clear" variant="ghost" size="sm" className="new-results-clear" onClick=${onClear}>Clear</${Button}>`,
   ];
   return html`<${Card} section="results" className="card-flush new-results-card" title="Submitted" labelId="new-results-title" actions=${actions}>
-    <p class="new-results-summary" role="status">${summary}</p>
+    <p id="new-results-summary" class="new-results-summary" role="status" tabindex="-1">${summary}</p>
     <ul class="job-list job-list-compact new-results" aria-labelledby="new-results-title">
       ${rows.map((r) => html`<li key=${r.url} class="new-result" data-status=${r.deleted ? 'deleted' : r.view.status}>
         ${r.job && !r.deleted
@@ -91,14 +108,16 @@ export function ResultsCard({ rows, params, busy, onRetry, onClear }) {
 }
 
 function ResultRow({ row, params, busy, onRetry }) {
-  const v = row.deleted ? { role: 'neutral', icon: 'circle-minus', label: 'Deleted', message: 'This job was deleted after it was queued.' } : row.view;
+  const v = row.deleted ? { role: 'neutral', icon: 'circle-minus', label: 'Deleted', message: 'This job was deleted after it was queued' } : row.view;
   const served = v.storefronts && v.storefronts.length ? `It serves ${v.storefronts.map((s) => s.toUpperCase()).join(', ')}.` : '';
+  const title = row.deleted && row.job ? jobTitle(row.job) : '';
   return html`<div class="new-result-row" data-role=${v.role}>
     <span class="new-result-icon"><${Icon} name=${v.icon} /></span>
     <span class="new-result-main">
       <span class="new-result-label">${v.label}</span>
+      ${title ? html`<span class="new-result-title" dir="auto">${title}</span>` : null}
       <span class="new-result-url mono" title=${row.url}>${bare(row.url)}</span>
-      ${v.message || served ? html`<span class="new-result-msg">${[v.message ? `${v.message}.` : '', served].filter(Boolean).join(' ')}</span>` : null}
+      ${v.message || served ? html`<span class="new-result-msg">${[sentence(v.message), served].filter(Boolean).join(' ')}</span>` : null}
       ${v.detail ? html`<span class="new-result-detail">Server: ${v.detail}</span>` : null}
     </span>
     <span class="new-result-actions">

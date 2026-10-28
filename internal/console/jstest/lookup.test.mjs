@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX } from '../static/js/lib/lookup.js';
+import { parseLink } from '../static/js/lib/links.js';
+import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob } from '../static/js/lib/lookup.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -192,4 +193,23 @@ test('shortError keeps lookup failures to one line', () => {
   assert.equal(shortError('wrapper: decrypt failed: {"code":5}'), 'wrapper: decrypt failed');
   assert.equal(shortError('x'.repeat(200), 10), `${'x'.repeat(9)}…`);
   assert.equal(shortError(undefined), '');
+});
+
+test('priorJob finds the earlier job of the same item, not of an id that merely contains it', () => {
+  const BLONDE = 'https://music.apple.com/us/album/blonde/1146195596';
+  const j = (id, input, status, created, finished) => ({ id, input, status, created_at: created, finished_at: finished });
+  const jobs = [
+    j('old', BLONDE, 'completed', '2026-10-01T00:00:00Z', '2026-10-01T00:05:00Z'),
+    j('new', `${BLONDE}?l=en`, 'completed', '2026-10-28T00:00:00Z', '2026-10-28T00:05:00Z'),
+    j('fail', BLONDE, 'failed', '2026-10-29T00:00:00Z', '2026-10-29T00:01:00Z'),
+    j('other', 'https://music.apple.com/us/album/x/91146195596', 'running', '2026-10-29T00:00:00Z', ''),
+    j('song', `${BLONDE}?i=1146195599`, 'running', '2026-10-29T00:00:00Z', ''),
+  ];
+  assert.deepEqual(priorJob(jobs, parseLink(BLONDE)), { state: 'done', job: jobs[1] });
+  assert.equal(priorJob(jobs, parseLink(`${BLONDE}?i=1146195599`)).job.id, 'song');
+  assert.deepEqual(priorJob(jobs, parseLink(BLONDE), 'album'), { state: 'active', job: jobs[4] }, 'in album mode a ?i= job downloads the album');
+  const queued = [...jobs, j('q', BLONDE, 'queued', '2026-10-29T01:00:00Z', '')];
+  assert.deepEqual(priorJob(queued, parseLink(BLONDE)), { state: 'active', job: queued[5] });
+  assert.equal(priorJob([jobs[2]], parseLink(BLONDE)), null, 'a failed job is no copy');
+  assert.equal(priorJob(null, parseLink(BLONDE)), null);
 });

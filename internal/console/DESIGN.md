@@ -31,7 +31,7 @@ wins and this page is fixed in the same change. Sources are listed in
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
 | `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings, API links |
-| `#/new?url=` | New download | Sections `compose` (text box, media-user-token when needed, Download N), `results` (after a submit), `links` (a row per link found), and beside them at 1024 px and up `options` and `bookmarklet`. `url` carries one or more links, newline- or space-separated and URL-encoded (`lib/route.js` `newDownloadHash`, `newDownloadUrls`), and follows the text box; `lib/links.js` parses them |
+| `#/new?url=` | New download | Sections `compose` (text box, media-user-token when needed, Download N), `links` (a row per link found), `results` (after a submit), and beside them at 1024 px and up `options` and `bookmarklet`. `url` carries one or more links, newline- or space-separated and URL-encoded (`lib/route.js` `newDownloadHash`, `newDownloadUrls`), and follows the text box; `lib/links.js` parses them |
 | `#/settings?section=` | Settings | A section list (a select under 640 px) and one open section: `downloads` (the default), `files`, `artwork`, `lyrics`, `catalog`, `library_sync`, `logging`, `simulate`, `account`, `config_file` (`lib/settings.js` `SETTINGS_SECTIONS`; `section` is lowercase words joined by `_`, `settingsSection`). The palette links to `account` and `library_sync` |
 
 New download is the primary action and has these entry points: the
@@ -161,7 +161,7 @@ Stable class names and attributes a skin can style without touching JS:
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
 | Settings | `.page-settings[data-section-active][data-dirty]` > `nav.settings-nav` (`ul.settings-nav-list` > `a.settings-nav-item[data-section][aria-current=true][data-dirty][data-invalid]` > `.icon`, `.settings-nav-label`, `.settings-nav-mark` (`.settings-nav-dot` when unsaved); `label.settings-jump` > `.settings-jump-label` + `select`, shown under 640 px), `.settings-main` (a size container) > `.settings-error` + `section.card.settings-section[data-section=<id>]` > `.settings-intro`, `.field-list` > `.field[data-key][data-type][data-wide][data-changed][data-pinned][data-invalid]` > `.field-text` (`.field-label`, `.field-changed`, `button.field-revert`, `.field-help`, `code.field-key`), `.field-control` (`input.field-switch[role=switch]` + `.field-switch-state`, `.field-select` > `.select` + `.field-option-hint`, `.field-number` > `.field-input` + `.field-unit`, `.field-input`, `.field-secret`, `.list-editor` > `ol.list-items` > `li.list-item[data-item]` (`.list-rank`, `.list-label`, `.list-code`, `.list-actions` > `.list-up`, `.list-down`, `.list-remove`) + `.list-add`, `.check-group` > `label.check`), then `.field-default` (`code.field-default-value`), `.field-fixed` (a pinned folder or template shown whole), `.field-pin`, `.field-error`, `.field-warning`; `.list-min-note`; `.settings-updated` and `.settings-elsewhere` (`.settings-elsewhere-actions`) above the section; panels `.settings-panel[data-panel=library-sync\|config-file]` (`.settings-panel-head`, `.settings-panel-actions`, `.sync-reset`, `.sync-state`, `.config-reload`, `.config-outcome`, `.pinned-table`), `details.template-ref`, `.account` > `.account-block` (`.account-block-head`, `ul.account-rows` > `.account-row` > `.account-name` + `.account-logout`), `form.login-form[data-step=credentials\|code]` > `.form-row`, `.login-blocked`, `.form-actions`; `.save-bar[data-state=dirty\|saving]` > `.save-bar-text` (`.save-bar-count`, `.save-bar-where`) + `.save-bar-actions` (`.save-bar-discard`, `.save-bar-save`) |
 | Job selection (Queue) | Toolbar `.queue-tools` > `.btn.queue-retry-all` (Failed tab) + `.btn.queue-select[aria-pressed]`; `.bulk-bar[data-state=select\|run]` (sticky at `top: var(--topbar-h)`; a skin whose top bar does not stick overrides `top`) > `label.bulk-all` > `input.bulk-check` (indeterminate when some), `.bulk-count`, `.bulk-actions` > `.btn.bulk-action[data-action=retry\|cancel\|delete]` > `.bulk-n` (count) or `.bulk-hint`, or during a run `.bulk-progress` > `.bulk-progress-text` + `.bulk-meter[role=progressbar]` > `.bulk-meter-fill` (`--f`); `ul.job-list.is-selecting` > `li.job-item[data-job-id][data-selected]` > `label.job-check` > `input.job-check-input` + `a.job-row[data-selected]`. Drawer: `.btn.drawer-delete` (finished jobs) |
-| New download | `.page.page-new` > `.new-main` (cards `compose`, `results`, `links`) + `.new-aside` (`options`, `bookmarklet`), two columns at 1024 px and up (the aside 260-300 px wide below 1280, 300-380 from 1280). Compose: `form.new-form` > `textarea#new-input.new-input`, `.new-hint`, `.new-token` > `input.new-token-input` (while a station or private playlist can be sent), `.new-submit` > `.new-submit-info` (`.new-count`, `button.new-options-jump`) + `.btn.new-submit-btn[aria-busy]`. Links: `ul.new-links` > `li.new-link[data-kind][data-state=queued\|loading\|ready\|error\|idle\|invalid][data-issue=not_apple\|unsupported\|music_video\|refused\|not_found\|needs_token\|preview_failed][data-blocking][.has-palette]` > `.art.art-48.new-link-art`, `.new-link-main` (`.new-link-tags` > `.chip`s and `.new-link-loading`, `.new-link-title[.is-url]`, `.new-link-sub` > `.new-link-artist`, `.new-link-album`, `.new-link-fact[data-key=tracks\|year\|length\|genre]`, mono `.new-link-url`, `.new-link-note`, `.new-link-issue.status-text[data-role]`), `.new-link-actions` > `.new-link-quality`, `.new-link-retry`, `.new-link-remove`; `.new-links-more`. Results: `.new-results-summary[role=status]`, `ul.job-list.job-list-compact.new-results` > `li.new-result[data-status=accepted\|invalid\|duplicate_active\|duplicate_in_request\|queue_full\|error\|deleted]` > a Job row, or `.new-result-row[data-role]` > `.new-result-icon`, `.new-result-main` (`.new-result-label`, `.new-result-url`, `.new-result-msg`, `.new-result-detail`), `.new-result-actions`; head `.new-results-retry`, `.new-results-clear`. Options: `section.card.new-options` > `.new-options-toggle[aria-expanded]`, `.new-options-reset`, `#new-options-body.new-options-body[data-open]` > `.new-options-summary[data-changed]` (`.new-options-count`, `.new-options-text`) or `.new-options-form` > `fieldset.new-fieldset[data-group=quality\|lyrics\|covers\|behavior\|hooks][data-changed]` > `label.new-check[data-key][data-changed]` (`.new-check-label`, `.new-check-hint`), `.new-field[data-key][data-changed]` (`.new-field-label` + `.select`), `.new-field-row`, `.new-check-group`, `.new-codecs` > `ol.new-codec-list` > `li.new-codec[data-codec]` (`.new-codec-rank`, `.new-codec-name` > `.new-codec-hint`, `.new-codec-actions` > `.new-codec-up`) + `.new-codec-add` > `.new-codec-add-btn[data-codec]`, then `.new-options-foot`; the base puts an accent dot after the label of a value that differs from the server default. Bookmarklet: `.new-bookmarklet` > `code#new-bookmarklet-code.new-bookmarklet-code` + `.new-bookmarklet-copy`, `ol.new-steps`. Quality sheet `.sheet.sheet-quality[data-dialog=quality]` > `.quality-for`, `.quality-wait`, `.quality-body[role=region][tabindex=0]` (the part that scrolls, so the head and its Close stay) > `ul.quality-slots` > `li.quality-slot[data-id]` (`.quality-slot-label` > `.quality-slot-codec`, `.quality-slot-count`, `.quality-slot-best`), `ol.quality-tracks` > `li.quality-track` > `.quality-track-head` (`.quality-track-no`, `.quality-track-name`, `.chip`) + `.quality-track-opts` > `.quality-opt[data-id]` (`.quality-opt-label`, `.quality-opt-spec`) |
+| New download | `.page.page-new` > `.new-main` (cards `compose`, `links`, `results`) + `.new-aside` (`options`, `bookmarklet`), two columns at 1024 px and up (the aside 260-300 px wide below 1280, 300-380 from 1280). Compose: `form.new-form` > `textarea#new-input.new-input`, `.new-hint`, `.new-token` > `input.new-token-input` (while a station or private playlist can be sent), `.new-submit` (sticky above the tab bar under 640 px) > `.new-submit-info` (`.new-count`, `button.new-options-jump`) + `.btn.new-submit-btn[aria-busy]`. Links: `ul.new-links` > `li.new-link[data-kind][data-state=queued\|loading\|ready\|error\|idle\|invalid][data-issue=not_apple\|no_storefront\|unsupported\|music_video\|bad_storefront\|refused\|not_found\|needs_token\|preview_failed][data-blocking][.has-palette]` > `.art.art-48.new-link-art`, `.new-link-main` (`.new-link-tags` > `.chip`s and `.new-link-loading`, `.new-link-title[.is-url]`, `.new-link-sub` > `.new-link-artist`, `.new-link-album`, `.new-link-fact[data-key=tracks\|year\|length\|genre]`, mono `.new-link-url`, `.new-link-note[data-note=artist\|storefront]`, `a.new-link-prior[data-state=active\|done]`, `.new-link-issue.status-text[data-role]`), `.new-link-actions` > `.new-link-quality` (albums and songs), `.new-link-retry`, `.new-link-remove`; `.new-links-all` > `.new-links-toggle[aria-expanded]`, `.new-links-more`, `.new-links-legend` > `.new-legend-item` > `.chip`. Results: `#new-results-summary.new-results-summary[role=status][tabindex=-1]`, `ul.job-list.job-list-compact.new-results` > `li.new-result[data-status=accepted\|invalid\|duplicate_active\|duplicate_in_request\|queue_full\|error\|deleted]` > a Job row, or `.new-result-row[data-role]` > `.new-result-icon`, `.new-result-main` (`.new-result-label`, `.new-result-title` (a deleted job), `.new-result-url`, `.new-result-msg`, `.new-result-detail`), `.new-result-actions`; head `.new-results-retry`, `.new-results-clear`. Options: `section.card.new-options` > `.new-options-toggle[aria-expanded]`, `.new-options-reset`, `#new-options-body.new-options-body[data-open]` > `.new-options-summary[data-changed]` (`.new-options-count`, `.new-options-text`) or `.new-options-form` > `fieldset.new-fieldset[data-group=quality\|lyrics\|covers\|behavior\|hooks][data-changed]` > `label.new-check[data-key][data-changed]` (`.new-check-label`, `.new-check-hint`), `.new-field[data-key][data-changed]` (`.new-field-label` + `.select`), `.new-field-row`, `.new-check-group`, `.new-codecs` > `ol.new-codec-list` > `li.new-codec[data-codec]` (`.new-codec-rank`, `.new-codec-name` > `.new-codec-hint`, `.new-codec-actions` > `.new-codec-up`, `.new-codec-remove`) + `.new-codec-add` > `.new-codec-add-btn[data-codec]`, then `.new-options-foot`; the base puts an accent dot after the label of a value that differs from the server default. Bookmarklet: `.new-bookmarklet` > `code#new-bookmarklet-code.new-bookmarklet-code` + `.new-bookmarklet-copy`, `ol.new-steps`. Quality sheet `.sheet.sheet-quality[data-dialog=quality]` > `.quality-for`, `.quality-wait`, `.quality-body[role=region][tabindex=0]` (the part that scrolls, so the head and its Close stay) > `ul.quality-slots` > `li.quality-slot[data-id]` (`.quality-slot-label` > `.quality-slot-codec`, `.quality-slot-count`, `.quality-slot-best`), `ol.quality-tracks` > `li.quality-track` > `.quality-track-head` (`.quality-track-no`, `.quality-track-name`, `.chip`) + `.quality-track-opts` > `.quality-opt[data-id]` (`.quality-opt-label`, `.quality-opt-spec`) |
 
 **Artwork palette.** `.job-row`, `.strip-tile`, `.tile` and `.hero` carry
 `--art-bg` and `--art-t1`, `--art-t2`, `--art-t3` (from `lib/format.js`
@@ -342,12 +342,26 @@ and motion covers.
   a bare `#/new`. It takes focus one frame after the
   shell focuses the heading, with a fine pointer only. Each row shows the
   link's kind and storefront at once, then a `POST /lookup` preview: the first
-  12 previewable links, 4 at a time, a lookup the text no longer holds is
-  aborted, answers are cached per tab (an album `?i=` link's only under the
-  `catalog.album_track_url_mode` it was read with). Links that are not Apple Music, not a
-  downloadable kind, music videos, refused by the lookup (400) or unknown to
-  Apple (its 404, private playlists included: the catalog read never
-  carries the token) are flagged and not sent; a sendable station or
+  100 previewable links (one submit chunk), 4 at a time, a lookup the text no
+  longer holds is aborted, answers are cached per tab (an album `?i=` link's
+  only under the `catalog.album_track_url_mode` it was read with); after a
+  feed resync (`app.epoch`) failed lookups run again. The first 12 rows are
+  listed plus every flagged one, then "Show all N". Legacy
+  `itunes.apple.com` links and `id`-prefixed ids read as music.apple.com
+  links; a link without a storefront takes the first one another link in the
+  text has (the server's `catalog.default_storefront` is not in the API), else
+  it is flagged; two links glued together split at the second `http`.
+  Repeats are merged and counted in the card note, and a legend explains the
+  storefront, E and ADM chips the rows show. Links that are not Apple Music, not a
+  downloadable kind, music videos, refused by the lookup (400), in a
+  storefront Apple does not have, or unknown to Apple (its 404, private
+  playlists included: the catalog read never carries the token) are flagged
+  and not sent; the count line counts them as flagged only, and warnings
+  apart. Albums, songs and playlists also ask `GET /downloads?q=<id>` (2 at a
+  time, cached per tab, `lib/lookup.js` `priorJob`) and show "Downloaded
+  Oct 29" or "Already in the queue", linking to that job; downloading again
+  stays possible. An artist row says it queues the whole discography, and a
+  submit with artist links asks first; a sendable station or
   private playlist brings a media-user-token password field. A station
   without a token (typed or the server's) gets a warning; a private
   playlist downloads without one and uses it only for the owner's cover.
@@ -355,7 +369,7 @@ and motion covers.
   playlists are looked up again with it (a station's preview does not use
   it), and a request carries it as `overrides.media_user_token` only while
   one of its links can use it (`lib/submit.js` `requestOverrides`).
-  Qualities opens a sheet from `POST /quality`: a summary per quality slot,
+  Qualities (albums and songs only) opens a sheet from `POST /quality`: a summary per quality slot,
   then each track's formats; errors show inline with the server's message.
   Options start collapsed with a line naming what differs from `GET /config`
   `download`; a submit sends only those as `overrides` (`buildOverrides`:
@@ -363,7 +377,8 @@ and motion covers.
   when the checked set differs from the enabled entries, `[]` for none).
   Reset restores the defaults; "Remember these options on this device" keeps
   them in `localStorage["amdl.console.download.options"]`. Download N
-  (Cmd/Ctrl+Enter) posts `POST /downloads` in chunks of 100, and the per-URL
+  (Cmd/Ctrl+Enter, hinted only with a fine pointer) posts `POST /downloads` in chunks of 100, hands the
+  accepted job ids to `app.watchJobs`, and the per-URL
   results replace the previous ones: accepted jobs as live Job rows (feed
   batches through `applyFeedToResults`) that open the drawer over the page,
   from 640 px up in two lines so the title and artist keep the main
@@ -373,11 +388,18 @@ and motion covers.
   the rest with their reason, View job for `duplicate_active`, Retry for
   `queue_full`, `decryptor_unavailable` and server errors. The handled
   links then leave the text box; the rest of it stays, links typed during
-  the request included. The results stay until Clear (which moves focus to
+  the request included, and focus moves to the results summary, whose
+  counts follow each job's live status. The whole text box lasts for the
+  tab when the page is left. The results stay until Clear (which moves focus to
   the text box) or the next submit, for the life of the tab (module state in
-  `views/download-results.js` `useResults`, without the token): coming back
-  to the page shows them, and their jobs (at most 25) are read again since
-  the page missed the feed meanwhile. The bookmarklet card shows
+  `views/download-results.js` `useResults`, and
+  `sessionStorage["amdl.console.download.results"]` over a reload, without
+  the token): coming back to the page shows them, and their jobs (at most
+  25) are read again since the page missed the feed meanwhile. The Options
+  card uses the Settings labels and value lists (`lib/settings.js`
+  `FIELDS`), says in text why the last codec cannot be removed, hides the
+  ALAC limits while ALAC is not listed, and keeps focus in the codec list
+  after an add or remove. The bookmarklet card shows
   `javascript:location.href='<this page>#/new?url='+encodeURIComponent(location.href)`
   as copyable text, never as a link.
 
@@ -392,7 +414,7 @@ and motion covers.
 | Logs | 12 skeleton lines | "No records match" + Clear filters | the API's validation message |
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |
 | Settings | 6 skeleton lines in the section | | inline note + Retry; a refused save keeps the draft with a notice and per-field errors; wrapper errors as notices in plain words with the server's text under "Details"; a load error reloads after a reconnect |
-| New download | a skeleton cover and line per link being looked up; 3 skeleton lines for the options until `GET /config` answers | "No links yet" under the text box | a failed lookup flags its row (warning, Retry) and the link is still sent; options: inline note + Retry, and a submit sends no overrides; a refused submit shows a notice, `invalid_overrides` on the Options card |
+| New download | a skeleton cover and line per link being looked up; 3 skeleton lines for the options until `GET /config` answers | "No links yet" under the text box | a failed lookup flags its row (warning, Retry) and the link is still sent, and it runs again after a feed resync; options: inline note + Retry (also reloaded after a resync), and a submit sends no overrides; a refused submit shows a notice, `invalid_overrides` on the Options card |
 | Feed | | | Reconnecting · Ns; banner after 10 s; Disconnected after 60 s with Retry |
 
 ## Accessibility

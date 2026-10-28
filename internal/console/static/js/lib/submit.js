@@ -7,6 +7,7 @@
 import { parseLink } from './links.js';
 import { PREVIEW_KINDS, shortError } from './lookup.js';
 import { capitalized, sentence } from './format.js';
+import { sanitizeOverrides } from './overrides.js';
 
 /** The backend's per-request URL limit; larger batches are sent in chunks. */
 export const MAX_URLS_PER_REQUEST = 100;
@@ -23,10 +24,19 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
   const link = entry && entry.link;
   if (!link) return { code: 'not_apple', role: 'danger', blocking: true, message: 'Not an Apple Music link' };
   if (link.kind === 'music-video') return { code: 'music_video', role: 'danger', blocking: true, message: 'Music videos cannot be downloaded' };
+  if (link.kind === 'unknown' && link.noStorefront) {
+    return { code: 'no_storefront', role: 'danger', blocking: true, message: 'No storefront in this link: add one, as in music.apple.com/us/album/…' };
+  }
   if (!PREVIEW_KINDS.includes(link.kind)) {
     return { code: 'unsupported', role: 'danger', blocking: true, message: 'Not an album, song, playlist, artist or station link' };
   }
   const err = lookup && lookup.state === 'error' ? lookup.error : null;
+  const msg = err ? String(err.message || '') : '';
+  // Apple refuses a storefront it does not have with a 400 the lookup
+  // passes on as 502 upstream_error; a job of the link could only fail.
+  if (err && /storefront/i.test(msg) && (/\b400\b/.test(msg) || /unknown storefront/i.test(msg))) {
+    return { code: 'bad_storefront', role: 'danger', blocking: true, message: `Apple Music has no storefront “${link.storefront.toUpperCase()}”`, title: msg };
+  }
   if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: capitalized(err.message) || 'The backend does not download this link' };
   // Apple answered 404 for the id: a job of this link could only fail. The
   // catalog read never carries the media-user-token (internal/applemusic
@@ -156,6 +166,13 @@ export function keptAfterSubmit(pairs) {
   return pairs.filter((p) => !p.result || !DONE.has(p.result.status)).map((p) => p.url);
 }
 
+/** The sent URLs the server took or already runs: those leave the text box (keptAfterSubmit keeps the rest). */
+export function handledUrls(pairs) {
+  const done = new Set(pairs.map((p) => p.url));
+  for (const u of keptAfterSubmit(pairs)) done.delete(u);
+  return done;
+}
+
 /**
  * Result rows for the page: [{url, view, job, deleted}] where `job` is the
  * Job of an accepted URL, kept live by applyFeedToResults.
@@ -199,21 +216,77 @@ export function applyFeedToResults(rows, batch) {
   return next;
 }
 
-/** One line for the toast and the live region: "2 queued · 1 already downloading · 1 not accepted". */
-export function submitSummary(rows) {
-  const n = { accepted: 0, active: 0, repeat: 0, other: 0 };
-  for (const r of rows) {
-    if (r.view.status === 'accepted') n.accepted++;
-    else if (r.view.status === 'duplicate_active') n.active++;
-    else if (r.view.status === 'duplicate_in_request') n.repeat++;
-    else n.other++;
+// The summary's parts in order: an accepted row by its job's live status
+// (or deleted), then the rows the server did not queue.
+const SUMMARY = [
+  ['running', 'running'],
+  ['queued', 'queued'],
+  ['completed', 'completed'],
+  ['failed', 'failed'],
+  ['cancelled', 'cancelled'],
+  ['deleted', 'deleted'],
+  ['duplicate_active', 'already downloading'],
+  ['duplicate_in_request', 'listed twice'],
+  ['other', 'not accepted'],
+];
+
+/** The state a result row counts as in the summary. */
+function summaryState(r) {
+  if (r.view.status === 'accepted') {
+    if (r.deleted) return 'deleted';
+    const st = r.job && r.job.status;
+    return SUMMARY.some(([k]) => k === st) ? st : 'queued';
   }
-  const parts = [];
-  if (n.accepted) parts.push(`${n.accepted} queued`);
-  if (n.active) parts.push(`${n.active} already downloading`);
-  if (n.repeat) parts.push(`${n.repeat} listed twice`);
-  if (n.other) parts.push(`${n.other} not accepted`);
-  return parts.join(' · ') || 'Nothing was submitted';
+  if (r.view.status === 'duplicate_active' || r.view.status === 'duplicate_in_request') return r.view.status;
+  return 'other';
+}
+
+/**
+ * One line for the toast, the live region and the Submitted card, from the
+ * rows as they are now: "1 running · 2 completed · 1 already downloading ·
+ * 1 not accepted". Accepted rows count by their job's live status.
+ */
+export function submitSummary(rows) {
+  const n = new Map();
+  for (const r of rows) {
+    const k = summaryState(r);
+    n.set(k, (n.get(k) || 0) + 1);
+  }
+  return (
+    SUMMARY.filter(([k]) => n.get(k))
+      .map(([k, text]) => `${n.get(k)} ${text}`)
+      .join(' · ') || 'Nothing was submitted'
+  );
+}
+
+/** sessionStorage key for the last results, so a reload of the tab keeps them (never the token). */
+export const RESULTS_KEY = 'amdl.console.download.results';
+
+const isRow = (r) =>
+  Boolean(r && typeof r.url === 'string' && r.view && typeof r.view === 'object' && typeof r.view.status === 'string' && typeof r.view.label === 'string') &&
+  (r.job === null || (typeof r.job === 'object' && typeof r.job.id === 'string'));
+
+/**
+ * Results as stored text: {rows, overrides} with the overrides sanitized
+ * (lib/overrides.js), so a media-user-token never reaches storage. ''
+ * when there are no rows.
+ */
+export function storedResults(results) {
+  const rows = results && Array.isArray(results.rows) ? results.rows.filter(isRow) : [];
+  if (!rows.length) return '';
+  return JSON.stringify({ rows, overrides: sanitizeOverrides(results.overrides) });
+}
+
+/** Parses stored results (lib/prefs.js readPref normalizer); null when absent or unusable. */
+export function parseStoredResults(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    const rows = v && Array.isArray(v.rows) ? v.rows.filter(isRow).map((r) => ({ url: r.url, view: r.view, job: r.job, deleted: r.deleted === true })) : [];
+    return rows.length ? { rows, overrides: sanitizeOverrides(v.overrides) } : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

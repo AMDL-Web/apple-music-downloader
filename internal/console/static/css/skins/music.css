@@ -2134,7 +2134,8 @@
   margin-bottom: var(--s-0_5);
 }
 
-:root[data-skin="music"] .new-link-tags .chip {
+:root[data-skin="music"] .new-link-tags .chip,
+:root[data-skin="music"] .new-legend-item .chip {
   height: 18px;
   padding: 0 var(--s-1_5);
   border-color: transparent;
@@ -2152,7 +2153,8 @@
 :root[data-skin="music"] .new-link-sub,
 :root[data-skin="music"] .new-link-issue,
 :root[data-skin="music"] .new-link-loading,
-:root[data-skin="music"] .new-link-note {
+:root[data-skin="music"] .new-link-note,
+:root[data-skin="music"] .new-link-prior {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
 }
@@ -2161,7 +2163,8 @@
   color: var(--text-secondary);
 }
 
-:root[data-skin="music"] .new-links-more {
+:root[data-skin="music"] .new-links-more,
+:root[data-skin="music"] .new-links-legend {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
 }

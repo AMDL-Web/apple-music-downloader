@@ -4,9 +4,16 @@
 // sheet show. No DOM; the caller passes the network function.
 
 import { releaseYear, trackLength, kHz, count } from './format.js';
+import { parseLink } from './links.js';
 
-/** Links previewed per page view; the rest are listed without a preview. */
-export const PREVIEW_LIMIT = 12;
+/**
+ * Links looked up per paste: one submit request's worth (lib/submit.js
+ * MAX_URLS_PER_REQUEST), so a link Apple does not have is flagged before
+ * the submit wherever it sits in the list.
+ */
+export const LOOKUP_LIMIT = 100;
+/** Link rows listed before "Show all"; flagged rows past it are listed too. */
+export const ROWS_SHOWN = 12;
 /** Lookups in flight at once. */
 export const LOOKUP_CONCURRENCY = 4;
 /** Previews kept per tab, oldest dropped first. */
@@ -222,4 +229,37 @@ export function qualityOverview(resp) {
     }
   }
   return [...slots.values()].map(({ bestOpt, ...s }) => ({ ...s, best: bestOpt ? qualitySpec(bestOpt) : '' }));
+}
+
+/**
+ * What a job of `link` would be, as {type, id}: an album ?i= link is that
+ * song unless catalog.album_track_url_mode is "album".
+ */
+export function linkTarget(link, trackMode = 'song') {
+  if (!link || !link.id) return null;
+  if (link.kind === 'album' && link.trackId && trackMode !== 'album') return { type: 'song', id: link.trackId };
+  return { type: link.kind, id: link.id };
+}
+
+const ACTIVE = new Set(['queued', 'running']);
+const newest = (a, b, key) => (Date.parse(b[key] || '') || 0) - (Date.parse(a[key] || '') || 0);
+
+/**
+ * The earlier job of the same album, song or playlist among `jobs` (a GET
+ * downloads?q=<id> page, whose q is a substring match, so each job's input
+ * is parsed and compared): {state: 'active', job} for one queued or
+ * running, else {state: 'done', job} for the latest completed one, else
+ * null. Failed and cancelled jobs do not count.
+ */
+export function priorJob(jobs, link, trackMode = 'song') {
+  const want = linkTarget(link, trackMode);
+  if (!want) return null;
+  const same = (Array.isArray(jobs) ? jobs : []).filter((j) => {
+    const got = j && typeof j.input === 'string' ? linkTarget(parseLink(j.input), trackMode) : null;
+    return got && got.type === want.type && got.id === want.id;
+  });
+  const active = same.filter((j) => ACTIVE.has(j.status)).sort((a, b) => newest(a, b, 'created_at'));
+  if (active.length) return { state: 'active', job: active[0] };
+  const done = same.filter((j) => j.status === 'completed').sort((a, b) => newest(a, b, 'finished_at'));
+  return done.length ? { state: 'done', job: done[0] } : null;
 }

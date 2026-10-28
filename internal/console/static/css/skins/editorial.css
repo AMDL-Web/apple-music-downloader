@@ -2914,7 +2914,8 @@
   margin-bottom: var(--s-0_5);
 }
 
-:root[data-skin="editorial"] .new-link-tags .chip {
+:root[data-skin="editorial"] .new-link-tags .chip,
+:root[data-skin="editorial"] .new-legend-item .chip {
   height: auto;
   padding: 0;
   border: 0;

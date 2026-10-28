@@ -2,7 +2,8 @@
 // links, see what each one is, set per-download options and submit. The
 // text box is the source of the links; ?url= prefills it, and the page
 // writes its links back into ?url= so a reload or the global paste keeps
-// them. The page head comes from app.js. Parts: download-lookup.js
+// them; the whole text also lasts for the tab when the page is left. The
+// page head comes from app.js. Parts: download-lookup.js
 // (previews), download-links.js (rows), download-options.js,
 // download-quality.js, download-results.js; the logic is pure in
 // lib/links.js, lib/lookup.js, lib/submit.js and lib/overrides.js.
@@ -10,11 +11,11 @@
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
 import { createDownload, getConfig, getHooks } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
-import { scanLinks, removeLink } from '../lib/links.js';
+import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
 import {
   chunk,
   pairResults,
-  keptAfterSubmit,
+  handledUrls,
   resultRows,
   submitSummary,
   classifySubmitError,
@@ -23,7 +24,8 @@ import {
 import { OPTIONS_KEY, optionDefaults, buildOverrides, applyOverrides, sanitizeOverrides, parseStoredOptions, describeOverrides } from '../lib/overrides.js';
 import { readPref, writePref } from '../lib/prefs.js';
 import { useApp, Card, Button, Notice } from '../ui/components.js';
-import { useDebounced } from '../ui/hooks.js';
+import { useDebounced, useMedia } from '../ui/hooks.js';
+import { ConfirmDialog } from '../ui/dialogs.js';
 import { useLookups } from './download-lookup.js';
 import { LinksCard } from './download-links.js';
 import { OptionsCard } from './download-options.js';
@@ -40,36 +42,20 @@ const storage = () => {
 
 const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
 
-/** Text with `urls` appended on new lines, skipping links it already holds. */
-function mergeLinks(text, urls) {
-  const have = new Set(scanLinks(text).map((e) => e.url));
-  const add = [];
-  for (const u of urls) {
-    const e = scanLinks(u)[0];
-    const key = e ? e.url : u;
-    if (have.has(key)) continue;
-    have.add(key);
-    add.push(key);
-  }
-  if (!add.length) return text;
-  const head = text.replace(/\s+$/, '');
-  return head ? `${head}\n${add.join('\n')}` : add.join('\n');
-}
-
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-/** The sent URLs the server took or already runs (lib/submit.js keptAfterSubmit keeps the rest). */
-function handled(pairs) {
-  const done = new Set(pairs.map((p) => p.url));
-  for (const u of keptAfterSubmit(pairs)) done.delete(u);
-  return done;
-}
+// The text box outlives the page for the life of the tab, so leaving New
+// download through the sidebar and coming back keeps a draft, notes and
+// links that are not Apple Music included (?url= keeps only the links).
+let draft = '';
 
 export function DownloadPage({ route }) {
   const app = useApp();
   const incoming = newDownloadUrls(route.params);
-  const [text, setText] = useState(() => mergeLinks('', incoming));
+  const [text, setText] = useState(() => mergeLinks(draft, incoming));
+  draft = text;
   const entries = useMemo(() => scanLinks(text), [text]);
+  const dupes = useMemo(() => duplicateCount(text), [text]);
   const settled = useDebounced(text, 350);
   const inputRef = useRef(null);
 
@@ -182,13 +168,15 @@ export function DownloadPage({ route }) {
     setRefusal('');
   };
 
-  const { statusOf, issueOf, sendable, flagged, skipped, needsToken, lookupStatus, queue } = useLookups({
+  const { statusOf, issueOf, sendable, flagged, warned, skipped, needsToken, lookupStatus, queue, priorOf, forgetPrior } = useLookups({
     settled,
     entries,
     token,
     serverToken,
     trackMode,
+    epoch: app.epoch,
   });
+  const jobHref = (id) => buildHash('new', route.params, id);
 
   // Submit and results (kept for the life of the tab, without the token).
   const [busy, setBusy] = useState(false);
@@ -197,6 +185,7 @@ export function DownloadPage({ route }) {
   const [results, setResults] = useResults();
   const [retrying, setRetrying] = useState(() => new Set());
   const [quality, setQuality] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   /**
    * Sends `urls` in chunks the backend accepts, the typed token only with
@@ -222,8 +211,23 @@ export function DownloadPage({ route }) {
     return { pairs, fail };
   };
 
-  const submit = async () => {
+  // An artist link queues the whole discography as one job: ask first.
+  const artists = sendable.filter((u) => {
+    const e = entries.find((x) => x.url === u);
+    return e && e.link && e.link.kind === 'artist';
+  });
+  const submit = async (confirmed = false) => {
     if (busy || sendable.length === 0) return;
+    if (artists.length && !confirmed) {
+      setConfirm(
+        artists.map((u) => {
+          const s = statusOf(u);
+          return (s.state === 'ready' && s.data && s.data.title) || u.replace(/^https?:\/\//i, '');
+        }),
+      );
+      return;
+    }
+    setConfirm(null);
     setBusy(true);
     setFailure('');
     setRefusal('');
@@ -242,12 +246,20 @@ export function DownloadPage({ route }) {
     const rows = resultRows(pairs);
     setResults({ rows, overrides });
     const summary = submitSummary(rows);
-    const queued = rows.some((r) => r.view.status === 'accepted');
-    app.toast({ message: queued ? `Download started: ${summary}` : summary, role: queued ? 'success' : 'warning' });
+    const ids = rows.filter((r) => r.job).map((r) => r.job.id);
+    app.toast({ message: ids.length ? `Download started: ${summary}` : summary, role: ids.length ? 'success' : 'warning' });
+    if (ids.length && app.watchJobs) app.watchJobs(ids);
+    forgetPrior(pairs.map((p) => p.url));
     // Keep what was not handled: links not sent (flagged, or after a failed
     // chunk), links the server did not take, and anything typed meanwhile.
     // ?url= follows the text.
-    setText((t) => [...handled(pairs)].reduce(removeLink, t));
+    setText((t) => [...handledUrls(pairs)].reduce(removeLink, t));
+    // The button that had focus is now disabled: the summary takes it, on
+    // both submit paths, so the result is where focus lands.
+    requestAnimationFrame(() => {
+      const el = document.getElementById('new-results-summary');
+      if (el) el.focus({ preventScroll: false });
+    });
   };
 
   const retry = async (urls) => {
@@ -257,8 +269,10 @@ export function DownloadPage({ route }) {
     if (fail) app.toast({ message: fail.message, role: 'danger' });
     if (!pairs.length) return;
     const fresh = new Map(resultRows(pairs).map((r) => [r.url, r]));
+    const ids = [...fresh.values()].filter((r) => r.job).map((r) => r.job.id);
+    if (ids.length && app.watchJobs) app.watchJobs(ids);
     setResults((r) => ({ ...r, rows: r.rows.map((row) => fresh.get(row.url) || row) }));
-    const done = handled(pairs);
+    const done = handledUrls(pairs);
     if (done.size) setText((t) => [...done].reduce(removeLink, t));
     app.toast({ message: submitSummary([...fresh.values()]), role: [...fresh.values()].some((r) => r.job) ? 'success' : 'warning' });
   };
@@ -300,8 +314,17 @@ export function DownloadPage({ route }) {
   const changes = describeOverrides(overrides);
   const optionsLine = !values ? 'Server defaults' : changes.length ? `${changes.length} ${changes.length === 1 ? 'option' : 'options'} changed` : 'Server defaults';
   const countLine = entries.length
-    ? [`${entries.length} ${entries.length === 1 ? 'link' : 'links'}`, `${sendable.length} to download`, flagged ? `${flagged} flagged` : ''].filter(Boolean).join(' · ')
+    ? [
+        `${entries.length} ${entries.length === 1 ? 'link' : 'links'}`,
+        `${sendable.length} to download`,
+        flagged ? `${flagged} flagged` : '',
+        warned ? `${warned} to check` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
     : 'No links yet';
+  // The shortcut hint only where there is a keyboard to press it on.
+  const keyboard = useMedia('(hover: hover) and (pointer: fine)');
   const keys = isMac() ? '⌘ Return' : 'Ctrl+Enter';
 
   return html`<div class="page page-new">
@@ -323,7 +346,7 @@ export function DownloadPage({ route }) {
             onInput=${(e) => setText(e.currentTarget.value)}
           ></textarea>
           <p id="new-input-hint" class="new-hint">
-            Albums, songs, playlists, artists and stations. Links are found anywhere in the text; ${keys} downloads.
+            Albums, songs, playlists, artists and stations. Links are found anywhere in the text${keyboard ? `; ${keys} downloads` : ''}.
           </p>
           ${needsToken
             ? html`<div class="new-token">
@@ -362,6 +385,20 @@ export function DownloadPage({ route }) {
           ${failure ? html`<${Notice} role="danger" icon="circle-x">${failure}</${Notice}>` : null}
         </form>
       </${Card}>
+      ${entries.length
+        ? html`<${LinksCard}
+            entries=${entries}
+            statusOf=${statusOf}
+            issueOf=${issueOf}
+            priorOf=${priorOf}
+            jobHref=${jobHref}
+            skipped=${skipped}
+            dupes=${dupes}
+            onRemove=${removeEntry}
+            onRetry=${(url) => queue.current.retry(url)}
+            onQuality=${(entry, data) => setQuality({ url: entry.url, title: data.title || entry.url, tracks: data.track_count })}
+          />`
+        : null}
       ${results.rows.length
         ? html`<${ResultsCard}
             rows=${results.rows}
@@ -369,17 +406,6 @@ export function DownloadPage({ route }) {
             busy=${retrying}
             onRetry=${retry}
             onClear=${clearResults}
-          />`
-        : null}
-      ${entries.length
-        ? html`<${LinksCard}
-            entries=${entries}
-            statusOf=${statusOf}
-            issueOf=${issueOf}
-            skipped=${skipped}
-            onRemove=${removeEntry}
-            onRetry=${(url) => queue.current.retry(url)}
-            onQuality=${(entry, data) => setQuality({ url: entry.url, title: data.title || entry.url })}
           />`
         : null}
     </div>
@@ -402,6 +428,17 @@ export function DownloadPage({ route }) {
       />
       <${BookmarkletCard} />
     </div>
-    ${quality ? html`<${QualitySheet} url=${quality.url} title=${quality.title} onClose=${() => setQuality(null)} />` : null}
+    ${quality ? html`<${QualitySheet} url=${quality.url} title=${quality.title} tracks=${quality.tracks} onClose=${() => setQuality(null)} />` : null}
+    ${confirm
+      ? html`<${ConfirmDialog}
+          title=${confirm.length === 1 ? `Download everything by ${confirm[0]}?` : `Download everything by ${confirm.length} artists?`}
+          confirmLabel=${`Download ${sendable.length}`}
+          onConfirm=${() => submit(true)}
+          onCancel=${() => setConfirm(null)}
+        >
+          <p>An artist link queues the artist's whole discography as one job: every album, often hundreds of tracks or more. You can cancel it from the queue.</p>
+          ${confirm.length > 1 ? html`<p dir="auto">${confirm.join(', ')}</p>` : null}
+        </${ConfirmDialog}>`
+      : null}
   </div>`;
 }

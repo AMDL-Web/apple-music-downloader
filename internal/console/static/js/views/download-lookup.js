@@ -1,11 +1,13 @@
 // New download: the link previews behind the rows, a POST lookup per
 // previewable link through a shared per-tab cache and a bounded queue, and
-// from them which links are flagged and which the submit may send.
+// from them which links are flagged and which the submit may send. A second
+// queue asks GET downloads whether an album, song or playlist was
+// downloaded before (lib/lookup.js priorJob).
 
 import { useState, useEffect, useRef, useMemo } from '../ui/preact.js';
-import { lookupLink } from '../api.js';
+import { lookupLink, listDownloads } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
-import { createLookupQueue, PREVIEW_KINDS, PREVIEW_LIMIT } from '../lib/lookup.js';
+import { createLookupQueue, priorJob, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { linkIssue, submittable, needsMediaUserToken } from '../lib/submit.js';
 import { useDebounced } from '../ui/hooks.js';
 
@@ -15,6 +17,9 @@ import { useDebounced } from '../ui/hooks.js';
 // they were read under (LOOKUPS_MODE).
 const LOOKUPS = new Map();
 let LOOKUPS_MODE = null;
+// GET downloads?q=<id> pages per link, for the "Downloaded Oct 29" note.
+const HISTORY = new Map();
+const HISTORY_KINDS = ['album', 'song', 'playlist'];
 
 const isPrivate = (url) => {
   const link = parseLink(url);
@@ -28,12 +33,14 @@ const isAlbumTrack = (url) => {
 
 /**
  * The page's link previews: the lookup queue, the status and issue of each
- * entry, and the links the submit may send. `settled` is the debounced
- * text, `entries` its scanned links, `token` the typed media-user-token,
- * `serverToken` and `trackMode` the server's catalog config.
+ * entry, the links the submit may send, and each link's earlier job.
+ * `settled` is the debounced text, `entries` its scanned links, `token` the
+ * typed media-user-token, `serverToken` and `trackMode` the server's
+ * catalog config, `epoch` the shell's reconnect counter (a resync after an
+ * outage looks failed previews and the history up again).
  */
-export function useLookups({ settled, entries, token, serverToken, trackMode }) {
-  // Previews: the first PREVIEW_LIMIT previewable links, 4 at a time. A
+export function useLookups({ settled, entries, token, serverToken, trackMode, epoch }) {
+  // Previews: the first LOOKUP_LIMIT previewable links, 4 at a time. A
   // private playlist is read with the typed token once it settles; answers
   // read with it leave the shared cache with the page, whose field starts
   // empty next time.
@@ -63,8 +70,32 @@ export function useLookups({ settled, entries, token, serverToken, trackMode }) 
     [],
   );
   const previewable = (list) => list.filter((e) => e.link && PREVIEW_KINDS.includes(e.link.kind));
-  const wanted = useMemo(() => previewable(scanLinks(settled)).slice(0, PREVIEW_LIMIT).map((e) => e.url), [settled]);
+  const wanted = useMemo(() => previewable(scanLinks(settled)).slice(0, LOOKUP_LIMIT).map((e) => e.url), [settled]);
   useEffect(() => queue.current.want(wanted), [wanted.join('\n')]);
+
+  // Earlier jobs of the wanted albums, songs and playlists, 2 at a time.
+  const history = useRef(null);
+  if (!history.current) {
+    history.current = createLookupQueue({
+      lookup: (url) => listDownloads({ q: parseLink(url).id, limit: 50 }),
+      cache: HISTORY,
+      max: 2,
+      onChange: () => setTick((n) => n + 1),
+    });
+  }
+  useEffect(() => () => history.current.dispose(), []);
+  const historyWanted = wanted.filter((u) => HISTORY_KINDS.includes((parseLink(u) || {}).kind));
+  useEffect(() => history.current.want(historyWanted), [historyWanted.join('\n')]);
+
+  // After an outage the shell resyncs and bumps epoch: failed previews and
+  // every history answer are read again; good previews stay.
+  const epochSeen = useRef(epoch);
+  useEffect(() => {
+    if (epochSeen.current === epoch) return;
+    epochSeen.current = epoch;
+    queue.current.forget([...LOOKUPS.keys()].filter((k) => LOOKUPS.get(k).state === 'error'));
+    history.current.forget([...HISTORY.keys()]);
+  }, [epoch]);
   // A changed album_track_url_mode reads album ?i= links again.
   useEffect(() => {
     if (trackMode === null) return;
@@ -78,8 +109,8 @@ export function useLookups({ settled, entries, token, serverToken, trackMode }) 
     tokenSeen.current = settledToken;
     queue.current.forget([...new Set([...wanted, ...LOOKUPS.keys()])].filter(isPrivate));
   }, [settledToken]);
-  const previewSet = new Set(previewable(entries).slice(0, PREVIEW_LIMIT).map((e) => e.url));
-  const skipped = Math.max(0, previewable(entries).length - PREVIEW_LIMIT);
+  const previewSet = new Set(previewable(entries).slice(0, LOOKUP_LIMIT).map((e) => e.url));
+  const skipped = Math.max(0, previewable(entries).length - LOOKUP_LIMIT);
   const statusOf = (url) => {
     const s = queue.current.status(url);
     return s.state === 'idle' && previewSet.has(url) ? { state: 'queued' } : s;
@@ -90,9 +121,20 @@ export function useLookups({ settled, entries, token, serverToken, trackMode }) 
   const hasToken = settledToken !== '' || serverToken;
   const issueOf = (e) => linkIssue(e, e.link && PREVIEW_KINDS.includes(e.link.kind) ? queue.current.status(e.url) : null, { hasToken });
   const sendable = submittable(entries, issueOf);
-  const flagged = entries.filter((e) => issueOf(e)).length;
+  const flagged = entries.filter((e) => (issueOf(e) || {}).blocking).length;
+  const warned = entries.filter((e) => {
+    const i = issueOf(e);
+    return i && !i.blocking;
+  }).length;
   const lookupStatus = (url) => queue.current.status(url);
   const needsToken = needsMediaUserToken(sendable, lookupStatus);
+  /** The earlier job of a link ({state: 'active' | 'done', job}) or null. */
+  const priorOf = (url) => {
+    const s = history.current.status(url);
+    return s.state === 'ready' && s.data ? priorJob(s.data.downloads, parseLink(url), trackMode || 'song') : null;
+  };
+  /** Forgets the earlier-job answers of links just submitted. */
+  const forgetPrior = (urls) => history.current.forget(urls);
 
-  return { statusOf, issueOf, sendable, flagged, skipped, needsToken, lookupStatus, queue };
+  return { statusOf, issueOf, sendable, flagged, warned, skipped, needsToken, lookupStatus, queue, priorOf, forgetPrior };
 }
