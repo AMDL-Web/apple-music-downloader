@@ -143,9 +143,11 @@ export function ConnectionIndicator({ conn, onRetry }) {
   const now = useClock(waiting ? 1000 : 0);
   const view = connectionView(conn.state);
   const secs = waiting && conn.retryAt ? Math.max(0, Math.ceil((conn.retryAt - now) / 1000)) : null;
-  return html`<span class="conn" data-role=${view.role} title="Live updates">
+  // The number is the wait before the next attempt, so it says so.
+  const label = conn.state === 'reconnecting' && secs ? `Retrying in ${secs} s` : view.label;
+  return html`<span class="conn" data-role=${view.role} data-state=${conn.state} title=${`Live updates: ${label}`}>
     <span class="conn-dot" aria-hidden="true"></span>
-    <span class="conn-label">${view.label}${secs !== null && conn.state === 'reconnecting' ? ` · ${secs}s` : ''}</span>
+    <span class="conn-label">${label}</span>
     ${conn.state === 'offline' && onRetry ? html`<${Button} size="sm" variant="ghost" onClick=${onRetry}>Retry</${Button}>` : null}
   </span>`;
 }

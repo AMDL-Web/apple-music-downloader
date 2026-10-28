@@ -110,6 +110,8 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   rises over the icon line, its label on the other labels' line (current: a
   bold label, no bar, which would run into the block); More turns ink while
   its sheet is open and takes the bar on Logs, System and Settings.
+  The connection word ("Live", "Retrying in 8 s") stays beside the live dot,
+  which is ink whether live or connecting.
 - **Banners**: full-bleed bands under the masthead, ink by default and red for
   warning and danger (the simulate band). In-page notices are a 3px rule in
   the role color with no fill.

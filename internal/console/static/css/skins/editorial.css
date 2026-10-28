@@ -492,6 +492,18 @@
   }
 }
 
+/* Phones: the base keeps only the dot under 640 px, and here a live dot is
+   the same ink as a connecting one, so the word stays beside it. */
+@media (max-width: 639px) {
+  :root[data-skin="editorial"] .conn-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+}
+
 :root[data-skin="editorial"] .search-trigger {
   width: 176px;
   padding: 0 0 0 var(--s-0_5);
