@@ -59,11 +59,10 @@ func (r *execRunner) Run(ctx context.Context, entry Entry, payload Payload) erro
 }
 
 // hookEnv is the environment of an exec hook: the backend's own environment
-// without any AMDL_* variable, plus the documented hook variables. Every
-// AMDL_* variable the backend accepts is a config key override or a config
-// file path (internal/config fails startup on any other), and some carry
-// secrets such as AMDL_CATALOG_MEDIA_USER_TOKEN, so none is passed on; PATH,
-// HOME, TZ and the rest are.
+// without any AMDL_* variable, plus the documented hook variables. The AMDL_*
+// variables are the backend's own settings, and one left over from an older
+// install may hold a secret, so none is passed on; PATH, HOME, TZ and the
+// rest are.
 func hookEnv(environ []string, payload Payload) []string {
 	env := make([]string, 0, len(environ)+12)
 	for _, kv := range environ {

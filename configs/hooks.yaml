@@ -88,9 +88,9 @@ entries:
   #   # string, required for type exec: command executed via `sh -c`. The JSON
   #   # payload (see below) is written to the command's stdin. The command
   #   # inherits the backend's environment (PATH, HOME, TZ, ...) WITHOUT any
-  #   # AMDL_* variable: those configure the backend and some are secrets
-  #   # (AMDL_CATALOG_MEDIA_USER_TOKEN), so pass what a script needs
-  #   # explicitly. These variables are set instead:
+  #   # AMDL_* variable: those are the backend's own settings, and one left
+  #   # over from an older install may hold a secret, so pass what a script
+  #   # needs explicitly. These variables are set instead:
   #   #   AMDL_EVENT           - job_queued | job_finished | job_failed | job_cancelled
   #   #   AMDL_JOB_ID          - job ID
   #   #   AMDL_JOB_TYPE        - song | album | playlist | artist | station

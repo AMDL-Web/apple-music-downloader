@@ -37,7 +37,7 @@ const SECTIONS_SHOWN_EMPTY = ['account', 'library_sync'];
 const SECTION_WORDS = {
   account: 'login log in log out wrapper apple id',
   library_sync: 'anchor poll',
-  config_file: 'reload yaml config pinned locked startup restart parallel concurrency concurrent threads workers pool pools limits',
+  config_file: 'reload yaml config locked startup restart parallel concurrency concurrent threads workers pool pools limits',
   logging: 'logs',
   files: 'folder path template',
   artwork: 'cover',

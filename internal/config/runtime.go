@@ -42,10 +42,40 @@ func isRuntimeKey(key string) bool {
 	return false
 }
 
+// configField is one leaf field of Config: its dotted key and the field index
+// path for reflect.Value.FieldByIndex.
+type configField struct {
+	key   string
+	index []int
+}
+
+// configFields enumerates every leaf field of Config from the yaml struct
+// tags, so a field added to any section is known to every walker below.
+func configFields() []configField {
+	var fields []configField
+	cfgType := reflect.TypeOf(Config{})
+	for i := 0; i < cfgType.NumField(); i++ {
+		section := cfgType.Field(i)
+		sectionTag := yamlTagName(section)
+		for j := 0; j < section.Type.NumField(); j++ {
+			fields = append(fields, configField{
+				key:   sectionTag + "." + yamlTagName(section.Type.Field(j)),
+				index: []int{i, j},
+			})
+		}
+	}
+	return fields
+}
+
+func yamlTagName(field reflect.StructField) string {
+	name, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+	return name
+}
+
 // knownKeys returns every dotted configuration key from Config's YAML tags.
 func knownKeys() map[string]bool {
 	keys := map[string]bool{}
-	for _, field := range envFields() {
+	for _, field := range configFields() {
 		keys[field.key] = true
 	}
 	return keys
@@ -86,7 +116,7 @@ func filterConfigYAML(cfg Config, keep func(key string) bool) ([]byte, error) {
 func copyRuntimeFields(target *Config, source Config) {
 	sourceValue := reflect.ValueOf(source)
 	targetValue := reflect.ValueOf(target).Elem()
-	for _, field := range envFields() {
+	for _, field := range configFields() {
 		if isRuntimeKey(field.key) {
 			targetValue.FieldByIndex(field.index).Set(sourceValue.FieldByIndex(field.index))
 		}
@@ -122,7 +152,7 @@ func MutableView(cfg Config) (map[string]any, error) {
 func RuntimeLockedChanges(old, updated Config) []string {
 	var changed []string
 	oldValue, updatedValue := reflect.ValueOf(old), reflect.ValueOf(updated)
-	for _, field := range envFields() {
+	for _, field := range configFields() {
 		if isRuntimeKey(field.key) {
 			continue
 		}

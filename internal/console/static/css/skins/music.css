@@ -2373,17 +2373,6 @@
   padding-right: var(--card-pad);
 }
 
-/* The pinned keys table's rules run to the card's edge like the rows above. */
-@media (min-width: 640px) {
-  :root[data-skin="music"] .settings-panel > .table-wrap {
-    margin-right: calc(-1 * var(--card-pad));
-  }
-
-  :root[data-skin="music"] .pinned-table :is(th, td):last-child {
-    padding-right: var(--card-pad);
-  }
-}
-
 :root[data-skin="music"] .field-label {
   font-size: var(--fs-15);
   line-height: var(--lh-15);
@@ -2467,7 +2456,6 @@
   height: var(--control-h);
 }
 
-:root[data-skin="music"] .field-pin,
 :root[data-skin="music"] .field-error,
 :root[data-skin="music"] .field-warning {
   font-size: var(--fs-14);

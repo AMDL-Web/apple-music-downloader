@@ -14,13 +14,17 @@ needs the API changes below before it works against 2.0.
    result.
 2. If you still have `configs/runtime.yaml`, start 1.x once so it merges the file, or
    copy its keys into `config.yaml` by hand: 2.0 leaves the file alone and never reads
-   it. Unset `AMDL_RUNTIME_CONFIG`: 2.0 fails startup on unknown `AMDL_*` variables.
-3. Remove `catalog.media_user_token_priority`, `catalog.developer_token_ttl_hours` and
-   `catalog.allowed_origins` from `config.yaml` and the environment if present: 2.0
-   rejects unknown keys at startup.
-4. If `config.yaml` omits any key in the defaults table below, decide whether you want
+   it.
+3. Move every `AMDL_*` variable except `AMDL_CONFIG`, `AMDL_HOOKS_CONFIG`,
+   `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and `AMDL_DATABASE_PATH` into
+   `config.yaml` (for example `AMDL_SIMULATE_ENABLED=true` becomes `enabled: true` under
+   `simulate:`), then unset it: 2.0 ignores the rest and logs a warning naming each one.
+4. Remove `catalog.media_user_token_priority`, `catalog.developer_token_ttl_hours` and
+   `catalog.allowed_origins` from `config.yaml` if present: 2.0 rejects unknown keys at
+   startup.
+5. If `config.yaml` omits any key in the defaults table below, decide whether you want
    the new default or should write the old value into the file.
-5. Give the container time to stop: `stop_grace_period: 2m` in Compose or
+6. Give the container time to stop: `stop_grace_period: 2m` in Compose or
    `--stop-timeout 120` with `docker run`. Interrupted jobs now resume on the next start
    instead of being cancelled.
 
@@ -50,7 +54,8 @@ needs the API changes below before it works against 2.0.
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
 | Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays (possibly empty) | account screens |
-| `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` or SIGHUP. It lists the keys an `AMDL_*` variable pins in `pinned`, and `PUT /config` refuses them with `422 config_key_pinned` | settings screens |
+| `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
+| Env-pinned keys | `GET /config` listed the runtime keys an `AMDL_*` variable set in `pinned`; `PUT /config` refused them with `422 config_key_pinned` | `pinned`, the `PinnedKey` schema and the `config_key_pinned` code are gone: no environment variable can set a runtime key any more | settings screens |
 | Developer token | `GET /developer-token` signed a token for other clients in local signing mode (`409 signing_disabled` in legacy mode) | removed (`404 route_not_found`), and the `signing_disabled` code with it; the backend signs only its own catalog token | browser players that fetched a token |
 | API reference | Swagger UI at `/docs` (from unpkg.com) and the spec at `/api/openapi.yaml` | neither is served (`404`); read `internal/api/openapi.yaml` and `docs/api.md` in the repository | API explorers, client generators that fetched the spec |
 | CORS | `Access-Control-Allow-Origin: *` on every response; `OPTIONS` answered `204` | no CORS headers; `OPTIONS` under `/api/` is `405 method_not_allowed`. Only same-origin pages (the console) and non-browser clients can call the API | web clients on another origin, such as amdl-web |
@@ -64,14 +69,21 @@ needs the API changes below before it works against 2.0.
 
 ## Config and environment
 
-- `AMDL_RUNTIME_CONFIG` is gone and fails startup like any unknown `AMDL_*` variable;
-  a leftover `runtime.yaml` is ignored.
-- `catalog.media_user_token_priority` is rejected in the file, as
-  `AMDL_CATALOG_MEDIA_USER_TOKEN_PRIORITY`, and in a `PUT /config` body (`400`).
+- Environment overrides: 1.x read `AMDL_<SECTION>_<KEY>` for every key. 2.0 reads five
+  variables: `AMDL_CONFIG`, `AMDL_HOOKS_CONFIG` and the overrides `AMDL_SERVER_LISTEN`,
+  `AMDL_WRAPPER_ADDRESS`, `AMDL_DATABASE_PATH`. Every other `AMDL_*` variable, such as
+  `AMDL_SIMULATE_ENABLED`, `AMDL_DOWNLOAD_DOWNLOADS_DIR` or `AMDL_LOGGING_LEVEL`, is
+  ignored, and startup logs one warning per variable; set the key in `config.yaml`
+  instead. That covers the removed `AMDL_RUNTIME_CONFIG` (a leftover `runtime.yaml` is
+  ignored), `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR`.
+- SIGHUP no longer reloads the config file; the backend ignores it. Use
+  `POST /config/reload` (the console's "Reload from file") after a hand edit;
+  `docker compose kill -s SIGHUP amdl-backend` no longer does anything.
+- `catalog.media_user_token_priority` is rejected in the file and in a `PUT /config` body
+  (`400`).
 - `catalog.developer_token_ttl_hours` and `catalog.allowed_origins` configured the removed
-  `GET /developer-token`. Both are rejected in the file and as
-  `AMDL_CATALOG_DEVELOPER_TOKEN_TTL_HOURS` / `AMDL_CATALOG_ALLOWED_ORIGINS`; delete them.
-  The backend's own signed token is unaffected.
+  `GET /developer-token`. Both are rejected in the file; delete them. The backend's own
+  signed token is unaffected.
 - Built-in defaults now equal the values in `configs/config.example.yaml`, so a key
   missing from `config.yaml` behaves the way the example documents. The exceptions are
   `download.album_path_format` and `download.artist_path_format`: a config without them
@@ -86,13 +98,13 @@ needs the API changes below before it works against 2.0.
   | `download.max_running_jobs` | `2` | `3` |
   | `download.max_attempts` | `4` | `3` |
   | `download.save_album_cover`, `save_artist_cover`, `save_playlist_cover` | `false` | `true` |
-- A hand edit to `config.yaml` is no longer applied by `GET /config`; send SIGHUP or
+- A hand edit to `config.yaml` is no longer applied by `GET /config`; send
   `POST /config/reload`. `PUT /config` re-reads the file first, so it keeps hand edits.
 - An invalid webhook URL in `hooks.yaml` fails startup instead of failing every run.
 - `download.cover_size` must be `{width}x{height}` in pixels. 1.x accepted any string,
   empty included, and silently fell back to the standard sizes when Apple could not
   serve it; 2.0 fails startup and `PUT /config` (`422 invalid_config`). Set it in
-  `config.yaml` or `AMDL_DOWNLOAD_COVER_SIZE` to a size such as `5000x5000`.
+  `config.yaml` to a size such as `5000x5000`.
 - `download.*_path_format` templates must stay relative to `download.downloads_dir`
   and may carry only the `:02d` format spec. 1.x stored absolute templates, `..`
   segments and other `{Variable:spec}` forms verbatim; expansion sanitized them into

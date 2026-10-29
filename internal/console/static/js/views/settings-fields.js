@@ -1,5 +1,5 @@
 // One Settings field (label, help, the config key, a control by type, and
-// its pinned, error and warning lines) and the controls themselves. The
+// its error and warning lines) and the controls themselves. The
 // field list in lib/settings.js decides which control a key gets.
 
 import { html, useState, useRef, useLayoutEffect } from '../ui/preact.js';
@@ -15,26 +15,21 @@ const WIDE = new Set(['list', 'path', 'template', 'secret']);
 const GROUPED = new Set(['list', 'set']);
 
 /**
- * .field[data-key][data-type][data-wide][data-changed][data-pinned][data-invalid]
+ * .field[data-key][data-type][data-wide][data-changed][data-invalid]
  * > .field-text (.field-label, .field-changed + revert, .field-help,
- * .field-key) + .field-control, then .field-pin, .field-error, .field-warning.
+ * .field-key) + .field-control, then .field-error, .field-warning.
  */
-export function SettingsField({ field, value, changed, pinnedEnv, error, warning, onChange, onRevert }) {
+export function SettingsField({ field, value, changed, error, warning, onChange, onRevert }) {
   const id = fieldId(field.key);
-  const pinned = Boolean(pinnedEnv);
-  const described = [`${id}-help`, field.defaultValue ? `${id}-default` : '', pinned ? `${id}-pin` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
-  const ctl = { field, id, value, disabled: pinned, invalid: Boolean(error), described, onChange };
-  // A pinned folder or template shows whole, wrapped, instead of a disabled
-  // one-line input that cuts a long path off.
-  const fixed = isFixedValue(field, pinned, value);
-  const grouped = GROUPED.has(field.type) || fixed;
+  const described = [`${id}-help`, field.defaultValue ? `${id}-default` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
+  const ctl = { field, id, value, invalid: Boolean(error), described, onChange };
+  const grouped = GROUPED.has(field.type);
   return html`<div
     class="field"
     data-key=${field.key}
     data-type=${field.type}
     data-wide=${WIDE.has(field.type) ? '' : undefined}
     data-changed=${changed ? '' : undefined}
-    data-pinned=${pinned ? '' : undefined}
     data-invalid=${error ? '' : undefined}
   >
     <div class="field-text">
@@ -54,18 +49,12 @@ export function SettingsField({ field, value, changed, pinnedEnv, error, warning
       <code class="field-key">${field.key}</code>
     </div>
     <div class="field-control">${control(ctl)}</div>
-    ${pinned
-      ? html`<p class="field-pin" id=${`${id}-pin`}><${Icon} name="lock" size="sm" /><span>Set by the environment variable <code>${pinnedEnv}</code>. Unset it and restart the backend to change this here.</span></p>`
-      : null}
     ${error ? html`<p class="field-error" id=${`${id}-error`} data-role="danger"><${Icon} name="circle-x" size="sm" /><span>${error}</span></p>` : null}
     ${warning && !error ? html`<p class="field-warning" id=${`${id}-warn`} data-role="warning"><${Icon} name="triangle-alert" size="sm" /><span>${warning}</span></p>` : null}
   </div>`;
 }
 
-const isFixedValue = (field, pinned, value) => pinned && Boolean(value) && (field.type === 'path' || field.type === 'template');
-
 function control(p) {
-  if (isFixedValue(p.field, p.disabled, p.value)) return html`<${FixedValue} ...${p} />`;
   switch (p.field.type) {
     case 'switch':
       return html`<${SwitchControl} ...${p} />`;
@@ -82,11 +71,6 @@ function control(p) {
     default:
       return html`<${TextControl} ...${p} />`;
   }
-}
-
-/** A value the environment pins, shown in full and wrapped; focusable so it can be selected by keyboard. */
-function FixedValue({ id, value, described }) {
-  return html`<div class="field-fixed mono" id=${id} role="group" tabindex="0" aria-labelledby=${`${id}-label`} aria-describedby=${described}>${String(value)}</div>`;
 }
 
 function SwitchControl({ id, value, disabled, described, onChange }) {

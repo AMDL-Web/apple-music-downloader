@@ -47,7 +47,7 @@ wins when they disagree, so details are not copied here.
 | Event cursor | `event_cursor` in `GET /downloads` and `GET /downloads/{id}`: the event id a client resumes the matching stream from (`?cursor=` or `Last-Event-ID`) | `internal/api#Server.listDownloads` |
 | Error code | The stable `code` of an error response; clients switch on it, never on the message | `internal/api#ErrorCode` |
 | Runtime key, startup key | Config keys that apply through `PUT /api/v1/config` vs keys that need a restart | `internal/config#isRuntimeKey` |
-| Env override | `AMDL_<SECTION>_<KEY>` variables that sit on top of the config file | `internal/config#envFields` |
+| Env override | `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and `AMDL_DATABASE_PATH`, which sit on top of the config file | `internal/config#envOverrides` |
 | Job overrides | The per-submission `overrides` object that overlays the quality and `force_overwrite` keys of the runtime config for one batch | `internal/config#DownloadOverrides` |
 | Job hook | A webhook or command fired on `job_queued` or a terminal job event | `internal/hooks#Dispatcher` |
 | Library sync | The poller that turns newly added library songs into album jobs | `internal/librarysync#Watcher` |

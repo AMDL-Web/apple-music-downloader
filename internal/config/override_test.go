@@ -156,7 +156,7 @@ func TestRuntimeLockedChanges(t *testing.T) {
 	updated.Catalog.RequestBurst = base.Catalog.RequestBurst + 1
 	got := RuntimeLockedChanges(base, updated)
 	// Keys surface in Config struct-field order because the locked set is
-	// derived from envFields.
+	// derived from configFields.
 	want := []string{"server.listen", "logging.format", "wrapper.address", "catalog.max_parallel_requests", "catalog.requests_per_second", "catalog.request_burst", "download.max_running_jobs", "download.max_parallel_downloads", "download.max_parallel_decrypts", "download.max_parallel_wrapper_requests"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("locked changes = %v, want %v", got, want)
@@ -269,7 +269,7 @@ func TestDownloadOverridesCoverRuntimeDownloadKeys(t *testing.T) {
 		overrideFields[name] = true
 	}
 	known := knownKeys()
-	for _, field := range envFields() {
+	for _, field := range configFields() {
 		section, leaf, _ := strings.Cut(field.key, ".")
 		if section != "download" || !isRuntimeKey(field.key) {
 			continue

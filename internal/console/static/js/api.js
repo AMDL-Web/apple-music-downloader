@@ -132,8 +132,8 @@ export const lookupLink = (url, { signal } = {}) =>
   request('POST', '/api/v1/lookup', undefined, { body: { url }, timeoutMs: LOOKUP_TIMEOUT_MS, signal });
 /**
  * Merges `partial` into the runtime config and answers the new ConfigResponse.
- * Send only the changed fields of a fresh GET; 422 config_key_pinned,
- * config_key_not_mutable or invalid_config name what was refused.
+ * Send only the changed fields of a fresh GET; 422 config_key_not_mutable or
+ * invalid_config name what was refused.
  */
 export const putConfig = (partial) => request('PUT', '/api/v1/config', undefined, { body: partial });
 /** Resolves to {status: 'logged_in'} or {status: 'needs_2fa', login_id}. */

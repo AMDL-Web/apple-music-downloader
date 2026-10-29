@@ -193,13 +193,9 @@ paths:
         through this API; edit the startup configuration configs/config.yaml and
         restart instead.
 
-        pinned lists the returned keys that an AMDL_* environment variable
-        currently sets; PUT rejects a change to any of them with 422
-        config_key_pinned, so a client should disable those fields.
-
         GET is a pure read of the in-memory configuration and has no side effects:
         it does not re-read configs/config.yaml. A hand edit of the file takes
-        effect through POST /api/v1/config/reload or SIGHUP; startup-only fields
+        effect through POST /api/v1/config/reload; startup-only fields
         still require a restart.
       operationId: getConfig
       responses:
@@ -227,12 +223,8 @@ paths:
         catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
         Every other field is consumed only at process startup, and a request that
         changes one is rejected with 422 config_key_not_mutable — edit the startup
-        configuration configs/config.yaml and restart instead. Fields overridden by
-        an AMDL_<SECTION>_<KEY> environment variable (section and key names in upper
-        case) return 422 config_key_pinned: the write would be masked again by the
-        environment variable's value on the next configuration reload, so change
-        the environment variable and restart instead. An unknown field is 400
-        invalid_request.
+        configuration configs/config.yaml and restart instead. An unknown field is
+        400 invalid_request.
 
         Changes take effect immediately for new requests and newly started jobs
         (running jobs keep the configuration snapshot taken when they started), and
@@ -275,10 +267,8 @@ paths:
           $ref: '#/components/responses/JSONBodyTooLarge'
         '422':
           description: >-
-            config_key_not_mutable: the request changes a startup-only field;
-            config_key_pinned: it changes a field overridden by an AMDL_*
-            environment variable (both list the fields in details.keys);
-            invalid_config: the merged result fails configuration validation, or
+            config_key_not_mutable: the request changes a startup-only field
+            (details.keys lists them); invalid_config: the merged result fails configuration validation, or
             the config file on disk no longer validates.
           content:
             application/json:
@@ -291,8 +281,7 @@ paths:
       tags: [System]
       summary: Re-read the configuration file
       description: >-
-        Re-reads configs/config.yaml (AMDL_* environment overrides included) and
-        applies its runtime-mutable fields, the same as sending SIGHUP; the
+        Re-reads configs/config.yaml and applies its runtime-mutable fields; the
         logging level takes effect at once. Startup-only fields keep their
         in-memory values until a restart. The response has the shape of GET
         /api/v1/config. When the file cannot be read or fails validation (for
@@ -1196,11 +1185,8 @@ components:
               description: >-
                 Code-specific data. no_urls_accepted and store_error from POST
                 /downloads: the BatchSubmitResponse. config_key_not_mutable:
-                {"keys": [...]}, the rejected fields as dotted key names.
-                config_key_pinned: {"keys": [...]}, each entry
-                "<key> (<ENV_VAR>)", for example "download.downloads_dir
-                (AMDL_DOWNLOAD_DOWNLOADS_DIR)". Errors of POST /lookup after
-                the link parsed: {"link": LookupLink}.
+                {"keys": [...]}, the rejected fields as dotted key names. Errors
+                of POST /lookup after the link parsed: {"link": LookupLink}.
     ErrorCode:
       type: string
       description: |
@@ -1211,8 +1197,8 @@ components:
         method_not_allowed (with an Allow header); 409 job_active,
         job_not_retryable, job_finalizing, duplicate_active, already_logged_in,
         login_pending; 413 request_too_large; 422
-        invalid_overrides, config_key_not_mutable, config_key_pinned,
-        invalid_config, no_urls_accepted; 500 internal_error, store_error
+        invalid_overrides, config_key_not_mutable, invalid_config,
+        no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 502 upstream_error; 503 queue_full,
         wrapper_unavailable, feature_unavailable (the process keeps no log
         history, so the log routes cannot answer); 504 upstream_timeout.
@@ -1234,7 +1220,6 @@ components:
         - request_too_large
         - invalid_overrides
         - config_key_not_mutable
-        - config_key_pinned
         - invalid_config
         - no_urls_accepted
         - internal_error
@@ -1942,23 +1927,10 @@ components:
           $ref: '#/components/schemas/LibrarySyncStatus'
     ConfigResponse:
       type: object
-      required: [config, persisted, pinned]
+      required: [config, persisted]
       properties:
         config:
           $ref: '#/components/schemas/RuntimeConfig'
-        pinned:
-          type: array
-          description: >-
-            The keys of config that an AMDL_<SECTION>_<KEY> environment variable
-            currently sets, sorted by key; empty when none. The environment
-            value wins on every reload, so PUT rejects a change to one of them
-            with 422 config_key_pinned. Startup keys are never listed: they are
-            not in config.
-          items:
-            $ref: '#/components/schemas/PinnedKey'
-          example:
-            - {key: download.downloads_dir, env: AMDL_DOWNLOAD_DOWNLOADS_DIR}
-            - {key: simulate.enabled, env: AMDL_SIMULATE_ENABLED}
         persisted:
           type: boolean
           description: >-
@@ -1972,18 +1944,6 @@ components:
             configuration file could not be used (unreadable or failing
             validation); config is then the previous, still active
             configuration.
-    PinnedKey:
-      type: object
-      required: [key, env]
-      properties:
-        key:
-          type: string
-          description: Dotted config key, as in RuntimeConfig (section.key).
-          example: download.downloads_dir
-        env:
-          type: string
-          description: The environment variable that sets it.
-          example: AMDL_DOWNLOAD_DOWNLOADS_DIR
     SubmitResult:
       type: object
       required: [url, status]

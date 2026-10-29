@@ -77,7 +77,7 @@ func (s *Store) UpdateAndSave(mutate func(current Config) (Config, error)) (Conf
 		return Config{}, err
 	}
 	if s.path != "" {
-		if err := saveRuntimeFields(s.path, updated, os.Environ()); err != nil {
+		if err := saveRuntimeFields(s.path, updated); err != nil {
 			return Config{}, err
 		}
 	}

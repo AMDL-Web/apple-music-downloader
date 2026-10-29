@@ -268,7 +268,6 @@ function ConfigCard() {
   else {
     const c = data.config || {};
     const d = c.download || {};
-    const pinned = Array.isArray(data.pinned) ? data.pinned.length : 0;
     body = html`<${KV}
         rows=${[
           ['Codec priority', Array.isArray(d.quality_priority) ? d.quality_priority.map((q) => CODEC_NAMES[q] || q).join(' → ') : null],
@@ -277,7 +276,6 @@ function ConfigCard() {
           ['Library sync', onOff(c.library_sync && c.library_sync.enabled)],
           ['Log level', c.logging ? c.logging.level : null],
           ['Media user token', c.catalog ? (c.catalog.media_user_token ? 'Set' : 'Not set') : null],
-          ['Pinned by environment', pinned ? `${count(pinned)} ${pinned === 1 ? 'key' : 'keys'}` : 'None'],
           ['Saved to a file', data.persisted === false ? 'No' : 'Yes'],
         ]}
       />

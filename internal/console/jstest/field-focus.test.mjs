@@ -17,7 +17,7 @@ function setup(field) {
 
 const { focusField } = await import('../static/js/ui/field-focus.js');
 
-test('a pinned field (control disabled, so nothing to focus) is scrolled to and the search ends', () => {
+test('a field without an enabled control is scrolled to and the search ends', () => {
   const calls = [];
   const field = {
     scrollIntoView: (o) => calls.push(o),

@@ -492,7 +492,7 @@ func TestDefaultMatchesExample(t *testing.T) {
 		t.Fatal(err)
 	}
 	defaults, documented := reflect.ValueOf(Default()), reflect.ValueOf(example)
-	for _, field := range envFields() {
+	for _, field := range configFields() {
 		if pathFormatsPredatingSongNumber[field.key] {
 			continue
 		}
@@ -517,8 +517,8 @@ func TestExampleDefaultAnnotationsMatchDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fields := map[string]envField{}
-	for _, field := range envFields() {
+	fields := map[string]configField{}
+	for _, field := range configFields() {
 		fields[field.key] = field
 	}
 	defaults := reflect.ValueOf(Default())

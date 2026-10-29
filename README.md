@@ -184,7 +184,7 @@ runs. The token is a runtime key, so `GET /api/v1/config` returns it.
 Errors share one body, `{"error": {"code", "message", "details"?}}`; clients switch on
 `code`. Streams are Server-Sent Events that resume from `Last-Event-ID` or `?cursor=`,
 seeded from the `event_cursor` of the matching snapshot. `GET /config` only reads; a
-hand-edited config file is applied by `POST /config/reload` or SIGHUP.
+hand-edited config file is applied by `POST /config/reload`.
 
 Every response carries a server-generated `X-Request-ID`;
 `GET /logs?request_id=<id>` aggregates that request's access and job logs.
@@ -201,10 +201,9 @@ is the documentation — every key's allowed values, units and defaults live in 
   immediately via `PUT /api/v1/config`, which rewrites the whole file and drops comments.
 - **Startup keys** (listen address, database path, wrapper address, pool sizes, log
   format) need a restart.
-- **Any key** can be overridden with `AMDL_<SECTION>_<KEY>`, e.g.
-  `AMDL_DOWNLOAD_QUALITY_PRIORITY=alac,aac`. Unknown `AMDL_*` variables fail startup
-  rather than being silently ignored, and env-pinned fields are rejected by `PUT` with 422
-  (`GET /config` lists them in `pinned`).
+- **Environment**: `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and `AMDL_DATABASE_PATH`
+  override their keys, and `AMDL_CONFIG` / `AMDL_HOOKS_CONFIG` choose the files. Every
+  other key is set in the file; any other `AMDL_*` variable is ignored with a warning.
 
 Defaults, hand edits and reload, and the Docker specifics: [docs/configuration.md](docs/configuration.md)
 and [docs/deployment.md](docs/deployment.md).

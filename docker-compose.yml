@@ -9,15 +9,13 @@
 # The first start generates config.yaml in ./configs (the backend bootstraps it
 # from config.example.yaml; the commented field documentation is the example
 # file in the same directory). To change the configuration afterwards:
-#   - runtime fields: PUT /api/v1/config, which takes effect immediately and
-#     rewrites config.yaml in full;
-#   - any field: override it with an AMDL_<SECTION>_<KEY> environment variable
-#     (upper-case section and key names; takes precedence over config.yaml and
-#     is not written back to the file on load), then docker compose up -d;
+#   - runtime fields: PUT /api/v1/config (the console's Settings page), which
+#     takes effect immediately and rewrites config.yaml in full;
 #   - or edit ./configs/config.yaml directly, then apply runtime fields with
-#     docker compose kill -s SIGHUP amdl-backend (or POST /api/v1/config/reload)
-#     and startup fields with docker compose restart (for fields overridden by
-#     an environment variable the environment variable wins).
+#     POST /api/v1/config/reload (the console's "Reload from file") and startup
+#     fields with docker compose restart.
+# Only the listen address, the wrapper address and the database path can also
+# be set through the environment (below); they win over config.yaml.
 #
 # Stopping or restarting is safe mid-download: running jobs stay running in
 # the database and resume on the next start.
@@ -53,11 +51,10 @@ services:
       # exec hooks; default UTC. The image ships tzdata, so an IANA time zone
       # name is all that is needed.
       # TZ: "Asia/Shanghai"
-      # Any configuration key can be overridden with an AMDL_<SECTION>_<KEY>
-      # environment variable (upper-case section and key names), for example
-      # AMDL_DOWNLOAD_QUALITY_PRIORITY: "alac,aac" or
-      # AMDL_SIMULATE_ENABLED: "true". List values are comma-separated; booleans
-      # are true/false.
+      # The backend reads AMDL_SERVER_LISTEN, AMDL_WRAPPER_ADDRESS,
+      # AMDL_DATABASE_PATH, AMDL_CONFIG and AMDL_HOOKS_CONFIG; every other
+      # setting belongs in config.yaml, and any other AMDL_* variable is
+      # ignored with a warning at startup.
       # wrapper-manager gRPC address (overrides wrapper.address):
       #   - wrapper runs on the host: keep host.docker.internal:8080 (also the
       #     entrypoint's container default, so leaving the variable unset has

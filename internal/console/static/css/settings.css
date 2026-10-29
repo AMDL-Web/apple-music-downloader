@@ -207,7 +207,6 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.field-pin,
 .field-error,
 .field-warning {
   grid-column: 1 / -1;
@@ -218,15 +217,10 @@
   line-height: var(--lh-13);
 }
 
-.field-pin .icon,
 .field-error .icon,
 .field-warning .icon {
   margin-top: var(--s-0_5);
   color: var(--role, var(--text-secondary));
-}
-
-.field-pin {
-  color: var(--text-secondary);
 }
 
 .field-error {
@@ -379,20 +373,6 @@
 .field[data-type="path"] .field-input,
 .field[data-type="template"] .field-input {
   max-width: 640px;
-}
-
-/* A value the environment pins: the whole path, wrapped, selectable. */
-.field-fixed {
-  max-width: 640px;
-  padding: var(--s-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-control);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  overflow-wrap: anywhere;
-  user-select: text;
 }
 
 /* A checkbox drawn as a switch; "On"/"Off" beside it says the state in text. */

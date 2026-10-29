@@ -14,7 +14,6 @@ import {
   changedKeys,
   buildPatch,
   draftAfterSave,
-  pinnedMap,
   parseLockedKey,
   keysInMessage,
   fieldErrors,
@@ -75,7 +74,7 @@ test('flattenConfig and changedKeys', () => {
   assert.deepEqual(changedKeys(flat, draft), ['logging.level'], 'a draft equal to the base is no change');
 });
 
-test('buildPatch sends only changed leaves, lists whole, and never a pinned key', () => {
+test('buildPatch sends only changed leaves and lists whole', () => {
   const base = flattenConfig(CONFIG);
   const draft = {
     'download.max_attempts': 4,
@@ -85,9 +84,9 @@ test('buildPatch sends only changed leaves, lists whole, and never a pinned key'
     'simulate.max_speed_kbps': 8000,
     'download.downloads_dir': '/elsewhere',
   };
-  const body = buildPatch(base, draft, { 'download.downloads_dir': 'AMDL_DOWNLOAD_DOWNLOADS_DIR' });
+  const body = buildPatch(base, draft);
   assert.deepEqual(body, {
-    download: { max_attempts: 4, quality_priority: ['ec3', 'alac'] },
+    download: { max_attempts: 4, quality_priority: ['ec3', 'alac'], downloads_dir: '/elsewhere' },
     simulate: { max_speed_kbps: 8000 },
   });
   assert.notEqual(body.download.quality_priority, draft['download.quality_priority'], 'lists are copied');
@@ -98,33 +97,16 @@ test('buildPatch sends only changed leaves, lists whole, and never a pinned key'
   assert.deepEqual(buildPatch(base, {}), {});
 });
 
-test('pinnedMap and parseLockedKey', () => {
-  assert.deepEqual(
-    pinnedMap([
-      { key: 'download.downloads_dir', env: 'AMDL_DOWNLOAD_DOWNLOADS_DIR' },
-      { key: 'simulate.enabled', env: 'AMDL_SIMULATE_ENABLED' },
-      { key: 1 },
-    ]),
-    { 'download.downloads_dir': 'AMDL_DOWNLOAD_DOWNLOADS_DIR', 'simulate.enabled': 'AMDL_SIMULATE_ENABLED' },
-  );
-  assert.deepEqual(pinnedMap(undefined), {});
-  assert.deepEqual(parseLockedKey('download.temp_dir (AMDL_DOWNLOAD_TEMP_DIR)'), { key: 'download.temp_dir', env: 'AMDL_DOWNLOAD_TEMP_DIR' });
-  assert.deepEqual(parseLockedKey('download.max_running_jobs'), { key: 'download.max_running_jobs', env: '' });
+test('parseLockedKey', () => {
+  assert.equal(parseLockedKey('download.max_running_jobs'), 'download.max_running_jobs');
   assert.equal(parseLockedKey('not a key'), null);
 });
 
 // The messages below are what the preview server answered to these PUTs.
 test('fieldErrors maps 422 and 400 answers onto fields', () => {
-  const pinned = new ApiError(422, 'config_key_pinned', 'fields are pinned by environment variables; unset the variable and restart to change them: download.downloads_dir (AMDL_DOWNLOAD_DOWNLOADS_DIR), download.temp_dir (AMDL_DOWNLOAD_TEMP_DIR)', {
-    keys: ['download.downloads_dir (AMDL_DOWNLOAD_DOWNLOADS_DIR)', 'download.temp_dir (AMDL_DOWNLOAD_TEMP_DIR)'],
-  });
-  const p = fieldErrors(pinned);
-  assert.deepEqual(Object.keys(p.fields), ['download.downloads_dir', 'download.temp_dir']);
-  assert.match(p.fields['download.temp_dir'], /AMDL_DOWNLOAD_TEMP_DIR/);
-  assert.equal(p.message, pinned.message);
-
   const locked = fieldErrors(new ApiError(422, 'config_key_not_mutable', 'fields can only be changed in the config file and require a restart: download.max_running_jobs', { keys: ['download.max_running_jobs'] }));
   assert.deepEqual(Object.keys(locked.fields), ['download.max_running_jobs']);
+  assert.equal(locked.message, 'fields can only be changed in the config file and require a restart: download.max_running_jobs');
 
   const range = fieldErrors(new ApiError(422, 'invalid_config', 'download.max_attempts must be at most 10'));
   assert.deepEqual(range.fields, { 'download.max_attempts': 'download.max_attempts must be at most 10' });
@@ -254,12 +236,11 @@ test('diffConfig, reloadSummary and labelList', () => {
   assert.equal(labelList(['download.max_attempts']), 'Attempts per step');
   assert.equal(labelList(['download.max_attempts', 'logging.level']), 'Attempts per step and Log level');
   assert.match(labelList(['download.max_attempts', 'logging.level', 'simulate.enabled', 'download.cover_size', 'library_sync.enabled'], 3), /and 2 more$/);
-  assert.match(reloadSummary([], 0).long, /no changes\.$/);
-  assert.equal(reloadSummary([], 0).short, 'Reloaded from the file: no changes');
-  const two = reloadSummary(['logging.level', 'download.max_attempts'], 3);
-  assert.match(two.long, /2 settings changed \(Log level and Attempts per step\)/);
-  assert.match(two.long, /3 pinned keys keep their environment values/);
-  assert.match(reloadSummary(['logging.level'], 1).short, /1 setting changed/);
+  assert.equal(reloadSummary([]).long, 'Reloaded from the config file: no changes.');
+  assert.equal(reloadSummary([]).short, 'Reloaded from the file: no changes');
+  const two = reloadSummary(['logging.level', 'download.max_attempts']);
+  assert.equal(two.long, 'Reloaded from the config file: 2 settings changed (Log level and Attempts per step).');
+  assert.match(reloadSummary(['logging.level']).short, /1 setting changed/);
 });
 
 test('lossSummary and unsavedAnnouncement', () => {

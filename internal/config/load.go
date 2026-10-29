@@ -11,12 +11,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// upgradeGuide names the document that lists removed keys and variables, so a
-// startup failure on one of them tells the operator where to look.
-const upgradeGuide = "docs/upgrading-to-2.0.md"
+// UpgradeGuide names the document that lists removed keys and variables, so a
+// startup failure or warning about one of them tells the operator where to look.
+const UpgradeGuide = "docs/upgrading-to-2.0.md"
 
-// Load reads the combined config file, overlays AMDL_* environment variable
-// overrides, clamps oversized limits, and validates the result.
+// Load reads the combined config file, overlays the AMDL_* environment
+// overrides (env.go), clamps oversized limits, and validates the result.
 func Load(path string) (Config, error) {
 	return load(path, os.Environ())
 }
@@ -31,16 +31,14 @@ func load(path string, environ []string) (Config, error) {
 	}
 	if unknown := unknownKeys(raw); len(unknown) > 0 {
 		return cfg, fmt.Errorf("%s: unknown config key(s) %s; removed keys and their replacements are listed in %s",
-			path, strings.Join(unknown, ", "), upgradeGuide)
+			path, strings.Join(unknown, ", "), UpgradeGuide)
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
 		return cfg, fmt.Errorf("decode %s: %w", path, err)
 	}
-	if err := applyEnvOverrides(&cfg, environ); err != nil {
-		return cfg, err
-	}
+	applyEnvOverrides(&cfg, environ)
 	// A file may hold values above the limits (hand edits, files written by an
 	// older backend); clamp them instead of refusing to boot. The runtime
 	// config API rejects the same values with an explicit error.

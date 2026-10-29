@@ -1,7 +1,7 @@
 # internal/config
 
 Loads, validates and persists the service config (`Load`, `Config.Validate`,
-`Store`), applies `AMDL_*` environment overrides, and defines the per-job
+`Store`), applies the three `AMDL_*` environment overrides, and defines the per-job
 `DownloadOverrides` (quality and overwrite keys only). These rules also cover `configs/`.
 
 ## Invariants
@@ -23,10 +23,11 @@ Loads, validates and persists the service config (`Load`, `Config.Validate`,
 - `Store.Reload` keeps the previous snapshot when the file is invalid.
   `Store.UpdateAndSave` re-reads the file under the same lock before `mutate`, so a
   PUT never overwrites a hand edit; don't bypass it with `Store.Set` for API writes.
-- Every key is overridable as `AMDL_<SECTION>_<KEY>`; `envFields` derives the names
-  from the yaml tags. An unknown `AMDL_*` variable fails startup, PUT rejects
-  env-pinned keys with 422, and `envIgnored` lists the only variables that are not
-  keys (`AMDL_CONFIG`, `AMDL_HOOKS_CONFIG`).
+- Five environment variables exist: `AMDL_CONFIG` and `AMDL_HOOKS_CONFIG` (file
+  paths) and the three overrides in `envOverrides` (`server.listen`,
+  `wrapper.address`, `database.path`). Overrides are startup keys only, so PUT never
+  has to refuse a key the environment would mask; don't add one for a runtime key.
+  Any other `AMDL_*` variable is ignored, and main warns about it (`UnreadEnv`).
 - Renaming or removing a key is a breaking change: unknown keys fail startup (the
   error names the key and `docs/upgrading-to-2.0.md`), so it needs a `!` commit and
   an upgrade-guide row telling users what to edit. No compatibility shims.
@@ -56,7 +57,7 @@ go test ./internal/config/ ./internal/api/
 
 `TestCommittedExampleDocumentsEveryConfigKey` (example key set),
 `TestDefaultMatchesExample` and `TestExampleDefaultAnnotationsMatchDefault`
-(defaults), `TestEnvFieldsCoverConfig` (env names),
+(defaults), `TestEnvOverridesTargetOnlyStartupKeys` (env overrides),
 `TestDownloadOverridesCoverRuntimeDownloadKeys` (job overrides) and, in
 internal/api, `TestRuntimeConfigSchemaMatchesRuntimeKeys` (the `RuntimeConfig`
 schema lists exactly the runtime keys) catch drift; none can judge whether a

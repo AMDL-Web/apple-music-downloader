@@ -18,7 +18,6 @@ import {
   flattenConfig,
   changedKeys,
   buildPatch,
-  pinnedMap,
   fieldErrors,
   validateDraft,
   savedWarnings,
@@ -43,7 +42,7 @@ function LossText({ keys, lead }) {
     <p>Saved settings are not affected.</p>`;
 }
 
-const EMPTY = { loaded: false, error: null, base: {}, pinned: {}, pinnedList: [], persisted: true, reloadError: '' };
+const EMPTY = { loaded: false, error: null, base: {}, persisted: true, reloadError: '' };
 
 export function SettingsPage({ route }) {
   const app = useApp();
@@ -76,8 +75,6 @@ export function SettingsPage({ route }) {
       loaded: true,
       error: null,
       base: flattenConfig(res && res.config),
-      pinned: pinnedMap(res && res.pinned),
-      pinnedList: Array.isArray(res && res.pinned) ? res.pinned : [],
       persisted: !res || res.persisted !== false,
       reloadError: (res && res.reload_error) || '',
     });
@@ -157,7 +154,7 @@ export function SettingsPage({ route }) {
       setFailSeq((n) => n + 1);
       return false;
     }
-    const body = buildPatch(cfg.base, draft, cfg.pinned);
+    const body = buildPatch(cfg.base, draft);
     if (Object.keys(body).length === 0) {
       setDraft({});
       return true;
@@ -269,7 +266,7 @@ export function SettingsPage({ route }) {
         : html`<${ErrorNote} title="Couldn't load the settings" error=${cfg.error} onRetry=${() => setLoadSeq((n) => n + 1)} />`;
   else if (!cfg.loaded) body = html`<${SkeletonRows} n=${6} kind="line" />`;
   else if (section.id === 'config_file')
-    body = html`<${ConfigFilePanel} persisted=${cfg.persisted} pinned=${cfg.pinnedList} reloadError=${cfg.reloadError} dirty=${dirty} base=${cfg.base} onReloaded=${apply} />`;
+    body = html`<${ConfigFilePanel} persisted=${cfg.persisted} reloadError=${cfg.reloadError} dirty=${dirty} base=${cfg.base} onReloaded=${apply} />`;
   else {
     const fields = sectionFields(section.id);
     body = html`
@@ -286,7 +283,6 @@ export function SettingsPage({ route }) {
             field=${f}
             value=${valueOf(f.key)}
             changed=${dirtyKeys.includes(f.key)}
-            pinnedEnv=${cfg.pinned[f.key]}
             error=${errors[f.key]}
             warning=${warnings[f.key]}
             onChange=${(v) => setValue(f.key, v)}

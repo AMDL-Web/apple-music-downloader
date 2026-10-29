@@ -42,8 +42,8 @@ it. `max_attempts` counts the first try, and retries wait one second between att
 
 **Exec entries** run `command` through `sh -c` with the JSON payload on stdin, optionally
 in `workdir`. The command inherits the backend's environment (`PATH`, `HOME`, `TZ`, …)
-**without** any `AMDL_*` variable: those configure the backend, and some, such as
-`AMDL_CATALOG_MEDIA_USER_TOKEN`, are secrets. Pass what a script needs explicitly. These
+**without** any `AMDL_*` variable: those are the backend's own settings, and one left
+over from an older install may hold a secret. Pass what a script needs explicitly. These
 variables are set instead:
 
 ```text

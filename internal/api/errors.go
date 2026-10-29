@@ -41,7 +41,6 @@ const (
 	// 422
 	CodeInvalidOverrides    ErrorCode = "invalid_overrides"
 	CodeConfigKeyNotMutable ErrorCode = "config_key_not_mutable"
-	CodeConfigKeyPinned     ErrorCode = "config_key_pinned"
 	CodeInvalidConfig       ErrorCode = "invalid_config"
 	CodeNoURLsAccepted      ErrorCode = "no_urls_accepted"
 	// 500

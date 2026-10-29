@@ -167,8 +167,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 
 所有错误共用一种响应体 `{"error": {"code", "message", "details"?}}`，客户端按 `code`
 分支。事件流都是 Server-Sent Events，用 `Last-Event-ID` 或 `?cursor=` 续传，初始游标取对应
-快照里的 `event_cursor`。`GET /config` 只读；手改配置文件后用 `POST /config/reload` 或
-SIGHUP 生效。
+快照里的 `event_cursor`。`GET /config` 只读；手改配置文件后用 `POST /config/reload` 生效。
 
 每个响应都带服务端生成的 `X-Request-ID`；用
 `GET /logs?request_id=<id>` 就能把该请求的访问日志与任务日志聚合起来。
@@ -184,9 +183,9 @@ SIGHUP 生效。
 - **运行期字段**（音质、路径、歌词、封面、重试、simulate、资料库同步）通过
   `PUT /api/v1/config` 立即生效；该接口会整体重写文件并丢弃注释。
 - **启动期字段**（监听地址、数据库路径、wrapper 地址、各种池大小、日志格式）需要重启。
-- **任意字段**都可以用 `AMDL_<大写段名>_<大写键名>` 覆盖，例如
-  `AMDL_DOWNLOAD_QUALITY_PRIORITY=alac,aac`。无法识别的 `AMDL_*` 变量会让启动失败，而不是被
-  静默忽略；被环境变量固定的字段在 `PUT` 时返回 422（`GET /config` 在 `pinned` 里列出它们）。
+- **环境变量**：`AMDL_SERVER_LISTEN`、`AMDL_WRAPPER_ADDRESS`、`AMDL_DATABASE_PATH` 覆盖对应的键，
+  `AMDL_CONFIG` / `AMDL_HOOKS_CONFIG` 指定文件路径。其余字段只在文件里设置；其他 `AMDL_*`
+  变量会被忽略，启动时打一条警告。
 
 默认值、手工编辑与重新加载、Docker 部分见 [docs/configuration.md](docs/configuration.md) 和
 [docs/deployment.md](docs/deployment.md)。

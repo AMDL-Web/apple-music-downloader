@@ -11,8 +11,8 @@ changes against 1.x are listed in [Upgrading to 2.0](upgrading-to-2.0.md).
 `cmd/amdl-api/main.go` only parses the environment and calls `run(ctx) error`; every
 deferred close runs on every exit path, and a startup failure is returned, logged and
 turned into exit status 1 by `main`. `run` builds the components, starts them, and on
-SIGINT/SIGTERM (or a failing HTTP server) stops them in this order
-(`cmd/amdl-api/shutdown.go`):
+SIGINT or SIGTERM (or a failing HTTP server) stops them in this order
+(`cmd/amdl-api/shutdown.go`; SIGHUP is ignored):
 
 1. HTTP: stop accepting connections and end every SSE stream at once
    (`internal/api#Server.EndStreams`, so a connected client never holds the drain;
@@ -32,9 +32,6 @@ Each step waits at most its own named timeout and then logs and moves on, so a s
 component cannot keep the process alive. The timeouts add up to about 105 s;
 `docker-compose.yml` sets `stop_grace_period: 2m` above that, and a test in
 `cmd/amdl-api` fails when the sum outgrows it.
-
-SIGHUP reloads the config file and applies its logging level (same as
-`POST /api/v1/config/reload`); an invalid file is logged and the previous snapshot stays.
 
 Every long-lived component has the same shape: a constructor that does no I/O, a
 `Start` that owns its goroutines or a blocking `Run(ctx)` that the caller runs on its
@@ -98,7 +95,7 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 | 405 | `method_not_allowed` |
 | 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
 | 413 | `request_too_large` |
-| 422 | `invalid_overrides`, `config_key_not_mutable`, `config_key_pinned`, `invalid_config`, `no_urls_accepted` |
+| 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` |
 | 502 | `upstream_error` |
 | 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
@@ -174,7 +171,7 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 ### 3.4 Config
 
 - `GET /config` returns the in-memory snapshot and has no side effects.
-- `POST /config/reload` (and SIGHUP) re-reads the file; the response is the same shape as
+- `POST /config/reload` re-reads the file; the response is the same shape as
   `GET`, with `reload_error` set if the file is invalid (the previous snapshot stays).
 - `PUT /config` re-reads the file under the same lock before applying the patch, so a
   hand edit made since the last reload is not overwritten.
@@ -259,8 +256,8 @@ The hook payload's job carries the API counters of 3.2 (`completed_items`,
 `skipped_items`, `failed_items`, `cancelled_items`) and `started_at`/`finished_at`; its
 items' `output_path` and `AMDL_OUTPUT_PATHS` are absolute (resolved in
 `internal/hooks`, so REST and the database keep the stored form). Exec hooks get the
-backend's environment without any `AMDL_*` variable (each is a config key override or a
-config file path, some of them secret) plus the documented hook variables, and a failed
+backend's environment without any `AMDL_*` variable (the backend's own settings; one left
+over from an older install may hold a secret) plus the documented hook variables, and a failed
 one records at most the last 4 KiB of its stderr. Webhook URLs must be absolute
 `http`/`https` URLs; an invalid one fails startup naming the entry. Attempts run on a
 dispatcher-owned context, so shutdown can stop retries and cancel running attempts.

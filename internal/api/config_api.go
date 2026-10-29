@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
-	"os"
 	"strings"
 
 	"amdl/internal/config"
@@ -16,7 +15,7 @@ import (
 // snapshot (mutable download fields, logging level and access log, simulate,
 // library sync, and the runtime catalog keys). Startup-bound fields are
 // omitted: clients cannot change them through this API. It never reads the
-// file; POST /config/reload and SIGHUP do.
+// file; POST /config/reload does.
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 	s.writeConfigView(w, nil)
 }
@@ -46,9 +45,6 @@ func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, r
 	resp := map[string]any{
 		"config":    view,
 		"persisted": s.cfg != nil && s.cfg.Persistent(),
-		// The same variables PUT checks with EnvLockedChanges, so a client
-		// can disable exactly the fields a PUT would reject.
-		"pinned": config.PinnedRuntimeKeys(os.LookupEnv),
 	}
 	if reloadErr != nil {
 		resp["reload_error"] = reloadErr.Error()
@@ -91,16 +87,6 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 			err := errors.New("fields can only be changed in the config file and require a restart: " + strings.Join(locked, ", "))
 			reject = func(w http.ResponseWriter) {
 				writeErrorDetails(w, http.StatusUnprocessableEntity, CodeConfigKeyNotMutable, err.Error(), map[string]any{"keys": locked})
-			}
-			return config.Config{}, err
-		}
-		// A field pinned by an AMDL_* environment override would accept the
-		// write but revert to the environment value on the next reload, so
-		// reject it up front instead of pretending the change stuck.
-		if locked := config.EnvLockedChanges(current, merged, os.LookupEnv); len(locked) > 0 {
-			err := errors.New("fields are pinned by environment variables; unset the variable and restart to change them: " + strings.Join(locked, ", "))
-			reject = func(w http.ResponseWriter) {
-				writeErrorDetails(w, http.StatusUnprocessableEntity, CodeConfigKeyPinned, err.Error(), map[string]any{"keys": locked})
 			}
 			return config.Config{}, err
 		}

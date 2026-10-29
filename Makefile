@@ -38,18 +38,13 @@ run: ## Run the API with configs/config.yaml (needs wrapper-manager for real dow
 
 dev: ## Run the API in simulate mode on 127.0.0.1:18080 with a throwaway config and data under data/dev/
 	@mkdir -p $(DEV_DIR)
-	@cp configs/config.example.yaml $(DEV_DIR)/config.example.yaml
-	@rm -f $(DEV_DIR)/config.yaml
+	@printf 'catalog:\n  language: "en-US"\ndownload:\n  downloads_dir: "%s"\n  temp_dir: "%s"\n  album_path_format: "albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"\n  artist_path_format: "artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"\nsimulate:\n  enabled: true\n' \
+		$(DEV_DIR)/downloads $(DEV_DIR)/tmp > $(DEV_DIR)/config.yaml
 	@test -f $(DEV_DIR)/hooks.yaml || cp configs/hooks.yaml $(DEV_DIR)/hooks.yaml
 	AMDL_CONFIG=$(DEV_DIR)/config.yaml \
 	AMDL_HOOKS_CONFIG=$(DEV_DIR)/hooks.yaml \
 	AMDL_SERVER_LISTEN=$(DEV_LISTEN) \
-	AMDL_SIMULATE_ENABLED=true \
 	AMDL_DATABASE_PATH=$(DEV_DIR)/amdl.db \
-	AMDL_DOWNLOAD_DOWNLOADS_DIR=$(DEV_DIR)/downloads \
-	AMDL_DOWNLOAD_TEMP_DIR=$(DEV_DIR)/tmp \
-	AMDL_LOGGING_FILE_ENABLED=false \
-	AMDL_CATALOG_LANGUAGE=en-US \
 	$(GO) run -ldflags "$(LDFLAGS)" ./cmd/amdl-api
 
 fmt: ## Rewrite Go files with gofmt

@@ -43,7 +43,7 @@ Hand edits reach the running service like this:
 | Trigger | Effect |
 | --- | --- |
 | `GET /api/v1/config` | Returns the in-memory snapshot; never reads the file. |
-| `POST /api/v1/config/reload` or `SIGHUP` | Re-reads the file and applies its runtime keys. If the file is unreadable or invalid, the previous snapshot stays live; the endpoint reports the error as `reload_error`, and `SIGHUP` logs it. |
+| `POST /api/v1/config/reload` (the console's "Reload from file") | Re-reads the file and applies its runtime keys. If the file is unreadable or invalid, the previous snapshot stays live and the response reports the error as `reload_error`. |
 | `PUT /api/v1/config` | Re-reads the file under the same lock first, then applies the patch, so a hand edit made since the last reload is kept rather than overwritten. An invalid file fails the `PUT` and changes nothing. |
 | Restart | Applies startup keys. A reload or `PUT` never makes a startup-key edit live, and a `PUT` keeps the edited value on disk for the next start. |
 
@@ -58,26 +58,22 @@ Set these before first real use:
 
 ## Environment overrides
 
-Any key can be overridden with `AMDL_<SECTION>_<KEY>` — the YAML path uppercased with `_`
-as the separator: `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_DATABASE_PATH`,
-`AMDL_LOGGING_LEVEL`, `AMDL_DOWNLOAD_QUALITY_PRIORITY`.
+Five environment variables exist, for what a container needs before it can read its own
+config file:
 
-- Overrides sit on top of the file on every start, reload and `PUT`. Loading alone never
-  writes them back.
-- Value syntax: strings verbatim; booleans `true`/`false`; integers as digits; string
-  lists comma-separated (`alac,aac`), with an empty value meaning an empty list.
-- Unrecognised `AMDL_*` variables **fail startup**, so a typo can never be silently
-  ignored. Only `AMDL_CONFIG` (path of `config.yaml`) and `AMDL_HOOKS_CONFIG` (path of
-  `hooks.yaml`) are exempt; they are file locations, not keys. Variables that no longer
-  exist fail the same way, for example `AMDL_RUNTIME_CONFIG`, `AMDL_LISTEN` (use
-  `AMDL_SERVER_LISTEN`) and `AMDL_WRAPPER_ADDR` (use `AMDL_WRAPPER_ADDRESS`).
-- A field pinned by an environment variable cannot be changed through
-  `PUT /api/v1/config` — it returns `422`. Change the variable and restart. Every config
-  answer lists the pinned runtime keys with their variables in `pinned`, so a client can
-  disable those fields.
-- A `PUT` persists the effective runtime snapshot, so an unchanged runtime field pinned by
-  an environment variable may be written into the file during an unrelated `PUT`.
-  Startup-field overrides are never baked in.
+| Variable | Sets |
+| --- | --- |
+| `AMDL_CONFIG` | Path of `config.yaml` (default `configs/config.yaml`) |
+| `AMDL_HOOKS_CONFIG` | Path of `hooks.yaml` (default `configs/hooks.yaml`) |
+| `AMDL_SERVER_LISTEN` | `server.listen` |
+| `AMDL_WRAPPER_ADDRESS` | `wrapper.address` |
+| `AMDL_DATABASE_PATH` | `database.path` |
+
+- The three key overrides win over the file on every start and reload, and are never
+  written back. They are all startup keys, so `PUT /api/v1/config` never meets one.
+- Every other key is set in `config.yaml`. Any other `AMDL_*` variable is ignored, and
+  startup logs one warning per variable naming it; releases before 2.0 accepted an
+  override for every key, so move such a setting into the file.
 
 ## Developer-token signing
 

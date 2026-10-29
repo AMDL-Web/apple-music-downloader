@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -13,13 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"amdl/internal/config"
 	"amdl/internal/db"
-	"amdl/internal/logging"
 )
 
-// newRunEnv prepares a config directory bootstrapped from the shipped example
-// and points every data path into a temp dir, the way `make dev` does.
+// newRunEnv prepares a config directory with a seeded config.yaml that points
+// every data path into a temp dir and turns on simulate mode, the way
+// `make dev` does; the shipped example sits next to it as on a real install.
 func newRunEnv(t *testing.T, hooksYAML string) configFiles {
 	t.Helper()
 	root := t.TempDir()
@@ -40,13 +39,13 @@ func newRunEnv(t *testing.T, hooksYAML string) configFiles {
 			t.Fatal(err)
 		}
 	}
+	seed := fmt.Sprintf("logging:\n  console: false\ndownload:\n  downloads_dir: %q\n  temp_dir: %q\nsimulate:\n  enabled: true\n",
+		filepath.Join(root, "downloads"), filepath.Join(root, "tmp"))
+	if err := os.WriteFile(files.config, []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("AMDL_SERVER_LISTEN", "127.0.0.1:0")
-	t.Setenv("AMDL_SIMULATE_ENABLED", "true")
 	t.Setenv("AMDL_DATABASE_PATH", filepath.Join(root, "db", "amdl.db"))
-	t.Setenv("AMDL_DOWNLOAD_DOWNLOADS_DIR", filepath.Join(root, "downloads"))
-	t.Setenv("AMDL_DOWNLOAD_TEMP_DIR", filepath.Join(root, "tmp"))
-	t.Setenv("AMDL_LOGGING_FILE_ENABLED", "false")
-	t.Setenv("AMDL_LOGGING_CONSOLE", "false")
 	return files
 }
 
@@ -159,59 +158,5 @@ func TestRunEndsOpenStreamsAtShutdown(t *testing.T) {
 	}
 	if _, err := io.ReadAll(stream.Body); err != nil {
 		t.Fatalf("stream did not end cleanly: %v", err)
-	}
-}
-
-// SIGHUP re-reads the config file and applies its logging level; an invalid
-// file keeps the previous snapshot.
-func TestReloadConfigAppliesLoggingLevelAndKeepsSnapshotOnError(t *testing.T) {
-	files := newRunEnv(t, "")
-	if _, err := config.EnsureFile(files.config); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := config.Load(files.config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	logSystem, err := logging.New(cfg.Logging)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer logSystem.Close()
-	cfgStore := config.NewFileStore(cfg, files.config)
-	var logs strings.Builder
-	logger := slog.New(slog.NewTextHandler(&logs, nil))
-	raw, err := os.ReadFile(files.config)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	debug := strings.Replace(string(raw), `level: "info"`, `level: "debug"`, 1)
-	if debug == string(raw) {
-		t.Fatal(`config example has no level: "info" line to edit`)
-	}
-	if err := os.WriteFile(files.config, []byte(debug), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	reloadConfig(cfgStore, logSystem, logger)
-	if got := cfgStore.Get().Logging.Level; got != "debug" {
-		t.Fatalf("reloaded logging level = %q, want debug", got)
-	}
-	if !logSystem.Logger.Enabled(context.Background(), slog.LevelDebug) {
-		t.Fatal("logger does not emit debug after the reload")
-	}
-	if !strings.Contains(logs.String(), "config reloaded on SIGHUP") {
-		t.Fatalf("reload log = %q, want a reload line", logs.String())
-	}
-
-	if err := os.WriteFile(files.config, []byte("logging: [not, a, map]\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	reloadConfig(cfgStore, logSystem, logger)
-	if got := cfgStore.Get().Logging.Level; got != "debug" {
-		t.Fatalf("logging level after an invalid reload = %q, want the previous debug", got)
-	}
-	if !strings.Contains(logs.String(), "keeping the previous config") {
-		t.Fatalf("reload log = %q, want the reload error", logs.String())
 	}
 }

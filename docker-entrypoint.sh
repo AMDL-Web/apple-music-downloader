@@ -20,9 +20,8 @@ PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 
 # Container defaults: two of the repository defaults do not work inside a
-# container, so they are replaced on every start through the backend's
-# AMDL_<SECTION>_<KEY> environment override mechanism (upper-case section and
-# key names):
+# container, so they are replaced on every start through two of the backend's
+# environment overrides:
 #   - server.listen   defaults to 127.0.0.1:18080, unreachable from outside
 #                     the container; changed to :18080
 #   - wrapper.address defaults to 127.0.0.1:8080, which points at the

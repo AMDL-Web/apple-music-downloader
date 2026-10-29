@@ -223,8 +223,8 @@ base durations (120 ms color, 200 ms overlays).
 - **Settings**: the section list repeats the sidebar (red 18 px glyphs, 15 px
   labels, the current section a filled pill in semibold; 14 px on the rail).
   Fields are grouped rows whose hairlines run from the text to the card's
-  right edge, as do panel rules, the pinned keys table and the library sync
-  and account status rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
+  right edge, as do panel rules and the library sync and account status
+  rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
   soft shadow, red when on, the off track keeping its `--border-control`
   outline, "On" / "Off" beside it). The ordered list is an inset list like
   the codec ranking; the template reference is an inset cell. Panel actions

@@ -62,10 +62,9 @@ about 105 s in the worst case, so the container needs more than Docker's default
 `--stop-timeout 120`. With less, Docker kills the process before it closes the database.
 The order of the steps is in [Architecture](architecture.md#1-process-and-lifecycle).
 
-SIGHUP re-reads `config.yaml` and applies its runtime keys and logging level, like
-`POST /api/v1/config/reload`: `docker compose kill -s SIGHUP amdl-backend`, or
-`docker kill -s HUP amdl-backend`. An invalid file is logged and the running config
-stays.
+After a hand edit of `config.yaml`, `POST /api/v1/config/reload` (the console's "Reload
+from file") applies its runtime keys and logging level; an invalid file is reported and
+the running config stays.
 
 ## Behind a reverse proxy
 
@@ -91,17 +90,17 @@ The entrypoint syncs the image's bundled examples into `/app/configs`:
 entrypoint, so what `PUT /api/v1/config` writes survives a container rebuild.
 
 Two repository defaults are unusable inside a container, so the entrypoint rewrites them
-on every start through the normal environment-override mechanism rather than baking them
-into the file: `server.listen` becomes `AMDL_SERVER_LISTEN` (default `:18080` — a
+on every start through two of the environment overrides rather than baking them into the
+file: `server.listen` becomes `AMDL_SERVER_LISTEN` (default `:18080` — a
 container must not listen on loopback) and `wrapper.address` becomes
 `AMDL_WRAPPER_ADDRESS` (default `host.docker.internal:8080`).
 
 ## Environment variables
 
-Any config key can be overridden with `AMDL_<SECTION>_<KEY>` (see
-[configuration.md](configuration.md#environment-overrides)), for example
-`AMDL_DOWNLOAD_QUALITY_PRIORITY: "alac,aac"` or `AMDL_SIMULATE_ENABLED: "true"`.
-Container-specific variables:
+The backend reads five `AMDL_*` variables (see
+[configuration.md](configuration.md#environment-overrides)); every other key is set in
+`config.yaml`, and any other `AMDL_*` variable is ignored with a startup warning.
+Container variables:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -112,17 +111,20 @@ Container-specific variables:
 | `AMDL_WRAPPER_ADDRESS` | `host.docker.internal:8080` (entrypoint default) | Overrides `wrapper.address` on every start. |
 | `AMDL_CONFIG` | `/app/configs/config.yaml` | Config file path (native backend support). |
 | `AMDL_HOOKS_CONFIG` | `/app/configs/hooks.yaml` | Hooks file path (native backend support). |
+| `AMDL_DATABASE_PATH` | `database.path` from `config.yaml` | Overrides `database.path` on every start. |
 
-Three ways to change configuration: runtime keys via `PUT /api/v1/config` (immediate);
-any key via an environment variable followed by `docker compose up -d`; or by editing
-`config.yaml` in the mounted directory — runtime keys apply on
-`POST /api/v1/config/reload` or SIGHUP (see [Stopping and restarting](#stopping-and-restarting)),
-startup keys need a container restart. Inside the container the listen and wrapper
+Two ways to change configuration: runtime keys via `PUT /api/v1/config` (immediate, the
+console's Settings page); or by editing `config.yaml` in the mounted directory — runtime
+keys apply on `POST /api/v1/config/reload` (see
+[Stopping and restarting](#stopping-and-restarting)), startup keys need a container
+restart. Inside the container the listen and wrapper
 addresses always come from the environment. Remember that a `PUT` rewrites the whole file
 and drops comments.
 
-> **Breaking change**: the old names `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR` were removed.
-> Leaving them set fails startup with an unknown-variable error.
+> **Breaking change**: 2.0 reads only the five variables above. The old names
+> `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR`, and the per-key overrides such as
+> `AMDL_SIMULATE_ENABLED`, are ignored with a warning; see
+> [Upgrading to 2.0](upgrading-to-2.0.md#config-and-environment).
 
 To avoid running as root at all, use `docker run --user <uid>:<gid>` (or compose's
 `user:`). The entrypoint then skips the privilege drop and the ownership fixes, ignores

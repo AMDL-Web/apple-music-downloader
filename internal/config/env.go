@@ -1,187 +1,51 @@
 package config
 
 import (
-	"fmt"
-	"maps"
-	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 )
 
-// Every config key can be overridden with an environment variable named
-// AMDL_<SECTION>_<KEY> — the yaml path uppercased with "_" as the separator,
-// for example AMDL_SERVER_LISTEN, AMDL_WRAPPER_ADDRESS, or
-// AMDL_DOWNLOAD_QUALITY_PRIORITY. Overrides sit on top of the config file:
-// they are applied on every Load (startup and Store.Reload alike) and never
-// written back. A PUT /api/v1/config rewrite persists the runtime values but
-// retains startup values from disk, and an env-pinned key keeps the file's own
-// value so unsetting the variable hands control back to the file. Value
-// syntax: strings verbatim, booleans per strconv.ParseBool, integers as
-// digits, string lists as comma-separated items (an empty value is an empty
-// list).
+// Five environment variables configure where the backend runs, so a container
+// can set them without editing config.yaml: AMDL_CONFIG and AMDL_HOOKS_CONFIG
+// (the two file paths, read in main) and the three overrides in envOverrides.
+// Every other key lives only in config.yaml. Overrides are applied on every
+// Load (startup and Store.Reload alike) and never written back; all three are
+// startup keys, so PUT /api/v1/config can never change one.
 
-// envPrefix is the shared prefix of every backend environment variable.
-const envPrefix = "AMDL_"
-
-// envIgnored are AMDL_-prefixed variables that are not config-key overrides:
-// the file-path variables read in main.
-var envIgnored = map[string]struct{}{
-	"AMDL_CONFIG":       {},
-	"AMDL_HOOKS_CONFIG": {},
+// envOverrides maps each overriding variable to the field it replaces.
+var envOverrides = map[string]func(*Config, string){
+	"AMDL_SERVER_LISTEN":   func(c *Config, v string) { c.Server.Listen = v },
+	"AMDL_WRAPPER_ADDRESS": func(c *Config, v string) { c.Wrapper.Address = v },
+	"AMDL_DATABASE_PATH":   func(c *Config, v string) { c.Database.Path = v },
 }
 
-// envField ties one leaf field of Config to the environment variable that
-// overrides it: the dotted config key, the variable name, and the field index
-// path for reflect.Value.FieldByIndex.
-type envField struct {
-	key   string
-	name  string
-	index []int
-}
+// envPaths are the variables main reads for the two file paths.
+var envPaths = []string{"AMDL_CONFIG", "AMDL_HOOKS_CONFIG"}
 
-// envFields enumerates every leaf field of Config from the yaml struct tags,
-// so a field added to any section becomes overridable automatically.
-func envFields() []envField {
-	var fields []envField
-	cfgType := reflect.TypeOf(Config{})
-	for i := 0; i < cfgType.NumField(); i++ {
-		section := cfgType.Field(i)
-		sectionTag := yamlTagName(section)
-		for j := 0; j < section.Type.NumField(); j++ {
-			leafTag := yamlTagName(section.Type.Field(j))
-			fields = append(fields, envField{
-				key:   sectionTag + "." + leafTag,
-				name:  envPrefix + strings.ToUpper(sectionTag) + "_" + strings.ToUpper(leafTag),
-				index: []int{i, j},
-			})
-		}
-	}
-	return fields
-}
-
-func yamlTagName(field reflect.StructField) string {
-	name, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
-	return name
-}
-
-// applyEnvOverrides overlays every AMDL_* variable in environ onto cfg. An
-// AMDL_-prefixed variable that is neither a config key nor in envIgnored is
-// an error, so a typo fails startup loudly instead of being skipped. Values
-// are only parsed here; semantic checks stay in Validate, which callers run
-// after the overlay.
-func applyEnvOverrides(cfg *Config, environ []string) error {
-	overrides := map[string]string{}
+// applyEnvOverrides overlays the override variables set in environ onto cfg.
+// Values are taken verbatim; Validate runs after the overlay.
+func applyEnvOverrides(cfg *Config, environ []string) {
 	for _, kv := range environ {
 		name, value, _ := strings.Cut(kv, "=")
-		if !strings.HasPrefix(name, envPrefix) {
-			continue
+		if set, ok := envOverrides[name]; ok {
+			set(cfg, value)
 		}
-		if _, ok := envIgnored[name]; ok {
-			continue
-		}
-		overrides[name] = value
 	}
-	if len(overrides) == 0 {
-		return nil
-	}
-	cfgValue := reflect.ValueOf(cfg).Elem()
-	for _, field := range envFields() {
-		raw, ok := overrides[field.name]
-		if !ok {
-			continue
-		}
-		if err := setFromEnv(cfgValue.FieldByIndex(field.index), raw); err != nil {
-			return fmt.Errorf("environment variable %s (%s): %w", field.name, field.key, err)
-		}
-		delete(overrides, field.name)
-	}
-	if len(overrides) > 0 {
-		return fmt.Errorf("unknown configuration environment variable(s): %s; removed variables are listed in %s",
-			strings.Join(slices.Sorted(maps.Keys(overrides)), ", "), upgradeGuide)
-	}
-	return nil
 }
 
-func setFromEnv(target reflect.Value, raw string) error {
-	switch target.Kind() {
-	case reflect.String:
-		target.SetString(raw)
-	case reflect.Bool:
-		parsed, err := strconv.ParseBool(strings.TrimSpace(raw))
-		if err != nil {
-			return fmt.Errorf("invalid boolean %q", raw)
-		}
-		target.SetBool(parsed)
-	case reflect.Int:
-		parsed, err := strconv.Atoi(strings.TrimSpace(raw))
-		if err != nil {
-			return fmt.Errorf("invalid integer %q", raw)
-		}
-		target.SetInt(int64(parsed))
-	case reflect.Slice:
-		target.Set(reflect.ValueOf(splitEnvList(raw)))
-	default:
-		return fmt.Errorf("unsupported field type %s", target.Kind())
-	}
-	return nil
-}
-
-// splitEnvList parses a comma-separated list value. Items are trimmed and
-// empty items dropped, so trailing commas are harmless; an empty (or
-// all-comma) value overrides the key to an empty list.
-func splitEnvList(raw string) []string {
-	items := []string{}
-	for _, item := range strings.Split(raw, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			items = append(items, item)
-		}
-	}
-	return items
-}
-
-// EnvLockedChanges returns a "key (VARIABLE)" entry for every field that
-// differs between current and merged while its override variable is set in
-// lookup. PUT /api/v1/config rejects such updates: the write itself would
-// succeed, but the next Load would overlay the environment value again and
-// silently shadow it.
-func EnvLockedChanges(current, merged Config, lookup func(string) (string, bool)) []string {
-	var locked []string
-	currentValue := reflect.ValueOf(current)
-	mergedValue := reflect.ValueOf(merged)
-	for _, field := range envFields() {
-		if _, ok := lookup(field.name); !ok {
+// UnreadEnv returns the AMDL_* variables set in environ that the backend does
+// not read, sorted. They are left over from releases that accepted an
+// override for every key; main logs a warning for each so an install notices
+// that the setting no longer applies and moves it into config.yaml.
+func UnreadEnv(environ []string) []string {
+	var unread []string
+	for _, kv := range environ {
+		name, _, _ := strings.Cut(kv, "=")
+		if _, ok := envOverrides[name]; ok || !strings.HasPrefix(name, "AMDL_") || slices.Contains(envPaths, name) {
 			continue
 		}
-		if !reflect.DeepEqual(currentValue.FieldByIndex(field.index).Interface(), mergedValue.FieldByIndex(field.index).Interface()) {
-			locked = append(locked, fmt.Sprintf("%s (%s)", field.key, field.name))
-		}
+		unread = append(unread, name)
 	}
-	return locked
-}
-
-// PinnedKey is one runtime config key that an AMDL_* environment variable
-// pins: Env names the variable, Key the dotted config key it overrides.
-type PinnedKey struct {
-	Key string `json:"key"`
-	Env string `json:"env"`
-}
-
-// PinnedRuntimeKeys returns the runtime keys (the ones GET /api/v1/config
-// returns) whose override variable is set in lookup, sorted by key and never
-// nil. A key is pinned whenever its variable is set, whatever its value: a PUT
-// changing it is rejected by EnvLockedChanges, so a client should not offer
-// the change.
-func PinnedRuntimeKeys(lookup func(string) (string, bool)) []PinnedKey {
-	pinned := []PinnedKey{}
-	for _, field := range envFields() {
-		if !isRuntimeKey(field.key) {
-			continue
-		}
-		if _, ok := lookup(field.name); ok {
-			pinned = append(pinned, PinnedKey{Key: field.key, Env: field.name})
-		}
-	}
-	slices.SortFunc(pinned, func(a, b PinnedKey) int { return strings.Compare(a.Key, b.Key) })
-	return pinned
+	slices.Sort(unread)
+	return slices.Compact(unread)
 }

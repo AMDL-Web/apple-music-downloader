@@ -1,5 +1,5 @@
 // Settings panels that are not config fields: the library sync status with
-// "Reset anchor", the configuration file (persisted, pinned keys, Reload),
+// "Reset anchor", the configuration file (persisted, Reload),
 // and the path template reference.
 
 import { html, useState } from '../ui/preact.js';
@@ -110,11 +110,11 @@ function SyncState({ view }) {
 }
 
 /**
- * Where the settings live: whether PUT writes them to the file, the keys an
- * environment variable pins, the last reload error, and "Reload from file"
+ * Where the settings live: whether PUT writes them to the file, the last
+ * reload error, and "Reload from file"
  * (POST /config/reload). onReloaded gets the ConfigResponse.
  */
-export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, onReloaded }) {
+export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloaded }) {
   const app = useApp();
   const [busy, setBusy] = useState(false);
   // What the last Reload did, kept on the page: {role, text} or null.
@@ -122,7 +122,6 @@ export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, o
   // Counts the reloads made here, so an unchanged failure is announced again
   // (and the warning is not, when the panel is shown again later).
   const [tries, setTries] = useState(0);
-  const list = Array.isArray(pinned) ? pinned : [];
   const reload = async () => {
     if (busy) return;
     setBusy(true);
@@ -134,7 +133,7 @@ export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, o
       // A file that could not be used is the warning under the button
       // (reloadError, which also survives leaving the page): said once.
       if (!res.reload_error) {
-        const sum = reloadSummary(diffConfig(base, flattenConfig(res.config)), list.length);
+        const sum = reloadSummary(diffConfig(base, flattenConfig(res.config)));
         setOutcome({ role: 'success', text: sum.long });
         app.toast({ message: sum.short, role: 'success' });
       }
@@ -148,21 +147,8 @@ export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, o
     <${KV}
       rows=${[
         ['Saved to a file', persisted ? 'Yes: saved changes are written to configs/config.yaml and survive a restart' : 'No: saved changes last until the backend restarts'],
-        ['Pinned keys', list.length ? plural(list.length, 'key', 'keys') : 'None'],
       ]}
     />
-    ${list.length
-      ? html`<div class="table-wrap">
-          <table class="table pinned-table">
-            <caption class="sr-only">Keys pinned by environment variables</caption>
-            <thead><tr><th scope="col">Key</th><th scope="col">Set by</th></tr></thead>
-            <tbody>
-              ${list.map((p) => html`<tr key=${p.key}><td class="mono" data-label="Key">${p.key}</td><td class="mono" data-label="Set by">${p.env}</td></tr>`)}
-            </tbody>
-          </table>
-        </div>
-        <p class="muted small">A pinned key is shown but cannot be changed here: the variable wins on every reload. Unset it and restart the backend to manage the key on this page.</p>`
-      : null}
     <div class="settings-panel-actions">
       <${Button} variant="secondary" icon="rotate" className="config-reload" onClick=${reload} aria-disabled=${busy ? 'true' : undefined}>${busy ? 'Reloading…' : 'Reload from file'}</${Button}>
       <p class="muted small">Reads configs/config.yaml again, for example after a hand edit.${dirty ? ' Your unsaved changes stay pending.' : ''}</p>

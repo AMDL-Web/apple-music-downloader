@@ -46,6 +46,11 @@ func main() {
 	if files.hooks == "" {
 		files.hooks = defaultHooksPath
 	}
+	// SIGHUP is ignored rather than left to Go's default exit: 1.x reloaded the
+	// config on it, so a leftover `docker kill -s HUP` habit must not stop the
+	// backend. A hand-edited config file is applied through
+	// POST /api/v1/config/reload.
+	signal.Ignore(syscall.SIGHUP)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	err := run(ctx, files)
 	stop()
@@ -94,11 +99,10 @@ func run(ctx context.Context, files configFiles) (err error) {
 		}
 	}()
 	logger.Info("logging initialized", "level", cfg.Logging.Level, "format", cfg.Logging.Format, "file_enabled", cfg.Logging.FileEnabled)
-	// Registered early so a SIGHUP during startup is queued instead of
-	// terminating the process (the default action).
-	reloadSignals := make(chan os.Signal, 1)
-	signal.Notify(reloadSignals, syscall.SIGHUP)
-	defer signal.Stop(reloadSignals)
+	for _, name := range config.UnreadEnv(os.Environ()) {
+		logger.Warn("environment variable is no longer read; set its key in config.yaml",
+			"variable", name, "see", config.UpgradeGuide)
+	}
 
 	hooksCfg, err := hooks.LoadConfig(files.hooks)
 	if err != nil {
@@ -218,18 +222,11 @@ func run(ctx context.Context, files configFiles) (err error) {
 	logger.Info("amdl backend listening", "addr", listener.Addr().String())
 
 	var runErr error
-serve:
-	for {
-		select {
-		case <-reloadSignals:
-			reloadConfig(cfgStore, logSystem, logger)
-		case <-ctx.Done():
-			break serve
-		case err := <-serveErr:
-			// Serve returns only on failure until Shutdown has been called.
-			runErr = fmt.Errorf("http server: %w", err)
-			break serve
-		}
+	select {
+	case <-ctx.Done():
+	case err := <-serveErr:
+		// Serve returns only on failure until Shutdown has been called.
+		runErr = fmt.Errorf("http server: %w", err)
 	}
 
 	shutdownSteps{
@@ -245,23 +242,6 @@ serve:
 		hooks:            hookDispatcher,
 	}.run()
 	return runErr
-}
-
-// reloadConfig handles SIGHUP like POST /api/v1/config/reload: it re-reads the
-// config file and applies its runtime keys and the logging level. An
-// unreadable or invalid file is logged and the previous snapshot stays.
-func reloadConfig(cfgStore *config.Store, logSystem *logging.System, logger *slog.Logger) {
-	if err := cfgStore.Reload(); err != nil {
-		logger.Error("config reload on SIGHUP failed; keeping the previous config", "error", err)
-		return
-	}
-	// FollowLevel, as the HTTP config routes do, so a PUT /config racing this
-	// reload cannot be overwritten by the level read here.
-	current := func() string { return cfgStore.Get().Logging.Level }
-	if err := logSystem.FollowLevel(current); err != nil {
-		logger.Error("apply reloaded logging level", "level", current(), "error", err)
-	}
-	logger.Info("config reloaded on SIGHUP", "logging_level", current())
 }
 
 // closeLogged runs a deferred close and logs its error, which has no caller

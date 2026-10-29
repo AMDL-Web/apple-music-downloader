@@ -8,8 +8,7 @@ const CONTROLS = 'input:not([disabled]), select:not([disabled]), textarea:not([d
 const GIVE_UP_MS = 3000;
 
 /**
- * Focuses the control of the Settings field `key` (a pinned field has none to
- * focus) and scrolls it into view, waiting for the page to render it (the config loads first) for at most
+ * Focuses the enabled control of the Settings field `key`, if it has one, and scrolls it into view, waiting for the page to render it (the config loads first) for at most
  * GIVE_UP_MS; any key or click of the user's own cancels. Returns the cancel.
  */
 export function focusField(key) {
@@ -25,7 +24,7 @@ export function focusField(key) {
     const box = field && field.querySelector('.field-control');
     const control = box && box.querySelector(CONTROLS);
     if (control || box) {
-      // A pinned field renders its control disabled: nothing to focus, still worth scrolling to.
+      // A field whose controls are all disabled has nothing to focus, still worth scrolling to.
       if (control) control.focus({ preventScroll: true });
       field.scrollIntoView({ block: 'center' });
       stop();
