@@ -1445,18 +1445,28 @@
 
 :root[data-skin="music"] [data-section="jobs"] .job-row {
   position: relative;
-  grid-template-columns: 48px minmax(0, 1fr) 64px 200px 148px 80px 16px;
+  grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 200px) 148px 80px 16px;
   min-height: 68px;
   padding: var(--row-pad-y) var(--card-pad-x);
 }
 
-:root[data-skin="music"] [data-section="jobs"] .job-list > li + li > .job-row::before {
+:root[data-skin="music"] [data-section="jobs"] .job-list > li + li > .job-row::before,
+:root[data-skin="music"] [data-section="jobs"] .job-list > li + li[data-action]::before {
   content: "";
   position: absolute;
   top: 0;
   right: 0;
   left: calc(var(--card-pad-x) + 48px + var(--s-3));
   border-top: var(--row-divider);
+}
+
+/* A row with a Retry button beside it draws its hairline across the whole item. */
+:root[data-skin="music"] [data-section="jobs"] .job-list > li[data-action] {
+  position: relative;
+}
+
+:root[data-skin="music"] [data-section="jobs"] .job-list > li[data-action] > .job-row::before {
+  content: none;
 }
 
 /* In the list (and New download's Submitted list), per-track cells join into
@@ -1500,7 +1510,6 @@
   line-height: var(--lh-13);
 }
 
-:root[data-skin="music"] .job-type,
 :root[data-skin="music"] .job-updated {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
@@ -1508,13 +1517,13 @@
 
 @media (max-width: 1279px) {
   :root[data-skin="music"] [data-section="jobs"] .job-row {
-    grid-template-columns: 48px minmax(0, 1fr) 176px 148px 72px 16px;
+    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 176px) 148px 72px 16px;
   }
 }
 
 @media (max-width: 1023px) {
   :root[data-skin="music"] [data-section="jobs"] .job-row {
-    grid-template-columns: 48px minmax(0, 1fr) 128px 140px 16px;
+    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 128px) 140px 16px;
   }
 }
 
@@ -3100,10 +3109,6 @@
     line-height: var(--lh-12);
   }
 
-  :root[data-skin="music"] [data-section="live"] .job-sub-type {
-    display: none;
-  }
-
   :root[data-skin="music"] [data-section="live"] .job-progress {
     margin-top: var(--s-4);
   }
@@ -3190,7 +3195,8 @@
     padding: var(--s-3) var(--s-4);
   }
 
-  :root[data-skin="music"] [data-section="jobs"] .job-list > li + li > .job-row::before {
+  :root[data-skin="music"] [data-section="jobs"] .job-list > li + li > .job-row::before,
+  :root[data-skin="music"] [data-section="jobs"] .job-list > li + li[data-action]::before {
     left: calc(var(--s-4) + 48px + var(--s-3));
   }
 
@@ -3201,6 +3207,12 @@
 
   :root[data-skin="music"] [data-section="jobs"] .job-progress {
     grid-column: 2 / -1;
+  }
+
+  /* A finished job has one row: the cover is centered beside it. */
+  :root[data-skin="music"] :is([data-section="jobs"], .new-results) .job-row[data-progress="off"] > .art {
+    grid-row: 1;
+    align-self: center;
   }
 
   /* Submitted rows too: the bar starts under the title, as in the Queue. */

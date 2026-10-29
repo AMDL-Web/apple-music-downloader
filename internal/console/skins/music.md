@@ -191,8 +191,13 @@ base durations (120 ms color, 200 ms overlays).
 - **Throughput**: totals as 20 px figures over their labels; the formats bar
   and its legend dots take one hue per position (`--series-1` to `-4`: blue,
   orange, purple, gray); the per-day bars are `--chart-bar`.
-- **Queue**: one grouped list, 48 px covers, hairlines inset past the cover;
-  phones get two-line rows with progress under the title.
+- **Queue**: one grouped list, 48 px covers, hairlines inset past the cover.
+  Only a queued or running job draws progress; a finished row is title, then
+  artist and track count, and a plain completed status is a green check with
+  no word. A failed row says what went wrong in red under the link and ends
+  in a Retry pill. Phones get two-line rows with progress under the title, a
+  status-tab chip row that scrolls sideways (the Failed count in red text) and
+  Select, which reads Done while selecting.
 - **Queue selection**: Select wears the toggle pill of Pause and Wrap
   (outlined or filled while off, the pressed fill while on). Rows gain Apple
   edit-mode circles: a 22 px ring in `--border-control`, then an `--ink` disc
@@ -201,9 +206,11 @@ base durations (120 ms color, 200 ms overlays).
   sits one row gap (12 px) before the cover, the hairline starts at the text,
   and the whole row, circle included, hovers and fills `--bg-selected` as
   one. The bar above the list is a frosted raised capsule with the float
-  shadow (it sticks under the top bar while the list scrolls): the count in
-  15 px semibold, Retry and Cancel as filled pills, Delete red text; during a run
-  the red meter and "Deleting 3 of 12" in semibold.
+  shadow (it sticks under the top bar while the list scrolls; on a phone it
+  docks above the tab bar): the count in 15 px semibold ("3 selected · 1 shown"
+  when a search hides some), Retry and Cancel as filled pills, "Remove 3 from
+  list" red text; during a run the red meter and "Deleting 3 of 12" in
+  semibold.
 - **Drawer**: a floating 22 px sheet inset 8 px from the window (full screen on
   phones); the head is an album-colored card with a 112 px cover; times and
   action buttons are grouped cells, Delete (finished jobs) in red text and

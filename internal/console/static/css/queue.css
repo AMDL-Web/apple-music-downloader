@@ -15,3 +15,103 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-2);
+}
+
+/* A failed job's Retry sits at the row's end, beside the link: a button
+   cannot live inside it. The item takes over the hover fill, and the
+   chevron makes room for the button. */
+.job-item[data-action] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.job-item[data-action]:hover {
+  background: var(--bg-hover);
+}
+
+.job-item[data-action] > .job-row:hover {
+  background: transparent;
+}
+
+.job-item[data-action] .job-chevron {
+  display: none;
+}
+
+.job-retry {
+  margin-inline-end: var(--card-pad-x);
+}
+
+@media (max-width: 639px) {
+  /* On a phone the button goes under the text, in line with the title. */
+  .job-item[data-action] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .job-item[data-action] > .job-row {
+    padding-bottom: var(--s-2);
+  }
+
+  .job-retry {
+    justify-self: start;
+    margin: 0 0 var(--s-3) calc(var(--s-4) + 48px + var(--s-3));
+  }
+}
+
+@media (max-width: 639px) {
+  /* The status tabs are a chip row that scrolls sideways, a count on every chip. */
+  .page-queue .seg {
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .page-queue .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* The filter, the type and Select share one row; the result count, when
+     the filter is set, gets a line of its own under them. */
+  .page-queue .toolbar-filters {
+    display: contents;
+  }
+
+  .page-queue .search {
+    flex: 1 1 150px;
+    min-width: 0;
+  }
+
+  .page-queue .queue-count {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .page-queue .queue-tools {
+    margin-left: 0;
+  }
+
+  /* Select and Done are words on a phone; the icon would only take room from the filter. */
+  .page-queue .queue-select > .icon {
+    display: none;
+  }
+
+  /* The selection bar docks above the tab bar, under the thumb; the page
+     leaves it room so the last row stays reachable. */
+  .page-queue .bulk-bar {
+    position: fixed;
+    top: auto;
+    right: var(--s-3);
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+    left: var(--s-3);
+    z-index: 19;
+  }
+
+  .page-queue[data-selecting] {
+    padding-bottom: calc(var(--control-h) + var(--s-6));
+  }
+}

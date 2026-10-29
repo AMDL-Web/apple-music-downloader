@@ -174,7 +174,10 @@
 
 .job-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 64px 168px 148px 80px 16px;
+  /* The progress column is as wide as --job-prog; a row without progress
+     (data-progress="off": finished jobs) sets it to 0 and gives the room to
+     the title. */
+  grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 168px) 148px 80px 16px;
   align-items: center;
   gap: var(--s-3);
   min-height: 56px;
@@ -182,6 +185,10 @@
   color: inherit;
   text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.job-row[data-progress="off"] {
+  --job-prog: 0px;
 }
 
 .job-row:hover {
@@ -229,46 +236,31 @@
   font-weight: var(--w-regular);
 }
 
-/* A failed job's reason: its first line, the full text in the title. */
+/* A failed job's reason: its first line on a line of its own, at most two
+   lines, the full text in the title. */
 .job-error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   min-width: 0;
+  margin-top: var(--s-0_5);
   color: var(--danger-text);
   font-size: var(--fs-12);
   line-height: var(--lh-12);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .job-sub {
-  display: flex;
-  gap: var(--s-1_5);
   min-width: 0;
   color: var(--text-secondary);
   font-size: var(--fs-12);
   line-height: var(--lh-12);
   white-space: nowrap;
   overflow: hidden;
-}
-
-.job-sub > span:first-child {
-  overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* A dot separates the artist from whichever of type (mobile) or storefront
-   (desktop) is visible; with no artist neither gets one. */
-.job-sub-artist ~ .job-sub-type::before,
-.job-sub-artist ~ .job-sub-sf::before {
-  content: "·";
-  margin-inline-end: var(--s-1_5);
-}
-
-.job-sub-type {
-  display: none;
-}
-
-.job-type,
 .job-updated {
   color: var(--text-secondary);
   font-size: var(--fs-12);
@@ -291,10 +283,9 @@
 }
 
 .job-list-compact .job-row {
-  grid-template-columns: 40px minmax(0, 1fr) 160px 148px;
+  grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 160px) 148px;
 }
 
-.job-list-compact .job-type,
 .job-list-compact .job-updated,
 .job-list-compact .job-chevron {
   display: none;
@@ -432,25 +423,8 @@
 }
 
 @media (max-width: 639px) {
-  /* Search, the type filter and Select share one row; Select keeps only its
-     icon (its name stays for screen readers). Retry all, when shown, brings
-     the tools to a row of their own at the right. */
-  .page-queue .toolbar-filters {
-    flex: 1 1 200px;
-  }
-
   .queue-tools {
     flex: none;
-  }
-
-  .queue-select > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
   }
 
   /* A title wraps to a second line instead of cutting at the status. */
@@ -462,15 +436,11 @@
     overflow-wrap: anywhere;
   }
 
-  /* Five tabs do not fit 358 px with every count; the open tab keeps its. Each
-     tab is as wide as its label needs, and the spare room is shared. */
-  .page-queue .seg-btn[aria-pressed="false"] .seg-count {
-    display: none;
-  }
-
+  /* Five tabs with their counts do not fit 358 px: each is as wide as its
+     label needs and the row scrolls sideways (css/queue.css). */
   .page-queue .seg-btn {
-    flex: 1 1 auto;
-    padding-inline: var(--s-1_5);
+    flex: 0 0 auto;
+    padding-inline: var(--s-3);
   }
 
   .bulk-hint.is-intro {

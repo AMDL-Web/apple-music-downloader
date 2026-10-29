@@ -24,11 +24,7 @@
 
 @media (max-width: 1279px) {
   .job-row {
-    grid-template-columns: 40px minmax(0, 1fr) 152px 148px 72px 16px;
-  }
-
-  .job-type {
-    display: none;
+    grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 152px) 148px 72px 16px;
   }
 }
 
@@ -108,7 +104,7 @@
   }
 
   .job-row {
-    grid-template-columns: 40px minmax(0, 1fr) 128px 148px 16px;
+    grid-template-columns: 40px minmax(0, 1fr) var(--job-prog, 128px) 148px 16px;
   }
 
   .job-updated {
@@ -330,17 +326,17 @@
     grid-area: prog;
   }
 
-  .job-type,
-  .job-updated,
-  .job-chevron {
+  .job-row[data-progress="off"],
+  .job-list-compact .job-row[data-progress="off"] {
+    grid-template-areas: "art main status";
+  }
+
+  .job-row[data-progress="off"] > .job-progress {
     display: none;
   }
 
-  .job-sub-type {
-    display: inline;
-  }
-
-  .job-sub-sf {
+  .job-updated,
+  .job-chevron {
     display: none;
   }
 

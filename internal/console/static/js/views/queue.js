@@ -234,12 +234,17 @@ export function QueuePage({ route }) {
     { value: 'all', label: 'All', count: c ? c.total : undefined },
   ];
   const rowHref = (job) => buildHash('queue', route.params, job.id);
+  // On a phone the status tabs scroll sideways; the open one stays in view.
+  useEffect(() => {
+    const open = document.querySelector('.page-queue .seg-btn[aria-pressed="true"]');
+    if (open && open.scrollIntoView) open.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [filters.tab, haveCounts]);
 
   let body;
   if (waiting || (state.loading && state.jobs.length === 0)) body = html`<${SkeletonRows} n=${6} kind="row" />`;
   else if (state.error && state.jobs.length === 0)
     body = html`<${ErrorNote} title="Couldn't load downloads" error=${state.error} onRetry=${() => load(0)} />`;
-  else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} />`;
+  else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} onShowAll=${() => setParams({ tab: 'all' })} />`;
   else
     body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs">
         ${rows.map((job) => {
@@ -282,7 +287,7 @@ export function QueuePage({ route }) {
           </div>`
         : null}`;
 
-  return html`<div class="page page-queue">
+  return html`<div class="page page-queue" data-selecting=${selecting || bulk.run ? '' : undefined}>
     <div class="toolbar">
       <${Segmented} label="Job status" options=${tabs} value=${filters.tab} onChange=${(tab) => setParams({ tab })} />
       <div class="toolbar-filters">
@@ -368,7 +373,7 @@ const typing = (el) =>
 
 const startAction = () => html`<${LinkButton} variant="primary" size="sm" icon="plus" href=${buildHash('new')}>Start a download</${LinkButton}>`;
 
-function QueueEmpty({ filters, tabs, onClear }) {
+function QueueEmpty({ filters, tabs, onClear, onShowAll }) {
   if (filters.q || filters.type) {
     // The search covers the current tab only; say so, and which tab.
     const tab = tabs.find((t) => t.value === filters.tab);
@@ -383,7 +388,15 @@ function QueueEmpty({ filters, tabs, onClear }) {
   if (filters.tab === 'completed') return html`<${Empty} icon="list" title="No completed jobs yet" />`;
   if (filters.tab === 'cancelled') return html`<${Empty} icon="list" title="No cancelled jobs" />`;
   if (filters.tab === 'active') {
-    return html`<${Empty} icon="list" title="No active downloads" action=${startAction()}>
+    const all = tabs.find((t) => t.value === 'all');
+    return html`<${Empty}
+      icon="list"
+      title="No active downloads"
+      action=${html`<div class="empty-actions">
+        ${all && all.count > 0 ? html`<${Button} size="sm" onClick=${onShowAll}>See all jobs (${all.count})</${Button}>` : null}
+        ${startAction()}
+      </div>`}
+    >
       Paste an Apple Music link anywhere in the console, or start one here.
     </${Empty}>`;
   }
