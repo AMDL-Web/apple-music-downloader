@@ -6,6 +6,11 @@
   font-weight: var(--w-semibold);
 }
 
+/* On the open tab's thumb (gray in dark) the red would fall under 4.5:1. */
+.seg-btn[aria-pressed="true"] .seg-count-danger {
+  color: var(--text-primary);
+}
+
 /* "5 results" beside the filter while it is set. */
 .queue-count {
   align-self: center;

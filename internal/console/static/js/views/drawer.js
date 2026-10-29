@@ -38,7 +38,7 @@ import {
 } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
 
 // A link Apple has nothing at is not worth keeping: its job is removed, not deleted.
 const deleteWord = (job) => (job && job.status === 'failed' && isNotFound(job.error) ? 'Remove' : 'Delete');
