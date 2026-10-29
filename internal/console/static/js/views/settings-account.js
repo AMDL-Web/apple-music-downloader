@@ -266,6 +266,7 @@ function LoginForm({ onDone, again }) {
         />
         <${Button}
           variant="ghost"
+          size="sm"
           icon=${shown ? 'eye-off' : 'eye'}
           className="field-secret-toggle"
           aria-label=${shown ? 'Hide the password' : 'Show the password'}

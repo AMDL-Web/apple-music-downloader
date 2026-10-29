@@ -18,7 +18,7 @@ import { settingsHash } from '../lib/route.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
 import { useApp, Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
-import { midTruncate, groupByDisk } from '../lib/storage.js';
+import { midTruncate, groupByDisk, diskRole } from '../lib/storage.js';
 
 export function SystemPage() {
   const app = useApp();
@@ -121,7 +121,7 @@ function StorageCard({ sys }) {
     body = html`<ul class="storage-list">
       ${groupByDisk(s.storage).map((g) => {
         const used = g.known ? 1 - g.free / g.total : 0;
-        const role = !g.known ? 'neutral' : used >= 0.95 ? 'danger' : used >= 0.85 ? 'warning' : 'info';
+        const role = diskRole(g);
         const label = g.folders.map((d) => FOLDER_NAMES[d.name] || d.name).join(' and ');
         return html`<li key=${g.folders[0].name} class="storage-row">
           <ul class="storage-folders">

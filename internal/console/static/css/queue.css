@@ -107,14 +107,15 @@
     mask-image: linear-gradient(to right, transparent, black var(--s-8), black calc(100% - var(--s-8)), transparent);
   }
 
-  /* The filter, the type and Select share one row; the result count, when
-     the filter is set, gets a line of its own under them. */
+  /* The filter takes a row of its own, wide enough for its placeholder and
+     what is typed; the type, Retry all and Select share the row under it,
+     and the result count, when the filter is set, sits between the two. */
   .page-queue .toolbar-filters {
     display: contents;
   }
 
   .page-queue .search {
-    flex: 1 1 150px;
+    flex: 1 1 100%;
     min-width: 0;
   }
 
@@ -124,7 +125,7 @@
   }
 
   .page-queue .queue-tools {
-    margin-left: 0;
+    margin-left: auto;
   }
 
   /* Select and Done are words on a phone; the icon would only take room from the filter. */

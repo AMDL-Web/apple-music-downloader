@@ -1,4 +1,5 @@
-// Display helpers for the System page's Storage card. Pure.
+// Display helpers for the System page's Storage card and the Overview status
+// line. Pure.
 
 const PATH_SHOWN = 48;
 
@@ -30,4 +31,18 @@ export function groupByDisk(storage) {
     if (key !== null) byDisk.set(key, group);
   }
   return groups;
+}
+
+/** A disk's state: danger at 95 % used, warning at 85 %, neutral when its space is unknown. */
+export function diskRole(group) {
+  if (!group.known) return 'neutral';
+  const used = 1 - group.free / group.total;
+  return used >= 0.95 ? 'danger' : used >= 0.85 ? 'warning' : 'info';
+}
+
+/** The fullest disk that is low on space, or null when every disk has room. */
+export function lowSpaceDisk(storage) {
+  const low = groupByDisk(Array.isArray(storage) ? storage : []).filter((g) => diskRole(g) === 'danger' || diskRole(g) === 'warning');
+  if (low.length === 0) return null;
+  return low.reduce((a, b) => (b.free / b.total < a.free / a.total ? b : a));
 }

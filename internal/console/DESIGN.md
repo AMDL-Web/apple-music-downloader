@@ -24,7 +24,7 @@ wins and this page is fixed in the same change. Sources are listed in
 
 | Route | Page | Content |
 | --- | --- | --- |
-| `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `attention` (only while a job failed in the last 24 h: up to 2, each with Retry), `live` (8 active jobs; one line when none), `recent` (one tile per album), `kpis`, `throughput` (from `/stats`; one sentence under three days of data) |
+| `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component and a disk System marks red otherwise, linking to System), `attention` (only while a job failed in the last 24 h: up to 2, each with Retry), `live` (8 active jobs; one line when none), `recent` (one tile per album), `kpis`, `throughput` (from `/stats`; one sentence under three days of data) |
 | `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed and Cancelled tabs |
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header with a summary line ("ALAC 24/44.1 · 14 tracks · 692 MB"), the failure reason, Cancel/Retry/Remove, the tracks (one line each; stage meters only on a track that is working or has an outcome), Files (completed jobs), and a closed Details (times, job ID, Activity with persisted history plus live events, hooks) |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
@@ -274,7 +274,7 @@ and motion covers.
   verbatim. Motion covers play muted on hover or focus, one at a time, only
   where `video.canPlayType` accepts HLS and motion is allowed. Titles underline
   on hover.
-- **Throughput**: under three days with data one sentence ("246 tracks, 11.1 GB in the last 14 days"); otherwise totals as facts, the formats mix of every retained job
+- **Throughput**: under three days with data one sentence ("246 tracks, 11.1 GB" under the card's "Last 14 days"); otherwise totals as facts, the formats mix of every retained job
   (`/stats` `codecs`, the top four with the rest as "Other"; nothing before
   a track completes), then two small multiples sharing the date
   axis (tracks per day, bytes per day), each with its own 0/max axis plus a

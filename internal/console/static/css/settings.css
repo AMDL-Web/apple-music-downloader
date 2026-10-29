@@ -429,15 +429,25 @@
 }
 
 .field-secret {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--s-1);
   max-width: 560px;
 }
 
+/* The show-password button sits inside the box, so the box is as wide as the
+   fields above and below it. */
 .field-secret .field-input {
   flex: 1;
   min-width: 0;
+  padding-inline-end: calc(var(--control-h-sm) + var(--s-1));
+}
+
+.field-secret-toggle {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--s-0_5);
+  margin-block: auto;
 }
 
 .field[data-type="path"] .field-input,
@@ -758,7 +768,7 @@
 }
 
 .token-row:not(.token-set) {
-  max-width: 560px;
+  max-width: 440px;
 }
 
 .token-row {

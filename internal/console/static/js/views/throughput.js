@@ -13,12 +13,12 @@ const SPARSE_DAYS = 3;
 
 const hasData = (d) => (d.tracks_completed || 0) > 0 || (d.bytes_written || 0) > 0 || (d.jobs_completed || 0) > 0 || (d.jobs_failed || 0) > 0;
 
-/** "246 tracks, 11.1 GB in the last 14 days", for a window that has little history. */
-export function sparseSummary(totals, days) {
+/** "246 tracks, 11.1 GB", for a window that has little history; the card head names the period. */
+export function sparseSummary(totals) {
   const tracks = totals.tracks_completed || 0;
   const failed = totals.tracks_failed ? `, ${count(totals.tracks_failed)} failed` : '';
-  if (tracks === 0 && !(totals.bytes_written > 0)) return `Nothing downloaded in the last ${days} days.`;
-  return `${count(tracks)} ${tracks === 1 ? 'track' : 'tracks'}, ${bytes(totals.bytes_written || 0)} in the last ${days} days${failed}.`;
+  if (tracks === 0 && !(totals.bytes_written > 0)) return 'Nothing downloaded.';
+  return `${count(tracks)} ${tracks === 1 ? 'track' : 'tracks'}, ${bytes(totals.bytes_written || 0)}${failed}.`;
 }
 
 export function ThroughputCard() {
@@ -35,7 +35,7 @@ export function ThroughputCard() {
   const jobsFailed = daily.reduce((n, d) => n + (d.jobs_failed || 0), 0);
   if (totals && daily.filter(hasData).length < SPARSE_DAYS) {
     return html`<${Card} section="throughput" title="Throughput" labelId="throughput-title" note=${period}>
-      <p class="tp-sparse">${sparseSummary(totals, STATS_DAYS)}</p>
+      <p class="tp-sparse">${sparseSummary(totals)}</p>
     </${Card}>`;
   }
   const today = stats && typeof stats.generated_at === 'string' ? stats.generated_at.slice(0, 10) : '';

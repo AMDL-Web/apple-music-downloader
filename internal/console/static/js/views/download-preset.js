@@ -91,7 +91,8 @@ export function CustomSheet({ defaults, start, onDone, onFollow, onClose }) {
     <p class="new-custom-for">For this download only; Settings stay as they are.</p>
     <div class="new-custom-body">
       <div class="new-custom-group">
-        <span class="new-custom-label" id="new-custom-codecs-label">Codec order</span>
+        <span class="new-custom-label" id="new-custom-codecs-label">Codec priority</span>
+        <p class="new-hint" id="new-custom-codecs-hint">Tried top to bottom · AAC always last</p>
         <${ListEditor}
           field=${fieldByKey('download.quality_priority')}
           id="new-custom-codecs"
@@ -99,7 +100,6 @@ export function CustomSheet({ defaults, start, onDone, onFollow, onClose }) {
           described="new-custom-codecs-hint"
           onChange=${(v) => set('quality_priority', v)}
         />
-        <p class="new-hint" id="new-custom-codecs-hint">Tried top to bottom · AAC always last</p>
       </div>
       <label class="new-custom-switch">
         <span>Fall back to the next codec</span>

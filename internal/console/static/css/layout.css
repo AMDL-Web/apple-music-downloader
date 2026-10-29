@@ -251,7 +251,7 @@
   -webkit-line-clamp: 2;
   min-width: 0;
   margin-top: var(--s-0_5);
-  color: var(--danger-text);
+  color: var(--text-secondary);
   font-size: var(--fs-12);
   line-height: var(--lh-12);
   overflow: hidden;

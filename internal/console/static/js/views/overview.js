@@ -2,10 +2,11 @@
 // completed artwork, the job counts and throughput from /stats.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, settle } from '../api.js';
-import { count, jobTitle, jobSubtitle, artPalette, paletteStyle, absTime, isUnresolved, inputLabel, errorSummary } from '../lib/format.js';
+import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, settle } from '../api.js';
+import { count, bytes, jobTitle, jobSubtitle, artPalette, paletteStyle, absTime, isUnresolved, inputLabel, errorSummary } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
 import { uniqueByTarget } from '../lib/albums.js';
+import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
 import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
 import { usePoll, useColumns, useNow } from '../ui/hooks.js';
@@ -215,7 +216,18 @@ function Attention() {
 }
 
 function loadHealth() {
-  return Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks())]);
+  return Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks()), settle(getSystem())]);
+}
+
+/**
+ * A Storage row when a disk is nearly full (System's red). System's orange
+ * stays there: a large disk can sit at 85 % for months with room to spare.
+ * A failed /system read stays on the System page too.
+ */
+function storageRows(res) {
+  const disk = res && res.data ? lowSpaceDisk(res.data.storage) : null;
+  if (!disk || diskRole(disk) !== 'danger') return [];
+  return [['Storage', { role: 'danger', label: 'Low space', detail: `${bytes(disk.free)} free` }]];
 }
 
 /** The four health rows behind the status line. */
@@ -232,12 +244,13 @@ export function healthRows(results) {
 /**
  * One line under the page head that answers "is the server healthy?": a quiet
  * status when everything is fine, a notice naming each service that is not
- * (the wrapper unreachable, library sync failing), with a link to System.
+ * (the wrapper unreachable, library sync failing) and a nearly full disk,
+ * with a link to System.
  * Nothing renders until the first read settles.
  */
 function HealthStrip({ poll }) {
   if (!poll.data) return null;
-  const rows = healthRows(poll.data);
+  const rows = [...healthRows(poll.data), ...storageRows(poll.data[4])];
   const bad = rows.filter(([, v]) => v.role === 'danger' || v.role === 'warning');
   const details = html`<a class="health-strip-link" href=${buildHash('system')}>Details</a>`;
   if (bad.length === 0) {
