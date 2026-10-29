@@ -150,7 +150,8 @@ const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 
 /**
  * The line under a page title, from the feed's status counts (null before
- * the first snapshot) and the current time.
+ * the first snapshot) and the current time. Showcase has none: the counts are
+ * jobs, and its grid shows albums.
  */
 export function pageSummary(page, counts, now = new Date()) {
   switch (page) {
@@ -158,8 +159,6 @@ export function pageSummary(page, counts, now = new Date()) {
       return counts ? `${shortDate(now)} · ${plural(counts.total, 'job', 'jobs')}` : shortDate(now);
     case 'queue':
       return counts ? `${count(counts.running)} running · ${count(counts.queued)} queued · ${count(counts.failed)} failed` : '';
-    case 'showcase':
-      return counts ? `${count(counts.completed)} completed` : '';
     default:
       return '';
   }

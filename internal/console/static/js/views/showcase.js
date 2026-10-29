@@ -1,14 +1,16 @@
-// Showcase: the latest completed release as a hero in Apple's own artwork
-// colors, then a grid of completed albums, playlists or songs. Motion covers
-// play on hover or focus where the browser plays HLS natively.
+// Showcase: a grid of completed albums, playlists or songs, one tile per
+// release (jobs of the same link target collapse to the newest), under a
+// compact banner for the latest one (desktop only; on a phone it is the first
+// tile). Motion covers play on hover or focus where the browser plays HLS
+// natively.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { jobTitle, jobSubtitle, artPalette, paletteStyle, artworkUrl, typeLabel, count, jobFacts, safeHttpUrl } from '../lib/format.js';
-import { isAlreadyInLibrary } from '../lib/status.js';
+import { jobTitle, jobSubtitle, artPalette, paletteStyle, artworkUrl, typeLabel, jobFacts } from '../lib/format.js';
+import { uniqueByTarget } from '../lib/albums.js';
 import { upsertJob, removeJob, appendPage, jobMatches } from '../lib/store.js';
 import { buildHash, showcaseType, showcaseQuery, SHOWCASE_TYPES } from '../lib/route.js';
-import { useApp, Artwork, Icon, Segmented, Empty, ErrorNote, Skeleton, Button, LinkButton, Facts } from '../ui/components.js';
+import { useApp, Artwork, Segmented, Empty, ErrorNote, Skeleton, Button, LinkButton, Facts } from '../ui/components.js';
 import { useReducedMotion } from '../ui/hooks.js';
 
 const PAGE_SIZE = 24;
@@ -89,7 +91,9 @@ export function ShowcasePage({ route }) {
     leave: (job) => setPlaying((p) => (p === job.id ? null : p)),
   };
 
-  const [hero, ...rest] = state.jobs;
+  // The newest release leads: a banner on desktop, the first tile on a phone.
+  const albums = uniqueByTarget(state.jobs);
+  const hero = albums[0];
 
   return html`<div class="page page-showcase">
     <div class="toolbar">
@@ -99,7 +103,6 @@ export function ShowcasePage({ route }) {
         value=${type}
         onChange=${setType}
       />
-      ${state.total > 0 ? html`<span class="toolbar-note">${count(state.total)} completed</span>` : null}
     </div>
     ${state.loading
       ? html`<div class="hero hero-skel" aria-hidden="true"><${Skeleton} kind="hero" /></div>
@@ -114,16 +117,13 @@ export function ShowcasePage({ route }) {
             >Jobs still in progress are listed in <a class="link" href=${buildHash('queue')}>the Queue</a>.</${Empty}></div></div>`
           : [
               html`<${Hero} key="hero" job=${hero} href=${href(hero)} playing=${playing === hero.id} hover=${hover} />`,
-              html`<${HeroActions} key="hero-actions" job=${hero} href=${href(hero)} />`,
-              rest.length
-                ? html`<ul key="grid" class="gallery" aria-label=${TYPE_LABELS[type]}>
-                    ${rest.map(
-                      (job, i) => html`<li key=${job.id} class=${fresh.has(job.id) ? 'is-new' : undefined}>
-                        <${Tile} job=${job} index=${i + 2} href=${href(job)} playing=${playing === job.id} hover=${hover} />
-                      </li>`,
-                    )}
-                  </ul>`
-                : null,
+              html`<ul key="grid" class="gallery" aria-label=${TYPE_LABELS[type]}>
+                ${albums.map(
+                  (job, i) => html`<li key=${job.id} class=${[fresh.has(job.id) ? 'is-new' : '', i === 0 ? 'is-latest' : ''].filter(Boolean).join(' ') || undefined}>
+                    <${Tile} job=${job} href=${href(job)} playing=${playing === job.id} hover=${hover} />
+                  </li>`,
+                )}
+              </ul>`,
               state.jobs.length < state.total
                 ? html`<div key="more" class="load-more">
                     <${Button} onClick=${() => load(state.jobs.length)} disabled=${state.more}>${state.more ? 'Loading…' : 'Load more'}</${Button}>
@@ -150,9 +150,6 @@ function MotionCover({ job }) {
   ></video>`;
 }
 
-/** Two-digit catalogue number of a release in the current list ("01" is the hero). */
-const catalogNo = (n) => String(n).padStart(2, '0');
-
 function Hero({ job, href, playing, hover }) {
   const motion = playing && job.motion_artwork_url;
   const palette = artPalette(job, Boolean(motion)) || artPalette(job);
@@ -162,7 +159,6 @@ function Hero({ job, href, playing, hover }) {
     ['year', 'Released', f.year],
     ['tracks', 'Tracks', f.tracks],
     ['finished', 'Finished', f.finished],
-    ['took', 'Took', f.took],
   ].filter((r) => r[2]);
   return html`<a
     class=${palette ? 'hero has-palette' : 'hero'}
@@ -178,60 +174,31 @@ function Hero({ job, href, playing, hover }) {
       ${motion ? html`<${MotionCover} job=${job} />` : null}
     </div>
     <div class="hero-text">
-      <span class="hero-kicker">Latest · ${typeLabel(job.type)}<span class="hero-no"> · No. ${catalogNo(1)}</span></span>
+      <span class="hero-kicker">Latest · ${typeLabel(job.type)}</span>
       <span class="hero-title" dir="auto">${jobTitle(job)}</span>
       <span class="hero-artist" dir="auto">${jobSubtitle(job)}</span>
       ${facts.length ? html`<${Facts} className="hero-facts" label="Release" rows=${facts} />` : null}
-      ${isAlreadyInLibrary(job) ? html`<span class="tag-library"><${Icon} name="archive" size="sm" />Already in library</span>` : null}
     </div>
   </a>`;
 }
 
-/**
- * Opt-in hook (hidden by the base): pill actions for the hero. The hero is
- * one link, so these are its next sibling rather than nested inside it, and
- * carry the same palette custom properties for a skin to place them over it.
- */
-function HeroActions({ job, href }) {
-  const palette = artPalette(job);
-  const apple = safeHttpUrl(job.input);
-  return html`<div class="hero-actions" style=${paletteStyle(palette)}>
-    <${LinkButton} href=${href} icon="list" size="sm">Tracks</${LinkButton}>
-    ${apple ? html`<${LinkButton} href=${apple} icon="music" size="sm" external>Open in Apple Music</${LinkButton}>` : null}
-  </div>`;
-}
-
-/**
- * A gallery tile in the release's own Apple palette (--art-bg, --art-t1..t3).
- * .tile-index and .tile-facts are hooks a skin may show or rearrange.
- */
-function Tile({ job, index, href, playing, hover }) {
-  const palette = artPalette(job);
+/** A gallery tile: the cover, then title and artist, on the page's own surface. */
+function Tile({ job, href, playing, hover }) {
   const title = jobTitle(job);
-  const f = jobFacts(job);
   return html`<a
-    class=${palette ? 'tile has-palette' : 'tile'}
+    class="tile"
     href=${href}
-    style=${paletteStyle(palette)}
     onMouseEnter=${() => hover.enter(job)}
     onMouseLeave=${() => hover.leave(job)}
     onFocus=${() => hover.enter(job)}
     onBlur=${() => hover.leave(job)}
   >
-    <span class="tile-head" aria-hidden="true"><span class="tile-index">No. ${catalogNo(index)}</span><span class="tile-year">${f.year}</span></span>
     <div class="tile-art">
-      <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${300} widths=${[300, 600]} sizes="(max-width: 639px) 50vw, 240px" className="art-square" />
+      <${Artwork} url=${job.artwork_url} px=${300} widths=${[300, 600]} sizes="(max-width: 639px) 50vw, 240px" className="art-square" />
       ${playing && job.motion_artwork_url ? html`<${MotionCover} job=${job} />` : null}
-      ${job.motion_artwork_url ? html`<span class="tile-motion" title="Has a motion cover"><${Icon} name="play" size="sm" /><span class="sr-only">Motion cover</span></span>` : null}
+      ${job.motion_artwork_url ? html`<span class="tile-motion">Motion cover</span>` : null}
     </div>
     <span class="tile-title" dir="auto" title=${title}>${title}</span>
     <span class="tile-sub" dir="auto">${jobSubtitle(job) || typeLabel(job.type)}</span>
-    <span class="tile-facts">
-      ${f.genre ? html`<span class="tile-fact" data-key="genre" dir="auto">${f.genre}</span>` : null}
-      ${f.year ? html`<span class="tile-fact" data-key="year">${f.year}</span>` : null}
-      ${f.tracks ? html`<span class="tile-fact" data-key="tracks">${f.tracks}</span>` : null}
-      ${f.finished ? html`<span class="tile-fact" data-key="finished">${f.finished}</span>` : null}
-    </span>
-    ${isAlreadyInLibrary(job) ? html`<span class="tag-library"><${Icon} name="archive" size="sm" />Already in library</span>` : null}
   </a>`;
 }

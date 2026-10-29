@@ -7,7 +7,7 @@ is particular to this skin.
 
 ## Intent
 
-Artwork leads. Running jobs, the showcase hero, showcase tiles and the job
+Artwork leads. Running jobs, the showcase banner and the job
 drawer's header take each album's own Apple colors (`--art-bg`, `--art-t1` to
 `--art-t3`). Large rounded radii, SF Pro Display-style tight headlines, a red
 accent close to Apple Music's. Dark first, with a designed light theme. The
@@ -86,7 +86,7 @@ Neue, PingFang SC, then `--font-system`; mono is `ui-monospace`, SF Mono, Menlo.
 
 ## Shape
 
-Running cards and the hero 28 px (`--r-live`); surfaces, tiles, drawer sheet,
+Running cards and the banner 28 px (`--r-live`); surfaces, tiles, drawer sheet,
 dialogs and sheets, the selection bar 22 (`--r-card`); notices, toasts, drawer
 groups, quality slots and the More list 16 (`--r-notice`); palette 18;
 artwork, inset lists and the link text box 12, list
@@ -108,8 +108,8 @@ text color; shelf covers and New download's link covers cast one tinted with
 `--art-bg`. Sidebar, tab bar, top bar, palette, sheets and toasts are
 translucent with a backdrop blur; the save bar and the Queue selection bar
 float over the content they stick to, so they are frosted `--toast-bg` with
-`--shadow-float`. Showcase tiles
-lift 3 px with an album-colored shadow and live covers scale 1.02 on hover,
+`--shadow-float`. Showcase covers
+lift 2 px and live covers scale 1.02 on hover,
 both only under `prefers-reduced-motion: no-preference`. Running shows a
 three-bar equalizer (two pseudo-elements animating `scaleY`, out of phase); it
 freezes into a static glyph under reduced motion. Everything else uses the
@@ -217,12 +217,12 @@ base durations (120 ms color, 200 ms overlays).
   cells; the extra track strip is hidden, since each row carries its status.
   Track stage fills are calm secondary ink and turn red only on a track that
   is still running.
-- **Showcase**: the hero moves above the type switch: album gradient, 300 px
-  cover, 64 px heavy title, artist in 24 px, text bottom-aligned with the
-  cover like an album header; centered column on phones. The hero actions
-  (Tracks filled in `--art-t1`, Open in Apple Music tinted) are lifted into the
-  hero's bottom padding under the text, which reserves their height. Tiles
-  fill with `--art-bg`; genre · year left, track count right, finish time below.
+- **Showcase**: the latest album is a banner above the type switch, at most
+  200 px tall: album gradient, 140 px cover, a 32 px heavy title, the artist
+  in 20 px, one line of facts; hidden under 640 px, where the same album is
+  the first tile. Tiles have no fill: the cover (a neutral placeholder with the
+  music glyph when it has none), the title in 15 px semibold and the artist
+  in 13 px secondary. A motion cover is marked with a small "Motion cover" chip.
 - **Logs**: level chips, Pause and Wrap are one kind of toggle pill: pressed is
   `--chip-on-bg` (the gray fill in light, the raised thumb in dark), off is
   outlined in light and filled in dark; an off level chip also hollows its

@@ -1748,16 +1748,12 @@
 
 /* ---- Showcase ------------------------------------------------------ */
 
-/* The latest album leads the page, above the type switch. */
+/* The latest album leads the page as a compact banner, above the type switch. */
 :root[data-skin="music"] .page-showcase > .hero {
   order: -1;
 }
 
 :root[data-skin="music"] .hero {
-  grid-template-columns: 300px minmax(0, 1fr);
-  align-items: center;
-  gap: var(--s-10);
-  padding: var(--s-10);
   border-radius: var(--r-live);
   background: linear-gradient(
     150deg,
@@ -1772,11 +1768,7 @@
 }
 
 :root[data-skin="music"] .hero-art .art {
-  box-shadow: 0 28px 56px -28px color-mix(in srgb, var(--art-t1, var(--text-primary)) 70%, transparent);
-}
-
-:root[data-skin="music"] .hero-text {
-  gap: var(--s-2);
+  box-shadow: 0 18px 36px -22px color-mix(in srgb, var(--art-t1, var(--text-primary)) 70%, transparent);
 }
 
 :root[data-skin="music"] .hero-kicker {
@@ -1787,88 +1779,39 @@
 }
 
 :root[data-skin="music"] .hero-title {
-  max-width: none;
   font-weight: var(--w-heavy);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.03em;
 }
 
 :root[data-skin="music"] .hero-artist {
   color: var(--art-t1, var(--text-primary));
-  font-size: var(--fs-24);
-  line-height: var(--lh-24);
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
   font-weight: var(--w-semibold);
   letter-spacing: var(--tracking-title);
 }
 
 :root[data-skin="music"] .hero-facts {
-  margin-top: var(--s-3);
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
-:root[data-skin="music"] .hero {
-  align-items: end;
-}
-
-/* The actions are the hero's next sibling (the hero is one link); they are
-   lifted into the hero's bottom padding, under the text column, as on an
-   Apple Music album header. The text column reserves their height. */
-:root[data-skin="music"] .page-showcase > .hero-actions {
-  order: -1;
-  position: relative;
-  display: flex;
-  gap: var(--s-2);
-  margin: calc(-1 * (var(--page-gap) + var(--s-10) + var(--hero-act-h))) var(--s-10) var(--s-10) calc(var(--s-10) + 300px + var(--s-10));
-}
-
-:root[data-skin="music"] .hero-text {
-  padding-bottom: calc(var(--hero-act-h) + var(--s-5));
-}
-
-:root[data-skin="music"] .hero-actions .btn {
-  height: var(--hero-act-h);
-  padding: 0 var(--s-4);
-  border-color: transparent;
-  background: color-mix(in srgb, var(--art-t1, var(--text-primary)) 16%, transparent);
-  color: var(--art-t1, var(--text-primary));
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .hero-actions .btn:first-child {
-  background: var(--art-t1, var(--ink));
-  color: var(--art-bg, var(--on-ink));
-}
-
-:root[data-skin="music"] .hero-actions .btn:hover {
-  background: color-mix(in srgb, var(--art-t1, var(--text-primary)) 26%, transparent);
-}
-
-:root[data-skin="music"] .hero-actions .btn:first-child:hover {
-  background: color-mix(in srgb, var(--art-t1, var(--ink)) 86%, var(--art-bg, var(--bg-canvas)));
-}
-
+/* A grid on the page surface: no tile fill, so a dark or missing cover is not a black block. */
 :root[data-skin="music"] .gallery {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--s-5);
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--s-6) var(--s-5);
 }
 
 :root[data-skin="music"] .tile {
   gap: var(--s-0_5);
-  height: 100%;
-  padding: var(--s-3) var(--s-3) var(--s-4);
-  border-radius: var(--r-card);
-  background: var(--art-bg, var(--bg-surface));
-  color: var(--art-t1, var(--text-primary));
-  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
 }
 
 :root[data-skin="music"] .tile-art {
-  margin-bottom: var(--s-3);
+  margin-bottom: var(--s-2);
 }
 
 :root[data-skin="music"] .tile-art .art {
-  box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--art-t1, var(--text-primary)) 55%, transparent);
+  box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--text-primary) 45%, transparent), 0 0 0 0.5px var(--border-subtle);
 }
 
 :root[data-skin="music"] .tile-title {
@@ -1880,55 +1823,6 @@
 :root[data-skin="music"] .tile-sub {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
-}
-
-:root[data-skin="music"] .tile-facts {
-  margin-top: var(--s-2);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-}
-
-/* Genre and year on the left, track count on the right, finish time below. */
-:root[data-skin="music"] .tile-facts {
-  width: 100%;
-}
-
-:root[data-skin="music"] .tile-fact[data-key="tracks"] {
-  margin-left: auto;
-}
-
-:root[data-skin="music"] .tile-fact[data-key="finished"] {
-  flex-basis: 100%;
-}
-
-:root[data-skin="music"] .tile-fact[data-key="tracks"]::before,
-:root[data-skin="music"] .tile-fact[data-key="finished"]::before {
-  content: none;
-}
-
-:root[data-skin="music"] .tile.has-palette .tile-sub {
-  color: var(--art-t2);
-}
-
-:root[data-skin="music"] .tile.has-palette .tile-facts {
-  color: var(--art-t3);
-}
-
-:root[data-skin="music"] .tag-library {
-  margin-top: var(--s-2);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  :root[data-skin="music"] .tile:hover,
-  :root[data-skin="music"] .tile:focus-visible {
-    transform: translateY(-3px);
-    box-shadow: 0 22px 40px -24px var(--art-bg, rgba(0, 0, 0, 0.6));
-  }
-
-  :root[data-skin="music"] .tile:hover .tile-art,
-  :root[data-skin="music"] .tile:focus-visible .tile-art {
-    transform: none;
-  }
 }
 
 /* ---- Logs page ----------------------------------------------------- */
@@ -2800,7 +2694,7 @@
 }
 
 :root[data-skin="music"] .skel-hero {
-  height: 380px;
+  height: 188px;
   border-radius: var(--r-live);
 }
 
@@ -2892,15 +2786,6 @@
     gap: var(--s-4);
   }
 
-  :root[data-skin="music"] .hero {
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: var(--s-6);
-    padding: var(--s-6);
-  }
-
-  :root[data-skin="music"] .page-showcase > .hero-actions {
-    margin: calc(-1 * (var(--page-gap) + var(--s-6) + var(--hero-act-h))) var(--s-6) var(--s-6) calc(var(--s-6) + 220px + var(--s-6));
-  }
 }
 
 /* ---- Phone (<640) --------------------------------------------------- */
@@ -3139,54 +3024,9 @@
     line-height: var(--lh-20);
   }
 
-  /* Showcase hero: a centered album page header. */
-  :root[data-skin="music"] .hero {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: center;
-    gap: var(--s-5);
-    padding: var(--s-6) var(--s-4);
-    border-radius: var(--r-card);
-    text-align: center;
-  }
-
-  :root[data-skin="music"] .hero-art {
-    width: min(250px, 100%);
-  }
-
-  :root[data-skin="music"] .hero-text {
-    align-items: center;
-    gap: var(--s-1);
-  }
-
-  :root[data-skin="music"] .page-showcase > .hero-actions {
-    justify-content: center;
-    margin: calc(-1 * (var(--page-gap) + var(--s-6) + var(--hero-act-h))) var(--s-4) var(--s-6);
-  }
-
-  :root[data-skin="music"] .hero-artist {
-    font-size: var(--fs-20);
-    line-height: var(--lh-20);
-  }
-
-  :root[data-skin="music"] .hero-facts {
-    justify-content: center;
-    gap: var(--s-1) var(--s-3);
-    font-size: var(--fs-13);
-    line-height: var(--lh-13);
-  }
-
   :root[data-skin="music"] .gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s-3);
-  }
-
-  :root[data-skin="music"] .tile {
-    padding: var(--s-2) var(--s-2) var(--s-3);
-    border-radius: var(--r-notice);
-  }
-
-  :root[data-skin="music"] .tile-art {
-    margin-bottom: var(--s-2);
+    gap: var(--s-5) var(--s-3);
   }
 
   :root[data-skin="music"] .tile-title {
