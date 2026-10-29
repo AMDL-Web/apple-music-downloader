@@ -218,7 +218,12 @@ update live use `tabular-nums`. Long titles truncate with the full text in
 Spacing steps (px): 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64 (`--s-0_5` …
 `--s-16`). Controls are 32 px (28 in toolbars), 44 px under 640 px and on any coarse
 pointer (a phone in landscape, a tablet), where the theme and skin switches
-become cycle buttons and the icon rail scrolls. Radii and
+become cycle buttons and the icon rail scrolls. Under those conditions a
+standalone link or a chip's remove button has a 44 px box; the log attribute
+chips stay 20 px drawn and get an invisible 44 px hit area inside a row that is
+44 px tall (so `getBoundingClientRect` reads 20, `elementFromPoint` 44). On the
+phone the Queue's Select button is icon-only beside the filters, and the
+selection bar keeps its actions on the select-all row. Radii and
 shadows are skin tokens.
 
 Motion: 120 ms hover color fades, 200 ms drawer/palette/toast/insert,

@@ -1534,6 +1534,11 @@
   color: var(--signal-text);
 }
 
+/* An empty queue above failures keeps the failures close under its button. */
+:root[data-skin="editorial"] .empty:has(+ .attention) {
+  padding-block: var(--s-8) var(--s-6);
+}
+
 /* Failures of the last day follow the live rows under a hairline, the
    word "Failed" set as a red kicker. */
 :root[data-skin="editorial"] [data-section="live"] .attention {

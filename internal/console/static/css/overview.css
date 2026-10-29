@@ -441,9 +441,14 @@
   white-space: nowrap;
 }
 
-/* The empty live queue and the failures under it are one card: keep them together. */
+/* The empty live queue and the failures under it are one card: keep them
+   together, with the icon and the roomy padding of a lone empty state dropped. */
 .empty:has(+ .attention) {
-  padding-bottom: var(--s-4);
+  padding-block: var(--s-6) var(--s-2);
+}
+
+.empty:has(+ .attention) .empty-icon {
+  display: none;
 }
 
 /* The Recently completed strip scrolls, which would clip a ring drawn outside the tile. */

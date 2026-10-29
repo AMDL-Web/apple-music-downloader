@@ -436,9 +436,25 @@
 }
 
 @media (max-width: 639px) {
+  /* Search, the type filter and Select share one row; Select keeps only its
+     icon (its name stays for screen readers). Retry all, when shown, brings
+     the tools to a row of their own at the right. */
+  .page-queue .toolbar-filters {
+    flex: 1 1 200px;
+  }
+
   .queue-tools {
-    flex-basis: 100%;
-    justify-content: flex-end;
+    flex: none;
+  }
+
+  .queue-select > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   /* A title wraps to a second line instead of cutting at the status. */
@@ -450,9 +466,14 @@
     overflow-wrap: anywhere;
   }
 
-  /* Five tabs do not fit 358 px with every count; the open tab keeps its. */
+  /* Five tabs do not fit 358 px with every count; the open tab keeps its and
+     is as wide as its label and count need. */
   .page-queue .seg-btn[aria-pressed="false"] .seg-count {
     display: none;
+  }
+
+  .page-queue .seg-btn[aria-pressed="true"] {
+    flex: 0 0 auto;
   }
 
   .bulk-hint.is-intro {

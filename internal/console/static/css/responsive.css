@@ -379,6 +379,26 @@
     margin-left: auto;
   }
 
+  /* Actions fill their rows evenly; Delete keeps its size, at the right. */
+  .drawer-actions .btn:not(.drawer-delete) {
+    flex: 1 1 auto;
+  }
+
+  .drawer-actions .confirm {
+    flex-basis: 100%;
+  }
+
+  /* The selection bar keeps select-all, the count and the actions on one row:
+     the buttons give up their icons. */
+  .bulk-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+  }
+
+  .bulk-action > .icon {
+    display: none;
+  }
+
   .drawer-body {
     padding: var(--s-4);
   }
@@ -587,12 +607,24 @@
     display: inline-flex;
   }
 
+  /* A chip stays 20px drawn; its row is a full target tall, so the invisible
+     hit area below reaches 44px without a neighbouring row covering it. */
+  .log-chips {
+    align-items: center;
+    min-height: var(--touch);
+    padding-block: 0;
+  }
+
   .attr-chip::after,
-  .filter-chip-x::after,
   .field-switch::after {
     content: "";
     position: absolute;
     inset: calc(-1 * var(--s-3)) calc(-1 * var(--s-1));
+  }
+
+  /* The chip's padding box is 18px tall (20 less its borders). */
+  .attr-chip::after {
+    inset: calc((18px - var(--touch)) / 2) calc(-1 * var(--s-1));
   }
 
   /* The switch is 26px tall: 100% is its own height. */
@@ -600,15 +632,28 @@
     inset: calc((100% - var(--touch)) / 2) calc(-1 * var(--s-1));
   }
 
+  /* The remove button is a full target itself; the negative margin keeps the
+     chip as tall as before. */
   .filter-chip-x {
-    position: relative;
+    width: var(--touch);
+    height: var(--touch);
+    margin: calc((20px - var(--touch)) / 2);
+  }
+
+  /* Links that stand alone on a line: the box itself is a full target. */
+  .health-strip-link,
+  .drawer-files-link,
+  .filter-chip-link {
+    display: inline-block;
+    min-width: var(--touch);
+    padding-block: calc((var(--touch) - 1lh) / 2);
+    margin-block: calc((1lh - var(--touch)) / 2);
   }
 
   /* Text links keep their line; padding grows the hit box up and down and
      the negative margin gives the room back. */
   .link,
-  .drawer-artist,
-  .filter-chip-link {
+  .drawer-artist {
     padding-block: var(--s-3);
     margin-block: calc(-1 * var(--s-3));
   }

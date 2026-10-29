@@ -957,6 +957,12 @@
   box-shadow: inset 0 0 0 1px currentColor;
 }
 
+/* The server status line is a banner too: under the stacked banners it sits at
+   their gap, not at the page gap. */
+:root[data-skin="music"] .banners:not(:empty) + .page-overview:has(> .health-strip:first-child) {
+  margin-top: calc(var(--s-2) - var(--page-gap));
+}
+
 /* Recent failures sit under the live cards as their own grouped rows. */
 :root[data-skin="music"] [data-section="live"] .attention {
   display: grid;
