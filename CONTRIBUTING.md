@@ -67,9 +67,7 @@ and the Node script tests. `make help` lists the narrower targets, and `make dev
 starts the API in simulate mode on `127.0.0.1:18080`, which needs no wrapper-manager.
 
 The API in `internal/api/openapi.yaml`, config keys, the DB schema and output paths
-are contracts. Breaking changes are allowed when they fix a defect or remove
-duplication, and they are marked with `!` in the commit title and listed in the upgrade
-guide. If your change touches one of them, read
+are contracts. If your change touches one of them, read
 [Contracts and breaking changes](AGENTS.md#contracts-and-breaking-changes) first.
 
 ## Pull requests

@@ -28,13 +28,13 @@ fit a Go open-source backend with English docs.
 | One review rubric for all review bots, imported by AGENTS.md | [REVIEW.md](../REVIEW.md), review workflows | adapted | Review output stays in Simplified Chinese by the maintainer's choice. |
 | Review convergence: fix real defects in one push, edge cases optional | [REVIEW.md](../REVIEW.md), [HUMAN.md](../HUMAN.md#review-bots) | adopted | |
 | Path-scoped rules with `paths:` frontmatter | `.claude/rules/` | adopted | Codex and others read nested AGENTS.md instead; rules point there. |
-| Nested AGENTS.md per package: invariants, traps, change-together lists, verify command | `internal/api/AGENTS.md` and five more | adopted | |
+| Nested AGENTS.md per package: invariants, traps, change-together lists, verify command | `internal/media/AGENTS.md` and the other `internal/*/AGENTS.md` | adopted | |
 | Glossary with one line and a source pointer per term | [GLOSSARY.md](../GLOSSARY.md) | adopted | |
 | Comment policy: surprising behavior, intent, contracts; no history | `.claude/rules/go.md` | adapted | Exported Go identifiers keep godoc comments. |
 | Doc types with an enforced index | [docs/README.md](README.md), `internal/repocheck` | adopted | English `> Type:` markers. |
 | Machine-checked links, anchors, backticked paths and `path#Symbol` pointers | `internal/repocheck` | adapted | A Go test instead of a TypeScript script; also accepts `package-dir#Symbol`, which survives file splits. |
 | One fact, one source; docs updated in the same commit, found with `rg` | [AGENTS.md](../AGENTS.md#working-agreements), `.claude/rules/docs.md` | adopted | |
-| Contract done-conditions; rename directly, no compatibility shims | [AGENTS.md](../AGENTS.md#contracts-and-breaking-changes), `internal/api/AGENTS.md` | adapted | Breaking changes allowed when they fix a defect or remove duplication, but marked `!` and listed in the upgrade guide, because installs and API clients must act on them. Output paths stay frozen without the maintainer's OK. |
+| Contract done-conditions; rename directly, no compatibility shims | [AGENTS.md](../AGENTS.md#contracts-and-breaking-changes), [amdl-api-change](../.claude/skills/amdl-api-change/SKILL.md) | adapted | Breaking changes allowed when they fix a defect or remove duplication, but marked `!` and listed in the upgrade guide, because installs and API clients must act on them. Output paths stay frozen without the maintainer's OK. |
 | Maintainer-facing collaboration protocol | [HUMAN.md](../HUMAN.md) | adapted | Short; outside contributors read CONTRIBUTING.md. |
 | README reading map from question to entry symbol | [README.md](../README.md#reading-map) | adopted | |
 | Skill conventions and the `.agents/skills` link | `.claude/skills/`, `.agents/skills` | adopted | |

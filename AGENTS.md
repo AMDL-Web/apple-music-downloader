@@ -1,173 +1,155 @@
 # amdl-backend
 
-Go service that resolves Apple Music links and runs the download → decrypt →
-remux → tag pipeline. REST + SSE on `/api/v1`, SQLite store. It owns
-`internal/api/openapi.yaml` and the one maintained client, the web console in
-`internal/console`.
-
-Its HTTP API, config keys, DB schema and output paths are contracts that installs
-and clients depend on; see [Contracts and breaking changes](#contracts-and-breaking-changes).
+Go service that resolves Apple Music links and runs the download, decrypt, remux
+and tag pipeline: REST and SSE under `/api/v1`, a SQLite store, and the web console
+in `internal/console`, the one client this repository maintains. Code map: the
+[README reading map](README.md#reading-map); vocabulary: `GLOSSARY.md`; docs index:
+`docs/README.md`.
 
 ## Working agreements
 
-- Decide routine, reversible choices yourself and state any assumption that matters. Ask only when missing information would change the result or the next step goes past what was asked, and keep doing the parts that don't depend on the answer.
-- When a request reads more than one way, restate the goal in a sentence or two and proceed on that reading, so a wrong reading costs one reply instead of a finished change.
-- The maintainer's explicit request beats this file and skill defaults. When a skill says stop, name the file and the rule.
-- Do the lightest fix first (wording, one config line). A new mechanism (check, hook, CI step, scheduled job) states what it prevents, when it runs and who reads its result, because every later change pays for it.
-- Before saying something can't be done, `rg` the repo, run `git log -S` / `--grep`, and read the official docs or upstream issues. Before "fixing" an inconsistency, check history for a deliberate choice.
-- Every wait (CI, review bots, background loops) and every outbound call has a bound: `timeout` on shell waits, a context deadline or client timeout in Go. An unbounded wait hangs silently.
-- When a change touches a source file over about 20 KB, first split one responsibility out of it, move-only, with `tools/splitdecls` ([amdl-refactor](.claude/skills/amdl-refactor/SKILL.md)). If there is no natural seam, skip it and say so.
-- Update affected docs in the same commit: `rg` the changed symbols, keys and rule words across `README.md`, `README.zh-CN.md`, `docs/`, every AGENTS.md, `REVIEW.md`, `GLOSSARY.md`, `.claude/`, `internal/api/openapi.yaml` and `configs/config.example.yaml`. When docs and code disagree, code wins and the doc is fixed now.
-- Report the result first, then evidence. Keep changed, tested, pushed and released apart, and label behavior inferred from reading code as inference, with what would confirm it.
-- Path rules live in `.claude/rules/` (loaded when you Read a matching file) and nested AGENTS.md files; open them yourself when editing through the shell.
+- What you decide alone and what waits for the maintainer is in `HUMAN.md`.
+- Do the lightest fix first. A new mechanism (check, hook, CI step, scheduled job)
+  needs the maintainer's OK after you state what it prevents, when it runs and who
+  reads the result.
+- Before changing a source file over about 20 KB, split one responsibility out of
+  it in a move-only commit ([amdl-refactor](.claude/skills/amdl-refactor/SKILL.md)),
+  or say there is no natural seam.
+- Every wait and every outbound call is bounded: `timeout` on shell waits, a context
+  deadline or client timeout in Go.
+- Docs change in the commit that changes the behavior. `rg` the changed symbols,
+  keys and rule words across `README.md`, `README.zh-CN.md`, `docs/`, the AGENTS.md
+  files, `REVIEW.md`, `GLOSSARY.md`, `.claude/`, `internal/api/openapi.yaml` and
+  `configs/config.example.yaml`. When a doc and the code disagree, fix the doc.
+- Reports keep changed, tested, pushed and released apart, and label behavior
+  inferred from reading code as inference.
+- Rules for some paths live in `.claude/rules/` and in `AGENTS.md` files under
+  `internal/`; open the matching one before editing there.
 
 ## This service has no auth, on purpose
 
-It is the download core. Every endpoint is unauthenticated. Access control is the
-responsibility of the deployment layer above this service (reverse proxy, gateway,
-or frontend session), not this codebase.
-
-Don't add auth middleware here, and don't report missing auth as a finding in a
-review: it's a deliberate architecture boundary, not an oversight.
+Every endpoint is unauthenticated; access control belongs to the deployment layer
+in front of it (reverse proxy, gateway). Each install serves one user, and the
+project is distributed as open source. Don't add auth middleware or multi-user
+features, and don't report missing auth in a review.
 
 ## Contracts and breaking changes
 
-The API, config keys, DB schema and output paths may change, breaking changes included, when the change fixes a defect, removes duplication or makes a contract machine-checkable. Taste alone is not a reason: every break costs each install and client an upgrade.
+The HTTP API (`internal/api/openapi.yaml`), config keys, the DB schema, SSE event
+types and output paths are contracts that installs and the console depend on.
 
-- A breaking change is a `!` Conventional Commit (`feat(api)!: …`), which the changelog lists under Breaking, and a row (old shape, new shape, affected clients) in the upgrade guide under `docs/` for the next major version.
-- A route or response change lands in one commit with: `internal/api/openapi.yaml`, the handler and route table in `internal/api`, the route/OpenAPI parity test, [docs/api.md](docs/api.md) and the API table in [README.md](README.md#api).
-- A config key needs its full comment in `configs/config.example.yaml` ([Config](#config)).
-- A schema change needs a row-preserving migration ([Data safety](#data-safety)).
-- Output paths are the exception: a change to path templates, `{Quality}` labels or name cleaning makes the "already downloaded" check miss, and libraries download again. Change them only with the maintainer's OK and an upgrade note; see `internal/media/AGENTS.md`.
-- A route or response the console uses changes together with the console. API changes are not held back for other clients ([Related repositories](#related-repositories)).
+- A breaking change needs a reason: it fixes a defect, removes duplication or makes
+  a contract machine-checkable.
+- Mark it with a `!` Conventional Commit (`feat(api)!: …`) and add a row (old
+  shape, new shape, affected clients) to the upgrade guide in `docs/` for the next
+  major version. Rename directly; no compatibility shims.
+- Output paths are the exception. A change to path templates, `{Quality}` labels,
+  name cleaning or sidecar names makes the "already downloaded" check miss and
+  libraries download again, so it needs the maintainer's OK and an upgrade note
+  (`internal/media/AGENTS.md`).
+- What changes together with each surface (spec, handler, docs, README table,
+  console, config example, migration) is listed in
+  [amdl-api-change](.claude/skills/amdl-api-change/SKILL.md).
+- The console changes in the same commit as an API it uses. The iOS app and amdl-web
+  are set aside and get no follow-ups.
 
 ## Config
 
-`configs/config.yaml` is generated: bootstrapped from `configs/config.example.yaml`
-on first start, then rewritten by `PUT /api/v1/config`, which drops all comments.
-Hand edits survive only until the next runtime config write.
+`configs/config.yaml` is generated: copied from `configs/config.example.yaml` on
+first start, then rewritten without comments by `PUT /api/v1/config`. The example
+is therefore the documentation. Each key's comment states allowed values, units,
+the behavior when the key is absent, whether it is a runtime or a startup key, and
+any template variables or list options.
 
-So `configs/config.example.yaml` is the documentation, and each key carries its full
-comment: allowed enum values, valid booleans, numeric units and default behavior,
-list item options, supported template variables. A test in `internal/config` fails
-when the example's key set drifts from the struct; it can't judge the comment.
-Details in `internal/config/AGENTS.md`.
+## Two Apple hosts
 
-## Two Apple hosts, not one
-
-`api.music.apple.com` (developer token) and `amp-api.music.apple.com` (scraped JWT
-plus `Origin`) are not interchangeable: `enhancedHls` and `editorialVideo` exist only
-on amp-api. Anything read from amp-api degrades to "this album doesn't have that"
-instead of failing a job. Read `internal/applemusic/AGENTS.md` first.
+`api.music.apple.com` takes the developer token. `amp-api.music.apple.com` takes a
+JWT scraped from the music.apple.com web player plus an `Origin` header, and is the
+only host that returns `enhancedHls` and `editorialVideo`. amp-api is undocumented,
+so anything read from it degrades to "not available" instead of failing a job
+(`internal/applemusic/AGENTS.md`).
 
 ## Data safety
 
-Schema changes need a migration that preserves existing rows, and confirmation
-before you apply one. Describe the migration impact rather than assuming a
-destructive rebuild is acceptable.
-
-Never commit `configs/config.yaml`, `*.p8` files, `keys/` or `data/`: they hold
-tokens, private keys and local state, which is why git ignores them.
+- A schema change is a new migration that keeps every existing row
+  (`internal/db/AGENTS.md`). Before applying one to a real database, describe its
+  impact and get the maintainer's confirmation.
+- Never commit `configs/config.yaml`, `*.p8` files, `keys/` or `data/`: they hold
+  tokens, private keys and local state.
 
 ## Language
 
 Everything in the repository is English: code, comments, docs, config comments, CI,
-OpenAPI descriptions and commit messages, so every contributor and agent reads one
-language. Deliberate exceptions: `README.zh-CN.md` (a translation; `README.md` is the
-source), hand-written release notes (may be Chinese), and review-bot PR comments
-(Simplified Chinese, set in `REVIEW.md`).
-
-## Where to start
-
-- Code map: [README "Reading map"](README.md#reading-map). Vocabulary: `GLOSSARY.md`. Docs index and doc types: `docs/README.md`.
-- Package rules: `internal/api/AGENTS.md`, `internal/applemusic/AGENTS.md`, `internal/config/AGENTS.md`, `internal/db/AGENTS.md`, `internal/jobs/AGENTS.md`, `internal/media/AGENTS.md`. Read the one for a package before changing it.
-- Who decides what, and how to report: `HUMAN.md`. Human contributor workflow: `CONTRIBUTING.md`.
+OpenAPI descriptions and commit messages. Exceptions: `README.zh-CN.md` (a
+translation of `README.md`), hand-written release notes (may be Chinese), and
+review-bot PR comments (Simplified Chinese, set in `REVIEW.md`).
 
 ## Verification
 
-Run what the change touches. CI (`.github/workflows/ci.yml`) is the authority: it runs
-the `make check` steps on pushes to `main` and `dev` and on pull requests, and builds
-the Docker image.
+CI (`.github/workflows/ci.yml`) runs the `make check` steps on pushes to `main` and
+`dev` and on pull requests, and builds the Docker image. Locally, run what the
+change touches; [amdl-verify](.claude/skills/amdl-verify/SKILL.md) has the live API
+and console checks and the report format.
 
 | Change | Run |
 | --- | --- |
-| Docs, AGENTS.md, skills | `go test -count=1 ./internal/repocheck/` |
+| Docs, AGENTS.md, rules, skills | `go test -count=1 ./internal/repocheck/` |
 | Go logic | the package's tests, then `make test` |
-| Concurrency (jobs, media pools, events, limits) | `make race` |
-| API routes or schemas | `go test ./internal/api/` and a live check with `make dev` ([amdl-verify](.claude/skills/amdl-verify/SKILL.md)) |
-| Config keys | `go test ./internal/config/`, then reread the key's example comment |
+| Concurrency (jobs, media pools, events, SSE) | `make race` |
+| API routes, schemas, SSE | `go test ./internal/api/` and a live check with `make dev` |
+| Config keys | `go test ./internal/config/ ./internal/api/`, then reread the key's example comment |
+| DB schema | `go test ./internal/db/` and a run against a copy of a real database |
+| Console | the commands in `internal/console/AGENTS.md` and a browser check |
 | Dependencies | `make vuln` |
 | Scripts, release tooling | `make node-test` |
 | Dockerfile, entrypoint | `make docker` |
 | Before pushing to dev | `make check` |
 
-Add a behavior test where a regression is likely, not tests that restate the
+Add a behavior test where a regression is likely, not one that restates the
 implementation. Say what you could not verify and why.
-
-## Skills
-
-Procedures live in `.claude/skills/` (also reachable as `.agents/skills`). Open the one that fits:
-
-- [amdl-verify](.claude/skills/amdl-verify/SKILL.md): after any change, before pushing or reporting done.
-- [amdl-diagnose](.claude/skills/amdl-diagnose/SKILL.md): something is broken, failing, flaky or slow; reproduce first, then fix.
-- [amdl-api-change](.claude/skills/amdl-api-change/SKILL.md): adding or changing a route, schema, SSE event, config key or DB column.
-- [amdl-release](.claude/skills/amdl-release/SKILL.md): cutting a release (dev → main PR, release notes, image check).
-- [amdl-refactor](.claude/skills/amdl-refactor/SKILL.md): splitting a large file or moving declarations without behavior change.
 
 ## Commits and releases
 
-Full workflow in [CONTRIBUTING.md](CONTRIBUTING.md). What bites in practice:
-
-- Only `main` requires a pull request. Work lands on `dev` directly — small
-  changes don't need their own branch, and cutting one off `main` puts the work
-  in the wrong place. `dev` is promoted into `main` by PR for releases. Rebase onto
-  `origin/dev`, never `origin/main`.
-- Every commit needs a DCO `Signed-off-by` trailer (`git commit -s`; for commits
-  already made, `git rebase --signoff origin/dev`). The
-  [DCO app](https://github.com/apps/dco) blocks the PR otherwise. Non-merge
-  commits follow [Conventional Commits](https://www.conventionalcommits.org/).
-- Codex — and only Codex — appends `Co-authored-by: Codex <noreply@openai.com>`.
-  Other agents use their own attribution and leave this footer alone.
-- Release notes may be hand-written at `.github/release-notes/<version>.md`; the
-  release workflow prefers that file when non-empty, else auto-generates.
-- In those hand-written notes, each entry lists its commit author and all
-  `Co-authored-by` contributors, deduplicated. Use the `@username` form whenever
-  the GitHub account is identifiable — plain model-name text renders as text, not
-  a mention, so the avatar never shows up. `Codex <noreply@openai.com>` → `@codex`;
-  any `Claude … <noreply@anthropic.com>` co-author, whatever the model name → `@claude`.
+- Work lands on `dev`; small changes need no branch of their own. `main` changes
+  only through the `dev` → `main` release PR. Rebase onto `origin/dev`.
+- Every commit carries a DCO `Signed-off-by` trailer (`git commit -s`). Non-merge
+  commits follow Conventional Commits.
+- Only Codex appends `Co-authored-by: Codex <noreply@openai.com>`; other agents use
+  their own attribution.
+- Releases follow [amdl-release](.claude/skills/amdl-release/SKILL.md); release-note
+  attribution is in [CONTRIBUTING.md](CONTRIBUTING.md#releases).
 
 ## Merging with `--admin`
 
-Bypassing branch protection needs the user's approval **for that specific bypass**.
-"Open and merge the PR" is not it. If required reviews, status checks, or
-conversation resolution block the merge, report what's blocking and wait.
+A branch-protection bypass needs the maintainer's approval for that specific
+bypass; "open and merge the PR" is not it. When reviews, checks or unresolved
+conversations block a merge, report what blocks it and wait.
 
 ## Related repositories
 
-- amdl-web and the AMDL iOS app: set aside, not kept in sync with this API.
-- [wrapper-manager](https://github.com/AMDL-Web/wrapper-manager): the Apple Music account session and decryptor, over gRPC; its proto module is a Go dependency.
+[wrapper-manager](https://github.com/AMDL-Web/wrapper-manager) holds the Apple Music
+account session and decrypts over gRPC (`internal/wrapper`); its proto module is a
+Go dependency.
 
 ## Rule -> enforced by
 
 | Rule | Enforced by |
 | --- | --- |
-| gofmt, build, vet, tests, race detector, govulncheck, Node script tests | CI `.github/workflows/ci.yml`, one step per `make` target |
+| gofmt, build, vet, tests, race detector, govulncheck, Node tests | CI, one step per `make` target |
 | The Docker image builds | CI docker build job |
-| Config example key set matches the config struct | test in `internal/config` |
-| Every route and runtime config key is in `internal/api/openapi.yaml` and the reverse | internal/api route and RuntimeConfig parity tests |
-| Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md sizes, CLAUDE.md pairs, docs types and index | `internal/repocheck` tests |
-| DCO sign-off on every commit | DCO GitHub App on PRs; `scripts/guard-commands.mjs` on `git commit` |
-| `main` changes only through a PR | branch protection on `main`; guard hook on `git push` |
-| No `--admin` merge without approval for that bypass | guard hook on `gh pr merge` (Claude Code only); text elsewhere |
+| Config example key set and defaults match the struct | tests in `internal/config` |
+| Routes, error codes and runtime config keys match `internal/api/openapi.yaml` | parity tests in `internal/api` |
+| Output paths | golden tests in `internal/media` |
+| Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `internal/console` |
+| Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md size, CLAUDE.md pairs, docs types and index | `internal/repocheck` tests |
+| DCO sign-off | DCO GitHub App on PRs; `scripts/guard-commands.mjs` on `git commit` |
+| `main` only through a PR | branch protection; guard hook on `git push` |
+| No `--admin` merge without approval | guard hook on `gh pr merge` (Claude Code only) |
 | Never commit config, keys or data | `.gitignore`; guard hook on `git add -f` |
-| No auth middleware | text only; `REVIEW.md` tells reviewers not to ask for it |
-| Breaking changes marked `!` with an upgrade-guide row; console updated with the API; full config comments | text only; `REVIEW.md` defects; the changelog's Breaking section |
-| Row-preserving migrations, confirmed before applying | text only; `REVIEW.md` defect |
-| amp-api reads degrade instead of failing a job | text only; `REVIEW.md` defect |
-| Codex-only footer, release-note attribution, language policy | text only |
+| No auth, breaking-change marking, console updated with the API, full config comments, row-preserving migrations, amp-api degrades | text and `REVIEW.md` |
 
 The guard hook runs where Claude Code loads `.claude/settings.json`; other agents
-and cloud environments that skip repository hooks follow the text.
+follow the text.
 
 ## Code review rules
 

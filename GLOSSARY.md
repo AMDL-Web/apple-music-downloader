@@ -28,7 +28,7 @@ wins when they disagree, so details are not copied here.
 | Item | One track inside a job | `internal/domain#JobItem` |
 | Stage breakdown | An item's durable per-stage flags (resolved, remuxed, verified, tagged, saved) that let a reconnecting client redraw progress | `internal/domain#ItemProgress` |
 | Terminal status | `completed`, `failed` or `cancelled`; written once, with its event | `internal/domain#JobStatus.IsTerminal` |
-| Canonical key | A job's dedup identity: type, storefront, id and destination | `internal/jobs#canonicalKey` |
+| Canonical key | A job's dedup identity: type, storefront and id | `internal/jobs#canonicalKey` |
 | Quality priority | The ordered codec list a track is tried in | `configs/config.example.yaml#download.quality_priority` |
 | Codec fallback | Moving to the next codec when one codec's attempts run out; AAC-LC over WebPlayback is the implicit last resort | [docs/download-pipeline.md](docs/download-pipeline.md#retries-and-codec-fallback) |
 | Memory mode | `low` checkpoints the encrypted track to disk, `high` keeps it in RAM | `configs/config.example.yaml#download.memory_mode` |
