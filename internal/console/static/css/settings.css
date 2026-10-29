@@ -600,13 +600,6 @@
   display: block;
 }
 
-.settings-elsewhere-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-  margin-top: var(--s-2);
-}
-
 .sync-state {
   display: inline-flex;
   flex-wrap: wrap;

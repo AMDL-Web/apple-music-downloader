@@ -33,7 +33,6 @@ import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
 import { LibrarySyncPanel, ConfigFilePanel, TemplateReference } from './settings-panels.js';
-import { useElsewhere, elsewhereText } from './settings-elsewhere.js';
 
 /** What a confirmation would lose: the count, the sections and the field names. */
 function LossText({ keys, lead }) {
@@ -68,9 +67,7 @@ export function SettingsPage({ route }) {
     [cfg.base, dirtyKeys, checks],
   );
 
-  const applySeq = useRef(0);
   const apply = useCallback((res) => {
-    applySeq.current += 1;
     setCfg({
       loaded: true,
       error: null,
@@ -95,19 +92,6 @@ export function SettingsPage({ route }) {
       cancelled = true;
     };
   }, [loadSeq, apply]);
-
-  // Saved values that changed in another tab or in the file: a quiet note
-  // after a silent refresh, or (under unsaved edits) a notice with a choice.
-  const { updatedNote, setUpdatedNote, elsewhere, setElsewhere, acked } = useElsewhere({
-    cfg,
-    dirty,
-    saving,
-    apply,
-    applySeq,
-    setLoadSeq,
-    setLive,
-    epoch: app.epoch,
-  });
 
   // Announce the unsaved count politely, after the typing pauses. A save or
   // discard that empties the draft has its own toast, so it stays quiet here.
@@ -139,7 +123,6 @@ export function SettingsPage({ route }) {
     setDiscarding(false);
     setDraft({});
     setSaveError(null);
-    setElsewhere(null);
     setLoadSeq((n) => n + 1);
     app.toast({ message: 'Changes discarded' });
   };
@@ -168,7 +151,6 @@ export function SettingsPage({ route }) {
       const res = await putConfig(body);
       quietZero.current = true;
       apply(res);
-      setUpdatedNote('');
       setDraft((d) => draftAfterSave(d, sent));
       app.toast({ message: `Saved ${dirtyKeys.length === 1 ? '1 setting' : `${dirtyKeys.length} settings`}`, role: 'success' });
       return true;
@@ -341,35 +323,6 @@ export function SettingsPage({ route }) {
               ${faultSections.length
                 ? html` <span>See ${faultSections.map((s, i) => html`${i ? ', ' : ''}<a key=${s.id} class="link" href=${settingsHash(s.id)}>${s.label}</a>`)}.</span>`
                 : null}
-            </${Notice}>
-          </div>`
-        : null}
-      ${updatedNote
-        ? html`<div class="settings-updated">
-            <${Notice} role="neutral" icon="info" action=${html`<${Button} variant="ghost" size="sm" onClick=${() => setUpdatedNote('')}>Dismiss</${Button}>`}>${updatedNote}</${Notice}>
-          </div>`
-        : null}
-      ${elsewhere
-        ? html`<div class="settings-elsewhere">
-            <${Notice} role="warning" icon="triangle-alert">
-              <p>${elsewhereText(elsewhere.keys, dirtyKeys.length)}</p>
-              <div class="settings-elsewhere-actions">
-                <${Button}
-                  size="sm"
-                  onClick=${() => {
-                    apply(elsewhere.res);
-                    setElsewhere(null);
-                  }}
-                >Show the saved values</${Button}>
-                <${Button}
-                  variant="ghost"
-                  size="sm"
-                  onClick=${() => {
-                    acked.current = elsewhere.sig;
-                    setElsewhere(null);
-                  }}
-                >Keep editing</${Button}>
-              </div>
             </${Notice}>
           </div>`
         : null}
