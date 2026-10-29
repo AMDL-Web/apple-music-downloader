@@ -6,6 +6,14 @@
 // instead of producing code that means something different. Integer
 // arithmetic keeps Rust's release-build wrapping semantics; all-constant
 // subexpressions are folded here because Go rejects constant overflow.
+//
+// The output is not line for line. Function-level u32 locals get a new Go
+// name on every assignment, each u32 expression is rewritten into a smaller
+// equivalent (simplify.go folds upstream's mixed boolean-arithmetic
+// obfuscation, which LLVM folds for Temari and the Go compiler does not), and
+// locals nothing reads any more are dropped. Equivalence rests on exact
+// identities checked by simplify_test.go and on the byte-for-byte comparison
+// with Temari in tools/temaridiff.
 package transpile
 
 import (
@@ -29,7 +37,7 @@ var handPorted = map[string]string{
 // handWritten names the package-level identifiers internal/fairplay declares
 // outside the generated file, which generated locals must not shadow.
 var handWritten = []string{
-	"Template", "ParseTemplate", "ctxTable", "ctxSize", "stateSize", "r1Entry", "stSlots",
+	"Template", "ParseTemplate", "ctxTable", "ctxSize", "ctxWords", "stateSize", "r1Entry", "stSlots",
 	"parseRegister", "decodeBase64", "reconstructBlock",
 }
 

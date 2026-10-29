@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -91,6 +93,33 @@ func TestDecryptSampleConcurrent(t *testing.T) {
 	}
 }
 
+// t4 reads ctxTable.w, which holds a word at every 4-aligned ctx offset
+// only, so every table base passed to t4 must be 4-aligned. An upstream
+// release with an unaligned base fails here instead of reading wrong words.
+func TestT4BasesAligned(t *testing.T) {
+	call := regexp.MustCompile(`\bt4\(ctx, (0x[0-9a-fA-F]+|[0-9]+),`)
+	any := regexp.MustCompile(`\bt4\(`)
+	for _, name := range []string{"rounds_gen.go", "decrypt.go"} {
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls := call.FindAllSubmatch(src, -1)
+		if n := len(any.FindAll(src, -1)); n != len(calls) {
+			t.Fatalf("%s: %d t4 calls, %d with a constant base", name, n, len(calls))
+		}
+		for _, m := range calls {
+			base, err := strconv.ParseUint(string(m[1]), 0, 64)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if base%4 != 0 || base >= ctxSize {
+				t.Errorf("%s: t4 base %s is not a 4-aligned ctx offset", name, m[1])
+			}
+		}
+	}
+}
+
 func TestParseTemplate(t *testing.T) {
 	g := loadGolden(t)
 	var base map[string]any
@@ -136,13 +165,56 @@ func TestParseTemplate(t *testing.T) {
 	}
 }
 
+// benchSizes are sample lengths around what a track carries: AAC samples are
+// a few KiB, ALAC and Atmos samples tens of KiB, and 1 MiB shows the
+// per-block cost without the per-sample one.
+var benchSizes = []struct {
+	name string
+	n    int
+}{{"4KiB", 4 << 10}, {"64KiB", 64 << 10}, {"1MiB", 1 << 20}}
+
+// benchCiphertext tiles the golden ciphertext to n bytes. The rounds take the
+// same path for any input, so the speed does not depend on the bytes.
+func benchCiphertext(ct []byte, n int) []byte {
+	b := make([]byte, n)
+	for i := 0; i < n; i += len(ct) {
+		copy(b[i:], ct)
+	}
+	return b
+}
+
 func BenchmarkDecryptSample(b *testing.B) {
 	g := loadGolden(b)
 	tmpl := mustParse(b, g.template)
-	buf := make([]byte, len(g.ct))
-	b.SetBytes(int64(len(g.ct)))
-	for b.Loop() {
-		copy(buf, g.ct)
-		tmpl.DecryptSample(buf)
+	for _, size := range benchSizes {
+		src := benchCiphertext(g.ct, size.n)
+		b.Run(size.name, func(b *testing.B) {
+			buf := make([]byte, len(src))
+			b.SetBytes(int64(len(src)))
+			for b.Loop() {
+				copy(buf, src)
+				tmpl.DecryptSample(buf)
+			}
+		})
+	}
+}
+
+// BenchmarkDecryptSampleParallel runs one sample per goroutine on every
+// GOMAXPROCS thread, as the wrapper's sample pool does.
+func BenchmarkDecryptSampleParallel(b *testing.B) {
+	g := loadGolden(b)
+	tmpl := mustParse(b, g.template)
+	for _, size := range benchSizes {
+		src := benchCiphertext(g.ct, size.n)
+		b.Run(size.name, func(b *testing.B) {
+			b.SetBytes(int64(len(src)))
+			b.RunParallel(func(pb *testing.PB) {
+				buf := make([]byte, len(src))
+				for pb.Next() {
+					copy(buf, src)
+					tmpl.DecryptSample(buf)
+				}
+			})
+		})
 	}
 }

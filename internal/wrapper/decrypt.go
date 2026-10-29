@@ -53,8 +53,8 @@ const (
 	prefetchAdamID = "0"
 
 	// templateCacheSize bounds the per-key-URI templates kept across jobs. A
-	// parsed template is about 41 KB (a 32 KiB ctx table and an 8.25 KiB
-	// state), so the cache stays near 10 MB.
+	// parsed template is about 72 KiB (the 32 KiB ctx table as bytes and as
+	// words, and an 8 KiB state), so the cache stays under 19 MB.
 	templateCacheSize = 256
 
 	// minChunkBytes is the least sample data worth a goroutine of its own.

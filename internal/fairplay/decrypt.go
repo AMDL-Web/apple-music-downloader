@@ -10,27 +10,22 @@ func (t *Template) DecryptSample(sample []byte) {
 	}
 	ct := sample[:n*16]
 	st := t.stInit
+	// Round 1's entry registers: the template's, and rdi and rsi set per block.
+	regs := round1Regs{rdx: t.r1.rdx, rcx: t.r1.rcx, r9: t.r1.r9, rax: t.r1.rax, rbp: t.r1.rbp}
 	for bi := 0; bi < n; bi++ {
-		t.decryptBlock(&st, ct, bi)
+		regs.rdi = 0x1EB2C6B4 ^ uint32(bi)<<4
+		regs.rsi = 0x8 + uint32(bi)<<4
+		t.decryptBlock(&st, &regs, ct, bi)
 	}
 }
 
 // decryptBlock is Temari's process_block. The rounds read ciphertext only
 // from block bi, so writing each plaintext block back over ct is safe;
 // tools/temaridiff checks that against Temari's out-of-place decrypt.
-func (t *Template) decryptBlock(st *state, ct []byte, bi int) {
-	regs := round1Regs{
-		rdi: 0x1EB2C6B4 ^ uint32(bi)<<4,
-		rsi: 0x8 + uint32(bi)<<4,
-		rdx: t.r1.rdx,
-		rcx: t.r1.rcx,
-		r9:  t.r1.r9,
-		rax: t.r1.rax,
-		rbp: t.r1.rbp,
-	}
+func (t *Template) decryptBlock(st *state, regs *round1Regs, ct []byte, bi int) {
 	ctx := &t.ctx
 
-	mid := round1_mid(ctx, st, ct, &regs)
+	mid := round1_mid(ctx, st, ct, regs)
 	r2 := round1_tail(ctx, st, mid.rax, mid.r13&0xFF, mid.r15&0xFF, mid.r8&0xFF, mid.r14&0xFF)
 	r2v := round2_sub6400(ctx, st, r2.rdi, r2.rsi, r2.rdx, r2.rcx, r2.r8, r2.r9, r2.rax, r2.rbx,
 		r2.r10, r2.r11, r2.r13, r2.r14, r2.r15, 0)
@@ -65,14 +60,12 @@ func (t *Template) decryptBlock(st *state, ct []byte, bi int) {
 // lowest offset in pt.
 func reconstructBlock(pt *[16]tupleUint32Uint8, blk *[16]byte) {
 	base := pt[0].f0
-	for _, p := range pt {
-		if p.f0 < base {
-			base = p.f0
-		}
+	for i := range pt {
+		base = min(base, pt[i].f0)
 	}
-	for _, p := range pt {
-		if idx := p.f0 - base; idx < 16 {
-			blk[idx] = p.f1
+	for i := range pt {
+		if idx := pt[i].f0 - base; idx < 16 {
+			blk[idx] = pt[i].f1
 		}
 	}
 }

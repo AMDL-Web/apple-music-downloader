@@ -17,7 +17,15 @@ const (
 	stateSize = 0x2000
 )
 
-type ctxTable [ctxSize]byte
+// ctxTable holds the template's ctx bytes twice: as bytes for ctxb and as
+// little-endian words at every 4-aligned offset for t4, so a word read is one
+// load instead of four byte loads.
+type ctxTable struct {
+	b [ctxSize]byte
+	w [ctxWords]uint32
+}
+
+const ctxWords = ctxSize / 4
 
 type r1Entry struct{ rdx, rcx, rax, r9, rbp uint32 }
 
@@ -95,7 +103,10 @@ func ParseTemplate(body []byte) (*Template, error) {
 	}
 
 	t := &Template{}
-	copy(t.ctx[:], ctx)
+	copy(t.ctx.b[:], ctx)
+	for i := range t.ctx.w {
+		t.ctx.w[i] = binary.LittleEndian.Uint32(t.ctx.b[4*i:])
+	}
 	for _, off := range stSlots {
 		if int(off) >= stSize {
 			continue

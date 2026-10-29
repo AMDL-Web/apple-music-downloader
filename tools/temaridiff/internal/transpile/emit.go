@@ -2,7 +2,6 @@ package transpile
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -73,14 +72,17 @@ type value struct {
 	c       uint64
 	op      string // top-level Go binary operator, "" when the code is a primary expression
 	unary   bool
+	sym     *sym // the simplified form of a u32 value
 }
 
 type variable struct {
-	name  string
-	t     *gtype
-	read  bool
-	line  int // index of the declaring line in emitter.lines, -1 for parameters
-	param bool
+	name   string // Rust name
+	goname string // Go name of the binding's current value
+	t      *gtype
+	// sym is what a read of a u32 variable yields: the simplified definition
+	// when it can be repeated where the variable is read, else the Go name.
+	sym *sym
+	top bool // declared at function level, so assignments can make new SSA names
 }
 
 type scope struct {
@@ -109,9 +111,19 @@ type emitter struct {
 	tuples   map[string]*gtype
 	reserved map[string]bool
 	lines    []string
-	declared []*variable
+	defs     map[int]string // line index -> Go local that line declares
 	scope    *scope
+	depth    int               // nesting of if and for bodies
+	branch   map[string]bool   // locals assigned inside an if or for body
+	rustName map[string]bool   // every identifier in the function's Rust source
+	used     map[string]bool   // Go locals declared so far
+	slices   []string          // &[u8] parameters, whose indexing may panic
+	names    map[string]string // key of a stable expression -> the Go local holding it
 }
+
+// inlineLimit bounds the size of a definition that is repeated where its
+// variable is read instead of being read through a Go local.
+const inlineLimit = 24
 
 var nameOverrides = map[string]string{"St": "state", "ST_SIZE": "stSize"}
 
@@ -331,6 +343,25 @@ func (e *emitter) binary(op string, x, y value) (value, error) {
 			}
 			return constValue(r&t.mask(), t), nil
 		}
+		if t.k == kU32 {
+			a, b := symOf(x), symOf(y)
+			var s *sym
+			switch op {
+			case "+":
+				s = add(a, b)
+			case "-":
+				s = sub(a, b)
+			case "*":
+				s = mul(a, b)
+			case "&":
+				s = and(a, b)
+			case "|":
+				s = or(a, b)
+			case "^":
+				s = xor(a, b)
+			}
+			return e.fromSym(s, t), nil
+		}
 		return value{code: wrap(x, op, true) + " " + op + " " + wrap(y, op, false), t: t, op: op}, nil
 	case "<<", ">>":
 		return e.shift(op, x, y, false)
@@ -384,6 +415,12 @@ func (e *emitter) shift(op string, x, y value, wrapping bool) (value, error) {
 			}
 			return constValue(r&x.t.mask(), x.t), nil
 		}
+		if x.t.k == kU32 {
+			if op == "<<" {
+				return e.fromSym(shl(symOf(x), uint32(y.c)), x.t), nil
+			}
+			return e.fromSym(shr(symOf(x), uint32(y.c)), x.t), nil
+		}
 	}
 	return value{code: wrap(x, op, true) + " " + op + " " + wrap(y, op, false), t: x.t, op: op}, nil
 }
@@ -400,10 +437,16 @@ func (e *emitter) unary(op string, x value) (value, error) {
 		if x.isConst {
 			return constValue(^x.c&x.t.mask(), x.t), nil
 		}
+		if x.t.k == kU32 {
+			return e.fromSym(not(symOf(x)), x.t), nil
+		}
 		return value{code: "^" + code, t: x.t, unary: true}, nil
 	case op == "-" && x.t.isInt() && x.t.k != kUntyped:
 		if x.isConst {
 			return constValue(-x.c&x.t.mask(), x.t), nil
+		}
+		if x.t.k == kU32 {
+			return e.fromSym(neg(symOf(x)), x.t), nil
 		}
 		return value{code: "-" + code, t: x.t, unary: true}, nil
 	}
@@ -431,8 +474,10 @@ func (e *emitter) expr(x expr) (value, error) {
 		if v == nil {
 			return value{}, fmt.Errorf("undefined: %s", x.name)
 		}
-		v.read = true
-		return value{code: x.name, t: v.t}, nil
+		if v.sym != nil {
+			return e.fromSym(v.sym, v.t), nil
+		}
+		return value{code: v.goname, t: v.t}, nil
 	case *fieldExpr:
 		base, err := e.expr(x.x)
 		if err != nil {
@@ -451,7 +496,7 @@ func (e *emitter) expr(x expr) (value, error) {
 				if err != nil {
 					return value{}, err
 				}
-				return value{code: wrap(base, ".", true) + "." + x.name, t: ft}, nil
+				return opaque(value{code: wrap(base, ".", true) + "." + x.name, t: ft}, all), nil
 			}
 		}
 		return value{}, fmt.Errorf("struct %s has no field %s", st.name, x.name)
@@ -485,7 +530,7 @@ func (e *emitter) expr(x expr) (value, error) {
 		if n > 0 && idx.isConst && idx.c >= n {
 			return value{}, fmt.Errorf("constant index %d out of range [0,%d)", idx.c, n)
 		}
-		return value{code: wrap(base, "[", true) + "[" + idx.code + "]", t: elem}, nil
+		return opaque(value{code: wrap(base, "[", true) + "[" + idx.code + "]", t: elem}, all), nil
 	case *castExpr:
 		v, err := e.expr(x.x)
 		if err != nil {
@@ -515,7 +560,11 @@ func (e *emitter) expr(x expr) (value, error) {
 		if v.t.k == to.k {
 			return v, nil
 		}
-		return value{code: e.goType(to) + "(" + v.code + ")", t: to}, nil
+		po := all
+		if v.t.k == kU8 {
+			po = 0xFF
+		}
+		return opaque(value{code: e.goType(to) + "(" + v.code + ")", t: to}, po), nil
 	case *unaryExpr:
 		v, err := e.expr(x.x)
 		if err != nil {
@@ -591,7 +640,11 @@ func (e *emitter) expr(x expr) (value, error) {
 		if err != nil {
 			return value{}, err
 		}
-		return value{code: fnName(x.fn) + "(" + strings.Join(codes, ", ") + ")", t: rt}, nil
+		po := all
+		if x.fn == "ctxb" {
+			po = 0xFF // a table byte
+		}
+		return opaque(value{code: fnName(x.fn) + "(" + strings.Join(codes, ", ") + ")", t: rt}, po), nil
 	case *structExpr:
 		si, ok := e.structs[x.name]
 		if !ok || len(x.fields) != len(si.fields) {
@@ -708,26 +761,71 @@ func (e *emitter) declare(name string, v value) error {
 		if !sameType(prev.t, v.t) && !assignable(v, prev.t) {
 			return fmt.Errorf("let %s changes the binding's type", name)
 		}
-		if v.code == name {
+		if v.code == prev.goname {
 			// let mut x = x; only makes a parameter mutable, which Go
 			// parameters already are.
 			return nil
 		}
-		e.emit("%s = %s", name, v.code)
+		if e.ssa(prev) {
+			return e.define(prev, v)
+		}
+		e.emit("%s = %s", prev.goname, v.code)
 		return nil
 	}
 	if v.t.k == kTuple {
 		return fmt.Errorf("let %s binds a tuple", name)
 	}
+	if _, err := e.typed(v); err != nil {
+		return err
+	}
+	nv := &variable{name: name, t: v.t, top: e.depth == 0}
+	e.scope.vars[name] = nv
+	return e.define(nv, v)
+}
+
+// ssa reports whether v gets a new Go local on every assignment, so that a
+// read always sees one immutable value: function-level u32 variables that no
+// if or for body assigns.
+func (e *emitter) ssa(v *variable) bool {
+	return v.t.k == kU32 && v.top && e.depth == 0 && !e.branch[v.name]
+}
+
+// define declares a new Go local holding v as variable vr's current value.
+func (e *emitter) define(vr *variable, v value) error {
 	code, err := e.typed(v)
 	if err != nil {
 		return err
 	}
-	nv := &variable{name: name, t: v.t, line: len(e.lines)}
-	e.scope.vars[name] = nv
-	e.declared = append(e.declared, nv)
-	e.emit("%s := %s", name, code)
+	vr.goname = e.fresh(vr.name)
+	e.defs[len(e.lines)] = vr.goname
+	e.emit("%s := %s", vr.goname, code)
+	vr.sym = nil
+	if vr.t.k == kU32 {
+		s := symOf(v)
+		if _, ok := e.names[s.key]; !ok && e.ssa(vr) && s.inl && s.k != sLeaf && s.k != sConst {
+			e.names[s.key] = vr.goname
+		}
+		switch {
+		case e.ssa(vr) && s.inl && s.size <= inlineLimit:
+			vr.sym = s
+		case e.ssa(vr):
+			vr.sym = leaf(vr.goname, precPrimary, s.po, true)
+		default:
+			// Assigned again later in place: reads may not move.
+			vr.sym = leaf(vr.goname, precPrimary, all, false)
+		}
+	}
 	return nil
+}
+
+// fresh returns an unused Go local name for Rust variable name.
+func (e *emitter) fresh(name string) string {
+	n := name
+	for i := 2; e.used[n] || (n != name && e.rustName[n]) || e.reserved[n]; i++ {
+		n = fmt.Sprintf("%s_%d", name, i)
+	}
+	e.used[n] = true
+	return n
 }
 
 func (e *emitter) stmts(list []stmt) error {
@@ -783,6 +881,7 @@ func (e *emitter) stmt(s stmt) error {
 		}
 		e.emit("if %s {", cond.code)
 		e.push()
+		e.depth++
 		if err := e.stmts(s.then); err != nil {
 			return err
 		}
@@ -795,6 +894,7 @@ func (e *emitter) stmt(s stmt) error {
 			}
 			e.pop()
 		}
+		e.depth--
 		e.emit("}")
 	case *forStmt:
 		m, ok := s.iter.(*methodExpr)
@@ -812,18 +912,33 @@ func (e *emitter) stmt(s stmt) error {
 		if av.t.elem.k != kTuple || len(av.t.elem.elems) != len(s.names) {
 			return fmt.Errorf("for pattern does not match the tuple element type")
 		}
-		e.emit("for _, elem := range %s {", av.code)
-		e.push()
-		for i, n := range s.names {
-			if err := e.declare(n, value{code: fmt.Sprintf("elem.f%d", i), t: av.t.elem.elems[i]}); err != nil {
+		// The array is a literal, so the loop is unrolled into one block per
+		// element: constant indices need no bounds checks, and the speed no
+		// longer depends on where a tiny loop happens to be placed.
+		for _, el := range arr.elems {
+			tup := el.(*tupleExpr) // e.array accepted it as a tuple element
+			e.emit("{")
+			e.push()
+			e.depth++
+			for i, n := range s.names {
+				v, err := e.expr(tup.elems[i])
+				if err != nil {
+					return err
+				}
+				if v.t.k == kUntyped {
+					v = constValue(v.c, av.t.elem.elems[i])
+				}
+				if err := e.declare(n, v); err != nil {
+					return err
+				}
+			}
+			if err := e.stmts(s.body); err != nil {
 				return err
 			}
+			e.depth--
+			e.pop()
+			e.emit("}")
 		}
-		if err := e.stmts(s.body); err != nil {
-			return err
-		}
-		e.pop()
-		e.emit("}")
 	case *returnStmt:
 		v, err := e.expr(s.x)
 		if err != nil {
@@ -845,7 +960,10 @@ func (e *emitter) assign(s *assignStmt) error {
 		if v == nil {
 			return fmt.Errorf("assignment to undefined %s", l.name)
 		}
-		lhs, lt = l.name, v.t
+		if e.ssa(v) {
+			return e.assignSSA(v, s)
+		}
+		lhs, lt = v.goname, v.t
 	case *indexExpr:
 		lv, err := e.expr(l)
 		if err != nil {
@@ -878,10 +996,81 @@ func (e *emitter) assign(s *assignStmt) error {
 	return nil
 }
 
+// assignSSA turns an assignment to an SSA variable into a new Go local.
+func (e *emitter) assignSSA(v *variable, s *assignStmt) error {
+	if id, ok := s.rhs.(*identExpr); ok && id.name == v.name && s.op == "=" {
+		return fmt.Errorf("self-assignment of %s", v.name)
+	}
+	rhs, err := e.expr(s.rhs)
+	if err != nil {
+		return err
+	}
+	if !assignable(rhs, v.t) {
+		return fmt.Errorf("assignment to %s has the wrong type", v.name)
+	}
+	if s.op != "=" {
+		switch s.op {
+		case "^=", "&=", "|=", "+=", "-=", "*=":
+		default:
+			return fmt.Errorf("unsupported assignment operator %s", s.op)
+		}
+		cur := e.fromSym(v.sym, v.t)
+		rhs, err = e.binary(s.op[:1], cur, rhs)
+		if err != nil {
+			return err
+		}
+	}
+	if rhs.t.k == kUntyped {
+		rhs = constValue(rhs.c, v.t)
+	}
+	return e.define(v, rhs)
+}
+
+// symOf returns v's simplified form; v is a u32 value or an untyped constant.
+func symOf(v value) *sym {
+	switch {
+	case v.sym != nil:
+		return v.sym
+	case v.isConst:
+		return cnst(uint32(v.c))
+	}
+	prec := precPrimary
+	if v.op != "" {
+		prec = opPrec(v.op)
+	}
+	return leaf(v.code, prec, all, false)
+}
+
+// fromSym prints s as a value of type t.
+func (e *emitter) fromSym(s *sym, t *gtype) value {
+	if s.isConst() {
+		v := constValue(uint64(s.c), t)
+		v.sym = s
+		return v
+	}
+	code, op := (&printer{names: e.names}).render(s)
+	return value{code: code, t: t, op: op, sym: s}
+}
+
+// opaque attaches a leaf form to a u32 value the simplifier cannot look into.
+func opaque(v value, po uint32) value {
+	if v.t.k == kU32 {
+		v.sym = leaf(v.code, precPrimary, po, false)
+	}
+	return v
+}
+
 func (e *emitter) fn(f *fnItem) error {
 	e.lines = nil
-	e.declared = nil
+	e.defs = map[int]string{}
 	e.scope = &scope{vars: map[string]*variable{}}
+	e.depth = 0
+	e.branch = map[string]bool{}
+	e.rustName = map[string]bool{}
+	e.used = map[string]bool{}
+	e.slices = nil
+	e.names = map[string]string{}
+	collectNames(f.body, false, e.branch, e.rustName)
 	var params []string
 	for _, p := range f.params {
 		if err := e.checkLocal(p.name); err != nil {
@@ -891,7 +1080,16 @@ func (e *emitter) fn(f *fnItem) error {
 		if err != nil {
 			return fmt.Errorf("parameter %s: %w", p.name, err)
 		}
-		e.scope.vars[p.name] = &variable{name: p.name, t: t, line: -1, param: true}
+		pv := &variable{name: p.name, goname: p.name, t: t, top: true}
+		e.rustName[p.name] = true
+		e.used[p.name] = true
+		if t.k == kU32 {
+			pv.sym = leaf(p.name, precPrimary, all, !e.branch[p.name])
+		}
+		if t.k == kBytes {
+			e.slices = append(e.slices, p.name)
+		}
+		e.scope.vars[p.name] = pv
 		params = append(params, p.name+" "+e.goType(t))
 	}
 	ret := ""
@@ -906,14 +1104,113 @@ func (e *emitter) fn(f *fnItem) error {
 	if err := e.stmts(f.body); err != nil {
 		return fmt.Errorf("fn %s: %w", f.name, err)
 	}
-	// Go rejects locals that are never read; Rust only warns.
-	sort.SliceStable(e.declared, func(i, j int) bool { return e.declared[i].line > e.declared[j].line })
-	for _, v := range e.declared {
-		if !v.read {
-			i := v.line + 1
-			e.lines = append(e.lines[:i], append([]string{"_ = " + v.name}, e.lines[i:]...)...)
-		}
-	}
+	e.dropDead()
 	e.lines = append([]string{header}, append(e.lines, "}")...)
 	return nil
+}
+
+// collectNames records every identifier the statements bind or assign, and
+// in branch those assigned inside an if or for body.
+func collectNames(list []stmt, inBranch bool, branch, names map[string]bool) {
+	for _, st := range list {
+		switch st := st.(type) {
+		case *letStmt:
+			for _, n := range st.names {
+				names[n] = true
+			}
+		case *assignStmt:
+			if id, ok := st.lhs.(*identExpr); ok && inBranch {
+				branch[id.name] = true
+			}
+		case *ifStmt:
+			collectNames(st.then, true, branch, names)
+			collectNames(st.els, true, branch, names)
+		case *forStmt:
+			for _, n := range st.names {
+				names[n] = true
+			}
+			collectNames(st.body, true, branch, names)
+		}
+	}
+}
+
+// dropDead deletes declarations of locals nothing reads (simplification
+// leaves many intermediate SSA values unread) unless their initializer may
+// panic, and marks the remaining unread ones as used: Go rejects unread
+// locals, Rust only warns.
+func (e *emitter) dropDead() {
+	live := map[string]bool{}
+	keep := make([]bool, len(e.lines))
+	for i := len(e.lines) - 1; i >= 0; i-- {
+		def, isDef := e.defs[i]
+		if isDef && !live[def] && !e.mayPanic(e.lines[i]) {
+			continue
+		}
+		keep[i] = true
+		for j, id := range localRefs(e.lines[i]) {
+			if isDef && j == 0 && id == def {
+				continue
+			}
+			live[id] = true
+		}
+	}
+	var out []string
+	for i, line := range e.lines {
+		if !keep[i] {
+			continue
+		}
+		out = append(out, line)
+		if def, ok := e.defs[i]; ok && !live[def] {
+			out = append(out, "_ = "+def)
+		}
+	}
+	e.lines = out
+}
+
+// mayPanic reports whether a line indexes a slice parameter.
+func (e *emitter) mayPanic(line string) bool {
+	for _, s := range e.slices {
+		if strings.Contains(line, s+"[") {
+			return true
+		}
+	}
+	return false
+}
+
+// localRefs lists the identifiers in a line of generated Go that can name a
+// local: not field selectors, not struct literal keys, nothing in a comment.
+func localRefs(line string) []string {
+	if strings.HasPrefix(strings.TrimSpace(line), "//") {
+		return nil
+	}
+	isStart := func(c byte) bool { return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
+	isPart := func(c byte) bool { return isStart(c) || c >= '0' && c <= '9' }
+	var ids []string
+	for i := 0; i < len(line); {
+		c := line[i]
+		if c >= '0' && c <= '9' {
+			for i < len(line) && isPart(line[i]) {
+				i++
+			}
+			continue
+		}
+		if !isStart(c) {
+			i++
+			continue
+		}
+		j := i
+		for j < len(line) && isPart(line[j]) {
+			j++
+		}
+		id := line[i:j]
+		prev := strings.TrimRight(line[:i], " ")
+		next := strings.TrimLeft(line[j:], " ")
+		selector := strings.HasSuffix(prev, ".")
+		key := strings.HasPrefix(next, ":") && !strings.HasPrefix(next, ":=")
+		if !selector && !key {
+			ids = append(ids, id)
+		}
+		i = j
+	}
+	return ids
 }

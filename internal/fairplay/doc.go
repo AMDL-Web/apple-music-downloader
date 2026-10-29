@@ -4,7 +4,8 @@
 // It is a pure-Go translation of Temari v0.5.1
 // (https://github.com/WorldObservationLog/Temari, tag bindings/go/v0.5.1,
 // commit 85c6762). rounds_gen.go is translated mechanically from
-// src/rounds_gen.rs by tools/temaridiff/cmd/transpile; template.go,
+// src/rounds_gen.rs by tools/temaridiff/cmd/transpile, which also folds the
+// obfuscated arithmetic into smaller equivalent expressions; template.go,
 // decrypt.go and rounds.go are hand ports of src/template.rs, src/rounds.rs
 // and the unsafe helpers in src/rounds_gen.rs. tools/temaridiff checks the
 // result byte for byte against the upstream library.

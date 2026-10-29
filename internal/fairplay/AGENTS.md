@@ -10,6 +10,12 @@ A pure-Go translation of the Temari library (provenance and MIT notice in
   not load Temari's cdylib. `make temaridiff` (its own CI job) compares both
   implementations and fails when `rounds_gen.go` is stale. Run it after any change
   here, including speedups.
+- Speed in the rounds comes from the translator, which folds upstream's
+  obfuscated arithmetic (`simplify.go`). Every rule there must be an exact
+  identity with a case in `simplify_test.go`. Judge a rule by `benchstat` on
+  `BenchmarkDecryptSample` before and after, not by the size of the output,
+  and in both this package's and `tools/temaridiff`'s test binaries: code
+  layout alone has moved the speed by a third.
 - `DecryptSample` overwrites the sample block by block. That is safe only because
   the rounds read ciphertext from the current block alone; the golden test and
   `make temaridiff` catch a change that breaks it.
