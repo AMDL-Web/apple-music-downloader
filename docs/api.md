@@ -281,7 +281,7 @@ and an explicit `""` clears the fallback for this batch.
 
 The token is persisted only onto the jobs that actually need it — stations and private
 playlists (`pl.u-xxx`). Songs, albums, artists and other playlists in the same batch do
-not store it. It is cleared when a job completes or is cancelled, and retained on failure
+not store it. It is cleared when a job completes, and retained on failure or cancellation
 so a retry can still resolve. It is never echoed back in create, list, detail or SSE
 responses. The global fallback in `catalog.media_user_token` does persist to the
 config file and may be returned by `GET /api/v1/config`.
@@ -343,7 +343,8 @@ curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/cancel
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/retry
 ```
 
-Only `failed` jobs can be retried: otherwise `409 job_not_retryable`. A job still finishing
+Only `failed` and `cancelled` jobs can be retried: otherwise `409 job_not_retryable`.
+Finished tracks stay done; failed and cancelled ones run again. A job still finishing
 its previous run is `409 job_finalizing` (retry a moment later), one whose input is
 already queued or running again is `409 duplicate_active`, and a full queue is
 `503 queue_full`.

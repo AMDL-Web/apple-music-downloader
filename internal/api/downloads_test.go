@@ -467,7 +467,43 @@ func TestRetryDownloadRequeuesFailedJobAndKeepsFinishedItems(t *testing.T) {
 	}
 }
 
-func TestRetryDownloadRejectsNonFailedAndMissingJobs(t *testing.T) {
+func TestRetryDownloadRequeuesCancelledJob(t *testing.T) {
+	server := newTestServerWithManager(t)
+	ctx := context.Background()
+	job := domain.Job{ID: "job-cancelled", Input: "album|us|2", Type: "album", CanonicalKey: "album:us:2", Status: domain.JobCancelled, Error: "cancelled"}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []domain.JobItem{
+		{ID: "c-item1", JobID: job.ID, AdamID: "s1", Kind: "song", Index: 1, Status: domain.ItemCompleted},
+		{ID: "c-item2", JobID: job.ID, AdamID: "s2", Kind: "song", Index: 2, Status: domain.ItemCancelled, StatusMessage: "Cancelled"},
+	} {
+		if err := server.store.CreateItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+job.ID+"/retry", "")
+	if recorder.Code != http.StatusAccepted || !strings.Contains(recorder.Body.String(), `"queued"`) {
+		t.Fatalf("status = %d, body = %s; want 202 queued", recorder.Code, recorder.Body.String())
+	}
+	got, err := server.store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.JobQueued || got.Error != "" {
+		t.Fatalf("job after retry = status %s error %q, want queued with empty error", got.Status, got.Error)
+	}
+	items, err := server.store.ListItems(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].Status != domain.ItemCompleted || items[1].Status != domain.ItemQueued || items[1].StatusMessage != "" {
+		t.Fatalf("items after retry = %+v, want completed kept and the cancelled one queued", items)
+	}
+}
+
+func TestRetryDownloadRejectsCompletedAndMissingJobs(t *testing.T) {
 	server := newTestServerWithManager(t)
 	ctx := context.Background()
 	completed := domain.Job{ID: "job-done", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobCompleted}

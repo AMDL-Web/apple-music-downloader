@@ -161,9 +161,9 @@ func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
-// retryDownload re-queues a failed job. Only tracks that did not finish are
-// downloaded again: completed/skipped items are preserved as-is, failed ones
-// are reset to queued and re-processed.
+// retryDownload re-queues a failed or cancelled job. Only tracks that did not
+// finish are downloaded again: completed/skipped items are preserved as-is,
+// failed and cancelled ones are reset to queued and re-processed.
 func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.manager.Retry(r.Context(), id); err != nil {

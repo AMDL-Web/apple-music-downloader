@@ -20,9 +20,10 @@ one.
   terminal event or hook, and `RecoverUnfinished` resumes it on the next start. Only
   `Shutdown` may set that cause; cancelling `Start`'s context is a user cancel. A panic
   in `ProcessJob` fails the job (`errProcessorPanic`), even during shutdown.
-- Only failed jobs can be retried (`ErrJobNotRetryable`). Retry and Delete refuse
-  a job that is still finalizing (`ErrJobFinalizing`) rather than racing the old
-  worker's cleanup.
+- Only failed and cancelled jobs can be retried (`ErrJobNotRetryable`); both keep
+  their media-user-token for it, a completed job drops it
+  (`withoutTerminalMediaUserToken`). Retry and Delete refuse a job that is still
+  finalizing (`ErrJobFinalizing`) rather than racing the old worker's cleanup.
 - A job's dedup identity is `canonicalKey`, backed by a partial unique index in
   internal/db. Changing how the key is built changes which submissions dedupe
   against existing jobs, so it is a contract change.

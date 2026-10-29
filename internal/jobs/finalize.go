@@ -360,10 +360,10 @@ func (m *Manager) persistTerminal(ctx context.Context, job domain.Job, eventType
 }
 
 // withoutTerminalMediaUserToken drops a persisted credential once a job can
-// no longer run. Failed jobs deliberately keep it because Retry may enqueue the
-// same row again, including after a process restart.
+// no longer run. Failed and cancelled jobs deliberately keep it because Retry
+// may enqueue the same row again, including after a process restart.
 func withoutTerminalMediaUserToken(job domain.Job) domain.Job {
-	if job.Status != domain.JobFailed && job.Overrides != nil {
+	if job.Status != domain.JobFailed && job.Status != domain.JobCancelled && job.Overrides != nil {
 		job.Overrides = job.Overrides.WithoutMediaUserToken()
 	}
 	return job

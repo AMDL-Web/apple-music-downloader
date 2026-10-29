@@ -1011,13 +1011,14 @@ paths:
   /api/v1/downloads/{job_id}/retry:
     post:
       tags: [Downloads]
-      summary: Retry a failed download job
+      summary: Retry a failed or cancelled download job
       description: |
-        Re-enqueues a job in the failed terminal state; only unfinished tracks are
-        actually retried: items that already completed (completed) or were skipped
-        (skipped_existing) keep their state and are not downloaded again; the
-        remaining items (failed, etc.) are reset to queued and reprocessed under
-        their original item ids.
+        Re-enqueues a job in the failed or cancelled terminal state; only unfinished
+        tracks are actually retried: items that already completed (completed) or were
+        skipped (skipped_existing) keep their state and are not downloaded again; the
+        remaining items (failed, cancelled, etc.) are reset to queued and reprocessed
+        under their original item ids. A cancelled job keeps its media_user_token for
+        this, like a failed one.
         Re-enqueueing records and pushes a job_retried event (an overview milestone
         event, which drives the GET /downloads overview feed).
       operationId: retryDownload
@@ -1039,7 +1040,7 @@ paths:
           $ref: '#/components/responses/JobNotFound'
         '409':
           description: |
-            job_not_retryable: the job is not in the failed state;
+            job_not_retryable: the job is not in the failed or cancelled state;
             duplicate_active: a queued/running job for the same link already
             exists; job_finalizing: the previous run is still wrapping up (the
             terminal state was just written but worker cleanup/hook dispatch has
@@ -2628,9 +2629,9 @@ components:
           $ref: '#/components/schemas/DownloadOverrides'
           description: >-
             The configuration overrides submitted with the job; omitted when none
-            were given. media_user_token is writeOnly: even while a failed job
-            keeps it internally for retries, no job response ever includes its
-            value.
+            were given. media_user_token is writeOnly: even while a failed or
+            cancelled job keeps it internally for retries, no job response ever
+            includes its value.
         status:
           type: string
           enum: [queued, running, completed, failed, cancelled]

@@ -16,10 +16,10 @@ import (
 
 var ErrQueueFull = errors.New("job queue is full")
 
-// ErrJobNotRetryable is returned by Retry for jobs that are not in the failed
-// terminal status: queued/running jobs are already progressing, and
-// completed/cancelled jobs have nothing to retry.
-var ErrJobNotRetryable = errors.New("only failed jobs can be retried")
+// ErrJobNotRetryable is returned by Retry for jobs that are neither failed nor
+// cancelled: queued/running jobs are already progressing, and a completed job
+// has nothing left to retry.
+var ErrJobNotRetryable = errors.New("only failed or cancelled jobs can be retried")
 
 // ErrJobFinalizing is returned by Retry when the job's row already reads
 // failed but its previous run has not fully wound down (the worker's cancel
@@ -154,10 +154,10 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 	return resp
 }
 
-// Retry re-queues a failed job so only its unfinished tracks run again:
-// completed/skipped items keep their state (ProcessJob reuses those rows and
-// never downloads them again), while every other item is reset to queued and
-// re-processed under its original item id.
+// Retry re-queues a failed or cancelled job so only its unfinished tracks run
+// again: completed/skipped items keep their state (ProcessJob reuses those rows
+// and never downloads them again), while every other item (failed or
+// cancelled) is reset to queued and re-processed under its original item id.
 //
 // Locking: submitMu serializes the capacity check + enqueue with SubmitBatch
 // and closes the race with a concurrent submit of the same canonical key (the
@@ -177,10 +177,10 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 		}
 		return err
 	}
-	if job.Status != domain.JobFailed {
+	if job.Status != domain.JobFailed && job.Status != domain.JobCancelled {
 		return ErrJobNotRetryable
 	}
-	// The failed status is persisted before the old worker's deferred cleanup
+	// The terminal status is persisted before the old worker's deferred cleanup
 	// removes its m.cancels entry (and before Cancel's queued path clears its
 	// finalizing mark), so a retry racing that window could requeue the job,
 	// let a new worker register its cancel func, and then have the old
@@ -227,7 +227,7 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	// queued with no worker ever picking it up (and further retries refused),
 	// until a restart's RecoverUnfinished. Mirrors SubmitBatch, which also
 	// treats the job_queued event as best-effort once the row is committed.
-	message := "job re-queued to retry failed tracks"
+	message := "job re-queued to retry unfinished tracks"
 	if err := m.Event(ctx, domain.Event{JobID: jobID, Type: domain.EventJobRetried, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
 		m.logger.Error("record job_retried event", "job_id", jobID, "error", err)
 	}

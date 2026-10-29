@@ -306,7 +306,73 @@ func TestRetryRequeuesFailedJobAndResetsOnlyUnfinishedItems(t *testing.T) {
 	}
 }
 
-func TestRetryRefusesNonFailedMissingAndDuplicateJobs(t *testing.T) {
+// A cancelled job is retried like a failed one: its cancelled and failed items
+// run again, finished items stay done, and the job emits the same job_retried
+// event, so an operator who cancelled a batch by mistake can bring it back.
+func TestRetryRequeuesCancelledJob(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	started, finished := now.Add(-time.Minute), now.Add(-time.Second)
+	token := "tok"
+	job := domain.Job{ID: "job-cancelled", Input: "in", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:c1", Status: domain.JobCancelled, TotalItems: 3, Error: "cancelled", StartedAt: &started, FinishedAt: &finished, Overrides: &config.DownloadOverrides{MediaUserToken: &token}, CreatedAt: now, UpdatedAt: now}
+	if err := store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	for i, status := range []domain.ItemStatus{domain.ItemCompleted, domain.ItemCancelled, domain.ItemFailed} {
+		item := domain.JobItem{ID: "item-" + strconv.Itoa(i), JobID: job.ID, AdamID: "song-" + strconv.Itoa(i), Kind: "song", Index: i + 1, Status: status, StatusMessage: "Cancelled", CreatedAt: now, UpdatedAt: now}
+		if err := store.CreateItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
+	if err := manager.Retry(ctx, job.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.GetJob(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.JobQueued || got.Error != "" || got.StartedAt != nil || got.FinishedAt != nil {
+		t.Fatalf("job after retry = %+v, want queued with error, started_at and finished_at cleared", got)
+	}
+	if got.Overrides == nil || got.Overrides.MediaUserToken == nil || *got.Overrides.MediaUserToken != token {
+		t.Fatalf("overrides after retry = %+v, want the media-user-token kept", got.Overrides)
+	}
+	items, err := store.ListItems(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items[0].Status != domain.ItemCompleted || items[0].StatusMessage != "Cancelled" {
+		t.Fatalf("completed item touched by retry: %+v", items[0])
+	}
+	for _, it := range items[1:] {
+		if it.Status != domain.ItemQueued || it.StatusMessage != "" {
+			t.Fatalf("unfinished item not reset to queued: %+v", it)
+		}
+	}
+	if got.CompletedItems != 1 || got.CancelledItems != 0 || got.FailedItems != 0 {
+		t.Fatalf("counters after retry = completed %d cancelled %d failed %d, want 1/0/0", got.CompletedItems, got.CancelledItems, got.FailedItems)
+	}
+	if len(manager.queue) != 1 || <-manager.queue != job.ID {
+		t.Fatal("retry did not enqueue the job")
+	}
+	evs, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evs) != 1 || evs[0].Type != domain.EventJobRetried {
+		t.Fatalf("events = %+v, want one job_retried", evs)
+	}
+}
+
+func TestRetryRefusesActiveCompletedMissingAndDuplicateJobs(t *testing.T) {
 	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -316,7 +382,7 @@ func TestRetryRefusesNonFailedMissingAndDuplicateJobs(t *testing.T) {
 	now := time.Now().UTC()
 	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
 
-	for i, status := range []domain.JobStatus{domain.JobQueued, domain.JobRunning, domain.JobCompleted, domain.JobCancelled} {
+	for i, status := range []domain.JobStatus{domain.JobQueued, domain.JobRunning, domain.JobCompleted} {
 		job := domain.Job{ID: "job-" + string(status), Input: "in", Type: "song", CanonicalKey: "song:cn:" + strconv.Itoa(i), Status: status, CreatedAt: now, UpdatedAt: now}
 		if err := store.CreateJob(ctx, job); err != nil {
 			t.Fatal(err)

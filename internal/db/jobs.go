@@ -82,8 +82,8 @@ func updateJob(ctx context.Context, x execer, job domain.Job) error {
 }
 
 // updateFinalJob also persists the final override value. In particular, the
-// manager removes media-user-token from completed/cancelled jobs before
-// finalization so credentials do not remain in terminal history; failed jobs
+// manager removes media-user-token from completed jobs before finalization so
+// credentials do not remain in terminal history; failed and cancelled jobs
 // retain it for Retry.
 func updateFinalJob(ctx context.Context, x execer, job domain.Job) error {
 	overrides, err := encodeOverrides(job.Overrides)

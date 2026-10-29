@@ -186,7 +186,7 @@ func (failingProcessor) ProcessJob(context.Context, domain.Job, Reporter) error 
 	return errors.New("boom")
 }
 
-func TestTerminalJobDropsPersistedTokenUnlessRetryable(t *testing.T) {
+func TestTerminalJobKeepsPersistedTokenOnlyWhenRetryable(t *testing.T) {
 	newOverrides := func() *config.DownloadOverrides {
 		token := "tok"
 		return &config.DownloadOverrides{MediaUserToken: &token}
@@ -228,7 +228,7 @@ func TestTerminalJobDropsPersistedTokenUnlessRetryable(t *testing.T) {
 		waitToken(t, manager, resp.Results[0].Job.ID, "", false)
 	})
 
-	t.Run("cancelled drops the token", func(t *testing.T) {
+	t.Run("cancelled keeps the token for retry", func(t *testing.T) {
 		manager := newTestManager(t)
 		resp := manager.SubmitBatch(context.Background(), []string{"station|us|ra.1"}, newOverrides())
 		if resp.Accepted != 1 {
@@ -238,7 +238,7 @@ func TestTerminalJobDropsPersistedTokenUnlessRetryable(t *testing.T) {
 		if err := manager.Cancel(context.Background(), jobID); err != nil {
 			t.Fatal(err)
 		}
-		waitToken(t, manager, jobID, "", false)
+		waitToken(t, manager, jobID, "tok", true)
 	})
 
 	t.Run("failed keeps the token for retry", func(t *testing.T) {
