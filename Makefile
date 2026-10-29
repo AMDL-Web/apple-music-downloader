@@ -24,7 +24,7 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check docker
+.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
@@ -78,6 +78,9 @@ node-test: ## Run the Node tests for release tooling, guard scripts and console 
 	node --test $(NODE_TESTS)
 
 check: fmt-check build vet test race vuln node-test ## The CI gate: everything above, in CI's order
+
+temaridiff: ## Compare internal/fairplay with upstream Temari (own CI job; downloads Temari's cdylib)
+	cd tools/temaridiff && $(GO) test -count=1 ./...
 
 docker: ## Build the container image locally (single arch, not pushed)
 	docker build -t $(DOCKER_IMAGE) .
