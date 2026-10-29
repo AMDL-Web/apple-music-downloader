@@ -544,6 +544,12 @@
    Targets grow with min-height / min-width or an invisible hit area, never
    the drawn size of a chip or a switch. */
 @media (max-width: 639px), (pointer: coarse) {
+  /* 16 px or more, or iOS Safari zooms the page into a focused field. */
+  :is(textarea, input, select, .select, .field-input, .new-input, .search input) {
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+
   .btn,
   .select,
   .search,

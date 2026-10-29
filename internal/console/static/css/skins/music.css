@@ -38,13 +38,21 @@
   --text-secondary: light-dark(#6e6e73, #a1a1a6);
   --text-disabled: light-dark(#86868b, #6e6e73);
 
-  /* Accent: Apple Music red. --accent-text 4.87 / 5.26 on surface; white on --accent 4.72. */
+  /* Accent: Apple Music red, solid only on the primary action (primary
+     buttons, New download). --accent-text 4.87 / 5.26 on surface; white on
+     --accent 4.72, on hover 5.66, pressed 6.73. */
   --ink: light-dark(#1d1d1f, #f5f5f7);
   --on-ink: light-dark(#ffffff, #000000);
   --accent: #e0213a;
+  --accent-hover: #c81c33;
+  --accent-pressed: #b0172c;
   --accent-text: light-dark(#d60f2c, #ff4d61);
   --on-accent: #ffffff;
-  --focus: light-dark(#0071e3, #0a84ff);
+  /* Focus rings follow the accent, as in Apple Music. */
+  --focus: var(--accent-text);
+  /* A disabled button: a neutral fill, its label 4.6 / 4.85 on it. */
+  --disabled-bg: var(--bg-fill);
+  --disabled-text: light-dark(#636366, #98989d);
   --brand: #e0213a;
   --brand-top: #ff5c6f;
   --on-brand: #ffffff;
@@ -59,7 +67,8 @@
   --success-text: light-dark(#1b7a34, #30d158);
   --danger: light-dark(#d70015, #ff6961);
   --danger-tint: light-dark(rgba(215, 0, 21, 0.1), rgba(255, 105, 97, 0.16));
-  --danger-text: light-dark(#d70015, #ff6961);
+  /* 4.82 on the tint over the surface, 5.74 on the surface. */
+  --danger-text: light-dark(#c4001a, #ff6961);
   --warning: light-dark(#b25000, #ffd60a);
   --warning-tint: light-dark(rgba(255, 204, 0, 0.2), rgba(255, 214, 10, 0.13));
   --warning-text: light-dark(#b25000, #ffd60a);
@@ -74,7 +83,8 @@
 
   /* Data */
   --track: light-dark(#e8e8ed, #3a3a3c);
-  --chart-bar: #fa2d48;
+  /* Single-series charts (per-day bars): a quiet blue-gray, not the accent. */
+  --chart-bar: light-dark(#6b7b93, #8d9bb3);
   --chart-grid: var(--border-subtle);
   --scrim: light-dark(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6));
 
@@ -154,8 +164,9 @@
   --chip-off-bg: light-dark(transparent, #2c2c2e);
   --chip-off-ring: inset 0 0 0 1px light-dark(#86868b, transparent);
 
-  /* Categorical series (formats bar): red, orange, purple, then gray. */
-  --series-1: #fa2d48;
+  /* Categorical series (formats bar): blue, orange, purple, then gray. Red is
+     kept for the primary action and failures. */
+  --series-1: light-dark(#007aff, #0a84ff);
   --series-2: light-dark(#ff9500, #ff9f0a);
   --series-3: light-dark(#8944ab, #bf5af2);
   --series-4: light-dark(#77777c, #8e8e93);
@@ -167,6 +178,18 @@
   /* Switches and selection circles: a white thumb in both themes. */
   --switch-thumb: #ffffff;
   --check-size: 22px;
+  /* The select chevron, drawn in --text-secondary (a data image cannot read a token). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%236e6e73' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="music"]:not([data-theme="light"]) {
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a1a1a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+}
+
+:root[data-skin="music"][data-theme="dark"] {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a1a1a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 @media (max-width: 1023px) {
@@ -316,7 +339,11 @@
 :root[data-skin="music"] .sidebar .nav-item .icon-nav {
   width: 18px;
   height: 18px;
-  color: var(--mark);
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .sidebar .nav-item[aria-current="page"] .icon-nav {
+  color: var(--text-primary);
 }
 
 :root[data-skin="music"] .nav-item:hover {
@@ -356,14 +383,14 @@
 }
 
 :root[data-skin="music"] .search-trigger {
-  border-color: transparent;
-  background: var(--bg-fill);
   font-size: var(--fs-14);
 }
 
+/* The base's surface pill with a hairline: the secondary placeholder reads
+   4.66 / 6.61 on it. */
 :root[data-skin="music"] .search-trigger:hover {
-  border-color: transparent;
-  background: var(--bg-selected);
+  border-color: var(--border-subtle);
+  background: var(--bg-hover);
 }
 
 :root[data-skin="music"] .search-trigger-kbd {
@@ -413,7 +440,7 @@
 }
 
 /* New download: the primary action above the nav, a red pill as tall as a
-   nav row; while its page is open a soft red ring marks it current. */
+   nav row; while its page is open a slightly darker fill marks it current. */
 :root[data-skin="music"] .sidebar .sidebar-new {
   height: 36px;
   margin: 0;
@@ -428,7 +455,7 @@
 }
 
 :root[data-skin="music"] .sidebar-new[aria-current="page"] {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  background: var(--accent-hover);
 }
 
 :root[data-skin="music"] .banners {
@@ -455,10 +482,44 @@
   background: var(--bg-selected);
 }
 
+/* The primary action darkens on hover and darker still, a touch smaller,
+   while pressed. */
+:root[data-skin="music"] .btn-primary {
+  transition: background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+:root[data-skin="music"] .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--accent-hover);
+}
+
+:root[data-skin="music"] .btn-primary:active:not(:disabled):not([aria-disabled="true"]) {
+  opacity: 1;
+  background: var(--accent-pressed);
+  transform: scale(0.98);
+}
+
+/* Unavailable reads as gray, not as a faded (pressed-looking) red. */
+:root[data-skin="music"] .btn-primary:disabled,
+:root[data-skin="music"] .btn-primary[aria-disabled="true"] {
+  opacity: 1;
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+}
+
+/* Destructive actions (Delete, Discard, Cancel job, Log out) are red text,
+   as in Apple's action lists; only the primary action is a red fill. */
 :root[data-skin="music"] .btn-danger {
   border-color: transparent;
-  background: var(--accent);
-  color: var(--on-accent);
+  background: transparent;
+  color: var(--danger-text);
+}
+
+:root[data-skin="music"] .btn-danger .icon {
+  color: var(--danger-text);
+}
+
+:root[data-skin="music"] .btn-danger:hover:not(:disabled) {
+  background: var(--danger-tint);
 }
 
 /* Card and section actions read as Apple's red "See All" links. */
@@ -554,6 +615,17 @@
   color: var(--role-text, var(--text-primary));
 }
 
+/* A failure is a labelled chip (tint, icon, word), never a solid red block. */
+:root[data-skin="music"] .badge[data-role="danger"],
+:root[data-skin="music"] .status-text[data-role="danger"] {
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-full);
+  background: var(--danger-tint);
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
 /* Running: a now-playing equalizer instead of the ripple dot. Two bars share
    ::before (one through box-shadow), the middle one is ::after, out of phase. */
 :root[data-skin="music"] .pulse {
@@ -612,6 +684,12 @@
 :root[data-skin="music"] .pcell[data-state="remaining"] {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--border-control);
+}
+
+:root[data-skin="music"] .pcell[data-state="failed"],
+:root[data-skin="music"] .track-block[data-role="danger"] {
+  background: var(--danger-tint);
+  box-shadow: inset 0 0 0 1.5px var(--danger);
 }
 
 :root[data-skin="music"] .jprog-text {
@@ -987,7 +1065,15 @@
 }
 
 :root[data-skin="music"] [data-section="live"] .attention-label {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-full);
+  background: var(--danger-tint);
   color: var(--danger-text);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   font-weight: var(--w-semibold);
 }
 
@@ -1193,6 +1279,12 @@
   border-radius: var(--r-icon-tile);
   background: var(--role, var(--neutral));
   color: var(--on-role);
+}
+
+/* A failed component's tile is tinted with a red glyph, not a red block. */
+:root[data-skin="music"] [data-role="danger"] .health-icon {
+  background: var(--danger-tint);
+  color: var(--danger-text);
 }
 
 :root[data-skin="music"] .health-name {
@@ -1524,9 +1616,13 @@
 }
 
 :root[data-skin="music"] .job-check-input:checked,
-:root[data-skin="music"] .bulk-check:checked,
+:root[data-skin="music"] .bulk-check:checked {
+  background: var(--ink);
+  box-shadow: none;
+}
+
 :root[data-skin="music"] .bulk-check:indeterminate {
-  background: var(--accent);
+  background: var(--neutral);
   box-shadow: none;
 }
 
@@ -1538,7 +1634,7 @@
   left: 8px;
   width: 6px;
   height: 11px;
-  border: solid var(--switch-thumb);
+  border: solid var(--on-ink);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -1551,7 +1647,7 @@
   width: 10px;
   height: 2px;
   border-radius: 1px;
-  background: var(--switch-thumb);
+  background: var(--on-role);
 }
 
 :root[data-skin="music"] .bulk-check:disabled {
@@ -1644,16 +1740,22 @@
   line-height: var(--lh-13);
 }
 
-:root[data-skin="music"] .drawer-head .badge,
+:root[data-skin="music"] .drawer-head .badge:not([data-role="danger"]),
 :root[data-skin="music"] .drawer-head .live-tag {
   color: var(--art-t1, var(--badge-text));
   font-weight: var(--w-semibold);
 }
 
-:root[data-skin="music"] .drawer-head .badge .icon,
+:root[data-skin="music"] .drawer-head .badge:not([data-role="danger"]) .icon,
 :root[data-skin="music"] .drawer-head .pulse,
 :root[data-skin="music"] .drawer-head .pulse-static {
   --role: var(--art-t1, var(--info));
+}
+
+/* A failure keeps its chip on any album color: the danger tint over an opaque
+   surface, so the red word reads as it does everywhere else. */
+:root[data-skin="music"] .drawer-head .badge[data-role="danger"] {
+  background: linear-gradient(var(--danger-tint), var(--danger-tint)), var(--bg-raised);
 }
 
 :root[data-skin="music"] .drawer-times {
@@ -2346,7 +2448,7 @@
 :root[data-skin="music"] .settings-nav-item > .icon {
   width: 18px;
   height: 18px;
-  color: var(--mark);
+  color: var(--text-secondary);
 }
 
 :root[data-skin="music"] .settings-nav-item:hover {
@@ -2456,6 +2558,34 @@
   height: var(--control-h);
 }
 
+/* Touch screens keep fields at 16 px (responsive.css), above the sizes set here. */
+@media (max-width: 639px), (pointer: coarse) {
+  :root[data-skin="music"] :is(textarea, input, .select, .search input) {
+    font-size: var(--fs-16);
+    line-height: var(--lh-16);
+  }
+}
+
+/* A field's focus ring sits on its own border: one ring, not the border, a
+   gap and the ring. Buttons, links and switches keep the 2 px offset. */
+:root[data-skin="music"] :is(textarea, select, input:not([type="checkbox"], [type="radio"], [type="range"])):focus-visible,
+:root[data-skin="music"] .search:focus-within {
+  outline-offset: -1px;
+}
+
+/* Selects draw their own chevron 12 px in from the right edge, like the
+   rounded fields around them, instead of the native arrow against the border.
+   :is() keeps this above the card and field rules that set the background
+   and padding. */
+:root[data-skin="music"] :is(.select, .card-body .select, .field .select) {
+  appearance: none;
+  padding-right: calc(var(--s-3) + 12px + var(--s-2));
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--s-3) center;
+  background-size: 12px 12px;
+}
+
 :root[data-skin="music"] .field-error,
 :root[data-skin="music"] .field-warning {
   font-size: var(--fs-14);
@@ -2521,14 +2651,25 @@
   line-height: var(--lh-15);
 }
 
-:root[data-skin="music"] .save-bar-discard,
 :root[data-skin="music"] .bulk-bar .btn-secondary {
   background: var(--fill-raised);
 }
 
-:root[data-skin="music"] .save-bar-discard:hover:not(:disabled),
 :root[data-skin="music"] .bulk-bar .btn-secondary:hover:not(:disabled) {
   background: var(--fill-raised-hover);
+}
+
+/* Discarding and logging out lose something: red text, as .btn-danger. */
+:root[data-skin="music"] .save-bar-discard,
+:root[data-skin="music"] .account-logout {
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger-text);
+}
+
+:root[data-skin="music"] .save-bar-discard:hover:not(:disabled),
+:root[data-skin="music"] .account-logout:hover:not(:disabled) {
+  background: var(--danger-tint);
 }
 
 /* ---- Overlays ------------------------------------------------------ */
@@ -2573,7 +2714,7 @@
 }
 
 :root[data-skin="music"] .palette-item .icon {
-  color: var(--mark);
+  color: var(--text-secondary);
 }
 
 :root[data-skin="music"] .palette-item[aria-selected="true"] {
@@ -2693,7 +2834,7 @@
 }
 
 :root[data-skin="music"] .more-item > .icon:first-child {
-  color: var(--mark);
+  color: var(--text-secondary);
 }
 
 :root[data-skin="music"] .more-item > .icon:last-child {
@@ -2791,6 +2932,23 @@
   margin-top: 1px;
 }
 
+/* A link in a warning or failure notice wears the role's text color,
+   underlined (4.75 / 5.23 on the tints over the canvas); the accent red would
+   fall under 4.5:1 on the red tint. */
+:root[data-skin="music"] .notice[data-role] :is(a, .link, .health-strip-link) {
+  color: var(--role-text, var(--accent-text));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Beside the green "All systems healthy" the Details link is secondary text,
+   underlined, so a red link does not read as a warning. */
+:root[data-skin="music"] .health-strip[data-state="ok"] .health-strip-link {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 :root[data-skin="music"] .skel {
   border-radius: var(--r-icon-tile);
 }
@@ -2857,8 +3015,8 @@
   }
 
   :root[data-skin="music"] .nav-badge {
-    background: var(--accent);
-    color: var(--on-accent);
+    background: var(--bg-fill);
+    color: var(--text-primary);
     font-size: var(--fs-11);
     line-height: var(--lh-11);
     font-weight: var(--w-semibold);
