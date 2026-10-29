@@ -135,11 +135,18 @@ test('resultView words every status and code', () => {
   assert.equal(v[2].retry, true, 'queue_full can be retried');
   assert.equal(v[2].detail, '', 'the server words add nothing here');
   assert.deepEqual(v[3].storefronts, ['us', 'ca']);
-  assert.equal(v[3].message, 'The decryptor does not serve this storefront');
+  assert.equal(v[3].message, "The wrapper's Apple Music account is in another storefront");
   assert.equal(v[4].retry, true);
   assert.equal(v[4].detail, 'Database is locked.', 'a store error shows what the server said');
-  const notReady = resultView({ status: 'invalid', error: { code: 'decryptor_unavailable', message: 'x' } });
-  assert.deepEqual([notReady.role, notReady.label, notReady.retry], ['warning', 'Decryptor not ready', true]);
+  const notReady = resultView({ status: 'invalid', error: { code: 'decryptor_unavailable', message: 'the wrapper is not ready' } });
+  assert.deepEqual([notReady.role, notReady.label, notReady.retry], ['warning', 'Wrapper not ready', true]);
+  const down = resultView({
+    status: 'invalid',
+    error: { code: 'decryptor_unavailable', message: 'cannot reach the wrapper: wrapper /status: Get "http://127.0.0.1:12399/status": dial tcp 127.0.0.1:12399: connect: connection refused' },
+  });
+  assert.deepEqual([down.role, down.label, down.retry], ['danger', 'Wrapper unreachable', true], 'a wrapper that does not answer is not "not ready"');
+  assert.match(down.message, /wrapper\.address/);
+  assert.equal(down.detail, 'Connection refused (127.0.0.1:12399)');
   const unknown = resultView({ status: 'invalid', error: { code: 'something_new', message: 'server words' } });
   assert.deepEqual([unknown.label, unknown.message, unknown.retry], ['Not accepted', 'Server words.', false]);
 });

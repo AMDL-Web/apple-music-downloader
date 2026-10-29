@@ -180,9 +180,9 @@ function LogoutDialog({ account, onClose, onDone }) {
 function CommandLineLogin() {
   return html`<section class="account-block" aria-labelledby="login-title">
     <h3 class="section-title" id="login-title">Log in from the command line</h3>
-    <p class="small">This session service has no login of its own. On the machine that runs it, start it with <code>--login</code>:</p>
+    <p class="small">This session service is a bare wrapper-lite, which has no login of its own. On the machine that runs it, log in once with <code>--login</code>; it saves the login and exits:</p>
     <code class="account-cmd mono">wrapper-lite-rootless --login APPLE_ID:PASSWORD</code>
-    <p class="muted small">If Apple asks for a two-step code, the program prints where to put it. Select Refresh above afterwards. To log in from this page instead, put a wrapper-manager in front of it and set <code>wrapper.address</code> to that.</p>
+    <p class="muted small">It asks for the two-step code in the terminal; without one, add <code>--code-from-file</code> and write the code to <code>2fa.txt</code> in its data folder. Then start it again without <code>--login</code> and select Refresh above. To log in from this page instead, run wrapper-manager v2 in front of it and set <code>wrapper.address</code> to that.</p>
   </section>`;
 }
 

@@ -9,6 +9,7 @@ import {
   backendHealthView,
   wrapperView,
   summarizeError,
+  missingToolRows,
   librarySyncView,
   hooksView,
   logLevelView,
@@ -199,6 +200,18 @@ test('summarizeError turns gRPC dial chains into one line and keeps the full tex
   const view = wrapperView({ error: { status: 503, message: raw } });
   assert.equal(view.detail, 'Connection refused (127.0.0.1:8080)');
   assert.equal(view.title, raw);
+});
+
+test('missingToolRows flags a missing ffmpeg outside simulate mode', () => {
+  const err = 'exec: "ffmpeg": executable file not found in $PATH';
+  const sys = { simulate: false, tools: [{ name: 'ffmpeg', available: false, error: err }] };
+  const rows = missingToolRows(sys);
+  assert.deepEqual(rows.map(([name, v]) => [name, v.role, v.label]), [['ffmpeg', 'danger', 'Missing']]);
+  assert.equal(rows[0][1].detail, 'needed for every download');
+  assert.equal(rows[0][1].title, err);
+  assert.deepEqual(missingToolRows({ ...sys, simulate: true }), [], 'simulate mode needs no ffmpeg');
+  assert.deepEqual(missingToolRows({ tools: [{ name: 'ffmpeg', available: true, path: '/usr/bin/ffmpeg' }] }), []);
+  assert.deepEqual(missingToolRows(undefined), []);
 });
 
 test('progressCells gives one cell per track in ordered runs', () => {

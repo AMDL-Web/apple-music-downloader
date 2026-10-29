@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, settle } from '../api.js';
 import { count, bytes, jobTitle, jobSubtitle, artPalette, paletteStyle, absTime, isUnresolved, inputLabel, errorSummary } from '../lib/format.js';
-import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
+import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/status.js';
 import { uniqueByTarget } from '../lib/albums.js';
 import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
@@ -244,13 +244,14 @@ export function healthRows(results) {
 /**
  * One line under the page head that answers "is the server healthy?": a quiet
  * status when everything is fine, a notice naming each service that is not
- * (the wrapper unreachable, library sync failing) and a nearly full disk,
- * with a link to System.
+ * (the wrapper unreachable, library sync failing), a missing ffmpeg and a
+ * nearly full disk, with a link to System.
  * Nothing renders until the first read settles.
  */
 function HealthStrip({ poll }) {
   if (!poll.data) return null;
-  const rows = [...healthRows(poll.data), ...storageRows(poll.data[4])];
+  const sys = poll.data[4] && poll.data[4].data;
+  const rows = [...healthRows(poll.data), ...missingToolRows(sys), ...storageRows(poll.data[4])];
   const bad = rows.filter(([, v]) => v.role === 'danger' || v.role === 'warning');
   const details = html`<a class="health-strip-link" href=${buildHash('system')}>Details</a>`;
   if (bad.length === 0) {

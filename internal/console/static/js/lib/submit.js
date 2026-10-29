@@ -9,6 +9,7 @@ import { PREVIEW_KINDS, shortError } from './lookup.js';
 import { capitalized, sentence } from './format.js';
 import { sanitizeOverrides } from './overrides.js';
 import { settingsHash } from './route.js';
+import { summarizeError } from './status.js';
 
 /** Where Settings edits catalog.media_user_token, the only token a download uses. */
 export const TOKEN_SETTINGS_HASH = settingsHash('catalog', 'catalog.media_user_token');
@@ -134,8 +135,8 @@ const CODES = {
   invalid_url: ['Not accepted', 'Not an Apple Music link the backend can read'],
   invalid_configuration: ['Not accepted', 'The server configuration cannot handle this link'],
   unsupported_input: ['Not accepted', 'This kind of link cannot be downloaded'],
-  unsupported_storefront: ['Storefront not served', 'The decryptor does not serve this storefront'],
-  decryptor_unavailable: ['Decryptor not ready', 'The wrapper is not ready yet; try again in a moment'],
+  unsupported_storefront: ['Storefront not served', "The wrapper's Apple Music account is in another storefront"],
+  decryptor_unavailable: ['Wrapper not ready', 'The wrapper has no account ready yet; try again in a moment'],
   duplicate_in_request: ['Listed twice', 'An earlier link in this batch downloads the same thing'],
   duplicate_active: ['Already downloading', ''],
   queue_full: ['Queue full', 'The job queue is full; try again shortly'],
@@ -146,6 +147,7 @@ const SERVER_DETAIL = new Set(['invalid_url', 'invalid_configuration', 'unsuppor
 const RETRYABLE = new Set(['queue_full', 'decryptor_unavailable', 'store_error', 'internal_error']);
 const ROLES = { duplicate_active: 'info', duplicate_in_request: 'neutral', queue_full: 'warning', decryptor_unavailable: 'warning' };
 const ICONS = { duplicate_active: 'rotate', duplicate_in_request: 'layers', queue_full: 'clock', decryptor_unavailable: 'triangle-alert' };
+const UNREACHABLE = /cannot reach the wrapper|connection refused|no such host|deadline exceeded|timed? ?out/i;
 
 /**
  * How one SubmitResult reads: {status, code, role, icon, label, message,
@@ -161,6 +163,16 @@ export function resultView(result) {
   const code = err.code || r.status || '';
   const known = CODES[code];
   const isError = r.status === 'error';
+  // decryptor_unavailable covers a wrapper that answers without an account
+  // and one that does not answer at all; only the second needs a look at
+  // wrapper.address, and waiting does not fix it.
+  if (code === 'decryptor_unavailable' && UNREACHABLE.test(err.message || '')) {
+    return {
+      status: r.status || 'invalid', code, role: 'danger', icon: 'circle-x', label: 'Wrapper unreachable',
+      message: 'The backend cannot reach the wrapper at wrapper.address; check that it is running',
+      detail: summarizeError(err.message) || '', retry: true, existingJobId: '', storefronts: [],
+    };
+  }
   return {
     status: r.status || 'error',
     code,

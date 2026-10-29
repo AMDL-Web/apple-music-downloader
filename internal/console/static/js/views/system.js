@@ -15,7 +15,7 @@ import {
 } from '../api.js';
 import { count, bytes, elapsed, absTime, relTime } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
-import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
+import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/status.js';
 import { useApp, Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
 import { midTruncate, groupByDisk, diskRole } from '../lib/storage.js';
@@ -30,7 +30,7 @@ export function SystemPage() {
   // One flowing grid: pairs of cards, and a hooks table wide enough for its columns.
   return html`<div class="page page-system">
     <div class="grid-2">
-      <${HealthCard} backend=${h} wrapper=${w} sync=${ls} hooks=${hk} loading=${!health.data} />
+      <${HealthCard} backend=${h} wrapper=${w} sync=${ls} hooks=${hk} tools=${missingToolRows(sys.data)} loading=${!health.data} />
       <${WrapperCard} res=${w} loading=${!health.data} />
       <${StorageCard} sys=${sys} />
       <${ConfigCard} />
@@ -91,6 +91,7 @@ function RuntimeCard({ sys }) {
                 <span class="mono">${t.name}</span>
                 <${StatusText} view=${t.available ? { icon: 'circle-check', role: 'success', label: 'Available' } : { icon: 'circle-x', role: 'danger', label: 'Missing' }} />
                 ${t.path ? html`<span class="mono muted small wrap-any">${t.path}</span>` : null}
+                ${t.available ? null : html`<span class="muted small" title=${t.error || undefined}>Install it, or set <code>tools.${t.name}</code> in configs/config.yaml to its path and restart.</span>`}
               </li>`,
             )}
           </ul>`
@@ -144,7 +145,7 @@ function StorageCard({ sys }) {
   return html`<${Card} className="span-6" title="Storage" labelId="storage-title">${body}</${Card}>`;
 }
 
-function HealthCard({ backend, wrapper, sync, hooks, loading }) {
+function HealthCard({ backend, wrapper, sync, hooks, tools = [], loading }) {
   const rows = loading
     ? null
     : [
@@ -152,6 +153,7 @@ function HealthCard({ backend, wrapper, sync, hooks, loading }) {
         ['Wrapper', wrapperView(wrapper)],
         ['Library sync', librarySyncView(sync)],
         ['Hooks', hooksView(hooks)],
+        ...tools,
       ];
   return html`<${Card} className="span-6" title="Health" labelId="sys-health-title" note="Checked every 30 s">
     ${rows
@@ -190,7 +192,9 @@ function WrapperCard({ res, loading }) {
             </ul>
           </div>`
         : null}
-      <p class="muted small">Log in and out of accounts in <a class="link" href=${settingsHash('account')}>Settings › Account</a>.</p>`;
+      ${wr.login_supported === false
+        ? html`<p class="muted small">This wrapper logs in on its own command line; <a class="link" href=${settingsHash('account')}>Settings › Account</a> shows how.</p>`
+        : html`<p class="muted small">Log in and out of accounts in <a class="link" href=${settingsHash('account')}>Settings › Account</a>.</p>`}`;
   }
   return html`<${Card} className="span-6" title="Wrapper" labelId="wrapper-title">${body}</${Card}>`;
 }

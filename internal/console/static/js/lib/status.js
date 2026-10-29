@@ -132,9 +132,9 @@ export function backendHealthView(res) {
 }
 
 /**
- * One readable line for an upstream failure. gRPC and dial errors arrive as
- * nested "rpc error: code = … desc = …" chains that bury the cause; the full
- * text stays available as the view's title.
+ * One readable line for an upstream failure. Dial errors arrive as nested
+ * Go error chains that bury the cause; the full text stays available as the
+ * view's title.
  */
 export function summarizeError(message) {
   if (!message) return undefined;
@@ -167,6 +167,18 @@ export function wrapperView(res) {
   }
   const signedIn = accounts === 0 ? 'Signed in' : accounts === 1 ? '1 account signed in' : `${accounts} accounts signed in`;
   return { icon: 'circle-check', role: 'success', label: 'Ready', detail: regions || signedIn };
+}
+
+/**
+ * Health rows for the media tools GET /system reports missing, as
+ * [name, view]. Real downloads stop at the save step without them, so a
+ * missing tool is a problem unless simulate mode is on (it needs none).
+ */
+export function missingToolRows(system) {
+  if (!system || system.simulate || !Array.isArray(system.tools)) return [];
+  return system.tools
+    .filter((t) => t && t.name && t.available === false)
+    .map((t) => [t.name, { icon: 'circle-x', role: 'danger', label: 'Missing', detail: 'needed for every download', title: t.error || undefined }]);
 }
 
 export function librarySyncView(res) {

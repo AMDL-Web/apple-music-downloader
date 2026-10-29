@@ -130,7 +130,7 @@ func (d *Downloader) withConfig(cfg config.Config) *Downloader {
 }
 
 // ValidateRequest implements jobs.Processor: it parses url and checks that the
-// decryptor serves its storefront (skipped in simulate mode).
+// wrapper serves its storefront (skipped in simulate mode).
 func (d *Downloader) ValidateRequest(ctx context.Context, url string) (jobs.ValidationResult, error) {
 	return d.withConfig(d.baseConfig()).validateRequest(ctx, url)
 }
@@ -156,26 +156,26 @@ func (d *Downloader) validateRequest(ctx context.Context, url string) (jobs.Vali
 func (d *Downloader) validateStorefront(ctx context.Context, storefront string) error {
 	if d.cfg.Simulate.Enabled {
 		// Test mode never decrypts, so it must not depend on a running
-		// wrapper/decryptor or its supported-storefront list.
+		// wrapper or its supported-storefront list.
 		return nil
 	}
 	status, err := d.wrapper.Status(ctx)
 	if err != nil {
-		message := fmt.Sprintf("failed to check decryptor status: %v", err)
+		message := fmt.Sprintf("cannot reach the wrapper: %v", err)
 		return &jobs.RequestError{Code: "decryptor_unavailable", Message: message, Cause: err}
 	}
 	if len(status.Regions) == 0 && (!status.Ready || !status.Status) {
-		return &jobs.RequestError{Code: "decryptor_unavailable", Message: "decryptor is not ready"}
+		return &jobs.RequestError{Code: "decryptor_unavailable", Message: "the wrapper is not ready"}
 	}
 	for _, region := range status.Regions {
 		if strings.EqualFold(region, storefront) {
 			if !status.Ready || !status.Status {
-				return &jobs.RequestError{Code: "decryptor_unavailable", Message: "decryptor is not ready"}
+				return &jobs.RequestError{Code: "decryptor_unavailable", Message: "the wrapper is not ready"}
 			}
 			return nil
 		}
 	}
-	message := fmt.Sprintf("storefront %q is not supported by decryptor (supported: %s)", storefront, strings.Join(status.Regions, ", "))
+	message := fmt.Sprintf("storefront %q is not served by the wrapper's account (it serves: %s)", storefront, strings.Join(status.Regions, ", "))
 	return &jobs.RequestError{
 		Code: "unsupported_storefront", Message: message, Storefront: storefront,
 		SupportedStorefronts: append([]string(nil), status.Regions...),
