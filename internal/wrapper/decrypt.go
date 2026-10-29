@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"amdl/internal/fairplay"
+	"amdl/internal/limits"
 )
 
 // SampleDecrypter decrypts one FairPlay sample in place: the 16-byte-aligned
@@ -104,10 +105,8 @@ func (c *Client) template(ctx context.Context, adamID, key string) (SampleDecryp
 	if pinned {
 		adamID = prefetchAdamID
 	}
-	return c.templates.get(ctx, key, pinned, func() (SampleDecrypter, error) {
-		// The fetch outlives the caller that started it: other tracks may be
-		// waiting for the same key, so one cancelled job must not fail them.
-		fetchCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	return c.templates.get(ctx, key, pinned, func(fetchCtx context.Context) (SampleDecrypter, error) {
+		fetchCtx, cancel := context.WithCancel(fetchCtx)
 		defer cancel()
 		stop := context.AfterFunc(c.life, cancel)
 		defer stop()
@@ -116,11 +115,10 @@ func (c *Client) template(ctx context.Context, adamID, key string) (SampleDecryp
 }
 
 // fetchTemplate asks for key's template, retrying after keyRetryDelays. Each
-// attempt's request is bounded by the request timeout once it holds a playback
-// permit; the wait for the permit is not charged to it. That wait is bounded
-// because every permit holder is bounded by the same timeout and at most one
-// holder or waiter is a /m3u8 (manifestRequestLimit), so the queue ahead of a
-// /key is other /key fetches, at most one per track being decrypted.
+// attempt waits at most playbackWaitTimeouts request timeouts for a playback
+// permit and then has the full request timeout for its /key; the wait is not
+// charged to the request. An attempt that runs out of wait ends the fetch
+// without a retry, which would only queue again.
 func (c *Client) fetchTemplate(ctx context.Context, adamID, key string) (SampleDecrypter, error) {
 	for attempt := 0; ; attempt++ {
 		dec, err := c.fetchTemplateOnce(ctx, adamID, key)
@@ -142,7 +140,7 @@ func (c *Client) fetchTemplate(ctx context.Context, adamID, key string) (SampleD
 
 func (c *Client) fetchTemplateOnce(ctx context.Context, adamID, key string) (SampleDecrypter, error) {
 	var dec SampleDecrypter
-	err := withPermit(ctx, c.playbackLimit, func() error {
+	err := c.withPlaybackPermits(ctx, "/key", []*limits.Semaphore{c.playbackLimit}, func() error {
 		data, err := c.call(ctx, http.MethodGet, "/key", url.Values{"adamId": {adamID}, "uri": {key}}, nil)
 		if err != nil {
 			return err
@@ -159,9 +157,10 @@ func (c *Client) fetchTemplateOnce(ctx context.Context, adamID, key string) (Sam
 }
 
 // retryable reports whether a failed /key may succeed when asked again: any
-// failure except a 4xx answer and the caller's own cancellation.
+// failure except a 4xx answer, a wait for a permit that ran out and the
+// caller's own cancellation.
 func retryable(err error) bool {
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, errPlaybackWait) {
 		return false
 	}
 	var reply *ReplyError
@@ -174,6 +173,10 @@ func retryable(err error) bool {
 // templateCache holds one decrypter per key URI, shares a fetch in flight
 // between its callers and evicts the least recently used unpinned entry beyond
 // its limit. Failed fetches are not kept.
+//
+// A fetch outlives the caller that started it, since other tracks may wait for
+// the same key and one cancelled job must not fail them, but it ends once
+// every caller waiting for it has given up.
 type templateCache struct {
 	mu      sync.Mutex
 	limit   int
@@ -182,42 +185,75 @@ type templateCache struct {
 }
 
 type templateEntry struct {
-	ready chan struct{} // closed once dec or err is set
-	dec   SampleDecrypter
-	err   error
-	elem  *list.Element // nil while loading and for pinned entries
+	ready  chan struct{} // closed once dec or err is set
+	dec    SampleDecrypter
+	err    error
+	elem   *list.Element // nil while loading and for pinned entries
+	loaded bool          // dec or err is set; guarded by templateCache.mu
+	// waiters counts the callers waiting while the fetch runs, and cancel
+	// ends the fetch. Both are guarded by templateCache.mu.
+	waiters int
+	cancel  context.CancelFunc
 }
 
 func newTemplateCache(limit int) *templateCache {
 	return &templateCache{limit: limit, entries: map[string]*templateEntry{}, lru: list.New()}
 }
 
-func (c *templateCache) get(ctx context.Context, key string, pinned bool, load func() (SampleDecrypter, error)) (SampleDecrypter, error) {
+// get returns key's decrypter, starting load on a miss. load's context carries
+// the values of the ctx that started it, such as its priority, and is
+// cancelled when every caller has stopped waiting.
+func (c *templateCache) get(ctx context.Context, key string, pinned bool, load func(context.Context) (SampleDecrypter, error)) (SampleDecrypter, error) {
 	c.mu.Lock()
 	entry, ok := c.entries[key]
-	if ok {
+	if ok && entry.loaded {
 		if entry.elem != nil {
 			c.lru.MoveToFront(entry.elem)
 		}
-	} else {
-		entry = &templateEntry{ready: make(chan struct{})}
-		c.entries[key] = entry
-		go c.fill(key, entry, pinned, load)
+		c.mu.Unlock()
+		return entry.dec, entry.err
 	}
+	if !ok {
+		fetchCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		entry = &templateEntry{ready: make(chan struct{}), cancel: cancel}
+		c.entries[key] = entry
+		go c.fill(fetchCtx, key, entry, pinned, load)
+	}
+	entry.waiters++
 	c.mu.Unlock()
 	select {
 	case <-entry.ready:
 		return entry.dec, entry.err
 	case <-ctx.Done():
+		c.leave(key, entry)
 		return nil, ctx.Err()
 	}
 }
 
-func (c *templateCache) fill(key string, entry *templateEntry, pinned bool, load func() (SampleDecrypter, error)) {
-	dec, err := load()
+// leave drops a caller that stopped waiting for entry. The last one to leave a
+// fetch still running cancels it and unlists the entry, so a later caller
+// starts a fresh fetch instead of joining one that is ending.
+func (c *templateCache) leave(key string, entry *templateEntry) {
 	c.mu.Lock()
-	entry.dec, entry.err = dec, err
+	defer c.mu.Unlock()
+	entry.waiters--
+	if entry.waiters > 0 || entry.loaded {
+		return
+	}
+	if c.entries[key] == entry {
+		delete(c.entries, key)
+	}
+	entry.cancel()
+}
+
+func (c *templateCache) fill(ctx context.Context, key string, entry *templateEntry, pinned bool, load func(context.Context) (SampleDecrypter, error)) {
+	dec, err := load(ctx)
+	entry.cancel()
+	c.mu.Lock()
+	entry.dec, entry.err, entry.loaded = dec, err, true
 	switch {
+	case c.entries[key] != entry:
+		// Every caller left; the entry is no longer listed.
 	case err != nil:
 		delete(c.entries, key)
 	case !pinned:

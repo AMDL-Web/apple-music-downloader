@@ -342,6 +342,14 @@ func TestCancelledCallerDoesNotFailOthersWaitingForTheSameKey(t *testing.T) {
 		}
 		second <- out[0]
 	}()
+	// Cancel only once the second caller waits too: the fetch ends when
+	// nobody is left waiting for it.
+	waitFor(t, func() bool {
+		c.templates.mu.Lock()
+		defer c.templates.mu.Unlock()
+		entry := c.templates.entries["skd://k"]
+		return entry != nil && entry.waiters == 2
+	})
 	cancel()
 	if err := <-first; !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled caller = %v, want context.Canceled", err)

@@ -55,6 +55,19 @@ const playbackRequestLimit = 2
 // wrapper-lite answers /m3u8 one at a time anyway they lose no throughput.
 const manifestRequestLimit = 1
 
+// playbackWaitTimeouts bounds the wait for the permits of one /key or /m3u8
+// request, in request timeouts: 5 minutes at the default 30 seconds. Every
+// permit holder is bounded by one request timeout and two hold at a time, so
+// the wait outlasts about twenty requests ahead that each run out their
+// timeout, while a healthy wrapper answers one in well under a second. A queue
+// that has not cleared by then means the wrapper is stuck or higher-priority
+// requests keep overtaking, and the request fails with errPlaybackWait rather
+// than wait on.
+const playbackWaitTimeouts = 10
+
+// errPlaybackWait is a /key or /m3u8 that gave up waiting for its permits.
+var errPlaybackWait = errors.New("no playback slot became free")
+
 type LoginResult struct {
 	Status  string `json:"status"`
 	LoginID string `json:"login_id,omitempty"`
@@ -263,6 +276,27 @@ func (c *Client) get(ctx context.Context, endpoint string, query url.Values, out
 	return nil
 }
 
+// withPlaybackPermits runs run once it holds one permit from each of sems,
+// taken in order. The wait for all of them together ends after
+// playbackWaitTimeouts request timeouts; the request run sends gets its own
+// full timeout from ctx however long the wait took.
+func (c *Client) withPlaybackPermits(ctx context.Context, endpoint string, sems []*limits.Semaphore, run func() error) error {
+	wait := playbackWaitTimeouts * c.timeout
+	waitCtx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	for _, sem := range sems {
+		release, err := sem.Acquire(waitCtx)
+		if err != nil {
+			if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("wrapper %s: %w within %s", endpoint, errPlaybackWait, wait)
+			}
+			return err
+		}
+		defer release()
+	}
+	return run()
+}
+
 func withPermit(ctx context.Context, limit *limits.Semaphore, run func() error) error {
 	release, err := limit.Acquire(ctx)
 	if err != nil {
@@ -315,14 +349,13 @@ func nonNil(values []string) []string {
 // M3U8 returns the device master playlist for adamID. It takes the manifest
 // permit before the playback permit, so the /m3u8 requests queued behind it
 // wait outside the playback queue and a /key never waits behind more than one.
+// The wait for both is bounded as withPlaybackPermits describes.
 func (c *Client) M3U8(ctx context.Context, adamID string) (string, error) {
 	var body struct {
 		M3U8 string `json:"m3u8"`
 	}
-	err := withPermit(ctx, c.manifestLimit, func() error {
-		return withPermit(ctx, c.playbackLimit, func() error {
-			return c.get(ctx, "/m3u8", url.Values{"adamId": {adamID}}, &body)
-		})
+	err := c.withPlaybackPermits(ctx, "/m3u8", []*limits.Semaphore{c.manifestLimit, c.playbackLimit}, func() error {
+		return c.get(ctx, "/m3u8", url.Values{"adamId": {adamID}}, &body)
 	})
 	return body.M3U8, err
 }

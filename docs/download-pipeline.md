@@ -110,7 +110,9 @@ All pools are process-wide, shared across every job, sized at startup, and not s
 between backend replicas. The three config keys need a restart to change; the rest are
 fixed sizes in `internal/config` (`MaxParallelDecrypts`, `MaxParallelWrapperRequests`,
 `CatalogRequestsPerSecond`, `CatalogRequestBurst`) and `internal/wrapper`
-(`playbackRequestLimit`, `manifestRequestLimit`).
+(`playbackRequestLimit`, `manifestRequestLimit`). A `/key` or `/m3u8` gives up after
+waiting 10 wrapper request timeouts for its permits (`playbackWaitTimeouts`), however
+often higher-priority requests overtake it.
 
 | Pool | Size | Bounds |
 | --- | ---: | --- |

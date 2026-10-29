@@ -93,8 +93,9 @@ account session. All three keys are startup keys.
   [Deployment](deployment.md#the-wrapper); what the backend asks of the wrapper is in
   [Architecture](architecture.md#21-the-wrapper-and-decryption).
 - `wrapper.timeout_seconds` (default 30) bounds one wrapper HTTP request; a failed key
-  template request is retried up to three more times, 1, 2 and 4 seconds apart. Decryption
-  runs in the backend and has no wrapper timeout.
+  template request is retried up to three more times, 1, 2 and 4 seconds apart. A `/key` or
+  `/m3u8` waits at most ten times this for a free playback slot, then fails without
+  retrying. Decryption runs in the backend and has no wrapper timeout.
 - `wrapper.login_timeout_seconds` (default 120) bounds one console login request to a
   wrapper-manager. A login that needs a two-step code takes two requests.
 - Simulate mode (below) skips the wrapper status check, so jobs can be submitted without one.
