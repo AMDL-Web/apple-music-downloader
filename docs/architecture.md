@@ -49,7 +49,7 @@ was running stays `running` and resumes on the next start.
 | `internal/jobs` | admission, queue, workers, terminal-state rules, hook dispatch trigger | know about HTTP |
 | `internal/media` | the per-track pipeline: select, fetch, decrypt, remux, tag, finalize; simulate backend | write job rows except through `jobs.Reporter` |
 | `internal/applemusic` | both Apple hosts, tokens, catalog and library reads | fail a job because an amp-api-only field is missing |
-| `internal/wrapper` | the wrapper-manager gRPC client (login, status, decrypt sessions) | |
+| `internal/wrapper` | the wrapper-lite HTTP client (status, manifests, licenses, lyrics) and in-process decryption with cached key templates | |
 | `internal/db` | SQLite schema, versioned migrations, queries | contain business rules |
 | `internal/domain` | shared types, enums and event type constants | import other internal packages |
 | `internal/events` | in-process wake signals for streams | carry events (subscribers re-read the store) |

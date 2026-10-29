@@ -128,9 +128,9 @@ conversations block a merge, report what blocks it and wait.
 
 ## Related repositories
 
-[wrapper-manager](https://github.com/AMDL-Web/wrapper-manager) holds the Apple Music
-account session and decrypts over gRPC (`internal/wrapper`); its proto module is a
-Go dependency.
+[wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) holds the
+Apple Music account session and serves manifests, licenses, lyrics and per-key
+decryption templates over HTTP (`internal/wrapper`); the backend decrypts in-process.
 
 ## Rule -> enforced by
 

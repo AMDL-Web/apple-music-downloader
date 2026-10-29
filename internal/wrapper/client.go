@@ -1,36 +1,25 @@
+// Package wrapper is the client for wrapper-lite, which holds the Apple Music
+// account session. wrapper-lite serves device manifests, lyrics, web playback
+// manifests and Widevine licenses over HTTP, and for each FairPlay key URI a
+// white-box key template that this package runs in-process to decrypt media
+// samples.
 package wrapper
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/tls"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
-	"strings"
-	"sync"
+	"net/http"
+	"net/url"
 	"time"
 
 	"amdl/internal/config"
 	"amdl/internal/limits"
-	pb "github.com/AMDL-Web/wrapper-manager/proto"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
-
-type Client struct {
-	conn         *grpc.ClientConn
-	api          pb.WrapperManagerServiceClient
-	cfg          config.WrapperConfig
-	loginTimeout time.Duration
-	dataLimit    *limits.Semaphore
-	sessionsMu   sync.Mutex
-	sessions     map[string]*loginSession
-}
 
 var (
 	ErrAuthenticationFailed = errors.New("wrapper authentication failed")
@@ -41,6 +30,9 @@ var (
 	ErrLoginTimeout         = errors.New("wrapper login timed out")
 	ErrAccountNotFound      = errors.New("wrapper account not found")
 	ErrWrapperResponse      = errors.New("wrapper returned an unexpected response")
+	// ErrLoginUnsupported answers every login, two-step and logout call:
+	// wrapper-lite logs in only from its own command line (--login).
+	ErrLoginUnsupported = errors.New("the wrapper has no login API; log in on the wrapper host")
 )
 
 const (
@@ -48,70 +40,23 @@ const (
 	LoginStatusNeedsTwoStep = "needs_2fa"
 )
 
-// Reply codes wrapper-manager puts in ReplyHeader.code. The proto declares the
-// field as a bare int32; these values are what wrapper-manager's handlers send
-// (handler.go and main.go in AMDL-Web/wrapper-manager).
-const (
-	replyOK int32 = 0
-	// replyNeedsTwoStep answers a login whose account needs a two-step code,
-	// which the client sends on the same stream.
-	replyNeedsTwoStep int32 = 2
-	replyFailed       int32 = -1
-)
+const maxReplyBytes = 16 << 20
 
-// Substrings of wrapper-manager reply messages that carry meaning the reply code
-// does not; both arrive with replyFailed and match case-insensitively.
-// TestUpstreamReplyWording pins them to wrapper-manager's wording.
-const (
-	// msgAlreadyLoggedIn answers a second login of an account that already has
-	// a wrapper, from wrapper-manager releases that run one wrapper per
-	// account. Releases that run several wrappers per account start another
-	// one instead and never send it.
-	msgAlreadyLoggedIn = "already login"
-	// msgLoginPending answers a login of an account whose earlier login is
-	// still waiting for its two-step code.
-	msgLoginPending = "login already pending"
-	// msgNoSuchAccount answers a logout of an account with no wrapper.
-	msgNoSuchAccount = "no such account"
-)
-
-// loginFailure maps the message of a replyFailed login answer to its error.
-func loginFailure(msg string) error {
-	msg = strings.ToLower(msg)
-	switch {
-	case strings.Contains(msg, msgAlreadyLoggedIn):
-		return ErrAlreadyLoggedIn
-	case strings.Contains(msg, msgLoginPending):
-		return ErrLoginPending
-	default:
-		return ErrAuthenticationFailed
-	}
-}
-
-// logoutFailure maps a logout answer other than replyOK to its error.
-func logoutFailure(code int32, msg string) error {
-	if strings.Contains(strings.ToLower(msg), msgNoSuchAccount) {
-		return ErrAccountNotFound
-	}
-	return fmt.Errorf("%w: logout code %d: %s", ErrWrapperResponse, code, msg)
-}
+// playbackRequestLimit bounds /key and /m3u8 requests in flight. wrapper-lite
+// answers both behind one mutex, one at a time; more in flight would only queue
+// inside wrapper-lite, where the wait runs down the request timeout and holds
+// the HTTP worker threads /status and /lyrics need.
+const playbackRequestLimit = 2
 
 type LoginResult struct {
 	Status  string `json:"status"`
 	LoginID string `json:"login_id,omitempty"`
 }
 
-type loginSession struct {
-	stream    pb.WrapperManagerService_LoginClient
-	cancel    context.CancelFunc
-	username  string
-	expiresAt time.Time
-	timer     *time.Timer
-	busy      bool
-}
-
-// Status is wrapper-manager's state as GET /api/v1/wrapper/status returns
-// it. Regions and Accounts are never nil, so they encode as [] when empty.
+// Status is the wrapper's state as GET /api/v1/wrapper/status returns it.
+// Ready means the wrapper answered; Status means an account is logged in, which
+// wrapper-lite shows by listing its storefront in Regions. Regions and
+// Accounts are never nil, so they encode as [] when empty.
 type Status struct {
 	Ready    bool     `json:"ready"`
 	Status   bool     `json:"status"`
@@ -119,245 +64,201 @@ type Status struct {
 	Accounts []string `json:"accounts"`
 }
 
-// DecryptSession is a live decrypt stream to the wrapper for a single track.
-// Samples are decrypted in fragment-sized batches so a whole track's plaintext
-// never has to be materialised in memory at once.
-type DecryptSession interface {
-	// DecryptFragment sends one fragment's still-encrypted samples (all of which
-	// share key) and returns their plaintext in the same order. It blocks until
-	// every sample in the batch has come back.
-	DecryptFragment(key string, samples [][]byte) ([][]byte, error)
-	// Close finishes the send side of the stream and releases its resources.
-	Close() error
+// LyricsRequestOptions are wrapper-lite's /lyrics query parameters, sent as
+// given. Language and Script are left out when empty, so wrapper-lite applies
+// its own defaults; Syllable is always sent because wrapper-lite defaults to
+// word-timed lyrics.
+type LyricsRequestOptions struct {
+	Language string
+	Syllable bool
+	Script   string
 }
 
-type LyricsRequestOptions struct {
-	Region                  string
-	Language                string
-	Type                    string
-	ExtendTtmlLocalizations bool
+// ReplyError is a wrapper reply that is not a success. Code and Msg are
+// wrapper-lite's envelope fields, which carry an HTTP-like status (400 for a
+// bad request, 404 when the item has no such resource, 500 when the wrapper
+// failed); Code is 0 when the body was not an envelope. HTTPStatus is the
+// response status, which wrapper-lite keeps at 200 except for unknown routes
+// and handler exceptions.
+type ReplyError struct {
+	Endpoint   string
+	HTTPStatus int
+	Code       int
+	Msg        string
+}
+
+func (e *ReplyError) Error() string {
+	if e.Code == 0 {
+		return fmt.Sprintf("wrapper %s: HTTP %d: %s", e.Endpoint, e.HTTPStatus, e.Msg)
+	}
+	return fmt.Sprintf("wrapper %s: code %d: %s", e.Endpoint, e.Code, e.Msg)
+}
+
+func (e *ReplyError) Unwrap() error { return ErrWrapperResponse }
+
+// clientFault reports a 4xx answer: asking again cannot change it.
+func (e *ReplyError) clientFault() bool {
+	status := e.Code
+	if status == 0 {
+		status = e.HTTPStatus
+	}
+	return status >= 400 && status < 500
+}
+
+// Client talks to one wrapper-lite instance. It is safe for concurrent use.
+type Client struct {
+	base          *url.URL
+	http          *http.Client
+	timeout       time.Duration
+	dataLimit     *limits.Semaphore
+	playbackLimit *limits.Semaphore
+
+	parse       TemplateParser
+	templates   *templateCache
+	samples     *samplePool
+	retryDelays []time.Duration
+
+	// life ends at Close and stops template fetches no caller waits for.
+	life     context.Context
+	shutdown context.CancelFunc
 }
 
 type ClientOption func(*Client)
 
-// WithDataConcurrencyLimit applies a process-wide, cross-job bound to wrapper
-// data RPCs (M3U8, Lyrics, WebPlayback, License). Tracks no longer queue on a
-// per-job limit before reaching the wrapper, so these unary RPCs need their
-// own pool. Login/logout are deliberately excluded so operator access cannot
-// be starved by a busy download queue, and Decrypt streams are excluded
-// because the downloader's decrypt pool already bounds them.
-func WithDataConcurrencyLimit(limit int) ClientOption {
-	return func(client *Client) {
-		client.dataLimit = limits.NewSemaphore(limit)
-	}
+// WithTemplateParser replaces the FairPlay template implementation, which is
+// internal/fairplay by default.
+func WithTemplateParser(parse TemplateParser) ClientOption {
+	return func(c *Client) { c.parse = parse }
 }
 
+// NewClient builds a client for cfg.Address, an http:// or https:// URL. It
+// does not contact the wrapper.
 func NewClient(cfg config.WrapperConfig, options ...ClientOption) (*Client, error) {
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(wrapperTransportCredentials(cfg))}
-	conn, err := grpc.NewClient(cfg.Address, opts...)
+	base, err := url.Parse(cfg.Address)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse wrapper address %q: %w", cfg.Address, err)
 	}
-	client := &Client{conn: conn, api: pb.NewWrapperManagerServiceClient(conn), cfg: cfg, sessions: make(map[string]*loginSession)}
+	if (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
+		return nil, fmt.Errorf("wrapper address %q is not an http:// or https:// URL", cfg.Address)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	transport.MaxIdleConnsPerHost = config.MaxParallelWrapperRequests + playbackRequestLimit
+	life, shutdown := context.WithCancel(context.Background())
+	c := &Client{
+		base:          base,
+		http:          &http.Client{Transport: transport},
+		timeout:       cfg.Timeout(),
+		dataLimit:     limits.NewSemaphore(config.MaxParallelWrapperRequests),
+		playbackLimit: limits.NewSemaphore(playbackRequestLimit),
+		parse:         parseFairPlayTemplate,
+		templates:     newTemplateCache(templateCacheSize),
+		samples:       newSamplePool(config.MaxParallelDecrypts),
+		retryDelays:   keyRetryDelays,
+		life:          life,
+		shutdown:      shutdown,
+	}
 	for _, option := range options {
-		option(client)
+		option(c)
 	}
-	return client, nil
+	if c.parse == nil {
+		shutdown()
+		return nil, errors.New("wrapper: nil template parser")
+	}
+	return c, nil
 }
 
-func (c *Client) acquireDataSlot(ctx context.Context) (func(), error) {
-	if c.dataLimit == nil {
-		return func() {}, nil
-	}
-	return c.dataLimit.Acquire(ctx)
-}
-
-func wrapperTransportCredentials(cfg config.WrapperConfig) credentials.TransportCredentials {
-	if cfg.Insecure {
-		return insecure.NewCredentials()
-	}
-	return credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
-}
-
+// Close stops template fetches in flight and releases idle connections.
 func (c *Client) Close() error {
-	c.sessionsMu.Lock()
-	for id, session := range c.sessions {
-		if session.timer != nil {
-			session.timer.Stop()
-		}
-		session.cancel()
-		delete(c.sessions, id)
-	}
-	c.sessionsMu.Unlock()
-	return c.conn.Close()
+	c.shutdown()
+	c.http.CloseIdleConnections()
+	return nil
 }
 
-func (c *Client) authTimeout() time.Duration {
-	if c.loginTimeout > 0 {
-		return c.loginTimeout
-	}
-	return c.cfg.LoginTimeout()
+type envelope struct {
+	Code int             `json:"code"`
+	Msg  string          `json:"msg"`
+	Data json.RawMessage `json:"data"`
 }
 
-func (c *Client) StartLogin(ctx context.Context, username, password string) (LoginResult, error) {
-	streamCtx, cancel := context.WithCancel(context.Background())
-	stream, err := c.api.Login(streamCtx)
-	if err != nil {
-		cancel()
-		return LoginResult{}, err
-	}
-	if err := stream.Send(&pb.LoginRequest{Data: &pb.LoginData{Username: username, Password: password}}); err != nil {
-		cancel()
-		return LoginResult{}, err
-	}
-	reply, err := receiveLoginReply(ctx, stream, c.authTimeout())
-	if err != nil {
-		cancel()
-		return LoginResult{}, err
-	}
-	switch reply.GetHeader().GetCode() {
-	case replyOK:
-		cancel()
-		return LoginResult{Status: LoginStatusLoggedIn}, nil
-	case replyNeedsTwoStep:
-		id, err := randomLoginID()
-		if err != nil {
-			cancel()
-			return LoginResult{}, err
-		}
-		timeout := c.authTimeout()
-		session := &loginSession{stream: stream, cancel: cancel, username: username, expiresAt: time.Now().Add(timeout)}
-		c.sessionsMu.Lock()
-		c.sessions[id] = session
-		session.timer = time.AfterFunc(timeout, func() { c.expireSession(id, session) })
-		c.sessionsMu.Unlock()
-		return LoginResult{Status: LoginStatusNeedsTwoStep, LoginID: id}, nil
-	case replyFailed:
-		cancel()
-		return LoginResult{}, loginFailure(reply.GetHeader().GetMsg())
-	default:
-		cancel()
-		return LoginResult{}, fmt.Errorf("%w: login code %d: %s", ErrWrapperResponse, reply.GetHeader().GetCode(), reply.GetHeader().GetMsg())
-	}
-}
-
-func (c *Client) SubmitTwoStepCode(ctx context.Context, loginID, code string) (LoginResult, error) {
-	session, remaining, err := c.acquireSession(loginID)
-	if err != nil {
-		return LoginResult{}, err
-	}
-	defer c.removeSession(loginID, session)
-	if err := session.stream.Send(&pb.LoginRequest{Data: &pb.LoginData{Username: session.username, TwoStepCode: code}}); err != nil {
-		return LoginResult{}, err
-	}
-	reply, err := receiveLoginReply(ctx, session.stream, remaining)
-	if err != nil {
-		return LoginResult{}, err
-	}
-	switch reply.GetHeader().GetCode() {
-	case replyOK:
-		return LoginResult{Status: LoginStatusLoggedIn}, nil
-	case replyFailed:
-		return LoginResult{}, ErrAuthenticationFailed
-	default:
-		return LoginResult{}, fmt.Errorf("%w: two-step code %d: %s", ErrWrapperResponse, reply.GetHeader().GetCode(), reply.GetHeader().GetMsg())
-	}
-}
-
-func (c *Client) Logout(ctx context.Context, username string) error {
-	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout())
+// call sends one request bounded by the configured timeout and returns the
+// reply's data object.
+func (c *Client) call(ctx context.Context, method, endpoint string, query url.Values, body any) (json.RawMessage, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	reply, err := c.api.Logout(ctx, &pb.LogoutRequest{Data: &pb.LogoutData{Username: username}})
+	target := c.base.JoinPath(endpoint)
+	target.RawQuery = query.Encode()
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("encode wrapper %s body: %w", endpoint, err)
+		}
+		reader = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target.String(), reader)
+	if err != nil {
+		return nil, fmt.Errorf("build wrapper %s request: %w", endpoint, err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("wrapper %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxReplyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("read wrapper %s reply: %w", endpoint, err)
+	}
+	var env envelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, &ReplyError{Endpoint: endpoint, HTTPStatus: resp.StatusCode, Msg: snippet(raw)}
+	}
+	if env.Code != 0 || resp.StatusCode != http.StatusOK {
+		return nil, &ReplyError{Endpoint: endpoint, HTTPStatus: resp.StatusCode, Code: env.Code, Msg: env.Msg}
+	}
+	return env.Data, nil
+}
+
+func snippet(raw []byte) string {
+	const n = 200
+	if len(raw) > n {
+		return string(raw[:n]) + "..."
+	}
+	return string(raw)
+}
+
+func (c *Client) get(ctx context.Context, endpoint string, query url.Values, out any) error {
+	data, err := c.call(ctx, http.MethodGet, endpoint, query, nil)
 	if err != nil {
 		return err
 	}
-	if reply.GetHeader().GetCode() == replyOK {
-		return nil
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("%w: wrapper %s data: %v", ErrWrapperResponse, endpoint, err)
 	}
-	return logoutFailure(reply.GetHeader().GetCode(), reply.GetHeader().GetMsg())
+	return nil
 }
 
-func receiveLoginReply(ctx context.Context, stream pb.WrapperManagerService_LoginClient, timeout time.Duration) (*pb.LoginReply, error) {
-	type result struct {
-		reply *pb.LoginReply
-		err   error
-	}
-	resultCh := make(chan result, 1)
-	go func() {
-		reply, err := stream.Recv()
-		resultCh <- result{reply: reply, err: err}
-	}()
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-timer.C:
-		return nil, ErrLoginTimeout
-	case result := <-resultCh:
-		return result.reply, result.err
-	}
-}
-
-func randomLoginID() (string, error) {
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("generate login id: %w", err)
-	}
-	return hex.EncodeToString(raw), nil
-}
-
-func (c *Client) acquireSession(id string) (*loginSession, time.Duration, error) {
-	c.sessionsMu.Lock()
-	defer c.sessionsMu.Unlock()
-	session, ok := c.sessions[id]
-	if !ok || time.Now().After(session.expiresAt) {
-		return nil, 0, ErrLoginSessionNotFound
-	}
-	if session.busy {
-		return nil, 0, ErrLoginSessionBusy
-	}
-	session.busy = true
-	if session.timer != nil {
-		session.timer.Stop()
-	}
-	return session, time.Until(session.expiresAt), nil
-}
-
-func (c *Client) expireSession(id string, expected *loginSession) {
-	c.removeSession(id, expected)
-}
-
-func (c *Client) removeSession(id string, expected *loginSession) {
-	c.sessionsMu.Lock()
-	session, ok := c.sessions[id]
-	if ok && session == expected {
-		delete(c.sessions, id)
-		if session.timer != nil {
-			session.timer.Stop()
-		}
-		session.cancel()
-	}
-	c.sessionsMu.Unlock()
-}
-
-func (c *Client) Status(ctx context.Context) (Status, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout())
-	defer cancel()
-	resp, err := c.api.Status(ctx, &emptypb.Empty{})
+func withPermit(ctx context.Context, limit *limits.Semaphore, run func() error) error {
+	release, err := limit.Acquire(ctx)
 	if err != nil {
+		return err
+	}
+	defer release()
+	return run()
+}
+
+// Status asks /status whether the wrapper is up and logged in.
+func (c *Client) Status(ctx context.Context) (Status, error) {
+	var body struct {
+		Regions []string `json:"regions"`
+	}
+	if err := c.get(ctx, "/status", nil, &body); err != nil {
 		return Status{}, err
 	}
-	if resp.GetHeader().GetCode() != 0 {
-		return Status{}, fmt.Errorf("wrapper status: %s", resp.GetHeader().GetMsg())
-	}
-	data := resp.GetData()
-	return Status{
-		Ready:    data.GetReady(),
-		Status:   data.GetStatus(),
-		Regions:  nonNil(data.GetRegions()),
-		Accounts: nonNil(data.GetAccounts()),
-	}, nil
+	return Status{Ready: true, Status: len(body.Regions) > 0, Regions: nonNil(body.Regions), Accounts: []string{}}, nil
 }
 
 func nonNil(values []string) []string {
@@ -367,217 +268,82 @@ func nonNil(values []string) []string {
 	return values
 }
 
+// StartLogin, SubmitTwoStepCode and Logout return ErrLoginUnsupported.
+func (c *Client) StartLogin(context.Context, string, string) (LoginResult, error) {
+	return LoginResult{}, ErrLoginUnsupported
+}
+
+func (c *Client) SubmitTwoStepCode(context.Context, string, string) (LoginResult, error) {
+	return LoginResult{}, ErrLoginUnsupported
+}
+
+func (c *Client) Logout(context.Context, string) error {
+	return ErrLoginUnsupported
+}
+
+// M3U8 returns the device master playlist for adamID.
 func (c *Client) M3U8(ctx context.Context, adamID string) (string, error) {
-	release, err := c.acquireDataSlot(ctx)
-	if err != nil {
-		return "", err
+	var body struct {
+		M3U8 string `json:"m3u8"`
 	}
-	defer release()
-	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout())
-	defer cancel()
-	resp, err := c.api.M3U8(ctx, &pb.M3U8Request{Data: &pb.M3U8DataRequest{AdamId: adamID}})
-	if err != nil {
-		return "", err
-	}
-	if resp.GetHeader().GetCode() != replyOK {
-		return "", fmt.Errorf("wrapper m3u8: %s", resp.GetHeader().GetMsg())
-	}
-	return resp.GetData().GetM3U8(), nil
+	err := withPermit(ctx, c.playbackLimit, func() error {
+		return c.get(ctx, "/m3u8", url.Values{"adamId": {adamID}}, &body)
+	})
+	return body.M3U8, err
 }
 
+// Lyrics returns adamID's lyrics as wrapper-lite renders them for opts.
 func (c *Client) Lyrics(ctx context.Context, adamID string, opts LyricsRequestOptions) (string, error) {
-	release, err := c.acquireDataSlot(ctx)
-	if err != nil {
-		return "", err
+	query := url.Values{"adamId": {adamID}, "syllable": {"0"}}
+	if opts.Syllable {
+		query.Set("syllable", "1")
 	}
-	defer release()
-	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout())
-	defer cancel()
-	resp, err := c.api.Lyrics(ctx, &pb.LyricsRequest{Data: &pb.LyricsDataRequest{
-		AdamId: adamID, Region: opts.Region, Language: opts.Language,
-		Type: opts.Type, ExtendTtmlLocalizations: opts.ExtendTtmlLocalizations,
-	}})
-	if err != nil {
-		return "", err
+	if opts.Language != "" {
+		query.Set("language", opts.Language)
 	}
-	if resp.GetHeader().GetCode() != replyOK {
-		return "", fmt.Errorf("wrapper lyrics: %s", resp.GetHeader().GetMsg())
+	if opts.Script != "" {
+		query.Set("script", opts.Script)
 	}
-	return resp.GetData().GetLyrics(), nil
+	var body struct {
+		Lyrics string `json:"lyrics"`
+	}
+	err := withPermit(ctx, c.dataLimit, func() error {
+		return c.get(ctx, "/lyrics", query, &body)
+	})
+	return body.Lyrics, err
 }
 
+// WebPlayback returns the web-player playlist URL for adamID, which carries
+// the AAC-LC rendition.
 func (c *Client) WebPlayback(ctx context.Context, adamID string) (string, error) {
-	release, err := c.acquireDataSlot(ctx)
-	if err != nil {
-		return "", err
+	var body struct {
+		M3U8 string `json:"m3u8"`
 	}
-	defer release()
-	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout())
-	defer cancel()
-	resp, err := c.api.WebPlayback(ctx, &pb.WebPlaybackRequest{Data: &pb.WebPlaybackDataRequest{AdamId: adamID}})
-	if err != nil {
-		return "", err
-	}
-	if resp.GetHeader().GetCode() != replyOK {
-		return "", fmt.Errorf("wrapper web playback: %s", resp.GetHeader().GetMsg())
-	}
-	return resp.GetData().GetM3U8(), nil
+	err := withPermit(ctx, c.dataLimit, func() error {
+		return c.get(ctx, "/webplayback", url.Values{"adamId": {adamID}}, &body)
+	})
+	return body.M3U8, err
 }
 
+// License exchanges a base64 Widevine challenge for a base64 license.
 func (c *Client) License(ctx context.Context, adamID, challenge, uri string) (string, error) {
-	release, err := c.acquireDataSlot(ctx)
-	if err != nil {
-		return "", err
+	var body struct {
+		License string `json:"license"`
 	}
-	defer release()
-	ctx, cancel := context.WithTimeout(ctx, c.cfg.Timeout())
-	defer cancel()
-	resp, err := c.api.License(ctx, &pb.LicenseRequest{Data: &pb.LicenseDataRequest{
-		AdamId: adamID, Challenge: challenge, Uri: uri,
-	}})
-	if err != nil {
-		return "", err
-	}
-	if resp.GetHeader().GetCode() != replyOK {
-		return "", fmt.Errorf("wrapper license: %s", resp.GetHeader().GetMsg())
-	}
-	return resp.GetData().GetLicense(), nil
-}
-
-// NewDecryptSession opens a bidirectional decrypt stream for one track. The
-// stream is fed one fragment at a time (DecryptFragment) and torn down with
-// Close, so the caller can decrypt a whole track without ever holding all of
-// its samples in memory. A track may legitimately take much longer than a
-// unary RPC, so the configured timeout bounds each fragment operation rather
-// than the lifetime of the whole stream.
-func (c *Client) NewDecryptSession(ctx context.Context, adamID string) (DecryptSession, error) {
-	streamCtx, cancel := context.WithCancel(ctx)
-	stream, err := c.api.Decrypt(streamCtx)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	return &grpcDecryptSession{stream: stream, cancel: cancel, adamID: adamID, fragmentTimeout: c.cfg.Timeout()}, nil
-}
-
-type grpcDecryptSession struct {
-	stream pb.WrapperManagerService_DecryptClient
-	cancel context.CancelFunc
-	adamID string
-	// fragmentTimeout is an inactivity bound for one fragment request/reply
-	// batch. It deliberately is not a whole-track deadline.
-	fragmentTimeout time.Duration
-	// next is the monotonically increasing sample index used to correlate
-	// requests with their replies. It spans the whole track (not reset per
-	// fragment) so indices stay unique across every batch on the one stream.
-	next int
-}
-
-func (s *grpcDecryptSession) DecryptFragment(key string, samples [][]byte) ([][]byte, error) {
-	if len(samples) == 0 {
-		return nil, nil
-	}
-	if s.fragmentTimeout <= 0 {
-		return s.decryptFragment(key, samples)
-	}
-	type result struct {
-		out [][]byte
-		err error
-	}
-	done := make(chan result, 1)
-	go func() {
-		out, err := s.decryptFragment(key, samples)
-		done <- result{out: out, err: err}
-	}()
-	timer := time.NewTimer(s.fragmentTimeout)
-	defer timer.Stop()
-	select {
-	case result := <-done:
-		return result.out, result.err
-	case <-timer.C:
-		// Cancelling the stream unblocks both Send and Recv. Wait for the
-		// operation to unwind so CloseSend cannot race a lingering Send.
-		s.cancel()
-		<-done
-		return nil, fmt.Errorf("wrapper decrypt fragment timed out after %s: %w", s.fragmentTimeout, context.DeadlineExceeded)
-	}
-}
-
-func (s *grpcDecryptSession) decryptFragment(key string, samples [][]byte) ([][]byte, error) {
-	n := len(samples)
-	base := s.next
-	if last := int64(base) + int64(n) - 1; last > math.MaxInt32 {
-		return nil, fmt.Errorf("wrapper decrypt: sample index %d does not fit the protocol's int32 sample_index", last)
-	}
-	s.next += n
-	// Send in the background while receiving: a fragment can carry more sample
-	// bytes than the gRPC flow-control window, so sending everything before
-	// reading the first reply could deadlock.
-	sendErr := make(chan error, 1)
-	go func() {
-		for i, data := range samples {
-			if err := s.stream.Send(&pb.DecryptRequest{Data: &pb.DecryptData{
-				AdamId: s.adamID, Key: key, SampleIndex: int32(base + i), Sample: data,
-			}}); err != nil {
-				sendErr <- err
-				return
-			}
-		}
-		sendErr <- nil
-	}()
-
-	out := make([][]byte, n)
-	recvErr := s.receiveBatch(out, base)
-	if recvErr != nil {
-		// The receive failed partway, so the sender may still be blocked on Send.
-		// Cancel the stream to unblock it and wait for it to exit before
-		// returning: the caller runs Close (CloseSend) next, which must not race
-		// a concurrent Send on this stream. The session is unusable after an
-		// error anyway, so cancelling here is fine.
-		s.cancel()
-		<-sendErr
-		return nil, recvErr
-	}
-	if err := <-sendErr; err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// receiveBatch reads one reply per slot of out, placing each sample by its
-// index relative to base. An index outside the batch, or one that already
-// arrived, is an error: either would leave another slot without its sample
-// and produce a silently short fragment. With both rejected, len(out) replies
-// fill every slot.
-func (s *grpcDecryptSession) receiveBatch(out [][]byte, base int) error {
-	filled := make([]bool, len(out))
-	for received := 0; received < len(out); received++ {
-		resp, err := s.stream.Recv()
+	err := withPermit(ctx, c.dataLimit, func() error {
+		data, err := c.call(ctx, http.MethodPost, "/license", nil, map[string]string{
+			"adamId": adamID, "challenge": challenge, "uri": uri,
+		})
 		if err != nil {
-			if err == io.EOF {
-				return fmt.Errorf("wrapper decrypt stream ended after %d/%d samples", received, len(out))
-			}
 			return err
 		}
-		if resp.GetHeader().GetCode() != replyOK {
-			return fmt.Errorf("wrapper decrypt: %s", resp.GetHeader().GetMsg())
+		if err := json.Unmarshal(data, &body); err != nil {
+			return fmt.Errorf("%w: wrapper /license data: %v", ErrWrapperResponse, err)
 		}
-		index := resp.GetData().GetSampleIndex()
-		idx := int(index) - base
-		if idx < 0 || idx >= len(out) {
-			return fmt.Errorf("wrapper decrypt returned out-of-range sample index %d", index)
-		}
-		if filled[idx] {
-			return fmt.Errorf("wrapper decrypt returned sample index %d twice", index)
-		}
-		filled[idx] = true
-		out[idx] = resp.GetData().GetSample()
+		return nil
+	})
+	if err == nil && body.License == "" {
+		err = fmt.Errorf("%w: wrapper /license reply has no license", ErrWrapperResponse)
 	}
-	return nil
-}
-
-func (s *grpcDecryptSession) Close() error {
-	err := s.stream.CloseSend()
-	s.cancel()
-	return err
+	return body.License, err
 }

@@ -326,11 +326,10 @@ func (m realMedia) commit(staged stagedFile, outPath string) (int64, error) {
 }
 
 // lyricsRequest builds the wrapper's lyrics options from the job's config.
-func lyricsRequest(cfg config.Config, storefront string) wrapper.LyricsRequestOptions {
+// wrapper-lite answers from its own account's storefront, whatever the job's.
+func lyricsRequest(cfg config.Config) wrapper.LyricsRequestOptions {
 	return wrapper.LyricsRequestOptions{
-		Region:                  storefront,
-		Language:                cfg.Catalog.Language,
-		Type:                    cfg.Download.LyricsType,
-		ExtendTtmlLocalizations: len(cfg.Download.LyricsExtras) > 0 || cfg.Download.LyricsType == "syllable-lyrics",
+		Language: cfg.Catalog.Language,
+		Syllable: cfg.Download.LyricsType == "syllable-lyrics",
 	}
 }

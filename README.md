@@ -258,7 +258,7 @@ symbol, so it stays valid when files inside the package are split.
 | How are jobs queued, run, cancelled and retried? | `internal/jobs#Manager` |
 | How is one track downloaded, decrypted, remuxed and tagged? | `internal/media#Downloader` |
 | Which Apple host answers a request? | `internal/applemusic#CatalogClient.apiBase`, `internal/applemusic#CatalogClient.doWithWebAuth` |
-| How does the backend talk to wrapper-manager? | `internal/wrapper#Client` |
+| How does the backend talk to the wrapper? | `internal/wrapper#Client` |
 | Where are jobs stored, and how does the schema migrate? | `internal/db#Store` |
 | How is config loaded and validated? | `internal/config#Load`, `internal/config#Config.Validate` |
 | What do job hooks send? | `internal/hooks#Dispatcher` |

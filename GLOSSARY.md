@@ -23,7 +23,7 @@ wins when they disagree, so details are not copied here.
 
 | Term | Meaning | Source |
 | --- | --- | --- |
-| wrapper, wrapper-manager | The gRPC service that holds the Apple account session and serves device manifests, licenses and lyrics; required for real downloads | `internal/wrapper#Client` |
+| wrapper, wrapper-lite | The HTTP service that holds the Apple account session and serves device manifests, licenses, lyrics and per-key decryption templates; required for real downloads | `internal/wrapper#Client` |
 | Job | One submitted link (song, album, playlist, artist or station) and its lifecycle | `internal/domain#Job` |
 | Item | One track inside a job | `internal/domain#JobItem` |
 | Stage breakdown | An item's durable per-stage flags (resolved, remuxed, verified, tagged, saved) that let a reconnecting client redraw progress | `internal/domain#ItemProgress` |

@@ -148,7 +148,7 @@ func TestRuntimeLockedChanges(t *testing.T) {
 	updated.Logging.Console = false
 	updated.Download.MaxRunningJobs = base.Download.MaxRunningJobs + 1
 	updated.Download.MaxParallelDownloads = base.Download.MaxParallelDownloads + 1
-	updated.Wrapper.Address = "10.0.0.1:8080"
+	updated.Wrapper.Address = "http://10.0.0.1:12340"
 	updated.Catalog.MaxParallelRequests = base.Catalog.MaxParallelRequests + 1
 	got := RuntimeLockedChanges(base, updated)
 	// Keys surface in Config struct-field order because the locked set is

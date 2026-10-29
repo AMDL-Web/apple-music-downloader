@@ -133,11 +133,11 @@ func run(ctx context.Context, files configFiles) (err error) {
 	// pipeline. Process-wide concurrency pools are sized once from this startup
 	// snapshot; runtime-mutable fields are read when each job starts.
 	cfgStore := config.NewFileStore(cfg, files.config)
-	wrapperClient, err := wrapper.NewClient(cfg.Wrapper, wrapper.WithDataConcurrencyLimit(config.MaxParallelWrapperRequests))
+	wrapperClient, err := wrapper.NewClient(cfg.Wrapper)
 	if err != nil {
-		return fmt.Errorf("connect wrapper-manager: %w", err)
+		return fmt.Errorf("set up wrapper client: %w", err)
 	}
-	defer closeLogged(logger, "close wrapper-manager client", wrapperClient.Close)
+	defer closeLogged(logger, "close wrapper client", wrapperClient.Close)
 
 	catalog := applemusic.NewCatalogClient(cfg.Catalog, logSystem.Logger.With("component", "catalog"))
 	if err := catalog.InitDeveloperToken(); err != nil {

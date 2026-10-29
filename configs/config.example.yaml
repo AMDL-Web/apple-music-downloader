@@ -45,15 +45,18 @@ logging:
   buffer_size: 2000
 
 wrapper:
-  # string: wrapper-manager gRPC address in "host:port" form. Requires a restart.
-  address: "127.0.0.1:8080"
-  # bool: true uses plaintext gRPC; false uses TLS 1.2+ and verifies the wrapper certificate
-  # against the operating system trust store and the hostname in address. Requires a restart.
-  insecure: true
-  # integer seconds: wrapper unary-RPC timeout and per-decrypt-fragment inactivity timeout.
-  # It is not a whole-track deadline, so long tracks may run longer. Values <= 0 fall back to 30 seconds. Requires a restart.
+  # string: wrapper-lite base URL, "http://host:port" or "https://host:port", optionally with a path
+  # prefix when a reverse proxy serves it under one. The scheme picks the transport: http is plaintext;
+  # https uses TLS 1.2+ and verifies the certificate against the operating system trust store and the
+  # hostname. A bare "host:port" is rejected at startup. Requires a restart.
+  address: "http://127.0.0.1:12340"
+  # integer seconds: timeout for one wrapper HTTP request. A failed key-template request (/key) is
+  # retried up to 3 more times, 1, 2 and 4 seconds apart, each with this timeout. Decryption itself runs
+  # in this process and has no wrapper timeout. Values <= 0 fall back to 30 seconds. Requires a restart.
   timeout_seconds: 30
-  # integer seconds: wrapper login/2FA timeout. Values <= 0 fall back to 120 seconds. Requires a restart.
+  # integer seconds: bound on a console login including its 2FA step, for a wrapper that offers a
+  # login API; wrapper-lite has none and logs in from its own command line (--login).
+  # Values <= 0 fall back to 120 seconds. Requires a restart.
   login_timeout_seconds: 120
 
 catalog:

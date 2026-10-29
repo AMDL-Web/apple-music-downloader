@@ -1,88 +1,671 @@
 package wrapper
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"amdl/internal/config"
-	pb "github.com/AMDL-Web/wrapper-manager/proto"
-	"google.golang.org/grpc"
 )
 
-// blockingM3U8API parks every M3U8 call until release is closed so tests can
-// hold data-slot permits at will. All other RPCs panic via the embedded nil.
-type blockingM3U8API struct {
-	pb.WrapperManagerServiceClient
-	inFlight atomic.Int32
-	entered  chan struct{}
-	release  chan struct{}
-}
+// xorTemplate stands in for a FairPlay template: it XORs every byte of the
+// 16-byte-aligned prefix with its value, so a test can build ciphertext from
+// known plaintext and tell which template decrypted it.
+type xorTemplate byte
 
-func (f *blockingM3U8API) M3U8(ctx context.Context, _ *pb.M3U8Request, _ ...grpc.CallOption) (*pb.M3U8Reply, error) {
-	f.inFlight.Add(1)
-	defer f.inFlight.Add(-1)
-	select {
-	case f.entered <- struct{}{}:
-	default:
-	}
-	select {
-	case <-f.release:
-		return &pb.M3U8Reply{}, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
+func (x xorTemplate) DecryptSample(sample []byte) {
+	for i := range len(sample) / 16 * 16 {
+		sample[i] ^= byte(x)
 	}
 }
 
-func TestDataConcurrencyLimitBoundsDataRPCs(t *testing.T) {
-	api := &blockingM3U8API{entered: make(chan struct{}, 1), release: make(chan struct{})}
-	client := &Client{api: api, cfg: config.WrapperConfig{TimeoutSeconds: 5}, sessions: map[string]*loginSession{}}
-	WithDataConcurrencyLimit(1)(client)
-
-	firstDone := make(chan struct{})
-	go func() {
-		defer close(firstDone)
-		_, _ = client.M3U8(context.Background(), "1")
-	}()
-	<-api.entered
-
-	// The pool has a single permit and it is held by the blocked first call: a
-	// second call must wait on the semaphore and honor cancellation without
-	// ever reaching the RPC layer.
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	if _, err := client.M3U8(ctx, "2"); err != context.DeadlineExceeded {
-		t.Fatalf("second M3U8 error = %v, want context.DeadlineExceeded from the data slot wait", err)
+// parseXOR reads {"xor": n}; a reply without it is a template wrapper-lite
+// failed to capture.
+func parseXOR(data []byte) (SampleDecrypter, error) {
+	var body struct {
+		XOR *int `json:"xor"`
 	}
-	if got := api.inFlight.Load(); got != 1 {
-		t.Fatalf("in-flight RPCs = %d, want the second call blocked before the RPC layer", got)
+	if err := json.Unmarshal(data, &body); err != nil {
+		return nil, err
 	}
+	if body.XOR == nil {
+		return nil, errors.New("reply has no template fields")
+	}
+	return xorTemplate(*body.XOR), nil
+}
 
-	close(api.release)
-	<-firstDone
-	// The permit must be released after the first call returns.
-	if _, err := client.M3U8(context.Background(), "3"); err != nil {
-		t.Fatalf("M3U8 after release: %v", err)
+func encrypt(plain []byte, x byte) []byte {
+	out := append([]byte(nil), plain...)
+	xorTemplate(x).DecryptSample(out)
+	return out
+}
+
+// writeReply writes a wrapper-lite envelope with HTTP 200, as wrapper-lite
+// answers every handled request.
+func writeReply(w http.ResponseWriter, code int, msg string, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	body := map[string]any{"code": code, "msg": msg}
+	if data != nil {
+		body["data"] = data
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func newTestClient(t *testing.T, handler http.Handler) *Client {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	c, err := NewClient(config.WrapperConfig{Address: srv.URL, TimeoutSeconds: 5}, WithTemplateParser(parseXOR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.retryDelays = make([]time.Duration, len(keyRetryDelays))
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
+
+type keyServer struct {
+	mu     sync.Mutex
+	xor    map[string]int
+	calls  map[string]int
+	adamID map[string][]string
+}
+
+func newKeyServer(xor map[string]int) *keyServer {
+	return &keyServer{xor: xor, calls: map[string]int{}, adamID: map[string][]string{}}
+}
+
+func (s *keyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	uri := r.URL.Query().Get("uri")
+	s.mu.Lock()
+	s.calls[uri]++
+	s.adamID[uri] = append(s.adamID[uri], r.URL.Query().Get("adamId"))
+	x, ok := s.xor[uri]
+	s.mu.Unlock()
+	if r.URL.Path != "/key" || !ok {
+		writeReply(w, 400, "unexpected request", nil)
+		return
+	}
+	writeReply(w, 0, "SUCCESS", map[string]any{"xor": x})
+}
+
+func (s *keyServer) callCount(uri string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls[uri]
+}
+
+func TestDecryptFragmentReusesTemplatesAcrossSessions(t *testing.T) {
+	const key = "skd://itunes.apple.com/p1/c6"
+	keys := newKeyServer(map[string]int{key: 0x5a})
+	c := newTestClient(t, keys)
+
+	aligned := []byte("0123456789abcdef0123456789abcdef")
+	unaligned := []byte("0123456789abcdef0123456789abcdefTAIL!")
+	for _, adamID := range []string{"101", "101", "202"} {
+		session, err := c.NewDecryptSession(context.Background(), adamID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		samples := [][]byte{encrypt(aligned, 0x5a), encrypt(unaligned, 0x5a)}
+		got, err := session.DecryptFragment(key, samples)
+		if err != nil {
+			t.Fatalf("DecryptFragment: %v", err)
+		}
+		if string(got[0]) != string(aligned) || string(got[1]) != string(unaligned) {
+			t.Fatalf("plaintext = %q, %q; want %q, %q", got[0], got[1], aligned, unaligned)
+		}
+		if err := session.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := keys.callCount(key); n != 1 {
+		t.Fatalf("/key calls = %d, want 1 for one key across three sessions", n)
 	}
 }
 
-func TestWrapperTransportCredentials(t *testing.T) {
+// The built-in parser decrypts Temari's public golden sample (track
+// 1720704575, MIT) from a /key reply shaped like wrapper-lite's, whose data
+// object also carries adamId, keyUri and contentKey.
+func TestBuiltInParserDecryptsTheGoldenSample(t *testing.T) {
+	read := func(ext string) []byte {
+		b, err := os.ReadFile(filepath.Join("..", "fairplay", "testdata", "track_1720704575_s1."+ext))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	var data map[string]any
+	if err := json.Unmarshal(read("json"), &data); err != nil {
+		t.Fatal(err)
+	}
+	const key = "skd://itunes.apple.com/p1720704575/c6"
+	data["adamId"], data["keyUri"], data["contentKey"] = "1720704575", key, "00"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeReply(w, 0, "SUCCESS", data)
+	}))
+	defer srv.Close()
+	c, err := NewClient(config.WrapperConfig{Address: srv.URL, TimeoutSeconds: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	session, _ := c.NewDecryptSession(context.Background(), "1720704575")
+	got, err := session.DecryptFragment(key, [][]byte{read("ct")})
+	if err != nil {
+		t.Fatalf("DecryptFragment: %v", err)
+	}
+	if !bytes.Equal(got[0], read("pt")) {
+		t.Fatal("plaintext differs from the golden plaintext")
+	}
+}
+
+func TestDecryptFragmentRejectsAFragmentWithoutKey(t *testing.T) {
+	c := newTestClient(t, newKeyServer(nil))
+	session, _ := c.NewDecryptSession(context.Background(), "1")
+	if out, err := session.DecryptFragment("", nil); out != nil || err != nil {
+		t.Fatalf("empty fragment = (%v, %v), want (nil, nil)", out, err)
+	}
+	if _, err := session.DecryptFragment("", [][]byte{make([]byte, 16)}); err == nil {
+		t.Fatal("DecryptFragment accepted a fragment with no key URI")
+	}
+}
+
+func TestPrefetchKeyIsFetchedOnceForAdamIDZero(t *testing.T) {
+	var calls atomic.Int32
+	var adamIDs sync.Map
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		adamIDs.Store(r.URL.Query().Get("adamId"), true)
+		time.Sleep(50 * time.Millisecond)
+		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 7})
+	}))
+	c.templates = newTemplateCache(1)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 20)
+	for i := range 20 {
+		wg.Go(func() {
+			session, _ := c.NewDecryptSession(context.Background(), fmt.Sprint(1000+i))
+			_, err := session.DecryptFragment(prefetchKeyURI, [][]byte{make([]byte, 16)})
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Fill the one-entry cache with other keys; the prefetch template stays.
+	session, _ := c.NewDecryptSession(context.Background(), "1")
+	for _, key := range []string{"skd://a", "skd://b", prefetchKeyURI} {
+		if _, err := session.DecryptFragment(key, [][]byte{make([]byte, 16)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := calls.Load(); n != 3 {
+		t.Fatalf("/key calls = %d, want 3: the prefetch key once, then skd://a and skd://b", n)
+	}
+	var got []string
+	adamIDs.Range(func(k, _ any) bool { got = append(got, k.(string)); return true })
+	if _, ok := adamIDs.Load("0"); !ok || len(got) != 2 {
+		t.Fatalf("adamIds sent = %v, want 0 for the prefetch key and 1 for the others", got)
+	}
+}
+
+func TestKeyTemplateRetries(t *testing.T) {
+	ok := func(w http.ResponseWriter) { writeReply(w, 0, "SUCCESS", map[string]any{"xor": 1}) }
 	tests := []struct {
-		name             string
-		insecure         bool
-		securityProtocol string
+		name      string
+		fail      func(w http.ResponseWriter)
+		failures  int // replies that fail before one succeeds
+		wantCalls int
+		wantErr   bool
+		wantCode  int
 	}{
-		{name: "plaintext", insecure: true, securityProtocol: "insecure"},
-		{name: "TLS", insecure: false, securityProtocol: "tls"},
+		{
+			name: "handler exception after a token refresh",
+			fail: func(w http.ResponseWriter) {
+				w.WriteHeader(http.StatusInternalServerError)
+				writeReply(w, 500, "internal error", nil)
+			},
+			failures: 2, wantCalls: 3,
+		},
+		{
+			name:     "proxy error page",
+			fail:     func(w http.ResponseWriter) { http.Error(w, "<html>bad gateway</html>", http.StatusBadGateway) },
+			failures: 1, wantCalls: 2,
+		},
+		{
+			name:     "template not captured",
+			fail:     func(w http.ResponseWriter) { writeReply(w, 0, "SUCCESS", map[string]any{"contentKey": "x"}) },
+			failures: 1, wantCalls: 2,
+		},
+		{
+			name:     "bad request is not retried",
+			fail:     func(w http.ResponseWriter) { writeReply(w, 400, "invalid uri for adamId", nil) },
+			failures: 99, wantCalls: 1, wantErr: true, wantCode: 400,
+		},
+		{
+			name: "gives up after every retry",
+			fail: func(w http.ResponseWriter) {
+				w.WriteHeader(http.StatusInternalServerError)
+				writeReply(w, 500, "internal error", nil)
+			},
+			failures: 99, wantCalls: len(keyRetryDelays) + 1, wantErr: true, wantCode: 500,
+		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			creds := wrapperTransportCredentials(config.WrapperConfig{Insecure: tt.insecure})
-			if got := creds.Info().SecurityProtocol; got != tt.securityProtocol {
-				t.Fatalf("security protocol = %q, want %q", got, tt.securityProtocol)
+			var calls atomic.Int32
+			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if int(calls.Add(1)) <= tt.failures {
+					tt.fail(w)
+					return
+				}
+				ok(w)
+			}))
+			session, _ := c.NewDecryptSession(context.Background(), "1")
+			_, err := session.DecryptFragment("skd://k", [][]byte{make([]byte, 16)})
+			if got := int(calls.Load()); got != tt.wantCalls {
+				t.Fatalf("/key calls = %d, want %d", got, tt.wantCalls)
+			}
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("DecryptFragment: %v", err)
+				}
+				return
+			}
+			var reply *ReplyError
+			if !errors.As(err, &reply) || reply.Code != tt.wantCode || !errors.Is(err, ErrWrapperResponse) {
+				t.Fatalf("error = %v, want a ReplyError with code %d wrapping ErrWrapperResponse", err, tt.wantCode)
 			}
 		})
 	}
+}
+
+func TestFailedTemplateFetchIsNotCached(t *testing.T) {
+	var calls atomic.Int32
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			writeReply(w, 400, "missing uri", nil)
+			return
+		}
+		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 1})
+	}))
+	session, _ := c.NewDecryptSession(context.Background(), "1")
+	if _, err := session.DecryptFragment("skd://k", [][]byte{make([]byte, 16)}); err == nil {
+		t.Fatal("first DecryptFragment succeeded, want the 400 reply")
+	}
+	if _, err := session.DecryptFragment("skd://k", [][]byte{make([]byte, 16)}); err != nil {
+		t.Fatalf("second DecryptFragment: %v", err)
+	}
+	if n := calls.Load(); n != 2 {
+		t.Fatalf("/key calls = %d, want 2", n)
+	}
+}
+
+func TestTemplateCacheEvictsTheLeastRecentlyUsedKey(t *testing.T) {
+	keys := newKeyServer(map[string]int{"skd://a": 1, "skd://b": 2, "skd://c": 3})
+	c := newTestClient(t, keys)
+	c.templates = newTemplateCache(2)
+	session, _ := c.NewDecryptSession(context.Background(), "1")
+	for _, key := range []string{"skd://a", "skd://b", "skd://a", "skd://c", "skd://a", "skd://b"} {
+		if _, err := session.DecryptFragment(key, [][]byte{make([]byte, 16)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := map[string]int{"skd://a": keys.callCount("skd://a"), "skd://b": keys.callCount("skd://b"), "skd://c": keys.callCount("skd://c")}
+	want := map[string]int{"skd://a": 1, "skd://b": 2, "skd://c": 1}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("/key calls = %v, want %v (b evicted when c arrived)", got, want)
+	}
+}
+
+func TestCancelledCallerDoesNotFailOthersWaitingForTheSameKey(t *testing.T) {
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			close(arrived)
+		}
+		<-release
+		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 9})
+	}))
+	plain := []byte("0123456789abcdef")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	first := make(chan error, 1)
+	go func() {
+		session, _ := c.NewDecryptSession(ctx, "1")
+		_, err := session.DecryptFragment("skd://k", [][]byte{encrypt(plain, 9)})
+		first <- err
+	}()
+	<-arrived
+	second := make(chan []byte, 1)
+	go func() {
+		session, _ := c.NewDecryptSession(context.Background(), "2")
+		out, err := session.DecryptFragment("skd://k", [][]byte{encrypt(plain, 9)})
+		if err != nil {
+			t.Errorf("waiting caller: %v", err)
+			second <- nil
+			return
+		}
+		second <- out[0]
+	}()
+	cancel()
+	if err := <-first; !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled caller = %v, want context.Canceled", err)
+	}
+	close(release)
+	if got := <-second; string(got) != string(plain) {
+		t.Fatalf("waiting caller plaintext = %q, want %q", got, plain)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("/key calls = %d, want the one shared fetch", n)
+	}
+}
+
+// wrapper-lite answers /key and /m3u8 one at a time behind one mutex, so the
+// client keeps the rest of a burst waiting on its own side.
+func TestKeyAndM3U8ShareOnePlaybackLimit(t *testing.T) {
+	var inFlight, peak atomic.Int32
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := inFlight.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+		inFlight.Add(-1)
+		writeReply(w, 0, "SUCCESS", map[string]any{"xor": 1, "m3u8": "#EXTM3U"})
+	}))
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			if _, err := c.M3U8(context.Background(), fmt.Sprint(i)); err != nil {
+				t.Error(err)
+			}
+		})
+		wg.Go(func() {
+			session, _ := c.NewDecryptSession(context.Background(), "1")
+			if _, err := session.DecryptFragment(fmt.Sprintf("skd://k%d", i), [][]byte{make([]byte, 16)}); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if p := peak.Load(); p > playbackRequestLimit {
+		t.Fatalf("peak /key + /m3u8 requests in flight = %d, want at most %d", p, playbackRequestLimit)
+	}
+}
+
+func TestStatusReportsLoginThroughRegions(t *testing.T) {
+	tests := []struct {
+		name    string
+		regions any
+		want    Status
+	}{
+		{name: "logged in", regions: []string{"cn"}, want: Status{Ready: true, Status: true, Regions: []string{"cn"}, Accounts: []string{}}},
+		{name: "not logged in", regions: []string{}, want: Status{Ready: true, Status: false, Regions: []string{}, Accounts: []string{}}},
+		{name: "regions missing", regions: nil, want: Status{Ready: true, Status: false, Regions: []string{}, Accounts: []string{}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/status" {
+					t.Errorf("path = %s, want /status", r.URL.Path)
+				}
+				data := map[string]any{}
+				if tt.regions != nil {
+					data["regions"] = tt.regions
+				}
+				writeReply(w, 0, "SUCCESS", data)
+			}))
+			got, err := c.Status(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("Status() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStatusOfAnUnreachableWrapperIsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	address := srv.URL
+	srv.Close()
+	c, err := NewClient(config.WrapperConfig{Address: address, TimeoutSeconds: 5}, WithTemplateParser(parseXOR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Status(context.Background()); err == nil {
+		t.Fatal("Status() of a closed server succeeded")
+	}
+}
+
+func TestFailedRepliesAreReplyErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler http.HandlerFunc
+		want    ReplyError
+	}{
+		{
+			name:    "envelope error",
+			handler: func(w http.ResponseWriter, r *http.Request) { writeReply(w, 404, "failed to get m3u8", nil) },
+			want:    ReplyError{Endpoint: "/m3u8", HTTPStatus: 200, Code: 404, Msg: "failed to get m3u8"},
+		},
+		{
+			name: "unknown route",
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+				writeReply(w, 404, "not found", nil)
+			},
+			want: ReplyError{Endpoint: "/m3u8", HTTPStatus: 404, Code: 404, Msg: "not found"},
+		},
+		{
+			name:    "not an envelope",
+			handler: func(w http.ResponseWriter, r *http.Request) { http.Error(w, "upstream down", http.StatusBadGateway) },
+			want:    ReplyError{Endpoint: "/m3u8", HTTPStatus: 502, Msg: "upstream down\n"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := newTestClient(t, tt.handler)
+			_, err := c.M3U8(context.Background(), "1")
+			var reply *ReplyError
+			if !errors.As(err, &reply) || !errors.Is(err, ErrWrapperResponse) {
+				t.Fatalf("M3U8() error = %v, want a ReplyError wrapping ErrWrapperResponse", err)
+			}
+			if *reply != tt.want {
+				t.Fatalf("ReplyError = %#v, want %#v", *reply, tt.want)
+			}
+		})
+	}
+}
+
+func TestLyricsSendsItsParametersAsGiven(t *testing.T) {
+	tests := []struct {
+		name string
+		opts LyricsRequestOptions
+		want url.Values
+	}{
+		{
+			name: "all set",
+			opts: LyricsRequestOptions{Language: "ja", Syllable: true, Script: "ja-Latn"},
+			want: url.Values{"adamId": {"42"}, "language": {"ja"}, "syllable": {"1"}, "script": {"ja-Latn"}},
+		},
+		{
+			name: "defaults left to the wrapper except syllable",
+			opts: LyricsRequestOptions{},
+			want: url.Values{"adamId": {"42"}, "syllable": {"0"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got url.Values
+			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.URL.Query()
+				writeReply(w, 0, "SUCCESS", map[string]any{"lyrics": "<tt/>"})
+			}))
+			lyrics, err := c.Lyrics(context.Background(), "42", tt.opts)
+			if err != nil || lyrics != "<tt/>" {
+				t.Fatalf("Lyrics() = (%q, %v), want <tt/>", lyrics, err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("query = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPlaybackManifestsAndLicense(t *testing.T) {
+	var license map[string]string
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/m3u8":
+			writeReply(w, 0, "SUCCESS", map[string]any{"adamId": r.URL.Query().Get("adamId"), "m3u8": "device-" + r.URL.Query().Get("adamId")})
+		case "/webplayback":
+			writeReply(w, 0, "SUCCESS", map[string]any{"m3u8": "web-" + r.URL.Query().Get("adamId")})
+		case "/license":
+			raw, _ := io.ReadAll(r.Body)
+			if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" || json.Unmarshal(raw, &license) != nil {
+				writeReply(w, 400, "invalid JSON body", nil)
+				return
+			}
+			writeReply(w, 0, "SUCCESS", map[string]any{"license": "TElD", "renew": 0})
+		}
+	}))
+	ctx := context.Background()
+	if got, err := c.M3U8(ctx, "7"); err != nil || got != "device-7" {
+		t.Fatalf("M3U8() = (%q, %v)", got, err)
+	}
+	if got, err := c.WebPlayback(ctx, "7"); err != nil || got != "web-7" {
+		t.Fatalf("WebPlayback() = (%q, %v)", got, err)
+	}
+	got, err := c.License(ctx, "7", "Q0hBTA==", "data:;base64,AAAA")
+	if err != nil || got != "TElD" {
+		t.Fatalf("License() = (%q, %v)", got, err)
+	}
+	if want := map[string]string{"adamId": "7", "challenge": "Q0hBTA==", "uri": "data:;base64,AAAA"}; !reflect.DeepEqual(license, want) {
+		t.Fatalf("license body = %v, want %v", license, want)
+	}
+}
+
+func TestLoginIsUnsupported(t *testing.T) {
+	c := newTestClient(t, http.NotFoundHandler())
+	ctx := context.Background()
+	_, startErr := c.StartLogin(ctx, "user", "pass")
+	_, codeErr := c.SubmitTwoStepCode(ctx, "id", "123456")
+	logoutErr := c.Logout(ctx, "user")
+	for name, err := range map[string]error{"StartLogin": startErr, "SubmitTwoStepCode": codeErr, "Logout": logoutErr} {
+		if !errors.Is(err, ErrLoginUnsupported) {
+			t.Errorf("%s() = %v, want ErrLoginUnsupported", name, err)
+		}
+	}
+}
+
+func TestNewClientRejects(t *testing.T) {
+	tests := []struct {
+		name    string
+		address string
+		parse   TemplateParser
+	}{
+		{name: "host:port", address: "127.0.0.1:8080", parse: parseXOR},
+		{name: "other scheme", address: "grpc://127.0.0.1:8080", parse: parseXOR},
+		{name: "no host", address: "http://", parse: parseXOR},
+		{name: "no template parser", address: "http://127.0.0.1:12340", parse: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if c, err := NewClient(config.WrapperConfig{Address: tt.address}, WithTemplateParser(tt.parse)); err == nil {
+				_ = c.Close()
+				t.Fatal("NewClient() succeeded")
+			}
+		})
+	}
+}
+
+func TestSplitSamples(t *testing.T) {
+	sizes := func(chunks [][][]byte) []int {
+		var out []int
+		for _, chunk := range chunks {
+			out = append(out, len(chunk))
+		}
+		return out
+	}
+	samples := func(n, size int) [][]byte {
+		out := make([][]byte, n)
+		for i := range out {
+			out[i] = make([]byte, size)
+		}
+		return out
+	}
+	tests := []struct {
+		name    string
+		samples [][]byte
+		parts   int
+		want    []int // samples per chunk
+	}{
+		{name: "even split", samples: samples(8, 64<<10), parts: 4, want: []int{2, 2, 2, 2}},
+		{name: "fewer samples than parts", samples: samples(3, 64<<10), parts: 8, want: []int{1, 1, 1}},
+		{name: "too little data to split", samples: samples(40, 1<<10), parts: 8, want: []int{40}},
+		{name: "one worker", samples: samples(8, 64<<10), parts: 1, want: []int{8}},
+		{name: "chunks of at least minChunkBytes", samples: samples(16, 8<<10), parts: 8, want: []int{4, 4, 4, 4}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sizes(splitSamples(tt.samples, tt.parts)); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("chunk sizes = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSamplePoolDecryptsEverySampleInPlace(t *testing.T) {
+	pool := newSamplePool(4)
+	var wg sync.WaitGroup
+	for round := range 8 {
+		wg.Go(func() {
+			x := byte(round + 1)
+			plain := make([][]byte, 300)
+			cipher := make([][]byte, len(plain))
+			for i := range plain {
+				plain[i] = make([]byte, (i*733+round*97)%9000)
+				for j := range plain[i] {
+					plain[i][j] = byte(i + j)
+				}
+				cipher[i] = encrypt(plain[i], x)
+			}
+			pool.decrypt(xorTemplate(x), cipher)
+			for i := range plain {
+				if string(cipher[i]) != string(plain[i]) {
+					t.Errorf("round %d sample %d (%d bytes) not decrypted", round, i, len(plain[i]))
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
 }

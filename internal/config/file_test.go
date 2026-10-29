@@ -195,13 +195,13 @@ func TestStoreUpdateAndSavePersistsOnlyRuntimeFields(t *testing.T) {
 func TestStoreReloadAppliesOnlyRuntimeFieldsAndKeepsLastGoodSnapshot(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	base := Default()
-	base.Wrapper.Address = "running-wrapper:8080"
+	base.Wrapper.Address = "http://running-wrapper:12340"
 	base.Download.MaxRunningJobs = maxRunningJobsLimit
 	writeFullConfig(t, path, base)
 	store := NewFileStore(base, path)
 
 	edited := base
-	edited.Wrapper.Address = "next-restart-wrapper:8080"
+	edited.Wrapper.Address = "http://next-restart-wrapper:12340"
 	edited.Download.MaxRunningJobs = 1
 	edited.Download.CoverFormat = "png"
 	edited.Catalog.AlbumTrackURLMode = "album"
@@ -214,7 +214,7 @@ func TestStoreReloadAppliesOnlyRuntimeFieldsAndKeepsLastGoodSnapshot(t *testing.
 	if got.Download.CoverFormat != "png" || got.Catalog.AlbumTrackURLMode != "album" || got.Logging.Level != "debug" {
 		t.Fatalf("runtime edits not reloaded: %+v", got)
 	}
-	if got.Wrapper.Address != "running-wrapper:8080" || got.Download.MaxRunningJobs != maxRunningJobsLimit {
+	if got.Wrapper.Address != "http://running-wrapper:12340" || got.Download.MaxRunningJobs != maxRunningJobsLimit {
 		t.Fatalf("startup edits became live: wrapper=%q max_running_jobs=%d", got.Wrapper.Address, got.Download.MaxRunningJobs)
 	}
 
@@ -224,7 +224,7 @@ func TestStoreReloadAppliesOnlyRuntimeFieldsAndKeepsLastGoodSnapshot(t *testing.
 	if err := store.Reload(); err == nil {
 		t.Fatal("expected reload error for broken config")
 	}
-	if after := store.Get(); after.Download.CoverFormat != "png" || after.Wrapper.Address != "running-wrapper:8080" {
+	if after := store.Get(); after.Download.CoverFormat != "png" || after.Wrapper.Address != "http://running-wrapper:12340" {
 		t.Fatalf("failed reload changed snapshot: %+v", after)
 	}
 	if err := NewStore(Default()).Reload(); err != nil {
@@ -380,7 +380,7 @@ func TestStoreSaveDoesNotPersistStartupEnvironmentOverride(t *testing.T) {
 // its own values so unsetting the variables restores file control.
 func TestStoreSaveDoesNotBakeEnvOverrides(t *testing.T) {
 	t.Setenv("AMDL_DATABASE_PATH", "/env/amdl.db")
-	t.Setenv("AMDL_WRAPPER_ADDRESS", "wrapper-manager:8080")
+	t.Setenv("AMDL_WRAPPER_ADDRESS", "http://wrapper:12340")
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	writeFullConfig(t, path, Default())
 

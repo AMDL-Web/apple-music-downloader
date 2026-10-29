@@ -156,6 +156,7 @@ func TestLoadRejectsUnknownKeysNamingThemAndTheUpgradeGuide(t *testing.T) {
 				"download.max_parallel_media_downloads, download.max_parallel_metadata_requests, download.max_parallel_tracks",
 			},
 		},
+		{name: "removed wrapper TLS switch", body: "wrapper:\n  insecure: true\n", want: []string{"wrapper.insecure"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -248,6 +249,24 @@ func TestValidateCoverSize(t *testing.T) {
 		cfg.Download.CoverSize = size
 		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "download.cover_size ") {
 			t.Errorf("Validate() with cover_size %q = %v, want a download.cover_size error", size, err)
+		}
+	}
+}
+
+func TestValidateWrapperAddress(t *testing.T) {
+	for _, address := range []string{"http://127.0.0.1:12340", "https://wrapper.example.com", "http://wrapper:12340/lite"} {
+		cfg := Default()
+		cfg.Wrapper.Address = address
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() rejected wrapper.address %q: %v", address, err)
+		}
+	}
+	for _, address := range []string{"", "127.0.0.1:8080", "wrapper:8080", "grpc://127.0.0.1:8080", "ftp://wrapper", "http://", "/lite"} {
+		cfg := Default()
+		cfg.Wrapper.Address = address
+		err := cfg.Validate()
+		if err == nil || !strings.HasPrefix(err.Error(), "wrapper.address ") || !strings.Contains(err.Error(), UpgradeGuide) {
+			t.Errorf("Validate() with wrapper.address %q = %v, want a wrapper.address error naming %s", address, err, UpgradeGuide)
 		}
 	}
 }

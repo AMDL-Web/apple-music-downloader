@@ -165,7 +165,7 @@ curl http://localhost:18080/api/v1/wrapper/status
 ```
 
 Returns `ready`, `status`, `regions` and `accounts` (the logged-in account identifiers,
-`[]` when none). The gRPC connection is lazy — the backend starts fine without
+`[]` when none). The backend does not contact the wrapper at startup, so it starts fine without
 a reachable wrapper, and this endpoint is how you verify connectivity; an unreachable
 wrapper is `503 wrapper_unavailable`.
 

@@ -20,7 +20,7 @@ git diff -U0 origin/dev -- '*.go' | rg '^\+.*//'
 
 `make dev` (or the `amdl-dev` entry in `.claude/launch.json`) serves the API on
 `127.0.0.1:18080` in simulate mode: real catalog lookups and media selection,
-simulated transfer and decryption, no wrapper-manager, nothing written to the
+simulated transfer and decryption, no wrapper, nothing written to the
 library. Config and database live under `data/dev/`, and the config is recreated
 from the example on each start. It needs network access to Apple.
 
@@ -46,7 +46,7 @@ ends `completed`. Adapt it to the change:
 - Stats are cached for `internal/api#statsCacheTTL`.
 - A new route: valid and invalid input, compared with `internal/api/openapi.yaml`.
 
-Real downloads, decryption, lyrics and wrapper login need wrapper-manager; without
+Real downloads, decryption, lyrics and wrapper login need a logged-in wrapper; without
 it they are SKIPPED, never assumed. Stop the server afterwards with Ctrl-C, or
 `kill $(lsof -ti tcp:18080)` for a background run, because killing `make` leaves
 the `go run` child listening.
@@ -67,7 +67,7 @@ Verified <what> at <short sha>.
 | --- | --- | --- |
 | make check | PASS | exit 0 |
 | live: album job in simulate mode | PASS | job_finished id 1290, status completed |
-| real download | SKIPPED | no wrapper-manager here |
+| real download | SKIPPED | no wrapper here |
 
 Not verified: <each gap and why>.
 ```

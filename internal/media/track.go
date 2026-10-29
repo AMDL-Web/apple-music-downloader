@@ -326,7 +326,7 @@ func (r *trackRun) fetchLyrics(ctx context.Context) error {
 	attempts := clampAttempts(r.maxAttempts())
 	raw, lyricsAttempts, err := retryValue(ctx, r.maxAttempts(), retryBackoff, func(attempt int) (string, error) {
 		d.setItemAttempt(ctx, r.reporter, item, "lyrics", attempt, attempts, fmt.Sprintf("Fetching lyrics (%d/%d)", attempt, attempts))
-		return r.media.lyrics(ctx, r.song.ID, lyricsRequest(d.cfg, r.target.storefront))
+		return r.media.lyrics(ctx, r.song.ID, lyricsRequest(d.cfg))
 	}, func(failure retryFailure) {
 		d.setRetryFailure(ctx, r.reporter, item, "lyrics", "lyrics", failure)
 		d.emitRetryEvent(ctx, r.reporter, r.job.ID, item, "lyrics", "", failure)

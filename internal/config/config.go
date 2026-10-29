@@ -1,6 +1,7 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"time"
 )
@@ -67,10 +68,10 @@ type LoggingConfig struct {
 	BufferSize int    `yaml:"buffer_size" json:"buffer_size"`
 }
 
-// WrapperConfig is the wrapper-manager gRPC connection.
+// WrapperConfig is the wrapper-lite connection. Address is an http:// or
+// https:// URL; https uses TLS 1.2+ and verifies the certificate.
 type WrapperConfig struct {
 	Address             string `yaml:"address" json:"address"`
-	Insecure            bool   `yaml:"insecure" json:"insecure"`
 	TimeoutSeconds      int    `yaml:"timeout_seconds" json:"timeout_seconds"`
 	LoginTimeoutSeconds int    `yaml:"login_timeout_seconds" json:"login_timeout_seconds"`
 }
@@ -84,8 +85,8 @@ func (c WrapperConfig) LoginTimeout() time.Duration {
 	return time.Duration(c.LoginTimeoutSeconds) * time.Second
 }
 
-// Timeout bounds a wrapper unary RPC and each decrypt-fragment wait; values
-// <= 0 fall back to 30 seconds.
+// Timeout bounds one wrapper HTTP request; values <= 0 fall back to 30
+// seconds.
 func (c WrapperConfig) Timeout() time.Duration {
 	if c.TimeoutSeconds <= 0 {
 		return 30 * time.Second
@@ -201,18 +202,21 @@ const (
 // max_parallel_downloads and catalog.max_parallel_requests they are not keys:
 // one install has no reason to tune them.
 const (
-	// MaxParallelDecrypts bounds media decrypt operations in flight across
-	// all jobs.
-	MaxParallelDecrypts = 32
-	// MaxParallelWrapperRequests bounds wrapper-manager data RPCs (M3U8,
-	// lyrics, web playback, license) across all jobs; login and logout are
-	// exempt, and decrypt streams are bounded by MaxParallelDecrypts instead.
+	// MaxParallelWrapperRequests bounds wrapper lyrics, web playback and
+	// license requests across all jobs. /key and /m3u8 have their own, smaller
+	// bound in internal/wrapper.
 	MaxParallelWrapperRequests = 24
 	// CatalogRequestsPerSecond and CatalogRequestBurst are the token bucket
 	// shared by authenticated Catalog API and amp-api requests.
 	CatalogRequestsPerSecond = 10
 	CatalogRequestBurst      = 16
 )
+
+// MaxParallelDecrypts bounds the tracks in the decrypt stage across all jobs,
+// and the goroutines decrypting their samples. Decryption is CPU-bound and runs
+// in this process, so it is the number of CPUs Go uses (GOMAXPROCS, which
+// follows a container's CPU limit), read once at startup.
+var MaxParallelDecrypts = runtime.GOMAXPROCS(0)
 
 // ToolsConfig locates external executables.
 type ToolsConfig struct {
@@ -239,7 +243,7 @@ func Default() Config {
 		Database: DatabaseConfig{Path: "data/db/amdl.db"},
 		Logging:  LoggingConfig{Level: "info", Console: true, AccessLog: false, BufferSize: 2000},
 		Wrapper: WrapperConfig{
-			Address: "127.0.0.1:8080", Insecure: true, TimeoutSeconds: 30, LoginTimeoutSeconds: 120,
+			Address: "http://127.0.0.1:12340", TimeoutSeconds: 30, LoginTimeoutSeconds: 120,
 		},
 		Catalog: CatalogConfig{
 			DefaultStorefront: "cn", Language: "zh-Hans_CN",

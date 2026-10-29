@@ -8,10 +8,10 @@ import (
 )
 
 func TestEnvOverrides(t *testing.T) {
-	path := writeConfig(t, "wrapper:\n  address: \"10.0.0.1:8080\"\n")
+	path := writeConfig(t, "wrapper:\n  address: \"http://10.0.0.1:12340\"\n")
 	cfg, err := load(path, []string{
 		"AMDL_SERVER_LISTEN=:19090",
-		"AMDL_WRAPPER_ADDRESS=wrapper-manager:8080",
+		"AMDL_WRAPPER_ADDRESS=http://wrapper:12340",
 		"AMDL_DATABASE_PATH=/srv/amdl/amdl.db",
 		"AMDL_CONFIG=/etc/amdl/config.yaml",
 		"AMDL_HOOKS_CONFIG=/etc/amdl/hooks.yaml",
@@ -24,7 +24,7 @@ func TestEnvOverrides(t *testing.T) {
 		t.Fatalf("listen = %q, want env override", cfg.Server.Listen)
 	}
 	// The environment wins over an explicit file value.
-	if cfg.Wrapper.Address != "wrapper-manager:8080" {
+	if cfg.Wrapper.Address != "http://wrapper:12340" {
 		t.Fatalf("wrapper address = %q, want env override over file value", cfg.Wrapper.Address)
 	}
 	if cfg.Database.Path != "/srv/amdl/amdl.db" {
@@ -93,9 +93,9 @@ func TestEnvOverridesTargetOnlyStartupKeys(t *testing.T) {
 // the overlay is re-applied on every load, and baking it into the file would
 // keep the value even after the variable is unset.
 func TestBootstrapDoesNotBakeEnvOverrides(t *testing.T) {
-	t.Setenv("AMDL_WRAPPER_ADDRESS", "wrapper-manager:8080")
+	t.Setenv("AMDL_WRAPPER_ADDRESS", "http://wrapper:12340")
 	dir := t.TempDir()
-	example := "wrapper:\n  address: \"127.0.0.1:8080\"\n"
+	example := "wrapper:\n  address: \"http://127.0.0.1:12340\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.example.yaml"), []byte(example), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestBootstrapDoesNotBakeEnvOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Wrapper.Address != "wrapper-manager:8080" {
+	if cfg.Wrapper.Address != "http://wrapper:12340" {
 		t.Fatalf("loaded wrapper address = %q, want env overlay on top of the file", cfg.Wrapper.Address)
 	}
 }

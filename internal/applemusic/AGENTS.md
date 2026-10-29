@@ -22,4 +22,4 @@ go test ./internal/applemusic/
 ```
 
 Live behavior needs network access to Apple: `make dev` and a submitted album, or a
-`POST /api/v1/quality` probe, exercise both hosts without wrapper-manager.
+`POST /api/v1/quality` probe, exercise both hosts without a wrapper.

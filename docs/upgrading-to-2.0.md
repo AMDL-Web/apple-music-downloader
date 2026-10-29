@@ -28,6 +28,11 @@ needs the API changes below before it works against 2.0.
 6. Give the container time to stop: `stop_grace_period: 2m` in Compose or
    `--stop-timeout 120` with `docker run`. Interrupted jobs now resume on the next start
    instead of being cancelled.
+7. Replace wrapper-manager with
+   [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite), logged in
+   with its `--login`, and set `wrapper.address` (or `AMDL_WRAPPER_ADDRESS`) to its URL,
+   such as `http://127.0.0.1:12340`. 2.0 no longer speaks wrapper-manager's gRPC and
+   decrypts media itself; see [Wrapper](#wrapper).
 
 ## HTTP API
 
@@ -90,9 +95,10 @@ needs the API changes below before it works against 2.0.
   `logging.file_path`, `logging.max_size_mb`, `logging.max_backups`,
   `logging.max_age_days` and `logging.compress` are rejected in the file; delete them and
   collect stdout (`docker logs`) to keep logs. The `./data/logs` mount is no longer used.
-- `catalog.requests_per_second` (10), `catalog.request_burst` (16),
-  `download.max_parallel_decrypts` (32) and `download.max_parallel_wrapper_requests` (24)
-  are fixed at those values and rejected in the file; delete them.
+- `catalog.requests_per_second` (10), `catalog.request_burst` (16) and
+  `download.max_parallel_wrapper_requests` (24) are fixed at those values, and
+  `download.max_parallel_decrypts` at the number of CPUs the backend uses (`GOMAXPROCS`,
+  which follows a container CPU limit). All four are rejected in the file; delete them.
   `catalog.max_parallel_requests`, `download.max_parallel_downloads` and
   `download.max_running_jobs` remain keys.
 - `catalog.developer_token_ttl_hours` and `catalog.allowed_origins` configured the removed
@@ -106,6 +112,7 @@ needs the API changes below before it works against 2.0.
 
   | Key | 1.x default | 2.0 default |
   | --- | --- | --- |
+  | `wrapper.address` | `127.0.0.1:8080` | `http://127.0.0.1:12340` |
   | `catalog.default_storefront` | `us` | `cn` |
   | `catalog.language` | `en-US` | `zh-Hans_CN` |
   | `download.quality_priority` | `[alac, aac]` | `[alac]` |
@@ -126,6 +133,15 @@ needs the API changes below before it works against 2.0.
   was ever written outside it, but the result never matched the intent. 2.0 fails
   startup and `PUT /config` (`422 invalid_config`) on them. Fix the template to a
   relative path.
+
+## Wrapper
+
+| Area | 1.x | 2.0 | Affects |
+| --- | --- | --- | --- |
+| Wrapper service | wrapper-manager over gRPC; it decrypted samples | wrapper-lite over HTTP; it returns a key template per key URI and the backend decrypts | deployments |
+| `wrapper.address` | gRPC `host:port` | wrapper-lite URL, `http://host:port` or `https://host:port`; anything else, in the file or in `AMDL_WRAPPER_ADDRESS`, fails startup | `config.yaml`, Compose files |
+| `wrapper.insecure` | `true` for plaintext gRPC, `false` for TLS | rejected in the file; the URL scheme picks plaintext (`http`) or TLS 1.2+ (`https`) | `config.yaml` |
+| `wrapper.timeout_seconds` | bound on a unary RPC and on each decrypt-fragment wait | bound on one wrapper HTTP request; decryption has no wrapper timeout | `config.yaml` |
 
 ## Hooks
 

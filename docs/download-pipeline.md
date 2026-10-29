@@ -109,20 +109,23 @@ from zero rather than mixing two representations.
 All pools are process-wide, shared across every job, sized at startup, and not shared
 between backend replicas. The three config keys need a restart to change; the rest are
 fixed sizes in `internal/config` (`MaxParallelDecrypts`, `MaxParallelWrapperRequests`,
-`CatalogRequestsPerSecond`, `CatalogRequestBurst`).
+`CatalogRequestsPerSecond`, `CatalogRequestBurst`) and `internal/wrapper`
+(`playbackRequestLimit`).
 
 | Pool | Size | Bounds |
 | --- | ---: | --- |
 | `download.max_running_jobs` | 3 (default) | Worker slots — concurrently running jobs |
 | `download.max_parallel_downloads` | 16 (default) | Encrypted media transfers in flight |
-| Decrypts | 32 | Decrypt operations in flight |
-| Wrapper requests | 24 | Wrapper data RPCs — M3U8, lyrics, web playback, license |
+| Decrypts | CPUs (`GOMAXPROCS`) | Tracks in the decrypt stage, and the goroutines decrypting their samples |
+| Wrapper requests | 24 | Wrapper lyrics, web playback and license requests |
+| Wrapper playback requests | 2 | Wrapper `/key` and `/m3u8`, which wrapper-lite answers one at a time |
 | `catalog.max_parallel_requests` | 16 (default) | Apple control-plane HTTP: Catalog API, web token, HLS manifests, artwork |
 | Catalog rate | 10 per second | Sustained authenticated Catalog / amp-api rate |
 | Catalog burst | 16 | Token-bucket burst for the same traffic |
 
-Wrapper login and logout are exempt from the wrapper request pool so operator access is
-never starved; decrypt streams are bounded by the decrypt pool instead.
+Decryption runs in the backend: wrapper-lite's `/key` returns a white-box template per
+key URI, which is cached across jobs (`templateCacheSize` entries; the prefetch key's
+template is kept for the life of the process), so each key costs one `/key` request.
 Media already downloaded but not yet decrypted is additionally held back by internal
 in-flight backpressure — with `D` download and `X` decrypt permits the internal in-flight
 ceiling is `D+X`.

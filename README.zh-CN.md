@@ -236,7 +236,7 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 | 任务怎么排队、运行、取消和重试？ | `internal/jobs#Manager` |
 | 一首曲目怎么下载、解密、重封装和写标签？ | `internal/media#Downloader` |
 | 请求由哪个 Apple 主机应答？ | `internal/applemusic#CatalogClient.apiBase`、`internal/applemusic#CatalogClient.doWithWebAuth` |
-| 后端怎么和 wrapper-manager 通信？ | `internal/wrapper#Client` |
+| 后端怎么和 wrapper 通信？ | `internal/wrapper#Client` |
 | 任务存在哪里，表结构怎么迁移？ | `internal/db#Store` |
 | 配置怎么加载和校验？ | `internal/config#Load`、`internal/config#Config.Validate` |
 | 任务 hooks 发出什么？ | `internal/hooks#Dispatcher` |

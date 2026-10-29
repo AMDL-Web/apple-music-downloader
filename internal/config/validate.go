@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,6 +20,16 @@ var coverSizePattern = regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`)
 // a typo the user meant differently. Unknown "{Variable}" names without a spec
 // are allowed: they are kept literally on purpose.
 var formatSpecPattern = regexp.MustCompile(`\{[A-Za-z]+:([^}]*)\}`)
+
+// validateWrapperAddress requires the URL wrapper-lite listens on, so a bare
+// host:port fails at startup instead of on the first download.
+func validateWrapperAddress(address string) error {
+	u, err := url.Parse(address)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("wrapper.address must be an http:// or https:// URL such as http://127.0.0.1:12340, got %q (see %s)", address, UpgradeGuide)
+	}
+	return nil
+}
 
 // validatePathFormat checks one *_path_format template beyond non-emptiness.
 // Each segment is sanitized independently at expansion time, so an absolute
@@ -64,6 +75,9 @@ func (c Config) Validate() error {
 	}
 	if c.Logging.BufferSize < 0 || c.Logging.BufferSize > maxLogBufferSize {
 		return fmt.Errorf("logging.buffer_size must be between 0 and %d", maxLogBufferSize)
+	}
+	if err := validateWrapperAddress(c.Wrapper.Address); err != nil {
+		return err
 	}
 	if c.Catalog.AlbumTrackURLMode != "song" && c.Catalog.AlbumTrackURLMode != "album" {
 		return fmt.Errorf("catalog.album_track_url_mode must be song or album")
