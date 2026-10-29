@@ -2343,8 +2343,10 @@
 }
 
 /* Fields: grouped rows whose hairlines start at the text and run to the
-   card's right edge (the keyline of every other grouped list here). */
+   card's right edge (the keyline of every other grouped list here), and so
+   do the lines between Advanced's groups. */
 :root[data-skin="music"] .field,
+:root[data-skin="music"] .settings-group,
 :root[data-skin="music"] .settings-panel,
 :root[data-skin="music"] .account-block + .account-block,
 :root[data-skin="music"] :is(.settings-panel, .account-block) > .kv > .kv-row {

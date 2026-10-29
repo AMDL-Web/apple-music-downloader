@@ -20,20 +20,21 @@ test('an Apple Music link offers to download it, first', () => {
 
 test('Settings sections and fields are findable by label, id, key and what their panels do', () => {
   const sectionOf = (q) => paletteItems(q).filter((it) => it.group === 'Settings').map((it) => [it.label, parseHash(it.hash).params.section]);
-  assert.deepEqual(sectionOf('logging')[0], ['Settings: Logging', 'logging']);
-  assert.ok(sectionOf('files').some(([l, s]) => l === 'Settings: Files and paths' && s === 'files'));
+  assert.deepEqual(sectionOf('logging')[0], ['Settings: Logging', 'logging'], 'an Advanced group opens Advanced at it');
+  assert.ok(sectionOf('files').some(([l, s]) => l === 'Settings: Files & naming' && s === 'files'));
+  assert.ok(sectionOf('quality').some(([l, s]) => l === 'Settings: Quality & downloads' && s === 'quality'));
   assert.ok(sectionOf('reload').some(([, s]) => s === 'config_file'), 'Reload from file lives in Configuration file');
-  const attempts = paletteItems('max_attempts').find((it) => it.label === 'Attempts per step');
+  const attempts = paletteItems('download.max_attempts').find((it) => it.label === 'Tries per file');
   assert.ok(attempts, 'a field is found by its config key');
-  assert.equal(parseHash(attempts.hash).params.section, 'downloads');
-  assert.match(attempts.sub, /download\.max_attempts/);
+  assert.equal(parseHash(attempts.hash).params.section, 'advanced');
+  assert.equal(attempts.sub, 'Advanced › Downloading', 'the key is searchable but not shown');
   assert.ok(paletteItems('cover').some((it) => it.label === 'Cover size'));
 });
 
 test('the empty palette keeps its short list', () => {
   const items = paletteItems('');
   const settings = items.filter((it) => it.group === 'Settings').map((it) => it.label);
-  assert.deepEqual(settings, ['Settings: Apple Music account', 'Settings: Library sync']);
+  assert.deepEqual(settings, ['Settings: Account', 'Settings: Library sync']);
   assert.ok(labels(items).includes('Use dark theme'));
 });
 
@@ -61,7 +62,7 @@ test('a Settings field result names its field, so the page can focus it', () => 
   const attempts = paletteItems('attempts').find((it) => it.id === 'field-download.max_attempts');
   assert.equal(attempts.field, 'download.max_attempts');
   const route = parseHash(attempts.hash);
-  assert.equal(route.params.section, 'downloads');
+  assert.equal(route.params.section, 'advanced');
   assert.equal(settingsField(route.params), 'download.max_attempts');
   assert.equal(settingsField({ field: 'Bad Value' }), '');
   assert.equal(settingsField({}), '');
@@ -78,6 +79,9 @@ test('parallel and concurrency find where worker pools live, and template finds 
   const templates = paletteItems('template').filter((it) => it.field);
   assert.ok(templates.length >= 5, 'every path template field answers to "template"');
   assert.ok(templates.every((it) => it.field.endsWith('_path_format')));
-  assert.ok(paletteItems('retries').some((it) => it.field === 'download.max_attempts'));
+  const retries = paletteItems('retries').find((it) => it.group === 'Settings');
+  assert.equal(retries.field, 'download.max_attempts', 'the field is the first Settings result');
+  assert.equal(retries.label, 'Tries per file');
+  assert.equal(parseHash(retries.hash).params.section, 'advanced');
   assert.ok(paletteItems('folder').some((it) => it.field === 'download.downloads_dir'));
 });

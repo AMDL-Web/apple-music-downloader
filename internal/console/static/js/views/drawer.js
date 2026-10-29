@@ -267,7 +267,7 @@ let downloadsDir; // the configured downloads folder, read once per page load; n
 /**
  * Where a finished job's files are. The job carries no path, so the drawer
  * names the downloads folder from GET /config and links to Settings > Files
- * and paths, where the name templates under it are set.
+ * & naming, where the name templates under it are set.
  */
 function SavedTo() {
   const [dir, setDir] = useState(downloadsDir);
@@ -290,7 +290,7 @@ function SavedTo() {
   return html`<p class="drawer-files">
     <span class="drawer-files-label">Saved to</span>
     ${dir ? html`<code class="drawer-files-dir mono" title=${dir}>${dir}</code>` : html`<span>the downloads folder</span>`}
-    <a class="drawer-files-link" href=${settingsHash('files')}>Files and paths</a>
+    <a class="drawer-files-link" href=${settingsHash('files')}>Files & naming</a>
   </p>`;
 }
 

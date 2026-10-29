@@ -6,7 +6,10 @@ import {
   FIELD_KEYS,
   NOT_EDITED,
   BY_KEY,
+  SETTINGS_GROUPS,
   sectionById,
+  groupById,
+  valueLabel,
 } from '../static/js/lib/settings.js';
 import {
   flattenConfig,
@@ -47,18 +50,44 @@ const CONFIG = {
 
 test('sections and fields: every field names a section, keys are unique dotted literals', () => {
   const ids = new Set(SETTINGS_SECTIONS.map((s) => s.id));
-  assert.ok(ids.has('account') && ids.has('library_sync'), 'the palette links to account and library_sync');
-  for (const id of ids) assert.match(id, /^[a-z][a-z0-9_]*$/, 'settingsSection accepts the id');
+  assert.deepEqual(
+    SETTINGS_SECTIONS.map((s) => s.label),
+    ['Account', 'Quality & downloads', 'Files & naming', 'Lyrics & artwork', 'Advanced'],
+  );
+  for (const id of [...ids, ...SETTINGS_GROUPS.map((g) => g.id)]) assert.match(id, /^[a-z][a-z0-9_]*$/, 'settingsSection accepts the id');
   assert.equal(new Set(FIELD_KEYS).size, FIELD_KEYS.length);
   for (const f of FIELDS) {
     assert.ok(ids.has(f.section), `${f.key} names an unknown section`);
     assert.match(f.key, /^[a-z_]+\.[a-z0-9_]+$/);
     assert.ok(f.label && f.help, `${f.key} has a label and help`);
+    assert.ok(!/Default:/.test(f.help), `${f.key}: the default lives in defaultValue, not the help`);
+    assert.ok(!/[.;] .*[.;] /.test(f.help), `${f.key}: the help is one short line`);
+    assert.equal(Boolean(f.group), f.section === 'advanced', `${f.key}: only Advanced fields name a group`);
+    if (f.group) assert.ok(groupById(f.group), `${f.key} names an unknown group`);
     if (f.type === 'select' || f.type === 'list' || f.type === 'set') assert.ok(f.options.length > 0, `${f.key} has options`);
   }
   assert.deepEqual(NOT_EDITED, {});
-  assert.equal(sectionById('nope').id, 'downloads');
+  assert.equal(sectionById('nope').id, 'account', 'the first section');
   assert.equal(sectionById('account').id, 'account');
+});
+
+test('retired section ids and fields open the section that holds them now', () => {
+  for (const [old, now] of [['downloads', 'quality'], ['artwork', 'lyrics_artwork'], ['lyrics', 'lyrics_artwork'], ['catalog', 'account'], ['library_sync', 'advanced'], ['logging', 'advanced'], ['simulate', 'advanced'], ['config_file', 'advanced'], ['files', 'files']]) {
+    assert.equal(sectionById(old).id, now, old);
+  }
+  // A field wins over the section named next to it (old links and bookmarks).
+  assert.equal(sectionById('catalog', 'catalog.media_user_token').id, 'account');
+  assert.equal(sectionById('downloads', 'download.max_attempts').id, 'advanced');
+  assert.equal(sectionById('catalog', 'catalog.album_track_url_mode').id, 'quality');
+  assert.equal(sectionById('quality', 'not.a_key').id, 'quality');
+});
+
+test('valueLabel words a value the way the page shows it', () => {
+  assert.equal(valueLabel(BY_KEY.get('download.codec_alternative'), false), 'Off');
+  assert.equal(valueLabel(BY_KEY.get('download.alac_max_sample_rate'), 192000), '192 kHz');
+  assert.equal(valueLabel(BY_KEY.get('download.quality_priority'), ['alac', 'ec3']), 'ALAC (lossless), Dolby Atmos (E-AC-3)');
+  assert.equal(valueLabel(BY_KEY.get('download.lyrics_extras'), []), 'None');
+  assert.equal(valueLabel(BY_KEY.get('download.progress_event_interval_ms'), 500), '500 ms');
 });
 
 test('flattenConfig and changedKeys', () => {
@@ -204,12 +233,20 @@ test('draftAfterSave keeps only what changed while the save ran', () => {
 const EXAMPLE = readFileSync(new URL('../../../configs/config.example.yaml', import.meta.url), 'utf8');
 const exampleValue = (name) => new RegExp(`^  ${name}: "(.*)"$`, 'm').exec(EXAMPLE)?.[1];
 
-test('every field states its default, and the path defaults match config.example.yaml', () => {
-  // The token's help says "Empty means none".
-  const exempt = new Set(['catalog.media_user_token']);
+// The value under `name:` in the `section:` block of config.example.yaml, parsed
+// (every default there is written as JSON: quoted strings, numbers, booleans,
+// flow lists).
+const exampleDefault = (key) => {
+  const [section, name] = key.split('.');
+  const block = new RegExp(`^${section}:\\n([\\s\\S]*?)(?=^[a-z_]+:|(?![\\s\\S]))`, 'm').exec(EXAMPLE)?.[1] || '';
+  const raw = new RegExp(`^  ${name}: (.*)$`, 'm').exec(block)?.[1];
+  return raw === undefined ? undefined : JSON.parse(raw);
+};
+
+test('every field states its default, and every default matches config.example.yaml', () => {
   for (const f of FIELDS) {
-    if (exempt.has(f.key)) continue;
-    assert.ok(/Default: /.test(f.help) || f.defaultValue, `${f.key} states no default`);
+    assert.ok(f.defaultValue !== undefined, `${f.key} states no default`);
+    assert.deepEqual(f.defaultValue, exampleDefault(f.key), `${f.key} drifted from config.example.yaml`);
   }
   const templates = FIELDS.filter((f) => f.type === 'template' || f.type === 'path');
   assert.equal(templates.length, 7);
@@ -233,21 +270,21 @@ test('diffConfig, reloadSummary and labelList', () => {
   assert.deepEqual(diffConfig(a, { ...a }), []);
   assert.deepEqual(diffConfig(a, { ...a, 'logging.level': 'warn', 'download.max_attempts': 7 }), ['download.max_attempts', 'logging.level'], 'field order');
   assert.deepEqual(diffConfig(a, { ...a, 'download.quality_priority': ['alac', 'aac'] }), ['download.quality_priority']);
-  assert.equal(labelList(['download.max_attempts']), 'Attempts per step');
-  assert.equal(labelList(['download.max_attempts', 'logging.level']), 'Attempts per step and Log level');
+  assert.equal(labelList(['download.max_attempts']), 'Tries per file');
+  assert.equal(labelList(['download.max_attempts', 'logging.level']), 'Tries per file and Log level');
   assert.match(labelList(['download.max_attempts', 'logging.level', 'simulate.enabled', 'download.cover_size', 'library_sync.enabled'], 3), /and 2 more$/);
   assert.equal(reloadSummary([]).long, 'Reloaded from the config file: no changes.');
   assert.equal(reloadSummary([]).short, 'Reloaded from the file: no changes');
   const two = reloadSummary(['logging.level', 'download.max_attempts']);
-  assert.equal(two.long, 'Reloaded from the config file: 2 settings changed (Log level and Attempts per step).');
+  assert.equal(two.long, 'Reloaded from the config file: 2 settings changed (Log level and Tries per file).');
   assert.match(reloadSummary(['logging.level']).short, /1 setting changed/);
 });
 
 test('lossSummary and unsavedAnnouncement', () => {
   const t = lossSummary(['download.max_attempts', 'download.song_path_format', 'logging.level']);
   assert.equal(t.count, 3);
-  assert.equal(t.sections, 'Downloads, Files and paths and Logging');
-  assert.equal(t.fields, 'Attempts per step, Songs and Log level');
+  assert.equal(t.sections, 'Advanced and Files & naming');
+  assert.equal(t.fields, 'Tries per file, Songs and Log level');
   assert.equal(unsavedAnnouncement(1), '1 unsaved change');
   assert.equal(unsavedAnnouncement(4), '4 unsaved changes');
   assert.equal(unsavedAnnouncement(0), 'No unsaved changes');
@@ -275,7 +312,7 @@ test('anchorResetState disables Reset anchor without an anchor', () => {
   assert.equal(anchorResetState(undefined).allowed, false);
   const none = anchorResetState({ anchor_size: 0 });
   assert.equal(none.allowed, false);
-  assert.match(none.reason, /no anchor/);
+  assert.match(none.reason, /Nothing to start over/);
   assert.deepEqual(anchorResetState({ anchor_size: 120 }), { allowed: true, reason: '' });
 });
 

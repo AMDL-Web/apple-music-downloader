@@ -5,7 +5,7 @@
 
 import { buildHash, newDownloadHash, settingsHash } from './route.js';
 import { extractLinks } from './links.js';
-import { SETTINGS_SECTIONS, FIELDS } from './settings.js';
+import { SETTINGS_SECTIONS, SETTINGS_GROUPS, FIELDS, groupById } from './settings.js';
 import { jobTitle, jobSubtitle, typeLabel, dateTime } from './format.js';
 import { jobStatusView } from './status.js';
 
@@ -28,28 +28,31 @@ const PREF_ITEMS = [
   { id: 'theme-dark', group: 'Theme', label: 'Use dark theme', icon: 'moon', theme: 'dark' },
 ];
 
-/** Settings sections listed before anything is typed. */
+/** Settings sections (and Advanced groups) listed before anything is typed. */
 const SECTIONS_SHOWN_EMPTY = ['account', 'library_sync'];
 
-/** Words a section answers to besides its label and id (what its panels do). */
+/** Words a section or group answers to besides its label and id (what its panels do). */
 const SECTION_WORDS = {
-  account: 'login log in log out wrapper apple id',
+  account: 'login log in log out wrapper session apple id media user token',
+  quality: 'codec alac atmos lossless overwrite',
+  files: 'folder path template naming',
+  lyrics_artwork: 'cover artwork lyrics',
+  advanced: 'tuning',
   library_sync: 'anchor poll',
-  config_file: 'reload yaml config locked startup restart parallel concurrency concurrent threads workers pool pools limits',
+  config_file: 'reload yaml config locked startup restart parallel concurrency concurrent threads workers pool pools limits keys defaults',
   logging: 'logs',
-  files: 'folder path template',
-  artwork: 'cover',
 };
 
 // What the page says about the parallel pools: they are startup settings, so
 // no field has them, and a search for them lands here.
 const SECTION_SUBS = { config_file: 'Worker pools are set in the file' };
 
-const SECTION_ITEMS = SETTINGS_SECTIONS.map((s) => ({
+// The five sections, then the Advanced groups, which open Advanced at the group.
+const SECTION_ITEMS = [...SETTINGS_SECTIONS, ...SETTINGS_GROUPS].map((s) => ({
   id: `set-${s.id}`,
   group: 'Settings',
   label: `Settings: ${s.label}`,
-  sub: SECTION_SUBS[s.id],
+  sub: SECTION_SUBS[s.id] || (s.section ? 'Advanced' : undefined),
   icon: s.icon,
   hash: settingsHash(s.id),
   section: s.id,
@@ -59,8 +62,10 @@ const SECTION_ITEMS = SETTINGS_SECTIONS.map((s) => ({
 /** Words a field answers to besides its label and key: by type, then by key. */
 const TYPE_WORDS = { template: 'template name format', path: 'folder directory' };
 const KEY_WORDS = {
-  'download.max_attempts': 'retry retries tries',
-  'download.memory_mode': 'ram parallel',
+  'download.max_attempts': 'retry retries tries attempts',
+  'download.memory_mode': 'ram parallel memory mode',
+  'catalog.album_track_url_mode': 'song track album link',
+  'library_sync.interval_minutes': 'poll interval',
   'download.force_overwrite': 'replace redownload again',
   'download.progress_event_interval_ms': 'throttle',
   'logging.level': 'verbose',
@@ -121,7 +126,8 @@ export function paletteItems(query, jobs = []) {
         id: `field-${f.key}`,
         group: 'Settings',
         label: f.label,
-        sub: `${section ? section.label : f.section} · ${f.key}`,
+        // The key stays searchable but is not shown: the page hides keys by default.
+        sub: [section ? section.label : f.section, f.group ? groupById(f.group).label : ''].filter(Boolean).join(' › '),
         icon: section ? section.icon : 'settings',
         hash: settingsHash(f.section, f.key),
         field: f.key,

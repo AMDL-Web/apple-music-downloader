@@ -1,5 +1,5 @@
 // Settings panels that are not config fields: the library sync status with
-// "Reset anchor", the configuration file (persisted, Reload),
+// "Start over from now", the configuration file (persisted, Reload),
 // and the path template reference.
 
 import { html, useState } from '../ui/preact.js';
@@ -16,7 +16,9 @@ const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 
 /**
  * Live state from GET /library-sync (polled every 30 s, and again when a
- * save changes the switch or the interval) and Reset anchor. `enabled`,
+ * save changes the switch or the interval) and "Start over from now" (POST
+ * /library-sync/reset, which clears the anchor), offered only once a check
+ * has recorded the library. `enabled`,
  * `interval` and `tokenSet` are the saved config values.
  */
 export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
@@ -33,7 +35,7 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
     setError(null);
     try {
       const res = await resetLibrarySync();
-      app.toast({ message: `Anchor cleared (${plural(res.cleared, 'track', 'tracks')}); the next poll re-anchors without submitting`, role: 'success' });
+      app.toast({ message: `Library sync starts over: forgot ${plural(res.cleared, 'track', 'tracks')}; the next check downloads nothing`, role: 'success' });
       setAsking(false);
       poll.reload();
     } catch (e) {
@@ -51,10 +53,10 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
     body = html`<${KV}
       rows=${[
         ['State', html`<${SyncState} view=${librarySyncState(s, tokenSet)} />`],
-        ['Last poll', s.last_poll_at ? html`<${RelTime} value=${s.last_poll_at} />` : 'Never'],
+        ['Last check', s.last_poll_at ? html`<${RelTime} value=${s.last_poll_at} />` : 'Never'],
         ['Last error', s.last_error ? html`<span class="text-warning wrap-any">${s.last_error}</span>` : null],
-        ['Anchor', s.anchor_size > 0 ? plural(s.anchor_size, 'track', 'tracks') : 'Not set; the next poll sets it'],
-        ['Albums submitted', `${count(s.last_submitted)} last poll · ${count(s.total_submitted)} since the backend started`],
+        ['Last seen in your library', s.anchor_size > 0 ? plural(s.anchor_size, 'track', 'tracks') : 'Nothing yet; the next check records it'],
+        ['Albums submitted', `${count(s.last_submitted)} last check · ${count(s.total_submitted)} since the backend started`],
       ]}
     />`;
 
@@ -65,29 +67,22 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
     </div>
     ${enabled && !tokenSet
       ? html`<${Notice} role="warning" icon="triangle-alert">
-          Library sync is on but the media user token is empty, so the monitor idles.${' '}
-          <a class="link" href=${settingsHash('catalog')}>Set the token in Catalog</a>.
+          Library sync is on but the media user token is empty, so it waits.${' '}
+          <a class="link" href=${settingsHash('account', 'catalog.media_user_token')}>Set the token in Account</a>.
         </${Notice}>`
       : null}
     ${body}
-    <div class="settings-panel-actions">
-      <${Button}
-        variant="secondary"
-        icon="rotate"
-        className="sync-reset"
-        onClick=${() => setAsking(true)}
-        disabled=${!resetState.allowed}
-        aria-describedby="sync-reset-note"
-      >Reset anchor…</${Button}>
-      <p class="muted small" id="sync-reset-note">
-        ${resetState.allowed ? 'Forgets which songs the monitor has seen. Nothing is downloaded by the reset.' : resetState.reason}
-      </p>
-    </div>
+    ${resetState.allowed
+      ? html`<div class="settings-panel-actions">
+          <${Button} variant="secondary" icon="rotate" className="sync-reset" onClick=${() => setAsking(true)} aria-describedby="sync-reset-note">Start over from now…</${Button}>
+          <p class="muted small" id="sync-reset-note">Forgets which songs library sync has seen. Nothing is downloaded by this.</p>
+        </div>`
+      : null}
     ${asking
       ? html`<${ConfirmDialog}
-          title="Reset the library anchor?"
-          confirmLabel=${error ? 'Try again' : 'Reset anchor'}
-          busyLabel="Resetting…"
+          title="Start library sync over from now?"
+          confirmLabel=${error ? 'Try again' : 'Start Over'}
+          busyLabel="Starting over…"
           danger
           busy=${busy}
           onConfirm=${reset}
@@ -96,7 +91,7 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
             setError(null);
           }}
         >
-          <p>The monitor forgets its history. Its next poll records your library as it is then and submits no albums, so songs added before that moment are never downloaded by library sync.</p>
+          <p>Library sync forgets what it has seen. Its next check records your library as it is then and downloads nothing, so songs added before that moment are never downloaded by library sync.</p>
           <p>To download one album again, submit its link on <a class="link" href="#/new">New download</a> instead.</p>
           ${error ? html`<${Notice} role="danger" icon="circle-x">${error.message}</${Notice}>` : null}
         </${ConfirmDialog}>`

@@ -1,9 +1,10 @@
-// One Settings field (label, help, the config key, a control by type, and
-// its error and warning lines) and the controls themselves. The
+// One Settings field (label, help, on demand the config key and default, a
+// control by type, and its error and warning lines) and the controls themselves. The
 // field list in lib/settings.js decides which control a key gets.
 
 import { html, useState } from '../ui/preact.js';
-import { parseNumberInput } from '../lib/settings-draft.js';
+import { parseNumberInput, sameValue } from '../lib/settings-draft.js';
+import { valueLabel } from '../lib/settings.js';
 import { Icon, Button } from '../ui/components.js';
 import { ListEditor } from './settings-list.js';
 
@@ -11,20 +12,25 @@ import { ListEditor } from './settings-list.js';
 export const fieldId = (key) => `set-${key.replace(/[^a-z0-9]+/gi, '-')}`;
 
 // Types whose control takes the row's full width under the text.
-const WIDE = new Set(['list', 'path', 'template', 'secret']);
+const WIDE = new Set(['list', 'path', 'template', 'token']);
 // Types labelled by a group (role=group + aria-labelledby) rather than <label for>.
 const GROUPED = new Set(['list', 'set']);
 
 /**
  * .field[data-key][data-type][data-wide][data-changed][data-invalid]
- * > .field-text (.field-label, .field-changed + revert, .field-help,
- * .field-key) + .field-control, then .field-error, .field-warning.
+ * > .field-text (.field-label, .field-changed + Undo or .field-reset,
+ * .field-help, then with `showKeys` .field-default and .field-key) +
+ * .field-control, then .field-error, .field-warning. A saved value that
+ * differs from the default offers "Reset to default", which is an edit like
+ * any other (Undo takes it back).
  */
-export function SettingsField({ field, value, changed, error, warning, onChange, onRevert }) {
+export function SettingsField({ field, value, changed, error, warning, showKeys, onChange, onRevert }) {
   const id = fieldId(field.key);
-  const described = [`${id}-help`, field.defaultValue ? `${id}-default` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
+  const hasDefault = field.defaultValue !== undefined;
+  const described = [`${id}-help`, showKeys && hasDefault ? `${id}-default` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
   const ctl = { field, id, value, invalid: Boolean(error), described, onChange };
   const grouped = GROUPED.has(field.type);
+  const resettable = !changed && hasDefault && value !== undefined && field.type !== 'token' && !sameValue(value, field.defaultValue);
   return html`<div
     class="field"
     data-key=${field.key}
@@ -42,12 +48,21 @@ export function SettingsField({ field, value, changed, error, warning, onChange,
           ? html`<span class="field-changed">Unsaved</span>
               <button type="button" class="field-revert link" onClick=${onRevert} aria-label=${`Undo the change to ${field.label}`}>Undo</button>`
           : null}
+        ${resettable
+          ? html`<button
+              type="button"
+              class="field-reset link"
+              title=${`Default: ${valueLabel(field, field.defaultValue)}`}
+              aria-label=${`Reset ${field.label} to its default, ${valueLabel(field, field.defaultValue)}`}
+              onClick=${() => onChange(Array.isArray(field.defaultValue) ? [...field.defaultValue] : field.defaultValue)}
+            >Reset to default</button>`
+          : null}
       </div>
       <p class="field-help" id=${`${id}-help`}>${field.help}</p>
-      ${field.defaultValue
-        ? html`<p class="field-default" id=${`${id}-default`}>Default: <code class="field-default-value">${field.defaultValue}</code>${field.defaultNote ? html`. ${field.defaultNote}` : null}</p>`
+      ${showKeys && hasDefault
+        ? html`<p class="field-default" id=${`${id}-default`}>Default: <code class="field-default-value">${valueLabel(field, field.defaultValue)}</code>${field.defaultNote ? html`. ${field.defaultNote}` : null}</p>`
         : null}
-      <code class="field-key">${field.key}</code>
+      ${showKeys ? html`<code class="field-key">${field.key}</code>` : null}
     </div>
     <div class="field-control">${control(ctl)}</div>
     ${error ? html`<p class="field-error" id=${`${id}-error`} data-role="danger"><${Icon} name="circle-x" size="sm" /><span>${error}</span></p>` : null}
@@ -63,7 +78,7 @@ function control(p) {
       return html`<${SelectControl} ...${p} />`;
     case 'number':
       return html`<${NumberControl} ...${p} />`;
-    case 'secret':
+    case 'token':
       return html`<${SecretControl} ...${p} />`;
     case 'list':
       return html`<${ListEditor} ...${p} />`;

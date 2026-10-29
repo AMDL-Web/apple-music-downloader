@@ -11,7 +11,7 @@ import { getConfig, putConfig } from '../api.js';
 import {
   SETTINGS_SECTIONS,
   sectionById,
-  sectionFields,
+  groupById,
   fieldByKey,
 } from '../lib/settings.js';
 import {
@@ -27,12 +27,11 @@ import {
   draftAfterSave,
 } from '../lib/settings-draft.js';
 import { punctuated } from '../lib/format.js';
-import { settingsSection, settingsHash, parseHash } from '../lib/route.js';
-import { useApp, Card, Notice, ErrorNote, SkeletonRows, Unavailable } from '../ui/components.js';
+import { settingsSection, settingsField, settingsHash, parseHash } from '../lib/route.js';
+import { readPref, writePref } from '../lib/prefs.js';
+import { useApp, Card, Notice } from '../ui/components.js';
 import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
-import { SettingsField } from './settings-fields.js';
-import { AccountPanel } from './settings-account.js';
-import { LibrarySyncPanel, ConfigFilePanel, TemplateReference } from './settings-panels.js';
+import { SectionBody, groupDomId } from './settings-section.js';
 import { SettingsNav, SaveBar } from './settings-nav.js';
 
 /** What a confirmation would lose: the count, the sections and the field names. */
@@ -42,11 +41,27 @@ function LossText({ keys, lead }) {
     <p>Saved settings are not affected.</p>`;
 }
 
+// "Show config keys and defaults" is a per-device preference.
+const KEYS_PREF = 'amdl.console.settings.keys';
+const storage = () => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
+
 const EMPTY = { loaded: false, error: null, base: {}, persisted: true, reloadError: '' };
 
 export function SettingsPage({ route }) {
   const app = useApp();
-  const section = sectionById(settingsSection(route.params));
+  const asked = settingsSection(route.params);
+  const section = sectionById(asked, settingsField(route.params));
+  const [showKeys, setShowKeys] = useState(() => readPref(storage(), KEYS_PREF, (v) => v === '1'));
+  const changeShowKeys = (on) => {
+    setShowKeys(on);
+    writePref(storage(), KEYS_PREF, on ? '1' : '0');
+  };
   const [cfg, setCfg] = useState(EMPTY);
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
@@ -220,6 +235,15 @@ export function SettingsPage({ route }) {
     window.scrollTo(0, 0);
   }, [section.id]);
 
+  // A ?section= naming an Advanced group (an earlier section) opens Advanced
+  // at that group once the fields are there; a ?field= focuses instead.
+  const group = groupById(asked) && !settingsField(route.params) ? asked : '';
+  useEffect(() => {
+    if (!group || !cfg.loaded) return;
+    const el = document.getElementById(groupDomId(group));
+    if (el) el.scrollIntoView({ block: 'start' });
+  }, [group, cfg.loaded]);
+
   const leave = (to = leaveTo) => {
     if (app.setLeaveGuard) app.setLeaveGuard(null);
     setLeaveTo(null);
@@ -240,44 +264,16 @@ export function SettingsPage({ route }) {
   const errorSections = new Set(Object.keys(errors).map(sectionOf).filter(Boolean));
   const valueOf = (key) => (Object.hasOwn(draft, key) ? draft[key] : cfg.base[key]);
 
-  let body;
-  if (section.id === 'account') body = html`<${AccountPanel} />`;
-  else if (cfg.error && !cfg.loaded)
-    body =
-      cfg.error.status === 404
-        ? html`<${Unavailable} what="Runtime configuration (GET /api/v1/config)" />`
-        : html`<${ErrorNote} title="Couldn't load the settings" error=${cfg.error} onRetry=${() => setLoadSeq((n) => n + 1)} />`;
-  else if (!cfg.loaded) body = html`<${SkeletonRows} n=${6} kind="line" />`;
-  else if (section.id === 'config_file')
-    body = html`<${ConfigFilePanel} persisted=${cfg.persisted} reloadError=${cfg.reloadError} dirty=${dirty} base=${cfg.base} onReloaded=${apply} />`;
-  else {
-    const fields = sectionFields(section.id);
-    body = html`
-      ${section.id === 'files'
-        ? html`<${Notice} role="warning" icon="triangle-alert">
-            Changing a folder or a template changes where new downloads are saved. Tracks already saved under the old names are
-            not recognized as downloaded, so they download again.
-          </${Notice}>`
-        : null}
-      <div class="field-list">
-        ${fields.map(
-          (f) => html`<${SettingsField}
-            key=${f.key}
-            field=${f}
-            value=${valueOf(f.key)}
-            changed=${dirtyKeys.includes(f.key)}
-            error=${errors[f.key]}
-            warning=${warnings[f.key]}
-            onChange=${(v) => setValue(f.key, v)}
-            onRevert=${() => revert(f.key)}
-          />`,
-        )}
-      </div>
-      ${section.id === 'files' ? html`<${TemplateReference} />` : null}
-      ${section.id === 'library_sync'
-        ? html`<${LibrarySyncPanel} enabled=${cfg.base['library_sync.enabled'] === true} interval=${cfg.base['library_sync.interval_minutes']} tokenSet=${Boolean(cfg.base['catalog.media_user_token'])} />`
-        : null}`;
-  }
+  const form = { valueOf, dirtyKeys, errors, warnings, setValue, revert, showKeys };
+  const body = html`<${SectionBody}
+    section=${section}
+    cfg=${cfg}
+    form=${form}
+    dirty=${dirty}
+    onRetry=${() => setLoadSeq((n) => n + 1)}
+    onReloaded=${apply}
+    setShowKeys=${changeShowKeys}
+  />`;
 
   const faultSections = SETTINGS_SECTIONS.filter((s) => errorSections.has(s.id) && s.id !== section.id);
 

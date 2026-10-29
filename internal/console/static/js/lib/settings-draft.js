@@ -211,10 +211,10 @@ export function librarySyncState(s, tokenSet) {
   return { icon: 'circle-check', role: 'success', label: 'Watching', detail: `Every ${s.interval_minutes} min` };
 }
 
-/** Whether Reset anchor does anything, with the reason when it does not. */
+/** Whether "Start over from now" (the anchor reset) does anything, with the reason when it does not. */
 export function anchorResetState(s) {
   if (!s) return { allowed: false, reason: 'Loading the status.' };
-  if (!(s.anchor_size > 0)) return { allowed: false, reason: 'There is no anchor to reset yet: the next poll sets one.' };
+  if (!(s.anchor_size > 0)) return { allowed: false, reason: 'Nothing to start over from yet: the next check records your library.' };
   return { allowed: true, reason: '' };
 }
 

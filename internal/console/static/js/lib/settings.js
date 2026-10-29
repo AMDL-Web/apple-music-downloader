@@ -8,23 +8,46 @@
 // NOT_EDITED, or when a field names a key the API does not return. Help text
 // condenses the key's comment in configs/config.example.yaml.
 
-/** The page's sections in nav order; `id` is the ?section= value. */
+/**
+ * The page's sections in nav order; `id` is the ?section= value. `summary`
+ * is the one line the phone's section list shows under the label.
+ */
 export const SETTINGS_SECTIONS = [
-  { id: 'downloads', label: 'Downloads', icon: 'download', intro: 'Codecs, retries and what happens to files already on disk.' },
-  { id: 'files', label: 'Files and paths', icon: 'hard-drive', intro: 'Where finished tracks go and how their folders and names are built.' },
-  { id: 'artwork', label: 'Artwork', icon: 'disc', intro: 'Cover size and format, embedded and saved next to the tracks.' },
-  { id: 'lyrics', label: 'Lyrics', icon: 'file-text', intro: 'Embedded lyrics and lyrics files.' },
-  { id: 'catalog', label: 'Catalog', icon: 'music', intro: 'How links are read and which Apple requests run.' },
-  { id: 'library_sync', label: 'Library sync', icon: 'rotate', intro: 'Download the album of every song you add to your Apple Music library.' },
-  { id: 'logging', label: 'Logging', icon: 'list', intro: 'What the backend logs.' },
-  { id: 'simulate', label: 'Simulate', icon: 'play', intro: 'Run jobs without downloading or writing files.' },
-  { id: 'account', label: 'Apple Music account', icon: 'key', intro: 'The Apple Music accounts used to decrypt downloads. They live in wrapper-manager, a separate session service this backend connects to.' },
-  { id: 'config_file', label: 'Configuration file', icon: 'braces', intro: 'Where these settings are stored, and the keys this page cannot change.' },
+  { id: 'account', label: 'Account', icon: 'key', summary: 'Apple Music login and media token', intro: 'Your Apple Music login, kept by the session service.' },
+  { id: 'quality', label: 'Quality & downloads', icon: 'download', summary: 'Codecs, ALAC limits, overwriting', intro: 'Which version of each track is downloaded, and what happens to files already on disk.' },
+  { id: 'files', label: 'Files & naming', icon: 'hard-drive', summary: 'Folders and file names', intro: 'Where finished tracks go and how their folders and names are built.' },
+  { id: 'lyrics_artwork', label: 'Lyrics & artwork', icon: 'disc', summary: 'Covers and lyrics', intro: 'Covers and lyrics, embedded in each track or saved next to it.' },
+  { id: 'advanced', label: 'Advanced', icon: 'settings', summary: 'Retries, library sync, logging, simulate', intro: 'Tuning, library sync, logging, simulate mode and the configuration file.' },
 ];
 
-/** The section a ?section= value names, or the first one. */
-export function sectionById(id) {
-  return SETTINGS_SECTIONS.find((s) => s.id === id) || SETTINGS_SECTIONS[0];
+/**
+ * The sub-headings of Advanced, in order. A group id is also a ?section=
+ * value (the sections they were before), which opens Advanced at the group.
+ */
+export const SETTINGS_GROUPS = [
+  { id: 'downloading', section: 'advanced', label: 'Downloading', icon: 'download' },
+  { id: 'apple_requests', section: 'advanced', label: 'Apple Music requests', icon: 'music' },
+  { id: 'library_sync', section: 'advanced', label: 'Library sync', icon: 'rotate', intro: 'Download the album of every song you add to your Apple Music library.' },
+  { id: 'logging', section: 'advanced', label: 'Logging', icon: 'list' },
+  { id: 'simulate', section: 'advanced', label: 'Simulate', icon: 'play', intro: 'Run jobs without downloading or writing files.' },
+  { id: 'config_file', section: 'advanced', label: 'Configuration file', icon: 'braces' },
+];
+
+// Section ids of earlier versions, kept so bookmarks and links still open
+// the section that now holds their settings.
+const RETIRED_SECTIONS = { downloads: 'quality', artwork: 'lyrics_artwork', lyrics: 'lyrics_artwork', catalog: 'account' };
+
+/** The Advanced group a ?section= value names, or undefined. */
+export const groupById = (id) => SETTINGS_GROUPS.find((g) => g.id === id);
+
+/**
+ * The section a ?section= value names (a section, an Advanced group or a
+ * retired id), or the first one. A known `field` wins: its section opens.
+ */
+export function sectionById(id, field = '') {
+  const f = field ? fieldByKey(field) : undefined;
+  const want = f ? f.section : (groupById(id) || {}).section || RETIRED_SECTIONS[id] || id;
+  return SETTINGS_SECTIONS.find((s) => s.id === want) || SETTINGS_SECTIONS[0];
 }
 
 // An install upgraded from a version whose album and artist templates used
@@ -33,41 +56,56 @@ const OLDER_LAYOUT_NOTE = 'An install upgraded from an older version may still u
 
 /**
  * One field per editable key. type: switch | select | number | text | path |
- * template | secret | list (ordered, from options) | set (unordered, from
- * options). select options may carry a hint shown under the control.
+ * template | token | list (ordered, from options) | set (unordered, from
+ * options). `help` is one short line about the effect; `defaultValue` is the
+ * value a key missing from the file takes (configs/config.example.yaml), shown
+ * with the key on demand and used by Reset to default. Fields of Advanced
+ * name their `group`. select options may carry a hint, added to the help line while chosen.
  */
 export const FIELDS = [
-  // Downloads
+  // Account
+  {
+    key: 'catalog.media_user_token',
+    section: 'account',
+    type: 'token',
+    label: 'Media user token',
+    help: 'Needed for stations, private playlist covers and library sync.',
+    defaultValue: '',
+  },
+  // Quality & downloads
   {
     key: 'download.quality_priority',
-    section: 'downloads',
+    section: 'quality',
     type: 'list',
     label: 'Codec priority',
-    help: 'Tried top to bottom. AAC-LC is always the last fallback and needs no entry. Default: ALAC only.',
+    help: 'Tried top to bottom · AAC always last',
+    defaultValue: ['alac'],
     minItems: 1,
-    minItemsNote: 'At least one codec is required, so the last one cannot be removed. Add another first to swap it.',
+    addLabel: 'Add codec',
     options: [
-      { value: 'alac', label: 'ALAC (lossless)' },
-      { value: 'ec3', label: 'Dolby Atmos (E-AC-3)' },
-      { value: 'ac3', label: 'Dolby Digital (AC-3)' },
-      { value: 'aac', label: 'AAC (Enhanced HLS)' },
-      { value: 'aac-binaural', label: 'AAC binaural' },
-      { value: 'aac-downmix', label: 'AAC Dolby downmix' },
+      { value: 'alac', label: 'ALAC (lossless)', hint: 'Apple Lossless, up to the limits below' },
+      { value: 'ec3', label: 'Dolby Atmos (E-AC-3)', hint: 'Dolby Atmos in Dolby Digital Plus' },
+      { value: 'ac3', label: 'Dolby Digital (AC-3)', hint: 'Dolby Digital surround' },
+      { value: 'aac', label: 'AAC (Enhanced HLS)', hint: 'The Enhanced HLS AAC stream' },
+      { value: 'aac-binaural', label: 'AAC binaural', hint: 'Spatial audio rendered for headphones' },
+      { value: 'aac-downmix', label: 'AAC Dolby downmix', hint: 'Spatial audio downmixed to stereo' },
     ],
   },
   {
     key: 'download.codec_alternative',
-    section: 'downloads',
+    section: 'quality',
     type: 'switch',
     label: 'Fall back to the next codec',
-    help: 'On: when a codec fails, the next one in the list is tried. Off: only the first. Default: on.',
+    help: 'When a codec fails, try the next one in the list.',
+    defaultValue: true,
   },
   {
     key: 'download.alac_max_sample_rate',
-    section: 'downloads',
+    section: 'quality',
     type: 'select',
     label: 'Highest ALAC sample rate',
-    help: 'ALAC versions above this rate are skipped. Default: 192 kHz.',
+    help: 'Higher-rate ALAC versions are skipped.',
+    defaultValue: 192000,
     options: [
       { value: 44100, label: '44.1 kHz' },
       { value: 48000, label: '48 kHz' },
@@ -79,68 +117,43 @@ export const FIELDS = [
   },
   {
     key: 'download.alac_max_bit_depth',
-    section: 'downloads',
+    section: 'quality',
     type: 'select',
     label: 'Highest ALAC bit depth',
-    help: 'ALAC versions deeper than this are skipped. Default: 24-bit.',
+    help: 'Deeper ALAC versions are skipped.',
+    defaultValue: 24,
     options: [
       { value: 16, label: '16-bit' },
       { value: 24, label: '24-bit' },
     ],
   },
   {
-    key: 'download.memory_mode',
-    section: 'downloads',
-    type: 'select',
-    label: 'Memory mode',
-    help: 'The RAM and disk trade-off for Enhanced HLS tracks. Default: low.',
-    options: [
-      { value: 'low', label: 'Low memory', hint: 'Streams each track to a resumable file: little RAM, about two track-sized files per parallel track in the temporary folder.' },
-      { value: 'high', label: 'High memory', hint: 'Keeps one encrypted track in RAM (at most 512 MiB): about one track-sized file per parallel track in the temporary folder.' },
-    ],
-  },
-  {
-    key: 'download.max_attempts',
-    section: 'downloads',
-    type: 'number',
-    label: 'Attempts per step',
-    help: 'Total tries, the first included, for metadata, cover, lyrics and each codec. 1 to 10. Default: 3.',
-    min: 1,
-    max: 10,
-    clampsBelow: true,
-  },
-  {
-    key: 'download.progress_event_interval_ms',
-    section: 'downloads',
-    type: 'number',
-    label: 'Progress update interval',
-    help: 'Least time between two progress events for one track; 0 leaves one per whole percent. Applies to jobs started later. 0 to 10000. Default: 500.',
-    min: 0,
-    max: 10000,
-    clampsBelow: true,
-    unit: 'ms',
-  },
-  {
-    key: 'download.check_integrity',
-    section: 'downloads',
-    type: 'switch',
-    label: 'Check file integrity',
-    help: 'Verifies each finished file and repairs known ALAC issues. Default: on.',
-  },
-  {
     key: 'download.force_overwrite',
-    section: 'downloads',
+    section: 'quality',
     type: 'switch',
     label: 'Overwrite existing files',
-    help: 'On: a track downloaded again replaces its file and lyrics file. Off: tracks already on disk are skipped. A submission may choose otherwise. Default: off.',
+    help: 'Download tracks again even when they are already on disk.',
+    defaultValue: false,
   },
-  // Files and paths
+  {
+    key: 'catalog.album_track_url_mode',
+    section: 'quality',
+    type: 'select',
+    label: 'When an album link points to one track',
+    help: 'For example a link copied from a song on an album page.',
+    defaultValue: 'song',
+    options: [
+      { value: 'song', label: 'Download that track' },
+      { value: 'album', label: 'Download the whole album' },
+    ],
+  },
+  // Files & naming
   {
     key: 'download.downloads_dir',
     section: 'files',
     type: 'path',
     label: 'Downloads folder',
-    help: 'The library root. A relative path starts at the backend working directory.',
+    help: 'Where finished tracks are saved. A relative path starts at the backend’s folder.',
     defaultValue: 'data/downloads',
   },
   {
@@ -148,151 +161,183 @@ export const FIELDS = [
     section: 'files',
     type: 'path',
     label: 'Temporary folder',
-    help: 'Scratch space while a track is processed; only finished files move to the downloads folder. Fast local storage helps, and the same disk as the downloads folder makes the move a rename.',
+    help: 'Work space while a track is processed; on the same disk as the downloads folder is fastest.',
     defaultValue: 'data/tmp',
   },
-  { key: 'download.album_path_format', section: 'files', type: 'template', label: 'Albums', help: 'Album tasks. {SongNumber} counts on across discs.', defaultValue: 'albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
-  { key: 'download.song_path_format', section: 'files', type: 'template', label: 'Songs', help: 'Single-song tasks. {SongNumber} is always 1 here; {TrackNumber} keeps the album position.', defaultValue: 'songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}' },
-  { key: 'download.playlist_path_format', section: 'files', type: 'template', label: 'Playlists', help: 'Playlist tasks. {SongNumber} is the position in the playlist.', defaultValue: 'playlists/{PlaylistName}/{SongNumber:02d}. {SongName}' },
-  { key: 'download.artist_path_format', section: 'files', type: 'template', label: 'Artists', help: 'Artist tasks. {SongNumber} restarts at 1 for each album.', defaultValue: 'artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
-  { key: 'download.station_path_format', section: 'files', type: 'template', label: 'Stations', help: 'Radio station tasks. {SongNumber} is the position in the station’s track list.', defaultValue: 'stations/{StationName}/{SongNumber:02d}. {SongName}' },
-  // Artwork
+  { key: 'download.album_path_format', section: 'files', type: 'template', label: 'Albums', help: '{SongNumber} keeps counting across discs.', defaultValue: 'albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
+  { key: 'download.song_path_format', section: 'files', type: 'template', label: 'Songs', help: '{SongNumber} is always 1; {TrackNumber} keeps the album position.', defaultValue: 'songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}' },
+  { key: 'download.playlist_path_format', section: 'files', type: 'template', label: 'Playlists', help: '{SongNumber} is the position in the playlist.', defaultValue: 'playlists/{PlaylistName}/{SongNumber:02d}. {SongName}' },
+  { key: 'download.artist_path_format', section: 'files', type: 'template', label: 'Artists', help: '{SongNumber} restarts at 1 for each album.', defaultValue: 'artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
+  { key: 'download.station_path_format', section: 'files', type: 'template', label: 'Stations', help: '{SongNumber} is the position in the station’s track list.', defaultValue: 'stations/{StationName}/{SongNumber:02d}. {SongName}' },
+  // Lyrics & artwork
   {
     key: 'download.cover_size',
-    section: 'artwork',
+    section: 'lyrics_artwork',
     type: 'text',
     label: 'Cover size',
-    help: 'Width x height in pixels, for example 5000x5000, 3000x3000 or 1400x1400. Default: 5000x5000.',
+    help: 'Smaller standard sizes are tried when Apple lacks this one.',
+    defaultValue: '5000x5000',
     // The backend's rule (internal/config Validate).
     pattern: '^[1-9][0-9]*x[1-9][0-9]*$',
     patternHint: 'Write it as width x height in whole pixels above 0, for example 3000x3000.',
   },
   {
     key: 'download.cover_format',
-    section: 'artwork',
+    section: 'lyrics_artwork',
     type: 'select',
     label: 'Cover format',
-    help: 'Default: JPEG (.jpg).',
+    help: 'The image type of covers.',
+    defaultValue: 'jpg',
     options: [
       { value: 'jpg', label: 'JPEG (.jpg)' },
       { value: 'jpeg', label: 'JPEG (.jpeg)' },
       { value: 'png', label: 'PNG (.png)' },
     ],
   },
-  { key: 'download.embed_cover', section: 'artwork', type: 'switch', label: 'Embed the cover in each track', help: 'Default: on.' },
-  {
-    key: 'download.save_album_cover',
-    section: 'artwork',
-    type: 'switch',
-    label: 'Save an album cover file',
-    help: 'Written to the deepest folder whose name uses {AlbumName} or {AlbumId}, else next to the tracks. Default: on.',
-  },
-  {
-    key: 'download.save_artist_cover',
-    section: 'artwork',
-    type: 'switch',
-    label: 'Save an artist picture file',
-    help: 'Written to the deepest folder whose name uses an artist variable; skipped when none does. Default: on.',
-  },
-  { key: 'download.save_playlist_cover', section: 'artwork', type: 'switch', label: 'Save a playlist cover file', help: 'For playlist downloads. Default: on.' },
-  // Lyrics
-  { key: 'download.embed_lyrics', section: 'lyrics', type: 'switch', label: 'Embed lyrics in each track', help: 'Default: on.' },
-  { key: 'download.save_lyrics_file', section: 'lyrics', type: 'switch', label: 'Save a lyrics file next to each track', help: 'Default: off.' },
+  { key: 'download.embed_cover', section: 'lyrics_artwork', type: 'switch', label: 'Embed the cover in each track', help: 'Music players show it as the artwork.', defaultValue: true },
+  { key: 'download.save_album_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save an album cover file', help: 'Saved in the album’s folder.', defaultValue: true },
+  { key: 'download.save_artist_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save an artist picture file', help: 'Saved in the artist’s folder, when the path has one.', defaultValue: true },
+  { key: 'download.save_playlist_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save a playlist cover file', help: 'Saved with playlist downloads.', defaultValue: true },
+  { key: 'download.embed_lyrics', section: 'lyrics_artwork', type: 'switch', label: 'Embed lyrics in each track', help: 'Music players show them while the song plays.', defaultValue: true },
+  { key: 'download.save_lyrics_file', section: 'lyrics_artwork', type: 'switch', label: 'Save a lyrics file next to each track', help: 'A separate file with the track’s name.', defaultValue: false },
   {
     key: 'download.lyrics_format',
-    section: 'lyrics',
+    section: 'lyrics_artwork',
     type: 'select',
     label: 'Lyrics file format',
-    help: 'Default: LRC.',
+    help: 'The format of saved lyrics files.',
+    defaultValue: 'lrc',
     options: [
       { value: 'lrc', label: 'LRC', hint: 'Apple’s TTML converted to LRC.' },
-      { value: 'ttml', label: 'TTML', hint: 'The TTML the wrapper returns, unchanged.' },
+      { value: 'ttml', label: 'TTML', hint: 'Apple’s TTML, unchanged.' },
     ],
   },
   {
     key: 'download.lyrics_type',
-    section: 'lyrics',
+    section: 'lyrics_artwork',
     type: 'select',
-    label: 'Timing',
-    help: 'Default: line by line.',
+    label: 'Lyrics timing',
+    help: 'How finely the lyrics follow the song.',
+    defaultValue: 'lyrics',
     options: [
       { value: 'lyrics', label: 'Line by line' },
-      { value: 'syllable-lyrics', label: 'Word by word', hint: 'Needs a wrapper that supports word-timed lyrics.' },
+      { value: 'syllable-lyrics', label: 'Word by word', hint: 'Needs a session service that supports word-timed lyrics.' },
     ],
   },
   {
     key: 'download.lyrics_extras',
-    section: 'lyrics',
+    section: 'lyrics_artwork',
     type: 'set',
     label: 'Extra lines',
-    help: 'Localized lines added when Apple has them. Default: none.',
+    help: 'Added when Apple has them.',
+    defaultValue: [],
     options: [
       { value: 'translation', label: 'Translation' },
       { value: 'pronunciation', label: 'Pronunciation' },
     ],
   },
-  // Catalog
+  // Advanced › Downloading
   {
-    key: 'catalog.album_track_url_mode',
-    section: 'catalog',
+    key: 'download.max_attempts',
+    section: 'advanced',
+    group: 'downloading',
+    type: 'number',
+    label: 'Tries per file',
+    help: 'How many times each step is tried before the track fails (1-10).',
+    defaultValue: 3,
+    min: 1,
+    max: 10,
+    clampsBelow: true,
+  },
+  {
+    key: 'download.memory_mode',
+    section: 'advanced',
+    group: 'downloading',
     type: 'select',
-    label: 'Album links to one song (?i=)',
-    help: 'What an album link that points at one track downloads. Default: the song.',
+    label: 'Memory use',
+    help: 'Faster with more RAM, or slower and lighter.',
+    defaultValue: 'low',
     options: [
-      { value: 'song', label: 'The song' },
-      { value: 'album', label: 'The whole album' },
+      { value: 'low', label: 'Low memory', hint: 'Streams each track to disk: little RAM, more temporary files.' },
+      { value: 'high', label: 'High memory', hint: 'Keeps one track in RAM, up to 512 MiB each.' },
     ],
   },
   {
-    key: 'catalog.media_user_token',
-    section: 'catalog',
-    type: 'secret',
-    label: 'Media user token',
-    help: 'Your Apple Music subscription token (media-user-token). Stations, private playlist covers and library sync need it; every download and preview uses this one. Empty means none. The config API returns it as plain text.',
+    key: 'download.progress_event_interval_ms',
+    section: 'advanced',
+    group: 'downloading',
+    type: 'number',
+    label: 'Progress updates every',
+    help: 'Shorter is smoother, longer is lighter; 0 updates each percent (0-10000).',
+    defaultValue: 500,
+    min: 0,
+    max: 10000,
+    clampsBelow: true,
+    unit: 'ms',
   },
   {
+    key: 'download.check_integrity',
+    section: 'advanced',
+    group: 'downloading',
+    type: 'switch',
+    label: 'Check file integrity',
+    help: 'Verify each finished file and repair known ALAC issues.',
+    defaultValue: true,
+  },
+  // Advanced › Apple Music requests
+  {
     key: 'catalog.signed_mode_hls_source',
-    section: 'catalog',
+    section: 'advanced',
+    group: 'apple_requests',
     type: 'select',
-    label: 'Enhanced HLS source with a signed token',
-    help: 'Used only when developer-token signing is set up in the config file; ignored otherwise. Default: wrapper.',
+    label: 'Enhanced AAC source',
+    help: 'Used only when developer-token signing is set up in the config file.',
+    defaultValue: 'wrapper',
     options: [
-      { value: 'wrapper', label: 'Wrapper', hint: 'The authorized device manifest from wrapper-manager.' },
-      { value: 'web_token', label: 'Web player token', hint: 'Scrapes a music.apple.com token and reads Enhanced HLS from amp-api.' },
+      { value: 'wrapper', label: 'Session service', hint: 'The device manifest from the session service.' },
+      { value: 'web_token', label: 'Web player', hint: 'A music.apple.com token and Apple’s web API.' },
     ],
   },
   {
     key: 'catalog.motion_artwork_enabled',
-    section: 'catalog',
+    section: 'advanced',
+    group: 'apple_requests',
     type: 'switch',
     label: 'Look up animated covers',
-    help: 'One extra amp-api request per album after a job resolves; it never blocks or fails a download. Off: no request and no motion covers. Default: on.',
+    help: 'One extra request per album; it never holds up a download.',
+    defaultValue: true,
   },
-  // Library sync
+  // Advanced › Library sync
   {
     key: 'library_sync.enabled',
-    section: 'library_sync',
+    section: 'advanced',
+    group: 'library_sync',
     type: 'switch',
     label: 'Watch my library',
-    help: 'Polls your library and downloads the album of each newly added song. Needs the media user token (Catalog). Default: off.',
+    help: 'Needs the media user token.',
+    defaultValue: false,
   },
   {
     key: 'library_sync.interval_minutes',
-    section: 'library_sync',
+    section: 'advanced',
+    group: 'library_sync',
     type: 'number',
-    label: 'Polling interval',
-    help: 'A poll usually makes one Apple request. 1 to 1440. Default: 15.',
+    label: 'Check every',
+    help: 'A check is usually one Apple request (1-1440).',
+    defaultValue: 15,
     min: 1,
     max: 1440,
     unit: 'min',
   },
-  // Logging
+  // Advanced › Logging
   {
     key: 'logging.level',
-    section: 'logging',
+    section: 'advanced',
+    group: 'logging',
     type: 'select',
     label: 'Log level',
-    help: 'Records below this level are dropped from every output. Default: info.',
+    help: 'Messages below this level are dropped.',
+    defaultValue: 'info',
     options: [
       { value: 'debug', label: 'Debug' },
       { value: 'info', label: 'Info' },
@@ -300,17 +345,19 @@ export const FIELDS = [
       { value: 'error', label: 'Error' },
     ],
   },
-  { key: 'logging.access_log', section: 'logging', type: 'switch', label: 'HTTP access log', help: 'One record per completed HTTP request. Default: off.' },
-  // Simulate
+  { key: 'logging.access_log', section: 'advanced', group: 'logging', type: 'switch', label: 'HTTP access log', help: 'One line per HTTP request.', defaultValue: false },
+  // Advanced › Simulate
   {
     key: 'simulate.enabled',
-    section: 'simulate',
+    section: 'advanced',
+    group: 'simulate',
     type: 'switch',
     label: 'Simulate mode',
-    help: 'Jobs skip the transfer, decryption and file writes; catalog data and codec choice stay real, and no wrapper is needed. Default: off.',
+    help: 'Jobs move through their steps at the simulated speeds below.',
+    defaultValue: false,
   },
-  { key: 'simulate.min_speed_kbps', section: 'simulate', type: 'number', label: 'Slowest simulated speed', help: 'At least 1. Default: 512.', min: 1, unit: 'KB/s' },
-  { key: 'simulate.max_speed_kbps', section: 'simulate', type: 'number', label: 'Fastest simulated speed', help: 'At least the slowest speed. Default: 4096.', min: 1, unit: 'KB/s' },
+  { key: 'simulate.min_speed_kbps', section: 'advanced', group: 'simulate', type: 'number', label: 'Slowest simulated speed', help: 'At least 1.', defaultValue: 512, min: 1, unit: 'KB/s' },
+  { key: 'simulate.max_speed_kbps', section: 'advanced', group: 'simulate', type: 'number', label: 'Fastest simulated speed', help: 'At least the slowest speed.', defaultValue: 4096, min: 1, unit: 'KB/s' },
 ];
 
 /**
@@ -324,3 +371,21 @@ export const BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
 
 export const fieldByKey = (key) => BY_KEY.get(key);
 export const sectionFields = (id) => FIELDS.filter((f) => f.section === id);
+
+/** A value as the page words it: On/Off, an option's label, a list of labels, a number with its unit. */
+export function valueLabel(field, v) {
+  const label = (x) => (field.options.find((o) => o.value === x) || { label: String(x) }).label;
+  switch (field.type) {
+    case 'switch':
+      return v ? 'On' : 'Off';
+    case 'select':
+      return label(v);
+    case 'list':
+    case 'set':
+      return Array.isArray(v) && v.length ? v.map(label).join(', ') : 'None';
+    case 'number':
+      return field.unit ? `${v} ${field.unit}` : String(v);
+    default:
+      return v === '' ? 'Empty' : String(v);
+  }
+}

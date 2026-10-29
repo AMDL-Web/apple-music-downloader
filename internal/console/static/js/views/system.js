@@ -167,7 +167,7 @@ function WrapperCard({ res, loading }) {
           ['Error', view.detail ? html`<span class="wrap-any" title=${view.title || undefined}>${view.detail}</span>` : null],
         ]}
       />
-      <p class="muted small">The backend reaches wrapper-manager at <code>wrapper.address</code>; downloads need it, simulate mode does not. Accounts are managed in <a class="link" href=${settingsHash('account')}>Settings › Apple Music account</a>.</p>`;
+      <p class="muted small">The backend reaches wrapper-manager at <code>wrapper.address</code>; downloads need it, simulate mode does not. Accounts are managed in <a class="link" href=${settingsHash('account')}>Settings › Account</a>.</p>`;
   }
   else {
     const wr = res.data;
@@ -187,7 +187,7 @@ function WrapperCard({ res, loading }) {
             </ul>
           </div>`
         : null}
-      <p class="muted small">Log in and out of accounts in <a class="link" href=${settingsHash('account')}>Settings › Apple Music account</a>.</p>`;
+      <p class="muted small">Log in and out of accounts in <a class="link" href=${settingsHash('account')}>Settings › Account</a>.</p>`;
   }
   return html`<${Card} className="span-6" title="Wrapper" labelId="wrapper-title">${body}</${Card}>`;
 }
@@ -204,7 +204,7 @@ function LibrarySyncCard({ res, loading }) {
         ['Interval', `${count(s.interval_minutes)} min`],
         ['Last poll', s.last_poll_at ? html`<${RelTime} value=${s.last_poll_at} />` : 'Never'],
         ['Last error', s.last_error ? html`<span class="text-warning wrap-any">${s.last_error}</span>` : null],
-        ['Anchor', `${count(s.anchor_size)} tracks`],
+        ['Last seen in your library', `${count(s.anchor_size)} tracks`],
         ['Submitted', `${count(s.last_submitted)} last poll · ${count(s.total_submitted)} since start`],
       ]}
     />`;
