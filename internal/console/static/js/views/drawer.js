@@ -1,7 +1,7 @@
 // Job drawer: one job's header, palette, per-track strip and stage meters,
 // hooks and actions (Cancel, Retry, Delete), kept live by the per-job event
 // stream and, once that stream has ended, by the overview feed. Parts:
-// drawer-detail.js (snapshot and stream).
+// drawer-detail.js (snapshot and stream), drawer-tracks.js (palette, tracks).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { getConfig, cancelDownload, retryDownload, deleteDownload } from '../api.js';
@@ -11,10 +11,6 @@ import {
   typeLabel,
   artPalette,
   paletteStyle,
-  trackLength,
-  bytes,
-  codecLabel,
-  isHiRes,
   absTime,
   elapsed,
   displayId,
@@ -25,21 +21,19 @@ import {
   errorSummary,
   clockTime,
 } from '../lib/format.js';
-import { jobStatusView, itemStatusView, hookStatusView, activityView, isTerminal } from '../lib/status.js';
+import { jobStatusView, hookStatusView, activityView, isTerminal } from '../lib/status.js';
 import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
 import { buildHash, settingsHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
+import { Palette, TrackStrip, TrackList } from './drawer-tracks.js';
 import {
   useApp,
   Artwork,
   Badge,
-  StatusText,
   JobProgress,
-  StageTrack,
   Icon,
   Button,
   LinkButton,
-  Chip,
   Empty,
   ErrorNote,
   SkeletonRows,
@@ -356,68 +350,4 @@ function Actions({ job, app, onChanged, onDelete }) {
     ${safeHttpUrl(job.input) ? html`<${LinkButton} href=${safeHttpUrl(job.input)} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
     ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Delete</${Button}>` : null}
   </div>`;
-}
-
-function Swatch({ hex, label }) {
-  if (!hex || !/^[0-9a-f]{6}$/i.test(hex)) return null;
-  return html`<li class="swatch" title=${`${label} ${hex}`}>
-    <span class="swatch-dot" style=${{ '--swatch': `#${hex}` }}></span>
-    <span class="swatch-label mono">${hex}</span>
-  </li>`;
-}
-
-function Palette({ job }) {
-  if (!job.artwork_bg_color) return null;
-  const still = ['bg_color', 'text_color1', 'text_color2', 'text_color3', 'text_color4'];
-  const names = ['Background', 'Text 1', 'Text 2', 'Text 3', 'Text 4'];
-  return html`<section class="drawer-section" aria-labelledby="palette-title">
-    <h3 id="palette-title" class="section-title">Artwork palette</h3>
-    <ul class="swatches" aria-label="Cover colors">
-      ${still.map((k, i) => html`<${Swatch} key=${k} hex=${job[`artwork_${k}`]} label=${names[i]} />`)}
-    </ul>
-    ${job.motion_artwork_bg_color
-      ? html`<p class="small muted">Motion cover</p>
-          <ul class="swatches" aria-label="Motion cover colors">
-            ${still.map((k, i) => html`<${Swatch} key=${k} hex=${job[`motion_artwork_${k}`]} label=${names[i]} />`)}
-          </ul>`
-      : null}
-  </section>`;
-}
-
-function TrackStrip({ items }) {
-  return html`<div class="track-strip" aria-hidden="true">
-    ${items.map((it) => {
-      const v = itemStatusView(it);
-      return html`<span key=${it.id} class="track-block" data-role=${v.role} title=${`${it.index}. ${it.title || ''}: ${v.label}`}></span>`;
-    })}
-  </div>`;
-}
-
-function TrackList({ items }) {
-  return html`<ol class="tracks">
-    ${items.map((it) => {
-      const v = itemStatusView(it);
-      const codec = codecLabel(it);
-      return html`<li key=${it.id} class="track" data-row tabindex="-1">
-        <span class="track-index num">${it.index}</span>
-        <span class="track-main">
-          <span class="track-title" dir="auto" title=${it.title}>${it.title || html`<span class="muted">Untitled</span>`}</span>
-          ${it.artist ? html`<span class="track-artist" dir="auto">${it.artist}</span>` : null}
-        </span>
-        <span class="track-len num">${trackLength(it.duration_ms)}</span>
-        <span class="track-codec">${codec ? html`<${Chip} title=${isHiRes(it) ? 'High resolution' : undefined}>${codec}</${Chip}>` : null}</span>
-        <span class="track-stages"><${StageTrack} item=${it} /></span>
-        <span class="track-status">
-          <${StatusText} view=${v} />
-          ${v.retry ? html`<span class="badge" data-role="warning"><${Icon} name="rotate" size="sm" /><span class="badge-label">${v.retry}</span></span>` : null}
-        </span>
-        <span class="track-size num">${it.file_size > 0 ? bytes(it.file_size) : ''}</span>
-        ${it.status === 'failed' && it.error
-          ? html`<p class="track-error">${it.error}</p>`
-          : it.status_message && !['completed', 'skipped_existing'].includes(it.status)
-            ? html`<p class="track-note">${it.status_message}</p>`
-            : null}
-      </li>`;
-    })}
-  </ol>`;
 }
