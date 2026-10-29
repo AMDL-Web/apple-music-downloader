@@ -31,11 +31,10 @@ type Deps struct {
 	// Logging backs GET /logs and GET /logs/stream and applies runtime
 	// log-level changes. With logging.buffer_size 0 (no in-memory retention)
 	// the two log routes answer 503 feature_unavailable.
-	Logging        *logging.System
-	Wrapper        WrapperService
-	Quality        QualityService
-	DeveloperToken DeveloperTokenService
-	LibrarySync    LibrarySyncService
+	Logging     *logging.System
+	Wrapper     WrapperService
+	Quality     QualityService
+	LibrarySync LibrarySyncService
 	// Catalog backs POST /lookup.
 	Catalog CatalogService
 }
@@ -54,7 +53,6 @@ type Server struct {
 	logsOff     bool
 	wrapper     WrapperService
 	quality     QualityService
-	devToken    DeveloperTokenService
 	librarySync LibrarySyncService
 	catalog     CatalogService
 	// now is the clock of GET /system uptime and the GET /stats window and
@@ -71,7 +69,7 @@ func New(deps Deps) *Server {
 	s := &Server{
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
-		wrapper: deps.Wrapper, quality: deps.Quality, devToken: deps.DeveloperToken, librarySync: deps.LibrarySync,
+		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync,
 		catalog: deps.Catalog,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())
@@ -110,8 +108,6 @@ func (s *Server) routes() []route {
 	return []route{
 		{http.MethodGet, "/{$}", h(redirectToConsole)},
 		{http.MethodGet, "/console/", http.StripPrefix("/console", console.Handler())},
-		{http.MethodGet, "/docs", h(swaggerUI)},
-		{http.MethodGet, "/api/openapi.yaml", h(openAPI)},
 
 		{http.MethodGet, "/api/v1/health", h(s.health)},
 		{http.MethodGet, "/api/v1/system", h(s.systemInfo)},
@@ -122,7 +118,6 @@ func (s *Server) routes() []route {
 		{http.MethodPut, "/api/v1/config", h(s.updateConfig)},
 		{http.MethodPost, "/api/v1/config/reload", h(s.reloadConfig)},
 		{http.MethodGet, "/api/v1/hooks", h(s.listHooks)},
-		{http.MethodGet, "/api/v1/developer-token", h(s.developerToken)},
 		{http.MethodGet, "/api/v1/library-sync", h(s.librarySyncStatus)},
 		{http.MethodPost, "/api/v1/library-sync/reset", h(s.librarySyncReset)},
 		{http.MethodGet, "/api/v1/wrapper/status", h(s.wrapperStatus)},
@@ -146,7 +141,8 @@ func (s *Server) routes() []route {
 }
 
 // Routes returns the handler to serve: the route table on one mux, wrapped in
-// CORS and request observation (X-Request-ID, access log, panic recovery).
+// request observation (X-Request-ID, access log, panic recovery). There are
+// no CORS headers: the only client is the console, served from this origin.
 func (s *Server) Routes() http.Handler {
 	table := s.routes()
 	mux := http.NewServeMux()
@@ -158,7 +154,7 @@ func (s *Server) Routes() http.Handler {
 	// instead, because a method-less pattern matches whatever a method
 	// pattern does not, and it answers with the JSON error envelope.
 	mux.Handle("/api/", apiFallback(table))
-	return s.observeHTTP(cors(mux))
+	return s.observeHTTP(mux)
 }
 
 // apiFallback answers a request under /api/ that no route matched: 405
@@ -215,20 +211,4 @@ func apiFallback(table []route) http.Handler {
 // redirectToConsole sends the bare root to the web console.
 func redirectToConsole(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/console/", http.StatusFound)
-}
-
-// cors allows any origin. Last-Event-ID is an allowed request header so a
-// cross-origin EventSource can resume a stream.
-func cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID, Last-Event-ID")
-		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }

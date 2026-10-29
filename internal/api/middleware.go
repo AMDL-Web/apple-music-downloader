@@ -9,24 +9,19 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"regexp"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"time"
 
 	"amdl/internal/logging"
 )
 
-var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
-
 func (s *Server) observeHTTP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
-		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
-		if !requestIDPattern.MatchString(requestID) {
-			requestID = newRequestID()
-		}
+		// The id is always generated here, never taken from the request, so
+		// GET /logs?request_id= finds only this request's records.
+		requestID := newRequestID()
 		w.Header().Set("X-Request-ID", requestID)
 		logger := s.logger
 		if logger == nil {

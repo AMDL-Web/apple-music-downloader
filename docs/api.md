@@ -4,16 +4,16 @@
 
 Examples assume the service listens on `http://localhost:18080`.
 
-- Interactive Swagger UI: <http://localhost:18080/docs> (loads Swagger UI from unpkg.com,
-  so it needs internet access)
-- OpenAPI 3.1 spec: <http://localhost:18080/api/openapi.yaml> (source:
-  [`internal/api/openapi.yaml`](../internal/api/openapi.yaml))
+- OpenAPI 3.1 spec: [`internal/api/openapi.yaml`](../internal/api/openapi.yaml) in this
+  repository; the server does not serve it
 - Web console: <http://localhost:18080/console/>; `/` redirects there
 
 The spec is the source of truth for every request and response shape; its `info.version`
 is the contract version, while the URL prefix stays `/api/v1`. The web console is the
 maintained client and changes together with the API; other clients, the iOS app and
-amdl-web included, are not kept in sync.
+amdl-web included, are not kept in sync. The API sends no CORS headers, so the console,
+served from the same origin, is its only browser client; scripts and `curl` call it
+directly.
 
 ## Errors
 
@@ -34,7 +34,7 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 401 | `authentication_failed` |
 | 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
 | 405 | `method_not_allowed`, with an `Allow` header |
-| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending`, `signing_disabled` |
+| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `config_key_pinned`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
@@ -44,8 +44,8 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 
 An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
 methods answers `405 method_not_allowed`. `feature_unavailable` means the component behind
-the route (log buffer, wrapper client, quality probe, catalog client, developer-token
-signing, library watcher) is not wired into this process; the log routes also answer it when
+the route (log buffer, wrapper client, quality probe, catalog client, library watcher) is
+not wired into this process; the log routes also answer it when
 `logging.buffer_size` is `0`. A job lookup answers `404 job_not_found` only
 when the job does not exist; a store failure is `500 store_error`, so a client never drops
 a job because of a transient error.
@@ -67,8 +67,6 @@ tail. They share these rules:
   feed without a cursor: that replays the whole retained milestone history.
 - **Keepalive.** Every stream sends a `: keepalive` comment every 15 seconds and the
   `X-Accel-Buffering: no` header, so proxies neither buffer nor time out an idle stream.
-- **CORS** allows the `Last-Event-ID` request header, so a cross-origin `EventSource`
-  resumes too, and exposes `X-Request-ID`.
 
 Events are named (`event: <type>`), so a browser client uses `addEventListener` with the
 name; `onmessage` does not fire for them.
@@ -131,16 +129,6 @@ Download activity. `days` is 1-90 (default 14); anything else is `400 invalid_re
 Deleting a job removes it from every figure. Results are cached for 30 seconds per `days`
 value; `generated_at` says when a result was computed.
 
-```bash
-curl http://localhost:18080/api/v1/developer-token
-```
-
-Mints a shareable Apple Music developer token. Available only when local signing is
-enabled (all three `catalog.apple_music_*` keys set); otherwise it returns
-`409 signing_disabled`. The token's lifetime is `catalog.developer_token_ttl_hours` and
-its `origin` claim comes from `catalog.allowed_origins`. This is a different token from
-the backend's own internal one, which always lasts 24 hours.
-
 ### Logs
 
 ```bash
@@ -161,8 +149,8 @@ stream replays every matching entry still buffered; without one, the newest `lim
 (default 500). A client that reads too slowly is disconnected and reconnects from its last
 id.
 
-Every HTTP response carries an `X-Request-ID`. Send your own header of the same name and
-`GET /api/v1/logs?request_id=<id>` aggregates that request's access log with the
+Every HTTP response carries an `X-Request-ID` the server generates; an incoming header of
+that name is ignored. `GET /api/v1/logs?request_id=<id>` aggregates that request's access log with the
 synchronous job operations it triggered.
 
 In-memory retention is `logging.buffer_size`; at `0` no history is kept and both
@@ -321,13 +309,12 @@ curl http://localhost:18080/api/v1/downloads/{job_id}
 Returns `{job, items, hooks, event_cursor}`.
 
 ```bash
-curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,cancelled&type=album&storefront=cn&q=beta&created_after=2024-07-01&sort=updated_at&order=desc'
+curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,cancelled&type=album&q=beta&sort=updated_at&order=desc'
 ```
 
-Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `storefront`,
-`q` (substring of the title, artist name or input), `created_after`, `created_before`,
-`updated_after`, `updated_before`, `sort` (`created_at` | `updated_at`), `order`
-(`asc` | `desc`). Jobs that tie on the sort field, such as a batch submitted in one request,
+Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `q` (substring of
+the title, artist name or input), `sort` (`created_at` | `updated_at`), `order`
+(`asc` | `desc`); other parameters are ignored. Jobs that tie on the sort field, such as a batch submitted in one request,
 list in submission order whichever `order` is asked for, so a batch reads in paste order.
 Multi-value parameters accept repeated keys or comma-separated values. The response adds `status_counts` (for the same
 filter), `total`, `limit`, `offset` and the global `event_cursor`.

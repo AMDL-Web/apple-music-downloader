@@ -69,7 +69,8 @@ was running stays `running` and resumes on the next start.
 All JSON endpoints live under `/api/v1`; 2.0 keeps that prefix and sets the spec's
 `info.version` to the release version. The contract is `internal/api/openapi.yaml`;
 the route table in `internal/api` and the spec are checked against each other in both
-directions by a test.
+directions by a test. The server does not serve the spec, and it sends no CORS headers:
+the console, served from the same origin, is the one browser client.
 
 ### 3.1 Errors
 
@@ -95,7 +96,7 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 | 401 | `authentication_failed` (wrapper login) |
 | 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
 | 405 | `method_not_allowed` |
-| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending`, `signing_disabled` |
+| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
 | 413 | `request_too_large` |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `config_key_pinned`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` |
@@ -152,8 +153,7 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   `internal/domain` and the `EventType` enum in the spec.
 - Streams are Server-Sent Events only. There are no WebSocket twins.
 - Every stream resumes from `Last-Event-ID` or `?cursor=<id>`; the header wins when both
-  are present. A malformed cursor is `400 invalid_request`. CORS allows the
-  `Last-Event-ID` request header, so a cross-origin `EventSource` resumes too.
+  are present. A malformed cursor is `400 invalid_request`.
 - Every stream sends `X-Accel-Buffering: no` and a `: keepalive` comment every 15 s.
   That comment interval is separate from the store re-drain ticker that bounds latency
   when a wake signal is dropped; keep both.

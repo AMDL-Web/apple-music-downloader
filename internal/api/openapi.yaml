@@ -18,8 +18,7 @@ info:
     Streams are Server-Sent Events. Each resumes from the Last-Event-ID header or
     the `cursor` query parameter; the header wins when both are set, and a
     malformed cursor is 400 invalid_request. Every stream sends a `: keepalive`
-    comment every 15 seconds and the X-Accel-Buffering: no header. CORS allows
-    the Last-Event-ID request header, so a cross-origin EventSource resumes too.
+    comment every 15 seconds and the X-Accel-Buffering: no header.
 servers:
   - url: /
 tags:
@@ -330,34 +329,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HooksResponse'
-  /api/v1/developer-token:
-    get:
-      tags: [System]
-      summary: Get a locally signed Apple Music developer token
-      description: >-
-        Available only in local signing mode: signs a fresh JWT with the configured
-        .p8 private key, valid for catalog.developer_token_ttl_hours (default 1
-        hour); when catalog.allowed_origins is configured, an origin claim is added.
-        Returns 409 signing_disabled in legacy scraping mode (the scraped token is
-        origin-restricted and cannot be handed out).
-      operationId: getDeveloperToken
-      responses:
-        '200':
-          description: A newly issued developer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeveloperTokenResponse'
-        '409':
-          description: signing_disabled; the service is in legacy scraping mode, which does not support issuing a developer token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/library-sync:
     get:
       tags: [System]
@@ -710,9 +681,9 @@ paths:
       summary: List download jobs
       description: |
         Returns a snapshot of the download job list, with pagination,
-        status/type/storefront filters, substring search over title, artist and input URL,
-        and filtering by creation/update time windows. Sorted by created_at
-        descending by default.
+        status and type filters, and substring search over title, artist and
+        input URL. Sorted by created_at descending by default. Other query
+        parameters are ignored.
         Multi-value parameters (status, type) accept repeated keys or comma
         separation; for example `status=failed&status=cancelled` is equivalent to
         `status=failed,cancelled`.
@@ -757,11 +728,6 @@ paths:
               enum: [song, album, playlist, artist, station]
           style: form
           explode: true
-        - name: storefront
-          in: query
-          description: Exact match on the Apple Music storefront, e.g. us, cn, jp.
-          schema:
-            type: string
         - name: q
           in: query
           description: >-
@@ -769,40 +735,6 @@ paths:
             case-insensitive for ASCII letters). `%` and `_` match literally.
           schema:
             type: string
-        - name: created_after
-          in: query
-          description: >-
-            Only return jobs with created_at >= this instant. Accepts RFC3339 (with
-            optional nanoseconds) or YYYY-MM-DD (start of the UTC day, 00:00:00).
-          schema:
-            type: string
-            format: date-time
-        - name: created_before
-          in: query
-          description: >-
-            Only return jobs with created_at <= this instant. Accepts RFC3339 (with
-            optional nanoseconds) or YYYY-MM-DD (end of the UTC day,
-            23:59:59.999999999).
-          schema:
-            type: string
-            format: date-time
-        - name: updated_after
-          in: query
-          description: >-
-            Only return jobs with updated_at >= this instant. Accepts RFC3339 (with
-            optional nanoseconds) or YYYY-MM-DD (start of the UTC day, 00:00:00).
-          schema:
-            type: string
-            format: date-time
-        - name: updated_before
-          in: query
-          description: >-
-            Only return jobs with updated_at <= this instant. Accepts RFC3339 (with
-            optional nanoseconds) or YYYY-MM-DD (end of the UTC day,
-            23:59:59.999999999).
-          schema:
-            type: string
-            format: date-time
         - name: sort
           in: query
           description: >-
@@ -1308,7 +1240,7 @@ components:
         route_not_found, job_not_found, login_not_found, account_not_found; 405
         method_not_allowed (with an Allow header); 409 job_active,
         job_not_retryable, job_finalizing, duplicate_active, already_logged_in,
-        login_pending, signing_disabled; 413 request_too_large; 422
+        login_pending; 413 request_too_large; 422
         invalid_overrides, config_key_not_mutable, config_key_pinned,
         invalid_config, no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 502 upstream_error; 503 queue_full,
@@ -1329,7 +1261,6 @@ components:
         - duplicate_active
         - already_logged_in
         - login_pending
-        - signing_disabled
         - request_too_large
         - invalid_overrides
         - config_key_not_mutable
@@ -1343,13 +1274,6 @@ components:
         - wrapper_unavailable
         - feature_unavailable
         - upstream_timeout
-    DeveloperTokenResponse:
-      type: object
-      required: [token]
-      properties:
-        token:
-          type: string
-          description: ES256-signed Apple Music developer token (JWT). Read the expiry time from the exp claim in the payload.
     WrapperStatus:
       type: object
       required: [ready, status, regions, client_count, accounts]
@@ -1417,8 +1341,8 @@ components:
           enum: [local, legacy]
           description: >-
             local when the catalog.apple_music_* developer-token signing keys are
-            set (GET /developer-token works); legacy when the backend scrapes the
-            web-player token.
+            set and the backend signs its own catalog token; legacy when it
+            scrapes the web-player token.
         motion_artwork_enabled:
           type: boolean
           description: catalog.motion_artwork_enabled.

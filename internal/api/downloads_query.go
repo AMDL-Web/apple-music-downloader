@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"amdl/internal/db"
 	"amdl/internal/domain"
@@ -24,10 +23,9 @@ var (
 func parseJobListFilter(r *http.Request) (db.JobListFilter, error) {
 	q := r.URL.Query()
 	filter := db.JobListFilter{
-		Storefront: strings.TrimSpace(q.Get("storefront")),
-		Query:      strings.TrimSpace(q.Get("q")),
-		Sort:       strings.TrimSpace(q.Get("sort")),
-		Order:      strings.TrimSpace(strings.ToLower(q.Get("order"))),
+		Query: strings.TrimSpace(q.Get("q")),
+		Sort:  strings.TrimSpace(q.Get("sort")),
+		Order: strings.TrimSpace(strings.ToLower(q.Get("order"))),
 	}
 
 	if raw := strings.TrimSpace(q.Get("limit")); raw != "" {
@@ -67,25 +65,6 @@ func parseJobListFilter(r *http.Request) (db.JobListFilter, error) {
 		return filter, fmt.Errorf("order must be asc or desc")
 	}
 
-	var err error
-	if filter.CreatedAfter, err = parseOptionalTime(q.Get("created_after"), false); err != nil {
-		return filter, fmt.Errorf("created_after: %w", err)
-	}
-	if filter.CreatedBefore, err = parseOptionalTime(q.Get("created_before"), true); err != nil {
-		return filter, fmt.Errorf("created_before: %w", err)
-	}
-	if filter.UpdatedAfter, err = parseOptionalTime(q.Get("updated_after"), false); err != nil {
-		return filter, fmt.Errorf("updated_after: %w", err)
-	}
-	if filter.UpdatedBefore, err = parseOptionalTime(q.Get("updated_before"), true); err != nil {
-		return filter, fmt.Errorf("updated_before: %w", err)
-	}
-	if filter.CreatedAfter != nil && filter.CreatedBefore != nil && filter.CreatedAfter.After(*filter.CreatedBefore) {
-		return filter, fmt.Errorf("created_after must be <= created_before")
-	}
-	if filter.UpdatedAfter != nil && filter.UpdatedBefore != nil && filter.UpdatedAfter.After(*filter.UpdatedBefore) {
-		return filter, fmt.Errorf("updated_after must be <= updated_before")
-	}
 	filter.Normalize()
 	return filter, nil
 }
@@ -113,27 +92,4 @@ func parseCSVQuery(q url.Values, key string) []string {
 		}
 	}
 	return out
-}
-
-func parseOptionalTime(raw string, endOfDayIfDateOnly bool) (*time.Time, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		utc := t.UTC()
-		return &utc, nil
-	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		utc := t.UTC()
-		return &utc, nil
-	}
-	if t, err := time.Parse("2006-01-02", raw); err == nil {
-		utc := t.UTC()
-		if endOfDayIfDateOnly {
-			utc = utc.Add(24*time.Hour - time.Nanosecond)
-		}
-		return &utc, nil
-	}
-	return nil, fmt.Errorf("must be RFC3339 or YYYY-MM-DD")
 }

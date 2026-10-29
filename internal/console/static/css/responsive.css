@@ -69,10 +69,6 @@
     height: var(--icon-nav);
   }
 
-  .sidebar-foot .icon-sm {
-    display: none;
-  }
-
   .sidebar .sidebar-new {
     width: var(--touch);
     height: 40px;

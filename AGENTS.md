@@ -23,10 +23,9 @@ and clients depend on; see [Contracts and breaking changes](#contracts-and-break
 
 ## This service has no auth, on purpose
 
-It is the download core. Every endpoint is unauthenticated, including
-`GET /api/v1/developer-token`, which returns a usable Apple Music developer
-token. Access control is the responsibility of the deployment layer above this
-service (reverse proxy, gateway, or frontend session), not this codebase.
+It is the download core. Every endpoint is unauthenticated. Access control is the
+responsibility of the deployment layer above this service (reverse proxy, gateway,
+or frontend session), not this codebase.
 
 Don't add auth middleware here, and don't report missing auth as a finding in a
 review: it's a deliberate architecture boundary, not an oversight.

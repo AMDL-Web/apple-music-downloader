@@ -105,20 +105,18 @@ func (c WrapperConfig) Timeout() time.Duration {
 // the shared Apple request limits, developer-token signing, and the
 // runtime-mutable catalog behavior keys.
 type CatalogConfig struct {
-	DefaultStorefront        string   `yaml:"default_storefront" json:"default_storefront"`
-	Language                 string   `yaml:"language" json:"language"`
-	MaxParallelRequests      int      `yaml:"max_parallel_requests" json:"max_parallel_requests"`
-	RequestsPerSecond        int      `yaml:"requests_per_second" json:"requests_per_second"`
-	RequestBurst             int      `yaml:"request_burst" json:"request_burst"`
-	AppleMusicPrivateKeyPath string   `yaml:"apple_music_private_key_path" json:"apple_music_private_key_path"`
-	AppleMusicKeyID          string   `yaml:"apple_music_key_id" json:"apple_music_key_id"`
-	AppleMusicTeamID         string   `yaml:"apple_music_team_id" json:"apple_music_team_id"`
-	DeveloperTokenTTLHours   int      `yaml:"developer_token_ttl_hours" json:"developer_token_ttl_hours"`
-	AllowedOrigins           []string `yaml:"allowed_origins" json:"allowed_origins"`
-	TokenCacheTTLHours       int      `yaml:"token_cache_ttl_hours" json:"token_cache_ttl_hours"`
-	AlbumTrackURLMode        string   `yaml:"album_track_url_mode" json:"album_track_url_mode"`
-	MediaUserToken           string   `yaml:"media_user_token" json:"media_user_token"`
-	SignedModeHLSSource      string   `yaml:"signed_mode_hls_source" json:"signed_mode_hls_source"`
+	DefaultStorefront        string `yaml:"default_storefront" json:"default_storefront"`
+	Language                 string `yaml:"language" json:"language"`
+	MaxParallelRequests      int    `yaml:"max_parallel_requests" json:"max_parallel_requests"`
+	RequestsPerSecond        int    `yaml:"requests_per_second" json:"requests_per_second"`
+	RequestBurst             int    `yaml:"request_burst" json:"request_burst"`
+	AppleMusicPrivateKeyPath string `yaml:"apple_music_private_key_path" json:"apple_music_private_key_path"`
+	AppleMusicKeyID          string `yaml:"apple_music_key_id" json:"apple_music_key_id"`
+	AppleMusicTeamID         string `yaml:"apple_music_team_id" json:"apple_music_team_id"`
+	TokenCacheTTLHours       int    `yaml:"token_cache_ttl_hours" json:"token_cache_ttl_hours"`
+	AlbumTrackURLMode        string `yaml:"album_track_url_mode" json:"album_track_url_mode"`
+	MediaUserToken           string `yaml:"media_user_token" json:"media_user_token"`
+	SignedModeHLSSource      string `yaml:"signed_mode_hls_source" json:"signed_mode_hls_source"`
 	// MotionArtworkEnabled controls the out-of-band animated-cover lookup. It
 	// is the only feature that talks to amp-api purely for decoration, and it
 	// costs one undocumented-endpoint request plus a scraped web-player token
@@ -127,16 +125,6 @@ type CatalogConfig struct {
 	// fields, which clients already have to handle — an album without an
 	// animated cover looks the same.
 	MotionArtworkEnabled bool `yaml:"motion_artwork_enabled" json:"motion_artwork_enabled"`
-}
-
-// DeveloperTokenTTL returns the validity of developer tokens minted for
-// external clients via GET /api/v1/developer-token. Values <= 0 fall back to
-// 1 hour. The backend's internal token keeps its own fixed 24h validity.
-func (c CatalogConfig) DeveloperTokenTTL() time.Duration {
-	if c.DeveloperTokenTTLHours <= 0 {
-		return time.Hour
-	}
-	return time.Duration(c.DeveloperTokenTTLHours) * time.Hour
 }
 
 // TokenTTL is the validity window of an auto-discovered (legacy mode) bearer
@@ -255,8 +243,8 @@ func Default() Config {
 		Catalog: CatalogConfig{
 			DefaultStorefront: "cn", Language: "zh-Hans_CN",
 			MaxParallelRequests: 16, RequestsPerSecond: 10, RequestBurst: 16,
-			DeveloperTokenTTLHours: 1, AllowedOrigins: []string{}, TokenCacheTTLHours: 12,
-			AlbumTrackURLMode: "song", SignedModeHLSSource: "wrapper",
+			TokenCacheTTLHours: 12,
+			AlbumTrackURLMode:  "song", SignedModeHLSSource: "wrapper",
 			MotionArtworkEnabled: true,
 		},
 		Download: DownloadConfig{

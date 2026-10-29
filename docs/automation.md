@@ -129,8 +129,8 @@ watcher idles and warns once instead of erroring every pass.
 
 Submissions go through `jobs.Manager.SubmitBatch`, not through the backend's own HTTP API,
 so they are identical to jobs you submit by hand — same deduplication, same validation,
-same hooks. Catalog reads use the backend's **internal** developer token, not the one
-`/api/v1/developer-token` signs for browser clients.
+same hooks. Catalog reads use the backend's own developer token or scraped web-player
+token, like every other catalog read.
 
 ### Why the watermark is a position, not a timestamp
 

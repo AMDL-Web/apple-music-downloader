@@ -30,7 +30,7 @@ wins and this page is fixed in the same change. Sources are listed in
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, Activity (persisted history plus live events), Saved to (completed jobs), Cancel/Retry/Delete |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
-| `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings, API links |
+| `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings |
 | `#/new?url=` | New download | Sections `compose` (text box, media-user-token when needed, Download N), `links` (a row per link found), `results` (after a submit), and beside them at 1024 px and up `options` and `bookmarklet`. `url` carries one or more links, newline- or space-separated and URL-encoded (`lib/route.js` `newDownloadHash`, `newDownloadUrls`), and follows the text box; `lib/links.js` parses them |
 | `#/settings?section=&field=` | Settings | A section list (a select under 640 px) and one open section: `downloads` (the default), `files`, `artwork`, `lyrics`, `catalog`, `library_sync`, `logging`, `simulate`, `account`, `config_file` (`lib/settings.js` `SETTINGS_SECTIONS`; `section` is lowercase words joined by `_`, `settingsSection`). The palette finds every section and field, also by words such as `parallel` or `template` (`lib/palette.js`); a field result opens `#/settings?section=<id>&field=<config key>`, which focuses that field (a pinned field has no enabled control, so it only scrolls) and scrolls it to the middle (`ui/field-focus.js`) |
 
@@ -59,7 +59,7 @@ sidebar into a horizontal masthead at 640 px and up).
 
 ```
 .shell
-  .sidebar (nav: .brand > .brand-mark + .brand-text > .brand-name, .brand-sub; a.sidebar-new; .nav > .nav-item; .sidebar-foot)
+  .sidebar (nav: .brand > .brand-mark + .brand-text > .brand-name, .brand-sub; a.sidebar-new; .nav > .nav-item)
   .main-col
     header.topbar (.topbar-right: .conn, .search-trigger, .skin, .theme)
     main.main[data-page] (.page-head > h1.page-title + .page-sub + .page-actions; .banners; .page.page-<name>)

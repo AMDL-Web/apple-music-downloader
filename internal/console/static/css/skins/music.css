@@ -333,11 +333,6 @@
   line-height: var(--lh-13);
 }
 
-:root[data-skin="music"] .sidebar-foot .nav-item {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-}
-
 /* The top bar is the canvas, frosted, so content scrolling under it stays legible. */
 :root[data-skin="music"] .topbar {
   padding: 0 var(--main-x);

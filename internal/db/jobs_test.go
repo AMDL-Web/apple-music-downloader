@@ -528,14 +528,14 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 		t.Fatalf("status filter = ids=%v total=%d, want [j2]/1", idsOf(listed), total)
 	}
 
-	listed, total, err = store.ListJobs(ctx, JobListFilter{Types: []string{"song", "artist"}, Storefront: "us", Limit: 50})
+	listed, total, err = store.ListJobs(ctx, JobListFilter{Types: []string{"song", "artist"}, Limit: 50})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if total != 2 || len(listed) != 2 {
-		t.Fatalf("type+storefront = ids=%v total=%d, want 2 us song/artist", idsOf(listed), total)
+		t.Fatalf("type filter = ids=%v total=%d, want the song and the artist", idsOf(listed), total)
 	}
-	counts, err = store.CountJobsByStatus(ctx, JobListFilter{Types: []string{"song", "artist"}, Storefront: "us"})
+	counts, err = store.CountJobsByStatus(ctx, JobListFilter{Types: []string{"song", "artist"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,16 +567,6 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 		t.Fatalf("literal %% query matched %d jobs, want 0", total)
 	}
 
-	after := base.Add(90 * time.Minute)
-	before := base.Add(150 * time.Minute)
-	listed, total, err = store.ListJobs(ctx, JobListFilter{CreatedAfter: &after, CreatedBefore: &before, Limit: 50})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if total != 1 || listed[0].ID != "j3" {
-		t.Fatalf("created window = ids=%v total=%d, want [j3]", idsOf(listed), total)
-	}
-
 	listed, total, err = store.ListJobs(ctx, JobListFilter{Sort: JobListSortUpdatedAt, Order: JobListOrderAsc, Limit: 50})
 	if err != nil {
 		t.Fatal(err)
@@ -586,11 +576,10 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 	}
 }
 
-// TestListJobsWholeSecondBoundaryWithFractionalTimes guards the lexicographic
-// TEXT compare bug: a whole-second filter like created_after=...T12:00:00Z must
-// still include rows stored with sub-second fractions in that same second, and
-// ORDER BY must keep chronological order across whole-second vs fractional rows.
-func TestListJobsWholeSecondBoundaryWithFractionalTimes(t *testing.T) {
+// TestListJobsOrdersFractionalTimes guards the lexicographic TEXT compare:
+// timestamps are stored fixed-width, so ORDER BY keeps chronological order
+// across whole-second and sub-second rows.
+func TestListJobsOrdersFractionalTimes(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -620,22 +609,12 @@ func TestListJobsWholeSecondBoundaryWithFractionalTimes(t *testing.T) {
 		t.Fatalf("stored created_at = %q, want fixed-width %q", stored, wantStored)
 	}
 
-	after := sec
-	listed, total, err := store.ListJobs(ctx, JobListFilter{CreatedAfter: &after, Sort: JobListSortCreatedAt, Order: JobListOrderAsc, Limit: 50})
+	listed, total, err := store.ListJobs(ctx, JobListFilter{Sort: JobListSortCreatedAt, Order: JobListOrderAsc, Limit: 50})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if total != 3 || idsOf(listed)[0] != "exact" || idsOf(listed)[1] != "frac" || idsOf(listed)[2] != "next" {
-		t.Fatalf("created_after whole-second = ids=%v total=%d, want [exact frac next]", idsOf(listed), total)
-	}
-
-	before := sec
-	listed, total, err = store.ListJobs(ctx, JobListFilter{CreatedBefore: &before, Limit: 50})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if total != 1 || listed[0].ID != "exact" {
-		t.Fatalf("created_before whole-second = ids=%v total=%d, want [exact] only (frac must be excluded)", idsOf(listed), total)
+		t.Fatalf("created_at asc = ids=%v total=%d, want [exact frac next]", idsOf(listed), total)
 	}
 }
 

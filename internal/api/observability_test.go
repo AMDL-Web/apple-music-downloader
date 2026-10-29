@@ -31,14 +31,16 @@ func newObservedServer(t *testing.T) (*Server, *logging.System) {
 func TestHTTPObservationAndLogQuery(t *testing.T) {
 	server, system := newObservedServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	// A client's own id is not adopted: the server always generates one.
 	req.Header.Set("X-Request-ID", "client-request-1")
 	rec := httptest.NewRecorder()
 	server.Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || rec.Header().Get("X-Request-ID") != "client-request-1" {
-		t.Fatalf("health response = %d, request id %q", rec.Code, rec.Header().Get("X-Request-ID"))
+	requestID := rec.Header().Get("X-Request-ID")
+	if rec.Code != http.StatusOK || requestID == "" || requestID == "client-request-1" {
+		t.Fatalf("health response = %d, request id %q, want a generated id", rec.Code, requestID)
 	}
 
-	page := system.Store.List(logging.Filter{RequestID: "client-request-1", Limit: 10})
+	page := system.Store.List(logging.Filter{RequestID: requestID, Limit: 10})
 	if len(page.Entries) != 1 || page.Entries[0].Message != "http request" {
 		t.Fatalf("access logs = %#v", page.Entries)
 	}
@@ -47,7 +49,7 @@ func TestHTTPObservationAndLogQuery(t *testing.T) {
 		t.Fatalf("access attrs = %#v", attrs)
 	}
 
-	query := httptest.NewRequest(http.MethodGet, "/api/v1/logs?request_id=client-request-1&level=info&limit=10", nil)
+	query := httptest.NewRequest(http.MethodGet, "/api/v1/logs?request_id="+requestID+"&level=info&limit=10", nil)
 	queryRec := httptest.NewRecorder()
 	server.Routes().ServeHTTP(queryRec, query)
 	if queryRec.Code != http.StatusOK {

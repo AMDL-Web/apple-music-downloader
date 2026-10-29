@@ -10,7 +10,7 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | Public API host | `api.music.apple.com`: Apple's documented Music API, called with the developer token | `internal/applemusic#CatalogClient.apiBase` |
 | amp-api | `amp-api.music.apple.com`: Apple's undocumented web-player API, called with a scraped JWT and an `Origin` header; the only source of some fields | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Developer token | Self-signed Apple Music JWT made from a `.p8` key, also served by `GET /api/v1/developer-token` | `internal/applemusic#CatalogClient.InitDeveloperToken` |
+| Developer token | Self-signed Apple Music JWT made from a `.p8` key, used for the backend's own catalog reads | `internal/applemusic#CatalogClient.InitDeveloperToken` |
 | Web-player JWT | The token scraped from music.apple.com's JS bundle that amp-api requires | `internal/applemusic#CatalogClient.doWithWebAuth` |
 | Signed vs legacy mode | Whether developer-token signing is configured; it decides which host catalog reads use | [docs/configuration.md](docs/configuration.md#developer-token-signing) |
 | Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it | `configs/config.example.yaml#catalog.media_user_token` |

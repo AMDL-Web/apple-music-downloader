@@ -1,39 +1,21 @@
 package api
 
 import (
-	"net/http"
+	_ "embed"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
 
-func TestSwaggerUI(t *testing.T) {
-	server := &Server{}
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/docs", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if contentType := recorder.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
-		t.Fatalf("content type = %q", contentType)
-	}
-	body := recorder.Body.String()
-	for _, expected := range []string{`<html lang="en">`, "<title>AMDL API reference</title>", "swagger-ui-dist@5.32.8", "/api/openapi.yaml", "SwaggerUIBundle", "needs internet access"} {
-		if !strings.Contains(body, expected) {
-			t.Fatalf("Swagger UI does not contain %q", expected)
-		}
-	}
-}
+// openAPISpec is internal/api/openapi.yaml, the contract the parity tests
+// check the route table, error codes and runtime config against. The server
+// does not serve it.
+//
+//go:embed openapi.yaml
+var openAPISpec []byte
 
 func TestOpenAPISpecification(t *testing.T) {
-	server := &Server{}
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/openapi.yaml", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if contentType := recorder.Header().Get("Content-Type"); contentType != "application/yaml; charset=utf-8" {
-		t.Fatalf("content type = %q", contentType)
-	}
 	var spec struct {
 		OpenAPI string `yaml:"openapi"`
 		Info    struct {
@@ -43,7 +25,7 @@ func TestOpenAPISpecification(t *testing.T) {
 			Schemas map[string]any `yaml:"schemas"`
 		} `yaml:"components"`
 	}
-	if err := yaml.Unmarshal(recorder.Body.Bytes(), &spec); err != nil {
+	if err := yaml.Unmarshal(openAPISpec, &spec); err != nil {
 		t.Fatalf("invalid OpenAPI YAML: %v", err)
 	}
 	if spec.OpenAPI != "3.1.0" {
@@ -88,7 +70,7 @@ func TestOpenAPISpecification(t *testing.T) {
 	if !tracksRequired {
 		t.Errorf("OpenAPI QualityResponse required = %#v, want tracks", required)
 	}
-	if !strings.Contains(recorder.Body.String(), "enum: [song, album, playlist, artist, station]") {
+	if !strings.Contains(string(openAPISpec), "enum: [song, album, playlist, artist, station]") {
 		t.Error("OpenAPI QualityResponse does not document all supported input types")
 	}
 }

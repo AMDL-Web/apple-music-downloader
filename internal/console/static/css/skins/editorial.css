@@ -353,21 +353,6 @@
     vertical-align: super;
   }
 
-  :root[data-skin="editorial"] .sidebar-foot {
-    flex-direction: row;
-    margin: 0 0 0 auto;
-  }
-
-  :root[data-skin="editorial"] .sidebar-foot .nav-item {
-    font-size: var(--fs-13);
-  }
-
-  :root[data-skin="editorial"] .sidebar-foot .icon-sm {
-    display: inline-block;
-    width: var(--icon-sm);
-    height: var(--icon-sm);
-  }
-
   /* The top bar's controls sit on the wordmark's line, at the right. */
   :root[data-skin="editorial"] .topbar {
     grid-row: 1;
@@ -414,10 +399,6 @@
 
   :root[data-skin="editorial"] .nav-item {
     height: var(--topbar-h);
-  }
-
-  :root[data-skin="editorial"] .sidebar-foot {
-    margin-left: 0;
   }
 
   :root[data-skin="editorial"] .topbar {

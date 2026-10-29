@@ -256,12 +256,6 @@
   line-height: var(--lh-13);
 }
 
-.link-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-}
-
 .quiet-note {
   display: flex;
   align-items: center;

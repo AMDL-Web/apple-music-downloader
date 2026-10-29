@@ -18,7 +18,6 @@ const STATIC_ITEMS = [
   { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
   { id: 'nav-system', group: 'Navigate', label: 'System', icon: 'server', hash: buildHash('system'), keys: 'g y' },
   { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,' },
-  { id: 'nav-docs', group: 'Navigate', label: 'API docs', icon: 'book', external: true },
   { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },
   { id: 'f-running', group: 'Filters', label: 'Show active jobs', icon: 'dot', hash: buildHash('queue') },
   { id: 'f-errors', group: 'Filters', label: 'Show error logs', icon: 'triangle-alert', hash: buildHash('logs', { level: 'warn,error' }) },
@@ -94,7 +93,7 @@ export function jobItem(job) {
 /**
  * The palette's rows for `query` and the jobs its search returned, in
  * display order. Rows carry {id, group, label, icon} and one of hash,
- * theme, skin or external; `sub`, `keys`, `dir` and, for a Settings field,
+ * theme or skin; `sub`, `keys`, `dir` and, for a Settings field,
  * `field` (its config key, to focus once the section is open) are optional.
  */
 export function paletteItems(query, jobs = []) {

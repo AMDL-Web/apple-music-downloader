@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"amdl/internal/config"
 	"amdl/internal/domain"
@@ -139,23 +138,18 @@ func (s *Store) GetJob(ctx context.Context, id string) (domain.Job, error) {
 	return scanJob(s.db.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.id=?`, id))
 }
 
-// JobListFilter controls GET /downloads listing: pagination, status/type/
-// storefront filters, title/input/artist substring search, and created/updated
-// time windows. Zero values mean "no constraint" except Limit, which the
-// store clamps to [1, 200] with a default of 50.
+// JobListFilter controls GET /downloads listing: pagination, status and type
+// filters, and title/input/artist substring search. Zero values mean "no
+// constraint" except Limit, which the store clamps to [1, 200] with a default
+// of 50.
 type JobListFilter struct {
-	Limit         int
-	Offset        int
-	Statuses      []domain.JobStatus
-	Types         []string
-	Storefront    string
-	Query         string
-	CreatedAfter  *time.Time
-	CreatedBefore *time.Time
-	UpdatedAfter  *time.Time
-	UpdatedBefore *time.Time
-	Sort          string // created_at (default) or updated_at
-	Order         string // desc (default) or asc
+	Limit    int
+	Offset   int
+	Statuses []domain.JobStatus
+	Types    []string
+	Query    string
+	Sort     string // created_at (default) or updated_at
+	Order    string // desc (default) or asc
 }
 
 const (
@@ -208,30 +202,10 @@ func (f JobListFilter) whereClause() (string, []any) {
 		}
 		conds = append(conds, "j.type IN ("+strings.Join(placeholders, ",")+")")
 	}
-	if sf := strings.TrimSpace(f.Storefront); sf != "" {
-		conds = append(conds, "j.storefront=?")
-		args = append(args, sf)
-	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		like := "%" + escapeLike(q) + "%"
 		conds = append(conds, `(j.title LIKE ? ESCAPE '\' OR j.input LIKE ? ESCAPE '\' OR j.artist_name LIKE ? ESCAPE '\')`)
 		args = append(args, like, like, like)
-	}
-	if f.CreatedAfter != nil {
-		conds = append(conds, "j.created_at>=?")
-		args = append(args, formatTime(*f.CreatedAfter))
-	}
-	if f.CreatedBefore != nil {
-		conds = append(conds, "j.created_at<=?")
-		args = append(args, formatTime(*f.CreatedBefore))
-	}
-	if f.UpdatedAfter != nil {
-		conds = append(conds, "j.updated_at>=?")
-		args = append(args, formatTime(*f.UpdatedAfter))
-	}
-	if f.UpdatedBefore != nil {
-		conds = append(conds, "j.updated_at<=?")
-		args = append(args, formatTime(*f.UpdatedBefore))
 	}
 	if len(conds) == 0 {
 		return "", args

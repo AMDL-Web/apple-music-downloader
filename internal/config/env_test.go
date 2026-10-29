@@ -9,7 +9,7 @@ import (
 )
 
 func TestEnvOverrides(t *testing.T) {
-	path := writeConfig(t, "wrapper:\n  address: \"10.0.0.1:8080\"\n")
+	path := writeConfig(t, "wrapper:\n  address: \"10.0.0.1:8080\"\ndownload:\n  lyrics_extras: [translation]\n")
 	cfg, err := load(path, []string{
 		"AMDL_SERVER_LISTEN=:19090",
 		"AMDL_WRAPPER_ADDRESS=wrapper-manager:8080",
@@ -24,7 +24,7 @@ func TestEnvOverrides(t *testing.T) {
 		"AMDL_CATALOG_MAX_PARALLEL_REQUESTS=12",
 		"AMDL_CATALOG_REQUESTS_PER_SECOND=9",
 		"AMDL_CATALOG_REQUEST_BURST=14",
-		"AMDL_CATALOG_ALLOWED_ORIGINS=",
+		"AMDL_DOWNLOAD_LYRICS_EXTRAS=",
 		"UNRELATED=1",
 	})
 	if err != nil {
@@ -62,8 +62,8 @@ func TestEnvOverrides(t *testing.T) {
 		t.Fatalf("quality priority = %#v, want trimmed comma-separated items", cfg.Download.QualityPriority)
 	}
 	// An empty value overrides a list to empty.
-	if !reflect.DeepEqual(cfg.Catalog.AllowedOrigins, []string{}) {
-		t.Fatalf("allowed origins = %#v, want empty list", cfg.Catalog.AllowedOrigins)
+	if !reflect.DeepEqual(cfg.Download.LyricsExtras, []string{}) {
+		t.Fatalf("lyrics extras = %#v, want the file's list emptied", cfg.Download.LyricsExtras)
 	}
 }
 

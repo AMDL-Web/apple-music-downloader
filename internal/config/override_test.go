@@ -274,14 +274,13 @@ func TestRuntimeLockedChanges(t *testing.T) {
 	updated.Download.MaxParallelDecrypts = base.Download.MaxParallelDecrypts + 1
 	updated.Download.MaxParallelWrapperRequests = base.Download.MaxParallelWrapperRequests + 1
 	updated.Wrapper.Address = "10.0.0.1:8080"
-	updated.Catalog.AllowedOrigins = []string{"https://example.com"}
 	updated.Catalog.MaxParallelRequests = base.Catalog.MaxParallelRequests + 1
 	updated.Catalog.RequestsPerSecond = base.Catalog.RequestsPerSecond + 1
 	updated.Catalog.RequestBurst = base.Catalog.RequestBurst + 1
 	got := RuntimeLockedChanges(base, updated)
 	// Keys surface in Config struct-field order because the locked set is
 	// derived from envFields.
-	want := []string{"server.listen", "logging.format", "wrapper.address", "catalog.max_parallel_requests", "catalog.requests_per_second", "catalog.request_burst", "catalog.allowed_origins", "download.max_running_jobs", "download.max_parallel_downloads", "download.max_parallel_decrypts", "download.max_parallel_wrapper_requests"}
+	want := []string{"server.listen", "logging.format", "wrapper.address", "catalog.max_parallel_requests", "catalog.requests_per_second", "catalog.request_burst", "download.max_running_jobs", "download.max_parallel_downloads", "download.max_parallel_decrypts", "download.max_parallel_wrapper_requests"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("locked changes = %v, want %v", got, want)
 	}

@@ -152,9 +152,7 @@ func run(ctx context.Context, files configFiles) (err error) {
 	// actually run under.
 	manager.SetConfigStore(cfgStore)
 	// The library watcher submits through the same manager as the REST API, so
-	// anything it queues is an ordinary job (same dedup, same hooks), and it
-	// reads catalog metadata with the backend's internal developer token,
-	// which carries no origin claim.
+	// anything it queues is an ordinary job (same dedup, same hooks).
 	libraryWatcher := librarysync.New(cfgStore, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
 
 	listener, err := net.Listen("tcp", cfg.Server.Listen)
@@ -181,7 +179,7 @@ func run(ctx context.Context, files configFiles) (err error) {
 	apiServer := api.New(api.Deps{
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
-		Wrapper: wrapperClient, Quality: qualityService, DeveloperToken: catalog, LibrarySync: libraryWatcher,
+		Wrapper: wrapperClient, Quality: qualityService, LibrarySync: libraryWatcher,
 		Catalog: catalog,
 	})
 	routes := apiServer.Routes()

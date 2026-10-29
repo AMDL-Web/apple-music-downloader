@@ -1,7 +1,7 @@
 // Command palette (Cmd/Ctrl+K) and the keyboard shortcut sheet.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { listDownloads, docsUrl } from '../api.js';
+import { listDownloads } from '../api.js';
 import { paletteItems, resultCount } from '../lib/palette.js';
 import { Icon, Button } from '../ui/components.js';
 import { Dialog, useDialog } from '../ui/dialogs.js';
@@ -50,7 +50,6 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
     onClose();
     if (it.theme) setTheme(it.theme);
     else if (it.skin) setSkin(it.skin);
-    else if (it.external) window.open(docsUrl(), '_blank', 'noopener,noreferrer');
     else if (it.hash) {
       // Already at that address: no route change moves focus, so do it here.
       if (it.field && window.location.hash === it.hash) focusField(it.field);
@@ -93,7 +92,6 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
       <span class="palette-label" dir=${it.dir}>${it.label}</span>
       ${it.sub ? html`<span class="palette-sub" dir="auto">${it.sub}</span>` : null}
       ${it.keys ? html`<kbd class="palette-keys">${it.keys}</kbd>` : null}
-      ${it.external ? html`<${Icon} name="external" size="sm" />` : null}
     </li>`);
   });
 

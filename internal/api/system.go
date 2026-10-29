@@ -14,12 +14,6 @@ type QualityService interface {
 	QueryQuality(context.Context, media.QualityRequest) (media.QualityResult, error)
 }
 
-// DeveloperTokenService mints Apple Music developer tokens in local signing
-// mode.
-type DeveloperTokenService interface {
-	MintDeveloperToken() (string, error)
-}
-
 func (s *Server) queryQuality(w http.ResponseWriter, r *http.Request) {
 	var req media.QualityRequest
 	if !decodeJSONBody(w, r, &req, false) {
@@ -59,24 +53,4 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listHooks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.manager.ListHooks())
-}
-
-// developerToken hands out a freshly signed Apple Music developer token. Only
-// local signing mode can serve it: the legacy web-discovered token is
-// origin-locked to music.apple.com and would be rejected anywhere else.
-func (s *Server) developerToken(w http.ResponseWriter, r *http.Request) {
-	if s.devToken == nil {
-		writeFeatureUnavailable(w, "developer token signing")
-		return
-	}
-	if !s.currentConfig().Catalog.DeveloperTokenSigningEnabled() {
-		writeError(w, http.StatusConflict, CodeSigningDisabled, "developer token endpoint requires local signing mode (catalog.apple_music_* keys); the web-discovered token is origin-restricted and cannot be shared")
-		return
-	}
-	token, err := s.devToken.MintDeveloperToken()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, CodeInternalError, "mint developer token: "+err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }

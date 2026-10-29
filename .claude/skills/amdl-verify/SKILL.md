@@ -79,7 +79,7 @@ Done when: health is `ok`; the stream shows `job_queued`, `job_started`,
 - Config: `curl -s $B/config | jq .`, then `PUT` a runtime key and read it back; a
   startup key must be rejected.
 - New route: hit it with valid and invalid input and compare the response with
-  `internal/api/openapi.yaml`; the spec is served at `http://127.0.0.1:18080/docs`.
+  `internal/api/openapi.yaml`.
 
 Real downloads, decryption, lyrics and wrapper login need wrapper-manager; in its
 absence they are "not verified", never assumed. Stop the server when done: Ctrl-C

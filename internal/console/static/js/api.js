@@ -26,7 +26,7 @@ const QUALITY_TIMEOUT_MS = 180000;
 // The server bounds a lookup at 15 s and answers 504; wait a little longer.
 const LOOKUP_TIMEOUT_MS = 20000;
 
-/** Resolves an "/api/..." or "/docs" path against the server root above /console/. */
+/** Resolves an "/api/..." path against the server root above /console/. */
 export function resolveUrl(path, query, base = globalThis.document ? globalThis.document.baseURI : 'http://localhost/console/') {
   const root = new URL('../', base);
   const url = new URL(path.replace(/^\//, ''), root);
@@ -154,10 +154,6 @@ export const resetLibrarySync = () => request('POST', '/api/v1/library-sync/rese
 export const feedStreamUrl = () => resolveUrl('/api/v1/downloads/events');
 export const jobStreamUrl = (id) => resolveUrl(`/api/v1/downloads/${encodeURIComponent(id)}/events`);
 export const logStreamUrl = (query) => resolveUrl('/api/v1/logs/stream', query);
-
-/** Links outside the console. */
-export const docsUrl = () => resolveUrl('/docs');
-export const specUrl = () => resolveUrl('/api/openapi.yaml');
 
 /** Parses SSE data as JSON, or null. */
 export function parseData(ev) {

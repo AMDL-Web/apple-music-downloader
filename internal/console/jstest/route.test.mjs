@@ -125,7 +125,7 @@ test('encodeQuery skips empty values', () => {
 test('API URLs resolve against the server root above the console', () => {
   assert.equal(resolveUrl('/api/v1/downloads', { limit: 1 }, 'http://h:18080/console/'), 'http://h:18080/api/v1/downloads?limit=1');
   assert.equal(resolveUrl('/api/v1/health', undefined, 'https://h/amdl/console/'), 'https://h/amdl/api/v1/health');
-  assert.equal(resolveUrl('/docs', {}, 'http://h/console/#/system'), 'http://h/docs');
+  assert.equal(resolveUrl('/api/v1/system', {}, 'http://h/console/#/system'), 'http://h/api/v1/system');
 });
 
 test('toApiError reads the 2.0 error envelope', () => {

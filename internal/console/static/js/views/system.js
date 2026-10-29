@@ -12,8 +12,6 @@ import {
   getLibrarySync,
   getHooks,
   settle,
-  docsUrl,
-  specUrl,
 } from '../api.js';
 import { count, bytes, elapsed, absTime, maskAccount, relTime } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
@@ -41,10 +39,7 @@ export function SystemPage() {
       <${LibrarySyncCard} res=${ls} loading=${!health.data} />
     </div>
     <${HooksCard} res=${hk} stats=${stats} loading=${!health.data} />
-    <div class="grid-2">
-      <${ConfigCard} />
-      <${LinksCard} />
-    </div>
+    <${ConfigCard} />
   </div>`;
 }
 
@@ -289,20 +284,9 @@ function ConfigCard() {
       <p class="muted small">Startup-only settings are not exposed by the API; edit configs/config.yaml and restart for those.</p>`;
   }
   return html`<${Card}
-    className="span-6"
     title="Configuration"
     labelId="config-title"
     section="config"
     actions=${html`<${LinkButton} size="sm" icon="settings" href=${settingsHash()}>Open settings</${LinkButton}>`}
   >${body}</${Card}>`;
-}
-
-function LinksCard() {
-  return html`<${Card} className="span-6" title="API" labelId="api-title">
-    <div class="link-row">
-      <${LinkButton} href=${docsUrl()} icon="book" external>API docs</${LinkButton}>
-      <${LinkButton} href=${specUrl()} icon="braces" external>OpenAPI spec</${LinkButton}>
-    </div>
-    <p class="muted small">The API docs page loads Swagger UI from a CDN and needs internet access.</p>
-  </${Card}>`;
 }

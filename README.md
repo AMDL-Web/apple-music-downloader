@@ -63,7 +63,7 @@ data/downloads/albums/<artist>/<album>/01. Song.m4a   ← ALAC, cover and lyrics
                                        cover.jpg      ← standalone artwork
 ```
 
-Interactive API reference: <http://localhost:18080/docs>.
+API reference: [docs/api.md](docs/api.md) and [`internal/api/openapi.yaml`](internal/api/openapi.yaml).
 
 ## How it works
 
@@ -84,9 +84,9 @@ scraped from `music.apple.com`, and is the **only** source of `enhancedHls` mani
 `editorialVideo` animated covers. Being undocumented, it can change without notice;
 anything read from it degrades to "this album doesn't have that" rather than failing a job.
 
-**There is no authentication here, on purpose.** Every endpoint is open, including
-`GET /api/v1/developer-token`. This is the download core — access control belongs to the
-reverse proxy, gateway or session layer you put in front of it.
+**There is no authentication here, on purpose.** Every endpoint is open. This is the
+download core — access control belongs to the reverse proxy, gateway or session layer you
+put in front of it.
 
 ## How a track is downloaded
 
@@ -159,10 +159,10 @@ lyrics sidecars are written next to the audio when enabled.
 
 ## API
 
-`http://localhost:18080/docs` is a live Swagger UI (loaded from unpkg.com, so it needs
-internet access) over [`internal/api/openapi.yaml`](internal/api/openapi.yaml), which is
-the source of truth for every request and response shape. Every path below is under
-`/api/v1`; the web console is at `/console/`.
+[`internal/api/openapi.yaml`](internal/api/openapi.yaml) is the source of truth for every
+request and response shape. Every path below is under `/api/v1`. The web console at
+`/console/` is the API's only browser client: responses carry no CORS headers, so a page
+on another origin cannot call it.
 
 | | |
 | --- | --- |
@@ -173,7 +173,7 @@ the source of truth for every request and response shape. Every path below is un
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |
 | **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
-| **System** | `GET /health` · `GET /system` build, capacity and free space · `GET /stats` download statistics · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
+| **System** | `GET /health` · `GET /system` build, capacity and free space · `GET /stats` download statistics · `GET /logs` · `GET /logs/stream` |
 
 Submissions take `urls`, and an `overrides` object that overlays the runtime config for
 that batch only — quality priority, memory mode, path templates, lyrics settings,
@@ -186,7 +186,7 @@ Errors share one body, `{"error": {"code", "message", "details"?}}`; clients swi
 seeded from the `event_cursor` of the matching snapshot. `GET /config` only reads; a
 hand-edited config file is applied by `POST /config/reload` or SIGHUP.
 
-Every response carries an `X-Request-ID`; send your own and
+Every response carries a server-generated `X-Request-ID`;
 `GET /logs?request_id=<id>` aggregates that request's access and job logs.
 
 Full walkthrough with curl examples: [docs/api.md](docs/api.md).

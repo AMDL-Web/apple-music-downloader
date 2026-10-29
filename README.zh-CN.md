@@ -60,7 +60,7 @@ data/downloads/albums/<艺人>/<专辑>/01. Song.m4a   ← ALAC，封面与歌�
                                    cover.jpg      ← 独立封面
 ```
 
-交互式 API 文档：<http://localhost:18080/docs>。
+API 参考：[docs/api.md](docs/api.md) 与 [`internal/api/openapi.yaml`](internal/api/openapi.yaml)。
 
 ## 架构
 
@@ -79,8 +79,8 @@ developer token。`amp-api.music.apple.com` 是 Apple 内部的网页播放器�
 **唯一**来源。它没有文档，随时可能变，所以从它读到的东西必须退化成「这张专辑没有那个字段」，
 而不是让任务失败。
 
-**这里没有鉴权，是故意的。** 所有端点都是开放的，包括 `GET /api/v1/developer-token`。这是
-下载核心，访问控制属于你放在它前面的反向代理、网关或会话层。
+**这里没有鉴权，是故意的。** 所有端点都是开放的。这是下载核心，访问控制属于你放在它前面的
+反向代理、网关或会话层。
 
 ## 一首曲目是怎么下下来的
 
@@ -145,10 +145,9 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 
 ## API
 
-`http://localhost:18080/docs` 是基于
-[`internal/api/openapi.yaml`](internal/api/openapi.yaml) 的在线 Swagger UI（从 unpkg.com
-加载，需要联网），该文件是所有请求与响应结构的唯一事实来源。下表路径都在 `/api/v1` 之下；
-网页控制台在 `/console/`。
+[`internal/api/openapi.yaml`](internal/api/openapi.yaml) 是所有请求与响应结构的唯一事实
+来源。下表路径都在 `/api/v1` 之下。`/console/` 的网页控制台是这套 API 唯一的浏览器客户端：
+响应不带 CORS 头，其他源的网页无法调用它。
 
 | | |
 | --- | --- |
@@ -159,7 +158,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |
 | **资料库同步** | `GET /library-sync` · `POST /library-sync/reset` |
-| **系统** | `GET /health` · `GET /system` 构建信息、容量与剩余空间 · `GET /stats` 下载统计 · `GET /developer-token` · `GET /logs` · `GET /logs/stream` |
+| **系统** | `GET /health` · `GET /system` 构建信息、容量与剩余空间 · `GET /stats` 下载统计 · `GET /logs` · `GET /logs/stream` |
 
 提交接口接受 `urls`，以及一个只对该批任务生效的 `overrides` 对象——编码优先级、内存模式、
 路径模板、歌词选项、`force_overwrite`、hooks 允许列表，以及电台和私人歌单所需的
@@ -171,7 +170,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 快照里的 `event_cursor`。`GET /config` 只读；手改配置文件后用 `POST /config/reload` 或
 SIGHUP 生效。
 
-每个响应都带 `X-Request-ID`；传入你自己的同名头，之后
+每个响应都带服务端生成的 `X-Request-ID`；用
 `GET /logs?request_id=<id>` 就能把该请求的访问日志与任务日志聚合起来。
 
 带 curl 示例的完整说明：[docs/api.md](docs/api.md)。

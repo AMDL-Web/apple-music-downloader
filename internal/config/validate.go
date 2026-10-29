@@ -104,11 +104,6 @@ func (c Config) Validate() error {
 	if signingFields != 0 && signingFields != 3 {
 		return fmt.Errorf("catalog.apple_music_private_key_path, catalog.apple_music_key_id, and catalog.apple_music_team_id must all be set together or all left empty")
 	}
-	for _, origin := range c.Catalog.AllowedOrigins {
-		if strings.TrimSpace(origin) == "" {
-			return fmt.Errorf("catalog.allowed_origins must not contain empty entries")
-		}
-	}
 	for _, limit := range []struct {
 		key   string
 		value int

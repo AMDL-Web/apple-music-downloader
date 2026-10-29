@@ -46,7 +46,7 @@ func TestListDownloadsQueryFilters(t *testing.T) {
 		t.Fatalf("status filter counts = %+v, want failed=1 total=1", resp.StatusCounts)
 	}
 
-	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads?type=song&type=playlist&storefront=us&sort=created_at&order=asc", "")
+	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads?type=song&type=playlist&sort=created_at&order=asc", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
@@ -54,10 +54,10 @@ func TestListDownloadsQueryFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.Total != 2 || len(resp.Downloads) != 2 || resp.Downloads[0].ID != "a" || resp.Downloads[1].ID != "c" {
-		t.Fatalf("type+storefront+sort resp = %+v", resp)
+		t.Fatalf("type+sort resp = %+v", resp)
 	}
 	if resp.StatusCounts != (domain.JobStatusCounts{Completed: 1, Running: 1, Total: 2}) {
-		t.Fatalf("type+storefront counts = %+v, want completed=1 running=1 total=2", resp.StatusCounts)
+		t.Fatalf("type counts = %+v, want completed=1 running=1 total=2", resp.StatusCounts)
 	}
 
 	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads?q=beta", "")
@@ -71,52 +71,6 @@ func TestListDownloadsQueryFilters(t *testing.T) {
 		t.Fatalf("q filter resp = %+v", resp)
 	}
 
-	recorder = requestJSON(t, server.Routes(), http.MethodGet,
-		"/api/v1/downloads?created_after=2024-07-01T11:00:00Z&created_before=2024-07-01T13:00:00Z", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Total != 1 || resp.Downloads[0].ID != "b" {
-		t.Fatalf("created window resp = %+v", resp)
-	}
-
-	// Whole-second created_after must include a job created later in that same
-	// second (sub-second fraction). This is the lexicographic TEXT-compare bug.
-	fracJob := domain.Job{
-		ID: "frac", Input: "https://music.apple.com/us/song/frac/9", Type: "song", Storefront: "us",
-		Title: "Frac", CanonicalKey: "song|us|9", Status: domain.JobCompleted,
-		CreatedAt: time.Date(2024, 7, 1, 16, 0, 0, 500000000, time.UTC),
-		UpdatedAt: time.Date(2024, 7, 1, 16, 0, 0, 500000000, time.UTC),
-	}
-	if err := server.store.CreateJob(ctx, fracJob); err != nil {
-		t.Fatal(err)
-	}
-	recorder = requestJSON(t, server.Routes(), http.MethodGet,
-		"/api/v1/downloads?created_after=2024-07-01T16:00:00Z&created_before=2024-07-01T16:00:00Z", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Total != 0 {
-		t.Fatalf("created_before=exact-second should exclude frac job, got %+v", resp)
-	}
-	recorder = requestJSON(t, server.Routes(), http.MethodGet,
-		"/api/v1/downloads?created_after=2024-07-01T16:00:00Z&limit=10", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp.Total != 1 || len(resp.Downloads) != 1 || resp.Downloads[0].ID != "frac" {
-		t.Fatalf("created_after whole-second must include frac job, got %+v", resp)
-	}
-
 	recorder = requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads?limit=1&offset=1&sort=created_at&order=asc", "")
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
@@ -124,8 +78,8 @@ func TestListDownloadsQueryFilters(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	// a,b,c,frac — offset 1 of created_at asc is still b.
-	if resp.Total != 4 || resp.Offset != 1 || len(resp.Downloads) != 1 || resp.Downloads[0].ID != "b" {
+	// a,b,c — offset 1 of created_at asc is b.
+	if resp.Total != 3 || resp.Offset != 1 || len(resp.Downloads) != 1 || resp.Downloads[0].ID != "b" {
 		t.Fatalf("offset page resp = %+v", resp)
 	}
 
@@ -136,8 +90,6 @@ func TestListDownloadsQueryFilters(t *testing.T) {
 		"/api/v1/downloads?type=video",
 		"/api/v1/downloads?sort=title",
 		"/api/v1/downloads?order=up",
-		"/api/v1/downloads?created_after=not-a-date",
-		"/api/v1/downloads?created_after=2024-07-02&created_before=2024-07-01",
 	} {
 		recorder = requestJSON(t, server.Routes(), http.MethodGet, bad, "")
 		if recorder.Code != http.StatusBadRequest {

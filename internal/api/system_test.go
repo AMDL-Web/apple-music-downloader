@@ -215,62 +215,10 @@ func TestQualityEndpointErrors(t *testing.T) {
 	assertErrorCode(t, recorder, http.StatusBadGateway, "upstream_error")
 }
 
-type fakeDevTokenService struct {
-	token string
-	err   error
-	calls int
-}
-
-func (f *fakeDevTokenService) MintDeveloperToken() (string, error) {
-	f.calls++
-	return f.token, f.err
-}
-
-func TestDeveloperTokenLegacyModeConflict(t *testing.T) {
-	server := &Server{cfg: config.NewStore(config.Default()), devToken: &fakeDevTokenService{}}
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/developer-token", "")
-	assertErrorCode(t, recorder, http.StatusConflict, "signing_disabled")
-}
-
-func TestDeveloperTokenWithoutService(t *testing.T) {
-	server := &Server{cfg: config.NewStore(signingEnabledConfig())}
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/developer-token", "")
-	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "feature_unavailable")
-}
-
 func signingEnabledConfig() config.Config {
 	cfg := config.Default()
 	cfg.Catalog.AppleMusicPrivateKeyPath = "keys/AuthKey.p8"
 	cfg.Catalog.AppleMusicKeyID = "88KBJL3CKU"
 	cfg.Catalog.AppleMusicTeamID = "2VTXNMR2GL"
 	return cfg
-}
-
-func TestDeveloperTokenSigningMode(t *testing.T) {
-	fake := &fakeDevTokenService{token: "signed.jwt.value"}
-	server := &Server{cfg: config.NewStore(signingEnabledConfig()), devToken: fake}
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/developer-token", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	var resp map[string]string
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if resp["token"] != "signed.jwt.value" {
-		t.Fatalf("token = %q", resp["token"])
-	}
-	if _, ok := resp["expires_at"]; ok {
-		t.Fatal("expires_at should not be in the response; clients read exp from the JWT")
-	}
-	if fake.calls != 1 {
-		t.Fatalf("mint calls = %d, want 1", fake.calls)
-	}
-}
-
-func TestDeveloperTokenSigningError(t *testing.T) {
-	fake := &fakeDevTokenService{err: errors.New("boom")}
-	server := &Server{cfg: config.NewStore(signingEnabledConfig()), devToken: fake}
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/developer-token", "")
-	assertErrorCode(t, recorder, http.StatusInternalServerError, "internal_error")
 }

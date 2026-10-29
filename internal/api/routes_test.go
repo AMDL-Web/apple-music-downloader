@@ -46,8 +46,7 @@ func specOperations(t *testing.T) []string {
 }
 
 // The route table and openapi.yaml describe the same operations, in both
-// directions. Routes outside /api/v1/ (the console, /docs and the spec file
-// itself) are not API operations.
+// directions. Routes outside /api/v1/ (the console) are not API operations.
 func TestRoutesMatchSpec(t *testing.T) {
 	var table []string
 	for _, rt := range (&Server{}).routes() {
@@ -230,9 +229,13 @@ func TestRuntimeConfigSchemaMatchesRuntimeKeys(t *testing.T) {
 
 func TestUnknownAPIPathIsRouteNotFound(t *testing.T) {
 	routes := (&Server{}).Routes()
-	for _, path := range []string{"/api/v1/nope", "/api/nope", "/api/v1/health/extra", "/api/v1/downloads/job1/nope"} {
+	// The last two were served for other clients and are gone on purpose.
+	for _, path := range []string{"/api/v1/nope", "/api/nope", "/api/v1/health/extra", "/api/v1/downloads/job1/nope", "/api/openapi.yaml", "/api/v1/developer-token"} {
 		recorder := requestJSON(t, routes, http.MethodGet, path, "")
 		assertErrorCode(t, recorder, http.StatusNotFound, "route_not_found")
+	}
+	if recorder := requestJSON(t, routes, http.MethodGet, "/docs", ""); recorder.Code != http.StatusNotFound {
+		t.Fatalf("GET /docs = %d, want 404", recorder.Code)
 	}
 }
 
@@ -251,7 +254,6 @@ func TestWrongMethodIsMethodNotAllowed(t *testing.T) {
 		{http.MethodGet, "/api/v1/config/reload", "POST"},
 		// "events" also matches /downloads/{job_id}, which a DELETE would reach.
 		{http.MethodPut, "/api/v1/downloads/events", "DELETE, GET, HEAD"},
-		{http.MethodPost, "/api/openapi.yaml", "GET, HEAD"},
 	}
 	for _, tt := range tests {
 		recorder := requestJSON(t, routes, tt.method, tt.path, "")
@@ -262,34 +264,20 @@ func TestWrongMethodIsMethodNotAllowed(t *testing.T) {
 	}
 }
 
-// A cross-origin EventSource resumes with Last-Event-ID, so the preflight
-// must allow that request header.
-func TestCORSPreflightAllowsLastEventID(t *testing.T) {
-	req := httptest.NewRequest(http.MethodOptions, "/api/v1/downloads/events", nil)
+// The only client is the same-origin console: a cross-origin preflight gets
+// the ordinary 405 and no response carries CORS headers.
+func TestNoCrossOriginAccess(t *testing.T) {
+	routes := (&Server{}).Routes()
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/downloads", nil)
 	req.Header.Set("Origin", "https://web.example")
 	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
-	req.Header.Set("Access-Control-Request-Headers", "last-event-id")
 	recorder := httptest.NewRecorder()
-	(&Server{}).Routes().ServeHTTP(recorder, req)
-	if recorder.Code != http.StatusNoContent {
-		t.Fatalf("preflight status = %d, want 204", recorder.Code)
-	}
-	headerHas := func(name, token string) bool {
-		for _, part := range strings.Split(recorder.Header().Get(name), ",") {
-			if strings.EqualFold(strings.TrimSpace(part), token) {
-				return true
-			}
+	routes.ServeHTTP(recorder, req)
+	assertErrorCode(t, recorder, http.StatusMethodNotAllowed, "method_not_allowed")
+	for name := range recorder.Header() {
+		if strings.HasPrefix(strings.ToLower(name), "access-control-") {
+			t.Errorf("preflight answered with %s", name)
 		}
-		return false
-	}
-	if !headerHas("Access-Control-Allow-Headers", "Last-Event-ID") {
-		t.Fatalf("Access-Control-Allow-Headers = %q, want Last-Event-ID", recorder.Header().Get("Access-Control-Allow-Headers"))
-	}
-	if !headerHas("Access-Control-Expose-Headers", "X-Request-ID") {
-		t.Fatalf("Access-Control-Expose-Headers = %q, want X-Request-ID", recorder.Header().Get("Access-Control-Expose-Headers"))
-	}
-	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Fatalf("Access-Control-Allow-Origin = %q, want *", got)
 	}
 }
 

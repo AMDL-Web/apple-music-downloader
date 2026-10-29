@@ -3,7 +3,6 @@
 // controls and the page banners.
 
 import { html } from '../ui/preact.js';
-import { docsUrl } from '../api.js';
 import { buildHash } from '../lib/route.js';
 import { connectionView } from '../lib/status.js';
 import { clockTime, count } from '../lib/format.js';
@@ -59,13 +58,6 @@ export function Sidebar({ route, counts }) {
         </li>`,
       )}
     </ul>
-    <div class="sidebar-foot">
-      <a class="nav-item" href=${docsUrl()} target="_blank" rel="noopener noreferrer" title="API docs">
-        <${Icon} name="book" size="nav" />
-        <span class="nav-label">API docs</span>
-        <${Icon} name="external" size="sm" />
-      </a>
-    </div>
   </nav>`;
 }
 

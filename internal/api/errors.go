@@ -36,7 +36,6 @@ const (
 	CodeDuplicateActive ErrorCode = "duplicate_active"
 	CodeAlreadyLoggedIn ErrorCode = "already_logged_in"
 	CodeLoginPending    ErrorCode = "login_pending"
-	CodeSigningDisabled ErrorCode = "signing_disabled"
 	// 413
 	CodeRequestTooLarge ErrorCode = "request_too_large"
 	// 422

@@ -24,18 +24,6 @@ func (c *CatalogClient) InitDeveloperToken() error {
 	return err
 }
 
-// MintDeveloperToken signs a fresh developer token for external clients using
-// the configured endpoint TTL and allowed-origins list. It fails when
-// developer-token signing is disabled (legacy web-token mode). Expiry is not
-// returned: clients read the exp claim from the JWT payload.
-func (c *CatalogClient) MintDeveloperToken() (string, error) {
-	if c.signer == nil {
-		return "", fmt.Errorf("developer token signing is not configured")
-	}
-	token, _, err := c.signer.sign(time.Now(), c.cfg.DeveloperTokenTTL(), c.cfg.AllowedOrigins)
-	return token, err
-}
-
 var (
 	indexJSPattern = regexp.MustCompile(`/assets/index~[^"']+\.js`)
 	jwtPattern     = regexp.MustCompile(`eyJ[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+`)
@@ -46,7 +34,7 @@ var (
 // JWT.
 func (c *CatalogClient) fetchCatalogToken(ctx context.Context) (string, time.Duration, error) {
 	if c.signer != nil {
-		token, _, err := c.signer.sign(time.Now(), internalDeveloperTokenTTL, nil)
+		token, _, err := c.signer.sign(time.Now(), internalDeveloperTokenTTL)
 		return token, internalDeveloperTokenTTL, err
 	}
 	return c.scrapeWebToken(ctx)

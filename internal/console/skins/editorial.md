@@ -92,10 +92,10 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
 - **Masthead** (640 px and up): the sidebar becomes a band across the top,
   wordmark "AMDL" with "Apple Music Downloader" beside it (1024 and up), the
   ink New download button, the numbered nav (`01 Overview` … `06 Settings`
-  via CSS counters) and "API docs"; the top-bar controls sit at the right end
+  via CSS counters); the top-bar controls sit at the right end
   of the wordmark's line (`.main-col` is `display: contents`, so the top bar
   and the sidebar share the grid cell). The active item has a 4px ink
-  underline on the 3px rule. Below 1760 px the button, nav and API docs take
+  underline on the 3px rule. Below 1760 px the button and nav take
   a second line under the wordmark; from 1760 (the line needs about 1700)
   everything is one line, the controls in a grid column of their own that
   carries the rule too, so a line that grows wraps in its column instead of
@@ -265,6 +265,6 @@ ui-monospace, Menlo, Consolas. Numbers are tabular.
   line can still start with a separator dot.
 - The one-line masthead starts at a measured width (1760 px for six nav
   items, "Live" and "Queue 2"); a longer connection label or nav makes the
-  line wrap inside its column (API docs first) rather than overlap.
+  line wrap inside its column rather than overlap.
 - The destructive confirm's red rule relies on `:has()`; without it the
   dialog keeps the ink rule.
