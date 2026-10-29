@@ -18,7 +18,7 @@ func TestWrapperStatusEndpoint(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	want := `{"ready":true,"status":true,"regions":["us"],"accounts":["user@example.com"]}` + "\n"
+	want := `{"ready":true,"status":true,"regions":["us"],"accounts":["user@example.com"],"login_supported":false}` + "\n"
 	if recorder.Body.String() != want {
 		t.Fatalf("body = %s, want %s", recorder.Body.String(), want)
 	}
@@ -44,6 +44,7 @@ func TestWrapperLoginResponses(t *testing.T) {
 		{name: "already logged in", err: wrapper.ErrAlreadyLoggedIn, status: http.StatusConflict, code: "already_logged_in"},
 		{name: "login pending", err: wrapper.ErrLoginPending, status: http.StatusConflict, code: "login_pending"},
 		{name: "timeout", err: wrapper.ErrLoginTimeout, status: http.StatusGatewayTimeout, code: "upstream_timeout"},
+		{name: "unsupported", err: wrapper.ErrLoginUnsupported, status: http.StatusNotImplemented, code: "login_unsupported"},
 		{name: "upstream", err: errors.New("connection refused"), status: http.StatusBadGateway, code: "upstream_error"},
 	}
 	for _, tt := range tests {
@@ -131,6 +132,7 @@ func TestWrapperLogoutResponses(t *testing.T) {
 	}{
 		{name: "success", status: http.StatusOK},
 		{name: "not found", err: wrapper.ErrAccountNotFound, status: http.StatusNotFound, code: "account_not_found"},
+		{name: "unsupported", err: wrapper.ErrLoginUnsupported, status: http.StatusNotImplemented, code: "login_unsupported"},
 		{name: "upstream", err: errors.New("unavailable"), status: http.StatusBadGateway, code: "upstream_error"},
 	}
 	for _, tt := range tests {

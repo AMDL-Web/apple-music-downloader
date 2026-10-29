@@ -50,7 +50,7 @@ Hand edits reach the running service like this:
 Set these before first real use:
 
 - `server.listen` — API listen address.
-- `wrapper.address` — wrapper-lite URL, `http://host:port` or `https://host:port`.
+- `wrapper.address` — wrapper URL, `http://host:port` or `https://host:port`: a wrapper-lite, or a wrapper-manager v2 in front of it, which adds logging in from the console.
 - `database.path` — SQLite file (default `data/db/amdl.db`).
 - `download.downloads_dir` — where finished files go.
 - `logging.*` — level, stdout on or off, in-memory retention. There is no log file.

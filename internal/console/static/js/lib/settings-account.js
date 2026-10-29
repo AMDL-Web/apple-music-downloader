@@ -2,17 +2,16 @@
 // login, two-step code, logout), keyed by the API's error codes. Pure.
 
 /**
- * Whether a failed wrapper call means the wrapper-manager service itself
- * cannot be reached (as opposed to Apple refusing a login): the API's
- * wrapper_unavailable code or a raw gRPC "Unavailable" text.
+ * Whether a failed wrapper call means the session service itself cannot be
+ * reached (as opposed to Apple refusing a login): the API's wrapper_unavailable
+ * code, or a dial error in the text of a 502 from login or logout.
  * Returns null otherwise, else {address, detail}: the address read from the
  * dial error when there is one ('' when not), and the server's own text.
  */
 export function wrapperUnreachable(err) {
   if (!err || !err.status) return null;
   const raw = err.message || '';
-  const grpc = /code = Unavailable/.test(raw);
-  if (err.code !== 'wrapper_unavailable' && !grpc) return null;
+  if (err.code !== 'wrapper_unavailable' && !/dial tcp /.test(raw)) return null;
   const m = /dial tcp (\S+?):\s/.exec(raw);
   return { address: m ? m[1] : '', detail: raw };
 }
@@ -47,7 +46,7 @@ export function wrapperErrorText(err, step = 'login') {
   }
   switch (code) {
     case 'authentication_failed':
-      return { message: step === 'code' ? 'Apple did not accept this code. Check it and try again.' : 'Apple did not accept this Apple ID and password.', detail: '' };
+      return { message: step === 'code' ? 'Apple did not accept this code. Enter your password to start again.' : 'Apple did not accept this Apple ID and password.', detail: '' };
     case 'already_logged_in':
       return { message: 'This account is already logged in.', detail: '' };
     case 'login_pending':
@@ -62,6 +61,8 @@ export function wrapperErrorText(err, step = 'login') {
       return { message: 'The session service could not complete the request.', detail: raw };
     case 'wrapper_unavailable':
       return { message: 'The session service is not reachable.', detail: raw };
+    case 'login_unsupported':
+      return { message: 'This session service has no login of its own. Log in on the machine that runs it.', detail: '' };
     default:
       break;
   }

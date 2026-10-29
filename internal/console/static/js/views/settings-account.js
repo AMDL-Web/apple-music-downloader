@@ -1,7 +1,9 @@
-// Settings > Account: the session service (wrapper-manager) status, the
-// logged-in accounts with Log out, and the login form with its two-step code
-// step. While the service cannot be reached, one line with Refresh replaces
-// all of it. `children` (the media user token field) follows as the last block.
+// Settings > Account: the session service status, the logged-in accounts with
+// Log out, and the login form with its two-step code step. A session service
+// without a login API (a bare wrapper-lite) gets the command-line steps
+// instead of the form. While the service cannot be reached, one line with
+// Refresh replaces all of it. `children` (the media user token field) follows
+// as the last block.
 
 import { html, useState } from '../ui/preact.js';
 import { getWrapperStatus, loginWrapper, submitWrapperTwoStep, logoutWrapper, settle } from '../api.js';
@@ -27,6 +29,7 @@ export function AccountPanel({ children }) {
   const res = status.data;
   // Login needs the session service; say why it cannot be used instead of failing late.
   const down = res && res.error ? wrapperUnreachable(res.error) : null;
+  // null: no dialog; '': ask for the Apple ID; else the account to log out.
   const [logout, setLogout] = useState(null);
 
   if (down) {
@@ -57,7 +60,9 @@ export function AccountPanel({ children }) {
       ]}
     />`;
   }
-  const accounts = res && res.data && Array.isArray(res.data.accounts) ? res.data.accounts : [];
+  const w = res && res.data;
+  const accounts = w && Array.isArray(w.accounts) ? w.accounts : [];
+  const canLogin = !w || w.login_supported !== false;
 
   return html`<div class="account">
     <section class="account-block" aria-labelledby="account-status-title">
@@ -67,7 +72,7 @@ export function AccountPanel({ children }) {
       </div>
       ${state}
     </section>
-    ${res && res.data
+    ${w && canLogin
       ? html`<section class="account-block" aria-labelledby="account-list-title">
           <div class="account-block-head">
             <h3 class="section-title" id="account-list-title">Logged-in accounts</h3>
@@ -81,11 +86,18 @@ export function AccountPanel({ children }) {
                   </li>`,
                 )}
               </ul>`
-            : html`<p class="muted small">No account is logged in. Log in below so downloads can be decrypted.</p>`}
+            : w.status
+              ? html`<p class="small">An account is logged in. The session service does not say which one.</p>
+                  <div class="form-actions">
+                    <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout('')}>Log out…</${Button}>
+                  </div>`
+              : html`<p class="muted small">No account is logged in. Log in below so downloads can be decrypted.</p>`}
         </section>`
       : null}
-    <${LoginForm} onDone=${status.reload} again=${accounts.length > 0} />
-    ${logout
+    ${canLogin
+      ? html`<${LoginForm} onDone=${status.reload} again=${accounts.length > 0 || Boolean(w && w.status)} />`
+      : html`<${CommandLineLogin} />`}
+    ${logout !== null
       ? html`<${LogoutDialog}
           account=${logout}
           onClose=${() => setLogout(null)}
@@ -99,16 +111,25 @@ export function AccountPanel({ children }) {
   </div>`;
 }
 
+/** Log out `account`, or the Apple ID typed in when `account` is '' (no wrapper lists its accounts). */
 function LogoutDialog({ account, onClose, onDone }) {
   const app = useApp();
+  const [name, setName] = useState(account);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [missing, setMissing] = useState(false);
+  const asked = account === '';
+  const target = name.trim();
   const confirm = async () => {
+    if (!target) {
+      setMissing(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await logoutWrapper(account);
-      app.toast({ message: `Logged out ${account}`, role: 'success' });
+      await logoutWrapper(target);
+      app.toast({ message: `Logged out ${target}`, role: 'success' });
       onDone();
     } catch (e) {
       setError(e);
@@ -116,7 +137,7 @@ function LogoutDialog({ account, onClose, onDone }) {
     }
   };
   return html`<${ConfirmDialog}
-    title="Log out of this account?"
+    title=${asked ? 'Log out of an account?' : 'Log out of this account?'}
     confirmLabel=${error ? 'Try again' : 'Log out'}
     busyLabel="Logging out…"
     danger
@@ -124,15 +145,53 @@ function LogoutDialog({ account, onClose, onDone }) {
     onConfirm=${confirm}
     onCancel=${onClose}
   >
-    <p>The session service ends the login of <span class="mono">${account}</span>. Downloads from its storefronts stop until an account is logged in again.</p>
+    ${asked
+      ? html`<p>The session service does not list its accounts. Enter the Apple ID to log out; its login ends and downloads from its storefronts stop until an account is logged in again.</p>
+          <div class="form-row">
+            <label class="field-label" for="logout-user">Apple ID</label>
+            <input
+              id="logout-user"
+              class="field-input"
+              type="text"
+              name="username"
+              inputmode="email"
+              autocomplete="username"
+              autocapitalize="off"
+              spellcheck="false"
+              aria-invalid=${missing && !target ? 'true' : undefined}
+              data-autofocus
+              value=${name}
+              onInput=${(e) => {
+                setName(e.currentTarget.value);
+                setMissing(false);
+              }}
+              onKeyDown=${(e) => {
+                if (e.key === 'Enter' && !busy) confirm();
+              }}
+            />
+            ${missing && !target ? html`<p class="field-help" role="alert">Enter the Apple ID to log out.</p>` : null}
+          </div>`
+      : html`<p>The session service ends the login of <span class="mono">${account}</span>. Downloads from its storefronts stop until an account is logged in again.</p>`}
     <${WrapperError} error=${error} step="logout" />
   </${ConfirmDialog}>`;
 }
 
+/** What replaces the login form when the session service has no login API. */
+function CommandLineLogin() {
+  return html`<section class="account-block" aria-labelledby="login-title">
+    <h3 class="section-title" id="login-title">Log in from the command line</h3>
+    <p class="small">This session service has no login of its own. On the machine that runs it, start it with <code>--login</code>:</p>
+    <code class="account-cmd mono">wrapper-lite-rootless --login APPLE_ID:PASSWORD</code>
+    <p class="muted small">If Apple asks for a two-step code, the program prints where to put it. Select Refresh above afterwards. To log in from this page instead, put a wrapper-manager in front of it and set <code>wrapper.address</code> to that.</p>
+  </section>`;
+}
+
 /**
  * The login form: Apple ID and password, then the two-step code when the
- * wrapper answers 202 needs_2fa. The password goes to the session service
- * and is kept only in this form's state; it is cleared on success.
+ * wrapper answers 202 needs_2fa. The password goes to the session service;
+ * this page keeps it only in this form's state, and clears it on success and
+ * when a code fails (the backend drops its copy then too, so the form starts
+ * over from the password).
  */
 function LoginForm({ onDone, again }) {
   const app = useApp();
@@ -142,7 +201,7 @@ function LoginForm({ onDone, again }) {
   const [code, setCode] = useState('');
   const [loginId, setLoginId] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
+  const [failure, setFailure] = useState(null);
   const [shown, setShown] = useState(false);
 
   const reset = () => {
@@ -151,7 +210,7 @@ function LoginForm({ onDone, again }) {
     setPassword('');
     setCode('');
     setLoginId('');
-    setError(null);
+    setFailure(null);
   };
   const succeeded = () => {
     app.toast({ message: `Logged in ${username.trim()}`, role: 'success' });
@@ -164,7 +223,7 @@ function LoginForm({ onDone, again }) {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
       const res = await loginWrapper({ username: username.trim(), password });
       if (res && res.status === 'needs_2fa' && res.login_id) {
@@ -173,7 +232,7 @@ function LoginForm({ onDone, again }) {
       } else succeeded();
     } catch (err) {
       if (err.status === 401) setPassword('');
-      setError(err);
+      setFailure({ error: err, step: 'login' });
     } finally {
       setBusy(false);
     }
@@ -183,17 +242,17 @@ function LoginForm({ onDone, again }) {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
-    setError(null);
+    setFailure(null);
     try {
       await submitWrapperTwoStep(loginId, code.trim());
       succeeded();
     } catch (err) {
-      if (err.status === 404) {
+      // The backend ends the sign-in on any failed attempt except a second
+      // submit while one is being verified (409), so start over from the password.
+      if (err.status === 409) setFailure({ error: err, step: 'code' });
+      else {
         reset();
-        setError(err);
-      } else {
-        setCode('');
-        setError(err);
+        setFailure({ error: err, step: 'code' });
       }
     } finally {
       setBusy(false);
@@ -203,7 +262,7 @@ function LoginForm({ onDone, again }) {
   if (step === 'code') {
     return html`<form class="account-block login-form" data-step="code" aria-labelledby="login-title" onSubmit=${submitCode}>
       <h3 class="section-title" id="login-title">Two-step verification</h3>
-      <p class="small">Apple sent a code to the trusted devices of <span class="mono">${username.trim()}</span>. Enter it to finish logging in.</p>
+      <p class="small">Apple sent a code to the trusted devices of <span class="mono">${username.trim()}</span>. Enter it within a minute to finish logging in.</p>
       <div class="form-row">
         <label class="field-label" for="login-code">Verification code</label>
         <input
@@ -220,7 +279,7 @@ function LoginForm({ onDone, again }) {
           onInput=${(e) => setCode(e.currentTarget.value)}
         />
       </div>
-      <${WrapperError} error=${error} step="code" />
+      <${WrapperError} error=${failure && failure.error} step="code" />
       <div class="form-actions">
         <${Button} type="submit" variant="primary" aria-disabled=${busy ? 'true' : undefined}>${busy ? 'Verifying…' : 'Verify'}</${Button}>
         <${Button} variant="ghost" onClick=${reset} disabled=${busy}>Start over</${Button}>
@@ -230,7 +289,7 @@ function LoginForm({ onDone, again }) {
 
   return html`<form class="account-block login-form" data-step="credentials" aria-labelledby="login-title" onSubmit=${submitCredentials}>
     <h3 class="section-title" id="login-title">${again ? 'Log in another account' : 'Log in'}</h3>
-    <p class="muted small">The password goes to the session service, which keeps the login; this service does not store it. Logging in can take up to two minutes.</p>
+    <p class="muted small">The session service keeps the login. This service holds the password in memory only while you enter a two-step code, and never stores it. Logging in can take up to two minutes.</p>
     <div class="form-row">
       <label class="field-label" for="login-user">Apple ID</label>
       <p class="field-help" id="login-user-help">The email address or phone number you sign in to Apple Music with.</p>
@@ -276,7 +335,7 @@ function LoginForm({ onDone, again }) {
         />
       </span>
     </div>
-    <${WrapperError} error=${error} step="login" />
+    <${WrapperError} error=${failure && failure.error} step=${failure ? failure.step : 'login'} />
     <div class="form-actions">
       <${Button}
         type="submit"

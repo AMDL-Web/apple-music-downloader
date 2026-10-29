@@ -104,7 +104,15 @@ test('health rows', () => {
   assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com'] } }).detail, '1 account signed in');
   assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com', 'b@example.com'] } }).detail, '2 accounts signed in');
   assert.equal(wrapperView({ data: { ready: true, status: true } }).detail, 'Signed in');
-  assert.equal(wrapperView({ data: { ready: false, status: true, regions: [], accounts: [] } }).detail, 'No account logged in');
+  assert.equal(wrapperView({ data: { ready: false, status: false, regions: [], accounts: [] } }).detail, 'No account logged in');
+  assert.equal(wrapperView({ data: { ready: false, status: true, regions: [], accounts: [] } }).detail, 'Wrapper is not ready', 'a wrapper that names no accounts is judged by status');
+  // Answering without a storefront means nobody is logged in: not Ready.
+  assert.deepEqual(wrapperView({ data: { ready: true, status: false, regions: [], accounts: [], login_supported: false } }), {
+    icon: 'triangle-alert',
+    role: 'warning',
+    label: 'No account',
+    detail: 'Log in so downloads can be decrypted',
+  });
   assert.equal(wrapperView({ error: { status: 503, message: 'unreachable' } }).label, 'Unreachable');
 
   assert.equal(librarySyncView({ error: { status: 503, message: 'Service Unavailable' } }).label, 'Unavailable');

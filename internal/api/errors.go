@@ -46,6 +46,8 @@ const (
 	// 500
 	CodeInternalError ErrorCode = "internal_error"
 	CodeStoreError    ErrorCode = "store_error"
+	// 501
+	CodeLoginUnsupported ErrorCode = "login_unsupported"
 	// 502
 	CodeUpstreamError ErrorCode = "upstream_error"
 	// 503

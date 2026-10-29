@@ -158,11 +158,15 @@ export function wrapperView(res) {
   const w = res.data;
   const regions = Array.isArray(w.regions) && w.regions.length ? w.regions.join(', ').toUpperCase() : '';
   const accounts = Array.isArray(w.accounts) ? w.accounts.length : 0;
-  if (w.ready) {
-    const signedIn = accounts === 0 ? 'Signed in' : accounts === 1 ? '1 account signed in' : `${accounts} accounts signed in`;
-    return { icon: 'circle-check', role: 'success', label: 'Ready', detail: regions || signedIn };
+  if (!w.ready) {
+    return { icon: 'triangle-alert', role: 'warning', label: 'Not ready', detail: w.status ? 'Wrapper is not ready' : 'No account logged in' };
   }
-  return { icon: 'triangle-alert', role: 'warning', label: 'Not ready', detail: accounts === 0 ? 'No account logged in' : 'Wrapper is not ready' };
+  // A wrapper that answers but has no storefront has no account to download with.
+  if (w.status === false) {
+    return { icon: 'triangle-alert', role: 'warning', label: 'No account', detail: 'Log in so downloads can be decrypted' };
+  }
+  const signedIn = accounts === 0 ? 'Signed in' : accounts === 1 ? '1 account signed in' : `${accounts} accounts signed in`;
+  return { icon: 'circle-check', role: 'success', label: 'Ready', detail: regions || signedIn };
 }
 
 export function librarySyncView(res) {

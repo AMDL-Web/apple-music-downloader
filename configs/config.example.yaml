@@ -45,8 +45,10 @@ logging:
   buffer_size: 2000
 
 wrapper:
-  # string: wrapper-lite base URL, "http://host:port" or "https://host:port", optionally with a path
-  # prefix when a reverse proxy serves it under one. The scheme picks the transport: http is plaintext;
+  # string: wrapper base URL, "http://host:port" or "https://host:port", optionally with a path
+  # prefix when a reverse proxy serves it under one. Either a wrapper-lite, or a wrapper-manager v2 in
+  # front of it: only the wrapper-manager has the login API the console's Account page uses. The
+  # scheme picks the transport: http is plaintext;
   # https uses TLS 1.2+ and verifies the certificate against the operating system trust store and the
   # hostname. A bare "host:port" is rejected at startup. Requires a restart.
   address: "http://127.0.0.1:12340"
@@ -54,9 +56,9 @@ wrapper:
   # retried up to 3 more times, 1, 2 and 4 seconds apart, each with this timeout. Decryption itself runs
   # in this process and has no wrapper timeout. Values <= 0 fall back to 30 seconds. Requires a restart.
   timeout_seconds: 30
-  # integer seconds: bound on a console login including its 2FA step, for a wrapper that offers a
-  # login API; wrapper-lite has none and logs in from its own command line (--login).
-  # Values <= 0 fall back to 120 seconds. Requires a restart.
+  # integer seconds: bound on one console login request, for a wrapper-manager (a bare wrapper-lite has
+  # no login API and logs in from its own command line, --login). A login that needs a two-step code
+  # takes two requests, each bounded by this. Values <= 0 fall back to 120 seconds. Requires a restart.
   login_timeout_seconds: 120
 
 catalog:

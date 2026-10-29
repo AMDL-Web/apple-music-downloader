@@ -32,7 +32,10 @@ needs the API changes below before it works against 2.0.
    [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite), logged in
    with its `--login`, and set `wrapper.address` (or `AMDL_WRAPPER_ADDRESS`) to its URL,
    such as `http://127.0.0.1:12340`. 2.0 no longer speaks wrapper-manager's gRPC and
-   decrypts media itself; see [Wrapper](#wrapper).
+   decrypts media itself; see [Wrapper](#wrapper). To keep logging in from the console,
+   point `wrapper.address` at the `v2` branch of
+   [wrapper-manager](https://github.com/WorldObservationLog/wrapper-manager/tree/v2)
+   instead: it fronts wrapper-lite over HTTP and adds the login API.
 
 ## HTTP API
 
@@ -46,6 +49,8 @@ needs the API changes below before it works against 2.0.
 | Submit, nothing accepted | `422` with the batch body | `422 no_urls_accepted` (or `500 store_error`) envelope; the batch body is in `error.details` | submit flows |
 | Wrapper login already pending | `401` (wrapper-manager's `login already pending` reply) | `409 login_pending`; a two-step code already being verified is also `login_pending` | account screens |
 | Wrapper login timeout | `504` | `504 upstream_timeout` | account screens |
+| Wrapper login without a login API | not applicable (wrapper-manager always had one) | `501 login_unsupported` from login, two-step and logout when `wrapper.address` is a bare wrapper-lite; log in with its `--login` instead | account screens |
+| Wrapper logout | listed accounts to pick from | the request names the Apple ID; no wrapper lists its accounts | account screens |
 | Wrapper login password | trimmed | sent as typed; only an all-whitespace password is `400` | account screens |
 | Config `PUT` with an invalid file on disk | `500` | `422 invalid_config` | settings screens |
 | Logs with `logging.buffer_size: 0` | `GET /logs` an empty `200`; `GET /logs/stream` live records only | `503 feature_unavailable` on both | log viewers |
@@ -59,8 +64,8 @@ needs the API changes below before it works against 2.0.
 | Logs paging | `after`, `next_cursor` | `cursor`, `next_cursor` | log viewers |
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
-| Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays (possibly empty) | account screens |
-| Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `status`, `regions`, `accounts` | account screens that showed the count |
+| Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays, and `accounts` stays empty because neither wrapper-lite nor wrapper-manager v2 names its accounts; `login_supported` says whether the wrapper has the login API | account screens |
+| Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `status`, `regions`, `accounts`, `login_supported` | account screens that showed the count |
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
 | Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
 | `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were startup keys (`422 config_key_not_mutable`) | `400 invalid_request` naming the unknown field, like any removed key | settings screens |

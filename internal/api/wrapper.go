@@ -9,8 +9,9 @@ import (
 	"amdl/internal/wrapper"
 )
 
-// WrapperService is the wrapper-manager client: account status, login with
-// an optional two-step code, and logout.
+// WrapperService is the wrapper client: account status, login with an optional
+// two-step code, and logout. The last three need a wrapper-manager; a bare
+// wrapper-lite answers them with wrapper.ErrLoginUnsupported.
 type WrapperService interface {
 	Status(context.Context) (wrapper.Status, error)
 	StartLogin(context.Context, string, string) (wrapper.LoginResult, error)
@@ -107,6 +108,8 @@ func writeWrapperError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, CodeLoginNotFound, err.Error())
 	case errors.Is(err, wrapper.ErrAccountNotFound):
 		writeError(w, http.StatusNotFound, CodeAccountNotFound, err.Error())
+	case errors.Is(err, wrapper.ErrLoginUnsupported):
+		writeError(w, http.StatusNotImplemented, CodeLoginUnsupported, err.Error())
 	case errors.Is(err, wrapper.ErrLoginTimeout):
 		writeError(w, http.StatusGatewayTimeout, CodeUpstreamTimeout, err.Error())
 	default:

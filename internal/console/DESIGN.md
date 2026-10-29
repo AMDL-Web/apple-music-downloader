@@ -340,13 +340,17 @@ and motion covers.
   Library sync shows `GET /library-sync` (read again after a save changes the
   switch; "On, idle" without a token) and "Start over from now" (the anchor
   reset, a `ConfirmDialog`, offered only once a check has recorded the library); Account shows
-  the session service's status, Log out per account (a `ConfirmDialog`) and
-  the login form (with a show-password toggle) with its two-step code step;
+  the session service's status and, when it has a login API
+  (`login_supported`), Log out (a `ConfirmDialog`: per named account, else one
+  that asks for the Apple ID, because no wrapper lists its accounts) and the
+  login form (with a show-password toggle) with its two-step code step, which
+  starts over from the password after any failed code; a session service
+  without a login API gets the command-line steps in place of the form;
   while the service cannot be reached, one line ("Can't reach the session
   service at <address>.") with Refresh; the page and its errors say "session
   service" and leave wrapper-manager to the server's own text under "Details
   from the server".
-  That line replaces all three. Then the media user token: a saved token
+  That line replaces all of these. Then the media user token: a saved token
   is never put in the page, only "Token set · ends …a1b2" with Replace and
   Remove; without one an empty box, and "Where do I find this?" opens three
   steps; Configuration file shows

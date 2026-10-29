@@ -361,8 +361,12 @@ paths:
   /api/v1/wrapper/status:
     get:
       tags: [Wrapper]
-      summary: Get wrapper-manager status
-      description: Probes wrapper-manager connectivity and runtime state such as login and regions; use it before downloading or managing accounts.
+      summary: Get wrapper status
+      description: >-
+        Probes the wrapper (wrapper-lite, or the wrapper-manager in front of it)
+        for connectivity and runtime state such as login and regions; use it
+        before downloading or managing accounts. login_supported tells whether
+        the login routes work against this wrapper.
       operationId: getWrapperStatus
       responses:
         '200':
@@ -372,7 +376,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WrapperStatus'
         '503':
-          description: wrapper_unavailable; wrapper-manager did not answer.
+          description: wrapper_unavailable; the wrapper did not answer.
           content:
             application/json:
               schema:
@@ -385,7 +389,10 @@ paths:
         Login may succeed immediately, or return a login_id that requires a
         two-step verification code. The username is trimmed; the password is
         forwarded exactly as sent, because spaces can be part of it (a password
-        that is only whitespace is 400 invalid_request).
+        that is only whitespace is 400 invalid_request). The password of a login
+        that waits for its code is kept in memory for at most 75 seconds and
+        never written to disk. Needs a wrapper-manager; a bare wrapper-lite
+        answers 501 login_unsupported.
       operationId: loginWrapper
       requestBody:
         required: true
@@ -414,6 +421,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Conflict'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
         '502':
           $ref: '#/components/responses/BadGateway'
         '504':
@@ -422,6 +431,11 @@ paths:
     post:
       tags: [Wrapper]
       summary: Submit a two-step verification code
+      description: >-
+        Finishes the login that returned the login_id. The wrapper gives up on a
+        login 60 seconds after it asks for the code, so submit it promptly. The
+        login ends with this call even when the code is wrong; start again from
+        POST /wrapper/login.
       operationId: submitWrapperTwoStepCode
       parameters:
         - $ref: '#/components/parameters/LoginID'
@@ -456,6 +470,9 @@ paths:
     post:
       tags: [Wrapper]
       summary: Log out of a wrapper account
+      description: >-
+        Ends the account's login in the wrapper-manager and deletes its data
+        there. A bare wrapper-lite answers 501 login_unsupported.
       operationId: logoutWrapper
       requestBody:
         required: true
@@ -476,6 +493,8 @@ paths:
           $ref: '#/components/responses/JSONBodyTooLarge'
         '404':
           $ref: '#/components/responses/NotFound'
+        '501':
+          $ref: '#/components/responses/NotImplemented'
         '502':
           $ref: '#/components/responses/BadGateway'
   /api/v1/quality:
@@ -1136,8 +1155,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    NotImplemented:
+      description: >-
+        login_unsupported; the wrapper is a bare wrapper-lite, which logs in only
+        from its own command line. Log in on the wrapper host instead.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     BadGateway:
-      description: upstream_error; wrapper-manager returned an error.
+      description: upstream_error; the wrapper returned an error.
       content:
         application/json:
           schema:
@@ -1195,7 +1222,7 @@ components:
         login_pending; 413 request_too_large; 422
         invalid_overrides, config_key_not_mutable, invalid_config,
         no_urls_accepted; 500 internal_error, store_error
-        (retrying may succeed); 502 upstream_error; 503 queue_full,
+        (retrying may succeed); 501 login_unsupported; 502 upstream_error; 503 queue_full,
         wrapper_unavailable, feature_unavailable (the process keeps no log
         history, so the log routes cannot answer); 504 upstream_timeout.
       enum:
@@ -1220,6 +1247,7 @@ components:
         - no_urls_accepted
         - internal_error
         - store_error
+        - login_unsupported
         - upstream_error
         - queue_full
         - wrapper_unavailable
@@ -1227,12 +1255,16 @@ components:
         - upstream_timeout
     WrapperStatus:
       type: object
-      required: [ready, status, regions, accounts]
+      required: [ready, status, regions, accounts, login_supported]
       properties:
         ready:
           type: boolean
+          description: >-
+            The wrapper answered; for a wrapper-manager, also that it has
+            restored its accounts after a start.
         status:
           type: boolean
+          description: An account is logged in and serves at least one storefront.
         regions:
           type: array
           description: Storefronts the decryptor serves; an empty array when none.
@@ -1242,9 +1274,18 @@ components:
           type: array
           description: >-
             Logged-in wrapper account identifiers; an empty array when no account
-            is logged in or the connected wrapper-manager does not report them.
+            is logged in or the wrapper does not report them. Neither
+            wrapper-lite nor wrapper-manager does, so a logout names the account
+            itself.
           items:
             type: string
+        login_supported:
+          type: boolean
+          description: >-
+            The wrapper is a wrapper-manager, so POST /wrapper/login and
+            /wrapper/logout work. False for a bare wrapper-lite, which those
+            routes answer with 501 login_unsupported; no login can start there,
+            so /wrapper/login/{login_id}/2fa has no session to find.
     HealthResponse:
       type: object
       required: [status]

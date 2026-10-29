@@ -573,19 +573,6 @@ func TestPlaybackManifestsAndLicense(t *testing.T) {
 	}
 }
 
-func TestLoginIsUnsupported(t *testing.T) {
-	c := newTestClient(t, http.NotFoundHandler())
-	ctx := context.Background()
-	_, startErr := c.StartLogin(ctx, "user", "pass")
-	_, codeErr := c.SubmitTwoStepCode(ctx, "id", "123456")
-	logoutErr := c.Logout(ctx, "user")
-	for name, err := range map[string]error{"StartLogin": startErr, "SubmitTwoStepCode": codeErr, "Logout": logoutErr} {
-		if !errors.Is(err, ErrLoginUnsupported) {
-			t.Errorf("%s() = %v, want ErrLoginUnsupported", name, err)
-		}
-	}
-}
-
 func TestNewClientRejects(t *testing.T) {
 	tests := []struct {
 		name    string

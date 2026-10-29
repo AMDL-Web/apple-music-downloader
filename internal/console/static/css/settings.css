@@ -865,6 +865,17 @@
   line-height: var(--lh-13);
 }
 
+.account-cmd {
+  display: block;
+  padding: var(--s-2) var(--s-3);
+  overflow-wrap: anywhere;
+}
+
+.dialog-body .form-row {
+  margin-top: var(--s-3);
+  text-align: left;
+}
+
 .login-form .form-row,
 .login-form .field-secret,
 .login-form .notice,

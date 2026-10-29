@@ -38,6 +38,7 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
+| 501 | `login_unsupported` |
 | 502 | `upstream_error` |
 | 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
 | 504 | `upstream_timeout` |
@@ -163,10 +164,13 @@ restart.
 curl http://localhost:18080/api/v1/wrapper/status
 ```
 
-Returns `ready`, `status`, `regions` and `accounts` (the logged-in account identifiers,
-`[]` when none). The backend does not contact the wrapper at startup, so it starts fine without
-a reachable wrapper, and this endpoint is how you verify connectivity; an unreachable
-wrapper is `503 wrapper_unavailable`.
+Returns `ready`, `status`, `regions`, `accounts` and `login_supported`. `status` is true
+when an account is logged in and serves a storefront. `accounts` lists the account
+identifiers the wrapper reports (`[]` when none; neither wrapper-lite nor wrapper-manager
+reports any). `login_supported` is true when the wrapper is a wrapper-manager, which the
+three routes below need. The backend does not contact the wrapper at startup, so it starts
+fine without a reachable wrapper, and this endpoint is how you verify connectivity; an
+unreachable wrapper is `503 wrapper_unavailable`.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login \
@@ -175,8 +179,10 @@ curl -X POST http://localhost:18080/api/v1/wrapper/login \
 ```
 
 The username is trimmed; the password is forwarded exactly as sent, because spaces can be
-part of it. If the response contains `"status":"needs_2fa"`, submit the code within 30
-seconds using the `login_id` from that response:
+part of it. If the response contains `"status":"needs_2fa"`, submit the code within 60
+seconds using the `login_id` from that response. The password is held in memory for that
+wait (at most 75 seconds) and is never written to disk. A wrong code ends the login; start
+again from the password.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login/{login_id}/2fa \
@@ -193,8 +199,9 @@ curl -X POST http://localhost:18080/api/v1/wrapper/logout \
 Login errors: `401 authentication_failed`, `409 already_logged_in` (the account already
 has a wrapper), `409 login_pending` (a login for the account, or this session's two-step
 code, is already in progress), `404 login_not_found` (the two-step session expired),
-`404 account_not_found` (logout of an account with no wrapper), `502 upstream_error`,
-`504 upstream_timeout`.
+`404 account_not_found` (logout of an account with no wrapper), `501 login_unsupported`
+(the wrapper is a bare wrapper-lite: log in with `wrapper-lite-rootless --login` on its
+host), `502 upstream_error`, `504 upstream_timeout`.
 
 ## Downloads
 

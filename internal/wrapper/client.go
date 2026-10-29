@@ -30,8 +30,9 @@ var (
 	ErrLoginTimeout         = errors.New("wrapper login timed out")
 	ErrAccountNotFound      = errors.New("wrapper account not found")
 	ErrWrapperResponse      = errors.New("wrapper returned an unexpected response")
-	// ErrLoginUnsupported answers every login, two-step and logout call:
-	// wrapper-lite logs in only from its own command line (--login).
+	// ErrLoginUnsupported answers every login, two-step and logout call on a
+	// wrapper without wrapper-manager's login API: wrapper-lite logs in only
+	// from its own command line (--login).
 	ErrLoginUnsupported = errors.New("the wrapper has no login API; log in on the wrapper host")
 )
 
@@ -54,14 +55,18 @@ type LoginResult struct {
 }
 
 // Status is the wrapper's state as GET /api/v1/wrapper/status returns it.
-// Ready means the wrapper answered; Status means an account is logged in, which
-// wrapper-lite shows by listing its storefront in Regions. Regions and
-// Accounts are never nil, so they encode as [] when empty.
+// Ready means the wrapper answered and, for a wrapper-manager, has restored its
+// accounts; Status means an account is logged in, which wrapper-lite shows by
+// listing its storefront in Regions. Neither wrapper-lite nor wrapper-manager
+// names its accounts, so Accounts stays empty. LoginSupported is true when the
+// wrapper has the login API (a wrapper-manager). Regions and Accounts are never
+// nil, so they encode as [] when empty.
 type Status struct {
-	Ready    bool     `json:"ready"`
-	Status   bool     `json:"status"`
-	Regions  []string `json:"regions"`
-	Accounts []string `json:"accounts"`
+	Ready          bool     `json:"ready"`
+	Status         bool     `json:"status"`
+	Regions        []string `json:"regions"`
+	Accounts       []string `json:"accounts"`
+	LoginSupported bool     `json:"login_supported"`
 }
 
 // LyricsRequestOptions are wrapper-lite's /lyrics query parameters, sent as
@@ -110,6 +115,7 @@ type Client struct {
 	base          *url.URL
 	http          *http.Client
 	timeout       time.Duration
+	loginTimeout  time.Duration
 	dataLimit     *limits.Semaphore
 	playbackLimit *limits.Semaphore
 
@@ -117,6 +123,8 @@ type Client struct {
 	templates   *templateCache
 	samples     *samplePool
 	retryDelays []time.Duration
+
+	logins loginBook
 
 	// life ends at Close and stops template fetches no caller waits for.
 	life     context.Context
@@ -149,6 +157,7 @@ func NewClient(cfg config.WrapperConfig, options ...ClientOption) (*Client, erro
 		base:          base,
 		http:          &http.Client{Transport: transport},
 		timeout:       cfg.Timeout(),
+		loginTimeout:  cfg.LoginTimeout(),
 		dataLimit:     limits.NewSemaphore(config.MaxParallelWrapperRequests),
 		playbackLimit: limits.NewSemaphore(playbackRequestLimit),
 		parse:         parseFairPlayTemplate,
@@ -184,7 +193,12 @@ type envelope struct {
 // call sends one request bounded by the configured timeout and returns the
 // reply's data object.
 func (c *Client) call(ctx context.Context, method, endpoint string, query url.Values, body any) (json.RawMessage, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	return c.callWithin(ctx, c.timeout, method, endpoint, query, body)
+}
+
+// callWithin is call with an explicit bound.
+func (c *Client) callWithin(ctx context.Context, timeout time.Duration, method, endpoint string, query url.Values, body any) (json.RawMessage, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	target := c.base.JoinPath(endpoint)
 	target.RawQuery = query.Encode()
@@ -250,15 +264,37 @@ func withPermit(ctx context.Context, limit *limits.Semaphore, run func() error) 
 	return run()
 }
 
-// Status asks /status whether the wrapper is up and logged in.
+// Status asks /status whether the wrapper is up and logged in. A wrapper-lite
+// answers {regions}; a wrapper-manager v2 adds clientCount and ready, and is the
+// only one with a login API.
 func (c *Client) Status(ctx context.Context) (Status, error) {
-	var body struct {
-		Regions []string `json:"regions"`
-	}
-	if err := c.get(ctx, "/status", nil, &body); err != nil {
+	body, err := c.fetchStatus(ctx)
+	if err != nil {
 		return Status{}, err
 	}
-	return Status{Ready: true, Status: len(body.Regions) > 0, Regions: nonNil(body.Regions), Accounts: []string{}}, nil
+	status := Status{
+		Ready:          true,
+		Status:         len(body.Regions) > 0,
+		Regions:        nonNil(body.Regions),
+		Accounts:       []string{},
+		LoginSupported: body.ClientCount != nil,
+	}
+	if body.Ready != nil {
+		status.Ready = *body.Ready
+	}
+	return status, nil
+}
+
+type statusBody struct {
+	Regions     []string `json:"regions"`
+	ClientCount *int     `json:"clientCount"`
+	Ready       *bool    `json:"ready"`
+}
+
+func (c *Client) fetchStatus(ctx context.Context) (statusBody, error) {
+	var body statusBody
+	err := c.get(ctx, "/status", nil, &body)
+	return body, err
 }
 
 func nonNil(values []string) []string {
@@ -266,19 +302,6 @@ func nonNil(values []string) []string {
 		return []string{}
 	}
 	return values
-}
-
-// StartLogin, SubmitTwoStepCode and Logout return ErrLoginUnsupported.
-func (c *Client) StartLogin(context.Context, string, string) (LoginResult, error) {
-	return LoginResult{}, ErrLoginUnsupported
-}
-
-func (c *Client) SubmitTwoStepCode(context.Context, string, string) (LoginResult, error) {
-	return LoginResult{}, ErrLoginUnsupported
-}
-
-func (c *Client) Logout(context.Context, string) error {
-	return ErrLoginUnsupported
 }
 
 // M3U8 returns the device master playlist for adamID.

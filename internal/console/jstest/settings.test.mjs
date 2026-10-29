@@ -224,17 +224,18 @@ test('wrapperErrorText per status and code', () => {
   assert.match(wrapperErrorText(e(404, 'account_not_found'), 'logout').message, /not logged in/);
   assert.match(wrapperErrorText(e(409, 'already_logged_in')).message, /already logged in/);
   assert.match(wrapperErrorText(e(409, 'login_pending')).message, /in progress/);
-  const bad = wrapperErrorText(e(502, 'upstream_error', 'dial tcp 127.0.0.1:8080: connect: connection refused'));
+  const bad = wrapperErrorText(e(502, 'upstream_error', 'wrapper /login: HTTP 500: internal error'));
   assert.match(bad.message, /could not complete/);
-  assert.match(bad.detail, /connection refused/);
+  assert.match(bad.detail, /internal error/);
+  assert.match(wrapperErrorText(e(501, 'login_unsupported')).message, /no login of its own/);
   assert.match(wrapperErrorText(e(503, 'wrapper_unavailable')).message, /not reachable/);
   assert.match(wrapperErrorText(e(504, 'upstream_timeout')).message, /in time/);
   assert.equal(wrapperErrorText(e(400, 'invalid_request', 'username and password are required')).message, 'username and password are required');
   assert.match(wrapperErrorText(e(0, 'timeout')).message, /in time/);
   assert.match(wrapperErrorText(e(0, 'network_error')).message, /Cannot reach/);
   assert.match(wrapperErrorText(e(401, '')).message, /Apple ID/, 'a bare 401 reads like authentication_failed');
-  const codes = ['authentication_failed', 'already_logged_in', 'login_pending', 'login_not_found', 'account_not_found', 'upstream_timeout', 'upstream_error', 'wrapper_unavailable', 'timeout', ''];
-  for (const status of [0, 400, 401, 404, 409, 502, 503, 504]) {
+  const codes = ['authentication_failed', 'already_logged_in', 'login_pending', 'login_not_found', 'account_not_found', 'upstream_timeout', 'upstream_error', 'wrapper_unavailable', 'login_unsupported', 'timeout', ''];
+  for (const status of [0, 400, 401, 404, 409, 501, 502, 503, 504]) {
     for (const code of codes) assert.doesNotMatch(wrapperErrorText(e(status, code)).message, /wrapper/i, `${status} ${code} names the session service, not the wrapper`);
   }
 });
@@ -335,16 +336,17 @@ test('anchorResetState disables Reset anchor without an anchor', () => {
   assert.deepEqual(anchorResetState({ anchor_size: 120 }), { allowed: true, reason: '' });
 });
 
-test('wrapperUnreachable reads the address out of a gRPC dial error', () => {
-  const raw = 'rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:8080: connect: connection refused"';
+test('wrapperUnreachable reads the address out of a dial error', () => {
+  const raw = 'wrapper /status: Get "http://127.0.0.1:12340/status": dial tcp 127.0.0.1:12340: connect: connection refused';
   const status = wrapperUnreachable(new ApiError(503, 'wrapper_unavailable', raw));
-  assert.equal(status.address, '127.0.0.1:8080');
+  assert.equal(status.address, '127.0.0.1:12340');
   const msg = wrapperErrorText(new ApiError(503, 'wrapper_unavailable', raw), 'status');
-  assert.equal(msg.message, 'The Apple Music session service at 127.0.0.1:8080 is not reachable.');
+  assert.equal(msg.message, 'The Apple Music session service at 127.0.0.1:12340 is not reachable.');
   assert.equal(msg.detail, raw, 'the raw text stays in the details');
-  assert.equal(unreachableLine(status), "Can't reach the session service at 127.0.0.1:8080.");
+  assert.equal(unreachableLine(status), "Can't reach the session service at 127.0.0.1:12340.");
   const login = wrapperErrorText(new ApiError(502, 'upstream_error', raw), 'login');
-  assert.match(login.message, /session service/, 'a gRPC Unavailable behind a 502 reads the same');
+  assert.match(login.message, /session service/, 'a dial error behind a 502 reads the same');
+  assert.match(login.message, /not reachable/);
   assert.equal(wrapperUnreachable(new ApiError(502, 'upstream_error', 'some other failure')), null);
   assert.equal(wrapperUnreachable(new ApiError(0, 'network_error', 'Cannot reach the server.')), null, 'the console server itself being down is not the wrapper');
   assert.equal(wrapperErrorText(new ApiError(503, 'wrapper_unavailable', 'dns lookup failed'), 'status').message, 'The Apple Music session service is not reachable.');

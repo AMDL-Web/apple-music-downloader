@@ -171,7 +171,7 @@ function WrapperCard({ res, loading }) {
           ['Error', view.detail ? html`<span class="wrap-any" title=${view.title || undefined}>${view.detail}</span>` : null],
         ]}
       />
-      <p class="muted small">The backend reaches wrapper-manager at <code>wrapper.address</code>; downloads need it, simulate mode does not. Accounts are managed in <a class="link" href=${settingsHash('account')}>Settings › Account</a>.</p>`;
+      <p class="muted small">The backend reaches the wrapper (wrapper-lite, or a wrapper-manager in front of it) at <code>wrapper.address</code>; downloads need it, simulate mode does not. Accounts are managed in <a class="link" href=${settingsHash('account')}>Settings › Account</a>.</p>`;
   }
   else {
     const wr = res.data;
@@ -180,8 +180,8 @@ function WrapperCard({ res, loading }) {
         rows=${[
           ['Connected', wr.status ? 'Yes' : 'No'],
           ['Regions', Array.isArray(wr.regions) && wr.regions.length ? wr.regions.map((r) => r.toUpperCase()).join(', ') : null],
-          ['Accounts', html`<span class="num">${count(accounts.length)}</span>`],
-        ]}
+          accounts.length ? ['Accounts', html`<span class="num">${count(accounts.length)}</span>`] : null,
+        ].filter(Boolean)}
       />
       ${accounts.length
         ? html`<div class="accounts">
