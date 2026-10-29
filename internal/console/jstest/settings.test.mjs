@@ -37,7 +37,7 @@ import {
   librarySyncState,
   anchorResetState,
 } from '../static/js/lib/settings-draft.js';
-import { templateUnknownVars } from '../static/js/lib/settings-template.js';
+import { templateUnknownVars, templateExample, templateKind } from '../static/js/lib/settings-template.js';
 import { wrapperErrorText, wrapperUnreachable } from '../static/js/lib/settings-account.js';
 import { ApiError } from '../static/js/api.js';
 import { readFileSync } from 'node:fs';
@@ -199,7 +199,21 @@ test('parseNumberInput and changesLabel', () => {
 test('templateUnknownVars', () => {
   assert.deepEqual(templateUnknownVars('albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}'), []);
   assert.deepEqual(templateUnknownVars('{Foo}/{SongName:02d}/{TrackNumber:2}/{Foo}'), ['{Foo}', '{SongName:02d}', '{TrackNumber:2}']);
+  assert.deepEqual(templateUnknownVars('{TrackNumber:03d}'), ['{TrackNumber:03d}'], 'the backend pads only with :02d');
   assert.deepEqual(templateUnknownVars(''), []);
+});
+
+test('templateExample builds the sample track path the way the backend does', () => {
+  const ex = (key) => templateExample(BY_KEY.get(key).defaultValue, templateKind(key));
+  assert.equal(ex('download.album_path_format'), 'albums/Frank Ocean/Blonde/01. Nikes.m4a');
+  assert.equal(ex('download.song_path_format'), 'songs/Frank Ocean/Blonde/01. Nikes.m4a');
+  assert.equal(ex('download.playlist_path_format'), 'playlists/Summer Mix/01. Nikes.m4a');
+  assert.equal(ex('download.station_path_format'), 'stations/Frank Ocean Radio/01. Nikes.m4a');
+  // Unknown variables stay; reserved characters become "_" per segment; an
+  // empty segment is "_"; Codec is upper case; only :02d pads.
+  assert.equal(templateExample('a/{Foo}/{Quality}/{AlbumName} [{Codec}]/{TrackNumber:03d} {SongName}'), 'a/{Foo}/16-bit_44 kHz/Blonde [ALAC]/{TrackNumber_03d} Nikes.m4a');
+  assert.equal(templateExample('{PlaylistName}/.{SongName}.'), '_/Nikes.m4a', 'no playlist name on an album; dots trimmed');
+  assert.equal(templateExample('{SongName:02d}'), '00.m4a');
 });
 
 test('wrapperErrorText per status and code', () => {

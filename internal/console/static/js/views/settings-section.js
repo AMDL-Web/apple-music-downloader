@@ -8,7 +8,7 @@ import { SETTINGS_GROUPS, sectionFields } from '../lib/settings.js';
 import { Notice, ErrorNote, SkeletonRows, Unavailable } from '../ui/components.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
-import { LibrarySyncPanel, ConfigFilePanel, TemplateReference } from './settings-panels.js';
+import { LibrarySyncPanel, ConfigFilePanel } from './settings-panels.js';
 
 /** The DOM id of an Advanced group's block. */
 export const groupDomId = (id) => `settings-group-${id}`;
@@ -102,6 +102,5 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, se
           not recognized as downloaded, so they download again.
         </${Notice}>`
       : null}
-    <${FieldRows} fields=${fields} form=${form} />
-    ${section.id === 'files' ? html`<${TemplateReference} />` : null}`;
+    <${FieldRows} fields=${fields} form=${form} />`;
 }

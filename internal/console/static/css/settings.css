@@ -530,43 +530,97 @@
 
 /* ---- Panels: template reference, library sync, config file, account -- */
 
-.template-ref {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-control);
-}
-
-.template-ref-summary {
-  padding: var(--s-2) var(--s-3);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  font-weight: var(--w-medium);
-  cursor: pointer;
-}
-
-.template-ref-body {
+/* A path template: the field and its Variables button in a row, the
+   popover of variable chips under them, and the sample track's path. */
+.template-field {
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
-  padding: 0 var(--s-3) var(--s-3);
+  gap: var(--s-1_5);
+  max-width: 640px;
 }
 
-.template-vars {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--s-2) var(--s-5);
-}
-
-.template-var {
-  display: grid;
-  grid-template-columns: 10.5em minmax(0, 1fr);
-  align-items: baseline;
+.template-row {
+  display: flex;
   gap: var(--s-2);
+}
+
+.template-row .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.template-vars-anchor {
+  display: flex;
+  flex: none;
+}
+
+/* Narrow: the template gets the whole line, Variables goes under it. */
+@container (max-width: 560px) {
+  .template-row {
+    flex-wrap: wrap;
+  }
+
+  .template-row .field-input {
+    flex-basis: 100%;
+  }
+}
+
+/* In the flow under the field (the section is a size container, so an
+   overlay could not rise above the save bar). */
+.template-popover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-float);
+}
+
+.template-popover-note,
+.template-var-desc,
+.template-example {
+  color: var(--text-secondary);
   font-size: var(--fs-12);
   line-height: var(--lh-12);
 }
 
-.template-var dd {
-  color: var(--text-secondary);
+.template-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1_5);
+}
+
+.template-chip {
+  padding: var(--s-0_5) var(--s-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-full);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  cursor: pointer;
+}
+
+.template-chip:hover {
+  background: var(--bg-hover);
+}
+
+.template-popover-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.template-var-desc {
+  min-height: calc(2 * var(--lh-12));
+}
+
+.template-example-label {
+  font-weight: var(--w-medium);
 }
 
 .settings-panel {
@@ -794,9 +848,9 @@
     bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--touch) + var(--lh-14) + var(--s-8) + var(--s-4));
   }
 
-  .template-var {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--s-0_5);
+  .template-chip {
+    min-height: 40px;
+    padding: var(--s-1) var(--s-3);
   }
 }
 

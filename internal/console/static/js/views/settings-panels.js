@@ -1,11 +1,9 @@
 // Settings panels that are not config fields: the library sync status with
-// "Start over from now", the configuration file (persisted, Reload),
-// and the path template reference.
+// "Start over from now" and the configuration file (persisted, Reload).
 
 import { html, useState } from '../ui/preact.js';
 import { flattenConfig, diffConfig, reloadSummary, splitReloadError, librarySyncState, anchorResetState } from '../lib/settings-draft.js';
 import { getLibrarySync, resetLibrarySync, reloadConfig } from '../api.js';
-import { TEMPLATE_VARIABLES, PADDED_VARIABLES } from '../lib/settings-template.js';
 import { count } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
 import { useApp, Badge, Button, KV, Notice, RelTime, SkeletonRows, ErrorNote } from '../ui/components.js';
@@ -175,25 +173,4 @@ function ReloadError({ message, announce }) {
       ${file ? html`<details class="account-error-details"><summary>Which file</summary><span class="mono small wrap-any account-error-detail">${file}</span></details>` : null}
     </${Notice}>
   </div>`;
-}
-
-/** The path template variables, collapsed by default. */
-export function TemplateReference() {
-  return html`<details class="template-ref">
-    <summary class="template-ref-summary">Template variables</summary>
-    <div class="template-ref-body">
-      <p class="small">
-        "/" separates folders and the last part is the file name; ".m4a" is added. Each part is cleaned on its own, so a value
-        cannot create folders. Unknown variables stay as written. Numbers marked "pads" take a width, as in <code>{TrackNumber:02d}</code>.
-      </p>
-      <dl class="template-vars">
-        ${TEMPLATE_VARIABLES.map(
-          ([name, text]) => html`<div key=${name} class="template-var">
-            <dt><code>{${name}}</code></dt>
-            <dd>${text}${PADDED_VARIABLES.includes(name) ? html` <span class="chip">pads</span>` : null}</dd>
-          </div>`,
-        )}
-      </dl>
-    </div>
-  </details>`;
 }

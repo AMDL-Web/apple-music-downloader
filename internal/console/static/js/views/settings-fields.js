@@ -7,6 +7,7 @@ import { parseNumberInput, sameValue } from '../lib/settings-draft.js';
 import { valueLabel } from '../lib/settings.js';
 import { Icon, Button } from '../ui/components.js';
 import { ListEditor } from './settings-list.js';
+import { TemplateControl } from './settings-template.js';
 
 /** A DOM id for a dotted config key. */
 export const fieldId = (key) => `set-${key.replace(/[^a-z0-9]+/gi, '-')}`;
@@ -80,6 +81,8 @@ function control(p) {
       return html`<${SelectControl} ...${p} />`;
     case 'number':
       return html`<${NumberControl} ...${p} />`;
+    case 'template':
+      return html`<${TemplateControl} ...${p} />`;
     case 'token':
       return html`<${SecretControl} ...${p} />`;
     case 'list':

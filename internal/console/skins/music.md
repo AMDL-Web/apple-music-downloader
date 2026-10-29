@@ -242,7 +242,7 @@ base durations (120 ms color, 200 ms overlays).
   rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
   soft shadow, red when on, the off track keeping its `--border-control`
   outline, no On/Off word beside it). The ordered list is an inset list like
-  the codec ranking; the template reference is an inset cell. Panel actions
+  the codec ranking. Panel actions
   in a block head (Refresh) are red text, and so is an account's Log out. The save bar is a frosted floating
   capsule with the float shadow: the count in 15 px semibold, where in 14 px
   secondary, Discard red text and Save a red pill, both 36 px; on phones it
