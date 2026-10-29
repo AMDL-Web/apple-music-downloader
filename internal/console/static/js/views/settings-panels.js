@@ -3,7 +3,7 @@
 // and the path template reference.
 
 import { html, useState } from '../ui/preact.js';
-import { flattenConfig, diffConfig, reloadSummary, librarySyncState, anchorResetState } from '../lib/settings.js';
+import { flattenConfig, diffConfig, reloadSummary, librarySyncState, anchorResetState } from '../lib/settings-draft.js';
 import { getLibrarySync, resetLibrarySync, reloadConfig } from '../api.js';
 import { TEMPLATE_VARIABLES, PADDED_VARIABLES } from '../lib/settings-template.js';
 import { count } from '../lib/format.js';

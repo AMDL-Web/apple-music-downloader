@@ -6,6 +6,8 @@ import {
   FIELD_KEYS,
   NOT_EDITED,
   sectionById,
+} from '../static/js/lib/settings.js';
+import {
   flattenConfig,
   sameValue,
   changedKeys,
@@ -27,7 +29,7 @@ import {
   unsavedAnnouncement,
   librarySyncState,
   anchorResetState,
-} from '../static/js/lib/settings.js';
+} from '../static/js/lib/settings-draft.js';
 import { templateUnknownVars } from '../static/js/lib/settings-template.js';
 import { wrapperErrorText, wrapperUnreachable } from '../static/js/lib/settings-account.js';
 import { ApiError } from '../static/js/api.js';

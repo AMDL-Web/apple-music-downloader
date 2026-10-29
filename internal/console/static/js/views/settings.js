@@ -3,7 +3,7 @@
 // head comes from app.js; this is the body: a section list (a select under
 // 640 px), the open section, and a sticky save bar while anything differs
 // from the server. Save sends PUT /api/v1/config with only the changed
-// leaves (lib/settings.js buildPatch); leaving with unsaved changes asks
+// leaves (lib/settings-draft.js buildPatch); leaving with unsaved changes asks
 // first, inside the console (the app's leave guard) and on unload.
 
 import { html, useState, useEffect, useMemo, useRef, useCallback } from '../ui/preact.js';
@@ -13,6 +13,8 @@ import {
   sectionById,
   sectionFields,
   fieldByKey,
+} from '../lib/settings.js';
+import {
   flattenConfig,
   changedKeys,
   buildPatch,
@@ -20,13 +22,11 @@ import {
   fieldErrors,
   validateDraft,
   savedWarnings,
-  diffConfig,
-  labelList,
   lossSummary,
   unsavedAnnouncement,
   changesLabel,
   draftAfterSave,
-} from '../lib/settings.js';
+} from '../lib/settings-draft.js';
 import { punctuated } from '../lib/format.js';
 import { settingsSection, settingsHash, parseHash } from '../lib/route.js';
 import { useApp, Card, Icon, Button, Notice, ErrorNote, SkeletonRows, Unavailable } from '../ui/components.js';
@@ -34,19 +34,13 @@ import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
 import { LibrarySyncPanel, ConfigFilePanel, TemplateReference } from './settings-panels.js';
+import { useElsewhere, elsewhereText } from './settings-elsewhere.js';
 
 /** What a confirmation would lose: the count, the sections and the field names. */
 function LossText({ keys, lead }) {
   const t = lossSummary(keys);
   return html`<p>${lead} ${changesLabel(t.count)} in ${t.sections}: ${t.fields}.</p>
     <p>Saved settings are not affected.</p>`;
-}
-
-/** The notice for saved values that changed elsewhere while edits are pending. */
-function elsewhereText(keys, edits) {
-  const changed = `The saved ${keys.length === 1 ? 'value' : 'values'} of ${labelList(keys, 4)} changed in another tab or in the file.`;
-  const mine = edits === 1 ? 'Your unsaved change stays pending' : `Your ${edits} unsaved changes stay pending`;
-  return `${changed} ${mine}; saving sends only ${edits === 1 ? 'it' : 'those'}, and if the same setting changed elsewhere, yours wins.`;
 }
 
 const EMPTY = { loaded: false, error: null, base: {}, pinned: {}, pinnedList: [], persisted: true, reloadError: '' };
@@ -60,10 +54,6 @@ export function SettingsPage({ route }) {
   const [saveError, setSaveError] = useState(null);
   const [leaveTo, setLeaveTo] = useState(null);
   const [discarding, setDiscarding] = useState(false);
-  // Saved values that changed in another tab or in the file: a quiet note
-  // after a silent refresh, or (under unsaved edits) a notice with a choice.
-  const [updatedNote, setUpdatedNote] = useState('');
-  const [elsewhere, setElsewhere] = useState(null);
   const [live, setLive] = useState('');
   const [loadSeq, setLoadSeq] = useState(0);
   const [failSeq, setFailSeq] = useState(0);
@@ -109,81 +99,18 @@ export function SettingsPage({ route }) {
     };
   }, [loadSeq, apply]);
 
-  // Look at the server's values again when the tab comes back, and after a
-  // reconnect (app.epoch). Nothing changed: nothing happens. Changed with no
-  // local edits: refresh quietly and say so. Changed under local edits: a
-  // notice, and the draft stays. Save still sends only the edited keys, so
-  // the last write wins.
-  const cfgRef = useRef(cfg);
-  cfgRef.current = cfg;
-  const savingRef = useRef(false);
-  savingRef.current = saving;
-  const checking = useRef(false);
-  const lastCheck = useRef(0);
-  const acked = useRef('');
-  const checkElsewhere = useCallback(
-    async (force) => {
-      const before = cfgRef.current;
-      // A load that failed is tried again when the tab returns.
-      if (!before.loaded) {
-        if (before.error && !dirtyRef.current) setLoadSeq((n) => n + 1);
-        return;
-      }
-      if (checking.current || savingRef.current) return;
-      if (!force && Date.now() - lastCheck.current < 1500) return;
-      checking.current = true;
-      lastCheck.current = Date.now();
-      const seq = applySeq.current;
-      try {
-        const res = await getConfig();
-        if (seq !== applySeq.current) return;
-        const next = flattenConfig(res && res.config);
-        const changed = diffConfig(cfgRef.current.base, next);
-        if (changed.length === 0) return;
-        if (!dirtyRef.current) {
-          apply(res);
-          const note = `Updated from another tab or the file: ${labelList(changed, 4)} changed.`;
-          setUpdatedNote(note);
-          setLive(note);
-        } else {
-          const sig = JSON.stringify(changed.map((k) => [k, next[k]]));
-          if (sig !== acked.current) {
-            setElsewhere({ res, keys: changed, sig });
-            setUpdatedNote('');
-            setLive(`The saved values of ${labelList(changed, 4)} changed elsewhere. Your unsaved changes stay pending.`);
-          }
-        }
-      } catch {
-        // A failed look is not worth a message; the next focus tries again.
-      } finally {
-        checking.current = false;
-      }
-    },
-    [apply],
-  );
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') checkElsewhere(false);
-    };
-    const onFocus = () => checkElsewhere(false);
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onFocus);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [checkElsewhere]);
-  const seenEpoch = useRef(app.epoch);
-  useEffect(() => {
-    if (seenEpoch.current === app.epoch) return;
-    seenEpoch.current = app.epoch;
-    if (cfgRef.current.loaded) checkElsewhere(true);
-    else if (!dirtyRef.current) setLoadSeq((n) => n + 1);
-  }, [app.epoch, checkElsewhere]);
-  // The notices are moot once nothing is edited: a save or discard shows the server's values.
-  useEffect(() => {
-    if (!dirty) setElsewhere(null);
-  }, [dirty]);
+  // Saved values that changed in another tab or in the file: a quiet note
+  // after a silent refresh, or (under unsaved edits) a notice with a choice.
+  const { updatedNote, setUpdatedNote, elsewhere, setElsewhere, acked } = useElsewhere({
+    cfg,
+    dirty,
+    saving,
+    apply,
+    applySeq,
+    setLoadSeq,
+    setLive,
+    epoch: app.epoch,
+  });
 
   // Announce the unsaved count politely, after the typing pauses. A save or
   // discard that empties the draft has its own toast, so it stays quiet here.

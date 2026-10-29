@@ -3,7 +3,7 @@
 // field list in lib/settings.js decides which control a key gets.
 
 import { html, useState, useRef, useEffect } from '../ui/preact.js';
-import { parseNumberInput } from '../lib/settings.js';
+import { parseNumberInput } from '../lib/settings-draft.js';
 import { Icon, Button } from '../ui/components.js';
 
 /** A DOM id for a dotted config key. */
