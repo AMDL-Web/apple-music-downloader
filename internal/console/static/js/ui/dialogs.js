@@ -101,7 +101,8 @@ let confirmSeq = 0;
  * Asks before a destructive or irreversible action: role=alertdialog, the
  * title, an optional body (children), Cancel (focused, the safe choice) and
  * the confirm button (`danger` styles it as destructive). While `busy` both
- * buttons are aria-disabled, the confirm button reads busyLabel, and Escape
+ * buttons are aria-disabled, the confirm button reads busyLabel (the `altLabel`
+ * button does when there is one: it is the choice that runs), and Escape
  * and the scrim do nothing; the caller closes the dialog when its request
  * settles. Escape or Cancel calls onCancel; focus returns to the opener.
  * `altLabel` + `onAlt` add a third, primary choice between the two (a
@@ -123,14 +124,16 @@ export function ConfirmDialog({ title, children, confirmLabel = 'Confirm', cance
     ${children ? html`<div id=${`${id}-body`} class="dialog-body">${children}</div>` : null}
     <div class="dialog-actions" data-choices=${altLabel ? '3' : undefined}>
       <${Button} variant="secondary" className="dialog-cancel" aria-disabled=${off} onClick=${cancel} data-autofocus>${cancelLabel}</${Button}>
-      ${altLabel ? html`<${Button} variant="primary" className="dialog-alt-btn" aria-disabled=${off} onClick=${busy ? undefined : onAlt}>${altLabel}</${Button}>` : null}
+      ${altLabel
+        ? html`<${Button} variant="primary" className="dialog-alt-btn" aria-disabled=${off} aria-busy=${off} onClick=${busy ? undefined : onAlt}>${busy ? busyLabel : altLabel}</${Button}>`
+        : null}
       <${Button}
         variant=${danger ? 'danger' : 'primary'}
         className="dialog-confirm-btn"
         aria-disabled=${off}
-        aria-busy=${off}
+        aria-busy=${altLabel ? undefined : off}
         onClick=${busy ? undefined : onConfirm}
-      >${busy ? busyLabel : confirmLabel}</${Button}>
+      >${busy && !altLabel ? busyLabel : confirmLabel}</${Button}>
     </div>
   </${Dialog}>`;
 }

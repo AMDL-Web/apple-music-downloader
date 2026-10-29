@@ -354,7 +354,9 @@ and motion covers.
   without reaching the page shortcuts, focus returns to the opener).
   `ConfirmDialog` asks before a destructive or irreversible action: an
   alertdialog with the title, the consequence, Cancel (focused) and the
-  confirm button; while busy both are disabled and Escape does nothing. The
+  confirm button; while busy every button is disabled and Escape does nothing (the
+  Settings leave dialog is busy while Save and leave saves, and that button reads
+  "Saving…"). The
   More sheet and the shortcut sheet are `Dialog`s. A change of page or drawer
   (a link, Back, a shortcut) closes the palette and the shell's sheets; a sheet pushes
   no history entry, so Back leaves the page rather than closing it first.

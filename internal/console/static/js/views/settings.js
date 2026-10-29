@@ -408,6 +408,8 @@ export function SettingsPage({ route }) {
           cancelLabel="Stay"
           altLabel=${Object.keys(checks.errors).length ? '' : 'Save and leave'}
           onAlt=${saveAndLeave}
+          busy=${saving}
+          busyLabel="Saving…"
           danger
           onConfirm=${() => leave()}
           onCancel=${() => setLeaveTo(null)}
