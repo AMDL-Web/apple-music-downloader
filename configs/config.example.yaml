@@ -286,10 +286,10 @@ download:
   lyrics_extras: []
   # integer Hz: maximum selected ALAC sample rate; 0 or less sets no ceiling. Use 192000 for up to
   # 192 kHz. Apple Music serves ALAC at 44100 Hz and above, so a lower value skips every ALAC stream.
-  # Above 48000, a Hi-Res Lossless track takes its master playlist from the wrapper's device manifest
-  # (one wrapper /m3u8 request per song, remembered for 12 hours), because the web player's playlist can
-  # leave out the 88.2, 96 and 192 kHz renditions. At 48000 or below, and for every other track, no such
-  # request is made. If the wrapper cannot supply the manifest the track keeps the web player's.
+  # Above 48000, or at 0 or less (no ceiling), a Hi-Res Lossless track takes its master playlist from the
+  # wrapper's device manifest (one wrapper /m3u8 request per song, remembered for 12 hours), because the
+  # web player's playlist can leave out the 88.2, 96 and 192 kHz renditions. From 1 to 48000, and for
+  # every other track, no such request is made. If the wrapper cannot supply the manifest the track keeps the web player's.
   alac_max_sample_rate: 192000
   # integer bits: maximum selected ALAC bit depth; 0 or less sets no ceiling. Use 24 for up to 24-bit.
   # Apple Music serves 16- and 24-bit ALAC, so 16 to 23 keeps 16-bit streams only.

@@ -148,8 +148,8 @@ needs the API changes below before it works against 2.0.
   is what an install with the three signing keys empty already did, so such an install
   sees no change. An install that set the keys now reads the web player's `enhancedHls`
   from the catalog response and no longer asks the wrapper for a manifest per track: only a
-  `hi-res-lossless` track with ALAC and `download.alac_max_sample_rate` above 48000 takes
-  the wrapper's device manifest, remembered for 12 hours. Remove any `.p8` key mount.
+  `hi-res-lossless` track with ALAC and `download.alac_max_sample_rate` above 48000 or at 0 or less
+  (no ceiling) takes the wrapper's device manifest, remembered for 12 hours. Remove any `.p8` key mount.
   `catalog.token_cache_ttl_hours` now applies to every install.
 - Built-in defaults now equal the values in `configs/config.example.yaml`, so a key
   missing from `config.yaml` behaves the way the example documents. The exceptions are

@@ -79,9 +79,14 @@ const webALACMaxSampleRate = 48000
 // playlist sometimes omits are always listed, and nothing in the web playlist
 // says when it is short. Atmos and AAC renditions match in both, so only a
 // hi-res-lossless track whose ALAC may exceed 48 kHz is worth a wrapper
-// request: /m3u8 shares one lock with /key.
+// request: /m3u8 shares one lock with /key. A ceiling of 0 or less means no
+// ceiling (selectVariant), so it may exceed 48 kHz too.
 func (d *Downloader) wantsDeviceManifest(song applemusic.Song, codec string) bool {
-	return song.HiResLossless && codec == "alac" && d.cfg.Download.ALACMaxSampleRate > webALACMaxSampleRate
+	if !song.HiResLossless || codec != "alac" {
+		return false
+	}
+	maxRate := d.cfg.Download.ALACMaxSampleRate
+	return maxRate <= 0 || maxRate > webALACMaxSampleRate
 }
 
 // resolveEnhancedHLS chooses the master-playlist source shared by downloads

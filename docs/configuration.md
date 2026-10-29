@@ -110,8 +110,8 @@ The web player's playlist can leave out a Hi-Res track's higher ALAC renditions 
 wrapper's device manifest lists: an 88.2, 96 or 192 kHz stream may be missing while 48 kHz
 is there, and nothing in the playlist says so. So a track with the `hi-res-lossless` audio
 trait takes the device manifest from the wrapper (`/m3u8`) when `download.alac_max_sample_rate`
-is above 48000 and the codec is ALAC. At 48000 or below, for Atmos and AAC, and for any other
-track, the catalog playlist is used and the wrapper is not asked, because the wrapper serves
+is above 48000 or is 0 or less (no ceiling) and the codec is ALAC. From 1 to 48000, for Atmos
+and AAC, and for any other track, the catalog playlist is used and the wrapper is not asked, because the wrapper serves
 `/m3u8` and `/key` from one lock. The answer is remembered per storefront and song for 12
 hours (at most 1024 songs), and dropped as soon as the playlist it points to fails to load.
 If the wrapper cannot supply a manifest the track keeps the catalog playlist and may be
