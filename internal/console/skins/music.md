@@ -251,10 +251,14 @@ base durations (120 ms color, 200 ms overlays).
 - **Dialogs**: sheets take the card radius. A confirm is an Apple alert: a
   centered 20 px bold title and 14 px consequence, then Cancel and the
   confirm button as two equal 36 px pills; a destructive one is red text,
-  not a red fill.
+  not a red fill. Three choices share one row, 520 px wide. On phones every
+  bottom sheet takes a 20 px top radius (`--r-sheet`) and 24 px above its
+  content for the grabber.
 - **Palette and toasts**: frosted raised surface, secondary item glyphs, 20 px input
   with no focus rule (the caret shows focus; the 1 px divider stays). On phones
-  the palette is inset 8 px with the 16 px radius and drops the key hints.
+  the palette is inset 8 px with the 16 px radius and drops the key hints;
+  on touch its rows are 44 px and Cancel is red 16 px text. The shortcut
+  sheet's keys and context words are secondary, what they do primary.
 - **Notices**: 16 px radius role tint, 18 px icon; a link inside a warning or
   failure notice is underlined in the role's text color.
 - **Buttons**: only the primary action is a red fill; it darkens on hover

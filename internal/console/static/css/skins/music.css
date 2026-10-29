@@ -127,6 +127,8 @@
   --r-art-sm: 8px;
   --r-icon-tile: 8px;
   --r-overlay: 18px;
+  /* Top corners of a phone bottom sheet. */
+  --r-sheet: 20px;
   --r-drawer: 0;
   --r-notice: 16px;
   --bar-h: 6px;
@@ -2695,6 +2697,41 @@
   padding: var(--s-2) var(--s-5);
 }
 
+/* Touch: Cancel is red text as in an iOS search field; rows are 44 px. */
+:root[data-skin="music"] .palette-close {
+  height: auto;
+  padding: var(--s-1);
+  color: var(--accent-text);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: var(--w-regular);
+}
+
+:root[data-skin="music"] .palette-close:hover:not(:disabled) {
+  background: transparent;
+}
+
+@media (hover: none) {
+  :root[data-skin="music"] .palette-item {
+    min-height: var(--touch);
+  }
+}
+
+/* Shortcut sheet: keys and their context words on the left in secondary,
+   what they do in primary. */
+:root[data-skin="music"] .shortcut-group .kv dt {
+  color: var(--text-secondary);
+}
+
+:root[data-skin="music"] .shortcut-group .kv dd {
+  color: var(--text-primary);
+}
+
+:root[data-skin="music"] .shortcut-group-title {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
 :root[data-skin="music"] .toast {
   min-height: 48px;
   padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
@@ -2747,13 +2784,31 @@
   margin-top: var(--s-3);
 }
 
-:root[data-skin="music"] .dialog-actions[data-choices="3"] {
-  grid-template-columns: 1fr;
+:root[data-skin="music"] .dialog-confirm:has(> .dialog-actions[data-choices="3"]) {
+  width: min(520px, 100%);
 }
 
-:root[data-skin="music"] .dialog-actions[data-choices="3"] .dialog-confirm-btn {
-  background: var(--danger-tint);
-  color: var(--danger-text);
+/* Three choices: one row, the destructive one alone on the left (base). */
+:root[data-skin="music"] .dialog-actions[data-choices="3"] {
+  display: flex;
+  justify-content: flex-end;
+}
+
+:root[data-skin="music"] .dialog-actions[data-choices="3"] .btn {
+  padding: 0 var(--s-4);
+}
+
+/* Phone sheets: the grabber above, the 20 px top radius, and a confirm's
+   choices stacked full width (order in overlays.css). */
+:root[data-skin="music"] [data-placement="bottom"] > [data-dialog] {
+  width: 100%;
+  padding-top: var(--s-6);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+}
+
+:root[data-skin="music"] [data-placement="bottom"] .dialog-actions {
+  display: flex;
+  flex-direction: column;
 }
 
 :root[data-skin="music"] .dialog-actions .btn {
@@ -2762,8 +2817,8 @@
   line-height: var(--lh-15);
 }
 
-/* More (phones): an inset grouped list on the frosted sheet, red glyphs as
-   in the sidebar, hairlines from the text, the current page in semibold. */
+/* More (phones): an inset grouped list on the frosted sheet, secondary
+   glyphs as in the sidebar, hairlines from the text, the current page in semibold. */
 :root[data-skin="music"] .sheet-more {
   gap: var(--s-3);
   padding: var(--s-4) var(--s-3) var(--s-3);

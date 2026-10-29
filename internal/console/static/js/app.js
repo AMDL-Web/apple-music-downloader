@@ -23,7 +23,7 @@ import { SystemPage } from './views/system.js';
 import { DownloadPage } from './views/download.js';
 import { SettingsPage } from './views/settings.js';
 import { JobDrawer } from './views/drawer.js';
-import { CommandPalette, ShortcutSheet } from './views/palette.js';
+import { CommandPalette, ShortcutSheet, isMac } from './views/palette.js';
 import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, SimulateTag, ThemeControl, Banners } from './views/shell.js';
 
 const TITLES = {
@@ -59,7 +59,7 @@ export function applyTheme(theme) {
 }
 
 // The palette shortcut as this platform writes it.
-const PALETTE_KEYS = /Mac|iPhone|iPad/.test((typeof navigator !== 'undefined' && (navigator.platform || navigator.userAgent)) || '') ? '⌘K' : 'Ctrl K';
+const PALETTE_KEYS = isMac() ? '⌘K' : 'Ctrl K';
 
 const isTyping = (el) =>
   el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);

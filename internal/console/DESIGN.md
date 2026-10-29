@@ -153,7 +153,7 @@ Stable class names and attributes the skin can style without touching JS:
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
 | Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus; it rises over the icon line with a negative `margin-top`, so its label shares the other labels' line, and a skin rule that resizes the mark or the tab icons restates it) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.theme` > `button.theme-cycle` (one button cycling System, Light, Dark; its label names the next), `.sim-tag` (simulate mode, explanation in its title and an `.sr-only` span); loading shell `.boot` > `.boot-mark` + `.boot-text` (static in `index.html`, replaced on mount); `svg.sprite` at the start of `body`, the in-document icon sprite (`ui/icons.js`), never styled by the skin; `meta[name=theme-color]` set from the body background; `.conn[data-role][data-state=connecting\|live\|reconnecting\|offline\|paused]` > `.conn-dot` + `.conn-label` (the base hides the label visually unless `data-state` is `reconnecting` or `offline`, and always under 640 px) |
-| Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive); a busy button is `.btn[aria-disabled=true]`. Shortcut sheet `[data-dialog=shortcuts]` |
+| Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions[data-choices=3]` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive), in drawn order: with three choices `.dialog-confirm-btn` first and `.btn.dialog-alt-btn` last, on a phone sheet the confirm button before Cancel and `.dialog-alt-btn` first; a busy button is `.btn[aria-disabled=true]`; a bottom panel draws its grabber as `::before`. Shortcut sheet `.sheet.sheet-shortcuts[data-dialog=shortcuts]` > `.sheet-head` + `.shortcut-body` > `.shortcut-groups` > `section.shortcut-group` > `h3.shortcut-group-title` + `dl.kv` (`dt.shortcut-keys` with `kbd`s) |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
 | Settings | `.page-settings[data-section-active][data-dirty]` > `nav.settings-nav` (`ul.settings-nav-list` > `a.settings-nav-item[data-section][aria-current=true][data-dirty][data-invalid]` > `.icon`, `.settings-nav-label`, `.settings-nav-mark` (`.settings-nav-dot` when unsaved); `label.settings-jump` > `.settings-jump-label` + `select`, shown under 640 px), `.settings-main` (a size container) > `.settings-error` + `section.card.settings-section[data-section=<id>]` > `.settings-intro`, `.field-list` > `.field[data-key][data-type][data-wide][data-changed][data-invalid]` > `.field-text` (`.field-label`, `.field-changed`, `button.field-revert`, `.field-help`, `code.field-key`), `.field-control` (`input.field-switch[role=switch]` + `.field-switch-state`, `.field-select` > `.select` + `.field-option-hint`, `.field-number` > `.field-input` + `.field-unit`, `.field-input`, `.field-secret`, `.list-editor` > `ol.list-items` > `li.list-item[data-item]` (`.list-rank`, `.list-label`, `.list-code`, `.list-actions` > `.list-up`, `.list-down`, `.list-remove`) + `.list-add`, `.check-group` > `label.check`), then `.field-default` (`code.field-default-value`), `.field-error`, `.field-warning`; `.list-min-note`; panels `.settings-panel[data-panel=library-sync\|config-file]` (`.settings-panel-head`, `.settings-panel-actions`, `.sync-reset`, `.sync-state`, `.config-reload`, `.config-outcome`), `details.template-ref`, `.account` > `.account-block` (`.account-block-head`, `ul.account-rows` > `.account-row` > `.account-name` + `.account-logout`), `form.login-form[data-step=credentials\|code]` > `.form-row`, `.login-blocked`, `.form-actions`; `.save-bar[data-state=dirty\|saving]` > `.save-bar-text` (`.save-bar-count`, `.save-bar-where`) + `.save-bar-actions` (`.save-bar-discard`, `.save-bar-save`) |
 | Job selection (Queue) | Toolbar `.queue-tools` > `.btn.queue-retry-all` (Failed and Cancelled tabs) + `.btn.queue-select[aria-pressed]`; `.bulk-bar[data-state=select\|run]` (sticky at `top: var(--topbar-h)`; a skin whose top bar does not stick would override `top`) > `label.bulk-all` > `input.bulk-check` (indeterminate when some), `.bulk-count`, `.bulk-actions` > `.btn.bulk-action[data-action=retry\|cancel\|delete]` > `.bulk-n` (count) or `.bulk-hint`, or during a run `.bulk-progress` > `.bulk-progress-text` + `.bulk-meter[role=progressbar]` > `.bulk-meter-fill` (`--f`); `ul.job-list.is-selecting` > `li.job-item[data-job-id][data-selected]` > `label.job-check` > `input.job-check-input` + `a.job-row[data-selected]`. Drawer: `.btn.drawer-delete` (finished jobs) |
@@ -332,19 +332,31 @@ and motion covers.
   modal dialog; combobox + listbox; focus handling from `useDialog`, so
   focus returns to the opener; rows from `lib/palette.js`: a query holding
   Apple Music links offers "Download this link" first, Settings sections and
-  fields match by label, key or panel, job rows add status and date; a
+  fields match by label, key or panel, job rows add status and date and
+  time (`dateTime`); a
   visually hidden polite status reads the result count once the job search
-  answers; under `(hover: none)` a `.palette-close` button shows and the key
-  hints and `.palette-foot` hide), shortcut sheet (`?`).
+  answers; under `(hover: none)` a `.palette-close` "Cancel" text button
+  shows, the key hints and `.palette-foot` hide, rows are 44 px with the sub
+  line under the label and the Navigate group is left out until something is
+  typed), shortcut sheet
+  (`?`: groups Global, Lists, New download, Settings, two flowing columns
+  from 640 px (CSS columns, so a group follows the one above it), keycaps only
+  for real keys, the body scrolls under its head).
 - **Dialogs** (`ui/dialogs.js`): `Dialog` is a scrim plus a modal panel
   (`useDialog`: focus the first `[data-autofocus]`, trap Tab, Escape closes
   without reaching the page shortcuts, focus returns to the opener).
   `ConfirmDialog` asks before a destructive or irreversible action: an
   alertdialog with the title, the consequence, Cancel (focused) and the
-  confirm button; while busy every button is disabled and Escape does nothing (the
+  confirm button; with a third, primary choice the three share one row in
+  macOS order (the destructive one alone on the left, then Cancel and the
+  primary). Under 640 px it is a bottom sheet with full-width buttons:
+  primary, destructive, Cancel. The DOM follows the drawn order. While busy every button is disabled and Escape does nothing (the
   Settings leave dialog is busy while Save and leave saves, and that button reads
   "Saving…"). The
-  More sheet and the shortcut sheet are `Dialog`s. A change of page or drawer
+  More sheet and the shortcut sheet are `Dialog`s. Every bottom sheet
+  (`placement="bottom"`: More, Qualities and confirms on phones) is full
+  width on the tab bar (to the screen edge over the drawer), with rounded top
+  corners, a 36 x 4 px grabber and `overscroll-behavior: contain`. A change of page or drawer
   (a link, Back, a shortcut) closes the palette and the shell's sheets; a sheet pushes
   no history entry, so Back leaves the page rather than closing it first.
 - **Queue selection** (`views/queue-select.js`, rules in `lib/jobactions.js`):

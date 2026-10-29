@@ -126,7 +126,9 @@
   line-height: var(--lh-12);
 }
 
-/* Touch screens: a visible Close (no Escape key) and no keyboard hints. */
+/* Touch screens: a visible Cancel (no Escape key), no keyboard hints, and
+   44 px rows with the sub line under the label (views/palette.js also drops
+   the Navigate group there: the tab bar does that). */
 .palette-close {
   display: none;
 }
@@ -139,6 +141,24 @@
   .palette-keys,
   .palette-foot {
     display: none;
+  }
+
+  .palette-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: center;
+    column-gap: var(--s-3);
+    min-height: var(--touch);
+    padding-block: var(--s-1);
+  }
+
+  .palette-item > .icon {
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .palette-sub {
+    grid-column: 2;
   }
 }
 
@@ -180,10 +200,41 @@
   outline: none;
 }
 
-/* A bottom sheet (the tab bar's More) rises above the tab bar. */
+/* Phone sheets (Dialog placement="bottom": More, Qualities, confirmations)
+   share one look: full width, resting on the tab bar (down to the screen
+   edge, past the safe area, over the full-screen drawer), rounded top
+   corners, a grabber, and scrolling that stays inside. The scrim and
+   Escape close them. */
 .overlay-host[data-placement="bottom"] {
   align-items: flex-end;
-  padding: var(--s-2) var(--s-2) calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+  padding: var(--s-8) 0 calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+}
+
+:root.has-overlay .overlay-host[data-placement="bottom"] {
+  padding-bottom: 0;
+}
+
+.overlay-host[data-placement="bottom"] > [data-dialog] {
+  width: 100%;
+  max-height: 100%;
+  padding-top: var(--s-6);
+  border-radius: var(--r-overlay) var(--r-overlay) 0 0;
+  overscroll-behavior: contain;
+}
+
+:root.has-overlay .overlay-host[data-placement="bottom"] > [data-dialog] {
+  padding-bottom: calc(var(--s-5) + env(safe-area-inset-bottom));
+}
+
+.overlay-host[data-placement="bottom"] > [data-dialog]::before {
+  content: "";
+  position: absolute;
+  top: var(--s-2);
+  left: calc(50% - 18px);
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--border-control);
 }
 
 .sheet-more {
@@ -251,10 +302,91 @@
   gap: var(--s-2);
 }
 
-/* Three choices (Stay, Save and leave, Discard and leave) wrap to a second
-   row instead of squeezing their labels. */
 .dialog-actions > .btn {
   flex: 0 0 auto;
+}
+
+/* Three choices sit in one row in macOS order: the destructive one alone on
+   the left, Cancel and the primary on the right. */
+.dialog-confirm:has(> .dialog-actions[data-choices="3"]) {
+  width: min(520px, 100%);
+}
+
+.dialog-actions[data-choices="3"] {
+  flex-wrap: nowrap;
+}
+
+.dialog-actions[data-choices="3"] > .dialog-confirm-btn {
+  margin-right: auto;
+}
+
+/* On a phone sheet the choices stack full width: the primary first, then
+   the destructive one, Cancel last (ConfirmDialog renders them in that order). */
+[data-placement="bottom"] > .dialog-confirm > .dialog-actions {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+[data-placement="bottom"] > .dialog-confirm > .dialog-actions > .btn {
+  width: 100%;
+  margin: 0;
+}
+
+/* The shortcut sheet: opens near the top, its head stays while the groups
+   scroll, two columns from 640 px. Keys are keycaps; the words around them
+   ("then", "in a field") are plain text. */
+.overlay-host:has(> .sheet-shortcuts)[data-placement="center"] {
+  padding-top: 6vh;
+}
+
+.sheet-shortcuts {
+  width: min(760px, 100%);
+  max-height: calc(94vh - var(--s-2));
+  overflow: hidden;
+}
+
+.shortcut-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Two flowing columns, not a grid: a group follows the one above it in its
+   column instead of waiting for the row's tallest group. */
+.shortcut-group {
+  break-inside: avoid;
+}
+
+.shortcut-group + .shortcut-group {
+  margin-top: var(--s-5);
+}
+
+@media (min-width: 640px) {
+  .shortcut-groups {
+    columns: 2;
+    column-gap: var(--s-8);
+  }
+}
+
+.shortcut-group-title {
+  margin: 0 0 var(--s-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-semibold);
+}
+
+.shortcut-keys {
+  color: var(--text-secondary);
+}
+
+.shortcut-keys kbd {
+  min-width: 20px;
+  text-align: center;
+  color: var(--text-primary);
 }
 
 /* ---- States -------------------------------------------------------- */

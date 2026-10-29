@@ -5,6 +5,7 @@
 
 import { html, useEffect, useRef, useState } from './preact.js';
 import { Button } from './components.js';
+import { useMedia } from './hooks.js';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -105,17 +106,36 @@ let confirmSeq = 0;
  * button does when there is one: it is the choice that runs), and Escape
  * and the scrim do nothing; the caller closes the dialog when its request
  * settles. Escape or Cancel calls onCancel; focus returns to the opener.
- * `altLabel` + `onAlt` add a third, primary choice between the two (a
- * "Save and leave" next to a destructive "Discard and leave").
+ * `altLabel` + `onAlt` add a third, primary choice (a "Save and leave" next
+ * to a destructive "Discard and leave"): the three sit in one row in macOS
+ * order, the destructive one alone on the left, Cancel then the primary on
+ * the right. Under 640 px the dialog is a bottom sheet whose full-width
+ * buttons read primary, destructive, Cancel. The DOM follows the order drawn,
+ * so Tab and a screen reader meet the buttons as they are seen.
  */
 export function ConfirmDialog({ title, children, confirmLabel = 'Confirm', cancelLabel = 'Cancel', busyLabel = 'Working…', altLabel = '', danger = false, busy = false, onConfirm, onCancel, onAlt }) {
   const [id] = useState(() => `confirm-${++confirmSeq}`);
+  const phone = useMedia('(max-width: 639px)');
   const cancel = busy ? undefined : onCancel;
   const off = busy ? 'true' : undefined;
+  const confirm = html`<${Button}
+    key="confirm"
+    variant=${danger ? 'danger' : 'primary'}
+    className="dialog-confirm-btn"
+    aria-disabled=${off}
+    aria-busy=${altLabel ? undefined : off}
+    onClick=${busy ? undefined : onConfirm}
+  >${busy && !altLabel ? busyLabel : confirmLabel}</${Button}>`;
+  const dismiss = html`<${Button} key="cancel" variant="secondary" className="dialog-cancel" aria-disabled=${off} onClick=${cancel} data-autofocus>${cancelLabel}</${Button}>`;
+  const alt = altLabel
+    ? html`<${Button} key="alt" variant="primary" className="dialog-alt-btn" aria-disabled=${off} aria-busy=${off} onClick=${busy ? undefined : onAlt}>${busy ? busyLabel : altLabel}</${Button}>`
+    : null;
+  const buttons = phone ? [alt, confirm, dismiss] : alt ? [confirm, dismiss, alt] : [dismiss, confirm];
   return html`<${Dialog}
     name="confirm"
     role="alertdialog"
     className="sheet dialog-confirm"
+    placement=${phone ? 'bottom' : 'center'}
     labelledBy=${`${id}-title`}
     describedBy=${children ? `${id}-body` : undefined}
     onClose=${cancel}
@@ -123,17 +143,7 @@ export function ConfirmDialog({ title, children, confirmLabel = 'Confirm', cance
     <h2 id=${`${id}-title`} class="card-title dialog-title">${title}</h2>
     ${children ? html`<div id=${`${id}-body`} class="dialog-body">${children}</div>` : null}
     <div class="dialog-actions" data-choices=${altLabel ? '3' : undefined}>
-      <${Button} variant="secondary" className="dialog-cancel" aria-disabled=${off} onClick=${cancel} data-autofocus>${cancelLabel}</${Button}>
-      ${altLabel
-        ? html`<${Button} variant="primary" className="dialog-alt-btn" aria-disabled=${off} aria-busy=${off} onClick=${busy ? undefined : onAlt}>${busy ? busyLabel : altLabel}</${Button}>`
-        : null}
-      <${Button}
-        variant=${danger ? 'danger' : 'primary'}
-        className="dialog-confirm-btn"
-        aria-disabled=${off}
-        aria-busy=${altLabel ? undefined : off}
-        onClick=${busy ? undefined : onConfirm}
-      >${busy && !altLabel ? busyLabel : confirmLabel}</${Button}>
+      ${buttons}
     </div>
   </${Dialog}>`;
 }

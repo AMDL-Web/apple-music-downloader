@@ -6,7 +6,14 @@ import { paletteItems, resultCount } from '../lib/palette.js';
 import { Icon, Button } from '../ui/components.js';
 import { Dialog, useDialog } from '../ui/dialogs.js';
 import { focusField } from '../ui/field-focus.js';
-import { useDebounced } from '../ui/hooks.js';
+import { useDebounced, useMedia } from '../ui/hooks.js';
+
+/** Whether this is an Apple platform, where the command key is ⌘. */
+export const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
+
+// A touch screen has no keyboard hints to show, and a tab bar for the pages:
+// the Navigate group shows there only once something is typed.
+const TOUCH = '(hover: none)';
 
 export function CommandPalette({ onClose, navigate, setTheme }) {
   const [query, setQuery] = useState('');
@@ -14,6 +21,7 @@ export function CommandPalette({ onClose, navigate, setTheme }) {
   // q: the query these jobs answer.
   const [jobs, setJobs] = useState({ items: [], loading: false, q: '' });
   const debounced = useDebounced(query, 200);
+  const touch = useMedia(TOUCH);
   const input = useRef(null);
   const panel = useRef(null);
   // Focus starts in the input, Tab stays in the panel, Escape closes it, and
@@ -38,7 +46,7 @@ export function CommandPalette({ onClose, navigate, setTheme }) {
     };
   }, [debounced]);
 
-  const items = paletteItems(query, jobs.items);
+  const items = paletteItems(query, jobs.items).filter((it) => !(touch && !query.trim() && it.group === 'Navigate'));
   // Announced once the job search for what was typed has answered.
   const settled = query.trim() !== '' && query.trim() === jobs.q && !jobs.loading;
   const current = Math.min(active, Math.max(0, items.length - 1));
@@ -108,12 +116,12 @@ export function CommandPalette({ onClose, navigate, setTheme }) {
           aria-controls="palette-list"
           aria-activedescendant=${items.length ? `pal-${current}` : undefined}
           aria-autocomplete="list"
-          placeholder="Search jobs, pages and actions"
+          placeholder="Search or paste a link"
           value=${query}
           onInput=${(e) => setQuery(e.currentTarget.value)}
           onKeyDown=${onKey}
         />
-        <${Button} variant="ghost" size="sm" icon="x" className="palette-close" aria-label="Close" onClick=${onClose} />
+        <button type="button" class="btn btn-ghost palette-close" onClick=${onClose}>Cancel</button>
       </div>
       <p class="sr-only" role="status" aria-live="polite">${settled ? resultCount(items.length) : ''}</p>
       <ul id="palette-list" role="listbox" class="palette-list" aria-label="Results">
@@ -126,35 +134,74 @@ export function CommandPalette({ onClose, navigate, setTheme }) {
   </div>`;
 }
 
-const SHORTCUTS = [
-  ['n', 'New download'],
-  ['g then o', 'Overview'],
-  ['g then q', 'Queue'],
-  ['g then s', 'Showcase'],
-  ['g then l', 'Logs'],
-  ['g then y', 'System'],
-  ['g then ,', 'Settings'],
-  ['/', 'Focus the page filter'],
-  ['j / k', 'Next / previous row'],
-  ['Enter', 'Open the focused row (select it while selecting)'],
-  ['x', 'Select the focused job (Queue)'],
-  ['Esc', 'Close the drawer or dialog, then leave selection'],
-  ['Esc in a field', 'Clear the search, then leave the field'],
-  ['Paste a link', 'New download with that link, outside a text field'],
-  ['Cmd/Ctrl + S', 'Save settings (Settings)'],
-  ['Cmd/Ctrl + K', 'Command palette'],
-  ['?', 'This list'],
-];
+// One shortcut row: keys are <kbd>, plain strings are the words between or
+// around them ("then", "in a field").
+const k = (key) => ({ key });
+
+function shortcutGroups(mod) {
+  const go = (key, label) => [[k('g'), ' then ', k(key)], label];
+  return [
+    [
+      'Global',
+      [
+        [[k('n')], 'New download'],
+        go('o', 'Overview'),
+        go('q', 'Queue'),
+        go('s', 'Showcase'),
+        go('l', 'Logs'),
+        go('y', 'System'),
+        go(',', 'Settings'),
+        [[k(mod), ' ', k('K')], 'Command palette'],
+        [[k('?')], 'This list'],
+        [[k('Esc')], 'Close the drawer or dialog'],
+      ],
+    ],
+    [
+      'Lists',
+      [
+        [[k('/')], 'Focus the page filter'],
+        [[k('j'), ' / ', k('k')], 'Next / previous row'],
+        [[k('Enter')], 'Open the focused row (select it while selecting)'],
+        [[k('x')], 'Select the focused job (Queue)'],
+        [[k('Esc')], 'Leave selection'],
+        [[k('Esc'), ' in a field'], 'Clear the search, then leave the field'],
+      ],
+    ],
+    [
+      'New download',
+      [
+        [['Paste a link'], 'Outside a text field: New download with that link'],
+        [[k(mod), ' ', k(mod === '⌘' ? 'Return' : 'Enter')], 'Download the links in the box'],
+      ],
+    ],
+    ['Settings', [[[k(mod), ' ', k('S')], 'Save settings']]],
+  ];
+}
 
 export function ShortcutSheet({ onClose }) {
-  return html`<${Dialog} name="shortcuts" labelledBy="shortcuts-title" onClose=${onClose}>
+  const groups = shortcutGroups(isMac() ? '⌘' : 'Ctrl');
+  return html`<${Dialog} name="shortcuts" className="sheet sheet-shortcuts" labelledBy="shortcuts-title" onClose=${onClose}>
     <div class="sheet-head">
       <h2 id="shortcuts-title" class="card-title">Keyboard shortcuts</h2>
       <${Button} variant="ghost" icon="x" aria-label="Close" onClick=${onClose} data-autofocus />
     </div>
-    <dl class="kv">
-      ${SHORTCUTS.map(([k, v]) => html`<div class="kv-row" key=${k}><dt><kbd>${k}</kbd></dt><dd>${v}</dd></div>`)}
-    </dl>
-    <p class="muted small">Single-key shortcuts are off while you type in a field; Esc leaves it.</p>
+    <div class="shortcut-body">
+      <div class="shortcut-groups">
+        ${groups.map(
+          ([title, rows]) => html`<section key=${title} class="shortcut-group" aria-label=${title}>
+            <h3 class="shortcut-group-title">${title}</h3>
+            <dl class="kv">
+              ${rows.map(
+                ([keys, label]) => html`<div class="kv-row" key=${label}>
+                  <dt class="shortcut-keys">${keys.map((p, i) => (typeof p === 'string' ? p : html`<kbd key=${i}>${p.key}</kbd>`))}</dt>
+                  <dd>${label}</dd>
+                </div>`,
+              )}
+            </dl>
+          </section>`,
+        )}
+      </div>
+      <p class="muted small">Single-key shortcuts are off while you type in a field; Esc leaves it.</p>
+    </div>
   </${Dialog}>`;
 }
