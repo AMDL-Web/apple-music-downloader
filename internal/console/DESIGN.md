@@ -29,7 +29,7 @@ wins and this page is fixed in the same change. Sources are listed in
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header with a summary line ("ALAC 24/44.1 · 14 tracks · 692 MB"), the failure reason, Cancel/Retry/Remove, the tracks (one line each; stage meters only on a track that is working or has an outcome), Files (completed jobs), and a closed Details (times, job ID, Activity with persisted history plus live events, hooks) |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
-| `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings |
+| `#/system` | System | Cards in this order, so health is first on a phone: health, wrapper, storage (the downloads and temporary folders by name, each path once, middle-cut with Copy; folders on one disk share one meter and one "Low space" line), a configuration summary that links to Settings (a warning only when changes are not saved), library sync (one line when off), hooks with outcomes (one line when none), runtime, about; paired so neighbours are of similar height |
 | `#/new?url=` | New download | One centered column (760 px at most): sections `compose` (the text box), `links` (a row per link found), the submit bar (quality preset, Overwrite, count, Download), `results` (after a submit), then a closed "Browser shortcut" disclosure. `url` carries one or more links, newline- or space-separated and URL-encoded (`lib/route.js` `newDownloadHash`, `newDownloadUrls`), and follows the text box; `lib/links.js` parses them |
 | `#/settings?section=&field=` | Settings | A section list beside one open section (under 640 px, `#/settings` without a section is the list of sections, icon, label, one-line summary and chevron, and a section opens as its own view headed by a "Settings" back link and the section title, the page title kept for screen readers only): `account` (the default), `quality`, `files`, `lyrics_artwork`, `advanced` (`lib/settings.js` `SETTINGS_SECTIONS`; `section` is lowercase words joined by `_`, `settingsSection`). Advanced has sub-headed groups (`SETTINGS_GROUPS`: `downloading`, `apple_requests`, `library_sync`, `logging`, `simulate`, `config_file`); a group id as `section` opens Advanced scrolled to it, and the retired ids `downloads`, `artwork`, `lyrics` and `catalog` open the section that holds their settings now (`sectionById`). A known `field` wins over `section`: its own section opens. The palette finds every section and field, also by words such as `parallel` or `template` (`lib/palette.js`); a field result opens `#/settings?section=<id>&field=<config key>`, which focuses that field's enabled control, if any, and scrolls it to the middle (`ui/field-focus.js`) |
 
@@ -289,9 +289,9 @@ and motion covers.
 - **Health rows**: name · status · detail for backend, wrapper, library sync
   and hooks (System page); the Overview keeps only the status line above
   the sections; polled every 30 s and on focus.
-- **Config summary** (System): a few `GET /config` values (codec priority,
-  downloads folder, simulate, library sync, log level, whether the media user
-  token is set, whether changes are saved to a file) and "Open settings".
+- **Config summary** (System): a few `GET /config` values that no other card
+  shows (codec priority, log level, whether the media user token is set) and
+  "Open settings"; a warning appears only when changes are not saved to a file.
 - **Settings**: one field per `RuntimeConfig` leaf (`lib/settings.js`
   `FIELDS`; `TestSettingsFieldsCoverRuntimeConfig` fails on a leaf with
   neither a field nor a `NOT_EDITED` reason), in five sections: Account,

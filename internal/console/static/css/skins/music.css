@@ -1958,7 +1958,7 @@
   margin-top: calc(-1 * var(--card-gap));
 }
 
-:root[data-skin="music"] .storage-head {
+:root[data-skin="music"] .storage-folder {
   font-size: var(--fs-14);
   line-height: var(--lh-14);
 }

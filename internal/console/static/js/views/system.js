@@ -1,6 +1,6 @@
-// System: build and runtime facts from /system, health of each part, the
-// wrapper, library sync, hooks with outcomes, and a short config summary
-// that links to Settings, where the config is edited.
+// System: health first, then the wrapper, storage, a short config summary that
+// links to Settings, library sync, hooks with outcomes, and the runtime and
+// build facts from /system last. Cards sit in pairs of similar height.
 
 import { html } from '../ui/preact.js';
 import {
@@ -16,8 +16,9 @@ import {
 import { count, bytes, elapsed, absTime, relTime } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
-import { useApp, Card, Badge, StatusText, KV, Icon, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, Empty, RelTime, HealthList } from '../ui/components.js';
+import { useApp, Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
+import { midTruncate, groupByDisk } from '../lib/storage.js';
 
 export function SystemPage() {
   const app = useApp();
@@ -25,21 +26,19 @@ export function SystemPage() {
   const health = usePoll(() => Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks())]), 30000, [app.epoch]);
   const stats = usePoll(() => getStats(14), 60000, [app.epoch]);
   const [h, w, ls, hk] = health.data || [];
+  const entries = hk && !hk.error ? hk.data.entries || [] : [];
+  // One flowing grid: pairs of cards, and a hooks table wide enough for its columns.
   return html`<div class="page page-system">
     <div class="grid-2">
-      <${AboutCard} sys=${sys} />
-      <${RuntimeCard} sys=${sys} />
-    </div>
-    <div class="grid-2">
       <${HealthCard} backend=${h} wrapper=${w} sync=${ls} hooks=${hk} loading=${!health.data} />
-      <${StorageCard} sys=${sys} />
-    </div>
-    <div class="grid-2">
       <${WrapperCard} res=${w} loading=${!health.data} />
+      <${StorageCard} sys=${sys} />
+      <${ConfigCard} />
       <${LibrarySyncCard} res=${ls} loading=${!health.data} />
+      <${HooksCard} res=${hk} stats=${stats} loading=${!health.data} wide=${entries.length > 0} />
+      <${RuntimeCard} sys=${sys} />
+      <${AboutCard} sys=${sys} />
     </div>
-    <${HooksCard} res=${hk} stats=${stats} loading=${!health.data} />
-    <${ConfigCard} />
   </div>`;
 }
 
@@ -111,6 +110,7 @@ function QueueMeter({ depth = 0, capacity }) {
   </span>`;
 }
 
+const FOLDER_NAMES = { downloads_dir: 'Downloads folder', temp_dir: 'Temporary folder' };
 function StorageCard({ sys }) {
   const s = sys.data;
   let body;
@@ -119,21 +119,26 @@ function StorageCard({ sys }) {
   else if (!Array.isArray(s.storage) || s.storage.length === 0) body = html`<p class="muted small">No storage information.</p>`;
   else
     body = html`<ul class="storage-list">
-      ${s.storage.map((d) => {
-        const known = typeof d.free_bytes === 'number' && typeof d.total_bytes === 'number' && d.total_bytes > 0;
-        const used = known ? 1 - d.free_bytes / d.total_bytes : 0;
-        const role = !known ? 'neutral' : used >= 0.95 ? 'danger' : used >= 0.85 ? 'warning' : 'info';
-        return html`<li key=${d.name} class="storage-row">
-          <div class="storage-head">
-            <span class="mono">${d.name}</span>
-            <span class="mono muted small wrap-any">${d.path}</span>
-          </div>
-          ${known
-            ? html`<span class="meter" role="meter" aria-label=${`${d.name} used space`} aria-valuemin="0" aria-valuemax="100" aria-valuenow=${Math.round(used * 100)} aria-valuetext=${`${bytes(d.free_bytes)} free of ${bytes(d.total_bytes)}`}>
+      ${groupByDisk(s.storage).map((g) => {
+        const used = g.known ? 1 - g.free / g.total : 0;
+        const role = !g.known ? 'neutral' : used >= 0.95 ? 'danger' : used >= 0.85 ? 'warning' : 'info';
+        const label = g.folders.map((d) => FOLDER_NAMES[d.name] || d.name).join(' and ');
+        return html`<li key=${g.folders[0].name} class="storage-row">
+          <ul class="storage-folders">
+            ${g.folders.map(
+              (d) => html`<li key=${d.name} class="storage-folder">
+                <span class="storage-name">${FOLDER_NAMES[d.name] || d.name}</span>
+                <${CopyButton} text=${d.path} label=${`Copy ${(FOLDER_NAMES[d.name] || d.name).toLowerCase()} path`} />
+                <span class="storage-path mono muted small" title=${d.path}>${midTruncate(d.path)}</span>
+              </li>`,
+            )}
+          </ul>
+          ${g.known
+            ? html`<span class="meter" role="meter" aria-label=${`${label} used space`} aria-valuemin="0" aria-valuemax="100" aria-valuenow=${Math.round(used * 100)} aria-valuetext=${`${bytes(g.free)} free of ${bytes(g.total)}`}>
                   <span class="meter-fill" data-role=${role} style=${{ '--v': String(used) }}></span>
                 </span>
-                <span class="small"><span class="num">${bytes(d.free_bytes)}</span> free of <span class="num">${bytes(d.total_bytes)}</span>${role === 'danger' || role === 'warning' ? html` · <${StatusText} view=${{ icon: 'triangle-alert', role, label: 'Low space' }} />` : null}</span>`
-            : html`<${StatusText} view=${{ icon: 'circle-minus', role: 'neutral', label: d.error ? `Unknown: ${d.error}` : 'Unknown' }} />`}
+                <span class="small"><span class="num">${bytes(g.free)}</span> free of <span class="num">${bytes(g.total)}</span>${role === 'danger' || role === 'warning' ? html` · <${StatusText} view=${{ icon: 'triangle-alert', role, label: 'Low space' }} />` : null}</span>`
+            : html`<${StatusText} view=${{ icon: 'circle-minus', role: 'neutral', label: g.error ? `Unknown: ${g.error}` : 'Unknown' }} />`}
         </li>`;
       })}
     </ul>`;
@@ -174,7 +179,6 @@ function WrapperCard({ res, loading }) {
     const accounts = Array.isArray(wr.accounts) ? wr.accounts : [];
     body = html`<${KV}
         rows=${[
-          ['State', html`<${Badge} view=${wrapperView(res)} />`],
           ['Connected', wr.status ? 'Yes' : 'No'],
           ['Regions', Array.isArray(wr.regions) && wr.regions.length ? wr.regions.map((r) => r.toUpperCase()).join(', ') : null],
           ['Accounts', html`<span class="num">${count(accounts.length)}</span>`],
@@ -196,11 +200,11 @@ function LibrarySyncCard({ res, loading }) {
   let body;
   if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
   else if (!res || res.error) body = html`<${Badge} view=${librarySyncView(res)} />`;
+  else if (!res.data.enabled) body = html`<p class="muted small">Library sync is off. You can turn it on in <a class="link" href=${settingsHash()}>Settings</a>.</p>`;
   else {
     const s = res.data;
     body = html`<${KV}
       rows=${[
-        ['State', html`<${Badge} view=${librarySyncView(res)} />`],
         ['Interval', `${count(s.interval_minutes)} min`],
         ['Last poll', s.last_poll_at ? html`<${RelTime} value=${s.last_poll_at} />` : 'Never'],
         ['Last error', s.last_error ? html`<span class="text-warning wrap-any">${s.last_error}</span>` : null],
@@ -212,14 +216,14 @@ function LibrarySyncCard({ res, loading }) {
   return html`<${Card} className="span-6" title="Library sync" labelId="sync-title">${body}</${Card}>`;
 }
 
-function HooksCard({ res, stats, loading }) {
+function HooksCard({ res, stats, loading, wide }) {
   let body;
   const outcomes = new Map(((stats.data && stats.data.hooks) || []).map((h) => [h.name, h]));
   if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
   else if (!res || res.error) body = html`<${ErrorNote} title="Couldn't load hooks" error=${res && res.error} />`;
   else {
     const entries = res.data.entries || [];
-    if (entries.length === 0) body = html`<${Empty} icon="info" title="No hooks configured">Hooks are defined in configs/hooks.yaml.</${Empty}>`;
+    if (entries.length === 0) body = html`<p class="quiet-note">No hooks configured</p>`;
     else
       body = html`${!res.data.enabled ? html`<${Notice} icon="circle-minus">Hooks are switched off globally in hooks.yaml.</${Notice}>` : null}
         <div class="table-wrap">
@@ -246,13 +250,12 @@ function HooksCard({ res, stats, loading }) {
         </div>
         ${notFound(stats) ? html`<p class="muted small">Outcome counts need GET /api/v1/stats, which this backend does not have.</p>` : html`<p class="muted small">Outcomes over the last 14 days of retained jobs.</p>`}`;
   }
-  return html`<${Card} title="Hooks" labelId="hooks-title">${body}</${Card}>`;
+  return html`<${Card} className=${wide ? undefined : 'span-6'} title="Hooks" labelId="hooks-title">${body}</${Card}>`;
 }
 
 const CODEC_NAMES = { alac: 'ALAC', ec3: 'Dolby Atmos', ac3: 'Dolby Digital', aac: 'AAC', 'aac-binaural': 'AAC binaural', 'aac-downmix': 'AAC downmix' };
-const onOff = (v) => (v === undefined ? null : v ? 'On' : 'Off');
 
-/** A few runtime settings at a glance; Settings edits them. */
+/** A few runtime settings at a glance; Settings edits them. Folders, simulate and library sync show in Storage, Runtime and Library sync. */
 function ConfigCard() {
   const app = useApp();
   const cfg = usePoll(getConfig, 0, [app.epoch]);
@@ -266,17 +269,15 @@ function ConfigCard() {
     body = html`<${KV}
         rows=${[
           ['Codec priority', Array.isArray(d.quality_priority) ? d.quality_priority.map((q) => CODEC_NAMES[q] || q).join(' → ') : null],
-          ['Downloads folder', d.downloads_dir ? html`<span class="mono wrap-any">${d.downloads_dir}</span>` : null],
-          ['Simulate', onOff(c.simulate && c.simulate.enabled)],
-          ['Library sync', onOff(c.library_sync && c.library_sync.enabled)],
           ['Log level', c.logging ? c.logging.level : null],
           ['Media user token', c.catalog ? (c.catalog.media_user_token ? 'Set' : 'Not set') : null],
-          ['Saved to a file', data.persisted === false ? 'No' : 'Yes'],
         ]}
       />
+      ${data.persisted === false ? html`<${Notice} role="warning" icon="triangle-alert">Changes are not written to configs/config.yaml, so a restart loses them.</${Notice}>` : null}
       <p class="muted small">Startup-only settings are not exposed by the API; edit configs/config.yaml and restart for those.</p>`;
   }
   return html`<${Card}
+    className="span-6"
     title="Configuration"
     labelId="config-title"
     section="config"

@@ -450,22 +450,6 @@ export function jobFacts(job) {
   };
 }
 
-/**
- * Health-adjacent facts from GET /system: workers, queue, downloads disk and
- * uptime as [key, label, value] rows; rows without data are left out.
- */
-export function systemFacts(sys) {
-  if (!sys || typeof sys !== 'object') return [];
-  const out = [];
-  const jobs = sys.jobs || {};
-  if (typeof jobs.workers === 'number') out.push(['workers', 'Workers', `${count(jobs.active || 0)} of ${count(jobs.workers)} busy`]);
-  if (typeof jobs.queue_capacity === 'number') out.push(['queue', 'Queue', `${count(jobs.queue_depth || 0)} of ${count(jobs.queue_capacity)}`]);
-  const disk = (sys.storage || []).find((d) => d && d.name === 'downloads_dir');
-  if (disk && typeof disk.free_bytes === 'number') out.push(['storage', 'Storage', `${bytes(disk.free_bytes)} free of ${bytes(disk.total_bytes)}`]);
-  if (typeof sys.uptime_seconds === 'number') out.push(['uptime', 'Uptime', elapsed(sys.uptime_seconds * 1000)]);
-  return out;
-}
-
 /** Log attributes as "key=value" pairs in key order, without the keys in `omit`. */
 export function attrPairs(attrs, omit = []) {
   if (!attrs || typeof attrs !== 'object') return [];

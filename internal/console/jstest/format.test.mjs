@@ -43,7 +43,6 @@ import {
   pageSummary,
   releaseYear,
   jobFacts,
-  systemFacts,
   attrPairs,
 } from '../static/js/lib/format.js';
 
@@ -261,25 +260,6 @@ test('jobFacts gives kicker and meta parts, empty when unknown', () => {
   assert.equal(jobFacts({ total_items: 1 }).tracks, '1 track');
   assert.deepEqual(jobFacts(null), { type: '', genre: '', year: '', tracks: '', started: '', finished: '', took: '' });
   assert.equal(releaseYear({ release_date: 'soon' }), '');
-});
-
-test('systemFacts picks workers, queue, downloads disk and uptime', () => {
-  const sys = {
-    uptime_seconds: 306,
-    jobs: { workers: 3, active: 2, queue_depth: 0, queue_capacity: 256 },
-    storage: [
-      { name: 'temp_dir', free_bytes: 1, total_bytes: 2 },
-      { name: 'downloads_dir', free_bytes: 23051792384, total_bytes: 494384795648 },
-    ],
-  };
-  assert.deepEqual(systemFacts(sys), [
-    ['workers', 'Workers', '2 of 3 busy'],
-    ['queue', 'Queue', '0 of 256'],
-    ['storage', 'Storage', '23.1 GB free of 494 GB'],
-    ['uptime', 'Uptime', '5m 6s'],
-  ]);
-  assert.deepEqual(systemFacts({}), []);
-  assert.deepEqual(systemFacts(null), []);
 });
 
 test('attrPairs sorts keys and leaves out the omitted ones', () => {
