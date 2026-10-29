@@ -150,9 +150,12 @@ func (m *Manager) run(parent context.Context, jobID string) {
 		m.logClaimFailure(parent, jobID, "load job", err)
 		return
 	}
-	if job.Status.IsTerminal() {
-		// Cancel() (or another path) already finalized this job while it was
-		// queued. Do not resurrect it; its terminal hook was already dispatched.
+	if job.Status != domain.JobQueued {
+		// A stale delivery. A job cancelled while queued keeps its id in the
+		// worker channel, and a retry enqueues it again, so one job can be
+		// delivered twice: Cancel() already finalized it (its terminal hook was
+		// dispatched, do not resurrect it), or another worker already claimed it
+		// and the row says running. Either way this delivery has nothing to run.
 		m.mu.Unlock()
 		cancel()
 		return

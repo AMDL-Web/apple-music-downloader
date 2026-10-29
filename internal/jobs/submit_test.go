@@ -370,6 +370,21 @@ func TestRetryRequeuesCancelledJob(t *testing.T) {
 	if len(evs) != 1 || evs[0].Type != domain.EventJobRetried {
 		t.Fatalf("events = %+v, want one job_retried", evs)
 	}
+	// The event must describe the job as it is after the reset, the same
+	// counters GET /downloads/{id} returns, not the cancelled/failed ones the
+	// retry just cleared.
+	var payload struct {
+		Status         string `json:"status"`
+		CompletedItems int    `json:"completed_items"`
+		FailedItems    int    `json:"failed_items"`
+		CancelledItems int    `json:"cancelled_items"`
+	}
+	if err := json.Unmarshal(evs[0].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Status != "queued" || payload.CompletedItems != 1 || payload.FailedItems != 0 || payload.CancelledItems != 0 {
+		t.Fatalf("job_retried payload = %+v, want queued with completed 1, failed 0, cancelled 0", payload)
+	}
 }
 
 func TestRetryRefusesActiveCompletedMissingAndDuplicateJobs(t *testing.T) {
@@ -457,4 +472,74 @@ func TestRetryRefusesWhilePreviousRunIsFinalizing(t *testing.T) {
 	if len(manager.queue) != 1 || <-manager.queue != job.ID {
 		t.Fatal("retry after finalize did not enqueue the job")
 	}
+}
+
+// holdProcessor reports every ProcessJob entry and blocks it until release is
+// closed, so a test can see whether a second worker also entered the job.
+type holdProcessor struct {
+	keyedProcessor
+	entered chan string
+	release chan struct{}
+}
+
+func (p *holdProcessor) ProcessJob(ctx context.Context, job domain.Job, _ Reporter) error {
+	p.entered <- job.ID
+	select {
+	case <-p.release:
+	case <-ctx.Done():
+	}
+	return nil
+}
+
+// A job cancelled while queued leaves its id in the worker channel (a channel
+// cannot drop an element), and Retry enqueues it a second time. The two stale
+// deliveries must not run the job twice: whichever worker claims it first wins
+// and the other finds it already running.
+func TestRetryOfQueuedCancelledJobRunsItOnce(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	processor := &holdProcessor{entered: make(chan string, 4), release: make(chan struct{})}
+	manager := NewManager(store, events.NewHub(), processor, 2, slog.Default())
+	ctx := context.Background()
+
+	// No workers yet: the submitted id stays buffered in manager.queue.
+	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	if resp.Accepted != 1 {
+		t.Fatalf("submit = %+v, want 1 accepted", resp)
+	}
+	jobID := resp.Results[0].Job.ID
+	if err := manager.Cancel(ctx, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Retry(ctx, jobID); err != nil {
+		t.Fatal(err)
+	}
+	if len(manager.queue) != 2 {
+		t.Fatalf("queue holds %d entries, want the stale and the retried id", len(manager.queue))
+	}
+
+	// Two workers each take one delivery. The first claims the job; the second
+	// must return without processing it.
+	first, second := <-manager.queue, <-manager.queue
+	firstDone, secondDone := make(chan struct{}), make(chan struct{})
+	go func() { defer close(firstDone); manager.run(ctx, first) }()
+	select {
+	case <-processor.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the first delivery did not start the job")
+	}
+	go func() { defer close(secondDone); manager.run(ctx, second) }()
+	select {
+	case <-secondDone:
+	case id := <-processor.entered:
+		t.Errorf("job %s entered ProcessJob a second time while it was already running", id)
+	case <-time.After(2 * time.Second):
+		t.Error("the second delivery neither returned nor started the job")
+	}
+	close(processor.release)
+	<-firstDone
+	<-secondDone
 }

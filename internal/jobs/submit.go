@@ -216,6 +216,10 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	// duration does not count the time the job sat failed.
 	job.Status = domain.JobQueued
 	job.Error = ""
+	// The reset above turned every failed and cancelled item back to queued;
+	// the job_retried payload below must carry the counters GET now derives.
+	job.FailedItems = 0
+	job.CancelledItems = 0
 	job.StartedAt = nil
 	job.FinishedAt = nil
 	job.UpdatedAt = now
