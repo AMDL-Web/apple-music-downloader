@@ -487,14 +487,3 @@
   font-weight: var(--w-regular);
   color: var(--text-secondary);
 }
-
-@media (max-width: 639px) {
-  .track:not([data-detail]) {
-    grid-template-columns: 24px minmax(0, 1fr) auto 44px;
-    grid-template-areas: "idx main codec len";
-  }
-
-  .track:not([data-detail]) .track-size {
-    display: none;
-  }
-}
