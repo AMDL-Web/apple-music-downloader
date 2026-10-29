@@ -165,6 +165,27 @@
   outline: none;
 }
 
+/* The browser's own clear button is a blue cross; this one is drawn from two
+   gradients in the field's ink, with a padded touch target. */
+.search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: content-box;
+  width: var(--s-3);
+  height: var(--s-3);
+  margin: 0;
+  padding: var(--s-2);
+  background:
+    linear-gradient(45deg, transparent 44%, currentcolor 44% 56%, transparent 56%) center / 100% 100% no-repeat content-box,
+    linear-gradient(-45deg, transparent 44%, currentcolor 44% 56%, transparent 56%) center / 100% 100% no-repeat content-box;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.search input::-webkit-search-cancel-button:hover {
+  color: var(--text-primary);
+}
+
 .search input::placeholder,
 .palette-input input::placeholder {
   color: var(--text-disabled);
