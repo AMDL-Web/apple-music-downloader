@@ -26,7 +26,7 @@ wins and this page is fixed in the same change. Sources are listed in
 | Route | Page | Content |
 | --- | --- | --- |
 | `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `recent`, `kpis`, `health`, `throughput` (from `/stats`), `logs` (12-line tail) |
-| `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed tab |
+| `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed and Cancelled tabs |
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, Activity (persisted history plus live events), Saved to (completed jobs), Cancel/Retry/Delete |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
@@ -250,7 +250,7 @@ and motion covers.
 - **Job drawer**: dialog with focus trap, Esc and Back close it, focus returns
   to the row. Header with cover, artist link, meta, status, live tag;
   created/started/finished/duration; Cancel (inline confirm) for queued or
-  running, Retry for failed, View logs, Open in Apple Music, Delete (a
+  running, Retry for failed or cancelled, View logs, Open in Apple Music, Delete (a
   `ConfirmDialog` beside the panel) for completed, failed or cancelled jobs,
   which closes the drawer; palette swatches;
   per-track strip; track list (codec chip such as `ALAC 24/96`, length, size,
@@ -351,7 +351,7 @@ and motion covers.
   Select (or `x` on a row) adds a checkbox column; a plain click on a row
   then selects it (Shift selects a range), Cmd/Ctrl-click still opens it.
   The bar offers only what the selection allows, with counts: Retry for
-  failed jobs (the API retries nothing else), Cancel for queued or running,
+  failed or cancelled jobs (the API retries nothing else), Cancel for queued or running,
   Delete for completed, failed or cancelled; Cancel and Delete ask first.
   Requests run at most 4 at a time (`lib/bulk.js` `runLimited`) with
   "Deleting 3 of 12" in the bar and the dialog, then one toast names the

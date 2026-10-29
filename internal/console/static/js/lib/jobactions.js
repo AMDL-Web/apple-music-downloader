@@ -1,9 +1,10 @@
 // Pure rules for acting on jobs: which of Retry, Cancel and Delete a job's
 // status allows, the words for each refusal the API can answer, and the
 // progress line and summary of a bulk run. The status rules mirror
-// internal/jobs: only a failed job can be retried (POST .../retry answers 409
-// job_not_retryable otherwise), a queued or running one can be cancelled, and
-// only a finished one (completed, failed, cancelled) can be deleted.
+// internal/jobs: only a failed or cancelled job can be retried (POST .../retry
+// answers 409 job_not_retryable otherwise), a queued or running one can be
+// cancelled, and only a finished one (completed, failed, cancelled) can be
+// deleted.
 
 import { isTerminal } from './status.js';
 
@@ -22,7 +23,7 @@ export function jobAllows(job, action) {
   const status = job && job.status;
   switch (action) {
     case 'retry':
-      return status === 'failed';
+      return status === 'failed' || status === 'cancelled';
     case 'cancel':
       return status === 'queued' || status === 'running';
     case 'delete':
@@ -61,7 +62,7 @@ export function actionReason(action, err) {
   const status = err ? err.status : undefined;
   if (code === 'job_not_found' || status === 404) return action === 'delete' ? 'already deleted' : 'no longer exists';
   if (code === 'job_active') return 'still running, finishing or running a hook';
-  if (code === 'job_not_retryable') return 'only failed jobs can be retried';
+  if (code === 'job_not_retryable') return 'only failed or cancelled jobs can be retried';
   if (code === 'job_finalizing') return 'still finishing its last run, try again in a moment';
   if (code === 'duplicate_active') return 'another active job already downloads this link';
   if (code === 'queue_full') return 'the queue is full';

@@ -138,7 +138,7 @@ export function BulkConfirm({ action, jobs, skipped, run, onConfirm, onCancel })
   const body =
     action === 'delete'
       ? `${plural(n, 'It leaves', 'They leave')} the console with ${plural(n, 'its', 'their')} track records and event history. Downloaded files stay on disk.${left}`
-      : `Tracks that already finished stay on disk. A cancelled job can't be retried; submit its link again to download it.${left}`;
+      : `Tracks that already finished stay on disk. Retry on the Cancelled tab queues the rest again.${left}`;
   return html`<${ConfirmDialog}
     title=${`${bulkLabel(action, n)}?`}
     confirmLabel=${bulkLabel(action, n)}

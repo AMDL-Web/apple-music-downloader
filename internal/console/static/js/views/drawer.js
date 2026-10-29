@@ -346,7 +346,7 @@ function Actions({ job, app, onChanged, onDelete }) {
       : null}
     ${canCancel && confirming
       ? html`<div class="confirm" role="group" aria-label="Confirm cancel">
-          <span>Cancel this job? Finished tracks stay on disk.</span>
+          <span>Cancel this job? Finished tracks stay on disk, and Retry queues the rest again.</span>
           <${Button} variant="danger" onClick=${() => run('cancel', cancelDownload, 'Job cancelled')} disabled=${busy}>Cancel job</${Button}>
           <${Button} variant="ghost" onClick=${() => setConfirming(false)}>Keep running</${Button}>
         </div>`

@@ -20,7 +20,7 @@ test('each status allows exactly the actions the backend accepts', () => {
   assert.deepEqual(allowed('queued'), ['cancel']);
   assert.deepEqual(allowed('running'), ['cancel']);
   assert.deepEqual(allowed('failed'), ['retry', 'delete']);
-  assert.deepEqual(allowed('cancelled'), ['delete'], 'Retry is for failed jobs only (409 job_not_retryable)');
+  assert.deepEqual(allowed('cancelled'), ['retry', 'delete'], 'a cancelled job can be retried like a failed one');
   assert.deepEqual(allowed('completed'), ['delete']);
   assert.deepEqual(allowed('mystery'), []);
   assert.equal(jobAllows(null, 'delete'), false);
@@ -28,11 +28,11 @@ test('each status allows exactly the actions the backend accepts', () => {
 });
 
 test('actionPlan splits a selection by action, keeping order', () => {
-  const list = [job('a', 'failed'), job('b', 'running'), job('c', 'completed'), job('d', 'failed'), job('e', 'queued')];
+  const list = [job('a', 'failed'), job('b', 'running'), job('c', 'completed'), job('d', 'failed'), job('e', 'queued'), job('f', 'cancelled')];
   const plan = actionPlan(list);
-  assert.deepEqual(plan.retry.map((j) => j.id), ['a', 'd']);
+  assert.deepEqual(plan.retry.map((j) => j.id), ['a', 'd', 'f']);
   assert.deepEqual(plan.cancel.map((j) => j.id), ['b', 'e']);
-  assert.deepEqual(plan.delete.map((j) => j.id), ['a', 'c', 'd']);
+  assert.deepEqual(plan.delete.map((j) => j.id), ['a', 'c', 'd', 'f']);
   assert.deepEqual(actionPlan([]), { retry: [], cancel: [], delete: [] });
 });
 
@@ -47,7 +47,7 @@ test('actionReason words every refusal the job routes answer', () => {
   assert.equal(actionReason('delete', err(409, 'job_active', 'job x is still running')), 'still running, finishing or running a hook');
   assert.equal(actionReason('delete', err(404, 'job_not_found')), 'already deleted');
   assert.equal(actionReason('cancel', err(404, 'job_not_found')), 'no longer exists');
-  assert.equal(actionReason('retry', err(409, 'job_not_retryable')), 'only failed jobs can be retried');
+  assert.equal(actionReason('retry', err(409, 'job_not_retryable')), 'only failed or cancelled jobs can be retried');
   assert.equal(actionReason('retry', err(409, 'job_finalizing')), 'still finishing its last run, try again in a moment');
   assert.equal(actionReason('retry', err(409, 'duplicate_active')), 'another active job already downloads this link');
   assert.equal(actionReason('retry', err(503, 'queue_full')), 'the queue is full');

@@ -1,4 +1,4 @@
-// Queue page: Active / Failed / All tabs, search and type filter, a dense
+// Queue page: Active / Completed / Failed / Cancelled / All tabs, search and type filter, a dense
 // job list kept live from the downloads feed, and a selection mode for
 // Retry, Cancel and Delete on many jobs (views/queue-select.js).
 
@@ -308,11 +308,11 @@ export function QueuePage({ route }) {
       </div>
       ${selecting || state.jobs.length > 0
         ? html`<div class="queue-tools">
-            ${filters.tab === 'failed' && retryable.length > 0
+            ${(filters.tab === 'failed' || filters.tab === 'cancelled') && retryable.length > 0
               ? html`<${Button}
                   icon="rotate"
                   className="queue-retry-all"
-                  aria-label=${`Retry all ${retryable.length} loaded failed jobs`}
+                  aria-label=${`Retry all ${retryable.length} loaded ${filters.tab} jobs`}
                   disabled=${Boolean(bulk.run)}
                   onClick=${() => runAction('retry', retryable)}
                 >Retry all <span class="bulk-n">${retryable.length}</span></${Button}>`
