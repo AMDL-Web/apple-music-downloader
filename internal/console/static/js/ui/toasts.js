@@ -5,15 +5,18 @@ import { Icon, Button, LinkButton } from './components.js';
 
 // How long a toast stays: errors longer, a toast with an action (Open) a
 // little longer; a sticky one until dismissed or the page changes. Every
-// timer pauses while the pointer or focus is on the toasts.
+// timer pauses while the pointer or focus is on the toasts. A toast raised
+// with `offline` (a request that could not reach the server) also goes once
+// the feed is live again, after OFFLINE_MIN_MS so it can still be read.
 const TOAST_MS = 5000;
 const TOAST_ACTION_MS = 8000;
 const TOAST_DANGER_MS = 10000;
+const OFFLINE_MIN_MS = 3000;
 
 /** The toast list for App(): {toasts, toast, dismissToast, toastsRef}; `route` is the current route. */
 export function useToasts(route) {
   const [toasts, setToasts] = useState([]);
-  // Toasts: {id, message, role, sticky, action: {label, hash}}.
+  // Toasts: {id, message, role, sticky, offline, at, action: {label, hash}}.
   const toastTimers = useRef(new Map());
   const toastsHeld = useRef(false);
   const toastsRef = useRef(null);
@@ -27,7 +30,8 @@ export function useToasts(route) {
     (t) => {
       const id = `${Date.now()}-${Math.random()}`;
       const role = t.role || 'neutral';
-      setToasts((list) => [...list.slice(-3), { id, message: t.message, role, sticky: Boolean(t.sticky), action: t.action || null }]);
+      const item = { id, message: t.message, role, sticky: Boolean(t.sticky), offline: Boolean(t.offline), at: Date.now(), action: t.action || null };
+      setToasts((list) => [...list.slice(-3), item]);
       if (t.sticky) return;
       const ms = role === 'danger' ? TOAST_DANGER_MS : t.action ? TOAST_ACTION_MS : TOAST_MS;
       const timer = toastsHeld.current ? null : setTimeout(() => dismissToast(id), ms);
@@ -35,6 +39,15 @@ export function useToasts(route) {
     },
     [dismissToast],
   );
+  // A toast that left the list (cut off by newer ones, filtered out) keeps no timer.
+  useEffect(() => {
+    const live = new Set(toasts.map((t) => t.id));
+    for (const [id, t] of toastTimers.current) {
+      if (live.has(id)) continue;
+      if (t.timer !== null) clearTimeout(t.timer);
+      toastTimers.current.delete(id);
+    }
+  }, [toasts]);
   useEffect(() => {
     const el = toastsRef.current;
     if (!el) return undefined;
@@ -80,6 +93,31 @@ export function useToasts(route) {
   // A sticky toast is about the page it was raised on.
   useEffect(() => setToasts((list) => (list.some((t) => t.sticky) ? list.filter((t) => !t.sticky) : list)), [route.page, route.jobId]);
   return { toasts, toast, dismissToast, toastsRef };
+}
+
+/**
+ * Back on the feed (`conn.state` turns live): the toasts raised with `offline`
+ * go, once they have been up OFFLINE_MIN_MS.
+ */
+export function useOfflineToasts(conn, toasts, dismissToast) {
+  const wasLive = useRef(true);
+  const toastsNow = useRef(toasts);
+  toastsNow.current = toasts;
+  const state = conn && conn.state;
+  useEffect(() => {
+    const live = state === 'live';
+    const back = live && !wasLive.current;
+    wasLive.current = live;
+    if (!back) return undefined;
+    const timers = [];
+    for (const t of toastsNow.current) {
+      if (!t.offline) continue;
+      const wait = OFFLINE_MIN_MS - (Date.now() - t.at);
+      if (wait <= 0) dismissToast(t.id);
+      else timers.push(setTimeout(() => dismissToast(t.id), wait));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [state, dismissToast]);
 }
 
 /** The stack of toasts; `toastsRef` is the element useToasts watches for hover and focus. */

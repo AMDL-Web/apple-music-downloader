@@ -332,7 +332,7 @@ function Actions({ job, app, onChanged, onDelete }) {
       app.toast({ message: okMessage, role: 'success' });
       onChanged();
     } catch (e) {
-      app.toast({ message: actionError(action, e), role: 'danger', sticky: true });
+      app.toast({ message: actionError(action, e), role: 'danger', offline: e.status === 0 });
     } finally {
       setBusy(false);
       setConfirming(false);

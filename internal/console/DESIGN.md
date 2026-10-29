@@ -320,6 +320,9 @@ and motion covers.
   control, search field, select, chips, notices, toasts (`role="status"`; 5 s,
   8 s with an action, errors 10 s, every timer paused while the pointer or
   focus is on them; `sticky` ones stay until dismissed or the page changes;
+  one raised with `offline` (a request that could not reach the server)
+  also goes once the feed is live again, after 3 s up; the toast list is
+  `ui/toasts.js`;
   `.toast` > `.icon`, `.toast-msg`, `a.toast-action`, Dismiss),
   completion toasts (`app.watchJobs(ids)`: when watched jobs end, one toast
   per 3 s burst, "Album X finished" with Open to its drawer or "3 downloads

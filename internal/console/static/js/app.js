@@ -10,7 +10,7 @@ import { THEME_KEY, SKIN_KEY, normalizeTheme, normalizeSkin, readPref, writePref
 import { count, pageSummary } from './lib/format.js';
 import { AppContext, Icon, LinkButton } from './ui/components.js';
 import { isDialogOpen } from './ui/dialogs.js';
-import { useToasts, ToastStack } from './ui/toasts.js';
+import { useToasts, useOfflineToasts, ToastStack } from './ui/toasts.js';
 import { loadSprite, spriteLoaded } from './ui/icons.js';
 import { useHashRouter } from './ui/router.js';
 import { useFeed } from './ui/feed.js';
@@ -133,6 +133,7 @@ export function App() {
   const { toasts, toast, dismissToast, toastsRef } = useToasts(route);
 
   const { feed, conn, epoch, retryRef, subscribeFeed, watchJobs, announce, liveText } = useFeed({ toast, route });
+  useOfflineToasts(conn, toasts, dismissToast);
 
   // A sprite that could not load at startup is tried again after an outage.
   useEffect(() => {

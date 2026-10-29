@@ -175,7 +175,7 @@ function Attention() {
       await retryDownload(job.id);
       app.toast({ message: 'Job queued again', role: 'success' });
     } catch (e) {
-      app.toast({ message: e.message || 'The request failed', role: 'danger', sticky: true });
+      app.toast({ message: e.message || 'The request failed', role: 'danger', offline: e.status === 0 });
     } finally {
       setBusy(null);
       rescueUntil.current = Date.now() + 3000;
