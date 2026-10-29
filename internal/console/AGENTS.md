@@ -3,8 +3,8 @@
 The embedded web console: an operator dashboard and a showcase of downloaded
 music, served by `Handler` at `/console/`. Plain ES modules plus a vendored
 Preact+htm bundle. [DESIGN.md](DESIGN.md) is the shared contract (structure,
-states, accessibility, the skin mechanism); each skin's look is specified in
-`internal/console/skins/`.
+states, accessibility, the skin layer); the look of the one skin, `music`, is
+specified in [skins/music.md](skins/music.md).
 
 ## Rules
 
@@ -22,16 +22,16 @@ states, accessibility, the skin mechanism); each skin's look is specified in
   dynamic colors go through Preact style objects (CSSOM custom properties).
   No `innerHTML`; htm escapes data.
 - Colors live only in `static/css/tokens.css` (skin-neutral) and
-  `static/css/skins/*.css` (one per skin, scoped under
-  `:root[data-skin="<name>"]`); the base stylesheets (every other
-  `static/css/*.css`, one per area) are structure and read tokens only, and
-  their link order in `index.html` is the cascade order. Font sizes use
+  `static/css/skins/music.css` (scoped under `:root[data-skin="music"]`);
+  the base stylesheets (every other `static/css/*.css`, one per area) are
+  structure and read tokens only, and their link order in `index.html` is the
+  cascade order. Font sizes use
   `--fs-*`; never `transition: all`; UI copy is English, Apple-provided text
   gets `dir="auto"`.
-- Skins never need JS: a skin changes only its own CSS file and spec page. A
-  hook both skins need (class, data attribute, custom property) lands in the
-  base with a DESIGN.md "DOM hooks" row. The theme (`data-theme`) and the skin
-  (`data-skin`, default `music`, static in `index.html`) are separate axes.
+- The skin never needs JS: it changes only its own CSS file and spec page. A
+  hook it needs (class, data attribute, custom property) lands in the base
+  with a DESIGN.md "DOM hooks" row. The theme (`data-theme`, switchable) and
+  the skin (`data-skin="music"`, static in `index.html`) are separate axes.
 - Modules in `static/js/lib/` are pure (no DOM at import, no vendor import) so
   `node --test` covers them; views and hooks live in `views/` and `ui/`.
 - Streams use `lib/stream.js` (fetch-based SSE, `?cursor=`, 1-30 s backoff,
@@ -65,9 +65,9 @@ painting while the server is unreachable; nothing else references the file.
 - vendor checksum;
 - design guard (color literals outside `css/tokens.css` and `css/skins/*.css`,
   `transition: all`, CJK copy, raw HTML writes, raw font sizes in any CSS);
-- skin parity: every token a base stylesheet reads and `tokens.css` does not
-  declare is declared by each skin, each skin is scoped by its file name;
-  `index.html` links tokens, every base stylesheet, then the skins;
+- skin tokens: every token a base stylesheet reads and `tokens.css` does not
+  declare is declared by the skin, which is scoped by its file name;
+  `index.html` links tokens, every base stylesheet, then the skin;
 - contract guard: each `/api/v1/...` literal in `static/js` is a path in
   `internal/api/openapi.yaml`;
 - `LOG_COMPONENTS` equals the `"component"` log tags in the Go code;
@@ -77,8 +77,8 @@ painting while the server is unreachable; nothing else references the file.
 ## Run and verify
 
 Mounted by `internal/api` at `GET /console/`. Run `make dev`, then open
-`http://127.0.0.1:18080/console/`; check each skin (Style switch in the top
-bar) at 1440 and 390 px wide, light and dark.
+`http://127.0.0.1:18080/console/`; check it at 1440 and 390 px wide, light
+and dark.
 
 ```bash
 for f in $(find internal/console/static -name '*.js' -o -name '*.mjs'); do node --check "$f"; done

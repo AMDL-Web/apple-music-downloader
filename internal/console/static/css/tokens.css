@@ -1,14 +1,14 @@
 /*
  * Skin-neutral tokens: the color-scheme switch, the type scale, spacing,
- * sizes and motion that every skin shares. Colors, radii, shadows, font
+ * sizes and motion under the skin. Colors, radii, shadows, font
  * stacks and display type belong to a skin (css/skins/<name>.css), which
  * must declare every token the base stylesheets (css/*.css) use that is not
  * declared here; a Go test checks that. Color literals are allowed only here and in css/skins/*.css.
- * The contract is DESIGN.md "Skins".
+ * The contract is DESIGN.md "Skin".
  */
 
 :root {
-  /* light-dark() in the skins resolves against this; skins never set it. */
+  /* light-dark() in the skin resolves against this; the skin never sets it. */
   color-scheme: light dark;
 
   /* Text over Apple artwork when its own palette fails 4.5:1 (lib/format.js artTextColor). */
@@ -20,7 +20,7 @@
     "PingFang SC", "Hiragino Sans", "Noto Sans CJK SC", sans-serif;
   --font-system-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
-  /* Type scale (size / line height). Skins add display roles (--fs-page-title, --fs-kpi, ...). */
+  /* Type scale (size / line height). The skin adds display roles (--fs-page-title, --fs-kpi, ...). */
   --fs-11: 11px;
   --lh-11: 16px;
   --fs-12: 12px;

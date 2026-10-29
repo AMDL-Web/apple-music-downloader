@@ -1,8 +1,8 @@
 # Skin: music (Apple Music, immersive)
 
-The default skin. Implementation: `internal/console/static/css/skins/music.css`.
-The shared contract (structure, tokens a skin must declare, DOM hooks, what a
-skin file may do) is [DESIGN.md](../DESIGN.md#skins); this page only says what
+The console's one skin. Implementation: `internal/console/static/css/skins/music.css`.
+The shared contract (structure, tokens the skin must declare, DOM hooks, what a
+skin file may do) is [DESIGN.md](../DESIGN.md#skin); this page only says what
 is particular to this skin.
 
 ## Intent

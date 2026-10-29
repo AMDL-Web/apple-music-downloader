@@ -152,7 +152,7 @@ export function LinkButton({ variant = 'secondary', size, icon, children, classN
 
 /**
  * A titled section: .card > .card-head (.card-title, .card-note,
- * .card-actions) + .card-body. `section` names it for skins (data-section).
+ * .card-actions) + .card-body. `section` names it for the skin (data-section).
  */
 export function Card({ title, actions, children, className, labelId, note, section }) {
   return html`<section class=${className ? `card ${className}` : 'card'} data-section=${section} aria-labelledby=${labelId}>

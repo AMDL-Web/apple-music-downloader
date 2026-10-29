@@ -13,7 +13,7 @@ import { usePoll, useColumns, useNow } from '../ui/hooks.js';
 import { JobRow, applyFeedToList } from './queue.js';
 import { ThroughputCard } from './throughput.js';
 
-// Sections follow the reading order of both skins, so Tab order equals the
+// Sections follow the reading order of the skin, so Tab order equals the
 // visual order: the server status line, Live queue, Recently completed, Jobs,
 // System health, Throughput, Log tail.
 export function OverviewPage() {

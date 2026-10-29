@@ -1,12 +1,11 @@
 // What the command palette lists for a query (views/palette.js renders it):
-// pages, actions, filters, themes and styles; with a query, also a download
+// pages, actions, filters and themes; with a query, also a download
 // action for Apple Music links in it, Settings sections and fields, and the
 // jobs the search found.
 
 import { buildHash, newDownloadHash, settingsHash } from './route.js';
 import { extractLinks } from './links.js';
 import { SETTINGS_SECTIONS, FIELDS } from './settings.js';
-import { SKINS } from './prefs.js';
 import { jobTitle, jobSubtitle, typeLabel, shortDate } from './format.js';
 import { jobStatusView } from './status.js';
 
@@ -27,7 +26,6 @@ const PREF_ITEMS = [
   { id: 'theme-system', group: 'Theme', label: 'Use system theme', icon: 'monitor', theme: 'system' },
   { id: 'theme-light', group: 'Theme', label: 'Use light theme', icon: 'sun', theme: 'light' },
   { id: 'theme-dark', group: 'Theme', label: 'Use dark theme', icon: 'moon', theme: 'dark' },
-  ...SKINS.map((s) => ({ id: `skin-${s.value}`, group: 'Style', label: `Style: ${s.label}`, icon: 'palette', skin: s.value })),
 ];
 
 /** Settings sections listed before anything is typed. */
@@ -92,8 +90,8 @@ export function jobItem(job) {
 
 /**
  * The palette's rows for `query` and the jobs its search returned, in
- * display order. Rows carry {id, group, label, icon} and one of hash,
- * theme or skin; `sub`, `keys`, `dir` and, for a Settings field,
+ * display order. Rows carry {id, group, label, icon} and a hash or a
+ * theme; `sub`, `keys`, `dir` and, for a Settings field,
  * `field` (its config key, to focus once the section is open) are optional.
  */
 export function paletteItems(query, jobs = []) {

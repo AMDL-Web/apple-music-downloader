@@ -136,14 +136,12 @@
   justify-content: center;
 }
 
-.theme,
-.skin {
+.theme {
   display: flex;
   align-items: center;
 }
 
-.theme-cycle,
-.skin-cycle {
+.theme-cycle {
   display: none;
 }
 

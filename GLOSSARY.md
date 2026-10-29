@@ -52,7 +52,7 @@ wins when they disagree, so details are not copied here.
 | Job hook | A webhook or command fired on `job_queued` or a terminal job event | `internal/hooks#Dispatcher` |
 | Library sync | The poller that turns newly added library songs into album jobs | `internal/librarysync#Watcher` |
 | Watermark | Library sync's position-based anchor in the newest-first library list | [docs/automation.md](docs/automation.md#why-the-watermark-is-a-position-not-a-timestamp) |
-| Skin | The console's switchable look (`music`, `editorial`), `<html data-skin>`, separate from the light/dark theme | [internal/console/DESIGN.md](internal/console/DESIGN.md#skins) |
+| Skin | The console's look, one skin (`music`) on `<html data-skin>`, separate from the light/dark theme | [internal/console/DESIGN.md](internal/console/DESIGN.md#skin) |
 
 ## Repository workflow
 

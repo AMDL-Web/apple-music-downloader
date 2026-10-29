@@ -1,5 +1,5 @@
 /*
- * Structural base shared by every skin: layout, component structure and
+ * Structural base under the skin: layout, component structure and
  * behavior. Everything visual is a token: neutral scales from tokens.css,
  * colors, radii, shadows, font stacks and display type from the active skin
  * (css/skins/<name>.css under :root[data-skin]). No color literals here (a Go

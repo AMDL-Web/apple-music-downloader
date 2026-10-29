@@ -1,9 +1,8 @@
 # Console design
 
 The shared contract for the embedded console: structure, states, accessibility,
-motion and the skin mechanism. How the console *looks* belongs to a skin; each
-skin's spec is in `internal/console/skins/` ([music](skins/music.md),
-[editorial](skins/editorial.md)). When this page and the code disagree, the code
+motion and the skin layer. How the console *looks* belongs to its one skin,
+`music`, specified in [skins/music.md](skins/music.md). When this page and the code disagree, the code
 wins and this page is fixed in the same change. Sources are listed in
 [docs/references.md](../../docs/references.md#console-design-references).
 
@@ -13,11 +12,11 @@ wins and this page is fixed in the same change. Sources are listed in
    percentage (`ItemProgress` has none on purpose). Simulate mode is announced
    in a banner.
 2. **Status is never color alone.** Every status has an icon (or glyph), a label
-   and a color role; a skin may change the look of a role, never drop the label.
+   and a color role; the skin may change the look of a role, never drop the label.
 3. **Artwork colors are data.** Apple's per-album palette reaches the page as
    custom properties; text colors are contrast-checked before they are used.
-4. **Both themes, every skin.** Each skin ships a light and a dark theme; light
-   is designed, not inverted.
+4. **Both themes.** The skin ships a light and a dark theme; light is
+   designed, not inverted.
 5. **English UI copy**, `lang="en"`. Apple-provided text (titles, artists,
    genres) is shown as received with `dir="auto"`.
 
@@ -54,14 +53,13 @@ row's job chip filters to that job. The tab title reads `"{Page} · AMDL"`, and
 
 ## Layout
 
-The DOM frame is fixed; a skin restyles it (the editorial skin turns the
-sidebar into a horizontal masthead at 640 px and up).
+The DOM frame is fixed; the skin restyles it.
 
 ```
 .shell
   .sidebar (nav: .brand > .brand-mark + .brand-text > .brand-name, .brand-sub; a.sidebar-new; .nav > .nav-item)
   .main-col
-    header.topbar (.topbar-right: .conn, .search-trigger, .skin, .theme)
+    header.topbar (.topbar-right: .conn, .search-trigger, .theme)
     main.main[data-page] (.page-head > h1.page-title + .page-sub + .page-actions; .banners; .page.page-<name>)
   nav.tabbar (> .tab x2, a.tab.tab-new, .tab, button.tab.tab-more, under 640 px)
 ```
@@ -70,41 +68,38 @@ sidebar into a horizontal masthead at 640 px and up).
 | --- | --- | --- |
 | ≥1024 | `--sidebar-w` sidebar, `--topbar-h` top bar | Overview is a 12-column grid: `live` spans 8, `health` 4, the rest 12 |
 | 640-1023 | `--rail-w` icon rail (labels kept for screen readers) | two-column cards stack |
-| <640 | top bar, `--tabbar-h` bottom tab bar + safe area, 16 px gutters | single column, 44 px targets (also on any coarse pointer at any width), theme and skin become cycle buttons |
+| <640 | top bar, `--tabbar-h` bottom tab bar + safe area, 16 px gutters | single column, 44 px targets (also on any coarse pointer at any width), the theme control becomes a cycle button |
 
 Siblings are spaced by the parent's `gap` (`--page-gap` between sections,
 `--grid-gap` inside grids, `--card-gap` inside cards), never by child margins.
-No horizontal page scroll at 390 px in any skin or theme.
+No horizontal page scroll at 390 px in either theme.
 
-## Skins
+## Skin
 
-A skin is the console's look: colors, radii, shadows, font stacks, display
-type and a few component rules. The theme (system, light, dark) is a separate
-axis; every skin supports all three.
+The skin is the console's look: colors, radii, shadows, font stacks, display
+type and a few component rules. There is one, `music`; the theme (system,
+light, dark) is a separate axis, and the skin supports all three.
 
 ### Mechanism
 
-- `<html data-skin="music|editorial">`, stored per browser under
-  `localStorage["amdl.console.skin"]` with the same guarded read and write as
-  the theme (`lib/prefs.js`: `SKINS`, `DEFAULT_SKIN`, `normalizeSkin`,
-  `readPref`, `writePref`). The default is `music`, and `index.html` carries it
-  statically so the first frame has every token before `main.js` runs;
-  `main.js` then applies the stored skin and theme before mounting.
-- The switch is a segmented control labelled "Style" in the top bar beside the
-  theme control (a cycle button under 640 px), and the command palette has
-  "Style: Apple Music" and "Style: Editorial".
+- `<html data-skin="music">` is static in `index.html`, so the first frame has
+  every token before `main.js` runs. Nothing switches it; an `amdl.console.skin`
+  value an earlier version stored in the browser is never read.
+- The theme is stored per browser under `localStorage["amdl.console.theme"]`
+  with a guarded read and write (`lib/prefs.js`: `normalizeTheme`, `readPref`,
+  `writePref`); `main.js` applies it before mounting.
 - The theme is `<html data-theme="light|dark">` or no attribute for "system";
-  `css/tokens.css` sets `color-scheme` from it, and skins write every color as
-  `light-dark(<light>, <dark>)`, which resolves against that. Skins never set
-  `color-scheme`.
+  `css/tokens.css` sets `color-scheme` from it, and the skin writes every color
+  as `light-dark(<light>, <dark>)`, which resolves against that. The skin never
+  sets `color-scheme`.
 
 ### Files and what each may do
 
 | File | Holds | May | May not |
 | --- | --- | --- | --- |
-| `static/css/tokens.css` | Skin-neutral scales: type scale `--fs-*`/`--lh-*`, weights, spacing `--s-*`, sizes, motion, `--on-art-light/dark`, system font fallbacks | change a scale every skin shares | hold a skin's color, radius, shadow or font stack |
-| `static/css/*.css` (the base: `base.css`, `shell.css`, `controls.css`, `layout.css`, one file per page area, `overlays.css`, `responsive.css`, then the newer pages' `download.css` and `settings.css`) | Structure: layout, component structure and behavior, all visual values through tokens, one file per area. `index.html` links them after `tokens.css` and before the skins, and that link order is the cascade order: `responsive.css` follows the older areas, and `download.css` and `settings.css` follow it, so each carries its own media queries | add structure both skins need, in the file of its area | contain a color literal, `!important` (outside reduced motion) or a skin-specific choice |
-| `static/css/skins/<name>.css` | One `:root[data-skin="<name>"]` token block (light and dark via `light-dark()`), responsive token overrides, and that skin's component rules, every selector prefixed `:root[data-skin="<name>"]` | set any token, override any base rule (repeating its selector chain when it is deeper than three classes), show opt-in hooks, reorder overview sections, use CSS counters and `::before` text | touch another skin's scope, add JS, use `font-size` other than `var(--fs-*)`, use `transition: all`, rely on `color-scheme` it sets itself |
+| `static/css/tokens.css` | Skin-neutral scales: type scale `--fs-*`/`--lh-*`, weights, spacing `--s-*`, sizes, motion, `--on-art-light/dark`, system font fallbacks | change a shared scale | hold a skin's color, radius, shadow or font stack |
+| `static/css/*.css` (the base: `base.css`, `shell.css`, `controls.css`, `layout.css`, one file per page area, `overlays.css`, `responsive.css`, then the newer pages' `download.css` and `settings.css`) | Structure: layout, component structure and behavior, all visual values through tokens, one file per area. `index.html` links them after `tokens.css` and before the skin, and that link order is the cascade order: `responsive.css` follows the older areas, and `download.css` and `settings.css` follow it, so each carries its own media queries | add structure, in the file of its area | contain a color literal, `!important` (outside reduced motion) or a skin-specific choice |
+| `static/css/skins/<name>.css` | One `:root[data-skin="<name>"]` token block (light and dark via `light-dark()`), responsive token overrides, and that skin's component rules, every selector prefixed `:root[data-skin="<name>"]` | set any token, override any base rule (repeating its selector chain when it is deeper than three classes), show opt-in hooks, reorder overview sections, use CSS counters and `::before` text | leave its scope, add JS, use `font-size` other than `var(--fs-*)`, use `transition: all`, rely on `color-scheme` it sets itself |
 | `skins/<name>.md` | The skin's spec: intent, token table with contrast, component notes | | restate the shared contract |
 
 The prefix `:root[data-skin="<name>"]` adds (0,2,0) (`:root` is a
@@ -116,12 +111,12 @@ therefore carries its own responsive overrides. For a deeper base selector
 `.job-list.job-list-compact.new-results > .new-result > .job-row`), repeat
 its chain under the skin prefix.
 
-### Tokens a skin must declare
+### Tokens the skin must declare
 
-`TestSkinsDeclareEveryBaseToken` fails when a skin misses one that a base
+`TestSkinsDeclareEveryBaseToken` fails when the skin misses one that a base
 stylesheet reads and `tokens.css` does not declare. Declare the whole table anyway (for
 example every role's `-text`, though the base reads only `--danger-text` and
-`--warning-text`), so skin rules can rely on it.
+`--warning-text`), so the skin's rules can rely on it.
 
 | Group | Tokens |
 | --- | --- |
@@ -139,7 +134,7 @@ example every role's `-text`, though the base reads only `--danger-text` and
 
 ### DOM hooks
 
-Stable class names and attributes a skin can style without touching JS:
+Stable class names and attributes the skin can style without touching JS:
 
 | Surface | Hooks |
 | --- | --- |
@@ -156,11 +151,11 @@ Stable class names and attributes a skin can style without touching JS:
 | Live failures | `ul.attention` after the live list > `li.attention-row[data-role=danger]` > `.attention-icon`, `.attention-title` (`.attention-label` "Failed", `a.attention-link` to the drawer, mono `.attention-input`), `.attention-detail` (`.attention-error`, relative time), Retry `.btn` |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
-| Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus; it rises over the icon line with a negative `margin-top`, so its label shares the other labels' line, and a skin that resizes the mark or the tab icons restates it) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.skin`/`.seg-skin`/`.skin-cycle`, `.theme`/`.seg-icons`/`.theme-cycle`; loading shell `.boot` > `.boot-mark` + `.boot-text` (static in `index.html`, replaced on mount); `svg.sprite` at the start of `body`, the in-document icon sprite (`ui/icons.js`), never styled by a skin; `meta[name=theme-color]` set from the body background; `.conn[data-role][data-state=connecting\|live\|reconnecting\|offline\|paused]` > `.conn-dot` + `.conn-label` (the base hides the label under 640 px) |
+| Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus; it rises over the icon line with a negative `margin-top`, so its label shares the other labels' line, and a skin rule that resizes the mark or the tab icons restates it) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.theme`/`.seg-icons`/`.theme-cycle`; loading shell `.boot` > `.boot-mark` + `.boot-text` (static in `index.html`, replaced on mount); `svg.sprite` at the start of `body`, the in-document icon sprite (`ui/icons.js`), never styled by the skin; `meta[name=theme-color]` set from the body background; `.conn[data-role][data-state=connecting\|live\|reconnecting\|offline\|paused]` > `.conn-dot` + `.conn-label` (the base hides the label under 640 px) |
 | Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive); a busy button is `.btn[aria-disabled=true]`. Shortcut sheet `[data-dialog=shortcuts]` |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
 | Settings | `.page-settings[data-section-active][data-dirty]` > `nav.settings-nav` (`ul.settings-nav-list` > `a.settings-nav-item[data-section][aria-current=true][data-dirty][data-invalid]` > `.icon`, `.settings-nav-label`, `.settings-nav-mark` (`.settings-nav-dot` when unsaved); `label.settings-jump` > `.settings-jump-label` + `select`, shown under 640 px), `.settings-main` (a size container) > `.settings-error` + `section.card.settings-section[data-section=<id>]` > `.settings-intro`, `.field-list` > `.field[data-key][data-type][data-wide][data-changed][data-invalid]` > `.field-text` (`.field-label`, `.field-changed`, `button.field-revert`, `.field-help`, `code.field-key`), `.field-control` (`input.field-switch[role=switch]` + `.field-switch-state`, `.field-select` > `.select` + `.field-option-hint`, `.field-number` > `.field-input` + `.field-unit`, `.field-input`, `.field-secret`, `.list-editor` > `ol.list-items` > `li.list-item[data-item]` (`.list-rank`, `.list-label`, `.list-code`, `.list-actions` > `.list-up`, `.list-down`, `.list-remove`) + `.list-add`, `.check-group` > `label.check`), then `.field-default` (`code.field-default-value`), `.field-error`, `.field-warning`; `.list-min-note`; `.settings-updated` and `.settings-elsewhere` (`.settings-elsewhere-actions`) above the section; panels `.settings-panel[data-panel=library-sync\|config-file]` (`.settings-panel-head`, `.settings-panel-actions`, `.sync-reset`, `.sync-state`, `.config-reload`, `.config-outcome`), `details.template-ref`, `.account` > `.account-block` (`.account-block-head`, `ul.account-rows` > `.account-row` > `.account-name` + `.account-logout`), `form.login-form[data-step=credentials\|code]` > `.form-row`, `.login-blocked`, `.form-actions`; `.save-bar[data-state=dirty\|saving]` > `.save-bar-text` (`.save-bar-count`, `.save-bar-where`) + `.save-bar-actions` (`.save-bar-discard`, `.save-bar-save`) |
-| Job selection (Queue) | Toolbar `.queue-tools` > `.btn.queue-retry-all` (Failed and Cancelled tabs) + `.btn.queue-select[aria-pressed]`; `.bulk-bar[data-state=select\|run]` (sticky at `top: var(--topbar-h)`; a skin whose top bar does not stick overrides `top`) > `label.bulk-all` > `input.bulk-check` (indeterminate when some), `.bulk-count`, `.bulk-actions` > `.btn.bulk-action[data-action=retry\|cancel\|delete]` > `.bulk-n` (count) or `.bulk-hint`, or during a run `.bulk-progress` > `.bulk-progress-text` + `.bulk-meter[role=progressbar]` > `.bulk-meter-fill` (`--f`); `ul.job-list.is-selecting` > `li.job-item[data-job-id][data-selected]` > `label.job-check` > `input.job-check-input` + `a.job-row[data-selected]`. Drawer: `.btn.drawer-delete` (finished jobs) |
+| Job selection (Queue) | Toolbar `.queue-tools` > `.btn.queue-retry-all` (Failed and Cancelled tabs) + `.btn.queue-select[aria-pressed]`; `.bulk-bar[data-state=select\|run]` (sticky at `top: var(--topbar-h)`; a skin whose top bar does not stick would override `top`) > `label.bulk-all` > `input.bulk-check` (indeterminate when some), `.bulk-count`, `.bulk-actions` > `.btn.bulk-action[data-action=retry\|cancel\|delete]` > `.bulk-n` (count) or `.bulk-hint`, or during a run `.bulk-progress` > `.bulk-progress-text` + `.bulk-meter[role=progressbar]` > `.bulk-meter-fill` (`--f`); `ul.job-list.is-selecting` > `li.job-item[data-job-id][data-selected]` > `label.job-check` > `input.job-check-input` + `a.job-row[data-selected]`. Drawer: `.btn.drawer-delete` (finished jobs) |
 | New download | `.page.page-new` > `.new-main` (cards `compose`, `links`, `results`) + `.new-aside` (`options`, `bookmarklet`), two columns at 1024 px and up (the aside 260-300 px wide below 1280, 300-380 from 1280). Compose: `form.new-form` > `textarea#new-input.new-input`, `.new-hint`, `.new-submit` (sticky above the tab bar under 640 px) > `.new-submit-info` (`.new-count`, `p.new-options-line` > `.new-options-state` + `button.new-options-jump`) + `.btn.new-submit-btn[aria-busy]`. Links: `ul.new-links` > `li.new-link[data-kind][data-state=queued\|loading\|ready\|error\|idle\|invalid][data-issue=not_apple\|no_storefront\|unsupported\|music_video\|bad_storefront\|refused\|not_found\|needs_token\|preview_failed][data-blocking][.has-palette]` > `.art.art-48.new-link-art`, `.new-link-main` (`.new-link-tags` > `.chip`s and `.new-link-loading`, `.new-link-title[.is-url]`, `.new-link-sub` > `.new-link-artist`, `.new-link-album`, `.new-link-fact[data-key=tracks\|year\|length\|genre]`, mono `.new-link-url`, `.new-link-note[data-note=artist\|storefront]`, `a.new-link-prior[data-state=active\|done]`, `.new-link-issue.status-text[data-role]`, with `a.link.new-link-fix` when a page fixes it), `.new-link-actions` > `.new-link-quality` (albums and songs), `.new-link-retry`, `.new-link-remove`; `.new-links-all` > `.new-links-toggle[aria-expanded]`, `.new-links-more`, `.new-links-legend` > `.new-legend-item` > `.chip`. Results: `#new-results-summary.new-results-summary[role=status][tabindex=-1]`, `ul.job-list.job-list-compact.new-results` > `li.new-result[data-status=accepted\|invalid\|duplicate_active\|duplicate_in_request\|queue_full\|error\|deleted]` > a Job row, or `.new-result-row[data-role]` > `.new-result-icon`, `.new-result-main` (`.new-result-label`, `.new-result-title` (a deleted job), `.new-result-url`, `.new-result-msg`, `.new-result-detail`), `.new-result-actions`; head `.new-results-retry`, `.new-results-clear`. Options: `section.card.new-options` > `.new-options-toggle[aria-expanded]`, `.new-options-reset`, `#new-options-body.new-options-body[data-open]` > `.new-options-summary[data-changed]` (`.new-options-count`, `.new-options-text`) or `.new-options-form` > `fieldset.new-fieldset[data-group=quality\|behavior][data-changed]` > `label.new-check[data-key][data-changed]` (`.new-check-label`, `.new-check-hint`), `.new-field[data-key][data-changed]` (`.new-field-label` + `.select`), `.new-field-row`, `.new-codecs` > `ol.new-codec-list` > `li.new-codec[data-codec]` (`.new-codec-rank`, `.new-codec-name` > `.new-codec-hint`, `.new-codec-actions` > `.new-codec-up`, `.new-codec-down`, `.new-codec-remove`) + `.new-codec-add` > `.new-codec-add-btn[data-codec]`, then `.new-options-foot`; the base puts an accent dot after the label of a value that differs from the server default. Bookmarklet: `.new-bookmarklet` > `code#new-bookmarklet-code.new-bookmarklet-code` + `.new-bookmarklet-copy`, `ol.new-steps`. Quality sheet `.sheet.sheet-quality[data-dialog=quality]` > `.quality-for`, `.quality-wait`, `.quality-body[role=region][tabindex=0]` (the part that scrolls, so the head and its Close stay) > `ul.quality-slots` > `li.quality-slot[data-id]` (`.quality-slot-label` > `.quality-slot-codec`, `.quality-slot-count`, `.quality-slot-best`), `ol.quality-tracks` > `li.quality-track` > `.quality-track-head` (`.quality-track-no`, `.quality-track-name`, `.chip`) + `.quality-track-opts` > `.quality-opt[data-id]` (`.quality-opt-label`, `.quality-opt-spec`) |
 
 **Artwork palette.** `.job-row`, `.strip-tile`, `.tile` and `.hero` carry
@@ -171,34 +166,20 @@ drawer's `.drawer-head` carries the properties without the class. Each `--art-t*
 `motion_artwork_*` palette; the two are never mixed. `.art` also sets `--art-bg`
 behind a cover while it loads or when it fails.
 
-**Opt-in hooks** are hidden by the base and shown by a skin that wants them:
+**Opt-in hooks** are hidden by the base and shown by the skin when it wants them:
 `.brand-sub`, `.job-facts`, `.health-icon`, `.hero-no`, `.hero-actions`,
 `.tile-head`, `.strip-tile.is-overflow`, `.jprog-legend`,
 `.attention`, and the x-axis day labels other than the first, middle and
 latest.
 
-### Adding a skin
-
-1. Add `{ value, label, short }` to `SKINS` in `static/js/lib/prefs.js` and a
-   test case in `jstest/prefs.test.mjs`.
-2. Create `static/css/skins/<value>.css` with a `:root[data-skin="<value>"]`
-   block declaring every token in the table above, then its rules.
-3. Link it from `index.html` after the base stylesheets (`css/responsive.css`
-   is the last of them).
-4. Write `skins/<value>.md`.
-5. `go test ./internal/console/` checks the token set, the link, the scope and
-   the color and font-size guards; then check every page in light and dark at
-   1440 and 390 px.
-
 ## Color and contrast rules
 
-Every skin meets these; its spec lists the measured values.
+The skin meets these; its spec lists the measured values.
 
 - Body and secondary text 4.5:1 on `--bg-surface` and `--bg-canvas`;
   `--border-control`, focus rings and progress fills 3:1 against neighbors.
 - `--*-text` is used only on `--bg-surface`. A role may share a color with
-  another (the editorial skin keeps running and completed in ink) as long as
-  the icon and label differ.
+  another as long as the icon and label differ.
 - The danger and warning roles never look like the accent of a healthy state.
 - Under `forced-colors`, badges (with inline padding, so the border clears the
   text), bars, cells and dots get borders (base); a progress cell with an
@@ -208,17 +189,17 @@ Every skin meets these; its spec lists the measured values.
 
 ## Type, spacing, shape, motion
 
-System fonts only: no web fonts, no CDN. A skin picks stacks for `--font-sans`,
+System fonts only: no web fonts, no CDN. The skin picks stacks for `--font-sans`,
 `--font-display` and `--font-mono` and falls back to `--font-system` or
 `--font-system-mono`. Every `font-size` is a `--fs-*` token (a Go test
-checks every CSS file); a skin adds display roles as tokens. Numbers that
+checks every CSS file); the skin adds display roles as tokens. Numbers that
 update live use `tabular-nums`. Long titles truncate with the full text in
 `title`.
 
 Spacing steps (px): 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64 (`--s-0_5` …
 `--s-16`). Controls are 32 px (28 in toolbars), 44 px under 640 px and on any coarse
-pointer (a phone in landscape, a tablet), where the theme and skin switches
-become cycle buttons and the icon rail scrolls. Under those conditions a
+pointer (a phone in landscape, a tablet), where the theme switch
+becomes a cycle button and the icon rail scrolls. Under those conditions a
 standalone link or a chip's remove button has a 44 px box; the log attribute
 chips stay 20 px drawn and get an invisible 44 px hit area inside a row that is
 44 px tall (so `getBoundingClientRect` reads 20, `elementFromPoint` 44). On the
@@ -229,7 +210,7 @@ shadows are skin tokens.
 Motion: 120 ms hover color fades, 200 ms drawer/palette/toast/insert,
 `--ease-out` in. Movement uses only `transform` and `opacity` (stage and meter
 fills: `scaleX`, linear); never `transition: all`. The running pulse and the
-skeleton pulse are the only loops a skin gets for free; any other loop (an
+skeleton pulse are the only loops the skin gets for free; any other loop (an
 equalizer glyph, a live dot) is the skin's and must stop under
 `prefers-reduced-motion`, which also removes the drawer slide, cover movement
 and motion covers.
@@ -275,7 +256,7 @@ and motion covers.
   300w/600w and lazy loading. Covers keep pre-signed URLs without placeholders
   verbatim. Motion covers play muted on hover or focus, one at a time, only
   where `video.canPlayType` accepts HLS and motion is allowed. Titles underline
-  on hover in every skin.
+  on hover.
 - **Throughput**: totals as facts, the formats mix of every retained job
   (`/stats` `codecs`, the top four with the rest as "Other"; nothing before
   a track completes), then two small multiples sharing the date
@@ -424,7 +405,7 @@ and motion covers.
   from 640 px up in two lines so the title and artist keep the main
   column's width (the art beside both, title and artist across the row,
   progress and status under them, no relative time; the base sets it with a
-  five-class chain that outranks the skins' `.job-list-compact` rules),
+  five-class chain that outranks the skin's `.job-list-compact` rules),
   the rest with their reason, View job for `duplicate_active`, Retry for
   `queue_full`, `decryptor_unavailable` and server errors. The handled
   links then leave the text box; an error under Download ("Cannot reach the
@@ -470,11 +451,11 @@ clears a search first, then leaves the field), Cmd/Ctrl+K, Cmd/Ctrl+S saves
 Settings,
 `?`; single keys and the global paste are ignored while typing,
 while the palette or a sheet is open and while any `[data-dialog]` is up. The
-skin and theme controls are button groups with `aria-pressed` and an
-accessible name ("Style", "Theme"). Milestones ("Album X completed") go to one
+theme control is a button group with `aria-pressed` and the accessible name
+"Theme". Milestones ("Album X completed") go to one
 polite status region, at most one announcement per 5 s. Progress carries
 `role="progressbar"` with `aria-valuetext` such as "12 of 14 tracks, 1 failed",
-whether it renders cells or a bar. Text a skin adds with `::before` (section
+whether it renders cells or a bar. Text the skin adds with `::before` (section
 numbers, "No.") is decoration and repeats nothing a screen reader needs.
 With unsaved settings, leaving the page asks first (Stay, "Save and leave" while
 no field is invalid, Discard and leave): a page sets
@@ -499,9 +480,8 @@ every page refetches what it loads, and a page showing a load error reloads.
 
 ## Verification
 
-Run the backend with `make dev` (simulate mode), open `/console/`, switch the
-style in the top bar, and check each skin at 1440 and 390 px wide in light and
-dark: Overview, Queue with the drawer, Showcase, Logs, System, New
+Run the backend with `make dev` (simulate mode), open `/console/`, and check
+it at 1440 and 390 px wide in light and dark: Overview, Queue with the drawer, Showcase, Logs, System, New
 download, Settings, the command palette, and under 640 px the tab bar and its
 More sheet. No horizontal scroll at 390 px, status icon plus label everywhere,
 visible focus rings.

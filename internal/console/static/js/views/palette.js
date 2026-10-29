@@ -8,7 +8,7 @@ import { Dialog, useDialog } from '../ui/dialogs.js';
 import { focusField } from '../ui/field-focus.js';
 import { useDebounced } from '../ui/hooks.js';
 
-export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
+export function CommandPalette({ onClose, navigate, setTheme }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   // q: the query these jobs answer.
@@ -49,7 +49,6 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
     if (!it) return;
     onClose();
     if (it.theme) setTheme(it.theme);
-    else if (it.skin) setSkin(it.skin);
     else if (it.hash) {
       // Already at that address: no route change moves focus, so do it here.
       if (it.field && window.location.hash === it.hash) focusField(it.field);

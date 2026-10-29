@@ -1,34 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  SKINS,
-  DEFAULT_SKIN,
-  DEFAULT_THEME,
-  SKIN_KEY,
-  THEME_KEY,
-  normalizeSkin,
-  normalizeTheme,
-  nextSkin,
-  readPref,
-  writePref,
-} from '../static/js/lib/prefs.js';
+import { DEFAULT_THEME, THEME_KEY, normalizeTheme, readPref, writePref } from '../static/js/lib/prefs.js';
 
 const memory = (init = {}) => {
   const data = { ...init };
   return { getItem: (k) => (k in data ? data[k] : null), setItem: (k, v) => (data[k] = String(v)), data };
 };
 const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
-
-test('skins: music is the default, unknown values fall back to it', () => {
-  assert.deepEqual(SKINS.map((s) => s.value), ['music', 'editorial']);
-  assert.equal(DEFAULT_SKIN, 'music');
-  assert.equal(normalizeSkin('editorial'), 'editorial');
-  assert.equal(normalizeSkin('terminal'), 'music');
-  assert.equal(normalizeSkin(null), 'music');
-  assert.equal(nextSkin('music'), 'editorial');
-  assert.equal(nextSkin('editorial'), 'music');
-  assert.equal(nextSkin('bogus'), 'editorial');
-});
 
 test('themes: system is the default', () => {
   assert.equal(DEFAULT_THEME, 'system');
@@ -37,13 +15,13 @@ test('themes: system is the default', () => {
 });
 
 test('readPref and writePref survive missing or throwing storage', () => {
-  const store = memory({ [SKIN_KEY]: 'editorial', [THEME_KEY]: 'nope' });
-  assert.equal(readPref(store, SKIN_KEY, normalizeSkin), 'editorial');
+  const store = memory({ [THEME_KEY]: 'nope' });
   assert.equal(readPref(store, THEME_KEY, normalizeTheme), 'system');
-  assert.equal(readPref(broken, SKIN_KEY, normalizeSkin), 'music');
-  assert.equal(readPref(null, SKIN_KEY, normalizeSkin), 'music');
-  assert.equal(writePref(store, SKIN_KEY, 'music'), true);
-  assert.equal(store.data[SKIN_KEY], 'music');
-  assert.equal(writePref(broken, SKIN_KEY, 'music'), false);
-  assert.equal(writePref(null, SKIN_KEY, 'music'), false);
+  assert.equal(readPref(memory({ [THEME_KEY]: 'dark' }), THEME_KEY, normalizeTheme), 'dark');
+  assert.equal(readPref(broken, THEME_KEY, normalizeTheme), 'system');
+  assert.equal(readPref(null, THEME_KEY, normalizeTheme), 'system');
+  assert.equal(writePref(store, THEME_KEY, 'light'), true);
+  assert.equal(store.data[THEME_KEY], 'light');
+  assert.equal(writePref(broken, THEME_KEY, 'light'), false);
+  assert.equal(writePref(null, THEME_KEY, 'light'), false);
 });

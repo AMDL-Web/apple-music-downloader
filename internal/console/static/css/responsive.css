@@ -593,13 +593,11 @@
     justify-content: center;
   }
 
-  .seg-icons,
-  .seg-skin {
+  .seg-icons {
     display: none;
   }
 
-  .theme-cycle,
-  .skin-cycle {
+  .theme-cycle {
     display: inline-flex;
   }
 
@@ -680,7 +678,7 @@
     border: 1px solid CanvasText;
   }
 
-  /* Skins draw a badge without padding; the border would touch the text. */
+  /* The skin draws a badge without padding; the border would touch the text. */
   :root:root:root .badge {
     padding-inline: var(--s-1_5);
   }

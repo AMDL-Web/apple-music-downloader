@@ -19,7 +19,7 @@ const PAGE_SIZE = 50;
 /**
  * One job in a list: artwork, title, type, progress, status, last update.
  * The row carries the job's status (data-status) and Apple palette
- * (--art-bg, --art-t1..t3) for skins; .job-facts is hidden unless a skin shows it.
+ * (--art-bg, --art-t1..t3) for the skin; .job-facts is hidden unless the skin shows it.
  * Selection is opt-in (the Queue's selection mode; the Overview passes
  * neither prop): `selected` sets data-selected, and with `onSelect` a plain
  * click selects instead of opening the drawer (Cmd/Ctrl-click still opens).

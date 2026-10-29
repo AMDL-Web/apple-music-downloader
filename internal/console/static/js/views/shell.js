@@ -1,6 +1,6 @@
 // Shell chrome: primary navigation (sidebar, tab bar and its More sheet),
-// the New download entry point, the connection indicator, the skin and theme
-// controls and the page banners.
+// the New download entry point, the connection indicator, the theme control
+// and the page banners.
 
 import { html } from '../ui/preact.js';
 import { buildHash } from '../lib/route.js';
@@ -9,7 +9,7 @@ import { clockTime, count } from '../lib/format.js';
 import { Icon, Button, Notice } from '../ui/components.js';
 import { Dialog } from '../ui/dialogs.js';
 import { useClock } from '../ui/hooks.js';
-import { THEMES, SKINS, nextSkin } from '../lib/prefs.js';
+import { THEMES } from '../lib/prefs.js';
 
 export const NAV = [
   { page: 'overview', label: 'Overview', icon: 'grid', key: 'o' },
@@ -142,24 +142,6 @@ export function ConnectionIndicator({ conn, onRetry }) {
     <span class="conn-label">${label}</span>
     ${conn.state === 'offline' && onRetry ? html`<${Button} size="sm" variant="ghost" onClick=${onRetry}>Retry</${Button}>` : null}
   </span>`;
-}
-
-/** The skin switch: a compact segmented control, a cycle button under 640 px. */
-export function SkinControl({ skin, setSkin }) {
-  const current = SKINS.find((s) => s.value === skin) || SKINS[0];
-  const next = SKINS.find((s) => s.value === nextSkin(skin));
-  return html`<div class="skin">
-    <div class="seg seg-skin" role="group" aria-label="Style">
-      ${SKINS.map(
-        (s) => html`<button key=${s.value} type="button" class="seg-btn" aria-pressed=${String(s.value === skin)} title=${`Style: ${s.label}`} onClick=${() => setSkin(s.value)}>
-          <span>${s.short}</span>
-        </button>`,
-      )}
-    </div>
-    <button type="button" class="btn btn-ghost btn-icon skin-cycle" aria-label=${`Style: ${current.label}; switch to ${next.label}`} title=${`Style: ${current.label}`} onClick=${() => setSkin(next.value)}>
-      <${Icon} name="palette" />
-    </button>
-  </div>`;
 }
 
 const THEME_OPTIONS = [

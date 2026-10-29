@@ -1,7 +1,7 @@
 /*
  * The Settings page (#/settings, views/settings*.js): runtime configuration
  * sections, the Apple Music account and library sync. Base structure only;
- * it reads tokens like every other base stylesheet, and the skins restyle it.
+ * it reads tokens like every other base stylesheet, and the skin restyles it.
  * This file is linked after responsive.css, so it carries its own media
  * queries. Fields stack by the width of .settings-main (a size container),
  * not the viewport, so the rail and the masthead layouts get the same rule.

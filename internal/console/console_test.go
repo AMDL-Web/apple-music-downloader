@@ -402,7 +402,7 @@ func TestDesignGuardCatchesViolations(t *testing.T) {
 	clean := []struct{ file, text string }{
 		{"css/tokens.css", "--x: light-dark(#ffffff, #111113);"},
 		{"css/skins/music.css", ":root[data-skin=\"music\"] { --x: light-dark(#ffffff, rgba(0, 0, 0, 0.5)); }"},
-		{"css/skins/editorial.css", "a { font-size: var(--fs-page-title); }"},
+		{"css/skins/music.css", "a { font-size: var(--fs-page-title); }"},
 		{"js/x.js", "location.hash = '#/queue'; const bg = `#${hex}`;"},
 		{"css/shell.css", "a { font-size: var(--fs-12); transition: opacity 120ms; }"},
 	}
@@ -549,7 +549,7 @@ func cssNames(re *regexp.Regexp, text string) map[string]bool {
 }
 
 // baseCSS returns the base stylesheets, every css/*.css except tokens.css:
-// the structure both skins share, split by area.
+// the structure under the skin, split by area.
 func baseCSS(t *testing.T) []string {
 	t.Helper()
 	names, err := fs.Glob(staticFS(t), "css/*.css")
@@ -563,13 +563,13 @@ func baseCSS(t *testing.T) []string {
 	return out
 }
 
-// TestSkinsDeclareEveryBaseToken keeps the skins interchangeable: every
-// custom property a base stylesheet (css/*.css other than tokens.css) reads
-// that tokens.css does not declare (colors, radii, shadows, fonts, display
-// type, card shape) must be declared by each css/skins/*.css, so a skin
-// designer who forgets one gets a failing test instead of a transparent badge
-// in the other skin. It runs with the package tests (make test, CI); the
-// failure names the skin, the token and a base file that reads it.
+// TestSkinsDeclareEveryBaseToken keeps the skin complete: every custom
+// property a base stylesheet (css/*.css other than tokens.css) reads that
+// tokens.css does not declare (colors, radii, shadows, fonts, display type,
+// card shape) must be declared by each css/skins/*.css, so a token added to
+// the base without a value gets a failing test instead of a transparent
+// badge. It runs with the package tests (make test, CI); the failure names
+// the skin, the token and a base file that reads it.
 func TestSkinsDeclareEveryBaseToken(t *testing.T) {
 	files := staticFS(t)
 	neutral := cssNames(varDecl, readStatic(t, "css/tokens.css"))
@@ -589,8 +589,8 @@ func TestSkinsDeclareEveryBaseToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(skins) < 2 {
-		t.Fatalf("found %d skins under css/skins, want at least 2", len(skins))
+	if len(skins) == 0 {
+		t.Fatal("found no skin under css/skins")
 	}
 	index := readStatic(t, "index.html")
 	for _, skin := range skins {

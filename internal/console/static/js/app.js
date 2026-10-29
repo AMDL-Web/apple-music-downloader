@@ -6,7 +6,7 @@ import { html, useState, useEffect, useLayoutEffect, useRef, useCallback, useMem
 import { getSystem, getConfig } from './api.js';
 import { buildHash, newDownloadHash, newDownloadUrls } from './lib/route.js';
 import { extractLinks } from './lib/links.js';
-import { THEME_KEY, SKIN_KEY, normalizeTheme, normalizeSkin, readPref, writePref } from './lib/prefs.js';
+import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
 import { count, pageSummary } from './lib/format.js';
 import { AppContext, Icon, LinkButton } from './ui/components.js';
 import { isDialogOpen } from './ui/dialogs.js';
@@ -24,7 +24,7 @@ import { DownloadPage } from './views/download.js';
 import { SettingsPage } from './views/settings.js';
 import { JobDrawer } from './views/drawer.js';
 import { CommandPalette, ShortcutSheet } from './views/palette.js';
-import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, ThemeControl, SkinControl, Banners } from './views/shell.js';
+import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, ThemeControl, Banners } from './views/shell.js';
 
 const TITLES = {
   overview: 'Overview',
@@ -58,14 +58,6 @@ export function applyTheme(theme) {
   else root.removeAttribute('data-theme');
 }
 
-/** Reads the stored skin; the default when storage is unavailable or the value unknown. */
-export const loadSkin = () => readPref(storage(), SKIN_KEY, normalizeSkin);
-
-/** Applies a skin to <html data-skin>, which scopes css/skins/<skin>.css. */
-export function applySkin(skin) {
-  document.documentElement.setAttribute('data-skin', normalizeSkin(skin));
-}
-
 const isTyping = (el) =>
   el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 
@@ -93,7 +85,6 @@ export function App() {
   const [simulate, setSimulate] = useState(false);
   const [defaultStorefront, setDefaultStorefront] = useState('');
   const [theme, setThemeState] = useState(loadTheme);
-  const [skin, setSkinState] = useState(loadSkin);
   const [overlay, setOverlay] = useState(null);
   const opener = useRef(null);
   const mainRef = useRef(null);
@@ -105,15 +96,8 @@ export function App() {
   }, []);
   useEffect(() => applyTheme(theme), [theme]);
 
-  const setSkin = useCallback((s) => {
-    const v = normalizeSkin(s);
-    setSkinState(v);
-    writePref(storage(), SKIN_KEY, v);
-  }, []);
-  useEffect(() => applySkin(skin), [skin]);
-
   // The browser chrome (theme-color) follows the page background of the
-  // active skin and theme; with the system theme it follows the OS switch.
+  // active theme; with the system theme it follows the OS switch.
   useEffect(() => {
     const sync = () => {
       let meta = document.querySelector('meta[name="theme-color"]');
@@ -129,7 +113,7 @@ export function App() {
     if (theme !== 'system' || !mq) return undefined;
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
-  }, [theme, skin]);
+  }, [theme]);
 
   const { toasts, toast, dismissToast, toastsRef, toastsHeld } = useToasts(route);
 
@@ -357,7 +341,6 @@ export function App() {
               <span class="search-trigger-text">Search jobs…</span>
               <kbd class="search-trigger-kbd">⌘K</kbd>
             </button>
-            <${SkinControl} skin=${skin} setSkin=${setSkin} />
             <${ThemeControl} theme=${theme} setTheme=${setTheme} />
           </div>
         </header>
@@ -378,7 +361,7 @@ export function App() {
       <${TabBar} route=${route} moreOpen=${overlay === 'more'} onMore=${() => setOverlay('more')} />
     </div>
     ${route.jobId ? html`<${JobDrawer} jobId=${route.jobId} onClose=${closeDrawer} />` : null}
-    ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} setSkin=${setSkin} />` : null}
+    ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} />` : null}
     ${overlay === 'shortcuts' ? html`<${ShortcutSheet} onClose=${() => setOverlay(null)} />` : null}
     ${overlay === 'more' ? html`<${MoreSheet} route=${route} onClose=${() => setOverlay(null)} />` : null}
     <${ToastStack} toasts=${toasts} toastsRef=${toastsRef} dismissToast=${dismissToast} />

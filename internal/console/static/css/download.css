@@ -2,7 +2,7 @@
  * The New download page (#/new, views/download*.js): link entry, link
  * previews, options, the quality sheet, submit results and the
  * bookmarklet. Base structure only; it reads tokens like every other base
- * stylesheet, and the skins restyle it. Linked after responsive.css, so the
+ * stylesheet, and the skin restyles it. Linked after responsive.css, so the
  * phone rules at the end of this file are its own.
  */
 
@@ -325,7 +325,7 @@
    640 px up, where the compact row's fixed progress and status columns
    would squeeze the title to nothing. Here the title and artist take the
    whole row and the progress and status run under them. Five classes, so
-   the layout outranks the skins' .job-list-compact and .job-row rules (four
+   the layout outranks the skin's .job-list-compact and .job-row rules (four
    at most with the :root[data-skin] prefix); a skin that restyles it
    repeats the chain. Under 640 px the phone job card applies. */
 .new-results .job-row {
