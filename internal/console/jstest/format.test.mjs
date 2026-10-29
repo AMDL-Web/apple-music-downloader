@@ -22,7 +22,6 @@ import {
   kHz,
   codecLabel,
   codecMeaning,
-  codecLegend,
   legacyCatalogError,
   formatShares,
   isHiRes,
@@ -374,14 +373,4 @@ test('codecMeaning spells a chip out in the words of the Qualities sheet', () =>
   assert.equal(codecMeaning({ codec: 'aac', bit_depth: 16, sample_rate: 48000 }), '16-bit / 48\u00a0kHz');
   assert.equal(codecMeaning({ codec: 'aac' }), '');
   assert.equal(codecMeaning(null), '');
-});
-
-test('codecLegend lists each distinct numbered chip once, in first-seen order', () => {
-  const alac = (rate) => ({ codec: 'alac', bit_depth: 24, sample_rate: rate });
-  assert.deepEqual(codecLegend([alac(44100), { codec: 'aac' }, alac(44100), alac(48000)]), [
-    { label: 'ALAC 24/44.1', text: 'Lossless 24-bit / 44.1\u00a0kHz' },
-    { label: 'ALAC 24/48', text: 'Lossless 24-bit / 48\u00a0kHz' },
-  ]);
-  assert.deepEqual(codecLegend([{ codec: 'aac' }]), []);
-  assert.deepEqual(codecLegend(undefined), []);
 });

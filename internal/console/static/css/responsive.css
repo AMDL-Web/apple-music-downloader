@@ -367,9 +367,14 @@
     display: none;
   }
 
-  /* Actions fill their rows evenly; Delete keeps its size, at the right. */
-  .drawer-actions .btn:not(.drawer-delete) {
+  /* Actions fill their rows evenly, Remove included, so no button is left
+     alone and small at the end of a row. */
+  .drawer-actions .btn {
     flex: 1 1 auto;
+  }
+
+  .drawer-delete {
+    margin-left: 0;
   }
 
   .drawer-actions .confirm {

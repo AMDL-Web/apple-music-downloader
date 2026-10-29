@@ -1,7 +1,7 @@
 // What a job list row and the job drawer say about a job. Pure: the views
 // (views/queue-row.js, views/drawer*.js) only draw what these return.
 
-import { jobTitle, jobSubtitle, typeLabel, isUnresolved, inputLabel, unresolvedHint, errorSummary, codecLabel, bytes } from './format.js';
+import { jobTitle, jobSubtitle, typeLabel, isUnresolved, inputLabel, unresolvedHint, errorSummary, codecLabel, codecMeaning, bytes } from './format.js';
 import { jobCounts, jobStatusView, activityView } from './status.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -81,6 +81,17 @@ export function albumCodec(items) {
   let top = 0;
   for (const [label, k] of n) if (k > top) [best, top] = [label, k];
   return best;
+}
+
+/**
+ * The track list's key to its chips: the codec most tracks carry, spelled out
+ * ({label: "ALAC 24/48", text: "Lossless 24-bit / 48 kHz"}); the rows mark only
+ * the tracks that differ. null when no track carries a codec.
+ */
+export function codecNote(items) {
+  const label = albumCodec(items);
+  if (!label) return null;
+  return { label, text: codecMeaning((items || []).find((it) => codecLabel(it) === label)) };
 }
 
 /** The distinct codec chips of a track list, in first-seen order. */

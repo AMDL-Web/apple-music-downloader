@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isNotFound, activeFirst, rowView, albumCodec, drawerSummary, trackView, activityRows } from '../static/js/lib/jobview.js';
+import { isNotFound, activeFirst, rowView, albumCodec, codecNote, drawerSummary, trackView, activityRows } from '../static/js/lib/jobview.js';
 
 const done = { id: 'a', status: 'completed', type: 'album', storefront: 'us', title: 'folklore', artist_name: 'Taylor Swift', total_items: 16, completed_items: 16 };
 
@@ -68,6 +68,13 @@ test('drawerSummary names the format, the tracks and the size', () => {
   assert.equal(drawerSummary([t(), t({ codec: 'aac', bit_depth: 0, sample_rate: 0 })]), 'Mixed formats · 2 tracks · 80.0 MB');
   assert.equal(drawerSummary([t({ file_size: 0, codec: '' })]), '1 track');
   assert.equal(drawerSummary([]), '');
+});
+
+test('codecNote spells out the codec most tracks carry, once', () => {
+  const items = [t({ sample_rate: 48000 }), t({ sample_rate: 48000 }), t(), t({ sample_rate: 96000 })];
+  assert.deepEqual(codecNote(items), { label: 'ALAC 24/48', text: 'Lossless 24-bit / 48\u00a0kHz' });
+  assert.equal(codecNote([t({ codec: '' })]), null);
+  assert.equal(codecNote([]), null);
 });
 
 test('trackView shows an artist, codec or status only when it adds something', () => {

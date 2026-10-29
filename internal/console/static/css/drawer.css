@@ -112,6 +112,11 @@
   line-height: var(--lh-12);
 }
 
+/* The link of a job that never resolved, under its title. */
+.drawer-input {
+  overflow-wrap: anywhere;
+}
+
 .drawer-badges {
   display: flex;
   flex-wrap: wrap;

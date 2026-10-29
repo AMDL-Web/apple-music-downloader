@@ -38,20 +38,6 @@ export function codecMeaning(item) {
 }
 
 /**
- * The key to the chips of a track list: one {label, text} per distinct chip
- * that carries numbers ("ALAC 24/44.1" -> "Lossless 24-bit / 44.1 kHz"), in
- * first-seen order.
- */
-export function codecLegend(items) {
-  const seen = new Map();
-  for (const it of items || []) {
-    const text = codecMeaning(it);
-    if (text && !seen.has(codecLabel(it))) seen.set(codecLabel(it), text);
-  }
-  return [...seen].map(([label, text]) => ({ label, text }));
-}
-
-/**
  * The codec mix from /stats `codecs` (most tracks first) as shares of all
  * completed tracks. Past `max` formats, the tail is folded into "Other".
  * @returns {{key: string, label: string, tracks: number, share: number}[]}

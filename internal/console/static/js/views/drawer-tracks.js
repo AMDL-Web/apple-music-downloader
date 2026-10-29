@@ -4,8 +4,8 @@
 // say something (lib/jobview.js trackView).
 
 import { html } from '../ui/preact.js';
-import { trackLength, bytes, codecMeaning, codecLegend } from '../lib/format.js';
-import { albumCodec, trackView } from '../lib/jobview.js';
+import { trackLength, bytes, codecMeaning } from '../lib/format.js';
+import { albumCodec, codecNote, trackView } from '../lib/jobview.js';
 import { itemStatusView } from '../lib/status.js';
 import { StatusText, StageTrack, Icon, Chip } from '../ui/components.js';
 
@@ -21,12 +21,17 @@ export function TrackStrip({ items }) {
 // A status message that only repeats the status label adds nothing under it.
 const sameWords = (a, b) => String(a).trim().replace(/[.\s]+$/, '').toLowerCase() === String(b).trim().toLowerCase();
 
-/** The key to the codec chips below it: "ALAC 24/44.1 = Lossless 24-bit / 44.1 kHz". */
+/**
+ * The key to the codec chips below it, said once: the codec most tracks carry
+ * (the rows without a chip), and that the others are marked on their rows,
+ * where each chip's title spells it out.
+ */
 export function TrackLegend({ items }) {
-  const legend = codecLegend(items);
-  if (legend.length === 0) return null;
+  const note = codecNote(items);
+  if (!note) return null;
   return html`<p class="track-legend">
-    ${legend.map((k) => html`<span key=${k.label} class="track-legend-item"><span class="track-legend-label">${k.label}</span> ${k.text}</span>`)}
+    <span><span class="track-legend-label">Most tracks: ${note.label}</span>${note.text ? ` (${note.text})` : ''}.</span>
+    <span>Other formats are marked on their rows.</span>
   </p>`;
 }
 

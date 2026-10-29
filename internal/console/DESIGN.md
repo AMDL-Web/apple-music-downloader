@@ -26,7 +26,7 @@ wins and this page is fixed in the same change. Sources are listed in
 | --- | --- | --- |
 | `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `recent`, `kpis`, `health`, `throughput` (from `/stats`), `logs` (12-line tail) |
 | `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed and Cancelled tabs |
-| `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header with a summary line ("ALAC 24/44.1 · 14 tracks · 692 MB"), the failure reason, Cancel/Retry/Delete, the tracks (one line each; stage meters only on a track that is working or has an outcome), Files (completed jobs), and a closed Details (times, job ID, Activity with persisted history plus live events, hooks) |
+| `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header with a summary line ("ALAC 24/44.1 · 14 tracks · 692 MB"), the failure reason, Cancel/Retry/Remove, the tracks (one line each; stage meters only on a track that is working or has an outcome), Files (completed jobs), and a closed Details (times, job ID, Activity with persisted history plus live events, hooks) |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
 | `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings |
@@ -248,14 +248,17 @@ and motion covers.
   line computed from the tracks (`lib/jobview.js` `drawerSummary`), status, live
   tag; for a failed job the notice with the trimmed reason (full error under a
   disclosure) comes first, then Cancel (inline confirm) for queued or running,
-  Retry for failed or cancelled, View logs, Open in Apple Music, Delete (a
-  `ConfirmDialog` beside the panel) for completed, failed or cancelled jobs,
+  Retry for failed or cancelled, View logs, Open in Apple Music, Remove (a
+  `ConfirmDialog` beside the panel; it removes the job's records, never the
+  files) for completed, failed or cancelled jobs,
   which closes the drawer. A job Apple has nothing at (a 404) makes Open in
-  Apple Music the solid button, Retry secondary and Delete read Remove. Tracks:
+  Apple Music the solid button and Retry secondary, and its header reads as its
+  queue row does ("Link not found", the link under it, no type or region);
+  on a phone the actions fill their rows, Remove included. Tracks:
   one 44 px line each (number, title, length, size); the artist shows when it
   differs from the album artist, a codec chip such as `ALAC 24/96` when it
-  differs from the album's (`.track-legend` spells the chips out only when the
-  codecs differ), and stage meters, status and error only for a track that is
+  differs from the album's (`.track-legend` says once which codec most tracks carry and that the
+  others are marked on their rows, only when the codecs differ), and stage meters, status and error only for a track that is
   working, failed, skipped or waiting; no tracks section for a finished job that
   has none. A completed job shows Files: the downloads folder with a Copy button
   and a link to Settings, since the API has no per-job path. Details is closed:

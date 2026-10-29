@@ -1,5 +1,5 @@
 // Job drawer: one job's header with a summary line, the failure reason,
-// actions (Cancel, Retry, Delete), the tracks, where the files are and a
+// actions (Cancel, Retry, Remove), the tracks, where the files are and a
 // closed Details (times, id, Activity, hooks), kept live by the per-job event
 // stream and, once that stream has ended, by the overview feed. Parts:
 // drawer-detail.js (snapshot and stream), drawer-tracks.js (tracks),
@@ -18,7 +18,7 @@ import {
   isUnresolved,
   inputLabel,
 } from '../lib/format.js';
-import { drawerSummary, codecKinds, isNotFound } from '../lib/jobview.js';
+import { drawerSummary, codecKinds, isNotFound, rowView } from '../lib/jobview.js';
 import { jobStatusView, jobCounts, isTerminal } from '../lib/status.js';
 import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
 import { buildHash } from '../lib/route.js';
@@ -39,9 +39,6 @@ import {
 import { ConfirmDialog } from '../ui/dialogs.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
-
-// A link Apple has nothing at is not worth keeping: its job is removed, not deleted.
-const deleteWord = (job) => (job && job.status === 'failed' && isNotFound(job.error) ? 'Remove' : 'Delete');
 
 export function JobDrawer({ jobId, onClose }) {
   const app = useApp();
@@ -72,7 +69,7 @@ export function JobDrawer({ jobId, onClose }) {
     return () => el.removeEventListener('keydown', onKey);
   }, [jobId]);
 
-  // Delete asks first (the dialog sits beside the panel, outside its Tab
+  // Remove asks first (the dialog sits beside the panel, outside its Tab
   // trap); on success the drawer closes and the feed's download_deleted
   // takes the row out of every list.
   const [deleting, setDeleting] = useState(null);
@@ -80,18 +77,17 @@ export function JobDrawer({ jobId, onClose }) {
   const confirmDelete = async () => {
     const id = jobId;
     const title = jobTitle(detailRef.current && detailRef.current.job);
-    const verb = deleteWord(detailRef.current && detailRef.current.job);
     setDeleting('busy');
     try {
       await deleteDownload(id);
-      app.toast({ message: `${verb === 'Remove' ? 'Removed' : 'Deleted'} ${title}`, role: 'success' });
+      app.toast({ message: `Removed ${title}`, role: 'success' });
     } catch (e) {
       if (!actionDone('delete', e)) {
         if (jobIdRef.current === id) setDeleting(null);
         app.toast({ message: actionError('delete', e), role: 'danger' });
         return;
       }
-      app.toast({ message: `${title} was already deleted` });
+      app.toast({ message: `${title} was already removed` });
     }
     if (jobIdRef.current === id) {
       setDeleting(null);
@@ -105,7 +101,6 @@ export function JobDrawer({ jobId, onClose }) {
   // says only that no download has this id.
   const gone = Boolean((detail && detail.deleted) || (error && error.status === 404));
   const deleted = gone && Boolean(job);
-  const remove = deleteWord(job);
   const missing = gone && !job;
   // Deleted elsewhere while the confirm asked: the question is gone, and
   // focus, which was in it, goes to the drawer's Close.
@@ -145,16 +140,15 @@ export function JobDrawer({ jobId, onClose }) {
                   streamEnded=${streamEnded}
                   onChanged=${() => reopen(true)}
                   onDelete=${() => setDeleting('ask')}
-                  remove=${remove}
                   app=${app}
                 />`}
       </div>
     </aside>
     ${deleting && job && !gone
       ? html`<${ConfirmDialog}
-          title=${`${remove} this job?`}
-          confirmLabel=${`${remove} job`}
-          busyLabel=${remove === 'Remove' ? 'Removing…' : 'Deleting…'}
+          title="Remove this job?"
+          confirmLabel="Remove job"
+          busyLabel="Removing…"
           danger
           busy=${deleting === 'busy'}
           onConfirm=${confirmDelete}
@@ -167,15 +161,21 @@ export function JobDrawer({ jobId, onClose }) {
   </div>`;
 }
 
-function DrawerBody({ detail, streamEnded, onChanged, onDelete, remove, app }) {
+function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
   const { job, items, hooks, activity } = detail;
   const unresolved = isUnresolved(job);
-  const title = unresolved ? inputLabel(job.input) || jobTitle(job) : jobTitle(job);
-  const sub = jobSubtitle(job);
+  // A link that failed before Apple named anything reads as in the queue row
+  // ("Link not found", the link under it) and has no type or region to state.
+  const lost = unresolved && job.status === 'failed';
+  const lostRow = lost ? rowView(job) : null;
+  const title = lost ? lostRow.title : unresolved ? inputLabel(job.input) || jobTitle(job) : jobTitle(job);
+  const sub = lost ? '' : jobSubtitle(job);
   const palette = artPalette(job);
-  const meta = [typeLabel(job.type), job.release_date ? job.release_date.slice(0, 4) : '', job.genre, job.storefront ? job.storefront.toUpperCase() : '']
-    .filter(Boolean)
-    .join(' · ');
+  const meta = lost
+    ? ''
+    : [typeLabel(job.type), job.release_date ? job.release_date.slice(0, 4) : '', job.genre, job.storefront ? job.storefront.toUpperCase() : '']
+        .filter(Boolean)
+        .join(' · ');
   const summary = drawerSummary(items);
   const live = !isTerminal(job.status) && !streamEnded;
   // A finished job with no tracks (a link that never resolved) has nothing to list.
@@ -188,7 +188,8 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, remove, app }) {
     <header class="drawer-head" style=${paletteStyle(palette)}>
       <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${128} className="art-64" eager />
       <div class="drawer-head-text">
-        <h2 id="drawer-title" class=${unresolved ? 'drawer-title is-unresolved' : 'drawer-title'} dir="auto">${title}</h2>
+        <h2 id="drawer-title" class=${unresolved && !lost ? 'drawer-title is-unresolved' : 'drawer-title'} dir="auto">${title}</h2>
+        ${lost && lostRow.sub ? html`<p class="drawer-meta drawer-input" dir="auto">${lostRow.sub}</p>` : null}
         ${sub
           ? safeHttpUrl(job.artist_url)
             ? html`<a class="drawer-artist" href=${safeHttpUrl(job.artist_url)} target="_blank" rel="noopener noreferrer" dir="auto">${sub}</a>`
@@ -205,7 +206,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, remove, app }) {
 
     ${job.status === 'failed' && job.error ? html`<${FailureNotice} error=${job.error} />` : null}
 
-    <${Actions} job=${job} app=${app} onChanged=${onChanged} onDelete=${onDelete} remove=${remove} />
+    <${Actions} job=${job} app=${app} onChanged=${onChanged} onDelete=${onDelete} />
 
     ${tracks
       ? html`<section class="drawer-section" aria-labelledby="tracks-title">
@@ -229,7 +230,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, remove, app }) {
   </div>`;
 }
 
-function Actions({ job, app, onChanged, onDelete, remove }) {
+function Actions({ job, app, onChanged, onDelete }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => setConfirming(false), [job.id, job.status]);
@@ -269,6 +270,6 @@ function Actions({ job, app, onChanged, onDelete, remove }) {
       : null}
     <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
     ${open && !notFound ? html`<${LinkButton} href=${open} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
-    ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>${remove}</${Button}>` : null}
+    ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Remove</${Button}>` : null}
   </div>`;
 }
