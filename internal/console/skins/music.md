@@ -26,7 +26,7 @@ Contrast is measured on `--bg-surface` (the grouped surface) unless noted.
 | `--bg-raised` | `#ffffff` | `#1c1c1e` | drawer, palette | |
 | `--bg-group` | `#f5f5f7` | `#2c2c2e` | grouped cells inside overlays (drawer times, buttons) | |
 | `--bg-fill` | `#e8e8ed` | `#2c2c2e` | segmented track, search trigger, chips | |
-| `--bg-inset` | `#ffffff` | `#2c2c2e` | cells and fields inside a grouped surface: text fields, selects, codec and list editors, template reference, bookmarklet code, link tags | secondary text 5.07 / 5.42 |
+| `--bg-inset` | `#ffffff` | `#2c2c2e` | cells and fields inside a grouped surface: text fields, selects, codec and list editors, bookmarklet code, link tags | secondary text 5.07 / 5.42 |
 | `--fill-raised` / `-hover` | `#e8e8ed` / `#e3e3e8` | `#3a3a3c` / `#48484a` | filled buttons on the frosted save and selection bars, where `--bg-fill` matches the bar in dark | text 13.78 / 10.42 |
 | `--switch-thumb` | `#ffffff` | same | switch thumb | |
 | `--bg-hover` / `--bg-selected` | `#ececf0` / `#e3e3e8` | `#2c2c2e` | row hover, current nav item | |
@@ -89,7 +89,7 @@ Neue, PingFang SC, then `--font-system`; mono is `ui-monospace`, SF Mono, Menlo.
 Running cards and the hero 28 px (`--r-live`); surfaces, tiles, drawer sheet,
 dialogs and sheets, the selection bar 22 (`--r-card`); notices, toasts, drawer
 groups, quality slots and the More list 16 (`--r-notice`); palette 18;
-artwork, inset lists, the link text box and the template reference 12, list
+artwork, inset lists and the link text box 12, list
 covers 8; nav items and fields 9; segmented 10 / 8; buttons, badges, chips
 and level chips are pills, and so is the save bar (the card radius on
 phones, where it wraps). Large pills (Download N, dialog and save bar
@@ -238,12 +238,12 @@ base durations (120 ms color, 200 ms overlays).
 - **Settings**: the section list repeats the sidebar (secondary 18 px glyphs, 15 px
   labels, the current section a filled pill in semibold; 14 px on the rail).
   Fields are grouped rows whose hairlines run from the text to the card's
-  right edge, as do panel rules and the library sync and account status
-  rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
+  right edge, as do panel rules, the rules between Advanced's groups and the
+  library sync and account status rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
   soft shadow, red when on, the off track keeping its `--border-control`
   outline, no On/Off word beside it). The ordered list is an inset list like
   the codec ranking. Panel actions
-  in a block head (Refresh) are red text, and so is an account's Log out. The save bar is a frosted floating
+  in a block head (Refresh) and the token's Replace are red text, and so are an account's Log out and the token's Remove. The save bar is a frosted floating
   capsule with the float shadow: the count in 15 px semibold, where in 14 px
   secondary, Discard red text and Save a red pill, both 36 px; on phones it
   wraps to two lines with the card radius.

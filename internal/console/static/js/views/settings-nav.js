@@ -1,5 +1,6 @@
-// The Settings page frame around the open section: the section list (a
-// select under 640 px) and the sticky save bar.
+// The Settings page frame around the open section: the side list of
+// sections (desktop), the phone's list of sections with its back link, and
+// the sticky save bar.
 
 import { html } from '../ui/preact.js';
 import { SETTINGS_SECTIONS } from '../lib/settings.js';
@@ -7,10 +8,23 @@ import { changesLabel } from '../lib/settings-draft.js';
 import { settingsHash } from '../lib/route.js';
 import { Icon, Button } from '../ui/components.js';
 
-/** The section list; `dirty` and `invalid` are Sets of section ids. */
-export function SettingsNav({ section, dirty, invalid, navigate }) {
+/** Words for a section's marks, read after its name: ", unsaved changes". */
+const markWords = (id, dirty, invalid) => [dirty.has(id) ? 'unsaved changes' : '', invalid.has(id) ? 'needs attention' : ''].filter(Boolean);
+
+/** The mark after a section's name: an error icon, else the unsaved dot. */
+function Mark({ id, dirty, invalid }) {
+  const words = markWords(id, dirty, invalid);
+  return html`${invalid.has(id)
+      ? html`<span class="settings-nav-mark" data-role="danger"><${Icon} name="circle-x" size="sm" /></span>`
+      : dirty.has(id)
+        ? html`<span class="settings-nav-mark settings-nav-dot" aria-hidden="true"></span>`
+        : null}
+    ${words.length ? html`<span class="sr-only">, ${words.join(', ')}</span>` : null}`;
+}
+
+/** The side list of sections (hidden under 640 px); `dirty` and `invalid` are Sets of section ids. */
+export function SettingsNav({ section, dirty, invalid }) {
   const navItem = (s) => {
-    const marks = [dirty.has(s.id) ? 'unsaved changes' : '', invalid.has(s.id) ? 'needs attention' : ''].filter(Boolean);
     return html`<li key=${s.id}>
       <a
         class="settings-nav-item"
@@ -22,27 +36,43 @@ export function SettingsNav({ section, dirty, invalid, navigate }) {
       >
         <${Icon} name=${s.icon} />
         <span class="settings-nav-label">${s.label}</span>
-        ${invalid.has(s.id)
-          ? html`<span class="settings-nav-mark" data-role="danger"><${Icon} name="circle-x" size="sm" /></span>`
-          : dirty.has(s.id)
-            ? html`<span class="settings-nav-mark settings-nav-dot" aria-hidden="true"></span>`
-            : null}
-        ${marks.length ? html`<span class="sr-only">, ${marks.join(', ')}</span>` : null}
+        <${Mark} id=${s.id} dirty=${dirty} invalid=${invalid} />
       </a>
     </li>`;
   };
 
   return html`<nav class="settings-nav" aria-label="Settings sections">
     <ul class="settings-nav-list">${SETTINGS_SECTIONS.map(navItem)}</ul>
-    <label class="settings-jump">
-      <span class="settings-jump-label">Section</span>
-      <select class="select" value=${section.id} onChange=${(e) => navigate(settingsHash(e.currentTarget.value))}>
-        ${SETTINGS_SECTIONS.map(
-          (s) => html`<option key=${s.id} value=${s.id}>${s.label}${invalid.has(s.id) ? ' (needs attention)' : dirty.has(s.id) ? ' (unsaved)' : ''}</option>`,
-        )}
-      </select>
-    </label>
   </nav>`;
+}
+
+/**
+ * Under 640 px, #/settings without a section: the five sections as a grouped
+ * list (icon, label, one-line summary, chevron), each opening as its own view.
+ */
+export function SettingsList({ dirty, invalid }) {
+  return html`<nav class="card settings-list-card" aria-label="Settings sections">
+    <ul class="settings-list">
+      ${SETTINGS_SECTIONS.map(
+        (s) => html`<li key=${s.id}>
+          <a class="settings-list-row" href=${settingsHash(s.id)} data-section=${s.id}>
+            <span class="settings-list-icon"><${Icon} name=${s.icon} /></span>
+            <span class="settings-list-text">
+              <span class="settings-list-label">${s.label}</span>
+              <span class="settings-list-summary">${s.summary}</span>
+            </span>
+            <${Mark} id=${s.id} dirty=${dirty} invalid=${invalid} />
+            <span class="settings-list-chevron" aria-hidden="true"><${Icon} name="chevron-right" size="sm" /></span>
+          </a>
+        </li>`,
+      )}
+    </ul>
+  </nav>`;
+}
+
+/** A phone's way back from a section to the list. */
+export function SettingsBack() {
+  return html`<a class="settings-back" href=${settingsHash()}><${Icon} name="chevron-left" size="sm" /><span>Settings</span></a>`;
 }
 
 /** The sticky bar while anything differs from the server: the count, where, Discard and Save. */

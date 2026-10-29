@@ -1,12 +1,14 @@
 // Settings (#/settings?section=): the runtime configuration by section, the
-// Apple Music account, library sync and the configuration file. The page
-// head comes from app.js; this is the body: a section list (a select under
-// 640 px), the open section, and a sticky save bar while anything differs
+// Apple Music login, library sync and the configuration file. The page
+// head comes from app.js; this is the body: a section list beside the open
+// section (on a phone, the list first and each section its own view with a
+// way back), and a sticky save bar while anything differs
 // from the server. Save sends PUT /api/v1/config with only the changed
 // leaves (lib/settings-draft.js buildPatch); leaving with unsaved changes asks
 // first, inside the console (the app's leave guard) and on unload.
 
 import { html, useState, useEffect, useMemo, useRef, useCallback } from '../ui/preact.js';
+import { useMedia } from '../ui/hooks.js';
 import { getConfig, putConfig } from '../api.js';
 import {
   FIELD_KEYS,
@@ -34,7 +36,7 @@ import { useApp, Card, Notice } from '../ui/components.js';
 import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
 import { focusField } from '../ui/field-focus.js';
 import { SectionBody, groupDomId } from './settings-section.js';
-import { SettingsNav, SaveBar } from './settings-nav.js';
+import { SettingsNav, SettingsList, SettingsBack, SaveBar } from './settings-nav.js';
 
 // "Show config keys and defaults" is a per-device preference.
 const KEYS_PREF = 'amdl.console.settings.keys';
@@ -52,6 +54,9 @@ export function SettingsPage({ route }) {
   const app = useApp();
   const asked = settingsSection(route.params);
   const section = sectionById(asked, settingsField(route.params));
+  // A phone opens #/settings on the list of sections, each its own view.
+  const phone = useMedia('(max-width: 639px)');
+  const listView = phone && !asked && !settingsField(route.params);
   const [showKeys, setShowKeys] = useState(() => readPref(storage(), KEYS_PREF, (v) => v === '1'));
   const changeShowKeys = (on) => {
     setShowKeys(on);
@@ -277,8 +282,13 @@ export function SettingsPage({ route }) {
 
   const faultKeys = saveError ? FIELD_KEYS.filter((k) => saveError.fields[k]) : [];
 
-  return html`<div class="page page-settings" data-section-active=${section.id} data-dirty=${dirty ? '' : undefined}>
-    <${SettingsNav} section=${section} dirty=${dirtySections} invalid=${errorSections} navigate=${app.navigate} />
+  return html`<div
+    class="page page-settings"
+    data-section-active=${listView ? undefined : section.id}
+    data-view=${phone ? (listView ? 'list' : 'section') : undefined}
+    data-dirty=${dirty ? '' : undefined}
+  >
+    <${SettingsNav} section=${section} dirty=${dirtySections} invalid=${errorSections} />
     <div class="settings-main">
       ${saveError
         ? html`<div class="settings-error" tabindex="-1" ref=${errorRef} role="alert">
@@ -290,10 +300,13 @@ export function SettingsPage({ route }) {
             </${Notice}>
           </div>`
         : null}
-      <${Card} section=${section.id} className="settings-section" title=${section.label} labelId="settings-section-title">
-        <p class="settings-intro">${section.intro}</p>
-        ${body}
-      </${Card}>
+      ${listView
+        ? html`<${SettingsList} dirty=${dirtySections} invalid=${errorSections} />`
+        : html`${phone ? html`<${SettingsBack} />` : null}
+            <${Card} section=${section.id} className="settings-section" title=${section.label} labelId="settings-section-title">
+              <p class="settings-intro">${section.intro}</p>
+              ${body}
+            </${Card}>`}
     </div>
     ${dirty || saving
       ? html`<${SaveBar} count=${dirtyKeys.length} sections=${dirtySections} saving=${saving} onDiscard=${askDiscard} onSave=${save} />`
