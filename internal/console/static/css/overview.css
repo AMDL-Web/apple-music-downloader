@@ -95,11 +95,6 @@
   min-width: 0;
 }
 
-.health-facts {
-  padding-top: var(--s-3);
-  border-top: var(--row-divider);
-}
-
 /* Label/value facts (Facts): a wrapping row of small pairs by default. */
 .facts {
   display: flex;
@@ -152,16 +147,6 @@
 /* Tiles past the whole-tile count; a skin may show them as a scrolling shelf. */
 .strip-tile.is-overflow {
   display: none;
-}
-
-.strip-meta {
-  color: var(--text-secondary);
-  font-size: var(--fs-11);
-  line-height: var(--lh-11);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .strip-title,
@@ -379,33 +364,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.log-tail {
-  list-style: none;
-  margin: 0;
-  padding: var(--s-2) 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-12);
-  line-height: var(--lh-mono-12);
-}
-
-.log-tail-row {
-  display: grid;
-  grid-template-columns: 64px 44px 64px minmax(0, 1fr);
-  gap: var(--s-2);
-  padding: var(--s-0_5) var(--card-pad-x);
-}
-
-.log-attrs {
-  color: var(--text-secondary);
-}
-
-.log-tail-row .log-msg {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-
 /* ---- Server status line ------------------------------------------- */
 
 /* One line above the sections that answers "is the server healthy?". */
@@ -441,17 +399,47 @@
   white-space: nowrap;
 }
 
-/* The empty live queue and the failures under it are one card: keep them
-   together, with the icon and the roomy padding of a lone empty state dropped. */
-.empty:has(+ .attention) {
-  padding-block: var(--s-6) var(--s-2);
-}
-
-.empty:has(+ .attention) .empty-icon {
-  display: none;
-}
-
 /* The Recently completed strip scrolls, which would clip a ring drawn outside the tile. */
 .strip-tile:focus-visible {
   outline-offset: -2px;
+}
+
+/* ---- Needs attention and the quiet queue ----------------------------- */
+
+/* A failure's reason may take two lines; the clamp ends it, not a one-line ellipsis. */
+.attention-detail {
+  display: block;
+  overflow: visible;
+  white-space: normal;
+}
+
+.attention-error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+.attention-time {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.live-idle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.tp-sparse {
+  margin: 0;
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
 }

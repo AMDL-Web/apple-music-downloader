@@ -1,5 +1,6 @@
 // Throughput: the /stats card on the Overview, with totals, the formats mix
-// and two per-day small multiples.
+// and two per-day small multiples. Under SPARSE_DAYS days with data the card
+// is one sentence instead: a chart of one bar says nothing.
 
 import { html, useState } from '../ui/preact.js';
 import { getStats } from '../api.js';
@@ -8,6 +9,17 @@ import { useApp, Card, Empty, ErrorNote, Skeleton, Unavailable, Facts } from '..
 import { usePoll } from '../ui/hooks.js';
 
 const STATS_DAYS = 14;
+const SPARSE_DAYS = 3;
+
+const hasData = (d) => (d.tracks_completed || 0) > 0 || (d.bytes_written || 0) > 0 || (d.jobs_completed || 0) > 0 || (d.jobs_failed || 0) > 0;
+
+/** "246 tracks, 11.1 GB in the last 14 days", for a window that has little history. */
+export function sparseSummary(totals, days) {
+  const tracks = totals.tracks_completed || 0;
+  const failed = totals.tracks_failed ? `, ${count(totals.tracks_failed)} failed` : '';
+  if (tracks === 0 && !(totals.bytes_written > 0)) return `Nothing downloaded in the last ${days} days.`;
+  return `${count(tracks)} ${tracks === 1 ? 'track' : 'tracks'}, ${bytes(totals.bytes_written || 0)} in the last ${days} days${failed}.`;
+}
 
 export function ThroughputCard() {
   const app = useApp();
@@ -21,6 +33,12 @@ export function ThroughputCard() {
   const daily = (stats && stats.daily) || [];
   const jobsDone = daily.reduce((n, d) => n + (d.jobs_completed || 0), 0);
   const jobsFailed = daily.reduce((n, d) => n + (d.jobs_failed || 0), 0);
+  if (totals && daily.filter(hasData).length < SPARSE_DAYS) {
+    return html`<${Card} section="throughput" title="Throughput" labelId="throughput-title" note=${period}>
+      <p class="tp-sparse">${sparseSummary(totals, STATS_DAYS)}</p>
+    </${Card}>`;
+  }
+  const today = stats && typeof stats.generated_at === 'string' ? stats.generated_at.slice(0, 10) : '';
   return html`<${Card}
     section="throughput"
     title="Throughput"
@@ -42,7 +60,7 @@ export function ThroughputCard() {
       : null}
     ${stats ? html`<${Formats} codecs=${stats.codecs} />` : null}
     ${stats
-      ? html`<${Throughput} daily=${daily} />`
+      ? html`<${Throughput} daily=${daily} today=${today} />`
       : poll.error
         ? html`<${ErrorNote} title="Couldn't load stats" error=${poll.error} onRetry=${poll.reload} />`
         : html`<${Skeleton} kind="chart" />`}
@@ -85,7 +103,7 @@ function compact(n) {
  * Two small multiples sharing the date axis: tracks completed and bytes
  * written per day. Two measures, two charts, never a second y-axis.
  */
-export function Throughput({ daily }) {
+export function Throughput({ daily, today = '' }) {
   const [hover, setHover] = useState(null);
   if (daily.length === 0) return html`<${Empty} icon="info" title="No history yet" />`;
   const shown = hover !== null ? daily[hover] : daily[daily.length - 1];
@@ -101,7 +119,7 @@ export function Throughput({ daily }) {
   const hasMid = (s) => s.max >= 2 && (!s.whole || s.max % 2 === 0);
   return html`<div class="chart" onMouseLeave=${() => setHover(null)}>
     <p class="chart-readout" aria-live="off">
-      <span class="chart-readout-day">${dayLabel(shown.date)}${hover === null ? ' (latest)' : ''}</span>
+      <span class="chart-readout-day">${dayLabel(shown.date)}${hover === null ? (shown.date === today ? ' (today so far)' : ' (latest day)') : ''}</span>
       <span>${count(shown.tracks_completed || 0)} tracks</span>
       <span>${bytes(shown.bytes_written || 0)}</span>
       <span>${count(shown.jobs_completed || 0)} jobs completed${shown.jobs_failed ? `, ${count(shown.jobs_failed)} failed` : ''}</span>

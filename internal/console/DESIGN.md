@@ -24,7 +24,7 @@ wins and this page is fixed in the same change. Sources are listed in
 
 | Route | Page | Content |
 | --- | --- | --- |
-| `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `recent`, `kpis`, `health`, `throughput` (from `/stats`), `logs` (12-line tail) |
+| `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `attention` (only while a job failed in the last 24 h: up to 2, each with Retry), `live` (8 active jobs; one line when none), `recent` (one tile per album), `kpis`, `throughput` (from `/stats`; one sentence under three days of data) |
 | `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed and Cancelled tabs |
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header with a summary line ("ALAC 24/44.1 · 14 tracks · 692 MB"), the failure reason, Cancel/Retry/Remove, the tracks (one line each; stage meters only on a track that is working or has an outcome), Files (completed jobs), and a closed Details (times, job ID, Activity with persisted history plus live events, hooks) |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
@@ -67,7 +67,7 @@ The DOM frame is fixed; the skin restyles it.
 
 | Width | Base frame | Notes |
 | --- | --- | --- |
-| ≥1024 | `--sidebar-w` sidebar, `--topbar-h` top bar | Overview is a 12-column grid: `live` spans 8, `health` 4, the rest 12 |
+| ≥1024 | `--sidebar-w` sidebar, `--topbar-h` top bar | Overview is a 12-column grid, every section 12 wide |
 | 640-1023 | `--rail-w` icon rail (labels kept for screen readers) | two-column cards stack |
 | <640 | top bar, `--tabbar-h` bottom tab bar + safe area, 16 px gutters | single column, 44 px targets and 16 px fields (also on any coarse pointer at any width) |
 
@@ -139,17 +139,17 @@ Stable class names and attributes the skin can style without touching JS:
 
 | Surface | Hooks |
 | --- | --- |
-| Section / card | `section.card[data-section]` > `header.card-head` (`h2.card-title`, `.card-note`, `.card-actions`) + `.card-body`; `.card-flush` for edge-to-edge lists. Overview sections: `live`, `recent`, `kpis`, `health`, `throughput`, `logs`; Queue `jobs`; Logs `log` |
+| Section / card | `section.card[data-section]` > `header.card-head` (`h2.card-title`, `.card-note`, `.card-actions`) + `.card-body`; `.card-flush` for edge-to-edge lists. Overview sections: `attention`, `live`, `recent`, `kpis`, `throughput`; Queue `jobs`; Logs `log` |
 | Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub` (Overview, Queue and Showcase only: live counts), `.banners`, `.page.page-<name>` (`page-new`, `page-settings` included) |
 | KPI | `a.kpi[data-key=queued\|running\|completed\|failed\|total][data-role][data-zero]` > `.kpi-label`, `.kpi-icon`, `.kpi-value`, `.kpi-meta` |
 | Job row | `a.job-row[data-status][data-progress=on\|off][.has-palette]` > `.art`, `.job-main` (`.job-facts` > `.job-fact[data-key=type\|genre\|year\|started]`, `.job-title[.is-unresolved]` (a failed link reads "Link not found" for a 404), `.job-sub` (one line: artist, the type unless it is Album, the storefront unless it is the default, the track count of a finished job; a failed link's address), `.job-error` (failed jobs: the reason on its own line, at most two lines, full text in the title attribute)), `.job-progress` (empty unless the job is queued or running; `data-progress=off` sets `--job-prog` to 0 so the title takes the room), `.job-status` (a plain completed job is `.status-text.status-icon[role=img]`, the icon alone; every other status a badge), `.job-updated`, `.job-chevron`. The Queue adds `li.job-item[data-action=retry]` > `.btn.job-retry` after the row for a failed job (a button cannot sit inside the link); every Queue row reserves the button's width as `--job-trail` (the chevron sits at its end), so the status, the time and Retry line up down the list |
 | Progress | `.jprog[data-mode=cells\|bar][data-working]` (a running job with nothing finished yet shows a striped remaining track): up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
-| Health | `.health-row[data-role]` > `.health-icon`, `.health-name`, `.health-status` (badge), `.health-detail`; runtime facts `dl.facts.health-facts` |
-| Facts | `dl.facts` > `.fact[data-key][data-role]` > `dt.fact-label` + `dd.fact-value` (health facts, throughput totals `.tp-totals` with `tracks`, `tracks-failed`, `bytes`, `jobs`, `jobs-failed`, the failed rows only when non-zero and `data-role=danger`, hero facts `.hero-facts`) |
-| Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`, `.strip-meta`; every completed job renders, those past the whole-tile count carry `.is-overflow` |
+| Health | `.health-row[data-role]` > `.health-icon`, `.health-name`, `.health-status` (badge), `.health-detail` (System page) |
+| Facts | `dl.facts` > `.fact[data-key][data-role]` > `dt.fact-label` + `dd.fact-value` (throughput totals `.tp-totals` with `tracks`, `tracks-failed`, `bytes`, `jobs`, `jobs-failed`, the failed rows only when non-zero and `data-role=danger`, hero facts `.hero-facts`) |
+| Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`; every completed album renders once (newest job of a link target), those past the whole-tile count carry `.is-overflow` |
 | Showcase | `a.hero.has-palette` > `.hero-art`, `.hero-text` (`.hero-kicker` > `.hero-no`, `.hero-title`, `.hero-artist`, `.hero-facts`), then its sibling `div.hero-actions` (same palette properties) > `.btn` "Tracks" (the drawer) and "Open in Apple Music"; `a.tile[.has-palette]` > `.tile-head` (`.tile-index`, `.tile-year`), `.tile-art`, `.tile-title`, `.tile-sub`, `.tile-facts` > `.tile-fact[data-key=genre\|year\|tracks\|finished]` |
 | Status strip, Activity, failure | Overview `p.health-strip[data-state=ok]` or `.health-strip.notice[data-state=problem][data-role=danger\|warning]` > `.health-strip-link`; drawer `details.drawer-section.drawer-details` (closed) > `.drawer-details-body` > `dl.drawer-times`, `.drawer-id` (`code` + Copy), `section.activity` > `ol.activity-list` > `li.activity-row[data-role]` (`.activity-time`, `.activity-label`, `.activity-msg`) and a Hooks `section`; failure notice with `details.notice-more` > `pre.notice-raw`; Files `section` > `.drawer-files` > `code.drawer-files-dir` + Copy, `a.drawer-files-link`; tracks `ol.tracks` > `li.track[data-status][data-detail]` (`data-detail` on a track with stage meters and a status) > `.track-index`, `.track-main` (`.track-title`, `.track-artist` only when it differs from the album artist), `.track-codec` (only when it differs from the album's), `.track-len`, `.track-size`, then `.track-stages`, `.track-status`, `.track-error`/`.track-note` for a detail track; Logs `.log-err`, `.attr-chip-job` > `.attr-chip-name`, `.filter-chip-name`, rows `[data-seq]` with the one tab stop |
-| Live failures | `ul.attention` after the live list > `li.attention-row[data-role=danger]` > `.attention-icon`, `.attention-title` (`.attention-label` "Failed", `a.attention-link` to the drawer, mono `.attention-input`), `.attention-detail` (`.attention-error`, relative time), Retry `.btn` |
+| Needs attention | `section.card[data-section=attention]` > `ul.attention` > `li.attention-row[data-role=danger]` > `.attention-title` (`.attention-label` "Failed" with a circle-x icon, `a.attention-link` to the drawer, mono `.attention-input`, `.attention-time`), `.attention-detail` (`.attention-error`, clamped to two lines), Retry `.btn`; `p.live-idle` is the empty live queue; `p.tp-sparse` the short Throughput card |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
 | Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus; it rises over the icon line with a negative `margin-top`, so its label shares the other labels' line, and a skin rule that resizes the mark or the tab icons restates it) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.theme` > `button.theme-cycle` (one button cycling System, Light, Dark; its label names the next), `.sim-tag` (simulate mode, explanation in its title and an `.sr-only` span); loading shell `.boot` > `.boot-mark` + `.boot-text` (static in `index.html`, replaced on mount); `svg.sprite` at the start of `body`, the in-document icon sprite (`ui/icons.js`), never styled by the skin; `meta[name=theme-color]` set from the body background; `.conn[data-role][data-state=connecting\|live\|reconnecting\|offline\|paused]` > `.conn-dot` + `.conn-label` (the base hides the label visually unless `data-state` is `reconnecting` or `offline`, and always under 640 px) |
@@ -272,7 +272,7 @@ and motion covers.
   verbatim. Motion covers play muted on hover or focus, one at a time, only
   where `video.canPlayType` accepts HLS and motion is allowed. Titles underline
   on hover.
-- **Throughput**: totals as facts, the formats mix of every retained job
+- **Throughput**: under three days with data one sentence ("246 tracks, 11.1 GB in the last 14 days"); otherwise totals as facts, the formats mix of every retained job
   (`/stats` `codecs`, the top four with the rest as "Other"; nothing before
   a track completes), then two small multiples sharing the date
   axis (tracks per day, bytes per day), each with its own 0/max axis plus a
@@ -285,7 +285,8 @@ and motion covers.
   2,000 rows. Warn and error rows are marked in the skin's warning and danger
   roles.
 - **Health rows**: name · status · detail for backend, wrapper, library sync
-  and hooks, plus workers, queue, downloads disk and uptime from `/system`; polled every 30 s and on focus.
+  and hooks (System page); the Overview keeps only the status line above
+  the sections; polled every 30 s and on focus.
 - **Config summary** (System): a few `GET /config` values (codec priority,
   downloads folder, simulate, library sync, log level, whether the media user
   token is set, whether changes are saved to a file) and "Open settings".

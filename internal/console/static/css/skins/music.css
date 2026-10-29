@@ -761,28 +761,6 @@
   }
 }
 
-/* ---- Overview layout ----------------------------------------------- */
-
-/* Mockup order: Now Downloading, Recently Completed, then jobs and throughput
-   beside System Health, then the log. The DOM is in that order, so Tab order
-   follows it. */
-@media (min-width: 1024px) {
-  :root[data-skin="music"] .page-overview > [data-section="live"] {
-    grid-column: span 12;
-  }
-
-  :root[data-skin="music"] .page-overview > [data-section="kpis"],
-  :root[data-skin="music"] .page-overview > [data-section="throughput"] {
-    grid-column: span 8;
-  }
-
-  :root[data-skin="music"] .page-overview > [data-section="health"] {
-    grid-column: span 4;
-    grid-row: span 2;
-    align-self: start;
-  }
-}
-
 /* ---- Now downloading ----------------------------------------------- */
 
 /* Each live job is a card in its album's own colors. */
@@ -1008,37 +986,38 @@
   margin-top: calc(var(--s-2) - var(--page-gap));
 }
 
-/* Recent failures sit under the live cards as their own grouped rows. */
-:root[data-skin="music"] [data-section="live"] .attention {
+/* "Needs attention": one tinted card per recent failure, above the live queue. */
+:root[data-skin="music"] [data-section="attention"] > .card-body {
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+:root[data-skin="music"] [data-section="attention"] .attention {
   display: grid;
   gap: var(--s-2);
-  margin-top: var(--grid-gap);
   border-top: 0;
 }
 
-:root[data-skin="music"] [data-section="live"] .attention-row {
+:root[data-skin="music"] [data-section="attention"] .attention-row {
   column-gap: var(--s-4);
   padding: var(--s-3) var(--s-4) var(--s-3) var(--s-5);
   border-radius: var(--r-card);
   background: var(--card-bg);
 }
 
-:root[data-skin="music"] [data-section="live"] .attention-row + .attention-row {
+:root[data-skin="music"] [data-section="attention"] .attention-row + .attention-row {
   border-top: 0;
 }
 
-:root[data-skin="music"] [data-section="live"] .attention-icon .icon {
-  width: var(--icon-nav);
-  height: var(--icon-nav);
-}
-
-:root[data-skin="music"] [data-section="live"] .attention-title {
+:root[data-skin="music"] [data-section="attention"] .attention-title {
   font-weight: var(--w-semibold);
 }
 
-:root[data-skin="music"] [data-section="live"] .attention-label {
+:root[data-skin="music"] [data-section="attention"] .attention-label {
   display: inline-flex;
   align-items: center;
+  gap: var(--s-1);
   height: 22px;
   padding: 0 var(--s-2);
   border-radius: var(--r-full);
@@ -1049,13 +1028,19 @@
   font-weight: var(--w-semibold);
 }
 
-:root[data-skin="music"] [data-section="live"] .attention-link {
+:root[data-skin="music"] [data-section="attention"] .attention-link {
   color: var(--text-primary);
 }
 
-:root[data-skin="music"] [data-section="live"] .attention-detail {
+:root[data-skin="music"] [data-section="attention"] .attention-time,
+:root[data-skin="music"] [data-section="attention"] .attention-detail {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+}
+
+/* Quiet queue: one line, no empty-state block. */
+:root[data-skin="music"] [data-section="live"] > .card-body:has(> .live-idle) {
+  padding: var(--s-3) var(--s-5);
 }
 
 /* ---- Recently completed -------------------------------------------- */
@@ -1108,17 +1093,6 @@
 :root[data-skin="music"] .strip-sub {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
-}
-
-:root[data-skin="music"] .strip-meta {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  margin-top: var(--s-0_5);
-  overflow: hidden;
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-  white-space: normal;
 }
 
 :root[data-skin="music"] .strip-tile:hover .strip-title {
@@ -1285,43 +1259,6 @@
   font-weight: var(--w-semibold);
 }
 
-/* Runtime facts: a second group under the services. */
-:root[data-skin="music"] .health-facts {
-  flex-direction: column;
-  flex-wrap: nowrap;
-  gap: 0;
-  margin-top: var(--s-1);
-  padding: var(--s-1) 0 0;
-  border-top: 6px solid var(--bg-canvas);
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
-}
-
-:root[data-skin="music"] .health-facts .fact {
-  position: relative;
-  justify-content: space-between;
-  gap: var(--s-3);
-  padding: var(--row-pad-y) var(--s-4);
-}
-
-:root[data-skin="music"] .health-facts .fact + .fact::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: var(--s-4);
-  border-top: var(--row-divider);
-}
-
-:root[data-skin="music"] .health-facts .fact-label {
-  color: var(--text-primary);
-}
-
-:root[data-skin="music"] .health-facts .fact-value {
-  color: var(--text-secondary);
-  text-align: right;
-}
-
 /* ---- Throughput ---------------------------------------------------- */
 
 :root[data-skin="music"] .tp-totals {
@@ -1401,21 +1338,6 @@
 }
 
 /* ---- Log tail ------------------------------------------------------ */
-
-:root[data-skin="music"] .log-tail {
-  padding: var(--s-1_5) 0;
-  font-size: var(--fs-mono-log);
-}
-
-:root[data-skin="music"] .log-tail-row {
-  grid-template-columns: 70px 64px 64px minmax(0, 1fr);
-  gap: var(--s-3);
-  padding: var(--s-1_5) var(--s-5);
-}
-
-:root[data-skin="music"] .log-tail-row + .log-tail-row {
-  border-top: var(--row-divider);
-}
 
 :root[data-skin="music"] .log-level {
   font-size: var(--fs-11);
@@ -3117,10 +3039,6 @@
     scrollbar-width: none;
   }
 
-  :root[data-skin="music"] .strip-meta {
-    display: none;
-  }
-
   :root[data-skin="music"] .kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -3165,22 +3083,6 @@
 
   :root[data-skin="music"] .health-row .badge {
     justify-self: end;
-  }
-
-  :root[data-skin="music"] .log-tail-row {
-    grid-template-columns: 62px minmax(0, 1fr);
-    gap: var(--s-0_5) var(--s-3);
-    padding: var(--s-2) var(--s-4);
-  }
-
-  :root[data-skin="music"] .log-tail-row .log-level {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  :root[data-skin="music"] .log-tail-row .log-msg {
-    grid-column: 2;
-    white-space: normal;
   }
 
   /* Queue rows: two-line cards with the cover, hairlines inset to the text. */

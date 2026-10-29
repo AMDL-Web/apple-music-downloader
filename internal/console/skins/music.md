@@ -160,13 +160,12 @@ base durations (120 ms color, 200 ms overlays).
   16 px, so iOS Safari does not zoom into it.
 - **Live cards**: under the cells a legend names each shape with its count
   (filled pill "saved", outlined "remaining"; states at zero are left out).
-  Failures of the last 24 h follow the cards as grouped rows: a red circle
+  Failures of the last 24 h sit above them in a "Needs attention" card as grouped rows: a red circle
   glyph, "Failed" as a tinted chip, the title and the mono link, the error and its age,
   and a Retry button (under the text on phones).
-- **Overview order**: Now downloading (full width), Recently completed, then
-  Jobs and Throughput (8 columns) beside System health (4 columns, spanning both
-  rows), then the log tail. Below 1024 px they stack in that reading order:
-  Jobs, Throughput, System health, log tail.
+- **Overview order**: Needs attention (only with failures), Now downloading (one
+  line when idle), Recently completed, Jobs, Throughput, each full width, so
+  the phone and desktop reading order are the same.
 - **Live queue**: each job is a card filled with its album gradient; 136 px
   cover (96 on phones); eyebrow = equalizer + RUNNING in `--art-t3`; title up
   to two lines; artist in `--art-t2`; genre · year · started below; per-track
@@ -174,18 +173,17 @@ base durations (120 ms color, 200 ms overlays).
   (queued, resolving) falls back to the grouped surface.
 - **Recently completed**: a shelf with no surface; every tile is shown and the
   row scrolls (7 per view at 1280+, 5, 4, then 138 px tiles on phones running
-  to the screen edge). Title and artist, then tracks · finished · took on up
-  to two lines; phones show title and artist only.
+  to the screen edge). Title and artist only; the finish time is the tile's
+  title attribute.
 - **Jobs**: one grouped surface, five hairline-separated columns (three per row
   on phones); icon and label share a line; a zero value goes secondary. Only
   Total shows its sublabel (cancelled); the others' repeated "of N total" is
   hidden but keeps its line, so the columns share one baseline.
 - **System health**: inset grouped list, 30 px solid icon tiles in the role
   color (a failed component's tile is the danger tint with a red glyph), hairlines inset to the text, status word right-aligned in its role
-  color, detail in mono. Runtime facts form a second group below a 6 px canvas
-  gap.
+  color, detail in mono (System page).
 - **Grouped lists (keyline)**: every hairline starts at the text and runs to
-  the card's right edge: health rows, runtime facts, and label/value lists
+  the card's right edge: health rows and label/value lists
   (About, Runtime). The tool rows (ffmpeg) continue the Runtime list with the
   same row padding.
 - **Throughput**: totals as 20 px figures over their labels; the formats bar

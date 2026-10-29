@@ -22,6 +22,7 @@
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
   gap: var(--grid-gap);
 }
 
@@ -483,10 +484,10 @@
 
 .attention-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    "icon title action"
-    "icon detail action";
+    "title action"
+    "detail action";
   align-items: center;
   column-gap: var(--s-3);
   padding: var(--s-3) var(--card-pad-x);
@@ -494,12 +495,6 @@
 
 .attention-row + .attention-row {
   border-top: var(--row-divider);
-}
-
-.attention-icon {
-  grid-area: icon;
-  display: inline-flex;
-  color: var(--danger-text);
 }
 
 .attention-title,
@@ -528,6 +523,10 @@
 }
 
 .attention-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  color: var(--danger-text);
   font-weight: var(--w-medium);
 }
 

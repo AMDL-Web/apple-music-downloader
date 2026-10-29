@@ -1,14 +1,6 @@
 /* ---- Responsive ---------------------------------------------------- */
 
 @media (min-width: 1024px) {
-  .page-overview > [data-section="live"] {
-    grid-column: span 8;
-  }
-
-  .page-overview > [data-section="health"] {
-    grid-column: span 4;
-  }
-
   .span-8 {
     grid-column: span 8;
   }
@@ -128,20 +120,16 @@
 
   /* Retry moves under the text so the title keeps the row's width. */
   .attention-row {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "icon title"
-      "icon detail"
-      ". action";
+      "title"
+      "detail"
+      "action";
   }
 
   .attention-row > .btn {
     justify-self: start;
     margin-top: var(--s-2);
-  }
-
-  .attention-input {
-    display: none;
   }
 
   .topbar-right {
@@ -458,14 +446,6 @@
 
   .log-detail {
     padding-left: var(--s-3);
-  }
-
-  .log-tail-row {
-    grid-template-columns: 64px 44px minmax(0, 1fr);
-  }
-
-  .log-tail-row .log-comp {
-    display: none;
   }
 
   .toolbar-right {
