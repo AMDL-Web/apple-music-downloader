@@ -93,7 +93,10 @@ Returns what is running and what it has to work with:
   from git, if it was built inside a checkout; `go run` leaves both empty.
 - `go_version`, `os`, `arch`, `started_at`, `uptime_seconds`.
 - `simulate` (`simulate.enabled`), `signing_mode` (`local` when the three
-  `catalog.apple_music_*` keys are set, else `legacy`), `motion_artwork_enabled`.
+  `catalog.apple_music_*` keys are set, else `legacy`), `motion_artwork_enabled`,
+  `default_storefront` (`catalog.default_storefront`, a startup key). The API refuses a
+  link without a storefront in its path (`invalid_url`); a client that accepts such links, like the
+  web console, completes them with this value.
 - `jobs`: `workers` (`download.max_running_jobs` at startup), `active`, `queue_depth` of
   `queue_capacity` (a full queue rejects submissions with `queue_full`), and
   `recovery_backlog`, the jobs resumed at startup that still wait for a worker.

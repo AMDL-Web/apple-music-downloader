@@ -109,17 +109,18 @@ export function parseLink(input, opts = {}) {
 }
 
 /**
- * The storefront a link without one borrows: that of the first link in
- * `text` that has one, or '' when none does. The server's own default
- * storefront is a startup key the API does not return.
+ * The storefront a link without one takes: that of the first link in `text`
+ * that has one, else `fallback` (the server's catalog.default_storefront,
+ * GET /system `default_storefront`) when it is a storefront, else ''.
  */
-export function pasteStorefront(text) {
-  if (typeof text !== 'string' || !text) return '';
+export function pasteStorefront(text, fallback = '') {
+  const own = typeof fallback === 'string' && STOREFRONT.test(fallback) ? fallback : '';
+  if (typeof text !== 'string' || !text) return own;
   for (const m of text.matchAll(CANDIDATE)) {
     const link = parseLink(m[0].replace(TRAILING, ''));
     if (link && link.storefront) return link.storefront;
   }
-  return '';
+  return own;
 }
 
 /**
@@ -129,11 +130,11 @@ export function pasteStorefront(text) {
  * without duplicates. Links of an unknown kind are kept, so the page can say
  * why the backend would refuse them.
  */
-export function extractLinks(text) {
+export function extractLinks(text, fallback = '') {
   if (typeof text !== 'string' || !text) return [];
   const seen = new Set();
   const out = [];
-  const storefront = pasteStorefront(text);
+  const storefront = pasteStorefront(text, fallback);
   for (const m of text.matchAll(CANDIDATE)) {
     const link = parseLink(m[0].replace(TRAILING, ''), { storefront });
     if (!link || seen.has(link.url)) continue;
@@ -154,7 +155,7 @@ const LEFTOVER = /^[\s,;:<>()[\]"'`|*_~.-]*$/;
  * then other URLs that do not overlap them. `storefront` fills links
  * without one (pasteStorefront of the whole text).
  */
-function spans(text, storefront = pasteStorefront(text)) {
+function spans(text, storefront) {
   const out = [];
   for (const m of text.matchAll(CANDIDATE)) {
     out.push({ start: m.index, raw: m[0].replace(TRAILING, ''), apple: true });
@@ -178,13 +179,13 @@ function spans(text, storefront = pasteStorefront(text)) {
  * and its normalized URL in `url`; any other http(s) URL has `link: null`
  * and `url` equal to the text as written (minus trailing punctuation), so
  * the page can say it is not an Apple Music link. Free text around the
- * links is ignored.
+ * links is ignored. `fallback` is pasteStorefront's.
  */
-export function scanLinks(text) {
+export function scanLinks(text, fallback = '') {
   if (typeof text !== 'string' || !text) return [];
   const seen = new Set();
   const out = [];
-  for (const s of spans(text)) {
+  for (const s of spans(text, pasteStorefront(text, fallback))) {
     if (seen.has(s.url)) continue;
     seen.add(s.url);
     out.push({ url: s.url, raw: s.raw, link: s.link });
@@ -193,9 +194,9 @@ export function scanLinks(text) {
 }
 
 /** How many links in `text` repeat an earlier one (scanLinks lists each once). */
-export function duplicateCount(text) {
+export function duplicateCount(text, fallback = '') {
   if (typeof text !== 'string' || !text) return 0;
-  const all = spans(text);
+  const all = spans(text, pasteStorefront(text, fallback));
   return all.length - new Set(all.map((s) => s.url)).size;
 }
 
@@ -223,11 +224,11 @@ export function removeLink(text, url) {
 }
 
 /** `text` with `urls` appended on new lines (normalized), skipping links it already holds. */
-export function mergeLinks(text, urls) {
-  const have = new Set(scanLinks(text).map((e) => e.url));
+export function mergeLinks(text, urls, fallback = '') {
+  const have = new Set(scanLinks(text, fallback).map((e) => e.url));
   const add = [];
   for (const u of urls || []) {
-    const e = scanLinks(u)[0];
+    const e = scanLinks(u, fallback)[0];
     const key = e ? e.url : u;
     if (have.has(key)) continue;
     have.add(key);

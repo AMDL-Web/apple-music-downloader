@@ -1384,7 +1384,7 @@ components:
           type: string
     SystemInfo:
       type: object
-      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, signing_mode, motion_artwork_enabled, jobs, pools, tools, storage]
+      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, signing_mode, motion_artwork_enabled, default_storefront, jobs, pools, tools, storage]
       properties:
         version:
           type: string
@@ -1422,6 +1422,13 @@ components:
         motion_artwork_enabled:
           type: boolean
           description: catalog.motion_artwork_enabled.
+        default_storefront:
+          type: string
+          description: >-
+            catalog.default_storefront, a startup key (not in RuntimeConfig). The
+            API itself refuses a link without a storefront in its path (a
+            submit result with invalid_url); a client that accepts such links, as
+            the web console does, completes them with this value.
         jobs:
           type: object
           required: [workers, active, queue_depth, queue_capacity, recovery_backlog]

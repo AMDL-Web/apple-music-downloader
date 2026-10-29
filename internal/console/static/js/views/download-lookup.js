@@ -37,9 +37,10 @@ const isAlbumTrack = (url) => {
  * `settled` is the debounced text, `entries` its scanned links, `token` the
  * typed media-user-token, `serverToken` and `trackMode` the server's
  * catalog config, `epoch` the shell's reconnect counter (a resync after an
- * outage looks failed previews and the history up again).
+ * outage looks failed previews and the history up again), `storefront` the
+ * server's default storefront for links without one (see scanLinks).
  */
-export function useLookups({ settled, entries, token, serverToken, trackMode, epoch }) {
+export function useLookups({ settled, entries, token, serverToken, trackMode, epoch, storefront }) {
   // Previews: the first LOOKUP_LIMIT previewable links, 4 at a time. A
   // private playlist is read with the typed token once it settles; answers
   // read with it leave the shared cache with the page, whose field starts
@@ -70,7 +71,7 @@ export function useLookups({ settled, entries, token, serverToken, trackMode, ep
     [],
   );
   const previewable = (list) => list.filter((e) => e.link && PREVIEW_KINDS.includes(e.link.kind));
-  const wanted = useMemo(() => previewable(scanLinks(settled)).slice(0, LOOKUP_LIMIT).map((e) => e.url), [settled]);
+  const wanted = useMemo(() => previewable(scanLinks(settled, storefront)).slice(0, LOOKUP_LIMIT).map((e) => e.url), [settled, storefront]);
   useEffect(() => queue.current.want(wanted), [wanted.join('\n')]);
 
   // Earlier jobs of the wanted albums, songs and playlists, 2 at a time.

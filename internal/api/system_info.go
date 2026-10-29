@@ -23,6 +23,7 @@ type systemInfo struct {
 	Simulate             bool                `json:"simulate"`
 	SigningMode          string              `json:"signing_mode"`
 	MotionArtworkEnabled bool                `json:"motion_artwork_enabled"`
+	DefaultStorefront    string              `json:"default_storefront"`
 	Jobs                 systemJobs          `json:"jobs"`
 	Pools                systemPools         `json:"pools"`
 	Tools                []domain.Capability `json:"tools"`
@@ -85,6 +86,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		Simulate:             cfg.Simulate.Enabled,
 		SigningMode:          signingMode,
 		MotionArtworkEnabled: cfg.Catalog.MotionArtworkEnabled,
+		DefaultStorefront:    cfg.Catalog.DefaultStorefront,
 		Jobs: systemJobs{
 			Workers: queue.Workers, Active: queue.Active, QueueDepth: queue.QueueDepth,
 			QueueCapacity: queue.QueueCapacity, RecoveryBacklog: queue.RecoveryBacklog,

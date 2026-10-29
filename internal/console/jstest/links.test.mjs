@@ -134,6 +134,29 @@ test('a link without a storefront borrows one from the paste, else stays unknown
   assert.equal(removeLink(removeLink(text, MIDNIGHTS), IGOR), '');
 });
 
+test('a link without a storefront falls back to the server default, after the paste', () => {
+  const bare = 'https://music.apple.com/album/igor/1463409338';
+  const jp = 'https://music.apple.com/jp/album/igor/1463409338';
+  // No link in the text has a storefront: the server default fills it.
+  assert.equal(pasteStorefront(bare, 'jp'), 'jp');
+  assert.deepEqual(scanLinks(bare, 'jp').map((e) => e.url), [jp]);
+  assert.equal(scanLinks(bare, 'jp')[0].link.kind, 'album');
+  assert.deepEqual(extractLinks(bare, 'jp'), [jp]);
+  assert.equal(mergeLinks('', [bare], 'jp'), jp);
+  assert.equal(duplicateCount(`${bare}\n${jp}`, 'jp'), 1);
+  assert.equal(removeLink(bare, jp), '');
+  // A link in the paste that has one is the first choice.
+  const text = `${bare}\n${MIDNIGHTS}`;
+  assert.equal(pasteStorefront(text, 'jp'), 'us');
+  assert.deepEqual(scanLinks(text, 'jp').map((e) => e.url), [IGOR, MIDNIGHTS]);
+  // No default (not loaded yet, or not a storefront): the link stays unknown.
+  for (const none of [undefined, '', 'jpn', 'J1', null]) {
+    assert.equal(pasteStorefront(bare, none), '');
+    assert.equal(scanLinks(bare, none)[0].link.kind, 'unknown');
+    assert.equal(scanLinks(bare, none)[0].link.noStorefront, true);
+  }
+});
+
 test('duplicateCount counts repeats that scanLinks merges', () => {
   assert.equal(duplicateCount(`${IGOR}\n${MIDNIGHTS}\n${IGOR}?l=en\n${IGOR}`), 2);
   assert.equal(duplicateCount(`${IGOR} ${FOLKLORE}`), 0);

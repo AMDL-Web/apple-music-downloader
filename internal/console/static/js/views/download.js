@@ -52,10 +52,13 @@ let draft = '';
 export function DownloadPage({ route }) {
   const app = useApp();
   const incoming = newDownloadUrls(route.params);
-  const [text, setText] = useState(() => mergeLinks(draft, incoming));
+  // A link without a storefront borrows another link's, else the server's
+  // catalog.default_storefront (GET /system), '' until that has loaded.
+  const storefront = app.defaultStorefront;
+  const [text, setText] = useState(() => mergeLinks(draft, incoming, storefront));
   draft = text;
-  const entries = useMemo(() => scanLinks(text), [text]);
-  const dupes = useMemo(() => duplicateCount(text), [text]);
+  const entries = useMemo(() => scanLinks(text, storefront), [text, storefront]);
+  const dupes = useMemo(() => duplicateCount(text, storefront), [text, storefront]);
   const settled = useDebounced(text, 350);
   const inputRef = useRef(null);
 
@@ -63,7 +66,7 @@ export function DownloadPage({ route }) {
   // this page, a bookmarklet, a shared link) join the text.
   const urlParam = route.params.url || '';
   useEffect(() => {
-    if (incoming.length) setText((t) => mergeLinks(t, incoming));
+    if (incoming.length) setText((t) => mergeLinks(t, incoming, storefront));
   }, [urlParam]);
 
   // text -> ?url=: the links follow the text, so a reload keeps them, also
@@ -76,14 +79,14 @@ export function DownloadPage({ route }) {
   const settledSeen = useRef(settled);
   useEffect(() => {
     const r = routeRef.current;
-    const urls = scanLinks(settled).map((e) => e.url);
+    const urls = scanLinks(settled, storefront).map((e) => e.url);
     const inParam = newDownloadUrls(r.params);
     const textMoved = settledSeen.current !== settled;
     settledSeen.current = settled;
     if (sameList(urls, inParam)) return;
-    if (!textMoved && scanLinks(inParam.join('\n')).some((e) => !urls.includes(e.url))) return;
+    if (!textMoved && scanLinks(inParam.join('\n'), storefront).some((e) => !urls.includes(e.url))) return;
     app.navigate(buildHash('new', { ...r.params, url: urls.join('\n') }, r.jobId), { replace: true });
-  }, [settled, urlParam]);
+  }, [settled, urlParam, storefront]);
 
   // Focus the text box once the shell has focused the heading (a fine
   // pointer only: on a phone it would open the keyboard unasked).
@@ -175,6 +178,7 @@ export function DownloadPage({ route }) {
     serverToken,
     trackMode,
     epoch: app.epoch,
+    storefront,
   });
   const jobHref = (id) => buildHash('new', route.params, id);
 

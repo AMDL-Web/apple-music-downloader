@@ -367,8 +367,9 @@ and motion covers.
   listed plus every flagged one, then "Show all N". Legacy
   `itunes.apple.com` links and `id`-prefixed ids read as music.apple.com
   links; a link without a storefront takes the first one another link in the
-  text has (the server's `catalog.default_storefront` is not in the API), else
-  it is flagged; two links glued together split at the second `http`.
+  text has, else the server's `catalog.default_storefront` (`GET /system`
+  `default_storefront`, `app.defaultStorefront`), else it is flagged; two
+  links glued together split at the second `http`.
   Repeats are merged and counted in the card note, and a legend explains the
   storefront, E and ADM chips the rows show. Links that are not Apple Music, not a
   downloadable kind, music videos, refused by the lookup (400), in a

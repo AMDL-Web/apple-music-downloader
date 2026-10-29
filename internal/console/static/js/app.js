@@ -103,6 +103,7 @@ export function App() {
   const [conn, setConn] = useState({ state: 'connecting', retryAt: null, downSince: null });
   const [epoch, setEpoch] = useState(0);
   const [simulate, setSimulate] = useState(false);
+  const [defaultStorefront, setDefaultStorefront] = useState('');
   const [theme, setThemeState] = useState(loadTheme);
   const [skin, setSkinState] = useState(loadSkin);
   const [toasts, setToasts] = useState([]);
@@ -393,7 +394,11 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     getSystem().then(
-      (s) => !cancelled && setSimulate(Boolean(s.simulate)),
+      (s) => {
+        if (cancelled) return;
+        setSimulate(Boolean(s.simulate));
+        setDefaultStorefront(typeof s.default_storefront === 'string' ? s.default_storefront : '');
+      },
       (err) => {
         if (cancelled || err.status !== 404) return;
         getConfig().then(
@@ -548,11 +553,12 @@ export function App() {
       conn,
       epoch,
       simulate,
+      defaultStorefront,
       setLeaveGuard,
       resumeLeave,
       retryFeed: () => retryRef.current(),
     }),
-    [navigate, toast, watchJobs, announce, subscribeFeed, counts, conn, epoch, simulate, setLeaveGuard, resumeLeave],
+    [navigate, toast, watchJobs, announce, subscribeFeed, counts, conn, epoch, simulate, defaultStorefront, setLeaveGuard, resumeLeave],
   );
 
   const title = TITLES[route.page] || 'AMDL';

@@ -28,6 +28,7 @@ func TestSystemInfo(t *testing.T) {
 	cfg := signingEnabledConfig()
 	cfg.Simulate.Enabled = true
 	cfg.Catalog.MotionArtworkEnabled = false
+	cfg.Catalog.DefaultStorefront = "jp"
 	cfg.Download.MaxParallelDownloads, cfg.Download.MaxParallelDecrypts, cfg.Download.MaxParallelWrapperRequests = 4, 5, 6
 	cfg.Download.DownloadsDir = t.TempDir()
 	cfg.Download.TempDir = filepath.Join(t.TempDir(), "missing")
@@ -63,6 +64,7 @@ func TestSystemInfo(t *testing.T) {
 		Simulate             bool           `json:"simulate"`
 		SigningMode          string         `json:"signing_mode"`
 		MotionArtworkEnabled *bool          `json:"motion_artwork_enabled"`
+		DefaultStorefront    *string        `json:"default_storefront"`
 		RawJobs              map[string]int `json:"jobs"`
 		RawPools             map[string]int `json:"pools"`
 		Tools                []struct {
@@ -93,6 +95,9 @@ func TestSystemInfo(t *testing.T) {
 	}
 	if !got.Simulate || got.SigningMode != "local" || got.MotionArtworkEnabled == nil || *got.MotionArtworkEnabled {
 		t.Errorf("simulate %v, signing_mode %q, motion %v; want true, local, false", got.Simulate, got.SigningMode, got.MotionArtworkEnabled)
+	}
+	if got.DefaultStorefront == nil || *got.DefaultStorefront != "jp" {
+		t.Errorf("default_storefront = %v, want jp", got.DefaultStorefront)
 	}
 	wantJobs := map[string]int{"workers": 2, "active": 0, "queue_depth": 1, "queue_capacity": 256, "recovery_backlog": 0}
 	if !equalCounts(got.RawJobs, wantJobs) {
