@@ -2647,6 +2647,15 @@ components:
             written to disk (completed) or found already present
             (skipped_existing). 0/absent until then, and for items produced
             before this field existed or whose file could not be stat'd.
+        output_path:
+          type: string
+          description: >-
+            Absolute path of the track's file on the machine that runs the
+            backend (a relative download.downloads_dir is resolved against the
+            backend's working directory). Present only once the file is on disk
+            (completed, skipped_existing); absent before that, for failed or
+            cancelled items, and when no path was stored. The item's event
+            payloads carry it under the same rule.
         retry_kind: {type: string}
         attempt: {type: integer}
         max_attempts: {type: integer}

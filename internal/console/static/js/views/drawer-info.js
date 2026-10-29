@@ -6,6 +6,7 @@ import { getConfig } from '../api.js';
 import { absTime, dateTime, elapsed, count, errorSummary, clockTime } from '../lib/format.js';
 import { hookStatusView } from '../lib/status.js';
 import { activityRows } from '../lib/jobview.js';
+import { outputFolders } from '../lib/files.js';
 import { settingsHash } from '../lib/route.js';
 import { Icon, Badge, CopyButton } from '../ui/components.js';
 import { useClock } from '../ui/hooks.js';
@@ -26,28 +27,33 @@ export function FailureNotice({ error }) {
 let downloadsDir; // the configured downloads folder, read once per page load; null when it could not be read
 
 /**
- * Where a finished job's files are. The job carries no path, so the drawer
- * names the downloads folder from GET /config (with a Copy button) and links
- * to Settings > Files & naming, where the name templates under it are set.
+ * Where a finished job's files are, with a Copy button: the one folder its
+ * tracks were written to (from the items' `output_path`; an album or a song),
+ * or, when they went to several folders (a playlist, an artist), the downloads
+ * folder from GET /config with a count of the folders under it. A link to
+ * Settings > Files & naming, where the name templates are set, follows.
  */
-export function FilesSection() {
-  const [dir, setDir] = useState(downloadsDir);
+export function FilesSection({ items }) {
+  const folders = outputFolders(items);
+  const only = folders.length === 1 ? folders[0] : null;
+  const [root, setRoot] = useState(downloadsDir);
+  const dir = only || root;
   useEffect(() => {
-    if (downloadsDir !== undefined) return undefined;
+    if (only || downloadsDir !== undefined) return undefined;
     let live = true;
     getConfig().then(
       (body) => {
         downloadsDir = (body && body.config && body.config.download && body.config.download.downloads_dir) || null;
-        if (live) setDir(downloadsDir);
+        if (live) setRoot(downloadsDir);
       },
       () => {
-        if (live) setDir(null);
+        if (live) setRoot(null);
       },
     );
     return () => {
       live = false;
     };
-  }, []);
+  }, [only]);
   return html`<section class="drawer-section" aria-labelledby="files-title">
     <h3 id="files-title" class="section-title">Files</h3>
     <div class="drawer-files">
@@ -55,6 +61,7 @@ export function FilesSection() {
         ? html`<code class="drawer-files-dir mono" title=${dir}>${dir}</code><${CopyButton} text=${dir} label="Copy folder path" />`
         : html`<span class="muted">The downloads folder</span>`}
     </div>
+    ${folders.length > 1 ? html`<p class="drawer-files-note muted small">Spread over ${count(folders.length)} folders.</p>` : null}
     <a class="drawer-files-link" href=${settingsHash('files')}>Files & naming</a>
   </section>`;
 }

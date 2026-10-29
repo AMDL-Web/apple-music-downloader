@@ -207,7 +207,7 @@ needs the API changes below before it works against 2.0.
 | Job counters in the payload | `job.done_items` (completed + skipped), `job.failed_items` | `job.completed_items`, `job.skipped_items`, `job.failed_items`, `job.cancelled_items`, the API's counters | webhook receivers |
 | Job counters in the exec environment | `AMDL_DONE_ITEMS`, `AMDL_FAILED_ITEMS` | `AMDL_COMPLETED_ITEMS`, `AMDL_SKIPPED_ITEMS`, `AMDL_FAILED_ITEMS`, `AMDL_CANCELLED_ITEMS` | exec scripts |
 | Job timing in the payload | none | `job.started_at`, `job.finished_at` (RFC 3339, absent until set) | new |
-| Output paths | as stored, relative when `download.downloads_dir` is (the default `data/downloads`) | absolute, in `items[].output_path` and `AMDL_OUTPUT_PATHS` | scripts and media servers that resolved them |
+| Output paths | as stored, relative when `download.downloads_dir` is (the default `data/downloads`) | absolute, in the payload's `items[].output_path` and `AMDL_OUTPUT_PATHS` | scripts and media servers that resolved them |
 | Exec environment | the whole backend environment, `AMDL_*` overrides included (for example `AMDL_CATALOG_MEDIA_USER_TOKEN`) | the backend environment without any `AMDL_*` variable, plus the hook variables; pass what a script needs explicitly | exec scripts |
 | Failed exec hook message | all of stderr | the last 4 KiB of stderr | hook status views |
 | Restart while a job runs | the job ended `cancelled` and fired `job_cancelled` | no hook: the job resumes on the next start and fires its terminal hook when it finishes | `job_cancelled` receivers |

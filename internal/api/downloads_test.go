@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -418,6 +419,53 @@ func TestJobLookupStoreFailureIsNotNotFound(t *testing.T) {
 	for _, path := range []string{"/api/v1/downloads/job1", "/api/v1/downloads/job1/events"} {
 		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
 		assertErrorCode(t, recorder, http.StatusInternalServerError, "store_error")
+	}
+}
+
+// The pipeline fills output_path before a file exists, so only items whose file
+// is on disk (completed, skipped_existing) report it, as an absolute path.
+func TestGetDownloadReportsOutputPathOfFinishedItemsOnly(t *testing.T) {
+	server := newTestServerWithManager(t)
+	ctx := context.Background()
+	job := domain.Job{ID: "job1", Input: "album|us|1", Type: "album", Status: domain.JobCompleted, TotalItems: 4}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	abs := filepath.Join(t.TempDir(), "A", "Album", "01. One.m4a")
+	rel := filepath.Join("data", "downloads", "A", "Album", "02. Two.m4a")
+	for _, item := range []domain.JobItem{
+		{ID: "done", JobID: job.ID, Index: 1, Status: domain.ItemCompleted, OutputPath: abs},
+		{ID: "skipped", JobID: job.ID, Index: 2, Status: domain.ItemSkipped, OutputPath: rel},
+		{ID: "failed", JobID: job.ID, Index: 3, Status: domain.ItemFailed, OutputPath: abs + ".x"},
+		{ID: "queued", JobID: job.ID, Index: 4, Status: domain.ItemQueued},
+	} {
+		if err := server.store.CreateItem(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	var detail struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	wantSkipped, err := filepath.Abs(rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"done": abs, "skipped": wantSkipped, "failed": nil, "queued": nil}
+	if len(detail.Items) != len(want) {
+		t.Fatalf("items = %v, want %d", detail.Items, len(want))
+	}
+	for _, item := range detail.Items {
+		id, _ := item["id"].(string)
+		if got := item["output_path"]; got != want[id] {
+			t.Errorf("item %s output_path = %v, want %v", id, got, want[id])
+		}
 	}
 }
 

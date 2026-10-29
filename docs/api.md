@@ -293,7 +293,10 @@ Without one the playlist still downloads, just without its cover.
 curl http://localhost:18080/api/v1/downloads/{job_id}
 ```
 
-Returns `{job, items, hooks, event_cursor}`.
+Returns `{job, items, hooks, event_cursor}`. A finished item (`completed` or
+`skipped_existing`) carries `output_path`, the absolute path of its file on the machine
+that runs the backend; the console's Files section shows the folder it sits in. An item
+that is not finished omits it, and the item events on the stream follow the same rule.
 
 ```bash
 curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,cancelled&type=album&q=beta&sort=updated_at&order=desc'

@@ -2,12 +2,42 @@ package domain
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"amdl/internal/config"
 )
+
+func TestJobItemMarshalsOutputPathOnlyWhenFinished(t *testing.T) {
+	for _, tc := range []struct {
+		status ItemStatus
+		shown  bool
+	}{
+		{ItemCompleted, true}, {ItemSkipped, true},
+		{ItemFailed, false}, {ItemCancelled, false}, {ItemDownloading, false}, {ItemQueued, false},
+	} {
+		raw, err := json.Marshal(JobItem{ID: "i", Status: tc.status, OutputPath: "/music/A/01.m4a"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(raw), `"output_path":"/music/A/01.m4a"`); got != tc.shown {
+			t.Errorf("%s: output_path shown = %v, want %v in %s", tc.status, got, tc.shown, raw)
+		}
+	}
+	relative, err := json.Marshal(JobItem{Status: ItemCompleted, OutputPath: "data/downloads/01.m4a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got JobItem
+	if err := json.Unmarshal(relative, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(got.OutputPath) || !strings.HasSuffix(got.OutputPath, filepath.Join("data", "downloads", "01.m4a")) {
+		t.Errorf("relative output path marshaled as %q, want its absolute form", got.OutputPath)
+	}
+}
 
 func TestMarshalEventPayloadKeepsSnapshotFields(t *testing.T) {
 	force := true

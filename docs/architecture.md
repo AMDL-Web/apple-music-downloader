@@ -292,8 +292,9 @@ rune boundary.
 
 The hook payload's job carries the API counters of 3.2 (`completed_items`,
 `skipped_items`, `failed_items`, `cancelled_items`) and `started_at`/`finished_at`; its
-items' `output_path` and `AMDL_OUTPUT_PATHS` are absolute (resolved in
-`internal/hooks`, so REST and the database keep the stored form). Exec hooks get the
+items' `output_path` and `AMDL_OUTPUT_PATHS` are absolute (resolved with
+`domain.AbsolutePath`; the database keeps the stored form, and the API's `output_path`
+is the same absolute path, shown only for a finished item). Exec hooks get the
 backend's environment without any `AMDL_*` variable (the backend's own settings; one left
 over from an older install may hold a secret) plus the documented hook variables, and a failed
 one records at most the last 4 KiB of its stderr. Webhook URLs must be absolute

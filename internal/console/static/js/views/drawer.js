@@ -224,7 +224,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
         </section>`
       : null}
 
-    ${job.status === 'completed' ? html`<${FilesSection} />` : null}
+    ${job.status === 'completed' ? html`<${FilesSection} items=${items} />` : null}
 
     <${DetailsSection} job=${job} activity=${activity} hooks=${hooks} />
   </div>`;

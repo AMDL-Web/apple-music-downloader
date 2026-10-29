@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"path/filepath"
 	"time"
 
 	"amdl/internal/domain"
@@ -60,25 +59,8 @@ func itemPayloads(items []domain.JobItem) []ItemPayload {
 	for _, item := range items {
 		out = append(out, ItemPayload{
 			ID: item.ID, Title: item.Title, Artist: item.Artist, Album: item.Album,
-			Status: string(item.Status), Codec: item.Codec, OutputPath: absolutePath(item.OutputPath), Error: item.Error,
+			Status: string(item.Status), Codec: item.Codec, OutputPath: domain.AbsolutePath(item.OutputPath), Error: item.Error,
 		})
 	}
 	return out
-}
-
-// absolutePath resolves an output path against the backend's working
-// directory. Item rows keep the path as the pipeline built it, which is
-// relative when download.downloads_dir is, but a hook may run in another
-// workdir or on another machine, so it gets the absolute form.
-func absolutePath(path string) string {
-	if path == "" || filepath.IsAbs(path) {
-		return path
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		// Abs fails only when the working directory cannot be read; the
-		// relative path is then still the best answer there is.
-		return path
-	}
-	return abs
 }

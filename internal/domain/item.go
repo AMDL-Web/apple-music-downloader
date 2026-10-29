@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"encoding/json"
+	"path/filepath"
 	"time"
 )
 
@@ -143,15 +145,50 @@ type JobItem struct {
 	// track is written to disk (completed) or found already present
 	// (skipped_existing). Zero until then, and for items produced before this
 	// field existed or whose file the backend could not stat.
-	FileSize      int64     `json:"file_size,omitempty"`
-	RetryKind     string    `json:"retry_kind,omitempty"`
-	Attempt       int       `json:"attempt,omitempty"`
-	MaxAttempts   int       `json:"max_attempts,omitempty"`
-	StatusMessage string    `json:"status_message,omitempty"`
-	OutputPath    string    `json:"-"`
-	Error         string    `json:"error,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	FileSize      int64  `json:"file_size,omitempty"`
+	RetryKind     string `json:"retry_kind,omitempty"`
+	Attempt       int    `json:"attempt,omitempty"`
+	MaxAttempts   int    `json:"max_attempts,omitempty"`
+	StatusMessage string `json:"status_message,omitempty"`
+	// OutputPath is where the pipeline writes (or found) the track's file, as
+	// built from download.downloads_dir, so it is relative when that is. The
+	// pipeline sets it before the file exists; MarshalJSON decides what the
+	// API shows.
+	OutputPath string    `json:"output_path,omitempty"`
+	Error      string    `json:"error,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// MarshalJSON is the one place that decides what the API and the event stream
+// say about OutputPath: the absolute path of the file once the track is
+// completed or skipped_existing, and nothing before that, because the pipeline
+// fills the field before the file exists and keeps it for a failed track.
+func (i JobItem) MarshalJSON() ([]byte, error) {
+	type plain JobItem
+	if i.Finished() {
+		i.OutputPath = AbsolutePath(i.OutputPath)
+	} else {
+		i.OutputPath = ""
+	}
+	return json.Marshal(plain(i))
+}
+
+// AbsolutePath resolves a path against the backend's working directory for
+// readers that run elsewhere: API clients, and hook scripts, which may run in
+// another workdir or on another machine. An empty or absolute path is returned
+// as is.
+func AbsolutePath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		// Abs fails only when the working directory cannot be read; the
+		// relative path is then still the best answer there is.
+		return path
+	}
+	return abs
 }
 
 // Finished reports whether the item ended in a state that a job retry must
