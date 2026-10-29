@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isNotFound, activeFirst, rowView, albumCodec, drawerSummary, trackView } from '../static/js/lib/jobview.js';
+import { isNotFound, activeFirst, rowView, albumCodec, drawerSummary, trackView, activityRows } from '../static/js/lib/jobview.js';
 
 const done = { id: 'a', status: 'completed', type: 'album', storefront: 'us', title: 'folklore', artist_name: 'Taylor Swift', total_items: 16, completed_items: 16 };
 
@@ -78,4 +78,13 @@ test('trackView shows an artist, codec or status only when it adds something', (
   assert.deepEqual(trackView(items[2], 'Taylor Swift', mode), { artist: 'Bon Iver', codec: 'AAC', status: false });
   assert.equal(trackView(t({ status: 'skipped_existing' }), 'Taylor Swift', mode).status, true);
   assert.equal(trackView(t({ status: 'downloading' }), 'Taylor Swift', mode).status, true);
+});
+
+test('activityRows folds Gave up into the Failed that says the same', () => {
+  const e = (id, type, message) => ({ id, type, message });
+  const err = 'catalog request failed: 404 Not Found: {"errors":[]}';
+  const rows = activityRows([e(1, 'job_queued', 'job queued'), e(2, 'operation_exhausted', err), e(3, 'job_failed', err)]);
+  assert.deepEqual(rows.map((r) => r.view.label), ['Queued', 'Failed']);
+  const apart = activityRows([e(1, 'operation_exhausted', 'a'), e(2, 'job_failed', 'b')]);
+  assert.deepEqual(apart.map((r) => r.view.label), ['Gave up', 'Failed'], 'different text stays');
 });

@@ -367,10 +367,6 @@
     display: none;
   }
 
-  .drawer-bar-id {
-    margin-left: auto;
-  }
-
   /* Actions fill their rows evenly; Delete keeps its size, at the right. */
   .drawer-actions .btn:not(.drawer-delete) {
     flex: 1 1 auto;

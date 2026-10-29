@@ -1,49 +1,47 @@
-// Job drawer: one job's header, palette, per-track strip and stage meters,
-// hooks and actions (Cancel, Retry, Delete), kept live by the per-job event
+// Job drawer: one job's header with a summary line, the failure reason,
+// actions (Cancel, Retry, Delete), the tracks, where the files are and a
+// closed Details (times, id, Activity, hooks), kept live by the per-job event
 // stream and, once that stream has ended, by the overview feed. Parts:
-// drawer-detail.js (snapshot and stream), drawer-tracks.js (palette, tracks).
+// drawer-detail.js (snapshot and stream), drawer-tracks.js (tracks),
+// drawer-info.js (failure notice, files, Details).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { getConfig, cancelDownload, retryDownload, deleteDownload } from '../api.js';
+import { cancelDownload, retryDownload, deleteDownload } from '../api.js';
 import {
   jobTitle,
   jobSubtitle,
   typeLabel,
   artPalette,
   paletteStyle,
-  absTime,
-  elapsed,
-  displayId,
   count,
   safeHttpUrl,
   isUnresolved,
   inputLabel,
-  errorSummary,
-  clockTime,
 } from '../lib/format.js';
-import { jobStatusView, hookStatusView, activityView, isTerminal } from '../lib/status.js';
+import { drawerSummary, codecKinds, isNotFound } from '../lib/jobview.js';
+import { jobStatusView, jobCounts, isTerminal } from '../lib/status.js';
 import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
-import { buildHash, settingsHash } from '../lib/route.js';
+import { buildHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
-import { Palette, TrackStrip, TrackLegend, TrackList } from './drawer-tracks.js';
+import { TrackStrip, TrackLegend, TrackList } from './drawer-tracks.js';
+import { FailureNotice, FilesSection, DetailsSection } from './drawer-info.js';
 import {
   useApp,
   Artwork,
   Badge,
   JobProgress,
-  Icon,
   Button,
   LinkButton,
   Empty,
   ErrorNote,
   SkeletonRows,
-  CopyButton,
-  RelTime,
 } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
-import { useClock } from '../ui/hooks.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
+
+// A link Apple has nothing at is not worth keeping: its job is removed, not deleted.
+const deleteWord = (job) => (job && job.status === 'failed' && isNotFound(job.error) ? 'Remove' : 'Delete');
 
 export function JobDrawer({ jobId, onClose }) {
   const app = useApp();
@@ -82,10 +80,11 @@ export function JobDrawer({ jobId, onClose }) {
   const confirmDelete = async () => {
     const id = jobId;
     const title = jobTitle(detailRef.current && detailRef.current.job);
+    const verb = deleteWord(detailRef.current && detailRef.current.job);
     setDeleting('busy');
     try {
       await deleteDownload(id);
-      app.toast({ message: `Deleted ${title}`, role: 'success' });
+      app.toast({ message: `${verb === 'Remove' ? 'Removed' : 'Deleted'} ${title}`, role: 'success' });
     } catch (e) {
       if (!actionDone('delete', e)) {
         if (jobIdRef.current === id) setDeleting(null);
@@ -106,6 +105,7 @@ export function JobDrawer({ jobId, onClose }) {
   // says only that no download has this id.
   const gone = Boolean((detail && detail.deleted) || (error && error.status === 404));
   const deleted = gone && Boolean(job);
+  const remove = deleteWord(job);
   const missing = gone && !job;
   // Deleted elsewhere while the confirm asked: the question is gone, and
   // focus, which was in it, goes to the drawer's Close.
@@ -128,8 +128,6 @@ export function JobDrawer({ jobId, onClose }) {
     >
       <div class="drawer-bar">
         <${Button} variant="ghost" icon="x" className="drawer-close" aria-label="Close" onClick=${onClose} data-autofocus />
-        <${CopyButton} text=${jobId} label="Copy job ID" />
-        <span class="drawer-bar-id mono" title=${jobId}>${displayId(jobId)}</span>
         <${Button} variant="ghost" icon="chevron-left" className="drawer-back" aria-label="Back" onClick=${onClose} data-autofocus>Back</${Button}>
       </div>
       <div class="drawer-scroll">
@@ -147,15 +145,16 @@ export function JobDrawer({ jobId, onClose }) {
                   streamEnded=${streamEnded}
                   onChanged=${() => reopen(true)}
                   onDelete=${() => setDeleting('ask')}
+                  remove=${remove}
                   app=${app}
                 />`}
       </div>
     </aside>
     ${deleting && job && !gone
       ? html`<${ConfirmDialog}
-          title="Delete this job?"
-          confirmLabel="Delete job"
-          busyLabel="Deleting…"
+          title=${`${remove} this job?`}
+          confirmLabel=${`${remove} job`}
+          busyLabel=${remove === 'Remove' ? 'Removing…' : 'Deleting…'}
           danger
           busy=${deleting === 'busy'}
           onConfirm=${confirmDelete}
@@ -168,20 +167,22 @@ export function JobDrawer({ jobId, onClose }) {
   </div>`;
 }
 
-function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
+function DrawerBody({ detail, streamEnded, onChanged, onDelete, remove, app }) {
   const { job, items, hooks, activity } = detail;
   const unresolved = isUnresolved(job);
   const title = unresolved ? inputLabel(job.input) || jobTitle(job) : jobTitle(job);
   const sub = jobSubtitle(job);
   const palette = artPalette(job);
-  const now = useClock(job.status === 'running' ? 1000 : 0);
-  const started = job.started_at ? Date.parse(job.started_at) : null;
-  const finished = job.finished_at ? Date.parse(job.finished_at) : null;
-  const duration = started ? (finished || (job.status === 'running' ? now : null)) - started : null;
   const meta = [typeLabel(job.type), job.release_date ? job.release_date.slice(0, 4) : '', job.genre, job.storefront ? job.storefront.toUpperCase() : '']
     .filter(Boolean)
     .join(' · ');
+  const summary = drawerSummary(items);
   const live = !isTerminal(job.status) && !streamEnded;
+  // A finished job with no tracks (a link that never resolved) has nothing to list.
+  const tracks = items.length > 0 || !isTerminal(job.status);
+  // The bar says where a finished job ended up; a clean completion needs none.
+  const c = jobCounts(job);
+  const showProgress = !isTerminal(job.status) || c.failed > 0 || c.cancelled > 0;
 
   return html`<div class="drawer-body">
     <header class="drawer-head" style=${paletteStyle(palette)}>
@@ -193,7 +194,8 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
             ? html`<a class="drawer-artist" href=${safeHttpUrl(job.artist_url)} target="_blank" rel="noopener noreferrer" dir="auto">${sub}</a>`
             : html`<p class="drawer-artist" dir="auto">${sub}</p>`
           : null}
-        <p class="drawer-meta">${meta}</p>
+        ${meta ? html`<p class="drawer-meta">${meta}</p>` : null}
+        ${summary ? html`<p class="drawer-meta drawer-summary">${summary}</p>` : null}
         <div class="drawer-badges">
           <${Badge} view=${jobStatusView(job)} />
           ${live ? html`<span class="live-tag"><span class="pulse-static" aria-hidden="true"></span>Live</span>` : null}
@@ -201,125 +203,33 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
       </div>
     </header>
 
-    <dl class="drawer-times">
-      <div><dt>Created</dt><dd><${RelTime} value=${job.created_at} /></dd></div>
-      <div><dt>Started</dt><dd>${job.started_at ? html`<time datetime=${job.started_at} title=${absTime(job.started_at)}>${absTime(job.started_at)}</time>` : html`<span class="muted">Not yet</span>`}</dd></div>
-      <div><dt>Finished</dt><dd>${job.finished_at ? html`<time datetime=${job.finished_at}>${absTime(job.finished_at)}</time>` : html`<span class="muted">—</span>`}</dd></div>
-      <div><dt>Duration</dt><dd class="num">${duration !== null && duration >= 0 ? elapsed(duration) : html`<span class="muted">—</span>`}</dd></div>
-    </dl>
-
-    <${Actions} job=${job} app=${app} onChanged=${onChanged} onDelete=${onDelete} />
-
     ${job.status === 'failed' && job.error ? html`<${FailureNotice} error=${job.error} />` : null}
 
-    ${job.status === 'completed' ? html`<${SavedTo} />` : null}
+    <${Actions} job=${job} app=${app} onChanged=${onChanged} onDelete=${onDelete} remove=${remove} />
 
-    <${Activity} activity=${activity} />
+    ${tracks
+      ? html`<section class="drawer-section" aria-labelledby="tracks-title">
+          <div class="section-head">
+            <h3 id="tracks-title" class="section-title">Tracks</h3>
+            ${showProgress ? html`<${JobProgress} job=${job} />` : null}
+          </div>
+          ${items.length === 0
+            ? html`<${Empty} icon="list" title="No tracks resolved yet" />`
+            : [
+                html`<${TrackStrip} key="strip" items=${items} />`,
+                codecKinds(items).length > 1 ? html`<${TrackLegend} key="legend" items=${items} />` : null,
+                html`<${TrackList} key="list" items=${items} albumArtist=${job.artist_name || ''} />`,
+              ]}
+        </section>`
+      : null}
 
-    <${Palette} job=${job} />
+    ${job.status === 'completed' ? html`<${FilesSection} />` : null}
 
-    <section class="drawer-section" aria-labelledby="tracks-title">
-      <div class="section-head">
-        <h3 id="tracks-title" class="section-title">Tracks</h3>
-        <${JobProgress} job=${job} />
-      </div>
-      ${items.length === 0
-        ? html`<${Empty} icon="list" title=${job.status === 'running' || job.status === 'queued' ? 'No tracks resolved yet' : 'No tracks'} />`
-        : [
-            html`<${TrackStrip} key="strip" items=${items} />`,
-            html`<${TrackLegend} key="legend" items=${items} />`,
-            html`<${TrackList} key="list" items=${items} />`,
-          ]}
-    </section>
-
-    <section class="drawer-section" aria-labelledby="hooks-title">
-      <h3 id="hooks-title" class="section-title">Hooks</h3>
-      ${hooks.length === 0
-        ? html`<p class="muted small">No hook has run for this job.</p>`
-        : html`<ul class="hook-list">
-            ${hooks.map(
-              (h) => html`<li key=${h.name} class="hook-row">
-                <span class="mono">${h.name}</span>
-                <${Badge} view=${hookStatusView(h.status)} />
-                ${h.error ? html`<span class="hook-error">${h.error}</span>` : null}
-              </li>`,
-            )}
-          </ul>`}
-    </section>
+    <${DetailsSection} job=${job} activity=${activity} hooks=${hooks} />
   </div>`;
 }
 
-/** The failure reason as one line, with the full upstream text a click away when it says more. */
-function FailureNotice({ error }) {
-  const summary = errorSummary(error);
-  const more = error.trim() !== summary;
-  return html`<div class="notice" data-role="danger">
-    <${Icon} name="circle-x" />
-    <div class="notice-body">
-      ${summary || error}
-      ${more ? html`<details class="notice-more"><summary>Full error</summary><pre class="notice-raw">${error}</pre></details>` : null}
-    </div>
-  </div>`;
-}
-
-let downloadsDir; // the configured downloads folder, read once per page load; null when it could not be read
-
-/**
- * Where a finished job's files are. The job carries no path, so the drawer
- * names the downloads folder from GET /config and links to Settings > Files
- * & naming, where the name templates under it are set.
- */
-function SavedTo() {
-  const [dir, setDir] = useState(downloadsDir);
-  useEffect(() => {
-    if (downloadsDir !== undefined) return undefined;
-    let live = true;
-    getConfig().then(
-      (body) => {
-        downloadsDir = (body && body.config && body.config.download && body.config.download.downloads_dir) || null;
-        if (live) setDir(downloadsDir);
-      },
-      () => {
-        if (live) setDir(null);
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, []);
-  return html`<p class="drawer-files">
-    <span class="drawer-files-label">Saved to</span>
-    ${dir ? html`<code class="drawer-files-dir mono" title=${dir}>${dir}</code>` : html`<span>the downloads folder</span>`}
-    <a class="drawer-files-link" href=${settingsHash('files')}>Files & naming</a>
-  </p>`;
-}
-
-/**
- * What happened to the job, newest first: the persisted history (the stream
- * replays it when the drawer opens) plus live events. Open, so a failure's
- * story is on screen; the list scrolls instead of pushing the tracks away.
- */
-function Activity({ activity }) {
-  if (activity.length === 0) return null;
-  return html`<details class="drawer-section activity" open>
-    <summary class="section-title">Activity <span class="muted">(${count(activity.length)} ${activity.length === 1 ? 'event' : 'events'})</span></summary>
-    <ol class="activity-list" aria-label="Job events, newest first">
-      ${activity
-        .slice()
-        .reverse()
-        .map((a) => {
-          const v = activityView(a);
-          return html`<li key=${a.id} class="activity-row" data-role=${v.role}>
-            <time class="activity-time mono muted" datetime=${a.created_at} title=${a.created_at}>${clockTime(a.created_at, false)}</time>
-            <span class="activity-label">${v.label}</span>
-            ${v.text ? html`<span class="activity-msg muted">${v.text}</span>` : null}
-          </li>`;
-        })}
-    </ol>
-  </details>`;
-}
-
-function Actions({ job, app, onChanged, onDelete }) {
+function Actions({ job, app, onChanged, onDelete, remove }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => setConfirming(false), [job.id, job.status]);
@@ -338,6 +248,10 @@ function Actions({ job, app, onChanged, onDelete }) {
   };
   const canCancel = jobAllows(job, 'cancel');
   const canRetry = jobAllows(job, 'retry');
+  // Apple has nothing at this link: asking again fails the same way, so the
+  // way out is the link in Apple Music, and Retry steps back.
+  const notFound = job.status === 'failed' && isNotFound(job.error);
+  const open = safeHttpUrl(job.input);
   return html`<div class="drawer-actions">
     ${canCancel && !confirming
       ? html`<${Button} variant="secondary" icon="circle-slash" onClick=${() => setConfirming(true)} disabled=${busy}>Cancel job</${Button}>`
@@ -349,9 +263,12 @@ function Actions({ job, app, onChanged, onDelete }) {
           <${Button} variant="ghost" onClick=${() => setConfirming(false)}>Keep running</${Button}>
         </div>`
       : null}
-    ${canRetry ? html`<${Button} variant="primary" icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>` : null}
+    ${notFound && open ? html`<${LinkButton} href=${open} variant="primary" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
+    ${canRetry
+      ? html`<${Button} variant=${notFound ? 'secondary' : 'primary'} icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>`
+      : null}
     <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
-    ${safeHttpUrl(job.input) ? html`<${LinkButton} href=${safeHttpUrl(job.input)} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
-    ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Delete</${Button}>` : null}
+    ${open && !notFound ? html`<${LinkButton} href=${open} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
+    ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>${remove}</${Button}>` : null}
   </div>`;
 }

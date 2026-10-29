@@ -26,7 +26,7 @@ wins and this page is fixed in the same change. Sources are listed in
 | --- | --- | --- |
 | `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component otherwise, linking to System), `live` (8 active jobs, then up to 2 jobs that failed in the last 24 h), `recent`, `kpis`, `health`, `throughput` (from `/stats`), `logs` (12-line tail) |
 | `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed and Cancelled tabs |
-| `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header, palette, track strip, track list with stage meters, hooks, Activity (persisted history plus live events), Saved to (completed jobs), Cancel/Retry/Delete |
+| `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header with a summary line ("ALAC 24/44.1 · 14 tracks · 692 MB"), the failure reason, Cancel/Retry/Delete, the tracks (one line each; stage meters only on a track that is working or has an outcome), Files (completed jobs), and a closed Details (times, job ID, Activity with persisted history plus live events, hooks) |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
 | `#/logs?level=&component=&job_id=&request_id=&q=` | Logs | Level chips, component, search, filter chips, live tail, expandable rows |
 | `#/system` | System | About, runtime, health, storage, wrapper, library sync, hooks with outcomes, a configuration summary that links to Settings |
@@ -148,7 +148,7 @@ Stable class names and attributes the skin can style without touching JS:
 | Facts | `dl.facts` > `.fact[data-key][data-role]` > `dt.fact-label` + `dd.fact-value` (health facts, throughput totals `.tp-totals` with `tracks`, `tracks-failed`, `bytes`, `jobs`, `jobs-failed`, the failed rows only when non-zero and `data-role=danger`, hero facts `.hero-facts`) |
 | Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`, `.strip-meta`; every completed job renders, those past the whole-tile count carry `.is-overflow` |
 | Showcase | `a.hero.has-palette` > `.hero-art`, `.hero-text` (`.hero-kicker` > `.hero-no`, `.hero-title`, `.hero-artist`, `.hero-facts`), then its sibling `div.hero-actions` (same palette properties) > `.btn` "Tracks" (the drawer) and "Open in Apple Music"; `a.tile[.has-palette]` > `.tile-head` (`.tile-index`, `.tile-year`), `.tile-art`, `.tile-title`, `.tile-sub`, `.tile-facts` > `.tile-fact[data-key=genre\|year\|tracks\|finished]` |
-| Status strip, Activity, failure | Overview `p.health-strip[data-state=ok]` or `.health-strip.notice[data-state=problem][data-role=danger\|warning]` > `.health-strip-link`; drawer `details.drawer-section.activity[open]` > `ul.activity-list` > `li.activity-row[data-role]` (`.activity-time`, `.activity-label`, `.activity-msg`), failure notice with `details.notice-more` > `pre.notice-raw`, `.drawer-files` > `code.drawer-files-dir`; Logs `.log-err`, `.attr-chip-job` > `.attr-chip-name`, `.filter-chip-name`, rows `[data-seq]` with the one tab stop |
+| Status strip, Activity, failure | Overview `p.health-strip[data-state=ok]` or `.health-strip.notice[data-state=problem][data-role=danger\|warning]` > `.health-strip-link`; drawer `details.drawer-section.drawer-details` (closed) > `.drawer-details-body` > `dl.drawer-times`, `.drawer-id` (`code` + Copy), `section.activity` > `ol.activity-list` > `li.activity-row[data-role]` (`.activity-time`, `.activity-label`, `.activity-msg`) and a Hooks `section`; failure notice with `details.notice-more` > `pre.notice-raw`; Files `section` > `.drawer-files` > `code.drawer-files-dir` + Copy, `a.drawer-files-link`; tracks `ol.tracks` > `li.track[data-status][data-detail]` (`data-detail` on a track with stage meters and a status) > `.track-index`, `.track-main` (`.track-title`, `.track-artist` only when it differs from the album artist), `.track-codec` (only when it differs from the album's), `.track-len`, `.track-size`, then `.track-stages`, `.track-status`, `.track-error`/`.track-note` for a detail track; Logs `.log-err`, `.attr-chip-job` > `.attr-chip-name`, `.filter-chip-name`, rows `[data-seq]` with the one tab stop |
 | Live failures | `ul.attention` after the live list > `li.attention-row[data-role=danger]` > `.attention-icon`, `.attention-title` (`.attention-label` "Failed", `a.attention-link` to the drawer, mono `.attention-input`), `.attention-detail` (`.attention-error`, relative time), Retry `.btn` |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
@@ -243,20 +243,27 @@ and motion covers.
   `verified=false` shows a hollow "Not verified" segment, never red.
 - **Job drawer**: dialog with focus trap, Esc and Back close it, focus returns
   to the row. Close is first in the DOM, so Tab goes from it to the header's
-  Copy job ID and then the body (`.drawer-bar` is `row-reverse`, which keeps the
-  drawn order). Header with cover, artist link, meta, status, live tag;
-  created/started/finished/duration; Cancel (inline confirm) for queued or
-  running, Retry for failed or cancelled, View logs, Open in Apple Music, Delete (a
+  Back on a phone and then the body (`.drawer-bar` is `row-reverse`,
+  which keeps the drawn order). Header with cover, artist link, meta, a summary
+  line computed from the tracks (`lib/jobview.js` `drawerSummary`), status, live
+  tag; for a failed job the notice with the trimmed reason (full error under a
+  disclosure) comes first, then Cancel (inline confirm) for queued or running,
+  Retry for failed or cancelled, View logs, Open in Apple Music, Delete (a
   `ConfirmDialog` beside the panel) for completed, failed or cancelled jobs,
-  which closes the drawer; palette swatches;
-  per-track strip; track list (codec chip such as `ALAC 24/96`, length, size,
-  error; `.track-legend` above it spells each numbered chip out, "ALAC 24/44.1
-  Lossless 24-bit / 44.1 kHz", as the Qualities sheet does); hooks; Activity: the job's persisted events (the job stream replays
-  them from the start; `lib/store.js` keeps those at or before the snapshot cursor
-  out of the job and items) plus live ones, newest first, without per-item
-  progress. A failed job shows a notice with the trimmed reason and the full error
-  under a disclosure; a completed job shows the downloads folder with a link to
-  Settings, since the API has no per-job path.
+  which closes the drawer. A job Apple has nothing at (a 404) makes Open in
+  Apple Music the solid button, Retry secondary and Delete read Remove. Tracks:
+  one 44 px line each (number, title, length, size); the artist shows when it
+  differs from the album artist, a codec chip such as `ALAC 24/96` when it
+  differs from the album's (`.track-legend` spells the chips out only when the
+  codecs differ), and stage meters, status and error only for a track that is
+  working, failed, skipped or waiting; no tracks section for a finished job that
+  has none. A completed job shows Files: the downloads folder with a Copy button
+  and a link to Settings, since the API has no per-job path. Details is closed:
+  times in one short format (`dateTime`, the exact time in the title), the job
+  id with Copy, Activity (the job's persisted events, which the job stream
+  replays from the start; `lib/store.js` keeps those at or before the snapshot
+  cursor out of the job and items; newest first, with a "Gave up" folded into
+  the "Failed" that says the same) and hooks.
 - **Showcase**: hero for the newest release, then a grid with `srcset`
   300w/600w and lazy loading. Covers keep pre-signed URLs without placeholders
   verbatim. Motion covers play muted on hover or focus, one at a time, only

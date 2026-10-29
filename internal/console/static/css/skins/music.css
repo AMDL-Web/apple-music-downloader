@@ -1812,11 +1812,6 @@
   background: var(--success);
 }
 
-:root[data-skin="music"] .swatch-dot {
-  width: 18px;
-  height: 18px;
-}
-
 @media (min-width: 640px) {
   /* A floating sheet with the large radius, inset from the window edge. */
   :root[data-skin="music"] .drawer {

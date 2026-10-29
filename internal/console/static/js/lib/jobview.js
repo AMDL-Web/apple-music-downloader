@@ -2,7 +2,7 @@
 // (views/queue-row.js, views/drawer*.js) only draw what these return.
 
 import { jobTitle, jobSubtitle, typeLabel, isUnresolved, inputLabel, unresolvedHint, errorSummary, codecLabel, bytes } from './format.js';
-import { jobCounts, jobStatusView } from './status.js';
+import { jobCounts, jobStatusView, activityView } from './status.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -117,4 +117,17 @@ export function trackView(item, albumArtist, modeCodec) {
     codec: chip && chip !== modeCodec ? chip : '',
     status: !SETTLED.includes(item.status),
   };
+}
+
+/**
+ * The drawer's Activity as {entry, view} rows, oldest first: "Gave up" right
+ * before the "Failed" that carries the same text is one failure, so it is
+ * dropped and only "Failed" stays.
+ */
+export function activityRows(activity) {
+  const rows = (activity || []).map((entry) => ({ entry, view: activityView(entry) }));
+  return rows.filter((r, i) => {
+    const next = rows[i + 1];
+    return !(r.entry.type === 'operation_exhausted' && next && next.entry.type === 'job_failed' && r.view.text === next.view.text);
+  });
 }
