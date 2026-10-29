@@ -2048,7 +2048,6 @@
    gray surface in light, the second grouped level in dark), still outlined
    in --border-control so a field reads as a field. */
 :root[data-skin="music"] .new-input,
-:root[data-skin="music"] .new-token-input,
 :root[data-skin="music"] .field-input,
 :root[data-skin="music"] .card-body .select {
   background: var(--bg-inset);
@@ -2068,10 +2067,6 @@
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-art);
   line-height: var(--lh-mono-12);
-}
-
-:root[data-skin="music"] .new-token-input {
-  border-radius: var(--r-control);
 }
 
 :root[data-skin="music"] .new-hint {

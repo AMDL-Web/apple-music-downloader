@@ -29,8 +29,8 @@ func (d *Downloader) ProcessJob(ctx context.Context, job domain.Job, reporter jo
 		return fmt.Errorf("invalid job overrides: %w", err)
 	}
 	if !cfg.Simulate.Enabled {
-		// The runtime config or the job's overrides may point at directories
-		// that main() did not create at startup.
+		// A runtime config change may point at directories that main() did
+		// not create at startup.
 		if err := os.MkdirAll(cfg.Download.DownloadsDir, 0o755); err != nil {
 			return fmt.Errorf("create downloads dir: %w", err)
 		}
@@ -63,19 +63,15 @@ func (d *Downloader) ProcessJob(ctx context.Context, job domain.Job, reporter jo
 
 // CleanupJobArtifacts implements jobs.ArtifactCleaner for queued cancellation
 // and terminal deletion, where no ProcessJob call is available to run the
-// lifecycle cleanup above. Invalid historical overrides are ignored safely;
-// startup cleanup still leaves unrelated files untouched.
+// lifecycle cleanup above. A job's scratch lives under the runtime
+// download.temp_dir; overrides cannot move it.
 func (d *Downloader) CleanupJobArtifacts(job domain.Job) {
-	cfg, err := job.Overrides.ApplyValidated(d.baseConfig())
-	if err != nil {
-		return
-	}
-	cleanupResumeOwner(cfg.Download.TempDir, job.ID)
+	cleanupResumeOwner(d.baseConfig().Download.TempDir, job.ID)
 }
 
 // parseJobInput reconstructs the submission-time parse result from the job's
-// canonical key ("type:storefront:id:destination", written by the manager
-// after ValidateRequest). Re-parsing the raw input here instead would apply
+// canonical key ("type:storefront:id", written by the manager after
+// ValidateRequest). Re-parsing the raw input here instead would apply
 // the CURRENT catalog.album_track_url_mode, so an album?i= link submitted as a
 // song could silently turn into a whole-album job (or vice versa) if that
 // mode changed while the job sat in the queue — diverging from the dedup key

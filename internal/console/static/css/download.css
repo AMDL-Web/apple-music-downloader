@@ -55,8 +55,7 @@
   min-width: 0;
 }
 
-.new-input,
-.new-token-input {
+.new-input {
   width: 100%;
   border: 1px solid var(--border-control);
   border-radius: var(--r-control);
@@ -74,23 +73,8 @@
   resize: vertical;
 }
 
-.new-input::placeholder,
-.new-token-input::placeholder {
+.new-input::placeholder {
   color: var(--text-disabled);
-}
-
-.new-token {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-  max-width: 520px;
-}
-
-.new-token-input {
-  height: var(--control-h);
-  padding: 0 var(--s-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-13);
 }
 
 .new-submit {
@@ -261,6 +245,10 @@
 
 .new-link-issue[data-role="warning"] {
   color: var(--warning-text);
+}
+
+.new-link-fix {
+  white-space: nowrap;
 }
 
 .new-link-actions {
@@ -526,13 +514,6 @@
   overflow-wrap: anywhere;
 }
 
-.new-check-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-1_5);
-}
-
 .new-field {
   display: flex;
   flex-direction: column;
@@ -554,7 +535,6 @@
 .new-check[data-changed] .new-check-label::after,
 .new-field[data-changed] > .new-field-label::after,
 .new-codecs[data-changed] > .new-field-label::after,
-.new-check-group[data-changed] > .new-field-label::after,
 .new-fieldset[data-changed] > legend::after {
   content: "";
   display: inline-block;
@@ -862,7 +842,6 @@
     min-height: 128px;
   }
 
-  .new-token-input,
   .new-options-jump {
     min-height: var(--touch);
   }

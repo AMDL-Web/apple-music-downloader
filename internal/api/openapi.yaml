@@ -312,8 +312,8 @@ paths:
       summary: List the available job hooks
       description: >-
         Returns the global switch and entry metadata loaded from hooks.yaml at
-        process startup, in file order, so clients can build an overrides.hooks
-        allow-list. An entry's enabled value is the result after defaults are
+        process startup, in file order. Every enabled entry that matches a job's
+        event and type runs for it. An entry's enabled value is the result after defaults are
         applied; an empty job_types array matches every job type. The response never
         includes the URL, headers, command, workdir or any other configuration field
         that may carry secrets.
@@ -560,10 +560,9 @@ paths:
         absent). The amp-api-only reads (animated covers, Enhanced HLS) are never
         made. The whole lookup is bounded by 15 seconds.
 
-        media_user_token overrides catalog.media_user_token for this lookup, like
-        overrides.media_user_token on a submission: absent uses the runtime value,
-        an empty string clears it. Only a private (pl.u-) playlist's cover uses it.
-        It is never echoed.
+        Only a private (pl.u-) playlist's cover uses a media-user-token, and only
+        the runtime catalog.media_user_token; the request cannot supply one. It is
+        never echoed.
 
         Once the link has parsed, every error carries it in details.link
         (LookupLink), so a client can still show what was pasted.
@@ -760,12 +759,10 @@ paths:
         500 store_error if any URL failed in the job store (status error; the same
         submit may succeed when retried), 500 internal_error if the only server
         failure was an unexpected validator error, else 422 no_urls_accepted. The optional overrides field
-        applies to the jobs created by this request and overrides the download
-        section of the runtime configuration; overrides.media_user_token overrides
-        the catalog.media_user_token fallback and follows its own rules for
-        on-demand persistence, clearing at terminal states, and redaction from
-        responses; overrides.hooks selects which hooks.yaml entries the jobs in this
-        batch may run.
+        applies to the jobs created by this request and overrides the quality and
+        force_overwrite keys of the runtime download configuration. The
+        media-user-token is always the runtime catalog.media_user_token, and every
+        enabled hooks.yaml entry that matches runs for every job.
       operationId: createDownload
       requestBody:
         required: true
@@ -783,9 +780,10 @@ paths:
         '400':
           description: >-
             invalid_json: the body cannot be parsed; invalid_request: it contains
-            unknown fields (for example the old top-level media_user_token, or a
-            misspelled key inside overrides), urls is empty, or it exceeds the
-            per-request limit (100 URLs).
+            unknown fields (for example media_user_token at the top level or
+            inside overrides, a key overrides does not carry such as hooks or
+            downloads_dir, or a misspelled key), urls is empty, or it exceeds the
+            per-request limit (100 URLs). The message names the unknown field.
           content:
             application/json:
               schema:
@@ -796,8 +794,7 @@ paths:
           description: >-
             no_urls_accepted: every URL was rejected, and error.details is the
             BatchSubmitResponse with each URL's reason; invalid_overrides:
-            overrides failed configuration validation (including unknown entry
-            names in hooks).
+            overrides failed configuration validation.
           content:
             application/json:
               schema:
@@ -932,8 +929,7 @@ paths:
         tracks are actually retried: items that already completed (completed) or were
         skipped (skipped_existing) keep their state and are not downloaded again; the
         remaining items (failed, cancelled, etc.) are reset to queued and reprocessed
-        under their original item ids. A cancelled job keeps its media_user_token for
-        this, like a failed one.
+        under their original item ids, with the job's overrides unchanged.
         Re-enqueueing records and pushes a job_retried event (an overview milestone
         event, which drives the GET /downloads overview feed).
       operationId: retryDownload
@@ -1668,9 +1664,8 @@ components:
             which the server splits automatically; at most 100 URLs per request
             after splitting. Stations (station, shaped like
             .../station/.../ra.xxxx) are supported only for personalized/curated
-            stations that resolve to a track list, and require
-            overrides.media_user_token or the catalog.media_user_token fallback from
-            the runtime configuration; live radio stations (Apple Music 1, etc.)
+            stations that resolve to a track list, and require the runtime
+            catalog.media_user_token; live radio stations (Apple Music 1, etc.)
             have no static track list and cannot be downloaded.
           minItems: 1
           items:
@@ -1684,120 +1679,29 @@ components:
             Optional configuration overrides that apply only to the jobs created by
             this request. Omitted fields keep the current runtime configuration.
             Download overrides are persisted with each job and still apply after a
-            retry or a restart recovery; media_user_token follows the stricter
-            lifecycle and redaction rules described in DownloadOverrides; hooks
-            selects the job event hooks. No override affects any other job.
+            retry or a restart recovery. No override affects any other job.
     DownloadOverrides:
       type: object
+      additionalProperties: false
       description: >-
-        Per-job configuration override layer: apart from media_user_token and
-        hooks, the fields map one-to-one onto the download section of the runtime
-        configuration. max_running_jobs, max_parallel_downloads,
-        max_parallel_decrypts and max_parallel_wrapper_requests are fixed at
-        startup and shared globally, so they cannot be overridden per job;
-        progress_event_interval_ms describes the shape of the event stream shared
-        by all subscribers and likewise cannot be overridden per job. All fields
-        are optional; on submission the full validation runs against "current
-        runtime configuration + overrides". downloads_dir and temp_dir may only
-        select the administrator-configured root directory itself or one of its
-        subdirectories, and cannot escape that root through absolute paths, .. or
-        symlinks. media_user_token has three-state semantics: when omitted, the
-        catalog.media_user_token fallback is used; a non-empty string overrides
-        the fallback; an explicit empty string clears the fallback for that job.
-        The token is persisted only for the station and private playlist
-        (pl.u-xxx) jobs that actually need it; jobs of other types in the same
-        batch do not store it. It is cleared when the job completes or is
-        cancelled, kept on failure so retry works, and never echoed back in any
-        job response, whether create, list, detail, SSE or otherwise.
+        Per-job override layer for the quality and overwrite keys of the download
+        section of the runtime configuration; each field maps one-to-one onto the
+        download key of the same name. Every other setting (directories, path
+        templates, lyrics, covers, memory_mode, max_attempts, check_integrity, the
+        media-user-token and hook selection) comes from the runtime configuration
+        and hooks.yaml for every job. All fields are optional; on submission the
+        full validation runs against "current runtime configuration + overrides",
+        and an unknown field is rejected with 400 invalid_request naming it. Job
+        rows stored before a field was removed are read with that field ignored.
       properties:
-        media_user_token:
-          type: string
-          writeOnly: true
-          description: >-
-            Apple Music subscription token (media-user-token), used to resolve
-            stations and fetch private playlist covers. See the DownloadOverrides
-            description for the three-state semantics of omitted, non-empty and
-            explicitly empty values, and for the persistence, clearing and response
-            redaction rules.
-        hooks:
-          type: array
-          items:
-            type: string
-          uniqueItems: false
-          description: >-
-            Per-job allow-list of configs/hooks.yaml entry names, applying to
-            job_queued and every terminal-state event. A job_queued hook is
-            dispatched only once, on the first submission; retry and restart
-            recovery do not send it again. The allow-list is persisted with the
-            job, so terminal events that arrive after a retry or restart recovery
-            are still bound by the same list. When the field is omitted, every
-            enabled entry matching events/job_types may run; an explicit [] runs no
-            hook for this batch; a non-empty list only lets the entries with those
-            names continue through the normal enabled/events/job_types filtering,
-            and cannot enable a disabled or non-matching entry. Duplicate names are
-            allowed and count once; when a hooks configuration exists, unknown
-            names return 422. When no entry is configured at all, any list is
-            accepted but has no effect.
         quality_priority:
           type: array
           items:
             type: string
             enum: [alac, aac, aac-binaural, aac-downmix, ec3, ac3]
         codec_alternative: {type: boolean}
-        memory_mode:
-          type: string
-          enum: [low, high]
-          description: >-
-            Per-job Enhanced HLS memory mode. On the normal path, low uses bounded
-            per-fragment memory, trading more temporary disk for lower RAM; high
-            keeps one encrypted copy of the whole track in memory, reducing
-            temporary disk use and disk round trips (in-memory media is capped at
-            512 MiB per track; because of Go GC allocation headroom, the actual heap
-            peak can approach twice the track size). When omitted, the runtime
-            configuration applies. AAC-LC is unaffected by this option and is held
-            in memory as a whole track in both modes; the rare ALAC integrity repair
-            also reads and copies the whole track. In both modes, tagging briefly
-            creates a whole-track rewrite file in the system temp directory.
-        max_attempts:
-          type: integer
-          maximum: 10
-          description: Positive values 1-10 are allowed; values <=0 are treated as 1; values above 10 are rejected with 422 at submission (job overrides persisted before this limit existed are clamped to 10 at run time instead of failing).
-        downloads_dir: {type: string}
-        song_path_format: {type: string}
-        album_path_format: {type: string}
-        artist_path_format: {type: string}
-        playlist_path_format: {type: string}
-        station_path_format: {type: string}
-        temp_dir: {type: string}
-        cover_size:
-          type: string
-          pattern: '^[1-9][0-9]*x[1-9][0-9]*$'
-          description: >-
-            "{width}x{height}" in pixels, e.g. 5000x5000; any other value is
-            rejected with 422 invalid_overrides.
-        cover_format:
-          type: string
-          enum: [jpg, jpeg, png]
-        embed_cover: {type: boolean}
-        save_album_cover: {type: boolean}
-        save_artist_cover: {type: boolean}
-        save_playlist_cover: {type: boolean}
-        embed_lyrics: {type: boolean}
-        save_lyrics_file: {type: boolean}
-        lyrics_format:
-          type: string
-          enum: [lrc, ttml]
-        lyrics_type:
-          type: string
-          enum: [lyrics, syllable-lyrics]
-        lyrics_extras:
-          type: array
-          items:
-            type: string
-            enum: [translation, pronunciation]
         alac_max_sample_rate: {type: integer}
         alac_max_bit_depth: {type: integer}
-        check_integrity: {type: boolean}
         force_overwrite:
           type: boolean
           description: >-
@@ -1824,11 +1728,10 @@ components:
             media_user_token:
               type: string
               description: >-
-                Global media-user-token fallback used for station downloads and
-                private playlist cover fetching. It can be changed through PUT and
-                is written back to the configuration file; GET returns the current
-                value. overrides.media_user_token in a request can override it or
-                explicitly clear it per job.
+                The media-user-token used for station downloads, private playlist
+                covers and library sync; no request can supply its own. It can be
+                changed through PUT and is written back to the configuration file;
+                GET returns the current value.
             signed_mode_hls_source:
               type: string
               enum: [wrapper, web_token]
@@ -2254,12 +2157,6 @@ components:
           type: string
           description: One Apple Music link; surrounding whitespace is ignored.
           example: https://music.apple.com/us/album/igor/1463409338
-        media_user_token:
-          type: string
-          writeOnly: true
-          description: >-
-            Overrides catalog.media_user_token for this lookup; an empty string
-            clears it. Only a private playlist's cover uses it. Never echoed.
     LookupLink:
       type: object
       description: >-
@@ -2363,8 +2260,7 @@ components:
               type: boolean
               description: >-
                 True for a station: its download reads the next-tracks feed,
-                which needs a media-user-token (catalog.media_user_token or
-                overrides.media_user_token). Absent for other types.
+                which needs catalog.media_user_token. Absent for other types.
     Job:
       type: object
       required: [id, input, type, status, total_items, completed_items, skipped_items, failed_items, cancelled_items, created_at, updated_at]
@@ -2536,9 +2432,7 @@ components:
           $ref: '#/components/schemas/DownloadOverrides'
           description: >-
             The configuration overrides submitted with the job; omitted when none
-            were given. media_user_token is writeOnly: even while a failed or
-            cancelled job keeps it internally for retries, no job response ever
-            includes its value.
+            were given.
         status:
           type: string
           enum: [queued, running, completed, failed, cancelled]

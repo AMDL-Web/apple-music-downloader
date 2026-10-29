@@ -103,8 +103,7 @@ type Event struct {
 // MarshalEventPayload serializes a public API snapshot (Job or JobItem) and
 // overlays event-specific fields on the resulting JSON object, so an event's
 // payload carries the same fields as the REST representation of that
-// snapshot. Custom MarshalJSON implementations are honored first, which is how
-// Job's media-user-token redaction reaches event payloads. It returns nil when
+// snapshot. It returns nil when
 // the snapshot or a field cannot be encoded as a JSON object.
 func MarshalEventPayload(snapshot any, fields map[string]any) json.RawMessage {
 	raw, err := json.Marshal(snapshot)

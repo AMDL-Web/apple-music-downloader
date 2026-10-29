@@ -16,17 +16,16 @@ one.
   together with its terminal event in one store call; hooks dispatch only after
   that write succeeds. Don't write a terminal status anywhere else.
 - `Manager.Shutdown` cancels workers with the cause `ErrShutdown`. `run()` then writes
-  nothing terminal: the row stays `running` with its items and media-user-token, no
-  terminal event or hook, and `RecoverUnfinished` resumes it on the next start. Only
+  nothing terminal: the row stays `running` with its items, no terminal event or hook, and `RecoverUnfinished` resumes it on the next start. Only
   `Shutdown` may set that cause; cancelling `Start`'s context is a user cancel. A panic
   in `ProcessJob` fails the job (`errProcessorPanic`), even during shutdown.
-- Only failed and cancelled jobs can be retried (`ErrJobNotRetryable`); both keep
-  their media-user-token for it, a completed job drops it
-  (`withoutTerminalMediaUserToken`). Retry and Delete refuse a job that is still
-  finalizing (`ErrJobFinalizing`) rather than racing the old worker's cleanup.
-- A job's dedup identity is `canonicalKey`, backed by a partial unique index in
-  internal/db. Changing how the key is built changes which submissions dedupe
-  against existing jobs, so it is a contract change.
+- Only failed and cancelled jobs can be retried (`ErrJobNotRetryable`). Retry and
+  Delete refuse a job that is still finalizing (`ErrJobFinalizing`) rather than
+  racing the old worker's cleanup.
+- A job's dedup identity is `canonicalKey` (`type:storefront:id`), backed by a
+  partial unique index in internal/db. Changing how the key is built changes which
+  submissions dedupe against existing jobs, so it is a contract change, and
+  `ParseCanonicalKey` keeps reading every layout older rows carry.
 - Hooks: `job_queued` fires on admission, before enqueue; `job_finished`,
   `job_failed` and `job_cancelled` fire after `persistTerminal`.
   `Manager.FinalizeInFlight` and `Manager.HooksPending` tell the API streams when

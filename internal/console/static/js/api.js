@@ -126,14 +126,10 @@ export const queryQuality = (url, signal) =>
   request('POST', '/api/v1/quality', undefined, { body: { url }, timeoutMs: QUALITY_TIMEOUT_MS, signal });
 /**
  * Previews one link without creating a job (LookupResponse). Errors after the
- * link parsed carry it in details.link; mediaUserToken is sent only when given.
+ * link parsed carry it in details.link.
  */
-export const lookupLink = (url, { mediaUserToken, signal } = {}) =>
-  request('POST', '/api/v1/lookup', undefined, {
-    body: mediaUserToken ? { url, media_user_token: mediaUserToken } : { url },
-    timeoutMs: LOOKUP_TIMEOUT_MS,
-    signal,
-  });
+export const lookupLink = (url, { signal } = {}) =>
+  request('POST', '/api/v1/lookup', undefined, { body: { url }, timeoutMs: LOOKUP_TIMEOUT_MS, signal });
 /**
  * Merges `partial` into the runtime config and answers the new ConfigResponse.
  * Send only the changed fields of a fresh GET; 422 config_key_pinned,

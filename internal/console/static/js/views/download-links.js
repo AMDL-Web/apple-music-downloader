@@ -149,7 +149,9 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
       ${issue
         ? html`<span class="new-link-issue status-text" data-role=${issue.role} title=${issue.title || undefined}>
             <${Icon} name=${issue.role === 'danger' ? 'circle-x' : 'triangle-alert'} size="sm" />
-            <span>${issue.message}${issue.blocking ? html`<span class="sr-only">. Not downloaded.</span>` : null}</span>
+            <span>${issue.message}${issue.blocking ? html`<span class="sr-only">. Not downloaded.</span>` : null}${issue.href
+              ? html`. <a class="link new-link-fix" href=${issue.href}>${issue.action}</a>`
+              : null}</span>
           </span>`
         : null}
     </div>

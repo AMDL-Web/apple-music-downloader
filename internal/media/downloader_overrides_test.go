@@ -12,14 +12,14 @@ import (
 	"amdl/internal/domain"
 )
 
-func TestCleanupJobArtifactsUsesJobTempOverride(t *testing.T) {
+func TestCleanupJobArtifactsUsesConfiguredTempDir(t *testing.T) {
 	root := t.TempDir()
 	cfg := config.Default()
 	cfg.Download.TempDir = filepath.Join(root, "temp")
-	overrideDir := filepath.Join(cfg.Download.TempDir, "job-scratch")
 	downloader := newTestDownloader(&Downloader{store: config.NewStore(cfg)})
-	job := domain.Job{ID: "job-clean", Overrides: &config.DownloadOverrides{TempDir: &overrideDir}}
-	path, metadataPath := resumableDownloadPaths(overrideDir, job.ID, "output")
+	force := true
+	job := domain.Job{ID: "job-clean", Overrides: &config.DownloadOverrides{ForceOverwrite: &force}}
+	path, metadataPath := resumableDownloadPaths(cfg.Download.TempDir, job.ID, "output")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -30,16 +30,16 @@ func TestCleanupJobArtifactsUsesJobTempOverride(t *testing.T) {
 	}
 
 	downloader.CleanupJobArtifacts(job)
-	if _, err := os.Stat(resumeOwnerDir(overrideDir, job.ID)); !os.IsNotExist(err) {
+	if _, err := os.Stat(resumeOwnerDir(cfg.Download.TempDir, job.ID)); !os.IsNotExist(err) {
 		t.Fatalf("job resume directory still exists: %v", err)
 	}
 }
 
-// TestProcessJobAppliesPerJobOverrides runs two jobs through the same
-// Downloader in simulate mode: one carrying a song_path_format override and
-// one without. The overridden job's output path must follow the override and
-// the plain job must keep the runtime config's format, proving the overlay is
-// scoped to a single job and never leaks into the shared Downloader.
+// TestProcessJobAppliesPerJobOverrides runs jobs through the same Downloader
+// in simulate mode: one carrying a force_overwrite override and one without.
+// Only the overridden job records item_overwrite, proving the overlay reaches
+// the pipeline and is scoped to its job, never leaking into the shared
+// Downloader.
 func TestProcessJobAppliesPerJobOverrides(t *testing.T) {
 	cfg := config.Default()
 	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
@@ -52,51 +52,44 @@ func TestProcessJobAppliesPerJobOverrides(t *testing.T) {
 		catalog: fakeDownloaderCatalog{song: song},
 	})
 
-	overrideFormat := "override-dir/{SongName}"
-	runJob := func(t *testing.T, overrides *config.DownloadOverrides) domain.JobItem {
+	overwrote := func(t *testing.T, id string, overrides *config.DownloadOverrides) bool {
 		t.Helper()
 		reporter := &recordingReporter{}
-		job := domain.Job{ID: "job-1", Input: "https://music.apple.com/us/song/foo/987654321", Overrides: overrides}
+		job := domain.Job{ID: id, Input: "https://music.apple.com/us/song/foo/987654321", Overrides: overrides}
 		if err := downloader.ProcessJob(context.Background(), job, reporter); err != nil {
 			t.Fatalf("ProcessJob failed: %v", err)
 		}
-		if len(reporter.items) == 0 {
-			t.Fatal("no item updates recorded")
+		if len(reporter.items) == 0 || reporter.items[len(reporter.items)-1].Status != domain.ItemCompleted {
+			t.Fatalf("job %s did not complete: %+v", id, reporter.items)
 		}
-		final := reporter.items[len(reporter.items)-1]
-		if final.Status != domain.ItemCompleted {
-			t.Fatalf("final item status = %s, want completed (%+v)", final.Status, final)
+		for _, ev := range reporter.events {
+			if ev.Type == domain.EventItemOverwrite {
+				return true
+			}
 		}
-		return final
+		return false
 	}
 
-	overridden := runJob(t, &config.DownloadOverrides{SongPathFormat: &overrideFormat})
-	if !strings.Contains(overridden.OutputPath, "override-dir/Track") {
-		t.Fatalf("overridden output path = %q, want it to follow song_path_format override", overridden.OutputPath)
+	force := true
+	if !overwrote(t, "job-1", &config.DownloadOverrides{ForceOverwrite: &force}) {
+		t.Fatal("job with force_overwrite recorded no item_overwrite")
 	}
-
-	plain := runJob(t, nil)
-	if strings.Contains(plain.OutputPath, "override-dir") {
-		t.Fatalf("plain job output path = %q leaked the previous job's override", plain.OutputPath)
-	}
-	if !strings.Contains(plain.OutputPath, "songs/Artist") {
-		t.Fatalf("plain job output path = %q, want the runtime config's song_path_format", plain.OutputPath)
+	if overwrote(t, "job-2", nil) {
+		t.Fatal("plain job recorded item_overwrite: the previous job's override leaked")
 	}
 }
 
-func TestProcessJobRejectsPersistedOverrideOutsideConfiguredRoots(t *testing.T) {
-	dir := t.TempDir()
+func TestProcessJobRejectsInvalidPersistedOverride(t *testing.T) {
 	cfg := config.Default()
 	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
-	cfg.Download.DownloadsDir = filepath.Join(dir, "downloads")
-	cfg.Download.TempDir = filepath.Join(dir, "temp")
+	cfg.Download.DownloadsDir = t.TempDir()
 	downloader := newTestDownloader(&Downloader{store: config.NewStore(cfg)})
-	escaped := filepath.Join(dir, "outside")
+	unknown := []string{"flac"}
 	err := downloader.ProcessJob(context.Background(), domain.Job{
-		ID: "job-unsafe", Overrides: &config.DownloadOverrides{DownloadsDir: &escaped},
+		ID: "job-invalid", Overrides: &config.DownloadOverrides{QualityPriority: &unknown},
 	}, &recordingReporter{})
-	if err == nil || !strings.Contains(err.Error(), "downloads_dir") {
-		t.Fatalf("ProcessJob error = %v, want unsafe downloads_dir rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "quality_priority") {
+		t.Fatalf("ProcessJob error = %v, want a quality_priority validation error", err)
 	}
 }
 
@@ -136,19 +129,18 @@ func TestProcessJobHonorsCanonicalKeyOverReparse(t *testing.T) {
 	}
 }
 
-// TestParseJobInputAcceptsBothKeyGenerations guards the failure mode that
-// folding the destination into the canonical key creates here: this is the
-// site that decides which substring of the key is the adam id, and reading
-// the wrong substring produces no error at all — just a download of the wrong
-// thing. Both the four-segment key written now and the three-segment key
-// still sitting in deployed databases must yield the same adam id.
+// TestParseJobInputAcceptsBothKeyGenerations guards the failure mode of a key
+// layout change here: this is the site that decides which substring of the
+// key is the adam id, and reading the wrong substring produces no error at
+// all — just a download of the wrong thing. Both the three-segment key written
+// now and the four-segment key older rows carry must yield the same adam id.
 func TestParseJobInputAcceptsBothKeyGenerations(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		key  string
 	}{
-		{name: "with destination", key: "song:us:987654321:0123456789ab"},
-		{name: "legacy without destination", key: "song:us:987654321"},
+		{name: "three segments", key: "song:us:987654321"},
+		{name: "legacy destination segment", key: "song:us:987654321:0123456789ab"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			job := domain.Job{

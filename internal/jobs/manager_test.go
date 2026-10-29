@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -20,15 +21,15 @@ import (
 	"amdl/internal/hooks"
 )
 
-type tokenRecoveryProcessor struct {
+type legacyRecoveryProcessor struct {
 	jobs chan domain.Job
 }
 
-func (p *tokenRecoveryProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
+func (p *legacyRecoveryProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
 	return ValidationResult{Type: "station", Storefront: "us", ID: "ra.1"}, nil
 }
 
-func (p *tokenRecoveryProcessor) ProcessJob(_ context.Context, job domain.Job, _ Reporter) error {
+func (p *legacyRecoveryProcessor) ProcessJob(_ context.Context, job domain.Job, _ Reporter) error {
 	p.jobs <- job
 	return errors.New("keep retryable")
 }
@@ -95,17 +96,20 @@ func TestRecoverUnfinishedRequeuesQueuedAndRunningJobs(t *testing.T) {
 	}
 }
 
-func TestRecoverUnfinishedRestoresMediaUserTokenOverride(t *testing.T) {
+// A row stored before the overrides shrank keeps keys that are no longer
+// fields (the token, a hook selection, a downloads directory) and a
+// four-segment canonical key. No migration rewrites it: after a restart it
+// recovers, decodes with those keys ignored and runs with the kept ones.
+func TestRecoverUnfinishedRunsLegacyOverridesRow(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "amdl.db")
 	store, err := db.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	token := "persisted-token"
 	now := time.Now().UTC()
 	job := domain.Job{
-		ID: "station-recover", Input: "station|us|ra.1", Type: "station", Storefront: "us", CanonicalKey: "station:us:ra.1",
-		Overrides: &config.DownloadOverrides{MediaUserToken: &token}, Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
+		ID: "station-recover", Input: "station|us|ra.1", Type: "station", Storefront: "us", CanonicalKey: "station:us:ra.1:0123456789ab",
+		Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateJob(context.Background(), job); err != nil {
 		_ = store.Close()
@@ -114,13 +118,25 @@ func TestRecoverUnfinishedRestoresMediaUserTokenOverride(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{"media_user_token":"old-token","hooks":["notify"],"downloads_dir":"/elsewhere","force_overwrite":true}`
+	if _, err := raw.Exec(`UPDATE jobs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	store, err = db.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	processor := &tokenRecoveryProcessor{jobs: make(chan domain.Job, 1)}
+	processor := &legacyRecoveryProcessor{jobs: make(chan domain.Job, 1)}
 	manager := NewManager(store, events.NewHub(), processor, 1, slog.Default())
 	if recovered, err := manager.RecoverUnfinished(context.Background()); err != nil || recovered != 1 {
 		t.Fatalf("RecoverUnfinished() = (%d, %v), want (1, nil)", recovered, err)
@@ -130,8 +146,12 @@ func TestRecoverUnfinishedRestoresMediaUserTokenOverride(t *testing.T) {
 	manager.Start(ctx)
 	select {
 	case recovered := <-processor.jobs:
-		if recovered.Overrides == nil || recovered.Overrides.MediaUserToken == nil || *recovered.Overrides.MediaUserToken != token {
-			t.Fatalf("recovered token override = %+v, want %q", recovered.Overrides, token)
+		if recovered.Overrides == nil || *recovered.Overrides != (config.DownloadOverrides{ForceOverwrite: recovered.Overrides.ForceOverwrite}) ||
+			recovered.Overrides.ForceOverwrite == nil || !*recovered.Overrides.ForceOverwrite {
+			t.Fatalf("recovered overrides = %+v, want only force_overwrite", recovered.Overrides)
+		}
+		if typ, sf, id, ok := ParseCanonicalKey(recovered.CanonicalKey); !ok || typ != "station" || sf != "us" || id != "ra.1" {
+			t.Fatalf("legacy key %q parsed as %s/%s/%s (%v)", recovered.CanonicalKey, typ, sf, id, ok)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("recovered job did not run")

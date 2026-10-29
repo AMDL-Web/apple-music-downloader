@@ -13,10 +13,9 @@ import {
   submitSummary,
   classifySubmitError,
   bookmarklet,
-  needsMediaUserToken,
-  requestOverrides,
   storedResults,
   parseStoredResults,
+  TOKEN_SETTINGS_HASH,
 } from '../static/js/lib/submit.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
@@ -50,8 +49,15 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
   assert.deepEqual(linkIssue(entry('https://open.spotify.com/album/x')), { code: 'not_apple', role: 'danger', blocking: true, message: 'Not an Apple Music link' });
   assert.equal(linkIssue(entry(VIDEO)).code, 'music_video');
   assert.equal(linkIssue(entry('https://music.apple.com/us/curator/apple-music/976439548')).code, 'unsupported');
-  assert.equal(linkIssue(entry(STATION)).code, 'needs_token');
-  assert.equal(linkIssue(entry(STATION)).blocking, false);
+  assert.deepEqual(linkIssue(entry(STATION)), {
+    code: 'needs_token',
+    role: 'warning',
+    blocking: false,
+    message: 'Stations need a media-user-token',
+    href: TOKEN_SETTINGS_HASH,
+    action: 'Set it in Settings',
+  });
+  assert.equal(TOKEN_SETTINGS_HASH, '#/settings?section=catalog&field=catalog.media_user_token', 'the hint opens Settings at the token field');
   assert.equal(linkIssue(entry(STATION), null, { hasToken: true }), null);
   assert.equal(linkIssue(entry(PRIVATE)), null, 'a private playlist downloads without a token; the token only finds its cover');
   const live = { state: 'error', error: { status: 400, code: 'invalid_request', message: 'station "Apple Music 1" is a live radio stream' } };
@@ -86,30 +92,6 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
   const says = { state: 'ready', data: { needs_media_user_token: true } };
   assert.equal(linkIssue(entry(IGOR), says).code, 'needs_token', 'the preview can ask for the token');
   assert.equal(linkIssue(entry(IGOR), says, { hasToken: true }), null);
-});
-
-test('needsMediaUserToken: stations, private playlists (their cover) and previews that say so', () => {
-  const none = () => null;
-  assert.equal(needsMediaUserToken([], none), false);
-  assert.equal(needsMediaUserToken([IGOR, FOLKLORE, 'https://example.com/x'], none), false);
-  assert.equal(needsMediaUserToken([IGOR, STATION], none), true);
-  assert.equal(needsMediaUserToken([PRIVATE], none), true);
-  assert.equal(needsMediaUserToken(['https://music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb'], none), false, 'a catalog playlist needs none');
-  const says = (url) => (url === FOLKLORE ? { state: 'ready', data: { needs_media_user_token: true } } : { state: 'idle' });
-  assert.equal(needsMediaUserToken([IGOR, FOLKLORE], says), true);
-  assert.equal(needsMediaUserToken([IGOR, FOLKLORE], (url) => ({ state: 'error', error: { status: 502 } })), false);
-});
-
-test('requestOverrides sends the typed token only with links that need it', () => {
-  const opts = { lyrics_format: 'ttml' };
-  const none = () => null;
-  assert.deepEqual(requestOverrides(opts, [IGOR, STATION], ' tok ', none), { lyrics_format: 'ttml', media_user_token: 'tok' });
-  assert.deepEqual(requestOverrides(opts, [PRIVATE], 'tok', none), { lyrics_format: 'ttml', media_user_token: 'tok' });
-  // The station was removed or sent in another request: the token stays home.
-  assert.equal(requestOverrides(opts, [IGOR, FOLKLORE], 'tok', none), opts);
-  assert.equal(requestOverrides(opts, [STATION], '   ', none), opts, 'an empty field leaves the server token in charge');
-  assert.equal(requestOverrides(opts, [STATION], undefined, none), opts);
-  assert.equal(opts.media_user_token, undefined, 'the options object is not changed');
 });
 
 test('submittable keeps links without a blocking issue, in order', () => {
@@ -245,11 +227,11 @@ test('submitSummary follows the live status of each queued job', () => {
   assert.equal(submitSummary(done), '1 completed · 1 deleted');
 });
 
-test('stored results round-trip without the media-user-token', () => {
+test('stored results round-trip with only the known overrides', () => {
   const rows = resultRows([{ url: IGOR, result: { url: IGOR, status: 'accepted', job: job('a', 'queued', '2026-10-29T00:00:00Z') } }]);
-  const text = storedResults({ rows, overrides: { max_attempts: 5, media_user_token: 'secret' } });
+  const text = storedResults({ rows, overrides: { force_overwrite: true, media_user_token: 'secret' } });
   assert.ok(!text.includes('secret'));
-  assert.deepEqual(parseStoredResults(text), { rows, overrides: { max_attempts: 5 } });
+  assert.deepEqual(parseStoredResults(text), { rows, overrides: { force_overwrite: true } });
   assert.equal(storedResults({ rows: [], overrides: {} }), '');
   for (const bad of [null, '', '{', '{"rows":[{"url":1}]}', '[]']) assert.equal(parseStoredResults(bad), null);
 });

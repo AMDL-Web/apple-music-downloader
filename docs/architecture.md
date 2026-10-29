@@ -20,8 +20,8 @@ SIGINT/SIGTERM (or a failing HTTP server) stops them in this order
    short drain, then cancel the base context of whatever is still running.
 2. Library watcher and catalog token refresher: stop and wait.
 3. Job manager: cancel workers with the cause `jobs.ErrShutdown`. A job interrupted by
-   shutdown is **not** cancelled: it stays `running` in the database, keeps its items,
-   resume checkpoints and media-user-token, emits no terminal event and fires no hook.
+   shutdown is **not** cancelled: it stays `running` in the database, keeps its items
+   and resume checkpoints, emits no terminal event and fires no hook.
    The next start requeues it through recovery (`job_recovered`).
 4. Downloader background work (motion-artwork backfill): wait.
 5. Hook dispatcher: stop retries at once, drain running attempts, then cancel what is

@@ -122,8 +122,8 @@ func TestShutdownInterruptsJobAndRestartResumesIt(t *testing.T) {
 	firstHooks := hooks.NewDispatcher(hooksCfg, first.Event, slog.Default())
 	first.SetHooks(firstHooks)
 	first.Start(context.Background())
-	token := "persisted-token"
-	resp := first.SubmitBatch(ctx, []string{"station|us|ra.1"}, &config.DownloadOverrides{MediaUserToken: &token})
+	force := true
+	resp := first.SubmitBatch(ctx, []string{"station|us|ra.1"}, &config.DownloadOverrides{ForceOverwrite: &force})
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v", resp)
 	}
@@ -156,8 +156,8 @@ func TestShutdownInterruptsJobAndRestartResumesIt(t *testing.T) {
 		t.Fatalf("interrupted job = status %s finished %v error %q started %v, want running, unfinished, no error, started",
 			interrupted.Status, interrupted.FinishedAt, interrupted.Error, interrupted.StartedAt)
 	}
-	if interrupted.Overrides == nil || interrupted.Overrides.MediaUserToken == nil || *interrupted.Overrides.MediaUserToken != token {
-		t.Fatalf("interrupted job overrides = %+v, want the media-user-token kept for the resumed run", interrupted.Overrides)
+	if interrupted.Overrides == nil || interrupted.Overrides.ForceOverwrite == nil || !*interrupted.Overrides.ForceOverwrite {
+		t.Fatalf("interrupted job overrides = %+v, want them kept for the resumed run", interrupted.Overrides)
 	}
 	items, err := store.ListItems(ctx, jobID)
 	if err != nil || len(items) != 1 || items[0].Status != domain.ItemDownloading {
@@ -190,8 +190,8 @@ func TestShutdownInterruptsJobAndRestartResumesIt(t *testing.T) {
 	}()
 	select {
 	case resumed := <-processor.resumed:
-		if resumed.Overrides == nil || resumed.Overrides.MediaUserToken == nil || *resumed.Overrides.MediaUserToken != token {
-			t.Fatalf("resumed run overrides = %+v, want the media-user-token", resumed.Overrides)
+		if resumed.Overrides == nil || resumed.Overrides.ForceOverwrite == nil || !*resumed.Overrides.ForceOverwrite {
+			t.Fatalf("resumed run overrides = %+v, want force_overwrite", resumed.Overrides)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("recovered job did not run")

@@ -8,15 +8,16 @@ import { useState, useEffect, useRef, useMemo } from '../ui/preact.js';
 import { lookupLink, listDownloads } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
 import { createLookupQueue, priorJob, priorQuery, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
-import { linkIssue, submittable, needsMediaUserToken } from '../lib/submit.js';
-import { useDebounced } from '../ui/hooks.js';
+import { linkIssue, submittable } from '../lib/submit.js';
 
 // Previews outlive the page, so coming back does not look links up again.
 // An album ?i= link previews as a song or the album depending on
 // catalog.album_track_url_mode, so those answers hold only for the mode
-// they were read under (LOOKUPS_MODE).
+// they were read under (LOOKUPS_MODE), and a private playlist's cover only
+// for whether Settings held a media-user-token then (LOOKUPS_TOKEN).
 const LOOKUPS = new Map();
 let LOOKUPS_MODE = null;
+let LOOKUPS_TOKEN = null;
 // GET downloads?q=<id> pages per link, for the "Downloaded Oct 29" note.
 const HISTORY = new Map();
 const HISTORY_KINDS = ['album', 'song', 'playlist'];
@@ -34,42 +35,24 @@ const isAlbumTrack = (url) => {
 /**
  * The page's link previews: the lookup queue, the status and issue of each
  * entry, the links the submit may send, and each link's earlier job.
- * `settled` is the debounced text, `entries` its scanned links, `token` the
- * typed media-user-token, `serverToken` and `trackMode` the server's
- * catalog config, `epoch` the shell's reconnect counter (a resync after an
+ * `settled` is the debounced text, `entries` its scanned links, `serverToken`
+ * (whether Settings holds a media-user-token, null until the config loads)
+ * and `trackMode` the server's catalog config, `epoch` the shell's reconnect counter (a resync after an
  * outage looks failed previews and the history up again), `storefront` the
  * server's default storefront for links without one (see scanLinks).
  */
-export function useLookups({ settled, entries, token, serverToken, trackMode, epoch, storefront }) {
-  // Previews: the first LOOKUP_LIMIT previewable links, 4 at a time. A
-  // private playlist is read with the typed token once it settles; answers
-  // read with it leave the shared cache with the page, whose field starts
-  // empty next time.
-  const settledToken = useDebounced(token.trim(), 350);
-  const tokenRef = useRef(settledToken);
-  tokenRef.current = settledToken;
-  const readWithToken = useRef(new Set());
+export function useLookups({ settled, entries, serverToken, trackMode, epoch, storefront }) {
+  // Previews: the first LOOKUP_LIMIT previewable links, 4 at a time.
   const [, setTick] = useState(0);
   const queue = useRef(null);
   if (!queue.current) {
     queue.current = createLookupQueue({
-      lookup: (url, signal) => {
-        const t = isPrivate(url) ? tokenRef.current : '';
-        if (t) readWithToken.current.add(url);
-        else readWithToken.current.delete(url);
-        return lookupLink(url, { signal, mediaUserToken: t });
-      },
+      lookup: (url, signal) => lookupLink(url, { signal }),
       cache: LOOKUPS,
       onChange: () => setTick((n) => n + 1),
     });
   }
-  useEffect(
-    () => () => {
-      queue.current.dispose();
-      for (const url of readWithToken.current) LOOKUPS.delete(url);
-    },
-    [],
-  );
+  useEffect(() => () => queue.current.dispose(), []);
   const previewable = (list) => list.filter((e) => e.link && PREVIEW_KINDS.includes(e.link.kind));
   const wanted = useMemo(() => previewable(scanLinks(settled, storefront)).slice(0, LOOKUP_LIMIT).map((e) => e.url), [settled, storefront]);
   useEffect(() => queue.current.want(wanted), [wanted.join('\n')]);
@@ -110,13 +93,12 @@ export function useLookups({ settled, entries, token, serverToken, trackMode, ep
     }
     LOOKUPS_MODE = trackMode;
   }, [trackMode]);
-  // A changed token reads private playlists again.
-  const tokenSeen = useRef(settledToken);
+  // A token set or cleared in Settings reads private playlists again.
   useEffect(() => {
-    if (tokenSeen.current === settledToken) return;
-    tokenSeen.current = settledToken;
-    queue.current.forget([...new Set([...wanted, ...LOOKUPS.keys()])].filter(isPrivate));
-  }, [settledToken]);
+    if (serverToken === null) return;
+    if (LOOKUPS_TOKEN !== null && LOOKUPS_TOKEN !== serverToken) queue.current.forget([...LOOKUPS.keys()].filter(isPrivate));
+    LOOKUPS_TOKEN = serverToken;
+  }, [serverToken]);
   const previewSet = new Set(previewable(entries).slice(0, LOOKUP_LIMIT).map((e) => e.url));
   const skipped = Math.max(0, previewable(entries).length - LOOKUP_LIMIT);
   const statusOf = (url) => {
@@ -124,9 +106,8 @@ export function useLookups({ settled, entries, token, serverToken, trackMode, ep
     return s.state === 'idle' && previewSet.has(url) ? { state: 'queued' } : s;
   };
 
-  // The settled token, like the lookups: a preview read without it is not
-  // judged against a token it was never read with.
-  const hasToken = settledToken !== '' || serverToken;
+  // Until the config has loaded nothing is flagged for a missing token.
+  const hasToken = serverToken !== false;
   const issueOf = (e) => linkIssue(e, e.link && PREVIEW_KINDS.includes(e.link.kind) ? queue.current.status(e.url) : null, { hasToken });
   const sendable = submittable(entries, issueOf);
   const flagged = entries.filter((e) => (issueOf(e) || {}).blocking).length;
@@ -134,8 +115,6 @@ export function useLookups({ settled, entries, token, serverToken, trackMode, ep
     const i = issueOf(e);
     return i && !i.blocking;
   }).length;
-  const lookupStatus = (url) => queue.current.status(url);
-  const needsToken = needsMediaUserToken(sendable, lookupStatus);
   /** The earlier job of a link ({state: 'active' | 'done', job}) or null. */
   const priorOf = (url) => {
     const s = history.current.status(url);
@@ -144,5 +123,5 @@ export function useLookups({ settled, entries, token, serverToken, trackMode, ep
   /** Forgets the earlier-job answers of links just submitted. */
   const forgetPrior = (urls) => history.current.forget(urls);
 
-  return { statusOf, issueOf, sendable, flagged, warned, skipped, needsToken, lookupStatus, queue, priorOf, forgetPrior };
+  return { statusOf, issueOf, sendable, flagged, warned, skipped, queue, priorOf, forgetPrior };
 }

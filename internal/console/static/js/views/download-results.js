@@ -25,8 +25,7 @@ const session = () => {
 // The last results outlive the page for the life of the tab, so leaving
 // New download and coming back shows them again, and sessionStorage keeps
 // them over a reload of the tab (where storage is refused, they last for
-// the page view). They never hold the media-user-token; the page adds it to
-// each request that needs it.
+// the page view).
 const EMPTY = { rows: [], overrides: {} };
 let kept = null;
 const keep = (next) => {
@@ -40,9 +39,9 @@ const REFRESH_MAX = 25;
 
 /**
  * The page's results, {rows, overrides} (rows from lib/submit.js
- * resultRows, overrides without the token), and a setter taking a value or
- * an updater. Rows stay live through the feed; restored rows and those
- * left after a feed resync (app.epoch) are read again with GET downloads/:id.
+ * resultRows), and a setter taking a value or an updater. Rows stay live
+ * through the feed; restored rows and those left after a feed resync
+ * (app.epoch) are read again with GET downloads/:id.
  */
 export function useResults() {
   const app = useApp();

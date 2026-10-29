@@ -1,10 +1,8 @@
 // Pure Apple Music link handling for the New download page and the global
 // paste: find the links in pasted text and tell what each one points at.
 // Hosts, the storefront rule, the kinds and "the id is the last path part"
-// follow internal/applemusic (ParseWithAlbumTrackMode), and needsToken
-// follows internal/jobs needsMediaUserToken (stations and pl.u- playlists
-// can use a media-user-token), so the console and the backend agree on a
-// link.
+// follow internal/applemusic (ParseWithAlbumTrackMode), so the console and
+// the backend agree on a link.
 
 /** Link kinds the backend downloads ("music-video" only through a collection). */
 export const LINK_KINDS = ['album', 'song', 'playlist', 'artist', 'station', 'music-video'];
@@ -45,7 +43,7 @@ function toUrl(raw) {
  * Parses one Apple Music link. Returns null for anything that is not a
  * music.apple.com link (beta. and classical. included; geo., embed. and
  * legacy itunes.apple.com links are read as music.apple.com), else
- * {url, kind, storefront, id, trackId, private, needsToken, noStorefront}:
+ * {url, kind, storefront, id, trackId, private, noStorefront}:
  *
  * - url: the normalized link, https://<host>/<path> with the storefront in
  *   lower case, no fragment and no query except an album's ?i=, so variants
@@ -64,11 +62,8 @@ function toUrl(raw) {
  * - trackId: an album link's ?i= (one song on that album), else null. The
  *   kind stays 'album': the backend downloads that song or the whole album
  *   depending on the runtime catalog.album_track_url_mode ("song" by default).
- * - private: a user playlist (id starts with "pl.u-").
- * - needsToken: a job of this link can use a media-user-token (overrides or
- *   catalog.media_user_token): a station cannot download without one, and a
- *   private playlist, which resolves without one, uses it for the owner's
- *   cover.
+ * - private: a user playlist (id starts with "pl.u-"), whose cover the
+ *   backend reads with catalog.media_user_token.
  */
 export function parseLink(input, opts = {}) {
   if (typeof input !== 'string') return null;
@@ -103,7 +98,6 @@ export function parseLink(input, opts = {}) {
     id,
     trackId,
     private: isPrivate,
-    needsToken: kind === 'station' || isPrivate,
     noStorefront,
   };
 }

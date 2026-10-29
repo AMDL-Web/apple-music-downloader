@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"encoding/json"
 	"time"
 
 	"amdl/internal/config"
@@ -123,8 +122,7 @@ type Job struct {
 	// Overrides is the per-request job config overlay attached at submission;
 	// nil for jobs submitted without one. It is persisted with the job and
 	// applied on top of the live runtime config each time the job runs
-	// (including retries and post-restart requeues). Credential fields are
-	// redacted from its public JSON representation.
+	// (including retries and post-restart requeues).
 	Overrides *config.DownloadOverrides `json:"overrides,omitempty"`
 	Status    JobStatus                 `json:"status"`
 	// TotalItems is stored when the input resolves. The four item counters
@@ -145,15 +143,4 @@ type Job struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
-}
-
-// MarshalJSON is the public job representation used by create/list/detail and
-// live feeds. Per-job media-user-tokens are credentials: keep them available
-// in the internal/persisted Job for retry and recovery, but never echo them to
-// API clients. A token-only override collapses to nil and is omitted entirely.
-func (j Job) MarshalJSON() ([]byte, error) {
-	type publicJob Job
-	public := publicJob(j)
-	public.Overrides = j.Overrides.WithoutMediaUserToken()
-	return json.Marshal(public)
 }

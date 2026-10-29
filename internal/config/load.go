@@ -100,8 +100,7 @@ func clampCatalogLimits(c *CatalogConfig) {
 }
 
 // clampDownloadLimits lowers the bounded download settings to their hard
-// limits in place. It accepts files with oversized values and persisted job
-// overrides whose retry count predates its cap.
+// limits in place, so a file with oversized values still loads.
 func clampDownloadLimits(d *DownloadConfig) {
 	if d.MaxRunningJobs > maxRunningJobsLimit {
 		d.MaxRunningJobs = maxRunningJobsLimit

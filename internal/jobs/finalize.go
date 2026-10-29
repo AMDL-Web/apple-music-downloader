@@ -67,7 +67,6 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 	}
 	job.Status = domain.JobCancelled
 	job.Error = "cancelled"
-	job = withoutTerminalMediaUserToken(job)
 	job.UpdatedAt = now
 	job, persistErr := m.persistTerminal(ctx, job, domain.EventJobCancelled, "job cancelled")
 	if persistErr == nil {
@@ -332,7 +331,6 @@ const cancelledItemMessage = "Cancelled"
 // backend could not even record that fact. A persistence failure is returned
 // so callers can propagate or log it, and no hook fires.
 func (m *Manager) finalizeJob(ctx context.Context, job domain.Job, eventType domain.EventType, message string) error {
-	job = withoutTerminalMediaUserToken(job)
 	job.UpdatedAt = time.Now().UTC()
 	job, err := m.persistTerminal(ctx, job, eventType, message)
 	if err != nil {
@@ -360,16 +358,6 @@ func (m *Manager) persistTerminal(ctx context.Context, job domain.Job, eventType
 	}
 	m.hub.Publish(stored)
 	return job, nil
-}
-
-// withoutTerminalMediaUserToken drops a persisted credential once a job can
-// no longer run. Failed and cancelled jobs deliberately keep it because Retry
-// may enqueue the same row again, including after a process restart.
-func withoutTerminalMediaUserToken(job domain.Job) domain.Job {
-	if job.Status != domain.JobFailed && job.Status != domain.JobCancelled && job.Overrides != nil {
-		job.Overrides = job.Overrides.WithoutMediaUserToken()
-	}
-	return job
 }
 
 // dispatchHooks fires any post-download hooks subscribed to job's terminal

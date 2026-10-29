@@ -113,48 +113,16 @@ func (d *Dispatcher) List() Listing {
 	return listing
 }
 
-// ValidateSelection verifies a per-submission hook allowlist against the
-// configured entry names even when the global hook switch is disabled. With
-// no entries there is nothing meaningful to validate or run (the normal
-// missing-hooks.yaml case), so any list is accepted and has no effect.
-func (d *Dispatcher) ValidateSelection(names *[]string) error {
-	if d == nil || names == nil || len(d.cfg.Entries) == 0 {
-		return nil
-	}
-	configured := make(map[string]struct{}, len(d.cfg.Entries))
-	for _, entry := range d.cfg.Entries {
-		configured[entry.Name] = struct{}{}
-	}
-	for _, name := range *names {
-		if _, ok := configured[name]; !ok {
-			return fmt.Errorf("unknown hook %q", name)
-		}
-	}
-	return nil
-}
-
-// Dispatch evaluates every entry against the job's persisted hook selection,
-// event, and type, then launches the matches asynchronously. Safe to call with
+// Dispatch evaluates every entry against the event and the job's type, then
+// launches the enabled matches asynchronously. Safe to call with
 // a no-op Dispatcher (nil-safe) so callers don't need to branch when hooks are
 // disabled.
 func (d *Dispatcher) Dispatch(event string, job domain.Job, items []domain.JobItem) {
 	if d == nil || !d.cfg.Enabled {
 		return
 	}
-	var selected map[string]struct{}
-	if job.Overrides != nil && job.Overrides.Hooks != nil {
-		selected = make(map[string]struct{}, len(*job.Overrides.Hooks))
-		for _, name := range *job.Overrides.Hooks {
-			selected[name] = struct{}{}
-		}
-	}
 	var matched []Entry
 	for _, e := range d.cfg.Entries {
-		if selected != nil {
-			if _, ok := selected[e.Name]; !ok {
-				continue
-			}
-		}
 		if !e.IsEnabled() || !e.MatchesEvent(event) || !e.MatchesJobType(job.Type) {
 			continue
 		}

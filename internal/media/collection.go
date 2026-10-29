@@ -47,9 +47,8 @@ type resolvedCollection struct {
 	ArtworkColors applemusic.ArtworkColors
 }
 
-// mediaUserToken returns the token from this job's effective config. ProcessJob
-// has already layered overrides.media_user_token over the current runtime
-// catalog value, so retries and post-restart recovery follow the same path.
+// mediaUserToken returns catalog.media_user_token from the runtime snapshot
+// this job runs under; a submission cannot supply its own.
 func (d *Downloader) mediaUserToken() string {
 	return strings.TrimSpace(d.cfg.Catalog.MediaUserToken)
 }

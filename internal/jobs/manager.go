@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"amdl/internal/config"
 	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/events"
@@ -41,12 +40,6 @@ type Manager struct {
 	finalizing map[string]bool
 	workers    int
 	hooks      *hooks.Dispatcher
-	// configStore is the live runtime config, read at submit time to resolve
-	// the destination a submission would write to for its canonical key. Set
-	// after construction like hooks; a Manager without one keys every
-	// submission against the zero config's downloads dir, which is consistent
-	// within a process and so leaves dedup semantics intact for tests.
-	configStore *config.Store
 	// active counts jobs currently in ProcessJob. It gates the post-job memory
 	// scavenge so only the last-finishing job of a busy burst triggers it (see
 	// run).
@@ -89,23 +82,6 @@ func (m *Manager) SetHooks(d *hooks.Dispatcher) {
 	m.hooks = d
 }
 
-// SetConfigStore wires the live runtime config used to resolve a submission's
-// effective downloads directory for its canonical key. Called after
-// construction for the same reason as SetHooks: the store is shared with the
-// download pipeline and the API layer rather than owned here.
-func (m *Manager) SetConfigStore(store *config.Store) {
-	m.configStore = store
-}
-
-// baseConfig returns the current runtime config snapshot; nil-safe for test
-// Managers constructed without a config store.
-func (m *Manager) baseConfig() config.Config {
-	if m == nil || m.configStore == nil {
-		return config.Config{}
-	}
-	return m.configStore.Get()
-}
-
 // ListHooks returns the sanitized hook configuration snapshot used by
 // Dispatch. Nil-safe for tests and deployments with no dispatcher configured.
 func (m *Manager) ListHooks() hooks.Listing {
@@ -113,16 +89,6 @@ func (m *Manager) ListHooks() hooks.Listing {
 		return (*hooks.Dispatcher)(nil).List()
 	}
 	return m.hooks.List()
-}
-
-// ValidateHookSelection checks a per-submission hook allowlist against the
-// hook configuration snapshot used by Dispatch. Nil-safe for tests and
-// deployments with no dispatcher configured.
-func (m *Manager) ValidateHookSelection(names *[]string) error {
-	if m == nil {
-		return nil
-	}
-	return m.hooks.ValidateSelection(names)
 }
 
 // HooksPending reports whether jobID has a post-download hook still running.

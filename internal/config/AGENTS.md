@@ -1,8 +1,8 @@
 # internal/config
 
 Loads, validates and persists the service config (`Load`, `Config.Validate`,
-`Store`), applies `AMDL_*` environment overrides, and builds per-job
-`DownloadOverrides`. These rules also cover `configs/`.
+`Store`), applies `AMDL_*` environment overrides, and defines the per-job
+`DownloadOverrides` (quality and overwrite keys only). These rules also cover `configs/`.
 
 ## Invariants
 

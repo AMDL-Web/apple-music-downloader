@@ -100,9 +100,9 @@ exec hook's stdin — looks like this. The `job` counters are the API's (see
 }
 ```
 
-Hook execution surfaces as `hook_started`, `hook_succeeded` and `hook_failed` events, and
-a submission can restrict which entries may run through `overrides.hooks` — see
-[api.md](api.md#job-overrides). On shutdown, hooks get a short drain: retries stop at once,
+Hook execution surfaces as `hook_started`, `hook_succeeded` and `hook_failed` events.
+Every enabled entry whose `events` and `job_types` match runs for every job; a submission
+cannot choose among them. On shutdown, hooks get a short drain: retries stop at once,
 and an attempt still running when the drain ends is cancelled and recorded as
 `hook_failed`.
 

@@ -1,11 +1,11 @@
-// New download: the server's download defaults (GET config) and hooks list
-// (GET hooks) the Options card edits against. Both load on mount and again
-// after a reconnect (the shell's epoch); the config also on Retry.
+// New download: the server's download defaults (GET config) the Options card
+// edits against. They load on mount and again after a reconnect (the shell's
+// epoch) or on Retry.
 
 import { useState, useEffect } from '../ui/preact.js';
-import { getConfig, getHooks } from '../api.js';
+import { getConfig } from '../api.js';
 
-/** {cfg, setCfgRun, hooks}: each {loading, data, error}; setCfgRun((n) => n + 1) reads the config again. */
+/** {cfg, setCfgRun}: cfg is {loading, data, error}; setCfgRun((n) => n + 1) reads the config again. */
 export function useServerConfig(epoch) {
   const [cfg, setCfg] = useState({ loading: true, data: null, error: null });
   const [cfgRun, setCfgRun] = useState(0);
@@ -20,16 +20,5 @@ export function useServerConfig(epoch) {
       off = true;
     };
   }, [cfgRun, epoch]);
-  const [hooks, setHooks] = useState({ loading: true, data: null, error: null });
-  useEffect(() => {
-    let off = false;
-    getHooks().then(
-      (data) => !off && setHooks({ loading: false, data, error: null }),
-      (error) => !off && setHooks({ loading: false, data: null, error }),
-    );
-    return () => {
-      off = true;
-    };
-  }, [epoch]);
-  return { cfg, setCfgRun, hooks };
+  return { cfg, setCfgRun };
 }

@@ -48,8 +48,6 @@ streams, and `internal/api/openapi.yaml`, the contract the web console
   done, hooks no longer pending, in that order). Caught up and exhausted at
   connect is 204, not an error. The comments explain each race; keep the order.
 - `GET /config` is a pure read; `POST /config/reload` re-reads the file.
-- A submission's `media_user_token` override is never echoed back in a job,
-  item or event (`DownloadOverrides.WithoutMediaUserToken` in internal/config).
 
 ## Change together
 

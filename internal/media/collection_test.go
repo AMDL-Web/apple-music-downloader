@@ -72,7 +72,7 @@ func TestResolveCollectionStationPassesTokenAndTracks(t *testing.T) {
 	}
 }
 
-func TestResolveCollectionStationUsesEffectiveConfigToken(t *testing.T) {
+func TestResolveCollectionStationUsesConfiguredToken(t *testing.T) {
 	var gotToken string
 	cfg := config.Default()
 	cfg.Catalog.MediaUserToken = " configured-token "
@@ -91,19 +91,6 @@ func TestResolveCollectionStationUsesEffectiveConfigToken(t *testing.T) {
 	}
 	if gotToken != "configured-token" {
 		t.Fatalf("token = %q, want trimmed configured token", gotToken)
-	}
-
-	// ProcessJob applies the request override before resolution; model that
-	// effective snapshot directly here and verify it follows the same path.
-	requestToken := " request-token "
-	downloader.cfg = (&config.DownloadOverrides{MediaUserToken: &requestToken}).Apply(cfg)
-	if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
-		Storefront: "us", Type: applemusic.TypeStation, ID: "ra.1",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if gotToken != "request-token" {
-		t.Fatalf("token = %q, want job override to take precedence", gotToken)
 	}
 }
 

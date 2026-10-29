@@ -19,18 +19,18 @@ func TestGetJobFailsOnCorruptOverrides(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 	ctx := context.Background()
 
-	embed := false
+	force := true
 	now := time.Now().UTC()
 	job := domain.Job{
 		ID: "job-1", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1",
-		Overrides: &config.DownloadOverrides{EmbedLyrics: &embed},
+		Overrides: &config.DownloadOverrides{ForceOverwrite: &force},
 		Status:    domain.JobQueued, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := store.GetJob(ctx, job.ID)
-	if err != nil || loaded.Overrides == nil || loaded.Overrides.EmbedLyrics == nil || *loaded.Overrides.EmbedLyrics {
+	if err != nil || loaded.Overrides == nil || loaded.Overrides.ForceOverwrite == nil || !*loaded.Overrides.ForceOverwrite {
 		t.Fatalf("healthy round trip failed: %+v, %v", loaded.Overrides, err)
 	}
 
@@ -44,76 +44,11 @@ func TestGetJobFailsOnCorruptOverrides(t *testing.T) {
 	}
 }
 
-func TestMediaUserTokenOverrideSurvivesStorageRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-
-	empty := ""
-	now := time.Now().UTC()
-	job := domain.Job{
-		ID: "job-token", Input: "station|us|ra.1", Type: "station", CanonicalKey: "station:us:ra.1",
-		Overrides: &config.DownloadOverrides{MediaUserToken: &empty},
-		Status:    domain.JobQueued, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := store.CreateJob(context.Background(), job); err != nil {
-		t.Fatal(err)
-	}
-	loaded, err := store.GetJob(context.Background(), job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.Overrides == nil || loaded.Overrides.MediaUserToken == nil || *loaded.Overrides.MediaUserToken != "" {
-		t.Fatalf("stored explicit-empty media_user_token = %+v, want non-nil empty pointer", loaded.Overrides)
-	}
-}
-
-func TestHooksOverrideNilAndEmptySurviveStorageRoundTrip(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-
-	empty := []string{}
-	tests := []struct {
-		name  string
-		hooks *[]string
-	}{
-		{name: "nil"},
-		{name: "empty", hooks: &empty},
-	}
-	for i, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			job := domain.Job{
-				ID: "job-hooks-" + tt.name, Input: "song|us|" + tt.name, Type: "song", CanonicalKey: "song:us:hooks-" + tt.name,
-				Overrides: &config.DownloadOverrides{Hooks: tt.hooks},
-				Status:    domain.JobQueued, CreatedAt: time.Now().UTC().Add(time.Duration(i) * time.Second), UpdatedAt: time.Now().UTC(),
-			}
-			if err := store.CreateJob(context.Background(), job); err != nil {
-				t.Fatal(err)
-			}
-			loaded, err := store.GetJob(context.Background(), job.ID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if loaded.Overrides == nil {
-				t.Fatal("stored overrides decoded as nil")
-			}
-			if tt.hooks == nil {
-				if loaded.Overrides.Hooks != nil {
-					t.Fatalf("nil hooks decoded as %+v", loaded.Overrides.Hooks)
-				}
-			} else if loaded.Overrides.Hooks == nil || len(*loaded.Overrides.Hooks) != 0 {
-				t.Fatalf("explicit-empty hooks decoded as %+v", loaded.Overrides.Hooks)
-			}
-		})
-	}
-}
-
-func TestRemovedParallelTracksOverrideDoesNotBlockHistoricalJobLoad(t *testing.T) {
+// Rows stored before the overrides shrank keep keys that are no longer
+// fields (media_user_token, hooks, downloads_dir, max_parallel_tracks, ...).
+// No migration removes them: every read decodes the row with those keys
+// ignored, and the job's terminal write drops them.
+func TestRemovedOverrideKeysDoNotBlockHistoricalJobLoad(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -123,13 +58,14 @@ func TestRemovedParallelTracksOverrideDoesNotBlockHistoricalJobLoad(t *testing.T
 
 	now := time.Now().UTC()
 	job := domain.Job{
-		ID: "job-old-parallel", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:old-parallel",
+		ID: "job-old", Input: "station|us|ra.1", Type: "station", CanonicalKey: "station:us:ra.1:0123456789ab",
 		Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.ExecContext(ctx, `UPDATE jobs SET overrides=? WHERE id=?`, `{"max_parallel_tracks":64,"embed_lyrics":false}`, job.ID); err != nil {
+	legacy := `{"media_user_token":"old-token","hooks":["notify"],"downloads_dir":"/elsewhere","max_parallel_tracks":64,"embed_lyrics":false,"force_overwrite":true}`
+	if _, err := store.db.ExecContext(ctx, `UPDATE jobs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -137,7 +73,24 @@ func TestRemovedParallelTracksOverrideDoesNotBlockHistoricalJobLoad(t *testing.T
 	if err != nil {
 		t.Fatalf("load historical job: %v", err)
 	}
-	if loaded.Overrides == nil || loaded.Overrides.EmbedLyrics == nil || *loaded.Overrides.EmbedLyrics {
-		t.Fatalf("historical supported overrides not retained: %+v", loaded.Overrides)
+	if loaded.Overrides == nil || loaded.Overrides.ForceOverwrite == nil || !*loaded.Overrides.ForceOverwrite {
+		t.Fatalf("kept override not retained: %+v", loaded.Overrides)
+	}
+	recoverable, err := store.ListRecoverableJobs(ctx)
+	if err != nil || len(recoverable) != 1 || recoverable[0].Overrides == nil || recoverable[0].Overrides.ForceOverwrite == nil {
+		t.Fatalf("ListRecoverableJobs = %+v, %v; want the historical job with its kept override", recoverable, err)
+	}
+
+	loaded.Status = domain.JobCompleted
+	loaded.UpdatedAt = time.Now().UTC()
+	if _, err := store.FinalizeJob(ctx, loaded, domain.Event{JobID: job.ID, Type: domain.EventJobFinished, Message: "done"}); err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err := store.db.QueryRowContext(ctx, `SELECT overrides FROM jobs WHERE id=?`, job.ID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != `{"force_overwrite":true}` {
+		t.Fatalf("overrides after the terminal write = %s, want only force_overwrite", stored)
 	}
 }

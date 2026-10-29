@@ -18,7 +18,6 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/db"
-	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/hooks"
 	"amdl/internal/jobs"
@@ -147,10 +146,6 @@ func run(ctx context.Context, files configFiles) (err error) {
 	manager := jobs.NewManager(store, hub, downloader, cfg.Download.MaxRunningJobs, logSystem.Logger.With("component", "jobs"))
 	hookDispatcher := hooks.NewDispatcher(hooksCfg, manager.Event, logSystem.Logger.With("component", "hooks"))
 	manager.SetHooks(hookDispatcher)
-	// Shares the same live config as the API layer and the download pipeline,
-	// so a submission's dedup key reflects the downloads dir the job will
-	// actually run under.
-	manager.SetConfigStore(cfgStore)
 	// The library watcher submits through the same manager as the REST API, so
 	// anything it queues is an ordinary job (same dedup, same hooks).
 	libraryWatcher := librarysync.New(cfgStore, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
@@ -171,7 +166,6 @@ func run(ctx context.Context, files configFiles) (err error) {
 	} else if recovered > 0 {
 		logger.Info("recovered unfinished jobs", "count", recovered)
 	}
-	sweepRecoveredTempOverrides(startupCtx, cfg, store, logger, logSystem.Logger.With("component", "media"))
 
 	httpHandlerCtx, cancelHTTPHandlers := context.WithCancel(context.Background())
 	defer cancelHTTPHandlers()
@@ -253,30 +247,6 @@ serve:
 	return runErr
 }
 
-// sweepRecoveredTempOverrides cleans the per-request temp_dir overrides of
-// jobs left queued or running. The configured-dir sweep doesn't cover them,
-// and they are exactly the jobs whose in-flight scratch could have leaked on a
-// crash. It runs before the worker pool starts, so nothing writes to them.
-func sweepRecoveredTempOverrides(ctx context.Context, cfg config.Config, store *db.Store, logger, mediaLogger *slog.Logger) {
-	recoverable, err := store.ListRecoverableJobs(ctx)
-	if err != nil {
-		logger.Warn("list recoverable jobs; skipping the sweep of their temp_dir overrides", "error", err)
-		return
-	}
-	swept := map[string]bool{cfg.Download.TempDir: true}
-	for _, job := range recoverable {
-		dir, ok, err := recoveryTempOverride(cfg, job)
-		if err != nil {
-			logger.Warn("skip unsafe recovered temp override", "job_id", job.ID, "error", err)
-			continue
-		}
-		if ok && !swept[dir] {
-			swept[dir] = true
-			media.CleanupStaleTemp(dir, mediaLogger)
-		}
-	}
-}
-
 // reloadConfig handles SIGHUP like POST /api/v1/config/reload: it re-reads the
 // config file and applies its runtime keys and the logging level. An
 // unreadable or invalid file is logged and the previous snapshot stays.
@@ -300,18 +270,4 @@ func closeLogged(logger *slog.Logger, what string, closeFn func() error) {
 	if err := closeFn(); err != nil {
 		logger.Error(what, "error", err)
 	}
-}
-
-// recoveryTempOverride applies the same filesystem trust boundary used when
-// accepting and running a job. Persisted rows may predate that validation, so
-// startup cleanup must not trust their raw temp_dir values.
-func recoveryTempOverride(base config.Config, job domain.Job) (string, bool, error) {
-	if job.Overrides == nil || job.Overrides.TempDir == nil || *job.Overrides.TempDir == "" {
-		return "", false, nil
-	}
-	effective, err := job.Overrides.ApplyValidated(base)
-	if err != nil {
-		return "", false, err
-	}
-	return effective.Download.TempDir, true, nil
 }

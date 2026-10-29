@@ -12,17 +12,8 @@ import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/p
 import { createDownload } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
-import {
-  chunk,
-  pairResults,
-  handledUrls,
-  resultRows,
-  submitSummary,
-  classifySubmitError,
-  requestOverrides,
-} from '../lib/submit.js';
-import { OPTIONS_KEY, optionDefaults, buildOverrides, applyOverrides, sanitizeOverrides, parseStoredOptions, describeOverrides } from '../lib/overrides.js';
-import { readPref, writePref } from '../lib/prefs.js';
+import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError } from '../lib/submit.js';
+import { optionDefaults, buildOverrides, applyOverrides, describeOverrides } from '../lib/overrides.js';
 import { useApp, Card, Button, Notice } from '../ui/components.js';
 import { useDebounced, useMedia } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -32,14 +23,6 @@ import { LinksCard } from './download-links.js';
 import { OptionsCard } from './download-options.js';
 import { QualitySheet } from './download-quality.js';
 import { ResultsCard, BookmarkletCard, useResults } from './download-results.js';
-
-const storage = () => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-};
 
 const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
 
@@ -118,55 +101,34 @@ export function DownloadPage({ route }) {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // Server defaults and hooks.
-  const { cfg, setCfgRun, hooks } = useServerConfig(app.epoch);
+  // Server defaults.
+  const { cfg, setCfgRun } = useServerConfig(app.epoch);
 
   const download = cfg.data && cfg.data.config ? cfg.data.config.download : null;
   const trackMode = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.album_track_url_mode || '' : null;
   const defaults = useMemo(() => (download ? optionDefaults(download) : null), [JSON.stringify(download)]);
-  const serverToken = Boolean(cfg.data && cfg.data.config && cfg.data.config.catalog && cfg.data.config.catalog.media_user_token);
-  const enabledHooks = hooks.data && hooks.data.enabled ? hooks.data.entries.filter((e) => e.enabled).map((e) => e.name) : [];
-  const hookNames = hooks.data ? hooks.data.entries.map((e) => e.name) : [];
+  // Whether Settings holds a media-user-token; null until the config loads.
+  const serverToken = cfg.data && cfg.data.config && cfg.data.config.catalog ? Boolean(cfg.data.config.catalog.media_user_token) : null;
 
-  // The form: defaults, plus options this device remembers.
+  // The form starts from the server defaults.
   const [values, setValues] = useState(null);
-  const [hookSel, setHookSel] = useState(null);
-  const [remember, setRemember] = useState(false);
   const [open, setOpen] = useState(false);
-  const [token, setToken] = useState('');
   useEffect(() => {
     if (!defaults || values) return;
-    const stored = readPref(storage(), OPTIONS_KEY, parseStoredOptions);
-    if (stored) {
-      setRemember(true);
-      if (stored.hooks) setHookSel(stored.hooks);
-    }
-    setValues(applyOverrides(defaults, stored || {}));
+    setValues(applyOverrides(defaults, {}));
   }, [defaults]);
-  // A remembered hook list keeps only names hooks.yaml still has; without
-  // the hooks list it is dropped, since an unknown name fails the submit.
-  const hooksPicked = !hookSel ? null : hooks.data ? hookSel.filter((n) => hookNames.includes(n)) : hooks.loading ? hookSel : null;
 
-  const overrides = useMemo(
-    () => (defaults && values ? buildOverrides(defaults, values, { hooks: hooksPicked, enabledHooks }) : {}),
-    [defaults, values, hooksPicked ? `picked:${hooksPicked.join('\n')}` : 'all', enabledHooks.join('\n')],
-  );
-  useEffect(() => {
-    if (!values) return;
-    writePref(storage(), OPTIONS_KEY, remember ? JSON.stringify(sanitizeOverrides(overrides)) : '');
-  }, [remember, overrides]);
+  const overrides = useMemo(() => (defaults && values ? buildOverrides(defaults, values) : {}), [defaults, values]);
 
   const setValue = useCallback((key, v) => setValues((cur) => ({ ...cur, [key]: v })), []);
   const resetOptions = () => {
     if (defaults) setValues(applyOverrides(defaults, {}));
-    setHookSel(null);
     setRefusal('');
   };
 
-  const { statusOf, issueOf, sendable, flagged, warned, skipped, needsToken, lookupStatus, queue, priorOf, forgetPrior } = useLookups({
+  const { statusOf, issueOf, sendable, flagged, warned, skipped, queue, priorOf, forgetPrior } = useLookups({
     settled,
     entries,
-    token,
     serverToken,
     trackMode,
     epoch: app.epoch,
@@ -174,7 +136,7 @@ export function DownloadPage({ route }) {
   });
   const jobHref = (id) => buildHash('new', route.params, id);
 
-  // Submit and results (kept for the life of the tab, without the token).
+  // Submit and results (kept for the life of the tab).
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
   const [results, setResults] = useResults();
@@ -182,17 +144,13 @@ export function DownloadPage({ route }) {
   const [quality, setQuality] = useState(null);
   const [confirm, setConfirm] = useState(null);
 
-  /**
-   * Sends `urls` in chunks the backend accepts, the typed token only with
-   * a chunk that needs it; returns {pairs, failure}.
-   */
+  /** Sends `urls` in chunks the backend accepts; returns {pairs, failure}. */
   const send = async (urls, ov) => {
     const pairs = [];
     let fail = null;
     for (const part of chunk(urls)) {
-      const body = requestOverrides(ov, part, token, lookupStatus);
       try {
-        const resp = await createDownload(Object.keys(body).length ? { urls: part, overrides: body } : { urls: part });
+        const resp = await createDownload(Object.keys(ov).length ? { urls: part, overrides: ov } : { urls: part });
         pairs.push(...pairResults(part, resp.results));
       } catch (err) {
         const c = classifySubmitError(err);
@@ -343,25 +301,6 @@ export function DownloadPage({ route }) {
           <p id="new-input-hint" class="new-hint">
             Albums, songs, playlists, artists and stations. Links are found anywhere in the text${keyboard ? `; ${keys} downloads` : ''}.
           </p>
-          ${needsToken
-            ? html`<div class="new-token">
-                <label class="new-field-label" for="new-token">Media-user-token</label>
-                <input
-                  id="new-token"
-                  class="new-token-input"
-                  type="password"
-                  autocomplete="off"
-                  spellcheck=${false}
-                  value=${token}
-                  aria-describedby="new-token-hint"
-                  onInput=${(e) => setToken(e.currentTarget.value)}
-                />
-                <p id="new-token-hint" class="new-hint">
-                  Stations download with your Apple Music media-user-token; a private playlist uses it only to find the cover you chose. It goes with
-                  this download only and is never stored here.${serverToken ? ' Leave it empty to use the token saved on the server.' : ''}
-                </p>
-              </div>`
-            : null}
           <div class="new-submit">
             <div class="new-submit-info">
               <span class="new-count">${countLine}</span>
@@ -413,14 +352,9 @@ export function DownloadPage({ route }) {
         defaults=${defaults}
         values=${values}
         setValue=${setValue}
-        hooks=${hooks}
-        hookSel=${hooksPicked}
-        setHookSel=${setHookSel}
         overrides=${overrides}
         open=${open}
         setOpen=${setOpen}
-        remember=${remember}
-        setRemember=${setRemember}
         onReset=${resetOptions}
         refusal=${refusal}
       />

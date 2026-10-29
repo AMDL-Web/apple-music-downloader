@@ -33,8 +33,8 @@ export const PREVIEW_KINDS = ['album', 'song', 'playlist', 'artist', 'station'];
  *   slot) | {state: 'idle'} (not wanted).
  * - retry(url): forgets a cached answer so want() fetches it again.
  * - forget(urls): aborts these lookups in flight and drops their cached
- *   answers, then fetches the wanted ones again (the media-user-token a
- *   private playlist is read with changed).
+ *   answers, then fetches the wanted ones again (the token Settings holds
+ *   for private playlist covers was set or cleared).
  * - dispose(): aborts everything in flight.
  *
  * Answers (errors included) are cached per URL in `cache`, which the caller

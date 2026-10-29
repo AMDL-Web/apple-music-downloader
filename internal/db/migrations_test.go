@@ -436,9 +436,8 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if running.Overrides == nil || running.Overrides.ForceOverwrite == nil || !*running.Overrides.ForceOverwrite ||
-		running.Overrides.EmbedCover == nil || !*running.Overrides.EmbedCover {
-		t.Errorf("j-running overrides = %+v, want force_overwrite true and embed_cover kept", running.Overrides)
+	if running.Overrides == nil || running.Overrides.ForceOverwrite == nil || !*running.Overrides.ForceOverwrite {
+		t.Errorf("j-running overrides = %+v, want force_overwrite true", running.Overrides)
 	}
 	if running.StartedAt == nil || running.FinishedAt != nil || running.CompletedItems != 1 {
 		t.Errorf("j-running = started %v finished %v completed %d", running.StartedAt, running.FinishedAt, running.CompletedItems)
@@ -451,8 +450,9 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 		t.Errorf("j-failed counters = completed %d skipped %d failed %d cancelled %d, want 1/1/1/0",
 			failed.CompletedItems, failed.SkippedItems, failed.FailedItems, failed.CancelledItems)
 	}
-	if failed.Overrides == nil || failed.Overrides.MediaUserToken == nil || *failed.Overrides.MediaUserToken != "tok" || failed.Overrides.ForceOverwrite != nil {
-		t.Errorf("j-failed overrides = %+v, want the token kept and no force_overwrite", failed.Overrides)
+	// Its overrides held only removed keys, so the job reads as having none.
+	if failed.Overrides != nil {
+		t.Errorf("j-failed overrides = %+v, want none", failed.Overrides)
 	}
 	if got := after["jobs"]["j-corrupt"]["overrides"]; got != "{broken" {
 		t.Errorf("unparseable overrides = %#v, want it left as it was", got)

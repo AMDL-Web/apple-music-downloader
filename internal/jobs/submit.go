@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"time"
 
 	"amdl/internal/config"
@@ -32,15 +31,11 @@ var ErrJobFinalizing = errors.New("job is still finalizing its previous run; ret
 // SubmitBatch validates and enqueues each url independently, applying
 // three-layer dedup: request-internal (canonical key seen earlier in this
 // batch), active-job lookup, and the DB's partial unique index as a backstop
-// against races. See docs/multi-link-submit-design.md.
+// against races.
 //
-// overrides, when non-nil, is attached to every job created from this batch,
-// overlays the runtime config while those jobs run, and carries their hook
-// selection. Callers must validate it (apply to the current config and
-// Validate, plus validate hook names) before submitting. A media-user-token
-// override is retained only by stations and private playlists, the two job
-// kinds that consume it; all other jobs keep the remaining overrides without
-// retaining the credential.
+// overrides, when non-nil, is attached to every job created from this batch
+// and overlays the runtime config while those jobs run. Callers validate it
+// (DownloadOverrides.ApplyValidated) before submitting.
 func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *config.DownloadOverrides) domain.BatchSubmitResponse {
 	results := make([]domain.SubmitResult, len(urls))
 
@@ -50,14 +45,6 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 		key   string
 		valid ValidationResult
 	}
-	// One destination for the whole batch: overrides are batch-scoped, so
-	// every candidate shares this segment and request-internal dedup is
-	// unaffected. Resolved once, and before submitMu is taken, because
-	// canonicalizing the path touches the filesystem and submitMu serializes
-	// every submit in the process. Resolved here rather than when the job
-	// runs so the key is stable from submit through retry and post-restart
-	// recovery, which is what the unique index depends on.
-	destination := destinationSegment(m.baseConfig(), overrides)
 	var candidates []candidate
 	seenKeys := map[string]bool{}
 	for i, url := range urls {
@@ -66,7 +53,7 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 			results[i] = validationFailure(url, err)
 			continue
 		}
-		key := canonicalKey(validated.Type, validated.Storefront, validated.ID, destination)
+		key := canonicalKey(validated.Type, validated.Storefront, validated.ID)
 		if seenKeys[key] {
 			results[i] = domain.SubmitResult{URL: url, Status: domain.SubmitDuplicateInRequest, Error: &domain.SubmitError{
 				Code: domain.SubmitCodeDuplicateInRequest, Message: "an earlier URL in this request names the same download",
@@ -105,13 +92,9 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 			continue
 		}
 
-		jobOverrides := overrides
-		if overrides != nil && !needsMediaUserToken(c.valid.Type, c.valid.ID) {
-			jobOverrides = overrides.WithoutMediaUserToken()
-		}
 		job := domain.Job{
 			ID: ids.NewID("job"), Input: c.url, Type: c.valid.Type, Storefront: c.valid.Storefront, CanonicalKey: c.key,
-			Overrides: jobOverrides, Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
+			Overrides: overrides, Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
 		}
 		if err := m.store.CreateJob(ctx, job); err != nil {
 			if errors.Is(err, db.ErrDuplicateActive) {
@@ -274,11 +257,4 @@ func duplicateActiveResult(url, existingJobID string) domain.SubmitResult {
 	return domain.SubmitResult{URL: url, Status: domain.SubmitDuplicateActive, ExistingJobID: existingJobID, Error: &domain.SubmitError{
 		Code: domain.SubmitCodeDuplicateActive, Message: "an active job already downloads this input",
 	}}
-}
-
-// needsMediaUserToken reports whether a job can consume the per-job credential:
-// stations require it for next-tracks, while private playlists use it for
-// best-effort library artwork enrichment.
-func needsMediaUserToken(jobType, id string) bool {
-	return jobType == "station" || (jobType == "playlist" && strings.HasPrefix(id, "pl.u-"))
 }

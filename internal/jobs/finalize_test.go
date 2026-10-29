@@ -186,12 +186,14 @@ func (failingProcessor) ProcessJob(context.Context, domain.Job, Reporter) error 
 	return errors.New("boom")
 }
 
-func TestTerminalJobKeepsPersistedTokenOnlyWhenRetryable(t *testing.T) {
+// Overrides never change after submission: every terminal state keeps them,
+// so a retry runs under the same choices.
+func TestTerminalJobKeepsOverrides(t *testing.T) {
 	newOverrides := func() *config.DownloadOverrides {
-		token := "tok"
-		return &config.DownloadOverrides{MediaUserToken: &token}
+		force := true
+		return &config.DownloadOverrides{ForceOverwrite: &force}
 	}
-	waitToken := func(t *testing.T, m *Manager, jobID, want string, wantPresent bool) {
+	waitOverrides := func(t *testing.T, m *Manager, jobID string) {
 		t.Helper()
 		var job domain.Job
 		deadline := time.Now().Add(2 * time.Second)
@@ -206,17 +208,12 @@ func TestTerminalJobKeepsPersistedTokenOnlyWhenRetryable(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		got := ""
-		present := job.Overrides != nil && job.Overrides.MediaUserToken != nil
-		if present {
-			got = *job.Overrides.MediaUserToken
-		}
-		if got != want || present != wantPresent {
-			t.Fatalf("token after terminal = %q, want %q", got, want)
+		if job.Overrides == nil || job.Overrides.ForceOverwrite == nil || !*job.Overrides.ForceOverwrite {
+			t.Fatalf("overrides after %s = %+v, want force_overwrite kept", job.Status, job.Overrides)
 		}
 	}
 
-	t.Run("completed drops the token", func(t *testing.T) {
+	t.Run("completed", func(t *testing.T) {
 		manager := newTestManager(t)
 		ctx, stop := context.WithCancel(context.Background())
 		defer stop()
@@ -225,10 +222,10 @@ func TestTerminalJobKeepsPersistedTokenOnlyWhenRetryable(t *testing.T) {
 		if resp.Accepted != 1 {
 			t.Fatalf("submit: %+v", resp.Results)
 		}
-		waitToken(t, manager, resp.Results[0].Job.ID, "", false)
+		waitOverrides(t, manager, resp.Results[0].Job.ID)
 	})
 
-	t.Run("cancelled keeps the token for retry", func(t *testing.T) {
+	t.Run("cancelled", func(t *testing.T) {
 		manager := newTestManager(t)
 		resp := manager.SubmitBatch(context.Background(), []string{"station|us|ra.1"}, newOverrides())
 		if resp.Accepted != 1 {
@@ -238,10 +235,10 @@ func TestTerminalJobKeepsPersistedTokenOnlyWhenRetryable(t *testing.T) {
 		if err := manager.Cancel(context.Background(), jobID); err != nil {
 			t.Fatal(err)
 		}
-		waitToken(t, manager, jobID, "tok", true)
+		waitOverrides(t, manager, jobID)
 	})
 
-	t.Run("failed keeps the token for retry", func(t *testing.T) {
+	t.Run("failed", func(t *testing.T) {
 		store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
 		if err != nil {
 			t.Fatal(err)
@@ -255,7 +252,7 @@ func TestTerminalJobKeepsPersistedTokenOnlyWhenRetryable(t *testing.T) {
 		if resp.Accepted != 1 {
 			t.Fatalf("submit: %+v", resp.Results)
 		}
-		waitToken(t, manager, resp.Results[0].Job.ID, "tok", true)
+		waitOverrides(t, manager, resp.Results[0].Job.ID)
 	})
 }
 
@@ -690,13 +687,13 @@ func TestTerminalJobEventPayloadCarriesRESTJobSnapshot(t *testing.T) {
 	}
 	defer store.Close()
 
-	embed := false
+	force := true
 	ctx := context.Background()
 	now := time.Now().UTC().Add(-time.Minute)
 	job := domain.Job{
 		ID: "job-terminal-payload", Input: "song|us|1", Type: "song", Storefront: "us",
 		CanonicalKey: "song:us:1", Status: domain.JobRunning, TotalItems: 1,
-		Overrides: &config.DownloadOverrides{EmbedCover: &embed}, CreatedAt: now, UpdatedAt: now,
+		Overrides: &config.DownloadOverrides{ForceOverwrite: &force}, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)

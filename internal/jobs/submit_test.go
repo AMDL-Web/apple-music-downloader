@@ -21,42 +21,26 @@ import (
 	"amdl/internal/hooks"
 )
 
-func TestSubmitBatchStoresTokenOnlyForJobsThatNeedIt(t *testing.T) {
+func TestSubmitBatchStoresOverridesOnEveryJob(t *testing.T) {
 	manager := newTestManager(t)
-	token := "batch-token"
-	embedLyrics := false
-	overrides := &config.DownloadOverrides{MediaUserToken: &token, EmbedLyrics: &embedLyrics}
+	force := true
+	overrides := &config.DownloadOverrides{ForceOverwrite: &force}
 	resp := manager.SubmitBatch(context.Background(), []string{
 		"station|us|ra.1",
 		"playlist|us|pl.u-private",
-		"playlist|us|pl.editorial",
 		"song|us|1",
 	}, overrides)
-	if resp.Accepted != 4 {
-		t.Fatalf("accepted = %d, want 4: %+v", resp.Accepted, resp.Results)
+	if resp.Accepted != 3 {
+		t.Fatalf("accepted = %d, want 3: %+v", resp.Accepted, resp.Results)
 	}
-	want := []string{"batch-token", "batch-token", "", ""}
-	for i, result := range resp.Results {
+	for _, result := range resp.Results {
 		job, err := manager.store.GetJob(context.Background(), result.Job.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if job.Overrides == nil || job.Overrides.EmbedLyrics == nil || *job.Overrides.EmbedLyrics {
-			t.Fatalf("job %s (%s) lost non-token overrides: %+v", result.Job.ID, result.URL, job.Overrides)
+		if job.Overrides == nil || job.Overrides.ForceOverwrite == nil || !*job.Overrides.ForceOverwrite {
+			t.Fatalf("job %s (%s) overrides = %+v, want force_overwrite", result.Job.ID, result.URL, job.Overrides)
 		}
-		got := ""
-		if job.Overrides.MediaUserToken != nil {
-			got = *job.Overrides.MediaUserToken
-		}
-		if got != want[i] {
-			t.Fatalf("job %s (%s) token = %q, want %q", result.Job.ID, result.URL, got, want[i])
-		}
-		if want[i] == "" && job.Overrides.MediaUserToken != nil {
-			t.Fatalf("job %s (%s) retained a token pointer for an unrelated job", result.Job.ID, result.URL)
-		}
-	}
-	if overrides.MediaUserToken == nil || *overrides.MediaUserToken != token {
-		t.Fatalf("SubmitBatch mutated the caller's overrides: %+v", overrides)
 	}
 }
 
@@ -318,8 +302,8 @@ func TestRetryRequeuesCancelledJob(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	started, finished := now.Add(-time.Minute), now.Add(-time.Second)
-	token := "tok"
-	job := domain.Job{ID: "job-cancelled", Input: "in", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:c1", Status: domain.JobCancelled, TotalItems: 3, Error: "cancelled", StartedAt: &started, FinishedAt: &finished, Overrides: &config.DownloadOverrides{MediaUserToken: &token}, CreatedAt: now, UpdatedAt: now}
+	force := true
+	job := domain.Job{ID: "job-cancelled", Input: "in", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:c1", Status: domain.JobCancelled, TotalItems: 3, Error: "cancelled", StartedAt: &started, FinishedAt: &finished, Overrides: &config.DownloadOverrides{ForceOverwrite: &force}, CreatedAt: now, UpdatedAt: now}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
 	}
@@ -342,8 +326,8 @@ func TestRetryRequeuesCancelledJob(t *testing.T) {
 	if got.Status != domain.JobQueued || got.Error != "" || got.StartedAt != nil || got.FinishedAt != nil {
 		t.Fatalf("job after retry = %+v, want queued with error, started_at and finished_at cleared", got)
 	}
-	if got.Overrides == nil || got.Overrides.MediaUserToken == nil || *got.Overrides.MediaUserToken != token {
-		t.Fatalf("overrides after retry = %+v, want the media-user-token kept", got.Overrides)
+	if got.Overrides == nil || got.Overrides.ForceOverwrite == nil || !*got.Overrides.ForceOverwrite {
+		t.Fatalf("overrides after retry = %+v, want them kept", got.Overrides)
 	}
 	items, err := store.ListItems(ctx, job.ID)
 	if err != nil {

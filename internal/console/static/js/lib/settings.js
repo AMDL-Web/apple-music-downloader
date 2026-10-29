@@ -93,7 +93,7 @@ export const FIELDS = [
     section: 'downloads',
     type: 'select',
     label: 'Memory mode',
-    help: 'The RAM and disk trade-off for Enhanced HLS tracks; a submission may choose another. Default: low.',
+    help: 'The RAM and disk trade-off for Enhanced HLS tracks. Default: low.',
     options: [
       { value: 'low', label: 'Low memory', hint: 'Streams each track to a resumable file: little RAM, about two track-sized files per parallel track in the temporary folder.' },
       { value: 'high', label: 'High memory', hint: 'Keeps one encrypted track in RAM (at most 512 MiB): about one track-sized file per parallel track in the temporary folder.' },
@@ -248,7 +248,7 @@ export const FIELDS = [
     section: 'catalog',
     type: 'secret',
     label: 'Media user token',
-    help: 'Your Apple Music subscription token (media-user-token). Stations, private playlist covers and library sync need it; a submission may override it. Empty means none. The config API returns it as plain text.',
+    help: 'Your Apple Music subscription token (media-user-token). Stations, private playlist covers and library sync need it; every download and preview uses this one. Empty means none. The config API returns it as plain text.',
   },
   {
     key: 'catalog.signed_mode_hls_source',

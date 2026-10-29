@@ -233,61 +233,42 @@ ignores `i` and downloads the whole album.
 
 ### Job overrides
 
-`overrides` overlays the job-mutable runtime config for that submission only. Omitted
-fields keep the global value; a value that fails validation is `422 invalid_overrides`.
+`overrides` overlays the quality and overwrite keys of the runtime `download` config for
+that submission only. Omitted fields keep the global value; a value that fails validation
+is `422 invalid_overrides`.
 
 | Field | Notes |
 | --- | --- |
-| `quality_priority`, `codec_alternative`, `memory_mode`, `max_attempts` | Per-batch pipeline behaviour |
-| `downloads_dir`, `temp_dir`, `*_path_format` | Per-batch output destination; a template is a relative path inside the downloads folder, with no `..` segment and no `{Var:spec}` other than `:02d` |
-| `cover_size`, `cover_format`, `embed_cover`, `save_album_cover`, `save_artist_cover`, `save_playlist_cover` | Artwork; `cover_size` is `{width}x{height}` in pixels, such as `5000x5000` |
-| `embed_lyrics`, `save_lyrics_file`, `lyrics_format`, `lyrics_type`, `lyrics_extras` | Lyrics |
-| `alac_max_sample_rate`, `alac_max_bit_depth`, `check_integrity` | Audio limits and the integrity gate |
+| `quality_priority`, `codec_alternative` | Codec order and whether to fall back to the next codec |
+| `alac_max_sample_rate`, `alac_max_bit_depth` | ALAC limits |
 | `force_overwrite` | Overwrite existing output files and their lyrics sidecars instead of skipping |
-| `hooks` | Allow-list of hook entry names |
-| `media_user_token` | Apple Music subscription token for stations and private playlists |
 
-The request has no top-level `force` or `media_user_token` field; sending one is
-`400 invalid_request` (unknown field).
+Everything else comes from the runtime config for every job: directories, path templates,
+lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`, and the media-user-token
+(`catalog.media_user_token`). Every enabled hook in `hooks.yaml` whose `events` and
+`job_types` match runs for every job. Any other field, at the top level (`force`,
+`media_user_token`) or inside `overrides` (`hooks`, `downloads_dir`, `media_user_token`,
+...), is `400 invalid_request` naming the unknown field.
 
 **`force_overwrite`** — `true` overwrites an existing audio file and its lyrics sidecar;
 `false` (the default, from `download.force_overwrite`) skips tracks whose output already
 exists.
 
-**`hooks`** — values are `name`s from [`configs/hooks.yaml`](../configs/hooks.yaml). Call
-`GET /api/v1/hooks` first to build the list; it returns each entry's name, enabled state,
-type, events and job types, and never returns URLs, headers, commands or working
-directories. Omitting the field keeps the default (every enabled, matching hook may run);
-`[]` runs no hooks for this batch; a non-empty list restricts to those names. The list
-cannot enable a `enabled: false` entry and never bypasses `events` / `job_types` matching.
-Duplicate names behave like one entry; unknown names return `422 invalid_overrides` when
-any hook entry is configured. The selection is persisted with the job: the `job_queued`
-hook dispatches only on first submission (never on retry or restart recovery), and
-terminal-event hooks arriving after a retry or restart stay bound to the same allow-list.
-
-**`media_user_token`** — three-state: omitted uses the global
-`catalog.media_user_token` fallback, a non-empty string uses that value for this batch,
-and an explicit `""` clears the fallback for this batch.
-
-The token is persisted only onto the jobs that actually need it — stations and private
-playlists (`pl.u-xxx`). Songs, albums, artists and other playlists in the same batch do
-not store it. It is cleared when a job completes, and retained on failure or cancellation
-so a retry can still resolve. It is never echoed back in create, list, detail or SSE
-responses. The global fallback in `catalog.media_user_token` does persist to the
-config file and may be returned by `GET /api/v1/config`.
+The overrides are persisted with each job and apply again on a retry or after a restart.
+A job row written before the other fields were removed is read with them ignored, and its
+terminal write drops them.
 
 ### Radio stations
 
 Station links (`https://music.apple.com/us/station/.../ra.xxxx`) are supported when they
 resolve to a track list — personalised and curated stations. They need an Apple Music
-subscription token, per job via `overrides.media_user_token` or globally via
-`catalog.media_user_token`.
+subscription token in `catalog.media_user_token` (Settings in the console, or
+`PUT /api/v1/config`).
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads \
   -H 'Content-Type: application/json' \
-  -d '{"urls":["https://music.apple.com/us/station/example/ra.978194965"],
-       "overrides":{"media_user_token":"<your media-user-token>"}}'
+  -d '{"urls":["https://music.apple.com/us/station/example/ra.978194965"]}'
 ```
 
 Live stations such as Apple Music 1 have no static track list and end with an explicit
@@ -376,7 +357,6 @@ public snapshot fields as the REST `Job`; item events carry the same fields as t
 `JobItem`, plus event-only fields such as `download_attempts` and `will_retry`. So after
 one initial `GET`, a client can merge subsequent events directly — no re-fetch is needed
 on `item_completed`, `item_failed`, `item_skipped` or job-terminal events.
-`media_user_token` stays hidden here exactly as in every other response.
 
 Event types (the `EventType` enum in the spec; Go constants in `internal/domain`):
 
@@ -432,8 +412,8 @@ and a station adds `needs_media_user_token`. Each type costs light catalog reads
 album or playlist pages through its track list): never the amp-api-only reads, never a
 station's next-tracks feed, at most 15 seconds in all.
 
-The optional `media_user_token` overrides `catalog.media_user_token` for this lookup (an
-empty string clears it); only a private playlist's cover uses it, and it is never echoed.
+The body is `{url}` only. A private playlist's cover is read with
+`catalog.media_user_token`; the token is never echoed.
 
 | Case | Answer |
 | --- | --- |

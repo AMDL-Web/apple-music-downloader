@@ -13,7 +13,6 @@ import (
 	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/events"
-	"amdl/internal/hooks"
 	"amdl/internal/jobs"
 	"amdl/internal/logging"
 
@@ -332,7 +331,7 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"embed_lyrics":false,"quality_priority":["aac"],"memory_mode":"high"}}`)
+		`{"urls":["song|us|1"],"overrides":{"force_overwrite":true,"quality_priority":["aac"],"alac_max_bit_depth":16}}`)
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
@@ -343,8 +342,8 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 	if resp.Accepted != 1 || resp.Results[0].Job == nil {
 		t.Fatalf("submit response = %+v", resp)
 	}
-	if o := resp.Results[0].Job.Overrides; o == nil || o.EmbedLyrics == nil || *o.EmbedLyrics {
-		t.Fatalf("accepted job overrides = %+v, want embed_lyrics=false", resp.Results[0].Job.Overrides)
+	if o := resp.Results[0].Job.Overrides; o == nil || o.ForceOverwrite == nil || !*o.ForceOverwrite {
+		t.Fatalf("accepted job overrides = %+v, want force_overwrite=true", resp.Results[0].Job.Overrides)
 	}
 
 	// The overrides must survive the DB round-trip so retries and
@@ -353,71 +352,14 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Overrides == nil || persisted.Overrides.EmbedLyrics == nil || *persisted.Overrides.EmbedLyrics {
-		t.Fatalf("persisted overrides = %+v, want embed_lyrics=false", persisted.Overrides)
+	if persisted.Overrides == nil || persisted.Overrides.ForceOverwrite == nil || !*persisted.Overrides.ForceOverwrite {
+		t.Fatalf("persisted overrides = %+v, want force_overwrite=true", persisted.Overrides)
 	}
 	if qp := persisted.Overrides.QualityPriority; qp == nil || len(*qp) != 1 || (*qp)[0] != "aac" {
 		t.Fatalf("persisted quality_priority override = %v, want [aac]", qp)
 	}
-	if mode := persisted.Overrides.MemoryMode; mode == nil || *mode != config.MemoryModeHigh {
-		t.Fatalf("persisted memory_mode override = %v, want high", mode)
-	}
-}
-
-func TestCreateDownloadUsesMediaUserTokenOverrideWithoutEchoingIt(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
-	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
-
-	submit := func(body string) domain.Job {
-		t.Helper()
-		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads", body)
-		if recorder.Code != http.StatusAccepted {
-			t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-		}
-		if strings.Contains(recorder.Body.String(), "secret-") || strings.Contains(recorder.Body.String(), "media_user_token") {
-			t.Fatalf("submit response echoed media-user-token: %s", recorder.Body.String())
-		}
-		var resp domain.BatchSubmitResponse
-		if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-			t.Fatal(err)
-		}
-		if resp.Accepted != 1 || resp.Results[0].Job == nil {
-			t.Fatalf("submit response = %+v", resp)
-		}
-		job, err := store.GetJob(t.Context(), resp.Results[0].Job.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return job
-	}
-
-	canonical := submit(`{"urls":["station|us|ra.1"],"overrides":{"media_user_token":" secret-canonical "}}`)
-	if canonical.Overrides == nil || canonical.Overrides.MediaUserToken == nil || *canonical.Overrides.MediaUserToken != "secret-canonical" {
-		t.Fatalf("canonical token override = %+v", canonical.Overrides)
-	}
-	for _, path := range []string{"/api/v1/downloads/" + canonical.ID, "/api/v1/downloads"} {
-		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("GET %s status = %d, body = %s", path, recorder.Code, recorder.Body.String())
-		}
-		if strings.Contains(recorder.Body.String(), "secret-canonical") || strings.Contains(recorder.Body.String(), "media_user_token") {
-			t.Fatalf("GET %s echoed media-user-token: %s", path, recorder.Body.String())
-		}
-	}
-
-	empty := submit(`{"urls":["station|us|ra.2"],"overrides":{"media_user_token":""}}`)
-	if empty.Overrides == nil || empty.Overrides.MediaUserToken == nil || *empty.Overrides.MediaUserToken != "" {
-		t.Fatalf("explicit-empty token override lost its three-state meaning = %+v", empty.Overrides)
-	}
-
-	notNeeded := submit(`{"urls":["song|us|3"],"overrides":{"media_user_token":"secret-unused"}}`)
-	if notNeeded.Overrides != nil && notNeeded.Overrides.MediaUserToken != nil {
-		t.Fatalf("unneeded song token was persisted: %+v", notNeeded.Overrides)
+	if depth := persisted.Overrides.ALACMaxBitDepth; depth == nil || *depth != 16 {
+		t.Fatalf("persisted alac_max_bit_depth override = %v, want 16", depth)
 	}
 }
 
@@ -435,13 +377,21 @@ func TestCreateDownloadRejectsLegacyTopLevelMediaUserToken(t *testing.T) {
 	}
 }
 
+// Unknown override fields are refused with 400 naming the field, so a typo or
+// a key the overrides no longer carry never runs the batch without it: the
+// removed token, hook selection, directories, path templates, lyrics, covers
+// and retry settings, and the process-wide pool sizes.
 func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default())}
-	for _, field := range []string{"embedd_lyrics", "max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads", "max_parallel_wrapper_requests", "max_parallel_downloads", "max_parallel_decrypts"} {
+	for _, field := range []string{
+		"embedd_lyrics", "media_user_token", "hooks", "downloads_dir", "temp_dir", "song_path_format",
+		"embed_lyrics", "lyrics_extras", "cover_size", "save_album_cover", "max_attempts", "memory_mode", "check_integrity",
+		"max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads", "max_parallel_wrapper_requests", "max_parallel_downloads", "max_parallel_decrypts",
+	} {
 		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
 			`{"urls":["song|us|1"],"overrides":{"`+field+`":1}}`)
 		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("field %s: status = %d, body = %s (unknown/process-wide overrides must not be silently accepted)", field, recorder.Code, recorder.Body.String())
+			t.Fatalf("field %s: status = %d, body = %s (unknown overrides must not be silently accepted)", field, recorder.Code, recorder.Body.String())
 		}
 		if !strings.Contains(recorder.Body.String(), field) {
 			t.Fatalf("field %s: error body %q does not name the unknown field", field, recorder.Body.String())
@@ -452,38 +402,9 @@ func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
 func TestCreateDownloadRejectsInvalidOverrides(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default())}
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"lyrics_format":"srt"}}`)
+		`{"urls":["song|us|1"],"overrides":{"quality_priority":["flac"]}}`)
 	assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "invalid_overrides")
 	if !strings.Contains(recorder.Body.String(), "invalid overrides") {
 		t.Fatalf("error body %q does not mention invalid overrides", recorder.Body.String())
-	}
-}
-
-func TestCreateDownloadValidatesHookOverrideNames(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Close() })
-	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
-	manager.SetHooks(hooks.NewDispatcher(hooks.Config{
-		Enabled: false,
-		Entries: []hooks.Entry{{Name: "notify"}},
-	}, nil, slog.Default()))
-	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
-
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"hooks":["missing"]}}`)
-	if recorder.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("unknown hook status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	if !strings.Contains(recorder.Body.String(), `unknown hook \"missing\"`) {
-		t.Fatalf("unknown hook error does not name missing entry: %s", recorder.Body.String())
-	}
-
-	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|2"],"overrides":{"hooks":["notify","notify"]}}`)
-	if recorder.Code != http.StatusAccepted {
-		t.Fatalf("known hooks under global disable status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }

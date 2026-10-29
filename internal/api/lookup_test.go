@@ -162,35 +162,31 @@ func TestLookupAlbumTrackLinkFollowsTrackMode(t *testing.T) {
 	}
 }
 
-func TestLookupPlaylistTokenIsUsedButNeverEchoed(t *testing.T) {
-	const secret = "request-token-secret"
+func TestLookupPlaylistUsesSettingsTokenButNeverEchoesIt(t *testing.T) {
+	const secret = "settings-token-secret"
 	playlist := &applemusic.Collection{Name: "Mix", Artist: "Apple Music Hip-Hop", ArtworkURL: "pl-art", Tracks: make([]applemusic.Song, 50)}
-	tests := []struct {
-		name, body, configToken, want string
-	}{
-		{"request token", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc","media_user_token":" ` + secret + ` "}`, "config-token", secret},
-		{"config fallback", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc"}`, "config-token", "config-token"},
-		{"explicit empty clears", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc","media_user_token":""}`, "config-token", ""},
+	catalog := &fakeCatalog{t: t, playlist: playlist}
+	handler := newLookupServer(catalog, func(cfg *config.Config) { cfg.Catalog.MediaUserToken = " " + secret + " " })
+	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc"}`)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			catalog := &fakeCatalog{t: t, playlist: playlist}
-			handler := newLookupServer(catalog, func(cfg *config.Config) { cfg.Catalog.MediaUserToken = tt.configToken })
-			recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", tt.body)
-			if recorder.Code != http.StatusOK {
-				t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-			}
-			if catalog.token != tt.want {
-				t.Fatalf("token passed to the catalog = %q, want %q", catalog.token, tt.want)
-			}
-			if body := recorder.Body.String(); strings.Contains(body, "token") {
-				t.Fatalf("response mentions a token: %s", body)
-			}
-			got := decodeLookup(t, recorder.Body.Bytes())
-			if got["title"] != "Mix" || got["curator_name"] != "Apple Music Hip-Hop" || got["track_count"] != float64(50) || got["artist_name"] != nil {
-				t.Fatalf("playlist = %v", got)
-			}
-		})
+	if catalog.token != secret {
+		t.Fatalf("token passed to the catalog = %q, want %q", catalog.token, secret)
+	}
+	if body := recorder.Body.String(); strings.Contains(body, "token") {
+		t.Fatalf("response mentions a token: %s", body)
+	}
+	got := decodeLookup(t, recorder.Body.Bytes())
+	if got["title"] != "Mix" || got["curator_name"] != "Apple Music Hip-Hop" || got["track_count"] != float64(50) || got["artist_name"] != nil {
+		t.Fatalf("playlist = %v", got)
+	}
+
+	// The request body no longer carries a token: the field is unknown.
+	recorder = requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc","media_user_token":"x"}`)
+	assertErrorCode(t, recorder, http.StatusBadRequest, "invalid_request")
+	if !strings.Contains(recorder.Body.String(), "media_user_token") {
+		t.Fatalf("error body %q does not name the unknown field", recorder.Body.String())
 	}
 }
 

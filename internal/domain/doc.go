@@ -8,9 +8,8 @@
 // Invariants: JSON tags, status values and EventType values are the /api/v1
 // wire contract mirrored by internal/api/openapi.yaml, so renaming one breaks
 // clients. Every emitted event type is a constant listed in EventTypes.
-// Job.MarshalJSON strips the media-user-token from Overrides, and
-// MarshalEventPayload marshals snapshots through it so event payloads carry
-// the same redaction. Job's item counters are never stored: internal/db fills
+// MarshalEventPayload marshals snapshots the way the REST responses do, so an
+// event payload carries the same fields. Job's item counters are never stored: internal/db fills
 // them from job_items on every read. OverviewMilestones is the one list of
 // types the overview feed reacts to, live (IsOverviewMilestone) and on cursor
 // replay (the store's SQL filter).

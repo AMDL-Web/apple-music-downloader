@@ -63,10 +63,9 @@ func Open(path string) (*Store, error) {
 		_ = database.Close()
 		return nil, err
 	}
-	// Per-job overrides may contain a media-user-token while a station/private
-	// playlist is queued or retryable. Keep the database and its live WAL files
-	// owner-only, matching the managed config file that can hold the global
-	// fallback token. SQLite derives future sidecar modes from the main file.
+	// Job rows written before overrides lost media_user_token may still hold
+	// one. Keep the database and its live WAL files owner-only, matching the
+	// managed config file that holds the token. SQLite derives future sidecar modes from the main file.
 	if path != ":memory:" && !strings.HasPrefix(path, "file:") {
 		for _, databaseFile := range []string{path, path + "-wal", path + "-shm"} {
 			if err := os.Chmod(databaseFile, 0o600); err != nil && !errors.Is(err, os.ErrNotExist) {

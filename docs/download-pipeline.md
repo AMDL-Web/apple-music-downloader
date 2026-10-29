@@ -163,9 +163,6 @@ AAC-LC WebPlayback is unaffected by this option: both modes keep its encrypted r
 in memory and stream the decrypted output straight into `ffmpeg`. The Widevine parser may
 still hold decoded track structures until that stream completes.
 
-A per-job `overrides.memory_mode` can pick a different mode without changing the runtime
-default.
-
 **Which to use.** Keep `low` unless you have measured a temp-disk bottleneck. High mode is
 5–19% faster in tests that exclude CDN variance, but the gain comes from skipping the
 encrypted checkpoint's filesystem I/O, and it is easily hidden by a slow network or a fast

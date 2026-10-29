@@ -6,13 +6,12 @@ import {
   optionDefaults,
   buildOverrides,
   sanitizeOverrides,
-  parseStoredOptions,
   applyOverrides,
   moveItem,
   choices,
   describeOverrides,
   rateLabel,
-  COVER_FORMATS,
+  SAMPLE_RATES,
 } from '../static/js/lib/overrides.js';
 
 // The download section GET /api/v1/config answers in simulate mode (paths trimmed).
@@ -39,30 +38,28 @@ const SERVER = {
   save_playlist_cover: true,
 };
 
+test('the form edits quality and overwrite only', () => {
+  assert.deepEqual(OPTION_KEYS, ['quality_priority', 'codec_alternative', 'alac_max_sample_rate', 'alac_max_bit_depth', 'force_overwrite']);
+});
+
 test('optionDefaults reads the edited keys from the server and nothing else', () => {
   const d = optionDefaults(SERVER);
   assert.deepEqual(Object.keys(d), OPTION_KEYS);
-  assert.deepEqual(d, { ...OPTION_DEFAULTS, quality_priority: ['alac'], lyrics_extras: [] });
-  assert.equal('downloads_dir' in d, false);
-  assert.equal('memory_mode' in d, false);
+  assert.deepEqual(d, { ...OPTION_DEFAULTS, quality_priority: ['alac'] });
+  for (const key of ['downloads_dir', 'memory_mode', 'max_attempts', 'embed_lyrics', 'cover_size']) assert.equal(key in d, false, key);
 });
 
-test('optionDefaults falls back per key and clamps attempts like the backend', () => {
-  const d = optionDefaults({ quality_priority: ['aac', 'bogus'], max_attempts: 40, cover_format: 'gif', lyrics_extras: ['pronunciation', 'translation'] });
+test('optionDefaults falls back per key', () => {
+  const d = optionDefaults({ quality_priority: ['aac', 'bogus'], alac_max_sample_rate: 0, force_overwrite: 'yes' });
   assert.deepEqual(d.quality_priority, ['alac'], 'an unknown codec voids the list');
-  assert.equal(d.max_attempts, 10);
-  assert.equal(d.cover_format, 'jpg');
-  assert.deepEqual(d.lyrics_extras, ['translation', 'pronunciation'], 'extras are kept in canonical order');
-  assert.equal(optionDefaults({ max_attempts: 0 }).max_attempts, 1);
-  assert.deepEqual(optionDefaults(null), { ...OPTION_DEFAULTS, quality_priority: ['alac'], lyrics_extras: [] });
+  assert.equal(d.alac_max_sample_rate, 192000);
+  assert.equal(d.force_overwrite, false);
+  assert.deepEqual(optionDefaults(null), { ...OPTION_DEFAULTS, quality_priority: ['alac'] });
 });
 
 test('the form at its defaults sends no overrides', () => {
   const d = optionDefaults(SERVER);
   assert.deepEqual(buildOverrides(d, { ...d }), {});
-  assert.deepEqual(buildOverrides(d, { ...d }, { hooks: null, enabledHooks: ['a'] }), {}, 'untouched hooks are omitted');
-  assert.deepEqual(buildOverrides(d, { ...d }, { hooks: ['a'], enabledHooks: ['a'] }), {}, 'every enabled hook equals omitting the field');
-  assert.deepEqual(buildOverrides(d, { ...d }, { token: '   ' }), {}, 'a blank token is not sent');
 });
 
 test('only changed options are sent, with their exact values', () => {
@@ -70,61 +67,39 @@ test('only changed options are sent, with their exact values', () => {
   const v = {
     ...d,
     quality_priority: ['ec3', 'alac'],
+    codec_alternative: false,
     alac_max_sample_rate: 48000,
-    save_lyrics_file: true,
-    lyrics_extras: ['pronunciation'],
-    cover_size: '1400x1400',
     force_overwrite: true,
-    max_attempts: 5,
   };
   assert.deepEqual(buildOverrides(d, v), {
     quality_priority: ['ec3', 'alac'],
+    codec_alternative: false,
     alac_max_sample_rate: 48000,
-    save_lyrics_file: true,
-    lyrics_extras: ['pronunciation'],
-    cover_size: '1400x1400',
     force_overwrite: true,
-    max_attempts: 5,
   });
 });
 
-test('quality order matters, lyrics extras order does not', () => {
-  const d = optionDefaults({ ...SERVER, quality_priority: ['alac', 'aac'], lyrics_extras: ['translation', 'pronunciation'] });
-  const v = { ...d, quality_priority: ['aac', 'alac'], lyrics_extras: ['pronunciation', 'translation'] };
-  assert.deepEqual(buildOverrides(d, v), { quality_priority: ['aac', 'alac'] });
-});
-
-test('hooks: none checked sends [], a subset sends the names, the token is trimmed', () => {
-  const d = optionDefaults(SERVER);
-  assert.deepEqual(buildOverrides(d, d, { hooks: [], enabledHooks: ['a', 'b'] }), { hooks: [] });
-  assert.deepEqual(buildOverrides(d, d, { hooks: ['b', 'b'], enabledHooks: ['a', 'b'] }), { hooks: ['b'] });
-  assert.deepEqual(buildOverrides(d, d, { token: ' tok ' }), { media_user_token: 'tok' });
+test('quality order matters', () => {
+  const d = optionDefaults({ ...SERVER, quality_priority: ['alac', 'aac'] });
+  assert.deepEqual(buildOverrides(d, { ...d, quality_priority: ['aac', 'alac'] }), { quality_priority: ['aac', 'alac'] });
 });
 
 test('invalid form values are never sent', () => {
   const d = optionDefaults(SERVER);
-  assert.deepEqual(buildOverrides(d, { ...d, max_attempts: 11, quality_priority: [], cover_size: 'big' }), {});
+  assert.deepEqual(buildOverrides(d, { ...d, quality_priority: [], alac_max_bit_depth: -1, force_overwrite: 'yes' }), {});
 });
 
-test('stored options are sanitized and never hold a token', () => {
-  const raw = JSON.stringify({ quality_priority: ['aac'], media_user_token: 'secret', bogus: 1, embed_cover: 'yes', hooks: ['a'] });
-  assert.deepEqual(parseStoredOptions(raw), { quality_priority: ['aac'], hooks: ['a'] });
-  assert.equal(parseStoredOptions('{not json'), null);
-  assert.equal(parseStoredOptions(''), null);
-  assert.equal(parseStoredOptions(null), null);
-  assert.equal(parseStoredOptions('{"media_user_token":"x"}'), null);
+test('sanitizeOverrides keeps only the edited keys with valid values', () => {
+  const raw = { quality_priority: ['aac'], media_user_token: 'secret', bogus: 1, embed_cover: false, hooks: ['a'], force_overwrite: 'yes' };
+  assert.deepEqual(sanitizeOverrides(raw), { quality_priority: ['aac'] });
   assert.deepEqual(sanitizeOverrides([1, 2]), {});
+  assert.deepEqual(sanitizeOverrides(null), {});
 });
 
-test('remembered overrides re-apply on top of new defaults', () => {
+test('applyOverrides lays overrides over the defaults', () => {
   const d = optionDefaults(SERVER);
-  const form = applyOverrides(d, { quality_priority: ['aac'], save_lyrics_file: true, junk: 1 });
-  assert.deepEqual(form.quality_priority, ['aac']);
-  assert.equal(form.save_lyrics_file, true);
-  assert.equal(form.embed_cover, true);
-  // The server default later matches the remembered value: nothing is sent for it.
-  const later = optionDefaults({ ...SERVER, save_lyrics_file: true });
-  assert.deepEqual(buildOverrides(later, form), { quality_priority: ['aac'] });
+  const form = applyOverrides(d, { quality_priority: ['aac'], force_overwrite: true, embed_cover: false });
+  assert.deepEqual(form, { ...d, quality_priority: ['aac'], force_overwrite: true });
 });
 
 test('moveItem reorders and refuses moves past either end', () => {
@@ -136,8 +111,8 @@ test('moveItem reorders and refuses moves past either end', () => {
 });
 
 test('choices adds a server value outside the usual list', () => {
-  assert.deepEqual(choices(COVER_FORMATS, 'jpeg'), ['jpg', 'png', 'jpeg']);
-  assert.equal(choices(COVER_FORMATS, 'png'), COVER_FORMATS);
+  assert.deepEqual(choices(SAMPLE_RATES, 32000), [...SAMPLE_RATES, 32000]);
+  assert.equal(choices(SAMPLE_RATES, SAMPLE_RATES[0]), SAMPLE_RATES);
   assert.equal(rateLabel(44100), '44.1 kHz');
   assert.equal(rateLabel(192000), '192 kHz');
 });
@@ -146,17 +121,15 @@ test('describeOverrides names each change in display order', () => {
   assert.deepEqual(describeOverrides({}), []);
   assert.deepEqual(
     describeOverrides({
-      hooks: [],
+      force_overwrite: true,
       quality_priority: ['ec3', 'alac'],
-      save_lyrics_file: true,
-      max_attempts: 1,
-      lyrics_type: 'syllable-lyrics',
-      cover_size: '1400x1400',
-      media_user_token: 'secret',
+      codec_alternative: false,
+      alac_max_bit_depth: 16,
+      embed_cover: false,
     }),
-    ['Quality: Dolby Atmos (E-AC-3), ALAC (lossless)', 'Lyrics file on', 'Word-timed lyrics', 'Cover 1400 × 1400', '1 attempt', 'Hooks: none'],
+    ['Quality: Dolby Atmos (E-AC-3), ALAC (lossless)', 'Fallback to next codec off', 'ALAC up to 16-bit', 'Overwrite existing files'],
   );
-  assert.deepEqual(describeOverrides({ hooks: ['notify'], force_overwrite: true }), ['Overwrite existing files', 'Hooks: notify']);
+  assert.deepEqual(describeOverrides({ force_overwrite: false }), ['Keep existing files']);
 });
 
 test('codec labels and ALAC choices match the Settings fields', async () => {

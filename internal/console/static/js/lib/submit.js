@@ -8,6 +8,10 @@ import { parseLink } from './links.js';
 import { PREVIEW_KINDS, shortError } from './lookup.js';
 import { capitalized, sentence } from './format.js';
 import { sanitizeOverrides } from './overrides.js';
+import { settingsHash } from './route.js';
+
+/** Where Settings edits catalog.media_user_token, the only token a download uses. */
+export const TOKEN_SETTINGS_HASH = settingsHash('catalog', 'catalog.media_user_token');
 
 /** The backend's per-request URL limit; larger batches are sent in chunks. */
 export const MAX_URLS_PER_REQUEST = 100;
@@ -15,10 +19,10 @@ export const MAX_URLS_PER_REQUEST = 100;
 /**
  * Why a scanned link (lib/links.js scanLinks entry) cannot be downloaded or
  * needs attention, or null when it is fine. `lookup` is its preview status
- * (lib/lookup.js), `hasToken` whether a media-user-token is available
- * (typed on the page or set on the server). Returns
- * {code, role, blocking, message, title?}; a blocking issue keeps the link
- * out of the submission, and `title` holds a long server message in full.
+ * (lib/lookup.js), `hasToken` whether Settings holds a media-user-token.
+ * Returns {code, role, blocking, message, title?, href?, action?}; a blocking
+ * issue keeps the link out of the submission, `title` holds a long server
+ * message in full, and `href`/`action` name a page that fixes the issue.
  */
 export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
   const link = entry && entry.link;
@@ -50,40 +54,22 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
   }
   if (err && err.status === 400) return { code: 'refused', role: 'danger', blocking: true, message: capitalized(err.message) || 'The backend does not download this link' };
   // Only a station cannot download without the token; a private playlist
-  // uses it for its cover alone (lib/links.js needsToken).
+  // uses it for its cover alone.
   const required = link.kind === 'station' || Boolean(lookup && lookup.state === 'ready' && lookup.data && lookup.data.needs_media_user_token);
   if (required && !hasToken) {
-    return { code: 'needs_token', role: 'warning', blocking: false, message: link.kind === 'station' ? 'Stations need a media-user-token' : 'This link needs a media-user-token' };
+    return {
+      code: 'needs_token',
+      role: 'warning',
+      blocking: false,
+      message: link.kind === 'station' ? 'Stations need a media-user-token' : 'This link needs a media-user-token',
+      href: TOKEN_SETTINGS_HASH,
+      action: 'Set it in Settings',
+    };
   }
   if (err && err.code !== 'aborted') {
     return { code: 'preview_failed', role: 'warning', blocking: false, message: `No preview: ${shortError(err.message) || 'the lookup failed'}`, title: err.message };
   }
   return null;
-}
-
-/**
- * Whether a job of one of `urls` can use a media-user-token: a station or
- * a private playlist (lib/links.js needsToken), or a link whose preview
- * (`statusOf(url)`, a lib/lookup.js status) says it needs one.
- */
-export function needsMediaUserToken(urls, statusOf = () => null) {
-  return (urls || []).some((url) => {
-    const link = parseLink(url);
-    if (!link) return false;
-    if (link.needsToken) return true;
-    const s = statusOf(url);
-    return Boolean(s && s.state === 'ready' && s.data && s.data.needs_media_user_token);
-  });
-}
-
-/**
- * The overrides for one request of `urls`: `overrides` plus the typed
- * `token` as media_user_token, only while some of these links can use it,
- * so the token never travels with links that do not.
- */
-export function requestOverrides(overrides, urls, token, statusOf) {
-  const t = typeof token === 'string' ? token.trim() : '';
-  return t && needsMediaUserToken(urls, statusOf) ? { ...overrides, media_user_token: t } : overrides;
 }
 
 /** The URLs to submit: every link without a blocking issue, in order. */
@@ -272,8 +258,7 @@ const isRow = (r) =>
 
 /**
  * Results as stored text: {rows, overrides} with the overrides sanitized
- * (lib/overrides.js), so a media-user-token never reaches storage. ''
- * when there are no rows.
+ * (lib/overrides.js). '' when there are no rows.
  */
 export function storedResults(results) {
   const rows = results && Array.isArray(results.rows) ? results.rows.filter(isRow) : [];

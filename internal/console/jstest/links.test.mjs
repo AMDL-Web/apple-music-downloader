@@ -14,7 +14,6 @@ test('parseLink reads each kind the backend accepts', () => {
     id: '1463409338',
     trackId: null,
     private: false,
-    needsToken: false,
     noStorefront: false,
   });
   assert.equal(parseLink('https://music.apple.com/jp/song/one-last-kiss/1542953970').kind, 'song');
@@ -23,7 +22,6 @@ test('parseLink reads each kind the backend accepts', () => {
   const playlist = parseLink('https://music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb');
   assert.equal(playlist.kind, 'playlist');
   assert.equal(playlist.private, false);
-  assert.equal(playlist.needsToken, false);
   assert.deepEqual(LINK_KINDS, ['album', 'song', 'playlist', 'artist', 'station', 'music-video']);
 });
 
@@ -36,14 +34,12 @@ test('an album link with ?i= keeps kind album and carries the track id', () => {
   assert.equal(parseLink('https://music.apple.com/us/song/x/1?i=2').trackId, null, '?i= means a track only on album links');
 });
 
-test('private playlists and stations can use a media-user-token', () => {
+test('private playlists and stations', () => {
   const priv = parseLink('https://music.apple.com/us/playlist/my-mix/pl.u-abcDEF123');
   assert.equal(priv.private, true);
-  assert.equal(priv.needsToken, true);
   const station = parseLink('https://music.apple.com/us/station/my-station/ra.u-1234');
   assert.equal(station.kind, 'station');
   assert.equal(station.private, false);
-  assert.equal(station.needsToken, true);
 });
 
 test('normalization: scheme, host case, storefront case, fragment, trailing slash', () => {

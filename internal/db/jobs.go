@@ -80,10 +80,9 @@ func updateJob(ctx context.Context, x execer, job domain.Job) error {
 	return err
 }
 
-// updateFinalJob also persists the final override value. In particular, the
-// manager removes media-user-token from completed jobs before finalization so
-// credentials do not remain in terminal history; failed and cancelled jobs
-// retain it for Retry.
+// updateFinalJob also rewrites the overrides column from job.Overrides. A row
+// stored before the overrides shrank loses its removed keys (a
+// media_user_token among them) here, at its terminal write.
 func updateFinalJob(ctx context.Context, x execer, job domain.Job) error {
 	overrides, err := encodeOverrides(job.Overrides)
 	if err != nil {
@@ -379,7 +378,10 @@ func scanJob(row jobScanner) (domain.Job, error) {
 		if unmarshalErr := json.Unmarshal([]byte(overrides), parsed); unmarshalErr != nil {
 			return job, fmt.Errorf("job %s: decode overrides: %w", job.ID, unmarshalErr)
 		}
-		job.Overrides = parsed
+		// A row that held only removed keys decodes empty; it has no overrides.
+		if *parsed != (config.DownloadOverrides{}) {
+			job.Overrides = parsed
+		}
 	}
 	job.Status = domain.JobStatus(status)
 	job.StartedAt = parseOptionalTime(started)

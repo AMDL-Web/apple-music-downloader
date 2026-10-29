@@ -81,10 +81,6 @@ func (e notDownloadableError) Error() string { return e.message }
 func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		URL string `json:"url"`
-		// MediaUserToken overrides catalog.media_user_token for this lookup
-		// (present-empty clears it), like overrides.media_user_token on a
-		// submission. Only a private playlist's cover uses it. Never echoed.
-		MediaUserToken *string `json:"media_user_token"`
 	}
 	if !decodeJSONBody(w, r, &req, true) {
 		return
@@ -112,13 +108,9 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 		writeErrorDetails(w, http.StatusBadRequest, CodeInvalidRequest, fmt.Sprintf("%s download is not implemented", parsed.Type), details)
 		return
 	}
-	token := cfg.Catalog.MediaUserToken
-	if req.MediaUserToken != nil {
-		token = *req.MediaUserToken
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), lookupTimeout)
 	defer cancel()
-	resp, err := s.previewLink(ctx, parsed, strings.TrimSpace(token))
+	resp, err := s.previewLink(ctx, parsed, strings.TrimSpace(cfg.Catalog.MediaUserToken))
 	switch {
 	case err == nil:
 		resp.lookupLinkFields = link

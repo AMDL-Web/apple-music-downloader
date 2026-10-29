@@ -160,10 +160,10 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 | **资料库同步** | `GET /library-sync` · `POST /library-sync/reset` |
 | **系统** | `GET /health` · `GET /system` 构建信息、容量与剩余空间 · `GET /stats` 下载统计 · `GET /logs` · `GET /logs/stream` |
 
-提交接口接受 `urls`，以及一个只对该批任务生效的 `overrides` 对象——编码优先级、内存模式、
-路径模板、歌词选项、`force_overwrite`、hooks 允许列表，以及电台和私人歌单所需的
-`media_user_token`。批次里的令牌不会出现在任何响应里；全局兜底的
-`catalog.media_user_token` 是运行时配置，`GET /api/v1/config` 会返回它。
+提交接口接受 `urls`，以及一个只对该批任务生效的 `overrides` 对象，只覆盖音质相关的键
+（`quality_priority`、`codec_alternative`、ALAC 上限）和 `force_overwrite`。其余设置都取运行时
+配置，电台和私人歌单所需的 `catalog.media_user_token` 也一样；所有启用且匹配的 hooks 都会执行。
+这个令牌是运行时配置，`GET /api/v1/config` 会返回它。
 
 所有错误共用一种响应体 `{"error": {"code", "message", "details"?}}`，客户端按 `code`
 分支。事件流都是 Server-Sent Events，用 `Last-Event-ID` 或 `?cursor=` 续传，初始游标取对应

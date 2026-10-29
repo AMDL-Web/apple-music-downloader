@@ -9,44 +9,14 @@ import (
 	"amdl/internal/config"
 )
 
-func TestJobJSONRedactsMediaUserTokenOverride(t *testing.T) {
-	token := "secret-token"
-	embed := false
-	raw, err := json.Marshal(Job{
-		ID:        "job-1",
-		Overrides: &config.DownloadOverrides{MediaUserToken: &token, EmbedCover: &embed},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), token) || strings.Contains(string(raw), "media_user_token") {
-		t.Fatalf("job JSON leaked media-user-token: %s", raw)
-	}
-	if !strings.Contains(string(raw), `"embed_cover":false`) {
-		t.Fatalf("job JSON lost ordinary override: %s", raw)
-	}
-
-	raw, err = json.Marshal(Job{ID: "job-2", Overrides: &config.DownloadOverrides{MediaUserToken: &token}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "overrides") {
-		t.Fatalf("token-only override should be omitted from job JSON: %s", raw)
-	}
-}
-
-func TestMarshalEventPayloadKeepsSnapshotFieldsAndRedaction(t *testing.T) {
-	token := "secret-token"
-	embed := false
+func TestMarshalEventPayloadKeepsSnapshotFields(t *testing.T) {
+	force := true
 	payload := MarshalEventPayload(Job{
 		ID: "job-1", Status: JobCompleted,
-		Overrides: &config.DownloadOverrides{MediaUserToken: &token, EmbedCover: &embed},
+		Overrides: &config.DownloadOverrides{ForceOverwrite: &force},
 	}, map[string]any{"message": "completed", "attempts": 2})
 	if len(payload) == 0 {
 		t.Fatal("MarshalEventPayload returned an empty payload")
-	}
-	if strings.Contains(string(payload), token) || strings.Contains(string(payload), "media_user_token") {
-		t.Fatalf("event payload leaked media-user-token: %s", payload)
 	}
 	var got map[string]any
 	if err := json.Unmarshal(payload, &got); err != nil {
@@ -56,7 +26,7 @@ func TestMarshalEventPayloadKeepsSnapshotFieldsAndRedaction(t *testing.T) {
 		t.Fatalf("event payload = %#v, want snapshot plus event fields", got)
 	}
 	if _, ok := got["overrides"]; !ok {
-		t.Fatalf("event payload lost non-credential override: %#v", got)
+		t.Fatalf("event payload lost the override: %#v", got)
 	}
 }
 

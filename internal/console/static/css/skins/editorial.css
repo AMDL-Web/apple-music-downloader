@@ -2522,8 +2522,7 @@
 
 /* Every text field is a rule to write on, like the search and the select:
    no box, text on the keyline, focus thickens the rule. */
-:root[data-skin="editorial"] .field-input,
-:root[data-skin="editorial"] .new-token-input {
+:root[data-skin="editorial"] .field-input {
   padding-left: 0;
   border-width: 0 0 1px;
   border-color: var(--border-control);
@@ -2541,13 +2540,11 @@
 }
 
 :root[data-skin="editorial"] .field-input:hover:not(:disabled),
-:root[data-skin="editorial"] .new-token-input:hover,
 :root[data-skin="editorial"] .new-input:hover {
   border-color: var(--border-strong);
 }
 
 :root[data-skin="editorial"] .field-input:focus-visible,
-:root[data-skin="editorial"] .new-token-input:focus-visible,
 :root[data-skin="editorial"] .new-input:focus-visible {
   outline: none;
   border-color: var(--border-strong);
@@ -3052,7 +3049,6 @@
 :root[data-skin="editorial"] .new-check[data-changed] .new-check-label::after,
 :root[data-skin="editorial"] .new-field[data-changed] > .new-field-label::after,
 :root[data-skin="editorial"] .new-codecs[data-changed] > .new-field-label::after,
-:root[data-skin="editorial"] .new-check-group[data-changed] > .new-field-label::after,
 :root[data-skin="editorial"] .new-fieldset[data-changed] > legend::after {
   border-radius: 0;
   background: var(--ink);

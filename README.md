@@ -175,11 +175,11 @@ on another origin cannot call it.
 | **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
 | **System** | `GET /health` · `GET /system` build, capacity and free space · `GET /stats` download statistics · `GET /logs` · `GET /logs/stream` |
 
-Submissions take `urls`, and an `overrides` object that overlays the runtime config for
-that batch only — quality priority, memory mode, path templates, lyrics settings,
-`force_overwrite`, the hook allow-list, and the `media_user_token` that radio stations and
-private playlists need. A batch's token is never echoed back; the global fallback
-`catalog.media_user_token` is a runtime key, so `GET /api/v1/config` returns it.
+Submissions take `urls`, and an `overrides` object that overlays the quality keys
+(`quality_priority`, `codec_alternative`, the ALAC limits) and `force_overwrite` for that
+batch only. Everything else, the `catalog.media_user_token` that radio stations and private
+playlists need included, comes from the runtime config, and every enabled matching hook
+runs. The token is a runtime key, so `GET /api/v1/config` returns it.
 
 Errors share one body, `{"error": {"code", "message", "details"?}}`; clients switch on
 `code`. Streams are Server-Sent Events that resume from `Last-Event-ID` or `?cursor=`,
