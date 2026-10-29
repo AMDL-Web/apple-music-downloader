@@ -1717,10 +1717,13 @@ components:
               enum: [wrapper, web_token]
               description: >-
                 Takes effect only when developer-token signing is enabled (a
-                self-signed token cannot read enhancedHls); ignored in legacy mode.
-                wrapper (default) takes the authorized-device manifest from
-                wrapper.M3U8; web_token scrapes the music.apple.com web player JWT
-                and reads enhancedHls from amp-api.
+                self-signed token cannot read enhancedHls); ignored in legacy mode,
+                which reads enhancedHls but takes the authorized-device manifest for
+                tracks with the hi-res-lossless audio trait. wrapper (default) takes
+                the authorized-device manifest from wrapper.M3U8; web_token scrapes
+                the music.apple.com web player JWT and reads enhancedHls from
+                amp-api, whose manifest can lack a Hi-Res track's 88.2 or 96 kHz
+                ALAC renditions.
             motion_artwork_enabled:
               type: boolean
               description: >-

@@ -97,12 +97,15 @@ catalog:
   # the catalog cover.
   media_user_token: ""
   # enum: wrapper, web_token. Only meaningful when developer-token signing is enabled above (the self-signed token cannot
-  # read enhancedHls); ignored in legacy mode, where enhancedHls already comes from the catalog response.
-  # Default: wrapper.
+  # read enhancedHls); ignored in legacy mode. Legacy mode reads enhancedHls from the catalog response, except that a
+  # track whose audioTraits include hi-res-lossless takes the wrapper's device manifest instead, because the web
+  # player's manifest can leave out its higher ALAC sample rates; if the wrapper cannot supply one, that track keeps
+  # enhancedHls. Default: wrapper.
   # - wrapper: the Enhanced HLS master playlist comes from wrapper.M3U8 (the authorized device manifest).
   # - web_token: the backend scrapes a music.apple.com web-player JWT (same technique as legacy mode) and reads
   #     enhancedHls from amp-api.music.apple.com with that token, independent of the signed developer token used
-  #     for catalog metadata. Use this if the wrapper cannot supply a usable device manifest.
+  #     for catalog metadata. Use this if the wrapper cannot supply a usable device manifest. This is the web
+  #     player's manifest, so a Hi-Res track can lack its 88.2 or 96 kHz ALAC renditions.
   signed_mode_hls_source: "wrapper"
   # bool: true/false. Whether to look up Apple Music animated album covers (attributes.editorialVideo) and
   # expose them on jobs as motion_artwork_url / motion_artwork_tall_url plus each variant's palette.

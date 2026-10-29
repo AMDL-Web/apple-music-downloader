@@ -1,6 +1,7 @@
 package applemusic
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -62,6 +63,7 @@ func mapSong(raw catalogSongData) Song {
 		DurationInMillis: raw.Attributes.DurationInMillis,
 		ContentRating:    raw.Attributes.ContentRating, HasLyrics: raw.Attributes.HasLyrics || raw.Attributes.HasTimeSyncedLyrics,
 		AppleDigitalMaster: raw.Attributes.IsAppleDigitalMaster,
+		HiResLossless:      slices.Contains(raw.Attributes.AudioTraits, "hi-res-lossless"),
 		ArtworkURL:         raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
 		EnhancedHLS: raw.Attributes.ExtendedAssetURLs.EnhancedHLS,
 	}

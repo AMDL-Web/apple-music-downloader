@@ -65,6 +65,25 @@ func TestSongMetadataMapsAppleDigitalMaster(t *testing.T) {
 	}
 }
 
+// The trait lists are amp-api's own, as returned for songs 1635388718 and
+// 617154353 in the cn storefront.
+func TestSongMetadataMapsHiResLosslessTrait(t *testing.T) {
+	client := fixtureCatalogClient(t, map[string]string{
+		"/v1/catalog/cn/songs/hires":    `{"data":[{"id":"hires","type":"songs","attributes":{"name":"TV","audioTraits":["atmos","hi-res-lossless","lossless","lossy-stereo","spatial"]}}]}`,
+		"/v1/catalog/cn/songs/lossless": `{"data":[{"id":"lossless","type":"songs","attributes":{"name":"Give Life Back to Music","audioTraits":["lossless","lossy-stereo"]}}]}`,
+		"/v1/catalog/cn/songs/none":     `{"data":[{"id":"none","type":"songs","attributes":{"name":"No traits"}}]}`,
+	})
+	for id, want := range map[string]bool{"hires": true, "lossless": false, "none": false} {
+		song, err := client.SongMetadata(context.Background(), "cn", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if song.HiResLossless != want {
+			t.Errorf("song %s HiResLossless = %v, want %v", id, song.HiResLossless, want)
+		}
+	}
+}
+
 func TestArtistMapsPageAndGenres(t *testing.T) {
 	client := fixtureCatalogClient(t, map[string]string{
 		"/v1/catalog/us/artists/9": `{"data":[{"id":"9","type":"artists","attributes":{"name":"Nine","url":"https://music.apple.com/us/artist/nine/9","genreNames":["Hip-Hop/Rap"],"artwork":{"url":"artist-art","bgColor":"101010"}}}]}`,

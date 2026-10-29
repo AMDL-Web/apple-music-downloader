@@ -81,7 +81,7 @@ The three `catalog.apple_music_*` keys form one unit.
 
 | State | Behaviour |
 | --- | --- |
-| All three empty | Legacy mode. The bearer token is scraped from `music.apple.com` and catalog metadata is read from `amp-api.music.apple.com`, with `enhancedHls` included in the response. |
+| All three empty | Legacy mode. The bearer token is scraped from `music.apple.com` and catalog metadata is read from `amp-api.music.apple.com`, with `enhancedHls` included in the response. A track with the `hi-res-lossless` audio trait takes the wrapper's device manifest instead, falling back to `enhancedHls` if the wrapper cannot supply one (see below). |
 | All three set | The backend signs its own 24-hour ES256 developer token at startup (any signing error fails startup) and reads catalog metadata from the official `api.music.apple.com`. That token cannot read `enhancedHls`, so the Enhanced HLS source is chosen separately by `catalog.signed_mode_hls_source`. |
 | Only some set | Startup fails with a configuration error. |
 
@@ -89,6 +89,12 @@ The three `catalog.apple_music_*` keys form one unit.
 the master playlist from the wrapper's authorized device manifest; `web_token` scrapes a
 web-player JWT and reads `enhancedHls` from `amp-api.music.apple.com` independently of the
 signed token. Use `web_token` when the wrapper cannot supply a usable device manifest.
+
+The two manifests are not equivalent. The web player's `enhancedHls` can leave out a Hi-Res
+track's higher ALAC renditions that the device manifest lists: an 88.2 or 96 kHz stream may
+be missing while 48 kHz is there, and nothing in the manifest says so. That is why legacy
+mode asks the wrapper for Hi-Res tracks, and why `web_token` can cap such a track at 48 kHz.
+`download.alac_max_sample_rate` then picks from whichever manifest was read.
 
 `catalog.motion_artwork_enabled` (default `true`) controls the lookup of Apple's animated
 album covers. When on, one extra `amp-api` request per album runs out of band on a context

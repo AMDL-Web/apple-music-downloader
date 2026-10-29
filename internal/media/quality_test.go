@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -368,5 +369,105 @@ audio.m3u8
 	}
 	if len(result.Tracks) != 1 || len(result.Tracks[0].Qualities) == 0 || !result.Tracks[0].Qualities[0].Available {
 		t.Fatalf("qualities after retry = %#v", result.Tracks)
+	}
+}
+
+// legacyHiResManifests serves the two masters of a hi-res-lossless track the
+// way Apple did for song 1635388718: the web player's enhancedHls offers ALAC
+// only at 48 kHz, while the device manifest also lists 88.2 kHz.
+func legacyHiResManifests(t *testing.T) (webMaster, deviceMaster string) {
+	t.Helper()
+	const alac48 = `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-alac-stereo-48000-24",NAME="ALAC",BIT-DEPTH=24,SAMPLE-RATE=48000
+#EXT-X-STREAM-INF:BANDWIDTH=2400000,AVERAGE-BANDWIDTH=2000000,CODECS="alac",AUDIO="audio-alac-stereo-48000-24"
+alac-48/media.m3u8
+`
+	const alac88 = `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-alac-stereo-88200-24",NAME="ALAC",BIT-DEPTH=24,SAMPLE-RATE=88200
+#EXT-X-STREAM-INF:BANDWIDTH=4300000,AVERAGE-BANDWIDTH=3600000,CODECS="alac",AUDIO="audio-alac-stereo-88200-24"
+alac-88/media.m3u8
+`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/web.m3u8":
+			_, _ = w.Write([]byte("#EXTM3U\n" + alac48))
+		case "/device.m3u8":
+			_, _ = w.Write([]byte("#EXTM3U\n" + alac48 + alac88))
+		case "/alac-48/media.m3u8", "/alac-88/media.m3u8":
+			_, _ = w.Write([]byte("#EXTM3U\n" +
+				"#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://itunes.apple.com/P000000000/s1/e1/c23\"\n" +
+				"#EXT-X-MAP:URI=\"encrypted.mp4\"\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server.URL + "/web.m3u8", server.URL + "/device.m3u8"
+}
+
+func TestQualityQueryLegacyHiResTrackReadsDeviceManifest(t *testing.T) {
+	webMaster, deviceMaster := legacyHiResManifests(t)
+	tests := []struct {
+		name          string
+		hiRes         bool
+		wrapper       countingQualityWrapper
+		wantRate      int
+		wantM3U8Calls int
+	}{
+		{name: "hi-res track takes the device manifest", hiRes: true, wrapper: countingQualityWrapper{m3u8: deviceMaster}, wantRate: 88200, wantM3U8Calls: 1},
+		{name: "wrapper error keeps the web manifest", hiRes: true, wrapper: countingQualityWrapper{err: errors.New("wrapper m3u8: no session")}, wantRate: 48000, wantM3U8Calls: 1},
+		{name: "empty device manifest keeps the web manifest", hiRes: true, wrapper: countingQualityWrapper{}, wantRate: 48000, wantM3U8Calls: 1},
+		{name: "other tracks never ask the wrapper", hiRes: false, wrapper: countingQualityWrapper{m3u8: deviceMaster}, wantRate: 48000, wantM3U8Calls: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.Download.MaxAttempts = 1
+			var calls int
+			tt.wrapper.callCount = &calls
+			service := newTestQualityService(cfg, fakeQualityCatalog{song: applemusic.Song{
+				ID: "song-1", Name: "TV", EnhancedHLS: webMaster, HiResLossless: tt.hiRes,
+			}}, tt.wrapper)
+
+			result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != tt.wantM3U8Calls {
+				t.Fatalf("wrapper.M3U8 calls = %d, want %d", calls, tt.wantM3U8Calls)
+			}
+			var alac QualityOption
+			for _, option := range result.Tracks[0].Qualities {
+				if option.ID == "alac" {
+					alac = option
+				}
+			}
+			if !alac.Available || alac.SampleRate != tt.wantRate {
+				t.Fatalf("alac = %+v, want sample rate %d", alac, tt.wantRate)
+			}
+		})
+	}
+}
+
+func TestSelectEnhancedStreamLegacyHiResDownloadsFromDeviceManifest(t *testing.T) {
+	webMaster, deviceMaster := legacyHiResManifests(t)
+	var calls int
+	d := newTestDownloader(&Downloader{
+		cfg: config.Default(), wrapper: countingQualityWrapper{m3u8: deviceMaster, callCount: &calls}, http: newHTTPClient(),
+	})
+	info, err := d.selectEnhancedStream(context.Background(), "cn", applemusic.Song{ID: "song-1", EnhancedHLS: webMaster, HiResLossless: true}, "alac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || info.SampleRate != 88200 || info.CodecID != "audio-alac-stereo-88200-24" || !strings.HasSuffix(info.MediaURI, "/alac-88/encrypted.mp4") {
+		t.Fatalf("selected %+v after %d wrapper.M3U8 calls, want the 88.2 kHz device rendition", info, calls)
+	}
+}
+
+func TestResolveEnhancedHLSLegacyHiResDoesNotFallBackWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	d := newTestDownloader(&Downloader{cfg: config.Default(), wrapper: countingQualityWrapper{err: ctx.Err()}})
+	master, err := d.resolveEnhancedHLS(ctx, "cn", applemusic.Song{ID: "song-1", EnhancedHLS: "https://web.invalid/master.m3u8", HiResLossless: true})
+	if !errors.Is(err, context.Canceled) || master != "" {
+		t.Fatalf("resolveEnhancedHLS = %q, %v; want context.Canceled, not the web manifest", master, err)
 	}
 }

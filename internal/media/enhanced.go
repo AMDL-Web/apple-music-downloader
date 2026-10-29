@@ -2,12 +2,14 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/domain"
 	"amdl/internal/jobs"
+	"amdl/internal/logging"
 )
 
 // selectedDownloadMedia is one enhanced codec's chosen stream and, after the
@@ -56,9 +58,16 @@ func (d *Downloader) selectEnhancedStream(ctx context.Context, storefront string
 // (quality query). A song without a manifest wraps
 // applemusic.ErrNoEnhancedHLS, which is not retryable, so the codec loop falls
 // back at once instead of spending its retry budget.
+//
+// The web player's enhancedHls master can leave out a hi-res-lossless track's
+// higher ALAC renditions that the wrapper's device manifest lists (88.2 and
+// 96 kHz have been seen missing), and nothing in it says when. So in legacy
+// mode such a track takes the device manifest, and keeps enhancedHls only if
+// the wrapper cannot supply one.
 func (d *Downloader) resolveEnhancedHLS(ctx context.Context, storefront string, song applemusic.Song) (string, error) {
 	master := song.EnhancedHLS
-	if d.cfg.Catalog.DeveloperTokenSigningEnabled() {
+	switch {
+	case d.cfg.Catalog.DeveloperTokenSigningEnabled():
 		// A self-signed developer token cannot read enhancedHls, so the master
 		// playlist comes from either the wrapper's authorized device manifest
 		// or a scraped web-player token, per catalog.signed_mode_hls_source.
@@ -75,6 +84,20 @@ func (d *Downloader) resolveEnhancedHLS(ctx context.Context, storefront string, 
 			}
 			master = m3u8
 		}
+	case song.HiResLossless:
+		m3u8, err := d.wrapper.M3U8(ctx, song.ID)
+		if err == nil && m3u8 == "" {
+			err = errors.New("empty manifest")
+		}
+		if err == nil {
+			master = m3u8
+			break
+		}
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("request device m3u8: %w", err)
+		}
+		logging.FromContext(ctx, d.logger).Warn("device manifest unavailable; using the web manifest, which may lack hi-res renditions",
+			"song_id", song.ID, "error", err)
 	}
 	if master == "" {
 		return "", fmt.Errorf("song %s: %w", song.ID, applemusic.ErrNoEnhancedHLS)
