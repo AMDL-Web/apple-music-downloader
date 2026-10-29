@@ -390,8 +390,11 @@ paths:
         two-step verification code. The username is trimmed; the password is
         forwarded exactly as sent, because spaces can be part of it (a password
         that is only whitespace is 400 invalid_request). The password of a login
-        that waits for its code is kept in memory for at most 75 seconds and
-        never written to disk. Needs a wrapper-manager; a bare wrapper-lite
+        that waits for its code is kept in memory for at most 75 seconds while
+        no code has arrived and, once a code is submitted, until its
+        verification ends: at most 75 seconds plus wrapper.login_timeout_seconds
+        (195 seconds by default) after the needs_2fa response. It is never
+        written to disk. Needs a wrapper-manager; a bare wrapper-lite
         answers 501 login_unsupported.
       operationId: loginWrapper
       requestBody:

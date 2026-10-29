@@ -31,9 +31,12 @@ const (
 	msgNoSuchAccount   = "no such account"
 )
 
-// twoStepWindow is how long a login that needs a code keeps its password. The
-// wrapper-lite behind wrapper-manager abandons the login 60 seconds after it
-// asks for the code, so holding the password longer could not complete it.
+// twoStepWindow is how long a login that needs a code keeps its password while
+// no code has arrived. The wrapper-lite behind wrapper-manager abandons the
+// login 60 seconds after it asks for the code, so holding the password longer
+// could not complete it. A code that arrives inside the window keeps the
+// password until its verification ends, which SubmitTwoStepCode bounds by the
+// window's end plus the login timeout.
 const twoStepWindow = 75 * time.Second
 
 type loginBody struct {
@@ -51,6 +54,8 @@ type loginSession struct {
 	credentials
 	verifying bool
 	expiry    *time.Timer
+	// expires is when expiry fires: the end of the wait for the code.
+	expires time.Time
 }
 
 // loginBook tracks the logins in flight. wrapper-manager takes the password
@@ -106,23 +111,25 @@ func (b *loginBook) park(username, password string) (string, error) {
 		b.sessions = make(map[string]*loginSession)
 	}
 	b.sessions[id] = session
+	session.expires = time.Now().Add(window)
 	session.expiry = time.AfterFunc(window, func() { b.expire(id) })
 	return id, nil
 }
 
-// take marks the session as being verified and returns its credentials.
-func (b *loginBook) take(id string) (credentials, error) {
+// take marks the session as being verified and returns its credentials and the
+// end of its wait for the code.
+func (b *loginBook) take(id string) (credentials, time.Time, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	session := b.sessions[id]
 	if session == nil {
-		return credentials{}, ErrLoginSessionNotFound
+		return credentials{}, time.Time{}, ErrLoginSessionNotFound
 	}
 	if session.verifying {
-		return credentials{}, ErrLoginSessionBusy
+		return credentials{}, time.Time{}, ErrLoginSessionBusy
 	}
 	session.verifying = true
-	return session.credentials, nil
+	return session.credentials, session.expires, nil
 }
 
 // finish drops a session after its code was verified, successfully or not.
@@ -200,12 +207,18 @@ func (c *Client) StartLogin(ctx context.Context, username, password string) (Log
 // SubmitTwoStepCode finishes the login that StartLogin parked under loginID. The
 // login ends with this call whatever the outcome: a wrong code makes
 // wrapper-lite abandon the login, so the caller starts again from the password.
+//
+// The verification ends, and the password with it, by the end of the wait for
+// the code plus the login timeout at the latest, however late in the wait the
+// code arrived.
 func (c *Client) SubmitTwoStepCode(ctx context.Context, loginID, code string) (LoginResult, error) {
-	creds, err := c.logins.take(loginID)
+	creds, expires, err := c.logins.take(loginID)
 	if err != nil {
 		return LoginResult{}, err
 	}
 	defer c.logins.finish(loginID)
+	ctx, cancel := context.WithDeadline(ctx, expires.Add(c.loginTimeout))
+	defer cancel()
 	err = c.login(ctx, loginBody{Username: creds.username, Password: creds.password, Code: code})
 	if err != nil {
 		return LoginResult{}, loginFailure(err)

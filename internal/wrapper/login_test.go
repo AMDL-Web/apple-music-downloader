@@ -364,6 +364,40 @@ func TestParkedPasswordIsDroppedAfterTheWindow(t *testing.T) {
 	}
 }
 
+// A code that arrives late in the window keeps the password through its
+// verification, but no longer than the window plus the login timeout.
+func TestPasswordUnderVerificationIsDroppedByWindowPlusLoginTimeout(t *testing.T) {
+	m := &fakeManager{needsCode: true, hold: make(chan struct{})}
+	c := newTestClient(t, m)
+	t.Cleanup(func() { close(m.hold) }) // runs before the server closes
+	c.logins.window = 100 * time.Millisecond
+	c.loginTimeout = 200 * time.Millisecond
+	ctx := context.Background()
+	parked := time.Now()
+	first, err := c.StartLogin(ctx, testUser, testPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.logins.mu.Lock()
+	session := c.logins.sessions[first.LoginID]
+	c.logins.mu.Unlock()
+	time.Sleep(80 * time.Millisecond) // the code arrives near the end of the window
+
+	if _, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode); !errors.Is(err, ErrLoginTimeout) {
+		t.Fatalf("SubmitTwoStepCode() with a hung wrapper = %v, want ErrLoginTimeout", err)
+	}
+	// Scheduling slack on top of the 300 ms bound.
+	if held := time.Since(parked); held > 300*time.Millisecond+time.Second {
+		t.Fatalf("the verification ran %v after the code was asked for, want about 300ms", held)
+	}
+	c.logins.mu.Lock()
+	remaining, sessions := session.password, len(c.logins.sessions)
+	c.logins.mu.Unlock()
+	if remaining != "" || sessions != 0 {
+		t.Fatal("the session kept the password after its verification ended")
+	}
+}
+
 func TestLoginFailuresMapToPackageErrors(t *testing.T) {
 	tests := []struct {
 		name  string

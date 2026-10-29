@@ -90,7 +90,9 @@ Logging in is the one thing wrapper-lite cannot do over HTTP: it logs in only fr
 own command line. The login routes of `/api/v1/wrapper` therefore forward to wrapper-manager's
 `POST /login` and `POST /logout`, and answer `501 login_unsupported` against a bare
 wrapper-lite. The password of a login that waits for a two-step code is kept in memory for
-at most 75 seconds. Requests, pools and the Hi-Res rule are in
+at most 75 seconds while no code has arrived; a code submitted in that time keeps it until
+its verification ends, at most 75 seconds plus `wrapper.login_timeout_seconds` (195 seconds
+by default) after the code was asked for. Requests, pools and the Hi-Res rule are in
 [Download pipeline](download-pipeline.md#concurrency) and
 [Configuration](configuration.md#catalog-tokens-and-the-hi-res-manifest); the move from the
 1.x fork is in [Upgrading to 2.0](upgrading-to-2.0.md#wrapper).

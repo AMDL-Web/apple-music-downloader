@@ -181,7 +181,9 @@ curl -X POST http://localhost:18080/api/v1/wrapper/login \
 The username is trimmed; the password is forwarded exactly as sent, because spaces can be
 part of it. If the response contains `"status":"needs_2fa"`, submit the code within 60
 seconds using the `login_id` from that response. The password is held in memory for that
-wait (at most 75 seconds) and is never written to disk. A wrong code ends the login; start
+wait (at most 75 seconds) and, once a code is submitted, until its verification ends: at most
+75 seconds plus `wrapper.login_timeout_seconds` (195 seconds by default) after the
+`needs_2fa` response. It is never written to disk. A wrong code ends the login; start
 again from the password.
 
 ```bash
