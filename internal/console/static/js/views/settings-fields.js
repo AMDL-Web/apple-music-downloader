@@ -182,9 +182,10 @@ function SecretControl({ id, value, disabled, invalid, described, onChange }) {
 /**
  * An ordered list of option values: move up, move down, remove (never below
  * minItems), and add one of the options not yet listed. Moves are announced
- * in the editor's own polite region, and focus follows the moved row.
+ * in the editor's own polite region, and focus follows the moved row. The
+ * New download Custom… sheet reuses it for the codec order.
  */
-function ListEditor({ field, id, value, disabled, described, onChange }) {
+export function ListEditor({ field, id, value, disabled, described, onChange }) {
   const items = Array.isArray(value) ? value : [];
   const [said, setSaid] = useState('');
   const [adding, setAdding] = useState('');

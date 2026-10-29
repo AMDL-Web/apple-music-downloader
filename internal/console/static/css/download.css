@@ -1,74 +1,44 @@
 /*
  * The New download page (#/new, views/download*.js): link entry, link
- * previews, options, the quality sheet, submit results and the
- * bookmarklet. Base structure only; it reads tokens like every other base
- * stylesheet, and the skin restyles it. Linked after responsive.css, so the
+ * previews, the submit bar with the quality controls, the Custom… sheet,
+ * the quality sheet, submit results and the browser shortcut. Base
+ * structure only; it reads tokens like every other base stylesheet, and the
+ * skin restyles it. Text sizes are --fs-13 and --fs-15 (card titles and
+ * the page title come from the skin). Linked after responsive.css, so the
  * phone rules at the end of this file are its own.
  */
 
 /* ---- Layout -------------------------------------------------------- */
 
-.new-main,
-.new-aside {
-  display: flex;
-  flex-direction: column;
-  gap: var(--page-gap);
-  min-width: 0;
-}
-
-/* .page.page-new: beside a 1024-1279 px sidebar the options take 300 px at
-   most, so the links and results stay the wider column. */
-@media (min-width: 1024px) {
-  .page.page-new {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
-    align-items: start;
-    gap: var(--page-gap) var(--grid-gap);
-  }
-}
-
-@media (min-width: 1280px) {
-  .page.page-new {
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-  }
+/* One centered column: the text box, the links, the submit bar, the
+   results, the browser shortcut. */
+.page.page-new,
+.main[data-page="new"] > .page-head {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
 }
 
 .new-hint {
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-}
-
-.new-field-label {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
-  font-weight: var(--w-medium);
 }
 
 /* ---- Compose ------------------------------------------------------- */
 
-.new-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  min-width: 0;
-}
-
 .new-input {
+  display: block;
   width: 100%;
+  min-height: 152px;
+  padding: var(--s-2) var(--s-3);
   border: 1px solid var(--border-control);
   border-radius: var(--r-control);
   background: var(--bg-surface);
   color: var(--text-primary);
-}
-
-.new-input {
-  display: block;
-  min-height: 152px;
-  padding: var(--s-2) var(--s-3);
-  font-family: var(--font-mono);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
+  font-family: var(--font-sans);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
   resize: vertical;
 }
 
@@ -76,19 +46,25 @@
   color: var(--text-disabled);
 }
 
-.new-submit {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
+.new-compose .new-hint {
+  margin-top: var(--s-2);
 }
 
-.new-submit-info {
+/* ---- Submit bar ---------------------------------------------------- */
+
+/* Under the links and stuck to the bottom of the viewport while they run
+   past it, so Download stays in reach. */
+.new-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
   display: flex;
   flex-direction: column;
-  gap: var(--s-0_5);
-  min-width: 0;
+  gap: var(--s-2);
+  margin-top: calc(var(--s-4) - var(--page-gap));
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
 }
 
 .new-count {
@@ -98,29 +74,68 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* "Options: Server defaults" is a quiet summary like the count above it;
-   only "Edit" is the link. */
-.new-options-line {
+.new-submit-row {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+}
+
+.new-controls {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  min-width: 0;
+}
+
+.new-quality {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.new-quality-select {
+  min-width: 0;
+  max-width: 320px;
+  text-overflow: ellipsis;
+}
+
+.new-overwrite {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  cursor: pointer;
+}
+
+.new-overwrite:has(:disabled) {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.new-submit-btn {
+  margin-inline-start: auto;
+}
+
+.new-cfg-note {
+  display: flex;
   flex-wrap: wrap;
   gap: 0 var(--s-2);
-  margin: 0;
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
 }
 
-.new-options-jump {
+.new-cfg-note .link {
   padding: 0;
   border: 0;
   background: transparent;
-  text-align: left;
+  font: inherit;
   cursor: pointer;
-}
-
-.new-submit-btn {
-  min-width: 152px;
 }
 
 /* ---- Detected links ------------------------------------------------ */
@@ -181,8 +196,8 @@
 .new-link-loading,
 .new-link-note {
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
 .new-link-title {
@@ -209,8 +224,8 @@
   column-gap: var(--s-1_5);
   min-width: 0;
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
 .new-link-sub > * + *::before {
@@ -221,8 +236,8 @@
 .new-link-url {
   min-width: 0;
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -263,8 +278,8 @@
   gap: var(--s-1);
   align-self: flex-start;
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   text-decoration: none;
 }
 
@@ -289,8 +304,8 @@
   padding: var(--s-3) var(--card-pad-x);
   border-top: var(--row-divider);
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
 .new-legend-item {
@@ -306,8 +321,8 @@
   padding: var(--s-3) var(--card-pad-x);
   border-top: var(--row-divider);
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
 /* ---- Results ------------------------------------------------------- */
@@ -399,8 +414,8 @@
 .new-result-url {
   min-width: 0;
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -409,8 +424,8 @@
 .new-result-msg,
 .new-result-detail {
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   overflow-wrap: anywhere;
 }
 
@@ -422,212 +437,50 @@
   gap: var(--s-2);
 }
 
-/* ---- Options ------------------------------------------------------- */
+/* ---- Browser shortcut --------------------------------------------- */
 
-/* "Options: …" under the text box scrolls here; keep the head clear of the top bar. */
-.new-options {
-  scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
+.new-shortcut {
+  margin-top: calc(var(--s-4) - var(--page-gap));
 }
 
-.new-options-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  min-width: 0;
-}
-
-.new-options-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--s-1) var(--s-2);
+.new-shortcut-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1_5);
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
-}
-
-.new-options-count {
-  color: var(--text-primary);
-  font-weight: var(--w-medium);
-}
-
-.new-options-text {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.new-options-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-5);
-}
-
-.new-fieldset {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-/* A legend is not a flex item, so it carries its own space below. */
-.new-fieldset > legend {
-  padding: 0 0 var(--s-2);
-}
-
-.new-check {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s-2);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
+  list-style: none;
   cursor: pointer;
 }
 
-.new-check input {
-  flex: none;
-  width: var(--icon);
-  height: var(--icon);
-  margin: var(--s-0_5) 0 0;
-  accent-color: var(--accent);
+.new-shortcut-summary::-webkit-details-marker {
+  display: none;
 }
 
-.new-check input:disabled,
-.new-check input:disabled + .new-check-text {
-  cursor: not-allowed;
-  color: var(--text-secondary);
+.new-shortcut-summary .icon {
+  transform: rotate(-90deg);
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
-.new-check-text {
+.new-shortcut[open] .new-shortcut-summary .icon {
+  transform: none;
+}
+
+.new-shortcut-body {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-}
-
-.new-check-hint {
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-  overflow-wrap: anywhere;
-}
-
-.new-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-  min-width: 0;
-}
-
-.new-field .select {
-  width: 100%;
-}
-
-.new-field-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-3);
+  max-width: 560px;
+  padding-top: var(--s-3);
 }
 
-/* A value that differs from the server default carries a dot after its label. */
-.new-check[data-changed] .new-check-label::after,
-.new-field[data-changed] > .new-field-label::after,
-.new-codecs[data-changed] > .new-field-label::after,
-.new-fieldset[data-changed] > legend::after {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-inline-start: var(--s-1_5);
-  border-radius: var(--r-full);
-  background: var(--accent);
-  vertical-align: middle;
+/* A bookmarklet needs a mouse and a bookmarks bar. */
+@media (pointer: coarse) {
+  .new-shortcut {
+    display: none;
+  }
 }
-
-.new-codecs {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-}
-
-.new-codec-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-control);
-}
-
-.new-codec + .new-codec {
-  border-top: var(--row-divider);
-}
-
-.new-codec {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-1) var(--s-1) var(--s-1) var(--s-2);
-}
-
-.new-codec-rank {
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.new-codec-name {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  font-weight: var(--w-medium);
-}
-
-.new-codec-hint {
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-  font-weight: var(--w-regular);
-}
-
-.new-codec-actions {
-  display: flex;
-  gap: var(--s-0_5);
-}
-
-.new-codec-up .icon {
-  transform: rotate(180deg);
-}
-
-.new-codec-add {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-1_5);
-}
-
-.new-codec-add-label {
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-}
-
-.new-options-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s-3);
-  padding-top: var(--s-4);
-  border-top: var(--card-divider);
-}
-
-/* ---- Bookmarklet --------------------------------------------------- */
 
 .new-bookmarklet {
   display: flex;
@@ -659,6 +512,82 @@
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+}
+
+/* ---- Custom quality sheet ----------------------------------------- */
+
+.sheet-custom {
+  width: min(420px, 100%);
+  max-height: calc(94vh - var(--s-2));
+  overflow: hidden;
+}
+
+.sheet-custom > * {
+  flex-shrink: 0;
+}
+
+.sheet-custom > .new-custom-body {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.new-custom-for {
+  margin-top: calc(-1 * var(--s-3));
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-custom-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.new-custom-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.new-custom-label,
+.new-custom-field > span:first-child {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-medium);
+}
+
+.new-custom-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  cursor: pointer;
+}
+
+.new-custom-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.new-custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.new-custom-field .select {
+  width: 100%;
+}
+
+.new-custom-actions {
+  justify-content: space-between;
 }
 
 /* ---- Quality sheet ------------------------------------------------- */
@@ -743,14 +672,14 @@
   padding: var(--s-2) var(--s-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-control);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   font-variant-numeric: tabular-nums;
 }
 
 .quality-slot-label {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
   font-weight: var(--w-medium);
 }
 
@@ -761,7 +690,7 @@
 
 .quality-slot-codec {
   margin-inline-start: var(--s-1_5);
-  font-size: var(--fs-12);
+  font-size: var(--fs-13);
   font-weight: var(--w-regular);
 }
 
@@ -787,8 +716,8 @@
   flex: none;
   min-width: 2.5ch;
   color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -817,8 +746,8 @@
   padding: var(--s-0_5) var(--s-1_5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-badge);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   font-variant-numeric: tabular-nums;
 }
 
@@ -834,32 +763,92 @@
   align-self: center;
 }
 
-/* ---- Rail and phone ------------------------------------------------ */
+/* ---- Phone --------------------------------------------------------- */
 
 @media (max-width: 639px) {
   .new-input {
     min-height: 128px;
   }
 
-  .new-options-jump {
+  /* The submit bar is fixed above the tab bar, outside the cards, and the
+     page keeps its height free below the last row (--new-bar-h, measured
+     by the page). Count and Overwrite on one line, the quality menu and
+     Download on the next. */
+  .page.page-new {
+    padding-bottom: var(--new-bar-h, 0px);
+  }
+
+  .new-submit {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    z-index: 15;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "quality overwrite"
+      "button button";
+    align-items: center;
+    gap: var(--s-2) var(--s-3);
+    margin: 0;
+    padding: var(--s-2) var(--s-4) var(--s-3);
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-canvas);
+  }
+
+  .new-submit-row,
+  .new-controls {
+    display: contents;
+  }
+
+  /* The rows and the button say what the count says; it stays announced. */
+  .new-count {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .new-overwrite {
+    grid-area: overwrite;
     min-height: var(--touch);
   }
 
-  /* The submit row sticks above the tab bar while the text box is on
-     screen, so Download stays reachable over a long paste. */
-  .new-submit {
-    position: sticky;
-    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
-    z-index: 1;
-    flex-direction: column;
-    align-items: stretch;
-    margin-inline: calc(-1 * var(--card-pad-x));
-    padding: var(--s-2) var(--card-pad-x);
-    background: var(--bg-surface);
+  .new-overwrite-more {
+    display: none;
+  }
+
+  .new-quality {
+    grid-area: quality;
+  }
+
+  .new-quality-select {
+    flex: 1;
+    max-width: none;
+  }
+
+  .new-quality {
+    min-width: 0;
   }
 
   .new-submit-btn {
+    grid-area: button;
     width: 100%;
+    margin: 0;
+  }
+
+  .new-submit > .notice,
+  .new-cfg-note {
+    grid-column: 1 / -1;
+    margin-bottom: var(--s-2);
+  }
+
+  .new-shortcut,
+  .new-results-card {
+    margin-top: 0;
   }
 
   .new-link {
@@ -895,31 +884,8 @@
     justify-content: flex-start;
   }
 
-  .new-field-row {
+  .new-custom-limits {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .new-check {
-    min-height: var(--touch);
-    align-items: center;
-  }
-
-  .new-check input {
-    margin-top: 0;
-  }
-
-  /* With a hint under the label, the box stays on the label's line. */
-  .new-check:has(.new-check-hint) {
-    align-items: flex-start;
-  }
-
-  .new-check:has(.new-check-hint) input {
-    margin-top: var(--s-0_5);
-  }
-
-  .new-bookmarklet {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .quality-slots {

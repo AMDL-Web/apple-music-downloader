@@ -2140,28 +2140,6 @@
   min-height: 168px;
   padding: var(--s-3) var(--s-4);
   border-radius: var(--r-art);
-  line-height: var(--lh-mono-12);
-}
-
-:root[data-skin="music"] .new-hint {
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-:root[data-skin="music"] .new-count {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .new-options-line {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .new-options-jump {
-  font-weight: var(--w-medium);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 :root[data-skin="music"] .new-submit-btn {
@@ -2251,8 +2229,8 @@
   padding: var(--s-3) var(--card-pad-x);
   border-bottom: 0;
   color: var(--text-secondary);
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
 }
 
 :root[data-skin="music"] .new-results-summary::after,
@@ -2301,91 +2279,7 @@
   line-height: var(--lh-13);
 }
 
-/* Options: Edit and Done are red text, as in an Apple list header (Done in
-   semibold). The open form groups each fieldset under a small caps title;
-   the codec ranking is an inset list. */
-:root[data-skin="music"] .card-actions .new-options-toggle {
-  height: auto;
-  padding: 0;
-  background: transparent;
-  color: var(--accent-text);
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
-  font-weight: var(--w-medium);
-}
-
-:root[data-skin="music"] .card-actions .new-options-toggle[aria-expanded="true"] {
-  font-weight: var(--w-semibold);
-}
-
-:root[data-skin="music"] .card-actions .new-options-toggle:hover:not(:disabled) {
-  background: transparent;
-  text-decoration: underline;
-}
-
-:root[data-skin="music"] .new-options-summary {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .new-options-count {
-  font-weight: var(--w-semibold);
-}
-
-:root[data-skin="music"] .new-options-form {
-  gap: var(--s-6);
-}
-
-:root[data-skin="music"] .new-fieldset {
-  gap: var(--s-2_5);
-}
-
-:root[data-skin="music"] .new-check {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .new-check-hint {
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-:root[data-skin="music"] .new-codec-list {
-  border: 0;
-  border-radius: var(--r-art);
-  background: var(--bg-inset);
-}
-
-:root[data-skin="music"] .new-codec {
-  position: relative;
-  min-height: 44px;
-  padding: var(--s-1_5) var(--s-1) var(--s-1_5) var(--s-2);
-}
-
-:root[data-skin="music"] .new-codec + .new-codec {
-  border-top: 0;
-}
-
-:root[data-skin="music"] .new-codec + .new-codec::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: calc(var(--s-2) + 20px + var(--s-2));
-  border-top: var(--row-divider);
-}
-
-:root[data-skin="music"] .new-codec-name {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .new-codec-add-label {
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-/* Bookmarklet: the code is an inset cell, the steps quiet secondary text. */
+/* Browser shortcut: the code is an inset cell, the steps quiet secondary text. */
 :root[data-skin="music"] .new-bookmarklet-code {
   padding: var(--s-3);
   border: 0;
@@ -2395,8 +2289,6 @@
 
 :root[data-skin="music"] .new-steps {
   gap: var(--s-1_5);
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
 }
 
 /* ---- Settings ------------------------------------------------------ */
@@ -2904,8 +2796,8 @@
 }
 
 :root[data-skin="music"] .quality-slot-label {
-  font-size: var(--fs-16);
-  line-height: var(--lh-16);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
   font-weight: var(--w-semibold);
 }
 
@@ -2928,8 +2820,8 @@
 }
 
 :root[data-skin="music"] .quality-track-name {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
 }
 
 :root[data-skin="music"] .quality-opt {

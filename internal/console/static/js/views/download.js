@@ -1,10 +1,13 @@
 // New download (#/new?url=, #/new/:id for the drawer): paste Apple Music
-// links, see what each one is, set per-download options and submit. The
-// text box is the source of the links; ?url= prefills it, and the page
-// writes its links back into ?url= so a reload or the global paste keeps
-// them; the whole text also lasts for the tab when the page is left. The
-// page head comes from app.js. Parts: download-config.js (server defaults),
-// download-lookup.js (previews), download-links.js (rows), download-options.js,
+// links, see what each one is, choose the quality and submit. One column:
+// the text box, the detected links, then the submit bar (quality preset,
+// Overwrite, the count, Download), which stays in view while the list is
+// long, then what the last submit did. The text box is the source of the
+// links; ?url= prefills it, and the page writes its links back into ?url=
+// so a reload or the global paste keeps them; the whole text also lasts for
+// the tab when the page is left. The page head comes from app.js. Parts:
+// download-config.js (server defaults), download-lookup.js (previews),
+// download-links.js (rows), download-preset.js (quality controls),
 // download-quality.js, download-results.js; the logic is pure in
 // lib/links.js, lib/lookup.js, lib/submit.js and lib/overrides.js.
 
@@ -12,17 +15,18 @@ import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/p
 import { createDownload } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
-import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError } from '../lib/submit.js';
-import { optionDefaults, buildOverrides, applyOverrides, describeOverrides } from '../lib/overrides.js';
-import { useApp, Card, Button, Notice } from '../ui/components.js';
+import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError, submittable, downloadLabel, countLine } from '../lib/submit.js';
+import { optionDefaults, presetOverrides, presetValues } from '../lib/overrides.js';
+import { useApp, Card } from '../ui/components.js';
 import { useDebounced, useMedia } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { useServerConfig } from './download-config.js';
 import { useLookups } from './download-lookup.js';
 import { LinksCard } from './download-links.js';
-import { OptionsCard } from './download-options.js';
+import { QualityControls, CustomSheet } from './download-preset.js';
+import { SubmitBar, PasteButton, useBarHeight } from './download-bar.js';
 import { QualitySheet } from './download-quality.js';
-import { ResultsCard, BookmarkletCard, useResults } from './download-results.js';
+import { ResultsCard, BrowserShortcut, useResults } from './download-results.js';
 
 const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
 
@@ -32,6 +36,9 @@ const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]
 // download through the sidebar and coming back keeps a draft, notes and
 // links that are not Apple Music included (?url= keeps only the links).
 let draft = '';
+// The quality choice lasts for the tab too, so the next album can follow
+// with the same one: a PRESETS id or 'custom' with its values.
+let chosen = { preset: 'follow', custom: null };
 
 export function DownloadPage({ route }) {
   const app = useApp();
@@ -110,23 +117,29 @@ export function DownloadPage({ route }) {
   // Whether Settings holds a media-user-token; null until the config loads.
   const serverToken = cfg.data && cfg.data.config && cfg.data.config.catalog ? Boolean(cfg.data.config.catalog.media_user_token) : null;
 
-  // The form starts from the server defaults.
-  const [values, setValues] = useState(null);
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!defaults || values) return;
-    setValues(applyOverrides(defaults, {}));
-  }, [defaults]);
-
-  const overrides = useMemo(() => (defaults && values ? buildOverrides(defaults, values) : {}), [defaults, values]);
-
-  const setValue = useCallback((key, v) => setValues((cur) => ({ ...cur, [key]: v })), []);
-  const resetOptions = () => {
-    if (defaults) setValues(applyOverrides(defaults, {}));
+  // The quality preset and the Overwrite switch (null: as Settings has it).
+  const [choice, setChoiceState] = useState(chosen);
+  const setChoice = (next) => {
+    chosen = next;
+    setChoiceState(next);
     setRefusal('');
   };
+  const [overwrite, setOverwrite] = useState(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const overrides = useMemo(
+    () => (defaults ? presetOverrides(defaults, choice.preset, choice.custom, overwrite) : {}),
+    [defaults, choice, overwrite],
+  );
+  const qualitySelect = () => document.getElementById('new-quality');
+  const closeCustom = () => {
+    setCustomOpen(false);
+    requestAnimationFrame(() => {
+      const el = qualitySelect();
+      if (el && document.activeElement === document.body) el.focus({ preventScroll: true });
+    });
+  };
 
-  const { statusOf, issueOf, sendable, flagged, warned, skipped, queue, priorOf, forgetPrior } = useLookups({
+  const { statusOf, issueOf, sendable, skipped, queue, priorOf, forgetPrior } = useLookups({
     settled,
     entries,
     serverToken,
@@ -187,10 +200,8 @@ export function DownloadPage({ route }) {
     const { pairs, fail } = await send(sendable, overrides);
     setBusy(false);
     if (fail) {
-      if (fail.kind === 'overrides') {
-        setRefusal(fail.message);
-        setOpen(true);
-      } else setFailure(fail.message);
+      if (fail.kind === 'overrides') setRefusal(fail.message);
+      else setFailure(fail.message);
     }
     if (!pairs.length) {
       app.toast({ message: fail ? fail.message : 'Nothing was submitted', role: 'danger' });
@@ -254,112 +265,123 @@ export function DownloadPage({ route }) {
     }
   };
 
-  const jumpToOptions = () => {
-    setOpen(true);
-    requestAnimationFrame(() => {
-      const el = document.querySelector('.new-options');
-      if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      const first = document.querySelector('#new-options-body :is(input, select, button):not([disabled])');
-      if (first) first.focus({ preventScroll: true });
-    });
+  // The count line is announced (role=status), so it follows the settled
+  // text, not every keystroke.
+  const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
+  const settledSend = submittable(settledEntries, issueOf);
+  const count = countLine({
+    links: settledEntries.length,
+    fresh: settledSend.length,
+    blocked: settledEntries.filter((e) => (issueOf(e) || {}).blocking).length,
+    warned: settledEntries.filter((e) => {
+      const i = issueOf(e);
+      return i && !i.blocking;
+    }).length,
+  });
+  const kindOf = (url) => {
+    const st = statusOf(url);
+    if (st.state === 'ready' && st.data && st.data.type) return st.data.type;
+    const e = entries.find((x) => x.url === url);
+    const link = e && e.link;
+    return link ? (link.kind === 'album' && link.trackId && trackMode !== 'album' ? 'song' : link.kind) : 'item';
   };
+  const label = busy ? 'Submitting…' : downloadLabel(sendable.map(kindOf), entries.length > 0);
 
-  const changes = describeOverrides(overrides);
-  const optionsLine = !values ? 'Server defaults' : changes.length ? `${changes.length} ${changes.length === 1 ? 'option' : 'options'} changed` : 'Server defaults';
-  const countLine = entries.length
-    ? [
-        `${entries.length} ${entries.length === 1 ? 'link' : 'links'}`,
-        `${sendable.length} to download`,
-        flagged ? `${flagged} flagged` : '',
-        warned ? `${warned} to check` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : 'No links yet';
+  // Under 640 px the submit bar is fixed above the tab bar; the page keeps
+  // room for it below the last row.
+  const [barRef, barH] = useBarHeight();
+
   // The shortcut hint only where there is a keyboard to press it on.
   const keyboard = useMedia('(hover: hover) and (pointer: fine)');
   const keys = isMac() ? '⌘ Return' : 'Ctrl+Enter';
 
-  return html`<div class="page page-new">
-    <div class="new-main">
-      <${Card} section="compose" className="new-compose" title="Apple Music links" labelId="new-compose-title">
-        <form class="new-form" onSubmit=${(e) => { e.preventDefault(); submit(); }} onKeyDown=${onKeyDown}>
-          <textarea
-            id="new-input"
-            class="new-input"
-            ref=${inputRef}
-            rows="6"
-            value=${text}
-            placeholder=${'https://music.apple.com/us/album/igor/1463409338\nPaste one link per line, or any text that contains links'}
-            aria-labelledby="new-compose-title"
-            aria-describedby="new-input-hint"
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck=${false}
-            onInput=${(e) => edit(e.currentTarget.value)}
-          ></textarea>
-          <p id="new-input-hint" class="new-hint">
-            Albums, songs, playlists, artists and stations. Links are found anywhere in the text${keyboard ? `; ${keys} downloads` : ''}.
-          </p>
-          <div class="new-submit">
-            <div class="new-submit-info">
-              <span class="new-count">${countLine}</span>
-              <p class="new-options-line">
-                <span class="new-options-state">Options: ${optionsLine}</span>
-                <button type="button" class="new-options-jump link" aria-label="Edit options" onClick=${jumpToOptions}>Edit</button>
-              </p>
-            </div>
-            <${Button}
-              variant="primary"
-              icon="download"
-              type="submit"
-              className="new-submit-btn"
-              disabled=${busy || sendable.length === 0}
-              aria-busy=${busy ? 'true' : undefined}
-              title=${sendable.length === 0 ? 'Add at least one Apple Music link that can be downloaded' : undefined}
-            >${busy ? 'Submitting…' : sendable.length ? `Download ${sendable.length}` : 'Download'}</${Button}>
-          </div>
-          ${failure ? html`<${Notice} role="danger" icon="circle-x">${failure}</${Notice}>` : null}
-        </form>
-      </${Card}>
-      ${entries.length
-        ? html`<${LinksCard}
-            entries=${entries}
-            statusOf=${statusOf}
-            issueOf=${issueOf}
-            priorOf=${priorOf}
-            jobHref=${jobHref}
-            skipped=${skipped}
-            dupes=${dupes}
-            onRemove=${removeEntry}
-            onRetry=${(url) => queue.current.retry(url)}
-            onQuality=${(entry, data) => setQuality({ url: entry.url, title: data.title || entry.url, tracks: data.track_count })}
-          />`
-        : null}
-      ${results.rows.length
-        ? html`<${ResultsCard}
-            rows=${results.rows}
-            params=${route.params}
-            busy=${retrying}
-            onRetry=${retry}
-            onClear=${clearResults}
-          />`
-        : null}
-    </div>
-    <div class="new-aside">
-      <${OptionsCard}
-        cfg=${{ loading: cfg.loading, error: cfg.error, reload: () => setCfgRun((n) => n + 1) }}
+  return html`<div class="page page-new" style=${barH ? { '--new-bar-h': `${barH}px` } : undefined}>
+    <${Card}
+      section="compose"
+      className="new-compose"
+      title="Apple Music links"
+      labelId="new-compose-title"
+      actions=${html`<${PasteButton} storefront=${storefront} onLinks=${(urls) => edit((t) => mergeLinks(t, urls, storefront))} />`}
+    >
+      <textarea
+        id="new-input"
+        class="new-input"
+        ref=${inputRef}
+        rows="6"
+        value=${text}
+        placeholder="Paste Apple Music links"
+        aria-labelledby="new-compose-title"
+        aria-describedby=${keyboard ? 'new-input-hint' : undefined}
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck=${false}
+        onInput=${(e) => edit(e.currentTarget.value)}
+        onKeyDown=${onKeyDown}
+      ></textarea>
+      ${keyboard ? html`<p id="new-input-hint" class="new-hint">${keys} downloads</p>` : null}
+    </${Card}>
+    ${entries.length
+      ? html`<${LinksCard}
+          entries=${entries}
+          statusOf=${statusOf}
+          issueOf=${issueOf}
+          priorOf=${priorOf}
+          jobHref=${jobHref}
+          skipped=${skipped}
+          dupes=${dupes}
+          onRemove=${removeEntry}
+          onRetry=${(url) => queue.current.retry(url)}
+          onQuality=${(entry, data) => setQuality({ url: entry.url, title: data.title || entry.url, tracks: data.track_count })}
+        />`
+      : null}
+    <${SubmitBar}
+      barRef=${barRef}
+      count=${count}
+      controls=${html`<${QualityControls}
         defaults=${defaults}
-        values=${values}
-        setValue=${setValue}
-        overrides=${overrides}
-        open=${open}
-        setOpen=${setOpen}
-        onReset=${resetOptions}
-        refusal=${refusal}
-      />
-      <${BookmarkletCard} />
-    </div>
+        preset=${choice.preset}
+        custom=${choice.custom}
+        onPreset=${(preset) => setChoice({ ...choice, preset })}
+        onCustom=${() => setCustomOpen(true)}
+        overwrite=${overwrite === null ? Boolean(defaults && defaults.force_overwrite) : overwrite}
+        onOverwrite=${(v) => setOverwrite(defaults && v === defaults.force_overwrite ? null : v)}
+      />`}
+      label=${label}
+      disabled=${busy || sendable.length === 0}
+      busy=${busy}
+      title=${sendable.length === 0 && entries.length ? 'None of these links can be downloaded' : undefined}
+      onSubmit=${() => submit()}
+      failure=${failure}
+      refusal=${refusal}
+      onCustom=${() => setCustomOpen(true)}
+      cfgError=${Boolean(cfg.error && !defaults)}
+      onRetryCfg=${() => setCfgRun((n) => n + 1)}
+    />
+    ${results.rows.length
+      ? html`<${ResultsCard}
+          rows=${results.rows}
+          params=${route.params}
+          busy=${retrying}
+          onRetry=${retry}
+          onClear=${clearResults}
+        />`
+      : null}
+    <${BrowserShortcut} />
+    ${customOpen && defaults
+      ? html`<${CustomSheet}
+          defaults=${defaults}
+          start=${presetValues(defaults, choice.preset, choice.custom)}
+          onDone=${(custom) => {
+            setChoice({ preset: 'custom', custom });
+            closeCustom();
+          }}
+          onFollow=${() => {
+            setChoice({ preset: 'follow', custom: choice.custom });
+            closeCustom();
+          }}
+          onClose=${closeCustom}
+        />`
+      : null}
     ${quality ? html`<${QualitySheet} url=${quality.url} title=${quality.title} tracks=${quality.tracks} onClose=${() => setQuality(null)} />` : null}
     ${confirm
       ? html`<${ConfirmDialog}

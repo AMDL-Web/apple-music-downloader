@@ -77,6 +77,49 @@ export function submittable(entries, issueOf) {
   return entries.filter((e) => e.link && !(issueOf(e) || {}).blocking).map((e) => e.url);
 }
 
+const NOUNS = {
+  album: ['album', 'albums'],
+  song: ['song', 'songs'],
+  playlist: ['playlist', 'playlists'],
+  artist: ['artist', 'artists'],
+  station: ['station', 'stations'],
+};
+
+/**
+ * The Download button's text for the kinds of the links it sends, in
+ * order: "Download 1 album", "Download 2 songs", "Download 3 items" for
+ * mixed kinds. With nothing to send: "Paste a link to start" while the box
+ * has no links, else "Download".
+ */
+export function downloadLabel(kinds, hasLinks = true) {
+  const list = Array.isArray(kinds) ? kinds : [];
+  if (!list.length) return hasLinks ? 'Download' : 'Paste a link to start';
+  const same = list.every((k) => k === list[0]) ? NOUNS[list[0]] : null;
+  const [one, many] = same || ['item', 'items'];
+  return `Download ${list.length} ${list.length === 1 ? one : many}`;
+}
+
+/**
+ * The count line under the links: "4 links · 1 new · 2 in library · 1
+ * can't be downloaded". `fresh` counts links that can be sent and were
+ * never downloaded, `library` and `queued` those with an earlier job done
+ * or still in the queue, `blocked` those that cannot be sent, `warned`
+ * those with a warning.
+ */
+export function countLine({ links = 0, fresh = 0, library = 0, queued = 0, blocked = 0, warned = 0 } = {}) {
+  if (!links) return 'No links yet';
+  return [
+    `${links} ${links === 1 ? 'link' : 'links'}`,
+    fresh ? `${fresh} new` : '',
+    library ? `${library} in library` : '',
+    queued ? `${queued} in the queue` : '',
+    blocked ? `${blocked} can't be downloaded` : '',
+    warned ? `${warned} ${warned === 1 ? 'needs' : 'need'} a look` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 /** Splits a list into chunks of at most `size`. */
 export function chunk(list, size = MAX_URLS_PER_REQUEST) {
   const out = [];

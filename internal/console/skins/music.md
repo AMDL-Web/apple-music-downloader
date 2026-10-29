@@ -228,13 +228,11 @@ base durations (120 ms color, 200 ms overlays).
   link, Qualities a filled pill and remove a secondary glyph. Submitted reuses
   the Queue list language (covers, the joined capsule bar, hairlines from the
   text; on phones the bar starts under the title); an outcome row names its result in its role color beside the role
-  glyph. Options: Edit and Done are red text in the head (Done semibold);
-  the open form's fieldsets sit under small caps titles, the codec ranking is
-  an inset list with hairlines from the name, and Add buttons are filled
-  pills. The bookmarklet code is an inset cell; the steps are 14 px
-  secondary. Download N is a 36 px pill.
+  glyph. The submit bar is the canvas under a hairline; Download is the
+  red pill, the only solid red on the page. The browser shortcut's code is
+  an inset cell; the steps are 13 px secondary.
 - **Qualities sheet**: per-slot summaries are 16 px `--bg-group` cells with a
-  16 px semibold label; each track's formats are filled pills with the label
+  15 px semibold label; each track's formats are filled pills with the label
   in semibold; hairlines between tracks start at the title.
 - **Settings**: the section list repeats the sidebar (secondary 18 px glyphs, 15 px
   labels, the current section a filled pill in semibold; 14 px on the rail).

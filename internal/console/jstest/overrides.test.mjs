@@ -7,9 +7,13 @@ import {
   buildOverrides,
   sanitizeOverrides,
   applyOverrides,
-  moveItem,
   choices,
-  describeOverrides,
+  PRESETS,
+  presetValues,
+  presetOverrides,
+  qualityText,
+  customLabel,
+  probeWarning,
   rateLabel,
   SAMPLE_RATES,
 } from '../static/js/lib/overrides.js';
@@ -102,14 +106,6 @@ test('applyOverrides lays overrides over the defaults', () => {
   assert.deepEqual(form, { ...d, quality_priority: ['aac'], force_overwrite: true });
 });
 
-test('moveItem reorders and refuses moves past either end', () => {
-  const list = ['alac', 'aac', 'ec3'];
-  assert.deepEqual(moveItem(list, 2, -1), ['alac', 'ec3', 'aac']);
-  assert.deepEqual(moveItem(list, 0, 1), ['aac', 'alac', 'ec3']);
-  assert.equal(moveItem(list, 0, -1), list);
-  assert.equal(moveItem(list, 2, 1), list);
-});
-
 test('choices adds a server value outside the usual list', () => {
   assert.deepEqual(choices(SAMPLE_RATES, 32000), [...SAMPLE_RATES, 32000]);
   assert.equal(choices(SAMPLE_RATES, SAMPLE_RATES[0]), SAMPLE_RATES);
@@ -117,19 +113,46 @@ test('choices adds a server value outside the usual list', () => {
   assert.equal(rateLabel(192000), '192 kHz');
 });
 
-test('describeOverrides names each change in display order', () => {
-  assert.deepEqual(describeOverrides({}), []);
-  assert.deepEqual(
-    describeOverrides({
-      force_overwrite: true,
-      quality_priority: ['ec3', 'alac'],
-      codec_alternative: false,
-      alac_max_bit_depth: 16,
-      embed_cover: false,
-    }),
-    ['Quality: Dolby Atmos (E-AC-3), ALAC (lossless)', 'Fallback to next codec off', 'ALAC up to 16-bit', 'Overwrite existing files'],
-  );
-  assert.deepEqual(describeOverrides({ force_overwrite: false }), ['Keep existing files']);
+test('each preset maps to its overrides; Follow Settings with Overwrite untouched sends none', () => {
+  const d = optionDefaults(SERVER);
+  assert.deepEqual(PRESETS.map((p) => p.id), ['follow', 'lossless', 'atmos', 'aac']);
+  assert.deepEqual(presetOverrides(d, 'follow'), {});
+  assert.deepEqual(presetOverrides(d, 'follow', null, false), {}, 'Overwrite at the Settings value is not sent');
+  assert.deepEqual(presetOverrides(d, 'follow', null, true), { force_overwrite: true });
+  assert.deepEqual(presetOverrides(d, 'lossless'), {}, 'Settings already downloads ALAC with the fallback on');
+  assert.deepEqual(presetOverrides(d, 'atmos'), { quality_priority: ['ec3', 'alac'] });
+  assert.deepEqual(presetOverrides(d, 'aac'), { quality_priority: ['aac'] });
+  const strict = optionDefaults({ ...SERVER, quality_priority: ['ec3'], codec_alternative: false });
+  assert.deepEqual(presetOverrides(strict, 'lossless'), { quality_priority: ['alac'], codec_alternative: true });
+  assert.deepEqual(presetOverrides(strict, 'follow'), {});
+});
+
+test('the custom preset sends its edited quality keys, never other keys', () => {
+  const d = optionDefaults(SERVER);
+  const custom = { quality_priority: ['ec3', 'aac'], codec_alternative: false, alac_max_sample_rate: 48000, alac_max_bit_depth: 16, force_overwrite: true, embed_cover: false };
+  assert.deepEqual(presetOverrides(d, 'custom', custom), { quality_priority: ['ec3', 'aac'], codec_alternative: false, alac_max_sample_rate: 48000, alac_max_bit_depth: 16 });
+  assert.deepEqual(presetOverrides(d, 'custom', { quality_priority: [] }), {}, 'an empty codec list is never sent');
+  assert.deepEqual(presetOverrides(d, 'bogus'), {});
+  assert.equal(presetValues(d, 'atmos', null, true).force_overwrite, true);
+});
+
+test('qualityText, customLabel and probeWarning say what a download gets', () => {
+  const d = optionDefaults(SERVER);
+  assert.equal(qualityText(d), 'ALAC up to 24-bit/192 kHz');
+  assert.equal(qualityText(d, true), 'Lossless (ALAC) up to 24-bit/192 kHz');
+  assert.equal(qualityText(presetValues(d, 'atmos')), 'Dolby Atmos, then ALAC up to 24-bit/192 kHz');
+  assert.equal(qualityText(presetValues(d, 'atmos'), true), 'Dolby Atmos, else Lossless (ALAC) up to 24-bit/192 kHz');
+  assert.equal(qualityText({ ...d, quality_priority: ['aac', 'alac'], codec_alternative: false }), 'AAC only');
+  assert.equal(customLabel({ quality_priority: ['ec3', 'alac'] }), 'Custom: Dolby Atmos, ALAC');
+  const slots = [
+    { id: 'alac', tracks: 12, total: 12 },
+    { id: 'ec3', tracks: 0, total: 12 },
+    { id: 'aac-binaural', tracks: 3, total: 12 },
+  ];
+  assert.equal(probeWarning(presetValues(d, 'atmos'), slots), 'Dolby Atmos not offered');
+  assert.equal(probeWarning(presetValues(d, 'lossless'), slots), '');
+  assert.equal(probeWarning({ quality_priority: ['aac-binaural'] }, slots), 'AAC binaural on 3 of 12 tracks');
+  assert.equal(probeWarning(d, []), '');
 });
 
 test('codec labels and ALAC choices match the Settings fields', async () => {

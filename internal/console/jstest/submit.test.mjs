@@ -16,6 +16,8 @@ import {
   storedResults,
   parseStoredResults,
   TOKEN_SETTINGS_HASH,
+  downloadLabel,
+  countLine,
 } from '../static/js/lib/submit.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
@@ -234,4 +236,17 @@ test('stored results round-trip with only the known overrides', () => {
   assert.deepEqual(parseStoredResults(text), { rows, overrides: { force_overwrite: true } });
   assert.equal(storedResults({ rows: [], overrides: {} }), '');
   for (const bad of [null, '', '{', '{"rows":[{"url":1}]}', '[]']) assert.equal(parseStoredResults(bad), null);
+});
+
+test('Download names what it sends, and the count line what the links are', () => {
+  assert.equal(downloadLabel([], false), 'Paste a link to start');
+  assert.equal(downloadLabel([], true), 'Download');
+  assert.equal(downloadLabel(['album']), 'Download 1 album');
+  assert.equal(downloadLabel(['song', 'song']), 'Download 2 songs');
+  assert.equal(downloadLabel(['album', 'song', 'playlist']), 'Download 3 items');
+  assert.equal(countLine({}), 'No links yet');
+  assert.equal(countLine({ links: 4, fresh: 1, blocked: 3 }), "4 links · 1 new · 3 can't be downloaded");
+  assert.equal(countLine({ links: 2, fresh: 1, library: 1 }), '2 links · 1 new · 1 in library');
+  assert.equal(countLine({ links: 3, fresh: 1, queued: 1, warned: 1 }), '3 links · 1 new · 1 in the queue · 1 needs a look');
+  assert.doesNotMatch(countLine({ links: 5, blocked: 2, warned: 2 }), /flagged/);
 });

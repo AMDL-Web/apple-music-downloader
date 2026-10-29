@@ -1,7 +1,7 @@
 // New download: what the last submit did, per link (accepted jobs as live
 // job rows that open the drawer over this page, the rest with the reason
 // and, where a later try may work, Retry), the state behind it, and the
-// bookmarklet card.
+// Browser shortcut (the bookmarklet).
 
 import { html, useMemo, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
 import { getDownload } from '../api.js';
@@ -129,11 +129,13 @@ function ResultRow({ row, params, busy, onRetry }) {
 }
 
 /**
- * The bookmarklet as copyable text (never a link): opening it on an Apple
- * Music page brings that page here as #/new?url=. Built from this page's
- * own address, so it works under any path prefix.
+ * The bookmarklet as copyable text (never a link) in a closed "Browser
+ * shortcut" disclosure under the form; hidden on a touch screen, where a
+ * bookmarklet cannot be clicked. Opening it on an Apple Music page brings
+ * that page here as #/new?url=. Built from this page's own address, so it
+ * works under any path prefix.
  */
-export function BookmarkletCard() {
+export function BrowserShortcut() {
   const app = useApp();
   const code = useMemo(() => bookmarklet(window.location.href), []);
   const copy = async () => {
@@ -147,16 +149,19 @@ export function BookmarkletCard() {
       app.toast({ message: 'The browser blocked copying. The code is selected: press Ctrl+C or ⌘C.', role: 'warning' });
     }
   };
-  return html`<${Card} section="bookmarklet" className="new-bookmarklet-card" title="One-click from Apple Music" labelId="new-bookmarklet-title">
-    <p class="new-hint">A bookmark that sends the Apple Music page you are on to this page.</p>
-    <div class="new-bookmarklet">
-      <code id="new-bookmarklet-code" class="new-bookmarklet-code">${code}</code>
-      <${Button} size="sm" icon="copy" className="new-bookmarklet-copy" onClick=${copy}>Copy</${Button}>
+  return html`<details class="new-shortcut">
+    <summary class="new-shortcut-summary"><${Icon} name="chevron-down" size="sm" /><span>Browser shortcut</span></summary>
+    <div class="new-shortcut-body">
+      <p class="new-hint">A bookmark that sends the Apple Music page you are on to this page.</p>
+      <div class="new-bookmarklet">
+        <code id="new-bookmarklet-code" class="new-bookmarklet-code">${code}</code>
+        <${Button} size="sm" icon="copy" className="new-bookmarklet-copy" onClick=${copy}>Copy</${Button}>
+      </div>
+      <ol class="new-steps">
+        <li>Copy the code above.</li>
+        <li>Add a bookmark in this browser and paste the code as its address (URL).</li>
+        <li>On music.apple.com, open an album, song or playlist and click the bookmark.</li>
+      </ol>
     </div>
-    <ol class="new-steps">
-      <li>Copy the code above.</li>
-      <li>Add a bookmark in this browser and paste the code as its address (URL).</li>
-      <li>On music.apple.com, open an album, song or playlist and click the bookmark.</li>
-    </ol>
-  </${Card}>`;
+  </details>`;
 }

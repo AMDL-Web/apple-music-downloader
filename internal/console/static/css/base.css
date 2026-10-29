@@ -68,6 +68,11 @@ select {
   outline: none;
 }
 
+/* A heading a dialog focuses on open only marks where reading starts. */
+[tabindex="-1"][data-autofocus]:focus-visible {
+  outline: none;
+}
+
 code,
 kbd,
 pre {
