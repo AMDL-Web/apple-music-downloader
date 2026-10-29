@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { paletteItems, jobItem, resultCount } from '../static/js/lib/palette.js';
-import { newDownloadUrls, parseHash } from '../static/js/lib/route.js';
+import { newDownloadUrls, parseHash, settingsField } from '../static/js/lib/route.js';
 
 const labels = (items) => items.map((it) => it.label);
 
@@ -51,4 +51,29 @@ test('result counts read as a sentence', () => {
   assert.equal(resultCount(0), 'No results');
   assert.equal(resultCount(1), '1 result');
   assert.equal(resultCount(7), '7 results');
+});
+
+test('a Settings field result names its field, so the page can focus it', () => {
+  const attempts = paletteItems('attempts').find((it) => it.id === 'field-download.max_attempts');
+  assert.equal(attempts.field, 'download.max_attempts');
+  const route = parseHash(attempts.hash);
+  assert.equal(route.params.section, 'downloads');
+  assert.equal(settingsField(route.params), 'download.max_attempts');
+  assert.equal(settingsField({ field: 'Bad Value' }), '');
+  assert.equal(settingsField({}), '');
+  const section = paletteItems('logging').find((it) => it.id === 'set-logging');
+  assert.equal(parseHash(section.hash).params.field, undefined, 'a section result names no field');
+});
+
+test('parallel and concurrency find where worker pools live, and template finds the path templates', () => {
+  for (const q of ['concurrency', 'parallel', 'threads', 'workers']) {
+    const hit = paletteItems(q).find((it) => it.id === 'set-config_file');
+    assert.ok(hit, `${q} finds Configuration file`);
+    assert.match(hit.sub, /worker pools/);
+  }
+  const templates = paletteItems('template').filter((it) => it.field);
+  assert.ok(templates.length >= 5, 'every path template field answers to "template"');
+  assert.ok(templates.every((it) => it.field.endsWith('_path_format')));
+  assert.ok(paletteItems('retries').some((it) => it.field === 'download.max_attempts'));
+  assert.ok(paletteItems('folder').some((it) => it.field === 'download.downloads_dir'));
 });

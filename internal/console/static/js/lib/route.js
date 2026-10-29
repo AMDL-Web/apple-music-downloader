@@ -163,9 +163,18 @@ export function settingsSection(params = {}) {
   return typeof s === 'string' && /^[a-z][a-z0-9_]*$/.test(s) ? s : '';
 }
 
-/** The #/settings hash for a section ('' for the page itself). */
-export function settingsHash(section = '') {
-  return buildHash('settings', { section });
+/**
+ * The field #/settings?field= names (a config key such as download.max_attempts,
+ * which the page focuses once its section is open), or ''.
+ */
+export function settingsField(params = {}) {
+  const f = params.field;
+  return typeof f === 'string' && /^[a-z][a-z0-9_.]*$/.test(f) ? f : '';
+}
+
+/** The #/settings hash for a section ('' for the page itself), optionally naming a field in it. */
+export function settingsHash(section = '', field = '') {
+  return buildHash('settings', { section, field });
 }
 
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'];

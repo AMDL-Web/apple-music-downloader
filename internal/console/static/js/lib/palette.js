@@ -38,21 +38,37 @@ const SECTIONS_SHOWN_EMPTY = ['account', 'library_sync'];
 const SECTION_WORDS = {
   account: 'login log in log out wrapper apple id',
   library_sync: 'anchor poll',
-  config_file: 'reload yaml config pinned locked',
+  config_file: 'reload yaml config pinned locked startup restart parallel concurrency concurrent threads workers pool pools limits',
   logging: 'logs',
   files: 'folder path template',
   artwork: 'cover',
 };
 
+// What the page says about the parallel pools: they are startup settings, so
+// no field has them, and a search for them lands here.
+const SECTION_SUBS = { config_file: 'Startup settings such as worker pools are edited in the file' };
+
 const SECTION_ITEMS = SETTINGS_SECTIONS.map((s) => ({
   id: `set-${s.id}`,
   group: 'Settings',
   label: `Settings: ${s.label}`,
+  sub: SECTION_SUBS[s.id],
   icon: s.icon,
   hash: settingsHash(s.id),
   section: s.id,
   words: `${s.id.replace(/_/g, ' ')} ${SECTION_WORDS[s.id] || ''}`,
 }));
+
+/** Words a field answers to besides its label and key: by type, then by key. */
+const TYPE_WORDS = { template: 'template name format', path: 'folder directory' };
+const KEY_WORDS = {
+  'download.max_attempts': 'retry retries tries',
+  'download.memory_mode': 'ram parallel',
+  'download.force_overwrite': 'replace redownload again',
+  'download.progress_event_interval_ms': 'throttle',
+  'logging.level': 'verbose',
+};
+const fieldWords = (f) => `${TYPE_WORDS[f.type] || ''} ${KEY_WORDS[f.key] || ''}`;
 
 const SECTION_LABELS = new Map(SETTINGS_SECTIONS.map((s) => [s.id, s]));
 
@@ -78,7 +94,8 @@ export function jobItem(job) {
 /**
  * The palette's rows for `query` and the jobs its search returned, in
  * display order. Rows carry {id, group, label, icon} and one of hash,
- * theme, skin or external; `sub`, `keys` and `dir` are optional.
+ * theme, skin or external; `sub`, `keys`, `dir` and, for a Settings field,
+ * `field` (its config key, to focus once the section is open) are optional.
  */
 export function paletteItems(query, jobs = []) {
   const q = (query || '').trim().toLowerCase();
@@ -100,7 +117,7 @@ export function paletteItems(query, jobs = []) {
   out.push(...STATIC_ITEMS.filter((it) => matches(q, it.label, it.group)));
   out.push(...SECTION_ITEMS.filter((it) => matches(q, it.label, it.words)));
   if (q.length >= 2 && links.length === 0) {
-    const fields = FIELDS.filter((f) => matches(q, f.label, f.key)).slice(0, FIELD_LIMIT);
+    const fields = FIELDS.filter((f) => matches(q, f.label, f.key, fieldWords(f))).slice(0, FIELD_LIMIT);
     for (const f of fields) {
       const section = SECTION_LABELS.get(f.section);
       out.push({
@@ -109,7 +126,8 @@ export function paletteItems(query, jobs = []) {
         label: f.label,
         sub: `${section ? section.label : f.section} · ${f.key}`,
         icon: section ? section.icon : 'settings',
-        hash: settingsHash(f.section),
+        hash: settingsHash(f.section, f.key),
+        field: f.key,
       });
     }
   }

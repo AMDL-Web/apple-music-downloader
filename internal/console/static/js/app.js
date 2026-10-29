@@ -10,6 +10,7 @@ import { THEME_KEY, SKIN_KEY, normalizeTheme, normalizeSkin, readPref, writePref
 import { count, pageSummary } from './lib/format.js';
 import { AppContext, Icon, LinkButton } from './ui/components.js';
 import { isDialogOpen } from './ui/dialogs.js';
+import { useFieldFocus } from './ui/field-focus.js';
 import { useToasts, useOfflineToasts, ToastStack } from './ui/toasts.js';
 import { loadSprite, spriteLoaded } from './ui/icons.js';
 import { useHashRouter } from './ui/router.js';
@@ -192,6 +193,9 @@ export function App() {
     prevJob.current = route.jobId;
     document.documentElement.classList.toggle('has-overlay', Boolean(route.jobId));
   }, [route.jobId]);
+
+  // After the heading focus above, so a palette result for a setting lands on its field.
+  useFieldFocus(route);
 
   const closeDrawer = useCallback(() => navigate(buildHash(route.page, route.params)), [route.page, route.params, navigate]);
 

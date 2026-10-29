@@ -5,6 +5,7 @@ import { listDownloads, docsUrl } from '../api.js';
 import { paletteItems, resultCount } from '../lib/palette.js';
 import { Icon, Button } from '../ui/components.js';
 import { Dialog, useDialog } from '../ui/dialogs.js';
+import { focusField } from '../ui/field-focus.js';
 import { useDebounced } from '../ui/hooks.js';
 
 export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
@@ -50,7 +51,11 @@ export function CommandPalette({ onClose, navigate, setTheme, setSkin }) {
     if (it.theme) setTheme(it.theme);
     else if (it.skin) setSkin(it.skin);
     else if (it.external) window.open(docsUrl(), '_blank', 'noopener,noreferrer');
-    else if (it.hash) navigate(it.hash);
+    else if (it.hash) {
+      // Already at that address: no route change moves focus, so do it here.
+      if (it.field && window.location.hash === it.hash) focusField(it.field);
+      else navigate(it.hash);
+    }
   };
 
   const onKey = (e) => {
