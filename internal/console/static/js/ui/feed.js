@@ -5,10 +5,10 @@
 import { useState, useEffect, useRef, useCallback } from './preact.js';
 import { listDownloads, feedStreamUrl, parseData } from '../api.js';
 import { applyFeedMessage, EMPTY_COUNTS } from '../lib/store.js';
-import { StreamClient, createCoalescer, backoffDelay } from '../lib/stream.js';
+import { StreamClient, createCoalescer, backoffDelay, EPOCH_AFTER_MS } from '../lib/stream.js';
 import { jobTitle, typeLabel } from '../lib/format.js';
 import { isTerminal } from '../lib/status.js';
-import { BURST_MS, endsWatch, finishedToast } from '../lib/watch.js';
+import { BURST_MS, endsWatch, addEnded, finishedToast } from '../lib/watch.js';
 
 const ANNOUNCE_GAP_MS = 5000;
 
@@ -45,7 +45,9 @@ export function useFeed({ toast, route }) {
   const noteEnded = useCallback(
     (job) => {
       watched.current.delete(job.id);
-      endedBurst.current.push(job);
+      // Spent: a later watch of this id waits for its next ending.
+      recentEnded.current.delete(job.id);
+      endedBurst.current = addEnded(endedBurst.current, job);
       if (burstTimer.current === null) burstTimer.current = setTimeout(flushEnded, BURST_MS);
     },
     [flushEnded],
@@ -140,6 +142,7 @@ export function useFeed({ toast, route }) {
         if (stopped) return;
         for (const j of body.downloads || []) lastStatus.current.set(j.id, j.status);
         setFeed({ counts: { ...EMPTY_COUNTS, ...body.status_counts }, cursor: body.event_cursor ?? null });
+        // The first snapshot failed, so the pages that loaded with it did too.
         if (downSince !== null) setEpoch((e) => e + 1);
         client = new StreamClient({
           url: feedStreamUrl(),
@@ -151,12 +154,13 @@ export function useFeed({ toast, route }) {
           },
           onState: (s) => setConn(s),
           // Live again after an outage: the feed replays what it missed from
-          // the cursor, and a new epoch tells every page to refetch what it
-          // could not load meanwhile (error panels, defaults, previews).
-          onReconnect: () => {
-            refreshCounts();
-            setEpoch((e) => e + 1);
-          },
+          // the cursor. Only an outage of EPOCH_AFTER_MS or more (a restart,
+          // not a proxy closing an idle stream) bumps the epoch, which tells
+          // every page to refetch what it could not load meanwhile (error
+          // panels, defaults, previews).
+          onReconnect: refreshCounts,
+          resyncAfterMs: EPOCH_AFTER_MS,
+          onResync: () => setEpoch((e) => e + 1),
           onEnd: ({ status }) => setConn({ state: 'offline', retryAt: null, downSince: Date.now(), endStatus: status }),
         });
         retryRef.current = () => client.retryNow();
@@ -177,12 +181,9 @@ export function useFeed({ toast, route }) {
       }
     };
     // The device came back online: retry now instead of at the end of the
-    // backoff, and let pages refetch what failed while requests could not
-    // leave (the open stream itself may never have noticed).
-    const onOnline = () => {
-      retryRef.current();
-      setEpoch((e) => e + 1);
-    };
+    // backoff. No epoch bump here: the server may still be unreachable, and
+    // the stream bumps it once it is live after a real outage.
+    const onOnline = () => retryRef.current();
     window.addEventListener('online', onOnline);
     boot();
     return () => {

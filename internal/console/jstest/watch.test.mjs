@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { endsWatch, finishedToast } from '../static/js/lib/watch.js';
+import { endsWatch, addEnded, finishedToast } from '../static/js/lib/watch.js';
 
 const job = (id, status, extra = {}) => ({ id, status, type: 'album', title: `Album ${id}`, ...extra });
 
@@ -34,4 +34,13 @@ test('a burst becomes one toast with counts and a Queue link', () => {
   const failed = finishedToast([job('a', 'failed'), job('b', 'failed')]);
   assert.equal(failed.role, 'danger');
   assert.equal(failed.action.hash, '#/queue?tab=failed');
+});
+
+test('a job that ends twice in one burst counts once', () => {
+  let burst = addEnded([], job('a', 'failed'));
+  burst = addEnded(burst, job('b', 'completed'));
+  burst = addEnded(burst, job('a', 'completed'));
+  assert.deepEqual(burst.map((j) => `${j.id}:${j.status}`), ['a:completed', 'b:completed']);
+  assert.equal(finishedToast(burst).message, '2 downloads finished');
+  assert.equal(addEnded([], job('a', 'failed')).length, 1);
 });

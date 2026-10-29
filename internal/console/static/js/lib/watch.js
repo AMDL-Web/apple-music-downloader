@@ -19,6 +19,15 @@ export function endsWatch(job) {
   return Boolean(job && job.id && isTerminal(job.status));
 }
 
+/** `burst` with `job` added; a job already in it is replaced, so a re-watched id counts once. */
+export function addEnded(burst, job) {
+  const at = burst.findIndex((j) => j.id === job.id);
+  if (at < 0) return [...burst, job];
+  const next = burst.slice();
+  next[at] = job;
+  return next;
+}
+
 /**
  * The toast for watched jobs that ended together: {message, role, action}.
  * One job names itself and opens its drawer over the current page (the

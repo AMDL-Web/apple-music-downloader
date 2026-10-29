@@ -11,6 +11,7 @@ import {
   releaseSecondary,
   currentSecondary,
   createCoalescer,
+  EPOCH_AFTER_MS,
 } from '../static/js/lib/stream.js';
 
 const tick = () => new Promise((r) => setImmediate(r));
@@ -384,4 +385,50 @@ test('the coalescer flushes at most once per interval', () => {
   c.push(6);
   c.flushNow();
   assert.deepEqual(batches[2], [6]);
+});
+
+test('the feed bumps the page epoch after a real outage, not after a closed stream that reconnects at once', async () => {
+  const env = fakeEnv();
+  let fail = false;
+  let open = null;
+  env.fetch = async (url, init) => {
+    if (fail) throw new TypeError('network down');
+    open = liveBody(init.signal);
+    return new Response(open.body, { status: 200 });
+  };
+  let reconnects = 0;
+  let bumps = 0;
+  const client = new StreamClient({
+    url: 'http://h/x',
+    cursor: 3,
+    env,
+    onEvent: () => {},
+    onReconnect: () => reconnects++,
+    resyncAfterMs: EPOCH_AFTER_MS,
+    onResync: () => bumps++,
+  }).start();
+  await settle();
+  // A proxy closes the idle stream; the first retry connects again.
+  open.close();
+  await settle();
+  env.advance(1000);
+  env.runNext();
+  await settle();
+  assert.equal(client.state, 'live');
+  assert.equal(reconnects, 1);
+  assert.equal(bumps, 0, 'a one-second blip leaves the pages alone');
+  // The server goes away for a while.
+  fail = true;
+  open.close();
+  await settle();
+  env.advance(EPOCH_AFTER_MS + 1000);
+  env.runNext();
+  await settle();
+  fail = false;
+  env.advance(1000);
+  env.runNext();
+  await settle();
+  assert.equal(client.state, 'live');
+  assert.equal(bumps, 1, 'a restart makes the pages refetch');
+  client.stop();
 });

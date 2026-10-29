@@ -12,6 +12,13 @@ export const MIN_DELAY_MS = 1000;
 export const MAX_DELAY_MS = 30000;
 
 /**
+ * An outage of at least this long, once the feed is live again, is a real one
+ * (a restart, a lost network) after which pages refetch what failed. A shorter
+ * one (a proxy closing an idle stream) reconnects without disturbing them.
+ */
+export const EPOCH_AFTER_MS = 5000;
+
+/**
  * Reconnect delay for the given failed attempt (0-based): 1, 2, 4, 8, 16,
  * then 30 s, each with ±20% jitter, clamped to 1-30 s.
  */
