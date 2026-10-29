@@ -4,11 +4,11 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { jobTitle, isUnresolved, inputLabel } from '../lib/format.js';
-import { runningFirst } from '../lib/status.js';
+import { jobTitle, isUnresolved, inputLabel, count } from '../lib/format.js';
+import { activeFirst } from '../lib/jobview.js';
 import { appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
-import { toggleId, setIds, pruneSelection, rangeIds, selectedJobs, selectionState } from '../lib/selection.js';
+import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
 import { actionPlan, jobAllows } from '../lib/jobactions.js';
 import { useApp, Icon, Segmented, Empty, ErrorNote, SkeletonRows, Button, LinkButton } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
@@ -36,10 +36,32 @@ export function QueuePage({ route }) {
   const [state, setState] = useState({ jobs: [], total: 0, loading: true, error: null, more: false });
   const key = `${filters.tab}|${filters.type}|${filters.q}|${app.epoch}`;
   const seq = useRef(0);
+  const known = useRef(new Map());
 
   const setParams = (patch) => {
     app.navigate(buildHash('queue', { ...route.params, ...patch }, route.jobId), { replace: true });
   };
+
+  // A visit with no tab in the link opens on Active, unless nothing is queued
+  // or running: an empty Active list is a dead end, and the finished and
+  // failed jobs are one tap away. Once the counts are known the link is
+  // replaced with tab=all (Back does not return to the empty list). Choosing
+  // Active writes tab=active, so it never bounces. Until the counts arrive
+  // (or a second and a half pass) the list shows its skeleton.
+  const implicitTab = !route.params.tab;
+  const haveCounts = Boolean(app.counts);
+  const [patient, setPatient] = useState(true);
+  useEffect(() => {
+    if (!implicitTab || haveCounts) return undefined;
+    setPatient(true);
+    const t = setTimeout(() => setPatient(false), 1500);
+    return () => clearTimeout(t);
+  }, [implicitTab, haveCounts]);
+  useEffect(() => {
+    if (!implicitTab || !app.counts) return;
+    if (app.counts.queued + app.counts.running === 0) setParams({ tab: 'all' });
+  }, [implicitTab, haveCounts]);
+  const waiting = implicitTab && !haveCounts && patient;
 
   // The search box and the route's q follow each other. A q this page wrote
   // itself (ownQ) comes back through the route and must not reset a box the
@@ -80,34 +102,57 @@ export function QueuePage({ route }) {
     );
   };
 
-  useEffect(() => load(0), [key]);
+  useEffect(() => {
+    if (!waiting) load(0);
+  }, [key, waiting]);
 
   useEffect(() => {
     const filter = queueMatchFilter(filters);
     const opts = { append: queueAppends(filters) };
     // The snapshot's total moves with the rows the feed adds and removes
     // (an estimate: a change to a job past the loaded pages is not seen).
-    return app.subscribeFeed((batch) =>
+    return app.subscribeFeed((batch) => {
+      // Selected jobs the filters hide stay selected, so the registry of jobs
+      // follows the whole feed, not only the rows of this list.
+      for (const msg of batch) {
+        if (msg.type === 'download_deleted') {
+          known.current.delete(msg.job_id);
+          setSelected((s) => toggleId(s, msg.job_id, false));
+        } else if (msg.type === 'download_upserted' && msg.job) {
+          const old = known.current.get(msg.job.id);
+          if (!old || Date.parse(msg.job.updated_at) >= Date.parse(old.updated_at)) known.current.set(msg.job.id, msg.job);
+        }
+      }
       setState((s) => {
         const jobs = applyFeedToList(s.jobs, batch, filter, opts);
         return jobs === s.jobs ? s : { ...s, jobs, total: Math.max(jobs.length, s.total + jobs.length - s.jobs.length) };
-      }),
-    );
+      });
+    });
   }, [key]);
 
-  // Selection: a Set of ids, judged against the current list on every render,
-  // so a job the feed removes leaves it and a status change drops actions.
+  // Selection: a Set of ids. The jobs behind them come from `known`, the
+  // latest version of every job seen, so a status change drops actions, a job
+  // the feed deletes leaves the selection, and a search that hides a selected
+  // job leaves it selected (the bar says how many are shown). Another tab
+  // starts a new selection.
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [confirm, setConfirm] = useState(null);
   const bulk = useBulkRun(app);
-  // The rows as shown (the Active tab lifts running jobs), which is the order
-  // Shift-click ranges follow.
-  const rows = filters.tab === 'active' ? runningFirst(state.jobs) : state.jobs;
+  for (const j of state.jobs) {
+    const old = known.current.get(j.id);
+    if (!old || Date.parse(j.updated_at) >= Date.parse(old.updated_at)) known.current.set(j.id, j);
+  }
+  // The rows as shown (running jobs first, then queued ones, on Active and
+  // All), which is the order Shift-click ranges follow.
+  const rows = filters.tab === 'active' || filters.tab === 'all' ? activeFirst(state.jobs) : state.jobs;
   const jobsRef = useRef(rows);
   jobsRef.current = rows;
   const anchorId = useRef(null);
-  useEffect(() => setSelected((s) => pruneSelection(s, state.jobs)), [state.jobs]);
+  useEffect(() => {
+    setSelected((s) => (s.size === 0 ? s : new Set()));
+    anchorId.current = null;
+  }, [filters.tab]);
 
   const toggle = (id, range) => {
     const from = anchorId.current;
@@ -122,7 +167,8 @@ export function QueuePage({ route }) {
     setSelected(new Set());
     anchorId.current = null;
   };
-  const chosen = selectedJobs(selected, state.jobs);
+  const chosen = [...selected].map((id) => known.current.get(id)).filter(Boolean);
+  const shownSelected = rows.filter((j) => selected.has(j.id)).length;
   const plan = actionPlan(chosen);
   // A run disables or removes the control that had focus (the action
   // buttons, Retry all, the confirm dialog), and the feed then removes rows
@@ -178,17 +224,19 @@ export function QueuePage({ route }) {
   }, [route.jobId]);
 
   const c = app.counts;
+  // The failed count is the one number that asks for attention: danger text.
+  const failedCount = c && c.failed > 0 ? html`<span class="seg-count-danger">${c.failed}</span>` : c ? c.failed : undefined;
   const tabs = [
     { value: 'active', label: 'Active', count: c ? c.queued + c.running : undefined },
     { value: 'completed', label: 'Completed', count: c ? c.completed : undefined },
-    { value: 'failed', label: 'Failed', count: c ? c.failed : undefined },
+    { value: 'failed', label: 'Failed', count: failedCount },
     { value: 'cancelled', label: 'Cancelled', count: c ? c.cancelled : undefined },
     { value: 'all', label: 'All', count: c ? c.total : undefined },
   ];
   const rowHref = (job) => buildHash('queue', route.params, job.id);
 
   let body;
-  if (state.loading && state.jobs.length === 0) body = html`<${SkeletonRows} n=${6} kind="row" />`;
+  if (waiting || (state.loading && state.jobs.length === 0)) body = html`<${SkeletonRows} n=${6} kind="row" />`;
   else if (state.error && state.jobs.length === 0)
     body = html`<${ErrorNote} title="Couldn't load downloads" error=${state.error} onRetry=${() => load(0)} />`;
   else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} />`;
@@ -196,7 +244,8 @@ export function QueuePage({ route }) {
     body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs">
         ${rows.map((job) => {
           const on = selecting && selected.has(job.id);
-          return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined}>
+          const retry = !selecting && job.status === 'failed';
+          return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined} data-action=${retry ? 'retry' : undefined}>
             ${selecting
               ? html`<label class="job-check">
                   <input
@@ -214,6 +263,16 @@ export function QueuePage({ route }) {
               selected=${selecting ? on : undefined}
               onSelect=${selecting ? (e) => toggle(job.id, e.shiftKey) : undefined}
             />
+            ${retry
+              ? html`<${Button}
+                  size="sm"
+                  icon="rotate"
+                  className="job-retry"
+                  aria-label=${`Retry ${isUnresolved(job) ? inputLabel(job.input) : jobTitle(job)}`}
+                  disabled=${Boolean(bulk.run)}
+                  onClick=${() => runAction('retry', [job])}
+                >Retry</${Button}>`
+              : null}
           </li>`;
         })}
       </ul>
@@ -225,19 +284,20 @@ export function QueuePage({ route }) {
 
   return html`<div class="page page-queue">
     <div class="toolbar">
-      <${Segmented} label="Job status" options=${tabs} value=${filters.tab} onChange=${(tab) => setParams({ tab: tab === 'active' ? '' : tab })} />
+      <${Segmented} label="Job status" options=${tabs} value=${filters.tab} onChange=${(tab) => setParams({ tab })} />
       <div class="toolbar-filters">
         <label class="search">
           <${Icon} name="search" />
           <input
             type="search"
             data-filter
-            placeholder="Search title, artist or URL"
-            aria-label="Search jobs"
+            placeholder="Filter this list"
+            aria-label="Filter jobs by title, artist or link"
             value=${qInput}
             onInput=${(e) => setQInput(e.currentTarget.value)}
           />
         </label>
+        ${filters.q && !state.loading ? html`<span class="queue-count" role="status">${count(state.total)} ${state.total === 1 ? 'result' : 'results'}</span>` : null}
         <select class="select" aria-label="Job type" value=${filters.type} onChange=${(e) => setParams({ type: e.currentTarget.value })}>
           ${TYPE_OPTIONS.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}
         </select>
@@ -251,7 +311,7 @@ export function QueuePage({ route }) {
                   aria-label=${`Retry all ${retryable.length} loaded ${filters.tab} jobs`}
                   disabled=${Boolean(bulk.run)}
                   onClick=${() => runAction('retry', retryable)}
-                >Retry all <span class="bulk-n">${retryable.length}</span></${Button}>`
+                >Retry all (${retryable.length})</${Button}>`
               : null}
             <${Button}
               icon="square-check"
@@ -260,19 +320,21 @@ export function QueuePage({ route }) {
               aria-keyshortcuts="x"
               title="Select jobs (x selects the focused one, Esc leaves)"
               onClick=${() => (selecting ? leaveSelection() : setSelecting(true))}
-            >Select</${Button}>
+            >${selecting ? 'Done' : 'Select'}</${Button}>
           </div>`
         : null}
     </div>
     ${state.error && state.jobs.length > 0 ? html`<${ErrorNote} title="Couldn't refresh downloads" error=${state.error} onRetry=${() => load(0)} />` : null}
     ${selecting || bulk.run
       ? html`<${SelectionBar}
-          jobs=${state.jobs}
+          jobs=${rows}
           selected=${selected}
+          count=${chosen.length}
+          shown=${shownSelected}
           plan=${plan}
           selecting=${selecting}
           run=${bulk.run}
-          onSelectAll=${() => setSelected(selectionState(selected, state.jobs) === 'all' ? new Set() : new Set(state.jobs.map((j) => j.id)))}
+          onSelectAll=${() => setSelected((s) => setIds(s, rows.map((j) => j.id), selectionState(s, rows) !== 'all'))}
           onAction=${onAction}
         />`
       : null}

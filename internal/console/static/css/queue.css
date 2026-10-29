@@ -1,0 +1,17 @@
+/* ---- Queue page (views/queue*.js) ------------------------------------ */
+
+/* The failed count is the one number on the tabs that asks for attention. */
+.seg-count .seg-count-danger {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+/* "5 results" beside the filter while it is set. */
+.queue-count {
+  align-self: center;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

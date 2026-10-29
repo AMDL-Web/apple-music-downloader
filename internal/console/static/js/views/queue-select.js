@@ -46,10 +46,11 @@ export function useBulkRun(app) {
   return { run, start };
 }
 
+// The button words: Delete is "Remove ... from list" because the files stay.
 const ACTION_VIEW = {
-  retry: { icon: 'rotate', variant: 'secondary', label: 'Retry' },
-  cancel: { icon: 'circle-slash', variant: 'secondary', label: 'Cancel' },
-  delete: { icon: 'trash', variant: 'danger', label: 'Delete' },
+  retry: { icon: 'rotate', variant: 'secondary', label: (n) => `Retry ${n}` },
+  cancel: { icon: 'circle-slash', variant: 'secondary', label: (n) => `Cancel ${n}` },
+  delete: { icon: 'trash', variant: 'danger', label: (n) => `Remove ${n} from list` },
 };
 
 /** Progress of a bulk run: "Deleting 3 of 12" and a meter. */
@@ -75,13 +76,13 @@ function BulkProgress({ run }) {
  * The bar over the job list: .bulk-bar[data-state=select|run]. While
  * selecting it holds the select-all checkbox (.bulk-all), the count
  * (.bulk-count) and one button per action the selection allows
- * (.bulk-action[data-action], count in .bulk-n, hidden at zero); during a run
+ * (.bulk-action[data-action], hidden at zero); during a run
  * the progress replaces the count and the buttons (rows leave through the
  * feed before their requests settle, which would empty the count). `plan` is actionPlan of the selection.
  */
-export function SelectionBar({ jobs, selected, plan, selecting, run, onSelectAll, onAction }) {
+export function SelectionBar({ jobs, selected, count, shown, plan, selecting, run, onSelectAll, onAction }) {
   const state = selectionState(selected, jobs);
-  const n = state === 'none' ? 0 : jobs.filter((j) => selected.has(j.id)).length;
+  const n = count;
   const all = useRef(null);
   useEffect(() => {
     if (all.current) all.current.indeterminate = state === 'some';
@@ -97,14 +98,14 @@ export function SelectionBar({ jobs, selected, plan, selecting, run, onSelectAll
         icon=${v.icon}
         className="bulk-action"
         data-action=${a}
-        aria-label=${bulkLabel(a, k)}
+        aria-label=${a === 'delete' ? `Remove ${k} ${k === 1 ? 'job' : 'jobs'} from the list` : bulkLabel(a, k)}
         disabled=${Boolean(run)}
         onClick=${() => onAction(a)}
-      >${v.label} <span class="bulk-n">${k}</span></${Button}>`;
+      >${v.label(k)}</${Button}>`;
     });
   let hint = null;
   if (selecting && !run && actions.length === 0) {
-    hint = html`<span class=${n === 0 ? 'bulk-hint is-intro' : 'bulk-hint'}>${n === 0 ? 'Select jobs to retry, cancel or delete them.' : 'No action applies to these jobs.'}</span>`;
+    hint = html`<span class=${n === 0 ? 'bulk-hint is-intro' : 'bulk-hint'}>${n === 0 ? 'Select jobs to retry, cancel or remove them.' : 'No action applies to these jobs.'}</span>`;
   }
   return html`<div class="bulk-bar" data-state=${run ? 'run' : 'select'} role="group" aria-label="Selection">
     ${selecting
@@ -119,7 +120,7 @@ export function SelectionBar({ jobs, selected, plan, selecting, run, onSelectAll
               onClick=${onSelectAll}
             />
           </label>
-          ${run ? null : html`<span class="bulk-count" aria-live="polite">${n === 0 ? 'None selected' : `${n} selected`}</span>`}`
+          ${run ? null : html`<span class="bulk-count" aria-live="polite">${n === 0 ? 'None selected' : shown < n ? `${n} selected · ${shown} shown` : `${n} selected`}</span>`}`
       : null}
     ${run ? html`<${BulkProgress} run=${run} />` : html`<div class="bulk-actions">${actions}${hint}</div>`}
   </div>`;
@@ -139,9 +140,10 @@ export function BulkConfirm({ action, jobs, skipped, run, onConfirm, onCancel })
     action === 'delete'
       ? `${plural(n, 'It leaves', 'They leave')} the console with ${plural(n, 'its', 'their')} track records and event history. Downloaded files stay on disk.${left}`
       : `Tracks that already finished stay on disk. Retry on the Cancelled tab queues the rest again.${left}`;
+  const label = action === 'delete' ? `Remove ${n} ${plural(n, 'job', 'jobs')} from list` : bulkLabel(action, n);
   return html`<${ConfirmDialog}
-    title=${`${bulkLabel(action, n)}?`}
-    confirmLabel=${bulkLabel(action, n)}
+    title=${`${label}?`}
+    confirmLabel=${label}
     cancelLabel=${action === 'cancel' ? 'Keep running' : 'Cancel'}
     busyLabel=${run ? bulkProgressText(run.action, run.done, run.total) : 'Working…'}
     danger

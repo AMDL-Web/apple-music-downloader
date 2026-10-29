@@ -314,10 +314,6 @@
   background: var(--bg-selected);
 }
 
-.bulk-n {
-  font-variant-numeric: tabular-nums;
-}
-
 /* The bar over the list: select all, count, actions or a run's progress.
    It sticks under the top bar while the list scrolls. */
 .bulk-bar {
