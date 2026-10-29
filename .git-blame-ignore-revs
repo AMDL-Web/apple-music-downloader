@@ -24,3 +24,7 @@ d8937e1eb4f143ef85e80eab9d470a5ceff91328
 bb9c223f7ba045d681a236b037925b14936d8c4d
 # refactor(console): move the link previews out of download.js (move-only)
 a4eec34aa055806380d257b378937056af8bf3f9
+# refactor(console): move the downloads feed, drawer stream and settings helpers out (move-only)
+1e553a1a42320ec223d902d0c21217f723141442
+362b9fe6876700b52b4ed9614ce447586b09157d
+c234cf96ffbe40e1168ce69d8792cfdd6bc93454
