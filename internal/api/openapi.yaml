@@ -564,8 +564,8 @@ paths:
         a song reads the song resource, an album the album with its track list, a
         playlist the playlist with its track list, a station its metadata (never
         the next-tracks feed), an artist the artist alone (so track_count is
-        absent). The amp-api-only reads (animated covers, Enhanced HLS) are never
-        made. The whole lookup is bounded by 15 seconds.
+        absent). The animated-cover and Enhanced HLS reads are never made. The
+        whole lookup is bounded by 15 seconds.
 
         Only a private (pl.u-) playlist's cover uses a media-user-token, and only
         the runtime catalog.media_user_token; the request cannot supply one. It is

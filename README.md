@@ -92,10 +92,11 @@ catalog read, and is the **only** source of `enhancedHls` manifests and `editori
 animated covers. The documented `api.music.apple.com` needs a developer token signed with an
 Apple key; the backend holds none and never calls it. Being undocumented, amp-api can change
 without notice. The reads a download needs (the link's song, album, playlist, station or
-artist, and each track's metadata) are retried and then fail the job or that track. The
+artist, and each track's metadata) fail the job or that track once a retryable error has
+used up its attempts, or at once on an error a retry cannot fix. The
 extras (animated covers, the album details added to a single song, a private playlist's own
 cover, the artist picture) degrade to "this album doesn't have that" rather than failing a
-job, and a track without `enhancedHls` falls back to the next codec. Only a Hi-Res Lossless track that may exceed 48 kHz asks the wrapper for its
+job, and a track with no usable web or device manifest falls back to the next codec. Only a Hi-Res Lossless track that may exceed 48 kHz asks the wrapper for its
 device manifest too, because the web player's playlist can leave out the higher ALAC
 renditions.
 

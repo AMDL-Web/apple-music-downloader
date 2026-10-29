@@ -416,8 +416,8 @@ and `id` are what the job would be, and the `?i=` of an album link follows
 have the names and meaning of the job fields; `track_count` is the number of songs a
 download would contain (absent for artists and stations, whose track lists are not read),
 and a station adds `needs_media_user_token`. Each type costs light catalog reads only (an
-album or playlist pages through its track list): never the amp-api-only reads, never a
-station's next-tracks feed, at most 15 seconds in all.
+album or playlist pages through its track list): never the animated-cover or Enhanced
+HLS reads, never a station's next-tracks feed, at most 15 seconds in all.
 
 The body is `{url}` only. A private playlist's cover is read with
 `catalog.media_user_token`; the token is never echoed.
