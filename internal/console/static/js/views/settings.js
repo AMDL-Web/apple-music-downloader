@@ -28,11 +28,12 @@ import {
 } from '../lib/settings-draft.js';
 import { punctuated } from '../lib/format.js';
 import { settingsSection, settingsHash, parseHash } from '../lib/route.js';
-import { useApp, Card, Icon, Button, Notice, ErrorNote, SkeletonRows, Unavailable } from '../ui/components.js';
+import { useApp, Card, Notice, ErrorNote, SkeletonRows, Unavailable } from '../ui/components.js';
 import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
 import { LibrarySyncPanel, ConfigFilePanel, TemplateReference } from './settings-panels.js';
+import { SettingsNav, SaveBar } from './settings-nav.js';
 
 /** What a confirmation would lose: the count, the sections and the field names. */
 function LossText({ keys, lead }) {
@@ -278,43 +279,10 @@ export function SettingsPage({ route }) {
         : null}`;
   }
 
-  const navItem = (s) => {
-    const marks = [dirtySections.has(s.id) ? 'unsaved changes' : '', errorSections.has(s.id) ? 'needs attention' : ''].filter(Boolean);
-    return html`<li key=${s.id}>
-      <a
-        class="settings-nav-item"
-        href=${settingsHash(s.id)}
-        data-section=${s.id}
-        data-dirty=${dirtySections.has(s.id) ? '' : undefined}
-        data-invalid=${errorSections.has(s.id) ? '' : undefined}
-        aria-current=${s.id === section.id ? 'true' : undefined}
-      >
-        <${Icon} name=${s.icon} />
-        <span class="settings-nav-label">${s.label}</span>
-        ${errorSections.has(s.id)
-          ? html`<span class="settings-nav-mark" data-role="danger"><${Icon} name="circle-x" size="sm" /></span>`
-          : dirtySections.has(s.id)
-            ? html`<span class="settings-nav-mark settings-nav-dot" aria-hidden="true"></span>`
-            : null}
-        ${marks.length ? html`<span class="sr-only">, ${marks.join(', ')}</span>` : null}
-      </a>
-    </li>`;
-  };
-
   const faultSections = SETTINGS_SECTIONS.filter((s) => errorSections.has(s.id) && s.id !== section.id);
 
   return html`<div class="page page-settings" data-section-active=${section.id} data-dirty=${dirty ? '' : undefined}>
-    <nav class="settings-nav" aria-label="Settings sections">
-      <ul class="settings-nav-list">${SETTINGS_SECTIONS.map(navItem)}</ul>
-      <label class="settings-jump">
-        <span class="settings-jump-label">Section</span>
-        <select class="select" value=${section.id} onChange=${(e) => app.navigate(settingsHash(e.currentTarget.value))}>
-          ${SETTINGS_SECTIONS.map(
-            (s) => html`<option key=${s.id} value=${s.id}>${s.label}${errorSections.has(s.id) ? ' (needs attention)' : dirtySections.has(s.id) ? ' (unsaved)' : ''}</option>`,
-          )}
-        </select>
-      </label>
-    </nav>
+    <${SettingsNav} section=${section} dirty=${dirtySections} invalid=${errorSections} navigate=${app.navigate} />
     <div class="settings-main">
       ${saveError
         ? html`<div class="settings-error" tabindex="-1" ref=${errorRef} role="alert">
@@ -332,23 +300,7 @@ export function SettingsPage({ route }) {
       </${Card}>
     </div>
     ${dirty || saving
-      ? html`<div class="save-bar" role="region" aria-label="Unsaved changes" data-state=${saving ? 'saving' : 'dirty'}>
-          <p class="save-bar-text">
-            <span class="save-bar-count">${changesLabel(dirtyKeys.length)}</span>
-            <span class="save-bar-where">${SETTINGS_SECTIONS.filter((s) => dirtySections.has(s.id)).map((s) => s.label).join(', ')}</span>
-          </p>
-          <div class="save-bar-actions">
-            <${Button} variant="ghost" className="save-bar-discard" onClick=${askDiscard} disabled=${saving}>Discard</${Button}>
-            <${Button}
-              variant="primary"
-              icon="save"
-              className="save-bar-save"
-              aria-keyshortcuts="Meta+S Control+S"
-              aria-disabled=${saving ? 'true' : undefined}
-              onClick=${save}
-            >${saving ? 'Saving…' : 'Save'}</${Button}>
-          </div>
-        </div>`
+      ? html`<${SaveBar} count=${dirtyKeys.length} sections=${dirtySections} saving=${saving} onDiscard=${askDiscard} onSave=${save} />`
       : null}
     ${leaveTo
       ? html`<${ConfirmDialog}

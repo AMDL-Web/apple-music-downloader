@@ -10,7 +10,7 @@ import { fieldByKey } from '../lib/settings.js';
 import { Button } from '../ui/components.js';
 import { Dialog } from '../ui/dialogs.js';
 import { useMedia } from '../ui/hooks.js';
-import { ListEditor } from './settings-fields.js';
+import { ListEditor } from './settings-list.js';
 
 // The menu item that opens the sheet. It is never the selected value, so
 // choosing it again while Custom is active opens the sheet again.
