@@ -15,7 +15,7 @@
 import { html, useState } from '../ui/preact.js';
 import { artPalette, paletteStyle, shortDate } from '../lib/format.js';
 import { kindLabel, previewFacts, needsAttention, ROWS_SHOWN, LOOKUP_LIMIT } from '../lib/lookup.js';
-import { Card, Button, Icon, Chip, Artwork, Skeleton } from '../ui/components.js';
+import { Card, Button, Icon, Artwork, Skeleton } from '../ui/components.js';
 
 /** The link without its scheme, the title of a row with no preview. */
 const bare = (url) => url.replace(/^https?:\/\//i, '');
@@ -153,7 +153,7 @@ function LinkRow({ entry, status, issue, prior, picked, row }) {
         <span class=${facts ? 'new-link-title' : 'new-link-title is-url'} dir="auto">${facts ? name : breakable(name)}</span>
         ${facts && facts.explicit ? html`<span class="new-link-explicit" title="Explicit" aria-label="Explicit">E</span>` : null}
         ${facts && facts.adm ? html`<span class="chip new-link-adm" title="Mastered for Apple's high-resolution formats">Apple Digital Master</span>` : null}
-        ${sf ? html`<${Chip} title=${sfTitle}>${sf.toUpperCase()}</${Chip}>` : null}
+        ${sf ? html`<span class="chip new-link-sf" title=${sfTitle}>${sf.toUpperCase()}</span>` : null}
       </span>
       <span class="new-link-sub" title=${meta.map((m) => m.text).join(' · ')}>
         ${meta.map((m) => html`<span key=${m.key} class="new-link-fact" data-key=${m.key} dir=${m.auto ? 'auto' : undefined}>${m.text}</span>`)}

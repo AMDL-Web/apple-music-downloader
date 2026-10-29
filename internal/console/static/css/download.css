@@ -225,7 +225,8 @@
 }
 
 /* Title, the Explicit mark and the quiet tags on one line; when it is
-   short of room the tags give way first, then the title. */
+   short of room the Apple Digital Master tag gives way first, then the
+   title. The storefront tag is two letters and keeps them. */
 .new-link-head {
   display: flex;
   align-items: center;
@@ -243,6 +244,10 @@
   flex: 0 100 auto;
   min-width: 0;
   overflow: hidden;
+}
+
+.new-link-head > .new-link-sf {
+  flex: none;
 }
 
 /* Tags on this page read as words in the page's 13 px, not small caps. */
