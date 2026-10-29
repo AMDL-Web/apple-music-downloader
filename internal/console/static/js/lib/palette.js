@@ -46,7 +46,7 @@ const SECTION_WORDS = {
 
 // What the page says about the parallel pools: they are startup settings, so
 // no field has them, and a search for them lands here.
-const SECTION_SUBS = { config_file: 'Startup settings such as worker pools are edited in the file' };
+const SECTION_SUBS = { config_file: 'Worker pools are set in the file' };
 
 const SECTION_ITEMS = SETTINGS_SECTIONS.map((s) => ({
   id: `set-${s.id}`,

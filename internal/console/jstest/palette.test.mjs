@@ -69,7 +69,7 @@ test('parallel and concurrency find where worker pools live, and template finds 
   for (const q of ['concurrency', 'parallel', 'threads', 'workers']) {
     const hit = paletteItems(q).find((it) => it.id === 'set-config_file');
     assert.ok(hit, `${q} finds Configuration file`);
-    assert.match(hit.sub, /worker pools/);
+    assert.match(hit.sub, /Worker pools/);
   }
   const templates = paletteItems('template').filter((it) => it.field);
   assert.ok(templates.length >= 5, 'every path template field answers to "template"');
