@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, useMemo } from '../ui/preact.js';
 import { lookupLink, listDownloads } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
-import { createLookupQueue, priorJob, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
+import { createLookupQueue, priorJob, priorQuery, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { linkIssue, submittable, needsMediaUserToken } from '../lib/submit.js';
 import { useDebounced } from '../ui/hooks.js';
 
@@ -75,10 +75,14 @@ export function useLookups({ settled, entries, token, serverToken, trackMode, ep
   useEffect(() => queue.current.want(wanted), [wanted.join('\n')]);
 
   // Earlier jobs of the wanted albums, songs and playlists, 2 at a time.
+  // The search term is the id a job would download (priorQuery), under the
+  // track mode in force when it runs.
+  const modeRef = useRef(trackMode);
+  modeRef.current = trackMode || 'song';
   const history = useRef(null);
   if (!history.current) {
     history.current = createLookupQueue({
-      lookup: (url) => listDownloads({ q: parseLink(url).id, limit: 50 }),
+      lookup: (url) => listDownloads({ q: priorQuery(parseLink(url), modeRef.current), limit: 50 }),
       cache: HISTORY,
       max: 2,
       onChange: () => setTick((n) => n + 1),
@@ -100,7 +104,10 @@ export function useLookups({ settled, entries, token, serverToken, trackMode, ep
   // A changed album_track_url_mode reads album ?i= links again.
   useEffect(() => {
     if (trackMode === null) return;
-    if (LOOKUPS_MODE !== null && LOOKUPS_MODE !== trackMode) queue.current.forget([...LOOKUPS.keys()].filter(isAlbumTrack));
+    if (LOOKUPS_MODE !== null && LOOKUPS_MODE !== trackMode) {
+      queue.current.forget([...LOOKUPS.keys()].filter(isAlbumTrack));
+      history.current.forget([...HISTORY.keys()].filter(isAlbumTrack));
+    }
     LOOKUPS_MODE = trackMode;
   }, [trackMode]);
   // A changed token reads private playlists again.

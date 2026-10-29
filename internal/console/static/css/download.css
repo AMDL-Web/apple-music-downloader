@@ -115,13 +115,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* "Options: Server defaults" is a quiet summary like the count above it;
+   only "Edit" is the link. */
+.new-options-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
 .new-options-jump {
-  align-self: flex-start;
   padding: 0;
   border: 0;
   background: transparent;
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
   text-align: left;
   cursor: pointer;
 }

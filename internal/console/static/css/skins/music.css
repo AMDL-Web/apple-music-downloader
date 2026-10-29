@@ -2083,9 +2083,12 @@
   line-height: var(--lh-14);
 }
 
-:root[data-skin="music"] .new-options-jump {
+:root[data-skin="music"] .new-options-line {
   font-size: var(--fs-14);
   line-height: var(--lh-14);
+}
+
+:root[data-skin="music"] .new-options-jump {
   font-weight: var(--w-medium);
 }
 

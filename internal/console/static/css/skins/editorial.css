@@ -2896,10 +2896,6 @@
   font-weight: var(--w-semibold);
 }
 
-:root[data-skin="editorial"] .new-options-jump {
-  color: var(--text-secondary);
-}
-
 :root[data-skin="editorial"] .new-submit-btn {
   min-width: 200px;
   height: var(--touch);

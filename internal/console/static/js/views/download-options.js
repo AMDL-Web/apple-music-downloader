@@ -198,23 +198,37 @@ function OptionsForm({ defaults, values, setValue, hooks, hookSel, setHookSel, r
  */
 function CodecPriority({ list, onChange, changedMark }) {
   const box = useRef(null);
-  const pending = useRef('');
+  const pending = useRef([]);
   const excluded = CODECS.filter((c) => !list.includes(c.value));
   const info = (v) => CODECS.find((c) => c.value === v) || { value: v, label: v, hint: '' };
   // Moves focus right after the list re-renders, before the browser can
   // drop it on the body with the removed button.
-  const focusLater = (selector) => {
-    pending.current = selector;
+  const focusLater = (...selectors) => {
+    pending.current = selectors;
   };
   useLayoutEffect(() => {
-    const selector = pending.current;
-    pending.current = '';
-    const el = selector && box.current ? box.current.querySelector(selector) : null;
-    if (el) el.focus();
+    const selectors = pending.current;
+    pending.current = [];
+    if (!box.current) return;
+    for (const selector of selectors) {
+      const el = box.current.querySelector(selector);
+      if (el && !el.disabled) {
+        el.focus();
+        return;
+      }
+    }
   }, [list.join(',')]);
   const add = (v) => {
     onChange([...list, v]);
     focusLater(`.new-codec[data-codec="${v}"] .new-codec-up`);
+  };
+  // Focus stays on the moved row's same arrow, or the other one at an end,
+  // so the next press moves it again.
+  const move = (i, d) => {
+    const v = list[i];
+    onChange(moveItem(list, i, d));
+    const row = `.new-codec[data-codec="${v}"]`;
+    focusLater(`${row} .${d < 0 ? 'new-codec-up' : 'new-codec-down'}`, `${row} .${d < 0 ? 'new-codec-down' : 'new-codec-up'}`);
   };
   const remove = (i) => {
     const next = list.filter((_, j) => j !== i);
@@ -232,8 +246,8 @@ function CodecPriority({ list, onChange, changedMark }) {
           <span class="new-codec-rank" aria-hidden="true">${i + 1}</span>
           <span class="new-codec-name">${c.label}<span class="new-codec-hint">${c.hint}</span></span>
           <span class="new-codec-actions">
-            <${Button} variant="ghost" size="sm" icon="arrow-down" className="new-codec-up" aria-label=${`Move ${c.label} up`} title="Move up" disabled=${i === 0} onClick=${() => onChange(moveItem(list, i, -1))} />
-            <${Button} variant="ghost" size="sm" icon="arrow-down" aria-label=${`Move ${c.label} down`} title="Move down" disabled=${i === list.length - 1} onClick=${() => onChange(moveItem(list, i, 1))} />
+            <${Button} variant="ghost" size="sm" icon="arrow-down" className="new-codec-up" aria-label=${`Move ${c.label} up`} title="Move up" disabled=${i === 0} onClick=${() => move(i, -1)} />
+            <${Button} variant="ghost" size="sm" icon="arrow-down" className="new-codec-down" aria-label=${`Move ${c.label} down`} title="Move down" disabled=${i === list.length - 1} onClick=${() => move(i, 1)} />
             <${Button} variant="ghost" size="sm" icon="x" className="new-codec-remove" aria-label=${`Remove ${c.label}`} title=${only ? 'At least one codec is needed' : 'Remove'} disabled=${Boolean(only)} onClick=${() => remove(i)} />
           </span>
         </li>`;

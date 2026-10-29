@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLink } from '../static/js/lib/links.js';
-import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob } from '../static/js/lib/lookup.js';
+import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention } from '../static/js/lib/lookup.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -212,4 +212,21 @@ test('priorJob finds the earlier job of the same item, not of an id that merely 
   assert.deepEqual(priorJob(queued, parseLink(BLONDE)), { state: 'active', job: queued[5] });
   assert.equal(priorJob([jobs[2]], parseLink(BLONDE)), null, 'a failed job is no copy');
   assert.equal(priorJob(null, parseLink(BLONDE)), null);
+});
+
+test('priorQuery searches for the id a job would download', () => {
+  const link = parseLink('https://music.apple.com/us/album/blonde/1146195596?i=1146195599');
+  assert.equal(priorQuery(link), '1146195599', 'song mode: the track, so a /song/ job is found too');
+  assert.equal(priorQuery(link, 'song'), '1146195599');
+  assert.equal(priorQuery(link, 'album'), '1146195596');
+  assert.equal(priorQuery(parseLink('https://music.apple.com/us/album/blonde/1146195596')), '1146195596');
+  assert.equal(priorQuery(null), '');
+});
+
+test('a row needs attention for any issue or an earlier job still in flight, not for a finished one', () => {
+  assert.equal(needsAttention({ blocking: true }, null), true);
+  assert.equal(needsAttention({ blocking: false, text: 'needs a token' }, null), true, 'a warning counts');
+  assert.equal(needsAttention(null, { state: 'active', job: {} }), true);
+  assert.equal(needsAttention(null, { state: 'done', job: {} }), false);
+  assert.equal(needsAttention(null, null), false);
 });

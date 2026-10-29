@@ -241,7 +241,26 @@ export function linkTarget(link, trackMode = 'song') {
   return { type: link.kind, id: link.id };
 }
 
+/**
+ * The id to search GET downloads?q= for when looking for earlier jobs of
+ * `link`: the id a job of it would download (a song for an album ?i= link
+ * unless catalog.album_track_url_mode is "album"), so a song job made from
+ * a /song/ link is found too. '' when the link has no id.
+ */
+export function priorQuery(link, trackMode = 'song') {
+  const target = linkTarget(link, trackMode);
+  return target ? target.id : '';
+}
+
 const ACTIVE = new Set(['queued', 'running']);
+
+/**
+ * Whether a link row stays listed past ROWS_SHOWN: it has an issue (blocking
+ * or a warning) or an earlier job still queued or running.
+ */
+export function needsAttention(issue, prior) {
+  return Boolean(issue) || Boolean(prior && prior.state === 'active');
+}
 const newest = (a, b, key) => (Date.parse(b[key] || '') || 0) - (Date.parse(a[key] || '') || 0);
 
 /**

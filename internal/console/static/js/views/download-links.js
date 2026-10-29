@@ -3,11 +3,12 @@
 // title, artist, tracks, year) when it arrives, any reason it cannot be
 // sent or needs attention, and an earlier job of the same item. The page
 // owns the lookup queues; rows read them. The first ROWS_SHOWN rows are
-// listed, plus every flagged one, until Show all.
+// listed, plus every one that needs a look (an issue, an earlier job still
+// queued or running), until Show all.
 
 import { html, useState } from '../ui/preact.js';
 import { artPalette, paletteStyle, shortDate } from '../lib/format.js';
-import { kindLabel, previewFacts, ROWS_SHOWN, LOOKUP_LIMIT } from '../lib/lookup.js';
+import { kindLabel, previewFacts, needsAttention, ROWS_SHOWN, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { Card, Button, Icon, Chip, Artwork, Skeleton } from '../ui/components.js';
 
 /** The link without its scheme, for the mono line under a title. */
@@ -35,8 +36,10 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
   ]
     .filter(Boolean)
     .join(' · ');
-  const shown = all ? entries : entries.filter((e, i) => i < ROWS_SHOWN || blocked(e));
+  const shown = all ? entries : entries.filter((e, i) => i < ROWS_SHOWN || needsAttention(issueOf(e), priorOf(e.url)));
   const hidden = entries.length - shown.length;
+  // Hidden rows only have, at most, a quiet "Downloaded <date>" note.
+  const hiddenPrior = all ? 0 : entries.filter((e) => !shown.includes(e) && priorOf(e.url)).length;
   const data = (e) => {
     const s = statusOf(e.url);
     return s.state === 'ready' ? s.data : null;
@@ -68,7 +71,7 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
       ? html`<div class="new-links-all">
           <${Button} size="sm" icon=${all ? 'chevron-up' : 'chevron-down'} className="new-links-toggle" aria-expanded=${String(all)} onClick=${() => setAll(!all)}
             >${all ? `Show the first ${ROWS_SHOWN}` : `Show all ${entries.length} links`}</${Button}>
-          ${!all ? html`<span class="new-hint">${hidden} more not listed, none flagged so far.</span>` : null}
+          ${!all ? html`<span class="new-hint">${hidden} more not listed, ${hiddenPrior ? `${hiddenPrior} downloaded before` : 'none flagged so far'}.</span>` : null}
         </div>`
       : null}
     ${skipped > 0

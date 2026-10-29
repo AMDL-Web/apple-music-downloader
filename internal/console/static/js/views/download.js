@@ -61,13 +61,27 @@ export function DownloadPage({ route }) {
   const entries = useMemo(() => scanLinks(text, storefront), [text, storefront]);
   const dupes = useMemo(() => duplicateCount(text, storefront), [text, storefront]);
   const settled = useDebounced(text, 350);
+  // The submit error under the button (failure) belongs to the text it was
+  // sent from and to the connection it failed on: an edit or a reconnect
+  // clears it. A submit that drops handled links from the text does not.
+  const [failure, setFailure] = useState('');
+  const edit = (next) => {
+    setFailure('');
+    setText(next);
+  };
+  const epochFailed = useRef(app.epoch);
+  useEffect(() => {
+    if (epochFailed.current === app.epoch) return;
+    epochFailed.current = app.epoch;
+    setFailure('');
+  }, [app.epoch]);
   const inputRef = useRef(null);
 
   // ?url= -> text: links that arrive in the address (the global paste on
   // this page, a bookmarklet, a shared link) join the text.
   const urlParam = route.params.url || '';
   useEffect(() => {
-    if (incoming.length) setText((t) => mergeLinks(t, incoming, storefront));
+    if (incoming.length) edit((t) => mergeLinks(t, incoming, storefront));
   }, [urlParam]);
 
   // text -> ?url=: the links follow the text, so a reload keeps them, also
@@ -162,7 +176,6 @@ export function DownloadPage({ route }) {
 
   // Submit and results (kept for the life of the tab, without the token).
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState('');
   const [refusal, setRefusal] = useState('');
   const [results, setResults] = useResults();
   const [retrying, setRetrying] = useState(() => new Set());
@@ -272,7 +285,7 @@ export function DownloadPage({ route }) {
   };
 
   const removeEntry = (url) => {
-    setText((t) => removeLink(t, url));
+    edit((t) => removeLink(t, url));
     if (inputRef.current) inputRef.current.focus({ preventScroll: true });
   };
 
@@ -325,7 +338,7 @@ export function DownloadPage({ route }) {
             autocomplete="off"
             autocapitalize="off"
             spellcheck=${false}
-            onInput=${(e) => setText(e.currentTarget.value)}
+            onInput=${(e) => edit(e.currentTarget.value)}
           ></textarea>
           <p id="new-input-hint" class="new-hint">
             Albums, songs, playlists, artists and stations. Links are found anywhere in the text${keyboard ? `; ${keys} downloads` : ''}.
@@ -352,7 +365,10 @@ export function DownloadPage({ route }) {
           <div class="new-submit">
             <div class="new-submit-info">
               <span class="new-count">${countLine}</span>
-              <button type="button" class="new-options-jump link" onClick=${jumpToOptions}>Options: ${optionsLine}</button>
+              <p class="new-options-line">
+                <span class="new-options-state">Options: ${optionsLine}</span>
+                <button type="button" class="new-options-jump link" aria-label="Edit options" onClick=${jumpToOptions}>Edit</button>
+              </p>
             </div>
             <${Button}
               variant="primary"
