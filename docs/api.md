@@ -448,7 +448,7 @@ including a URL it cannot parse, is `502 upstream_error`.
 The success path reads one master playlist per track occurrence and summarises every
 quality from it; on failure it re-acquires the source per `download.max_attempts`. It does
 not read individual media playlists, verify media segments or enter encrypted media
-transfer. Region validation requires the wrapper/decryptor to be ready and the URL's
+transfer. Region validation requires the wrapper to be ready and the URL's
 storefront to be among the regions it reports.
 
 All link types return per-track `tracks`; a song returns one element, collections keep

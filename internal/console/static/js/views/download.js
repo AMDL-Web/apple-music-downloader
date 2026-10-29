@@ -12,14 +12,14 @@
 // lib/links.js, lib/lookup.js, lib/submit.js and lib/overrides.js.
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
-import { createDownload } from '../api.js';
+import { createDownload, getWrapperStatus, settle } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
-import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError, submittable, downloadLabel, countLine } from '../lib/submit.js';
+import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError, submittable, downloadLabel, countLine, servedRegions } from '../lib/submit.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
 import { isPicked, qualityOverview } from '../lib/lookup.js';
 import { useApp, Card } from '../ui/components.js';
-import { useDebounced, useMedia } from '../ui/hooks.js';
+import { useDebounced, useMedia, usePoll } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { useServerConfig } from './download-config.js';
 import { useLookups } from './download-lookup.js';
@@ -140,10 +140,16 @@ export function DownloadPage({ route }) {
     });
   };
 
+  // The storefronts the wrapper serves, to flag a link before the submit
+  // refuses it; null (flag nothing) while unknown or in simulate mode.
+  const wrapper = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch]);
+  const regions = servedRegions(wrapper.data, app.simulate);
+
   const { statusOf, issueOf, sendable: allowed, skipped, queue, priorOf, forgetPrior } = useLookups({
     settled,
     entries,
     serverToken,
+    regions,
     trackMode,
     epoch: app.epoch,
     storefront,

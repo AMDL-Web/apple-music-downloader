@@ -20,12 +20,13 @@ export const MAX_URLS_PER_REQUEST = 100;
 /**
  * Why a scanned link (lib/links.js scanLinks entry) cannot be downloaded or
  * needs attention, or null when it is fine. `lookup` is its preview status
- * (lib/lookup.js), `hasToken` whether Settings holds a media-user-token.
- * Returns {code, role, blocking, message, title?, href?, action?}; a blocking
+ * (lib/lookup.js), `hasToken` whether Settings holds a media-user-token,
+ * `regions` the storefronts the wrapper's account serves (servedRegions;
+ * null when unknown, which flags nothing). Returns {code, role, blocking, message, title?, href?, action?}; a blocking
  * issue keeps the link out of the submission, `title` holds a long server
  * message in full, and `href`/`action` name a page that fixes the issue.
  */
-export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
+export function linkIssue(entry, lookup = null, { hasToken = false, regions = null } = {}) {
   const link = entry && entry.link;
   if (!link) return { code: 'not_apple', role: 'danger', blocking: true, message: 'Not an Apple Music link' };
   if (link.kind === 'music-video') return { code: 'music_video', role: 'danger', blocking: true, message: 'Music videos cannot be downloaded' };
@@ -34,6 +35,12 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
   }
   if (!PREVIEW_KINDS.includes(link.kind)) {
     return { code: 'unsupported', role: 'danger', blocking: true, message: 'Not an album, song, playlist, artist or station link' };
+  }
+  // The same refusal the submit gives (unsupported_storefront), read from
+  // the wrapper's status first. The backend still has the last word.
+  if (Array.isArray(regions) && regions.length && link.storefront && !regions.includes(link.storefront)) {
+    const [label, reason] = CODES.unsupported_storefront;
+    return { code: 'storefront_not_served', role: 'danger', blocking: true, message: `${label}. ${reason}. ${servedNote(regions)}` };
   }
   const err = lookup && lookup.state === 'error' ? lookup.error : null;
   const msg = err ? String(err.message || '') : '';
@@ -71,6 +78,25 @@ export function linkIssue(entry, lookup = null, { hasToken = false } = {}) {
     return { code: 'preview_failed', role: 'warning', blocking: false, message: `No preview: ${shortError(err.message) || 'the lookup failed'}`, title: err.message };
   }
   return null;
+}
+
+/**
+ * The storefronts a wrapper status result ({data?, error?} from GET
+ * wrapper/status) says its account serves, lower case, or null when that
+ * is not known: the status is not loaded or failed, the wrapper is not ready
+ * or has no account, it lists none, or `simulate` is on (the backend then
+ * skips the storefront check).
+ */
+export function servedRegions(res, simulate = false) {
+  const w = res && !res.error ? res.data : null;
+  if (simulate || !w || !w.ready || w.status === false) return null;
+  const list = Array.isArray(w.regions) ? w.regions.filter((r) => typeof r === 'string' && r).map((r) => r.toLowerCase()) : [];
+  return list.length ? list : null;
+}
+
+/** "It serves CN, US." for a list of storefronts, '' for none. */
+export function servedNote(storefronts) {
+  return Array.isArray(storefronts) && storefronts.length ? `It serves ${storefronts.map((s) => s.toUpperCase()).join(', ')}.` : '';
 }
 
 /** The URLs to submit: every link without a blocking issue, in order. */

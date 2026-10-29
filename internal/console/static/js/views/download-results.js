@@ -6,7 +6,7 @@
 import { html, useMemo, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
 import { getDownload } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, seedJob, RESULTS_KEY } from '../lib/submit.js';
+import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, seedJob, servedNote, RESULTS_KEY } from '../lib/submit.js';
 import { readPref, writePref } from '../lib/prefs.js';
 import { jobTitle, sentence } from '../lib/format.js';
 import { useApp, Card, Button, LinkButton, Icon } from '../ui/components.js';
@@ -109,7 +109,7 @@ export function ResultsCard({ rows, params, busy, onRetry, onClear }) {
 
 function ResultRow({ row, params, busy, onRetry }) {
   const v = row.deleted ? { role: 'neutral', icon: 'circle-minus', label: 'Deleted', message: 'This job was deleted after it was queued' } : row.view;
-  const served = v.storefronts && v.storefronts.length ? `It serves ${v.storefronts.map((s) => s.toUpperCase()).join(', ')}.` : '';
+  const served = servedNote(v.storefronts);
   const title = row.deleted && row.job ? jobTitle(row.job) : '';
   return html`<div class="new-result-row" data-role=${v.role}>
     <span class="new-result-icon"><${Icon} name=${v.icon} /></span>

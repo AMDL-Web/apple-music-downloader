@@ -41,9 +41,10 @@ const isAlbumTrack = (url) => {
  * and `trackMode` the server's catalog config, `epoch` the shell's reconnect counter (a resync after an
  * outage looks failed previews and the history up again), `storefront` the
  * server's default storefront for links without one (see scanLinks),
- * `subscribeFeed` the shell's feed (app.subscribeFeed).
+ * `subscribeFeed` the shell's feed (app.subscribeFeed), `regions` the
+ * storefronts the wrapper serves (null while unknown).
  */
-export function useLookups({ settled, entries, serverToken, trackMode, epoch, storefront, subscribeFeed }) {
+export function useLookups({ settled, entries, serverToken, regions, trackMode, epoch, storefront, subscribeFeed }) {
   // Previews: the first LOOKUP_LIMIT previewable links, 4 at a time.
   const [, setTick] = useState(0);
   const queue = useRef(null);
@@ -127,7 +128,7 @@ export function useLookups({ settled, entries, serverToken, trackMode, epoch, st
 
   // Until the config has loaded nothing is flagged for a missing token.
   const hasToken = serverToken !== false;
-  const issueOf = (e) => linkIssue(e, e.link && PREVIEW_KINDS.includes(e.link.kind) ? queue.current.status(e.url) : null, { hasToken });
+  const issueOf = (e) => linkIssue(e, e.link && PREVIEW_KINDS.includes(e.link.kind) ? queue.current.status(e.url) : null, { hasToken, regions });
   const sendable = submittable(entries, issueOf);
   const flagged = entries.filter((e) => (issueOf(e) || {}).blocking).length;
   const warned = entries.filter((e) => {

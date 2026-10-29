@@ -1267,7 +1267,7 @@ components:
           description: An account is logged in and serves at least one storefront.
         regions:
           type: array
-          description: Storefronts the decryptor serves; an empty array when none.
+          description: Storefronts the wrapper's account serves; an empty array when none.
           items:
             type: string
         accounts:
@@ -2019,7 +2019,7 @@ components:
           type: object
           description: >-
             unsupported_storefront: {"storefront": "jp", "supported_storefronts":
-            ["us"]}, the storefronts the decryptor serves.
+            ["us"]}, the storefronts the wrapper's account serves.
           properties:
             storefront:
               type: string
@@ -2033,7 +2033,7 @@ components:
         Stable per-URL code. With status invalid: invalid_url (not an Apple
         Music URL the backend can parse), unsupported_input (a link type the
         backend does not download, such as music videos),
-        unsupported_storefront (the decryptor does not serve the URL's
+        unsupported_storefront (the wrapper's account does not serve the URL's
         storefront), decryptor_unavailable (the wrapper is not ready; retrying
         later may succeed), invalid_configuration (the runtime configuration
         cannot parse this link). With the status of the same name:

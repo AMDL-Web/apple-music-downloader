@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { scanLinks, removeLink } from '../static/js/lib/links.js';
 import {
   linkIssue,
+  servedRegions,
+  servedNote,
   submittable,
   chunk,
   resultView,
@@ -102,6 +104,40 @@ test('submittable keeps links without a blocking issue, in order', () => {
   assert.deepEqual(submittable(entries, (e) => linkIssue(e)), [IGOR, STATION, FOLKLORE]);
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
   assert.deepEqual(chunk([], 2), []);
+});
+
+const JP = 'https://music.apple.com/jp/album/1635388716';
+
+test('linkIssue flags a storefront the wrapper does not serve, and only when the regions are known', () => {
+  const issue = linkIssue(entry(JP), null, { regions: ['cn'] });
+  assert.deepEqual(issue, {
+    code: 'storefront_not_served',
+    role: 'danger',
+    blocking: true,
+    message: "Storefront not served. The wrapper's Apple Music account is in another storefront. It serves CN.",
+  });
+  const view = resultView({ status: 'invalid', error: { code: 'unsupported_storefront', message: 'x', details: { supported_storefronts: ['cn'] } } });
+  assert.ok(issue.message.startsWith(`${view.label}. ${view.message}.`), 'reads like the submit result');
+  assert.ok(issue.message.endsWith(servedNote(view.storefronts)));
+  assert.equal(linkIssue(entry(JP), null, { regions: ['cn', 'jp'] }), null, 'a served storefront is fine');
+  assert.equal(linkIssue(entry('https://music.apple.com/JP/album/x/1'), null, { regions: ['jp'] }), null, 'case does not matter');
+  for (const regions of [null, undefined, []]) assert.equal(linkIssue(entry(JP), null, { regions }), null, 'unknown regions flag nothing');
+  const links = scanLinks(`${JP} ${IGOR}`);
+  assert.deepEqual(submittable(links, (e) => linkIssue(e, null, { regions: ['us'] })), [IGOR], 'the unserved link leaves the submit set');
+  const noSf = scanLinks('https://music.apple.com/album/x/1', 'jp')[0];
+  assert.equal(linkIssue(noSf, null, { regions: ['cn'] }).code, 'storefront_not_served', 'a borrowed storefront counts too');
+});
+
+test('servedRegions reads the wrapper status, or null when it cannot say', () => {
+  const ok = { data: { ready: true, status: true, regions: ['CN', 'us'] } };
+  assert.deepEqual(servedRegions(ok), ['cn', 'us']);
+  assert.equal(servedRegions(ok, true), null, 'simulate skips the backend check');
+  assert.equal(servedRegions(undefined), null, 'not loaded');
+  assert.equal(servedRegions({ error: { status: 0 } }), null, 'unreachable');
+  assert.equal(servedRegions({ data: { ready: false, regions: ['cn'] } }), null);
+  assert.equal(servedRegions({ data: { ready: true, status: false, regions: ['cn'] } }), null);
+  assert.equal(servedRegions({ data: { ready: true, status: true, regions: [] } }), null);
+  assert.equal(servedRegions({ data: { ready: true, status: true } }), null);
 });
 
 const job = (id, status, updated) => ({ id, status, updated_at: updated, input: IGOR, type: 'album' });
