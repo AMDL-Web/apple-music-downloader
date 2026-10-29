@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 1600" width="1020" height="1600" role="img" aria-labelledby="t d">
+<title id="t">How amdl downloads one track</title>
+<desc id="d">Statechart of one track: resolving metadata, cover and lyrics; then for each codec in download.quality_priority, followed by aac-lc when codec_alternative is on, a fetch phase (choose the web enhancedHls manifest, the wrapper's device manifest for Hi-Res ALAC above 48 kHz, or webplayback for aac-lc; claim the output path; download the encrypted segments) and a decrypt phase (decrypt in-process with internal/fairplay, remux with ffmpeg, verify when check_integrity is on, tag, move into downloads_dir). Each phase has its own download.max_attempts budget; when one runs out the next codec is tried. End states: completed, skipped_existing, failed and cancelled.</desc>
+<defs>
+<pattern id="minor" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#7fb0e6" stroke-opacity="0.13" stroke-width="0.6"/></pattern>
+<pattern id="major" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#minor)"/><path d="M 100 0 L 0 0 0 100" fill="none" stroke="#9cc3ee" stroke-opacity="0.26" stroke-width="1"/></pattern>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="#e8f1ff"/></marker>
+</defs>
+<rect width="1020" height="1600" fill="#103f73"/>
+<rect width="1020" height="1600" fill="url(#major)"/>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" fill="#e8f1ff">
+<text x="510.0" y="42" text-anchor="middle" font-size="24">one track, from link to file</text>
+<rect x="30" y="60" width="960" height="80" fill="none" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="30" y1="88" x2="990" y2="88" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="510.0" y="79" text-anchor="middle" font-size="12">Legend</text>
+<rect x="36" y="300" width="790" height="1150" fill="#ffffff" fill-opacity="0.03" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="36" y1="330" x2="826" y2="330" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="50" y="320" text-anchor="start" font-size="13" font-weight="600">For each codec: quality_priority, then aac-lc</text>
+<rect x="270" y="360" width="545" height="470" fill="#ffffff" fill-opacity="0.03" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="270" y1="390" x2="815" y2="390" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="284" y="380" text-anchor="start" font-size="13" font-weight="600">Fetch phase, max_attempts tries</text>
+<rect x="270" y="900" width="545" height="530" fill="#ffffff" fill-opacity="0.03" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="270" y1="930" x2="815" y2="930" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="284" y="920" text-anchor="start" font-size="13" font-weight="600">Decrypt phase, max_attempts tries</text>
+<path d="M 560 178 L 560 199" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 250 C 560 329.5 560 329.5 560 409" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 520 443 C 520 481.0 405 481.0 405 519" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 443 C 560 481.0 560 481.0 560 519" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 600 443 C 600 481.0 715 481.0 715 519" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 405 570 C 405 599.5 510 599.5 510 629" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 570 C 560 599.5 560 599.5 560 629" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 715 570 C 715 599.5 610 599.5 610 629" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 663 C 560 695.0 560 695.0 560 727" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 668.0 646.5 C 760 646.5 780 643.5 848.0 643.5" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 778 C 560 863.5 560 863.5 560 949" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 1000 C 560 1025.5 560 1025.5 560 1051" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 1085 C 560 1114.0 560 1114.0 560 1143" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 1177 C 560 1204.0 560 1204.0 560 1231" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 468.0 1068.5 C 390 1068.5 380 1098.5 380 1148.5 L 380 1217.0 C 380 1247.0 400 1257.0 475.0 1257.0" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 1282 C 560 1308.5 560 1308.5 560 1335" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 560 1386 C 560 1442.5 560 1442.5 560 1499" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 270 620 C 200 620 190 660 190 700 L 190 819" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 270 1160 C 210 1160 190 1120 190 1080 L 190 871" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 110 820 L 110 470 C 110 440 130 428 160 428 L 471.0 428" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 110 870 L 110 1499" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 472.0 225.0 L 40 225.0 C 22 225.0 18 235.0 18 255.0 L 18 1486.5 C 18 1508.5 30 1516.5 72.5 1516.5" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 826 1380 C 900 1380 910 1420 910 1499" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<rect x="42.0" y="100" width="81" height="33" rx="3" fill="#7dd3fc" fill-opacity="0.2" stroke="#7dd3fc" stroke-width="1.5"/>
+<text x="82.5" y="121.3" text-anchor="middle" font-size="13">resolve</text>
+<rect x="147.7" y="100" width="73" height="33" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="184.16666666666669" y="121.3" text-anchor="middle" font-size="13">choose</text>
+<rect x="245.3" y="100" width="144" height="33" rx="3" fill="#a78bfa" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="317.33333333333337" y="121.3" text-anchor="middle" font-size="13">fetch &amp; decrypt</text>
+<rect x="414.0" y="100" width="144" height="33" rx="3" fill="#facc15" fill-opacity="0.16" stroke="#fde68a" stroke-width="1.5"/>
+<text x="486.0" y="121.3" text-anchor="middle" font-size="13">finish the file</text>
+<rect x="582.7" y="100" width="97" height="33" rx="3" fill="#fb923c" fill-opacity="0.2" stroke="#fdba74" stroke-width="1.5"/>
+<text x="631.1666666666666" y="121.3" text-anchor="middle" font-size="13">completed</text>
+<rect x="704.3" y="100" width="73" height="33" rx="3" fill="#f472b6" fill-opacity="0.2" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="740.8333333333333" y="121.3" text-anchor="middle" font-size="13">failed</text>
+<rect x="802.0" y="100" width="176" height="33" rx="3" fill="#94a3b8" fill-opacity="0.2" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="889.9999999999999" y="121.3" text-anchor="middle" font-size="13">skipped / cancelled</text>
+<circle cx="560" cy="172" r="6" fill="#7dd3fc"/>
+<rect x="472.0" y="200" width="176" height="50" rx="3" fill="#7dd3fc" fill-opacity="0.2" stroke="#7dd3fc" stroke-width="1.5"/>
+<text x="560" y="221.3" text-anchor="middle" font-size="13">Resolving metadata,</text>
+<text x="560" y="238.3" text-anchor="middle" font-size="13">cover and lyrics</text>
+<rect x="472.0" y="410" width="176" height="33" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="560" y="431.3" text-anchor="middle" font-size="13">Choosing a manifest</text>
+<rect x="332.0" y="520" width="146" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="405" y="541.3" text-anchor="middle" font-size="13">web enhancedHls</text>
+<text x="405" y="558.3" text-anchor="middle" font-size="13">from amp-api</text>
+<rect x="487.0" y="520" width="146" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="560" y="541.3" text-anchor="middle" font-size="13">device manifest</text>
+<text x="560" y="558.3" text-anchor="middle" font-size="13">wrapper /m3u8</text>
+<rect x="642.0" y="520" width="146" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="715" y="541.3" text-anchor="middle" font-size="13">webplayback</text>
+<text x="715" y="558.3" text-anchor="middle" font-size="13">wrapper</text>
+<rect x="452.0" y="630" width="216" height="33" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="560" y="651.3" text-anchor="middle" font-size="13">Claiming the output path</text>
+<rect x="476.0" y="728" width="168" height="50" rx="3" fill="#a78bfa" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="560" y="749.3" text-anchor="middle" font-size="13">Downloading the</text>
+<text x="560" y="766.3" text-anchor="middle" font-size="13">encrypted segments</text>
+<rect x="849.0" y="627" width="152" height="33" rx="3" fill="#94a3b8" fill-opacity="0.2" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="925" y="648.3" text-anchor="middle" font-size="13">skipped_existing</text>
+<rect x="464.0" y="950" width="192" height="50" rx="3" fill="#a78bfa" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="560" y="971.3" text-anchor="middle" font-size="13">Decrypting in-process</text>
+<text x="560" y="988.3" text-anchor="middle" font-size="13">internal/fairplay</text>
+<rect x="468.0" y="1052" width="184" height="33" rx="3" fill="#a78bfa" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="560" y="1073.3" text-anchor="middle" font-size="13">Remuxing with ffmpeg</text>
+<rect x="464.0" y="1144" width="192" height="33" rx="3" fill="#facc15" fill-opacity="0.16" stroke="#fde68a" stroke-width="1.5"/>
+<text x="560" y="1165.3" text-anchor="middle" font-size="13">Verifying with ffmpeg</text>
+<rect x="476.0" y="1232" width="168" height="50" rx="3" fill="#facc15" fill-opacity="0.16" stroke="#fde68a" stroke-width="1.5"/>
+<text x="560" y="1253.3" text-anchor="middle" font-size="13">Tagging: metadata,</text>
+<text x="560" y="1270.3" text-anchor="middle" font-size="13">cover, lyrics</text>
+<rect x="468.0" y="1336" width="184" height="50" rx="3" fill="#facc15" fill-opacity="0.16" stroke="#fde68a" stroke-width="1.5"/>
+<text x="560" y="1357.3" text-anchor="middle" font-size="13">Moving the file into</text>
+<text x="560" y="1374.3" text-anchor="middle" font-size="13">downloads_dir</text>
+<rect x="511.5" y="1500" width="97" height="33" rx="3" fill="#fb923c" fill-opacity="0.2" stroke="#fdba74" stroke-width="1.5"/>
+<text x="560" y="1521.3" text-anchor="middle" font-size="13">completed</text>
+<rect x="78.0" y="820" width="144" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="150" y="841.3" text-anchor="middle" font-size="13">Falling back to</text>
+<text x="150" y="858.3" text-anchor="middle" font-size="13">the next codec</text>
+<rect x="73.5" y="1500" width="73" height="33" rx="3" fill="#f472b6" fill-opacity="0.2" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="110" y="1521.3" text-anchor="middle" font-size="13">failed</text>
+<rect x="861.5" y="1500" width="97" height="33" rx="3" fill="#94a3b8" fill-opacity="0.2" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="910" y="1521.3" text-anchor="middle" font-size="13">cancelled</text>
+<rect x="497.0" y="268.0" width="126" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="282.2" text-anchor="middle" font-size="11">metadata resolved</text>
+<rect x="409.0" y="468.0" width="92" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="455" y="482.2" text-anchor="middle" font-size="11">other codecs</text>
+<rect x="514.0" y="461.0" width="92" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="475.2" text-anchor="middle" font-size="11">Hi-Res ALAC</text>
+<text x="560" y="489.2" text-anchor="middle" font-size="11">above 48 kHz</text>
+<rect x="639.0" y="468.0" width="52" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="665" y="482.2" text-anchor="middle" font-size="11">aac-lc</text>
+<rect x="514.0" y="689.0" width="92" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="703.2" text-anchor="middle" font-size="11">path is free</text>
+<rect x="675.5" y="631.5" width="133" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="742" y="645.7" text-anchor="middle" font-size="11">file exists,</text>
+<text x="742" y="659.7" text-anchor="middle" font-size="11">no force_overwrite</text>
+<rect x="493.5" y="845.0" width="133" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="859.2" text-anchor="middle" font-size="11">encrypted bytes in</text>
+<text x="560" y="873.2" text-anchor="middle" font-size="11">RAM or temp_dir</text>
+<rect x="500.5" y="1002.0" width="119" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="1016.2" text-anchor="middle" font-size="11">samples piped to</text>
+<text x="560" y="1030.2" text-anchor="middle" font-size="11">ffmpeg's stdin</text>
+<rect x="500.5" y="1099.0" width="119" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="1113.2" text-anchor="middle" font-size="11">check_integrity:</text>
+<text x="560" y="1127.2" text-anchor="middle" font-size="11">true</text>
+<rect x="507.0" y="1196.0" width="106" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="1210.2" text-anchor="middle" font-size="11">file is intact</text>
+<rect x="320.5" y="1153.0" width="119" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="380" y="1167.2" text-anchor="middle" font-size="11">check_integrity:</text>
+<text x="380" y="1181.2" text-anchor="middle" font-size="11">false</text>
+<rect x="493.5" y="1296.0" width="133" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="1310.2" text-anchor="middle" font-size="11">tagged in temp_dir</text>
+<rect x="537.0" y="1464.0" width="46" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="560" y="1478.2" text-anchor="middle" font-size="11">saved</text>
+<rect x="120.5" y="723.0" width="139" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="190" y="737.2" text-anchor="middle" font-size="11">attempts run out,</text>
+<text x="190" y="751.2" text-anchor="middle" font-size="11">or codec not listed</text>
+<rect x="130.5" y="993.0" width="119" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="190" y="1007.2" text-anchor="middle" font-size="11">decrypt attempts</text>
+<text x="190" y="1021.2" text-anchor="middle" font-size="11">run out</text>
+<rect x="125.5" y="411.0" width="99" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="175" y="425.2" text-anchor="middle" font-size="11">another codec</text>
+<text x="175" y="439.2" text-anchor="middle" font-size="11">is left</text>
+<rect x="60.5" y="1280.0" width="99" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="110" y="1294.2" text-anchor="middle" font-size="11">no codec left</text>
+<rect x="237.0" y="208.0" width="126" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="300" y="222.2" text-anchor="middle" font-size="11">metadata attempts</text>
+<text x="300" y="236.2" text-anchor="middle" font-size="11">run out</text>
+<rect x="855.5" y="1422.0" width="99" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="905" y="1436.2" text-anchor="middle" font-size="11">job cancelled</text>
+</g>
+</svg>

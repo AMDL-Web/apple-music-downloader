@@ -1,79 +1,131 @@
-<svg xmlns="http://www.w3.org/2000/svg"
-     width="1200" height="480" viewBox="0 0 1200 480"
-     role="img" aria-labelledby="archTitle archDesc">
-  <title id="archTitle">Where AMDL Backend sits</title>
-  <desc id="archDesc">The web console and your scripts call the backend over REST and Server-Sent Events. The backend keeps a job queue in SQLite and runs the download pipeline, writing finished files to disk. It requires a wrapper (wrapper-lite, or wrapper-manager v2 in front of it) over HTTP for device manifests, licenses, lyrics and decryption templates, which it runs in-process, and reads the Apple Music catalog over HTTPS from amp-api.music.apple.com, which alone serves enhancedHls.</desc>
-
-  <rect width="1200" height="480" rx="24" fill="#0A0C0E"/>
-  <rect x="0.75" y="0.75" width="1198.5" height="478.5" rx="23.25" fill="none" stroke="#1B2127" stroke-width="1.5"/>
-
-  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#79838D" letter-spacing="2">
-    <text x="56" y="84">CLIENTS</text>
-    <text x="392" y="84">REST + SSE  ·  /api/v1</text>
-    <text x="868" y="84">YOUR DISK</text>
-  </g>
-
-  <!-- ── clients ─────────────────────────────────────────────── -->
-  <g fill="#12161A" stroke="#232A31" stroke-width="1.5">
-    <rect x="56" y="104" width="260" height="54" rx="10"/>
-    <rect x="56" y="170" width="260" height="54" rx="10"/>
-  </g>
-  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#AEB7C0">
-    <text x="80" y="137">console · /console/</text>
-    <text x="80" y="203">your scripts · curl</text>
-  </g>
-
-  <path d="M316 164 H 378" stroke="#3A434C" stroke-width="2" fill="none"/>
-  <path d="M378 164 l -10 -5 v 10 z" fill="#3A434C"/>
-
-  <!-- ── backend ─────────────────────────────────────────────── -->
-  <rect x="392" y="104" width="416" height="144" rx="14" fill="#12161A" stroke="#5BC8AF" stroke-width="1.5"/>
-  <text x="420" y="146" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif"
-        font-size="26" font-weight="700" fill="#F2F5F7">AMDL Backend</text>
-  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#AEB7C0">
-    <text x="420" y="180">job queue · SQLite store</text>
-    <text x="420" y="206">pipeline · decrypt · ffmpeg</text>
-    <text x="420" y="232">SSE streams · hooks · sync</text>
-  </g>
-
-  <path d="M808 164 H 858" stroke="#3A434C" stroke-width="2" fill="none"/>
-  <path d="M858 164 l -10 -5 v 10 z" fill="#3A434C"/>
-
-  <!-- ── output ──────────────────────────────────────────────── -->
-  <rect x="868" y="104" width="276" height="120" rx="12" fill="#0E1417" stroke="#232A31" stroke-width="1.5"/>
-  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18">
-    <text x="892" y="140" fill="#79838D">albums/&lt;artist&gt;/</text>
-    <text x="892" y="168" fill="#5BC8AF">&lt;album&gt;/01. Song.m4a</text>
-    <text x="892" y="196" fill="#79838D">+ cover.jpg · .lrc</text>
-  </g>
-
-  <!-- ── dependency fan-out ──────────────────────────────────── -->
-  <path d="M600 248 V 286 M 418 286 H 886 M 418 286 V 310 M 886 286 V 310"
-        stroke="#3A434C" stroke-width="2" fill="none"/>
-  <path d="M418 316 l -5 -10 h 10 z M886 316 l -5 -10 h 10 z" fill="#3A434C"/>
-  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#79838D">
-    <text x="434" y="310">HTTP</text>
-    <text x="902" y="310">HTTPS</text>
-  </g>
-
-  <rect x="236" y="316" width="364" height="120" rx="12" fill="#12161A" stroke="#232A31" stroke-width="1.5"/>
-  <text x="264" y="356" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif"
-        font-size="22" font-weight="700" fill="#F2F5F7">wrapper-lite</text>
-  <rect x="472" y="334" width="104" height="28" rx="14" fill="none" stroke="#D98A4A" stroke-width="1.5"/>
-  <text x="524" y="353" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18"
-        fill="#D98A4A" text-anchor="middle">required</text>
-  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18" fill="#AEB7C0">
-    <text x="264" y="392">manifests · licenses · lyrics</text>
-    <text x="264" y="418">key templates · login (v2)</text>
-  </g>
-
-  <rect x="628" y="316" width="516" height="120" rx="12" fill="#12161A" stroke="#232A31" stroke-width="1.5"/>
-  <text x="656" y="356" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif"
-        font-size="22" font-weight="700" fill="#F2F5F7">Apple Music</text>
-  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18">
-    <text x="656" y="392" fill="#AEB7C0">amp-api.music.apple.com</text>
-    <text x="1116" y="392" fill="#79838D" text-anchor="end">catalog · enhancedHls</text>
-    <text x="656" y="418" fill="#AEB7C0">music.apple.com</text>
-    <text x="1116" y="418" fill="#79838D" text-anchor="end">web-player token</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 1045" width="1040" height="1045" role="img" aria-labelledby="t d">
+<title id="t">amdl architecture</title>
+<desc id="d">The web console calls amdl's /api/v1 REST and SSE API. Inside amdl, the HTTP API feeds the job queue, which stores jobs, items and events in SQLite, fires job hooks, and runs each track through the media pipeline; the pipeline decrypts samples in-process with internal/fairplay and writes tagged files to downloads_dir. A wrapper, wrapper-manager v2 (recommended, console login) in front of wrapper-lite or a bare wrapper-lite, supplies white-box key templates, the device manifest for Hi-Res ALAC, lyrics and the AAC-LC license. Apple's amp-api serves the catalog with a token scraped from music.apple.com, and Apple's media CDN serves the encrypted segments.</desc>
+<defs>
+<pattern id="minor" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#7fb0e6" stroke-opacity="0.13" stroke-width="0.6"/></pattern>
+<pattern id="major" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#minor)"/><path d="M 100 0 L 0 0 0 100" fill="none" stroke="#9cc3ee" stroke-opacity="0.26" stroke-width="1"/></pattern>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="#e8f1ff"/></marker>
+</defs>
+<rect width="1040" height="1045" fill="#103f73"/>
+<rect width="1040" height="1045" fill="url(#major)"/>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" fill="#e8f1ff">
+<text x="520.0" y="42" text-anchor="middle" font-size="24">amdl and what it talks to</text>
+<rect x="30" y="60" width="980" height="80" fill="none" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="30" y1="88" x2="1010" y2="88" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="520.0" y="79" text-anchor="middle" font-size="12">Legend</text>
+<rect x="40" y="280" width="960" height="400" fill="#ffffff" fill-opacity="0.03" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="40" y1="310" x2="1000" y2="310" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="520.0" y="300" text-anchor="middle" font-size="13" font-weight="600">amdl: one Go process and its files</text>
+<rect x="40" y="770" width="440" height="245" fill="#ffffff" fill-opacity="0.03" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="40" y1="800" x2="480" y2="800" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="466" y="790" text-anchor="end" font-size="13" font-weight="600">Wrapper: Linux, user namespaces</text>
+<rect x="520" y="770" width="480" height="245" fill="#ffffff" fill-opacity="0.03" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<line x1="520" y1="800" x2="1000" y2="800" stroke="#b9d3f2" stroke-opacity="0.85" stroke-width="1.2" stroke-dasharray="6 4"/>
+<text x="534" y="790" text-anchor="start" font-size="13" font-weight="600">Apple</text>
+<path d="M 200 230 C 200 284.5 200 284.5 200 339" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 290.0 365.0 L 429.0 365.0" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 630.0 365.0 L 769.0 365.0" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 860 340 L 860 231" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 530 390 C 530 424.5 530 424.5 530 459" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 600 390 C 600 424.5 840 424.5 840 459" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 430.0 485.0 L 291.0 485.0" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 585 510 C 585 546.5 600 546.5 600 583" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 155 880 C 155 914.5 155 914.5 155 949" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 300 770 C 300 700 470 690 470 640 L 470 511" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 110.0 365.0 C 70 365.0 62 377.0 62 405.0 L 62 790 C 62 810 80 816 95 829" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 670 830 C 670 740 700 720 700 681" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<path d="M 880 830 C 880 560 760 485.0 631.0 485.0" fill="none" stroke="#e8f1ff" stroke-opacity="0.9" stroke-width="1.3" marker-end="url(#arrow)"/>
+<rect x="42.0" y="100" width="73" height="33" rx="3" fill="#7dd3fc" fill-opacity="0.2" stroke="#7dd3fc" stroke-width="1.5"/>
+<text x="78.5" y="121.3" text-anchor="middle" font-size="13">client</text>
+<rect x="211.8" y="100" width="58" height="33" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="240.8" y="121.3" text-anchor="middle" font-size="13">amdl</text>
+<rect x="366.6" y="100" width="81" height="33" rx="3" fill="#fb923c" fill-opacity="0.2" stroke="#fdba74" stroke-width="1.5"/>
+<text x="407.1" y="121.3" text-anchor="middle" font-size="13">on disk</text>
+<rect x="544.4" y="100" width="81" height="33" rx="3" fill="#a78bfa" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="584.9000000000001" y="121.3" text-anchor="middle" font-size="13">wrapper</text>
+<rect x="722.2" y="100" width="66" height="33" rx="3" fill="#facc15" fill-opacity="0.16" stroke="#fde68a" stroke-width="1.5"/>
+<text x="755.2" y="121.3" text-anchor="middle" font-size="13">Apple</text>
+<rect x="885.0" y="100" width="113" height="33" rx="3" fill="#94a3b8" fill-opacity="0.2" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="941.5" y="121.3" text-anchor="middle" font-size="13">alternative</text>
+<rect x="116.0" y="180" width="168" height="50" rx="3" fill="#7dd3fc" fill-opacity="0.2" stroke="#7dd3fc" stroke-width="1.5"/>
+<text x="200" y="201.3" text-anchor="middle" font-size="13">Web console</text>
+<text x="200" y="218.3" text-anchor="middle" font-size="13">browser, /console/</text>
+<rect x="799.5" y="180" width="121" height="50" rx="3" fill="#7dd3fc" fill-opacity="0.2" stroke="#7dd3fc" stroke-width="1.5"/>
+<text x="860" y="201.3" text-anchor="middle" font-size="13">Your webhook</text>
+<text x="860" y="218.3" text-anchor="middle" font-size="13">or command</text>
+<rect x="110.0" y="340" width="180" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="200" y="361.3" text-anchor="middle" font-size="13">HTTP API</text>
+<text x="200" y="378.3" text-anchor="middle" font-size="13">internal/api</text>
+<rect x="430.0" y="340" width="200" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="530" y="361.3" text-anchor="middle" font-size="13">Job queue, workers</text>
+<text x="530" y="378.3" text-anchor="middle" font-size="13">internal/jobs</text>
+<rect x="770.0" y="340" width="180" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="860" y="361.3" text-anchor="middle" font-size="13">Job hooks</text>
+<text x="860" y="378.3" text-anchor="middle" font-size="13">internal/hooks</text>
+<rect x="110.0" y="460" width="180" height="50" rx="3" fill="#fb923c" fill-opacity="0.2" stroke="#fdba74" stroke-width="1.5"/>
+<text x="200" y="481.3" text-anchor="middle" font-size="13">downloads_dir</text>
+<text x="200" y="498.3" text-anchor="middle" font-size="13">tagged .m4a files</text>
+<rect x="430.0" y="460" width="200" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="530" y="481.3" text-anchor="middle" font-size="13">Track pipeline</text>
+<text x="530" y="498.3" text-anchor="middle" font-size="13">internal/media</text>
+<rect x="795.0" y="460" width="170" height="50" rx="3" fill="#fb923c" fill-opacity="0.2" stroke="#fdba74" stroke-width="1.5"/>
+<text x="880" y="481.3" text-anchor="middle" font-size="13">SQLite</text>
+<text x="880" y="498.3" text-anchor="middle" font-size="13">jobs, items, events</text>
+<rect x="515.0" y="584" width="170" height="50" rx="3" fill="#2dd4bf" fill-opacity="0.18" stroke="#5eead4" stroke-width="1.5"/>
+<text x="600" y="605.3" text-anchor="middle" font-size="13">FairPlay decrypt</text>
+<text x="600" y="622.3" text-anchor="middle" font-size="13">internal/fairplay</text>
+<rect x="71.0" y="830" width="168" height="50" rx="3" fill="#a78bfa" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="155" y="851.3" text-anchor="middle" font-size="13">wrapper-manager v2</text>
+<text x="155" y="868.3" text-anchor="middle" font-size="13">recommended</text>
+<rect x="285.0" y="830" width="160" height="50" rx="3" fill="#94a3b8" fill-opacity="0.2" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="365" y="851.3" text-anchor="middle" font-size="13">bare wrapper-lite</text>
+<text x="365" y="868.3" text-anchor="middle" font-size="13">log in: --login</text>
+<rect x="83.0" y="950" width="144" height="50" rx="3" fill="#a78bfa" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="155" y="971.3" text-anchor="middle" font-size="13">wrapper-lite</text>
+<text x="155" y="988.3" text-anchor="middle" font-size="13">account session</text>
+<rect x="594.0" y="830" width="152" height="50" rx="3" fill="#facc15" fill-opacity="0.16" stroke="#fde68a" stroke-width="1.5"/>
+<text x="670" y="851.3" text-anchor="middle" font-size="13">amp-api</text>
+<text x="670" y="868.3" text-anchor="middle" font-size="13">.music.apple.com</text>
+<rect x="819.5" y="830" width="121" height="50" rx="3" fill="#facc15" fill-opacity="0.16" stroke="#fde68a" stroke-width="1.5"/>
+<text x="880" y="851.3" text-anchor="middle" font-size="13">media CDN</text>
+<text x="880" y="868.3" text-anchor="middle" font-size="13">HLS segments</text>
+<rect x="160.5" y="237.0" width="79" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="200" y="251.2" text-anchor="middle" font-size="11">/api/v1</text>
+<text x="200" y="265.2" text-anchor="middle" font-size="11">REST + SSE</text>
+<rect x="307.0" y="355.0" width="106" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="360" y="369.2" text-anchor="middle" font-size="11">submit, cancel</text>
+<rect x="660.5" y="348.0" width="79" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="700" y="362.2" text-anchor="middle" font-size="11">job queued</text>
+<text x="700" y="376.2" text-anchor="middle" font-size="11">or ended</text>
+<rect x="804.0" y="244.0" width="112" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="860" y="258.2" text-anchor="middle" font-size="11">webhook or exec</text>
+<rect x="477.0" y="414.0" width="106" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="530" y="428.2" text-anchor="middle" font-size="11">run each track</text>
+<rect x="685.5" y="407.0" width="79" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="725" y="421.2" text-anchor="middle" font-size="11">store rows</text>
+<text x="725" y="435.2" text-anchor="middle" font-size="11">and events</text>
+<rect x="310.5" y="468.0" width="99" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="360" y="482.2" text-anchor="middle" font-size="11">ffmpeg remux,</text>
+<text x="360" y="496.2" text-anchor="middle" font-size="11">tag, move</text>
+<rect x="525.5" y="529.0" width="133" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="592" y="543.2" text-anchor="middle" font-size="11">encrypted samples,</text>
+<text x="592" y="557.2" text-anchor="middle" font-size="11">key template</text>
+<rect x="99.0" y="902.0" width="112" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="155" y="916.2" text-anchor="middle" font-size="11">one per account</text>
+<rect x="180.0" y="691.0" width="220" height="62" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="290" y="705.2" text-anchor="middle" font-size="11">/key: white-box key template</text>
+<text x="290" y="719.2" text-anchor="middle" font-size="11">/m3u8: device manifest</text>
+<text x="290" y="733.2" text-anchor="middle" font-size="11">(Hi-Res ALAC only)</text>
+<text x="290" y="747.2" text-anchor="middle" font-size="11">/lyrics, /webplayback, /license</text>
+<rect x="12.5" y="705.0" width="99" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="62" y="719.2" text-anchor="middle" font-size="11">console login</text>
+<text x="62" y="733.2" text-anchor="middle" font-size="11">POST /login</text>
+<rect x="583.5" y="698.0" width="213" height="48" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="690" y="712.2" text-anchor="middle" font-size="11">catalog: metadata, enhancedHls</text>
+<text x="690" y="726.2" text-anchor="middle" font-size="11">token scraped from</text>
+<text x="690" y="740.2" text-anchor="middle" font-size="11">music.apple.com</text>
+<rect x="856.0" y="705.0" width="72" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="892" y="719.2" text-anchor="middle" font-size="11">encrypted</text>
+<text x="892" y="733.2" text-anchor="middle" font-size="11">segments</text>
+</g>
 </svg>
