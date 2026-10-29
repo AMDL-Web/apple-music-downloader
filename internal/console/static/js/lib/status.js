@@ -157,8 +157,11 @@ export function wrapperView(res) {
   if (!res || res.error) return failedView(res, 'Unreachable');
   const w = res.data;
   const regions = Array.isArray(w.regions) && w.regions.length ? w.regions.join(', ').toUpperCase() : '';
-  if (w.ready) return { icon: 'circle-check', role: 'success', label: 'Ready', detail: regions };
   const accounts = Array.isArray(w.accounts) ? w.accounts.length : 0;
+  if (w.ready) {
+    const signedIn = accounts === 0 ? 'Signed in' : accounts === 1 ? '1 account signed in' : `${accounts} accounts signed in`;
+    return { icon: 'circle-check', role: 'success', label: 'Ready', detail: regions || signedIn };
+  }
   return { icon: 'triangle-alert', role: 'warning', label: 'Not ready', detail: accounts === 0 ? 'No account logged in' : 'Wrapper is not ready' };
 }
 

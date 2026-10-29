@@ -43,8 +43,12 @@ test('job rows carry status and date, so two runs of one album differ', () => {
   assert.notEqual(a.sub, b.sub);
   assert.match(a.sub, /Completed/);
   assert.match(b.sub, /Failed/);
-  assert.match(a.sub, /Oct 3/);
+  assert.match(a.sub, /Oct 3 \d\d:\d\d/);
   assert.equal(parseHash(a.hash).jobId, 'a');
+  // Two runs on one day differ by their time.
+  const c = jobItem({ id: 'c', type: 'album', title: 'Blonde', status: 'completed', updated_at: '2026-10-03T10:01:00Z' });
+  const d = jobItem({ id: 'd', type: 'album', title: 'Blonde', status: 'completed', updated_at: '2026-10-03T10:12:00Z' });
+  assert.notEqual(c.sub, d.sub);
 });
 
 test('result counts read as a sentence', () => {

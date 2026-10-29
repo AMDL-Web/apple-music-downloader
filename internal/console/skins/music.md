@@ -129,8 +129,9 @@ base durations (120 ms color, 200 ms overlays).
   `--bg-group` (16 px radius, 48 px rows, 16 px labels), red glyphs as in the
   sidebar, hairlines from the label, the current page in semibold with
   "Current" and the chevron in secondary.
-- **Page head**: title with its summary line beneath (15 px secondary), as an
-  Apple large title. Page actions (Overview's New download, a 36 px red pill)
+- **Page head**: title with its summary line beneath (15 px secondary; only
+  Overview, Queue and Showcase have one, their live counts), as an Apple
+  large title. Page actions (Overview's New download, a 36 px red pill)
   sit at the right, centered on the two lines, at every width.
 - **Sections**: every card with a head is a shelf: the head sits on the
   canvas, the body is the grouped surface. Section actions are red text links

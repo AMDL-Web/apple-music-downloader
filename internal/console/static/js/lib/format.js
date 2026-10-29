@@ -120,6 +120,19 @@ export function shortDate(value) {
 }
 
 /**
+ * A date and time short enough for a row, in local time: "06:21" today,
+ * "Oct 28 23:31" earlier this year, "Oct 28, 2025 23:31" before that.
+ */
+export function dateTime(value, now = new Date()) {
+  const d = toDate(value);
+  if (!d) return '';
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (d.getFullYear() !== now.getFullYear()) return `${shortDate(d)}, ${d.getFullYear()} ${time}`;
+  if (d.getMonth() === now.getMonth() && d.getDate() === now.getDate()) return time;
+  return `${shortDate(d)} ${time}`;
+}
+
+/**
  * "Downloaded Oct 28 · took 3m 12s" for a finished job; '' when it has no
  * finish time. The duration needs started_at, which a job cancelled while
  * queued never gets.
@@ -147,14 +160,6 @@ export function pageSummary(page, counts, now = new Date()) {
       return counts ? `${count(counts.running)} running · ${count(counts.queued)} queued · ${count(counts.failed)} failed` : '';
     case 'showcase':
       return counts ? `${count(counts.completed)} completed` : '';
-    case 'logs':
-      return 'Structured backend log, newest last';
-    case 'system':
-      return 'Build, runtime, health and configuration';
-    case 'new':
-      return 'Paste Apple Music links to queue albums, songs, playlists, artists or stations';
-    case 'settings':
-      return 'Runtime configuration, Apple Music account and library sync';
     default:
       return '';
   }
@@ -349,31 +354,74 @@ export function artTextColor(bg, text) {
   return ratio(lb, 1) >= ratio(lb, 0) ? 'var(--on-art-light)' : 'var(--on-art-dark)';
 }
 
+// In the dark theme a light album color would be a bright slab on a black
+// page, so it is drawn at this HSL lightness at most (then darker until white
+// text reaches 4.5:1), with the same hue and no more chroma than it had.
+const DARK_ART_L = 0.24;
+
+const hex2 = (v) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0');
+
+/** "rrggbb" darkened for the dark theme, or null when it is dark enough already. */
+export function darkArtColor(hex) {
+  const c = parseHex(hex);
+  if (!c) return null;
+  const v = [c.r / 255, c.g / 255, c.b / 255];
+  const hi = Math.max(...v);
+  const lo = Math.min(...v);
+  const l = (hi + lo) / 2;
+  if (l <= DARK_ART_L) return null;
+  const chroma = hi - lo;
+  const s = chroma === 0 ? 0 : chroma / (1 - Math.abs(2 * l - 1));
+  let out = hex;
+  for (let to = DARK_ART_L; to > 0; to -= 0.02) {
+    const k = chroma === 0 ? 0 : Math.min(chroma, (1 - Math.abs(2 * to - 1)) * s) / chroma;
+    out = v.map((x) => hex2(to + (x - l) * k)).join('');
+    if (contrastRatio(out, 'ffffff') >= 4.5) break;
+  }
+  return out;
+}
+
+// Over a darkened background: Apple's color when it is the lighter one and
+// reaches 4.5:1, else the light fallback.
+const darkArtText = (bg, text) =>
+  parseHex(text) && luminance(text) > luminance(bg) && contrastRatio(bg, text) >= 4.5 ? `#${text}` : 'var(--on-art-light)';
+
 /**
  * The palette to paint behind and over a job's artwork. With `motion` the
  * square motion asset's own palette is used; Apple pairs each asset with its
- * own colors, and mixing them puts dark text on a dark video.
+ * own colors, and mixing them puts dark text on a dark video. A light
+ * background also gets `dark`, the colors for the dark theme.
  */
 export function artPalette(job, motion = false) {
   if (!job) return null;
   const p = motion ? 'motion_artwork_' : 'artwork_';
   const bg = job[`${p}bg_color`];
   if (!parseHex(bg)) return null;
-  return {
+  const texts = [1, 2, 3].map((n) => job[`${p}text_color${n}`]);
+  const out = {
     bg: `#${bg}`,
-    text1: artTextColor(bg, job[`${p}text_color1`]),
-    text2: artTextColor(bg, job[`${p}text_color2`]),
-    text3: artTextColor(bg, job[`${p}text_color3`]),
+    text1: artTextColor(bg, texts[0]),
+    text2: artTextColor(bg, texts[1]),
+    text3: artTextColor(bg, texts[2]),
   };
+  const dark = darkArtColor(bg);
+  if (dark) {
+    const [text1, text2, text3] = texts.map((t) => darkArtText(dark, t));
+    out.dark = { bg: `#${dark}`, text1, text2, text3 };
+  }
+  return out;
 }
 
 /**
  * CSS custom properties for a palette, for a Preact style object: --art-bg
- * and --art-t1..t3 (each text color already reaches 4.5:1 on --art-bg).
+ * and --art-t1..t3 (each text color already reaches 4.5:1 on --art-bg). With
+ * a `dark` variant each value is light-dark(), so the theme picks.
  */
 export function paletteStyle(palette) {
   if (!palette) return undefined;
-  return { '--art-bg': palette.bg, '--art-t1': palette.text1, '--art-t2': palette.text2, '--art-t3': palette.text3 };
+  const d = palette.dark;
+  const v = (k) => (d ? `light-dark(${palette[k]}, ${d[k]})` : palette[k]);
+  return { '--art-bg': v('bg'), '--art-t1': v('text1'), '--art-t2': v('text2'), '--art-t3': v('text3') };
 }
 
 /** Year of an Apple release date ("2022-10-21" -> "2022"), or ''. */

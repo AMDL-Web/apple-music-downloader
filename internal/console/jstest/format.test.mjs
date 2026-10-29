@@ -15,6 +15,8 @@ import {
   elapsed,
   relTime,
   absTime,
+  dateTime,
+  darkArtColor,
   clockTime,
   dayLabel,
   kHz,
@@ -34,6 +36,7 @@ import {
   displayId,
   safeHttpUrl,
   contrastRatio,
+  parseHex,
   artTextColor,
   artPalette,
   paletteStyle,
@@ -113,6 +116,14 @@ test('absTime, clockTime and dayLabel', () => {
   assert.equal(dayLabel('2026-01-03'), 'Jan 3');
 });
 
+test('dateTime: time today, date and time this year, the year before that', () => {
+  const now = new Date(2026, 9, 29, 12, 0);
+  assert.equal(dateTime(new Date(2026, 9, 29, 6, 21).toISOString(), now), '06:21');
+  assert.equal(dateTime(new Date(2026, 9, 28, 23, 31).toISOString(), now), 'Oct 28 23:31');
+  assert.equal(dateTime(new Date(2025, 9, 28, 23, 31).toISOString(), now), 'Oct 28, 2025 23:31');
+  assert.equal(dateTime('', now), '');
+});
+
 test('codec labels', () => {
   assert.equal(kHz(96000), '96');
   assert.equal(kHz(44100), '44.1');
@@ -171,7 +182,9 @@ test('artPalette uses the motion asset palette only when asked', () => {
     motion_artwork_text_color2: 'e0e0e0',
     motion_artwork_text_color3: 'd0d0d0',
   };
-  assert.deepEqual(artPalette(job), { bg: '#598090', text1: '#0a0a0a', text2: 'var(--on-art-dark)', text3: '#000000' });
+  const light = artPalette(job);
+  assert.deepEqual({ ...light, dark: undefined }, { bg: '#598090', text1: '#0a0a0a', text2: 'var(--on-art-dark)', text3: '#000000', dark: undefined });
+  // Already dark: no dark-theme variant.
   assert.deepEqual(artPalette(job, true), { bg: '#05104b', text1: '#f5f5f5', text2: '#e0e0e0', text3: '#d0d0d0' });
   assert.equal(artPalette({}), null);
   assert.equal(artPalette({ artwork_bg_color: 'red' }), null);
@@ -182,6 +195,31 @@ test('artPalette uses the motion asset palette only when asked', () => {
     '--art-t3': 'c',
   });
   assert.equal(paletteStyle(null), undefined);
+});
+
+test('a light album color gets a dark-theme variant with light text', () => {
+  // Blonde: a light gray slab with dark text.
+  const p = artPalette({ artwork_bg_color: 'e3e4e4', artwork_text_color1: '0a0a0a', artwork_text_color2: 'f5f5f5', artwork_text_color3: '2a2a2a' });
+  assert.equal(p.bg, '#e3e4e4');
+  const bg = p.dark.bg.slice(1);
+  const c = parseHex(bg);
+  const lightness = (Math.max(c.r, c.g, c.b) + Math.min(c.r, c.g, c.b)) / 2 / 255;
+  assert.ok(lightness <= 0.3, `dark bg ${bg} lightness ${lightness}`);
+  assert.equal(p.dark.text1, 'var(--on-art-light)');
+  assert.equal(p.dark.text2, '#f5f5f5');
+  assert.ok(contrastRatio(bg, 'ffffff') >= 4.5);
+  // Hue survives: a light pink stays reddish, no more vivid than it was.
+  const pink = parseHex(darkArtColor('ffc0cb'));
+  assert.ok(pink.r > pink.g && pink.r > pink.b, JSON.stringify(pink));
+  // A light yellow is pushed darker until white text reaches 4.5:1.
+  assert.ok(contrastRatio(darkArtColor('ffff66'), 'ffffff') >= 4.5);
+  assert.equal(darkArtColor('101010'), null);
+  assert.deepEqual(paletteStyle(p), {
+    '--art-bg': `light-dark(#e3e4e4, ${p.dark.bg})`,
+    '--art-t1': `light-dark(${p.text1}, var(--on-art-light))`,
+    '--art-t2': `light-dark(${p.text2}, #f5f5f5)`,
+    '--art-t3': `light-dark(${p.text3}, var(--on-art-light))`,
+  });
 });
 
 test('finishedLine shows the finish date and the duration when both stamps exist', () => {
@@ -200,7 +238,8 @@ test('pageSummary reads the feed counts per page', () => {
   assert.equal(pageSummary('queue', null, now), '');
   assert.equal(pageSummary('showcase', counts, now), '13 completed');
   assert.equal(pageSummary('notfound', counts, now), '');
-  for (const page of ['new', 'settings']) assert.ok(pageSummary(page, null, now), `${page} has a summary before the feed loads`);
+  // The page names say what these pages are; only live counts get a line.
+  for (const page of ['logs', 'system', 'new', 'settings']) assert.equal(pageSummary(page, counts, now), '', page);
 });
 
 test('jobFacts gives kicker and meta parts, empty when unknown', () => {

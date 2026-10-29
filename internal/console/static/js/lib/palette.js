@@ -6,7 +6,7 @@
 import { buildHash, newDownloadHash, settingsHash } from './route.js';
 import { extractLinks } from './links.js';
 import { SETTINGS_SECTIONS, FIELDS } from './settings.js';
-import { jobTitle, jobSubtitle, typeLabel, shortDate } from './format.js';
+import { jobTitle, jobSubtitle, typeLabel, dateTime } from './format.js';
 import { jobStatusView } from './status.js';
 
 const STATIC_ITEMS = [
@@ -18,7 +18,7 @@ const STATIC_ITEMS = [
   { id: 'nav-system', group: 'Navigate', label: 'System', icon: 'server', hash: buildHash('system'), keys: 'g y' },
   { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,' },
   { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },
-  { id: 'f-running', group: 'Filters', label: 'Show active jobs', icon: 'dot', hash: buildHash('queue') },
+  { id: 'f-running', group: 'Filters', label: 'Show active jobs', icon: 'dot', hash: buildHash('queue', { tab: 'active' }) },
   { id: 'f-errors', group: 'Filters', label: 'Show error logs', icon: 'triangle-alert', hash: buildHash('logs', { level: 'warn,error' }) },
 ];
 
@@ -81,7 +81,7 @@ export function jobItem(job) {
     id: `job-${job.id}`,
     group: 'Jobs',
     label: jobTitle(job),
-    sub: [jobSubtitle(job), typeLabel(job.type), status && status.label, shortDate(job.updated_at || job.created_at)].filter(Boolean).join(' · '),
+    sub: [jobSubtitle(job), typeLabel(job.type), status && status.label, dateTime(job.updated_at || job.created_at)].filter(Boolean).join(' · '),
     icon: 'music',
     hash: buildHash('queue', {}, job.id),
     dir: 'auto',

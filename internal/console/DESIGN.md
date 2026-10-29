@@ -162,7 +162,11 @@ Stable class names and attributes the skin can style without touching JS:
 `--art-bg` and `--art-t1`, `--art-t2`, `--art-t3` (from `lib/format.js`
 `artPalette`/`paletteStyle`) plus `.has-palette` when Apple sent one; the
 drawer's `.drawer-head` carries the properties without the class. Each `--art-t*` already reaches 4.5:1 on `--art-bg` or is replaced by
-`--on-art-light`/`--on-art-dark`. A playing motion cover switches to the
+`--on-art-light`/`--on-art-dark`. A background lighter than 24 % HSL
+lightness also gets a dark-theme variant (`darkArtColor`: same hue, darkened
+until white text reaches 4.5:1, its text light), and each property is then a
+`light-dark()` pair, so a light album never paints a bright slab on the dark
+page. A playing motion cover switches to the
 `motion_artwork_*` palette; the two are never mixed. `.art` also sets `--art-bg`
 behind a cover while it loads or when it fails.
 

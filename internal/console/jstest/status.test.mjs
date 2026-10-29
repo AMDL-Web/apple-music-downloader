@@ -100,7 +100,10 @@ test('health rows', () => {
     label: 'Ready',
     detail: 'US, JP',
   });
-  assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com'] } }).detail, '');
+  // Ready without regions still says something: the accounts, else that it is signed in.
+  assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com'] } }).detail, '1 account signed in');
+  assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com', 'b@example.com'] } }).detail, '2 accounts signed in');
+  assert.equal(wrapperView({ data: { ready: true, status: true } }).detail, 'Signed in');
   assert.equal(wrapperView({ data: { ready: false, status: true, regions: [], accounts: [] } }).detail, 'No account logged in');
   assert.equal(wrapperView({ error: { status: 503, message: 'unreachable' } }).label, 'Unreachable');
 
