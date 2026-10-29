@@ -136,6 +136,10 @@ test('a running job with tracks and nothing finished is working, not empty', () 
   const song = jobProgress({ status: 'running', total_items: 1 });
   assert.equal(song.working, true);
   assert.equal(song.aria, '0 of 1 tracks, working');
+  assert.equal(song.text, 'Working', 'a lone track would read 0 / 1 for the whole run');
+  assert.equal(jobProgress({ status: 'running', total_items: 12 }).text, '0 / 12');
+  assert.equal(jobProgress({ status: 'completed', total_items: 1, completed_items: 1 }).text, '1 / 1');
+  assert.equal(jobProgress({ status: 'failed', total_items: 1 }).text, '0 / 1');
   assert.equal(jobProgress({ status: 'running', total_items: 5, completed_items: 1 }).working, false);
   assert.equal(jobProgress({ status: 'running', total_items: 0 }).working, false);
   assert.equal(jobProgress({ status: 'queued', total_items: 3 }).working, false);
@@ -222,7 +226,7 @@ test('activityView names the event and keeps one useful line', () => {
   assert.deepEqual(activityView({ type: 'resolved_input', message: 'album' }), { label: 'Resolved', role: 'neutral', text: 'album' });
   const failed = activityView({ type: 'job_failed', message: 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q"}]}' });
   assert.equal(failed.role, 'danger');
-  assert.equal(failed.text, 'catalog request failed: 404 Not Found');
+  assert.equal(failed.text, 'Apple Music has nothing at this link (404)');
   assert.equal(activityView({ type: 'operation_exhausted', phase: 'resolve_tracks' }).text, 'resolve tracks');
   assert.equal(activityView({ type: 'some_new_event' }).label, 'Some new event');
 });

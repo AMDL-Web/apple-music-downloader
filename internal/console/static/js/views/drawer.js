@@ -25,7 +25,7 @@ import { jobStatusView, hookStatusView, activityView, isTerminal } from '../lib/
 import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
 import { buildHash, settingsHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
-import { Palette, TrackStrip, TrackList } from './drawer-tracks.js';
+import { Palette, TrackStrip, TrackLegend, TrackList } from './drawer-tracks.js';
 import {
   useApp,
   Artwork,
@@ -127,10 +127,10 @@ export function JobDrawer({ jobId, onClose }) {
       ref=${panel}
     >
       <div class="drawer-bar">
-        <${Button} variant="ghost" icon="chevron-left" className="drawer-back" aria-label="Back" onClick=${onClose} data-autofocus>Back</${Button}>
-        <span class="drawer-bar-id mono" title=${jobId}>${displayId(jobId)}</span>
-        <${CopyButton} text=${jobId} label="Copy job ID" />
         <${Button} variant="ghost" icon="x" className="drawer-close" aria-label="Close" onClick=${onClose} data-autofocus />
+        <${CopyButton} text=${jobId} label="Copy job ID" />
+        <span class="drawer-bar-id mono" title=${jobId}>${displayId(jobId)}</span>
+        <${Button} variant="ghost" icon="chevron-left" className="drawer-back" aria-label="Back" onClick=${onClose} data-autofocus>Back</${Button}>
       </div>
       <div class="drawer-scroll">
         ${missing
@@ -225,7 +225,11 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
       </div>
       ${items.length === 0
         ? html`<${Empty} icon="list" title=${job.status === 'running' || job.status === 'queued' ? 'No tracks resolved yet' : 'No tracks'} />`
-        : [html`<${TrackStrip} key="strip" items=${items} />`, html`<${TrackList} key="list" items=${items} />`]}
+        : [
+            html`<${TrackStrip} key="strip" items=${items} />`,
+            html`<${TrackLegend} key="legend" items=${items} />`,
+            html`<${TrackList} key="list" items=${items} />`,
+          ]}
     </section>
 
     <section class="drawer-section" aria-labelledby="hooks-title">

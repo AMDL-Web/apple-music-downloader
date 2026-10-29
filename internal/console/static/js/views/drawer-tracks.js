@@ -2,7 +2,7 @@
 // strip and the track list with its stage meters.
 
 import { html } from '../ui/preact.js';
-import { trackLength, bytes, codecLabel, isHiRes } from '../lib/format.js';
+import { trackLength, bytes, codecLabel, codecMeaning, codecLegend } from '../lib/format.js';
 import { itemStatusView } from '../lib/status.js';
 import { StatusText, StageTrack, Icon, Chip } from '../ui/components.js';
 
@@ -41,6 +41,18 @@ export function TrackStrip({ items }) {
   </div>`;
 }
 
+// A status message that only repeats the status label adds nothing under it.
+const sameWords = (a, b) => String(a).trim().replace(/[.\s]+$/, '').toLowerCase() === String(b).trim().toLowerCase();
+
+/** The key to the codec chips below it: "ALAC 24/44.1 = Lossless 24-bit / 44.1 kHz". */
+export function TrackLegend({ items }) {
+  const legend = codecLegend(items);
+  if (legend.length === 0) return null;
+  return html`<p class="track-legend">
+    ${legend.map((k) => html`<span key=${k.label} class="track-legend-item"><span class="track-legend-label">${k.label}</span> ${k.text}</span>`)}
+  </p>`;
+}
+
 export function TrackList({ items }) {
   return html`<ol class="tracks">
     ${items.map((it) => {
@@ -53,7 +65,7 @@ export function TrackList({ items }) {
           ${it.artist ? html`<span class="track-artist" dir="auto">${it.artist}</span>` : null}
         </span>
         <span class="track-len num">${trackLength(it.duration_ms)}</span>
-        <span class="track-codec">${codec ? html`<${Chip} title=${isHiRes(it) ? 'High resolution' : undefined}>${codec}</${Chip}>` : null}</span>
+        <span class="track-codec">${codec ? html`<${Chip} title=${codecMeaning(it) || undefined}>${codec}</${Chip}>` : null}</span>
         <span class="track-stages"><${StageTrack} item=${it} /></span>
         <span class="track-status">
           <${StatusText} view=${v} />
@@ -62,7 +74,7 @@ export function TrackList({ items }) {
         <span class="track-size num">${it.file_size > 0 ? bytes(it.file_size) : ''}</span>
         ${it.status === 'failed' && it.error
           ? html`<p class="track-error">${it.error}</p>`
-          : it.status_message && !['completed', 'skipped_existing'].includes(it.status)
+          : it.status_message && !['completed', 'skipped_existing'].includes(it.status) && !sameWords(it.status_message, v.label)
             ? html`<p class="track-note">${it.status_message}</p>`
             : null}
       </li>`;

@@ -240,21 +240,27 @@ and motion covers.
   Values switch without count-up; "—" while disconnected.
 - **Job row**: cover, facts, title, artist/curator · type · storefront,
   progress, status badge, relative time, chevron. Indeterminate "Resolving"
-  while `total_items` is 0. A job without a title shows its link (host and path)
+  while `total_items` is 0; a running one-track job with nothing finished reads
+  "Working" instead of a "0 / 1" that never moves. A job without a title shows its link (host and path)
   muted, with a hint line instead of an artist. A failed job shows a one-line
-  reason (`errorSummary` in `lib/format.js`), never raw JSON. Under 640 px it is a two-line card.
+  reason (`errorSummary` in `lib/format.js`), never raw JSON; a stored legacy
+  catalog failure ("catalog request failed: 404 Not Found") reads in plain words
+  (`legacyCatalogError`), and the drawer keeps the stored text under "Full error". Under 640 px it is a two-line card.
 - **Stage track**: seven segments (Resolve, Download, Decrypt, Remux, Verify,
   Tag, Save). Download and decrypt fill to their fraction; download at 0 while
   downloading is striped ("size unknown"); a completed item with
   `verified=false` shows a hollow "Not verified" segment, never red.
 - **Job drawer**: dialog with focus trap, Esc and Back close it, focus returns
-  to the row. Header with cover, artist link, meta, status, live tag;
+  to the row. Close is first in the DOM, so Tab goes from it to the header's
+  Copy job ID and then the body (`.drawer-bar` is `row-reverse`, which keeps the
+  drawn order). Header with cover, artist link, meta, status, live tag;
   created/started/finished/duration; Cancel (inline confirm) for queued or
   running, Retry for failed or cancelled, View logs, Open in Apple Music, Delete (a
   `ConfirmDialog` beside the panel) for completed, failed or cancelled jobs,
   which closes the drawer; palette swatches;
   per-track strip; track list (codec chip such as `ALAC 24/96`, length, size,
-  error); hooks; Activity: the job's persisted events (the job stream replays
+  error; `.track-legend` above it spells each numbered chip out, "ALAC 24/44.1
+  Lossless 24-bit / 44.1 kHz", as the Qualities sheet does); hooks; Activity: the job's persisted events (the job stream replays
   them from the start; `lib/store.js` keeps those at or before the snapshot cursor
   out of the job and items) plus live ones, newest first, without per-item
   progress. A failed job shows a notice with the trimmed reason and the full error

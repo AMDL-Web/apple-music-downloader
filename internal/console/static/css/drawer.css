@@ -38,7 +38,10 @@
 }
 
 .drawer-bar {
+  /* Close comes first in the DOM, so Tab goes from it to the header's other
+     actions; row-reverse keeps the drawn order (Back, id, Copy, Close). */
   display: flex;
+  flex-direction: row-reverse;
   align-items: center;
   gap: var(--s-2);
   height: var(--topbar-h);
@@ -426,6 +429,22 @@
   line-height: var(--lh-mono-12);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* The key to the codec chips: "ALAC 24/44.1" and what it means, above the list. */
+.track-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-0_5) var(--s-4);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.track-legend-label {
+  color: var(--text-primary);
+  font-weight: var(--w-medium);
 }
 
 /* Where a finished job's files are. */

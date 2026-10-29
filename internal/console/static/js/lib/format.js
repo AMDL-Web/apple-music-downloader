@@ -191,6 +191,31 @@ export function codecLabel(item) {
 }
 
 /**
+ * What a codec chip's numbers mean, in the words of the Qualities sheet
+ * (lib/lookup.js qualitySpec): "Lossless 24-bit / 44.1 kHz" for ALAC, the
+ * bare "24-bit / 48 kHz" for another codec; empty without bit depth and rate.
+ */
+export function codecMeaning(item) {
+  if (!item || !(item.bit_depth > 0 && item.sample_rate > 0)) return '';
+  const spec = `${item.bit_depth}-bit / ${kHz(item.sample_rate)}\u00a0kHz`;
+  return item.codec === 'alac' ? `Lossless ${spec}` : spec;
+}
+
+/**
+ * The key to the chips of a track list: one {label, text} per distinct chip
+ * that carries numbers ("ALAC 24/44.1" -> "Lossless 24-bit / 44.1 kHz"), in
+ * first-seen order.
+ */
+export function codecLegend(items) {
+  const seen = new Map();
+  for (const it of items || []) {
+    const text = codecMeaning(it);
+    if (text && !seen.has(codecLabel(it))) seen.set(codecLabel(it), text);
+  }
+  return [...seen].map(([label, text]) => ({ label, text }));
+}
+
+/**
  * The codec mix from /stats `codecs` (most tracks first) as shares of all
  * completed tracks. Past `max` formats, the tail is folded into "Other".
  * @returns {{key: string, label: string, tracks: number, share: number}[]}
@@ -265,17 +290,38 @@ export function unresolvedHint(job) {
 
 const ERROR_SUMMARY_MAX = 140;
 
+const CATALOG_FAILED = /catalog request failed:\s*(\d{3})\b/i;
+
+/**
+ * Jobs stored before the server named Apple's answers keep "catalog request
+ * failed: 404 Not Found" as their error. Plain words for those forms, or ''
+ * for any other text. The caller keeps the stored text for "Full error".
+ */
+export function legacyCatalogError(text) {
+  const m = CATALOG_FAILED.exec(String(text || ''));
+  if (!m) return '';
+  const code = Number(m[1]);
+  if (code === 404) return 'Apple Music has nothing at this link (404)';
+  if (code === 401 || code === 403) return `Apple Music refused access (${code})`;
+  if (code === 429) return 'Apple Music is limiting requests, try again later (429)';
+  if (code >= 500) return `Apple Music had a server problem (${code})`;
+  return `Apple Music rejected the request (${code})`;
+}
+
 /**
  * One readable line from a job's error text: the first line, cut before an
  * embedded JSON body ("404 Not Found: {"errors":...}" -> "404 Not Found"), at
- * most 140 characters. Clean one-line text passes through unchanged; the full
- * text stays available to the caller (a title attribute).
+ * most 140 characters, with a stored legacy catalog error in plain words
+ * (legacyCatalogError). Clean one-line text passes through unchanged; the
+ * full text stays available to the caller (a title attribute).
  */
 export function errorSummary(error) {
   let text = String(error || '').split(/\r?\n/)[0];
   const brace = text.search(/[{[]/);
   if (brace > 0) text = text.slice(0, brace);
   text = text.replace(/[\s:;,]+$/, '').trim();
+  const plain = legacyCatalogError(text);
+  if (plain) return plain;
   return text.length > ERROR_SUMMARY_MAX ? `${text.slice(0, ERROR_SUMMARY_MAX - 1).trimEnd()}…` : text;
 }
 

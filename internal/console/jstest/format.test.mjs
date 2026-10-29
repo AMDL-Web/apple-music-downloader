@@ -19,6 +19,9 @@ import {
   dayLabel,
   kHz,
   codecLabel,
+  codecMeaning,
+  codecLegend,
+  legacyCatalogError,
   formatShares,
   isHiRes,
   jobTitle,
@@ -296,7 +299,7 @@ test('an unresolved job is shown by its link, not by a guessed title', () => {
 });
 
 test('errorSummary keeps the first line and drops an embedded JSON body', () => {
-  assert.equal(errorSummary('catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}'), 'catalog request failed: 404 Not Found');
+  assert.equal(errorSummary('Apple Music has no album 1 in storefront us (404)'), 'Apple Music has no album 1 in storefront us (404)');
   assert.equal(errorSummary('Apple Music has nothing at this link.'), 'Apple Music has nothing at this link.');
   assert.equal(errorSummary('first line\nsecond line'), 'first line');
   assert.equal(errorSummary('{"error":"x"}'), '{"error":"x"}');
@@ -305,4 +308,44 @@ test('errorSummary keeps the first line and drops an embedded JSON body', () => 
   const long = errorSummary('x'.repeat(300));
   assert.equal(long.length, 140);
   assert.ok(long.endsWith('…'));
+});
+
+test('legacyCatalogError puts the stored catalog failures into plain words', () => {
+  const nf = 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}';
+  assert.equal(legacyCatalogError(nf), 'Apple Music has nothing at this link (404)');
+  assert.equal(legacyCatalogError('read Apple Music catalog: catalog request failed: 404 Not Found'), 'Apple Music has nothing at this link (404)');
+  assert.equal(legacyCatalogError('catalog request failed: 403 Forbidden'), 'Apple Music refused access (403)');
+  assert.equal(legacyCatalogError('catalog request failed: 401 Unauthorized'), 'Apple Music refused access (401)');
+  assert.equal(legacyCatalogError('catalog request failed: 429 Too Many Requests'), 'Apple Music is limiting requests, try again later (429)');
+  assert.equal(legacyCatalogError('catalog request failed: 503 Service Unavailable'), 'Apple Music had a server problem (503)');
+  assert.equal(legacyCatalogError('catalog request failed: 400 Bad Request'), 'Apple Music rejected the request (400)');
+  // Anything else, including the server's current wording, is not touched.
+  assert.equal(legacyCatalogError('Apple Music has no album 1 in storefront us (404)'), '');
+  assert.equal(legacyCatalogError('disk full'), '');
+  assert.equal(legacyCatalogError(undefined), '');
+});
+
+test('errorSummary words a stored legacy catalog error and the caller keeps the full text', () => {
+  const raw = 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}';
+  assert.equal(errorSummary(raw), 'Apple Music has nothing at this link (404)');
+  assert.equal(errorSummary('catalog request failed: 502 Bad Gateway\nretry later'), 'Apple Music had a server problem (502)');
+  assert.notEqual(errorSummary(raw), raw.trim(), 'the drawer offers "Full error" when the summary differs');
+});
+
+test('codecMeaning spells a chip out in the words of the Qualities sheet', () => {
+  assert.equal(codecMeaning({ codec: 'alac', bit_depth: 24, sample_rate: 44100 }), 'Lossless 24-bit / 44.1\u00a0kHz');
+  assert.equal(codecMeaning({ codec: 'alac', bit_depth: 16, sample_rate: 44100 }), 'Lossless 16-bit / 44.1\u00a0kHz');
+  assert.equal(codecMeaning({ codec: 'aac', bit_depth: 16, sample_rate: 48000 }), '16-bit / 48\u00a0kHz');
+  assert.equal(codecMeaning({ codec: 'aac' }), '');
+  assert.equal(codecMeaning(null), '');
+});
+
+test('codecLegend lists each distinct numbered chip once, in first-seen order', () => {
+  const alac = (rate) => ({ codec: 'alac', bit_depth: 24, sample_rate: rate });
+  assert.deepEqual(codecLegend([alac(44100), { codec: 'aac' }, alac(44100), alac(48000)]), [
+    { label: 'ALAC 24/44.1', text: 'Lossless 24-bit / 44.1\u00a0kHz' },
+    { label: 'ALAC 24/48', text: 'Lossless 24-bit / 48\u00a0kHz' },
+  ]);
+  assert.deepEqual(codecLegend([{ codec: 'aac' }]), []);
+  assert.deepEqual(codecLegend(undefined), []);
 });

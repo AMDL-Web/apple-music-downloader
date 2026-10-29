@@ -243,7 +243,8 @@ export function jobProgress(job) {
     ...c,
     indeterminate,
     working,
-    text: indeterminate ? 'Resolving' : `${c.done} / ${c.total}`,
+    // A lone track in flight stays at 0 / 1 for the whole run; say it is working.
+    text: indeterminate ? 'Resolving' : working && c.total === 1 ? 'Working' : `${c.done} / ${c.total}`,
     aria: indeterminate ? 'Resolving tracks' : aria,
   };
 }
