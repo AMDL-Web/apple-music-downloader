@@ -104,9 +104,9 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 | 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
 | 504 | `upstream_timeout` (wrapper login) |
 
-`feature_unavailable` means an optional dependency of the route is not wired into the
-process (a nil field of `internal/api#Deps`), and on `GET /logs` and `GET /logs/stream`
-also that `logging.buffer_size` is `0`, so no log history is kept.
+`feature_unavailable` comes only from `GET /logs` and `GET /logs/stream`: `logging.buffer_size`
+is `0`, so no log history is kept. Every other dependency in `internal/api#Deps` is
+required, and the process does not start without it.
 
 Per-URL submit results keep the coarse `status` enum (`accepted`, `invalid`,
 `duplicate_in_request`, `duplicate_active`, `queue_full`, plus `error` for a server-side
@@ -205,8 +205,9 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   (`internal/config#CatalogConfig.DeveloperTokenSigningEnabled`), else `legacy`; no key
   material is returned. `jobs` comes from `internal/jobs#Manager.QueueStats`; `workers`
   and `pools` are startup values. `tools` is the `internal/media#ToolChecker` result.
-  `storage` is `statfs` on Linux, macOS and FreeBSD; elsewhere, or when the directory
-  cannot be inspected, the entry carries `error` instead of the byte counts.
+  `storage` comes from `statfs`; when a directory cannot be inspected, its entry carries
+  `error` instead of the byte counts. The backend builds only for Linux, macOS and
+  FreeBSD (`statfs` here, process groups for exec hooks); release images are Linux.
 - `GET /stats?days=N` (1-90, default 14; anything else is `400 invalid_request`).
   `totals` and `codecs` cover every retained job; `daily` and `hooks` cover the last
   `days` UTC calendar days, today included. `daily` has exactly `days` entries, oldest

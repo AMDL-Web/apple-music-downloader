@@ -200,7 +200,6 @@ test('wrapperErrorText per status and code', () => {
   assert.match(bad.message, /could not complete/);
   assert.match(bad.detail, /connection refused/);
   assert.match(wrapperErrorText(e(503, 'wrapper_unavailable')).message, /not reachable/);
-  assert.match(wrapperErrorText(e(503, 'feature_unavailable')).message, /no wrapper connection/);
   assert.match(wrapperErrorText(e(504, 'upstream_timeout')).message, /in time/);
   assert.equal(wrapperErrorText(e(400, 'invalid_request', 'username and password are required')).message, 'username and password are required');
   assert.match(wrapperErrorText(e(0, 'timeout')).message, /in time/);
@@ -309,7 +308,6 @@ test('wrapperUnreachable reads the address out of a gRPC dial error', () => {
   const login = wrapperErrorText(new ApiError(502, 'upstream_error', raw), 'login');
   assert.match(login.message, /session service/, 'a gRPC Unavailable behind a 502 reads the same');
   assert.equal(wrapperUnreachable(new ApiError(502, 'upstream_error', 'some other failure')), null);
-  assert.equal(wrapperUnreachable(new ApiError(503, 'feature_unavailable', 'no wrapper')), null, 'no wrapper connection is a different state');
   assert.equal(wrapperUnreachable(new ApiError(0, 'network_error', 'Cannot reach the server.')), null, 'the console server itself being down is not the wrapper');
   assert.equal(wrapperErrorText(new ApiError(503, 'wrapper_unavailable', 'dns lookup failed'), 'status').message, 'The Apple Music session service (wrapper-manager) is not reachable.');
 });

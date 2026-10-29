@@ -289,8 +289,7 @@ and motion covers.
   2,000 rows. Warn and error rows are marked in the skin's warning and danger
   roles.
 - **Health rows**: name · status · detail for backend, wrapper, library sync
-  (503 is "Not configured", not an error) and hooks, plus workers, queue,
-  downloads disk and uptime from `/system`; polled every 30 s and on focus.
+  and hooks, plus workers, queue, downloads disk and uptime from `/system`; polled every 30 s and on focus.
 - **Config summary** (System): a few `GET /config` values (codec priority,
   downloads folder, simulate, library sync, log level, whether the media user
   token is set, pinned key count) and "Open settings".

@@ -12,8 +12,8 @@ info:
     code-specific. The one exception is GET /api/v1/health, whose 503 body is a
     HealthResponse. A path under /api/ that does not exist answers 404
     route_not_found; a path that exists with other methods answers 405
-    method_not_allowed with an Allow header. A route whose optional backend
-    component is not wired into the process answers 503 feature_unavailable.
+    method_not_allowed with an Allow header. The log routes answer 503
+    feature_unavailable when the process keeps no log history.
 
     Streams are Server-Sent Events. Each resumes from the Last-Event-ID header or
     the `cursor` query parameter; the header wins when both are set, and a
@@ -286,8 +286,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/config/reload:
     post:
       tags: [System]
@@ -308,8 +306,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConfigResponse'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/hooks:
     get:
       tags: [System]
@@ -354,8 +350,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LibrarySyncStatus'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/library-sync/reset:
     post:
       tags: [System]
@@ -379,8 +373,6 @@ paths:
                 $ref: '#/components/schemas/LibrarySyncResetResponse'
         '500':
           $ref: '#/components/responses/StoreError'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/wrapper/status:
     get:
       tags: [Wrapper]
@@ -395,9 +387,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/WrapperStatus'
         '503':
-          description: >-
-            wrapper_unavailable: wrapper-manager did not answer;
-            feature_unavailable: no wrapper client is wired into this process.
+          description: wrapper_unavailable; wrapper-manager did not answer.
           content:
             application/json:
               schema:
@@ -441,8 +431,6 @@ paths:
           $ref: '#/components/responses/Conflict'
         '502':
           $ref: '#/components/responses/BadGateway'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
         '504':
           $ref: '#/components/responses/GatewayTimeout'
   /api/v1/wrapper/login/{login_id}/2fa:
@@ -477,8 +465,6 @@ paths:
           $ref: '#/components/responses/Conflict'
         '502':
           $ref: '#/components/responses/BadGateway'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
         '504':
           $ref: '#/components/responses/GatewayTimeout'
   /api/v1/wrapper/logout:
@@ -507,8 +493,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '502':
           $ref: '#/components/responses/BadGateway'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/quality:
     post:
       tags: [Quality]
@@ -558,8 +542,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
   /api/v1/lookup:
     post:
       tags: [Downloads]
@@ -667,8 +649,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '503':
-          $ref: '#/components/responses/FeatureUnavailable'
         '504':
           description: upstream_timeout; the catalog did not answer within 15 seconds. details.link carries the parsed link.
           content:
@@ -1181,12 +1161,6 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-    FeatureUnavailable:
-      description: feature_unavailable; the component behind this route is not wired into this process.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
     GatewayTimeout:
       description: upstream_timeout; the wrapper login timed out.
       content:
@@ -1244,8 +1218,8 @@ components:
         invalid_overrides, config_key_not_mutable, config_key_pinned,
         invalid_config, no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 502 upstream_error; 503 queue_full,
-        wrapper_unavailable, feature_unavailable (the route's optional component
-        is not wired into this process); 504 upstream_timeout.
+        wrapper_unavailable, feature_unavailable (the process keeps no log
+        history, so the log routes cannot answer); 504 upstream_timeout.
       enum:
         - invalid_request
         - invalid_json
@@ -1405,8 +1379,7 @@ components:
           description: >-
             Free space of downloads_dir and temp_dir, in that order. Either both
             byte counts or error is present; error is set when the directory
-            cannot be inspected (for example it does not exist) or the platform
-            has no statfs.
+            cannot be inspected (for example it does not exist).
           items:
             type: object
             required: [name, path]

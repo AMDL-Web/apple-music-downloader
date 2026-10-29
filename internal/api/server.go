@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -16,9 +17,9 @@ import (
 	"amdl/internal/logging"
 )
 
-// Deps are the components the HTTP layer serves. Config, Store, Hub and
-// Manager are required. The rest are optional: when one is nil, the routes
-// that need it answer 503 feature_unavailable and nothing else changes.
+// Deps are the components the HTTP layer serves. Every field is required
+// except Logger and Logging; New refuses a nil one, so no handler answers 503
+// for a missing dependency.
 type Deps struct {
 	// Config is the live runtime config shared with the download pipeline;
 	// the /config routes read, reload and replace its snapshot.
@@ -29,8 +30,9 @@ type Deps struct {
 	// Logger is the base logger of request logs; nil means slog.Default().
 	Logger *slog.Logger
 	// Logging backs GET /logs and GET /logs/stream and applies runtime
-	// log-level changes. With logging.buffer_size 0 (no in-memory retention)
-	// the two log routes answer 503 feature_unavailable.
+	// log-level changes. When it is nil, or logging.buffer_size is 0 (no
+	// in-memory retention), the two log routes answer 503
+	// feature_unavailable.
 	Logging     *logging.System
 	Wrapper     WrapperService
 	Quality     QualityService
@@ -64,8 +66,26 @@ type Server struct {
 	endStreams context.CancelFunc
 }
 
-// New returns a Server for deps. It does no I/O.
-func New(deps Deps) *Server {
+// New returns a Server for deps, or an error naming the first required
+// dependency that is nil. It does no I/O.
+func New(deps Deps) (*Server, error) {
+	for _, dep := range []struct {
+		name    string
+		missing bool
+	}{
+		{"Config", deps.Config == nil},
+		{"Store", deps.Store == nil},
+		{"Hub", deps.Hub == nil},
+		{"Manager", deps.Manager == nil},
+		{"Wrapper", deps.Wrapper == nil},
+		{"Quality", deps.Quality == nil},
+		{"LibrarySync", deps.LibrarySync == nil},
+		{"Catalog", deps.Catalog == nil},
+	} {
+		if dep.missing {
+			return nil, fmt.Errorf("api: Deps.%s is required", dep.name)
+		}
+	}
 	s := &Server{
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
@@ -77,13 +97,13 @@ func New(deps Deps) *Server {
 	// size the log store was built with. A store without retention keeps no
 	// history for the log routes to serve.
 	if deps.Logging != nil {
-		if deps.Config != nil && deps.Config.Get().Logging.BufferSize == 0 {
+		if deps.Config.Get().Logging.BufferSize == 0 {
 			s.logsOff = true
 		} else {
 			s.logStore = deps.Logging.Store
 		}
 	}
-	return s
+	return s, nil
 }
 
 // currentConfig returns the live runtime config snapshot; nil-safe for test

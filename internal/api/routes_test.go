@@ -305,3 +305,23 @@ func TestConsoleMount(t *testing.T) {
 	recorder = requestJSON(t, routes, http.MethodGet, "/api/v1/nope", "")
 	assertErrorCode(t, recorder, http.StatusNotFound, "route_not_found")
 }
+
+// A process missing a required service fails at startup instead of serving
+// 503s from the routes that need it.
+func TestNewRequiresEveryService(t *testing.T) {
+	if _, err := New(Deps{}); err == nil || !strings.Contains(err.Error(), "Deps.Config") {
+		t.Fatalf("New(Deps{}) error = %v, want Deps.Config named", err)
+	}
+	full := newServer(t, Deps{})
+	deps := Deps{
+		Config: full.cfg, Store: full.store, Hub: full.hub, Manager: full.manager,
+		Wrapper: full.wrapper, Quality: full.quality, LibrarySync: full.librarySync,
+	}
+	if _, err := New(deps); err == nil || !strings.Contains(err.Error(), "Deps.Catalog") {
+		t.Fatalf("New without Catalog error = %v, want Deps.Catalog named", err)
+	}
+	deps.Catalog = full.catalog
+	if _, err := New(deps); err != nil {
+		t.Fatalf("New with every service: %v", err)
+	}
+}

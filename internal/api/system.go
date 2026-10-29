@@ -24,10 +24,6 @@ func (s *Server) queryQuality(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "url is required")
 		return
 	}
-	if s.quality == nil {
-		writeFeatureUnavailable(w, "the quality probe")
-		return
-	}
 	result, err := s.quality.QueryQuality(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, CodeUpstreamError, err.Error())

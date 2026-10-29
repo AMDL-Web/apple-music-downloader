@@ -40,7 +40,7 @@ func TestSystemInfo(t *testing.T) {
 	if resp := manager.SubmitBatch(context.Background(), []string{"album|us|1"}, nil); resp.Accepted != 1 {
 		t.Fatalf("submit: %+v", resp.Results)
 	}
-	server := New(Deps{Config: config.NewStore(cfg), Store: store, Hub: hub, Manager: manager})
+	server := newServer(t, Deps{Config: config.NewStore(cfg), Store: store, Hub: hub, Manager: manager})
 	server.now = func() time.Time { return buildinfo.StartedAt.Add(90*time.Second + 600*time.Millisecond) }
 
 	rec := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/system", "")
@@ -186,7 +186,7 @@ func TestLogRoutesWithoutRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = system.Close() })
-	server := New(Deps{Config: config.NewStore(cfg), Logger: system.Logger, Logging: system})
+	server := newServer(t, Deps{Config: config.NewStore(cfg), Logger: system.Logger, Logging: system})
 	for _, path := range []string{"/api/v1/logs", "/api/v1/logs/stream"} {
 		rec := requestJSON(t, server.Routes(), http.MethodGet, path, "")
 		assertErrorCode(t, rec, http.StatusServiceUnavailable, CodeFeatureUnavailable)

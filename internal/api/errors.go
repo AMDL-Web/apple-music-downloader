@@ -100,9 +100,3 @@ func writeJobLookupError(w http.ResponseWriter, jobID string, err error) {
 func isJobNotFound(err error) bool {
 	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, db.ErrJobNotFound)
 }
-
-// writeFeatureUnavailable answers a route whose optional dependency was not
-// wired into this process (a nil field of Deps).
-func writeFeatureUnavailable(w http.ResponseWriter, feature string) {
-	writeError(w, http.StatusServiceUnavailable, CodeFeatureUnavailable, feature+" is not available in this process")
-}

@@ -176,12 +176,15 @@ func run(ctx context.Context, files configFiles) (err error) {
 	httpHandlerCtx, cancelHTTPHandlers := context.WithCancel(context.Background())
 	defer cancelHTTPHandlers()
 	var activeHTTPHandlers sync.WaitGroup
-	apiServer := api.New(api.Deps{
+	apiServer, err := api.New(api.Deps{
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperClient, Quality: qualityService, LibrarySync: libraryWatcher,
 		Catalog: catalog,
 	})
+	if err != nil {
+		return fmt.Errorf("build api server: %w", err)
+	}
 	routes := apiServer.Routes()
 	httpServer := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

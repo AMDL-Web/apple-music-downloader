@@ -207,11 +207,8 @@ func TestQualityEndpointValidatesURL(t *testing.T) {
 
 func TestQualityEndpointErrors(t *testing.T) {
 	body := `{"url":"https://music.apple.com/us/album/x/1"}`
-	recorder := requestJSON(t, (&Server{}).Routes(), http.MethodPost, "/api/v1/quality", body)
-	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "feature_unavailable")
-
 	server := &Server{quality: &fakeQualityService{err: errors.New("catalog lookup failed")}}
-	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", body)
+	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", body)
 	assertErrorCode(t, recorder, http.StatusBadGateway, "upstream_error")
 }
 

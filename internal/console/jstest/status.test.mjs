@@ -103,7 +103,7 @@ test('health rows', () => {
   assert.equal(wrapperView({ data: { ready: false, status: true, regions: [], client_count: 0, accounts: [] } }).detail, 'No account logged in');
   assert.equal(wrapperView({ error: { status: 503, message: 'unreachable' } }).label, 'Unreachable');
 
-  assert.equal(librarySyncView({ error: { status: 503 } }).label, 'Not configured');
+  assert.equal(librarySyncView({ error: { status: 503, message: 'Service Unavailable' } }).label, 'Unavailable');
   assert.equal(librarySyncView({ data: { enabled: false } }).label, 'Off');
   assert.equal(librarySyncView({ data: { enabled: true, last_error: 'no token' } }).role, 'warning');
   assert.equal(librarySyncView({ data: { enabled: true, interval_minutes: 30 } }).detail, 'Every 30 min');

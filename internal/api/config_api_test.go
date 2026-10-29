@@ -128,7 +128,7 @@ func TestUpdateConfigAppliesLoggingLevel(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = system.Close() })
 	store := config.NewStore(cfg)
-	server := New(Deps{Config: store, Logger: system.Logger, Logging: system})
+	server := newServer(t, Deps{Config: store, Logger: system.Logger, Logging: system})
 
 	system.Logger.Debug("before-level-change")
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", `{"logging":{"level":"debug","access_log":false}}`)

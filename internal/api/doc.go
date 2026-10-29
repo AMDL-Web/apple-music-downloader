@@ -1,8 +1,7 @@
 // Package api is the HTTP layer of amdl: the REST and SSE handlers under
 // /api/v1 and the web console mounted at /console/ (with / redirecting
 // there). New builds a Server from Deps; (*Server).Routes returns
-// the handler to serve. Optional dependencies left nil make their routes
-// answer 503 feature_unavailable.
+// the handler to serve. New refuses a Deps with a required service missing.
 //
 // Invariants: openapi.yaml is the published contract for clients, so route
 // and JSON-shape changes must update it, and the route table in

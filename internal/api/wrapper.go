@@ -19,10 +19,6 @@ type WrapperService interface {
 }
 
 func (s *Server) wrapperStatus(w http.ResponseWriter, r *http.Request) {
-	if s.wrapper == nil {
-		writeFeatureUnavailable(w, "the wrapper")
-		return
-	}
 	status, err := s.wrapper.Status(r.Context())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnavailable, err.Error())
@@ -44,10 +40,6 @@ func (s *Server) wrapperLogin(w http.ResponseWriter, r *http.Request) {
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" || strings.TrimSpace(req.Password) == "" {
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "username and password are required")
-		return
-	}
-	if s.wrapper == nil {
-		writeFeatureUnavailable(w, "the wrapper")
 		return
 	}
 	result, err := s.wrapper.StartLogin(r.Context(), req.Username, req.Password)
@@ -74,10 +66,6 @@ func (s *Server) wrapperTwoStep(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "two_step_code is required")
 		return
 	}
-	if s.wrapper == nil {
-		writeFeatureUnavailable(w, "the wrapper")
-		return
-	}
 	result, err := s.wrapper.SubmitTwoStepCode(r.Context(), r.PathValue("login_id"), req.Code)
 	if err != nil {
 		writeWrapperError(w, err)
@@ -96,10 +84,6 @@ func (s *Server) wrapperLogout(w http.ResponseWriter, r *http.Request) {
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" {
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "username is required")
-		return
-	}
-	if s.wrapper == nil {
-		writeFeatureUnavailable(w, "the wrapper")
 		return
 	}
 	if err := s.wrapper.Logout(r.Context(), req.Username); err != nil {

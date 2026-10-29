@@ -17,10 +17,6 @@ type LibrarySyncService interface {
 // plus what the last pass observed. It answers even while the feature is
 // disabled, so a client can render the toggle's current state without guessing.
 func (s *Server) librarySyncStatus(w http.ResponseWriter, r *http.Request) {
-	if s.librarySync == nil {
-		writeFeatureUnavailable(w, "library sync")
-		return
-	}
 	writeJSON(w, http.StatusOK, s.librarySync.Status())
 }
 
@@ -31,10 +27,6 @@ func (s *Server) librarySyncStatus(w http.ResponseWriter, r *http.Request) {
 // the effect is "stop treating my current library as new", not "fetch it all
 // again". Re-downloading one album is a normal POST /api/v1/downloads.
 func (s *Server) librarySyncReset(w http.ResponseWriter, r *http.Request) {
-	if s.librarySync == nil {
-		writeFeatureUnavailable(w, "library sync")
-		return
-	}
 	cleared, err := s.librarySync.ResetAnchor(r.Context())
 	if err != nil {
 		writeStoreError(w, "reset library sync anchor", err)

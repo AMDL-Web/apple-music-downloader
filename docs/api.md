@@ -43,10 +43,9 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 504 | `upstream_timeout` |
 
 An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
-methods answers `405 method_not_allowed`. `feature_unavailable` means the component behind
-the route (log buffer, wrapper client, quality probe, catalog client, library watcher) is
-not wired into this process; the log routes also answer it when
-`logging.buffer_size` is `0`. A job lookup answers `404 job_not_found` only
+methods answers `405 method_not_allowed`. `feature_unavailable` comes only from
+`GET /logs` and `GET /logs/stream`, when `logging.buffer_size` is `0` and no log history
+is kept. A job lookup answers `404 job_not_found` only
 when the job does not exist; a store failure is `500 store_error`, so a client never drops
 a job because of a transient error.
 
@@ -443,7 +442,6 @@ empty string clears it); only a private playlist's cover uses it, and it is neve
 | A music video or a live radio station | `400 invalid_request`, `details.link` |
 | The catalog read fails (Apple's 404 for an unknown id included) | `502 upstream_error`, `details.link` |
 | No answer within 15 seconds | `504 upstream_timeout`, `details.link` |
-| No catalog client in this process | `503 feature_unavailable` |
 
 `details.link` carries `input`, `type`, `storefront`, `id` and `track_id` of the parsed
 link, so the client can still show what was pasted.

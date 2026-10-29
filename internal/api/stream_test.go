@@ -40,7 +40,7 @@ func newStreamServer(t *testing.T) (*Server, *logging.System) {
 	}
 	t.Cleanup(func() { _ = system.Close() })
 	hub := events.NewHub()
-	return New(Deps{
+	return newServer(t, Deps{
 		Config: config.NewStore(cfg), Store: store, Hub: hub,
 		Manager: jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default()),
 		Logger:  system.Logger, Logging: system,

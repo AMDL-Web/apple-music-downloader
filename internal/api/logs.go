@@ -61,7 +61,7 @@ func (s *Server) writeLogsUnavailable(w http.ResponseWriter) {
 		writeError(w, http.StatusServiceUnavailable, CodeFeatureUnavailable, "in-memory log retention is off (logging.buffer_size: 0)")
 		return
 	}
-	writeFeatureUnavailable(w, "the log buffer")
+	writeError(w, http.StatusServiceUnavailable, CodeFeatureUnavailable, "the log buffer is not available in this process")
 }
 
 // runLogStream sends backlog, then each record published on live, plus a

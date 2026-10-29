@@ -245,11 +245,8 @@ func TestLookupRejectsLinksItCannotDownload(t *testing.T) {
 
 func TestLookupCatalogFailures(t *testing.T) {
 	const link = `{"url":"https://music.apple.com/us/album/igor/1463409338"}`
-	recorder := requestJSON(t, newLookupServer(nil, nil), http.MethodPost, "/api/v1/lookup", link)
-	assertErrorCode(t, recorder, http.StatusServiceUnavailable, CodeFeatureUnavailable)
-
 	upstream := &fakeCatalog{t: t, err: errors.New("catalog request failed: 500 Internal Server Error")}
-	recorder = requestJSON(t, newLookupServer(upstream, nil), http.MethodPost, "/api/v1/lookup", link)
+	recorder := requestJSON(t, newLookupServer(upstream, nil), http.MethodPost, "/api/v1/lookup", link)
 	assertLookupErrorLink(t, recorder, http.StatusBadGateway, CodeUpstreamError, "album")
 
 	slow := &fakeCatalog{t: t, err: fmt.Errorf("get album: %w", context.DeadlineExceeded)}

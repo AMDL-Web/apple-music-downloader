@@ -166,12 +166,7 @@ export function wrapperView(res) {
 }
 
 export function librarySyncView(res) {
-  if (!res || res.error) {
-    if (res && res.error && res.error.status === 503) {
-      return { icon: 'circle-minus', role: 'neutral', label: 'Not configured' };
-    }
-    return failedView(res, 'Unavailable');
-  }
+  if (!res || res.error) return failedView(res, 'Unavailable');
   const s = res.data;
   if (!s.enabled) return { icon: 'circle-minus', role: 'neutral', label: 'Off' };
   if (s.last_error) return { icon: 'triangle-alert', role: 'warning', label: 'Error', detail: s.last_error };

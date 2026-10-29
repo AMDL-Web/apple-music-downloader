@@ -30,19 +30,6 @@ func TestWrapperStatusUnavailable(t *testing.T) {
 	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "wrapper_unavailable")
 }
 
-func TestWrapperRoutesWithoutWrapper(t *testing.T) {
-	routes := (&Server{}).Routes()
-	for _, tc := range []struct{ method, path, body string }{
-		{http.MethodGet, "/api/v1/wrapper/status", ""},
-		{http.MethodPost, "/api/v1/wrapper/login", `{"username":"user","password":"secret"}`},
-		{http.MethodPost, "/api/v1/wrapper/login/login-1/2fa", `{"two_step_code":"123456"}`},
-		{http.MethodPost, "/api/v1/wrapper/logout", `{"username":"user"}`},
-	} {
-		recorder := requestJSON(t, routes, tc.method, tc.path, tc.body)
-		assertErrorCode(t, recorder, http.StatusServiceUnavailable, "feature_unavailable")
-	}
-}
-
 func TestWrapperLoginResponses(t *testing.T) {
 	tests := []struct {
 		name   string

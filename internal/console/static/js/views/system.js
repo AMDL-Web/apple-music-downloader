@@ -200,7 +200,7 @@ function WrapperCard({ res, loading }) {
 function LibrarySyncCard({ res, loading }) {
   let body;
   if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
-  else if (!res || res.error) body = html`<${Badge} view=${librarySyncView(res)} />${res && res.error && res.error.status === 503 ? html` <span class="muted small">This process has no library watcher.</span>` : null}`;
+  else if (!res || res.error) body = html`<${Badge} view=${librarySyncView(res)} />`;
   else {
     const s = res.data;
     body = html`<${KV}

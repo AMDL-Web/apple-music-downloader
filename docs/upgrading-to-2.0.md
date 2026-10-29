@@ -38,7 +38,6 @@ needs the API changes below before it works against 2.0.
 | Wrapper login timeout | `504` | `504 upstream_timeout` | account screens |
 | Wrapper login password | trimmed | sent as typed; only an all-whitespace password is `400` | account screens |
 | Config `PUT` with an invalid file on disk | `500` | `422 invalid_config` | settings screens |
-| Optional component missing | mixed (`/logs` answered an empty `200`) | `503 feature_unavailable` on every route that needs it | none in a normal install |
 | Logs with `logging.buffer_size: 0` | `GET /logs` an empty `200`; `GET /logs/stream` live records only | `503 feature_unavailable` on both | log viewers |
 | Stream cursor in snapshots | `last_event_id` on `GET /downloads` and `GET /downloads/{id}` | `event_cursor` | stream clients |
 | Job counters | `done_items` (completed + skipped), `failed_items` | `completed_items`, `skipped_items`, `failed_items`, `cancelled_items` | job lists, progress bars |

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"amdl/internal/config"
 	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/events"
@@ -98,6 +99,47 @@ func newTestServerWithManager(t *testing.T) *Server {
 	t.Cleanup(func() { store.Close() })
 	manager := jobs.NewManager(store, events.NewHub(), stubProcessor{}, 1, slog.Default())
 	return &Server{store: store, manager: manager}
+}
+
+// newServer builds a Server through New, filling each required dependency
+// deps leaves nil: the default config, a store in a temp dir, a hub, a
+// manager over stubProcessor, and fakes for the services.
+func newServer(t *testing.T, deps Deps) *Server {
+	t.Helper()
+	if deps.Config == nil {
+		deps.Config = config.NewStore(config.Default())
+	}
+	if deps.Store == nil {
+		store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { store.Close() })
+		deps.Store = store
+	}
+	if deps.Hub == nil {
+		deps.Hub = events.NewHub()
+	}
+	if deps.Manager == nil {
+		deps.Manager = jobs.NewManager(deps.Store, deps.Hub, stubProcessor{}, 1, slog.Default())
+	}
+	if deps.Wrapper == nil {
+		deps.Wrapper = &fakeWrapperService{}
+	}
+	if deps.Quality == nil {
+		deps.Quality = &fakeQualityService{}
+	}
+	if deps.LibrarySync == nil {
+		deps.LibrarySync = &fakeLibrarySync{}
+	}
+	if deps.Catalog == nil {
+		deps.Catalog = &fakeCatalog{t: t}
+	}
+	server, err := New(deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server
 }
 
 // assertErrorCode checks a response against the error envelope

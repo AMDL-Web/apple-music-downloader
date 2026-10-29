@@ -26,10 +26,6 @@ func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 // not validate leaves the previous snapshot in place; the response is still
 // 200 and reload_error says why, because the request itself succeeded.
 func (s *Server) reloadConfig(w http.ResponseWriter, r *http.Request) {
-	if s.cfg == nil {
-		writeFeatureUnavailable(w, "the runtime config store")
-		return
-	}
 	reloadErr := s.cfg.Reload()
 	s.applyLoggingConfig()
 	s.writeConfigView(w, reloadErr)
@@ -70,10 +66,6 @@ func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, r
 // started jobs immediately and are written back to the combined config file,
 // so they survive restarts.
 func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
-	if s.cfg == nil {
-		writeFeatureUnavailable(w, "the runtime config store")
-		return
-	}
 	var body json.RawMessage
 	if !decodeJSONBody(w, r, &body, false) {
 		return

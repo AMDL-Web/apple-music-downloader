@@ -24,7 +24,7 @@ func newObservedServer(t *testing.T) (*Server, *logging.System) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = system.Close() })
-	server := New(Deps{Config: config.NewStore(cfg), Logger: system.Logger, Logging: system})
+	server := newServer(t, Deps{Config: config.NewStore(cfg), Logger: system.Logger, Logging: system})
 	return server, system
 }
 

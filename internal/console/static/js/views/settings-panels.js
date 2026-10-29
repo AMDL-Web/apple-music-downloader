@@ -45,10 +45,7 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
 
   let body;
   if (poll.error && !s) {
-    body =
-      poll.error.status === 503
-        ? html`<p class="muted small">This process has no library watcher.</p>`
-        : html`<${ErrorNote} title="Couldn't load the library sync status" error=${poll.error} onRetry=${poll.reload} />`;
+    body = html`<${ErrorNote} title="Couldn't load the library sync status" error=${poll.error} onRetry=${poll.reload} />`;
   } else if (!s) body = html`<${SkeletonRows} n=${4} kind="line" />`;
   else
     body = html`<${KV}

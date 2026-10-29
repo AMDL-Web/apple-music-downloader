@@ -112,10 +112,6 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 		writeErrorDetails(w, http.StatusBadRequest, CodeInvalidRequest, fmt.Sprintf("%s download is not implemented", parsed.Type), details)
 		return
 	}
-	if s.catalog == nil {
-		writeFeatureUnavailable(w, "the Apple Music catalog")
-		return
-	}
 	token := cfg.Catalog.MediaUserToken
 	if req.MediaUserToken != nil {
 		token = *req.MediaUserToken

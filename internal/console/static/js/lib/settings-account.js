@@ -53,8 +53,6 @@ export function wrapperErrorText(err, step = 'login') {
       return { message: 'The wrapper could not complete the request.', detail: raw };
     case 'wrapper_unavailable':
       return { message: 'wrapper-manager is not reachable.', detail: raw };
-    case 'feature_unavailable':
-      return { message: 'This backend has no wrapper connection.', detail: raw };
     default:
       break;
   }
