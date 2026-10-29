@@ -5,9 +5,10 @@
 import { html, useState } from '../ui/preact.js';
 import { parseNumberInput, sameValue } from '../lib/settings-draft.js';
 import { valueLabel } from '../lib/settings.js';
-import { Icon, Button } from '../ui/components.js';
+import { Icon } from '../ui/components.js';
 import { ListEditor } from './settings-list.js';
 import { TemplateControl } from './settings-template.js';
+import { TokenControl } from './settings-token.js';
 
 /** A DOM id for a dotted config key. */
 export const fieldId = (key) => `set-${key.replace(/[^a-z0-9]+/gi, '-')}`;
@@ -84,7 +85,7 @@ function control(p) {
     case 'template':
       return html`<${TemplateControl} ...${p} />`;
     case 'token':
-      return html`<${SecretControl} ...${p} />`;
+      return html`<${TokenControl} ...${p} />`;
     case 'list':
       return html`<${ListEditor} ...${p} />`;
     case 'set':
@@ -189,34 +190,6 @@ function TextControl({ field, id, value, invalid, described, onChange }) {
     aria-describedby=${described}
     onInput=${(e) => onChange(e.currentTarget.value)}
   />`;
-}
-
-function SecretControl({ id, value, invalid, described, onChange }) {
-  const [shown, setShown] = useState(false);
-  return html`<span class="field-secret" data-shown=${shown ? '' : undefined}>
-    <input
-      type=${shown ? 'text' : 'password'}
-      class="field-input mono"
-      id=${id}
-      value=${value || ''}
-      placeholder="Not set"
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-      aria-invalid=${invalid ? 'true' : undefined}
-      aria-describedby=${described}
-      onInput=${(e) => onChange(e.currentTarget.value)}
-    />
-    <${Button}
-      variant="ghost"
-      icon=${shown ? 'eye-off' : 'eye'}
-      className="field-secret-toggle"
-      aria-label=${shown ? 'Hide the token' : 'Show the token'}
-      aria-pressed=${String(shown)}
-      aria-controls=${id}
-      onClick=${() => setShown((s) => !s)}
-    />
-  </span>`;
 }
 
 /** An unordered subset of the options as checkboxes; keeps the current order. */

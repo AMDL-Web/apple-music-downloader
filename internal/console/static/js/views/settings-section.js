@@ -72,8 +72,9 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, se
   else if (!cfg.loaded) rows = html`<${SkeletonRows} n=${section.id === 'account' ? 1 : 6} kind="line" />`;
 
   if (section.id === 'account') {
-    return html`<${AccountPanel} />
-      <section class="account-block" aria-label="Media user token">${rows || html`<${FieldRows} fields=${fields} form=${form} />`}</section>`;
+    return html`<${AccountPanel}>
+      <section class="account-block" aria-label="Media user token">${rows || html`<${FieldRows} fields=${fields} form=${form} />`}</section>
+    </${AccountPanel}>`;
   }
   if (rows) return rows;
 

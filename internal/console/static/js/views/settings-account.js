@@ -1,9 +1,11 @@
-// Settings > Apple Music account: wrapper-manager status, the logged-in
-// accounts with Log out, and the login form with its two-step code step.
+// Settings > Account: the session service (wrapper-manager) status, the
+// logged-in accounts with Log out, and the login form with its two-step code
+// step. While the service cannot be reached, one line with Refresh replaces
+// all of it. `children` (the media user token field) follows as the last block.
 
 import { html, useState } from '../ui/preact.js';
 import { getWrapperStatus, loginWrapper, submitWrapperTwoStep, logoutWrapper, settle } from '../api.js';
-import { wrapperErrorText, wrapperUnreachable } from '../lib/settings-account.js';
+import { wrapperErrorText, wrapperUnreachable, unreachableLine } from '../lib/settings-account.js';
 import { wrapperView } from '../lib/status.js';
 import { useApp, Badge, Button, Icon, KV, Notice, SkeletonRows } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -19,7 +21,7 @@ function WrapperError({ error, step, role = 'danger' }) {
   </${Notice}>`;
 }
 
-export function AccountPanel() {
+export function AccountPanel({ children }) {
   const app = useApp();
   const status = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch]);
   const res = status.data;
@@ -27,15 +29,24 @@ export function AccountPanel() {
   const down = res && res.error ? wrapperUnreachable(res.error) : null;
   const [logout, setLogout] = useState(null);
 
+  if (down) {
+    return html`<div class="account">
+      <section class="account-block" aria-label="Session service">
+        <p class="account-down" role="status">
+          <${Icon} name="triangle-alert" size="sm" />
+          <span>${unreachableLine(down)}</span>
+          <${Button} variant="ghost" size="sm" icon="rotate" className="account-down-refresh" onClick=${status.reload}>Refresh</${Button}>
+        </p>
+      </section>
+      ${children}
+    </div>`;
+  }
+
   let state;
   if (!res) state = html`<${SkeletonRows} n=${3} kind="line" />`;
   else if (res.error) {
     state = html`<${KV} rows=${[['State', html`<${Badge} view=${wrapperView(res)} />`]]} />
-      <${WrapperError} error=${res.error} step="status" role="warning" />
-      <p class="muted small">
-        wrapper-manager is the separate service that keeps your Apple Music login and decrypts the audio. This backend finds it at${' '}
-        <code>wrapper.address</code> (a startup key in configs/config.yaml, changed with a restart). Downloads need it; simulate mode does not.
-      </p>`;
+      <${WrapperError} error=${res.error} step="status" role="warning" />`;
   } else {
     const w = res.data;
     state = html`<${KV}
@@ -51,7 +62,7 @@ export function AccountPanel() {
   return html`<div class="account">
     <section class="account-block" aria-labelledby="account-status-title">
       <div class="account-block-head">
-        <h3 class="section-title" id="account-status-title">Session service (wrapper-manager)</h3>
+        <h3 class="section-title" id="account-status-title">Session service</h3>
         <${Button} variant="ghost" size="sm" icon="rotate" onClick=${status.reload}>Refresh</${Button}>
       </div>
       ${state}
@@ -73,7 +84,7 @@ export function AccountPanel() {
             : html`<p class="muted small">No account is logged in. Log in below so downloads can be decrypted.</p>`}
         </section>`
       : null}
-    <${LoginForm} onDone=${status.reload} again=${accounts.length > 0} blocked=${down ? 'Log in is off until the session service is reachable. This page checks again every 30 seconds.' : ''} />
+    <${LoginForm} onDone=${status.reload} again=${accounts.length > 0} />
     ${logout
       ? html`<${LogoutDialog}
           account=${logout}
@@ -84,6 +95,7 @@ export function AccountPanel() {
           }}
         />`
       : null}
+    ${children}
   </div>`;
 }
 
@@ -112,17 +124,17 @@ function LogoutDialog({ account, onClose, onDone }) {
     onConfirm=${confirm}
     onCancel=${onClose}
   >
-    <p>wrapper-manager ends the session for <span class="mono">${account}</span>. Downloads from its storefronts stop until an account is logged in again.</p>
+    <p>The session service ends the login of <span class="mono">${account}</span>. Downloads from its storefronts stop until an account is logged in again.</p>
     <${WrapperError} error=${error} step="logout" />
   </${ConfirmDialog}>`;
 }
 
 /**
  * The login form: Apple ID and password, then the two-step code when the
- * wrapper answers 202 needs_2fa. The password goes to wrapper-manager and is
- * kept only in this form's state; it is cleared on success.
+ * wrapper answers 202 needs_2fa. The password goes to the session service
+ * and is kept only in this form's state; it is cleared on success.
  */
-function LoginForm({ onDone, again, blocked }) {
+function LoginForm({ onDone, again }) {
   const app = useApp();
   const [step, setStep] = useState('credentials');
   const [username, setUsername] = useState('');
@@ -131,8 +143,10 @@ function LoginForm({ onDone, again, blocked }) {
   const [loginId, setLoginId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [shown, setShown] = useState(false);
 
   const reset = () => {
+    setShown(false);
     setStep('credentials');
     setPassword('');
     setCode('');
@@ -148,7 +162,7 @@ function LoginForm({ onDone, again, blocked }) {
 
   const submitCredentials = async (e) => {
     e.preventDefault();
-    if (busy || blocked) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -216,7 +230,7 @@ function LoginForm({ onDone, again, blocked }) {
 
   return html`<form class="account-block login-form" data-step="credentials" aria-labelledby="login-title" onSubmit=${submitCredentials}>
     <h3 class="section-title" id="login-title">${again ? 'Log in another account' : 'Log in'}</h3>
-    <p class="muted small">The password goes to wrapper-manager, which keeps the session; this service does not store it. Logging in can take up to two minutes.</p>
+    <p class="muted small">The password goes to the session service, which keeps the login; this service does not store it. Logging in can take up to two minutes.</p>
     <div class="form-row">
       <label class="field-label" for="login-user">Apple ID</label>
       <p class="field-help" id="login-user-help">The email address or phone number you sign in to Apple Music with.</p>
@@ -237,26 +251,36 @@ function LoginForm({ onDone, again, blocked }) {
     </div>
     <div class="form-row">
       <label class="field-label" for="login-pass">Password</label>
-      <input
-        id="login-pass"
-        class="field-input"
-        type="password"
-        name="password"
-        autocomplete="current-password"
-        required
-        value=${password}
-        onInput=${(e) => setPassword(e.currentTarget.value)}
-      />
+      <span class="field-secret">
+        <input
+          id="login-pass"
+          class="field-input"
+          type=${shown ? 'text' : 'password'}
+          name="password"
+          autocomplete="current-password"
+          autocapitalize="off"
+          spellcheck="false"
+          required
+          value=${password}
+          onInput=${(e) => setPassword(e.currentTarget.value)}
+        />
+        <${Button}
+          variant="ghost"
+          icon=${shown ? 'eye-off' : 'eye'}
+          className="field-secret-toggle"
+          aria-label=${shown ? 'Hide the password' : 'Show the password'}
+          aria-pressed=${String(shown)}
+          aria-controls="login-pass"
+          onClick=${() => setShown((v) => !v)}
+        />
+      </span>
     </div>
     <${WrapperError} error=${error} step="login" />
-    ${blocked ? html`<p class="small login-blocked" id="login-blocked"><${Icon} name="triangle-alert" size="sm" /><span>${blocked}</span></p>` : null}
     <div class="form-actions">
       <${Button}
         type="submit"
         variant="primary"
         icon="key"
-        disabled=${Boolean(blocked)}
-        aria-describedby=${blocked ? 'login-blocked' : undefined}
         aria-disabled=${busy ? 'true' : undefined}
       >${busy ? 'Logging in…' : 'Log in'}</${Button}>
     </div>

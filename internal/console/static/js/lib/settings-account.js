@@ -17,9 +17,18 @@ export function wrapperUnreachable(err) {
   return { address: m ? m[1] : '', detail: raw };
 }
 
-/** The plain-words sentence for an unreachable wrapper-manager. */
+/** The Account section's one line while the session service cannot be reached. */
+export function unreachableLine(u) {
+  return `Can't reach the session service${u.address ? ` at ${u.address}` : ''}.`;
+}
+
+/**
+ * The plain-words sentence for an unreachable session service. The page says
+ * "session service"; wrapper-manager, the program behind it, is named only
+ * in the server's own text under "Details from the server".
+ */
 export function unreachableText(u) {
-  return `The Apple Music session service (wrapper-manager) ${u.address ? `at ${u.address} ` : ''}is not reachable.`;
+  return `The Apple Music session service ${u.address ? `at ${u.address} ` : ''}is not reachable.`;
 }
 
 /**
@@ -34,7 +43,7 @@ export function wrapperErrorText(err, step = 'login') {
   const down = wrapperUnreachable(err);
   if (down) return { message: unreachableText(down), detail: raw };
   if (status === 0) {
-    return { message: code === 'timeout' ? 'The wrapper did not answer in time. Try again.' : 'Cannot reach the server.', detail: '' };
+    return { message: code === 'timeout' ? 'The session service did not answer in time. Try again.' : 'Cannot reach the server.', detail: '' };
   }
   switch (code) {
     case 'authentication_failed':
@@ -46,22 +55,22 @@ export function wrapperErrorText(err, step = 'login') {
     case 'login_not_found':
       return { message: 'This sign-in expired or already finished. Start again.', detail: '' };
     case 'account_not_found':
-      return { message: 'The wrapper has no session for this account.', detail: '' };
+      return { message: 'This account is not logged in to the session service.', detail: '' };
     case 'upstream_timeout':
-      return { message: 'The wrapper did not answer in time. Try again.', detail: raw };
+      return { message: 'The session service did not answer in time. Try again.', detail: raw };
     case 'upstream_error':
-      return { message: 'The wrapper could not complete the request.', detail: raw };
+      return { message: 'The session service could not complete the request.', detail: raw };
     case 'wrapper_unavailable':
-      return { message: 'wrapper-manager is not reachable.', detail: raw };
+      return { message: 'The session service is not reachable.', detail: raw };
     default:
       break;
   }
   if (status === 400) return { message: raw || 'The request was not valid.', detail: '' };
   if (status === 401) return wrapperErrorText({ status, code: 'authentication_failed' }, step);
   if (status === 404) return { message: step === 'code' ? 'This sign-in expired or already finished. Start again.' : 'Not found.', detail: raw };
-  if (status === 409) return { message: 'The wrapper is busy with this account.', detail: raw };
-  if (status === 502) return { message: 'The wrapper could not complete the request.', detail: raw };
-  if (status === 503) return { message: 'wrapper-manager is not reachable.', detail: raw };
-  if (status === 504) return { message: 'The wrapper did not answer in time. Try again.', detail: raw };
+  if (status === 409) return { message: 'The session service is busy with this account.', detail: raw };
+  if (status === 502) return { message: 'The session service could not complete the request.', detail: raw };
+  if (status === 503) return { message: 'The session service is not reachable.', detail: raw };
+  if (status === 504) return { message: 'The session service did not answer in time. Try again.', detail: raw };
   return { message: raw || `The request failed with HTTP ${status}.`, detail: '' };
 }

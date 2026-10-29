@@ -2469,29 +2469,15 @@
   line-height: var(--lh-14);
 }
 
-:root[data-skin="music"] .template-ref {
-  border: 0;
-  border-radius: var(--r-art);
-  background: var(--bg-inset);
-}
-
-:root[data-skin="music"] .template-ref-summary {
-  padding: var(--s-3) var(--s-4);
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .template-ref-body {
-  padding: 0 var(--s-4) var(--s-4);
-}
-
 :root[data-skin="music"] .settings-panel-head .btn-ghost,
-:root[data-skin="music"] .account-block-head .btn-ghost {
+:root[data-skin="music"] .account-block-head .btn-ghost,
+:root[data-skin="music"] .token-replace {
   color: var(--accent-text);
 }
 
 :root[data-skin="music"] .settings-panel-head .btn-ghost:hover:not(:disabled),
-:root[data-skin="music"] .account-block-head .btn-ghost:hover:not(:disabled) {
+:root[data-skin="music"] .account-block-head .btn-ghost:hover:not(:disabled),
+:root[data-skin="music"] .token-replace:hover:not(:disabled) {
   background: transparent;
   text-decoration: underline;
 }

@@ -675,16 +675,74 @@
   cursor: pointer;
 }
 
-.login-blocked {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s-1_5);
+/* The session service cannot be reached: one line with Refresh. */
+.account-down {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.account-down > .icon {
+  flex: none;
   color: var(--warning-text);
 }
 
-.login-blocked .icon {
-  margin-top: var(--s-0_5);
-  flex: none;
+/* The media user token: its state or an empty box, and the help steps. */
+.token-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.token-row:not(.token-set) {
+  max-width: 560px;
+}
+
+.token-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.token-row .field-input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.token-state {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.token-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.token-help-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  cursor: pointer;
+}
+
+.token-steps {
+  margin: 0;
+  padding-left: var(--s-5);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.token-steps li + li {
+  margin-top: var(--s-1);
 }
 
 .settings-error:focus {
@@ -738,6 +796,7 @@
 }
 
 .login-form .form-row,
+.login-form .field-secret,
 .login-form .notice,
 .login-form > p {
   max-width: 440px;

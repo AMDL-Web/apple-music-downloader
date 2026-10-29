@@ -38,7 +38,7 @@ import {
   anchorResetState,
 } from '../static/js/lib/settings-draft.js';
 import { templateUnknownVars, templateExample, templateKind } from '../static/js/lib/settings-template.js';
-import { wrapperErrorText, wrapperUnreachable } from '../static/js/lib/settings-account.js';
+import { wrapperErrorText, wrapperUnreachable, unreachableLine } from '../static/js/lib/settings-account.js';
 import { ApiError } from '../static/js/api.js';
 import { readFileSync } from 'node:fs';
 
@@ -221,7 +221,7 @@ test('wrapperErrorText per status and code', () => {
   assert.match(wrapperErrorText(e(401, 'authentication_failed'), 'login').message, /Apple ID and password/);
   assert.match(wrapperErrorText(e(401, 'authentication_failed'), 'code').message, /code/);
   assert.match(wrapperErrorText(e(404, 'login_not_found'), 'code').message, /Start again/);
-  assert.match(wrapperErrorText(e(404, 'account_not_found'), 'logout').message, /no session/);
+  assert.match(wrapperErrorText(e(404, 'account_not_found'), 'logout').message, /not logged in/);
   assert.match(wrapperErrorText(e(409, 'already_logged_in')).message, /already logged in/);
   assert.match(wrapperErrorText(e(409, 'login_pending')).message, /in progress/);
   const bad = wrapperErrorText(e(502, 'upstream_error', 'dial tcp 127.0.0.1:8080: connect: connection refused'));
@@ -233,6 +233,10 @@ test('wrapperErrorText per status and code', () => {
   assert.match(wrapperErrorText(e(0, 'timeout')).message, /in time/);
   assert.match(wrapperErrorText(e(0, 'network_error')).message, /Cannot reach/);
   assert.match(wrapperErrorText(e(401, '')).message, /Apple ID/, 'a bare 401 reads like authentication_failed');
+  const codes = ['authentication_failed', 'already_logged_in', 'login_pending', 'login_not_found', 'account_not_found', 'upstream_timeout', 'upstream_error', 'wrapper_unavailable', 'timeout', ''];
+  for (const status of [0, 400, 401, 404, 409, 502, 503, 504]) {
+    for (const code of codes) assert.doesNotMatch(wrapperErrorText(e(status, code)).message, /wrapper/i, `${status} ${code} names the session service, not the wrapper`);
+  }
 });
 
 test('draftAfterSave keeps only what changed while the save ran', () => {
@@ -336,13 +340,14 @@ test('wrapperUnreachable reads the address out of a gRPC dial error', () => {
   const status = wrapperUnreachable(new ApiError(503, 'wrapper_unavailable', raw));
   assert.equal(status.address, '127.0.0.1:8080');
   const msg = wrapperErrorText(new ApiError(503, 'wrapper_unavailable', raw), 'status');
-  assert.equal(msg.message, 'The Apple Music session service (wrapper-manager) at 127.0.0.1:8080 is not reachable.');
+  assert.equal(msg.message, 'The Apple Music session service at 127.0.0.1:8080 is not reachable.');
   assert.equal(msg.detail, raw, 'the raw text stays in the details');
+  assert.equal(unreachableLine(status), "Can't reach the session service at 127.0.0.1:8080.");
   const login = wrapperErrorText(new ApiError(502, 'upstream_error', raw), 'login');
   assert.match(login.message, /session service/, 'a gRPC Unavailable behind a 502 reads the same');
   assert.equal(wrapperUnreachable(new ApiError(502, 'upstream_error', 'some other failure')), null);
   assert.equal(wrapperUnreachable(new ApiError(0, 'network_error', 'Cannot reach the server.')), null, 'the console server itself being down is not the wrapper');
-  assert.equal(wrapperErrorText(new ApiError(503, 'wrapper_unavailable', 'dns lookup failed'), 'status').message, 'The Apple Music session service (wrapper-manager) is not reachable.');
+  assert.equal(wrapperErrorText(new ApiError(503, 'wrapper_unavailable', 'dns lookup failed'), 'status').message, 'The Apple Music session service is not reachable.');
 });
 
 test('a number outside its range is an inline error in plain words, before any PUT', () => {
