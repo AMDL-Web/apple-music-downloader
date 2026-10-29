@@ -1445,7 +1445,7 @@
 
 :root[data-skin="music"] [data-section="jobs"] .job-row {
   position: relative;
-  grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 200px) 148px 80px 16px;
+  grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 200px) 148px 80px var(--job-trail, 16px);
   min-height: 68px;
   padding: var(--row-pad-y) var(--card-pad-x);
 }
@@ -1517,13 +1517,13 @@
 
 @media (max-width: 1279px) {
   :root[data-skin="music"] [data-section="jobs"] .job-row {
-    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 176px) 148px 72px 16px;
+    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 176px) 148px 72px var(--job-trail, 16px);
   }
 }
 
 @media (max-width: 1023px) {
   :root[data-skin="music"] [data-section="jobs"] .job-row {
-    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 128px) 140px 16px;
+    grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 128px) 140px var(--job-trail, 16px);
   }
 }
 

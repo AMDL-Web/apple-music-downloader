@@ -196,7 +196,8 @@ base durations (120 ms color, 200 ms overlays).
   artist and track count, and a plain completed status is a green check with
   no word. A failed row says what went wrong in red under the link and ends
   in a Retry pill. Phones get two-line rows with progress under the title, a
-  status-tab chip row that scrolls sideways (the Failed count in red text) and
+  status-tab chip row that scrolls sideways when it must, an edge fading where
+  chips lie past it (the Failed count in red text) and
   Select, which reads Done while selecting.
 - **Queue selection**: Select wears the toggle pill of Pause and Wrap
   (outlined or filled while off, the pressed fill while on). Rows gain Apple

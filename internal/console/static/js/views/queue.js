@@ -14,6 +14,7 @@ import { useApp, Icon, Segmented, Empty, ErrorNote, SkeletonRows, Button, LinkBu
 import { useDebounced } from '../ui/hooks.js';
 import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 import { JobRow, applyFeedToList } from './queue-row.js';
+import { useChipRow } from './queue-chips.js';
 
 export { JobRow, applyFeedToList };
 
@@ -234,11 +235,8 @@ export function QueuePage({ route }) {
     { value: 'all', label: 'All', count: c ? c.total : undefined },
   ];
   const rowHref = (job) => buildHash('queue', route.params, job.id);
-  // On a phone the status tabs scroll sideways; the open one stays in view.
-  useEffect(() => {
-    const open = document.querySelector('.page-queue .seg-btn[aria-pressed="true"]');
-    if (open && open.scrollIntoView) open.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-  }, [filters.tab, haveCounts]);
+  // On a narrow phone the status tabs scroll sideways; the open one stays in view.
+  useChipRow(`${filters.tab}|${haveCounts}`);
 
   let body;
   if (waiting || (state.loading && state.jobs.length === 0)) body = html`<${SkeletonRows} n=${6} kind="row" />`;

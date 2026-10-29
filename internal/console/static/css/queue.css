@@ -29,16 +29,27 @@
 }
 
 /* A failed job's Retry sits at the row's end, beside the link: a button
-   cannot live inside it. The item takes over the hover fill, and the
-   chevron makes room for the button. */
+   cannot live inside it. Every Queue row reserves the same trailing slot
+   (--job-trail, the width of the button; the chevron sits at its end), and a
+   failed row's slot holds the button, so the status, the time and the slot
+   line up down the list. The item takes over the hover fill. */
+.page-queue {
+  --job-trail: 76px;
+}
+
 .job-item[data-action] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) calc(var(--job-trail) + var(--card-pad-x));
   align-items: center;
 }
 
 .job-item[data-action]:hover {
   background: var(--bg-hover);
+}
+
+.job-item[data-action] > .job-row {
+  --job-trail: 0px;
+  margin-inline-end: calc(-1 * var(--card-pad-x));
 }
 
 .job-item[data-action] > .job-row:hover {
@@ -50,6 +61,7 @@
 }
 
 .job-retry {
+  justify-self: end;
   margin-inline-end: var(--card-pad-x);
 }
 
@@ -60,6 +72,7 @@
   }
 
   .job-item[data-action] > .job-row {
+    margin-inline-end: 0;
     padding-bottom: var(--s-2);
   }
 
@@ -78,6 +91,20 @@
 
   .page-queue .seg::-webkit-scrollbar {
     display: none;
+  }
+
+  /* While chips lie past an edge of the row, that edge fades out
+     (views/queue-chips.js sets data-fade); the mask carries no colour. */
+  .page-queue .seg[data-fade="end"] {
+    mask-image: linear-gradient(to right, black calc(100% - var(--s-8)), transparent);
+  }
+
+  .page-queue .seg[data-fade="start"] {
+    mask-image: linear-gradient(to left, black calc(100% - var(--s-8)), transparent);
+  }
+
+  .page-queue .seg[data-fade="both"] {
+    mask-image: linear-gradient(to right, transparent, black var(--s-8), black calc(100% - var(--s-8)), transparent);
   }
 
   /* The filter, the type and Select share one row; the result count, when

@@ -532,11 +532,12 @@ var (
 	varRef  = regexp.MustCompile(`var\(\s*(--[A-Za-z0-9_-]+)`)
 	varDecl = regexp.MustCompile(`(?m)(?:^|[;{\s])(--[A-Za-z0-9_-]+)\s*:`)
 	// Custom properties set per element from JS style objects or by the
-	// role mapping and a job row without progress in the base CSS itself, not by a skin.
+	// role mapping, a job row without progress and the Queue's trailing slot
+	// in the base CSS itself, not by a skin.
 	runtimeVars = map[string]bool{
 		"--art-bg": true, "--art-t1": true, "--art-t2": true, "--art-t3": true,
 		"--w": true, "--f": true, "--v": true, "--n": true, "--swatch": true,
-		"--role": true, "--role-tint": true, "--new-bar-h": true, "--job-prog": true,
+		"--role": true, "--role-tint": true, "--new-bar-h": true, "--job-prog": true, "--job-trail": true,
 	}
 )
 
