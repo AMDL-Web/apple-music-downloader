@@ -324,7 +324,9 @@ curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,ca
 Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `storefront`,
 `q` (substring of the title, artist name or input), `created_after`, `created_before`,
 `updated_after`, `updated_before`, `sort` (`created_at` | `updated_at`), `order`
-(`asc` | `desc`). Multi-value parameters accept repeated keys or comma-separated values. The response adds `status_counts` (for the same
+(`asc` | `desc`). Jobs that tie on the sort field, such as a batch submitted in one request,
+list in submission order whichever `order` is asked for, so a batch reads in paste order.
+Multi-value parameters accept repeated keys or comma-separated values. The response adds `status_counts` (for the same
 filter), `total`, `limit`, `offset` and the global `event_cursor`.
 
 Every job carries `total_items` (tracks the input resolved to) and four disjoint item

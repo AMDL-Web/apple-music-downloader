@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -643,4 +645,70 @@ func idsOf(jobs []domain.Job) []string {
 		out[i] = job.ID
 	}
 	return out
+}
+
+// Jobs submitted together share created_at and updated_at and have random ids,
+// so the list must break the tie by insert order: a batch reads in submission
+// order, and pages cut inside it neither skip nor repeat a job.
+func TestListJobsBatchSharingTimestampKeepsSubmissionOrderAcrossPages(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+
+	base := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	// Ids that sort against insert order, so an id tie-break would fail.
+	ids := []string{"job_e", "job_c", "job_a", "job_d", "job_b"}
+	for i, id := range ids {
+		job := domain.Job{ID: id, Input: "in", Type: "song", Storefront: "us", CanonicalKey: "song|us|" + id, Status: domain.JobQueued, CreatedAt: base, UpdatedAt: base}
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+		// A later batch, one hour on, to check batches still order by time.
+		later := domain.Job{ID: "later_" + strconv.Itoa(i), Input: "in", Type: "song", Storefront: "us", CanonicalKey: "song|us|later" + strconv.Itoa(i), Status: domain.JobQueued, CreatedAt: base.Add(time.Hour), UpdatedAt: base.Add(time.Hour)}
+		if i < 2 {
+			if err := store.CreateJob(ctx, later); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	walk := func(filter JobListFilter) []string {
+		t.Helper()
+		var got []string
+		for offset := 0; ; offset += 2 {
+			filter.Limit, filter.Offset = 2, offset
+			page, total, err := store.ListJobs(ctx, filter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if total != 7 {
+				t.Fatalf("total = %d, want 7", total)
+			}
+			if len(page) == 0 {
+				return got
+			}
+			for _, j := range page {
+				got = append(got, j.ID)
+			}
+		}
+	}
+	batch := []string{"job_e", "job_c", "job_a", "job_d", "job_b"}
+	later := []string{"later_0", "later_1"}
+	for _, tc := range []struct {
+		name   string
+		filter JobListFilter
+		want   []string
+	}{
+		{"created_at desc", JobListFilter{Sort: JobListSortCreatedAt, Order: JobListOrderDesc}, append(append([]string{}, later...), batch...)},
+		{"created_at asc", JobListFilter{Sort: JobListSortCreatedAt, Order: JobListOrderAsc}, append(append([]string{}, batch...), later...)},
+		{"updated_at desc", JobListFilter{Sort: JobListSortUpdatedAt, Order: JobListOrderDesc}, append(append([]string{}, later...), batch...)},
+	} {
+		got := walk(tc.filter)
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("%s: paged list = %v, want %v", tc.name, got, tc.want)
+		}
+	}
 }

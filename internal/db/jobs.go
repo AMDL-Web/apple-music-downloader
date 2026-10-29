@@ -263,7 +263,12 @@ func (s *Store) ListJobs(ctx context.Context, filter JobListFilter) ([]domain.Jo
 		orderDir = "ASC"
 	}
 	listArgs := append(args, filter.Limit, filter.Offset)
-	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j`+where+` ORDER BY `+orderCol+` `+orderDir+`, j.id `+orderDir+` LIMIT ? OFFSET ?`,
+	// Jobs submitted together share created_at (and often updated_at), and job
+	// ids are random, so the tie-break is the insert order (rowid): a batch
+	// lists in submission order in either direction, and LIMIT/OFFSET pages
+	// never skip or repeat a job inside it. rowid is stable here because the
+	// store never runs VACUUM and jobs is not WITHOUT ROWID.
+	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j`+where+` ORDER BY `+orderCol+` `+orderDir+`, j.rowid ASC LIMIT ? OFFSET ?`,
 		listArgs...)
 	if err != nil {
 		return nil, 0, err

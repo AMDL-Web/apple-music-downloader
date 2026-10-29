@@ -805,7 +805,10 @@ paths:
             format: date-time
         - name: sort
           in: query
-          description: Sort field; default created_at.
+          description: >-
+            Sort field; default created_at. Jobs that tie on it (a batch submitted
+            together shares one created_at) list in submission order, whatever the
+            order parameter says.
           schema:
             type: string
             enum: [created_at, updated_at]
