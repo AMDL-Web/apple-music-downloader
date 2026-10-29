@@ -89,7 +89,6 @@ func run(ctx context.Context, files configFiles) (err error) {
 	if err != nil {
 		return fmt.Errorf("initialize logging: %w", err)
 	}
-	defer logSystem.Close()
 	slog.SetDefault(logSystem.Logger)
 	logger := logSystem.Logger.With("component", "main")
 	defer func() {
@@ -98,7 +97,7 @@ func run(ctx context.Context, files configFiles) (err error) {
 			err = loggedError{err}
 		}
 	}()
-	logger.Info("logging initialized", "level", cfg.Logging.Level, "format", cfg.Logging.Format, "file_enabled", cfg.Logging.FileEnabled)
+	logger.Info("logging initialized", "level", cfg.Logging.Level)
 	for _, name := range config.UnreadEnv(os.Environ()) {
 		logger.Warn("environment variable is no longer read; set its key in config.yaml",
 			"variable", name, "see", config.UpgradeGuide)
@@ -134,7 +133,7 @@ func run(ctx context.Context, files configFiles) (err error) {
 	// pipeline. Process-wide concurrency pools are sized once from this startup
 	// snapshot; runtime-mutable fields are read when each job starts.
 	cfgStore := config.NewFileStore(cfg, files.config)
-	wrapperClient, err := wrapper.NewClient(cfg.Wrapper, wrapper.WithDataConcurrencyLimit(cfg.Download.MaxParallelWrapperRequests))
+	wrapperClient, err := wrapper.NewClient(cfg.Wrapper, wrapper.WithDataConcurrencyLimit(config.MaxParallelWrapperRequests))
 	if err != nil {
 		return fmt.Errorf("connect wrapper-manager: %w", err)
 	}

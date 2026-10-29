@@ -184,8 +184,7 @@ paths:
       summary: Read the current runtime configuration (mutable fields only)
       description: >-
         Returns the runtime-mutable part of the effective configuration: the download
-        section (except max_running_jobs, max_parallel_downloads,
-        max_parallel_decrypts and max_parallel_wrapper_requests),
+        section (except max_running_jobs and max_parallel_downloads),
         logging.level/access_log, the simulate section, the library_sync section, and
         catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
         Startup-only fields (server, database, the other logging fields, wrapper,
@@ -217,9 +216,8 @@ paths:
         the same full validation as the configuration file.
 
         Only the fields returned by GET can be changed: the download section (except
-        max_running_jobs, max_parallel_downloads, max_parallel_decrypts and
-        max_parallel_wrapper_requests), logging.level/access_log, the simulate
-        section, the library_sync section, and
+        max_running_jobs and max_parallel_downloads), logging.level/access_log, the
+        simulate section, the library_sync section, and
         catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
         Every other field is consumed only at process startup, and a request that
         changes one is rejected with 422 config_key_not_mutable — edit the startup
@@ -1330,7 +1328,10 @@ components:
         pools:
           type: object
           required: [downloads, decrypts, wrapper_requests]
-          description: Process-wide pool sizes (download.max_parallel_*), fixed at startup.
+          description: >-
+            Process-wide pool sizes, fixed at startup: downloads is
+            download.max_parallel_downloads; decrypts (32) and wrapper_requests
+            (24) are built-in.
           properties:
             downloads:
               type: integer
@@ -1559,9 +1560,6 @@ components:
           enum: [debug, info, warn, error]
         message:
           type: string
-        source:
-          type: string
-          description: Present when logging.include_source is true; formatted as the Go source file path and line number.
         attributes:
           type: object
           additionalProperties: true
@@ -1704,8 +1702,8 @@ components:
         catalog:
           type: object
           description: >-
-            max_parallel_requests, requests_per_second and request_burst take
-            effect only at startup; they do not appear here and cannot be changed.
+            max_parallel_requests takes effect only at startup; it does not appear
+            here and cannot be changed.
           properties:
             album_track_url_mode:
               type: string
@@ -1741,9 +1739,8 @@ components:
         download:
           type: object
           description: >-
-            max_running_jobs, max_parallel_downloads, max_parallel_decrypts and
-            max_parallel_wrapper_requests take effect only at startup; they do not
-            appear here and cannot be changed.
+            max_running_jobs and max_parallel_downloads take effect only at
+            startup; they do not appear here and cannot be changed.
           properties:
             quality_priority:
               type: array
@@ -1848,7 +1845,7 @@ components:
                 overridden per batch with overrides.force_overwrite in the request.
         logging:
           type: object
-          description: Only the log level and the HTTP access log switch are runtime-mutable; output and rotation settings require a restart.
+          description: Only the log level and the HTTP access log switch are runtime-mutable; console and buffer_size require a restart.
           properties:
             level:
               type: string

@@ -43,7 +43,7 @@ func NewCatalogClient(cfg config.CatalogConfig, logger *slog.Logger) *CatalogCli
 		cfg:        cfg,
 		http:       &http.Client{Timeout: 30 * time.Second},
 		logger:     logger,
-		gate:       limits.NewRequestGate(cfg.MaxParallelRequests, cfg.RequestsPerSecond, cfg.RequestBurst),
+		gate:       limits.NewRequestGate(cfg.MaxParallelRequests, config.CatalogRequestsPerSecond, config.CatalogRequestBurst),
 		retryDelay: defaultRetryDelay,
 	}
 	c.catalogToken.fetch = c.fetchCatalogToken

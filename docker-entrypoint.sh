@@ -61,7 +61,7 @@ if [ "$(id -u)" = "0" ]; then
     # downloads directory may hold a large number of files, so ownership is
     # fixed recursively only once, when the top level does not match (the
     # first mount or a PUID/PGID change).
-    for dir in /app/data /app/data/db /app/data/logs /app/data/downloads; do
+    for dir in /app/data /app/data/db /app/data/downloads; do
         mkdir -p "$dir"
         if [ "$(stat -c '%u:%g' "$dir")" != "$PUID:$PGID" ]; then
             echo "fixing ownership of $dir to $PUID:$PGID"

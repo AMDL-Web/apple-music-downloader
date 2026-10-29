@@ -107,20 +107,22 @@ from zero rather than mixing two representations.
 ## Concurrency
 
 All pools are process-wide, shared across every job, sized at startup, and not shared
-between backend replicas. Changing any of them requires a restart.
+between backend replicas. The three config keys need a restart to change; the rest are
+fixed sizes in `internal/config` (`MaxParallelDecrypts`, `MaxParallelWrapperRequests`,
+`CatalogRequestsPerSecond`, `CatalogRequestBurst`).
 
-| Key | Default | Bounds |
+| Pool | Size | Bounds |
 | --- | ---: | --- |
-| `download.max_running_jobs` | 3 | Worker slots — concurrently running jobs |
-| `download.max_parallel_downloads` | 16 | Encrypted media transfers in flight |
-| `download.max_parallel_decrypts` | 32 | Decrypt operations in flight |
-| `download.max_parallel_wrapper_requests` | 24 | Wrapper data RPCs — M3U8, lyrics, web playback, license |
-| `catalog.max_parallel_requests` | 16 | Apple control-plane HTTP: Catalog API, web token, HLS manifests, artwork |
-| `catalog.requests_per_second` | 10 | Sustained authenticated Catalog / amp-api rate |
-| `catalog.request_burst` | 16 | Token-bucket burst for the same traffic |
+| `download.max_running_jobs` | 3 (default) | Worker slots — concurrently running jobs |
+| `download.max_parallel_downloads` | 16 (default) | Encrypted media transfers in flight |
+| Decrypts | 32 | Decrypt operations in flight |
+| Wrapper requests | 24 | Wrapper data RPCs — M3U8, lyrics, web playback, license |
+| `catalog.max_parallel_requests` | 16 (default) | Apple control-plane HTTP: Catalog API, web token, HLS manifests, artwork |
+| Catalog rate | 10 per second | Sustained authenticated Catalog / amp-api rate |
+| Catalog burst | 16 | Token-bucket burst for the same traffic |
 
-Wrapper login and logout are exempt from `max_parallel_wrapper_requests` so operator
-access is never starved; decrypt streams are bounded by `max_parallel_decrypts` instead.
+Wrapper login and logout are exempt from the wrapper request pool so operator access is
+never starved; decrypt streams are bounded by the decrypt pool instead.
 Media already downloaded but not yet decrypted is additionally held back by internal
 in-flight backpressure — with `D` download and `X` decrypt permits the internal in-flight
 ceiling is `D+X`.

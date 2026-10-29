@@ -29,7 +29,7 @@ func TestSystemInfo(t *testing.T) {
 	cfg.Simulate.Enabled = true
 	cfg.Catalog.MotionArtworkEnabled = false
 	cfg.Catalog.DefaultStorefront = "jp"
-	cfg.Download.MaxParallelDownloads, cfg.Download.MaxParallelDecrypts, cfg.Download.MaxParallelWrapperRequests = 4, 5, 6
+	cfg.Download.MaxParallelDownloads = 4
 	cfg.Download.DownloadsDir = t.TempDir()
 	cfg.Download.TempDir = filepath.Join(t.TempDir(), "missing")
 	cfg.Tools.FFmpeg = "amdl-test-tool-that-does-not-exist"
@@ -103,7 +103,7 @@ func TestSystemInfo(t *testing.T) {
 	if !equalCounts(got.RawJobs, wantJobs) {
 		t.Errorf("jobs = %v, want %v", got.RawJobs, wantJobs)
 	}
-	wantPools := map[string]int{"downloads": 4, "decrypts": 5, "wrapper_requests": 6}
+	wantPools := map[string]int{"downloads": 4, "decrypts": config.MaxParallelDecrypts, "wrapper_requests": config.MaxParallelWrapperRequests}
 	if !equalCounts(got.RawPools, wantPools) {
 		t.Errorf("pools = %v, want %v", got.RawPools, wantPools)
 	}
@@ -145,11 +145,12 @@ func TestSystemInfoLegacySigning(t *testing.T) {
 	}
 }
 
-// A pool size <= 0 runs as 1 (limits.NewSemaphore), so /system reports 1.
+// A pool size <= 0 runs as 1 (limits.NewSemaphore), so /system reports 1;
+// the decrypt and wrapper pools are fixed sizes.
 func TestSystemInfoReportsEffectivePoolSizes(t *testing.T) {
 	server := newTestServerWithManager(t)
 	cfg := config.Default()
-	cfg.Download.MaxParallelDownloads, cfg.Download.MaxParallelDecrypts, cfg.Download.MaxParallelWrapperRequests = 0, -3, 2
+	cfg.Download.MaxParallelDownloads = 0
 	server.cfg = config.NewStore(cfg)
 	rec := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/system", "")
 	var body struct {
@@ -158,7 +159,7 @@ func TestSystemInfoReportsEffectivePoolSizes(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil {
 		t.Fatalf("status %d, body %s", rec.Code, rec.Body.String())
 	}
-	if want := map[string]int{"downloads": 1, "decrypts": 1, "wrapper_requests": 2}; !equalCounts(body.Pools, want) {
+	if want := map[string]int{"downloads": 1, "decrypts": config.MaxParallelDecrypts, "wrapper_requests": config.MaxParallelWrapperRequests}; !equalCounts(body.Pools, want) {
 		t.Fatalf("pools = %v, want %v", body.Pools, want)
 	}
 }
@@ -185,7 +186,6 @@ func TestLogRoutesWithoutRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = system.Close() })
 	server := newServer(t, Deps{Config: config.NewStore(cfg), Logger: system.Logger, Logging: system})
 	for _, path := range []string{"/api/v1/logs", "/api/v1/logs/stream"} {
 		rec := requestJSON(t, server.Routes(), http.MethodGet, path, "")

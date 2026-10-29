@@ -153,11 +153,10 @@ that name is ignored. `GET /api/v1/logs?request_id=<id>` aggregates that request
 synchronous job operations it triggered.
 
 In-memory retention is `logging.buffer_size`; at `0` no history is kept and both
-`GET /logs` and `GET /logs/stream` answer `503 feature_unavailable`; read the console or
-file output instead. File output is off by default and rotates by
-`max_size_mb` / `max_backups` / `max_age_days`, optionally gzipped. `logging.level` and
-`logging.access_log` are runtime-mutable; format, destination, buffer size and rotation
-need a restart.
+`GET /logs` and `GET /logs/stream` answer `503 feature_unavailable`; read stdout
+(`logging.console`) instead. The backend writes no log file. `logging.level` and
+`logging.access_log` are runtime-mutable; `logging.console` and the buffer size need a
+restart.
 
 ## Wrapper
 

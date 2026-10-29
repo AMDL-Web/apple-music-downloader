@@ -35,7 +35,7 @@ including startup keys, dropping all comments in the process.
 
 | | |
 | --- | --- |
-| **Startup** | `server.listen`, `database.path`, `wrapper.*`, `tools.ffmpeg`, most of `logging.*`, the developer-token signing keys, and every pool size (`download.max_running_jobs`, `max_parallel_downloads`, `max_parallel_decrypts`, `max_parallel_wrapper_requests`, `catalog.max_parallel_requests`, `catalog.requests_per_second`, `catalog.request_burst`) |
+| **Startup** | `server.listen`, `database.path`, `wrapper.*`, `tools.ffmpeg`, `logging.console`, `logging.buffer_size`, the developer-token signing keys, and every pool size (`download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`) |
 | **Runtime** | `logging.level`, `logging.access_log`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.signed_mode_hls_source`, `catalog.motion_artwork_enabled`, all remaining `download.*` keys, the whole `simulate` section and the whole `library_sync` section |
 
 Hand edits reach the running service like this:
@@ -53,7 +53,7 @@ Set these before first real use:
 - `wrapper.address` — `wrapper-manager` gRPC address.
 - `database.path` — SQLite file (default `data/db/amdl.db`).
 - `download.downloads_dir` — where finished files go.
-- `logging.*` — format, in-memory retention, optional rotating file.
+- `logging.*` — level, stdout on or off, in-memory retention. There is no log file.
 - `tools.ffmpeg` — path or command name.
 
 ## Environment overrides

@@ -127,8 +127,7 @@ func TestMediaDownloadLimitSharedAcrossJobClones(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.TempDir = t.TempDir()
 	cfg.Download.MaxParallelDownloads = 1
-	cfg.Download.MaxParallelDecrypts = 1
-	base := (newTestDownloader(&Downloader{cfg: cfg, http: server.Client()})).withConfig(cfg)
+	base := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg, http: server.Client()}, 1)).withConfig(cfg)
 	a, b := base.withConfig(cfg), base.withConfig(cfg)
 	if a.downloadLimit != b.downloadLimit || a.decryptLimit != b.decryptLimit || a.inFlightLimit != b.inFlightLimit {
 		t.Fatal("withConfig clones did not share process-wide media limiters")

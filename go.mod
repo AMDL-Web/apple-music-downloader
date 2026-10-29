@@ -14,8 +14,6 @@ require (
 	modernc.org/sqlite v1.56.0
 )
 
-require gopkg.in/natefinch/lumberjack.v2 v2.2.1
-
 require golang.org/x/time v0.15.0
 
 require (

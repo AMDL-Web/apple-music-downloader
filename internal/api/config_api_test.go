@@ -49,7 +49,7 @@ func TestGetConfigReturnsOnlyMutableFields(t *testing.T) {
 	if err := json.Unmarshal(resp.Config["download"], &download); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"max_running_jobs", "max_parallel_downloads", "max_parallel_decrypts", "max_parallel_wrapper_requests"} {
+	for _, key := range []string{"max_running_jobs", "max_parallel_downloads"} {
 		if _, ok := download[key]; ok {
 			t.Fatalf("download section exposes startup-bound %s", key)
 		}
@@ -87,7 +87,7 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 	// The response echoes the mutable view only, never startup-bound sections.
-	if strings.Contains(recorder.Body.String(), `"server"`) || strings.Contains(recorder.Body.String(), `"max_running_jobs"`) || strings.Contains(recorder.Body.String(), `"max_parallel_downloads"`) || strings.Contains(recorder.Body.String(), `"max_parallel_decrypts"`) || strings.Contains(recorder.Body.String(), `"max_parallel_requests"`) {
+	if strings.Contains(recorder.Body.String(), `"server"`) || strings.Contains(recorder.Body.String(), `"max_running_jobs"`) || strings.Contains(recorder.Body.String(), `"max_parallel_downloads"`) || strings.Contains(recorder.Body.String(), `"max_parallel_requests"`) {
 		t.Fatalf("update response leaks startup-bound fields: %s", recorder.Body.String())
 	}
 
@@ -125,7 +125,6 @@ func TestUpdateConfigAppliesLoggingLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = system.Close() })
 	store := config.NewStore(cfg)
 	server := newServer(t, Deps{Config: store, Logger: system.Logger, Logging: system})
 
@@ -271,17 +270,17 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 		{name: "removed tracks limit", body: `{"download":{"max_parallel_tracks":5}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_tracks"},
 		{name: "removed metadata limit", body: `{"download":{"max_parallel_metadata_requests":32}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_metadata_requests"},
 		{name: "removed media limit", body: `{"download":{"max_parallel_media_downloads":32}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_media_downloads"},
-		{name: "locked wrapper pool", body: `{"download":{"max_parallel_wrapper_requests":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "download.max_parallel_wrapper_requests"},
+		{name: "removed wrapper pool", body: `{"download":{"max_parallel_wrapper_requests":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_wrapper_requests"},
 		{name: "invalid memory mode", body: `{"download":{"memory_mode":"auto"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "memory_mode"},
 		{name: "malformed cover size", body: `{"download":{"cover_size":"big"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "download.cover_size"},
 		{name: "locked field", body: `{"server":{"listen":"0.0.0.0:1"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "server.listen"},
 		{name: "locked worker count", body: `{"download":{"max_running_jobs":99}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "download.max_running_jobs"},
 		{name: "locked download pool", body: `{"download":{"max_parallel_downloads":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "download.max_parallel_downloads"},
-		{name: "locked decrypt pool", body: `{"download":{"max_parallel_decrypts":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "download.max_parallel_decrypts"},
+		{name: "removed decrypt pool", body: `{"download":{"max_parallel_decrypts":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_decrypts"},
 		{name: "locked catalog concurrency", body: `{"catalog":{"max_parallel_requests":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "catalog.max_parallel_requests"},
-		{name: "locked catalog rate", body: `{"catalog":{"requests_per_second":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "catalog.requests_per_second"},
-		{name: "locked catalog burst", body: `{"catalog":{"request_burst":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "catalog.request_burst"},
-		{name: "locked logging output", body: `{"logging":{"format":"json"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "logging.format"},
+		{name: "removed catalog rate", body: `{"catalog":{"requests_per_second":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "requests_per_second"},
+		{name: "removed logging format", body: `{"logging":{"format":"json"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "format"},
+		{name: "locked logging output", body: `{"logging":{"console":false}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "logging.console"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

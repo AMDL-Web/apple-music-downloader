@@ -44,9 +44,8 @@ func TestSimulateUsesSharedPipelinedMediaPools(t *testing.T) {
 	cfg.Download.QualityPriority = []string{"aac-lc"}
 	cfg.Download.CodecAlternative = false
 	cfg.Download.MaxParallelDownloads = 1
-	cfg.Download.MaxParallelDecrypts = 1
 	cfg.Download.EmbedCover = false
-	base := newTestDownloader(&Downloader{cfg: cfg}).withConfig(cfg)
+	base := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg}, 1)).withConfig(cfg)
 
 	start := time.Now()
 	var wg sync.WaitGroup

@@ -1,11 +1,10 @@
 package logging
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -26,7 +25,6 @@ func TestSystemCapturesFiltersAndRedacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer system.Close()
 
 	logger := system.Logger.With("component", "jobs", "job_id", "job-1")
 	logger.Debug("hidden")
@@ -203,59 +201,40 @@ func TestStoreDisconnectsSlowSubscriberAndMarksDisabledHistory(t *testing.T) {
 	}
 }
 
-func TestFileOutput(t *testing.T) {
+func TestConsoleOutputRedacts(t *testing.T) {
 	cfg := testConfig()
-	cfg.FileEnabled = true
-	cfg.FilePath = filepath.Join(t.TempDir(), "nested", "amdl.log")
-	cfg.Format = "json"
-	system, err := New(cfg)
+	cfg.Console = true
+	var out bytes.Buffer
+	system, err := newSystem(cfg, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
 	system.Logger.InfoContext(context.Background(), "written", "component", "test", "payload", map[string]string{"token": "must-not-leak"})
-	if err := system.Close(); err != nil {
-		t.Fatal(err)
+	system.Logger.Info("grouped", slog.Group("authorization", "value", "group-secret"))
+	raw := out.String()
+	if !strings.Contains(raw, "msg=written") || !strings.Contains(raw, "msg=grouped") {
+		t.Fatalf("console output = %s", raw)
 	}
-	raw, err := os.ReadFile(cfg.FilePath)
-	if err != nil {
-		t.Fatal(err)
+	if strings.Contains(raw, "must-not-leak") || strings.Contains(raw, "group-secret") {
+		t.Fatalf("console output was not redacted: %s", raw)
 	}
-	if !strings.Contains(string(raw), `"msg":"written"`) {
-		t.Fatalf("file output = %s", raw)
-	}
-	if strings.Contains(string(raw), "must-not-leak") || !strings.Contains(string(raw), "[REDACTED]") {
-		t.Fatalf("file output was not redacted: %s", raw)
+	if !strings.Contains(raw, "authorization.value=[REDACTED]") {
+		t.Fatalf("sensitive group not redacted as a whole: %s", raw)
 	}
 }
 
-func TestFileOutputRedactsSensitiveGroup(t *testing.T) {
-	cfg := testConfig()
-	cfg.FileEnabled = true
-	cfg.FilePath = filepath.Join(t.TempDir(), "amdl.log")
-	cfg.Format = "json"
-	system, err := New(cfg)
+func TestConsoleOffWritesNothing(t *testing.T) {
+	var out bytes.Buffer
+	system, err := newSystem(testConfig(), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	system.Logger.Info("written", slog.Group("authorization", "value", "group-secret"))
-	if err := system.Close(); err != nil {
-		t.Fatal(err)
+	system.Logger.Info("kept in memory only")
+	if out.Len() != 0 {
+		t.Fatalf("console off still wrote: %s", out.String())
 	}
-	raw, err := os.ReadFile(cfg.FilePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "group-secret") || !strings.Contains(string(raw), `"authorization":{"value":"[REDACTED]"}`) {
-		t.Fatalf("sensitive group leaked to file output: %s", raw)
-	}
-}
-
-func TestFileOutputFailsFastForUnwritableTarget(t *testing.T) {
-	cfg := testConfig()
-	cfg.FileEnabled = true
-	cfg.FilePath = t.TempDir()
-	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "open log file") {
-		t.Fatalf("New() error = %v, want log-file probe failure", err)
+	if page := system.Store.List(Filter{Limit: 10}); len(page.Entries) != 1 {
+		t.Fatalf("buffer entries = %d, want 1", len(page.Entries))
 	}
 }
 

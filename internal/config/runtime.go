@@ -24,10 +24,7 @@ func isRuntimeKey(key string) bool {
 	switch section {
 	case "download":
 		switch key {
-		case "download.max_running_jobs",
-			"download.max_parallel_downloads",
-			"download.max_parallel_decrypts",
-			"download.max_parallel_wrapper_requests":
+		case "download.max_running_jobs", "download.max_parallel_downloads":
 			return false
 		}
 		return true
@@ -143,7 +140,7 @@ func MutableView(cfg Config) (map[string]any, error) {
 // RuntimeLockedChanges returns the dotted keys of fields that differ between
 // old and updated but are consumed only at process startup (listen address,
 // database path, logging outputs, wrapper connection, catalog client/token
-// signing and Apple request limits, worker/resource pool sizes, tool paths).
+// signing and Apple request limit, worker/resource pool sizes, tool paths).
 // Changing them through the runtime config API would silently do nothing, so
 // PUT /api/v1/config rejects an update whenever this returns a non-empty
 // list. The startup-bound set is everything isRuntimeKey does not claim;

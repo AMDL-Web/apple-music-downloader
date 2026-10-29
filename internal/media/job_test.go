@@ -94,11 +94,10 @@ func TestProcessJobAvoidsDuplicateSingleSongMetadataReads(t *testing.T) {
 	cfg.Download.DownloadsDir = t.TempDir()
 	cfg.Download.MaxAttempts = 1
 	cfg.Download.MaxParallelDownloads = 1
-	cfg.Download.MaxParallelDecrypts = 1
 	cfg.Download.EmbedCover = false
 	cfg.Download.EmbedLyrics = false
 	cfg.Download.QualityPriority = []string{"alac"}
-	downloader := newTestDownloader(&Downloader{cfg: cfg, catalog: catalog})
+	downloader := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg, catalog: catalog}, 1))
 	reporter := &recordingReporter{}
 	force := true
 	job := domain.Job{
@@ -140,11 +139,10 @@ func TestProcessJobDoesNotRefetchResolvedAlbumPerTrack(t *testing.T) {
 	cfg.Download.DownloadsDir = t.TempDir()
 	cfg.Download.MaxAttempts = 1
 	cfg.Download.MaxParallelDownloads = 1
-	cfg.Download.MaxParallelDecrypts = 1
 	cfg.Download.EmbedCover = false
 	cfg.Download.EmbedLyrics = false
 	cfg.Download.QualityPriority = []string{"alac"}
-	downloader := newTestDownloader(&Downloader{cfg: cfg, catalog: catalog})
+	downloader := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg, catalog: catalog}, 1))
 	reporter := &recordingReporter{}
 	force := true
 	job := domain.Job{

@@ -19,9 +19,8 @@ needs the API changes below before it works against 2.0.
    `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and `AMDL_DATABASE_PATH` into
    `config.yaml` (for example `AMDL_SIMULATE_ENABLED=true` becomes `enabled: true` under
    `simulate:`), then unset it: 2.0 ignores the rest and logs a warning naming each one.
-4. Remove `catalog.media_user_token_priority`, `catalog.developer_token_ttl_hours` and
-   `catalog.allowed_origins` from `config.yaml` if present: 2.0 rejects unknown keys at
-   startup.
+4. Remove the keys listed as removed under [Config and environment](#config-and-environment)
+   from `config.yaml` if present: 2.0 rejects unknown keys at startup.
 5. If `config.yaml` omits any key in the defaults table below, decide whether you want
    the new default or should write the old value into the file.
 6. Give the container time to stop: `stop_grace_period: 2m` in Compose or
@@ -55,6 +54,8 @@ needs the API changes below before it works against 2.0.
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
 | Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays (possibly empty) | account screens |
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
+| Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
+| `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were startup keys (`422 config_key_not_mutable`) | `400 invalid_request` naming the unknown field, like any removed key | settings screens |
 | Env-pinned keys | `GET /config` listed the runtime keys an `AMDL_*` variable set in `pinned`; `PUT /config` refused them with `422 config_key_pinned` | `pinned`, the `PinnedKey` schema and the `config_key_pinned` code are gone: no environment variable can set a runtime key any more | settings screens |
 | Developer token | `GET /developer-token` signed a token for other clients in local signing mode (`409 signing_disabled` in legacy mode) | removed (`404 route_not_found`), and the `signing_disabled` code with it; the backend signs only its own catalog token | browser players that fetched a token |
 | API reference | Swagger UI at `/docs` (from unpkg.com) and the spec at `/api/openapi.yaml` | neither is served (`404`); read `internal/api/openapi.yaml` and `docs/api.md` in the repository | API explorers, client generators that fetched the spec |
@@ -81,6 +82,16 @@ needs the API changes below before it works against 2.0.
   `docker compose kill -s SIGHUP amdl-backend` no longer does anything.
 - `catalog.media_user_token_priority` is rejected in the file and in a `PUT /config` body
   (`400`).
+- Logging writes only to stdout and the in-memory buffer. `logging.format` (always text
+  now), `logging.include_source`, and the log file keys `logging.file_enabled`,
+  `logging.file_path`, `logging.max_size_mb`, `logging.max_backups`,
+  `logging.max_age_days` and `logging.compress` are rejected in the file; delete them and
+  collect stdout (`docker logs`) to keep logs. The `./data/logs` mount is no longer used.
+- `catalog.requests_per_second` (10), `catalog.request_burst` (16),
+  `download.max_parallel_decrypts` (32) and `download.max_parallel_wrapper_requests` (24)
+  are fixed at those values and rejected in the file; delete them.
+  `catalog.max_parallel_requests`, `download.max_parallel_downloads` and
+  `download.max_running_jobs` remain keys.
 - `catalog.developer_token_ttl_hours` and `catalog.allowed_origins` configured the removed
   `GET /developer-token`. Both are rejected in the file; delete them. The backend's own
   signed token is unaffected.

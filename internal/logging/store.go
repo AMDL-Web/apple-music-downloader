@@ -14,7 +14,6 @@ type Entry struct {
 	Time       time.Time      `json:"time"`
 	Level      string         `json:"level"`
 	Message    string         `json:"message"`
-	Source     string         `json:"source,omitempty"`
 	Attributes map[string]any `json:"attributes,omitempty"`
 }
 

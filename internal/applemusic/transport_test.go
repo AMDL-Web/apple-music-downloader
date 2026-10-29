@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"amdl/internal/config"
+	"amdl/internal/limits"
 )
 
 type closeTrackingBody struct {
@@ -26,7 +27,7 @@ func (b *closeTrackingBody) Close() error {
 
 func TestAppleRequestRetries429OnceAndClosesFirstBody(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{
-		MaxParallelRequests: 2, RequestsPerSecond: 1000, RequestBurst: 1000,
+		MaxParallelRequests: 2,
 	}, slog.Default())
 	firstBody := &closeTrackingBody{Reader: strings.NewReader("limited")}
 	calls := 0
@@ -58,7 +59,7 @@ func TestAppleRequestRetries429OnceAndClosesFirstBody(t *testing.T) {
 
 func TestAppleRequestReturnsSecond429(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{
-		MaxParallelRequests: 2, RequestsPerSecond: 1000, RequestBurst: 1000,
+		MaxParallelRequests: 2,
 	}, slog.Default())
 	calls := 0
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -78,9 +79,8 @@ func TestAppleRequestReturnsSecond429(t *testing.T) {
 }
 
 func TestAppleRequestRateAppliesOnlyToAuthenticatedAPI(t *testing.T) {
-	client := newTestCatalogClient(config.CatalogConfig{
-		MaxParallelRequests: 2, RequestsPerSecond: 1, RequestBurst: 1,
-	}, slog.Default())
+	client := newTestCatalogClient(config.CatalogConfig{MaxParallelRequests: 2}, slog.Default())
+	client.gate = limits.NewRequestGate(2, 1, 1)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}, nil
 	})}

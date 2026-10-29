@@ -5,22 +5,20 @@ import (
 	"net/http"
 
 	"amdl/internal/config"
+	"amdl/internal/limits"
 )
 
-// Most catalog tests predate the startup request-pool settings and construct
-// only the fields relevant to the behavior under test. Give those fixtures a
-// fast gate explicitly; production still treats configured values <=0 as 1.
+// Most catalog tests construct only the fields relevant to the behavior under
+// test. Give those fixtures a fast gate explicitly (64 in parallel, 64 per
+// second) instead of the production rate; production still treats a
+// max_parallel_requests <= 0 as 1.
 func newTestCatalogClient(cfg config.CatalogConfig, logger *slog.Logger) *CatalogClient {
 	if cfg.MaxParallelRequests <= 0 {
 		cfg.MaxParallelRequests = 64
 	}
-	if cfg.RequestsPerSecond <= 0 {
-		cfg.RequestsPerSecond = 64
-	}
-	if cfg.RequestBurst <= 0 {
-		cfg.RequestBurst = 64
-	}
-	return NewCatalogClient(cfg, logger)
+	c := NewCatalogClient(cfg, logger)
+	c.gate = limits.NewRequestGate(cfg.MaxParallelRequests, 64, 64)
+	return c
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

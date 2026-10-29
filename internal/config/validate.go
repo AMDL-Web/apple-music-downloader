@@ -59,28 +59,11 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("logging.level must be debug, info, warn, or error")
 	}
-	switch c.Logging.Format {
-	case "text", "json":
-	default:
-		return fmt.Errorf("logging.format must be text or json")
-	}
-	if !c.Logging.Console && !c.Logging.FileEnabled && c.Logging.BufferSize == 0 {
-		return fmt.Errorf("logging must enable console, file, or a non-zero buffer_size")
+	if !c.Logging.Console && c.Logging.BufferSize == 0 {
+		return fmt.Errorf("logging must enable console or a non-zero buffer_size")
 	}
 	if c.Logging.BufferSize < 0 || c.Logging.BufferSize > maxLogBufferSize {
 		return fmt.Errorf("logging.buffer_size must be between 0 and %d", maxLogBufferSize)
-	}
-	if c.Logging.FileEnabled && strings.TrimSpace(c.Logging.FilePath) == "" {
-		return fmt.Errorf("logging.file_path cannot be empty when file_enabled is true")
-	}
-	if c.Logging.MaxSizeMB < 1 {
-		return fmt.Errorf("logging.max_size_mb must be >= 1")
-	}
-	if c.Logging.MaxBackups < 0 {
-		return fmt.Errorf("logging.max_backups must be >= 0")
-	}
-	if c.Logging.MaxAgeDays < 0 {
-		return fmt.Errorf("logging.max_age_days must be >= 0")
 	}
 	if c.Catalog.AlbumTrackURLMode != "song" && c.Catalog.AlbumTrackURLMode != "album" {
 		return fmt.Errorf("catalog.album_track_url_mode must be song or album")
@@ -104,17 +87,8 @@ func (c Config) Validate() error {
 	if signingFields != 0 && signingFields != 3 {
 		return fmt.Errorf("catalog.apple_music_private_key_path, catalog.apple_music_key_id, and catalog.apple_music_team_id must all be set together or all left empty")
 	}
-	for _, limit := range []struct {
-		key   string
-		value int
-	}{
-		{"catalog.max_parallel_requests", c.Catalog.MaxParallelRequests},
-		{"catalog.request_burst", c.Catalog.RequestBurst},
-		{"catalog.requests_per_second", c.Catalog.RequestsPerSecond},
-	} {
-		if limit.value > maxGlobalPoolLimit {
-			return fmt.Errorf("%s must be at most %d", limit.key, maxGlobalPoolLimit)
-		}
+	if c.Catalog.MaxParallelRequests > maxGlobalPoolLimit {
+		return fmt.Errorf("catalog.max_parallel_requests must be at most %d", maxGlobalPoolLimit)
 	}
 	for _, format := range []struct {
 		key   string
@@ -138,12 +112,6 @@ func (c Config) Validate() error {
 	}
 	if c.Download.MaxParallelDownloads > maxGlobalPoolLimit {
 		return fmt.Errorf("download.max_parallel_downloads must be at most %d", maxGlobalPoolLimit)
-	}
-	if c.Download.MaxParallelDecrypts > maxGlobalPoolLimit {
-		return fmt.Errorf("download.max_parallel_decrypts must be at most %d", maxGlobalPoolLimit)
-	}
-	if c.Download.MaxParallelWrapperRequests > maxGlobalPoolLimit {
-		return fmt.Errorf("download.max_parallel_wrapper_requests must be at most %d", maxGlobalPoolLimit)
 	}
 	if c.Download.MaxAttempts > maxAttemptsLimit {
 		return fmt.Errorf("download.max_attempts must be at most %d", maxAttemptsLimit)

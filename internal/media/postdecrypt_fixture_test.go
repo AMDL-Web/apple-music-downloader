@@ -131,18 +131,17 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 	cfg.Download.TempDir = tempDir
 	cfg.Download.DownloadsDir = outputDir
 	cfg.Download.MaxParallelDownloads = 1
-	cfg.Download.MaxParallelDecrypts = 1
 	cfg.Download.CheckIntegrity = true
 	cfg.Download.EmbedCover = true
 	cfg.Download.SaveLyricsFile = false
 	cfg.Tools.FFmpeg = ffmpeg
 
-	downloader := newTestDownloader(&Downloader{
+	downloader := newTestDownloader(withDecryptLimit(&Downloader{
 		cfg:     cfg,
 		wrapper: postDecryptFixtureWrapper{fixture: fixture},
 		http:    client,
 		mp4:     newMP4Processor(cfg),
-	})
+	}, 1))
 	selected := selectedDownloadMedia{info: selectedMediaInfo{
 		MediaURI:   mediaURL,
 		Keys:       []string{"offline-fixture-key-slot"},

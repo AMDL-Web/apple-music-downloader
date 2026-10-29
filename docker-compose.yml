@@ -76,9 +76,6 @@ services:
       - ./configs:/app/configs
       # SQLite database directory (database.path defaults to data/db/amdl.db).
       - ./data/db:/app/data/db
-      # Optional rotating log directory (logging.file_enabled defaults to false;
-      # once enabled, logs are written here).
-      - ./data/logs:/app/data/logs
       # Download output directory; to put it elsewhere on the host, change the
       # left side of the colon, for example /path/to/music:/app/data/downloads.
       - ./data/downloads:/app/data/downloads

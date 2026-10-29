@@ -38,7 +38,6 @@ func newStreamServer(t *testing.T) (*Server, *logging.System) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = system.Close() })
 	hub := events.NewHub()
 	return newServer(t, Deps{
 		Config: config.NewStore(cfg), Store: store, Hub: hub,

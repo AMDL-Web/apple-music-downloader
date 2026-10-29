@@ -122,8 +122,8 @@ WebPlayback format. Set `codec_alternative: false` to stop after the first codec
 ### Concurrency
 
 Three process-wide pools, shared across all jobs and fixed at startup:
-`max_parallel_downloads` (16), `max_parallel_decrypts` (32) and
-`max_parallel_wrapper_requests` (24), plus `max_running_jobs` (3) worker slots. When a
+`max_parallel_downloads` (16), 32 decrypts and 24 wrapper requests, plus
+`max_running_jobs` (3) worker slots. When a
 pool is full, permits go to the earliest-submitted unfinished job first, so jobs tend to
 finish one after another instead of all creeping forward together. Interactive API calls
 never wait for those pools; Apple catalog reads, `POST /api/v1/lookup` included, share
@@ -200,7 +200,7 @@ is the documentation — every key's allowed values, units and defaults live in 
 - **Runtime keys** (quality, paths, lyrics, covers, retries, simulate, library sync) apply
   immediately via `PUT /api/v1/config`, which rewrites the whole file and drops comments.
 - **Startup keys** (listen address, database path, wrapper address, pool sizes, log
-  format) need a restart.
+  output) need a restart.
 - **Environment**: `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and `AMDL_DATABASE_PATH`
   override their keys, and `AMDL_CONFIG` / `AMDL_HOOKS_CONFIG` choose the files. Every
   other key is set in the file; any other `AMDL_*` variable is ignored with a warning.

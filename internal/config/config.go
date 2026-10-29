@@ -56,23 +56,15 @@ type DatabaseConfig struct {
 	Path string `yaml:"path" json:"path"`
 }
 
-// LoggingConfig controls the process-wide structured logger. The whole
-// output shape is startup-bound because changing files and handler structure
-// while requests are in flight would make persistence failures ambiguous;
-// Level and AccessLog are safe to update at runtime.
+// LoggingConfig controls the process-wide structured logger, which writes
+// text lines to stdout (Console) and keeps the newest BufferSize records in
+// memory for the log API. Console and BufferSize are startup-bound; Level and
+// AccessLog are safe to update at runtime.
 type LoggingConfig struct {
-	Level         string `yaml:"level" json:"level"`
-	Format        string `yaml:"format" json:"format"`
-	Console       bool   `yaml:"console" json:"console"`
-	IncludeSource bool   `yaml:"include_source" json:"include_source"`
-	AccessLog     bool   `yaml:"access_log" json:"access_log"`
-	BufferSize    int    `yaml:"buffer_size" json:"buffer_size"`
-	FileEnabled   bool   `yaml:"file_enabled" json:"file_enabled"`
-	FilePath      string `yaml:"file_path" json:"file_path"`
-	MaxSizeMB     int    `yaml:"max_size_mb" json:"max_size_mb"`
-	MaxBackups    int    `yaml:"max_backups" json:"max_backups"`
-	MaxAgeDays    int    `yaml:"max_age_days" json:"max_age_days"`
-	Compress      bool   `yaml:"compress" json:"compress"`
+	Level      string `yaml:"level" json:"level"`
+	Console    bool   `yaml:"console" json:"console"`
+	AccessLog  bool   `yaml:"access_log" json:"access_log"`
+	BufferSize int    `yaml:"buffer_size" json:"buffer_size"`
 }
 
 // WrapperConfig is the wrapper-manager gRPC connection.
@@ -102,14 +94,12 @@ func (c WrapperConfig) Timeout() time.Duration {
 }
 
 // CatalogConfig controls Apple Music catalog access: storefront and language,
-// the shared Apple request limits, developer-token signing, and the
+// the shared Apple request limit, developer-token signing, and the
 // runtime-mutable catalog behavior keys.
 type CatalogConfig struct {
 	DefaultStorefront        string `yaml:"default_storefront" json:"default_storefront"`
 	Language                 string `yaml:"language" json:"language"`
 	MaxParallelRequests      int    `yaml:"max_parallel_requests" json:"max_parallel_requests"`
-	RequestsPerSecond        int    `yaml:"requests_per_second" json:"requests_per_second"`
-	RequestBurst             int    `yaml:"request_burst" json:"request_burst"`
 	AppleMusicPrivateKeyPath string `yaml:"apple_music_private_key_path" json:"apple_music_private_key_path"`
 	AppleMusicKeyID          string `yaml:"apple_music_key_id" json:"apple_music_key_id"`
 	AppleMusicTeamID         string `yaml:"apple_music_team_id" json:"apple_music_team_id"`
@@ -156,14 +146,12 @@ func (c CatalogConfig) EnhancedHLSFromWebToken() bool {
 // DownloadConfig controls the download pipeline: codec choice, retries, the
 // process-wide pools, output paths and post-processing.
 type DownloadConfig struct {
-	QualityPriority            []string `yaml:"quality_priority" json:"quality_priority"`
-	CodecAlternative           bool     `yaml:"codec_alternative" json:"codec_alternative"`
-	MemoryMode                 string   `yaml:"memory_mode" json:"memory_mode"`
-	MaxRunningJobs             int      `yaml:"max_running_jobs" json:"max_running_jobs"`
-	MaxParallelDownloads       int      `yaml:"max_parallel_downloads" json:"max_parallel_downloads"`
-	MaxParallelDecrypts        int      `yaml:"max_parallel_decrypts" json:"max_parallel_decrypts"`
-	MaxParallelWrapperRequests int      `yaml:"max_parallel_wrapper_requests" json:"max_parallel_wrapper_requests"`
-	MaxAttempts                int      `yaml:"max_attempts" json:"max_attempts"`
+	QualityPriority      []string `yaml:"quality_priority" json:"quality_priority"`
+	CodecAlternative     bool     `yaml:"codec_alternative" json:"codec_alternative"`
+	MemoryMode           string   `yaml:"memory_mode" json:"memory_mode"`
+	MaxRunningJobs       int      `yaml:"max_running_jobs" json:"max_running_jobs"`
+	MaxParallelDownloads int      `yaml:"max_parallel_downloads" json:"max_parallel_downloads"`
+	MaxAttempts          int      `yaml:"max_attempts" json:"max_attempts"`
 	// ProgressEventIntervalMS is the minimum gap between two consecutive
 	// item_progress events for the same item while it stays in one state. It
 	// throttles only movement of the download/decrypt meters; status changes
@@ -198,8 +186,8 @@ const (
 	MemoryModeLow  = "low"
 	MemoryModeHigh = "high"
 
-	// These limits bound process-wide concurrency, request rate, and retry
-	// fan-out while remaining comfortably above normal deployments.
+	// These limits bound process-wide concurrency and retry fan-out while
+	// remaining comfortably above normal deployments.
 	maxRunningJobsLimit = 32
 	maxGlobalPoolLimit  = 64
 	maxAttemptsLimit    = 10
@@ -207,6 +195,23 @@ const (
 	// beyond this it looks frozen, so the coalescing interval is capped rather
 	// than left open-ended.
 	maxProgressEventIntervalMSLimit = 10000
+)
+
+// Fixed sizes of process-wide pools and of the Apple request rate. Unlike
+// max_parallel_downloads and catalog.max_parallel_requests they are not keys:
+// one install has no reason to tune them.
+const (
+	// MaxParallelDecrypts bounds media decrypt operations in flight across
+	// all jobs.
+	MaxParallelDecrypts = 32
+	// MaxParallelWrapperRequests bounds wrapper-manager data RPCs (M3U8,
+	// lyrics, web playback, license) across all jobs; login and logout are
+	// exempt, and decrypt streams are bounded by MaxParallelDecrypts instead.
+	MaxParallelWrapperRequests = 24
+	// CatalogRequestsPerSecond and CatalogRequestBurst are the token bucket
+	// shared by authenticated Catalog API and amp-api requests.
+	CatalogRequestsPerSecond = 10
+	CatalogRequestBurst      = 16
 )
 
 // ToolsConfig locates external executables.
@@ -232,24 +237,20 @@ func Default() Config {
 	return Config{
 		Server:   ServerConfig{Listen: "127.0.0.1:18080"},
 		Database: DatabaseConfig{Path: "data/db/amdl.db"},
-		Logging: LoggingConfig{
-			Level: "info", Format: "text", Console: true, AccessLog: false,
-			BufferSize: 2000, FilePath: "data/logs/amdl.log", MaxSizeMB: 100,
-			MaxBackups: 7, MaxAgeDays: 30, Compress: true,
-		},
+		Logging:  LoggingConfig{Level: "info", Console: true, AccessLog: false, BufferSize: 2000},
 		Wrapper: WrapperConfig{
 			Address: "127.0.0.1:8080", Insecure: true, TimeoutSeconds: 30, LoginTimeoutSeconds: 120,
 		},
 		Catalog: CatalogConfig{
 			DefaultStorefront: "cn", Language: "zh-Hans_CN",
-			MaxParallelRequests: 16, RequestsPerSecond: 10, RequestBurst: 16,
-			TokenCacheTTLHours: 12,
-			AlbumTrackURLMode:  "song", SignedModeHLSSource: "wrapper",
+			MaxParallelRequests: 16,
+			TokenCacheTTLHours:  12,
+			AlbumTrackURLMode:   "song", SignedModeHLSSource: "wrapper",
 			MotionArtworkEnabled: true,
 		},
 		Download: DownloadConfig{
 			QualityPriority: []string{"alac"}, CodecAlternative: true, MemoryMode: MemoryModeLow,
-			MaxRunningJobs: 3, MaxParallelDownloads: 16, MaxParallelDecrypts: 32, MaxParallelWrapperRequests: 24, MaxAttempts: 3,
+			MaxRunningJobs: 3, MaxParallelDownloads: 16, MaxAttempts: 3,
 			ProgressEventIntervalMS: 500,
 			DownloadsDir:            "data/downloads",
 			SongPathFormat:          "songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",

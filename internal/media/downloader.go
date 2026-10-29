@@ -81,8 +81,8 @@ func NewDownloader(store *config.Store, catalog *applemusic.CatalogClient, wrapp
 		store: store, cfg: cfg, catalog: catalog, wrapper: wrapperClient, tools: tools,
 		http: newHTTPClient(), mp4: newMP4Processor(cfg), logger: logger,
 		downloadLimit: limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
-		decryptLimit:  limits.NewSemaphore(cfg.Download.MaxParallelDecrypts),
-		inFlightLimit: limits.NewSemaphore(cfg.Download.MaxParallelDownloads + cfg.Download.MaxParallelDecrypts),
+		decryptLimit:  limits.NewSemaphore(config.MaxParallelDecrypts),
+		inFlightLimit: limits.NewSemaphore(cfg.Download.MaxParallelDownloads + config.MaxParallelDecrypts),
 		requestGate:   catalog.RequestGate(),
 		background:    &sync.WaitGroup{},
 	}

@@ -34,7 +34,6 @@ docker run -d --name amdl-backend \
   -p 18080:18080 \
   -v ./configs:/app/configs \
   -v ./data/db:/app/data/db \
-  -v ./data/logs:/app/data/logs \
   -v ./data/downloads:/app/data/downloads \
   --add-host host.docker.internal:host-gateway \
   amdl-backend
@@ -132,19 +131,21 @@ To avoid running as root at all, use `docker run --user <uid>:<gid>` (or compose
 
 ## Mounts
 
-`docker-compose.yml` bind-mounts four directories:
+`docker-compose.yml` bind-mounts three directories:
 
 | Host | Container | Contents |
 | --- | --- | --- |
 | `./configs` | `/app/configs` | `config.yaml`, `config.example.yaml`, `hooks.yaml` |
 | `./data/db` | `/app/data/db` | SQLite database (`database.path`, default `data/db/amdl.db`) |
-| `./data/logs` | `/app/data/logs` | Rotating logs — only written when `logging.file_enabled: true` |
 | `./data/downloads` | `/app/data/downloads` | Finished files. Change the host side to put them elsewhere, e.g. `/path/to/music:/app/data/downloads` |
 
 `data/tmp` stays inside the container and needs no mount. It is the staging area for the
 download, decrypt, remux, verify and tag steps (see `download.temp_dir` in
 [`configs/config.example.yaml`](../configs/config.example.yaml)). If your storage driver
 is slow, mount it separately onto a fast host disk, kept apart from `data/downloads`.
+
+Logs go to stdout (`docker logs amdl-backend`) and to the in-memory buffer the console's
+Logs page reads; the backend writes no log file, so there is no log mount.
 
 For developer-token signing, mount the `.p8` private key read-only (e.g.
 `-v ./keys:/app/keys:ro`) and point `catalog.apple_music_private_key_path` at the path

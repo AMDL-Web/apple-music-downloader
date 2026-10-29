@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"amdl/internal/buildinfo"
+	"amdl/internal/config"
 	"amdl/internal/domain"
 	"amdl/internal/media"
 )
@@ -95,8 +96,8 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		// config example documents; report the size in effect.
 		Pools: systemPools{
 			Downloads:       max(1, cfg.Download.MaxParallelDownloads),
-			Decrypts:        max(1, cfg.Download.MaxParallelDecrypts),
-			WrapperRequests: max(1, cfg.Download.MaxParallelWrapperRequests),
+			Decrypts:        config.MaxParallelDecrypts,
+			WrapperRequests: config.MaxParallelWrapperRequests,
 		},
 		Tools: tools,
 		Storage: []storageInfo{

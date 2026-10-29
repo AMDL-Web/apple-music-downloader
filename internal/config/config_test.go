@@ -58,11 +58,8 @@ func TestMemoryModeDefaultLoadAndValidate(t *testing.T) {
 func TestLoadValidatesLogging(t *testing.T) {
 	for name, body := range map[string]string{
 		"level":        "logging:\n  level: trace\n",
-		"format":       "logging:\n  format: xml\n",
 		"buffer":       "logging:\n  buffer_size: -1\n",
-		"file path":    "logging:\n  file_enabled: true\n  file_path: \"\"\n",
-		"max size":     "logging:\n  max_size_mb: 0\n",
-		"all disabled": "logging:\n  console: false\n  file_enabled: false\n  buffer_size: 0\n",
+		"all disabled": "logging:\n  console: false\n  buffer_size: 0\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Load(writeConfig(t, body)); err == nil || !strings.Contains(err.Error(), "logging") {
@@ -81,10 +78,7 @@ func TestValidateBoundsResourceAmplifyingDownloadSettings(t *testing.T) {
 	}{
 		{name: "running jobs", apply: func(c *Config, value int) { c.Download.MaxRunningJobs = value }, key: "max_running_jobs", max: maxRunningJobsLimit},
 		{name: "parallel downloads", apply: func(c *Config, value int) { c.Download.MaxParallelDownloads = value }, key: "max_parallel_downloads", max: maxGlobalPoolLimit},
-		{name: "parallel decrypts", apply: func(c *Config, value int) { c.Download.MaxParallelDecrypts = value }, key: "max_parallel_decrypts", max: maxGlobalPoolLimit},
 		{name: "catalog parallel requests", apply: func(c *Config, value int) { c.Catalog.MaxParallelRequests = value }, key: "max_parallel_requests", max: maxGlobalPoolLimit},
-		{name: "catalog requests per second", apply: func(c *Config, value int) { c.Catalog.RequestsPerSecond = value }, key: "requests_per_second", max: maxGlobalPoolLimit},
-		{name: "catalog request burst", apply: func(c *Config, value int) { c.Catalog.RequestBurst = value }, key: "request_burst", max: maxGlobalPoolLimit},
 		{name: "attempts", apply: func(c *Config, value int) { c.Download.MaxAttempts = value }, key: "max_attempts", max: maxAttemptsLimit},
 		{name: "progress event interval", apply: func(c *Config, value int) { c.Download.ProgressEventIntervalMS = value }, key: "progress_event_interval_ms", max: maxProgressEventIntervalMSLimit},
 	}
@@ -175,17 +169,6 @@ func TestLoadRejectsUnknownKeysNamingThemAndTheUpgradeGuide(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestLoadClampsWrapperRequestLimit(t *testing.T) {
-	path := writeConfig(t, "download:\n  max_parallel_wrapper_requests: 999\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() oversized wrapper limit: %v", err)
-	}
-	if cfg.Download.MaxParallelWrapperRequests != maxGlobalPoolLimit {
-		t.Fatalf("max_parallel_wrapper_requests = %d, want clamped %d", cfg.Download.MaxParallelWrapperRequests, maxGlobalPoolLimit)
 	}
 }
 
@@ -387,15 +370,15 @@ func TestValidateRejectsUnsafePathFormats(t *testing.T) {
 // TestLoadClampsResourceLimitsFromFile covers machine-managed config files
 // that may hold values above limits introduced by a newer backend.
 func TestLoadClampsResourceLimitsFromFile(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  max_parallel_requests: 200\n  requests_per_second: 200\n  request_burst: 200\ndownload:\n  max_running_jobs: 100\n  max_parallel_downloads: 200\n  max_parallel_decrypts: 200\n  max_attempts: 50\n")
+	path := writeConfig(t, "catalog:\n  max_parallel_requests: 200\ndownload:\n  max_running_jobs: 100\n  max_parallel_downloads: 200\n  max_attempts: 50\n")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() with over-limit values failed: %v", err)
 	}
-	if cfg.Catalog.MaxParallelRequests != maxGlobalPoolLimit || cfg.Catalog.RequestsPerSecond != maxGlobalPoolLimit || cfg.Catalog.RequestBurst != maxGlobalPoolLimit {
+	if cfg.Catalog.MaxParallelRequests != maxGlobalPoolLimit {
 		t.Fatalf("Load() did not clamp catalog values: %+v", cfg.Catalog)
 	}
-	if cfg.Download.MaxRunningJobs != maxRunningJobsLimit || cfg.Download.MaxParallelDownloads != maxGlobalPoolLimit || cfg.Download.MaxParallelDecrypts != maxGlobalPoolLimit || cfg.Download.MaxAttempts != maxAttemptsLimit {
+	if cfg.Download.MaxRunningJobs != maxRunningJobsLimit || cfg.Download.MaxParallelDownloads != maxGlobalPoolLimit || cfg.Download.MaxAttempts != maxAttemptsLimit {
 		t.Fatalf("Load() did not clamp download values: %+v", cfg.Download)
 	}
 }
@@ -572,8 +555,8 @@ func TestExampleDefaultAnnotationsMatchDefault(t *testing.T) {
 			t.Errorf("config.example.yaml says %s Default: %s, Default() has %s", key, annotation, got)
 		}
 	}
-	if checked < 15 {
-		t.Fatalf("checked %d Default annotations, want at least 15; did the example's comment format change?", checked)
+	if checked < 12 {
+		t.Fatalf("checked %d Default annotations, want at least 12; did the example's comment format change?", checked)
 	}
 }
 
@@ -582,11 +565,16 @@ func TestExampleDefaultAnnotationsMatchDefault(t *testing.T) {
 func TestValidateReportsViolationsInKeyOrder(t *testing.T) {
 	cfg := Default()
 	cfg.Catalog.MaxParallelRequests = maxGlobalPoolLimit + 1
-	cfg.Catalog.RequestBurst = maxGlobalPoolLimit + 1
-	cfg.Catalog.RequestsPerSecond = maxGlobalPoolLimit + 1
+	cfg.Logging.BufferSize = -1
 	cfg.Download.SongPathFormat = ""
 	cfg.Download.AlbumPathFormat = ""
 	cfg.Download.StationPathFormat = ""
+	for range 20 {
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "logging.buffer_size ") {
+			t.Fatalf("Validate() = %v, want the logging.buffer_size error every time", err)
+		}
+	}
+	cfg.Logging = Default().Logging
 	for range 20 {
 		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "catalog.max_parallel_requests ") {
 			t.Fatalf("Validate() = %v, want the catalog.max_parallel_requests error every time", err)

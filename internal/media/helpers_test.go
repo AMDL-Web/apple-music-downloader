@@ -27,10 +27,10 @@ func newTestDownloader(d *Downloader) *Downloader {
 		d.downloadLimit = limits.NewSemaphore(cfg.Download.MaxParallelDownloads)
 	}
 	if d.decryptLimit == nil {
-		d.decryptLimit = limits.NewSemaphore(cfg.Download.MaxParallelDecrypts)
+		d.decryptLimit = limits.NewSemaphore(config.MaxParallelDecrypts)
 	}
 	if d.inFlightLimit == nil {
-		d.inFlightLimit = limits.NewSemaphore(cfg.Download.MaxParallelDownloads + cfg.Download.MaxParallelDecrypts)
+		d.inFlightLimit = limits.NewSemaphore(cfg.Download.MaxParallelDownloads + config.MaxParallelDecrypts)
 	}
 	if d.background == nil {
 		d.background = &sync.WaitGroup{}
@@ -38,6 +38,15 @@ func newTestDownloader(d *Downloader) *Downloader {
 	if d.mp4 == nil {
 		d.mp4 = newMP4Processor(cfg)
 	}
+	return d
+}
+
+// withDecryptLimit sizes d's decrypt pool to n instead of
+// config.MaxParallelDecrypts, and the in-flight pool spanning transfers and
+// decrypts to match, as NewDownloader would for that size.
+func withDecryptLimit(d *Downloader, n int) *Downloader {
+	d.decryptLimit = limits.NewSemaphore(n)
+	d.inFlightLimit = limits.NewSemaphore(d.cfg.Download.MaxParallelDownloads + n)
 	return d
 }
 

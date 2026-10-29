@@ -112,9 +112,8 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 
 ### 并发
 
-三个进程级、跨全部任务共享、启动时固定的池：`max_parallel_downloads`（16）、
-`max_parallel_decrypts`（32）、`max_parallel_wrapper_requests`（24），外加
-`max_running_jobs`（3）个 worker 槽位。池满时许可按提交时间分配，最早提交且未完成的任务优先，
+三个进程级、跨全部任务共享、启动时固定的池：`max_parallel_downloads`（16）、32 个解密、
+24 个 wrapper 请求，外加 `max_running_jobs`（3）个 worker 槽位。池满时许可按提交时间分配，最早提交且未完成的任务优先，
 因此任务倾向于逐个完成而非交错推进。交互式 API 请求不等待这些池；Apple 目录读取（包括
 `POST /api/v1/lookup`）与任务的目录读取共用一个请求闸门（`catalog.max_parallel_requests`）。
 
@@ -182,7 +181,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 
 - **运行期字段**（音质、路径、歌词、封面、重试、simulate、资料库同步）通过
   `PUT /api/v1/config` 立即生效；该接口会整体重写文件并丢弃注释。
-- **启动期字段**（监听地址、数据库路径、wrapper 地址、各种池大小、日志格式）需要重启。
+- **启动期字段**（监听地址、数据库路径、wrapper 地址、各种池大小、日志输出）需要重启。
 - **环境变量**：`AMDL_SERVER_LISTEN`、`AMDL_WRAPPER_ADDRESS`、`AMDL_DATABASE_PATH` 覆盖对应的键，
   `AMDL_CONFIG` / `AMDL_HOOKS_CONFIG` 指定文件路径。其余字段只在文件里设置；其他 `AMDL_*`
   变量会被忽略，启动时打一条警告。

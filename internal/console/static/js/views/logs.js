@@ -230,7 +230,7 @@ export function LogsPage({ route }) {
   if (loading) body = html`<${SkeletonRows} n=${12} kind="log" />`;
   else if (retentionOff)
     body = html`<${Empty} icon="file-text" title=${LOG_RETENTION_OFF}>
-      The backend writes records only to its console or log file. Set logging.buffer_size above 0 and restart it to read them here.
+      The backend writes records only to its standard output. Set logging.buffer_size above 0 and restart it to read them here.
     </${Empty}>`;
   else if (error && logs.entries.length === 0) body = html`<${ErrorNote} title=${error.status === 400 ? 'The filter was rejected' : "Couldn't load logs"} error=${error} />`;
   else if (logs.entries.length === 0)
@@ -358,7 +358,7 @@ function LogRow({ entry, open, stop, names, onToggle, onFilter, narrow }) {
     ${open
       ? html`<div class="log-detail">
           <div class="log-detail-bar">
-            <span class="muted small">#${entry.sequence} · ${absTime(entry.time)}${entry.source ? ` · ${entry.source}` : ''}${component ? ` · ${component}` : ''}</span>
+            <span class="muted small">#${entry.sequence} · ${absTime(entry.time)}${component ? ` · ${component}` : ''}</span>
             <${CopyButton} text=${JSON.stringify(entry, null, 2)} label="Copy record as JSON" />
             ${jobId ? html`<a class="link small" href=${buildHash('queue', {}, jobId)}>Open job</a>` : null}
           </div>

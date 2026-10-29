@@ -8,65 +8,41 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"amdl/internal/config"
-
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// System is the process logger: an slog.Logger writing to the configured
-// console and file outputs, with every record also captured into Store for
-// the log API. Sensitive attribute keys and groups are redacted on all paths.
+// System is the process logger: an slog.Logger writing text lines to stdout
+// when the console output is on, with every record also captured into Store
+// for the log API. Sensitive attribute keys and groups are redacted on both
+// paths.
 type System struct {
 	Logger *slog.Logger
 	Store  *Store
-	closer io.Closer
 	level  slog.LevelVar
 }
 
-// New builds the logging system from cfg. It fails if the log file cannot be
-// opened, so a misconfigured path stops startup instead of losing logs.
+// New builds the logging system from cfg.
 func New(cfg config.LoggingConfig) (*System, error) {
+	return newSystem(cfg, os.Stdout)
+}
+
+// newSystem is New with the console output as a parameter, for tests.
+func newSystem(cfg config.LoggingConfig, console io.Writer) (*System, error) {
 	level, err := parseLevel(cfg.Level)
 	if err != nil {
 		return nil, err
 	}
-	var outputs []io.Writer
+	output := io.Discard
 	if cfg.Console {
-		outputs = append(outputs, os.Stdout)
+		output = console
 	}
-	var closer io.Closer
-	if cfg.FileEnabled {
-		if err := os.MkdirAll(filepath.Dir(cfg.FilePath), 0o755); err != nil {
-			return nil, fmt.Errorf("create log directory: %w", err)
-		}
-		probe, err := os.OpenFile(cfg.FilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			return nil, fmt.Errorf("open log file: %w", err)
-		}
-		if err := probe.Close(); err != nil {
-			return nil, fmt.Errorf("close log file probe: %w", err)
-		}
-		file := &lumberjack.Logger{
-			Filename: cfg.FilePath, MaxSize: cfg.MaxSizeMB, MaxBackups: cfg.MaxBackups,
-			MaxAge: cfg.MaxAgeDays, Compress: cfg.Compress, LocalTime: true,
-		}
-		outputs = append(outputs, file)
-		closer = file
-	}
-	output := io.Writer(io.Discard)
-	if len(outputs) > 0 {
-		output = io.MultiWriter(outputs...)
-	}
-	system := &System{Store: NewStore(cfg.BufferSize), closer: closer}
+	system := &System{Store: NewStore(cfg.BufferSize)}
 	system.level.Set(level)
-	options := &slog.HandlerOptions{
-		AddSource: cfg.IncludeSource,
-		Level:     &system.level,
+	base := slog.NewTextHandler(output, &slog.HandlerOptions{
+		Level: &system.level,
 		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
 			if hasSensitiveGroup(groups) {
 				attr.Value = slog.StringValue("[REDACTED]")
@@ -74,14 +50,8 @@ func New(cfg config.LoggingConfig) (*System, error) {
 			}
 			return redactAttr(attr)
 		},
-	}
-	var base slog.Handler
-	if cfg.Format == "json" {
-		base = slog.NewJSONHandler(output, options)
-	} else {
-		base = slog.NewTextHandler(output, options)
-	}
-	system.Logger = slog.New(&captureHandler{next: base, store: system.Store, includeSource: cfg.IncludeSource})
+	})
+	system.Logger = slog.New(&captureHandler{next: base, store: system.Store})
 	return system, nil
 }
 
@@ -111,14 +81,6 @@ func (s *System) FollowLevel(current func() string) error {
 	}
 }
 
-// Close closes the rotating log file, if any. It is nil-safe.
-func (s *System) Close() error {
-	if s == nil || s.closer == nil {
-		return nil
-	}
-	return s.closer.Close()
-}
-
 func parseLevel(value string) (slog.Level, error) {
 	switch value {
 	case "debug":
@@ -135,11 +97,10 @@ func parseLevel(value string) (slog.Level, error) {
 }
 
 type captureHandler struct {
-	next          slog.Handler
-	store         *Store
-	attrs         []boundAttr
-	groups        []string
-	includeSource bool
+	next   slog.Handler
+	store  *Store
+	attrs  []boundAttr
+	groups []string
 }
 
 type boundAttr struct {
@@ -160,12 +121,7 @@ func (h *captureHandler) Handle(ctx context.Context, record slog.Record) error {
 		addAttr(attrs, h.groups, redactCaptured(h.groups, attr))
 		return true
 	})
-	entry := Entry{Time: record.Time, Level: levelName(record.Level), Message: record.Message, Attributes: attrs}
-	if h.includeSource && record.PC != 0 {
-		frame, _ := runtime.CallersFrames([]uintptr{record.PC}).Next()
-		entry.Source = fmt.Sprintf("%s:%d", frame.File, frame.Line)
-	}
-	h.store.append(entry)
+	h.store.append(Entry{Time: record.Time, Level: levelName(record.Level), Message: record.Message, Attributes: attrs})
 	return h.next.Handle(ctx, record)
 }
 
@@ -205,8 +161,8 @@ func levelName(level slog.Level) string {
 // redactCaptured mirrors the output handlers' ReplaceAttr on the capture
 // path: an attribute recorded inside a sensitive group (WithGroup) is
 // redacted wholesale, otherwise per-key redaction applies. Without the group
-// check, the in-memory log API would return raw values that the console and
-// file outputs already redact.
+// check, the in-memory log API would return raw values that the console
+// output already redacts.
 func redactCaptured(groups []string, attr slog.Attr) slog.Attr {
 	if hasSensitiveGroup(groups) {
 		attr.Value = slog.StringValue("[REDACTED]")
