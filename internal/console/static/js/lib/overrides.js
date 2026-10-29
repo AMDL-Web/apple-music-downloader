@@ -179,20 +179,19 @@ const LONG = { ...SHORT, alac: 'Lossless (ALAC)' };
 /** A codec's short name ("Dolby Atmos"); `long` spells ALAC as "Lossless (ALAC)". */
 export const codecName = (value, long = false) => (long ? LONG : SHORT)[value] || value;
 
-const limits = (v) => `up to ${v.alac_max_bit_depth}-bit/${rateLabel(v.alac_max_sample_rate)}`;
+const limits = (v) => `up to ${v.alac_max_bit_depth}-bit / ${rateLabel(v.alac_max_sample_rate)}`;
 
 /**
- * What a set of option values downloads, in words: the codecs in order,
- * ALAC with its limits. Short: "Dolby Atmos, then ALAC up to 24-bit/192
- * kHz" (the Follow Settings item). Long: "Dolby Atmos, else Lossless (ALAC)
- * up to 24-bit/192 kHz" (the Will download line). Without the fallback only
- * the first codec counts.
+ * What a set of option values asks for, in words: the codecs in order, ALAC
+ * with its limits ("Dolby Atmos, then Lossless (ALAC) up to 24-bit / 192
+ * kHz"), the card's Quality line. Without the fallback only the first codec
+ * counts.
  */
-export function qualityText(values, long = false) {
+export function qualityText(values) {
   const list = values && Array.isArray(values.quality_priority) && values.quality_priority.length ? values.quality_priority : ['alac'];
   const used = values && values.codec_alternative === false ? list.slice(0, 1) : list;
-  const parts = used.map((c) => (c === 'alac' ? `${codecName(c, long)} ${limits(values)}` : codecName(c, long)));
-  const text = parts.join(long ? ', else ' : ', then ');
+  const parts = used.map((c) => (c === 'alac' ? `${codecName(c, true)} ${limits(values)}` : codecName(c, true)));
+  const text = parts.join(', then ');
   return used.length < list.length ? `${text} only` : text;
 }
 
@@ -214,4 +213,21 @@ export function probeWarning(values, slots) {
   if (!slot || slot.tracks === slot.total) return '';
   const name = codecName(first);
   return slot.tracks === 0 ? `${name} not offered` : `${name} on ${slot.tracks} of ${slot.total} tracks`;
+}
+
+/**
+ * What a link will download once its qualities are known (`slots`,
+ * lib/lookup.js qualityOverview): the first codec of `values` some track
+ * offers (only the first without the fallback), with the best format the
+ * probe saw, else the AAC-LC every track has; plus probeWarning. Returns
+ * {text, warning}.
+ */
+export function probedQuality(values, slots) {
+  const list = values && Array.isArray(values.quality_priority) ? values.quality_priority : [];
+  const tried = values && values.codec_alternative === false ? list.slice(0, 1) : list;
+  const offered = (Array.isArray(slots) ? slots : []).filter((s) => s.tracks > 0);
+  const hit = tried.map((c) => offered.find((s) => s.id === c)).find(Boolean);
+  const best = hit && hit.best ? hit.best.split(' · ')[0] : '';
+  const text = hit ? `${codecName(hit.id, true)}${best ? `, ${best}` : ''}` : 'AAC (the fallback every track has)';
+  return { text, warning: probeWarning(values, slots) };
 }

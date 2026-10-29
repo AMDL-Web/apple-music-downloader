@@ -232,6 +232,34 @@ export function qualityOverview(resp) {
 }
 
 /**
+ * The tracks of a QualityResponse whose formats differ from the album's
+ * (the slots any track offers), as indices in order; [] when every track
+ * offers the same formats.
+ */
+export function differingTracks(resp) {
+  const tracks = resp && Array.isArray(resp.tracks) ? resp.tracks : [];
+  const offered = (t) =>
+    ((t && t.qualities) || [])
+      .filter((q) => q && q.available)
+      .map((q) => q.id)
+      .sort()
+      .join(',');
+  const all = qualityOverview(resp)
+    .filter((s) => s.tracks > 0)
+    .map((s) => s.id)
+    .sort()
+    .join(',');
+  return tracks.map((t, i) => (offered(t) === all ? -1 : i)).filter((i) => i >= 0);
+}
+
+/** A quality slot's label with its codec only when the label does not already say it: "Lossless · ALAC", "AAC". */
+export function slotName(slot) {
+  const label = (slot && slot.label) || '';
+  const codec = (slot && slot.codec) || '';
+  return codec && !label.toLowerCase().includes(codec.toLowerCase()) ? { label, codec } : { label, codec: '' };
+}
+
+/**
  * What a job of `link` would be, as {type, id}: an album ?i= link is that
  * song unless catalog.album_track_url_mode is "album".
  */

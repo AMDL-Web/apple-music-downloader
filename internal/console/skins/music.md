@@ -223,9 +223,10 @@ base durations (120 ms color, 200 ms overlays).
   dot. Filled attribute chips, a grouped log surface.
 - **New download**: the link text box is a 12 px inset cell. Detected links
   are Queue-style rows: 48 px covers (8 px radius) with an `--art-bg` shadow,
-  hairlines from the text, the kind, storefront, E and ADM as quiet filled
-  tags on `--bg-inset`, a 15 px semibold title over 13 px facts and the mono
-  link, Qualities a filled pill and remove a secondary glyph. Submitted reuses
+  hairlines from the text, a 15 px semibold title with a gray E mark and
+  Apple Digital Master (and a storefront that is not the default) as quiet
+  filled tags on `--bg-inset`, one 13 px meta line, Available qualities a
+  filled pill and remove a secondary glyph. Submitted reuses
   the Queue list language (covers, the joined capsule bar, hairlines from the
   text; on phones the bar starts under the title); an outcome row names its result in its role color beside the role
   glyph. The submit bar is the canvas under a hairline; Download is the

@@ -74,6 +74,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Empty while the box has no links; it stays in place to announce the
+   first count, out of the bar's flow. */
+.new-count:empty {
+  position: absolute;
+}
+
 .new-submit-row {
   display: flex;
   flex-wrap: wrap;
@@ -154,7 +160,7 @@
   display: grid;
   grid-template-columns: auto 48px minmax(0, 1fr) auto;
   grid-template-areas: "pick art main actions";
-  align-items: start;
+  align-items: center;
   gap: var(--s-3);
   padding: var(--s-3) var(--card-pad-x);
 }
@@ -169,8 +175,9 @@
   align-self: center;
 }
 
+/* A row that can't be sent has nothing to tick: its slot stays empty. */
 .new-link-pick:disabled {
-  cursor: not-allowed;
+  visibility: hidden;
 }
 
 /* Unchecked rows (in the library, in the queue, or unchosen) stay listed
@@ -202,11 +209,59 @@
   min-width: 0;
 }
 
-.new-link-tags {
+/* The cover stays at the top when notes make the row taller. */
+.new-link-art,
+.new-link-actions {
+  align-self: start;
+}
+
+.new-link:not(:has(.new-link-note, .new-link-prior, .new-link-issue, .new-link-will)) .new-link-actions {
+  align-self: center;
+}
+
+/* Title, the Explicit mark and the quiet tags on one line; when it is
+   short of room the tags give way first, then the title. */
+.new-link-head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s-1);
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.new-link-head > .new-link-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.new-link-head > .chip {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Tags on this page read as words in the page's 13 px, not small caps. */
+.new-link-head > .chip,
+.quality-track-head > .chip {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.new-link-explicit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-badge);
+  background: var(--text-secondary);
+  color: var(--bg-canvas);
+  font-size: var(--fs-13);
+  line-height: 16px;
+  font-weight: var(--w-semibold);
 }
 
 .new-link-loading,
@@ -226,7 +281,6 @@
 
 .new-link-title.is-url {
   color: var(--text-secondary);
-  font-family: var(--font-mono);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
   font-weight: var(--w-regular);
@@ -234,22 +288,8 @@
   overflow-wrap: anywhere;
 }
 
+/* One meta line; the whole of it is the tooltip. */
 .new-link-sub {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: var(--s-1_5);
-  min-width: 0;
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-.new-link-sub > * + *::before {
-  content: "·";
-  margin-inline-end: var(--s-1_5);
-}
-
-.new-link-url {
   min-width: 0;
   color: var(--text-secondary);
   font-size: var(--fs-13);
@@ -257,6 +297,27 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.new-link-sub > * + *::before {
+  content: " · ";
+}
+
+.new-link-will {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-spec {
+  white-space: nowrap;
+}
+
+.new-link-will .status-text[data-role="warning"] {
+  color: var(--warning-text);
 }
 
 .new-link-issue {
@@ -312,24 +373,8 @@
   border-top: var(--row-divider);
 }
 
-.new-links-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-1_5) var(--s-4);
-  padding: var(--s-3) var(--card-pad-x);
-  border-top: var(--row-divider);
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-.new-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1_5);
-}
-
-.new-links-more {
+.new-links-more,
+.new-links-will {
   display: flex;
   align-items: flex-start;
   gap: var(--s-1_5);
@@ -774,8 +819,14 @@
   color: var(--text-secondary);
 }
 
-.quality-all {
-  align-self: center;
+.quality-same {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
 /* ---- Phone --------------------------------------------------------- */
@@ -787,8 +838,8 @@
 
   /* The submit bar is fixed above the tab bar, outside the cards, and the
      page keeps its height free below the last row (--new-bar-h, measured
-     by the page). Count and Overwrite on one line, the quality menu and
-     Download on the next. */
+     by the page). The quality menu has a line to itself, so a preset's
+     whole name shows; Overwrite and Download share the next. */
   .page.page-new {
     padding-bottom: var(--new-bar-h, 0px);
   }
@@ -800,10 +851,10 @@
     bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
     z-index: 15;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
-      "quality overwrite"
-      "button button";
+      "quality quality"
+      "overwrite button";
     align-items: center;
     gap: var(--s-2) var(--s-3);
     margin: 0;
@@ -866,24 +917,117 @@
     margin-top: 0;
   }
 
+  /* The title shares its line with the row's buttons (32 px drawn, a full
+     target with the hit area around them); the meta line and the notes run
+     under both, so they get the row's width. Available qualities keeps only
+     its icon. */
   .new-link {
-    grid-template-columns: auto 48px minmax(0, 1fr);
-    grid-template-areas:
-      "pick art main"
-      "actions actions actions";
-    row-gap: var(--s-2);
+    grid-template-areas: none;
+    row-gap: var(--s-0_5);
+    column-gap: var(--s-2);
     padding: var(--s-3) var(--s-4);
   }
 
-  .new-link-actions {
-    justify-content: flex-end;
+  .new-link-pick {
+    grid-column: 1;
+    grid-row: 1 / span 2;
   }
 
-  /* With nothing but Remove, the button stays beside the text instead of
-     taking a line of its own. */
-  .new-link:not(:has(.new-link-quality, .new-link-retry)) {
-    grid-template-columns: auto 48px minmax(0, 1fr) auto;
-    grid-template-areas: "pick art main actions";
+  .new-link-art {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .new-link-main {
+    display: contents;
+  }
+
+  .new-link-head {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .new-link-main > :not(.new-link-head) {
+    grid-column: 3 / -1;
+  }
+
+  .new-link-actions {
+    grid-column: 4;
+    grid-row: 1;
+    gap: 0;
+  }
+
+  .new-link .new-link-actions {
+    align-self: center;
+  }
+
+  .new-link-actions > .btn {
+    position: relative;
+    height: 32px;
+    min-height: 32px;
+  }
+
+  .new-link-actions > :is(.new-link-quality, .new-link-remove) {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+  }
+
+  .new-link-actions > .btn::after {
+    content: "";
+    position: absolute;
+    inset: calc((32px - var(--touch)) / 2) 0;
+  }
+
+  /* Titles take two lines before they give way; the meta line wraps
+     between its facts, two lines at most. */
+  .new-link-title:not(.is-url) {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .new-link-sub {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: calc(2 * var(--lh-13));
+  }
+
+  .new-link-sub > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .new-link-sub > * + *::before {
+    content: none;
+  }
+
+  .new-link-sub > :not(:last-child)::after {
+    content: "\a0·\a0";
+  }
+
+  .new-link-prior {
+    white-space: nowrap;
+  }
+
+  /* Albums are the usual case; the kind is spelled out for the others. */
+  .new-link[data-kind="album"] .new-link-fact[data-key="type"],
+  .new-link-adm {
+    display: none;
+  }
+
+  .new-link-quality > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .new-result-row {

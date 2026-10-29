@@ -14,6 +14,7 @@ import {
   qualityText,
   customLabel,
   probeWarning,
+  probedQuality,
   rateLabel,
   SAMPLE_RATES,
 } from '../static/js/lib/overrides.js';
@@ -138,10 +139,8 @@ test('the custom preset sends its edited quality keys, never other keys', () => 
 
 test('qualityText, customLabel and probeWarning say what a download gets', () => {
   const d = optionDefaults(SERVER);
-  assert.equal(qualityText(d), 'ALAC up to 24-bit/192 kHz');
-  assert.equal(qualityText(d, true), 'Lossless (ALAC) up to 24-bit/192 kHz');
-  assert.equal(qualityText(presetValues(d, 'atmos')), 'Dolby Atmos, then ALAC up to 24-bit/192 kHz');
-  assert.equal(qualityText(presetValues(d, 'atmos'), true), 'Dolby Atmos, else Lossless (ALAC) up to 24-bit/192 kHz');
+  assert.equal(qualityText(d), 'Lossless (ALAC) up to 24-bit / 192 kHz');
+  assert.equal(qualityText(presetValues(d, 'atmos')), 'Dolby Atmos, then Lossless (ALAC) up to 24-bit / 192 kHz');
   assert.equal(qualityText({ ...d, quality_priority: ['aac', 'alac'], codec_alternative: false }), 'AAC only');
   assert.equal(customLabel({ quality_priority: ['ec3', 'alac'] }), 'Custom: Dolby Atmos, ALAC');
   const slots = [
@@ -153,6 +152,12 @@ test('qualityText, customLabel and probeWarning say what a download gets', () =>
   assert.equal(probeWarning(presetValues(d, 'lossless'), slots), '');
   assert.equal(probeWarning({ quality_priority: ['aac-binaural'] }, slots), 'AAC binaural on 3 of 12 tracks');
   assert.equal(probeWarning(d, []), '');
+  const probed = [
+    { id: 'alac', tracks: 12, total: 12, best: '24-bit / 44.1\u00a0kHz · 1,580\u00a0kbps · 2\u00a0ch' },
+    { id: 'ec3', tracks: 0, total: 12, best: '' },
+  ];
+  assert.deepEqual(probedQuality(presetValues(d, 'atmos'), probed), { text: 'Lossless (ALAC), 24-bit / 44.1\u00a0kHz', warning: 'Dolby Atmos not offered' });
+  assert.equal(probedQuality({ ...presetValues(d, 'atmos'), codec_alternative: false }, probed).text, 'AAC (the fallback every track has)');
 });
 
 test('codec labels and ALAC choices match the Settings fields', async () => {

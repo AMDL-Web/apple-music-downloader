@@ -1,20 +1,33 @@
 // New download: the detected links. Each row shows at once what the link
-// is (kind, storefront) from lib/links.js, then the lookup preview (cover,
-// title, artist, tracks, year) when it arrives, any reason it cannot be
-// sent or needs attention, and an earlier job of the same item. Each row
-// that can be sent has a checkbox; one already in the library or the queue
-// starts unchecked (lib/lookup.js isPicked). The page owns the lookup
-// queues and the picks; rows read them. The first ROWS_SHOWN rows are
-// listed, plus every one that needs a look (an issue, an earlier job still
-// queued or running), until Show all.
+// is from lib/links.js, then the lookup preview when it arrives: a 48 px
+// cover, the title with the Explicit and Apple Digital Master marks, one
+// meta line (kind, artist, tracks, year), any reason it cannot be sent or
+// needs attention, and an earlier job of the same item. The storefront is
+// shown only where it is not the server's default or was borrowed from
+// another link; the URL stays in the row's tooltip. Each row that can be
+// sent has a checkbox; one already in the library or the queue starts
+// unchecked (lib/lookup.js isPicked). The card ends with what the chosen
+// quality asks for; a row whose qualities were read says what it will
+// download for that link. The page owns the lookup queues and the picks; rows read them. The
+// first ROWS_SHOWN rows are listed, plus every one that needs a look (an
+// issue, an earlier job still queued or running), until Show all.
 
 import { html, useState } from '../ui/preact.js';
 import { artPalette, paletteStyle, shortDate } from '../lib/format.js';
 import { kindLabel, previewFacts, needsAttention, ROWS_SHOWN, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { Card, Button, Icon, Chip, Artwork, Skeleton } from '../ui/components.js';
 
-/** The link without its scheme, for the mono line under a title. */
+/** The link without its scheme, the title of a row with no preview. */
 const bare = (url) => url.replace(/^https?:\/\//i, '');
+
+/** Quality words with their "24-bit / 44.1 kHz" kept on one line. */
+const keepSpec = (text) => {
+  const m = /^(.*?)(\d+-bit \/ [\d.]+\skHz)(.*)$/.exec(text);
+  return m ? [m[1], html`<span class="new-spec">${m[2]}</span>`, m[3]] : text;
+};
+
+/** A bare link that wraps after its slashes rather than inside a word. */
+const breakable = (text) => text.split('/').map((part, i, all) => (i < all.length - 1 ? [part, '/', html`<wbr />`] : part));
 
 // Types the quality probe is quick and meaningful for: one release. An
 // artist or station would read every track of a whole catalog.
@@ -23,16 +36,18 @@ const QUALITY_TYPES = ['album', 'song'];
 /**
  * Props: entries (scanLinks), statusOf(url) (the lookup status, with
  * 'idle' for a link past the lookup limit), issueOf(entry), priorOf(url)
- * (an earlier job, lib/lookup.js priorJob), jobHref(id), onRemove(url),
- * onRetry(url), onQuality(entry, data), skipped (links past the lookup
- * limit that would otherwise be looked up), dupes (repeats merged),
- * picked(url) and onPick(url, checked) (the checkboxes), overwrite (whether
- * the submit overwrites existing files).
+ * (an earlier job, lib/lookup.js priorJob), picked(url) (the checkbox),
+ * skipped (links past the lookup limit that would otherwise be looked up),
+ * dupes (repeats merged), asks (what the chosen quality asks for, in
+ * words), and row: {jobHref(id), onRemove(url), onRetry(url),
+ * onQuality(entry, data), onPick(url, checked), overwrite (whether the
+ * submit overwrites existing files), storefront (the server's default),
+ * probed(url) ({text, warning} once the link's qualities were read, else
+ * null)}.
  */
-export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemove, onRetry, onQuality, skipped, dupes, picked, onPick, overwrite }) {
+export function LinksCard({ entries, statusOf, issueOf, priorOf, picked, skipped, dupes, asks, row }) {
   const [all, setAll] = useState(false);
-  const blocked = (e) => Boolean((issueOf(e) || {}).blocking);
-  const flagged = entries.filter(blocked).length;
+  const flagged = entries.filter((e) => (issueOf(e) || {}).blocking).length;
   const note = [
     `${entries.length} ${entries.length === 1 ? 'link' : 'links'}`,
     dupes ? `${dupes} ${dupes === 1 ? 'duplicate' : 'duplicates'} merged` : '',
@@ -42,19 +57,8 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
     .join(' · ');
   const shown = all ? entries : entries.filter((e, i) => i < ROWS_SHOWN || needsAttention(issueOf(e), priorOf(e.url)));
   const hidden = entries.length - shown.length;
-  // Hidden rows only have, at most, a quiet "Downloaded <date>" note.
+  // Hidden rows only have, at most, a quiet "In your library" note.
   const hiddenPrior = all ? 0 : entries.filter((e) => !shown.includes(e) && priorOf(e.url)).length;
-  const data = (e) => {
-    const s = statusOf(e.url);
-    return s.state === 'ready' ? s.data : null;
-  };
-  const facts = shown.map((e) => previewFacts(data(e)));
-  const sf = (shown.find((e) => e.link && e.link.storefront) || {}).link;
-  const legend = [
-    sf ? html`<span key="sf" class="new-legend-item"><${Chip}>${sf.storefront.toUpperCase()}</${Chip}> storefront, the Apple Music country a link is read in</span>` : null,
-    facts.some((f) => f && f.explicit) ? html`<span key="e" class="new-legend-item"><${Chip}>E</${Chip}> explicit</span>` : null,
-    facts.some((f) => f && f.adm) ? html`<span key="adm" class="new-legend-item"><${Chip}>ADM</${Chip}> Apple Digital Master, mastered for Apple's high-resolution formats</span>` : null,
-  ].filter(Boolean);
   return html`<${Card} section="links" className="card-flush new-links-card" title="Detected links" labelId="new-links-title" note=${note}>
     <ul class="new-links" aria-labelledby="new-links-title">
       ${shown.map(
@@ -64,13 +68,8 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
           status=${statusOf(e.url)}
           issue=${issueOf(e)}
           prior=${priorOf(e.url)}
-          jobHref=${jobHref}
-          onRemove=${onRemove}
-          onRetry=${onRetry}
-          onQuality=${onQuality}
           picked=${picked(e.url)}
-          onPick=${onPick}
-          overwrite=${overwrite}
+          row=${row}
         />`,
       )}
     </ul>
@@ -87,7 +86,7 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
           <span>Links are checked up to the first ${LOOKUP_LIMIT}; ${skipped} more ${skipped === 1 ? 'is' : 'are'} downloaded without a check.</span>
         </p>`
       : null}
-    ${legend.length ? html`<p class="new-links-legend">${legend}</p>` : null}
+    ${asks ? html`<p class="new-links-will"><${Icon} name="disc" size="sm" /><span>Quality: ${keepSpec(asks)}</span></p>` : null}
   </${Card}>`;
 }
 
@@ -101,7 +100,7 @@ function PriorNote({ prior, href }) {
   </span>`;
 }
 
-function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQuality, picked, onPick, overwrite }) {
+function LinkRow({ entry, status, issue, prior, picked, row }) {
   const link = entry.link;
   const data = status.state === 'ready' ? status.data : null;
   const facts = previewFacts(data);
@@ -111,11 +110,22 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
   const loading = status.state === 'loading' || status.state === 'queued';
   const name = facts ? facts.title : bare(entry.url);
   const cls = ['new-link', palette ? 'has-palette' : ''].filter(Boolean).join(' ');
-  const artist = kind === 'artist' && !(issue && issue.blocking);
   const blocked = !link || Boolean(issue && issue.blocking);
+  const artist = kind === 'artist' && !blocked;
+  // The storefront only where it says something: not the server's default,
+  // or borrowed from the other links.
+  const sf = link && link.storefront && (link.noStorefront || link.storefront !== (row.storefront || '').toLowerCase()) ? link.storefront : '';
   const sfTitle = link && link.noStorefront ? 'Storefront taken from the other links, since this link has none' : 'Storefront';
+  const meta = [
+    { key: 'type', text: typeText },
+    facts && facts.sub ? { key: 'artist', text: facts.sub, auto: true } : null,
+    facts && facts.album ? { key: 'album', text: facts.album, auto: true } : null,
+    ...(facts ? facts.facts.filter((f) => f.key !== 'type' && f.key !== 'genre') : []),
+  ].filter(Boolean);
+  const probed = data && !blocked ? row.probed(entry.url) : null;
   return html`<li
     class=${cls}
+    title=${entry.url}
     data-kind=${kind}
     data-state=${link ? status.state : 'invalid'}
     data-issue=${issue ? issue.code : undefined}
@@ -131,7 +141,7 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
       disabled=${blocked}
       aria-label=${blocked ? `${name}: can't be downloaded` : `Download ${name}`}
       title=${blocked ? "Can't be downloaded" : undefined}
-      onChange=${(e) => onPick(entry.url, e.currentTarget.checked)}
+      onChange=${(e) => row.onPick(entry.url, e.currentTarget.checked)}
     />
     ${data
       ? html`<${Artwork} url=${data.artwork_url} bg=${palette && palette.bg} px=${160} className="art-48 new-link-art" />`
@@ -139,33 +149,32 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
           ${loading ? html`<${Skeleton} kind="tile" />` : html`<span class="art-glyph"><${Icon} name=${link ? 'music' : 'circle-slash'} /></span>`}
         </div>`}
     <div class="new-link-main">
-      <div class="new-link-tags">
-        <${Chip}>${typeText}</${Chip}>
-        ${link && link.storefront ? html`<${Chip} title=${sfTitle}>${link.storefront.toUpperCase()}</${Chip}>` : null}
-        ${facts && facts.explicit ? html`<${Chip} title="Explicit">E</${Chip}>` : null}
-        ${facts && facts.adm ? html`<${Chip} title="Apple Digital Master">ADM</${Chip}>` : null}
+      <span class="new-link-head">
+        <span class=${facts ? 'new-link-title' : 'new-link-title is-url'} dir="auto">${facts ? name : breakable(name)}</span>
+        ${facts && facts.explicit ? html`<span class="new-link-explicit" title="Explicit" aria-label="Explicit">E</span>` : null}
+        ${facts && facts.adm ? html`<span class="chip new-link-adm" title="Mastered for Apple's high-resolution formats">Apple Digital Master</span>` : null}
+        ${sf ? html`<${Chip} title=${sfTitle}>${sf.toUpperCase()}</${Chip}>` : null}
+      </span>
+      <span class="new-link-sub" title=${meta.map((m) => m.text).join(' · ')}>
+        ${meta.map((m) => html`<span key=${m.key} class="new-link-fact" data-key=${m.key} dir=${m.auto ? 'auto' : undefined}>${m.text}</span>`)}
         ${loading ? html`<span class="new-link-loading">Looking up…</span>` : null}
-      </div>
-      <span class=${facts ? 'new-link-title' : 'new-link-title is-url'} dir="auto" title=${name}>${name}</span>
-      ${facts && (facts.sub || facts.facts.length)
-        ? html`<span class="new-link-sub">
-            ${facts.sub ? html`<span class="new-link-artist" dir="auto">${facts.sub}</span>` : null}
-            ${facts.album ? html`<span class="new-link-album" dir="auto">${facts.album}</span>` : null}
-            ${facts.facts
-              .filter((f) => f.key !== 'type')
-              .map((f) => html`<span key=${f.key} class="new-link-fact" data-key=${f.key} dir=${f.key === 'genre' ? 'auto' : undefined}>${f.text}</span>`)}
-          </span>`
-        : null}
-      ${facts ? html`<span class="new-link-url mono" title=${entry.url}>${bare(entry.url)}</span>` : null}
-      ${loading && !facts ? html`<${Skeleton} kind="text" />` : null}
+      </span>
       ${status.state === 'idle' && link && !issue ? html`<span class="new-link-note">Not checked</span>` : null}
       ${artist ? html`<span class="new-link-note" data-note="artist">Downloads every album by this artist, the whole discography</span>` : null}
       ${link && link.noStorefront && link.storefront && !issue
         ? html`<span class="new-link-note" data-note="storefront">No storefront in the link: read as ${link.storefront.toUpperCase()}, like the other links</span>`
         : null}
-      ${prior && !blocked ? html`<${PriorNote} prior=${prior} href=${jobHref(prior.job.id)} />` : null}
-      ${prior && !blocked && prior.state === 'done' && picked && !overwrite
-        ? html`<span class="new-link-note" data-note="overwrite">Tracks already on disk are skipped unless Overwrite existing files is on</span>`
+      ${prior && !blocked ? html`<${PriorNote} prior=${prior} href=${row.jobHref(prior.job.id)} />` : null}
+      ${prior && !blocked && prior.state === 'done' && picked && !row.overwrite
+        ? html`<span class="new-link-note" data-note="overwrite">Tracks already on disk are skipped unless Overwrite is on</span>`
+        : null}
+      ${probed
+        ? html`<span class="new-link-will">
+            <span>Will download: ${keepSpec(probed.text)}</span>
+            ${probed.warning
+              ? html`<span class="status-text" data-role="warning"><${Icon} name="triangle-alert" size="sm" /><span>${probed.warning}</span></span>`
+              : null}
+          </span>`
         : null}
       ${issue
         ? html`<span class="new-link-issue status-text" data-role=${issue.role} title=${issue.title || undefined}>
@@ -178,12 +187,19 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
     </div>
     <div class="new-link-actions">
       ${data && QUALITY_TYPES.includes(data.type)
-        ? html`<${Button} size="sm" icon="disc" className="new-link-quality" title="Check which qualities each track offers" onClick=${() => onQuality(entry, data)}>Qualities</${Button}>`
+        ? html`<${Button}
+            size="sm"
+            icon="disc"
+            className="new-link-quality"
+            aria-label="Available qualities"
+            title="See which formats each track offers"
+            onClick=${() => row.onQuality(entry, data)}
+          >Available qualities</${Button}>`
         : null}
       ${status.state === 'error' && issue && !issue.blocking
-        ? html`<${Button} size="sm" icon="rotate" className="new-link-retry" onClick=${() => onRetry(entry.url)}>Retry</${Button}>`
+        ? html`<${Button} size="sm" icon="rotate" className="new-link-retry" onClick=${() => row.onRetry(entry.url)}>Retry</${Button}>`
         : null}
-      <${Button} variant="ghost" size="sm" icon="x" className="new-link-remove" aria-label=${`Remove ${name}`} title="Remove from the list" onClick=${() => onRemove(entry.url)} />
+      <${Button} variant="ghost" size="sm" icon="x" className="new-link-remove" aria-label=${`Remove ${name}`} title="Remove from the list" onClick=${() => row.onRemove(entry.url)} />
     </div>
   </li>`;
 }

@@ -2183,12 +2183,7 @@
   gap: var(--s-0_5);
 }
 
-:root[data-skin="music"] .new-link-tags {
-  margin-bottom: var(--s-0_5);
-}
-
-:root[data-skin="music"] .new-link-tags .chip,
-:root[data-skin="music"] .new-legend-item .chip {
+:root[data-skin="music"] .new-link-head .chip {
   height: 18px;
   padding: 0 var(--s-1_5);
   border-color: transparent;
@@ -2216,8 +2211,26 @@
   color: var(--text-secondary);
 }
 
+/* A failure chip in a row grows with its text when the reason wraps. */
+:root[data-skin="music"] .new-link-issue[data-role="danger"] {
+  align-self: flex-start;
+  justify-self: start;
+  height: auto;
+  min-height: 22px;
+  max-width: 100%;
+  padding-block: var(--s-0_5);
+  border-radius: 11px;
+}
+
+/* Open is a quiet link in a quiet line; red stays with Download. */
+:root[data-skin="music"] .new-link-open {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 :root[data-skin="music"] .new-links-more,
-:root[data-skin="music"] .new-links-legend {
+:root[data-skin="music"] .new-links-will {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
 }

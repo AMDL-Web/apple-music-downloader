@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLink } from '../static/js/lib/links.js';
-import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention, isPicked, applyFeedToJobs } from '../static/js/lib/lookup.js';
+import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention, isPicked, applyFeedToJobs, differingTracks, slotName } from '../static/js/lib/lookup.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -255,4 +255,16 @@ test('the feed keeps an earlier-job answer live', () => {
   const fresh = applyFeedToJobs([], [{ type: 'download_upserted', job: { id: 'j2', input: `${IGOR}?l=en`, status: 'queued', created_at: '2026-10-29T11:00:00Z' } }], link);
   assert.equal(priorJob(fresh, link).job.id, 'j2', 'a new job of the same item joins');
   assert.deepEqual(applyFeedToJobs(done, [{ type: 'download_deleted', job_id: 'j1' }], link), []);
+});
+
+test('the quality sheet lists only tracks that differ, and never says a codec twice', () => {
+  const q = (id, available, label = id, codec = id.toUpperCase()) => ({ id, label, codec, available });
+  const same = { tracks: [1, 2, 3].map((n) => ({ song: { id: String(n) }, qualities: [q('aac', true, 'AAC', 'AAC'), q('alac', true, 'Lossless', 'ALAC'), q('ec3', false)] })) };
+  assert.deepEqual(differingTracks(same), []);
+  const mixed = { tracks: [...same.tracks, { song: { id: '4' }, qualities: [q('aac', true, 'AAC', 'AAC'), q('alac', false), q('ec3', false)] }] };
+  assert.deepEqual(differingTracks(mixed), [3]);
+  assert.deepEqual(slotName({ label: 'AAC', codec: 'AAC' }), { label: 'AAC', codec: '' });
+  assert.deepEqual(slotName({ label: 'AAC Binaural', codec: 'AAC' }), { label: 'AAC Binaural', codec: '' });
+  assert.deepEqual(slotName({ label: 'Lossless', codec: 'ALAC' }), { label: 'Lossless', codec: 'ALAC' });
+  assert.deepEqual(differingTracks(null), []);
 });

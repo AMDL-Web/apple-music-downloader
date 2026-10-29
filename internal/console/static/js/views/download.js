@@ -16,8 +16,8 @@ import { createDownload } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
 import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError, submittable, downloadLabel, countLine } from '../lib/submit.js';
-import { optionDefaults, presetOverrides, presetValues } from '../lib/overrides.js';
-import { isPicked } from '../lib/lookup.js';
+import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
+import { isPicked, qualityOverview } from '../lib/lookup.js';
 import { useApp, Card } from '../ui/components.js';
 import { useDebounced, useMedia } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -26,7 +26,7 @@ import { useLookups } from './download-lookup.js';
 import { LinksCard } from './download-links.js';
 import { QualityControls, CustomSheet } from './download-preset.js';
 import { SubmitBar, PasteButton, useBarHeight } from './download-bar.js';
-import { QualitySheet } from './download-quality.js';
+import { QualitySheet, PROBES } from './download-quality.js';
 import { ResultsCard, BrowserShortcut, useResults } from './download-results.js';
 
 const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
@@ -155,6 +155,8 @@ export function DownloadPage({ route }) {
   const [picks, setPicks] = useState(() => new Map());
   const onPick = (url, on) => setPicks((m) => new Map(m).set(url, on));
   const sendable = allowed.filter((u) => isPicked(u, priorOf(u), picks));
+  // What the chosen preset resolves to, for the Will download lines.
+  const chosenValues = defaults ? presetValues(defaults, choice.preset, choice.custom) : null;
   const overwriteOn = overwrite === null ? Boolean(defaults && defaults.force_overwrite) : overwrite;
   const previewOf = (url) => {
     const st = statusOf(url);
@@ -167,6 +169,8 @@ export function DownloadPage({ route }) {
   const [results, setResults] = useResults();
   const [retrying, setRetrying] = useState(() => new Set());
   const [quality, setQuality] = useState(null);
+  // Bumped when the quality sheet has read a link's qualities (PROBES).
+  const [, setProbed] = useState(0);
   const [confirm, setConfirm] = useState(null);
 
   /** Sends `urls` in chunks the backend accepts; returns {pairs, failure}. */
@@ -303,7 +307,7 @@ export function DownloadPage({ route }) {
     const link = e && e.link;
     return link ? (link.kind === 'album' && link.trackId && trackMode !== 'album' ? 'song' : link.kind) : 'item';
   };
-  const label = busy ? 'Submitting…' : downloadLabel(sendable.map(kindOf), entries.length > 0);
+  const label = busy ? 'Submitting…' : downloadLabel(sendable.map(kindOf), entries.length > 0, allowed.length > 0);
 
   // Under 640 px the submit bar is fixed above the tab bar; the page keeps
   // room for it below the last row.
@@ -336,7 +340,7 @@ export function DownloadPage({ route }) {
         onInput=${(e) => edit(e.currentTarget.value)}
         onKeyDown=${onKeyDown}
       ></textarea>
-      ${keyboard ? html`<p id="new-input-hint" class="new-hint">${keys} downloads</p>` : null}
+      ${keyboard ? html`<p id="new-input-hint" class="new-hint">Press ${keys} to download</p>` : null}
     </${Card}>
     ${entries.length
       ? html`<${LinksCard}
@@ -344,15 +348,20 @@ export function DownloadPage({ route }) {
           statusOf=${statusOf}
           issueOf=${issueOf}
           priorOf=${priorOf}
-          jobHref=${jobHref}
+          picked=${(url) => isPicked(url, priorOf(url), picks)}
           skipped=${skipped}
           dupes=${dupes}
-          onRemove=${removeEntry}
-          onRetry=${(url) => queue.current.retry(url)}
-          onQuality=${(entry, data) => setQuality({ url: entry.url, title: data.title || entry.url, tracks: data.track_count })}
-          picked=${(url) => isPicked(url, priorOf(url), picks)}
-          onPick=${onPick}
-          overwrite=${overwriteOn}
+          asks=${chosenValues ? qualityText(chosenValues) : ''}
+          row=${{
+            jobHref,
+            onRemove: removeEntry,
+            onRetry: (url) => queue.current.retry(url),
+            onQuality: (entry, data) => setQuality({ url: entry.url, title: data.title || entry.url, tracks: data.track_count }),
+            onPick,
+            overwrite: overwriteOn,
+            storefront,
+            probed: (url) => (chosenValues && PROBES.has(url) ? probedQuality(chosenValues, qualityOverview(PROBES.get(url))) : null),
+          }}
         />`
       : null}
     <${SubmitBar}
@@ -362,6 +371,7 @@ export function DownloadPage({ route }) {
         defaults=${defaults}
         preset=${choice.preset}
         custom=${choice.custom}
+        asks=${chosenValues ? qualityText(chosenValues) : ''}
         onPreset=${(preset) => setChoice({ ...choice, preset })}
         onCustom=${() => setCustomOpen(true)}
         overwrite=${overwriteOn}
@@ -403,7 +413,15 @@ export function DownloadPage({ route }) {
           onClose=${closeCustom}
         />`
       : null}
-    ${quality ? html`<${QualitySheet} url=${quality.url} title=${quality.title} tracks=${quality.tracks} onClose=${() => setQuality(null)} />` : null}
+    ${quality
+      ? html`<${QualitySheet}
+          url=${quality.url}
+          title=${quality.title}
+          tracks=${quality.tracks}
+          onProbed=${() => setProbed((n) => n + 1)}
+          onClose=${() => setQuality(null)}
+        />`
+      : null}
     ${confirm
       ? html`<${ConfirmDialog}
           title=${confirm.length === 1 ? `Download everything by ${confirm[0]}?` : `Download everything by ${confirm.length} artists?`}
