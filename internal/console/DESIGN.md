@@ -328,8 +328,9 @@ and motion covers.
   wrapper-manager service is unreachable; Configuration file shows
   `persisted`, the pinned keys and "Reload from file", which reports how many
   settings changed; a file that cannot be used is one warning under the button
-  (`reload_error`, also after leaving and returning): the parser's reason, the
-  server's path behind a "Which file" details line.
+  (`reload_error`, also after leaving and returning, but announced as an alert
+  only for a reload made on the panel): the parser's reason, the server's path
+  behind a "Which file" details line.
 - **Primitives**: buttons (primary, secondary, ghost, danger), segmented
   control, search field, select, chips, notices, toasts (`role="status"`; 5 s,
   8 s with an action, errors 10 s, every timer paused while the pointer or
