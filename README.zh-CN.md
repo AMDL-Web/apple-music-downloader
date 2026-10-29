@@ -83,8 +83,10 @@ v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2)（多账号�
 **Apple 的目录数据读自它没有文档的网页播放器 API。** `amp-api.music.apple.com` 只认从
 `music.apple.com` 抓下来的 JWT，所有目录读取都走它，并且是 `enhancedHls` 清单和
 `editorialVideo` 动态封面的**唯一**来源。有文档的 `api.music.apple.com` 需要用 Apple 密钥自签
-的 developer token；后端没有密钥，也从不调用它。amp-api 没有文档，随时可能变，所以从它读到的
-东西必须退化成「这张专辑没有那个字段」，而不是让任务失败。只有可能超过 48 kHz 的 Hi-Res
+的 developer token；后端没有密钥，也从不调用它。amp-api 没有文档，随时可能变。下载离不开的读取（链接本身的歌曲、专辑、
+歌单、电台或艺人，以及每首曲目的元数据）会重试，重试用尽后让任务或那首曲目失败。附加信息（动态
+封面、给单曲补的专辑信息、私人歌单自己的封面、艺人图片）则退化成「这张专辑没有那个字段」，不会
+让任务失败；没有 `enhancedHls` 的曲目改用下一个编码。只有可能超过 48 kHz 的 Hi-Res
 无损曲目才会再向 wrapper 要一份设备清单，因为网页播放器的播放列表可能漏掉更高的 ALAC 档位。
 
 **这里没有鉴权，是故意的。** 所有端点都是开放的。这是下载核心，访问控制属于你放在它前面的

@@ -23,7 +23,8 @@ checked by nothing but you.
 
 New fields follow their neighbors in `internal/api/openapi.yaml` (snake_case,
 existing enum spellings) and say in the spec whether they are always present.
-Anything sourced from amp-api is optional.
+A field filled by an optional catalog read (root `AGENTS.md` "Apple catalog reads"),
+or one Apple may leave out of a response, is optional.
 
 ## Same commit
 

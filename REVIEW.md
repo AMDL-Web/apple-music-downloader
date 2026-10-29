@@ -24,7 +24,10 @@ Report a change that breaks one of these when used as intended:
   `configs/config.example.yaml`.
 - A migration that loses user data (jobs, items, milestone events, the library-sync
   anchor), edits a shipped migration, or is not idempotent across restarts.
-- A read from `amp-api.music.apple.com` that can fail a job.
+- An optional amp-api read (motion artwork, album enrichment, a playlist's library
+  cover, the artist read for an artist cover, or any new extra) that can fail a job
+  instead of degrading to "not available". Required reads (the link's resource and
+  each track's song metadata) fail the job or track after retries, as they must.
 - Docs or comments that contradict the code they describe.
 - Committed secrets or local details: tokens, `*.p8` keys, LAN IPs, absolute home
   paths, a `configs/config.yaml`.

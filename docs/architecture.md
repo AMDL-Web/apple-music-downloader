@@ -48,7 +48,7 @@ was running stays `running` and resumes on the next start.
 | `internal/console` | the embedded web console (static files + handler) | call anything but the public `/api/v1` |
 | `internal/jobs` | admission, queue, workers, terminal-state rules, hook dispatch trigger | know about HTTP |
 | `internal/media` | the per-track pipeline: select, fetch, decrypt, remux, tag, finalize; simulate backend | write job rows except through `jobs.Reporter` |
-| `internal/applemusic` | both Apple hosts, tokens, catalog and library reads | fail a job because an amp-api-only field is missing |
+| `internal/applemusic` | amp-api, the web-player token, catalog and library reads | fail a job because an optional read (motion artwork, album enrichment, a library cover) failed |
 | `internal/wrapper` | the wrapper HTTP client (status, manifests, licenses, lyrics, console login) and the decrypt sessions that run key templates through `internal/fairplay` | |
 | `internal/fairplay` | the pure-Go FairPlay sample decryptor, a translation of Temari v0.5.1 | import other internal packages |
 | `internal/db` | SQLite schema, versioned migrations, queries | contain business rules |

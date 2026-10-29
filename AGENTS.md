@@ -61,14 +61,21 @@ is therefore the documentation. Each key's comment states allowed values, units,
 the behavior when the key is absent, whether it is a runtime or a startup key, and
 any template variables or list options.
 
-## Two Apple hosts
+## Apple catalog reads
 
-`api.music.apple.com` is the documented API and takes a self-signed developer token;
-the backend does not sign one and never calls it. `amp-api.music.apple.com` takes a
-JWT scraped from the music.apple.com web player plus an `Origin` header, answers
-every catalog read, and is the only host that returns `enhancedHls` and
-`editorialVideo`. amp-api is undocumented, so anything read from it degrades to
-"not available" instead of failing a job (`internal/applemusic/AGENTS.md`).
+Every catalog read goes to `amp-api.music.apple.com`, Apple's undocumented web-player
+API, with a JWT scraped from music.apple.com plus an `Origin` header. The backend holds
+no developer token and never calls the documented `api.music.apple.com`. Reads are of
+two kinds (`internal/applemusic/AGENTS.md`):
+
+- Required: the link's resource (song, album, playlist, station tracks, artist and its
+  albums) and each track's song metadata. They retry and, after
+  `download.max_attempts`, fail the job or that track; there is nothing to download
+  without them.
+- Optional: `editorialVideo` motion artwork, the album read that enriches a song, a
+  private playlist's library cover, and the artist read for a standalone artist cover.
+  Each degrades to "not available" and never fails a job. A song whose metadata lacks
+  `enhancedHls` falls back to the next codec.
 
 ## Data safety
 
@@ -152,7 +159,7 @@ sit in front of it and adds the login API the console uses; a bare wrapper-lite 
 | `main` only through a PR | branch protection; guard hook on `git push` |
 | No `--admin` merge without approval | guard hook on `gh pr merge` (Claude Code only) |
 | Never commit config, keys or data | `.gitignore`; guard hook on `git add -f` |
-| No auth, breaking-change marking, console updated with the API, full config comments, row-preserving migrations, amp-api degrades | text and `REVIEW.md` |
+| No auth, breaking-change marking, console updated with the API, full config comments, row-preserving migrations, optional amp-api reads degrade | text and `REVIEW.md` |
 
 The guard hook runs where Claude Code loads `.claude/settings.json`; other agents
 follow the text.

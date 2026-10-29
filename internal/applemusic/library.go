@@ -109,8 +109,8 @@ func (c *CatalogClient) LibrarySongsNewestFirst(ctx context.Context, mediaUserTo
 // failure, so it returns ok=false with a nil error and the caller skips it
 // instead of failing the whole pass.
 //
-// Like the library listing, this resolves on both hosts — checked in legacy
-// web-token mode as well, since that path reaches amp-api instead.
+// Like the library listing, this reads amp-api with the web-player token and
+// the Media-User-Token.
 func (c *CatalogClient) LibraryAlbumCatalogURL(ctx context.Context, mediaUserToken, libraryAlbumID string) (catalogURL string, ok bool, err error) {
 	if mediaUserToken == "" {
 		return "", false, fmt.Errorf("reading the library requires a media-user-token")
