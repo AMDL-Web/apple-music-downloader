@@ -107,10 +107,16 @@ export function fieldErrors(err, sentKeys = []) {
 
 /**
  * The warning a value earns, or '' : a value the server accepts but that
- * looks wrong (cover size format, unknown template variables).
+ * looks wrong (cover size format, unknown template variables, a number below
+ * the minimum a `clampsBelow` field runs as: the file would keep a value the
+ * server treats as the minimum, as config.example.yaml says of "values <=0").
  */
 export function fieldWarning(field, v) {
   if (!field) return '';
+  if (field.type === 'number' && field.clampsBelow && Number.isInteger(v) && v < field.min) {
+    const range = field.max !== undefined ? ` Enter ${field.min} to ${field.max}.` : '';
+    return `Values below ${field.min} run as ${field.min}, so ${v} would be saved but run as ${field.min}.${range}`;
+  }
   if (field.pattern && typeof v === 'string' && !new RegExp(field.pattern).test(v)) return field.patternHint;
   if (field.type === 'template') {
     const unknown = templateUnknownVars(v);
@@ -182,6 +188,18 @@ export function reloadSummary(changed, pinnedCount = 0) {
   const pinned = pinnedCount > 0 ? ` ${pinnedCount === 1 ? '1 pinned key keeps its environment value.' : `${pinnedCount} pinned keys keep their environment values.`}` : '';
   if (changed.length === 0) return { short: 'Reloaded from the file: no changes', long: `Reloaded from the config file: no changes.${pinned}` };
   return { short: `Reloaded from the file: ${n} changed`, long: `Reloaded from the config file: ${n} changed (${labelList(changed, 4)}).${pinned}` };
+}
+
+/**
+ * A reload_error as {reason, file}: "decode /abs/config.yaml: yaml: line 6:
+ * ..." keeps the parser's reason and moves the server's file path aside
+ * (the admin needs the line, the path adds nothing). A message without a
+ * path is all reason.
+ */
+export function splitReloadError(message) {
+  const text = String(message || '').trim();
+  const m = /^[a-z ]*?\s*((?:\/|[A-Za-z]:[\\/]).*?\.ya?ml): (.+)$/is.exec(text);
+  return m ? { reason: m[2], file: m[1] } : { reason: text, file: '' };
 }
 
 /** What leaving or discarding would lose, for the confirmation dialogs. */

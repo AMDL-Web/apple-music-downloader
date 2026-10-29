@@ -5,6 +5,7 @@ import {
   FIELDS,
   FIELD_KEYS,
   NOT_EDITED,
+  BY_KEY,
   sectionById,
 } from '../static/js/lib/settings.js';
 import {
@@ -25,6 +26,7 @@ import {
   diffConfig,
   labelList,
   reloadSummary,
+  splitReloadError,
   lossSummary,
   unsavedAnnouncement,
   librarySyncState,
@@ -310,4 +312,32 @@ test('wrapperUnreachable reads the address out of a gRPC dial error', () => {
   assert.equal(wrapperUnreachable(new ApiError(503, 'feature_unavailable', 'no wrapper')), null, 'no wrapper connection is a different state');
   assert.equal(wrapperUnreachable(new ApiError(0, 'network_error', 'Cannot reach the server.')), null, 'the console server itself being down is not the wrapper');
   assert.equal(wrapperErrorText(new ApiError(503, 'wrapper_unavailable', 'dns lookup failed'), 'status').message, 'The Apple Music session service (wrapper-manager) is not reachable.');
+});
+
+test('a number the server clamps to its minimum earns a warning, not a block', () => {
+  const attempts = BY_KEY.get('download.max_attempts');
+  assert.match(fieldWarning(attempts, -5), /below 1 run as 1.*-5.*Enter 1 to 10/);
+  assert.match(fieldWarning(attempts, 0), /run as 1/);
+  assert.equal(fieldWarning(attempts, 1), '');
+  assert.equal(fieldWarning(attempts, 10), '');
+  assert.match(fieldWarning(BY_KEY.get('download.progress_event_interval_ms'), -1), /below 0 run as 0/);
+  assert.equal(fieldWarning(BY_KEY.get('download.progress_event_interval_ms'), 0), '');
+  const { errors, warnings } = validateDraft({ 'download.max_attempts': -5 });
+  assert.deepEqual(errors, {});
+  assert.ok(warnings['download.max_attempts']);
+  // The server states these ranges itself and rejects them; no clamp warning.
+  assert.equal(fieldWarning(BY_KEY.get('library_sync.interval_minutes'), 0), '');
+});
+
+test('splitReloadError keeps the reason and moves the server path aside', () => {
+  assert.deepEqual(splitReloadError('decode /srv/amdl/configs/config.yaml: yaml: line 6: did not find expected node content'), {
+    reason: 'yaml: line 6: did not find expected node content',
+    file: '/srv/amdl/configs/config.yaml',
+  });
+  assert.deepEqual(splitReloadError('decode /Users/me/My Configs/config.yml: yaml: line 2: mapping values are not allowed'), {
+    reason: 'yaml: line 2: mapping values are not allowed',
+    file: '/Users/me/My Configs/config.yml',
+  });
+  assert.deepEqual(splitReloadError('download.max_attempts must be at most 10'), { reason: 'download.max_attempts must be at most 10', file: '' });
+  assert.deepEqual(splitReloadError(''), { reason: '', file: '' });
 });

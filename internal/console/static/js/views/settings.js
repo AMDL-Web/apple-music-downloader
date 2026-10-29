@@ -149,17 +149,18 @@ export function SettingsPage({ route }) {
   // One edited field goes straight back; several ask first.
   const askDiscard = () => (dirtyKeys.length > 1 ? setDiscarding(true) : discard());
 
+  // Resolves to whether everything was saved (Save and leave goes on only then).
   const save = async () => {
-    if (!dirty || saving) return;
+    if (!dirty || saving) return false;
     if (Object.keys(checks.errors).length) {
       setSaveError({ message: 'Fix the marked fields, then save again.', fields: {} });
       setFailSeq((n) => n + 1);
-      return;
+      return false;
     }
     const body = buildPatch(cfg.base, draft, cfg.pinned);
     if (Object.keys(body).length === 0) {
       setDraft({});
-      return;
+      return true;
     }
     // Fields stay editable while the request runs; an edit made meanwhile
     // stays in the draft.
@@ -173,9 +174,11 @@ export function SettingsPage({ route }) {
       setUpdatedNote('');
       setDraft((d) => draftAfterSave(d, sent));
       app.toast({ message: `Saved ${dirtyKeys.length === 1 ? '1 setting' : `${dirtyKeys.length} settings`}`, role: 'success' });
+      return true;
     } catch (err) {
       setSaveError(fieldErrors(err, Object.keys(body).flatMap((sec) => Object.keys(body[sec]).map((k) => `${sec}.${k}`))));
       setFailSeq((n) => n + 1);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -237,13 +240,19 @@ export function SettingsPage({ route }) {
     window.scrollTo(0, 0);
   }, [section.id]);
 
-  const leave = () => {
-    const to = leaveTo;
+  const leave = (to = leaveTo) => {
     if (app.setLeaveGuard) app.setLeaveGuard(null);
     setLeaveTo(null);
     setDraft({});
     if (app.resumeLeave) app.resumeLeave(to);
     else app.navigate(to);
+  };
+
+  // Save and leave: a failed save keeps the page, with its error shown.
+  const saveAndLeave = async () => {
+    const to = leaveTo;
+    if (await save()) leave(to);
+    else setLeaveTo(null);
   };
 
   const sectionOf = (key) => (fieldByKey(key) || {}).section;
@@ -397,8 +406,10 @@ export function SettingsPage({ route }) {
           title="Leave without saving?"
           confirmLabel="Discard and leave"
           cancelLabel="Stay"
+          altLabel=${Object.keys(checks.errors).length ? '' : 'Save and leave'}
+          onAlt=${saveAndLeave}
           danger
-          onConfirm=${leave}
+          onConfirm=${() => leave()}
           onCancel=${() => setLeaveTo(null)}
         >
           <${LossText} keys=${dirtyKeys} lead="Leaving loses" />

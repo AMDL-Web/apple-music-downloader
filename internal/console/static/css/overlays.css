@@ -251,6 +251,12 @@
   gap: var(--s-2);
 }
 
+/* Three choices (Stay, Save and leave, Discard and leave) wrap to a second
+   row instead of squeezing their labels. */
+.dialog-actions > .btn {
+  flex: 0 0 auto;
+}
+
 /* ---- States -------------------------------------------------------- */
 
 .skel {

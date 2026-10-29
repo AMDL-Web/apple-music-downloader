@@ -2090,6 +2090,8 @@
 
 :root[data-skin="music"] .new-options-jump {
   font-weight: var(--w-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 :root[data-skin="music"] .new-submit-btn {
@@ -2648,6 +2650,15 @@
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: var(--s-2);
   margin-top: var(--s-3);
+}
+
+:root[data-skin="music"] .dialog-actions[data-choices="3"] {
+  grid-template-columns: 1fr;
+}
+
+:root[data-skin="music"] .dialog-actions[data-choices="3"] .dialog-confirm-btn {
+  background: var(--danger-tint);
+  color: var(--danger-text);
 }
 
 :root[data-skin="music"] .dialog-actions .btn {

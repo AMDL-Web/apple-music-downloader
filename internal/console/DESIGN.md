@@ -303,8 +303,9 @@ and motion covers.
   each field it names (`details.keys` for `config_key_pinned` and
   `config_key_not_mutable`, the dotted keys in the message for
   `invalid_config` and 400). Only unsendable numbers block Save on the
-  client; an odd cover size or unknown template variable is a warning, and a
-  saved template keeps its warning. When the tab regains focus (and after a
+  client; an odd cover size, an unknown template variable or a number below the
+  minimum the server runs as (`clampsBelow` in `lib/settings.js`: attempts per
+  step, progress interval) is a warning, and a saved one keeps its warning. When the tab regains focus (and after a
   reconnect) the page reads `GET /config` again: with no edits it refreshes and
   says "Updated from another tab or the file"; under edits it shows a notice
   with "Show the saved values" and "Keep editing", and the last write wins.
@@ -314,8 +315,10 @@ and motion covers.
   the wrapper status, Log out per account (a `ConfirmDialog`) and the login
   form with its two-step code step, which is disabled with a reason while the
   wrapper-manager service is unreachable; Configuration file shows
-  `persisted`, the pinned keys, `reload_error` and "Reload from file", which
-  reports how many settings changed.
+  `persisted`, the pinned keys and "Reload from file", which reports how many
+  settings changed; a file that cannot be used is one warning under the button
+  (`reload_error`, also after leaving and returning): the parser's reason, the
+  server's path behind a "Which file" details line.
 - **Primitives**: buttons (primary, secondary, ghost, danger), segmented
   control, search field, select, chips, notices, toasts (`role="status"`; 5 s,
   8 s with an action, errors 10 s, every timer paused while the pointer or
@@ -463,7 +466,8 @@ polite status region, at most one announcement per 5 s. Progress carries
 `role="progressbar"` with `aria-valuetext` such as "12 of 14 tracks, 1 failed",
 whether it renders cells or a bar. Text a skin adds with `::before` (section
 numbers, "No.") is decoration and repeats nothing a screen reader needs.
-With unsaved settings, leaving the page asks first: a page sets
+With unsaved settings, leaving the page asks first (Stay, "Save and leave" while
+no field is invalid, Discard and leave): a page sets
 `setLeaveGuard` from the app context, every hash change passes it (links,
 the palette, shortcuts, Back), and a refused change is undone through the
 history, so no entry is added (a pushed entry is dropped with Back, a Back

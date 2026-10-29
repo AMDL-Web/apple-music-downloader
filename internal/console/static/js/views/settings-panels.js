@@ -3,7 +3,7 @@
 // and the path template reference.
 
 import { html, useState } from '../ui/preact.js';
-import { flattenConfig, diffConfig, reloadSummary, librarySyncState, anchorResetState } from '../lib/settings-draft.js';
+import { flattenConfig, diffConfig, reloadSummary, splitReloadError, librarySyncState, anchorResetState } from '../lib/settings-draft.js';
 import { getLibrarySync, resetLibrarySync, reloadConfig } from '../api.js';
 import { TEMPLATE_VARIABLES, PADDED_VARIABLES } from '../lib/settings-template.js';
 import { count } from '../lib/format.js';
@@ -122,16 +122,20 @@ export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, o
   const [busy, setBusy] = useState(false);
   // What the last Reload did, kept on the page: {role, text} or null.
   const [outcome, setOutcome] = useState(null);
+  // Counts the reloads, so an unchanged failure is announced again.
+  const [tries, setTries] = useState(0);
   const list = Array.isArray(pinned) ? pinned : [];
   const reload = async () => {
     if (busy) return;
     setBusy(true);
+    setOutcome(null);
     try {
       const res = await reloadConfig();
       onReloaded(res);
-      if (res.reload_error) {
-        setOutcome({ role: 'warning', text: 'The config file could not be used; the previous settings stay active.' });
-      } else {
+      setTries((n) => n + 1);
+      // A file that could not be used is the warning under the button
+      // (reloadError, which also survives leaving the page): said once.
+      if (!res.reload_error) {
         const sum = reloadSummary(diffConfig(base, flattenConfig(res.config)), list.length);
         setOutcome({ role: 'success', text: sum.long });
         app.toast({ message: sum.short, role: 'success' });
@@ -149,12 +153,6 @@ export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, o
         ['Pinned keys', list.length ? plural(list.length, 'key', 'keys') : 'None'],
       ]}
     />
-    ${reloadError
-      ? html`<${Notice} role="warning" icon="triangle-alert">
-          The config file could not be used, so the previous settings stay active.
-          <span class="mono small wrap-any settings-reload-error">${reloadError}</span>
-        </${Notice}>`
-      : null}
     ${list.length
       ? html`<div class="table-wrap">
           <table class="table pinned-table">
@@ -173,12 +171,26 @@ export function ConfigFilePanel({ persisted, pinned, reloadError, dirty, base, o
     </div>
     ${outcome
       ? html`<div class="config-outcome" role=${outcome.role === 'success' ? undefined : 'alert'}>
-          <${Notice} role=${outcome.role} icon=${outcome.role === 'danger' ? 'circle-x' : outcome.role === 'warning' ? 'triangle-alert' : 'circle-check'}>${outcome.text}</${Notice}>
+          <${Notice} role=${outcome.role} icon=${outcome.role === 'danger' ? 'circle-x' : 'circle-check'}>${outcome.text}</${Notice}>
         </div>`
-      : null}
+      : reloadError
+        ? html`<${ReloadError} key=${tries} message=${reloadError} />`
+        : null}
     <p class="muted small">
       Startup settings (listen address, database, log outputs, wrapper address, tools, catalog signing and request limits, worker pools) are not on this page: edit configs/config.yaml and restart. configs/config.example.yaml documents every key.
     </p>
+  </div>`;
+}
+
+/** The config file could not be used: the parser's reason, and the server's path behind a details line. */
+function ReloadError({ message }) {
+  const { reason, file } = splitReloadError(message);
+  return html`<div class="config-outcome" role="alert">
+    <${Notice} role="warning" icon="triangle-alert">
+      The config file could not be used, so the previous settings stay active.
+      ${reason ? html`<span class="mono small wrap-any settings-reload-error">${reason}</span>` : null}
+      ${file ? html`<details class="account-error-details"><summary>Which file</summary><span class="mono small wrap-any account-error-detail">${file}</span></details>` : null}
+    </${Notice}>
   </div>`;
 }
 

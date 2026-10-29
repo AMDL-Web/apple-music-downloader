@@ -104,8 +104,10 @@ let confirmSeq = 0;
  * buttons are aria-disabled, the confirm button reads busyLabel, and Escape
  * and the scrim do nothing; the caller closes the dialog when its request
  * settles. Escape or Cancel calls onCancel; focus returns to the opener.
+ * `altLabel` + `onAlt` add a third, primary choice between the two (a
+ * "Save and leave" next to a destructive "Discard and leave").
  */
-export function ConfirmDialog({ title, children, confirmLabel = 'Confirm', cancelLabel = 'Cancel', busyLabel = 'Working…', danger = false, busy = false, onConfirm, onCancel }) {
+export function ConfirmDialog({ title, children, confirmLabel = 'Confirm', cancelLabel = 'Cancel', busyLabel = 'Working…', altLabel = '', danger = false, busy = false, onConfirm, onCancel, onAlt }) {
   const [id] = useState(() => `confirm-${++confirmSeq}`);
   const cancel = busy ? undefined : onCancel;
   const off = busy ? 'true' : undefined;
@@ -119,8 +121,9 @@ export function ConfirmDialog({ title, children, confirmLabel = 'Confirm', cance
   >
     <h2 id=${`${id}-title`} class="card-title dialog-title">${title}</h2>
     ${children ? html`<div id=${`${id}-body`} class="dialog-body">${children}</div>` : null}
-    <div class="dialog-actions">
+    <div class="dialog-actions" data-choices=${altLabel ? '3' : undefined}>
       <${Button} variant="secondary" className="dialog-cancel" aria-disabled=${off} onClick=${cancel} data-autofocus>${cancelLabel}</${Button}>
+      ${altLabel ? html`<${Button} variant="primary" className="dialog-alt-btn" aria-disabled=${off} onClick=${busy ? undefined : onAlt}>${altLabel}</${Button}>` : null}
       <${Button}
         variant=${danger ? 'danger' : 'primary'}
         className="dialog-confirm-btn"

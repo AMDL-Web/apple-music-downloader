@@ -107,6 +107,7 @@ export const FIELDS = [
     help: 'Total tries, the first included, for metadata, cover, lyrics and each codec. 1 to 10. Default: 3.',
     min: 1,
     max: 10,
+    clampsBelow: true,
   },
   {
     key: 'download.progress_event_interval_ms',
@@ -116,6 +117,7 @@ export const FIELDS = [
     help: 'Least time between two progress events for one track; 0 leaves one per whole percent. Applies to jobs started later. 0 to 10000. Default: 500.',
     min: 0,
     max: 10000,
+    clampsBelow: true,
     unit: 'ms',
   },
   {
