@@ -12,8 +12,9 @@ const TOAST_MS = 5000;
 const TOAST_ACTION_MS = 8000;
 const TOAST_DANGER_MS = 10000;
 const OFFLINE_MIN_MS = 3000;
+const OFFLINE_HELD_RETRY_MS = 1000;
 
-/** The toast list for App(): {toasts, toast, dismissToast, toastsRef}; `route` is the current route. */
+/** The toast list for App(): {toasts, toast, dismissToast, toastsRef, toastsHeld}; `route` is the current route. */
 export function useToasts(route) {
   const [toasts, setToasts] = useState([]);
   // Toasts: {id, message, role, sticky, offline, at, action: {label, hash}}.
@@ -92,14 +93,16 @@ export function useToasts(route) {
   }, [dismissToast]);
   // A sticky toast is about the page it was raised on.
   useEffect(() => setToasts((list) => (list.some((t) => t.sticky) ? list.filter((t) => !t.sticky) : list)), [route.page, route.jobId]);
-  return { toasts, toast, dismissToast, toastsRef };
+  return { toasts, toast, dismissToast, toastsRef, toastsHeld };
 }
 
 /**
  * Back on the feed (`conn.state` turns live): the toasts raised with `offline`
- * go, once they have been up OFFLINE_MIN_MS.
+ * go, once they have been up OFFLINE_MIN_MS and while the pointer or focus is
+ * not on the toasts (`held`, the ref useToasts returns); a held one is asked
+ * again every OFFLINE_HELD_RETRY_MS.
  */
-export function useOfflineToasts(conn, toasts, dismissToast) {
+export function useOfflineToasts(conn, toasts, dismissToast, held) {
   const wasLive = useRef(true);
   const toastsNow = useRef(toasts);
   toastsNow.current = toasts;
@@ -109,15 +112,25 @@ export function useOfflineToasts(conn, toasts, dismissToast) {
     const back = live && !wasLive.current;
     wasLive.current = live;
     if (!back) return undefined;
-    const timers = [];
+    const timers = new Map();
+    const arm = (id, wait) => {
+      timers.set(
+        id,
+        setTimeout(() => {
+          if (!toastsNow.current.some((t) => t.id === id)) timers.delete(id);
+          else if (held && held.current) arm(id, OFFLINE_HELD_RETRY_MS);
+          else {
+            timers.delete(id);
+            dismissToast(id);
+          }
+        }, wait),
+      );
+    };
     for (const t of toastsNow.current) {
-      if (!t.offline) continue;
-      const wait = OFFLINE_MIN_MS - (Date.now() - t.at);
-      if (wait <= 0) dismissToast(t.id);
-      else timers.push(setTimeout(() => dismissToast(t.id), wait));
+      if (t.offline) arm(t.id, Math.max(0, OFFLINE_MIN_MS - (Date.now() - t.at)));
     }
     return () => timers.forEach(clearTimeout);
-  }, [state, dismissToast]);
+  }, [state, dismissToast, held]);
 }
 
 /** The stack of toasts; `toastsRef` is the element useToasts watches for hover and focus. */

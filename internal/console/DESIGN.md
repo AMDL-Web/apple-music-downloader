@@ -336,7 +336,8 @@ and motion covers.
   8 s with an action, errors 10 s, every timer paused while the pointer or
   focus is on them; `sticky` ones stay until dismissed or the page changes;
   one raised with `offline` (a request that could not reach the server)
-  also goes once the feed is live again, after 3 s up; the toast list is
+  also goes once the feed is live again, after 3 s up and not while the pointer
+  or focus is on the toasts; the toast list is
   `ui/toasts.js`;
   `.toast` > `.icon`, `.toast-msg`, `a.toast-action`, Dismiss),
   completion toasts (`app.watchJobs(ids)`: when watched jobs end, one toast

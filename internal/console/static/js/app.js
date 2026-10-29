@@ -131,10 +131,10 @@ export function App() {
     return () => mq.removeEventListener('change', sync);
   }, [theme, skin]);
 
-  const { toasts, toast, dismissToast, toastsRef } = useToasts(route);
+  const { toasts, toast, dismissToast, toastsRef, toastsHeld } = useToasts(route);
 
   const { feed, conn, epoch, retryRef, subscribeFeed, watchJobs, announce, liveText } = useFeed({ toast, route });
-  useOfflineToasts(conn, toasts, dismissToast);
+  useOfflineToasts(conn, toasts, dismissToast, toastsHeld);
 
   // A sprite that could not load at startup is tried again after an outage.
   useEffect(() => {
