@@ -20,9 +20,8 @@ func TestCacheUntilIsHalfLife(t *testing.T) {
 		name string
 		ttl  time.Duration
 	}{
-		{"signed 24h internal ttl", internalDeveloperTokenTTL},
-		{"legacy 12h default", 12 * time.Hour},
-		{"legacy custom 6h", 6 * time.Hour},
+		{"12h default", 12 * time.Hour},
+		{"custom 6h", 6 * time.Hour},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -35,77 +34,27 @@ func TestCacheUntilIsHalfLife(t *testing.T) {
 	}
 }
 
-func TestInitDeveloperTokenCachesForHalfTheSignedLifetime(t *testing.T) {
-	path, _ := writeP8Key(t)
-	cfg := config.CatalogConfig{
-		AppleMusicPrivateKeyPath: path,
-		AppleMusicKeyID:          "KID1234567",
-		AppleMusicTeamID:         "TEAM123456",
-	}
-	client := newTestCatalogClient(cfg, slog.Default())
+func TestTokenRefreshUsesHalfLife(t *testing.T) {
+	client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
+	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.String() == "https://music.apple.com" {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
+	})}
 
 	before := time.Now()
-	if err := client.InitDeveloperToken(); err != nil {
-		t.Fatalf("InitDeveloperToken: %v", err)
+	if _, err := client.webToken.get(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
 	}
 	after := time.Now()
 
-	minUntil := before.Add(internalDeveloperTokenTTL / 2)
-	maxUntil := after.Add(internalDeveloperTokenTTL / 2)
-	if client.catalogToken.until.Before(minUntil) || client.catalogToken.until.After(maxUntil) {
-		t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v, not exp-5m)", client.catalogToken.until, minUntil, maxUntil, internalDeveloperTokenTTL)
+	wantTTL := client.cfg.TokenTTL()
+	minUntil := before.Add(wantTTL / 2)
+	maxUntil := after.Add(wantTTL / 2)
+	if client.webToken.until.Before(minUntil) || client.webToken.until.After(maxUntil) {
+		t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v)", client.webToken.until, minUntil, maxUntil, wantTTL)
 	}
-}
-
-func TestTokenRefreshUsesHalfLifeForBothModes(t *testing.T) {
-	t.Run("signed", func(t *testing.T) {
-		path, _ := writeP8Key(t)
-		cfg := config.CatalogConfig{
-			AppleMusicPrivateKeyPath: path,
-			AppleMusicKeyID:          "KID1234567",
-			AppleMusicTeamID:         "TEAM123456",
-		}
-		client := newTestCatalogClient(cfg, slog.Default())
-		client.signer, _ = newDeveloperTokenSigner(path, "KID1234567", "TEAM123456")
-		// Force a refresh by expiring the cached token.
-		client.catalogToken.value = "stale"
-		client.catalogToken.until = time.Now().Add(-time.Minute)
-
-		before := time.Now()
-		if _, err := client.catalogToken.get(context.Background()); err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-		after := time.Now()
-
-		minUntil := before.Add(internalDeveloperTokenTTL / 2)
-		maxUntil := after.Add(internalDeveloperTokenTTL / 2)
-		if client.catalogToken.until.Before(minUntil) || client.catalogToken.until.After(maxUntil) {
-			t.Fatalf("tokenUntil = %v, want within [%v, %v]", client.catalogToken.until, minUntil, maxUntil)
-		}
-	})
-
-	t.Run("legacy", func(t *testing.T) {
-		client := newTestCatalogClient(config.CatalogConfig{TokenCacheTTLHours: 12}, slog.Default())
-		client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() == "https://music.apple.com" {
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`<script src="/assets/index~abc123.js"></script>`)), Header: make(http.Header)}, nil
-			}
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`token:"eyJhbGciOiJFUzI1NiJ9.eyJmb28iOiJiYXIifQ.sig-part-here"`)), Header: make(http.Header)}, nil
-		})}
-
-		before := time.Now()
-		if _, err := client.catalogToken.get(context.Background()); err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-		after := time.Now()
-
-		wantTTL := client.cfg.TokenTTL()
-		minUntil := before.Add(wantTTL / 2)
-		maxUntil := after.Add(wantTTL / 2)
-		if client.catalogToken.until.Before(minUntil) || client.catalogToken.until.After(maxUntil) {
-			t.Fatalf("tokenUntil = %v, want within [%v, %v] (half of %v)", client.catalogToken.until, minUntil, maxUntil, wantTTL)
-		}
-	})
 }
 
 func TestProactiveTokenRefresh(t *testing.T) {
@@ -125,32 +74,13 @@ func TestProactiveTokenRefresh(t *testing.T) {
 		return client
 	}
 
-	t.Run("renews a legacy token near expiry", func(t *testing.T) {
-		var calls int32
-		client := newScrapingClient(&calls)
-		client.catalogToken.value = "stale"
-		client.catalogToken.until = time.Now().Add(tokenRefreshLead / 2) // inside the lead window
-
-		client.refreshExpiringWebTokens(context.Background())
-
-		if got := atomic.LoadInt32(&calls); got != 1 {
-			t.Fatalf("scrape calls = %d, want 1", got)
-		}
-		if client.catalogToken.value == "stale" || client.catalogToken.value == "" {
-			t.Fatalf("token = %q, want a freshly scraped value", client.catalogToken.value)
-		}
-		if !client.catalogToken.until.After(time.Now().Add(tokenRefreshLead)) {
-			t.Fatalf("tokenUntil = %v, want pushed well past the lead window", client.catalogToken.until)
-		}
-	})
-
-	t.Run("renews a web token near expiry", func(t *testing.T) {
+	t.Run("renews a token near expiry", func(t *testing.T) {
 		var calls int32
 		client := newScrapingClient(&calls)
 		client.webToken.value = "stale"
 		client.webToken.until = time.Now().Add(tokenRefreshLead / 2)
 
-		client.refreshExpiringWebTokens(context.Background())
+		client.refreshExpiringWebToken(context.Background())
 
 		if got := atomic.LoadInt32(&calls); got != 1 {
 			t.Fatalf("scrape calls = %d, want 1", got)
@@ -163,10 +93,9 @@ func TestProactiveTokenRefresh(t *testing.T) {
 	t.Run("leaves a token that is not near expiry", func(t *testing.T) {
 		var calls int32
 		client := newScrapingClient(&calls)
-		client.catalogToken.value, client.catalogToken.until = "still-good", time.Now().Add(time.Hour)
 		client.webToken.value, client.webToken.until = "still-good", time.Now().Add(time.Hour)
 
-		client.refreshExpiringWebTokens(context.Background())
+		client.refreshExpiringWebToken(context.Background())
 
 		if got := atomic.LoadInt32(&calls); got != 0 {
 			t.Fatalf("scrape calls = %d, want 0 (nothing near expiry)", got)
@@ -176,10 +105,10 @@ func TestProactiveTokenRefresh(t *testing.T) {
 	t.Run("never scrapes an empty cache", func(t *testing.T) {
 		var calls int32
 		client := newScrapingClient(&calls)
-		// token and webToken left empty: nothing has been fetched yet, so the
+		// webToken left empty: nothing has been fetched yet, so the
 		// proactive loop must not scrape Apple on its own.
 
-		client.refreshExpiringWebTokens(context.Background())
+		client.refreshExpiringWebToken(context.Background())
 
 		if got := atomic.LoadInt32(&calls); got != 0 {
 			t.Fatalf("scrape calls = %d, want 0 (empty cache must not trigger a scrape)", got)
@@ -215,7 +144,7 @@ func TestConcurrentTokenCacheMissScrapesOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := client.catalogToken.get(context.Background())
+			_, err := client.webToken.get(context.Background())
 			errCh <- err
 		}()
 	}
@@ -236,8 +165,8 @@ func TestConcurrentTokenCacheMissScrapesOnce(t *testing.T) {
 
 func TestGetWithUserTokenRetriesOnce401ThenSucceeds(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.catalogToken.value = "stale-token"
-	client.catalogToken.until = time.Now().Add(time.Hour)
+	client.webToken.value = "stale-token"
+	client.webToken.until = time.Now().Add(time.Hour)
 
 	var catalogCalls int
 	var authHeaders []string
@@ -277,8 +206,8 @@ func TestGetWithUserTokenRetriesOnce401ThenSucceeds(t *testing.T) {
 
 func TestGetWithUserTokenReturnsErrorAfterSingleRetryOn401Twice(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.catalogToken.value = "stale-token"
-	client.catalogToken.until = time.Now().Add(time.Hour)
+	client.webToken.value = "stale-token"
+	client.webToken.until = time.Now().Add(time.Hour)
 
 	var catalogCalls int
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

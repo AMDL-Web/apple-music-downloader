@@ -397,7 +397,7 @@ func TestMissingEnhancedManifestFallsBackWithoutRetrying(t *testing.T) {
 
 func TestResolveEnhancedHLSWrapsTheSentinel(t *testing.T) {
 	d := newTestDownloader(&Downloader{cfg: config.Default()})
-	_, err := d.resolveEnhancedHLS(context.Background(), "cn", applemusic.Song{ID: "song-9"})
+	_, _, err := d.resolveEnhancedHLS(context.Background(), "cn", applemusic.Song{ID: "song-9"}, "alac")
 	if !errors.Is(err, applemusic.ErrNoEnhancedHLS) || !isNonRetryableError(err) {
 		t.Fatalf("error = %v, want non-retryable ErrNoEnhancedHLS", err)
 	}

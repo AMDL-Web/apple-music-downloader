@@ -44,7 +44,7 @@ import { readFileSync } from 'node:fs';
 
 // A trimmed GET /api/v1/config "config" as the preview server returned it.
 const CONFIG = {
-  catalog: { album_track_url_mode: 'song', media_user_token: '', motion_artwork_enabled: true, signed_mode_hls_source: 'wrapper' },
+  catalog: { album_track_url_mode: 'song', media_user_token: '', motion_artwork_enabled: true },
   download: { max_attempts: 3, quality_priority: ['alac'], lyrics_extras: [], cover_size: '5000x5000', downloads_dir: '/data/downloads' },
   library_sync: { enabled: false, interval_minutes: 15 },
   logging: { access_log: false, level: 'info' },

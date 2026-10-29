@@ -14,7 +14,6 @@ func isRuntimeKey(key string) bool {
 	switch key {
 	case "logging.level", "logging.access_log",
 		"catalog.album_track_url_mode", "catalog.media_user_token",
-		"catalog.signed_mode_hls_source",
 		// Read per job when the input resolves, so flipping it takes effect on
 		// newly started jobs without a restart.
 		"catalog.motion_artwork_enabled":
@@ -139,8 +138,8 @@ func MutableView(cfg Config) (map[string]any, error) {
 
 // RuntimeLockedChanges returns the dotted keys of fields that differ between
 // old and updated but are consumed only at process startup (listen address,
-// database path, logging outputs, wrapper connection, catalog client/token
-// signing and Apple request limit, worker/resource pool sizes, tool paths).
+// database path, logging outputs, wrapper connection, the catalog client's
+// token lifetime and Apple request limit, worker/resource pool sizes, tool paths).
 // Changing them through the runtime config API would silently do nothing, so
 // PUT /api/v1/config rejects an update whenever this returns a non-empty
 // list. The startup-bound set is everything isRuntimeKey does not claim;

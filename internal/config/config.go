@@ -2,7 +2,6 @@ package config
 
 import (
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -31,7 +30,7 @@ type Config struct {
 // disabling it stops the polling rather than merely dropping the results.
 //
 // It needs catalog.media_user_token: a personal library is not readable with
-// the developer token alone. With that empty the watcher stays idle and says so
+// the web-player token alone. With that empty the watcher stays idle and says so
 // once per config change instead of failing every tick.
 type LibrarySyncConfig struct {
 	Enabled         bool `yaml:"enabled" json:"enabled"`
@@ -95,19 +94,15 @@ func (c WrapperConfig) Timeout() time.Duration {
 }
 
 // CatalogConfig controls Apple Music catalog access: storefront and language,
-// the shared Apple request limit, developer-token signing, and the
+// the shared Apple request limit, the web-player token lifetime, and the
 // runtime-mutable catalog behavior keys.
 type CatalogConfig struct {
-	DefaultStorefront        string `yaml:"default_storefront" json:"default_storefront"`
-	Language                 string `yaml:"language" json:"language"`
-	MaxParallelRequests      int    `yaml:"max_parallel_requests" json:"max_parallel_requests"`
-	AppleMusicPrivateKeyPath string `yaml:"apple_music_private_key_path" json:"apple_music_private_key_path"`
-	AppleMusicKeyID          string `yaml:"apple_music_key_id" json:"apple_music_key_id"`
-	AppleMusicTeamID         string `yaml:"apple_music_team_id" json:"apple_music_team_id"`
-	TokenCacheTTLHours       int    `yaml:"token_cache_ttl_hours" json:"token_cache_ttl_hours"`
-	AlbumTrackURLMode        string `yaml:"album_track_url_mode" json:"album_track_url_mode"`
-	MediaUserToken           string `yaml:"media_user_token" json:"media_user_token"`
-	SignedModeHLSSource      string `yaml:"signed_mode_hls_source" json:"signed_mode_hls_source"`
+	DefaultStorefront   string `yaml:"default_storefront" json:"default_storefront"`
+	Language            string `yaml:"language" json:"language"`
+	MaxParallelRequests int    `yaml:"max_parallel_requests" json:"max_parallel_requests"`
+	TokenCacheTTLHours  int    `yaml:"token_cache_ttl_hours" json:"token_cache_ttl_hours"`
+	AlbumTrackURLMode   string `yaml:"album_track_url_mode" json:"album_track_url_mode"`
+	MediaUserToken      string `yaml:"media_user_token" json:"media_user_token"`
 	// MotionArtworkEnabled controls the out-of-band animated-cover lookup. It
 	// is the only feature that talks to amp-api purely for decoration, and it
 	// costs one undocumented-endpoint request plus a scraped web-player token
@@ -118,30 +113,13 @@ type CatalogConfig struct {
 	MotionArtworkEnabled bool `yaml:"motion_artwork_enabled" json:"motion_artwork_enabled"`
 }
 
-// TokenTTL is the validity window of an auto-discovered (legacy mode) bearer
-// token; values <= 0 fall back to 12 hours.
+// TokenTTL is the validity window of the scraped web-player bearer token;
+// values <= 0 fall back to 12 hours.
 func (c CatalogConfig) TokenTTL() time.Duration {
 	if c.TokenCacheTTLHours <= 0 {
 		return 12 * time.Hour
 	}
 	return time.Duration(c.TokenCacheTTLHours) * time.Hour
-}
-
-// DeveloperTokenSigningEnabled reports whether all three Apple Music
-// developer-token signing fields are configured. Partial configuration is
-// rejected by validate(), so a true result implies a usable signing setup.
-func (c CatalogConfig) DeveloperTokenSigningEnabled() bool {
-	return strings.TrimSpace(c.AppleMusicPrivateKeyPath) != "" &&
-		strings.TrimSpace(c.AppleMusicKeyID) != "" &&
-		strings.TrimSpace(c.AppleMusicTeamID) != ""
-}
-
-// EnhancedHLSFromWebToken reports whether, in signed developer-token mode, the
-// Enhanced HLS master playlist should be read via a scraped music.apple.com
-// web-player token instead of the wrapper's authorized device manifest.
-// Meaningless (and ignored) when signing is disabled.
-func (c CatalogConfig) EnhancedHLSFromWebToken() bool {
-	return c.SignedModeHLSSource == "web_token"
 }
 
 // DownloadConfig controls the download pipeline: codec choice, retries, the
@@ -247,9 +225,9 @@ func Default() Config {
 		},
 		Catalog: CatalogConfig{
 			DefaultStorefront: "cn", Language: "zh-Hans_CN",
-			MaxParallelRequests: 16,
-			TokenCacheTTLHours:  12,
-			AlbumTrackURLMode:   "song", SignedModeHLSSource: "wrapper",
+			MaxParallelRequests:  16,
+			TokenCacheTTLHours:   12,
+			AlbumTrackURLMode:    "song",
 			MotionArtworkEnabled: true,
 		},
 		Download: DownloadConfig{

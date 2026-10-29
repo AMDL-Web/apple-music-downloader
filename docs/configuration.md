@@ -35,8 +35,8 @@ including startup keys, dropping all comments in the process.
 
 | | |
 | --- | --- |
-| **Startup** | `server.listen`, `database.path`, `wrapper.*`, `tools.ffmpeg`, `logging.console`, `logging.buffer_size`, the developer-token signing keys, and every pool size (`download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`) |
-| **Runtime** | `logging.level`, `logging.access_log`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.signed_mode_hls_source`, `catalog.motion_artwork_enabled`, all remaining `download.*` keys, the whole `simulate` section and the whole `library_sync` section |
+| **Startup** | `server.listen`, `database.path`, `wrapper.*`, `tools.ffmpeg`, `logging.console`, `logging.buffer_size`, `catalog.token_cache_ttl_hours`, and every pool size (`download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`) |
+| **Runtime** | `logging.level`, `logging.access_log`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.motion_artwork_enabled`, all remaining `download.*` keys, the whole `simulate` section and the whole `library_sync` section |
 
 Hand edits reach the running service like this:
 
@@ -75,26 +75,23 @@ config file:
   startup logs one warning per variable naming it; releases before 2.0 accepted an
   override for every key, so move such a setting into the file.
 
-## Developer-token signing
+## Catalog tokens and the Hi-Res manifest
 
-The three `catalog.apple_music_*` keys form one unit.
+Every catalog read goes to `amp-api.music.apple.com` with a bearer token the backend
+scrapes from `music.apple.com`; `catalog.token_cache_ttl_hours` sets how long it is
+trusted. The backend holds no Apple developer key and never signs a token.
 
-| State | Behaviour |
-| --- | --- |
-| All three empty | Legacy mode. The bearer token is scraped from `music.apple.com` and catalog metadata is read from `amp-api.music.apple.com`, with `enhancedHls` included in the response. A track with the `hi-res-lossless` audio trait takes the wrapper's device manifest instead, falling back to `enhancedHls` if the wrapper cannot supply one (see below). |
-| All three set | The backend signs its own 24-hour ES256 developer token at startup (any signing error fails startup) and reads catalog metadata from the official `api.music.apple.com`. That token cannot read `enhancedHls`, so the Enhanced HLS source is chosen separately by `catalog.signed_mode_hls_source`. |
-| Only some set | Startup fails with a configuration error. |
-
-`catalog.signed_mode_hls_source` only matters in signed mode: `wrapper` (default) takes
-the master playlist from the wrapper's authorized device manifest; `web_token` scrapes a
-web-player JWT and reads `enhancedHls` from `amp-api.music.apple.com` independently of the
-signed token. Use `web_token` when the wrapper cannot supply a usable device manifest.
-
-The two manifests are not equivalent. The web player's `enhancedHls` can leave out a Hi-Res
-track's higher ALAC renditions that the device manifest lists: an 88.2 or 96 kHz stream may
-be missing while 48 kHz is there, and nothing in the manifest says so. That is why legacy
-mode asks the wrapper for Hi-Res tracks, and why `web_token` can cap such a track at 48 kHz.
-`download.alac_max_sample_rate` then picks from whichever manifest was read.
+The Enhanced HLS master playlist normally comes from the catalog response (`enhancedHls`).
+The web player's playlist can leave out a Hi-Res track's higher ALAC renditions that the
+wrapper's device manifest lists: an 88.2, 96 or 192 kHz stream may be missing while 48 kHz
+is there, and nothing in the playlist says so. So a track with the `hi-res-lossless` audio
+trait takes the device manifest from the wrapper (`/m3u8`) when `download.alac_max_sample_rate`
+is above 48000 and the codec is ALAC. At 48000 or below, for Atmos and AAC, and for any other
+track, the catalog playlist is used and the wrapper is not asked, because the wrapper serves
+`/m3u8` and `/key` from one lock. The answer is remembered per storefront and song for 12
+hours (at most 1024 songs), and dropped as soon as the playlist it points to fails to load.
+If the wrapper cannot supply a manifest the track keeps the catalog playlist and may be
+capped at 48 kHz. `download.alac_max_sample_rate` then picks from whichever playlist was read.
 
 `catalog.motion_artwork_enabled` (default `true`) controls the lookup of Apple's animated
 album covers. When on, one extra `amp-api` request per album runs out of band on a context
@@ -112,5 +109,5 @@ are authentic and selection failures fall back through `quality_priority` exactl
 real download. Every API response, status, progress breakdown and SSE event matches a real
 job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`.
 
-Note that with developer-token signing enabled, manifests normally come from the wrapper —
-without one, selection falls back to a faked AAC-LC.
+Without a running wrapper a Hi-Res track keeps the catalog playlist, which may lack its
+88.2 kHz and higher ALAC renditions.

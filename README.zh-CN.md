@@ -74,9 +74,9 @@ Widevine 许可证和歌词。连接是懒建立的，所以后端不等它就�
 `GET /api/v1/wrapper/status` 才是判断它是否真的可达的地方。
 
 **Apple 有两个主机，而且不能互换。** `api.music.apple.com` 是有文档的官方 API，接受自签的
-developer token。`amp-api.music.apple.com` 是 Apple 内部的网页播放器端点，只认从
-`music.apple.com` 抓下来的 JWT，并且是 `enhancedHls` 清单和 `editorialVideo` 动态封面的
-**唯一**来源。它没有文档，随时可能变，所以从它读到的东西必须退化成「这张专辑没有那个字段」，
+developer token，后端不调用它。`amp-api.music.apple.com` 是 Apple 内部的网页播放器端点，
+只认从 `music.apple.com` 抓下来的 JWT，所有目录读取都走它，并且是 `enhancedHls` 清单和
+`editorialVideo` 动态封面的**唯一**来源。它没有文档，随时可能变，所以从它读到的东西必须退化成「这张专辑没有那个字段」，
 而不是让任务失败。
 
 **这里没有鉴权，是故意的。** 所有端点都是开放的。这是下载核心，访问控制属于你放在它前面的
@@ -235,7 +235,7 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 | API 到底收什么、回什么？ | `internal/api/openapi.yaml` |
 | 任务怎么排队、运行、取消和重试？ | `internal/jobs#Manager` |
 | 一首曲目怎么下载、解密、重封装和写标签？ | `internal/media#Downloader` |
-| 请求由哪个 Apple 主机应答？ | `internal/applemusic#CatalogClient.apiBase`、`internal/applemusic#CatalogClient.doWithWebAuth` |
+| 请求由哪个 Apple 主机应答？ | `internal/applemusic#ampAPIBase`、`internal/applemusic#CatalogClient.doWithWebAuth` |
 | 后端怎么和 wrapper 通信？ | `internal/wrapper#Client` |
 | 任务存在哪里，表结构怎么迁移？ | `internal/db#Store` |
 | 配置怎么加载和校验？ | `internal/config#Load`、`internal/config#Config.Validate` |

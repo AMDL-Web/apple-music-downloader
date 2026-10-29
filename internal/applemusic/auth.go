@@ -8,37 +8,10 @@ import (
 	"time"
 )
 
-// InitDeveloperToken loads the signing key and mints the first developer token
-// when signing is configured. It must be called once at startup; any error
-// should stop the process from starting. It is a no-op in legacy mode.
-func (c *CatalogClient) InitDeveloperToken() error {
-	if !c.cfg.DeveloperTokenSigningEnabled() {
-		return nil
-	}
-	signer, err := newDeveloperTokenSigner(c.cfg.AppleMusicPrivateKeyPath, c.cfg.AppleMusicKeyID, c.cfg.AppleMusicTeamID)
-	if err != nil {
-		return err
-	}
-	c.signer = signer
-	_, err = c.catalogToken.get(context.Background())
-	return err
-}
-
 var (
 	indexJSPattern = regexp.MustCompile(`/assets/index~[^"']+\.js`)
 	jwtPattern     = regexp.MustCompile(`eyJ[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+`)
 )
-
-// fetchCatalogToken is catalogToken's fetch: a locally signed developer token
-// once InitDeveloperToken configured a signer, otherwise a scraped web-player
-// JWT.
-func (c *CatalogClient) fetchCatalogToken(ctx context.Context) (string, time.Duration, error) {
-	if c.signer != nil {
-		token, _, err := c.signer.sign(time.Now(), internalDeveloperTokenTTL)
-		return token, internalDeveloperTokenTTL, err
-	}
-	return c.scrapeWebToken(ctx)
-}
 
 // scrapeWebToken is webToken's fetch: it reads the web-player JWT out of
 // music.apple.com's JS bundle.
@@ -97,13 +70,11 @@ const tokenRefreshLead = 5 * time.Minute
 
 // RunTokenRefresher proactively re-scrapes the music.apple.com web tokens
 // shortly before their cached validity lapses, so catalog and enhanced-HLS
-// requests in legacy or signed_mode_hls_source=web_token mode never pay the
-// inline scrape latency and never hit a lapsed token. It only renews a token
-// that has already been fetched at least once (a non-empty cache); it never
-// scrapes a token nothing has used yet, preserving the lazy-first behavior for
-// deployments that never touch the scraped path. It blocks until ctx is done
-// and returns once a refresh in flight has stopped; run it once, on its own
-// goroutine.
+// requests never pay the inline scrape latency and never hit a lapsed token. It
+// only renews a token that has already been fetched at least once (a non-empty
+// cache); it never scrapes a token nothing has used yet. It blocks until ctx is
+// done and returns once a refresh in flight has stopped; run it once, on its
+// own goroutine.
 func (c *CatalogClient) RunTokenRefresher(ctx context.Context) {
 	c.runTokenRefresher(ctx, tokenRefreshCheckInterval)
 }
@@ -116,20 +87,14 @@ func (c *CatalogClient) runTokenRefresher(ctx context.Context, interval time.Dur
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			c.refreshExpiringWebTokens(ctx)
+			c.refreshExpiringWebToken(ctx)
 		}
 	}
 }
 
-// refreshExpiringWebTokens renews any scraped token within tokenRefreshLead of
-// its cached expiry. The catalog cache is skipped when a signer is configured:
-// it then holds a locally minted token with nothing to keep warm.
-func (c *CatalogClient) refreshExpiringWebTokens(ctx context.Context) {
-	if c.signer == nil {
-		if err := c.catalogToken.refreshIfExpiring(ctx, tokenRefreshLead); err != nil {
-			c.logger.Warn("proactive legacy token refresh failed; keeping cached token until it expires", "error", err)
-		}
-	}
+// refreshExpiringWebToken renews the scraped token when it is within
+// tokenRefreshLead of its cached expiry.
+func (c *CatalogClient) refreshExpiringWebToken(ctx context.Context) {
 	if err := c.webToken.refreshIfExpiring(ctx, tokenRefreshLead); err != nil {
 		c.logger.Warn("proactive web token refresh failed; keeping cached token until it expires", "error", err)
 	}
@@ -145,23 +110,11 @@ type appleRequest struct {
 	mediaUserToken string
 }
 
-// doWithCatalogAuth sends r to apiBase's host with catalogToken. The Origin
-// header goes only with a scraped token (legacy mode): a self-signed developer
-// token carries no origin claim.
-func (c *CatalogClient) doWithCatalogAuth(ctx context.Context, r appleRequest) (*http.Response, error) {
-	return c.doWithAuth(ctx, &c.catalogToken, !c.cfg.DeveloperTokenSigningEnabled(), r)
-}
-
-// doWithWebAuth sends r to amp-api.music.apple.com with the scraped web-player
-// JWT and the Origin header that token is scoped to, whatever the signing mode.
+// doWithWebAuth sends r with the scraped web-player JWT and the Origin header
+// that token is scoped to. On a 401 it drops that token (only if it is still
+// the cached one), fetches another and sends r once more; any other status, a
+// second 401 included, goes back to the caller as-is.
 func (c *CatalogClient) doWithWebAuth(ctx context.Context, r appleRequest) (*http.Response, error) {
-	return c.doWithAuth(ctx, &c.webToken, true, r)
-}
-
-// doWithAuth sends r with a bearer token from cache. On a 401 it drops that
-// token (only if it is still the cached one), fetches another and sends r once
-// more; any other status, a second 401 included, goes back to the caller as-is.
-func (c *CatalogClient) doWithAuth(ctx context.Context, cache *tokenCache, origin bool, r appleRequest) (*http.Response, error) {
 	send := func(token string) (*http.Response, error) {
 		req, err := http.NewRequestWithContext(ctx, r.method, r.url, nil)
 		if err != nil {
@@ -171,14 +124,12 @@ func (c *CatalogClient) doWithAuth(ctx context.Context, cache *tokenCache, origi
 		if r.mediaUserToken != "" {
 			req.Header.Set("Media-User-Token", r.mediaUserToken)
 		}
-		if origin {
-			req.Header.Set("Origin", "https://music.apple.com")
-		}
+		req.Header.Set("Origin", "https://music.apple.com")
 		req.Header.Set("User-Agent", "Mozilla/5.0")
 		return c.doAppleRequest(ctx, req, true)
 	}
 
-	token, err := cache.get(ctx)
+	token, err := c.webToken.get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +142,8 @@ func (c *CatalogClient) doWithAuth(ctx context.Context, cache *tokenCache, origi
 	}
 	resp.Body.Close()
 
-	cache.invalidate(token)
-	token, err = cache.get(ctx)
+	c.webToken.invalidate(token)
+	token, err = c.webToken.get(ctx)
 	if err != nil {
 		return nil, err
 	}

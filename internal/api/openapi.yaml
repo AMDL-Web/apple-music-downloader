@@ -53,11 +53,9 @@ paths:
         Reports the running build (version, commit and build date stamped at
         build time; version is dev and the other two come from the VCS stamp or
         are empty for a build without them), the Go runtime, process start and
-        uptime, the simulate flag, the developer-token signing mode, the job
-        workers and queue, the process-wide pool sizes, the external tools, and
-        the free space of download.downloads_dir and download.temp_dir. It never
-        returns a secret: signing_mode says whether the signing keys are
-        configured, not which.
+        uptime, the simulate flag, the job workers and queue, the process-wide
+        pool sizes, the external tools, and the free space of
+        download.downloads_dir and download.temp_dir. It never returns a secret.
       operationId: getSystem
       responses:
         '200':
@@ -186,7 +184,7 @@ paths:
         Returns the runtime-mutable part of the effective configuration: the download
         section (except max_running_jobs and max_parallel_downloads),
         logging.level/access_log, the simulate section, the library_sync section, and
-        catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
+        catalog.album_track_url_mode/media_user_token/motion_artwork_enabled.
         Startup-only fields (server, database, the other logging fields, wrapper,
         tools, the other catalog fields) are not returned — they cannot be changed
         through this API; edit the startup configuration configs/config.yaml and
@@ -218,7 +216,7 @@ paths:
         Only the fields returned by GET can be changed: the download section (except
         max_running_jobs and max_parallel_downloads), logging.level/access_log, the
         simulate section, the library_sync section, and
-        catalog.album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled.
+        catalog.album_track_url_mode/media_user_token/motion_artwork_enabled.
         Every other field is consumed only at process startup, and a request that
         changes one is rejected with 422 config_key_not_mutable — edit the startup
         configuration configs/config.yaml and restart instead. An unknown field is
@@ -1258,7 +1256,7 @@ components:
           type: string
     SystemInfo:
       type: object
-      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, signing_mode, motion_artwork_enabled, default_storefront, jobs, pools, tools, storage]
+      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, motion_artwork_enabled, default_storefront, jobs, pools, tools, storage]
       properties:
         version:
           type: string
@@ -1286,13 +1284,6 @@ components:
         simulate:
           type: boolean
           description: simulate.enabled; jobs simulate transfer, decryption and file writes.
-        signing_mode:
-          type: string
-          enum: [local, legacy]
-          description: >-
-            local when the catalog.apple_music_* developer-token signing keys are
-            set and the backend signs its own catalog token; legacy when it
-            scrapes the web-player token.
         motion_artwork_enabled:
           type: boolean
           description: catalog.motion_artwork_enabled.
@@ -1391,7 +1382,6 @@ components:
         started_at: '2026-10-28T12:00:05Z'
         uptime_seconds: 3600
         simulate: false
-        signing_mode: legacy
         motion_artwork_enabled: true
         jobs: {workers: 3, active: 1, queue_depth: 0, queue_capacity: 256, recovery_backlog: 0}
         pools: {downloads: 16, decrypts: 32, wrapper_requests: 24}
@@ -1713,18 +1703,6 @@ components:
                 covers and library sync; no request can supply its own. It can be
                 changed through PUT and is written back to the configuration file;
                 GET returns the current value.
-            signed_mode_hls_source:
-              type: string
-              enum: [wrapper, web_token]
-              description: >-
-                Takes effect only when developer-token signing is enabled (a
-                self-signed token cannot read enhancedHls); ignored in legacy mode,
-                which reads enhancedHls but takes the authorized-device manifest for
-                tracks with the hi-res-lossless audio trait. wrapper (default) takes
-                the authorized-device manifest from wrapper.M3U8; web_token scrapes
-                the music.apple.com web player JWT and reads enhancedHls from
-                amp-api, whose manifest can lack a Hi-Res track's 88.2 or 96 kHz
-                ALAC renditions.
             motion_artwork_enabled:
               type: boolean
               description: >-

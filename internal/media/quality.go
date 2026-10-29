@@ -127,11 +127,18 @@ func (d *Downloader) queryTrackQualities(ctx context.Context, parsed applemusic.
 
 func (d *Downloader) querySongQualities(ctx context.Context, storefront string, song applemusic.Song) ([]QualityOption, error) {
 	variants, _, err := retryValue(ctx, d.cfg.Download.MaxAttempts, retryBackoff, func(int) ([]variant, error) {
-		master, err := d.resolveEnhancedHLS(ctx, storefront, song)
+		// The inventory lists ALAC among the codecs, so it reads the master
+		// playlist an ALAC download would.
+		master, _, err := d.resolveEnhancedHLS(ctx, storefront, song, "alac")
 		if err != nil {
 			return nil, err
 		}
-		return fetchMasterVariants(ctx, d.http, master, d.requestGate)
+		variants, err := fetchMasterVariants(ctx, d.http, master, d.requestGate)
+		if err != nil {
+			// The next attempt asks the wrapper again.
+			d.deviceManifests.forget(deviceManifestKey{storefront: storefront, songID: song.ID})
+		}
+		return variants, err
 	}, nil)
 	if err != nil {
 		return nil, err

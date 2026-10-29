@@ -2,17 +2,16 @@
 // reads catalog, artwork and library metadata through CatalogClient, built
 // once by NewCatalogClient: Song, Album, Playlist, StationTracks, ArtistAlbums,
 // FetchCover, LibrarySongsNewestFirst, LibraryAlbumCatalogURL. EnrichWithAlbum
-// merges album-level fields into a song for every caller. Startup calls
-// InitDeveloperToken once and runs RunTokenRefresher until shutdown.
+// merges album-level fields into a song for every caller. Startup runs
+// RunTokenRefresher until shutdown.
 //
-// Invariants: apiBase picks api.music.apple.com when developer-token signing is
-// enabled, amp-api.music.apple.com otherwise; MotionArtworkViaWebToken and
-// EnhancedHLSViaWebToken always use amp-api with a scraped web-player JWT, and a
-// MotionArtworkViaWebToken error means "no motion artwork", never a job failure.
-// The catalog token and the web-player JWT live in two separate tokenCache
-// values, each trusts a token for half its TTL, and doWithAuth drops only the
-// rejected token on a 401 and retries once. Every Apple request goes through
-// doAppleRequest and the client's one RequestGate, and upstream bodies are
+// Invariants: every request goes to amp-api.music.apple.com (ampAPIBase) with a
+// JWT scraped from the music.apple.com web player and the Origin header it is
+// scoped to; a MotionArtworkViaWebToken error means "no motion artwork", never a
+// job failure. The scraped token lives in one tokenCache that trusts a token for
+// half its TTL, and doWithWebAuth drops only the rejected token on a 401 and
+// retries once. Every Apple request goes through doAppleRequest and the
+// client's one RequestGate, and upstream bodies are
 // always read through a size cap. Every non-2xx JSON answer becomes a
 // catalogRequestError (NonRetryable for a 4xx, RetryDelay from Retry-After):
 // its Error() is a short message that job rows and API responses can show,

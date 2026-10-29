@@ -22,7 +22,6 @@ type systemInfo struct {
 	StartedAt            time.Time           `json:"started_at"`
 	UptimeSeconds        int64               `json:"uptime_seconds"`
 	Simulate             bool                `json:"simulate"`
-	SigningMode          string              `json:"signing_mode"`
 	MotionArtworkEnabled bool                `json:"motion_artwork_enabled"`
 	DefaultStorefront    string              `json:"default_storefront"`
 	Jobs                 systemJobs          `json:"jobs"`
@@ -55,22 +54,11 @@ type storageInfo struct {
 	Error      string  `json:"error,omitempty"`
 }
 
-// Signing modes of SystemInfo.signing_mode.
-const (
-	signingModeLocal  = "local"
-	signingModeLegacy = "legacy"
-)
-
 // systemInfo reports the build, the runtime capacity and the host resources
-// the pipeline depends on. It reads no secret: the signing mode says whether
-// the .p8 keys are configured, never which.
+// the pipeline depends on. It reads no secret.
 func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 	cfg := s.currentConfig()
 	build := buildinfo.Get()
-	signingMode := signingModeLegacy
-	if cfg.Catalog.DeveloperTokenSigningEnabled() {
-		signingMode = signingModeLocal
-	}
 	queue := s.manager.QueueStats()
 	// tools.ffmpeg is a startup key, so the live snapshot names the binary
 	// the pipeline's own checker was built with.
@@ -85,7 +73,6 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		StartedAt:            buildinfo.StartedAt,
 		UptimeSeconds:        int64(s.clock().Sub(buildinfo.StartedAt) / time.Second),
 		Simulate:             cfg.Simulate.Enabled,
-		SigningMode:          signingMode,
 		MotionArtworkEnabled: cfg.Catalog.MotionArtworkEnabled,
 		DefaultStorefront:    cfg.Catalog.DefaultStorefront,
 		Jobs: systemJobs{

@@ -147,11 +147,6 @@ is slow, mount it separately onto a fast host disk, kept apart from `data/downlo
 Logs go to stdout (`docker logs amdl-backend`) and to the in-memory buffer the console's
 Logs page reads; the backend writes no log file, so there is no log mount.
 
-For developer-token signing, mount the `.p8` private key read-only (e.g.
-`-v ./keys:/app/keys:ro`) and point `catalog.apple_music_private_key_path` at the path
-inside the container. Keys are not — and must not be — baked into the image;
-`.dockerignore` already excludes `keys/` and `*.p8`.
-
 Set `PUID`/`PGID` to the uid/gid that owns the host directories and the entrypoint fixes
 ownership inside the container for you.
 

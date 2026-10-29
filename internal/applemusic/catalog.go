@@ -25,19 +25,13 @@ type CatalogClient struct {
 	// retryDelay is replaceable by same-package tests so 429 behavior can be
 	// verified without sleeping through the production fallback delay.
 	retryDelay func(http.Header) time.Duration
-	signer     *developerTokenSigner
-	// catalogToken authorizes requests to apiBase: the signed developer token
-	// once InitDeveloperToken configured a signer, a scraped web-player JWT
-	// otherwise.
-	catalogToken tokenCache
-	// webToken is always a scraped web-player JWT, for the amp-api-only reads.
-	// It is separate from catalogToken so those reads work in signed mode
-	// without disturbing the signed token every other request uses.
+	// webToken is the scraped music.apple.com web-player JWT that authorizes
+	// every request, amp-api being the only host this client talks to.
 	webToken tokenCache
 }
 
-// NewCatalogClient builds the client. It does no I/O; call InitDeveloperToken
-// once at startup, and run RunTokenRefresher for the process lifetime.
+// NewCatalogClient builds the client. It does no I/O; run RunTokenRefresher for
+// the process lifetime.
 func NewCatalogClient(cfg config.CatalogConfig, logger *slog.Logger) *CatalogClient {
 	c := &CatalogClient{
 		cfg:        cfg,
@@ -46,7 +40,6 @@ func NewCatalogClient(cfg config.CatalogConfig, logger *slog.Logger) *CatalogCli
 		gate:       limits.NewRequestGate(cfg.MaxParallelRequests, config.CatalogRequestsPerSecond, config.CatalogRequestBurst),
 		retryDelay: defaultRetryDelay,
 	}
-	c.catalogToken.fetch = c.fetchCatalogToken
 	c.webToken.fetch = c.scrapeWebToken
 	return c
 }
@@ -82,14 +75,11 @@ func (c *CatalogClient) SongMetadata(ctx context.Context, storefront, id string)
 	var resp catalogSongResponse
 	params := url.Values{
 		"include": []string{"albums,artists"},
-		"l":       []string{c.cfg.Language},
+		// extendedAssetUrls carries enhancedHls.
+		"extend": []string{"extendedAssetUrls"},
+		"l":      []string{c.cfg.Language},
 	}
-	if !c.cfg.DeveloperTokenSigningEnabled() {
-		// extendedAssetUrls carries enhancedHls, which a self-signed developer
-		// token cannot access; only request it in legacy mode.
-		params.Set("extend", "extendedAssetUrls")
-	}
-	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/songs/%s", c.apiBase(), storefront, id), params, &resp); err != nil {
+	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/songs/%s", ampAPIBase, storefront, id), params, &resp); err != nil {
 		return Song{}, err
 	}
 	if len(resp.Data) == 0 {
@@ -102,7 +92,7 @@ func (c *CatalogClient) SongMetadata(ctx context.Context, storefront, id string)
 // album-level fields (album artist, release, label, disc and track totals).
 func (c *CatalogClient) Album(ctx context.Context, storefront, id string) (Collection, error) {
 	var resp catalogAlbumResponse
-	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/albums/%s", c.apiBase(), storefront, id), url.Values{
+	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/albums/%s", ampAPIBase, storefront, id), url.Values{
 		"include":        []string{"tracks,artists,record-labels"},
 		"include[songs]": []string{"artists"},
 		// artistUrl is the only extended attribute Apple documents as available
@@ -189,7 +179,7 @@ func (c *CatalogClient) Album(ctx context.Context, storefront, id string) (Colle
 // carries the actual user-selected cover (see libraryArtworkURL).
 func (c *CatalogClient) Playlist(ctx context.Context, storefront, id, mediaUserToken string) (Collection, error) {
 	var resp catalogPlaylistResponse
-	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/playlists/%s", c.apiBase(), storefront, id), url.Values{
+	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/playlists/%s", ampAPIBase, storefront, id), url.Values{
 		"l": []string{c.cfg.Language},
 	}, &resp); err != nil {
 		return Collection{}, err
@@ -232,7 +222,7 @@ func (c *CatalogClient) Playlist(ctx context.Context, storefront, id, mediaUserT
 // download proceeds without a playlist cover, it never fails the job.
 func (c *CatalogClient) libraryArtworkURL(ctx context.Context, storefront, id, mediaUserToken string) string {
 	var resp catalogPlaylistResponse
-	if err := c.getWithUserToken(ctx, fmt.Sprintf("%s/v1/catalog/%s/playlists/%s", c.apiBase(), storefront, id), url.Values{
+	if err := c.getWithUserToken(ctx, fmt.Sprintf("%s/v1/catalog/%s/playlists/%s", ampAPIBase, storefront, id), url.Values{
 		"include": []string{"library"},
 		"l":       []string{c.cfg.Language},
 	}, mediaUserToken, &resp); err != nil {
@@ -250,12 +240,12 @@ func (c *CatalogClient) libraryArtworkURL(ctx context.Context, storefront, id, m
 	return ""
 }
 
-// Station fetches a radio station's catalog metadata. The developer token
+// Station fetches a radio station's catalog metadata. The web-player token
 // alone authorizes this read (no media-user-token needed); the returned
 // Format distinguishes a downloadable "tracks" station from a live "stream".
 func (c *CatalogClient) Station(ctx context.Context, storefront, id string) (StationInfo, error) {
 	var resp catalogStationResponse
-	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/stations/%s", c.apiBase(), storefront, id), url.Values{
+	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/stations/%s", ampAPIBase, storefront, id), url.Values{
 		"l": []string{c.cfg.Language},
 	}, &resp); err != nil {
 		return StationInfo{}, err
@@ -274,7 +264,7 @@ func (c *CatalogClient) Station(ctx context.Context, storefront, id string) (Sta
 // StationTracks resolves a personalized/curated radio station into a finite
 // collection of catalog songs via POST /v1/me/stations/next-tracks/{id}, which
 // requires the user's media-user-token (an Apple subscription token) in
-// addition to the developer token. Live broadcast stations ("stream" format)
+// addition to the web-player token. Live broadcast stations ("stream" format)
 // have no static track list and return an error. The next-tracks feed is a
 // rolling window, so a station "download" captures whichever upcoming songs the
 // feed currently returns rather than a fixed catalog listing.
@@ -320,8 +310,8 @@ func (c *CatalogClient) stationNextTracks(ctx context.Context, id, mediaUserToke
 		"limit":          []string{strconv.Itoa(stationNextTracksLimit)},
 		"l":              []string{c.cfg.Language},
 	}
-	endpoint := fmt.Sprintf("%s/v1/me/stations/next-tracks/%s?%s", c.apiBase(), id, params.Encode())
-	resp, err := c.doWithCatalogAuth(ctx, appleRequest{method: http.MethodPost, url: endpoint, mediaUserToken: mediaUserToken})
+	endpoint := fmt.Sprintf("%s/v1/me/stations/next-tracks/%s?%s", ampAPIBase, id, params.Encode())
+	resp, err := c.doWithWebAuth(ctx, appleRequest{method: http.MethodPost, url: endpoint, mediaUserToken: mediaUserToken})
 	if err != nil {
 		return fmt.Errorf("station next-tracks: %w", err)
 	}
@@ -334,7 +324,7 @@ func (c *CatalogClient) stationNextTracks(ctx context.Context, id, mediaUserToke
 // ArtistAlbums reads an artist and every page of its albums, deduplicated by id.
 func (c *CatalogClient) ArtistAlbums(ctx context.Context, storefront, id string) (ArtistAlbums, error) {
 	var resp catalogArtistResponse
-	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s", c.apiBase(), storefront, id), url.Values{
+	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s", ampAPIBase, storefront, id), url.Values{
 		"include": []string{"albums"},
 		"l":       []string{c.cfg.Language},
 	}, &resp); err != nil {
@@ -397,15 +387,15 @@ func (c *CatalogClient) catalogNextURL(next string) string {
 		return next
 	}
 	if strings.HasPrefix(next, "/") {
-		return c.apiBase() + next
+		return ampAPIBase + next
 	}
-	return c.apiBase() + "/" + next
+	return ampAPIBase + "/" + next
 }
 
 // Artist reads a catalog artist's name, page, genres and artwork.
 func (c *CatalogClient) Artist(ctx context.Context, storefront, id string) (Artist, error) {
 	var resp catalogArtistResponse
-	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s", c.apiBase(), storefront, id), url.Values{
+	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s", ampAPIBase, storefront, id), url.Values{
 		"l": []string{c.cfg.Language},
 	}, &resp); err != nil {
 		return Artist{}, err

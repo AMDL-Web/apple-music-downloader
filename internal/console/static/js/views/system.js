@@ -77,7 +77,6 @@ function RuntimeCard({ sys }) {
       <${KV}
         rows=${[
           ['Mode', s.simulate ? 'Simulate' : 'Normal'],
-          ['Token signing', s.signing_mode === 'local' ? 'Local (.p8 key)' : s.signing_mode === 'legacy' ? 'Legacy (scraped web token)' : s.signing_mode],
           ['Motion covers', s.motion_artwork_enabled === undefined ? null : s.motion_artwork_enabled ? 'On' : 'Off'],
           ['Workers', j.workers !== undefined ? html`<span class="num">${count(j.active)} active of ${count(j.workers)}</span>` : null],
           ['Queue', j.queue_capacity !== undefined ? html`<${QueueMeter} depth=${j.queue_depth} capacity=${j.queue_capacity} />` : null],

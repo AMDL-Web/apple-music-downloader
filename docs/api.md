@@ -89,8 +89,7 @@ Returns what is running and what it has to work with:
   image). A plain `go build` reports `version` `dev` and takes the commit and its time
   from git, if it was built inside a checkout; `go run` leaves both empty.
 - `go_version`, `os`, `arch`, `started_at`, `uptime_seconds`.
-- `simulate` (`simulate.enabled`), `signing_mode` (`local` when the three
-  `catalog.apple_music_*` keys are set, else `legacy`), `motion_artwork_enabled`,
+- `simulate` (`simulate.enabled`), `motion_artwork_enabled`,
   `default_storefront` (`catalog.default_storefront`, a startup key). The API refuses a
   link without a storefront in its path (`invalid_url`); a client that accepts such links, like the
   web console, completes them with this value.
@@ -105,7 +104,7 @@ Returns what is running and what it has to work with:
   cannot be inspected (it does not exist yet, or the platform is not Linux, macOS or
   FreeBSD).
 
-No secret is returned; `signing_mode` only says whether signing keys are configured.
+No secret is returned.
 
 ```bash
 curl 'http://localhost:18080/api/v1/stats?days=7'

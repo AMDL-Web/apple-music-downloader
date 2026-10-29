@@ -64,9 +64,9 @@ func TestGetConfigReturnsOnlyMutableFields(t *testing.T) {
 	if err := json.Unmarshal(resp.Config["catalog"], &catalog); err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog) != 4 || catalog["album_track_url_mode"] != "song" || catalog["media_user_token"] != "" ||
-		catalog["signed_mode_hls_source"] != "wrapper" || catalog["motion_artwork_enabled"] != true {
-		t.Fatalf("catalog section = %v, want album_track_url_mode/media_user_token/signed_mode_hls_source/motion_artwork_enabled", catalog)
+	if len(catalog) != 3 || catalog["album_track_url_mode"] != "song" || catalog["media_user_token"] != "" ||
+		catalog["motion_artwork_enabled"] != true {
+		t.Fatalf("catalog section = %v, want album_track_url_mode/media_user_token/motion_artwork_enabled", catalog)
 	}
 	var logging map[string]any
 	if err := json.Unmarshal(resp.Config["logging"], &logging); err != nil {
@@ -82,7 +82,7 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	server := &Server{cfg: store}
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
-		`{"download":{"embed_lyrics":false,"cover_format":"png","memory_mode":"high"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"signed_mode_hls_source":"web_token"}}`)
+		`{"download":{"embed_lyrics":false,"cover_format":"png","memory_mode":"high"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"album_track_url_mode":"album"}}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
@@ -95,8 +95,8 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	if got.Download.EmbedLyrics || got.Download.CoverFormat != "png" || got.Download.MemoryMode != config.MemoryModeHigh || !got.Simulate.Enabled {
 		t.Fatalf("update not applied to store: %+v %+v", got.Download, got.Simulate)
 	}
-	if got.Catalog.SignedModeHLSSource != "web_token" {
-		t.Fatalf("catalog.signed_mode_hls_source not applied to store: %+v", got.Catalog)
+	if got.Catalog.AlbumTrackURLMode != "album" {
+		t.Fatalf("catalog.album_track_url_mode not applied to store: %+v", got.Catalog)
 	}
 	// Merge semantics: fields absent from the body keep their current values.
 	base := config.Default()
@@ -165,7 +165,7 @@ func TestReloadConfigAppliesManualFileEdits(t *testing.T) {
 	// Edit the file behind the running store, as a user would with an editor.
 	edited := base
 	edited.Download.CoverFormat = "png"
-	edited.Catalog.SignedModeHLSSource = "web_token"
+	edited.Catalog.AlbumTrackURLMode = "album"
 	writeConfigFile(t, path, edited)
 
 	// GET is a pure read of the snapshot: it does not pick the edit up.
@@ -178,13 +178,13 @@ func TestReloadConfigAppliesManualFileEdits(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	if !strings.Contains(recorder.Body.String(), `"cover_format":"png"`) || !strings.Contains(recorder.Body.String(), `"signed_mode_hls_source":"web_token"`) {
+	if !strings.Contains(recorder.Body.String(), `"cover_format":"png"`) || !strings.Contains(recorder.Body.String(), `"album_track_url_mode":"album"`) {
 		t.Fatalf("reload did not pick up the manual file edit: %s", recorder.Body.String())
 	}
 	if strings.Contains(recorder.Body.String(), "reload_error") {
 		t.Fatalf("unexpected reload_error: %s", recorder.Body.String())
 	}
-	if got := server.cfg.Get(); got.Download.CoverFormat != "png" || got.Catalog.SignedModeHLSSource != "web_token" {
+	if got := server.cfg.Get(); got.Download.CoverFormat != "png" || got.Catalog.AlbumTrackURLMode != "album" {
 		t.Fatalf("store snapshot not refreshed: %+v", got.Catalog)
 	}
 

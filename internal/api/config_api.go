@@ -56,7 +56,7 @@ func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, r
 // omitted fields keep their current values, present fields (including whole
 // sections) are replaced. The merged result must pass full config validation,
 // and fields consumed only at startup (server, database, logging outputs,
-// wrapper, tools, catalog client/signing/request limits, and process-wide
+// wrapper, tools, catalog client token and request limits, and process-wide
 // download worker/media pools) are rejected — changing them at runtime would
 // silently do nothing. Accepted changes apply to new requests and newly
 // started jobs immediately and are written back to the combined config file,

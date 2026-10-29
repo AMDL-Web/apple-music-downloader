@@ -65,14 +65,11 @@ type libraryAlbumCatalogResponse struct {
 // not need a second request per song. hasMore reports whether Apple offered a
 // next page.
 //
-// mediaUserToken is required: a personal library is invisible to the developer
+// mediaUserToken is required: a personal library is invisible to the web-player
 // token alone, and Apple answers 403 without it.
 //
-// Both hosts serve this. getWithUserToken routes through apiBase(), so signed
-// mode reads api.music.apple.com with the internal developer token, and legacy
-// mode reads amp-api.music.apple.com with a scraped web-player token plus the
-// Origin header it requires. Verified against a live library in both modes,
-// not assumed — /v1/me/library is one of the few paths the two hosts agree on.
+// It reads amp-api.music.apple.com with the scraped web-player token plus the
+// Origin header that host requires.
 func (c *CatalogClient) LibrarySongsNewestFirst(ctx context.Context, mediaUserToken string, offset, limit int) (songs []LibrarySong, hasMore bool, err error) {
 	if mediaUserToken == "" {
 		return nil, false, fmt.Errorf("reading the library requires a media-user-token")
@@ -86,7 +83,7 @@ func (c *CatalogClient) LibrarySongsNewestFirst(ctx context.Context, mediaUserTo
 	params.Set("sort", "-dateAdded")
 	params.Set("include", "albums")
 	var resp librarySongsResponse
-	endpoint := c.apiBase() + "/v1/me/library/songs"
+	endpoint := ampAPIBase + "/v1/me/library/songs"
 	if err := c.getWithUserToken(ctx, endpoint, params, mediaUserToken, &resp); err != nil {
 		return nil, false, err
 	}
@@ -119,7 +116,7 @@ func (c *CatalogClient) LibraryAlbumCatalogURL(ctx context.Context, mediaUserTok
 		return "", false, fmt.Errorf("reading the library requires a media-user-token")
 	}
 	var resp libraryAlbumCatalogResponse
-	endpoint := fmt.Sprintf("%s/v1/me/library/albums/%s/catalog", c.apiBase(), url.PathEscape(libraryAlbumID))
+	endpoint := fmt.Sprintf("%s/v1/me/library/albums/%s/catalog", ampAPIBase, url.PathEscape(libraryAlbumID))
 	if err := c.getWithUserToken(ctx, endpoint, nil, mediaUserToken, &resp); err != nil {
 		// errors.As rather than a type assertion so this keeps working if the
 		// request path ever wraps its errors.

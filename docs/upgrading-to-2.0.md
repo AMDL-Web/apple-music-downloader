@@ -102,8 +102,17 @@ needs the API changes below before it works against 2.0.
   `catalog.max_parallel_requests`, `download.max_parallel_downloads` and
   `download.max_running_jobs` remain keys.
 - `catalog.developer_token_ttl_hours` and `catalog.allowed_origins` configured the removed
-  `GET /developer-token`. Both are rejected in the file; delete them. The backend's own
-  signed token is unaffected.
+  `GET /developer-token`. Both are rejected in the file; delete them.
+- `catalog.apple_music_private_key_path`, `catalog.apple_music_key_id`,
+  `catalog.apple_music_team_id` and `catalog.signed_mode_hls_source` are rejected in the
+  file; delete them. The backend no longer signs a developer token. Every catalog read
+  goes to `amp-api.music.apple.com` with the token scraped from `music.apple.com`, which
+  is what an install with the three signing keys empty already did, so such an install
+  sees no change. An install that set the keys now reads the web player's `enhancedHls`
+  from the catalog response and no longer asks the wrapper for a manifest per track: only a
+  `hi-res-lossless` track with ALAC and `download.alac_max_sample_rate` above 48000 takes
+  the wrapper's device manifest, remembered for 12 hours. Remove any `.p8` key mount.
+  `catalog.token_cache_ttl_hours` now applies to every install.
 - Built-in defaults now equal the values in `configs/config.example.yaml`, so a key
   missing from `config.yaml` behaves the way the example documents. The exceptions are
   `download.album_path_format` and `download.artist_path_format`: a config without them

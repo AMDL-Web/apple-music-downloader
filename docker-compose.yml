@@ -81,10 +81,6 @@ services:
       - ./data/downloads:/app/data/downloads
       # The temp directory data/tmp stays inside the container and needs no
       # mount.
-      # When developer-token signing is enabled, mount the .p8 private key
-      # (read-only) and point catalog.apple_music_private_key_path in
-      # config.yaml at /app/keys/<file name>.p8:
-      # - ./keys:/app/keys:ro
 
   # If wrapper-manager is containerized too, uncomment this and fill it in for
   # the actual image, then change AMDL_WRAPPER_ADDRESS above to

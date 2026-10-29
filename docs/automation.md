@@ -120,13 +120,12 @@ pass, so turning it off really stops the polling rather than just discarding res
 shortening the interval takes effect immediately instead of after the current wait.
 
 It depends on `catalog.media_user_token`: a personal library is readable only with a
-subscription token, and a developer token alone will not do. With that field empty the
+subscription token, and the web-player token alone will not do. With that field empty the
 watcher idles and warns once instead of erroring every pass.
 
 Submissions go through `jobs.Manager.SubmitBatch`, not through the backend's own HTTP API,
 so they are identical to jobs you submit by hand — same deduplication, same validation,
-same hooks. Catalog reads use the backend's own developer token or scraped web-player
-token, like every other catalog read.
+same hooks. Catalog reads use the scraped web-player token, like every other catalog read.
 
 ### Why the watermark is a position, not a timestamp
 

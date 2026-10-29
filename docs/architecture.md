@@ -178,14 +178,14 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 
 ### 3.5 System and stats
 
-- `GET /system`: build info, uptime, simulate flag, signing mode, job/queue capacity,
+- `GET /system`: build info, uptime, simulate flag, job/queue capacity,
   pool sizes, tool availability, free space of `downloads_dir` and `temp_dir`.
 
   ```json
   {"version": "v2.0.0", "commit": "a6a6b46", "build_date": "2026-10-28T12:00:00Z",
    "go_version": "go1.26.5", "os": "linux", "arch": "amd64",
    "started_at": "2026-10-28T12:00:05Z", "uptime_seconds": 3600,
-   "simulate": false, "signing_mode": "legacy", "motion_artwork_enabled": true,
+   "simulate": false, "motion_artwork_enabled": true,
    "jobs": {"workers": 3, "active": 1, "queue_depth": 0, "queue_capacity": 256, "recovery_backlog": 0},
    "pools": {"downloads": 16, "decrypts": 32, "wrapper_requests": 24},
    "tools": [{"name": "ffmpeg", "available": true, "path": "/usr/bin/ffmpeg"}],
@@ -198,9 +198,7 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   `COMMIT` and `BUILD_DATE` build args that the image workflows pass). Without the
   stamp `version` is `dev`, and `commit`/`build_date` come from the VCS settings that
   `go build` records in a git checkout (`build_date` is then the commit time), or stay
-  empty. `signing_mode` is `local` when the developer-token signing keys are set
-  (`internal/config#CatalogConfig.DeveloperTokenSigningEnabled`), else `legacy`; no key
-  material is returned. `jobs` comes from `internal/jobs#Manager.QueueStats`; `workers`
+  empty. No secret is returned. `jobs` comes from `internal/jobs#Manager.QueueStats`; `workers`
   and `pools` are startup values. `tools` is the `internal/media#ToolChecker` result.
   `storage` comes from `statfs`; when a directory cannot be inspected, its entry carries
   `error` instead of the byte counts. The backend builds only for Linux, macOS and

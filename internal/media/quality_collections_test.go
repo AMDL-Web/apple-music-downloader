@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -34,18 +35,15 @@ type collectionQualityCatalog struct {
 	artist      applemusic.ArtistAlbums
 	resolveErr  error
 	metadataErr map[string]error
-	webHLS      map[string]string
-	webErr      error
 
-	songCalls       []string
-	metadataCalls   []string
-	albumCalls      []string
-	playlistCalls   []string
-	stationCalls    []string
-	artistCalls     []string
-	playlistTokens  []string
-	stationTokens   []string
-	webTokenHLSCall []string
+	songCalls      []string
+	metadataCalls  []string
+	albumCalls     []string
+	playlistCalls  []string
+	stationCalls   []string
+	artistCalls    []string
+	playlistTokens []string
+	stationTokens  []string
 }
 
 func (f *collectionQualityCatalog) Song(_ context.Context, storefront, id string) (applemusic.Song, error) {
@@ -122,16 +120,6 @@ func (f *collectionQualityCatalog) MotionArtworkViaWebToken(context.Context, str
 	return applemusic.MotionArtwork{}, nil
 }
 
-func (f *collectionQualityCatalog) EnhancedHLSViaWebToken(_ context.Context, storefront, id string) (string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.webTokenHLSCall = append(f.webTokenHLSCall, storefront+"/"+id)
-	if f.webErr != nil {
-		return "", f.webErr
-	}
-	return f.webHLS[id], nil
-}
-
 func newCollectionQualityCatalog(manifestBase string) *collectionQualityCatalog {
 	return &collectionQualityCatalog{
 		songs: map[string]applemusic.Song{
@@ -149,9 +137,6 @@ func newCollectionQualityCatalog(manifestBase string) *collectionQualityCatalog 
 			{ID: "a1"}, {ID: "a2"},
 		}},
 		metadataErr: map[string]error{},
-		webHLS: map[string]string{
-			"s1": manifestBase + "/s1.m3u8", "s2": manifestBase + "/s2.m3u8", "s3": manifestBase + "/s3.m3u8",
-		},
 	}
 }
 
@@ -348,47 +333,29 @@ func (w *collectionQualityWrapper) License(context.Context, string, string, stri
 	return "", nil
 }
 
-func TestQualityQueryCollectionSignedManifestSources(t *testing.T) {
+func TestQualityQueryCollectionAsksTheWrapperOnlyForHiResTracks(t *testing.T) {
 	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeQualityTestPlaylist(w, r, qualityTestMaster)
 	}))
 	defer manifest.Close()
 
-	for _, source := range []string{"wrapper", "web_token"} {
-		t.Run(source, func(t *testing.T) {
-			catalog := newCollectionQualityCatalog(manifest.URL)
-			cfg := config.Default()
-			cfg.Catalog.AppleMusicPrivateKeyPath = "AuthKey.p8"
-			cfg.Catalog.AppleMusicKeyID = "KEY"
-			cfg.Catalog.AppleMusicTeamID = "TEAM"
-			cfg.Catalog.SignedModeHLSSource = source
-			wrapper := &collectionQualityWrapper{hls: catalog.webHLS}
-			service := newTestQualityService(cfg, catalog, wrapper)
-			result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/album/example/a1"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(result.Tracks) != 2 {
-				t.Fatalf("tracks = %#v", result.Tracks)
-			}
-			catalog.mu.Lock()
-			metadataCalls := append([]string(nil), catalog.metadataCalls...)
-			webCalls := append([]string(nil), catalog.webTokenHLSCall...)
-			catalog.mu.Unlock()
-			wrapper.mu.Lock()
-			wrapperCalls := append([]string(nil), wrapper.calls...)
-			wrapper.mu.Unlock()
-			if len(metadataCalls) != 2 {
-				t.Fatalf("signed mode SongMetadata calls = %#v, want the download metadata step for both tracks", metadataCalls)
-			}
-			if source == "wrapper" {
-				if len(wrapperCalls) != 2 || len(webCalls) != 0 {
-					t.Fatalf("wrapper/web calls = %#v/%#v", wrapperCalls, webCalls)
-				}
-			} else if len(webCalls) != 2 || len(wrapperCalls) != 0 {
-				t.Fatalf("web/wrapper calls = %#v/%#v", webCalls, wrapperCalls)
-			}
-		})
+	catalog := newCollectionQualityCatalog(manifest.URL)
+	hiRes := catalog.songs["s1"]
+	hiRes.HiResLossless = true
+	catalog.songs["s1"] = hiRes
+	wrapper := &collectionQualityWrapper{hls: map[string]string{"s1": manifest.URL + "/s1-device.m3u8"}}
+	service := newTestQualityService(config.Default(), catalog, wrapper)
+	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/album/example/a1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tracks) != 2 {
+		t.Fatalf("tracks = %#v", result.Tracks)
+	}
+	wrapper.mu.Lock()
+	defer wrapper.mu.Unlock()
+	if !slices.Equal(wrapper.calls, []string{"s1"}) {
+		t.Fatalf("wrapper.M3U8 calls = %#v, want only the hi-res track s1", wrapper.calls)
 	}
 }
 

@@ -140,9 +140,6 @@ func run(ctx context.Context, files configFiles) (err error) {
 	defer closeLogged(logger, "close wrapper client", wrapperClient.Close)
 
 	catalog := applemusic.NewCatalogClient(cfg.Catalog, logSystem.Logger.With("component", "catalog"))
-	if err := catalog.InitDeveloperToken(); err != nil {
-		return fmt.Errorf("sign apple music developer token: %w", err)
-	}
 	toolChecker := media.NewToolChecker(cfg.Tools)
 	downloader := media.NewDownloader(cfgStore, catalog, wrapperClient, toolChecker, logSystem.Logger.With("component", "media"))
 	qualityService := media.NewQualityService(downloader)
@@ -211,9 +208,8 @@ func run(ctx context.Context, files configFiles) (err error) {
 	backgroundCtx, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
 	var background sync.WaitGroup
-	// Keeps the scraped music.apple.com web tokens (legacy mode and
-	// signed_mode_hls_source=web_token) warm, so requests never pay the
-	// inline scrape.
+	// Keeps the scraped music.apple.com web token warm, so requests never pay
+	// the inline scrape.
 	background.Go(func() { catalog.RunTokenRefresher(backgroundCtx) })
 	background.Go(func() { libraryWatcher.Run(backgroundCtx) })
 	serveErr := make(chan error, 1)

@@ -78,10 +78,10 @@ lazy, so the backend starts without it — `GET /api/v1/wrapper/status` tells yo
 it is actually reachable.
 
 **Apple is read from two hosts, and they are not interchangeable.**
-`api.music.apple.com` is the documented API and takes a self-signed developer token.
-`amp-api.music.apple.com` is Apple's internal web-player endpoint, answers only to a JWT
-scraped from `music.apple.com`, and is the **only** source of `enhancedHls` manifests and
-`editorialVideo` animated covers. Being undocumented, it can change without notice;
+`api.music.apple.com` is the documented API and takes a self-signed developer token; the
+backend never calls it. `amp-api.music.apple.com` is Apple's internal web-player endpoint,
+answers only to a JWT scraped from `music.apple.com`, serves every catalog read, and is the
+**only** source of `enhancedHls` manifests and `editorialVideo` animated covers. Being undocumented, it can change without notice;
 anything read from it degrades to "this album doesn't have that" rather than failing a job.
 
 **There is no authentication here, on purpose.** Every endpoint is open. This is the
@@ -257,7 +257,7 @@ symbol, so it stays valid when files inside the package are split.
 | What exactly does the API accept and return? | `internal/api/openapi.yaml` |
 | How are jobs queued, run, cancelled and retried? | `internal/jobs#Manager` |
 | How is one track downloaded, decrypted, remuxed and tagged? | `internal/media#Downloader` |
-| Which Apple host answers a request? | `internal/applemusic#CatalogClient.apiBase`, `internal/applemusic#CatalogClient.doWithWebAuth` |
+| Which Apple host answers a request? | `internal/applemusic#ampAPIBase`, `internal/applemusic#CatalogClient.doWithWebAuth` |
 | How does the backend talk to the wrapper? | `internal/wrapper#Client` |
 | Where are jobs stored, and how does the schema migrate? | `internal/db#Store` |
 | How is config loaded and validated? | `internal/config#Load`, `internal/config#Config.Validate` |

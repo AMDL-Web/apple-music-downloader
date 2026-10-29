@@ -16,8 +16,8 @@ import (
 )
 
 // newTestDownloader completes a Downloader literal with the process-wide
-// pieces NewDownloader creates: media pools sized from the literal's config and
-// the background-work tracker. Pools a test set itself are kept.
+// pieces NewDownloader creates: media pools sized from the literal's config, the
+// device manifest cache and the background-work tracker. Pools a test set itself are kept.
 func newTestDownloader(d *Downloader) *Downloader {
 	cfg := d.cfg
 	if d.store != nil {
@@ -34,6 +34,9 @@ func newTestDownloader(d *Downloader) *Downloader {
 	}
 	if d.background == nil {
 		d.background = &sync.WaitGroup{}
+	}
+	if d.deviceManifests == nil {
+		d.deviceManifests = newDeviceManifestCache()
 	}
 	if d.mp4 == nil {
 		d.mp4 = newMP4Processor(cfg)
@@ -106,19 +109,16 @@ func (f fakeDownloaderWrapper) License(context.Context, string, string, string) 
 }
 
 type fakeDownloaderCatalog struct {
-	song              applemusic.Song
-	songErr           error
-	album             applemusic.Collection
-	playlist          applemusic.Collection
-	artistAlbums      applemusic.ArtistAlbums
-	station           applemusic.Collection
-	stationErr        error
-	stationToken      *string
-	webTokenHLS       string
-	webTokenErr       error
-	webTokenCallCount *int
-	motionArtwork     applemusic.MotionArtwork
-	motionArtworkErr  error
+	song             applemusic.Song
+	songErr          error
+	album            applemusic.Collection
+	playlist         applemusic.Collection
+	artistAlbums     applemusic.ArtistAlbums
+	station          applemusic.Collection
+	stationErr       error
+	stationToken     *string
+	motionArtwork    applemusic.MotionArtwork
+	motionArtworkErr error
 }
 
 func (f fakeDownloaderCatalog) Song(context.Context, string, string) (applemusic.Song, error) {
@@ -166,13 +166,6 @@ func (f fakeDownloaderCatalog) FetchCover(context.Context, []string, string, str
 
 func (f fakeDownloaderCatalog) MotionArtworkViaWebToken(context.Context, string, string) (applemusic.MotionArtwork, error) {
 	return f.motionArtwork, f.motionArtworkErr
-}
-
-func (f fakeDownloaderCatalog) EnhancedHLSViaWebToken(context.Context, string, string) (string, error) {
-	if f.webTokenCallCount != nil {
-		*f.webTokenCallCount++
-	}
-	return f.webTokenHLS, f.webTokenErr
 }
 
 type recordingReporter struct {

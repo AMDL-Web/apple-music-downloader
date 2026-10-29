@@ -18,8 +18,8 @@ import (
 func fixtureCatalogClient(t *testing.T, bodies map[string]string) *CatalogClient {
 	t.Helper()
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.catalogToken.value = "test-token"
-	client.catalogToken.until = time.Now().Add(time.Hour)
+	client.webToken.value = "test-token"
+	client.webToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, ok := bodies[req.URL.Path]
 		status := http.StatusOK

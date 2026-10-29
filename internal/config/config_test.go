@@ -180,49 +180,15 @@ func TestLoadRejectsExplicitEmptyValues(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsPartialDeveloperTokenConfig(t *testing.T) {
-	path := writeConfig(t, "catalog:\n  apple_music_key_id: \"88KBJL3CKU\"\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "apple_music_") {
-		t.Fatalf("Load() error = %v, want partial signing config error", err)
-	}
-}
-
-func TestDeveloperTokenSigningEnabled(t *testing.T) {
-	if Default().Catalog.DeveloperTokenSigningEnabled() {
-		t.Fatal("default config should have signing disabled")
-	}
-	complete := CatalogConfig{
-		AppleMusicPrivateKeyPath: "keys/AuthKey.p8",
-		AppleMusicKeyID:          "88KBJL3CKU",
-		AppleMusicTeamID:         "2VTXNMR2GL",
-	}
-	if !complete.DeveloperTokenSigningEnabled() {
-		t.Fatal("complete config should have signing enabled")
-	}
-}
-
-func TestSignedModeHLSSourceDefaultAndValidate(t *testing.T) {
-	if got := Default().Catalog.SignedModeHLSSource; got != "wrapper" {
-		t.Fatalf("default signed_mode_hls_source = %q, want wrapper", got)
-	}
-	if Default().Catalog.EnhancedHLSFromWebToken() {
-		t.Fatal("default should not use web-token HLS source")
-	}
-	web := CatalogConfig{SignedModeHLSSource: "web_token"}
-	if !web.EnhancedHLSFromWebToken() {
-		t.Fatal("web_token should enable EnhancedHLSFromWebToken")
-	}
-	path := writeConfig(t, "catalog:\n  signed_mode_hls_source: device\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "signed_mode_hls_source") {
-		t.Fatalf("Load() error = %v, want signed_mode_hls_source validation error", err)
-	}
-	path = writeConfig(t, "catalog:\n  signed_mode_hls_source: web_token\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if cfg.Catalog.SignedModeHLSSource != "web_token" {
-		t.Fatalf("signed_mode_hls_source = %q, want web_token", cfg.Catalog.SignedModeHLSSource)
+// 2.0 removed developer-token signing. A config that still sets one of its
+// keys fails startup instead of being silently ignored, so an install that
+// relied on the signed token notices the change.
+func TestLoadRejectsRemovedSigningKeys(t *testing.T) {
+	for _, key := range []string{"apple_music_private_key_path", "apple_music_key_id", "apple_music_team_id", "signed_mode_hls_source"} {
+		path := writeConfig(t, "catalog:\n  "+key+": \"x\"\n")
+		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), key) {
+			t.Errorf("Load() with catalog.%s: error = %v, want it to name the key", key, err)
+		}
 	}
 }
 

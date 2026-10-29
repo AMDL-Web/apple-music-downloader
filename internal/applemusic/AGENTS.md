@@ -11,9 +11,8 @@ request path are in the package comment (`go doc ./internal/applemusic`); root
   (https://developer.apple.com/documentation/applemusicapi.md). A field that exists
   only on amp-api has no documentation, so the PR carries a captured response as
   evidence.
-- Strip `Authorization`, `Media-User-Token`, cookies, the developer token and the
-  scraped JWT from any captured request or response before it becomes a fixture or
-  a log line.
+- Strip `Authorization`, `Media-User-Token`, cookies and the scraped JWT from any
+  captured request or response before it becomes a fixture or a log line.
 
 ## Verify
 

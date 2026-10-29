@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"amdl/internal/config"
 	"amdl/internal/db"
 	"amdl/internal/hooks"
 	"amdl/internal/jobs"
@@ -210,12 +209,4 @@ func TestQualityEndpointErrors(t *testing.T) {
 	server := &Server{quality: &fakeQualityService{err: errors.New("catalog lookup failed")}}
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", body)
 	assertErrorCode(t, recorder, http.StatusBadGateway, "upstream_error")
-}
-
-func signingEnabledConfig() config.Config {
-	cfg := config.Default()
-	cfg.Catalog.AppleMusicPrivateKeyPath = "keys/AuthKey.p8"
-	cfg.Catalog.AppleMusicKeyID = "88KBJL3CKU"
-	cfg.Catalog.AppleMusicTeamID = "2VTXNMR2GL"
-	return cfg
 }

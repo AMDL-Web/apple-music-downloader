@@ -82,24 +82,12 @@ func (c Config) Validate() error {
 	if c.Catalog.AlbumTrackURLMode != "song" && c.Catalog.AlbumTrackURLMode != "album" {
 		return fmt.Errorf("catalog.album_track_url_mode must be song or album")
 	}
-	if c.Catalog.SignedModeHLSSource != "wrapper" && c.Catalog.SignedModeHLSSource != "web_token" {
-		return fmt.Errorf("catalog.signed_mode_hls_source must be wrapper or web_token")
-	}
 	// The ceiling is not a resource limit — one poll is a couple of Apple
 	// requests. It exists because a value like 100000 reads as "effectively
 	// never" while the watcher still reports itself as enabled, which is worse
 	// than being told the number is out of range.
 	if c.LibrarySync.IntervalMinutes < 1 || c.LibrarySync.IntervalMinutes > 1440 {
 		return fmt.Errorf("library_sync.interval_minutes must be between 1 and 1440")
-	}
-	signingFields := 0
-	for _, v := range []string{c.Catalog.AppleMusicPrivateKeyPath, c.Catalog.AppleMusicKeyID, c.Catalog.AppleMusicTeamID} {
-		if strings.TrimSpace(v) != "" {
-			signingFields++
-		}
-	}
-	if signingFields != 0 && signingFields != 3 {
-		return fmt.Errorf("catalog.apple_music_private_key_path, catalog.apple_music_key_id, and catalog.apple_music_team_id must all be set together or all left empty")
 	}
 	if c.Catalog.MaxParallelRequests > maxGlobalPoolLimit {
 		return fmt.Errorf("catalog.max_parallel_requests must be at most %d", maxGlobalPoolLimit)

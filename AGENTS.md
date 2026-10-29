@@ -63,11 +63,12 @@ any template variables or list options.
 
 ## Two Apple hosts
 
-`api.music.apple.com` takes the developer token. `amp-api.music.apple.com` takes a
-JWT scraped from the music.apple.com web player plus an `Origin` header, and is the
-only host that returns `enhancedHls` and `editorialVideo`. amp-api is undocumented,
-so anything read from it degrades to "not available" instead of failing a job
-(`internal/applemusic/AGENTS.md`).
+`api.music.apple.com` is the documented API and takes a self-signed developer token;
+the backend does not sign one and never calls it. `amp-api.music.apple.com` takes a
+JWT scraped from the music.apple.com web player plus an `Origin` header, answers
+every catalog read, and is the only host that returns `enhancedHls` and
+`editorialVideo`. amp-api is undocumented, so anything read from it degrades to
+"not available" instead of failing a job (`internal/applemusic/AGENTS.md`).
 
 ## Data safety
 

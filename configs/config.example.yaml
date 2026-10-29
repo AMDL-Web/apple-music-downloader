@@ -60,7 +60,7 @@ wrapper:
   login_timeout_seconds: 120
 
 catalog:
-  # The following catalog client and signing keys are startup-bound and require a restart.
+  # The following catalog client keys are startup-bound and require a restart.
   # string: default Apple Music storefront code, for example "us", "cn", "jp". The API does not read it: a link
   # without a storefront in its path is refused with invalid_url. The web console reads it from GET /api/v1/system
   # (default_storefront) to complete pasted links that have no region.
@@ -72,22 +72,9 @@ catalog:
   # as 1; values above 64 in this file are clamped to 64. Default: 16.
   # This sizes a process-wide pool at startup; changing it requires a restart.
   max_parallel_requests: 16
-  # Apple Music developer-token signing (all three keys form one unit):
-  # - all three empty: signing disabled; the bearer token is auto-discovered from music.apple.com (legacy behavior)
-  #     and catalog metadata is read from amp-api.music.apple.com with enhancedHls manifests.
-  # - all three set: the backend signs its own 24h ES256 developer token at startup (fails to start on any signing error)
-  #     and reads catalog metadata from the official api.music.apple.com. The self-signed token cannot read enhancedHls,
-  #     so the Enhanced HLS master playlist source is controlled separately by signed_mode_hls_source below.
-  # - only some set: startup fails with a configuration error.
-  # string: filesystem path to the Apple Media Services .p8 private key (PKCS#8 ECDSA). Empty disables signing.
-  apple_music_private_key_path: ""
-  # string: the 10-character Key ID (kid) for the .p8 key. Empty disables signing.
-  apple_music_key_id: ""
-  # string: the 10-character Apple developer Team ID used as the token issuer (iss). Empty disables signing.
-  apple_music_team_id: ""
-  # integer hours: validity window for an auto-discovered bearer token (legacy mode only). The cached token is
-  # proactively refreshed halfway through this window: for example, 12 refreshes after 6 hours. Values <= 0 use
-  # a 12-hour window and refresh after 6 hours. Ignored when developer-token signing is enabled.
+  # integer hours: validity window for the bearer token the backend discovers on music.apple.com (the web player's
+  # JWT, used for every catalog request). The cached token is proactively refreshed halfway through this window: for
+  # example, 12 refreshes after 6 hours. Values <= 0 use a 12-hour window and refresh after 6 hours.
   token_cache_ttl_hours: 12
   # The following catalog behavior keys are runtime-mutable through PUT /api/v1/config
   # and config reload; no restart is required.
@@ -99,17 +86,6 @@ catalog:
   # service at the deployment layer if the token is sensitive. Empty means none: stations fail and private playlists keep
   # the catalog cover.
   media_user_token: ""
-  # enum: wrapper, web_token. Only meaningful when developer-token signing is enabled above (the self-signed token cannot
-  # read enhancedHls); ignored in legacy mode. Legacy mode reads enhancedHls from the catalog response, except that a
-  # track whose audioTraits include hi-res-lossless takes the wrapper's device manifest instead, because the web
-  # player's manifest can leave out its higher ALAC sample rates; if the wrapper cannot supply one, that track keeps
-  # enhancedHls. Default: wrapper.
-  # - wrapper: the Enhanced HLS master playlist comes from wrapper.M3U8 (the authorized device manifest).
-  # - web_token: the backend scrapes a music.apple.com web-player JWT (same technique as legacy mode) and reads
-  #     enhancedHls from amp-api.music.apple.com with that token, independent of the signed developer token used
-  #     for catalog metadata. Use this if the wrapper cannot supply a usable device manifest. This is the web
-  #     player's manifest, so a Hi-Res track can lack its 88.2 or 96 kHz ALAC renditions.
-  signed_mode_hls_source: "wrapper"
   # bool: true/false. Whether to look up Apple Music animated album covers (attributes.editorialVideo) and
   # expose them on jobs as motion_artwork_url / motion_artwork_tall_url plus each variant's palette.
   # Default: true.
@@ -120,8 +96,7 @@ catalog:
   # - false: no lookup, no request, no token scrape. Jobs simply carry no motion artwork fields, which is
   #     indistinguishable to clients from an album that has no animated cover. Set this if nothing you use
   #     renders animated covers and you would rather not generate undocumented-endpoint traffic.
-  # This is the only amp-api traffic the backend makes purely for decoration; enhanced HLS media selection
-  # is unaffected and has its own switch in signed_mode_hls_source above.
+  # This is the only amp-api traffic the backend makes purely for decoration.
   motion_artwork_enabled: true
 
 download:
@@ -296,6 +271,10 @@ download:
   lyrics_extras: []
   # integer Hz: maximum selected ALAC sample rate; 0 or less sets no ceiling. Use 192000 for up to
   # 192 kHz. Apple Music serves ALAC at 44100 Hz and above, so a lower value skips every ALAC stream.
+  # Above 48000, a Hi-Res Lossless track takes its master playlist from the wrapper's device manifest
+  # (one wrapper /m3u8 request per song, remembered for 12 hours), because the web player's playlist can
+  # leave out the 88.2, 96 and 192 kHz renditions. At 48000 or below, and for every other track, no such
+  # request is made. If the wrapper cannot supply the manifest the track keeps the web player's.
   alac_max_sample_rate: 192000
   # integer bits: maximum selected ALAC bit depth; 0 or less sets no ceiling. Use 24 for up to 24-bit.
   # Apple Music serves 16- and 24-bit ALAC, so 16 to 23 keeps 16-bit streams only.
@@ -327,8 +306,8 @@ simulate:
   # authentic values, and selection failures fall back through quality_priority exactly like a real
   # download. Every API response, job/item status, progress breakdown, status message, and SSE event
   # matches a real download. The wrapper decryptor status/storefront check is skipped so jobs can be
-  # submitted without a running wrapper; note that with developer-token signing enabled manifests
-  # normally come from the wrapper, so without one selection falls back to a faked AAC-LC.
+  # submitted without a running wrapper; a Hi-Res track then keeps the web player's manifest, which can
+  # leave out its 88.2 kHz and higher ALAC renditions.
   # false runs real downloads.
   enabled: false
   # integer KB/s (kilobytes per second): lower bound of the randomized simulated transfer speed.
@@ -348,7 +327,7 @@ library_sync:
   # monitor off really stops polling rather than just discarding the results.
   #
   # Requires catalog.media_user_token — a personal library can be read only with the
-  # subscription token; a developer token alone is not enough. While that key is empty the
+  # subscription token; the web-player token alone is not enough. While that key is empty the
   # monitor idles and warns once, instead of reporting an error every round.
   #
   # How it detects "new": Apple does not return when a library track was added (library-songs

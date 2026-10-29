@@ -15,14 +15,12 @@ var ErrNoEnhancedHLS error = nonRetryableError("no enhanced hls manifest")
 
 // MotionArtworkViaWebToken fetches an album's animated cover loops.
 //
-// Same shape as EnhancedHLSViaWebToken and for the same reason: editorialVideo
-// is not available to third-party developer tokens at all. Apple states this
-// outright — the only extended attribute a third party may load on Albums is
-// artistUrl. Verified empirically: a self-signed token returns no editorialVideo
-// on any storefront, and even the web-player token returns none from the public
-// api.music.apple.com host. Both the amp-api host and a scraped web-player JWT
-// are required, so this always goes through doWithWebAuth regardless of whether
-// developer-token signing is enabled.
+// editorialVideo is not available to third-party developer tokens at all. Apple
+// states this outright — the only extended attribute a third party may load on
+// Albums is artistUrl. Verified empirically: a self-signed token returns no
+// editorialVideo on any storefront, and even the web-player token returns none
+// from the public api.music.apple.com host. Both the amp-api host and a scraped
+// web-player JWT are required, which is what every request makes.
 //
 // amp-api is Apple's internal web-player endpoint, not a documented API. Treat a
 // failure here as "this album has no motion artwork", never as a job error.
@@ -65,35 +63,4 @@ func pickMotionClip(clips ...motionArtworkClip) motionArtworkClip {
 		}
 	}
 	return motionArtworkClip{}
-}
-
-// EnhancedHLSViaWebToken fetches a song's Enhanced HLS master playlist URL
-// from amp-api.music.apple.com using a scraped music.apple.com web-player
-// JWT, regardless of whether developer-token signing is enabled. It is used
-// when signing is enabled but catalog.signed_mode_hls_source is "web_token":
-// the self-signed developer token cannot read enhancedHls at all, so this
-// reads it through the same legacy-style web token as unsigned mode while
-// catalog metadata itself keeps using the official signed-token endpoint.
-func (c *CatalogClient) EnhancedHLSViaWebToken(ctx context.Context, storefront, id string) (string, error) {
-	params := url.Values{
-		"extend": []string{"extendedAssetUrls"},
-		"l":      []string{c.cfg.Language},
-	}
-	endpoint := fmt.Sprintf("https://amp-api.music.apple.com/v1/catalog/%s/songs/%s?%s", storefront, id, params.Encode())
-	resp, err := c.doWithWebAuth(ctx, appleRequest{method: http.MethodGet, url: endpoint})
-	if err != nil {
-		return "", fmt.Errorf("fetch enhanced hls with web token: %w", err)
-	}
-	var out catalogSongResponse
-	if err := decodeCatalogResponse(resp, &out); err != nil {
-		return "", fmt.Errorf("fetch enhanced hls with web token: %w", err)
-	}
-	if len(out.Data) == 0 {
-		return "", fmt.Errorf("song %s not found", id)
-	}
-	master := out.Data[0].Attributes.ExtendedAssetURLs.EnhancedHLS
-	if master == "" {
-		return "", fmt.Errorf("song %s: %w", id, ErrNoEnhancedHLS)
-	}
-	return master, nil
 }

@@ -113,11 +113,8 @@ atmos/media.m3u8
 }
 
 type fakeQualityCatalog struct {
-	song              applemusic.Song
-	webTokenHLS       string
-	webTokenErr       error
-	webTokenCallCount *int
-	wrapperM3U8Calls  *int
+	song             applemusic.Song
+	wrapperM3U8Calls *int
 }
 
 func (f fakeQualityCatalog) Song(context.Context, string, string) (applemusic.Song, error) {
@@ -154,13 +151,6 @@ func (f fakeQualityCatalog) FetchCover(context.Context, []string, string, string
 
 func (f fakeQualityCatalog) MotionArtworkViaWebToken(context.Context, string, string) (applemusic.MotionArtwork, error) {
 	return applemusic.MotionArtwork{}, nil
-}
-
-func (f fakeQualityCatalog) EnhancedHLSViaWebToken(context.Context, string, string) (string, error) {
-	if f.webTokenCallCount != nil {
-		*f.webTokenCallCount++
-	}
-	return f.webTokenHLS, f.webTokenErr
 }
 
 type countingQualityWrapper struct {
@@ -256,85 +246,6 @@ audio.m3u8
 	}
 }
 
-func TestQualityQuerySignedModeUsesWebTokenSource(t *testing.T) {
-	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		writeQualityTestPlaylist(w, r, `#EXTM3U
-#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-stereo-256",NAME="AAC"
-#EXT-X-STREAM-INF:BANDWIDTH=281000,AVERAGE-BANDWIDTH=256000,CODECS="mp4a.40.2",AUDIO="audio-stereo-256"
-audio.m3u8
-`)
-	}))
-	defer manifest.Close()
-
-	cfg := config.Default()
-	cfg.Catalog.AppleMusicPrivateKeyPath = "keys/AuthKey.p8"
-	cfg.Catalog.AppleMusicKeyID = "88KBJL3CKU"
-	cfg.Catalog.AppleMusicTeamID = "2VTXNMR2GL"
-	cfg.Catalog.SignedModeHLSSource = "web_token"
-
-	var webCalls, wrapperCalls int
-	catalog := fakeQualityCatalog{
-		song:              applemusic.Song{ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album"},
-		webTokenHLS:       manifest.URL + "/master.m3u8",
-		webTokenCallCount: &webCalls,
-	}
-	service := newTestQualityService(cfg, catalog, countingQualityWrapper{m3u8: "https://wrapper.invalid/master.m3u8", callCount: &wrapperCalls})
-
-	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if webCalls != 1 {
-		t.Fatalf("EnhancedHLSViaWebToken calls = %d, want one master inventory", webCalls)
-	}
-	if wrapperCalls != 0 {
-		t.Fatalf("wrapper.M3U8 calls = %d, want 0", wrapperCalls)
-	}
-	if len(result.Tracks) != 1 || len(result.Tracks[0].Qualities) == 0 || !result.Tracks[0].Qualities[0].Available {
-		t.Fatalf("expected web-token manifest qualities, got %#v", result.Tracks)
-	}
-}
-
-func TestQualityQuerySignedModeUsesWrapperByDefault(t *testing.T) {
-	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		writeQualityTestPlaylist(w, r, `#EXTM3U
-#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-stereo-256",NAME="AAC"
-#EXT-X-STREAM-INF:BANDWIDTH=281000,AVERAGE-BANDWIDTH=256000,CODECS="mp4a.40.2",AUDIO="audio-stereo-256"
-audio.m3u8
-`)
-	}))
-	defer manifest.Close()
-
-	cfg := config.Default()
-	cfg.Catalog.AppleMusicPrivateKeyPath = "keys/AuthKey.p8"
-	cfg.Catalog.AppleMusicKeyID = "88KBJL3CKU"
-	cfg.Catalog.AppleMusicTeamID = "2VTXNMR2GL"
-	// SignedModeHLSSource default is wrapper
-
-	var webCalls, wrapperCalls int
-	catalog := fakeQualityCatalog{
-		song:              applemusic.Song{ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album"},
-		webTokenCallCount: &webCalls,
-	}
-	service := newTestQualityService(cfg, catalog, countingQualityWrapper{m3u8: manifest.URL + "/master.m3u8", callCount: &wrapperCalls})
-
-	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if wrapperCalls != 1 {
-		t.Fatalf("wrapper.M3U8 calls = %d, want one master inventory", wrapperCalls)
-	}
-	if webCalls != 0 {
-		t.Fatalf("EnhancedHLSViaWebToken calls = %d, want 0", webCalls)
-	}
-	if len(result.Tracks) != 1 || len(result.Tracks[0].Qualities) == 0 || !result.Tracks[0].Qualities[0].Available {
-		t.Fatalf("expected wrapper manifest qualities, got %#v", result.Tracks)
-	}
-}
-
 func TestQualityMasterInventoryRetriesSourceAndMasterAsOneUnit(t *testing.T) {
 	var masterHits atomic.Int32
 	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -352,12 +263,9 @@ audio.m3u8
 
 	cfg := config.Default()
 	cfg.Download.MaxAttempts = 2
-	cfg.Catalog.AppleMusicPrivateKeyPath = "keys/AuthKey.p8"
-	cfg.Catalog.AppleMusicKeyID = "KEY"
-	cfg.Catalog.AppleMusicTeamID = "TEAM"
 	var wrapperCalls int
 	service := newTestQualityService(cfg, fakeQualityCatalog{song: applemusic.Song{
-		ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album",
+		ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album", HiResLossless: true,
 	}}, countingQualityWrapper{m3u8: manifest.URL + "/master.m3u8", callCount: &wrapperCalls})
 
 	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
@@ -372,10 +280,10 @@ audio.m3u8
 	}
 }
 
-// legacyHiResManifests serves the two masters of a hi-res-lossless track the
+// hiResManifests serves the two masters of a hi-res-lossless track the
 // way Apple did for song 1635388718: the web player's enhancedHls offers ALAC
 // only at 48 kHz, while the device manifest also lists 88.2 kHz.
-func legacyHiResManifests(t *testing.T) (webMaster, deviceMaster string) {
+func hiResManifests(t *testing.T) (webMaster, deviceMaster string) {
 	t.Helper()
 	const alac48 = `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-alac-stereo-48000-24",NAME="ALAC",BIT-DEPTH=24,SAMPLE-RATE=48000
 #EXT-X-STREAM-INF:BANDWIDTH=2400000,AVERAGE-BANDWIDTH=2000000,CODECS="alac",AUDIO="audio-alac-stereo-48000-24"
@@ -403,11 +311,12 @@ alac-88/media.m3u8
 	return server.URL + "/web.m3u8", server.URL + "/device.m3u8"
 }
 
-func TestQualityQueryLegacyHiResTrackReadsDeviceManifest(t *testing.T) {
-	webMaster, deviceMaster := legacyHiResManifests(t)
+func TestQualityQueryHiResTrackReadsDeviceManifest(t *testing.T) {
+	webMaster, deviceMaster := hiResManifests(t)
 	tests := []struct {
 		name          string
 		hiRes         bool
+		maxRate       int // alac_max_sample_rate; 0 keeps the default
 		wrapper       countingQualityWrapper
 		wantRate      int
 		wantM3U8Calls int
@@ -416,11 +325,15 @@ func TestQualityQueryLegacyHiResTrackReadsDeviceManifest(t *testing.T) {
 		{name: "wrapper error keeps the web manifest", hiRes: true, wrapper: countingQualityWrapper{err: errors.New("wrapper m3u8: no session")}, wantRate: 48000, wantM3U8Calls: 1},
 		{name: "empty device manifest keeps the web manifest", hiRes: true, wrapper: countingQualityWrapper{}, wantRate: 48000, wantM3U8Calls: 1},
 		{name: "other tracks never ask the wrapper", hiRes: false, wrapper: countingQualityWrapper{m3u8: deviceMaster}, wantRate: 48000, wantM3U8Calls: 0},
+		{name: "a 48 kHz cap never asks the wrapper", hiRes: true, maxRate: 48000, wrapper: countingQualityWrapper{m3u8: deviceMaster}, wantRate: 48000, wantM3U8Calls: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.Download.MaxAttempts = 1
+			if tt.maxRate != 0 {
+				cfg.Download.ALACMaxSampleRate = tt.maxRate
+			}
 			var calls int
 			tt.wrapper.callCount = &calls
 			service := newTestQualityService(cfg, fakeQualityCatalog{song: applemusic.Song{
@@ -447,8 +360,8 @@ func TestQualityQueryLegacyHiResTrackReadsDeviceManifest(t *testing.T) {
 	}
 }
 
-func TestSelectEnhancedStreamLegacyHiResDownloadsFromDeviceManifest(t *testing.T) {
-	webMaster, deviceMaster := legacyHiResManifests(t)
+func TestSelectEnhancedStreamHiResDownloadsFromDeviceManifest(t *testing.T) {
+	webMaster, deviceMaster := hiResManifests(t)
 	var calls int
 	d := newTestDownloader(&Downloader{
 		cfg: config.Default(), wrapper: countingQualityWrapper{m3u8: deviceMaster, callCount: &calls}, http: newHTTPClient(),
@@ -462,11 +375,11 @@ func TestSelectEnhancedStreamLegacyHiResDownloadsFromDeviceManifest(t *testing.T
 	}
 }
 
-func TestResolveEnhancedHLSLegacyHiResDoesNotFallBackWhenCancelled(t *testing.T) {
+func TestResolveEnhancedHLSHiResDoesNotFallBackWhenCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	d := newTestDownloader(&Downloader{cfg: config.Default(), wrapper: countingQualityWrapper{err: ctx.Err()}})
-	master, err := d.resolveEnhancedHLS(ctx, "cn", applemusic.Song{ID: "song-1", EnhancedHLS: "https://web.invalid/master.m3u8", HiResLossless: true})
+	master, _, err := d.resolveEnhancedHLS(ctx, "cn", applemusic.Song{ID: "song-1", EnhancedHLS: "https://web.invalid/master.m3u8", HiResLossless: true}, "alac")
 	if !errors.Is(err, context.Canceled) || master != "" {
 		t.Fatalf("resolveEnhancedHLS = %q, %v; want context.Canceled, not the web manifest", master, err)
 	}

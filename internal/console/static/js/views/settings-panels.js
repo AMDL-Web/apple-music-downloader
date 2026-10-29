@@ -154,7 +154,7 @@ export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloade
         ? html`<${ReloadError} key=${tries} message=${reloadError} announce=${tries > 0} />`
         : null}
     <p class="muted small">
-      Startup settings (listen address, database, log outputs, wrapper address, tools, catalog signing and request limits, worker pools) are not on this page: edit configs/config.yaml and restart. configs/config.example.yaml documents every key.
+      Startup settings (listen address, database, log outputs, wrapper address, tools, catalog request limits, worker pools) are not on this page: edit configs/config.yaml and restart. configs/config.example.yaml documents every key.
     </p>
   </div>`;
 }

@@ -39,6 +39,9 @@ type Downloader struct {
 	decryptLimit  *limits.Semaphore
 	inFlightLimit *limits.Semaphore
 	requestGate   *limits.RequestGate
+	// deviceManifests is shared like the limiters above: a manifest one job
+	// asked the wrapper for serves every other job.
+	deviceManifests *deviceManifestCache
 
 	// Per-job suppression for standalone cover paths that were already handled
 	// (written, unavailable, or exhausted). The state has its own mutex because
@@ -60,7 +63,6 @@ type downloaderCatalog interface {
 	ArtistAlbums(context.Context, string, string) (applemusic.ArtistAlbums, error)
 	Artist(context.Context, string, string) (applemusic.Artist, error)
 	FetchCover(context.Context, []string, string, string) ([]byte, error)
-	EnhancedHLSViaWebToken(context.Context, string, string) (string, error)
 	MotionArtworkViaWebToken(context.Context, string, string) (applemusic.MotionArtwork, error)
 }
 
@@ -80,11 +82,12 @@ func NewDownloader(store *config.Store, catalog *applemusic.CatalogClient, wrapp
 	return &Downloader{
 		store: store, cfg: cfg, catalog: catalog, wrapper: wrapperClient, tools: tools,
 		http: newHTTPClient(), mp4: newMP4Processor(cfg), logger: logger,
-		downloadLimit: limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
-		decryptLimit:  limits.NewSemaphore(config.MaxParallelDecrypts),
-		inFlightLimit: limits.NewSemaphore(cfg.Download.MaxParallelDownloads + config.MaxParallelDecrypts),
-		requestGate:   catalog.RequestGate(),
-		background:    &sync.WaitGroup{},
+		downloadLimit:   limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
+		decryptLimit:    limits.NewSemaphore(config.MaxParallelDecrypts),
+		inFlightLimit:   limits.NewSemaphore(cfg.Download.MaxParallelDownloads + config.MaxParallelDecrypts),
+		requestGate:     catalog.RequestGate(),
+		deviceManifests: newDeviceManifestCache(),
+		background:      &sync.WaitGroup{},
 	}
 }
 

@@ -295,19 +295,6 @@ export const FIELDS = [
   },
   // Advanced › Apple Music requests
   {
-    key: 'catalog.signed_mode_hls_source',
-    section: 'advanced',
-    group: 'apple_requests',
-    type: 'select',
-    label: 'Enhanced AAC source',
-    help: 'Used only when developer-token signing is set up in the config file.',
-    defaultValue: 'wrapper',
-    options: [
-      { value: 'wrapper', label: 'Session service', hint: 'The device manifest from the session service.' },
-      { value: 'web_token', label: 'Web player', hint: 'A music.apple.com token and Apple’s web API.' },
-    ],
-  },
-  {
     key: 'catalog.motion_artwork_enabled',
     section: 'advanced',
     group: 'apple_requests',

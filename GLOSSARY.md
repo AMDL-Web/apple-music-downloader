@@ -8,14 +8,11 @@ wins when they disagree, so details are not copied here.
 
 | Term | Meaning | Source |
 | --- | --- | --- |
-| Public API host | `api.music.apple.com`: Apple's documented Music API, called with the developer token | `internal/applemusic#CatalogClient.apiBase` |
 | amp-api | `amp-api.music.apple.com`: Apple's undocumented web-player API, called with a scraped JWT and an `Origin` header; the only source of some fields | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Developer token | Self-signed Apple Music JWT made from a `.p8` key, used for the backend's own catalog reads | `internal/applemusic#CatalogClient.InitDeveloperToken` |
 | Web-player JWT | The token scraped from music.apple.com's JS bundle that amp-api requires | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Signed vs legacy mode | Whether developer-token signing is configured; it decides which host catalog reads use | [docs/configuration.md](docs/configuration.md#developer-token-signing) |
 | Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it | `configs/config.example.yaml#catalog.media_user_token` |
 | Storefront | The country code in a link (`us`, `cn`) that selects Apple's regional catalog | `configs/config.example.yaml#catalog.default_storefront` |
-| enhancedHls | The amp-api-only HLS manifest that lists the lossless and spatial variants | `internal/applemusic#CatalogClient.EnhancedHLSViaWebToken` |
+| enhancedHls | The amp-api-only HLS manifest that lists the lossless and spatial variants | `internal/applemusic#Song` |
 | editorialVideo, motion artwork | Animated album covers, amp-api only; absence is normal, never an error | `internal/applemusic#CatalogClient.MotionArtworkViaWebToken` |
 | L3 | The Widevine security level the pipeline runs at; it caps video quality, which is why music videos are out of scope | [docs/download-pipeline.md](docs/download-pipeline.md#download-pipeline) |
 

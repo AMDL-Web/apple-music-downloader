@@ -25,7 +25,8 @@ func TestSystemInfo(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	cfg := signingEnabledConfig()
+	cfg := config.Default()
+	cfg.Catalog.MediaUserToken = "secret-media-user-token"
 	cfg.Simulate.Enabled = true
 	cfg.Catalog.MotionArtworkEnabled = false
 	cfg.Catalog.DefaultStorefront = "jp"
@@ -47,10 +48,8 @@ func TestSystemInfo(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
-	for _, secret := range []string{"88KBJL3CKU", "2VTXNMR2GL", "AuthKey"} {
-		if strings.Contains(rec.Body.String(), secret) {
-			t.Fatalf("body exposes signing configuration %q: %s", secret, rec.Body.String())
-		}
+	if strings.Contains(rec.Body.String(), "secret-media-user-token") {
+		t.Fatalf("body exposes the media-user-token: %s", rec.Body.String())
 	}
 	var got struct {
 		Version              string         `json:"version"`
@@ -62,7 +61,6 @@ func TestSystemInfo(t *testing.T) {
 		StartedAt            time.Time      `json:"started_at"`
 		UptimeSeconds        int64          `json:"uptime_seconds"`
 		Simulate             bool           `json:"simulate"`
-		SigningMode          string         `json:"signing_mode"`
 		MotionArtworkEnabled *bool          `json:"motion_artwork_enabled"`
 		DefaultStorefront    *string        `json:"default_storefront"`
 		RawJobs              map[string]int `json:"jobs"`
@@ -93,8 +91,8 @@ func TestSystemInfo(t *testing.T) {
 	if !got.StartedAt.Equal(buildinfo.StartedAt) || got.UptimeSeconds != 90 {
 		t.Errorf("started_at = %v, uptime = %d; want %v and 90", got.StartedAt, got.UptimeSeconds, buildinfo.StartedAt)
 	}
-	if !got.Simulate || got.SigningMode != "local" || got.MotionArtworkEnabled == nil || *got.MotionArtworkEnabled {
-		t.Errorf("simulate %v, signing_mode %q, motion %v; want true, local, false", got.Simulate, got.SigningMode, got.MotionArtworkEnabled)
+	if !got.Simulate || got.MotionArtworkEnabled == nil || *got.MotionArtworkEnabled {
+		t.Errorf("simulate %v, motion %v; want true, false", got.Simulate, got.MotionArtworkEnabled)
 	}
 	if got.DefaultStorefront == nil || *got.DefaultStorefront != "jp" {
 		t.Errorf("default_storefront = %v, want jp", got.DefaultStorefront)
@@ -130,18 +128,6 @@ func TestSystemInfo(t *testing.T) {
 	}
 	if temp.Error == "" || temp.FreeBytes != nil || temp.TotalBytes != nil {
 		t.Errorf("missing temp_dir = %+v, want an error and no byte counts", temp)
-	}
-}
-
-func TestSystemInfoLegacySigning(t *testing.T) {
-	server := newTestServerWithManager(t)
-	server.cfg = config.NewStore(config.Default())
-	rec := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/system", "")
-	var body struct {
-		SigningMode string `json:"signing_mode"`
-	}
-	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil || body.SigningMode != "legacy" {
-		t.Fatalf("status %d, body %s; want signing_mode legacy", rec.Code, rec.Body.String())
 	}
 }
 

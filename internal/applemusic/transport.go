@@ -141,14 +141,8 @@ const (
 	maxErrorBodyExcerptBytes int64 = 2048
 )
 
-// apiBase returns the catalog host. A self-signed developer token uses the
-// official api.music.apple.com; legacy web tokens use the amp-api host.
-func (c *CatalogClient) apiBase() string {
-	if c.cfg.DeveloperTokenSigningEnabled() {
-		return "https://api.music.apple.com"
-	}
-	return "https://amp-api.music.apple.com"
-}
+// ampAPIBase is the host every catalog read goes to.
+const ampAPIBase = "https://amp-api.music.apple.com"
 
 func (c *CatalogClient) get(ctx context.Context, endpoint string, params url.Values, out any) error {
 	return c.getWithUserToken(ctx, endpoint, params, "", out)
@@ -162,7 +156,7 @@ func (c *CatalogClient) getWithUserToken(ctx context.Context, endpoint string, p
 	if len(params) > 0 {
 		endpoint += "?" + params.Encode()
 	}
-	resp, err := c.doWithCatalogAuth(ctx, appleRequest{method: http.MethodGet, url: endpoint, mediaUserToken: mediaUserToken})
+	resp, err := c.doWithWebAuth(ctx, appleRequest{method: http.MethodGet, url: endpoint, mediaUserToken: mediaUserToken})
 	if err != nil {
 		return err
 	}

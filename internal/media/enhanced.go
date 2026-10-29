@@ -41,15 +41,47 @@ func (d *Downloader) selectEnhancedMedia(ctx context.Context, job domain.Job, it
 // but stops at the master playlist instead of validating a concrete media
 // playlist here. It runs for real in simulate mode too.
 func (d *Downloader) selectEnhancedStream(ctx context.Context, storefront string, song applemusic.Song, codec string) (selectedMediaInfo, error) {
-	master, err := d.resolveEnhancedHLS(ctx, storefront, song)
+	master, cached, err := d.resolveEnhancedHLS(ctx, storefront, song, codec)
 	if err != nil {
 		return selectedMediaInfo{}, err
 	}
-	info, err := extractMedia(ctx, d.http, master, codec, d.cfg.Download.ALACMaxSampleRate, d.cfg.Download.ALACMaxBitDepth, d.requestGate)
+	extract := func(master string) (selectedMediaInfo, error) {
+		return extractMedia(ctx, d.http, master, codec, d.cfg.Download.ALACMaxSampleRate, d.cfg.Download.ALACMaxBitDepth, d.requestGate)
+	}
+	info, err := extract(master)
+	var notFound codecNotFoundError
+	if err != nil && ctx.Err() == nil && !errors.As(err, &notFound) {
+		// The device manifest URL is not known to have gone stale, but a
+		// playlist that will not load is reason enough to ask the wrapper again.
+		key := deviceManifestKey{storefront: storefront, songID: song.ID}
+		d.deviceManifests.forget(key)
+		if cached {
+			// A remembered URL may lead to an asset Apple has since replaced:
+			// try the wrapper's current answer once before giving up.
+			if fresh, _, resolveErr := d.resolveEnhancedHLS(ctx, storefront, song, codec); resolveErr == nil && fresh != master {
+				info, err = extract(fresh)
+			}
+		}
+	}
 	if err != nil {
 		return selectedMediaInfo{}, fmt.Errorf("select %s media: %w", codec, err)
 	}
 	return info, nil
+}
+
+// webALACMaxSampleRate is the highest ALAC sample rate the web player's master
+// playlist is relied on to list. Above it the playlist can leave renditions out.
+const webALACMaxSampleRate = 48000
+
+// wantsDeviceManifest reports whether codec's rendition for song may be missing
+// from the web player's master playlist. In the wrapper's device manifest for
+// the same song the 88.2, 96 and 192 kHz ALAC renditions that the web
+// playlist sometimes omits are always listed, and nothing in the web playlist
+// says when it is short. Atmos and AAC renditions match in both, so only a
+// hi-res-lossless track whose ALAC may exceed 48 kHz is worth a wrapper
+// request: /m3u8 shares one lock with /key.
+func (d *Downloader) wantsDeviceManifest(song applemusic.Song, codec string) bool {
+	return song.HiResLossless && codec == "alac" && d.cfg.Download.ALACMaxSampleRate > webALACMaxSampleRate
 }
 
 // resolveEnhancedHLS chooses the master-playlist source shared by downloads
@@ -59,50 +91,35 @@ func (d *Downloader) selectEnhancedStream(ctx context.Context, storefront string
 // applemusic.ErrNoEnhancedHLS, which is not retryable, so the codec loop falls
 // back at once instead of spending its retry budget.
 //
-// The web player's enhancedHls master can leave out a hi-res-lossless track's
-// higher ALAC renditions that the wrapper's device manifest lists (88.2 and
-// 96 kHz have been seen missing), and nothing in it says when. So in legacy
-// mode such a track takes the device manifest, and keeps enhancedHls only if
-// the wrapper cannot supply one.
-func (d *Downloader) resolveEnhancedHLS(ctx context.Context, storefront string, song applemusic.Song) (string, error) {
-	master := song.EnhancedHLS
-	switch {
-	case d.cfg.Catalog.DeveloperTokenSigningEnabled():
-		// A self-signed developer token cannot read enhancedHls, so the master
-		// playlist comes from either the wrapper's authorized device manifest
-		// or a scraped web-player token, per catalog.signed_mode_hls_source.
-		if d.cfg.Catalog.EnhancedHLSFromWebToken() {
-			hls, err := d.catalog.EnhancedHLSViaWebToken(ctx, storefront, song.ID)
-			if err != nil {
-				return "", fmt.Errorf("fetch enhanced hls via web token: %w", err)
-			}
-			master = hls
-		} else {
-			m3u8, err := d.wrapper.M3U8(ctx, song.ID)
-			if err != nil {
-				return "", fmt.Errorf("request device m3u8: %w", err)
-			}
-			master = m3u8
+// A track for which wantsDeviceManifest holds takes the device manifest, kept
+// per (storefront, song) by deviceManifests, and keeps the catalog's enhancedHls
+// only if the wrapper cannot supply one. cached reports that the returned URL
+// came from that cache, so a caller whose fetch fails can drop it.
+func (d *Downloader) resolveEnhancedHLS(ctx context.Context, storefront string, song applemusic.Song, codec string) (master string, cached bool, err error) {
+	master = song.EnhancedHLS
+	if d.wantsDeviceManifest(song, codec) {
+		key := deviceManifestKey{storefront: storefront, songID: song.ID}
+		if url, ok := d.deviceManifests.get(key); ok {
+			return url, true, nil
 		}
-	case song.HiResLossless:
 		m3u8, err := d.wrapper.M3U8(ctx, song.ID)
 		if err == nil && m3u8 == "" {
 			err = errors.New("empty manifest")
 		}
 		if err == nil {
-			master = m3u8
-			break
+			d.deviceManifests.put(key, m3u8)
+			return m3u8, false, nil
 		}
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("request device m3u8: %w", err)
+			return "", false, fmt.Errorf("request device m3u8: %w", err)
 		}
 		logging.FromContext(ctx, d.logger).Warn("device manifest unavailable; using the web manifest, which may lack hi-res renditions",
 			"song_id", song.ID, "error", err)
 	}
 	if master == "" {
-		return "", fmt.Errorf("song %s: %w", song.ID, applemusic.ErrNoEnhancedHLS)
+		return "", false, fmt.Errorf("song %s: %w", song.ID, applemusic.ErrNoEnhancedHLS)
 	}
-	return master, nil
+	return master, false, nil
 }
 
 // downloadSelectedEnhancedMedia is the enhanced codec's fetch phase: it waits

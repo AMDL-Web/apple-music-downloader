@@ -15,8 +15,8 @@ import (
 
 func TestStationTracksResolvesTracksFormat(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.catalogToken.value = "test-token"
-	client.catalogToken.until = time.Now().Add(time.Hour)
+	client.webToken.value = "test-token"
+	client.webToken.until = time.Now().Add(time.Hour)
 	var gotMediaToken string
 	var nextTracksMethod string
 	var nextTracksLimit string
@@ -60,8 +60,8 @@ func TestStationTracksResolvesTracksFormat(t *testing.T) {
 
 func TestStationTracksRejectsLiveStream(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.catalogToken.value = "test-token"
-	client.catalogToken.until = time.Now().Add(time.Hour)
+	client.webToken.value = "test-token"
+	client.webToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/v1/catalog/us/stations/ra.live" {
 			body := `{"data":[{"id":"ra.live","type":"stations","attributes":{"name":"Apple Music 1","isLive":true,"playParams":{"format":"stream"}}}]}`
@@ -78,8 +78,8 @@ func TestStationTracksRejectsLiveStream(t *testing.T) {
 
 func TestStationTracksRequiresMediaUserToken(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.catalogToken.value = "test-token"
-	client.catalogToken.until = time.Now().Add(time.Hour)
+	client.webToken.value = "test-token"
+	client.webToken.until = time.Now().Add(time.Hour)
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/v1/catalog/us/stations/ra.1" {
 			body := `{"data":[{"id":"ra.1","type":"stations","attributes":{"name":"My Station","playParams":{"format":"tracks"}}}]}`
@@ -96,8 +96,8 @@ func TestStationTracksRequiresMediaUserToken(t *testing.T) {
 
 func TestStationNextTracksRetriesOnce401ThenSucceeds(t *testing.T) {
 	client := newTestCatalogClient(config.CatalogConfig{Language: "en-US"}, slog.Default())
-	client.catalogToken.value = "stale-token"
-	client.catalogToken.until = time.Now().Add(time.Hour)
+	client.webToken.value = "stale-token"
+	client.webToken.until = time.Now().Add(time.Hour)
 
 	var nextTracksCalls int
 	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
