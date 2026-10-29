@@ -258,7 +258,6 @@ export const FIELDS = [
     defaultValue: 3,
     min: 1,
     max: 10,
-    clampsBelow: true,
   },
   {
     key: 'download.memory_mode',
@@ -283,7 +282,6 @@ export const FIELDS = [
     defaultValue: 500,
     min: 0,
     max: 10000,
-    clampsBelow: true,
     unit: 'ms',
   },
   {

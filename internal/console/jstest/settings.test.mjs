@@ -29,7 +29,10 @@ import {
   labelList,
   reloadSummary,
   splitReloadError,
-  lossSummary,
+  changedSentence,
+  firstErrorKey,
+  keysToLabels,
+  rangeError,
   unsavedAnnouncement,
   librarySyncState,
   anchorResetState,
@@ -138,7 +141,7 @@ test('fieldErrors maps 422 and 400 answers onto fields', () => {
   assert.equal(locked.message, 'fields can only be changed in the config file and require a restart: download.max_running_jobs');
 
   const range = fieldErrors(new ApiError(422, 'invalid_config', 'download.max_attempts must be at most 10'));
-  assert.deepEqual(range.fields, { 'download.max_attempts': 'download.max_attempts must be at most 10' });
+  assert.deepEqual(range.fields, { 'download.max_attempts': 'Tries per file must be at most 10' }, 'by label, not by key');
 
   const codec = fieldErrors(new ApiError(422, 'invalid_config', 'unsupported codec "flac" in download.quality_priority'));
   assert.deepEqual(Object.keys(codec.fields), ['download.quality_priority'], 'the key may come last');
@@ -174,8 +177,8 @@ test('validateDraft blocks unsendable numbers and warns on odd values', () => {
     'download.song_path_format': 'songs/{TrackNumber:02d}. {SongName}',
     'download.quality_priority': [],
   });
-  assert.deepEqual(Object.keys(errors).sort(), ['download.max_attempts', 'download.quality_priority', 'simulate.min_speed_kbps']);
-  assert.ok(!('library_sync.interval_minutes' in errors), 'bounds stay with the server');
+  assert.deepEqual(Object.keys(errors).sort(), ['download.max_attempts', 'download.quality_priority', 'library_sync.interval_minutes', 'simulate.min_speed_kbps']);
+  assert.equal(errors['library_sync.interval_minutes'], 'Use a number from 1 to 1440');
   assert.match(warnings['download.cover_size'], /3000x3000/);
   for (const [v, warned] of [['0x0', true], ['05000x5000', true], ['5000x0', true], ['5000x5000', false], ['1400x1400', false]]) {
     assert.equal('download.cover_size' in validateDraft({ 'download.cover_size': v }).warnings, warned, v);
@@ -280,11 +283,9 @@ test('diffConfig, reloadSummary and labelList', () => {
   assert.match(reloadSummary(['logging.level']).short, /1 setting changed/);
 });
 
-test('lossSummary and unsavedAnnouncement', () => {
-  const t = lossSummary(['download.max_attempts', 'download.song_path_format', 'logging.level']);
-  assert.equal(t.count, 3);
-  assert.equal(t.sections, 'Advanced and Files & naming');
-  assert.equal(t.fields, 'Tries per file, Songs and Log level');
+test('changedSentence and unsavedAnnouncement', () => {
+  assert.equal(changedSentence(['download.max_attempts', 'download.cover_size']), 'You changed Tries per file and Cover size.');
+  assert.equal(changedSentence(['download.max_attempts', 'download.song_path_format', 'logging.level', 'simulate.enabled', 'download.cover_size']), 'You changed Tries per file, Songs, Log level and 2 more.');
   assert.equal(unsavedAnnouncement(1), '1 unsaved change');
   assert.equal(unsavedAnnouncement(4), '4 unsaved changes');
   assert.equal(unsavedAnnouncement(0), 'No unsaved changes');
@@ -330,19 +331,28 @@ test('wrapperUnreachable reads the address out of a gRPC dial error', () => {
   assert.equal(wrapperErrorText(new ApiError(503, 'wrapper_unavailable', 'dns lookup failed'), 'status').message, 'The Apple Music session service (wrapper-manager) is not reachable.');
 });
 
-test('a number the server clamps to its minimum earns a warning, not a block', () => {
+test('a number outside its range is an inline error in plain words, before any PUT', () => {
   const attempts = BY_KEY.get('download.max_attempts');
-  assert.match(fieldWarning(attempts, -5), /below 1 run as 1.*-5.*Enter 1 to 10/);
-  assert.match(fieldWarning(attempts, 0), /run as 1/);
-  assert.equal(fieldWarning(attempts, 1), '');
-  assert.equal(fieldWarning(attempts, 10), '');
-  assert.match(fieldWarning(BY_KEY.get('download.progress_event_interval_ms'), -1), /below 0 run as 0/);
-  assert.equal(fieldWarning(BY_KEY.get('download.progress_event_interval_ms'), 0), '');
-  const { errors, warnings } = validateDraft({ 'download.max_attempts': -5 });
-  assert.deepEqual(errors, {});
-  assert.ok(warnings['download.max_attempts']);
-  // The server states these ranges itself and rejects them; no clamp warning.
-  assert.equal(fieldWarning(BY_KEY.get('library_sync.interval_minutes'), 0), '');
+  assert.equal(rangeError(attempts, 99), 'Use a number from 1 to 10');
+  assert.equal(rangeError(attempts, 0), 'Use a number from 1 to 10');
+  assert.equal(rangeError(attempts, 10), '');
+  assert.equal(rangeError(BY_KEY.get('simulate.min_speed_kbps'), 0), 'Use a number of at least 1');
+  assert.equal(rangeError(BY_KEY.get('simulate.min_speed_kbps'), 99999), '');
+  const { errors } = validateDraft({ 'download.max_attempts': 99, 'download.progress_event_interval_ms': 500 });
+  assert.deepEqual(errors, { 'download.max_attempts': 'Use a number from 1 to 10' });
+  assert.equal(firstErrorKey({ 'logging.level': 'x', 'download.max_attempts': 'y' }), 'download.max_attempts', 'field order, not insertion order');
+  assert.equal(firstErrorKey({}), '');
+});
+
+test('server messages name fields by label, never by dotted key', () => {
+  assert.equal(keysToLabels('download.max_attempts must be at most 10'), 'Tries per file must be at most 10');
+  assert.equal(
+    keysToLabels('simulate.max_speed_kbps must be >= simulate.min_speed_kbps'),
+    'Fastest simulated speed must be >= Slowest simulated speed',
+  );
+  const err = fieldErrors(new ApiError(422, 'invalid_config', 'download.max_attempts must be at most 10'), ['download.max_attempts']);
+  assert.equal(err.message, 'Tries per file must be at most 10');
+  assert.equal(err.fields['download.max_attempts'], 'Tries per file must be at most 10');
 });
 
 test('splitReloadError keeps the reason and moves the server path aside', () => {

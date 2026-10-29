@@ -301,12 +301,16 @@ and motion covers.
   Cmd/Ctrl+S, unless a dialog is up) sends `PUT /config` with only the
   changed leaves, lists whole (`buildPatch`); an edit made while the save
   runs stays in the draft (`draftAfterSave`). A section opens at its top. A refused save
-  keeps the draft: a notice says why, and `fieldErrors` puts the message on
-  each field it names (`details.keys` for `config_key_not_mutable`, the dotted keys in the message for
-  `invalid_config` and 400). Only unsendable numbers block Save on the
-  client; an odd cover size, an unknown template variable or a number below the
-  minimum the server runs as (`clampsBelow` in `lib/settings.js`: attempts per
-  step, progress interval) is a warning, and a saved one keeps its warning. The page reads `GET /config` when it opens,
+  keeps the draft: a notice says why and links to each field at fault by its
+  label, and `fieldErrors` puts the message on each field it names
+  (`details.keys` for `config_key_not_mutable`, the dotted keys in the message for
+  `invalid_config` and 400), with every known key in it replaced by its label
+  (`keysToLabels`). A number that is not whole or lies outside the field's
+  `min`/`max` is an inline error as it is typed ("Use a number from 1 to
+  10", `rangeError`); Save stays enabled but sends nothing while one is
+  marked and moves focus to the first, opening its section. An odd cover
+  size or an unknown template variable is a warning, and a saved one keeps
+  its warning. The page reads `GET /config` when it opens,
   on Retry after a failed load and on Discard, and takes the answer to a save
   or to "Reload from file" as the new saved values;
   focus, a reconnect and changes made in another tab or in the file do not
@@ -359,7 +363,7 @@ and motion covers.
   macOS order (the destructive one alone on the left, then Cancel and the
   primary). Under 640 px it is a bottom sheet with full-width buttons:
   primary, destructive, Cancel. The DOM follows the drawn order. While busy every button is disabled and Escape does nothing (the
-  Settings leave dialog is busy while Save and leave saves, and that button reads
+  Settings leave dialog is busy while its Save saves, and that button reads
   "Saving…"). The
   More sheet and the shortcut sheet are `Dialog`s. Every bottom sheet
   (`placement="bottom"`: More, Qualities and confirms on phones) is full
@@ -510,16 +514,18 @@ polite status region, at most one announcement per 5 s. Progress carries
 `role="progressbar"` with `aria-valuetext` such as "12 of 14 tracks, 1 failed",
 whether it renders cells or a bar. Text the skin adds with `::before` (section
 numbers, "No.") is decoration and repeats nothing a screen reader needs.
-With unsaved settings, leaving the page asks first (Stay, "Save and leave" while
-no field is invalid, Discard and leave): a page sets
+With unsaved settings, leaving the page asks "Save changes?" and names up to
+three changed fields ("Don't Save" in red text, Cancel, and Save while no
+field is invalid): a page sets
 `setLeaveGuard` from the app context, every hash change passes it (links,
 the palette, shortcuts, Back), and a refused change is undone through the
 history, so no entry is added (a pushed entry is dropped with Back, a Back
 or Forward is reversed; entries carry `history.state.amdlIdx`,
 `lib/route.js` `refusedMove`) while the page shows its `ConfirmDialog`;
 leaving after all repeats the same move (`resumeLeave`). The browser's own
-prompt covers closing the tab. The dialog names the count, the sections and
-the fields that would be lost. Moving between settings sections never asks.
+prompt covers closing the tab. Discard with more than one change asks
+"Discard N changes?" (Discard, Keep Editing). Moving between settings
+sections never asks.
 
 ## Data flow
 

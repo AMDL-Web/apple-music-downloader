@@ -1,7 +1,7 @@
 // Helpers for settings drafts, patches, diffs, validation, error mapping and
 // summaries. Pure: no DOM, so node --test covers it.
 
-import { SETTINGS_SECTIONS, FIELDS, FIELD_KEYS, BY_KEY } from './settings.js';
+import { FIELDS, FIELD_KEYS, BY_KEY } from './settings.js';
 import { templateUnknownVars } from './settings-template.js';
 
 /** A ConfigResponse `config` as a flat {'section.key': value} map of its leaves. */
@@ -75,7 +75,8 @@ export function keysInMessage(message, keys = FIELD_KEYS) {
  * PUT, `sentKeys`, when the message names any of them).
  */
 export function fieldErrors(err, sentKeys = []) {
-  const message = (err && err.message) || 'The settings were not saved.';
+  const raw = (err && err.message) || 'The settings were not saved.';
+  const message = keysToLabels(raw);
   const fields = {};
   const code = err && err.code;
   const listed = err && err.details && Array.isArray(err.details.keys) ? err.details.keys.map(parseLockedKey).filter(Boolean) : [];
@@ -84,25 +85,35 @@ export function fieldErrors(err, sentKeys = []) {
   } else if (err && (err.status === 400 || err.status === 422)) {
     // A message may name a key the user did not touch (a related setting);
     // when it also names a key in the PUT, mark only those.
-    const named = keysInMessage(message);
+    const named = keysInMessage(raw);
     const sent = named.filter((k) => sentKeys.includes(k));
     for (const key of sent.length ? sent : named) fields[key] = message;
   }
   return { message, fields };
 }
 
+/** A server message with every known dotted key replaced by its field's label. */
+export function keysToLabels(message) {
+  let text = String(message || '');
+  for (const k of keysInMessage(text)) text = text.replace(new RegExp(`(^|[^A-Za-z0-9_])${escapeRe(k)}(?![A-Za-z0-9_])`, 'g'), `$1${labelOf(k)}`);
+  return text;
+}
+
+/** The inline error for a whole number outside the field's min/max, or ''. */
+export function rangeError(field, v) {
+  const { min, max } = field;
+  if (min !== undefined && max !== undefined) return v < min || v > max ? `Use a number from ${min} to ${max}` : '';
+  if (min !== undefined && v < min) return `Use a number of at least ${min}`;
+  if (max !== undefined && v > max) return `Use a number of at most ${max}`;
+  return '';
+}
+
 /**
  * The warning a value earns, or '' : a value the server accepts but that
- * looks wrong (cover size format, unknown template variables, a number below
- * the minimum a `clampsBelow` field runs as: the file would keep a value the
- * server treats as the minimum, as config.example.yaml says of "values <=0").
+ * looks wrong (cover size format, unknown template variables).
  */
 export function fieldWarning(field, v) {
   if (!field) return '';
-  if (field.type === 'number' && field.clampsBelow && Number.isInteger(v) && v < field.min) {
-    const range = field.max !== undefined ? ` Enter ${field.min} to ${field.max}.` : '';
-    return `Values below ${field.min} run as ${field.min}, so ${v} would be saved but run as ${field.min}.${range}`;
-  }
   if (field.pattern && typeof v === 'string' && !new RegExp(field.pattern).test(v)) return field.patternHint;
   if (field.type === 'template') {
     const unknown = templateUnknownVars(v);
@@ -113,9 +124,10 @@ export function fieldWarning(field, v) {
 
 /**
  * Checks the client can make before a PUT. Blocking errors are values that
- * cannot be sent (a number field that is not a whole number); warnings are
- * values the server accepts but that look wrong. Bounds stay with the
- * server, which names the key.
+ * should not be sent (a number that is not a whole number or is outside the
+ * field's min/max, an empty list); warnings are values the server accepts
+ * but that look wrong. Cross-field rules (the slowest simulated speed under
+ * the fastest) stay with the server, which names the keys.
  */
 export function validateDraft(draft) {
   const errors = {};
@@ -123,7 +135,10 @@ export function validateDraft(draft) {
   for (const [key, v] of Object.entries(draft || {})) {
     const f = BY_KEY.get(key);
     if (!f) continue;
-    if (f.type === 'number' && !Number.isInteger(v)) errors[key] = 'Enter a whole number.';
+    if (f.type === 'number') {
+      const range = Number.isInteger(v) ? rangeError(f, v) : 'Enter a whole number.';
+      if (range) errors[key] = range;
+    }
     if (f.type === 'list' && f.minItems && (!Array.isArray(v) || v.length < f.minItems)) errors[key] = 'Keep at least one entry.';
     const w = fieldWarning(f, v);
     if (w) warnings[key] = w;
@@ -155,7 +170,8 @@ export function diffConfig(before, after) {
   return [...known, ...rest];
 }
 
-const labelOf = (key) => (BY_KEY.get(key) || { label: key }).label;
+/** A field's label, or the key itself when it is not a field. */
+export const labelOf = (key) => (BY_KEY.get(key) || { label: key }).label;
 const joinWords = (items) => (items.length < 3 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 
 /** Field labels for a list of keys, at most `max` named: "Albums, Songs and 2 more". */
@@ -187,11 +203,14 @@ export function splitReloadError(message) {
   return m ? { reason: m[2], file: m[1] } : { reason: text, file: '' };
 }
 
-/** What leaving or discarding would lose, for the confirmation dialogs. */
-export function lossSummary(keys) {
-  const sections = [...new Set(keys.map((k) => (BY_KEY.get(k) || {}).section).filter(Boolean))];
-  const names = sections.map((id) => (SETTINGS_SECTIONS.find((s) => s.id === id) || { label: id }).label);
-  return { count: keys.length, fields: labelList(keys, 4), sections: joinWords(names) };
+/** What the leave and discard dialogs say was changed: "You changed Tries per file and Cover size." */
+export function changedSentence(keys) {
+  return `You changed ${labelList(keys, 3)}.`;
+}
+
+/** The first key with an error, in field order. */
+export function firstErrorKey(errors) {
+  return FIELD_KEYS.find((k) => Object.hasOwn(errors || {}, k)) || Object.keys(errors || {})[0] || '';
 }
 
 /** The polite announcement for a changed unsaved count; '' when there is nothing to say. */

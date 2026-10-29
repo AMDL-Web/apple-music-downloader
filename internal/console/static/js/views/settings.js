@@ -9,7 +9,7 @@
 import { html, useState, useEffect, useMemo, useRef, useCallback } from '../ui/preact.js';
 import { getConfig, putConfig } from '../api.js';
 import {
-  SETTINGS_SECTIONS,
+  FIELD_KEYS,
   sectionById,
   groupById,
   fieldByKey,
@@ -21,9 +21,10 @@ import {
   fieldErrors,
   validateDraft,
   savedWarnings,
-  lossSummary,
+  changedSentence,
+  firstErrorKey,
+  labelOf,
   unsavedAnnouncement,
-  changesLabel,
   draftAfterSave,
 } from '../lib/settings-draft.js';
 import { punctuated } from '../lib/format.js';
@@ -31,15 +32,9 @@ import { settingsSection, settingsField, settingsHash, parseHash } from '../lib/
 import { readPref, writePref } from '../lib/prefs.js';
 import { useApp, Card, Notice } from '../ui/components.js';
 import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
+import { focusField } from '../ui/field-focus.js';
 import { SectionBody, groupDomId } from './settings-section.js';
 import { SettingsNav, SaveBar } from './settings-nav.js';
-
-/** What a confirmation would lose: the count, the sections and the field names. */
-function LossText({ keys, lead }) {
-  const t = lossSummary(keys);
-  return html`<p>${lead} ${changesLabel(t.count)} in ${t.sections}: ${t.fields}.</p>
-    <p>Saved settings are not affected.</p>`;
-}
 
 // "Show config keys and defaults" is a per-device preference.
 const KEYS_PREF = 'amdl.console.settings.keys';
@@ -73,6 +68,7 @@ export function SettingsPage({ route }) {
   const [failSeq, setFailSeq] = useState(0);
   const errorRef = useRef(null);
 
+  const sectionOf = (key) => (fieldByKey(key) || {}).section;
   const dirtyKeys = useMemo(() => changedKeys(cfg.base, draft), [cfg.base, draft]);
   const dirty = dirtyKeys.length > 0;
   const checks = useMemo(() => validateDraft(Object.fromEntries(dirtyKeys.map((k) => [k, draft[k]]))), [dirtyKeys, draft]);
@@ -145,12 +141,17 @@ export function SettingsPage({ route }) {
   // One edited field goes straight back; several ask first.
   const askDiscard = () => (dirtyKeys.length > 1 ? setDiscarding(true) : discard());
 
-  // Resolves to whether everything was saved (Save and leave goes on only then).
+  // Resolves to whether everything was saved (Save in the leave dialog goes
+  // on only then). A field marked invalid is not sent: Save takes focus to
+  // the first one instead, opening its section when it is elsewhere.
   const save = async () => {
     if (!dirty || saving) return false;
-    if (Object.keys(checks.errors).length) {
-      setSaveError({ message: 'Fix the marked fields, then save again.', fields: {} });
-      setFailSeq((n) => n + 1);
+    const bad = firstErrorKey(checks.errors);
+    if (bad) {
+      const where = sectionOf(bad);
+      if (where === section.id) focusField(bad);
+      else app.navigate(settingsHash(where, bad));
+      setLive(`Not saved: ${labelOf(bad)}. ${checks.errors[bad]}.`);
       return false;
     }
     const body = buildPatch(cfg.base, draft);
@@ -252,14 +253,13 @@ export function SettingsPage({ route }) {
     else app.navigate(to);
   };
 
-  // Save and leave: a failed save keeps the page, with its error shown.
+  // Save in the leave dialog: a failed save keeps the page, with its error shown.
   const saveAndLeave = async () => {
     const to = leaveTo;
     if (await save()) leave(to);
     else setLeaveTo(null);
   };
 
-  const sectionOf = (key) => (fieldByKey(key) || {}).section;
   const dirtySections = new Set(dirtyKeys.map(sectionOf));
   const errorSections = new Set(Object.keys(errors).map(sectionOf).filter(Boolean));
   const valueOf = (key) => (Object.hasOwn(draft, key) ? draft[key] : cfg.base[key]);
@@ -275,7 +275,7 @@ export function SettingsPage({ route }) {
     setShowKeys=${changeShowKeys}
   />`;
 
-  const faultSections = SETTINGS_SECTIONS.filter((s) => errorSections.has(s.id) && s.id !== section.id);
+  const faultKeys = saveError ? FIELD_KEYS.filter((k) => saveError.fields[k]) : [];
 
   return html`<div class="page page-settings" data-section-active=${section.id} data-dirty=${dirty ? '' : undefined}>
     <${SettingsNav} section=${section} dirty=${dirtySections} invalid=${errorSections} navigate=${app.navigate} />
@@ -284,8 +284,8 @@ export function SettingsPage({ route }) {
         ? html`<div class="settings-error" tabindex="-1" ref=${errorRef} role="alert">
             <${Notice} role="danger" icon="circle-x">
               <strong>Not saved.</strong> <span class="wrap-any">${punctuated(saveError.message)}</span>
-              ${faultSections.length
-                ? html` <span>See ${faultSections.map((s, i) => html`${i ? ', ' : ''}<a key=${s.id} class="link" href=${settingsHash(s.id)}>${s.label}</a>`)}.</span>`
+              ${faultKeys.length
+                ? html` <span>See ${faultKeys.map((k, i) => html`${i ? ', ' : ''}<a key=${k} class="link" href=${settingsHash(sectionOf(k), k)}>${labelOf(k)}</a>`)}.</span>`
                 : null}
             </${Notice}>
           </div>`
@@ -300,10 +300,10 @@ export function SettingsPage({ route }) {
       : null}
     ${leaveTo
       ? html`<${ConfirmDialog}
-          title="Leave without saving?"
-          confirmLabel="Discard and leave"
-          cancelLabel="Stay"
-          altLabel=${Object.keys(checks.errors).length ? '' : 'Save and leave'}
+          title="Save changes?"
+          confirmLabel="Don't Save"
+          cancelLabel="Cancel"
+          altLabel=${Object.keys(checks.errors).length ? '' : 'Save'}
           onAlt=${saveAndLeave}
           busy=${saving}
           busyLabel="Saving…"
@@ -311,19 +311,19 @@ export function SettingsPage({ route }) {
           onConfirm=${() => leave()}
           onCancel=${() => setLeaveTo(null)}
         >
-          <${LossText} keys=${dirtyKeys} lead="Leaving loses" />
+          <p>${changedSentence(dirtyKeys)}</p>
         </${ConfirmDialog}>`
       : null}
     ${discarding
       ? html`<${ConfirmDialog}
-          title="Discard all unsaved changes?"
-          confirmLabel="Discard changes"
-          cancelLabel="Keep editing"
+          title=${`Discard ${dirtyKeys.length} changes?`}
+          confirmLabel="Discard"
+          cancelLabel="Keep Editing"
           danger
           onConfirm=${discard}
           onCancel=${() => setDiscarding(false)}
         >
-          <${LossText} keys=${dirtyKeys} lead="Discarding loses" />
+          <p>${changedSentence(dirtyKeys)}</p>
         </${ConfirmDialog}>`
       : null}
     <div class="sr-only" role="status" aria-live="polite">${live}</div>
