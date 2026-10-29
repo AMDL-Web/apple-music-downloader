@@ -3,13 +3,13 @@
 // text box is the source of the links; ?url= prefills it, and the page
 // writes its links back into ?url= so a reload or the global paste keeps
 // them; the whole text also lasts for the tab when the page is left. The
-// page head comes from app.js. Parts: download-lookup.js
-// (previews), download-links.js (rows), download-options.js,
+// page head comes from app.js. Parts: download-config.js (server defaults),
+// download-lookup.js (previews), download-links.js (rows), download-options.js,
 // download-quality.js, download-results.js; the logic is pure in
 // lib/links.js, lib/lookup.js, lib/submit.js and lib/overrides.js.
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
-import { createDownload, getConfig, getHooks } from '../api.js';
+import { createDownload } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
 import {
@@ -26,6 +26,7 @@ import { readPref, writePref } from '../lib/prefs.js';
 import { useApp, Card, Button, Notice } from '../ui/components.js';
 import { useDebounced, useMedia } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
+import { useServerConfig } from './download-config.js';
 import { useLookups } from './download-lookup.js';
 import { LinksCard } from './download-links.js';
 import { OptionsCard } from './download-options.js';
@@ -104,30 +105,7 @@ export function DownloadPage({ route }) {
   }, []);
 
   // Server defaults and hooks.
-  const [cfg, setCfg] = useState({ loading: true, data: null, error: null });
-  const [cfgRun, setCfgRun] = useState(0);
-  useEffect(() => {
-    let off = false;
-    setCfg((c) => ({ ...c, loading: true }));
-    getConfig().then(
-      (data) => !off && setCfg({ loading: false, data, error: null }),
-      (error) => !off && setCfg((c) => ({ loading: false, data: c.data, error })),
-    );
-    return () => {
-      off = true;
-    };
-  }, [cfgRun, app.epoch]);
-  const [hooks, setHooks] = useState({ loading: true, data: null, error: null });
-  useEffect(() => {
-    let off = false;
-    getHooks().then(
-      (data) => !off && setHooks({ loading: false, data, error: null }),
-      (error) => !off && setHooks({ loading: false, data: null, error }),
-    );
-    return () => {
-      off = true;
-    };
-  }, [app.epoch]);
+  const { cfg, setCfgRun, hooks } = useServerConfig(app.epoch);
 
   const download = cfg.data && cfg.data.config ? cfg.data.config.download : null;
   const trackMode = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.album_track_url_mode || '' : null;
