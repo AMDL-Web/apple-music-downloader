@@ -19,7 +19,7 @@ const GROUPED = new Set(['list', 'set']);
 /**
  * .field[data-key][data-type][data-wide][data-changed][data-invalid]
  * > .field-text (.field-label, .field-changed + Undo or .field-reset,
- * .field-help, then with `showKeys` .field-default and .field-key) +
+ * .field-help with a select's chosen .field-option-hint, then with `showKeys` .field-default and .field-key) +
  * .field-control, then .field-error, .field-warning. A saved value that
  * differs from the default offers "Reset to default", which is an edit like
  * any other (Undo takes it back).
@@ -31,6 +31,8 @@ export function SettingsField({ field, value, changed, error, warning, showKeys,
   const ctl = { field, id, value, invalid: Boolean(error), described, onChange };
   const grouped = GROUPED.has(field.type);
   const resettable = !changed && hasDefault && value !== undefined && field.type !== 'token' && !sameValue(value, field.defaultValue);
+  // The chosen option's note joins the help line, so the control column stays a bare control.
+  const picked = field.type === 'select' ? field.options.find((o) => o.value === value) : null;
   return html`<div
     class="field"
     data-key=${field.key}
@@ -58,7 +60,7 @@ export function SettingsField({ field, value, changed, error, warning, showKeys,
             >Reset to default</button>`
           : null}
       </div>
-      <p class="field-help" id=${`${id}-help`}>${field.help}</p>
+      <p class="field-help" id=${`${id}-help`}>${field.help}${picked && picked.hint ? html` <span class="field-option-hint">${picked.hint}</span>` : null}</p>
       ${showKeys && hasDefault
         ? html`<p class="field-default" id=${`${id}-default`}>Default: <code class="field-default-value">${valueLabel(field, field.defaultValue)}</code>${field.defaultNote ? html`. ${field.defaultNote}` : null}</p>`
         : null}
@@ -89,55 +91,77 @@ function control(p) {
   }
 }
 
-function SwitchControl({ id, value, disabled, described, onChange }) {
-  const v = value === true;
-  return html`<span class="field-switch-wrap">
-    <input
-      type="checkbox"
-      role="switch"
-      class="field-switch"
-      id=${id}
-      checked=${v}
-      disabled=${disabled}
-      aria-describedby=${described}
-      onChange=${(e) => onChange(e.currentTarget.checked)}
-    />
-    <span class="field-switch-state" aria-hidden="true">${v ? 'On' : 'Off'}</span>
-  </span>`;
+function SwitchControl({ id, value, described, onChange }) {
+  return html`<input
+    type="checkbox"
+    role="switch"
+    class="field-switch"
+    id=${id}
+    checked=${value === true}
+    aria-describedby=${described}
+    onChange=${(e) => onChange(e.currentTarget.checked)}
+  />`;
 }
 
-function SelectControl({ field, id, value, disabled, invalid, described, onChange }) {
+const CUSTOM = '__custom__';
+
+/**
+ * A select of the field's options. A `custom` field (cover size) adds
+ * "Custom…", which reveals a text box for any other value; a saved value
+ * that is not listed opens it.
+ */
+function SelectControl({ field, id, value, invalid, described, onChange }) {
   const known = field.options.some((o) => o.value === value);
-  const options = known || value === undefined ? field.options : [...field.options, { value, label: `${value} (current, not a listed value)` }];
-  const picked = options.find((o) => o.value === value);
+  const [custom, setCustom] = useState(false);
+  const typing = field.custom && (custom || (!known && value !== undefined));
+  const options = known || value === undefined || field.custom ? field.options : [...field.options, { value, label: `${value} (current, not a listed value)` }];
   return html`<div class="field-select">
     <select
       class="select"
       id=${id}
-      disabled=${disabled}
-      aria-invalid=${invalid ? 'true' : undefined}
+      aria-invalid=${invalid && !typing ? 'true' : undefined}
       aria-describedby=${described}
-      value=${String(value)}
+      value=${typing ? CUSTOM : String(value)}
       onChange=${(e) => {
-        const o = options.find((x) => String(x.value) === e.currentTarget.value);
-        onChange(o ? o.value : e.currentTarget.value);
+        const v = e.currentTarget.value;
+        if (v === CUSTOM) {
+          setCustom(true);
+          return;
+        }
+        setCustom(false);
+        const o = options.find((x) => String(x.value) === v);
+        onChange(o ? o.value : v);
       }}
     >
       ${options.map((o) => html`<option key=${String(o.value)} value=${String(o.value)}>${o.label}</option>`)}
+      ${field.custom ? html`<option value=${CUSTOM}>Custom…</option>` : null}
     </select>
-    ${picked && picked.hint ? html`<p class="field-option-hint">${picked.hint}</p>` : null}
+    ${typing
+      ? html`<input
+          type="text"
+          class="field-input field-custom"
+          value=${value === undefined ? '' : String(value)}
+          placeholder=${field.customPlaceholder || ''}
+          aria-label=${`${field.label}, custom value`}
+          aria-invalid=${invalid ? 'true' : undefined}
+          aria-describedby=${described}
+          autocomplete="off"
+          spellcheck="false"
+          onInput=${(e) => onChange(e.currentTarget.value)}
+        />`
+      : null}
   </div>`;
 }
 
-function NumberControl({ field, id, value, disabled, invalid, described, onChange }) {
-  return html`<span class="field-number">
+/** A whole number; the unit sits inside the box, so every control ends on one edge. */
+function NumberControl({ field, id, value, invalid, described, onChange }) {
+  return html`<span class="field-number" data-unit=${field.unit ? '' : undefined}>
     <input
       type="text"
       inputmode="numeric"
       class="field-input num"
       id=${id}
       value=${value === undefined ? '' : String(value)}
-      disabled=${disabled}
       autocomplete="off"
       spellcheck="false"
       aria-invalid=${invalid ? 'true' : undefined}
@@ -148,15 +172,13 @@ function NumberControl({ field, id, value, disabled, invalid, described, onChang
   </span>`;
 }
 
-function TextControl({ field, id, value, disabled, invalid, described, onChange }) {
+function TextControl({ field, id, value, invalid, described, onChange }) {
   const mono = field.type === 'path' || field.type === 'template';
   return html`<input
     type="text"
     class=${mono ? 'field-input mono' : 'field-input'}
     id=${id}
     value=${value === undefined ? '' : String(value)}
-    title=${disabled && value ? String(value) : undefined}
-    disabled=${disabled}
     autocomplete="off"
     autocapitalize="off"
     spellcheck="false"
@@ -166,7 +188,7 @@ function TextControl({ field, id, value, disabled, invalid, described, onChange 
   />`;
 }
 
-function SecretControl({ id, value, disabled, invalid, described, onChange }) {
+function SecretControl({ id, value, invalid, described, onChange }) {
   const [shown, setShown] = useState(false);
   return html`<span class="field-secret" data-shown=${shown ? '' : undefined}>
     <input
@@ -175,7 +197,6 @@ function SecretControl({ id, value, disabled, invalid, described, onChange }) {
       id=${id}
       value=${value || ''}
       placeholder="Not set"
-      disabled=${disabled}
       autocomplete="off"
       autocapitalize="off"
       spellcheck="false"
@@ -196,7 +217,7 @@ function SecretControl({ id, value, disabled, invalid, described, onChange }) {
 }
 
 /** An unordered subset of the options as checkboxes; keeps the current order. */
-function SetControl({ field, id, value, disabled, described, onChange }) {
+function SetControl({ field, id, value, described, onChange }) {
   const items = Array.isArray(value) ? value : [];
   return html`<div class="check-group" role="group" aria-labelledby=${`${id}-label`} aria-describedby=${described}>
     ${field.options.map(
@@ -204,7 +225,6 @@ function SetControl({ field, id, value, disabled, described, onChange }) {
         <input
           type="checkbox"
           checked=${items.includes(o.value)}
-          disabled=${disabled}
           onChange=${(e) => onChange(e.currentTarget.checked ? [...items.filter((v) => v !== o.value), o.value] : items.filter((v) => v !== o.value))}
         />
         <span>${o.label}</span>

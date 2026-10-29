@@ -38,7 +38,7 @@ Contrast is measured on `--bg-surface` (the grouped surface) unless noted.
 | `--text-primary` | `#1d1d1f` | `#f5f5f7` | text | 15.6 / 15.4 |
 | `--text-secondary` | `#6e6e73` | `#a1a1a6` | labels, meta | 4.66 / 6.61 (5.07 / 8.16 on canvas) |
 | `--border-control` | `#86868b` | `#6e6e73` | outlined remaining cells, field outline | 3.33 / 3.36 |
-| `--accent` | `#e0213a` | same | the only red fill: primary buttons, New download (sidebar pill, rail disc, tab mark), and a switch that is on, the one fill that is not an action (an Apple toggle in the app's tint; "On" beside it says the state) | white on it 4.72 |
+| `--accent` | `#e0213a` | same | the only red fill: primary buttons, New download (sidebar pill, rail disc, tab mark), and a switch that is on, the one fill that is not an action (an Apple toggle in the app's tint; the fill says the state) | white on it 4.72 |
 | `--accent-hover` / `-pressed` | `#c81c33` / `#b0172c` | same | primary button hover / pressed, the current page's New download pill | white 5.72 / 6.99 |
 | `--disabled-bg` / `-text` | `--bg-fill` / `#636366` | `--bg-fill` / `#98989d` | a disabled primary button: gray, not faded red | 4.90 / 4.85 |
 | `--accent-text` | `#d60f2c` | `#ff4d61` | "See all" links, current tab | 4.87 / 5.26 |
@@ -153,7 +153,7 @@ base durations (120 ms color, 200 ms overlays).
 - **Fields in a grouped surface**: text fields, selects, the link text box
   and inset lists are `--bg-inset` cells (white on the gray surface in light,
   the second grouped level in dark), still outlined in `--border-control`.
-  Dotted config keys (`.field-key`, `.list-code`) are quiet mono text with no
+  Dotted config keys (`.field-key`, shown on demand) are quiet mono text with no
   fill. Selects draw their own 12 px chevron 12 px in from the right edge
   (`appearance: none`), at the height and radius of the text fields beside
   them. On touch screens (under 640 px or a coarse pointer) every field is
@@ -241,7 +241,7 @@ base durations (120 ms color, 200 ms overlays).
   right edge, as do panel rules and the library sync and account status
   rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
   soft shadow, red when on, the off track keeping its `--border-control`
-  outline, "On" / "Off" beside it). The ordered list is an inset list like
+  outline, no On/Off word beside it). The ordered list is an inset list like
   the codec ranking; the template reference is an inset cell. Panel actions
   in a block head (Refresh) are red text, and so is an account's Log out. The save bar is a frosted floating
   capsule with the float shadow: the count in 15 px semibold, where in 14 px

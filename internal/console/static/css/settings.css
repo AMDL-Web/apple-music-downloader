@@ -175,7 +175,7 @@
 
 .field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 300px);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--s-2) var(--s-6);
   padding: var(--s-3) 0;
@@ -195,12 +195,16 @@
 }
 
 .field-control {
+  justify-self: end;
   min-width: 0;
+  max-width: 320px;
 }
 
-.field[data-type="switch"],
-.field[data-type="number"] {
-  grid-template-columns: minmax(0, 1fr) auto;
+/* One control column: selects as wide as their longest option (at least
+   160 px), numbers 96 px with the unit inside, every control flush right. */
+.field[data-wide] .field-control {
+  justify-self: stretch;
+  max-width: none;
 }
 
 .field[data-wide] {
@@ -265,8 +269,7 @@
   cursor: pointer;
 }
 
-.field-help,
-.field-option-hint {
+.field-help {
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
@@ -322,41 +325,47 @@
   border-color: var(--danger);
 }
 
-.field-input:disabled,
-.field .select:disabled,
-.field-switch:disabled,
-.check input:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .field-select {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: var(--s-1);
 }
 
 .field-select .select {
-  width: 100%;
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+}
+
+.field-custom {
+  width: 160px;
 }
 
 .field-number {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--s-2);
 }
 
-.field-number .field-input {
-  width: 112px;
+.field .field-number .field-input {
+  width: 96px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
+.field .field-number[data-unit] .field-input {
+  width: 128px;
+  padding-right: calc(var(--s-3) + 2.5em);
+}
+
 .field-unit {
-  min-width: 2.5em;
+  position: absolute;
+  right: var(--s-3);
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+  pointer-events: none;
 }
 
 .field-secret {
@@ -376,13 +385,7 @@
   max-width: 640px;
 }
 
-/* A checkbox drawn as a switch; "On"/"Off" beside it says the state in text. */
-.field-switch-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-}
-
+/* A checkbox drawn as a switch: the filled track says it is on. */
 .field-switch {
   appearance: none;
   position: relative;
@@ -419,13 +422,6 @@
   background: var(--on-accent);
 }
 
-.field-switch-state {
-  min-width: 2em;
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
 .check-group {
   display: flex;
   flex-wrap: wrap;
@@ -448,18 +444,10 @@
   accent-color: var(--accent);
 }
 
-/* Ordered list editor (codec priority). */
-.list-min-note {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
 .list-editor {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  max-width: 560px;
 }
 
 .list-items {
@@ -474,7 +462,7 @@
 
 .list-item {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--s-2);
   min-height: 40px;
@@ -499,13 +487,6 @@
   line-height: var(--lh-14);
 }
 
-.list-code {
-  padding: 0;
-  background: none;
-  color: var(--text-secondary);
-  font-size: var(--fs-11);
-}
-
 .list-actions {
   display: flex;
   gap: var(--s-0_5);
@@ -517,8 +498,12 @@
   gap: var(--s-2);
 }
 
+.list-editor[data-ordered] .list-item {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+}
+
 .list-add .select {
-  flex: 0 1 320px;
+  flex: 1;
   min-width: 0;
   height: var(--control-h-sm);
 }
@@ -724,15 +709,23 @@
 /* ---- Narrow content: one column per field --------------------------- */
 
 @container (max-width: 560px) {
-  .field,
-  .field[data-type="number"] {
+  /* A switch stays beside its text; other controls go under it, full width. */
+  .field:not([data-type="switch"]) {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .field-number .field-input {
+  .field:not([data-type="switch"]) .field-control {
+    justify-self: stretch;
+    max-width: none;
+  }
+
+  .field-select {
+    align-items: stretch;
+  }
+
+  .field-select .select,
+  .field-custom {
     width: 100%;
-    max-width: 160px;
-    text-align: left;
   }
 }
 
@@ -773,10 +766,6 @@
     min-height: var(--touch);
     font-size: var(--fs-16);
     line-height: var(--lh-16);
-  }
-
-  .field-switch-wrap {
-    min-height: var(--touch);
   }
 
   .list-add .select {

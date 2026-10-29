@@ -57,7 +57,7 @@ const OLDER_LAYOUT_NOTE = 'An install upgraded from an older version may still u
 /**
  * One field per editable key. type: switch | select | number | text | path |
  * template | token | list (ordered, from options) | set (unordered, from
- * options). `help` is one short line about the effect; `defaultValue` is the
+ * options). A `custom` select also takes any other value through a text box. `help` is one short line about the effect; `defaultValue` is the
  * value a key missing from the file takes (configs/config.example.yaml), shown
  * with the key on demand and used by Reset to default. Fields of Advanced
  * name their `group`. select options may carry a hint, added to the help line while chosen.
@@ -82,6 +82,7 @@ export const FIELDS = [
     defaultValue: ['alac'],
     minItems: 1,
     addLabel: 'Add codec',
+    addNoun: 'codec',
     options: [
       { value: 'alac', label: 'ALAC (lossless)', hint: 'Apple Lossless, up to the limits below' },
       { value: 'ec3', label: 'Dolby Atmos (E-AC-3)', hint: 'Dolby Atmos in Dolby Digital Plus' },
@@ -173,10 +174,20 @@ export const FIELDS = [
   {
     key: 'download.cover_size',
     section: 'lyrics_artwork',
-    type: 'text',
+    type: 'select',
     label: 'Cover size',
     help: 'Smaller standard sizes are tried when Apple lacks this one.',
     defaultValue: '5000x5000',
+    // The sizes config.example.yaml documents; Custom… takes any other.
+    options: [
+      { value: '5000x5000', label: '5000 × 5000 px' },
+      { value: '3000x3000', label: '3000 × 3000 px' },
+      { value: '1400x1400', label: '1400 × 1400 px' },
+      { value: '600x600', label: '600 × 600 px' },
+      { value: '300x300', label: '300 × 300 px' },
+    ],
+    custom: true,
+    customPlaceholder: 'Width x height, as 2000x2000',
     // The backend's rule (internal/config Validate).
     pattern: '^[1-9][0-9]*x[1-9][0-9]*$',
     patternHint: 'Write it as width x height in whole pixels above 0, for example 3000x3000.',
