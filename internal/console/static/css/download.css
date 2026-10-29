@@ -16,9 +16,8 @@
   min-width: 0;
 }
 
-/* .page.page-new: the Overview's New download button carries .page-new
-   too. Beside a 1024-1279 px sidebar the options take 300 px at most, so
-   the links and results stay the wider column. */
+/* .page.page-new: beside a 1024-1279 px sidebar the options take 300 px at
+   most, so the links and results stay the wider column. */
 @media (min-width: 1024px) {
   .page.page-new {
     display: grid;

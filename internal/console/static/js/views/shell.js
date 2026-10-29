@@ -1,6 +1,6 @@
 // Shell chrome: primary navigation (sidebar, tab bar and its More sheet),
-// the New download entry point, the connection indicator, the theme control
-// and the page banners.
+// the New download entry point, the connection indicator, the simulate tag,
+// the theme control and the page banners.
 
 import { html } from '../ui/preact.js';
 import { buildHash } from '../lib/route.js';
@@ -66,17 +66,20 @@ const navItem = (page) => NAV.find((n) => n.page === page);
 /**
  * The phone tab bar: Overview, Queue, New download (center, primary),
  * Showcase and More, a button that opens MoreSheet. More is marked current
- * while one of MORE_PAGES is shown.
+ * while one of MORE_PAGES is shown and while its sheet is open.
  */
 export function TabBar({ route, moreOpen, onMore }) {
-  const tab = (n) => html`<a key=${n.page} class="tab" data-page=${n.page} href=${buildHash(n.page)} aria-current=${route.page === n.page ? 'page' : undefined}>
+  // While the More sheet is open, More is the current tab and the page under
+  // the sheet loses its mark until the sheet closes.
+  const current = (page) => (!moreOpen && route.page === page ? 'page' : undefined);
+  const tab = (n) => html`<a key=${n.page} class="tab" data-page=${n.page} href=${buildHash(n.page)} aria-current=${current(n.page)}>
     <${Icon} name=${n.icon} size="nav" />
     <span class="tab-label">${n.label}</span>
   </a>`;
   return html`<nav class="tabbar" aria-label="Primary">
     ${tab(navItem('overview'))}
     ${tab(navItem('queue'))}
-    <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${route.page === 'new' ? 'page' : undefined} aria-label=${NEW_DOWNLOAD.label}>
+    <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${current('new')} aria-label=${NEW_DOWNLOAD.label}>
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
       <span class="tab-label">New</span>
     </a>
@@ -86,7 +89,7 @@ export function TabBar({ route, moreOpen, onMore }) {
       class="tab tab-more"
       aria-haspopup="dialog"
       aria-expanded=${String(Boolean(moreOpen))}
-      aria-current=${MORE_PAGES.includes(route.page) ? 'page' : undefined}
+      aria-current=${moreOpen || MORE_PAGES.includes(route.page) ? 'page' : undefined}
       onClick=${onMore}
     >
       <${Icon} name="more" size="nav" />
@@ -130,17 +133,33 @@ export function MoreSheet({ route, onClose }) {
   </${Dialog}>`;
 }
 
+/**
+ * The live-update stream: a dot alone while it is connected (its words are
+ * for screen readers and the title), words only when something is wrong:
+ * "Reconnecting in 3 s", or "Offline" with Retry.
+ */
 export function ConnectionIndicator({ conn, onRetry }) {
   const waiting = conn.state === 'reconnecting' || conn.state === 'offline';
   const now = useClock(waiting ? 1000 : 0);
   const view = connectionView(conn.state);
   const secs = waiting && conn.retryAt ? Math.max(0, Math.ceil((conn.retryAt - now) / 1000)) : null;
   // The number is the wait before the next attempt, so it says so.
-  const label = conn.state === 'reconnecting' && secs ? `Retrying in ${secs} s` : view.label;
-  return html`<span class="conn" data-role=${view.role} data-state=${conn.state} title=${`Live updates: ${label}`}>
+  const label = conn.state === 'reconnecting' && secs ? `Reconnecting in ${secs} s` : view.label;
+  return html`<span class="conn" data-role=${view.role} data-state=${conn.state} title=${conn.state === 'live' ? 'Live updates on' : `Live updates: ${label}`}>
     <span class="conn-dot" aria-hidden="true"></span>
     <span class="conn-label">${label}</span>
     ${conn.state === 'offline' && onRetry ? html`<${Button} size="sm" variant="ghost" onClick=${onRetry}>Retry</${Button}>` : null}
+  </span>`;
+}
+
+/**
+ * Simulate mode is a standing setting, not a problem: a small neutral tag in
+ * the top bar instead of a banner on every page.
+ */
+export function SimulateTag() {
+  const text = 'Transfers and decryption are simulated; no files are written.';
+  return html`<span class="sim-tag" title=${text}>
+    Simulate<span class="sr-only">: ${text}</span>
   </span>`;
 }
 
@@ -150,32 +169,27 @@ const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark theme', icon: 'moon' },
 ];
 
+/**
+ * One button that cycles System, Light and Dark: the theme is set once, so it
+ * gets one icon, not a three-way control (the palette has all three).
+ */
 export function ThemeControl({ theme, setTheme }) {
   const i = THEMES.indexOf(theme);
   const current = THEME_OPTIONS[i < 0 ? 0 : i];
-  const next = THEMES[(i + 1) % THEMES.length];
+  const nextIndex = (Math.max(0, i) + 1) % THEMES.length;
+  const label = `${current.label}; switch to ${THEME_OPTIONS[nextIndex].label.toLowerCase()}`;
   return html`<div class="theme">
-    <div class="seg seg-icons" role="group" aria-label="Theme">
-      ${THEME_OPTIONS.map(
-        (o) => html`<button key=${o.value} type="button" class="seg-btn" aria-pressed=${String(o.value === theme)} aria-label=${o.label} title=${o.label} onClick=${() => setTheme(o.value)}>
-          <${Icon} name=${o.icon} />
-        </button>`,
-      )}
-    </div>
-    <button type="button" class="btn btn-ghost btn-icon theme-cycle" aria-label=${`${current.label}; switch to ${next}`} onClick=${() => setTheme(next)}>
+    <button type="button" class="btn btn-ghost btn-icon theme-cycle" aria-label=${label} title=${label} onClick=${() => setTheme(THEMES[nextIndex])}>
       <${Icon} name=${current.icon} />
     </button>
   </div>`;
 }
 
-export function Banners({ simulate, conn, onRetry }) {
+export function Banners({ conn, onRetry }) {
   const down = conn.state === 'reconnecting' || conn.state === 'offline';
   const now = useClock(down ? 1000 : 0);
   const downFor = down && conn.downSince ? now - conn.downSince : 0;
   return html`<div class="banners">
-    ${simulate
-      ? html`<${Notice} role="warning" icon="triangle-alert">Simulate mode: transfers and decryption are simulated and no files are written.</${Notice}>`
-      : null}
     ${conn.state === 'offline'
       ? html`<${Notice}
           role="danger"

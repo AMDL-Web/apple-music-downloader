@@ -207,11 +207,11 @@ export const LOG_RETENTION_OFF = 'In-memory log retention is off (logging.buffer
 export function connectionView(state) {
   switch (state) {
     case 'live':
-      return { icon: 'dot', role: 'success', label: 'Live' };
+      return { icon: 'dot', role: 'success', label: 'Live updates on' };
     case 'reconnecting':
       return { icon: 'dot', role: 'warning', label: 'Reconnecting' };
     case 'offline':
-      return { icon: 'dot', role: 'danger', label: 'Disconnected' };
+      return { icon: 'dot', role: 'danger', label: 'Offline' };
     case 'paused':
       return { icon: 'dot', role: 'neutral', label: 'Paused' };
     default:

@@ -48,7 +48,7 @@ Contrast is measured on `--bg-surface` (the grouped surface) unless noted.
 | `--info-text` | `#d60f2c` | `#ff4d61` | "Running" label | 4.87 / 5.26 |
 | `--success` / `-text` | `#248a3d` / `#1b7a34` | `#30d158` | completed marks / "Healthy" | text 4.97 / 8.42 |
 | `--danger` / `-text` | `#d70015` / `#c4001a` | `#ff6961` | failed marks / failed chips and red text actions | text 5.74 / 6.03 (4.82 / 4.79 on its tint) |
-| `--warning` / `-text` | `#b25000` | `#ffd60a` | warnings, simulate notice | 4.77 / 12.05 |
+| `--warning` / `-text` | `#b25000` | `#ffd60a` | warnings | 4.77 / 12.05 |
 | `--neutral` | `#77777c` | `#8e8e93` | off, queued (marks) | 3.6 / 5.22 |
 | `--skipped` / `-text` | `#8944ab` | `#bf5af2` / `#da8fff` | already in library | 5.54 / 7.58 |
 | `--on-role` | `#ffffff` | `#000000` | glyph on a solid health tile, the bar in a partly checked circle | 4.3+ / 6.6+ |
@@ -92,8 +92,8 @@ groups, quality slots and the More list 16 (`--r-notice`); palette 18;
 artwork, inset lists, the link text box and the template reference 12, list
 covers 8; nav items and fields 9; segmented 10 / 8; buttons, badges, chips
 and level chips are pills, and so is the save bar (the card radius on
-phones, where it wraps). Large pills (Download N, dialog, save bar and the
-Overview's New download) are 36 px (`--btn-lg-h`, 44 on phones). The switch
+phones, where it wraps). Large pills (Download N, dialog and save bar
+buttons) are 36 px (`--btn-lg-h`, 44 on phones). The switch
 is 44 x 26 with a 20 px thumb; selection circles are 22 px
 (`--check-size`). Progress cells are 8 px capsules with
 a 3 px gap; remaining cells are outlined, not filled. In the queue list the
@@ -120,12 +120,14 @@ base durations (120 ms color, 200 ms overlays).
 - **Shell**: brand mark is a 34 px red gradient tile; "Console" group label via
   `.nav::before`; nav glyphs in secondary ink (the current one primary); the
   current item is a filled 9 px pill. The top
-  bar is the frosted canvas with a "Live" pill, a filled search trigger and two
-  Apple segmented controls; a segment's count (the Queue tabs) is primary
-  ink in regular weight, since secondary text falls under 4.5:1 on the track
-  and on the dark thumb. Inline code is primary ink on `--bg-fill` for the
-  same reason. On phones the pill loses its fill but keeps the
-  word next to the dot. The icon rail (640-1023) shows the active count as a
+  bar is the frosted canvas with, in simulate mode, a neutral "Simulate" tag;
+  the live dot alone while connected ("Reconnecting in 3 s" or "Offline" in
+  a surface pill otherwise; on phones without the fill, the word still next
+  to the dot); the search pill ("Search or paste a link…", ⌘K or Ctrl K);
+  and one theme button that cycles System, Light and Dark. A segment's count
+  (the Queue tabs) is primary ink in regular weight, since secondary text
+  falls under 4.5:1 on the track and on the dark thumb. Inline code is
+  primary ink on `--bg-fill` for the same reason. The icon rail (640-1023) shows the active count as a
   neutral `--bg-fill` badge.
 - **New download entry points**: in the sidebar a red pill as tall as a nav
   row (36 px, 15 px semibold) above the "Console" label, a slightly darker
@@ -134,15 +136,15 @@ base durations (120 ms color, 200 ms overlays).
   px the center tab's mark is a 48 x 30 red capsule with a soft red shadow
   that rises 6 px over the 24 px icon line, so "New" sits on the other
   labels' line; More turns red like any current tab
-  while Logs, System or Settings is shown.
+  while Logs, System or Settings is shown or its sheet is open.
 - **More sheet** (phones): the frosted sheet holds an inset grouped list on
   `--bg-group` (16 px radius, 48 px rows, 16 px labels), secondary glyphs as
   in the sidebar, hairlines from the label, the current page in semibold with
   "Current" and the chevron in secondary.
 - **Page head**: title with its summary line beneath (15 px secondary; only
   Overview, Queue and Showcase have one, their live counts), as an Apple
-  large title. Page actions (Overview's New download, a 36 px red pill)
-  sit at the right, centered on the two lines, at every width.
+  large title. No page actions: New download lives in the sidebar and the
+  tab bar.
 - **Sections**: every card with a head is a shelf: the head sits on the
   canvas, the body is the grouped surface. Section actions are red text links
   with a chevron; an action in place (a `button`, such as Clear or Reset) is
@@ -286,9 +288,6 @@ base durations (120 ms color, 200 ms overlays).
 - A meaningful sublabel per Jobs column ("of 256 slots", "3 workers") and
   icon tiles for the runtime facts need DOM that the console does not render
   yet.
-- The Overview's New download button carries `.page-new`, the class
-  download.css lays out as the New download page (a grid at 1024 px and up),
-  so the skin restates the button's display, gap and size in full.
 - In dark, a field's `--border-control` outline is 3.36:1 against the surface
   around it but 2.75:1 against its own `--bg-inset` fill.
 - The skin is one file per the skin contract (scoped by its name), past 60

@@ -539,8 +539,7 @@
 }
 
 /* Touch. A coarse pointer gets the phone's 44px targets at any width, so a
-   phone in landscape (844 wide, 390 tall) and a tablet match portrait; the
-   top bar swaps the theme and style switches for the one-tap cycle buttons.
+   phone in landscape (844 wide, 390 tall) and a tablet match portrait.
    Targets grow with min-height / min-width or an invisible hit area, never
    the drawn size of a chip or a switch. */
 @media (max-width: 639px), (pointer: coarse) {
@@ -597,14 +596,6 @@
 
   .search-trigger {
     justify-content: center;
-  }
-
-  .seg-icons {
-    display: none;
-  }
-
-  .theme-cycle {
-    display: inline-flex;
   }
 
   /* A chip stays 20px drawn; its row is a full target tall, so the invisible

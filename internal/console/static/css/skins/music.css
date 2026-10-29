@@ -378,6 +378,11 @@
   font-weight: var(--w-semibold);
 }
 
+:root[data-skin="music"] .conn:not([data-state="reconnecting"], [data-state="offline"]) {
+  padding: 0 var(--s-1_5);
+  background: transparent;
+}
+
 :root[data-skin="music"] .conn-dot {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--role) 25%, transparent);
 }
@@ -401,37 +406,10 @@
   padding: var(--s-3) var(--main-x) var(--s-16);
 }
 
-/* A large title over its summary line; page actions (Overview: New download)
-   sit at the right, centered on the two lines, like an Apple Music header. */
+/* A large title over its summary line, like an Apple Music header. */
 :root[data-skin="music"] .page-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: var(--s-1) var(--s-4);
-}
-
-:root[data-skin="music"] .page-title,
-:root[data-skin="music"] .page-sub {
-  grid-column: 1;
-}
-
-:root[data-skin="music"] .page-actions {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  margin-left: 0;
-}
-
-/* Restated in full: download.css lays out the New download page as
-   .page-new, the class this button also carries. */
-:root[data-skin="music"] .page-actions > .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1_5);
-  height: var(--btn-lg-h);
-  padding: 0 var(--s-4);
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
+  gap: var(--s-1);
 }
 
 :root[data-skin="music"] .page-sub {
@@ -576,14 +554,6 @@
      track (light) and on the pressed thumb (dark). */
   color: var(--text-primary);
   font-weight: var(--w-regular);
-}
-
-:root[data-skin="music"] .seg-icons .seg-btn {
-  color: var(--text-secondary);
-}
-
-:root[data-skin="music"] .seg-icons .seg-btn[aria-pressed="true"] {
-  color: var(--text-primary);
 }
 
 /* Search fields and selects: filled, with the 3:1 --border-control outline so the field reads as a field. */
@@ -3076,8 +3046,9 @@
     line-height: var(--lh-12);
   }
 
-  /* Keep the word next to the dot: status never rests on color alone. */
-  :root[data-skin="music"] .conn-label {
+  /* Reconnecting or offline, keep the word next to the dot: a problem never
+     rests on color alone. */
+  :root[data-skin="music"] .conn:is([data-state="reconnecting"], [data-state="offline"]) .conn-label {
     position: static;
     width: auto;
     height: auto;

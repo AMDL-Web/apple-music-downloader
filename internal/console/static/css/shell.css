@@ -253,13 +253,4 @@
   height: var(--icon-nav);
 }
 
-/* Page actions sit at the end of the page head (Overview: New download). */
-.page-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2);
-  margin-left: auto;
-  align-self: center;
-}
 

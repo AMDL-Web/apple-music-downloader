@@ -8,7 +8,7 @@ import { buildHash, newDownloadHash, newDownloadUrls } from './lib/route.js';
 import { extractLinks } from './lib/links.js';
 import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
 import { count, pageSummary } from './lib/format.js';
-import { AppContext, Icon, LinkButton } from './ui/components.js';
+import { AppContext, Icon } from './ui/components.js';
 import { isDialogOpen } from './ui/dialogs.js';
 import { useFieldFocus } from './ui/field-focus.js';
 import { useToasts, useOfflineToasts, ToastStack } from './ui/toasts.js';
@@ -24,7 +24,7 @@ import { DownloadPage } from './views/download.js';
 import { SettingsPage } from './views/settings.js';
 import { JobDrawer } from './views/drawer.js';
 import { CommandPalette, ShortcutSheet } from './views/palette.js';
-import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, ThemeControl, Banners } from './views/shell.js';
+import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, SimulateTag, ThemeControl, Banners } from './views/shell.js';
 
 const TITLES = {
   overview: 'Overview',
@@ -57,6 +57,9 @@ export function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
   else root.removeAttribute('data-theme');
 }
+
+// The palette shortcut as this platform writes it.
+const PALETTE_KEYS = /Mac|iPhone|iPad/.test((typeof navigator !== 'undefined' && (navigator.platform || navigator.userAgent)) || '') ? '⌘K' : 'Ctrl K';
 
 const isTyping = (el) =>
   el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
@@ -335,11 +338,12 @@ export function App() {
       <div class="main-col">
         <header class="topbar">
           <div class="topbar-right">
+            ${simulate ? html`<${SimulateTag} />` : null}
             <${ConnectionIndicator} conn=${conn} onRetry=${() => retryRef.current()} />
-            <button type="button" class="search-trigger" onClick=${() => setOverlay('palette')} aria-label="Search and commands" aria-keyshortcuts="Meta+K Control+K">
+            <button type="button" class="search-trigger" onClick=${() => setOverlay('palette')} aria-label="Search, paste a link or run a command" aria-keyshortcuts="Meta+K Control+K">
               <${Icon} name="search" />
-              <span class="search-trigger-text">Search jobs…</span>
-              <kbd class="search-trigger-kbd">⌘K</kbd>
+              <span class="search-trigger-text">Search or paste a link…</span>
+              <kbd class="search-trigger-kbd">${PALETTE_KEYS}</kbd>
             </button>
             <${ThemeControl} theme=${theme} setTheme=${setTheme} />
           </div>
@@ -348,13 +352,8 @@ export function App() {
           <div class="page-head">
             <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
             ${summary ? html`<p class="page-sub">${summary}</p>` : null}
-            ${route.page === 'overview'
-              ? html`<div class="page-actions">
-                  <${LinkButton} variant="primary" icon="plus" className="page-new" href=${buildHash('new')}>${NEW_DOWNLOAD.label}</${LinkButton}>
-                </div>`
-              : null}
           </div>
-          <${Banners} simulate=${simulate} conn=${conn} onRetry=${() => retryRef.current()} />
+          <${Banners} conn=${conn} onRetry=${() => retryRef.current()} />
           ${page}
         </main>
       </div>

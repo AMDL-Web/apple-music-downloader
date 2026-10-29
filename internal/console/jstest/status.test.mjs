@@ -120,9 +120,9 @@ test('health rows', () => {
 test('log levels and connection states', () => {
   assert.deepEqual(logLevelView('warn'), { short: 'WRN', role: 'warning', label: 'Warn' });
   assert.equal(logLevelView('error').short, 'ERR');
-  assert.equal(connectionView('live').label, 'Live');
+  assert.equal(connectionView('live').label, 'Live updates on');
   assert.equal(connectionView('reconnecting').role, 'warning');
-  assert.equal(connectionView('offline').label, 'Disconnected');
+  assert.equal(connectionView('offline').label, 'Offline');
 });
 
 test('jobProgress counts tracks and never reports a percentage', () => {

@@ -10,7 +10,7 @@ wins and this page is fixed in the same change. Sources are listed in
 
 1. **Show only what the API knows.** Track counts, never an aggregate pipeline
    percentage (`ItemProgress` has none on purpose). Simulate mode is announced
-   in a banner.
+   by a "Simulate" tag in the top bar, whose title says what it means.
 2. **Status is never color alone.** Every status has an icon (or glyph), a label
    and a color role; the skin may change the look of a role, never drop the label.
 3. **Artwork colors are data.** Apple's per-album palette reaches the page as
@@ -35,7 +35,7 @@ wins and this page is fixed in the same change. Sources are listed in
 
 New download is the primary action and has these entry points: the
 `.sidebar-new` button first in the sidebar (icon-only with a tooltip on the
-640-1023 rail), the Overview page head's `.page-actions` button, "Start a
+640-1023 rail), "Start a
 download" in the Overview live-queue, Queue and Showcase empty states, the
 tab bar's center tab under 640 px, `n` (and `g n`), the palette's "New
 download", and a global paste: pasting text that holds at least one
@@ -44,7 +44,8 @@ dialog is open opens `#/new?url=<the links>` (on `#/new` the links join those
 already in `url`). Under 640 px the tab bar holds Overview, Queue, New,
 Showcase and More; More opens a bottom sheet (`MoreSheet`) listing Logs,
 System and Settings with the current page marked, and the More tab is
-`aria-current` while one of them is shown.
+`aria-current` while one of them is shown or while the sheet is open (the
+page under the sheet then loses its mark).
 
 Filters live in the hash query, so a filtered view is a link. KPI tiles open the
 matching Queue tab; the drawer's "View logs" opens `#/logs?job_id=…`; a log
@@ -59,8 +60,8 @@ The DOM frame is fixed; the skin restyles it.
 .shell
   .sidebar (nav: .brand > .brand-mark + .brand-text > .brand-name, .brand-sub; a.sidebar-new; .nav > .nav-item)
   .main-col
-    header.topbar (.topbar-right: .conn, .search-trigger, .theme)
-    main.main[data-page] (.page-head > h1.page-title + .page-sub + .page-actions; .banners; .page.page-<name>)
+    header.topbar (.topbar-right: .sim-tag in simulate mode, .conn, .search-trigger, .theme)
+    main.main[data-page] (.page-head > h1.page-title + .page-sub; .banners; .page.page-<name>)
   nav.tabbar (> .tab x2, a.tab.tab-new, .tab, button.tab.tab-more, under 640 px)
 ```
 
@@ -68,7 +69,7 @@ The DOM frame is fixed; the skin restyles it.
 | --- | --- | --- |
 | ≥1024 | `--sidebar-w` sidebar, `--topbar-h` top bar | Overview is a 12-column grid: `live` spans 8, `health` 4, the rest 12 |
 | 640-1023 | `--rail-w` icon rail (labels kept for screen readers) | two-column cards stack |
-| <640 | top bar, `--tabbar-h` bottom tab bar + safe area, 16 px gutters | single column, 44 px targets (also on any coarse pointer at any width), the theme control becomes a cycle button |
+| <640 | top bar, `--tabbar-h` bottom tab bar + safe area, 16 px gutters | single column, 44 px targets and 16 px fields (also on any coarse pointer at any width) |
 
 Siblings are spaced by the parent's `gap` (`--page-gap` between sections,
 `--grid-gap` inside grids, `--card-gap` inside cards), never by child margins.
@@ -139,7 +140,7 @@ Stable class names and attributes the skin can style without touching JS:
 | Surface | Hooks |
 | --- | --- |
 | Section / card | `section.card[data-section]` > `header.card-head` (`h2.card-title`, `.card-note`, `.card-actions`) + `.card-body`; `.card-flush` for edge-to-edge lists. Overview sections: `live`, `recent`, `kpis`, `health`, `throughput`, `logs`; Queue `jobs`; Logs `log` |
-| Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub`, `.page-actions` (Overview: `a.btn.btn-primary.page-new`), `.banners`, `.page.page-<name>` (`page-new`, `page-settings` included) |
+| Page | `main.main[data-page]`, `.page-head`, `.page-title`, `.page-sub` (Overview, Queue and Showcase only: live counts), `.banners`, `.page.page-<name>` (`page-new`, `page-settings` included) |
 | KPI | `a.kpi[data-key=queued\|running\|completed\|failed\|total][data-role][data-zero]` > `.kpi-label`, `.kpi-icon`, `.kpi-value`, `.kpi-meta` |
 | Job row | `a.job-row[data-status][.has-palette]` > `.art`, `.job-main` (`.job-facts` > `.job-fact[data-key=type\|genre\|year\|started]`, `.job-title[.is-unresolved]`, `.job-sub`, `.job-error` (failed jobs: one trimmed line, full text in the title attribute)), `.job-type`, `.job-progress`, `.job-status`, `.job-updated`, `.job-chevron` |
 | Progress | `.jprog[data-mode=cells\|bar][data-working]` (a running job with nothing finished yet shows a striped remaining track): up to 60 tracks `.pcells` (`--n`) > `.pcell[data-state=completed\|skipped\|failed\|cancelled\|remaining][data-role]` in that order (the list payload has counts, not per-track order); above 60 `.pbar` > `.pbar-seg[data-role]`; both followed by `.jprog-text` ("12 / 14") and `.jprog-legend` > `.jprog-key[data-state][data-role][data-zero]` > `.jprog-key-n` + `.jprog-key-label` (saved, on disk, failed, cancelled, remaining; every state, zeros included). The list payload cannot tell a track in flight from a waiting one, so "remaining" covers both and there is no byte percentage |
@@ -151,7 +152,7 @@ Stable class names and attributes the skin can style without touching JS:
 | Live failures | `ul.attention` after the live list > `li.attention-row[data-role=danger]` > `.attention-icon`, `.attention-title` (`.attention-label` "Failed", `a.attention-link` to the drawer, mono `.attention-input`), `.attention-detail` (`.attention-error`, relative time), Retry `.btn` |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on tail rows (`.log-tail-row`) and log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-attrs` in the tail) |
-| Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus; it rises over the icon line with a negative `margin-top`, so its label shares the other labels' line, and a skin rule that resizes the mark or the tab icons restates it) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.theme`/`.seg-icons`/`.theme-cycle`; loading shell `.boot` > `.boot-mark` + `.boot-text` (static in `index.html`, replaced on mount); `svg.sprite` at the start of `body`, the in-document icon sprite (`ui/icons.js`), never styled by the skin; `meta[name=theme-color]` set from the body background; `.conn[data-role][data-state=connecting\|live\|reconnecting\|offline\|paused]` > `.conn-dot` + `.conn-label` (the base hides the label under 640 px) |
+| Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new` > `.tab-new-mark` (accent pill around the plus; it rises over the icon line with a negative `margin-top`, so its label shares the other labels' line, and a skin rule that resizes the mark or the tab icons restates it) + `.tab-label` "New", `button.tab.tab-more[aria-expanded][aria-current]`, `.theme` > `button.theme-cycle` (one button cycling System, Light, Dark; its label names the next), `.sim-tag` (simulate mode, explanation in its title and an `.sr-only` span); loading shell `.boot` > `.boot-mark` + `.boot-text` (static in `index.html`, replaced on mount); `svg.sprite` at the start of `body`, the in-document icon sprite (`ui/icons.js`), never styled by the skin; `meta[name=theme-color]` set from the body background; `.conn[data-role][data-state=connecting\|live\|reconnecting\|offline\|paused]` > `.conn-dot` + `.conn-label` (the base hides the label visually unless `data-state` is `reconnecting` or `offline`, and always under 640 px) |
 | Dialogs | `.overlay-host[data-placement=center\|bottom]` > `.scrim` + the panel `[role=dialog\|alertdialog][aria-modal][data-dialog=<name>]` (`ui/dialogs.js` `Dialog`). More sheet: `.sheet.sheet-more[data-dialog=more]` > `.sheet-head`, `ul.more-list` > `a.more-item[data-page][aria-current]` > `.icon`, `.more-label`, `.more-current` ("Current"), chevron. Confirm: `.sheet.dialog-confirm[role=alertdialog][data-dialog=confirm]` > `h2.dialog-title`, `.dialog-body`, `.dialog-actions` > `.btn.dialog-cancel` + `.btn.dialog-confirm-btn[aria-busy]` (`btn-danger` when destructive); a busy button is `.btn[aria-disabled=true]`. Shortcut sheet `[data-dialog=shortcuts]` |
 | Status | `[data-role=info\|success\|danger\|warning\|neutral\|skipped]` sets `--role` and `--role-tint` for everything inside it; `.badge`, `.status-text`, `.notice` |
 | Settings | `.page-settings[data-section-active][data-dirty]` > `nav.settings-nav` (`ul.settings-nav-list` > `a.settings-nav-item[data-section][aria-current=true][data-dirty][data-invalid]` > `.icon`, `.settings-nav-label`, `.settings-nav-mark` (`.settings-nav-dot` when unsaved); `label.settings-jump` > `.settings-jump-label` + `select`, shown under 640 px), `.settings-main` (a size container) > `.settings-error` + `section.card.settings-section[data-section=<id>]` > `.settings-intro`, `.field-list` > `.field[data-key][data-type][data-wide][data-changed][data-invalid]` > `.field-text` (`.field-label`, `.field-changed`, `button.field-revert`, `.field-help`, `code.field-key`), `.field-control` (`input.field-switch[role=switch]` + `.field-switch-state`, `.field-select` > `.select` + `.field-option-hint`, `.field-number` > `.field-input` + `.field-unit`, `.field-input`, `.field-secret`, `.list-editor` > `ol.list-items` > `li.list-item[data-item]` (`.list-rank`, `.list-label`, `.list-code`, `.list-actions` > `.list-up`, `.list-down`, `.list-remove`) + `.list-add`, `.check-group` > `label.check`), then `.field-default` (`code.field-default-value`), `.field-error`, `.field-warning`; `.list-min-note`; panels `.settings-panel[data-panel=library-sync\|config-file]` (`.settings-panel-head`, `.settings-panel-actions`, `.sync-reset`, `.sync-state`, `.config-reload`, `.config-outcome`), `details.template-ref`, `.account` > `.account-block` (`.account-block-head`, `ul.account-rows` > `.account-row` > `.account-name` + `.account-logout`), `form.login-form[data-step=credentials\|code]` > `.form-row`, `.login-blocked`, `.form-actions`; `.save-bar[data-state=dirty\|saving]` > `.save-bar-text` (`.save-bar-count`, `.save-bar-where`) + `.save-bar-actions` (`.save-bar-discard`, `.save-bar-save`) |
@@ -444,7 +445,7 @@ and motion covers.
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |
 | Settings | 6 skeleton lines in the section | | inline note + Retry; a refused save keeps the draft with a notice and per-field errors; wrapper errors as notices in plain words with the server's text under "Details"; a failed load retries only with Retry |
 | New download | a skeleton cover and line per link being looked up; 3 skeleton lines for the options until `GET /config` answers | "No links yet" under the text box | a failed lookup flags its row (warning, Retry) and the link is still sent, and it runs again after a feed resync; options: inline note + Retry (also reloaded after a resync), and a submit sends no overrides; a refused submit shows a notice, `invalid_overrides` on the Options card |
-| Feed | | | "Retrying in N s" (the wait before the next attempt); banner after 10 s; Disconnected after 60 s with Retry; the browser's `online` event retries at once |
+| Feed | | | top bar: the live dot alone while connected, "Reconnecting in N s" (the wait before the next attempt); banner after 10 s; Offline (and the Disconnected banner) after 60 s with Retry; the browser's `online` event retries at once |
 | First load | static "Loading the AMDL console…" in `#app` (`.boot`, `index.html`) once the stylesheets are in, on the skin's canvas in the system theme; replaced on mount | | |
 
 ## Accessibility
