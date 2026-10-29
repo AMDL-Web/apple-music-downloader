@@ -76,7 +76,9 @@ whose storefront can serve it. What the backend asks for:
   caches templates across jobs, and `internal/fairplay#Template` decrypts samples in
   this process, so decryption needs no wrapper request per sample and is limited by CPUs,
   not by the wrapper. `/key` and `/m3u8` share one lock in wrapper-lite, so the client
-  keeps at most 2 of them in flight.
+  keeps at most 2 of them in flight, at most 1 of them `/m3u8`: a batch of quality probes
+  never holds both permits while a `/key` waits. A `/key` attempt's request timeout starts
+  once it holds a permit, so the wait for one does not use up its retries.
 - `/m3u8`: the device master playlist, asked for only by a Hi-Res Lossless track whose
   ALAC may exceed 48 kHz, because the web player's playlist can omit the higher
   renditions; every other master playlist comes from the catalog response.

@@ -49,6 +49,12 @@ const maxReplyBytes = 16 << 20
 // the HTTP worker threads /status and /lyrics need.
 const playbackRequestLimit = 2
 
+// manifestRequestLimit bounds /m3u8 requests holding or waiting for a playback
+// permit. With one of the two permits out of their reach, a batch of quality
+// probes cannot hold both while a /key waits behind them, and since
+// wrapper-lite answers /m3u8 one at a time anyway they lose no throughput.
+const manifestRequestLimit = 1
+
 type LoginResult struct {
 	Status  string `json:"status"`
 	LoginID string `json:"login_id,omitempty"`
@@ -118,6 +124,7 @@ type Client struct {
 	loginTimeout  time.Duration
 	dataLimit     *limits.Semaphore
 	playbackLimit *limits.Semaphore
+	manifestLimit *limits.Semaphore
 
 	parse       TemplateParser
 	templates   *templateCache
@@ -160,6 +167,7 @@ func NewClient(cfg config.WrapperConfig, options ...ClientOption) (*Client, erro
 		loginTimeout:  cfg.LoginTimeout(),
 		dataLimit:     limits.NewSemaphore(config.MaxParallelWrapperRequests),
 		playbackLimit: limits.NewSemaphore(playbackRequestLimit),
+		manifestLimit: limits.NewSemaphore(manifestRequestLimit),
 		parse:         parseFairPlayTemplate,
 		templates:     newTemplateCache(templateCacheSize),
 		samples:       newSamplePool(config.MaxParallelDecrypts),
@@ -304,13 +312,17 @@ func nonNil(values []string) []string {
 	return values
 }
 
-// M3U8 returns the device master playlist for adamID.
+// M3U8 returns the device master playlist for adamID. It takes the manifest
+// permit before the playback permit, so the /m3u8 requests queued behind it
+// wait outside the playback queue and a /key never waits behind more than one.
 func (c *Client) M3U8(ctx context.Context, adamID string) (string, error) {
 	var body struct {
 		M3U8 string `json:"m3u8"`
 	}
-	err := withPermit(ctx, c.playbackLimit, func() error {
-		return c.get(ctx, "/m3u8", url.Values{"adamId": {adamID}}, &body)
+	err := withPermit(ctx, c.manifestLimit, func() error {
+		return withPermit(ctx, c.playbackLimit, func() error {
+			return c.get(ctx, "/m3u8", url.Values{"adamId": {adamID}}, &body)
+		})
 	})
 	return body.M3U8, err
 }

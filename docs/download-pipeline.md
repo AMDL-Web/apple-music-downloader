@@ -110,7 +110,7 @@ All pools are process-wide, shared across every job, sized at startup, and not s
 between backend replicas. The three config keys need a restart to change; the rest are
 fixed sizes in `internal/config` (`MaxParallelDecrypts`, `MaxParallelWrapperRequests`,
 `CatalogRequestsPerSecond`, `CatalogRequestBurst`) and `internal/wrapper`
-(`playbackRequestLimit`).
+(`playbackRequestLimit`, `manifestRequestLimit`).
 
 | Pool | Size | Bounds |
 | --- | ---: | --- |
@@ -119,6 +119,7 @@ fixed sizes in `internal/config` (`MaxParallelDecrypts`, `MaxParallelWrapperRequ
 | Decrypts | CPUs (`GOMAXPROCS`) | Tracks in the decrypt stage, and the goroutines decrypting their samples |
 | Wrapper requests | 24 | Wrapper lyrics, web playback and license requests |
 | Wrapper playback requests | 2 | Wrapper `/key` and `/m3u8`, which wrapper-lite answers one at a time |
+| Wrapper manifest requests | 1 | Wrapper `/m3u8` holding or waiting for a playback permit, so `/m3u8` never holds both |
 | `catalog.max_parallel_requests` | 16 (default) | Apple control-plane HTTP: Catalog API, web token, HLS manifests, artwork |
 | Catalog rate | 10 per second | Sustained authenticated Catalog / amp-api rate |
 | Catalog burst | 16 | Token-bucket burst for the same traffic |

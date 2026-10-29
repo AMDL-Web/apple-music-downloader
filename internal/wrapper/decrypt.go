@@ -107,7 +107,7 @@ func (c *Client) template(ctx context.Context, adamID, key string) (SampleDecryp
 	return c.templates.get(ctx, key, pinned, func() (SampleDecrypter, error) {
 		// The fetch outlives the caller that started it: other tracks may be
 		// waiting for the same key, so one cancelled job must not fail them.
-		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.keyFetchBudget())
+		fetchCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 		defer cancel()
 		stop := context.AfterFunc(c.life, cancel)
 		defer stop()
@@ -115,17 +115,12 @@ func (c *Client) template(ctx context.Context, adamID, key string) (SampleDecryp
 	})
 }
 
-// keyFetchBudget bounds one template fetch with all its retries: every attempt
-// may use the full request timeout, plus one more for the wait behind other
-// /key and /m3u8 requests.
-func (c *Client) keyFetchBudget() time.Duration {
-	budget := time.Duration(len(c.retryDelays)+2) * c.timeout
-	for _, d := range c.retryDelays {
-		budget += d
-	}
-	return budget
-}
-
+// fetchTemplate asks for key's template, retrying after keyRetryDelays. Each
+// attempt's request is bounded by the request timeout once it holds a playback
+// permit; the wait for the permit is not charged to it. That wait is bounded
+// because every permit holder is bounded by the same timeout and at most one
+// holder or waiter is a /m3u8 (manifestRequestLimit), so the queue ahead of a
+// /key is other /key fetches, at most one per track being decrypted.
 func (c *Client) fetchTemplate(ctx context.Context, adamID, key string) (SampleDecrypter, error) {
 	for attempt := 0; ; attempt++ {
 		dec, err := c.fetchTemplateOnce(ctx, adamID, key)
