@@ -17,6 +17,7 @@ import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
 import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError, submittable, downloadLabel, countLine } from '../lib/submit.js';
 import { optionDefaults, presetOverrides, presetValues } from '../lib/overrides.js';
+import { isPicked } from '../lib/lookup.js';
 import { useApp, Card } from '../ui/components.js';
 import { useDebounced, useMedia } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -139,15 +140,26 @@ export function DownloadPage({ route }) {
     });
   };
 
-  const { statusOf, issueOf, sendable, skipped, queue, priorOf, forgetPrior } = useLookups({
+  const { statusOf, issueOf, sendable: allowed, skipped, queue, priorOf, forgetPrior } = useLookups({
     settled,
     entries,
     serverToken,
     trackMode,
     epoch: app.epoch,
     storefront,
+    subscribeFeed: app.subscribeFeed,
   });
   const jobHref = (id) => buildHash('new', route.params, id);
+  // The checked rows are what the submit sends: a row already in the
+  // library or the queue starts unchecked unless the person checks it.
+  const [picks, setPicks] = useState(() => new Map());
+  const onPick = (url, on) => setPicks((m) => new Map(m).set(url, on));
+  const sendable = allowed.filter((u) => isPicked(u, priorOf(u), picks));
+  const overwriteOn = overwrite === null ? Boolean(defaults && defaults.force_overwrite) : overwrite;
+  const previewOf = (url) => {
+    const st = statusOf(url);
+    return st.state === 'ready' ? st.data : null;
+  };
 
   // Submit and results (kept for the life of the tab).
   const [busy, setBusy] = useState(false);
@@ -207,11 +219,14 @@ export function DownloadPage({ route }) {
       app.toast({ message: fail ? fail.message : 'Nothing was submitted', role: 'danger' });
       return;
     }
-    const rows = resultRows(pairs);
+    const rows = resultRows(pairs, previewOf);
     setResults({ rows, overrides });
-    const summary = submitSummary(rows);
     const ids = rows.filter((r) => r.job).map((r) => r.job.id);
-    app.toast({ message: ids.length ? `Download started: ${summary}` : summary, role: ids.length ? 'success' : 'warning' });
+    app.toast({
+      message: submitSummary(rows),
+      role: ids.length ? 'success' : 'warning',
+      action: ids.length ? { label: 'View in Queue', hash: '#/queue' } : null,
+    });
     if (ids.length && app.watchJobs) app.watchJobs(ids);
     forgetPrior(pairs.map((p) => p.url));
     // Keep what was not handled: links not sent (flagged, or after a failed
@@ -232,7 +247,7 @@ export function DownloadPage({ route }) {
     setRetrying((s) => new Set([...s].filter((u) => !urls.includes(u))));
     if (fail) app.toast({ message: fail.message, role: 'danger' });
     if (!pairs.length) return;
-    const fresh = new Map(resultRows(pairs).map((r) => [r.url, r]));
+    const fresh = new Map(resultRows(pairs, previewOf).map((r) => [r.url, r]));
     const ids = [...fresh.values()].filter((r) => r.job).map((r) => r.job.id);
     if (ids.length && app.watchJobs) app.watchJobs(ids);
     setResults((r) => ({ ...r, rows: r.rows.map((row) => fresh.get(row.url) || row) }));
@@ -269,9 +284,12 @@ export function DownloadPage({ route }) {
   // text, not every keystroke.
   const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
   const settledSend = submittable(settledEntries, issueOf);
+  const priorState = (url) => (priorOf(url) || {}).state;
   const count = countLine({
     links: settledEntries.length,
-    fresh: settledSend.length,
+    fresh: settledSend.filter((u) => !priorOf(u)).length,
+    library: settledSend.filter((u) => priorState(u) === 'done').length,
+    queued: settledSend.filter((u) => priorState(u) === 'active').length,
     blocked: settledEntries.filter((e) => (issueOf(e) || {}).blocking).length,
     warned: settledEntries.filter((e) => {
       const i = issueOf(e);
@@ -332,6 +350,9 @@ export function DownloadPage({ route }) {
           onRemove=${removeEntry}
           onRetry=${(url) => queue.current.retry(url)}
           onQuality=${(entry, data) => setQuality({ url: entry.url, title: data.title || entry.url, tracks: data.track_count })}
+          picked=${(url) => isPicked(url, priorOf(url), picks)}
+          onPick=${onPick}
+          overwrite=${overwriteOn}
         />`
       : null}
     <${SubmitBar}
@@ -343,13 +364,13 @@ export function DownloadPage({ route }) {
         custom=${choice.custom}
         onPreset=${(preset) => setChoice({ ...choice, preset })}
         onCustom=${() => setCustomOpen(true)}
-        overwrite=${overwrite === null ? Boolean(defaults && defaults.force_overwrite) : overwrite}
+        overwrite=${overwriteOn}
         onOverwrite=${(v) => setOverwrite(defaults && v === defaults.force_overwrite ? null : v)}
       />`}
       label=${label}
       disabled=${busy || sendable.length === 0}
       busy=${busy}
-      title=${sendable.length === 0 && entries.length ? 'None of these links can be downloaded' : undefined}
+      title=${sendable.length === 0 && entries.length ? 'No checked link can be downloaded' : undefined}
       onSubmit=${() => submit()}
       failure=${failure}
       refusal=${refusal}

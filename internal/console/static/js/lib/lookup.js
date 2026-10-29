@@ -282,3 +282,47 @@ export function priorJob(jobs, link, trackMode = 'song') {
   const done = same.filter((j) => j.status === 'completed').sort((a, b) => newest(a, b, 'finished_at'));
   return done.length ? { state: 'done', job: done[0] } : null;
 }
+
+/**
+ * Whether a detected row is checked for the submit: the person's own pick
+ * when there is one (`picks`, a Map of url -> boolean), else unchecked when
+ * the item has an earlier job, done or still in the queue (`prior`, from
+ * priorJob), else checked.
+ */
+export function isPicked(url, prior, picks) {
+  if (picks && picks.has(url)) return picks.get(url) === true;
+  return !prior;
+}
+
+const sameTarget = (a, b) => Boolean(a && b && a.type === b.type && a.id === b.id);
+
+/**
+ * Applies feed messages to one cached GET downloads page (`jobs`) of
+ * `link`: a job it holds is replaced by a newer snapshot or dropped when
+ * deleted, and a job of the same item that it does not hold yet is added,
+ * so "In the queue now" turns into "In your library" when the job
+ * completes. Returns `jobs` itself when nothing changed.
+ */
+export function applyFeedToJobs(jobs, batch, link, trackMode = 'song') {
+  const want = linkTarget(link, trackMode);
+  let next = Array.isArray(jobs) ? jobs : [];
+  const start = next;
+  for (const msg of batch || []) {
+    if (!msg) continue;
+    if (msg.type === 'download_deleted') {
+      if (next.some((j) => j && j.id === msg.job_id)) next = next.filter((j) => !j || j.id !== msg.job_id);
+      continue;
+    }
+    const job = msg.type === 'download_upserted' ? msg.job : null;
+    if (!job || !job.id) continue;
+    const i = next.findIndex((j) => j && j.id === job.id);
+    if (i >= 0) {
+      if ((Date.parse(job.updated_at || '') || 0) < (Date.parse(next[i].updated_at || '') || 0)) continue;
+      next = next.slice();
+      next[i] = job;
+    } else if (typeof job.input === 'string' && sameTarget(linkTarget(parseLink(job.input), trackMode), want)) {
+      next = [job, ...next];
+    }
+  }
+  return next === start ? jobs : next;
+}

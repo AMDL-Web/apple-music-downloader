@@ -152,8 +152,8 @@
 
 .new-link {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  grid-template-areas: "art main actions";
+  grid-template-columns: auto 48px minmax(0, 1fr) auto;
+  grid-template-areas: "pick art main actions";
   align-items: start;
   gap: var(--s-3);
   padding: var(--s-3) var(--card-pad-x);
@@ -161,6 +161,22 @@
 
 .new-link-art {
   grid-area: art;
+}
+
+/* The include checkbox (the Queue's selection control), centered on the cover. */
+.new-link-pick {
+  grid-area: pick;
+  align-self: center;
+}
+
+.new-link-pick:disabled {
+  cursor: not-allowed;
+}
+
+/* Unchecked rows (in the library, in the queue, or unchosen) stay listed
+   but quiet. */
+.new-link[data-excluded] .new-link-art {
+  opacity: 0.6;
 }
 
 .art-48 {
@@ -283,9 +299,8 @@
   text-decoration: none;
 }
 
-.new-link-prior:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
+.new-link-open {
+  white-space: nowrap;
 }
 
 .new-links-all {
@@ -852,10 +867,10 @@
   }
 
   .new-link {
-    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-columns: auto 48px minmax(0, 1fr);
     grid-template-areas:
-      "art main"
-      "actions actions";
+      "pick art main"
+      "actions actions actions";
     row-gap: var(--s-2);
     padding: var(--s-3) var(--s-4);
   }
@@ -867,8 +882,8 @@
   /* With nothing but Remove, the button stays beside the text instead of
      taking a line of its own. */
   .new-link:not(:has(.new-link-quality, .new-link-retry)) {
-    grid-template-columns: 48px minmax(0, 1fr) auto;
-    grid-template-areas: "art main actions";
+    grid-template-columns: auto 48px minmax(0, 1fr) auto;
+    grid-template-areas: "pick art main actions";
   }
 
   .new-result-row {

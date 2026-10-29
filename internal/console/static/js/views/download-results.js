@@ -6,7 +6,7 @@
 import { html, useMemo, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
 import { getDownload } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, RESULTS_KEY } from '../lib/submit.js';
+import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, seedJob, RESULTS_KEY } from '../lib/submit.js';
 import { readPref, writePref } from '../lib/prefs.js';
 import { jobTitle, sentence } from '../lib/format.js';
 import { useApp, Card, Button, LinkButton, Icon } from '../ui/components.js';
@@ -81,7 +81,8 @@ export function useResults() {
 }
 
 /**
- * Props: rows (lib/submit.js resultRows, kept live by the page), params
+ * Props: rows (lib/submit.js resultRows, kept live by the page; a job
+ * shows its link's preview until Apple names it), params
  * (the page's hash params, kept when a row opens the drawer), busy (the
  * URLs being retried), onRetry(urls), onClear().
  */
@@ -99,7 +100,7 @@ export function ResultsCard({ rows, params, busy, onRetry, onClear }) {
     <ul class="job-list job-list-compact new-results" aria-labelledby="new-results-title">
       ${rows.map((r) => html`<li key=${r.url} class="new-result" data-status=${r.deleted ? 'deleted' : r.view.status}>
         ${r.job && !r.deleted
-          ? html`<${JobRow} job=${r.job} href=${buildHash('new', params, r.job.id)} />`
+          ? html`<${JobRow} job=${seedJob(r.job, r.preview)} href=${buildHash('new', params, r.job.id)} />`
           : html`<${ResultRow} row=${r} params=${params} busy=${busy.has(r.url)} onRetry=${onRetry} />`}
       </li>`)}
     </ul>

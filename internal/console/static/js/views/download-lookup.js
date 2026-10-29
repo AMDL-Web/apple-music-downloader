@@ -2,12 +2,13 @@
 // previewable link through a shared per-tab cache and a bounded queue, and
 // from them which links are flagged and which the submit may send. A second
 // queue asks GET downloads whether an album, song or playlist was
-// downloaded before (lib/lookup.js priorJob).
+// downloaded before (lib/lookup.js priorJob), and the feed keeps those
+// answers live.
 
 import { useState, useEffect, useRef, useMemo } from '../ui/preact.js';
 import { lookupLink, listDownloads } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
-import { createLookupQueue, priorJob, priorQuery, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
+import { createLookupQueue, priorJob, priorQuery, applyFeedToJobs, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { linkIssue, submittable } from '../lib/submit.js';
 
 // Previews outlive the page, so coming back does not look links up again.
@@ -39,9 +40,10 @@ const isAlbumTrack = (url) => {
  * (whether Settings holds a media-user-token, null until the config loads)
  * and `trackMode` the server's catalog config, `epoch` the shell's reconnect counter (a resync after an
  * outage looks failed previews and the history up again), `storefront` the
- * server's default storefront for links without one (see scanLinks).
+ * server's default storefront for links without one (see scanLinks),
+ * `subscribeFeed` the shell's feed (app.subscribeFeed).
  */
-export function useLookups({ settled, entries, serverToken, trackMode, epoch, storefront }) {
+export function useLookups({ settled, entries, serverToken, trackMode, epoch, storefront, subscribeFeed }) {
   // Previews: the first LOOKUP_LIMIT previewable links, 4 at a time.
   const [, setTick] = useState(0);
   const queue = useRef(null);
@@ -72,6 +74,23 @@ export function useLookups({ settled, entries, serverToken, trackMode, epoch, st
     });
   }
   useEffect(() => () => history.current.dispose(), []);
+  // Feed batches update the cached answers in place, so a job that
+  // completes turns "In the queue now" into "In your library".
+  useEffect(
+    () =>
+      subscribeFeed((batch) => {
+        let changed = false;
+        for (const [url, entry] of HISTORY) {
+          if (entry.state !== 'ready' || !entry.data || !Array.isArray(entry.data.downloads)) continue;
+          const next = applyFeedToJobs(entry.data.downloads, batch, parseLink(url), modeRef.current);
+          if (next === entry.data.downloads) continue;
+          entry.data = { ...entry.data, downloads: next };
+          changed = true;
+        }
+        if (changed) setTick((n) => n + 1);
+      }),
+    [],
+  );
   const historyWanted = wanted.filter((u) => HISTORY_KINDS.includes((parseLink(u) || {}).kind));
   useEffect(() => history.current.want(historyWanted), [historyWanted.join('\n')]);
 

@@ -89,11 +89,12 @@ const NOUNS = {
  * The Download button's text for the kinds of the links it sends, in
  * order: "Download 1 album", "Download 2 songs", "Download 3 items" for
  * mixed kinds. With nothing to send: "Paste a link to start" while the box
- * has no links, else "Download".
+ * has no links, "Select a link to download" while some link could be sent
+ * but none is checked (`pickable`), else "Download".
  */
-export function downloadLabel(kinds, hasLinks = true) {
+export function downloadLabel(kinds, hasLinks = true, pickable = false) {
   const list = Array.isArray(kinds) ? kinds : [];
-  if (!list.length) return hasLinks ? 'Download' : 'Paste a link to start';
+  if (!list.length) return !hasLinks ? 'Paste a link to start' : pickable ? 'Select a link to download' : 'Download';
   const same = list.every((k) => k === list[0]) ? NOUNS[list[0]] : null;
   const [one, many] = same || ['item', 'items'];
   return `Download ${list.length} ${list.length === 1 ? one : many}`;
@@ -101,13 +102,13 @@ export function downloadLabel(kinds, hasLinks = true) {
 
 /**
  * The count line under the links: "4 links · 1 new · 2 in library · 1
- * can't be downloaded". `fresh` counts links that can be sent and were
+ * can't be downloaded"; '' with no links (Download says it then). `fresh` counts links that can be sent and were
  * never downloaded, `library` and `queued` those with an earlier job done
  * or still in the queue, `blocked` those that cannot be sent, `warned`
  * those with a warning.
  */
 export function countLine({ links = 0, fresh = 0, library = 0, queued = 0, blocked = 0, warned = 0 } = {}) {
-  if (!links) return 'No links yet';
+  if (!links) return '';
   return [
     `${links} ${links === 1 ? 'link' : 'links'}`,
     fresh ? `${fresh} new` : '',
@@ -206,16 +207,51 @@ export function handledUrls(pairs) {
   return done;
 }
 
+// The preview fields a job row shows before Apple names the job: the same
+// names on LookupResponse and Job.
+const PREVIEW_KEYS = [
+  'title',
+  'artist_name',
+  'curator_name',
+  'artwork_url',
+  'release_date',
+  'genre',
+  'artwork_bg_color',
+  'artwork_text_color1',
+  'artwork_text_color2',
+  'artwork_text_color3',
+  'artwork_text_color4',
+];
+
+/** The preview fields of a LookupResponse a result row keeps, or null. */
+export function previewSeed(data) {
+  if (!data || typeof data !== 'object') return null;
+  const out = {};
+  for (const key of PREVIEW_KEYS) if (typeof data[key] === 'string' && data[key]) out[key] = data[key];
+  return out.title ? out : null;
+}
+
+/** `job` with the preview's fields where the job has none yet (its own win once it resolves). */
+export function seedJob(job, preview) {
+  if (!job || !preview) return job;
+  const out = { ...job };
+  for (const key of PREVIEW_KEYS) if (!out[key] && preview[key]) out[key] = preview[key];
+  return out;
+}
+
 /**
- * Result rows for the page: [{url, view, job, deleted}] where `job` is the
- * Job of an accepted URL, kept live by applyFeedToResults.
+ * Result rows for the page: [{url, view, job, deleted, preview}] where `job`
+ * is the Job of an accepted URL, kept live by applyFeedToResults, and
+ * `preview` the link's preview fields (previewOf(url), previewSeed), shown
+ * until the job resolves.
  */
-export function resultRows(pairs) {
+export function resultRows(pairs, previewOf = () => null) {
   return pairs.map(({ url, result }) => ({
     url,
     view: result ? resultView(result) : { status: 'error', role: 'danger', icon: 'circle-x', label: 'No answer', message: 'The server did not report on this link', detail: '', retry: true },
     job: result && result.status === 'accepted' && result.job ? result.job : null,
     deleted: false,
+    preview: previewSeed(previewOf(url)),
   }));
 }
 
@@ -249,11 +285,11 @@ export function applyFeedToResults(rows, batch) {
   return next;
 }
 
-// The summary's parts in order: an accepted row by its job's live status
-// (or deleted), then the rows the server did not queue.
+// The summary's parts after "Started N downloads": accepted jobs that have
+// finished (or were deleted), then the rows the server did not queue.
+// Queued and running jobs are what "started" means, so they get no part of
+// their own and the words never contradict the list.
 const SUMMARY = [
-  ['running', 'running'],
-  ['queued', 'queued'],
   ['completed', 'completed'],
   ['failed', 'failed'],
   ['cancelled', 'cancelled'],
@@ -268,7 +304,7 @@ function summaryState(r) {
   if (r.view.status === 'accepted') {
     if (r.deleted) return 'deleted';
     const st = r.job && r.job.status;
-    return SUMMARY.some(([k]) => k === st) ? st : 'queued';
+    return SUMMARY.some(([k]) => k === st) ? st : 'started';
   }
   if (r.view.status === 'duplicate_active' || r.view.status === 'duplicate_in_request') return r.view.status;
   return 'other';
@@ -276,8 +312,9 @@ function summaryState(r) {
 
 /**
  * One line for the toast, the live region and the Submitted card, from the
- * rows as they are now: "1 running · 2 completed · 1 already downloading ·
- * 1 not accepted". Accepted rows count by their job's live status.
+ * rows as they are now: "Started 3 downloads · 1 completed · 1 already
+ * downloading · 1 not accepted". Every accepted row counts as started;
+ * those that finished are named again by how.
  */
 export function submitSummary(rows) {
   const n = new Map();
@@ -285,11 +322,10 @@ export function submitSummary(rows) {
     const k = summaryState(r);
     n.set(k, (n.get(k) || 0) + 1);
   }
-  return (
-    SUMMARY.filter(([k]) => n.get(k))
-      .map(([k, text]) => `${n.get(k)} ${text}`)
-      .join(' · ') || 'Nothing was submitted'
-  );
+  const started = rows.filter((r) => r.view.status === 'accepted').length;
+  const parts = SUMMARY.filter(([k]) => n.get(k)).map(([k, text]) => `${n.get(k)} ${text}`);
+  if (started) parts.unshift(`Started ${started} ${started === 1 ? 'download' : 'downloads'}`);
+  return parts.join(' · ') || 'Nothing was submitted';
 }
 
 /** sessionStorage key for the last results, so a reload of the tab keeps them (never the token). */
@@ -314,7 +350,9 @@ export function parseStoredResults(raw) {
   if (typeof raw !== 'string' || !raw) return null;
   try {
     const v = JSON.parse(raw);
-    const rows = v && Array.isArray(v.rows) ? v.rows.filter(isRow).map((r) => ({ url: r.url, view: r.view, job: r.job, deleted: r.deleted === true })) : [];
+    const rows = v && Array.isArray(v.rows)
+      ? v.rows.filter(isRow).map((r) => ({ url: r.url, view: r.view, job: r.job, deleted: r.deleted === true, preview: previewSeed(r.preview) }))
+      : [];
     return rows.length ? { rows, overrides: sanitizeOverrides(v.overrides) } : null;
   } catch {
     return null;

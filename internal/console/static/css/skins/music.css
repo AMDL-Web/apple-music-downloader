@@ -2166,7 +2166,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  left: calc(var(--card-pad-x) + 48px + var(--s-3));
+  left: calc(var(--card-pad-x) + var(--check-size) + 48px + 2 * var(--s-3));
   border-top: var(--row-divider);
 }
 

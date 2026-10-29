@@ -18,6 +18,7 @@ import {
   TOKEN_SETTINGS_HASH,
   downloadLabel,
   countLine,
+  seedJob,
 } from '../static/js/lib/submit.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
@@ -165,7 +166,7 @@ test('feed updates reach only the jobs the results hold', () => {
   assert.equal(stale[0].job.status, 'running', 'an older snapshot does not undo a newer one');
   const gone = applyFeedToResults(running, [{ type: 'download_deleted', job_id: 'job_1' }]);
   assert.equal(gone[0].deleted, true);
-  assert.equal(submitSummary(rows), '1 queued · 1 already downloading · 3 not accepted');
+  assert.equal(submitSummary(rows), 'Started 1 download · 1 already downloading · 3 not accepted');
 });
 
 test('classifySubmitError maps each failure of POST downloads', () => {
@@ -214,19 +215,19 @@ test('linkIssue blocks a storefront Apple does not have and a link without one',
   assert.deepEqual([linkIssue(bare).code, linkIssue(bare).blocking], ['no_storefront', true]);
 });
 
-test('submitSummary follows the live status of each queued job', () => {
+test('submitSummary says started, then how started jobs finished', () => {
   const rows = resultRows([
     { url: IGOR, result: { url: IGOR, status: 'accepted', job: job('a', 'queued', '2026-10-29T00:00:00Z') } },
     { url: FOLKLORE, result: { url: FOLKLORE, status: 'accepted', job: job('b', 'queued', '2026-10-29T00:00:00Z') } },
   ]);
-  assert.equal(submitSummary(rows), '2 queued');
+  assert.equal(submitSummary(rows), 'Started 2 downloads');
   const later = applyFeedToResults(rows, [
     { type: 'download_upserted', job: job('a', 'running', '2026-10-29T00:00:05Z') },
     { type: 'download_deleted', job_id: 'b' },
   ]);
-  assert.equal(submitSummary(later), '1 running · 1 deleted');
+  assert.equal(submitSummary(later), 'Started 2 downloads · 1 deleted', 'running is what started means');
   const done = applyFeedToResults(later, [{ type: 'download_upserted', job: job('a', 'completed', '2026-10-29T00:01:00Z') }]);
-  assert.equal(submitSummary(done), '1 completed · 1 deleted');
+  assert.equal(submitSummary(done), 'Started 2 downloads · 1 completed · 1 deleted');
 });
 
 test('stored results round-trip with only the known overrides', () => {
@@ -241,12 +242,26 @@ test('stored results round-trip with only the known overrides', () => {
 test('Download names what it sends, and the count line what the links are', () => {
   assert.equal(downloadLabel([], false), 'Paste a link to start');
   assert.equal(downloadLabel([], true), 'Download');
+  assert.equal(downloadLabel([], true, true), 'Select a link to download');
   assert.equal(downloadLabel(['album']), 'Download 1 album');
   assert.equal(downloadLabel(['song', 'song']), 'Download 2 songs');
   assert.equal(downloadLabel(['album', 'song', 'playlist']), 'Download 3 items');
-  assert.equal(countLine({}), 'No links yet');
+  assert.equal(countLine({}), '');
   assert.equal(countLine({ links: 4, fresh: 1, blocked: 3 }), "4 links · 1 new · 3 can't be downloaded");
   assert.equal(countLine({ links: 2, fresh: 1, library: 1 }), '2 links · 1 new · 1 in library');
   assert.equal(countLine({ links: 3, fresh: 1, queued: 1, warned: 1 }), '3 links · 1 new · 1 in the queue · 1 needs a look');
   assert.doesNotMatch(countLine({ links: 5, blocked: 2, warned: 2 }), /flagged/);
+});
+
+test('a submitted row shows the preview until its job resolves', () => {
+  const preview = { title: 'IGOR', artist_name: 'Tyler, The Creator', artwork_url: 'https://x/{w}x{h}bb.jpg', artwork_bg_color: 'f1a8bf', track_count: 12, type: 'album' };
+  const rows = resultRows([{ url: IGOR, result: { url: IGOR, status: 'accepted', job: job('a', 'queued', '2026-10-29T00:00:00Z') } }], () => preview);
+  assert.deepEqual(rows[0].preview, { title: 'IGOR', artist_name: 'Tyler, The Creator', artwork_url: 'https://x/{w}x{h}bb.jpg', artwork_bg_color: 'f1a8bf' });
+  const seeded = seedJob(rows[0].job, rows[0].preview);
+  assert.equal(seeded.title, 'IGOR');
+  assert.equal(seeded.status, 'queued');
+  assert.equal(seedJob({ ...rows[0].job, title: 'IGOR (Deluxe)' }, rows[0].preview).title, 'IGOR (Deluxe)', 'the job wins once it resolves');
+  assert.equal(resultRows([{ url: IGOR, result: null }])[0].preview, null);
+  const text = storedResults({ rows, overrides: {} });
+  assert.equal(parseStoredResults(text).rows[0].preview.title, 'IGOR');
 });

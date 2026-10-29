@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLink } from '../static/js/lib/links.js';
-import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention } from '../static/js/lib/lookup.js';
+import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention, isPicked, applyFeedToJobs } from '../static/js/lib/lookup.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -229,4 +229,30 @@ test('a row needs attention for any issue or an earlier job still in flight, not
   assert.equal(needsAttention(null, { state: 'active', job: {} }), true);
   assert.equal(needsAttention(null, { state: 'done', job: {} }), false);
   assert.equal(needsAttention(null, null), false);
+});
+
+test('rows with an earlier job start unchecked; a pick wins', () => {
+  const done = { state: 'done', job: { id: 'j' } };
+  assert.equal(isPicked('u', null, new Map()), true);
+  assert.equal(isPicked('u', done, new Map()), false);
+  assert.equal(isPicked('u', { state: 'active', job: { id: 'j' } }, null), false);
+  assert.equal(isPicked('u', done, new Map([['u', true]])), true);
+  assert.equal(isPicked('u', null, new Map([['u', false]])), false);
+});
+
+test('the feed keeps an earlier-job answer live', () => {
+  const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
+  const link = parseLink(IGOR);
+  const queued = { id: 'j1', input: IGOR, status: 'running', updated_at: '2026-10-29T10:00:00Z', created_at: '2026-10-29T10:00:00Z' };
+  const jobs = [queued];
+  assert.equal(priorJob(jobs, link).state, 'active');
+  const done = applyFeedToJobs(jobs, [{ type: 'download_upserted', job: { ...queued, status: 'completed', updated_at: '2026-10-29T10:05:00Z', finished_at: '2026-10-29T10:05:00Z' } }], link);
+  assert.equal(priorJob(done, link).state, 'done');
+  const stale = applyFeedToJobs(done, [{ type: 'download_upserted', job: queued }], link);
+  assert.equal(stale, done, 'an older snapshot changes nothing');
+  const other = applyFeedToJobs(jobs, [{ type: 'download_upserted', job: { id: 'x', input: 'https://music.apple.com/us/album/blonde/1146195596', status: 'queued' } }], link);
+  assert.equal(other, jobs, 'a job of another item is ignored');
+  const fresh = applyFeedToJobs([], [{ type: 'download_upserted', job: { id: 'j2', input: `${IGOR}?l=en`, status: 'queued', created_at: '2026-10-29T11:00:00Z' } }], link);
+  assert.equal(priorJob(fresh, link).job.id, 'j2', 'a new job of the same item joins');
+  assert.deepEqual(applyFeedToJobs(done, [{ type: 'download_deleted', job_id: 'j1' }], link), []);
 });

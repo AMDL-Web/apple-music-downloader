@@ -1,8 +1,10 @@
 // New download: the detected links. Each row shows at once what the link
 // is (kind, storefront) from lib/links.js, then the lookup preview (cover,
 // title, artist, tracks, year) when it arrives, any reason it cannot be
-// sent or needs attention, and an earlier job of the same item. The page
-// owns the lookup queues; rows read them. The first ROWS_SHOWN rows are
+// sent or needs attention, and an earlier job of the same item. Each row
+// that can be sent has a checkbox; one already in the library or the queue
+// starts unchecked (lib/lookup.js isPicked). The page owns the lookup
+// queues and the picks; rows read them. The first ROWS_SHOWN rows are
 // listed, plus every one that needs a look (an issue, an earlier job still
 // queued or running), until Show all.
 
@@ -23,16 +25,18 @@ const QUALITY_TYPES = ['album', 'song'];
  * 'idle' for a link past the lookup limit), issueOf(entry), priorOf(url)
  * (an earlier job, lib/lookup.js priorJob), jobHref(id), onRemove(url),
  * onRetry(url), onQuality(entry, data), skipped (links past the lookup
- * limit that would otherwise be looked up), dupes (repeats merged).
+ * limit that would otherwise be looked up), dupes (repeats merged),
+ * picked(url) and onPick(url, checked) (the checkboxes), overwrite (whether
+ * the submit overwrites existing files).
  */
-export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemove, onRetry, onQuality, skipped, dupes }) {
+export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemove, onRetry, onQuality, skipped, dupes, picked, onPick, overwrite }) {
   const [all, setAll] = useState(false);
   const blocked = (e) => Boolean((issueOf(e) || {}).blocking);
   const flagged = entries.filter(blocked).length;
   const note = [
     `${entries.length} ${entries.length === 1 ? 'link' : 'links'}`,
     dupes ? `${dupes} ${dupes === 1 ? 'duplicate' : 'duplicates'} merged` : '',
-    flagged ? `${flagged} flagged` : '',
+    flagged ? `${flagged} can't be downloaded` : '',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -64,6 +68,9 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
           onRemove=${onRemove}
           onRetry=${onRetry}
           onQuality=${onQuality}
+          picked=${picked(e.url)}
+          onPick=${onPick}
+          overwrite=${overwrite}
         />`,
       )}
     </ul>
@@ -71,7 +78,7 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
       ? html`<div class="new-links-all">
           <${Button} size="sm" icon=${all ? 'chevron-up' : 'chevron-down'} className="new-links-toggle" aria-expanded=${String(all)} onClick=${() => setAll(!all)}
             >${all ? `Show the first ${ROWS_SHOWN}` : `Show all ${entries.length} links`}</${Button}>
-          ${!all ? html`<span class="new-hint">${hidden} more not listed, ${hiddenPrior ? `${hiddenPrior} downloaded before` : 'none flagged so far'}.</span>` : null}
+          ${!all ? html`<span class="new-hint">${hidden} more not listed, ${hiddenPrior ? `${hiddenPrior} in your library` : 'none with a problem so far'}.</span>` : null}
         </div>`
       : null}
     ${skipped > 0
@@ -84,17 +91,17 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, jobHref, onRemo
   </${Card}>`;
 }
 
-/** The quiet note for an earlier job: in the queue now, or when it last finished. */
+/** The quiet note for an earlier job: in the queue now, or in the library since when, with Open. */
 function PriorNote({ prior, href }) {
   const active = prior.state === 'active';
-  const text = active ? (prior.job.status === 'running' ? 'Downloading now' : 'Already in the queue') : `Downloaded ${shortDate(prior.job.finished_at) || 'before'}`;
-  return html`<a class="new-link-prior" data-state=${prior.state} href=${href} title="Open that job">
+  const when = active ? '' : shortDate(prior.job.finished_at);
+  return html`<span class="new-link-prior" data-state=${prior.state}>
     <${Icon} name=${active ? 'clock' : 'circle-check'} size="sm" />
-    <span>${text}</span>
-  </a>`;
+    <span>${active ? 'In the queue now' : 'In your library'}${when ? ` · ${when}` : ''} · <a class="link new-link-open" href=${href} title="Open that job">Open</a></span>
+  </span>`;
 }
 
-function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQuality }) {
+function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQuality, picked, onPick, overwrite }) {
   const link = entry.link;
   const data = status.state === 'ready' ? status.data : null;
   const facts = previewFacts(data);
@@ -105,6 +112,7 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
   const name = facts ? facts.title : bare(entry.url);
   const cls = ['new-link', palette ? 'has-palette' : ''].filter(Boolean).join(' ');
   const artist = kind === 'artist' && !(issue && issue.blocking);
+  const blocked = !link || Boolean(issue && issue.blocking);
   const sfTitle = link && link.noStorefront ? 'Storefront taken from the other links, since this link has none' : 'Storefront';
   return html`<li
     class=${cls}
@@ -112,9 +120,19 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
     data-state=${link ? status.state : 'invalid'}
     data-issue=${issue ? issue.code : undefined}
     data-blocking=${issue && issue.blocking ? '' : undefined}
+    data-excluded=${blocked || !picked ? '' : undefined}
     aria-busy=${loading ? 'true' : undefined}
     style=${paletteStyle(palette)}
   >
+    <input
+      type="checkbox"
+      class="job-check-input new-link-pick"
+      checked=${!blocked && picked}
+      disabled=${blocked}
+      aria-label=${blocked ? `${name}: can't be downloaded` : `Download ${name}`}
+      title=${blocked ? "Can't be downloaded" : undefined}
+      onChange=${(e) => onPick(entry.url, e.currentTarget.checked)}
+    />
     ${data
       ? html`<${Artwork} url=${data.artwork_url} bg=${palette && palette.bg} px=${160} className="art-48 new-link-art" />`
       : html`<div class="art art-48 new-link-art" aria-hidden="true">
@@ -145,7 +163,10 @@ function LinkRow({ entry, status, issue, prior, jobHref, onRemove, onRetry, onQu
       ${link && link.noStorefront && link.storefront && !issue
         ? html`<span class="new-link-note" data-note="storefront">No storefront in the link: read as ${link.storefront.toUpperCase()}, like the other links</span>`
         : null}
-      ${prior && !(issue && issue.blocking) ? html`<${PriorNote} prior=${prior} href=${jobHref(prior.job.id)} />` : null}
+      ${prior && !blocked ? html`<${PriorNote} prior=${prior} href=${jobHref(prior.job.id)} />` : null}
+      ${prior && !blocked && prior.state === 'done' && picked && !overwrite
+        ? html`<span class="new-link-note" data-note="overwrite">Tracks already on disk are skipped unless Overwrite existing files is on</span>`
+        : null}
       ${issue
         ? html`<span class="new-link-issue status-text" data-role=${issue.role} title=${issue.title || undefined}>
             <${Icon} name=${issue.role === 'danger' ? 'circle-x' : 'triangle-alert'} size="sm" />
