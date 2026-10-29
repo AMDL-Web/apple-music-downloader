@@ -466,14 +466,15 @@
     overflow-wrap: anywhere;
   }
 
-  /* Five tabs do not fit 358 px with every count; the open tab keeps its and
-     is as wide as its label and count need. */
+  /* Five tabs do not fit 358 px with every count; the open tab keeps its. Each
+     tab is as wide as its label needs, and the spare room is shared. */
   .page-queue .seg-btn[aria-pressed="false"] .seg-count {
     display: none;
   }
 
-  .page-queue .seg-btn[aria-pressed="true"] {
-    flex: 0 0 auto;
+  .page-queue .seg-btn {
+    flex: 1 1 auto;
+    padding-inline: var(--s-1_5);
   }
 
   .bulk-hint.is-intro {
