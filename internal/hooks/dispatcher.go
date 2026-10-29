@@ -15,6 +15,12 @@ import (
 // job's SSE stream) without internal/hooks importing internal/jobs.
 type EventRecorder func(ctx context.Context, ev domain.Event) error
 
+// Runner executes one hook entry against a payload. There are two: the webhook
+// and exec runners.
+type Runner interface {
+	Run(ctx context.Context, entry Entry, payload Payload) error
+}
+
 // retryDelay is the wait between two attempts of one hook execution.
 const retryDelay = time.Second
 
@@ -31,6 +37,10 @@ type Dispatcher struct {
 	recorder EventRecorder
 	logger   *slog.Logger
 	sem      chan struct{}
+
+	// runner, when set, runs every entry in place of its type's runner. Tests
+	// set it; NewDispatcher leaves it nil.
+	runner Runner
 
 	// runCtx is the parent of every hook attempt; abortRuns ends them all.
 	// retryCtx, its child, ends retry waits and keeps further attempts from
@@ -59,7 +69,7 @@ type Dispatcher struct {
 	// recorded their terminal hook_succeeded/hook_failed event yet. A caller
 	// deciding whether a job's event stream still has anything left to deliver
 	// cannot rely on the job's own terminal event alone: hook executions are
-	// fire-and-forget goroutines that can run for as long as their configured
+	// fire-and-forget goroutines that can run for as long as the hook
 	// timeout, well after the job itself reached a terminal status. See
 	// Pending.
 	pending map[string]int
@@ -70,7 +80,7 @@ func NewDispatcher(cfg Config, recorder EventRecorder, logger *slog.Logger) *Dis
 	retryCtx, stopRetries := context.WithCancel(runCtx)
 	return &Dispatcher{
 		cfg: cfg, recorder: recorder, logger: logger,
-		sem:    make(chan struct{}, cfg.Concurrency()),
+		sem:    make(chan struct{}, maxConcurrent),
 		runCtx: runCtx, abortRuns: abortRuns, retryCtx: retryCtx, stopRetries: stopRetries,
 		pending: map[string]int{},
 		done:    make(chan struct{}),
@@ -175,8 +185,7 @@ func (d *Dispatcher) execute(entry Entry, payload Payload) {
 	}
 	defer func() { <-d.sem }()
 
-	runner := runners[entry.Type]
-	timeout := entry.Timeout(d.cfg.Timeout())
+	runner := d.runnerFor(entry)
 
 	d.record(logger, entry, payload.Job.ID, domain.EventHookStarted, "", nil)
 	logger.Debug("hook execution started")
@@ -191,7 +200,7 @@ func (d *Dispatcher) execute(entry Entry, payload Payload) {
 	attempt := 0
 	for attempt < maxAttempts {
 		attempt++
-		runCtx, cancel := context.WithTimeout(d.runCtx, timeout)
+		runCtx, cancel := context.WithTimeout(d.runCtx, hookTimeout)
 		start := time.Now()
 		err := runner.Run(runCtx, entry, payload)
 		duration := time.Since(start)
@@ -211,6 +220,18 @@ func (d *Dispatcher) execute(entry Entry, payload Payload) {
 		}
 	}
 	d.record(logger, entry, payload.Job.ID, domain.EventHookFailed, lastErr.Error(), map[string]any{"attempts": attempt})
+}
+
+// runnerFor picks the runner for an entry's type. validate has already
+// rejected any other type.
+func (d *Dispatcher) runnerFor(entry Entry) Runner {
+	if d.runner != nil {
+		return d.runner
+	}
+	if entry.Type == typeWebhook {
+		return &webhookRunner{client: webhookClient}
+	}
+	return &execRunner{}
 }
 
 // waitRetry waits retryDelay before another attempt and reports whether to

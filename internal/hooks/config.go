@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"amdl/internal/config"
 	"amdl/internal/domain"
 
 	"gopkg.in/yaml.v3"
@@ -18,43 +19,41 @@ import (
 // separately from configs/config.yaml so hook entries can be added, removed,
 // or toggled without touching the main backend configuration.
 type Config struct {
-	Enabled        bool    `yaml:"enabled"`
-	TimeoutSeconds int     `yaml:"timeout_seconds"`
-	MaxConcurrent  int     `yaml:"max_concurrent"`
-	Entries        []Entry `yaml:"entries"`
+	Enabled bool    `yaml:"enabled"`
+	Entries []Entry `yaml:"entries"`
 }
 
-// Entry is one hook definition. Enabled and SendPayload use pointers so an
-// omitted field defaults to true while an explicit `false` in the file is
-// still honored.
+// hookTimeout bounds every attempt of every hook, and maxConcurrent bounds the
+// hook executions running at once across all jobs and entries. They are fixed
+// rather than configurable: one install serves one user.
+const (
+	hookTimeout   = 30 * time.Second
+	maxConcurrent = 2
+)
+
+// Hook entry types. validate and Dispatcher.runnerFor switch over the same two.
+const (
+	typeWebhook = "webhook"
+	typeExec    = "exec"
+)
+
+// Entry is one hook definition. Enabled uses a pointer so an omitted field
+// defaults to true while an explicit `false` in the file is still honored.
 type Entry struct {
-	Name           string            `yaml:"name"`
-	Enabled        *bool             `yaml:"enabled"`
-	Type           string            `yaml:"type"`
-	Events         []string          `yaml:"events"`
-	JobTypes       []string          `yaml:"job_types"`
-	URL            string            `yaml:"url"`
-	Headers        map[string]string `yaml:"headers"`
-	SendPayload    *bool             `yaml:"send_payload"`
-	MaxAttempts    int               `yaml:"max_attempts"`
-	TimeoutSeconds int               `yaml:"timeout_seconds"`
-	Command        string            `yaml:"command"`
-	Workdir        string            `yaml:"workdir"`
+	Name        string            `yaml:"name"`
+	Enabled     *bool             `yaml:"enabled"`
+	Type        string            `yaml:"type"`
+	Events      []string          `yaml:"events"`
+	JobTypes    []string          `yaml:"job_types"`
+	URL         string            `yaml:"url"`
+	Headers     map[string]string `yaml:"headers"`
+	MaxAttempts int               `yaml:"max_attempts"`
+	Command     string            `yaml:"command"`
+	Workdir     string            `yaml:"workdir"`
 }
 
 func (e Entry) IsEnabled() bool {
 	return e.Enabled == nil || *e.Enabled
-}
-
-func (e Entry) SendsPayload() bool {
-	return e.SendPayload == nil || *e.SendPayload
-}
-
-func (e Entry) Timeout(fallback time.Duration) time.Duration {
-	if e.TimeoutSeconds <= 0 {
-		return fallback
-	}
-	return time.Duration(e.TimeoutSeconds) * time.Second
 }
 
 func (e Entry) MatchesEvent(event string) bool {
@@ -79,21 +78,7 @@ func (e Entry) MatchesJobType(jobType string) bool {
 }
 
 func Default() Config {
-	return Config{Enabled: false, TimeoutSeconds: 30, MaxConcurrent: 2}
-}
-
-func (c Config) Timeout() time.Duration {
-	if c.TimeoutSeconds <= 0 {
-		return 30 * time.Second
-	}
-	return time.Duration(c.TimeoutSeconds) * time.Second
-}
-
-func (c Config) Concurrency() int {
-	if c.MaxConcurrent <= 0 {
-		return 2
-	}
-	return c.MaxConcurrent
+	return Config{}
 }
 
 // LoadConfig reads and validates the hooks config file at path. A missing
@@ -108,6 +93,10 @@ func LoadConfig(path string) (Config, error) {
 		}
 		return cfg, err
 	}
+	if removed := removedKeys(raw); len(removed) > 0 {
+		return cfg, fmt.Errorf("removed hooks key(s) %s; every hook now gets the payload and runs with a fixed %s timeout and at most %d hooks at once, see %s",
+			strings.Join(removed, ", "), hookTimeout, maxConcurrent, config.UpgradeGuide)
+	}
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
@@ -117,6 +106,39 @@ func LoadConfig(path string) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// removedKeys lists the keys an older hooks.yaml may hold that no longer exist,
+// so the startup error names them and points to the upgrade guide instead of
+// the decoder's bare "field not found". Entries are named by hook name, or by
+// position when the name is missing. A document that does not parse yields nil
+// and the typed decoder reports it.
+func removedKeys(raw []byte) []string {
+	var doc struct {
+		Entries []map[string]any `yaml:"entries"`
+	}
+	var top map[string]any
+	if yaml.Unmarshal(raw, &top) != nil || yaml.Unmarshal(raw, &doc) != nil {
+		return nil
+	}
+	var removed []string
+	for _, key := range []string{"timeout_seconds", "max_concurrent"} {
+		if _, ok := top[key]; ok {
+			removed = append(removed, key)
+		}
+	}
+	for i, entry := range doc.Entries {
+		label := fmt.Sprintf("entries[%d]", i)
+		if name, ok := entry["name"].(string); ok && name != "" {
+			label = fmt.Sprintf("entries[%q]", name)
+		}
+		for _, key := range []string{"send_payload", "timeout_seconds"} {
+			if _, ok := entry[key]; ok {
+				removed = append(removed, label+"."+key)
+			}
+		}
+	}
+	return removed
 }
 
 // allowedEvents are the hook event names, which are the event types of the
@@ -145,8 +167,8 @@ func (c Config) validate() error {
 		}
 		seenNames[e.Name] = true
 
-		if _, ok := runners[e.Type]; !ok {
-			return fmt.Errorf("%s: type must be one of %s", label, strings.Join(registeredTypes(), ", "))
+		if e.Type != typeWebhook && e.Type != typeExec {
+			return fmt.Errorf("%s: type must be one of %s, %s", label, typeWebhook, typeExec)
 		}
 		if len(e.Events) == 0 {
 			return fmt.Errorf("%s: events must list at least one of %s", label, strings.Join(sortedKeys(allowedEvents), ", "))
@@ -177,14 +199,14 @@ func (c Config) validate() error {
 			}
 		}
 		switch e.Type {
-		case "webhook":
+		case typeWebhook:
 			if strings.TrimSpace(e.URL) == "" {
 				return fmt.Errorf("%s: url is required for type webhook", label)
 			}
 			if err := validateWebhookURL(e.URL); err != nil {
 				return fmt.Errorf("%s: url: %w", label, err)
 			}
-		case "exec":
+		case typeExec:
 			if strings.TrimSpace(e.Command) == "" {
 				return fmt.Errorf("%s: command is required for type exec", label)
 			}

@@ -155,16 +155,6 @@ func TestList(t *testing.T) {
 func TestDispatchRunsEveryEnabledMatch(t *testing.T) {
 	runner := &recordingRunner{}
 	const runnerType = "match-test"
-	previous, hadPrevious := runners[runnerType]
-	runners[runnerType] = runner
-	defer func() {
-		if hadPrevious {
-			runners[runnerType] = previous
-		} else {
-			delete(runners, runnerType)
-		}
-	}()
-
 	cfg := Config{Enabled: true, Entries: []Entry{
 		{Name: "first", Type: runnerType, Events: []string{"job_finished"}},
 		{Name: "second", Type: runnerType, Events: []string{"job_finished"}},
@@ -187,6 +177,7 @@ func TestDispatchRunsEveryEnabledMatch(t *testing.T) {
 			runner.reset()
 			job := domain.Job{ID: "job-1", Type: "song", Overrides: &config.DownloadOverrides{ForceOverwrite: &force}}
 			d := NewDispatcher(cfg, nil, discardLogger())
+			d.runner = runner
 			d.Dispatch(tt.event, job, nil)
 			if err := d.Shutdown(context.Background()); err != nil {
 				t.Fatal(err)
@@ -211,7 +202,7 @@ func TestDispatchRunsMatchingWebhookAndRecordsSuccessEvent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := Config{Enabled: true, TimeoutSeconds: 5, MaxConcurrent: 2, Entries: []Entry{
+	cfg := Config{Enabled: true, Entries: []Entry{
 		{Name: "emby-refresh", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
 	}}
 	collector := newEventCollector(2) // hook_started + hook_succeeded
@@ -245,35 +236,7 @@ func TestDispatchRunsMatchingWebhookAndRecordsSuccessEvent(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(gotBody) == 0 {
-		t.Fatal("webhook received empty body, want JSON payload (send_payload defaults to true)")
-	}
-}
-
-func TestDispatchWebhookNoPayloadSendsEmptyBody(t *testing.T) {
-	var gotLen int
-	var gotContentType string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		gotLen = len(body)
-		gotContentType = r.Header.Get("Content-Type")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	cfg := Config{Enabled: true, Entries: []Entry{
-		{Name: "refresh", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL, SendPayload: boolPtr(false)},
-	}}
-	collector := newEventCollector(2)
-	d := NewDispatcher(cfg, collector.record, discardLogger())
-	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
-	collector.wait(t)
-	d.Shutdown(context.Background())
-
-	if gotLen != 0 {
-		t.Fatalf("body length = %d, want 0 when send_payload is false", gotLen)
-	}
-	if gotContentType != "" {
-		t.Fatalf("content-type = %q, want empty when send_payload is false", gotContentType)
+		t.Fatal("webhook received empty body, want the JSON payload")
 	}
 }
 
@@ -349,7 +312,7 @@ func TestPendingTracksInFlightHookExecution(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := Config{Enabled: true, TimeoutSeconds: 5, Entries: []Entry{
+	cfg := Config{Enabled: true, Entries: []Entry{
 		{Name: "h", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
 	}}
 	collector := newEventCollector(2) // hook_started + hook_succeeded

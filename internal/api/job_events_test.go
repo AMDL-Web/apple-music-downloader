@@ -222,7 +222,7 @@ func TestEventsWaitsForPendingHookBeforeClosingTerminalJob(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer hookServer.Close()
-	dispatcher := hooks.NewDispatcher(hooks.Config{Enabled: true, TimeoutSeconds: 5, Entries: []hooks.Entry{
+	dispatcher := hooks.NewDispatcher(hooks.Config{Enabled: true, Entries: []hooks.Entry{
 		{Name: "notify", Type: "webhook", Events: []string{"job_finished"}, URL: hookServer.URL},
 	}}, manager.Event, slog.Default())
 	manager.SetHooks(dispatcher)

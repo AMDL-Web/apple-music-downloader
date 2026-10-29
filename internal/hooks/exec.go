@@ -13,10 +13,6 @@ import (
 	"unicode/utf8"
 )
 
-func init() {
-	register("exec", &execRunner{})
-}
-
 // stderrTailBytes caps how much of a failed exec hook's stderr is kept. The
 // text becomes the hook_failed event message, which is stored in SQLite and
 // streamed to every SSE client, so a script that dumps megabytes must not land

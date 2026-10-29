@@ -12,19 +12,14 @@ summary. The file is loaded independently of `config.yaml`, so hooks can be adde
 or toggled without touching the main configuration. A missing file is not an error; hooks
 are simply disabled. **The file is read once at startup — changes need a restart.**
 
-Top-level keys:
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `enabled` | `false` | Master switch. When off, no entry runs regardless of its own flag. |
-| `timeout_seconds` | 30 | Default per-hook timeout, used when an entry sets none. |
-| `max_concurrent` | 2 | Maximum hook executions running at once across all jobs and entries. |
+The one top-level key is `enabled` (default `false`), the master switch: when off, no entry
+runs regardless of its own flag. Every attempt is cut off after 30 seconds, and at most two
+hook executions run at once across all jobs and entries; neither limit is a key.
 
 Each entry in `entries` needs a unique `name`, a `type` (`webhook` or `exec`), and at least
 one event from `job_queued`, `job_finished`, `job_failed`, `job_cancelled`. `job_types`
 filters by `song`, `album`, `playlist`, `artist`, `station`; empty or omitted matches all.
-Every entry whose `enabled`, `events` and `job_types` all match runs concurrently, bounded
-by `max_concurrent`.
+Every entry whose `enabled`, `events` and `job_types` all match runs, within that limit of two.
 
 - `job_queued` fires right after creation, before any track is resolved — the payload has
   no `items` and `total_items` is 0. It **cannot** share an entry with a terminal event;
@@ -37,8 +32,9 @@ by `max_concurrent`.
 
 **Webhook entries** POST to `url`, which must be an absolute `http` or `https` URL (an
 invalid one fails startup and names the entry), with optional `headers`.
-`send_payload: false` sends an empty body, which suits refresh-style endpoints that ignore
-it. `max_attempts` counts the first try, and retries wait one second between attempts.
+The body is always the JSON payload below; an endpoint that ignores it, such as a library
+refresh, just ignores it. `max_attempts` counts the first try, and retries wait one second
+between attempts.
 
 **Exec entries** run `command` through `sh -c` with the JSON payload on stdin, optionally
 in `workdir`. The command inherits the backend's environment (`PATH`, `HOME`, `TZ`, …)
@@ -63,7 +59,7 @@ AMDL_OUTPUT_PATHS     newline-separated absolute output paths
 
 A failing exec hook records the last 4 KiB of its stderr in its `hook_failed` event.
 
-The JSON payload — sent as the webhook body when `send_payload` is true, and written to an
+The JSON payload — sent as the webhook body and written to an
 exec hook's stdin — looks like this. The `job` counters are the API's (see
 [api.md](api.md#query-cancel-retry-delete)); `error` is present only when the job has one, `started_at` and
 `finished_at` only once set, and `output_path` is absolute:

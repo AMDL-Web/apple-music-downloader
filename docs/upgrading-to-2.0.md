@@ -20,7 +20,9 @@ needs the API changes below before it works against 2.0.
    `config.yaml` (for example `AMDL_SIMULATE_ENABLED=true` becomes `enabled: true` under
    `simulate:`), then unset it: 2.0 ignores the rest and logs a warning naming each one.
 4. Remove the keys listed as removed under [Config and environment](#config-and-environment)
-   from `config.yaml` if present: 2.0 rejects unknown keys at startup.
+   from `config.yaml` if present, and the removed keys under [Hooks](#hooks) from
+   `hooks.yaml` (`timeout_seconds` and `max_concurrent` at the top level,
+   `send_payload` and `timeout_seconds` in entries): 2.0 rejects them at startup.
 5. If `config.yaml` omits any key in the defaults table below, decide whether you want
    the new default or should write the old value into the file.
 6. Give the container time to stop: `stop_grace_period: 2m` in Compose or
@@ -137,6 +139,9 @@ needs the API changes below before it works against 2.0.
 | Failed exec hook message | all of stderr | the last 4 KiB of stderr | hook status views |
 | Restart while a job runs | the job ended `cancelled` and fired `job_cancelled` | no hook: the job resumes on the next start and fires its terminal hook when it finishes | `job_cancelled` receivers |
 | Hook selection per submission | `overrides.hooks` limited a batch to named entries (`[]` ran none) | removed; every enabled entry whose `events` and `job_types` match runs for every job. `GET /api/v1/hooks` still lists the entries | scripts that turned hooks off for a batch |
+| Hook limits | top-level `timeout_seconds` (default 30) and `max_concurrent` (default 2) in `hooks.yaml` | removed, fixed at 30 seconds per attempt and 2 executions at once; a file that still has either fails startup naming it | `hooks.yaml` files that set either |
+| Per-entry `timeout_seconds` | overrode the top-level timeout for one hook | removed; every attempt is cut off after 30 seconds; a file that still has it fails startup naming the entry | `hooks.yaml` entries that set it |
+| Webhook `send_payload` | `send_payload: false` sent an empty body | removed; the body is always the JSON payload, and a receiver that ignores the body ignores it; a file that still has it fails startup naming the entry | `hooks.yaml` webhook entries that set it |
 | Shutdown while a hook retries | slept out every remaining retry | retries stop; an attempt still running after the drain is cancelled and recorded as `hook_failed` | |
 
 ## Output paths

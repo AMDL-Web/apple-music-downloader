@@ -907,7 +907,7 @@ func TestCancelRacingStartupDispatchesExactlyOneConsistentHook(t *testing.T) {
 	}
 	defer store.Close()
 
-	hooksCfg := hooks.Config{Enabled: true, MaxConcurrent: 8, Entries: []hooks.Entry{
+	hooksCfg := hooks.Config{Enabled: true, Entries: []hooks.Entry{
 		{Name: "terminal", Type: "webhook", Events: []string{"job_finished", "job_failed", "job_cancelled"}, URL: server.URL},
 	}}
 	manager := NewManager(store, events.NewHub(), raceProcessor{}, 4, slog.Default())

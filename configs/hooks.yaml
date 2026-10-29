@@ -12,20 +12,13 @@
 # runs regardless of its own `enabled` value. Default false.
 enabled: false
 
-# integer seconds: default per-hook execution timeout, used when an entry
-# does not set its own timeout_seconds. Values <= 0 fall back to 30 seconds.
-timeout_seconds: 30
-
-# integer: maximum hook executions running concurrently across all jobs and
-# all entries. Values <= 0 fall back to 2.
-max_concurrent: 2
-
 # list: hook definitions. Evaluated independently for every job queued and
 # terminal job event; every entry whose `enabled`, `events`, and `job_types`
-# all match runs concurrently (bounded by max_concurrent above). Add a list item to
-# create a new hook, delete one to remove it, or flip `enabled` to pause it
-# without losing its configuration. A download submission cannot choose among
-# the entries: every enabled matching entry runs for every job.
+# all match runs, at most 2 executions at once across all jobs and entries,
+# and each attempt is cut off after 30 seconds (neither limit is a key). Add a
+# list item to create a new hook, delete one to remove it, or flip `enabled` to
+# pause it without losing its configuration. A download submission cannot
+# choose among the entries: every enabled matching entry runs for every job.
 #
 # To enable a hook, uncomment one of the example list items below (remove the
 # leading "# " from each of its lines) and edit the values. With every item
@@ -68,18 +61,14 @@ entries:
   #   # map of string to string: extra HTTP headers sent with the request.
   #   headers:
   #     X-Api-Key: "replace-with-your-api-key"
-  #   # bool: true (default) sends the JSON payload (see below) as the request
-  #   # body with Content-Type: application/json; false sends an empty body,
-  #   # useful for refresh-style endpoints that ignore the body.
-  #   send_payload: false
+  #   # The request body is always the JSON payload (see below), sent with
+  #   # Content-Type: application/json; an endpoint that ignores the body, such
+  #   # as a library refresh, just ignores it.
   #   # integer: maximum total attempts including the first. Values <= 0 behave
   #   # as 1 (single attempt, no retry). Retries wait 1 second between attempts.
   #   # When the backend shuts down, retries stop at once and an attempt still
   #   # running after a short drain is cancelled and recorded as hook_failed.
   #   max_attempts: 2
-  #   # integer seconds: per-hook timeout override. Values <= 0 use the
-  #   # top-level timeout_seconds above.
-  #   timeout_seconds: 15
   #
   # --- exec example: run a local script for post-processing ---
   # - name: "post-process"
@@ -111,7 +100,7 @@ entries:
   #   # backend process's working directory.
   #   workdir: ""
 
-# JSON payload sent as the webhook request body (when send_payload is true)
+# JSON payload sent as the webhook request body
 # and written to an exec hook's stdin. The job counters are the API's job
 # counters; "error" is present only when the job has an error, "started_at" and
 # "finished_at" (RFC 3339) only once set, and "items" is absent for job_queued.

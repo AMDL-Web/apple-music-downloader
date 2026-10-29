@@ -8,9 +8,7 @@ import (
 	"net/http"
 )
 
-func init() {
-	register("webhook", &webhookRunner{client: &http.Client{}})
-}
+var webhookClient = &http.Client{}
 
 type webhookRunner struct {
 	client *http.Client
@@ -18,19 +16,15 @@ type webhookRunner struct {
 
 func (r *webhookRunner) Run(ctx context.Context, entry Entry, payload Payload) error {
 	var body bytes.Buffer
-	if entry.SendsPayload() {
-		if err := json.NewEncoder(&body).Encode(payload); err != nil {
-			return fmt.Errorf("encode payload: %w", err)
-		}
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		return fmt.Errorf("encode payload: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, entry.URL, &body)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
-	if entry.SendsPayload() {
-		req.Header.Set("Content-Type", "application/json")
-	}
+	req.Header.Set("Content-Type", "application/json")
 	for k, v := range entry.Headers {
 		req.Header.Set(k, v)
 	}

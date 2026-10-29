@@ -68,7 +68,7 @@ func TestShutdownDeadlineAbortsRunningAttempts(t *testing.T) {
 	defer close(release) // before server.Close, which waits for this handler
 
 	collector := newEventCollector(2) // hook_started + hook_failed
-	d := NewDispatcher(Config{Enabled: true, TimeoutSeconds: 60, Entries: []Entry{
+	d := NewDispatcher(Config{Enabled: true, Entries: []Entry{
 		{Name: "hanging", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
 	}}, collector.record, discardLogger())
 	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
@@ -94,8 +94,6 @@ func TestShutdownDeadlineAbortsRunningAttempts(t *testing.T) {
 func TestRecorderFailureDoesNotWedgeExecution(t *testing.T) {
 	runner := &recordingRunner{}
 	const runnerType = "recorder-failure-test"
-	runners[runnerType] = runner
-	defer delete(runners, runnerType)
 
 	var recorded atomic.Int32
 	failing := func(context.Context, domain.Event) error {
@@ -105,6 +103,7 @@ func TestRecorderFailureDoesNotWedgeExecution(t *testing.T) {
 	d := NewDispatcher(Config{Enabled: true, Entries: []Entry{
 		{Name: "h", Type: runnerType, Events: []string{"job_finished"}},
 	}}, failing, discardLogger())
+	d.runner = runner
 	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

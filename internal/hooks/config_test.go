@@ -34,7 +34,6 @@ entries:
     type: "webhook"
     events: ["job_finished"]
     url: "http://example.local/refresh"
-    send_payload: false
   - name: "post-process"
     enabled: false
     type: "exec"
@@ -171,6 +170,40 @@ func TestLoadConfigRejectsUnknownField(t *testing.T) {
 	path := writeHooksConfig(t, "unknown_field: true\n")
 	if _, err := LoadConfig(path); err == nil || !strings.Contains(err.Error(), "unknown_field") {
 		t.Fatalf("LoadConfig() error = %v, want unknown field error", err)
+	}
+}
+
+// A hooks.yaml from before these keys were fixed fails at startup naming each
+// removed key and the upgrade guide, not with the decoder's bare "not found".
+func TestLoadConfigNamesRemovedKeys(t *testing.T) {
+	path := writeHooksConfig(t, `
+enabled: true
+timeout_seconds: 30
+max_concurrent: 2
+entries:
+  - name: "refresh"
+    type: "webhook"
+    events: ["job_finished"]
+    url: "http://example.local/refresh"
+    send_payload: false
+    timeout_seconds: 15
+  - type: "exec"
+    events: ["job_failed"]
+    command: "/bin/true"
+    timeout_seconds: 5
+`)
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("LoadConfig() error = nil, want removed keys rejected")
+	}
+	for _, want := range []string{
+		"timeout_seconds", "max_concurrent",
+		`entries["refresh"].send_payload`, `entries["refresh"].timeout_seconds`, "entries[1].timeout_seconds",
+		"docs/upgrading-to-2.0.md",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err, want)
+		}
 	}
 }
 
