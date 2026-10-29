@@ -4,16 +4,18 @@
 // sprite once, imports its <symbol>s into a hidden <svg class="sprite"> at
 // the start of <body> (outside #app, which main.js clears) and from then on
 // iconHref() points at "#i-name" in this document. Until it has loaded, or
-// when the fetch fails, icons use the external sprite.
+// when the fetch fails, icons use the external sprite; a load that finishes
+// after the app mounted rewrites the icons already on the page.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LOAD_TIMEOUT_MS = 5000;
+const EXTERNAL = 'icons.svg';
 
 let inline = false;
 let pending = null;
 
 /** The <use> href for an icon: the in-document symbol once the sprite is loaded. */
-export const iconHref = (name) => (inline ? `#i-${name}` : `icons.svg#i-${name}`);
+export const iconHref = (name) => (inline ? `#i-${name}` : `${EXTERNAL}#i-${name}`);
 
 /** Whether the sprite is in the document. */
 export const spriteLoaded = () => inline;
@@ -34,6 +36,12 @@ async function fetchSprite() {
     for (const s of symbols) host.appendChild(document.importNode(s, true));
     document.body.prepend(host);
     inline = true;
+    // Icons mounted before this (a late load after an outage) still point at
+    // the external file; their next render would only fix the ones that change.
+    for (const use of document.querySelectorAll('use')) {
+      const href = use.getAttribute('href') || '';
+      if (href.startsWith(EXTERNAL)) use.setAttribute('href', href.slice(EXTERNAL.length));
+    }
     return true;
   } catch {
     return false;
