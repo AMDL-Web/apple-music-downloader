@@ -73,9 +73,75 @@
   box-shadow: inset 0 0 0 1px var(--role);
 }
 
+/* A pressed level shows a check; an unpressed one is outlined with a hollow dot. */
+.level-chip .icon {
+  color: var(--role-text, var(--text-secondary));
+}
+
+.level-chip[aria-pressed="true"] {
+  font-weight: var(--w-semibold);
+}
+
+/* Wrap lines: a labelled switch (a toggle button, so aria-pressed carries the state). */
+.wrap-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--control-h-sm);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  cursor: pointer;
+}
+
+.wrap-switch-track {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-full);
+  background: var(--track);
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+
+.wrap-switch-track::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-full);
+  background: var(--text-secondary);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.wrap-switch[aria-pressed="true"] .wrap-switch-track {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.wrap-switch[aria-pressed="true"] .wrap-switch-track::before {
+  transform: translateX(16px);
+  background: var(--on-accent);
+}
+
+.wrap-switch:focus-visible {
+  border-radius: var(--r-control);
+}
+
+/* Attributes after the message, as secondary text. */
+.log-attrs {
+  color: var(--text-secondary);
+}
+
 /* Toolbar controls are 28 px, as the level chips and buttons beside them (DESIGN.md). */
 .toolbar-logs .search {
-  flex: 1 1 200px;
+  flex: 1 1 160px;
   height: var(--control-h-sm);
 }
 

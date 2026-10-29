@@ -223,10 +223,11 @@ base durations (120 ms color, 200 ms overlays).
   the first tile. Tiles have no fill: the cover (a neutral placeholder with the
   music glyph when it has none), the title in 15 px semibold and the artist
   in 13 px secondary. A motion cover is marked with a small "Motion cover" chip.
-- **Logs**: level chips, Pause and Wrap are one kind of toggle pill: pressed is
-  `--chip-on-bg` (the gray fill in light, the raised thumb in dark), off is
-  outlined in light and filled in dark; an off level chip also hollows its
-  dot. Filled attribute chips, a grouped log surface.
+- **Logs**: level chips and Pause are one kind of toggle pill: pressed is
+  `--chip-on-bg` (the gray fill in light, the raised thumb in dark) and a
+  level chip then shows a check; off is outlined in both themes, and an off
+  level chip hollows its dot. Wrap lines is the Apple switch with its label.
+  Filled attribute chips, a grouped log surface.
 - **New download**: the link text box is a 12 px inset cell. Detected links
   are Queue-style rows: 48 px covers (8 px radius) with an `--art-bg` shadow,
   hairlines from the text, a 15 px semibold title with a gray E mark and

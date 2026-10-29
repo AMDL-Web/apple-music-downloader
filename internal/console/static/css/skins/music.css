@@ -179,6 +179,8 @@
   --btn-lg-h: 36px;
   /* Switches and selection circles: a white thumb in both themes. */
   --switch-thumb: #ffffff;
+  /* A switch that is on is a neutral gray; red stays on the primary action. */
+  --switch-on: light-dark(#636366, #8e8e93);
   --check-size: 22px;
   /* The select chevron, drawn in --text-secondary (a data image cannot read a token). */
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%236e6e73' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -1830,8 +1832,8 @@
 :root[data-skin="music"] .level-chip {
   border-color: transparent;
   border-radius: var(--r-full);
-  background: var(--chip-off-bg);
-  box-shadow: var(--chip-off-ring);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-control);
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
@@ -1843,13 +1845,14 @@
   background: var(--chip-on-bg);
   box-shadow: var(--chip-on-shadow);
   color: var(--text-primary);
+  font-weight: var(--w-semibold);
 }
 
-/* Pause and Wrap are toggles like the level chips, so they wear the same pill. */
+/* Pause is a toggle pill like the level chips; Wrap lines is a switch. */
 :root[data-skin="music"] .toolbar-logs .btn[aria-pressed] {
   border-color: transparent;
-  background: var(--chip-off-bg);
-  box-shadow: var(--chip-off-ring);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-control);
   color: var(--text-primary);
 }
 
@@ -1865,6 +1868,30 @@
 :root[data-skin="music"] .level-chip[aria-pressed="false"] .log-dot {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--role);
+}
+
+:root[data-skin="music"] .wrap-switch-track {
+  width: 44px;
+  height: 26px;
+}
+
+:root[data-skin="music"] .wrap-switch[aria-pressed="true"] .wrap-switch-track {
+  border-color: transparent;
+  background: var(--switch-on);
+}
+
+:root[data-skin="music"] .wrap-switch-track::before {
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: var(--switch-thumb);
+  box-shadow: var(--shadow-thumb);
+}
+
+:root[data-skin="music"] .wrap-switch[aria-pressed="true"] .wrap-switch-track::before {
+  transform: translateX(18px);
+  background: var(--switch-thumb);
 }
 
 :root[data-skin="music"] .filter-chip {

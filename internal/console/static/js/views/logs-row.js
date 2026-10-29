@@ -2,10 +2,22 @@
 // expanded JSON detail.
 
 import { html } from '../ui/preact.js';
-import { absTime, clockTime, shortId, errorSummary } from '../lib/format.js';
+import { absTime, clockTime, shortId, errorSummary, attrPairs } from '../lib/format.js';
 import { logLevelView } from '../lib/status.js';
 import { buildHash } from '../lib/route.js';
 import { CopyButton } from '../ui/components.js';
+
+const ATTRS_SHOWN = 3;
+const ATTR_MAX = 48;
+// Already shown as chips or as the component column; `error` joins them when the row prints its reason.
+const OMIT_ATTRS = ['component', 'job_id', 'request_id'];
+
+/** Up to three key=value attributes for the row's line, each cut at 48 characters. */
+function lineAttrs(attrs, omit) {
+  return attrPairs(attrs, omit)
+    .slice(0, ATTRS_SHOWN)
+    .map((p) => (p.length > ATTR_MAX ? `${p.slice(0, ATTR_MAX - 1)}…` : p));
+}
 
 export function LogRow({ entry, open, stop, names, onToggle, onFilter, narrow }) {
   const lv = logLevelView(entry.level);
@@ -16,6 +28,7 @@ export function LogRow({ entry, open, stop, names, onToggle, onFilter, narrow })
   const json = JSON.stringify(attrs, null, 2);
   // A failure's reason is on the row, not behind a click.
   const reason = typeof attrs.error === 'string' && entry.level !== 'debug' ? errorSummary(attrs.error) : '';
+  const pairs = lineAttrs(attrs, reason ? [...OMIT_ATTRS, 'error'] : OMIT_ATTRS);
   const tab = stop ? 0 : -1;
   const jobName = jobId ? names.get(jobId) : '';
   return html`<div class=${open ? 'log-entry log-row is-open' : 'log-entry log-row'} data-level=${entry.level} data-seq=${entry.sequence} data-row tabindex="-1">
@@ -23,7 +36,7 @@ export function LogRow({ entry, open, stop, names, onToggle, onFilter, narrow })
       <span class="log-time" title=${absTime(entry.time)}>${clockTime(entry.time, !narrow)}</span>
       <span class="log-level" data-role=${lv.role}><span class="log-dot"></span>${lv.short}</span>
       ${component ? html`<span class="log-comp">${component}</span>` : html`<span class="log-comp"></span>`}
-      <span class="log-msg">${entry.message}${reason && !entry.message.includes(reason) ? html` <span class="log-err" title=${attrs.error}>${reason}</span>` : null}</span>
+      <span class="log-msg">${entry.message}${reason && !entry.message.includes(reason) ? html` <span class="log-err" title=${attrs.error}>${reason}</span>` : null}${pairs.length ? html` <span class="log-attrs">${pairs.join('  ')}</span>` : null}</span>
     </button>
     ${jobId || requestId
       ? html`<span class="log-chips">

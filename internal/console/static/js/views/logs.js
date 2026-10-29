@@ -273,8 +273,9 @@ export function LogsPage({ route }) {
       <div class="level-chips" role="group" aria-label="Levels">
         ${LOG_LEVELS.map((l) => {
           const lv = logLevelView(l);
-          return html`<button key=${l} type="button" class="level-chip" data-role=${lv.role} aria-pressed=${String(filters.levels.includes(l))} onClick=${() => toggleLevel(l)}>
-            <span class="log-dot"></span>${lv.label}
+          const on = filters.levels.includes(l);
+          return html`<button key=${l} type="button" class="level-chip" data-role=${lv.role} aria-pressed=${String(on)} onClick=${() => toggleLevel(l)}>
+            ${on ? html`<${Icon} name="circle-check" size="sm" />` : html`<span class="log-dot"></span>`}${lv.label}
           </button>`;
         })}
       </div>
@@ -286,12 +287,14 @@ export function LogsPage({ route }) {
       </div>
       <label class="search">
         <${Icon} name="search" />
-        <input type="search" data-filter placeholder="Search messages and attributes" aria-label="Search logs" value=${qInput} onInput=${(e) => setQInput(e.currentTarget.value)} />
+        <input type="search" data-filter placeholder="Search logs" aria-label="Search logs" value=${qInput} onInput=${(e) => setQInput(e.currentTarget.value)} />
       </label>
       <div class="toolbar-right">
         <${StatusText} view=${sv} />
         <${Button} size="sm" icon=${live ? 'pause' : 'play'} aria-pressed=${String(!live)} onClick=${() => setLive((v) => !v)}>${live ? 'Pause' : 'Resume'}</${Button}>
-        <${Button} size="sm" variant="ghost" aria-pressed=${String(wrap)} onClick=${() => setWrap((w) => !w)}>Wrap</${Button}>
+        <button type="button" class="wrap-switch" aria-pressed=${String(wrap)} onClick=${() => setWrap((w) => !w)}>
+          <span class="wrap-switch-track" aria-hidden="true"></span>Wrap lines
+        </button>
       </div>
     </div>
     ${filters.job_id || filters.request_id
