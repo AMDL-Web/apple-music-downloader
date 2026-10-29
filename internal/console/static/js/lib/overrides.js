@@ -1,4 +1,4 @@
-// Pure download options for the New download page: the server's download
+// Pure download overrides for the New download page: the server's download
 // defaults (GET config `download`), the quality presets of the submit row
 // (Follow Settings, Lossless, Dolby Atmos then lossless, AAC, Custom) and the
 // Overwrite switch, and the DownloadOverrides a submission sends, which holds
