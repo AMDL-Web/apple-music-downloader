@@ -308,61 +308,6 @@ func (r *trackRun) fetchCover(ctx context.Context) error {
 	return nil
 }
 
-// fetchLyrics fetches and converts the lyrics and records lyrics_status. A
-// failure only drops the lyrics; the error it returns is the job's
-// cancellation.
-func (r *trackRun) fetchLyrics(ctx context.Context) error {
-	d, item := r.d, &r.item
-	cfg := d.cfg.Download
-	if !(cfg.EmbedLyrics || cfg.SaveLyricsFile) || !r.song.HasLyrics {
-		if r.song.HasLyrics {
-			item.LyricsStatus = domain.LyricsDisabled
-		} else {
-			item.LyricsStatus = domain.LyricsNone
-		}
-		_ = r.reporter.UpdateItem(ctx, item)
-		return nil
-	}
-	attempts := clampAttempts(r.maxAttempts())
-	raw, lyricsAttempts, err := retryValue(ctx, r.maxAttempts(), retryBackoff, func(attempt int) (string, error) {
-		d.setItemAttempt(ctx, r.reporter, item, "lyrics", attempt, attempts, fmt.Sprintf("Fetching lyrics (%d/%d)", attempt, attempts))
-		return r.media.lyrics(ctx, r.song.ID, lyricsRequest(d.cfg))
-	}, func(failure retryFailure) {
-		d.setRetryFailure(ctx, r.reporter, item, "lyrics", "lyrics", failure)
-		d.emitRetryEvent(ctx, r.reporter, r.job.ID, item, "lyrics", "", failure)
-	})
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		item.LyricsStatus = domain.LyricsFailed
-		item.StatusMessage = "Lyrics fetch retries exhausted; continuing without embedded lyrics: " + err.Error()
-		_ = r.reporter.UpdateItem(ctx, item)
-		return nil
-	}
-	converted, convertErr := convertLyrics(raw, cfg.LyricsFormat, cfg.LyricsExtras)
-	switch {
-	case convertErr != nil:
-		item.LyricsStatus = domain.LyricsFailed
-		item.StatusMessage = "Lyrics conversion failed; continuing without embedded lyrics: " + convertErr.Error()
-		_ = r.reporter.UpdateItem(ctx, item)
-	case converted == "":
-		// The wrapper answered with an empty document (possible in ttml mode,
-		// where convertLyrics passes it through without error).
-		item.LyricsStatus = domain.LyricsFailed
-		item.StatusMessage = "Lyrics fetch returned an empty document; continuing without embedded lyrics"
-		_ = r.reporter.UpdateItem(ctx, item)
-	default:
-		r.lyrics = converted
-		item.LyricsStatus = domain.LyricsFetched
-		_ = r.reporter.UpdateItem(ctx, item)
-		if lyricsAttempts > 1 {
-			d.emitRecoveredEvent(ctx, r.reporter, r.job.ID, item, "lyrics", "", lyricsAttempts)
-		}
-	}
-	return nil
-}
-
 // runCodecs tries each configured codec until one completes or the item is
 // skipped. A cancelled job stops the chain at once instead of walking every
 // remaining codec on a dead context.
