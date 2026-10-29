@@ -67,6 +67,11 @@
   background: var(--bg-canvas);
 }
 
+/* Toasts rise above the bar so they never cover Download. */
+:root:has(.page-new) .toasts {
+  bottom: calc(var(--s-6) + 96px);
+}
+
 .new-count {
   color: var(--text-secondary);
   font-size: var(--fs-13);
@@ -842,6 +847,10 @@
      whole name shows; Overwrite and Download share the next. */
   .page.page-new {
     padding-bottom: var(--new-bar-h, 0px);
+  }
+
+  :root:has(.page-new) .toasts {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 2 * var(--touch) + 3 * var(--s-2) + var(--s-3) + var(--s-2));
   }
 
   .new-submit {

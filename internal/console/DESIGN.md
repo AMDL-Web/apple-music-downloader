@@ -427,7 +427,7 @@ and motion covers.
   24-bit / 192 kHz", `qualityText`).
   The submit bar sits under the links and sticks to the bottom of the
   viewport while they run past it (under 640 px it is fixed above the tab
-  bar). Its Quality menu offers Follow Settings, Lossless (ALAC), Dolby Atmos then
+  bar), and toasts rise above it so they never cover Download. Its Quality menu offers Follow Settings, Lossless (ALAC), Dolby Atmos then
   lossless, AAC, and Custom… (`lib/overrides.js` `PRESETS`; the closed menu shows
   only the name, and under 640 px it has a line to itself while Overwrite
   and Download share the next); Custom… opens a 420 px sheet (a bottom
