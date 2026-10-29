@@ -2,7 +2,7 @@
 // its pinned, error and warning lines) and the controls themselves. The
 // field list in lib/settings.js decides which control a key gets.
 
-import { html, useState, useRef, useEffect } from '../ui/preact.js';
+import { html, useState, useRef, useLayoutEffect } from '../ui/preact.js';
 import { parseNumberInput } from '../lib/settings-draft.js';
 import { Icon, Button } from '../ui/components.js';
 
@@ -206,7 +206,9 @@ function ListEditor({ field, id, value, disabled, described, onChange }) {
   const [adding, setAdding] = useState('');
   const refocus = useRef(null);
   const root = useRef(null);
-  useEffect(() => {
+  // A layout effect: a passive one from an earlier render could run first and
+  // focus the row before it moved, and the move then drops focus on the body.
+  useLayoutEffect(() => {
     const want = refocus.current;
     refocus.current = null;
     if (!want || !root.current) return;
