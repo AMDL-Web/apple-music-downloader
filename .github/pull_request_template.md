@@ -22,4 +22,4 @@
 
 ## Not verified
 
-<!-- What you could not check and why, e.g. a real download needs wrapper-manager. -->
+<!-- What you could not check and why, e.g. a real download needs a logged-in wrapper. -->

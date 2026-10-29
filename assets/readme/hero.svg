@@ -10,7 +10,7 @@
   <!-- ── title block ─────────────────────────────────────────── -->
   <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="19" fill="#79838D">
     <text x="56" y="76" letter-spacing="3">APPLE MUSIC DOWNLOAD CORE</text>
-    <text x="1144" y="76" text-anchor="end">Go · SQLite · gRPC · ffmpeg</text>
+    <text x="1144" y="76" text-anchor="end">Go · SQLite · SSE · ffmpeg</text>
   </g>
 
   <text x="56" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif"

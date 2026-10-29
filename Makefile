@@ -33,7 +33,7 @@ build: ## Compile every package, then the ./amdl-api binary with the version sta
 	$(GO) build ./...
 	$(GO) build -ldflags "$(LDFLAGS)" -o amdl-api ./cmd/amdl-api
 
-run: ## Run the API with configs/config.yaml (needs wrapper-manager for real downloads)
+run: ## Run the API with configs/config.yaml (needs a wrapper for real downloads)
 	$(GO) run -ldflags "$(LDFLAGS)" ./cmd/amdl-api
 
 dev: ## Run the API in simulate mode on 127.0.0.1:18080 with a throwaway config and data under data/dev/

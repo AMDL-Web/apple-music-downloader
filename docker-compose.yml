@@ -55,12 +55,19 @@ services:
       # AMDL_DATABASE_PATH, AMDL_CONFIG and AMDL_HOOKS_CONFIG; every other
       # setting belongs in config.yaml, and any other AMDL_* variable is
       # ignored with a warning at startup.
-      # wrapper-lite URL (overrides wrapper.address):
-      #   - wrapper runs on the host: keep http://host.docker.internal:12340 (also the
-      #     entrypoint's container default, so leaving the variable unset has
-      #     the same effect);
-      #   - wrapper is also a compose service: change it to "http://<service name>:12340"
-      #     and uncomment the wrapper-manager service below.
+      # Wrapper URL (overrides wrapper.address): a wrapper-manager v2 or a bare
+      # wrapper-lite, both over HTTP. Only a wrapper-manager has the login API the
+      # console's Account page uses; against a bare wrapper-lite you log in on its
+      # own command line (--login).
+      #   - wrapper-lite runs on the host: keep http://host.docker.internal:12340
+      #     (also the entrypoint's container default, so leaving the variable
+      #     unset has the same effect);
+      #   - wrapper-manager is a compose service (recommended): change it to
+      #     "http://wrapper-manager:8080" and uncomment the wrapper-manager
+      #     service below;
+      #   - wrapper-lite is a compose service: change it to
+      #     "http://wrapper-lite:12340" and uncomment the wrapper-lite service
+      #     below instead.
       AMDL_WRAPPER_ADDRESS: "http://host.docker.internal:12340"
       # API listen address (overrides server.listen). Inside the container it
       # must listen on a non-loopback address; the entrypoint defaults to
@@ -82,10 +89,45 @@ services:
       # The temp directory data/tmp stays inside the container and needs no
       # mount.
 
-  # If wrapper-manager is containerized too, uncomment this and fill it in for
-  # the actual image, then change AMDL_WRAPPER_ADDRESS above to
-  # "wrapper-manager:8080".
+  # Wrapper, option A (recommended): wrapper-manager v2, which supervises
+  # wrapper-lite accounts behind one HTTP port and lets you log in from the
+  # console. Upstream publishes no image, so compose builds it from the v2
+  # branch (Go and Docker are all it needs); first start also downloads the
+  # wrapper-lite payload from nightly.link. wrapper-lite-rootless needs user
+  # namespaces and chroot, which Docker blocks by default, hence privileged
+  # (a seccomp profile that allows unshare works too). Linux amd64 or arm64.
+  # Uncomment, set AMDL_WRAPPER_ADDRESS above to "http://wrapper-manager:8080",
+  # and add the wrapper-data volume at the bottom of this file. Then log in on
+  # the console's Account page.
   # wrapper-manager:
-  #   image: <wrapper-manager image>
+  #   build: https://github.com/WorldObservationLog/wrapper-manager.git#v2
+  #   image: wrapper-manager:latest
   #   container_name: wrapper-manager
   #   restart: unless-stopped
+  #   privileged: true
+  #   command: ["--host", "0.0.0.0", "--port", "8080"]
+  #   volumes:
+  #     - wrapper-data:/root/data
+
+  # Wrapper, option B: a bare wrapper-lite. Upstream publishes no image for it
+  # either; compose builds it from the lite branch, which downloads the Android
+  # NDK and takes a while. It has no login API: put USERNAME and PASSWORD in a
+  # .env file next to this one (never in this file) for the first start, which
+  # logs in; if Apple asks for a 2FA code, write it to 2fa.txt in the mounted
+  # data directory. Uncomment, and set AMDL_WRAPPER_ADDRESS above to
+  # "http://wrapper-lite:12340".
+  # wrapper-lite:
+  #   build: https://github.com/WorldObservationLog/wrapper.git#lite
+  #   container_name: wrapper-lite
+  #   restart: unless-stopped
+  #   security_opt:
+  #     - seccomp:unconfined
+  #   environment:
+  #     USERNAME: ${USERNAME}
+  #     PASSWORD: ${PASSWORD}
+  #   volumes:
+  #     - ./data/wrapper:/app/rootfs/data
+
+# For option A:
+# volumes:
+#   wrapper-data:

@@ -70,6 +70,20 @@ fit a Go open-source backend with English docs.
 | Delegation, external-worker and cross-model review skills | none | not adopting | Covered by the maintainer's personal skills. |
 | Cloudflare deploy guards, identity-signing enforcement, owner-specific conventions | none | not adopting | Site-specific; this repo ships a Docker image and requires DCO sign-off instead. |
 
+## Wrapper and decryption stack
+
+Upstream projects the backend depends on at run time or ported code from, with their
+licenses. The backend talks to a wrapper over HTTP and decrypts in-process;
+[Architecture](architecture.md#21-the-wrapper-and-decryption) has the boundary.
+
+| Practice | Landed in | Status | Note |
+| --- | --- | --- | --- |
+| [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) (MIT), the HTTP service that holds the Apple Music session: `/m3u8`, `/key`, `/lyrics`, `/webplayback`, `/license`, `/status` | `internal/wrapper` | adopted | Replaces the gRPC wrapper-manager fork of 1.x. Its `/key` template is what the backend decrypts with; `/lyrics` supplies word-timed TTML. It logs in only on its own command line. |
+| [wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2) (AGPL-3.0), which runs one wrapper-lite per account behind one port and adds `POST /login` and `POST /logout` | `internal/wrapper#Client`, `docker-compose.yml` | adopted | Optional and recommended: the console logs in through it. Run as a separate service; no code of it is in this repository. |
+| [Temari](https://github.com/WorldObservationLog/Temari) v0.5.1 (MIT), the FairPlay decryption library that consumes wrapper-lite's `/key` templates | `internal/fairplay`, `tools/temaridiff` | adapted | Translated to pure Go so the binary stays static; `tools/temaridiff` runs both implementations on every push and fails on a byte of difference. The MIT notice is in `internal/fairplay/doc.go`. |
+| Delegate decryption to the wrapper over gRPC, as 1.x did | none | not adopting | Upstream wrapper-manager v2 no longer speaks gRPC or decrypts. With a template the backend sends the wrapper one `/key` request per key instead of every sample. |
+| Sign a developer token with an Apple `.p8` key for the Catalog API | none | not adopting | Removed in 2.0: the scraped web-player token on amp-api serves every catalog read the backend makes, with no key to hold. |
+
 ## Console design references
 
 Sources behind the embedded console in `internal/console`; the resulting spec is

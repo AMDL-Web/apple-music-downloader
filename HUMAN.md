@@ -46,9 +46,9 @@ and the work proceeds on that reading.
 - Result first, then evidence: commands and output, `path#Symbol` pointers, links.
 - Changed locally, tests passed, pushed to `dev` and released in an image are kept
   apart; behavior inferred from code is labeled as inference.
-- What was not verified, and why (for example, no wrapper-manager, so downloads
+- What was not verified, and why (for example, no wrapper, so downloads
   ran in simulate mode).
-- Work owed outside this repository, such as a wrapper-manager change, is named and
+- Work owed outside this repository, such as a wrapper-lite or wrapper-manager change, is named and
   never reported as done.
 
 ## Review bots

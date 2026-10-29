@@ -150,13 +150,50 @@ Logs page reads; the backend writes no log file, so there is no log mount.
 Set `PUID`/`PGID` to the uid/gid that owns the host directories and the entrypoint fixes
 ownership inside the container for you.
 
-## Reaching wrapper-manager
+## The wrapper
 
-- Wrapper on the host: keep the default `http://host.docker.internal:12340`. The compose file's
-  `extra_hosts: host-gateway` entry makes that name resolvable on Linux too.
-- Wrapper as a compose service: set `AMDL_WRAPPER_ADDRESS` to `http://<service-name>:12340`.
-- The backend does not contact the wrapper at startup, so it starts without the wrapper online. Verify with
-  `GET /api/v1/wrapper/status`.
+Real downloads need a wrapper: the HTTP service that holds the Apple Music account
+session and serves device manifests, lyrics, web playback and Widevine licenses, plus a
+decryption template per key that the backend runs in-process. Upstream publishes no
+container image for either option below, so the compose file builds them from their
+repositories. Neither the backend nor the console needs the wrapper to start; verify the
+connection with `GET /api/v1/wrapper/status`.
+
+| Option | Upstream | Port | Login |
+| --- | --- | --- | --- |
+| wrapper-manager v2 (recommended) | [wrapper-manager `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
+| wrapper-lite | [wrapper `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
+
+Both run `wrapper-lite-rootless`, which needs user namespaces and `chroot` on a Linux
+host (x86_64 or arm64): `unshare -Ur true` must succeed there. Docker blocks them by
+default, so the wrapper-manager service runs `privileged: true` (upstream's compose) and
+the wrapper-lite service `security_opt: seccomp:unconfined` (upstream's compose); a
+seccomp profile that allows `unshare` is the alternative. On a host without user
+namespaces, upstream's `wrapper-lite-qemu` launcher boots a guest and serves the same
+HTTP API on port 12340.
+
+`docker-compose.yml` has both as commented services. To use one, uncomment it and set
+`AMDL_WRAPPER_ADDRESS` to its URL:
+
+- wrapper-manager as a compose service: `http://wrapper-manager:8080`. It keeps its
+  accounts and the wrapper-lite payload in the `wrapper-data` volume; the first start
+  downloads the payload from nightly.link, so it needs internet access. Log in on the
+  console's Account page, then check that `GET /api/v1/wrapper/status` lists a region.
+- wrapper-lite as a compose service: `http://wrapper-lite:12340`. Put `USERNAME` and
+  `PASSWORD` in a `.env` file next to the compose file for the first start, which logs
+  in; with a 2FA code, write it to `2fa.txt` in the mounted data directory. The image
+  build downloads the Android NDK and is slow.
+- wrapper-lite on the host: keep the default `http://host.docker.internal:12340`. The
+  compose file's `extra_hosts: host-gateway` entry makes that name resolvable on Linux
+  too. Start it with `--host 0.0.0.0` so the container can reach it, as `--host` defaults
+  to `127.0.0.1`.
+- Outside Docker, set `wrapper.address` in `config.yaml` to the URL, `http://127.0.0.1:12340`
+  by default. A bare `host:port` fails startup, and `https://` verifies the certificate
+  against the system trust store.
+
+wrapper-lite's API has no authentication, upstream says so, and wrapper-manager's README
+documents none, so keep both ports off any network you do not trust, as with this
+service's own.
 
 ## Releases
 

@@ -49,7 +49,8 @@ was running stays `running` and resumes on the next start.
 | `internal/jobs` | admission, queue, workers, terminal-state rules, hook dispatch trigger | know about HTTP |
 | `internal/media` | the per-track pipeline: select, fetch, decrypt, remux, tag, finalize; simulate backend | write job rows except through `jobs.Reporter` |
 | `internal/applemusic` | both Apple hosts, tokens, catalog and library reads | fail a job because an amp-api-only field is missing |
-| `internal/wrapper` | the wrapper-lite HTTP client (status, manifests, licenses, lyrics) and in-process decryption with cached key templates | |
+| `internal/wrapper` | the wrapper HTTP client (status, manifests, licenses, lyrics, console login) and the decrypt sessions that run key templates through `internal/fairplay` | |
+| `internal/fairplay` | the pure-Go FairPlay sample decryptor, a translation of Temari v0.5.1 | import other internal packages |
 | `internal/db` | SQLite schema, versioned migrations, queries | contain business rules |
 | `internal/domain` | shared types, enums and event type constants | import other internal packages |
 | `internal/events` | in-process wake signals for streams | carry events (subscribers re-read the store) |
@@ -60,6 +61,37 @@ was running stays `running` and resumes on the next start.
 | `internal/limits` | semaphores and the Apple request gate | |
 | `internal/ids` | random IDs (`job_<32 hex>`, `item_<32 hex>`) | |
 | `internal/buildinfo` | version, commit, build date (ldflags), process start time | |
+
+### 2.1 The wrapper and decryption
+
+The backend holds no Apple account session and no decryption keys of its own. It talks
+over HTTP (`wrapper.address`) to one of two upstream services, which look the same to
+`internal/wrapper#Client`: [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite),
+which holds one logged-in account, or [wrapper-manager
+v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2), which runs one
+wrapper-lite per account behind a single port and forwards each request to an account
+whose storefront can serve it. What the backend asks for:
+
+- `/key`: for each FairPlay key URI, a white-box template (`ctx` and `state`). The client
+  caches templates across jobs, and `internal/fairplay#Template` decrypts samples in
+  this process, so decryption needs no wrapper request per sample and is limited by CPUs,
+  not by the wrapper. `/key` and `/m3u8` share one lock in wrapper-lite, so the client
+  keeps at most 2 of them in flight.
+- `/m3u8`: the device master playlist, asked for only by a Hi-Res Lossless track whose
+  ALAC may exceed 48 kHz, because the web player's playlist can omit the higher
+  renditions; every other master playlist comes from the catalog response.
+- `/lyrics`, `/webplayback` (the AAC-LC fallback) and `/license` (Widevine), 24 at a time.
+- `/status`: connectivity, the storefront regions served, and for a wrapper-manager
+  `clientCount` and `ready`, whose presence is how the backend tells the two apart.
+
+Logging in is the one thing wrapper-lite cannot do over HTTP: it logs in only from its
+own command line. The login routes of `/api/v1/wrapper` therefore forward to wrapper-manager's
+`POST /login` and `POST /logout`, and answer `501 login_unsupported` against a bare
+wrapper-lite. The password of a login that waits for a two-step code is kept in memory for
+at most 75 seconds. Requests, pools and the Hi-Res rule are in
+[Download pipeline](download-pipeline.md#concurrency) and
+[Configuration](configuration.md#catalog-tokens-and-the-hi-res-manifest); the move from the
+1.x fork is in [Upgrading to 2.0](upgrading-to-2.0.md#wrapper).
 
 ## 3. HTTP API conventions
 
@@ -97,6 +129,7 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 | 413 | `request_too_large` |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` |
+| 501 | `login_unsupported` (wrapper login against a bare wrapper-lite) |
 | 502 | `upstream_error` |
 | 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
 | 504 | `upstream_timeout` (wrapper login) |

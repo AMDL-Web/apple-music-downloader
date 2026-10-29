@@ -3,7 +3,7 @@ info:
   title: AMDL Backend API
   version: 2.0.0
   description: |
-    Apple Music download jobs and wrapper-manager management API. The URL prefix
+    Apple Music download jobs and wrapper account management API. The URL prefix
     stays /api/v1; info.version is the version of this contract.
 
     Errors: every non-2xx JSON response is an ErrorResponse,

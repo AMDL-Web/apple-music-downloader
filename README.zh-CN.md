@@ -23,15 +23,17 @@ Events 接口，以及建立在这套接口上的网页控制台。支持单曲�
 
 ## 快速开始
 
-前置条件：一个可达的 [`wrapper-manager`](#架构) 实例——设备清单、许可证和歌词都从它拿，
-没有它下载不了任何东西。
+前置条件：一个可达的 wrapper，可以是 [wrapper-manager v2](#架构)（推荐：在控制台里登录），
+也可以是单独的 wrapper-lite。设备清单、许可证、歌词和解密模板都从它拿，没有它下载不了任何东西。
 
 ```bash
 docker compose up -d
 ```
 
 这会从 GHCR 拉取多架构镜像（无需本地构建），以内置示例为模板生成 `configs/config.yaml`，
-监听 `:18080`。在 `docker-compose.yml` 里用 `AMDL_WRAPPER_ADDRESS` 指向你的 wrapper。
+监听 `:18080`。在 `docker-compose.yml` 里用 `AMDL_WRAPPER_ADDRESS` 指向你的 wrapper；该文件里也带有可直接取消注释的
+wrapper 服务（[docs/deployment.md](docs/deployment.md#the-wrapper)，英文）。从 1.x 升级？先读
+[docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md)（英文）。
 
 想从源码跑——Go 版本以 [`go.mod`](go.mod) 为准，另需 `PATH` 上的 `ffmpeg`：
 
@@ -66,18 +68,24 @@ API 参考：[docs/api.md](docs/api.md) 与 [`internal/api/openapi.yaml`](intern
 
 <p align="center">
   <img src="./assets/readme/architecture.svg" width="100%"
-       alt="网页控制台与你的脚本通过 REST 和 Server-Sent Events 调用后端；后端把任务队列放在 SQLite 里，跑下载流水线并把文件写到磁盘；它依赖 gRPC 上的 wrapper-manager，并从两个不同的 Apple 主机读取数据">
+       alt="网页控制台与你的脚本通过 REST 和 Server-Sent Events 调用后端；后端把任务队列放在 SQLite 里，跑下载流水线并把文件写到磁盘；它依赖 HTTP 上的 wrapper，在进程内解密，并从 Apple 的 amp-api 读取目录数据">
 </p>
 
-**`wrapper-manager` 不是可选项。** 它持有 Apple Music 账号登录态，通过 gRPC 提供设备清单、
-Widevine 许可证和歌词。连接是懒建立的，所以后端不等它就能启动——
-`GET /api/v1/wrapper/status` 才是判断它是否真的可达的地方。
+**wrapper 不是可选项。** 它持有 Apple Music 账号登录态，通过 HTTP 提供设备清单、Widevine
+许可证、歌词，以及每个 FairPlay 密钥对应的解密模板；模板由后端自己用纯 Go 运行
+（`internal/fairplay`，翻译自 [Temari](https://github.com/WorldObservationLog/Temari)）。
+上游的两种 wrapper 都能用：[wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite)
+（单账号，在它的命令行里登录），以及放在它前面的 [wrapper-manager
+v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2)（多账号，控制台的
+「账号」页通过它登录）。后端启动时不连接 wrapper，所以不等它就能启动——
+`GET /api/v1/wrapper/status` 才是判断它是否真的可达、能否登录的地方。
 
-**Apple 有两个主机，而且不能互换。** `api.music.apple.com` 是有文档的官方 API，接受自签的
-developer token，后端不调用它。`amp-api.music.apple.com` 是 Apple 内部的网页播放器端点，
-只认从 `music.apple.com` 抓下来的 JWT，所有目录读取都走它，并且是 `enhancedHls` 清单和
-`editorialVideo` 动态封面的**唯一**来源。它没有文档，随时可能变，所以从它读到的东西必须退化成「这张专辑没有那个字段」，
-而不是让任务失败。
+**Apple 的目录数据读自它没有文档的网页播放器 API。** `amp-api.music.apple.com` 只认从
+`music.apple.com` 抓下来的 JWT，所有目录读取都走它，并且是 `enhancedHls` 清单和
+`editorialVideo` 动态封面的**唯一**来源。有文档的 `api.music.apple.com` 需要用 Apple 密钥自签
+的 developer token；后端没有密钥，也从不调用它。amp-api 没有文档，随时可能变，所以从它读到的
+东西必须退化成「这张专辑没有那个字段」，而不是让任务失败。只有可能超过 48 kHz 的 Hi-Res
+无损曲目才会再向 wrapper 要一份设备清单，因为网页播放器的播放列表可能漏掉更高的 ALAC 档位。
 
 **这里没有鉴权，是故意的。** 所有端点都是开放的。这是下载核心，访问控制属于你放在它前面的
 反向代理、网关或会话层。
@@ -95,7 +103,7 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 除状态外，每个 item 还带一份持久化的阶段进度——`resolved`、`remuxed`、`verified`、
 `tagged`、`saved`——所以中途重连的客户端不必重放事件流就能画出一模一样的进度。
 
-媒体逐片段解密后直接送进 `ffmpeg`，任何时候都不会有整轨明文落盘。扁平化、完整性校验和打
+媒体在本进程内逐片段解密后直接送进 `ffmpeg`，任何时候都不会有整轨明文落盘。扁平化、完整性校验和打
 标签全都在 `download.temp_dir` 里完成，只有成品文件才移进 `downloads_dir`。
 
 ### 编码回退
@@ -112,8 +120,8 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 
 ### 并发
 
-三个进程级、跨全部任务共享、启动时固定的池：`max_parallel_downloads`（16）、32 个解密、
-24 个 wrapper 请求，外加 `max_running_jobs`（3）个 worker 槽位。池满时许可按提交时间分配，最早提交且未完成的任务优先，
+三个进程级、跨全部任务共享、启动时定好大小的池：`max_parallel_downloads`（16）、每个 CPU 一个解密
+（`GOMAXPROCS`）、24 个 wrapper 请求，外加 `max_running_jobs`（3）个 worker 槽位。池满时许可按提交时间分配，最早提交且未完成的任务优先，
 因此任务倾向于逐个完成而非交错推进。交互式 API 请求不等待这些池；Apple 目录读取（包括
 `POST /api/v1/lookup`）与任务的目录读取共用一个请求闸门（`catalog.max_parallel_requests`）。
 
@@ -217,7 +225,8 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 | --- | --- |
 | [docs/api.md](docs/api.md) | 全部端点、curl 示例、任务 overrides、错误码、SSE 事件流语义 |
 | [docs/configuration.md](docs/configuration.md) | 配置文件、默认值、环境变量覆盖、运行期与启动期字段、重新加载 |
-| [docs/deployment.md](docs/deployment.md) | Docker、挂载、`PUID`/`PGID`、配置播种、发版与镜像 tag |
+| [docs/deployment.md](docs/deployment.md) | Docker、wrapper 服务、挂载、`PUID`/`PGID`、配置播种、发版与镜像 tag |
+| [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) | 从 1.x 起的全部破坏性变更，附新旧形态与升级清单 |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | 重试、编码回退、并发池、内存模式、歌词 |
 | [docs/automation.md](docs/automation.md) | 任务 hooks 与资料库同步 |
 | [docs/benchmarks.md](docs/benchmarks.md) | 后解密与端到端实测数据 |
@@ -237,6 +246,7 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 | 一首曲目怎么下载、解密、重封装和写标签？ | `internal/media#Downloader` |
 | 请求由哪个 Apple 主机应答？ | `internal/applemusic#ampAPIBase`、`internal/applemusic#CatalogClient.doWithWebAuth` |
 | 后端怎么和 wrapper 通信？ | `internal/wrapper#Client` |
+| 样本怎么解密？ | `internal/fairplay#Template` |
 | 任务存在哪里，表结构怎么迁移？ | `internal/db#Store` |
 | 配置怎么加载和校验？ | `internal/config#Load`、`internal/config#Config.Validate` |
 | 任务 hooks 发出什么？ | `internal/hooks#Dispatcher` |
@@ -255,7 +265,7 @@ webhook 或本地命令——刷新媒体服务器、跑后处理脚本。默认
 | `make docker` | 在本地构建容器镜像 |
 | `make help` | 列出全部目标 |
 
-`make dev` 不需要 wrapper-manager：模拟模式会解析真实的目录数据、选择真实的媒体，
+`make dev` 不需要 wrapper：模拟模式会解析真实的目录数据、选择真实的媒体，
 再模拟传输、解密和写文件，同时发布与真实下载相同的状态和事件。这是在本地验证 API、
 SSE 流和客户端最快的办法。
 

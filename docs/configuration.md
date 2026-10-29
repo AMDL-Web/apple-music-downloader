@@ -50,7 +50,7 @@ Hand edits reach the running service like this:
 Set these before first real use:
 
 - `server.listen` — API listen address.
-- `wrapper.address` — wrapper URL, `http://host:port` or `https://host:port`: a wrapper-lite, or a wrapper-manager v2 in front of it, which adds logging in from the console.
+- `wrapper.address` — the wrapper's URL ([Wrapper](#wrapper)).
 - `database.path` — SQLite file (default `data/db/amdl.db`).
 - `download.downloads_dir` — where finished files go.
 - `logging.*` — level, stdout on or off, in-memory retention. There is no log file.
@@ -74,6 +74,30 @@ config file:
 - Every other key is set in `config.yaml`. Any other `AMDL_*` variable is ignored, and
   startup logs one warning per variable naming it; releases before 2.0 accepted an
   override for every key, so move such a setting into the file.
+
+## Wrapper
+
+The `wrapper` section points the backend at the HTTP service that holds the Apple Music
+account session. All three keys are startup keys.
+
+- `wrapper.address` is `http://host:port` or `https://host:port`, with an optional path
+  prefix for a reverse proxy; the default is `http://127.0.0.1:12340`. A bare `host:port`
+  fails startup. The scheme picks the transport: `http` is plaintext, `https` is TLS 1.2+
+  with the certificate and hostname verified against the system trust store. There is no
+  option to skip verification.
+- The URL is either a wrapper-lite or a wrapper-manager v2 in front of one. Both serve
+  manifests, lyrics, licenses and the decryption templates; only wrapper-manager has the
+  login API, so only it lets the console's Account page log in. The backend tells them
+  apart from `/status` and reports it as `login_supported` in
+  `GET /api/v1/wrapper/status`. Container setups for both are in
+  [Deployment](deployment.md#the-wrapper); what the backend asks of the wrapper is in
+  [Architecture](architecture.md#21-the-wrapper-and-decryption).
+- `wrapper.timeout_seconds` (default 30) bounds one wrapper HTTP request; a failed key
+  template request is retried up to three more times, 1, 2 and 4 seconds apart. Decryption
+  runs in the backend and has no wrapper timeout.
+- `wrapper.login_timeout_seconds` (default 120) bounds one console login request to a
+  wrapper-manager. A login that needs a two-step code takes two requests.
+- Simulate mode (below) skips the wrapper status check, so jobs can be submitted without one.
 
 ## Catalog tokens and the Hi-Res manifest
 

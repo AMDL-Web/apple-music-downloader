@@ -132,6 +132,9 @@ conversations block a merge, report what blocks it and wait.
 [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) holds the
 Apple Music account session and serves manifests, licenses, lyrics and per-key
 decryption templates over HTTP (`internal/wrapper`); the backend decrypts in-process.
+[wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2) may
+sit in front of it and adds the login API the console uses; a bare wrapper-lite answers
+`501 login_unsupported`.
 
 ## Rule -> enforced by
 

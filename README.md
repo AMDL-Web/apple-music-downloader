@@ -25,8 +25,9 @@ playlists, artists and radio stations.
 
 ## Quick start
 
-You need a reachable [`wrapper-manager`](#how-it-works) instance — the backend gets
-device manifests, licenses and lyrics from it and cannot download anything without one.
+You need a reachable wrapper, either [wrapper-manager v2](#how-it-works) (recommended: you
+log in from the console) or a bare wrapper-lite. The backend gets device manifests,
+licenses, lyrics and decryption templates from it and cannot download anything without one.
 
 ```bash
 docker compose up -d
@@ -34,7 +35,9 @@ docker compose up -d
 
 That pulls the multi-arch image from GHCR (no local build), seeds `configs/config.yaml`
 from the bundled example, and listens on `:18080`. Point it at your wrapper with
-`AMDL_WRAPPER_ADDRESS` in `docker-compose.yml`.
+`AMDL_WRAPPER_ADDRESS` in `docker-compose.yml`, which also carries ready-to-uncomment wrapper
+services ([docs/deployment.md](docs/deployment.md#the-wrapper)). Upgrading from 1.x?
+Read [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) first.
 
 From source instead — Go per [`go.mod`](go.mod), plus `ffmpeg` on `PATH`:
 
@@ -69,20 +72,29 @@ API reference: [docs/api.md](docs/api.md) and [`internal/api/openapi.yaml`](inte
 
 <p align="center">
   <img src="./assets/readme/architecture.svg" width="100%"
-       alt="The web console and your scripts call the backend over REST and Server-Sent Events; the backend keeps its job queue in SQLite, runs the download pipeline and writes files to disk; it requires wrapper-manager over gRPC and reads Apple Music from two different hosts">
+       alt="The web console and your scripts call the backend over REST and Server-Sent Events; the backend keeps its job queue in SQLite, runs the download pipeline and writes files to disk; it requires a wrapper over HTTP, decrypts in-process, and reads the catalog from Apple's amp-api">
 </p>
 
-**`wrapper-manager` is not optional.** It holds the Apple Music account session and
-serves the device manifest, Widevine licenses and lyrics over gRPC. The connection is
-lazy, so the backend starts without it — `GET /api/v1/wrapper/status` tells you whether
-it is actually reachable.
+**A wrapper is not optional.** It holds the Apple Music account session and serves the
+device manifest, Widevine licenses, lyrics and, for each FairPlay key, a decryption
+template, over HTTP; the backend runs the templates itself, in pure Go
+(`internal/fairplay`, a translation of [Temari](https://github.com/WorldObservationLog/Temari)).
+Two upstream wrappers work: [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite)
+(one account; log in on its command line) and [wrapper-manager
+v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2) in front of it (many
+accounts; the console's Account page logs in through it). The backend does not contact the
+wrapper at startup, so it starts without it — `GET /api/v1/wrapper/status` tells you whether
+it is actually reachable and whether it can log in.
 
-**Apple is read from two hosts, and they are not interchangeable.**
-`api.music.apple.com` is the documented API and takes a self-signed developer token; the
-backend never calls it. `amp-api.music.apple.com` is Apple's internal web-player endpoint,
-answers only to a JWT scraped from `music.apple.com`, serves every catalog read, and is the
-**only** source of `enhancedHls` manifests and `editorialVideo` animated covers. Being undocumented, it can change without notice;
-anything read from it degrades to "this album doesn't have that" rather than failing a job.
+**Apple's catalog is read from its undocumented web-player API.**
+`amp-api.music.apple.com` answers only to a JWT scraped from `music.apple.com`, serves every
+catalog read, and is the **only** source of `enhancedHls` manifests and `editorialVideo`
+animated covers. The documented `api.music.apple.com` needs a developer token signed with an
+Apple key; the backend holds none and never calls it. Being undocumented, amp-api can change
+without notice; anything read from it degrades to "this album doesn't have that" rather than
+failing a job. Only a Hi-Res Lossless track that may exceed 48 kHz asks the wrapper for its
+device manifest too, because the web player's playlist can leave out the higher ALAC
+renditions.
 
 **There is no authentication here, on purpose.** Every endpoint is open. This is the
 download core — access control belongs to the reverse proxy, gateway or session layer you
@@ -102,7 +114,7 @@ Alongside the status, each item carries a durable stage breakdown — `resolved`
 `remuxed`, `verified`, `tagged`, `saved` — so a client that reconnects mid-job can
 redraw the exact same progress without replaying the stream.
 
-Media is decrypted fragment by fragment straight into `ffmpeg`; no plaintext whole track
+Media is decrypted in this process, fragment by fragment, straight into `ffmpeg`; no plaintext whole track
 is ever written to disk. The flatten, integrity check and tag rewrite all happen in
 `download.temp_dir`, and only the finished file moves to `downloads_dir`.
 
@@ -121,9 +133,9 @@ WebPlayback format. Set `codec_alternative: false` to stop after the first codec
 
 ### Concurrency
 
-Three process-wide pools, shared across all jobs and fixed at startup:
-`max_parallel_downloads` (16), 32 decrypts and 24 wrapper requests, plus
-`max_running_jobs` (3) worker slots. When a
+Three process-wide pools, shared across all jobs and sized at startup:
+`max_parallel_downloads` (16), one decrypt per CPU (`GOMAXPROCS`) and 24 wrapper requests,
+plus `max_running_jobs` (3) worker slots. When a
 pool is full, permits go to the earliest-submitted unfinished job first, so jobs tend to
 finish one after another instead of all creeping forward together. Interactive API calls
 never wait for those pools; Apple catalog reads, `POST /api/v1/lookup` included, share
@@ -240,7 +252,8 @@ Both are covered in [docs/automation.md](docs/automation.md).
 | --- | --- |
 | [docs/api.md](docs/api.md) | Every endpoint with curl examples, job overrides, error codes, SSE stream semantics |
 | [docs/configuration.md](docs/configuration.md) | Config file, defaults, env overrides, runtime vs startup keys, reload |
-| [docs/deployment.md](docs/deployment.md) | Docker, mounts, `PUID`/`PGID`, seeding, releases and image tags |
+| [docs/deployment.md](docs/deployment.md) | Docker, the wrapper service, mounts, `PUID`/`PGID`, seeding, releases and image tags |
+| [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) | Every breaking change from 1.x, with old and new shapes and an upgrade checklist |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | Retries, codec fallback, concurrency pools, memory modes, lyrics |
 | [docs/automation.md](docs/automation.md) | Job hooks and library sync |
 | [docs/benchmarks.md](docs/benchmarks.md) | Measured post-decrypt and end-to-end results |
@@ -259,6 +272,7 @@ symbol, so it stays valid when files inside the package are split.
 | How is one track downloaded, decrypted, remuxed and tagged? | `internal/media#Downloader` |
 | Which Apple host answers a request? | `internal/applemusic#ampAPIBase`, `internal/applemusic#CatalogClient.doWithWebAuth` |
 | How does the backend talk to the wrapper? | `internal/wrapper#Client` |
+| How are samples decrypted? | `internal/fairplay#Template` |
 | Where are jobs stored, and how does the schema migrate? | `internal/db#Store` |
 | How is config loaded and validated? | `internal/config#Load`, `internal/config#Config.Validate` |
 | What do job hooks send? | `internal/hooks#Dispatcher` |
@@ -278,7 +292,7 @@ tests.
 | `make docker` | Build the container image locally |
 | `make help` | Every target |
 
-`make dev` needs no wrapper-manager: simulate mode resolves real catalog data and
+`make dev` needs no wrapper: simulate mode resolves real catalog data and
 selects real media, then simulates the transfer, decryption and file writes while
 publishing the same statuses and events as a real download. It is the quickest way
 to exercise the API, SSE streams and clients locally.

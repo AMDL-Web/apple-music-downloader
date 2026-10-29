@@ -28,14 +28,46 @@ needs the API changes below before it works against 2.0.
 6. Give the container time to stop: `stop_grace_period: 2m` in Compose or
    `--stop-timeout 120` with `docker run`. Interrupted jobs now resume on the next start
    instead of being cancelled.
-7. Replace wrapper-manager with
+7. Replace the wrapper-manager fork with an upstream wrapper (see
+   [Wrapper](#wrapper) and [Deployment](deployment.md#the-wrapper)): either
+   [wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2),
+   which fronts wrapper-lite over HTTP and has the login API the console's Account page
+   uses, or a bare
    [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite), logged in
-   with its `--login`, and set `wrapper.address` (or `AMDL_WRAPPER_ADDRESS`) to its URL,
-   such as `http://127.0.0.1:12340`. 2.0 no longer speaks wrapper-manager's gRPC and
-   decrypts media itself; see [Wrapper](#wrapper). To keep logging in from the console,
-   point `wrapper.address` at the `v2` branch of
-   [wrapper-manager](https://github.com/WorldObservationLog/wrapper-manager/tree/v2)
-   instead: it fronts wrapper-lite over HTTP and adds the login API.
+   with its own `--login`. Set `wrapper.address` (or `AMDL_WRAPPER_ADDRESS`) to its URL,
+   such as `http://wrapper-manager:8080` or `http://127.0.0.1:12340`. 2.0 no longer
+   speaks the fork's gRPC and decrypts media itself.
+
+## Upgrade checklist
+
+1. Back up the database (step 1 above) and stop the container.
+2. In `configs/config.yaml`, delete every key 2.0 rejects at startup:
+   - `wrapper.insecure`;
+   - `catalog.apple_music_private_key_path`, `catalog.apple_music_key_id`,
+     `catalog.apple_music_team_id`, `catalog.signed_mode_hls_source`,
+     `catalog.developer_token_ttl_hours`, `catalog.allowed_origins`;
+   - `catalog.requests_per_second`, `catalog.request_burst`;
+   - `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests`;
+   - `logging.format`, `logging.include_source`, `logging.file_enabled`,
+     `logging.file_path`, `logging.max_size_mb`, `logging.max_backups`,
+     `logging.max_age_days`, `logging.compress`;
+   - `catalog.media_user_token_priority`, if still present.
+3. Rename or rewrite what changed shape:
+   - `wrapper.address`: `host:port` becomes `http://host:port` or `https://host:port`;
+   - `download.save_lyrics_file` and `download.lyrics_format` become the list
+     `download.lyrics_files`; `download.lyrics_type` becomes `download.lyrics_timing`
+     (`lyrics` is `line`, `syllable-lyrics` is `word`).
+4. In the Compose file:
+   - add the wrapper service (wrapper-manager v2 or wrapper-lite) from
+     [`docker-compose.yml`](../docker-compose.yml), or keep a wrapper on the host;
+   - set `AMDL_WRAPPER_ADDRESS` to its URL, for example `http://wrapper-manager:8080`
+     (a `host:port` value fails startup);
+   - drop the `./data/logs` mount and any `.p8` key mount;
+   - keep `stop_grace_period: 2m`;
+   - remove every other `AMDL_*` variable except the five 2.0 reads.
+5. Check the wrapper host: `unshare -Ur true` must succeed (see [Wrapper](#wrapper)).
+6. Start 2.0, then confirm `GET /api/v1/wrapper/status` reports `ready` and a region, and
+   read `login_supported` to know whether the console can log in.
 
 ## HTTP API
 
@@ -69,8 +101,9 @@ needs the API changes below before it works against 2.0.
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
 | Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
 | `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were startup keys (`422 config_key_not_mutable`) | `400 invalid_request` naming the unknown field, like any removed key | settings screens |
+| `GET /config` and `PUT /config` lyrics and catalog fields | `download.save_lyrics_file`, `download.lyrics_format`, `download.lyrics_type` and `catalog.signed_mode_hls_source` (enum `wrapper`, `web_token`) were runtime fields | the three lyrics fields are replaced by `download.lyrics_files` (array of `lrc`, `ttml`) and `download.lyrics_timing` (`line`, `word`); `catalog.signed_mode_hls_source` is gone; `PUT` with an old field is `400 invalid_request` naming it | settings screens, scripts that PUT lyrics settings |
 | Env-pinned keys | `GET /config` listed the runtime keys an `AMDL_*` variable set in `pinned`; `PUT /config` refused them with `422 config_key_pinned` | `pinned`, the `PinnedKey` schema and the `config_key_pinned` code are gone: no environment variable can set a runtime key any more | settings screens |
-| Developer token | `GET /developer-token` signed a token for other clients in local signing mode (`409 signing_disabled` in legacy mode) | removed (`404 route_not_found`), and the `signing_disabled` code with it; the backend signs only its own catalog token | browser players that fetched a token |
+| Developer token | `GET /developer-token` signed a token for other clients in local signing mode (`409 signing_disabled` in legacy mode) | removed (`404 route_not_found`), and the `signing_disabled` code with it; the backend no longer signs any token and reads the catalog with the web player's token | browser players that fetched a token |
 | API reference | Swagger UI at `/docs` (from unpkg.com) and the spec at `/api/openapi.yaml` | neither is served (`404`); read `internal/api/openapi.yaml` and `docs/api.md` in the repository | API explorers, client generators that fetched the spec |
 | CORS | `Access-Control-Allow-Origin: *` on every response; `OPTIONS` answered `204` | no CORS headers; `OPTIONS` under `/api/` is `405 method_not_allowed`. Only same-origin pages (the console) and non-browser clients can call the API | web clients on another origin, such as amdl-web |
 | Request id | a well-formed incoming `X-Request-ID` was adopted and echoed | always generated by the server; read it from the response to filter `GET /logs?request_id=` | scripts that set their own id |
@@ -79,7 +112,7 @@ needs the API changes below before it works against 2.0.
 | Media-user-token per request | `overrides.media_user_token` on `POST /downloads` and `media_user_token` on `POST /lookup` overlaid `catalog.media_user_token` (`""` cleared it) | removed (`400 invalid_request` naming the field); downloads and lookups always use `catalog.media_user_token` | scripts that passed a token per request |
 | Job `overrides` in responses and events | could hold every field above; the token was redacted | holds only the five fields above | job detail clients |
 | Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | |
-| New | | `GET /system` (with `default_storefront`), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), web console at `/console/` (`/` redirects there) | |
+| New | | `GET /system` (with `default_storefront`; it reports no signing mode, because the backend signs no token), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), web console at `/console/` (`/` redirects there) | |
 
 ## Config and environment
 
@@ -159,10 +192,13 @@ needs the API changes below before it works against 2.0.
 
 | Area | 1.x | 2.0 | Affects |
 | --- | --- | --- | --- |
-| Wrapper service | wrapper-manager over gRPC; it decrypted samples | wrapper-lite over HTTP; it returns a key template per key URI and the backend decrypts | deployments |
-| `wrapper.address` | gRPC `host:port` | wrapper-lite URL, `http://host:port` or `https://host:port`; anything else, in the file or in `AMDL_WRAPPER_ADDRESS`, fails startup | `config.yaml`, Compose files |
+| Wrapper service | the wrapper-manager fork over gRPC; it decrypted samples | wrapper-lite over HTTP; it returns a key template per key URI and the backend decrypts | deployments |
+| `wrapper.address` | gRPC `host:port` | wrapper URL (wrapper-lite or wrapper-manager v2), `http://host:port` or `https://host:port`; anything else, in the file or in `AMDL_WRAPPER_ADDRESS`, fails startup | `config.yaml`, Compose files |
 | `wrapper.insecure` | `true` for plaintext gRPC, `false` for TLS | rejected in the file; the URL scheme picks plaintext (`http`) or TLS 1.2+ (`https`) | `config.yaml` |
 | `wrapper.timeout_seconds` | bound on a unary RPC and on each decrypt-fragment wait | bound on one wrapper HTTP request; decryption has no wrapper timeout | `config.yaml` |
+| Where the wrapper runs | whatever your wrapper-manager deployment needed | `wrapper-lite-rootless`, which both wrapper-lite's Docker image and wrapper-manager v2 run, needs user namespaces and `chroot`: `unshare -Ur true` must succeed on the wrapper host, and a Docker container needs `privileged: true` or a seccomp profile that allows them. Upstream's `wrapper-lite-qemu` launcher boots a guest instead and has no such requirement | wrapper hosts, Compose files |
+| Logging in from the console | `POST /wrapper/login`, `/login/{login_id}/2fa` and `/logout` went to the fork's gRPC login | they work only when `wrapper.address` is a wrapper-manager v2, whose `POST /login` and `POST /logout` the backend forwards to; against a bare wrapper-lite they are `501 login_unsupported` and the console's Account page shows the wrapper's `--login` command instead. `GET /wrapper/status` reports which one it is in `login_supported` | the console's Account page, scripts that log in through the API |
+| Wrapper requests | gRPC calls, with `download.max_parallel_wrapper_requests` bounding them | HTTP; 24 lyrics, web playback and license requests and 2 `/key` and `/m3u8` requests at a time, fixed in the code | |
 
 ## Hooks
 
