@@ -54,9 +54,10 @@ wrapper:
   address: "http://127.0.0.1:12340"
   # integer seconds: timeout for one wrapper HTTP request. A failed key-template request (/key) is
   # retried up to 3 more times, 1, 2 and 4 seconds apart, each with this timeout. A /key or /m3u8 also
-  # waits at most 10 times this for a free playback slot, not taken from its timeout, and then fails
-  # without those retries. Decryption itself runs in this process and has no wrapper timeout. Values <= 0
-  # fall back to 30 seconds. Requires a restart.
+  # waits at most 10 times this for a free playback slot, not taken from its timeout; a /key that runs
+  # out of that wait skips the retries above, and the track's own decrypt attempts (download.max_attempts)
+  # still apply. Decryption itself runs in this process and has no wrapper timeout. Values <= 0 fall back
+  # to 30 seconds. Requires a restart.
   timeout_seconds: 30
   # integer seconds: bound on one console login request, for a wrapper-manager (a bare wrapper-lite has
   # no login API and logs in from its own command line, --login). A login that needs a two-step code

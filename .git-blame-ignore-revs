@@ -34,3 +34,5 @@ c234cf96ffbe40e1168ce69d8792cfdd6bc93454
 6268496c609fdf8a7b9778634a7961ea19f08a2f
 # refactor(media): move trackRun.fetchLyrics into lyrics.go (move-only)
 d1a2168ba6250a36401fedaa109edf0b9009beb6
+# refactor(wrapper): move the decrypt tests out of client_test.go (move-only)
+7b8ad1d4f21573b8238a642d5c84d4f471ea3f11
