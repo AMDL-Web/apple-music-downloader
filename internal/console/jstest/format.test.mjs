@@ -32,7 +32,6 @@ import {
   errorSummary,
   shortId,
   displayId,
-  maskAccount,
   safeHttpUrl,
   contrastRatio,
   artTextColor,
@@ -136,13 +135,11 @@ test('jobTitle falls back to the input URL slug before the input resolves', () =
   assert.equal(jobSubtitle({ artist_name: 'Taylor Swift', curator_name: 'x' }), 'Taylor Swift');
 });
 
-test('shortId, maskAccount and safeHttpUrl', () => {
+test('shortId and safeHttpUrl', () => {
   assert.equal(shortId('job_0123456789abcdef0123456789abcdef'), '01234567');
   assert.equal(displayId('job_0123456789abcdef0123456789abcdef'), '01234567');
   assert.equal(displayId('job_doesnotexist'), 'job_doesnotexist', 'an id that cannot be real is shown whole');
   assert.equal(displayId(undefined), '');
-  assert.equal(maskAccount('jane@example.com'), 'j•••@example.com');
-  assert.equal(maskAccount('operator'), 'o•••r');
   assert.equal(safeHttpUrl('https://music.apple.com/us/album/1'), 'https://music.apple.com/us/album/1');
   assert.equal(safeHttpUrl('javascript:alert(1)'), '');
   assert.equal(safeHttpUrl(undefined), '');

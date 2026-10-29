@@ -1229,7 +1229,7 @@ components:
         - upstream_timeout
     WrapperStatus:
       type: object
-      required: [ready, status, regions, client_count, accounts]
+      required: [ready, status, regions, accounts]
       properties:
         ready:
           type: boolean
@@ -1240,9 +1240,6 @@ components:
           description: Storefronts the decryptor serves; an empty array when none.
           items:
             type: string
-        client_count:
-          type: integer
-          format: int32
         accounts:
           type: array
           description: >-

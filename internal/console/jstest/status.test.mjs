@@ -94,13 +94,14 @@ test('health rows', () => {
   assert.equal(degraded.detail, 'disk I/O error');
   assert.equal(backendHealthView({ error: { status: 0, message: 'Cannot reach the server.' } }).label, 'Unreachable');
 
-  assert.deepEqual(wrapperView({ data: { ready: true, status: true, regions: ['us', 'jp'], client_count: 2, accounts: [] } }), {
+  assert.deepEqual(wrapperView({ data: { ready: true, status: true, regions: ['us', 'jp'], accounts: ['a@example.com', 'b@example.com'] } }), {
     icon: 'circle-check',
     role: 'success',
     label: 'Ready',
-    detail: '2 clients · US, JP',
+    detail: 'US, JP',
   });
-  assert.equal(wrapperView({ data: { ready: false, status: true, regions: [], client_count: 0, accounts: [] } }).detail, 'No account logged in');
+  assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com'] } }).detail, '');
+  assert.equal(wrapperView({ data: { ready: false, status: true, regions: [], accounts: [] } }).detail, 'No account logged in');
   assert.equal(wrapperView({ error: { status: 503, message: 'unreachable' } }).label, 'Unreachable');
 
   assert.equal(librarySyncView({ error: { status: 503, message: 'Service Unavailable' } }).label, 'Unavailable');

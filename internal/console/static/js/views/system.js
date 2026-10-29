@@ -2,7 +2,7 @@
 // wrapper, library sync, hooks with outcomes, and a short config summary
 // that links to Settings, where the config is edited.
 
-import { html, useState } from '../ui/preact.js';
+import { html } from '../ui/preact.js';
 import {
   getSystem,
   getStats,
@@ -13,10 +13,10 @@ import {
   getHooks,
   settle,
 } from '../api.js';
-import { count, bytes, elapsed, absTime, maskAccount, relTime } from '../lib/format.js';
+import { count, bytes, elapsed, absTime, relTime } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView } from '../lib/status.js';
-import { useApp, Card, Badge, StatusText, KV, Icon, Button, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, Empty, RelTime, HealthList } from '../ui/components.js';
+import { useApp, Card, Badge, StatusText, KV, Icon, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, Empty, RelTime, HealthList } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
 
 export function SystemPage() {
@@ -157,7 +157,6 @@ function HealthCard({ backend, wrapper, sync, hooks, loading }) {
 }
 
 function WrapperCard({ res, loading }) {
-  const [reveal, setReveal] = useState(false);
   let body;
   if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
   else if (!res || res.error) {
@@ -177,7 +176,6 @@ function WrapperCard({ res, loading }) {
         rows=${[
           ['State', html`<${Badge} view=${wrapperView(res)} />`],
           ['Connected', wr.status ? 'Yes' : 'No'],
-          ['Clients', html`<span class="num">${count(wr.client_count)}</span>`],
           ['Regions', Array.isArray(wr.regions) && wr.regions.length ? wr.regions.map((r) => r.toUpperCase()).join(', ') : null],
           ['Accounts', html`<span class="num">${count(accounts.length)}</span>`],
         ]}
@@ -185,11 +183,8 @@ function WrapperCard({ res, loading }) {
       ${accounts.length
         ? html`<div class="accounts">
             <ul class="account-list" aria-label="Logged-in accounts">
-              ${accounts.map((a) => html`<li key=${a} class="mono">${reveal ? a : maskAccount(a)}</li>`)}
+              ${accounts.map((a) => html`<li key=${a} class="mono">${a}</li>`)}
             </ul>
-            <${Button} size="sm" variant="ghost" icon=${reveal ? 'eye-off' : 'eye'} aria-pressed=${String(reveal)} onClick=${() => setReveal((r) => !r)}>
-              ${reveal ? 'Hide accounts' : 'Reveal accounts'}
-            </${Button}>
           </div>`
         : null}
       <p class="muted small">Log in and out of accounts in <a class="link" href=${settingsHash('account')}>Settings › Apple Music account</a>.</p>`;

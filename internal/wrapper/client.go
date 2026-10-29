@@ -113,11 +113,10 @@ type loginSession struct {
 // Status is wrapper-manager's state as GET /api/v1/wrapper/status returns
 // it. Regions and Accounts are never nil, so they encode as [] when empty.
 type Status struct {
-	Ready       bool     `json:"ready"`
-	Status      bool     `json:"status"`
-	Regions     []string `json:"regions"`
-	ClientCount int32    `json:"client_count"`
-	Accounts    []string `json:"accounts"`
+	Ready    bool     `json:"ready"`
+	Status   bool     `json:"status"`
+	Regions  []string `json:"regions"`
+	Accounts []string `json:"accounts"`
 }
 
 // DecryptSession is a live decrypt stream to the wrapper for a single track.
@@ -354,11 +353,10 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	}
 	data := resp.GetData()
 	return Status{
-		Ready:       data.GetReady(),
-		Status:      data.GetStatus(),
-		Regions:     nonNil(data.GetRegions()),
-		ClientCount: data.GetClientCount(),
-		Accounts:    nonNil(data.GetAccounts()),
+		Ready:    data.GetReady(),
+		Status:   data.GetStatus(),
+		Regions:  nonNil(data.GetRegions()),
+		Accounts: nonNil(data.GetAccounts()),
 	}, nil
 }
 

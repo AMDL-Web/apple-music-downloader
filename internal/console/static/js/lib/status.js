@@ -157,10 +157,7 @@ export function wrapperView(res) {
   if (!res || res.error) return failedView(res, 'Unreachable');
   const w = res.data;
   const regions = Array.isArray(w.regions) && w.regions.length ? w.regions.join(', ').toUpperCase() : '';
-  if (w.ready) {
-    const clients = `${w.client_count} ${w.client_count === 1 ? 'client' : 'clients'}`;
-    return { icon: 'circle-check', role: 'success', label: 'Ready', detail: regions ? `${clients} · ${regions}` : clients };
-  }
+  if (w.ready) return { icon: 'circle-check', role: 'success', label: 'Ready', detail: regions };
   const accounts = Array.isArray(w.accounts) ? w.accounts.length : 0;
   return { icon: 'triangle-alert', role: 'warning', label: 'Not ready', detail: accounts === 0 ? 'No account logged in' : 'Wrapper is not ready' };
 }

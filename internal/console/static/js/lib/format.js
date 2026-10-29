@@ -373,14 +373,6 @@ export function typeLabel(type) {
   return TYPE_LABELS[type] || type || '';
 }
 
-/** Masks an account identifier such as an email: "jane@example.com" -> "j•••@example.com". */
-export function maskAccount(value) {
-  if (typeof value !== 'string' || value === '') return '';
-  const at = value.indexOf('@');
-  if (at > 0) return `${value[0]}•••${value.slice(at)}`;
-  return value.length <= 2 ? '•••' : `${value[0]}•••${value[value.length - 1]}`;
-}
-
 // --- Artwork palette ----------------------------------------------------
 
 const HEX6 = /^[0-9a-f]{6}$/i;

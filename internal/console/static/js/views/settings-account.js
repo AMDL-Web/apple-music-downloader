@@ -5,7 +5,6 @@ import { html, useState } from '../ui/preact.js';
 import { getWrapperStatus, loginWrapper, submitWrapperTwoStep, logoutWrapper, settle } from '../api.js';
 import { wrapperErrorText, wrapperUnreachable } from '../lib/settings-account.js';
 import { wrapperView } from '../lib/status.js';
-import { count, maskAccount } from '../lib/format.js';
 import { useApp, Badge, Button, Icon, KV, Notice, SkeletonRows } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { usePoll } from '../ui/hooks.js';
@@ -26,7 +25,6 @@ export function AccountPanel() {
   const res = status.data;
   // Login needs the session service; say why it cannot be used instead of failing late.
   const down = res && res.error ? wrapperUnreachable(res.error) : null;
-  const [reveal, setReveal] = useState(false);
   const [logout, setLogout] = useState(null);
 
   let state;
@@ -45,7 +43,6 @@ export function AccountPanel() {
         ['State', html`<${Badge} view=${wrapperView(res)} />`],
         ['Connected', w.status ? 'Yes' : 'No'],
         ['Regions', Array.isArray(w.regions) && w.regions.length ? w.regions.map((r) => r.toUpperCase()).join(', ') : 'None'],
-        ['Clients', html`<span class="num">${count(w.client_count)}</span>`],
       ]}
     />`;
   }
@@ -63,17 +60,12 @@ export function AccountPanel() {
       ? html`<section class="account-block" aria-labelledby="account-list-title">
           <div class="account-block-head">
             <h3 class="section-title" id="account-list-title">Logged-in accounts</h3>
-            ${accounts.length
-              ? html`<${Button} variant="ghost" size="sm" icon=${reveal ? 'eye-off' : 'eye'} aria-pressed=${String(reveal)} onClick=${() => setReveal((r) => !r)}>
-                  ${reveal ? 'Hide names' : 'Show names'}
-                </${Button}>`
-              : null}
           </div>
           ${accounts.length
             ? html`<ul class="account-rows">
                 ${accounts.map(
                   (a) => html`<li key=${a} class="account-row">
-                    <span class="account-name mono">${reveal ? a : maskAccount(a)}</span>
+                    <span class="account-name mono">${a}</span>
                     <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout(a)}>Log out</${Button}>
                   </li>`,
                 )}
@@ -85,7 +77,6 @@ export function AccountPanel() {
     ${logout
       ? html`<${LogoutDialog}
           account=${logout}
-          masked=${reveal ? logout : maskAccount(logout)}
           onClose=${() => setLogout(null)}
           onDone=${() => {
             setLogout(null);
@@ -96,7 +87,7 @@ export function AccountPanel() {
   </div>`;
 }
 
-function LogoutDialog({ account, masked, onClose, onDone }) {
+function LogoutDialog({ account, onClose, onDone }) {
   const app = useApp();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -105,7 +96,7 @@ function LogoutDialog({ account, masked, onClose, onDone }) {
     setError(null);
     try {
       await logoutWrapper(account);
-      app.toast({ message: `Logged out ${masked}`, role: 'success' });
+      app.toast({ message: `Logged out ${account}`, role: 'success' });
       onDone();
     } catch (e) {
       setError(e);
@@ -121,7 +112,7 @@ function LogoutDialog({ account, masked, onClose, onDone }) {
     onConfirm=${confirm}
     onCancel=${onClose}
   >
-    <p>wrapper-manager ends the session for <span class="mono">${masked}</span>. Downloads from its storefronts stop until an account is logged in again.</p>
+    <p>wrapper-manager ends the session for <span class="mono">${account}</span>. Downloads from its storefronts stop until an account is logged in again.</p>
     <${WrapperError} error=${error} step="logout" />
   </${ConfirmDialog}>`;
 }
@@ -149,7 +140,7 @@ function LoginForm({ onDone, again, blocked }) {
     setError(null);
   };
   const succeeded = () => {
-    app.toast({ message: `Logged in ${maskAccount(username.trim())}`, role: 'success' });
+    app.toast({ message: `Logged in ${username.trim()}`, role: 'success' });
     reset();
     setUsername('');
     onDone();
@@ -198,7 +189,7 @@ function LoginForm({ onDone, again, blocked }) {
   if (step === 'code') {
     return html`<form class="account-block login-form" data-step="code" aria-labelledby="login-title" onSubmit=${submitCode}>
       <h3 class="section-title" id="login-title">Two-step verification</h3>
-      <p class="small">Apple sent a code to the trusted devices of <span class="mono">${maskAccount(username.trim())}</span>. Enter it to finish logging in.</p>
+      <p class="small">Apple sent a code to the trusted devices of <span class="mono">${username.trim()}</span>. Enter it to finish logging in.</p>
       <div class="form-row">
         <label class="field-label" for="login-code">Verification code</label>
         <input

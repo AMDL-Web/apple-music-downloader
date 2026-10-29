@@ -53,6 +53,7 @@ needs the API changes below before it works against 2.0.
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
 | Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays (possibly empty) | account screens |
+| Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `status`, `regions`, `accounts` | account screens that showed the count |
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
 | Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
 | `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were startup keys (`422 config_key_not_mutable`) | `400 invalid_request` naming the unknown field, like any removed key | settings screens |

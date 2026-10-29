@@ -131,7 +131,7 @@ func TestStatusEncodesEmptyListsAsArrays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"ready":false,"status":false,"regions":[],"client_count":0,"accounts":[]}`
+	want := `{"ready":false,"status":false,"regions":[],"accounts":[]}`
 	if string(raw) != want {
 		t.Fatalf("status JSON = %s, want %s", raw, want)
 	}
