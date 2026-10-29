@@ -60,6 +60,35 @@ jobs:
       - name: Script tests
         run: make node-test
 
+  # make temaridiff checks internal/fairplay byte for byte against the upstream
+  # Temari library it was translated from, and checks that rounds_gen.go is the
+  # translation of the Temari version pinned in tools/temaridiff/go.mod. It
+  # downloads Temari and loads its prebuilt cdylib, which `make check` must not
+  # depend on, so it is a job of its own. Renovate opens a separate PR for each
+  # Temari release; red there means upstream changed the algorithm and
+  # internal/fairplay needs re-translating (tools/temaridiff/doc.go).
+  temaridiff:
+    name: Temari parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/temaridiff/go.sum
+
+      - name: Compare with upstream Temari
+        run: make temaridiff
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

@@ -67,6 +67,14 @@
       groupName: "go dependencies",
     },
     {
+      // Comes after the go dependencies rule so its groupName wins. The bump
+      // also needs internal/fairplay/rounds_gen.go regenerated when upstream's
+      // rounds_gen.rs changed; the parity job says so when it is stale.
+      description: "Temari, the upstream of internal/fairplay, gets a PR of its own so the Temari parity CI job judges that one upgrade: green means upstream changed speed or packaging only, red means internal/fairplay needs re-translating (tools/temaridiff/doc.go)",
+      matchPackageNames: ["github.com/WorldObservationLog/Temari/bindings/go"],
+      groupName: "temari",
+    },
+    {
       description: "Container base images: golang and alpine in the Dockerfile",
       matchManagers: ["dockerfile", "docker-compose"],
       groupName: "docker base images",

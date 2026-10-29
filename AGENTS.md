@@ -141,6 +141,7 @@ Go dependency.
 | Config example key set and defaults match the struct | tests in `internal/config` |
 | Routes, error codes and runtime config keys match `internal/api/openapi.yaml` | parity tests in `internal/api` |
 | Output paths | golden tests in `internal/media` |
+| `internal/fairplay` decrypts like upstream Temari, and `internal/fairplay/rounds_gen.go` is the pinned version's translation | CI Temari parity job (`make temaridiff`); Renovate opens a PR per Temari release |
 | Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `internal/console` |
 | Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md size, CLAUDE.md pairs, docs types and index | `internal/repocheck` tests |
 | DCO sign-off | DCO GitHub App on PRs; `scripts/guard-commands.mjs` on `git commit` |
