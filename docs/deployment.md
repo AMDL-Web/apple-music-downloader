@@ -92,7 +92,7 @@ Two repository defaults are unusable inside a container, so the entrypoint rewri
 on every start through two of the environment overrides rather than baking them into the
 file: `server.listen` becomes `AMDL_SERVER_LISTEN` (default `:18080` — a
 container must not listen on loopback) and `wrapper.address` becomes
-`AMDL_WRAPPER_ADDRESS` (default `host.docker.internal:8080`).
+`AMDL_WRAPPER_ADDRESS` (default `http://host.docker.internal:12340`).
 
 ## Environment variables
 
@@ -107,7 +107,7 @@ Container variables:
 | `PGID` | `1000` | GID the backend runs as. Same behaviour as `PUID`. |
 | `TZ` | UTC | Container timezone (IANA name, e.g. `Asia/Shanghai`). Affects log timestamps and the local time exec hooks see. `tzdata` is in the image. |
 | `AMDL_SERVER_LISTEN` | `:18080` (entrypoint default) | Overrides `server.listen` on every start. The health check derives its port from this. |
-| `AMDL_WRAPPER_ADDRESS` | `host.docker.internal:8080` (entrypoint default) | Overrides `wrapper.address` on every start. |
+| `AMDL_WRAPPER_ADDRESS` | `http://host.docker.internal:12340` (entrypoint default) | Overrides `wrapper.address` on every start. |
 | `AMDL_CONFIG` | `/app/configs/config.yaml` | Config file path (native backend support). |
 | `AMDL_HOOKS_CONFIG` | `/app/configs/hooks.yaml` | Hooks file path (native backend support). |
 | `AMDL_DATABASE_PATH` | `database.path` from `config.yaml` | Overrides `database.path` on every start. |
@@ -157,10 +157,10 @@ ownership inside the container for you.
 
 ## Reaching wrapper-manager
 
-- Wrapper on the host: keep the default `host.docker.internal:8080`. The compose file's
+- Wrapper on the host: keep the default `http://host.docker.internal:12340`. The compose file's
   `extra_hosts: host-gateway` entry makes that name resolvable on Linux too.
-- Wrapper as a compose service: set `AMDL_WRAPPER_ADDRESS` to `<service-name>:8080`.
-- The gRPC connection is lazy — the backend starts without the wrapper online. Verify with
+- Wrapper as a compose service: set `AMDL_WRAPPER_ADDRESS` to `http://<service-name>:12340`.
+- The backend does not contact the wrapper at startup, so it starts without the wrapper online. Verify with
   `GET /api/v1/wrapper/status`.
 
 ## Releases

@@ -24,12 +24,12 @@ PGID="${PGID:-1000}"
 # environment overrides:
 #   - server.listen   defaults to 127.0.0.1:18080, unreachable from outside
 #                     the container; changed to :18080
-#   - wrapper.address defaults to 127.0.0.1:8080, which points at the
-#                     container itself; changed to the host
+#   - wrapper.address defaults to http://127.0.0.1:12340, which points at
+#                     the container itself; changed to the host
 # Environment variables take precedence over config.yaml and are not written
 # back to the file.
 export AMDL_SERVER_LISTEN="${AMDL_SERVER_LISTEN:-:18080}"
-export AMDL_WRAPPER_ADDRESS="${AMDL_WRAPPER_ADDRESS:-host.docker.internal:8080}"
+export AMDL_WRAPPER_ADDRESS="${AMDL_WRAPPER_ADDRESS:-http://host.docker.internal:12340}"
 
 mkdir -p "$CONFIG_DIR"
 

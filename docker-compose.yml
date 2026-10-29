@@ -55,13 +55,13 @@ services:
       # AMDL_DATABASE_PATH, AMDL_CONFIG and AMDL_HOOKS_CONFIG; every other
       # setting belongs in config.yaml, and any other AMDL_* variable is
       # ignored with a warning at startup.
-      # wrapper-manager gRPC address (overrides wrapper.address):
-      #   - wrapper runs on the host: keep host.docker.internal:8080 (also the
+      # wrapper-lite URL (overrides wrapper.address):
+      #   - wrapper runs on the host: keep http://host.docker.internal:12340 (also the
       #     entrypoint's container default, so leaving the variable unset has
       #     the same effect);
-      #   - wrapper is also a compose service: change it to "<service name>:8080"
+      #   - wrapper is also a compose service: change it to "http://<service name>:12340"
       #     and uncomment the wrapper-manager service below.
-      AMDL_WRAPPER_ADDRESS: "host.docker.internal:8080"
+      AMDL_WRAPPER_ADDRESS: "http://host.docker.internal:12340"
       # API listen address (overrides server.listen). Inside the container it
       # must listen on a non-loopback address; the entrypoint defaults to
       # :18080. When changing the port, adjust the ports mapping above to match;
