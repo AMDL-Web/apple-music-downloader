@@ -115,7 +115,8 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 三个进程级、跨全部任务共享、启动时固定的池：`max_parallel_downloads`（16）、
 `max_parallel_decrypts`（32）、`max_parallel_wrapper_requests`（24），外加
 `max_running_jobs`（3）个 worker 槽位。池满时许可按提交时间分配，最早提交且未完成的任务优先，
-因此任务倾向于逐个完成而非交错推进。交互式 API 请求永远不排在任务后面。
+因此任务倾向于逐个完成而非交错推进。交互式 API 请求不等待这些池；Apple 目录读取（包括
+`POST /api/v1/lookup`）与任务的目录读取共用一个请求闸门（`catalog.max_parallel_requests`）。
 
 `download.memory_mode` 是内存与临时盘 I/O 的取舍：`low`（默认）把加密整轨写成可续传的检查点
 再读回；`high` 改为留在内存里。详见
@@ -162,7 +163,8 @@ queued → resolving → waiting_download → downloading → waiting_decrypt
 
 提交接口接受 `urls`，以及一个只对该批任务生效的 `overrides` 对象——编码优先级、内存模式、
 路径模板、歌词选项、`force_overwrite`、hooks 允许列表，以及电台和私人歌单所需的
-`media_user_token`。令牌不会出现在任何响应里。
+`media_user_token`。批次里的令牌不会出现在任何响应里；全局兜底的
+`catalog.media_user_token` 是运行时配置，`GET /api/v1/config` 会返回它。
 
 所有错误共用一种响应体 `{"error": {"code", "message", "details"?}}`，客户端按 `code`
 分支。事件流都是 Server-Sent Events，用 `Last-Event-ID` 或 `?cursor=` 续传，初始游标取对应

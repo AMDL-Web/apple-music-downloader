@@ -50,9 +50,9 @@ needs the API changes below before it works against 2.0.
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
 | Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays (possibly empty) | account screens |
-| `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` or SIGHUP | settings screens |
+| `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` or SIGHUP. It lists the keys an `AMDL_*` variable pins in `pinned`, and `PUT /config` refuses them with `422 config_key_pinned` | settings screens |
 | Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | |
-| New | | `GET /system`, `GET /stats`, `POST /config/reload`, web console at `/console/` (`/` redirects there) | |
+| New | | `GET /system` (with `default_storefront`), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), web console at `/console/` (`/` redirects there) | |
 
 ## Config and environment
 
@@ -128,6 +128,8 @@ Unchanged, with three exceptions that only affect unusual titles:
   `item_progress` event whose `phase` is `cancelled`; a queued job's leftover items
   (from a run a restart interrupted) are ended in one write before its `job_cancelled`
   event. Job detail views and stream clients see the new terminal item status.
+  `POST /api/v1/downloads/{id}/retry` re-queues the unfinished tracks of a cancelled job
+  as it does for a failed one.
 - Stopping the backend no longer cancels running jobs: they stay `running` and resume
   on the next start (`job_recovered`), keeping finished tracks and, while the temp
   directory survives, partial transfers.

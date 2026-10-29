@@ -252,8 +252,8 @@ fields keep the global value; a value that fails validation is `422 invalid_over
 | Field | Notes |
 | --- | --- |
 | `quality_priority`, `codec_alternative`, `memory_mode`, `max_attempts` | Per-batch pipeline behaviour |
-| `downloads_dir`, `temp_dir`, `*_path_format` | Per-batch output destination |
-| `cover_size`, `cover_format`, `embed_cover`, `save_album_cover`, `save_artist_cover`, `save_playlist_cover` | Artwork |
+| `downloads_dir`, `temp_dir`, `*_path_format` | Per-batch output destination; a template is a relative path inside the downloads folder, with no `..` segment and no `{Var:spec}` other than `:02d` |
+| `cover_size`, `cover_format`, `embed_cover`, `save_album_cover`, `save_artist_cover`, `save_playlist_cover` | Artwork; `cover_size` is `{width}x{height}` in pixels, such as `5000x5000` |
 | `embed_lyrics`, `save_lyrics_file`, `lyrics_format`, `lyrics_type`, `lyrics_extras` | Lyrics |
 | `alac_max_sample_rate`, `alac_max_bit_depth`, `check_integrity` | Audio limits and the integrity gate |
 | `force_overwrite` | Overwrite existing output files and their lyrics sidecars instead of skipping |
@@ -442,8 +442,9 @@ and `id` are what the job would be, and the `?i=` of an album link follows
 `catalog.album_track_url_mode` (reported as `track_id` either way). The metadata fields
 have the names and meaning of the job fields; `track_count` is the number of songs a
 download would contain (absent for artists and stations, whose track lists are not read),
-and a station adds `needs_media_user_token`. Each type costs one light catalog read: never
-the amp-api-only reads, never a station's next-tracks feed, at most 15 seconds in all.
+and a station adds `needs_media_user_token`. Each type costs light catalog reads only (an
+album or playlist pages through its track list): never the amp-api-only reads, never a
+station's next-tracks feed, at most 15 seconds in all.
 
 The optional `media_user_token` overrides `catalog.media_user_token` for this lookup (an
 empty string clears it); only a private playlist's cover uses it, and it is never echoed.

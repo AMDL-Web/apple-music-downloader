@@ -126,7 +126,8 @@ Three process-wide pools, shared across all jobs and fixed at startup:
 `max_parallel_wrapper_requests` (24), plus `max_running_jobs` (3) worker slots. When a
 pool is full, permits go to the earliest-submitted unfinished job first, so jobs tend to
 finish one after another instead of all creeping forward together. Interactive API calls
-never queue behind jobs.
+never wait for those pools; Apple catalog reads, `POST /api/v1/lookup` included, share
+one request gate (`catalog.max_parallel_requests`) with the jobs' catalog reads.
 
 `download.memory_mode` trades RAM for temp-disk I/O: `low` (default) checkpoints the
 encrypted track to disk and re-reads it; `high` keeps it in RAM instead. See
@@ -177,7 +178,8 @@ the source of truth for every request and response shape. Every path below is un
 Submissions take `urls`, and an `overrides` object that overlays the runtime config for
 that batch only — quality priority, memory mode, path templates, lyrics settings,
 `force_overwrite`, the hook allow-list, and the `media_user_token` that radio stations and
-private playlists need. Tokens are never echoed back in any response.
+private playlists need. A batch's token is never echoed back; the global fallback
+`catalog.media_user_token` is a runtime key, so `GET /api/v1/config` returns it.
 
 Errors share one body, `{"error": {"code", "message", "details"?}}`; clients switch on
 `code`. Streams are Server-Sent Events that resume from `Last-Event-ID` or `?cursor=`,
