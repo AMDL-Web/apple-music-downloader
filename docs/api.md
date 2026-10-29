@@ -255,7 +255,7 @@ lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`, and the media-
 `media_user_token`) or inside `overrides` (`hooks`, `downloads_dir`, `media_user_token`,
 ...), is `400 invalid_request` naming the unknown field.
 
-**`force_overwrite`** — `true` overwrites an existing audio file and its lyrics sidecar;
+**`force_overwrite`** — `true` overwrites an existing audio file and its lyrics sidecars;
 `false` (the default, from `download.force_overwrite`) skips tracks whose output already
 exists.
 

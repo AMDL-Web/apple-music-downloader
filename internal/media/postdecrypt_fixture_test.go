@@ -133,7 +133,7 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 	cfg.Download.MaxParallelDownloads = 1
 	cfg.Download.CheckIntegrity = true
 	cfg.Download.EmbedCover = true
-	cfg.Download.SaveLyricsFile = false
+	cfg.Download.LyricsFiles = nil
 	cfg.Tools.FFmpeg = ffmpeg
 
 	downloader := newTestDownloader(withDecryptLimit(&Downloader{
@@ -193,7 +193,7 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		pipelineErr = downloader.downloadEnhancedCodec(
-			ctx, job, &item, song, "alac", lyrics, cover, outputPath, selected, reporter, phases.set,
+			ctx, job, &item, song, "alac", trackLyrics{lrc: lyrics}, cover, outputPath, selected, reporter, phases.set,
 		)
 		cancel()
 	}

@@ -178,18 +178,27 @@ comfortable. Full numbers in [benchmarks.md](benchmarks.md).
 
 ## Lyrics
 
-- `download.embed_lyrics` — write lyrics into the MP4 tag.
-- `download.save_lyrics_file` — save an `.lrc` or `.ttml` sidecar next to the audio.
-- `download.lyrics_format` — `lrc` or `ttml`; `ttml` preserves the wrapper's original TTML.
-- `download.lyrics_type` — `lyrics` or `syllable-lyrics` (word-timed).
-- `download.lyrics_extras` — `translation`, `pronunciation`; only applied when
-  `lyrics_format: "lrc"`.
+Each track with lyrics takes one wrapper request: `/lyrics` with `syllable=1`, which
+returns Apple's word-timed TTML with the translation in `catalog.language` (when Apple has
+one) and the romanization. wrapper-lite answers from its own account's storefront. A song
+with only plain-text lyrics has no such document, so a `404` asks once more with
+`syllable=0`, which falls back to the plain text; a second `404` is final and not retried.
+Everything else is derived from that one document:
 
-Lyrics, word-timed lyrics, translations and transliterations all require `wrapper-manager`
-to hold a valid Apple Music subscription session. A lyrics fetch or conversion failure
-never aborts the audio download: the file is saved without lyrics and the item's status
-explains why. Each item also carries a `lyrics_status` of `fetched`, `failed`, `none`
-(catalog reports no lyrics) or `disabled` (neither embedding nor sidecars are on).
+- `download.embed_lyrics` — write LRC into the MP4 tag.
+- `download.lyrics_files` — sidecars next to the audio: `lrc` (the same LRC as the tag)
+  and `ttml` (Apple's document unchanged, which keeps word timing, the translation, the
+  romanization, background vocals and duet voices).
+- `download.lyrics_timing` — `line` stamps each LRC line; `word` writes enhanced LRC
+  (`[mm:ss.xx]<mm:ss.xx>word <mm:ss.xx>word<mm:ss.xx>`). Songs Apple does not time word by
+  word stay line by line. Background vocals stay on their line, in Apple's parentheses.
+- `download.lyrics_extras` — `translation`, `pronunciation` (romanization) as extra LRC
+  lines with the line's timestamp, skipped when they read the same as the line.
+
+A lyrics fetch or conversion failure never aborts the audio download: the file is saved
+without lyrics and the item's status explains why. Each item also carries a
+`lyrics_status` of `fetched`, `failed`, `none` (catalog reports no lyrics) or `disabled`
+(`embed_lyrics` is off and `lyrics_files` is empty).
 
 ## Simulate mode
 

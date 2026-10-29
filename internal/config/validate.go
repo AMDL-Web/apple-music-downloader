@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -134,15 +135,18 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("download.cover_format must be jpg, jpeg, or png")
 	}
-	switch c.Download.LyricsFormat {
-	case "lrc", "ttml":
-	default:
-		return fmt.Errorf("download.lyrics_format must be lrc or ttml")
+	for i, format := range c.Download.LyricsFiles {
+		if format != "lrc" && format != "ttml" {
+			return fmt.Errorf("download.lyrics_files contains unsupported value %q; use lrc or ttml", format)
+		}
+		if slices.Contains(c.Download.LyricsFiles[:i], format) {
+			return fmt.Errorf("download.lyrics_files lists %q twice", format)
+		}
 	}
-	switch c.Download.LyricsType {
-	case "lyrics", "syllable-lyrics":
+	switch c.Download.LyricsTiming {
+	case "line", "word":
 	default:
-		return fmt.Errorf("download.lyrics_type must be lyrics or syllable-lyrics")
+		return fmt.Errorf("download.lyrics_timing must be line or word")
 	}
 	allowedLyricsExtras := map[string]struct{}{"translation": {}, "pronunciation": {}}
 	for _, extra := range c.Download.LyricsExtras {

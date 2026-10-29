@@ -47,8 +47,8 @@ const (
 	LyricsFailed LyricsStatus = "failed"
 	// LyricsNone: the catalog reports no lyrics for this track.
 	LyricsNone LyricsStatus = "none"
-	// LyricsDisabled: lyrics exist but neither embed_lyrics nor
-	// save_lyrics_file is enabled, so no fetch was attempted.
+	// LyricsDisabled: lyrics exist but embed_lyrics is off and lyrics_files
+	// is empty, so no fetch was attempted.
 	LyricsDisabled LyricsStatus = "disabled"
 )
 

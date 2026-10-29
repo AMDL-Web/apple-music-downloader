@@ -36,7 +36,7 @@ const SECTION_WORDS = {
   account: 'login log in log out wrapper session apple id media user token',
   quality: 'codec alac atmos lossless overwrite',
   files: 'folder path template naming',
-  lyrics_artwork: 'cover artwork lyrics',
+  lyrics_artwork: 'cover artwork lyrics lrc ttml karaoke translation romanization pronunciation',
   advanced: 'tuning',
   library_sync: 'anchor poll',
   config_file: 'reload yaml config locked startup restart parallel concurrency concurrent threads workers pool pools limits keys defaults',

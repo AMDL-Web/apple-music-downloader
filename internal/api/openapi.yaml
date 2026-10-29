@@ -1833,16 +1833,35 @@ components:
             save_album_cover: {type: boolean}
             save_artist_cover: {type: boolean}
             save_playlist_cover: {type: boolean}
-            embed_lyrics: {type: boolean}
-            save_lyrics_file: {type: boolean}
-            lyrics_format:
+            embed_lyrics:
+              type: boolean
+              description: >-
+                Embed the lyrics into the MP4 tag as LRC, shaped by lyrics_timing
+                and lyrics_extras.
+            lyrics_files:
+              type: array
+              description: >-
+                Lyrics sidecars written next to each track, each format at most
+                once: `lrc` holds the same LRC as the tag; `ttml` holds Apple's
+                word-timed TTML unchanged, with the translation and romanization
+                (none for a song Apple only has plain-text lyrics for). Empty
+                writes no sidecar.
+              items:
+                type: string
+                enum: [lrc, ttml]
+            lyrics_timing:
               type: string
-              enum: [lrc, ttml]
-            lyrics_type:
-              type: string
-              enum: [lyrics, syllable-lyrics]
+              enum: [line, word]
+              description: >-
+                LRC timing. `word` writes enhanced LRC with a time before each
+                word, for songs Apple times word by word; others stay line by line.
             lyrics_extras:
               type: array
+              description: >-
+                Extra LRC lines under each line, with its timestamp, when Apple
+                has them and they differ from the line: `translation` (in
+                catalog.language) and `pronunciation` (the romanization). The
+                `ttml` sidecar always carries both.
               items:
                 type: string
                 enum: [translation, pronunciation]
@@ -2577,8 +2596,8 @@ components:
             item's own status); `failed`: the catalog reported lyrics but
             fetching or converting them failed and the download continued
             without lyrics; `none`: the catalog reports no lyrics for
-            this track; `disabled`: lyrics exist but neither embed_lyrics
-            nor save_lyrics_file is enabled. Absent while undetermined
+            this track; `disabled`: lyrics exist but embed_lyrics is off
+            and lyrics_files is empty. Absent while undetermined
             (item not yet processed, or created before this field
             existed) and cleared when a retry re-processes the item.
             For finished (completed/skipped) items the value keeps

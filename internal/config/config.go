@@ -150,9 +150,8 @@ type DownloadConfig struct {
 	SaveArtistCover         bool     `yaml:"save_artist_cover" json:"save_artist_cover"`
 	SavePlaylistCover       bool     `yaml:"save_playlist_cover" json:"save_playlist_cover"`
 	EmbedLyrics             bool     `yaml:"embed_lyrics" json:"embed_lyrics"`
-	SaveLyricsFile          bool     `yaml:"save_lyrics_file" json:"save_lyrics_file"`
-	LyricsFormat            string   `yaml:"lyrics_format" json:"lyrics_format"`
-	LyricsType              string   `yaml:"lyrics_type" json:"lyrics_type"`
+	LyricsFiles             []string `yaml:"lyrics_files" json:"lyrics_files"`
+	LyricsTiming            string   `yaml:"lyrics_timing" json:"lyrics_timing"`
 	LyricsExtras            []string `yaml:"lyrics_extras" json:"lyrics_extras"`
 	ALACMaxSampleRate       int      `yaml:"alac_max_sample_rate" json:"alac_max_sample_rate"`
 	ALACMaxBitDepth         int      `yaml:"alac_max_bit_depth" json:"alac_max_bit_depth"`
@@ -248,7 +247,7 @@ func Default() Config {
 			StationPathFormat:  "stations/{StationName}/{SongNumber:02d}. {SongName}",
 			TempDir:            "data/tmp", CoverSize: "5000x5000", CoverFormat: "jpg",
 			EmbedCover: true, SaveAlbumCover: true, SaveArtistCover: true, SavePlaylistCover: true,
-			EmbedLyrics: true, LyricsFormat: "lrc", LyricsType: "lyrics", LyricsExtras: []string{},
+			EmbedLyrics: true, LyricsFiles: []string{}, LyricsTiming: "line", LyricsExtras: []string{},
 			ALACMaxSampleRate: 192000, ALACMaxBitDepth: 24, CheckIntegrity: true,
 		},
 		Tools:    ToolsConfig{FFmpeg: "ffmpeg"},

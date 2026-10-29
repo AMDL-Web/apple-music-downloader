@@ -236,9 +236,8 @@ var overrideExclusions = map[string]bool{
 	"download.save_artist_cover":    true,
 	"download.save_playlist_cover":  true,
 	"download.embed_lyrics":         true,
-	"download.save_lyrics_file":     true,
-	"download.lyrics_format":        true,
-	"download.lyrics_type":          true,
+	"download.lyrics_files":         true,
+	"download.lyrics_timing":        true,
 	"download.lyrics_extras":        true,
 	"download.check_integrity":      true,
 	// Startup keys, so never runtime; listed to keep the godoc's list whole.

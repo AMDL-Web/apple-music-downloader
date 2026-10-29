@@ -162,7 +162,7 @@ test('fieldErrors maps 422 and 400 answers onto fields', () => {
 });
 
 test('keysInMessage matches whole keys only', () => {
-  assert.deepEqual(keysInMessage('download.save_lyrics_file_x is odd'), []);
+  assert.deepEqual(keysInMessage('download.lyrics_files_x is odd'), []);
   assert.deepEqual(keysInMessage('logging.level must be debug, info, warn, or error'), ['logging.level']);
   assert.deepEqual(keysInMessage('library_sync.interval_minutes must be between 1 and 1440'), ['library_sync.interval_minutes']);
 });

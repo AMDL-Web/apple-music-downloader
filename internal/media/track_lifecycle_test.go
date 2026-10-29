@@ -501,7 +501,6 @@ func TestSimulatedTrackMatchesTheRealLifecycle(t *testing.T) {
 		cfg.Download.CheckIntegrity = true
 		cfg.Download.EmbedCover = false
 		cfg.Download.EmbedLyrics = true
-		cfg.Download.LyricsFormat = "lrc"
 		cfg.Download.SaveAlbumCover = false
 		cfg.Download.SaveArtistCover = false
 		// Every meter move is published, so the gate never holds one back.

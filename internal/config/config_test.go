@@ -244,17 +244,30 @@ func TestLoadRejectsMalformedCoverSize(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsUnknownLyricsFormat(t *testing.T) {
-	path := writeConfig(t, "download:\n  lyrics_format: json\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_format") {
-		t.Fatalf("Load() error = %v, want lyrics_format validation error", err)
+func TestLoadRejectsBadLyricsFiles(t *testing.T) {
+	for _, files := range []string{"[json]", "[lrc, lrc]"} {
+		path := writeConfig(t, "download:\n  lyrics_files: "+files+"\n")
+		if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_files") {
+			t.Fatalf("lyrics_files %s: Load() error = %v, want lyrics_files validation error", files, err)
+		}
 	}
 }
 
-func TestLoadRejectsUnknownLyricsType(t *testing.T) {
-	path := writeConfig(t, "download:\n  lyrics_type: word-by-word\n")
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_type") {
-		t.Fatalf("Load() error = %v, want lyrics_type validation error", err)
+func TestLoadRejectsUnknownLyricsTiming(t *testing.T) {
+	path := writeConfig(t, "download:\n  lyrics_timing: syllable\n")
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "lyrics_timing") {
+		t.Fatalf("Load() error = %v, want lyrics_timing validation error", err)
+	}
+}
+
+// 1.x lyrics keys are gone in 2.0; a config that still has one must fail
+// loudly instead of silently dropping the setting.
+func TestLoadRejectsRemovedLyricsKeys(t *testing.T) {
+	for _, key := range []string{"save_lyrics_file: true", "lyrics_format: lrc", "lyrics_type: lyrics"} {
+		path := writeConfig(t, "download:\n  "+key+"\n")
+		if _, err := Load(path); err == nil {
+			t.Fatalf("%s: Load() succeeded, want the removed key rejected", key)
+		}
 	}
 }
 

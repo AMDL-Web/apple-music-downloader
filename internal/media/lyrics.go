@@ -3,15 +3,284 @@ package media
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
+	"amdl/internal/config"
 	"amdl/internal/domain"
+	"amdl/internal/wrapper"
 )
 
 const appleLyricsNamespace = "http://music.apple.com/lyric-ttml-internal"
+
+// trackLyrics is one track's lyrics in the forms its outputs take: lrc for
+// the tag and the .lrc sidecar, ttml for the .ttml sidecar. ttml is empty
+// when the wrapper only had plain text.
+type trackLyrics struct {
+	lrc  string
+	ttml string
+}
+
+// sidecar is the content of the lyrics sidecar in format; "" writes none.
+func (l trackLyrics) sidecar(format string) string {
+	if format == "ttml" {
+		return l.ttml
+	}
+	return l.lrc
+}
+
+// lyricsNotFoundError is wrapper-lite's answer for a song Apple serves no
+// lyrics for. Asking again cannot change it.
+type lyricsNotFoundError struct{ error }
+
+func (lyricsNotFoundError) NonRetryable() bool { return true }
+
+func (e lyricsNotFoundError) Unwrap() error { return e.error }
+
+func isLyricsNotFound(err error) bool {
+	var reply *wrapper.ReplyError
+	// Code is the envelope's status; an HTTP 404 with no envelope is an
+	// unknown route, which means the wrapper is not wrapper-lite.
+	return errors.As(err, &reply) && reply.Code == http.StatusNotFound
+}
+
+// fetchLyricsDocument asks the wrapper for the word-timed document, which
+// also carries line timing, the translation and the romanization. A song
+// without synced lyrics has no such document, and only the line-timed
+// request (syllable=0) falls back to Apple's plain text, so a miss asks once
+// more that way.
+func fetchLyricsDocument(ctx context.Context, media mediaBackend, songID string, cfg config.Config) (string, error) {
+	doc, err := media.lyrics(ctx, songID, lyricsRequest(cfg, true))
+	if isLyricsNotFound(err) {
+		doc, err = media.lyrics(ctx, songID, lyricsRequest(cfg, false))
+	}
+	if isLyricsNotFound(err) {
+		return "", lyricsNotFoundError{err}
+	}
+	return doc, err
+}
+
+// fetchLyrics fetches and converts the lyrics and records lyrics_status. A
+// failure only drops the lyrics; the error it returns is the job's
+// cancellation.
+func (r *trackRun) fetchLyrics(ctx context.Context) error {
+	d, item := r.d, &r.item
+	cfg := d.cfg.Download
+	if !(cfg.EmbedLyrics || len(cfg.LyricsFiles) > 0) || !r.song.HasLyrics {
+		if r.song.HasLyrics {
+			item.LyricsStatus = domain.LyricsDisabled
+		} else {
+			item.LyricsStatus = domain.LyricsNone
+		}
+		_ = r.reporter.UpdateItem(ctx, item)
+		return nil
+	}
+	attempts := clampAttempts(r.maxAttempts())
+	doc, lyricsAttempts, err := retryValue(ctx, r.maxAttempts(), retryBackoff, func(attempt int) (string, error) {
+		d.setItemAttempt(ctx, r.reporter, item, "lyrics", attempt, attempts, fmt.Sprintf("Fetching lyrics (%d/%d)", attempt, attempts))
+		return fetchLyricsDocument(ctx, r.media, r.song.ID, d.cfg)
+	}, func(failure retryFailure) {
+		d.setRetryFailure(ctx, r.reporter, item, "lyrics", "lyrics", failure)
+		d.emitRetryEvent(ctx, r.reporter, r.job.ID, item, "lyrics", "", failure)
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		item.LyricsStatus = domain.LyricsFailed
+		if errors.As(err, new(lyricsNotFoundError)) {
+			item.StatusMessage = "The wrapper found no lyrics for this track; continuing without lyrics"
+		} else {
+			item.StatusMessage = "Lyrics fetch retries exhausted; continuing without embedded lyrics: " + err.Error()
+		}
+		_ = r.reporter.UpdateItem(ctx, item)
+		return nil
+	}
+	lrc, convertErr := lyricsLRC(doc, cfg.LyricsTiming == "word", cfg.LyricsExtras)
+	switch {
+	case convertErr != nil:
+		item.LyricsStatus = domain.LyricsFailed
+		item.StatusMessage = "Lyrics conversion failed; continuing without embedded lyrics: " + convertErr.Error()
+		_ = r.reporter.UpdateItem(ctx, item)
+	case lrc == "":
+		item.LyricsStatus = domain.LyricsFailed
+		item.StatusMessage = "Lyrics fetch returned an empty document; continuing without embedded lyrics"
+		_ = r.reporter.UpdateItem(ctx, item)
+	default:
+		r.lyrics = trackLyrics{lrc: lrc}
+		if isTTML(doc) {
+			r.lyrics.ttml = doc
+		}
+		item.LyricsStatus = domain.LyricsFetched
+		_ = r.reporter.UpdateItem(ctx, item)
+		if lyricsAttempts > 1 {
+			d.emitRecoveredEvent(ctx, r.reporter, r.job.ID, item, "lyrics", "", lyricsAttempts)
+		}
+	}
+	return nil
+}
+
+func isTTML(doc string) bool {
+	return strings.HasPrefix(strings.TrimSpace(doc), "<")
+}
+
+// lyricsLRC renders the wrapper's lyrics document as LRC. Each line is
+// stamped with its start; with word set, a line that has per-word times
+// becomes enhanced LRC instead. extras ("translation", "pronunciation") add
+// the line's translation and romanization (Apple's transliteration) under it
+// with the same stamp, unless they read the same as the line. A document
+// that is not TTML is Apple's plain text and passes through.
+func lyricsLRC(doc string, word bool, extras []string) (string, error) {
+	if !isTTML(doc) {
+		return strings.TrimSpace(doc), nil
+	}
+	root, err := parseLyricsXML(doc)
+	if err != nil {
+		return "", fmt.Errorf("parse lyrics TTML: %w", err)
+	}
+	if root == nil {
+		return "", fmt.Errorf("parse lyrics TTML: empty document")
+	}
+	if strings.EqualFold(attr(root, "itunes:timing", "timing"), "none") {
+		return plainTextLyrics(root), nil
+	}
+	var translations, romanizations map[string]*lyricNode
+	if slices.Contains(extras, "translation") {
+		translations = localizedLines(root, "translations")
+	}
+	if slices.Contains(extras, "pronunciation") {
+		romanizations = localizedLines(root, "transliterations")
+	}
+	var lines []string
+	for _, p := range lyricParagraphs(root) {
+		text := lineText(p)
+		if text == "" {
+			continue
+		}
+		begin := attr(p, "begin")
+		if begin == "" {
+			begin = firstSpanBegin(p)
+		}
+		if begin == "" {
+			return "", fmt.Errorf("no synchronised lyrics")
+		}
+		stamp, err := lrcTime(begin)
+		if err != nil {
+			return "", err
+		}
+		prefix := "[" + stamp + "]"
+		line, err := lrcLine(p, word)
+		if err != nil {
+			return "", err
+		}
+		lines = append(lines, prefix+line)
+		key := attr(p, "itunes:key", "key")
+		if translation := lineText(translations[key]); translation != "" && !strings.EqualFold(translation, text) {
+			lines = append(lines, prefix+translation)
+		}
+		if romanized := lineText(romanizations[key]); romanized != "" && !strings.EqualFold(romanized, text) {
+			line, err := lrcLine(romanizations[key], word)
+			if err != nil {
+				return "", err
+			}
+			lines = append(lines, prefix+line)
+		}
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// lrcLine renders a <p> or a localized <text> without its line stamp: its
+// whole text, or with word set and timed spans inside it, each span's text
+// after its start time and the last span's end closing the line. Untimed
+// spans, such as Apple's background vocals (ttm:role="x-bg"), only group the
+// timed spans inside them.
+func lrcLine(node *lyricNode, word bool) (string, error) {
+	if !word || firstSpanBegin(node) == "" {
+		return lineText(node), nil
+	}
+	var b strings.Builder
+	end := ""
+	var walk func(*lyricNode) error
+	walk = func(n *lyricNode) error {
+		for _, content := range n.content {
+			child := content.node
+			if child == nil {
+				b.WriteString(content.text)
+				continue
+			}
+			begin := attr(child, "begin")
+			if child.tag != "span" || begin == "" {
+				if err := walk(child); err != nil {
+					return err
+				}
+				continue
+			}
+			stamp, err := lrcTime(begin)
+			if err != nil {
+				return err
+			}
+			b.WriteString("<" + stamp + ">" + preferredNodeText(child))
+			if e := attr(child, "end"); e != "" {
+				end = e
+			}
+		}
+		return nil
+	}
+	if err := walk(node); err != nil {
+		return "", err
+	}
+	line := collapseSpace(b.String())
+	if end != "" {
+		stamp, err := lrcTime(end)
+		if err != nil {
+			return "", err
+		}
+		line += "<" + stamp + ">"
+	}
+	return line, nil
+}
+
+// lineText is a node's text as one line, nested spans included. Apple
+// separates romanized words with runs of spaces, so whitespace collapses.
+func lineText(node *lyricNode) string {
+	if node == nil {
+		return ""
+	}
+	return collapseSpace(preferredNodeText(node))
+}
+
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func firstSpanBegin(node *lyricNode) string {
+	for _, span := range findNodes(node, "span") {
+		if begin := attr(span, "begin"); begin != "" {
+			return begin
+		}
+	}
+	return ""
+}
+
+// localizedLines maps each line key to its <text> under the head's
+// <translations> or <transliterations>. The wrapper sends one language of
+// each; should there be more, the first wins.
+func localizedLines(root *lyricNode, section string) map[string]*lyricNode {
+	lines := map[string]*lyricNode{}
+	for _, group := range findNodes(root, section) {
+		for _, text := range findNodes(group, "text") {
+			if key := attr(text, "for"); key != "" && lines[key] == nil {
+				lines[key] = text
+			}
+		}
+	}
+	return lines
+}
 
 type lyricNode struct {
 	tag      string
@@ -23,27 +292,6 @@ type lyricNode struct {
 type lyricContent struct {
 	text string
 	node *lyricNode
-}
-
-func convertLyrics(ttml, format string, extras []string) (string, error) {
-	if strings.EqualFold(format, "ttml") {
-		return ttml, nil
-	}
-	root, err := parseLyricsXML(ttml)
-	if err != nil {
-		return "", fmt.Errorf("parse lyrics TTML: %w", err)
-	}
-	if root == nil {
-		return "", fmt.Errorf("parse lyrics TTML: empty document")
-	}
-	switch strings.ToLower(attr(root, "itunes:timing", "timing")) {
-	case "none":
-		return plainTextLyrics(root), nil
-	case "word":
-		return wordTimedLyrics(root, extras)
-	default:
-		return lineTimedLyrics(root, extras)
-	}
 }
 
 func parseLyricsXML(raw string) (*lyricNode, error) {
@@ -95,199 +343,11 @@ func parseLyricsXML(raw string) (*lyricNode, error) {
 func plainTextLyrics(root *lyricNode) string {
 	var lines []string
 	for _, p := range findNodes(root, "p") {
-		text := strings.TrimSpace(nodeText(p))
-		if text != "" {
+		if text := lineText(p); text != "" {
 			lines = append(lines, text)
 		}
 	}
 	return strings.Join(lines, "\n")
-}
-
-func lineTimedLyrics(root *lyricNode, extras []string) (string, error) {
-	localizations := localizationMaps(root)
-	var lines []string
-	for _, p := range lyricParagraphs(root) {
-		begin := attr(p, "begin")
-		if begin == "" {
-			return "", fmt.Errorf("no synchronised lyrics")
-		}
-		timestamp, err := lrcTime(begin)
-		if err != nil {
-			return "", err
-		}
-		text := strings.TrimSpace(preferredNodeText(p))
-		if text == "" {
-			continue
-		}
-		lines = append(lines, "["+timestamp+"]"+text)
-		key := attr(p, "itunes:key", "key")
-		lines = appendLineExtras(lines, "["+timestamp+"]", key, text, localizations, extras, false)
-	}
-	return strings.Join(lines, "\n"), nil
-}
-
-func wordTimedLyrics(root *lyricNode, extras []string) (string, error) {
-	localizations := localizationMaps(root)
-	var lines []string
-	for _, p := range lyricParagraphs(root) {
-		text, start, containsCJKText, err := enhancedLine(p)
-		if err != nil {
-			return "", err
-		}
-		if text == "" {
-			continue
-		}
-		lines = append(lines, text)
-		key := attr(p, "itunes:key", "key")
-		lines = appendLineExtras(lines, start, key, nodeText(p), localizations, extras, containsCJKText)
-	}
-	return strings.Join(lines, "\n"), nil
-}
-
-func enhancedLine(p *lyricNode) (line string, startPrefix string, hasCJK bool, err error) {
-	var pieces []string
-	startPrefix = ""
-	endSuffix := ""
-	textForCJK := ""
-	for _, content := range p.content {
-		child := content.node
-		if child == nil {
-			if len(pieces) > 0 && strings.TrimSpace(content.text) == "" && !strings.Contains(content.text, "\n") {
-				pieces = append(pieces, content.text)
-			}
-			continue
-		}
-		if child.tag != "span" {
-			continue
-		}
-		begin := attr(child, "begin")
-		if begin == "" {
-			continue
-		}
-		beginTime, err := lrcTime(begin)
-		if err != nil {
-			return "", "", false, err
-		}
-		if startPrefix == "" {
-			startPrefix = "[" + beginTime + "]"
-			pieces = append(pieces, startPrefix)
-		}
-		pieces = append(pieces, "<"+beginTime+">"+preferredNodeText(child))
-		textForCJK += preferredNodeText(child)
-		if end := attr(child, "end"); end != "" {
-			endTime, err := lrcTime(end)
-			if err != nil {
-				return "", "", false, err
-			}
-			endSuffix = "<" + endTime + ">"
-		}
-	}
-	if len(pieces) == 0 {
-		return "", "", false, nil
-	}
-	return strings.Join(pieces, "") + endSuffix, startPrefix, containsCJK(textForCJK), nil
-}
-
-func appendLineExtras(lines []string, prefix, key, sourceText string, localizations lyricLocalizations, extras []string, alreadyCheckedCJK bool) []string {
-	if key == "" || prefix == "" {
-		return lines
-	}
-	extraSet := stringSet(extras)
-	if _, ok := extraSet["translation"]; ok {
-		if text := localizations.translations[key].plain(prefix); text != "" {
-			lines = append(lines, text)
-		}
-	}
-	if _, ok := extraSet["pronunciation"]; ok {
-		hasCJK := alreadyCheckedCJK
-		if !hasCJK {
-			hasCJK = containsCJK(sourceText)
-		}
-		if hasCJK {
-			if text := localizations.transliterations[key].plain(prefix); text != "" {
-				lines = append(lines, text)
-			}
-		}
-	}
-	return lines
-}
-
-type lyricLocalizations struct {
-	translations     map[string]localizedText
-	transliterations map[string]localizedText
-}
-
-type localizedText struct {
-	text  string
-	spans []localizedSpan
-}
-
-type localizedSpan struct {
-	begin string
-	text  string
-}
-
-func (l localizedText) plain(prefix string) string {
-	if l.text != "" {
-		return prefix + l.text
-	}
-	if len(l.spans) == 0 {
-		return ""
-	}
-	var parts []string
-	for _, span := range l.spans {
-		if span.begin == "" || span.text == "" {
-			continue
-		}
-		ts, err := lrcTime(span.begin)
-		if err != nil {
-			continue
-		}
-		parts = append(parts, "<"+ts+">"+span.text)
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return prefix + strings.Join(parts, " ")
-}
-
-func localizationMaps(root *lyricNode) lyricLocalizations {
-	localizations := lyricLocalizations{
-		translations:     map[string]localizedText{},
-		transliterations: map[string]localizedText{},
-	}
-	for _, translations := range findNodes(root, "translations") {
-		for _, textNode := range findNodes(translations, "text") {
-			if key := attr(textNode, "for"); key != "" {
-				localizations.translations[key] = readLocalizedText(textNode)
-			}
-		}
-	}
-	for _, transliterations := range findNodes(root, "transliterations") {
-		for _, textNode := range findNodes(transliterations, "text") {
-			if key := attr(textNode, "for"); key != "" {
-				localizations.transliterations[key] = readLocalizedText(textNode)
-			}
-		}
-	}
-	return localizations
-}
-
-func readLocalizedText(node *lyricNode) localizedText {
-	if text := strings.TrimSpace(attr(node, "text")); text != "" {
-		return localizedText{text: text}
-	}
-	var spans []localizedSpan
-	for _, child := range node.children {
-		if child.tag != "span" {
-			continue
-		}
-		spans = append(spans, localizedSpan{begin: attr(child, "begin"), text: strings.TrimSpace(preferredNodeText(child))})
-	}
-	if len(spans) > 0 {
-		return localizedText{spans: spans}
-	}
-	return localizedText{text: strings.TrimSpace(nodeText(node))}
 }
 
 func lyricParagraphs(root *lyricNode) []*lyricNode {
@@ -431,110 +491,4 @@ func rightPad(s string, n int) string {
 		return s[:n]
 	}
 	return s
-}
-
-func stringSet(values []string) map[string]struct{} {
-	set := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		set[value] = struct{}{}
-	}
-	return set
-}
-
-func containsCJK(s string) bool {
-	for _, r := range s {
-		if (r >= 0x1100 && r <= 0x11FF) ||
-			(r >= 0x2E80 && r <= 0x2EFF) ||
-			(r >= 0x2F00 && r <= 0x2FDF) ||
-			(r >= 0x2FF0 && r <= 0x2FFF) ||
-			(r >= 0x3000 && r <= 0x303F) ||
-			(r >= 0x3040 && r <= 0x309F) ||
-			(r >= 0x30A0 && r <= 0x30FF) ||
-			(r >= 0x3130 && r <= 0x318F) ||
-			(r >= 0x31C0 && r <= 0x31EF) ||
-			(r >= 0x31F0 && r <= 0x31FF) ||
-			(r >= 0x3200 && r <= 0x32FF) ||
-			(r >= 0x3300 && r <= 0x33FF) ||
-			(r >= 0x3400 && r <= 0x4DBF) ||
-			(r >= 0x4E00 && r <= 0x9FFF) ||
-			(r >= 0xA960 && r <= 0xA97F) ||
-			(r >= 0xAC00 && r <= 0xD7AF) ||
-			(r >= 0xD7B0 && r <= 0xD7FF) ||
-			(r >= 0xF900 && r <= 0xFAFF) ||
-			(r >= 0xFE30 && r <= 0xFE4F) ||
-			(r >= 0xFF65 && r <= 0xFF9F) ||
-			(r >= 0xFFA0 && r <= 0xFFDC) ||
-			(r >= 0x1AFF0 && r <= 0x1AFFF) ||
-			(r >= 0x1B000 && r <= 0x1B0FF) ||
-			(r >= 0x1B100 && r <= 0x1B12F) ||
-			(r >= 0x1B130 && r <= 0x1B16F) ||
-			(r >= 0x1F200 && r <= 0x1F2FF) ||
-			(r >= 0x20000 && r <= 0x2A6DF) ||
-			(r >= 0x2A700 && r <= 0x2B73F) ||
-			(r >= 0x2B740 && r <= 0x2B81F) ||
-			(r >= 0x2B820 && r <= 0x2CEAF) ||
-			(r >= 0x2CEB0 && r <= 0x2EBEF) ||
-			(r >= 0x2EBF0 && r <= 0x2EE5F) ||
-			(r >= 0x2F800 && r <= 0x2FA1F) ||
-			(r >= 0x30000 && r <= 0x3134F) ||
-			(r >= 0x31350 && r <= 0x323AF) {
-			return true
-		}
-	}
-	return false
-}
-
-// fetchLyrics fetches and converts the lyrics and records lyrics_status. A
-// failure only drops the lyrics; the error it returns is the job's
-// cancellation.
-func (r *trackRun) fetchLyrics(ctx context.Context) error {
-	d, item := r.d, &r.item
-	cfg := d.cfg.Download
-	if !(cfg.EmbedLyrics || cfg.SaveLyricsFile) || !r.song.HasLyrics {
-		if r.song.HasLyrics {
-			item.LyricsStatus = domain.LyricsDisabled
-		} else {
-			item.LyricsStatus = domain.LyricsNone
-		}
-		_ = r.reporter.UpdateItem(ctx, item)
-		return nil
-	}
-	attempts := clampAttempts(r.maxAttempts())
-	raw, lyricsAttempts, err := retryValue(ctx, r.maxAttempts(), retryBackoff, func(attempt int) (string, error) {
-		d.setItemAttempt(ctx, r.reporter, item, "lyrics", attempt, attempts, fmt.Sprintf("Fetching lyrics (%d/%d)", attempt, attempts))
-		return r.media.lyrics(ctx, r.song.ID, lyricsRequest(d.cfg, r.target.storefront))
-	}, func(failure retryFailure) {
-		d.setRetryFailure(ctx, r.reporter, item, "lyrics", "lyrics", failure)
-		d.emitRetryEvent(ctx, r.reporter, r.job.ID, item, "lyrics", "", failure)
-	})
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		item.LyricsStatus = domain.LyricsFailed
-		item.StatusMessage = "Lyrics fetch retries exhausted; continuing without embedded lyrics: " + err.Error()
-		_ = r.reporter.UpdateItem(ctx, item)
-		return nil
-	}
-	converted, convertErr := convertLyrics(raw, cfg.LyricsFormat, cfg.LyricsExtras)
-	switch {
-	case convertErr != nil:
-		item.LyricsStatus = domain.LyricsFailed
-		item.StatusMessage = "Lyrics conversion failed; continuing without embedded lyrics: " + convertErr.Error()
-		_ = r.reporter.UpdateItem(ctx, item)
-	case converted == "":
-		// The wrapper answered with an empty document (possible in ttml mode,
-		// where convertLyrics passes it through without error).
-		item.LyricsStatus = domain.LyricsFailed
-		item.StatusMessage = "Lyrics fetch returned an empty document; continuing without embedded lyrics"
-		_ = r.reporter.UpdateItem(ctx, item)
-	default:
-		r.lyrics = converted
-		item.LyricsStatus = domain.LyricsFetched
-		_ = r.reporter.UpdateItem(ctx, item)
-		if lyricsAttempts > 1 {
-			d.emitRecoveredEvent(ctx, r.reporter, r.job.ID, item, "lyrics", "", lyricsAttempts)
-		}
-	}
-	return nil
 }

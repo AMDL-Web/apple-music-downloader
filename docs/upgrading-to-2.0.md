@@ -147,6 +147,13 @@ needs the API changes below before it works against 2.0.
   was ever written outside it, but the result never matched the intent. 2.0 fails
   startup and `PUT /config` (`422 invalid_config`) on them. Fix the template to a
   relative path.
+- Lyrics keys: `download.save_lyrics_file` and `download.lyrics_format` became the list
+  `download.lyrics_files` (`save_lyrics_file: true` with `lyrics_format: lrc` is
+  `[lrc]`, with `ttml` it is `[ttml]`, `false` is `[]`; both can be written now), and
+  `download.lyrics_type` became `download.lyrics_timing` (`lyrics` is `line`,
+  `syllable-lyrics` is `word`). The old keys are rejected at startup. `lyrics_extras`
+  keeps its values and now shapes LRC only. Lyrics come from the wrapper account's
+  storefront, whatever the job's, with the translation in `catalog.language`.
 
 ## Wrapper
 
@@ -219,6 +226,17 @@ Unchanged, with three exceptions that only affect unusual titles:
   or cancelled one) it neither blocks a new submission of the same link nor is refused
   because of one. Before retrying such a job, check that the same link is not already
   queued or running.
+
+- Lyrics are rebuilt on wrapper-lite's `/lyrics`. A `.ttml` sidecar is always Apple's
+  word-timed document with the translation and romanization in its head (1.x saved the
+  line-timed one unless `lyrics_type` was `syllable-lyrics`). LRC output changes for the
+  same song: background vocals are no longer dropped from word-timed lines, a
+  translation line no longer disappears when its line has background vocals, romanized
+  syllables are no longer split by spaces, and a translation or romanization that reads
+  the same as its line is no longer repeated. `embed_lyrics: false` now keeps lyrics out
+  of the tag even when a sidecar is written. Existing files are left alone unless a job
+  runs with `force_overwrite`. Jellyfin reads sidecar lyrics only, so it needs
+  `lyrics_files: [lrc]`.
 
 ## Database
 

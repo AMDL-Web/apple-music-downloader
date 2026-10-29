@@ -72,6 +72,8 @@ type fakeDownloaderWrapper struct {
 	status    wrapper.Status
 	lyrics    string
 	lyricsErr error
+	// lyricsFor, when set, answers Lyrics in place of lyrics and lyricsErr.
+	lyricsFor func(wrapper.LyricsRequestOptions) (string, error)
 }
 
 func (f fakeDownloaderWrapper) Status(context.Context) (wrapper.Status, error) {
@@ -82,7 +84,10 @@ func (f fakeDownloaderWrapper) M3U8(context.Context, string) (string, error) {
 	return "", nil
 }
 
-func (f fakeDownloaderWrapper) Lyrics(context.Context, string, wrapper.LyricsRequestOptions) (string, error) {
+func (f fakeDownloaderWrapper) Lyrics(_ context.Context, _ string, opts wrapper.LyricsRequestOptions) (string, error) {
+	if f.lyricsFor != nil {
+		return f.lyricsFor(opts)
+	}
 	return f.lyrics, f.lyricsErr
 }
 

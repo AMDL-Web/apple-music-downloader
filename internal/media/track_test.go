@@ -111,7 +111,7 @@ func TestProcessTrackRecordsLyricsStatus(t *testing.T) {
 		lyricsErr error
 		want      domain.LyricsStatus
 	}{
-		{name: "fetched", embed: true, hasLyrics: true, lyrics: "<tt>line</tt>", want: domain.LyricsFetched},
+		{name: "fetched", embed: true, hasLyrics: true, lyrics: `<tt><body><div><p begin="00:01.000">line</p></div></body></tt>`, want: domain.LyricsFetched},
 		{name: "fetch failed", embed: true, hasLyrics: true, lyricsErr: errors.New("region mismatch"), want: domain.LyricsFailed},
 		{name: "empty document", embed: true, hasLyrics: true, lyrics: "", want: domain.LyricsFailed},
 		{name: "catalog has none", embed: true, hasLyrics: false, want: domain.LyricsNone},
@@ -123,8 +123,6 @@ func TestProcessTrackRecordsLyricsStatus(t *testing.T) {
 			cfg.Download.MaxAttempts = 1
 			cfg.Download.EmbedCover = false
 			cfg.Download.EmbedLyrics = tc.embed
-			cfg.Download.SaveLyricsFile = false
-			cfg.Download.LyricsFormat = "ttml" // pass the fetched raw through unconverted
 			cfg.Tools.FFmpeg = "amdl-test-missing-ffmpeg"
 			downloader := newTestDownloader(&Downloader{
 				cfg:     cfg,

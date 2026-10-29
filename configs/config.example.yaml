@@ -68,6 +68,7 @@ catalog:
   # (default_storefront) to complete pasted links that have no region.
   default_storefront: "cn"
   # string: Apple Music catalog language tag passed as the "l" query parameter, for example "en-US", "zh-Hans_CN", "ja-JP".
+  # It is also the language of lyrics translations (download.lyrics_extras, the .ttml sidecar).
   language: "zh-Hans_CN"
   # integer: maximum Apple control-plane HTTP requests in flight across the whole process, including Catalog API,
   # web-player token discovery, Enhanced HLS manifests, and artwork. Positive values allow 1-64; values <=0 behave
@@ -261,15 +262,27 @@ download:
   save_artist_cover: true
   # bool: true saves standalone playlist cover files for playlist downloads; false skips them.
   save_playlist_cover: true
-  # bool: true embeds converted lyrics into MP4 metadata; false skips embedded lyrics.
+  # Lyrics are fetched only when embed_lyrics is true or lyrics_files is not empty. The wrapper
+  # serves them from its own account's storefront as Apple's word-timed TTML, with the translation
+  # in catalog.language when Apple has one.
+  # bool: true embeds the lyrics into the MP4 tag as LRC, shaped by lyrics_timing and lyrics_extras;
+  # false leaves the tag without lyrics. Default: true.
   embed_lyrics: true
-  # bool: true writes a sidecar lyrics file next to the audio file; false skips sidecar lyrics files.
-  save_lyrics_file: false
-  # enum: lrc, ttml. lrc converts Apple TTML to LRC; ttml preserves wrapper-returned TTML.
-  lyrics_format: "lrc"
-  # enum: lyrics, syllable-lyrics. syllable-lyrics requests word-timed lyrics from compatible wrappers.
-  lyrics_type: "lyrics"
-  # list enum: translation, pronunciation. Empty list disables extra localized lines.
+  # list enum: lrc, ttml, each at most once. Writes one sidecar per entry next to the track, with
+  # the track's file name: <track>.lrc holds the same LRC as the tag; <track>.ttml holds Apple's TTML
+  # unchanged, with word timing, the translation, the romanization, background vocals and duet
+  # voices (Navidrome 0.63+ reads all of these; Jellyfin reads .lrc only). A song that Apple has only
+  # plain-text lyrics for gets no .ttml. Empty list: no sidecar. Default: [].
+  lyrics_files: []
+  # enum: line, word. line stamps each LRC line with its start time. word writes enhanced LRC, which
+  # also stamps each word (<mm:ss.xx> before it, the line's end after the last one); songs that
+  # Apple does not time word by word stay line by line. Applies to the tag and the .lrc sidecar.
+  # Default: line.
+  lyrics_timing: "line"
+  # list enum: translation, pronunciation. Adds each LRC line's translation and its romanization
+  # (romaji, Korean romanization, pinyin or jyutping, as Apple picks for the lyrics language) as
+  # extra lines with the same timestamp, when Apple has them and they differ from the line.
+  # Applies to LRC only; the .ttml sidecar always carries both. Empty list: none. Default: [].
   lyrics_extras: []
   # integer Hz: maximum selected ALAC sample rate; 0 or less sets no ceiling. Use 192000 for up to
   # 192 kHz. Apple Music serves ALAC at 44100 Hz and above, so a lower value skips every ALAC stream.
@@ -283,7 +296,7 @@ download:
   alac_max_bit_depth: 24
   # bool: true verifies output MP4 integrity and repairs known ALAC terminator issues; false skips the integrity gate.
   check_integrity: true
-  # bool: true overwrites an existing output file (and its lyrics sidecar) when
+  # bool: true overwrites an existing output file (and its lyrics sidecars) when
   # a job downloads the same track again; false skips tracks whose output file
   # already exists. Default: false. Can be overridden per submission via the
   # overrides.force_overwrite field of POST /api/v1/downloads.

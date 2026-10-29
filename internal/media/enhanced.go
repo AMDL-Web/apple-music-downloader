@@ -165,7 +165,7 @@ func (d *Downloader) downloadSelectedEnhancedMedia(ctx context.Context, selected
 // fetched media one fragment at a time straight into ffmpeg, then verifies,
 // tags and commits the result (finalizeTrackOutput). Both memory modes stream;
 // only the encrypted input's backing differs.
-func (d *Downloader) downloadEnhancedCodec(ctx context.Context, job domain.Job, item *domain.JobItem, song applemusic.Song, codec, lyrics string, cover []byte, outPath string, selected selectedDownloadMedia, reporter jobs.Reporter, set publishStage) error {
+func (d *Downloader) downloadEnhancedCodec(ctx context.Context, job domain.Job, item *domain.JobItem, song applemusic.Song, codec string, lyrics trackLyrics, cover []byte, outPath string, selected selectedDownloadMedia, reporter jobs.Reporter, set publishStage) error {
 	backend := d.backend()
 	input, inputSize, closeInput, err := selected.open()
 	if err != nil {

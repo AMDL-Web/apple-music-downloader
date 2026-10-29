@@ -99,7 +99,7 @@ type trackRun struct {
 
 	output outputLease
 	cover  []byte
-	lyrics string
+	lyrics trackLyrics
 }
 
 func (d *Downloader) newTrackRun(job domain.Job, item domain.JobItem, initial applemusic.Song, target trackTarget, metadata *trackMetadataResolver, reporter jobs.Reporter) *trackRun {

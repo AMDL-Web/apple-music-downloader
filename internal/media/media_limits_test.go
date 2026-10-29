@@ -252,7 +252,7 @@ func TestDecryptLimitIsGlobalAndCanceledWaiterDoesNotEnter(t *testing.T) {
 	selected := selectedDownloadMedia{encryptedMedia: encryptedMedia{rawPath: rawPath}}
 	call := func(ctx context.Context, d *Downloader) error {
 		return d.downloadEnhancedCodec(ctx, domain.Job{ID: "job"}, &domain.JobItem{ID: "item"}, applemusic.Song{ID: "song"},
-			"alac", "", nil, cfg.Download.TempDir+"/out.m4a", selected, &recordingReporter{}, func(domain.ItemStatus, string, func(*domain.ItemProgress)) {})
+			"alac", trackLyrics{}, nil, cfg.Download.TempDir+"/out.m4a", selected, &recordingReporter{}, func(domain.ItemStatus, string, func(*domain.ItemProgress)) {})
 	}
 	firstDone := make(chan error, 1)
 	go func() { firstDone <- call(context.Background(), base.withConfig(cfg)) }()

@@ -213,7 +213,7 @@ func (d *Downloader) fetchAACLCMedia(ctx context.Context, job domain.Job, item *
 // finalizes the file. On retry this re-runs without downloading media again.
 // Gowidevine still retains the decoded media boxes until it has emitted the
 // track.
-func (d *Downloader) decryptAACLC(ctx context.Context, job domain.Job, item *domain.JobItem, song applemusic.Song, download aacLCDownload, lyrics string, cover []byte, outPath string, reporter jobs.Reporter, set publishStage) error {
+func (d *Downloader) decryptAACLC(ctx context.Context, job domain.Job, item *domain.JobItem, song applemusic.Song, download aacLCDownload, lyrics trackLyrics, cover []byte, outPath string, reporter jobs.Reporter, set publishStage) error {
 	backend := d.backend()
 	// Flatten, verify, and tag on temp storage, then move the finished file to
 	// its final path, same as downloadEnhancedCodec (see finalizeToOutput).

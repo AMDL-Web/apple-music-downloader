@@ -32,14 +32,13 @@ const SERVER = {
   embed_lyrics: true,
   force_overwrite: false,
   lyrics_extras: [],
-  lyrics_format: 'lrc',
-  lyrics_type: 'lyrics',
+  lyrics_files: [],
+  lyrics_timing: 'line',
   max_attempts: 3,
   memory_mode: 'low',
   quality_priority: ['alac'],
   save_album_cover: true,
   save_artist_cover: true,
-  save_lyrics_file: false,
   save_playlist_cover: true,
 };
 

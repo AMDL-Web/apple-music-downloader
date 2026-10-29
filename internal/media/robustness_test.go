@@ -118,10 +118,9 @@ func TestWriteFileAtomicLeavesOnlyTheFinishedFile(t *testing.T) {
 	}
 }
 
-func TestLyricsSidecarIsWrittenNextToTheTrack(t *testing.T) {
+func TestLyricsSidecarsAreWrittenNextToTheTrack(t *testing.T) {
 	cfg := config.Default()
-	cfg.Download.SaveLyricsFile = true
-	cfg.Download.LyricsFormat = "ttml"
+	cfg.Download.LyricsFiles = []string{"lrc", "ttml"}
 	cfg.Download.CheckIntegrity = false
 	d := newTestDownloader(&Downloader{cfg: cfg})
 	staged := filepath.Join(t.TempDir(), "flat.m4a")
@@ -131,21 +130,68 @@ func TestLyricsSidecarIsWrittenNextToTheTrack(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "Album", "01. Song.m4a")
 	err := d.finalizeTrackOutput(context.Background(), sidecarOnlyMedia{realMedia{d: d}}, trackOutput{
 		item: &domain.JobItem{ID: "item-1"}, song: applemusic.Song{Name: "Song"}, codec: "aac-lc",
-		lyrics: "<tt/>", staged: stagedFile{path: staged}, outPath: out, labels: aacLCOutputLabels,
+		lyrics: trackLyrics{lrc: "[00:01.00]line", ttml: "<tt/>"}, staged: stagedFile{path: staged}, outPath: out, labels: aacLCOutputLabels,
 	}, noopStage)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, err := os.ReadFile(filepath.Join(filepath.Dir(out), "01. Song.ttml")); err != nil || string(got) != "<tt/>" {
-		t.Fatalf("sidecar = %q (err %v), want the lyrics next to the track", got, err)
+		t.Fatalf("ttml sidecar = %q (err %v), want the TTML next to the track", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(filepath.Dir(out), "01. Song.lrc")); err != nil || string(got) != "[00:01.00]line" {
+		t.Fatalf("lrc sidecar = %q (err %v), want the LRC next to the track", got, err)
 	}
 	if got, err := os.ReadFile(out); err != nil || string(got) != "tagged audio" {
 		t.Fatalf("track = %q (err %v), want the committed staged file", got, err)
 	}
 }
 
+// With embed_lyrics off the tag gets no lyrics, even while a sidecar is written.
+func TestEmbedLyricsOffKeepsLyricsOutOfTheTag(t *testing.T) {
+	cfg := config.Default()
+	cfg.Download.EmbedLyrics = false
+	cfg.Download.LyricsFiles = []string{"lrc"}
+	cfg.Download.CheckIntegrity = false
+	d := newTestDownloader(&Downloader{cfg: cfg})
+	staged := filepath.Join(t.TempDir(), "flat.m4a")
+	if err := os.WriteFile(staged, []byte("tagged audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "Album", "01. Song.m4a")
+	media := &tagRecordingMedia{realMedia: realMedia{d: d}}
+	err := d.finalizeTrackOutput(context.Background(), media, trackOutput{
+		item: &domain.JobItem{ID: "item-1"}, song: applemusic.Song{Name: "Song"}, codec: "aac-lc",
+		lyrics: trackLyrics{lrc: "[00:01.00]line", ttml: "<tt/>"}, staged: stagedFile{path: staged}, outPath: out, labels: aacLCOutputLabels,
+	}, noopStage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !media.tagged || media.taggedLyrics != "" {
+		t.Fatalf("tag called = %v with lyrics %q, want a tag without lyrics", media.tagged, media.taggedLyrics)
+	}
+	if got, err := os.ReadFile(filepath.Join(filepath.Dir(out), "01. Song.lrc")); err != nil || string(got) != "[00:01.00]line" {
+		t.Fatalf("lrc sidecar = %q (err %v), want it written", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(out), "01. Song.ttml")); !os.IsNotExist(err) {
+		t.Fatalf("ttml sidecar stat err = %v, want none when lyrics_files lacks ttml", err)
+	}
+}
+
 // sidecarOnlyMedia skips tagging, which needs a real MP4.
 type sidecarOnlyMedia struct{ realMedia }
+
+// tagRecordingMedia records what tagging was asked to embed instead of
+// tagging, which needs a real MP4.
+type tagRecordingMedia struct {
+	realMedia
+	tagged       bool
+	taggedLyrics string
+}
+
+func (m *tagRecordingMedia) tag(_ context.Context, _ stagedFile, _ applemusic.Song, lyrics string, _ []byte) error {
+	m.tagged, m.taggedLyrics = true, lyrics
+	return nil
+}
 
 func (sidecarOnlyMedia) tag(context.Context, stagedFile, applemusic.Song, string, []byte) error {
 	return nil

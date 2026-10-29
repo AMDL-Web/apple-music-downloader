@@ -78,7 +78,7 @@ type trackOutput struct {
 	reporter jobs.Reporter
 	song     applemusic.Song
 	codec    string
-	lyrics   string
+	lyrics   trackLyrics
 	cover    []byte
 	staged   stagedFile
 	outPath  string
@@ -88,7 +88,7 @@ type trackOutput struct {
 	allowALACRepair bool
 }
 
-// finalizeTrackOutput verifies, writes the lyrics sidecar, tags and commits a
+// finalizeTrackOutput verifies, writes the lyrics sidecars, tags and commits a
 // staged track, then records the completed item's output fields. Verify and
 // tag run on temp storage (typically fast local disk), so a possibly slow
 // downloads volume sees one sequential write: the commit.
@@ -110,13 +110,19 @@ func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBacke
 	if err := backend.mkdirAll(filepath.Dir(out.outPath)); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
-	if d.cfg.Download.SaveLyricsFile && out.lyrics != "" {
-		if err := backend.writeFile(lyricsSidecarPath(out.outPath, d.cfg.Download.LyricsFormat), []byte(out.lyrics)); err != nil {
-			return fmt.Errorf("write lyrics file: %w", err)
+	for _, format := range d.cfg.Download.LyricsFiles {
+		if text := out.lyrics.sidecar(format); text != "" {
+			if err := backend.writeFile(lyricsSidecarPath(out.outPath, format), []byte(text)); err != nil {
+				return fmt.Errorf("write lyrics file: %w", err)
+			}
 		}
 	}
+	embedded := ""
+	if d.cfg.Download.EmbedLyrics {
+		embedded = out.lyrics.lrc
+	}
 	set(domain.ItemTagging, out.labels.tagging, nil)
-	if err := backend.tag(ctx, out.staged, out.song, out.lyrics, out.cover); err != nil {
+	if err := backend.tag(ctx, out.staged, out.song, embedded, out.cover); err != nil {
 		return fmt.Errorf("%s: %w", out.labels.tagFailed, err)
 	}
 	set(domain.ItemTagging, out.labels.tagged, markTagged)
