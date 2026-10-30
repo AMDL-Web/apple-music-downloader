@@ -43,19 +43,21 @@ for people. Without a server of its own, `amdl service install` runs the backend
 machine as a background service that starts at login. [docs/cli.md](docs/cli.md)
 describes it all.
 
-### Desktop app (planned)
+### Desktop app (in development)
 
-A native macOS app built with [MyGo](https://github.com/egoist/mygo) will live in
-apps/desktop. It will run either as a client of a remote server or as a standalone
-backend that runs the pipeline in-process and talks to a remote wrapper. Standalone mode
-embeds the server through `internal/server#Run` on a loopback listener; the app's own
-packages will sit under apps/desktop/internal, private to it.
+`apps/desktop` is a native app for macOS, Windows and Linux, drawn with
+[MyGo](https://github.com/egoist/mygo)'s native UI. It runs either as a client of a remote
+server or as a standalone backend that runs the pipeline in-process and talks to a remote
+wrapper. Standalone mode runs the backend through `internal/local` on a loopback port, or
+uses the one this computer already runs, such as `amdl service`, so the app and the command
+line share one backend and one download history; the app's own packages sit under
+apps/desktop/internal, private to it.
 
 ## Repository layout
 
 | Path | What it holds |
 | --- | --- |
-| `apps/` | One directory per product: `amdl` (the server and the command line), `console`, and later `desktop`. A non-Go app keeps its own build system in its directory. |
+| `apps/` | One directory per product: `amdl` (the server and the command line), `console` and `desktop`. A non-Go app keeps its own build system in its directory. |
 | `internal/` | The Go core every product shares: the HTTP API, jobs, the download pipeline, the Apple and wrapper clients, storage and config. [Architecture](docs/architecture.md#2-packages) lists each package. |
 | `deploy/` | The Compose file and, under `deploy/server/`, the server's Dockerfile and entrypoint. |
 | `configs/` | The example config and hooks template every install is seeded from. |

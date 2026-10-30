@@ -37,17 +37,19 @@ JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli se
 的命令。`amdl mcp` 把同样的能力作为 MCP 工具提供；在终端里直接运行 `amdl` 会打开给人用的交互界面。没有单独部署服务器时，`amdl service install`
 会把后端作为登录即启动的后台服务跑在本机。详见 [docs/cli.md](docs/cli.md)。
 
-### 桌面应用（规划中）
+### 桌面应用（开发中）
 
-一个用 [MyGo](https://github.com/egoist/mygo) 写的原生 macOS 应用将放在 apps/desktop。它可以作为
-远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程 wrapper。单机模式通过
-`internal/server#Run` 在本机回环地址上内嵌服务端；应用自己的包放在 apps/desktop/internal 下，只归它用。
+`apps/desktop` 是一个面向 macOS、Windows 和 Linux 的原生应用，用 [MyGo](https://github.com/egoist/mygo)
+的原生界面绘制。它可以作为远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程
+wrapper。单机模式通过 `internal/local` 在本机回环端口上运行后端；如果这台电脑上已有后端在跑（比如
+`amdl service`），就直接使用它，所以应用和命令行共用一个后端、一份下载记录；应用自己的包放在
+apps/desktop/internal 下，只归它用。
 
 ## 仓库结构
 
 | 路径 | 内容 |
 | --- | --- |
-| `apps/` | 一个产品一个目录：`amdl`（服务端和命令行）、`console`，以后还有 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
+| `apps/` | 一个产品一个目录：`amdl`（服务端和命令行）、`console` 和 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
 | `internal/` | 所有产品共用的 Go 核心：HTTP API、作业、下载流水线、Apple 与 wrapper 客户端、存储和配置。[Architecture](docs/architecture.md#2-packages) 列出了每个包。 |
 | `deploy/` | Compose 文件，以及 `deploy/server/` 下服务端的 Dockerfile 和入口脚本。 |
 | `configs/` | 每个安装据以生成配置的示例配置和钩子模板。 |

@@ -1,0 +1,279 @@
+// Package app runs the desktop app: it loads the settings, connects to a
+// remote backend or starts the embedded one, owns the main window, the tray
+// and the store, and does what the screens ask of it.
+package app
+
+import (
+	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+
+	"amdl/apps/desktop/internal/artwork"
+	"amdl/apps/desktop/internal/ffmpeg"
+	"amdl/apps/desktop/internal/mode"
+	"amdl/apps/desktop/internal/motion"
+	"amdl/apps/desktop/internal/shell"
+	"amdl/apps/desktop/internal/store"
+	appui "amdl/apps/desktop/internal/ui"
+	"amdl/internal/client"
+	"amdl/internal/local"
+)
+
+// Options are the command line's choices. The flags exist for development
+// and screenshots; a person launches the app without any.
+type Options struct {
+	// DataDir replaces the user data directory, to keep a test run apart.
+	DataDir string
+	// Remote, or Wrapper, starts in that mode with that address instead of
+	// the saved settings, without saving them.
+	Remote, Wrapper string
+	// Theme forces "light" or "dark".
+	Theme string
+	// Shots captures every screen into this directory as PNGs, then quits.
+	Shots string
+	// Submit downloads this link once the list loads, before the shots.
+	Submit string
+}
+
+// App is the running desktop app. Its fields belong to the UI thread.
+type App struct {
+	opts     Options
+	log      *slog.Logger
+	dirs     mode.Dirs
+	settings mode.Settings
+
+	win *mygo.Window
+	// panel is the tray icon's open panel, or nil.
+	panel *mygo.Window
+	store *store.Store
+	shell *shell.Shell
+	view  *appui.App
+
+	// backend is the backend this app runs in standalone mode, and shared
+	// the one another program on this computer runs that it uses instead.
+	backend  *ownBackend
+	shared   local.Runtime
+	starting bool
+	startErr string
+	// gen counts connections, so a backend that finishes starting after the
+	// settings changed again is stopped instead of used.
+	gen      int
+	quitting bool
+}
+
+// Run runs the app until it quits.
+func Run(opts Options) error {
+	a := &App{opts: opts, log: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))}
+	mygo.App.SetName("AMDL")
+	if opts.DataDir != "" {
+		// A test run downloads under its own directory too, not into the
+		// user's music folder.
+		mygo.App.SetPath(mygo.PathMusic, filepath.Join(opts.DataDir, "music"))
+		mygo.App.SetPath(mygo.PathUserData, filepath.Join(opts.DataDir, "data"))
+		mygo.App.SetPath(mygo.PathCache, filepath.Join(opts.DataDir, "cache"))
+		mygo.App.SetPath(mygo.PathLogs, filepath.Join(opts.DataDir, "logs"))
+	}
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { a.quit() })
+	mygo.App.WhenReady(a.ready)
+	return mygo.App.Run()
+}
+
+func (a *App) ready() {
+	dirs, err := mode.AppDirs()
+	if err != nil {
+		mygo.Dialog.Error("AMDL cannot start", err.Error())
+		mygo.App.Quit()
+		return
+	}
+	a.dirs = dirs
+	if err := appui.RegisterFonts(); err != nil {
+		// The system's monospace face stands in; the app still works.
+		a.log.Warn("embedded fonts unreadable", "error", err)
+	}
+	if a.settings, err = mode.LoadSettings(dirs.Data); err != nil {
+		a.log.Warn("settings unreadable; starting from the defaults", "error", err)
+	}
+	switch {
+	case a.opts.Remote != "":
+		a.settings.Mode, a.settings.RemoteURL = mode.Remote, a.opts.Remote
+	case a.opts.Wrapper != "":
+		a.settings.Mode, a.settings.WrapperAddress = mode.Standalone, a.opts.Wrapper
+	}
+
+	a.store = store.New(a.post, nil)
+	a.view = &appui.App{Store: a.store, Art: artwork.New(a.post), Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme}
+	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
+	a.findFFmpeg()
+	if a.settings.Mode == "" {
+		a.view.Screen = appui.ScreenSettings
+	}
+	a.win = mygo.NewWindow(mygo.WindowOptions{
+		Title:           "AMDL",
+		Width:           1280,
+		Height:          800,
+		MinWidth:        820,
+		MinHeight:       560,
+		StateKey:        "main",
+		TitleBarStyle:   mygo.TitleBarHidden,
+		Vibrancy:        vibrancy(),
+		BackgroundColor: "#111219",
+		Content:         ui.View(a.view.View),
+	})
+	keepOnScreen(a.win)
+	a.shell = shell.New(shell.Options{
+		Open:      a.showWindow,
+		OpenJob:   func(id string) { a.showWindow(); a.view.OpenJob(id) },
+		Panel:     a.togglePanel,
+		Notify:    func() bool { return a.settings.Notify },
+		KeepAwake: func() bool { return a.settings.KeepAwake },
+		Log:       a.log,
+	})
+	a.store.SetNotifier(a.shell)
+	a.win.OnClose(func(e *mygo.CloseEvent) {
+		// With a tray icon, closing the window keeps downloads and their
+		// notifications going; the tray's Quit ends the app.
+		if !a.quitting && a.shell.HasTray() {
+			e.PreventDefault()
+			a.win.Hide()
+		}
+	})
+	a.connect()
+	if a.opts.Shots != "" {
+		go a.captureScreens(a.opts.Shots)
+	}
+}
+
+// keepOnScreen moves w inside the work area of the display nearest it.
+// MyGo restores a remembered frame as long as part of it shows, so after a
+// display shrank the hidden title bar, the one strip that drags the window,
+// can sit above the screen.
+func keepOnScreen(w *mygo.Window) {
+	b := w.Bounds()
+	d := mygo.Screen.DisplayNearestPoint(mygo.Point{X: b.X + b.Width/2, Y: b.Y + b.Height/2}).WorkArea
+	if d.Width == 0 || d.Height == 0 {
+		return
+	}
+	x := min(max(b.X, d.X), d.X+max(d.Width-b.Width, 0))
+	y := min(max(b.Y, d.Y), d.Y+max(d.Height-b.Height, 0))
+	if x != b.X || y != b.Y {
+		w.SetPosition(x, y)
+	}
+}
+
+// findFFmpeg gives the motion covers the ffmpeg the settings lead to. In
+// remote mode the backend's own ffmpeg is on its machine, so motion covers
+// need one here too; without one the stills show.
+func (a *App) findFFmpeg() {
+	p, _, err := ffmpeg.Find(a.settings.FFmpeg, a.dirs.Resources)
+	if err != nil {
+		a.log.Info("no ffmpeg for motion covers", "error", err)
+	}
+	a.view.Motion.SetFFmpeg(p)
+}
+
+// vibrancy is the sidebar's system material on macOS. Elsewhere the design's
+// own solid sidebar reads better than Mica tinted by the desktop.
+func vibrancy() mygo.Vibrancy {
+	if runtime.GOOS == "darwin" {
+		return mygo.VibrancySidebar
+	}
+	return mygo.VibrancyNone
+}
+
+// post runs fn on the UI thread, then refreshes what the shell shows, and
+// redraws the window.
+func (a *App) post(fn func()) {
+	a.win.Update(func() {
+		fn()
+		if a.shell != nil {
+			a.shell.Sync(a.store.Summary())
+		}
+		if a.panel != nil {
+			a.panel.Invalidate()
+		}
+	})
+}
+
+// togglePanel opens the tray icon's panel next to the icon, or closes it.
+func (a *App) togglePanel() {
+	if a.panel != nil {
+		a.panel.Close()
+		return
+	}
+	tray := a.shell.Tray()
+	if tray == nil {
+		a.showWindow()
+		return
+	}
+	a.panel = mygo.NewFlyout(mygo.FlyoutOptions{
+		Tray:      tray,
+		Placement: mygo.PlacementBottom,
+		Gap:       4,
+		Width:     appui.PanelWidth,
+		Height:    460,
+		Focusable: true,
+		Shadow:    true,
+		Popover:   runtime.GOOS == "darwin",
+		Content:   ui.View(a.view.Panel),
+	})
+	a.panel.OnClosed(func() {
+		a.panel = nil
+		a.view.PanelClosed()
+	})
+}
+
+func (a *App) showWindow() {
+	a.win.Show()
+	a.win.Focus()
+}
+
+// connect follows the backend the settings name, starting the embedded one
+// in standalone mode.
+func (a *App) connect() {
+	a.gen++
+	gen := a.gen
+	a.startErr = ""
+	old := a.backend
+	a.backend, a.shared = nil, local.Runtime{}
+	a.store.Connect(nil)
+	switch a.settings.Mode {
+	case mode.Remote:
+		if old != nil {
+			go a.stopBackend(old)
+		}
+		c, err := client.New(a.settings.RemoteURL)
+		if err != nil {
+			a.startErr = err.Error()
+			return
+		}
+		a.store.Connect(c)
+	case mode.Standalone:
+		a.startLocal(gen, old)
+	default:
+		if old != nil {
+			go a.stopBackend(old)
+		}
+	}
+}
+
+func (a *App) quit() {
+	if a.quitting {
+		return
+	}
+	a.quitting = true
+	if a.store != nil {
+		a.store.Close()
+	}
+	if a.shell != nil {
+		a.shell.Close()
+	}
+	if a.backend != nil {
+		// The backend saves its state and stops its workers; unfinished
+		// jobs resume on the next launch.
+		a.stopBackend(a.backend)
+	}
+}

@@ -11,8 +11,8 @@ changes against 1.x are listed in [Upgrading to 2.0](upgrading-to-2.0.md).
 ## 1. Process and lifecycle
 
 `amdl serve` only reads the config paths from its flags or the environment, mounts the console and
-calls `internal/server#Run`; an embedding app such as the desktop app calls it with its
-own `net.Listener`. In `Run`, every deferred close runs on every exit path, and a startup
+calls `internal/server#Run`; `internal/local#Backend` calls it with its own `net.Listener` for
+the desktop app's standalone mode and `amdl --server embedded`. In `Run`, every deferred close runs on every exit path, and a startup
 failure is returned and logged; the binary turns it into exit status 1. `Run` builds the
 components, starts them, and when its context ends (SIGINT or SIGTERM for the binary) or
 the HTTP server fails, stops them in this order
