@@ -400,8 +400,8 @@ func (m *model) command(line string) tea.Cmd {
 			if err != nil {
 				return "", err
 			}
-			if !w.Status {
-				return "no Apple ID signed in · /login", nil
+			if what := wrapperProblem(w); what != "" {
+				return what, nil
 			}
 			return "signed in · regions " + strings.Join(w.Regions, ", "), nil
 		})

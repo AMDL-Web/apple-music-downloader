@@ -84,10 +84,10 @@ func (m *model) header() string {
 	h := t.style(t.clay).Render("✻ ") + lipgloss.NewStyle().Foreground(t.fg).Bold(true).Render("amdl") +
 		t.style(t.dim).Render(" "+m.opts.Version+" · "+m.opts.Target)
 	if m.wrapper != nil {
-		if m.wrapper.Status {
-			h += t.style(t.dim).Render(" · wrapper ready (" + strings.Join(m.wrapper.Regions, ", ") + ")")
+		if what := wrapperProblem(*m.wrapper); what != "" {
+			h += t.style(t.bad).Render(" · " + what)
 		} else {
-			h += t.style(t.bad).Render(" · no Apple ID signed in (/login)")
+			h += t.style(t.dim).Render(" · wrapper ready (" + strings.Join(m.wrapper.Regions, ", ") + ")")
 		}
 	}
 	tip := t.style(t.dim).Render("  paste a link to download, type to search, / for commands, ? for keys")

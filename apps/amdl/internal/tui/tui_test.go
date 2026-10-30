@@ -51,7 +51,7 @@ func sample(t *testing.T) *model {
 	st.rate.Add(time.Now(), 0.35)
 	m.jobs["job_a"] = st
 	m.jobs["job_b"] = &jobState{job: domain.Job{ID: "job_b", Type: "playlist", Status: domain.JobQueued, Title: "City Pop Essentials", CreatedAt: at(5)}}
-	m.wrapper = &client.WrapperStatus{Status: true, Regions: []string{"cn"}}
+	m.wrapper = &client.WrapperStatus{Ready: true, Status: true, Regions: []string{"cn"}}
 	m.height = 40
 	return m
 }
@@ -227,5 +227,27 @@ func TestTrackCountIsSingularForOne(t *testing.T) {
 		if got := trackCount(n); got != want {
 			t.Errorf("trackCount(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+func TestAMistypedCodeKeepsTheLogin(t *testing.T) {
+	m := sample(t)
+	m.panel = panelLogin
+	m.loginSt.step, m.loginSt.loginID = "waiting", "login_1"
+	m.onLogin(loginMsg{err: &client.APIError{Status: 400, Code: "invalid_request", Message: "a two-step code is six digits"}})
+	if m.loginSt.step != "code" || m.loginSt.loginID != "login_1" || m.panel != panelLogin {
+		t.Fatalf("after a mistyped code: step %q, login %q, panel %v", m.loginSt.step, m.loginSt.loginID, m.panel)
+	}
+	m.onLogin(loginMsg{err: &client.APIError{Status: 401, Code: "authentication_failed", Message: "wrong code"}})
+	if m.loginSt.loginID != "" || m.panel == panelLogin {
+		t.Fatal("a refused code still waits for another")
+	}
+}
+
+func TestHeaderNamesTheManagedWrappersState(t *testing.T) {
+	m := sample(t)
+	m.wrapper = &client.WrapperStatus{Managed: &client.ManagedWrapper{Mode: "stopped"}}
+	if h := m.header(); !strings.Contains(h, "the local wrapper is stopped") || strings.Contains(h, "no Apple ID") {
+		t.Fatalf("header = %q", h)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"amdl/apps/amdl/internal/service"
@@ -14,6 +15,7 @@ import (
 	"amdl/internal/domain"
 	"amdl/internal/local"
 	"amdl/internal/media"
+	"amdl/internal/wrapperhost"
 )
 
 // check is one line of amdl doctor's report. A check that is not required
@@ -119,6 +121,9 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 		if !sys.Simulate {
 			c.OK = false
 			c.Hint = "the wrapper does not answer; check wrapper.address (amdl config get wrapper.address)"
+			if onThisMachine && localQEMUMissing(dirs) != "" {
+				c.Hint = "this machine's wrapper is installed but cannot run without QEMU; see the local check"
+			}
 		}
 	default:
 		c.Detail["wrapper_ready"], c.Detail["wrapper_logged_in"], c.Detail["regions"] = w.Ready, w.Status, w.Regions
@@ -131,10 +136,8 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 		if sys.Simulate {
 			break
 		}
-		if !w.Ready {
-			c.OK, c.Hint = false, "the wrapper answers but is not ready; it may still be starting: amdl wrapper status"
-		} else if !w.Status {
-			c.OK, c.Hint = false, "no account is logged in to the wrapper: amdl wrapper login, or the wrapper's own --login"
+		if what, fix := w.Problem(); what != "" {
+			c.OK, c.Hint = false, what+": "+fix
 		}
 	}
 	return c, onThisMachine
@@ -175,5 +178,22 @@ func localCheck(dirs local.Dirs) check {
 	if st, err := service.Query(); err == nil {
 		c.Detail["service"] = st
 	}
+	if fix := localQEMUMissing(dirs); fix != "" {
+		c.Hint = "the local wrapper is installed but QEMU is not found, so the backend runs no wrapper: " + fix
+	}
 	return c
+}
+
+// localQEMUMissing returns how to install QEMU when this machine's wrapper
+// is installed and the backend would find no QEMU to run it, else "".
+func localQEMUMissing(dirs local.Dirs) string {
+	in, err := wrapperhost.Home{Dir: dirs.WrapperDir()}.Current()
+	if err != nil || in.QEMU != "" {
+		return ""
+	}
+	if _, err := wrapperhost.FindQEMU("", runtime.GOOS, exec.LookPath, exists); err == nil {
+		return ""
+	}
+	cmd, _ := wrapperhost.QEMUInstall(runtime.GOOS, func(name string) bool { _, err := exec.LookPath(name); return err == nil })
+	return cmd
 }

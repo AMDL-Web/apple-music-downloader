@@ -352,6 +352,10 @@ func (m *model) onLogin(msg loginMsg) tea.Cmd {
 	m.busy = ""
 	ls := &m.loginSt
 	switch {
+	case msg.err != nil && ls.loginID != "" && isAPIError(msg.err, "invalid_request"):
+		// A mistyped code: the login still waits for the right one.
+		ls.step = "code"
+		return tea.Println(m.theme.style(m.theme.bad).Render("  ⎿ ") + errText(msg.err) + "; enter the code again")
 	case msg.err != nil:
 		m.endLogin()
 		return tea.Println(m.theme.style(m.theme.bad).Render("  ⎿ ") + "sign-in failed: " + errText(msg.err))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -171,6 +172,25 @@ func twoStep(ctx context.Context, c *client.Client, loginID, code string) tea.Cm
 		}
 		return loginMsg{status: r.Status, err: err}
 	}
+}
+
+// isAPIError reports whether err is the server's error code.
+func isAPIError(err error, code string) bool {
+	var api *client.APIError
+	return errors.As(err, &api) && api.Code == code
+}
+
+// wrapperProblem is what keeps the wrapper from decrypting, in the TUI's
+// words, or empty while it serves an account.
+func wrapperProblem(w client.WrapperStatus) string {
+	what, fix := w.Problem()
+	switch {
+	case what == "":
+		return ""
+	case strings.HasPrefix(fix, "amdl wrapper login"):
+		return what + " (/login)"
+	}
+	return what + " · " + fix
 }
 
 // errText is what a person reads for an error: the API's message, or that the
