@@ -152,8 +152,7 @@ Notes on `wrapper-lite-qemu`, from upstream's sources:
 ```bash
 amdl wrapper install          # QEMU, then upstream's guest
 amdl service install          # runs the backend, which runs the wrapper
-printf '%s\n' "$PASSWORD" | amdl wrapper login --username you@example.com --password-stdin
-amdl wrapper 2fa <login_id> <code>   # when Apple asks for one
+amdl wrapper login            # asks for the Apple ID, password and any two-step code
 ```
 
 `amdl wrapper install` needs QEMU (`qemu-system-x86_64`). Without it, it offers to run

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -97,40 +96,6 @@ func configSetCmd(*flag.FlagSet) func(e *env, args []string) error {
 			node[parts[len(parts)-1]] = v
 		}
 		return e.send(capability.Request{Method: http.MethodPut, Path: "/api/v1/config", Body: patch}, nil)
-	}
-}
-
-func wrapperLoginCmd(fs *flag.FlagSet) func(e *env, args []string) error {
-	username := fs.String("username", "", "the Apple ID")
-	stdin := fs.Bool("password-stdin", false, "read the password from the first line of stdin (required: a password never goes on the command line)")
-	return func(e *env, args []string) error {
-		if *username == "" || !*stdin || len(args) > 0 {
-			return usageErr("usage: amdl wrapper login --username <apple id> --password-stdin")
-		}
-		var password string
-		if !e.dry {
-			line, err := bufio.NewReader(e.Stdin).ReadString('\n')
-			if err != nil && line == "" {
-				return usageErr("no password on stdin")
-			}
-			// Only the line ending goes: spaces can be part of a password.
-			password = strings.TrimRight(line, "\r\n")
-		}
-		req := capability.Request{Method: http.MethodPost, Path: "/api/v1/wrapper/login",
-			Body: map[string]any{"username": strings.TrimSpace(*username), "password": password}}
-		if e.dry {
-			req.Body["password"] = "(from stdin)"
-		}
-		return e.send(req, func(raw []byte) error {
-			var r struct {
-				Status  string `json:"status"`
-				LoginID string `json:"login_id"`
-			}
-			if json.Unmarshal(raw, &r) == nil && r.Status == "needs_2fa" {
-				e.note("enter the code within 60 seconds (4 minutes for a wrapper amdl runs): amdl wrapper 2fa %s <code>", r.LoginID)
-			}
-			return e.out.result(json.RawMessage(raw))
-		})
 	}
 }
 

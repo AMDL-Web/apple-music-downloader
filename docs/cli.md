@@ -41,14 +41,18 @@ An unknown command fails with `usage_error` and `details.did_you_mean`.
 | `logs list [filters]`, `logs tail [filters]` | `GET /logs`, `/logs/stream` | read |
 | `system get`, `system health`, `system stats [--days]`, `hooks list` | `/system`, `/health`, `/stats`, `/hooks` | read |
 | `config get [key…]`, `config set <key=value>…`, `config reload` | `GET`/`PUT /config`, `…/reload` | read, write, write |
-| `wrapper status`, `wrapper login --username <id> --password-stdin`, `wrapper 2fa <login_id> <code>`, `wrapper logout --username <id>` | `/wrapper/*` | read, write, write, destructive |
+| `wrapper status`, `wrapper login [--username <id>] [--password-stdin]`, `wrapper 2fa <login_id>`, `wrapper logout --username <id>` | `/wrapper/*` | read, write, write, destructive |
 | `context list\|add <name> <url>\|use <name>\|remove <name>`, `version` | local, `/system` | |
 | `serve [--config] [--hooks] [--no-console]` | runs the backend in this process | |
 
 `download -` reads links from stdin, any number per line. `config set` takes dotted keys
-with YAML values (`download.quality_priority=[alac,aac]`). `wrapper login` reads the
-password from the first line of stdin and never from the command line; a `needs_2fa`
-answer carries the `login_id` for `wrapper 2fa`, which has to follow within 60 seconds.
+with YAML values (`download.quality_priority=[alac,aac]`). A password or two-step code
+never goes on the command line. In a terminal, `wrapper login` asks for the Apple ID
+when `--username` is missing, then for the password and, when Apple sends one, the
+two-step code, neither echoed. Elsewhere it needs `--username` and `--password-stdin`
+and reads the password from the first line of stdin; a `needs_2fa` answer then carries
+the `login_id` for `wrapper 2fa <login_id>`, which reads the code the same way (a
+prompt in a terminal, else stdin's first line) and has to follow within 60 seconds.
 
 ## Output
 

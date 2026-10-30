@@ -29,7 +29,10 @@ type IO struct {
 	Stdout, Stderr io.Writer
 	// OutTTY, ErrTTY and InTTY say whether each stream is a terminal.
 	OutTTY, ErrTTY, InTTY bool
-	Getenv                func(string) string
+	// ReadSecret reads a line from the terminal on Stdin without echoing it;
+	// without one, a terminal is never asked for a password or code.
+	ReadSecret func(ctx context.Context) (string, error)
+	Getenv     func(string) string
 }
 
 // env is one command's run: its IO, the global flags and the server.

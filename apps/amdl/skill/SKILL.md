@@ -51,7 +51,7 @@ On the command line:
 
 Signing in to Apple is done by a person, never by an agent: do not ask for, type, read or store an Apple ID password or two-step code.
 
-When get_status (or `amdl doctor`) says the wrapper is not signed in, tell the user to run `amdl wrapper login --username <apple id> --password-stdin` and, if Apple asks, `amdl wrapper 2fa <login_id> <code>`, or to use the web console's Account page.
+When get_status (or `amdl doctor`) says the wrapper is not signed in, tell the user to run `amdl wrapper login` in their own terminal, which asks for the password and any two-step code without echoing them, or to use the web console's Account page.
 
 A machine with no wrapper can run one: `amdl wrapper install`, then `amdl service install`. It downloads about 65 MB and may install QEMU, so let the user decide.
 

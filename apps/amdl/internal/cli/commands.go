@@ -22,6 +22,7 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 		"config get":        configGetCmd,
 		"config set":        configSetCmd,
 		"wrapper login":     wrapperLoginCmd,
+		"wrapper 2fa":       wrapperTwoStepCmd,
 		"cli search":        cliSearchCmd,
 		"cli commands":      cliCommandsCmd,
 		"cli setup":         cliSetupCmd,

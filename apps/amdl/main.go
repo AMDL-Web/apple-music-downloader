@@ -23,6 +23,7 @@ func main() {
 	code := cli.Run(ctx, os.Args[1:], cli.IO{
 		Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
 		OutTTY: cli.IsTerminal(os.Stdout), ErrTTY: cli.IsTerminal(os.Stderr), InTTY: cli.IsTerminal(os.Stdin),
+		ReadSecret: cli.TerminalSecret(os.Stdin),
 	})
 	stop()
 	os.Exit(code)
