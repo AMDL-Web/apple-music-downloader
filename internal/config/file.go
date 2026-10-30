@@ -43,6 +43,15 @@ func EnsureFile(configPath string, example []byte) (created bool, err error) {
 	return true, nil
 }
 
+// FromExample parses example as EnsureFile would write it, without AMDL_*
+// overlays: where a client that writes its own config.yaml starts, so a new
+// install gets the example's values (such as its {SongNumber} album layout)
+// rather than Default's, which keep older installs' layout. Callers pass
+// configs.Example.
+func FromExample(example []byte) (Config, error) {
+	return loadBytes(configExampleFileName, example, nil)
+}
+
 // saveConfig writes the complete configuration to path, owner-only because
 // the file may hold a media-user-token.
 func saveConfig(path string, cfg Config) error {

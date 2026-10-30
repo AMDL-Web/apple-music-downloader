@@ -74,6 +74,7 @@ func Run(ctx context.Context, args []string, io IO) int {
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return rootHelp(io, cmds)
 	}
+	args = hoistGlobals(args)
 	cmd, rest, ok := match(cmds, args)
 	if !ok {
 		return fail(io, &cliError{Code: "usage_error", exit: exitInput,
@@ -132,6 +133,32 @@ func Run(ctx context.Context, args []string, io IO) int {
 		return fail(io, err)
 	}
 	return exitOK
+}
+
+// hoistGlobals moves global flags written before the command, as in
+// amdl --server nas jobs list, after it, where the command's flag set parses
+// them.
+func hoistGlobals(args []string) []string {
+	valued := map[string]bool{"--server": true, "--wrapper": true, "--fields": true}
+	var lead []string
+	i := 0
+	for i < len(args) {
+		name, _, inline := strings.Cut(args[i], "=")
+		switch {
+		case valued[name] && inline:
+			lead = append(lead, args[i])
+			i++
+		case valued[name] && i+1 < len(args):
+			lead = append(lead, args[i], args[i+1])
+			i += 2
+		case name == "--quiet" || name == "--yes" || name == "--dry-run":
+			lead = append(lead, args[i])
+			i++
+		default:
+			return append(append([]string{}, args[i:]...), lead...)
+		}
+	}
+	return args
 }
 
 // match finds the longest command path at the start of args.

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -267,5 +268,35 @@ func TestServeOptions(t *testing.T) {
 	serveOptions(getenv, "", "", true).Console.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusOK || rec.Header().Get("Content-Security-Policy") != console.ContentSecurityPolicy {
 		t.Fatalf("console index = %d CSP %q", rec.Code, rec.Header().Get("Content-Security-Policy"))
+	}
+}
+
+func TestStableExe(t *testing.T) {
+	// Homebrew's and Scoop's layouts, as their docs describe them.
+	sep := string(filepath.Separator)
+	p := func(parts ...string) string { return strings.Join(parts, sep) }
+	for in, want := range map[string]string{
+		p("", "opt", "homebrew", "Cellar", "amdl", "2.0.1", "bin", "amdl"):                 p("", "opt", "homebrew", "opt", "amdl", "bin", "amdl"),
+		p("", "home", "linuxbrew", ".linuxbrew", "Cellar", "amdl", "2.0.1", "bin", "amdl"): p("", "home", "linuxbrew", ".linuxbrew", "opt", "amdl", "bin", "amdl"),
+		p("C:", "Users", "a", "scoop", "apps", "amdl", "2.0.1", "amdl.exe"):                p("C:", "Users", "a", "scoop", "apps", "amdl", "current", "amdl.exe"),
+		p("C:", "Users", "a", "scoop", "apps", "amdl", "current", "amdl.exe"):              p("C:", "Users", "a", "scoop", "apps", "amdl", "current", "amdl.exe"),
+		p("", "home", "a", ".local", "bin", "amdl"):                                        p("", "home", "a", ".local", "bin", "amdl"),
+	} {
+		if got := stableExe(in); got != want {
+			t.Errorf("stableExe(%s) = %s, want %s", in, got, want)
+		}
+	}
+}
+
+func TestGlobalFlagsBeforeTheCommand(t *testing.T) {
+	for _, c := range []struct{ in, want []string }{
+		{[]string{"--server", "embedded", "jobs", "list"}, []string{"jobs", "list", "--server", "embedded"}},
+		{[]string{"--server=nas", "--quiet", "doctor"}, []string{"doctor", "--server=nas", "--quiet"}},
+		{[]string{"jobs", "list", "--server", "nas"}, []string{"jobs", "list", "--server", "nas"}},
+		{[]string{"--server"}, []string{"--server"}},
+	} {
+		if got := hoistGlobals(c.in); strings.Join(got, " ") != strings.Join(c.want, " ") {
+			t.Errorf("hoistGlobals(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }

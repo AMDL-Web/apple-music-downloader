@@ -232,6 +232,7 @@ func (m *model) onSnapshot(l client.DownloadList) tea.Cmd {
 			m.printed[j.ID] = true
 			continue
 		}
+		delete(m.printed, j.ID)
 		m.jobs[j.ID] = &jobState{job: j}
 	}
 	return m.followMore()
@@ -249,6 +250,7 @@ func (m *model) onFeed(f domain.DownloadFeedMessage) tea.Cmd {
 	st := m.jobs[j.ID]
 	if client.Terminal(j.Status) {
 		if m.printed[j.ID] {
+			delete(m.jobs, j.ID)
 			return nil
 		}
 		m.printed[j.ID] = true
@@ -259,6 +261,8 @@ func (m *model) onFeed(f domain.DownloadFeedMessage) tea.Cmd {
 		delete(m.jobs, j.ID)
 		return tea.Batch(tea.Println(m.finishedLine(j, d)), m.followMore())
 	}
+	// A retried job runs again under its ID and finishes again.
+	delete(m.printed, j.ID)
 	if st == nil {
 		st = &jobState{}
 		m.jobs[j.ID] = st

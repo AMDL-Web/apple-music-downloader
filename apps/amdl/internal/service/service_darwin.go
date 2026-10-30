@@ -82,7 +82,7 @@ func Query() (State, error) {
 		st.Status = "not loaded"
 		return st, nil
 	}
-	st.Status = "loaded"
+	st.Status, st.Active = "loaded", true
 	for _, line := range strings.Split(out, "\n") {
 		if k, v, ok := strings.Cut(strings.TrimSpace(line), " = "); ok && k == "state" {
 			st.Status = v

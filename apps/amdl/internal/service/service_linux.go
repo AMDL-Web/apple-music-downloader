@@ -79,5 +79,6 @@ func Query() (State, error) {
 	}
 	out, _ := systemctl("is-active", Name+".service") // exits non-zero for anything but active; the word is the answer
 	st.Status = strings.TrimSpace(out)
+	st.Active = st.Status == "active" || st.Status == "activating" || st.Status == "reloading"
 	return st, nil
 }

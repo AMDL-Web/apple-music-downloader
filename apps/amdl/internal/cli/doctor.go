@@ -111,16 +111,24 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 			}
 		}
 	}
-	if raw, err := cl.Call(e.ctx, http.MethodGet, "/api/v1/wrapper/status", nil, nil); err == nil {
-		var w struct {
-			Ready  bool   `json:"ready"`
-			Status string `json:"status"`
-		}
-		_ = json.Unmarshal(raw, &w) // as above
-		c.Detail["wrapper_ready"] = w.Ready
-		if !w.Ready && !sys.Simulate {
+	// Simulate mode downloads nothing, so it needs no wrapper.
+	w, err := cl.WrapperStatus(e.ctx)
+	switch {
+	case err != nil:
+		c.Detail["wrapper_error"] = asCLIError(err).Message
+		if !sys.Simulate {
 			c.OK = false
-			c.Hint = "the wrapper is not ready (" + w.Status + "): amdl wrapper status"
+			c.Hint = "the wrapper does not answer; check wrapper.address (amdl config get wrapper.address)"
+		}
+	default:
+		c.Detail["wrapper_ready"], c.Detail["wrapper_logged_in"], c.Detail["regions"] = w.Ready, w.Status, w.Regions
+		if sys.Simulate {
+			break
+		}
+		if !w.Ready {
+			c.OK, c.Hint = false, "the wrapper answers but is not ready; it may still be starting: amdl wrapper status"
+		} else if !w.Status {
+			c.OK, c.Hint = false, "no account is logged in to the wrapper: amdl wrapper login, or the wrapper's own --login"
 		}
 	}
 	return c, onThisMachine

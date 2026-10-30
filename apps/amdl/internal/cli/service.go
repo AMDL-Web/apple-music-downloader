@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"amdl/apps/amdl/internal/service"
@@ -56,9 +58,10 @@ const serviceWait = 45 * time.Second
 
 // awaitRunning polls the runtime file, up to serviceWait, until a backend
 // answers (want) or the one that ran before is gone (!want): stopping the
-// service leaves a desktop app's backend running.
-func awaitRunning(ctx context.Context, want bool, before serviceStatus) serviceStatus {
-	ctx, cancel := context.WithTimeout(ctx, serviceWait)
+// service leaves a desktop app's backend running. It prints the last status
+// either way and fails with service_timeout when the wait ran out.
+func (e *env) awaitRunning(want bool, before serviceStatus) error {
+	ctx, cancel := context.WithTimeout(e.ctx, serviceWait)
 	defer cancel()
 	for {
 		st, err := currentStatus(ctx)
@@ -66,8 +69,20 @@ func awaitRunning(ctx context.Context, want bool, before serviceStatus) serviceS
 		if !want {
 			done = !st.Running || !before.Running || st.Backend.PID != before.Backend.PID
 		}
-		if (err == nil && done) || ctx.Err() != nil {
-			return st
+		if err == nil && done {
+			return e.out.result(st)
+		}
+		if ctx.Err() != nil {
+			if perr := e.out.result(st); perr != nil {
+				return perr
+			}
+			verb := "answer"
+			if !want {
+				verb = "stop"
+			}
+			return &cliError{Code: "service_timeout", exit: exitWaitTimeout,
+				Message: fmt.Sprintf("the backend did not %s within %s", verb, serviceWait),
+				Hint:    "its log is logs/server.log under data_dir; amdl service status shows the manager's view"}
 		}
 		select {
 		case <-ctx.Done():
@@ -108,9 +123,7 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err != nil {
 			return err
 		}
-		if exe, err = filepath.EvalSymlinks(exe); err != nil {
-			return err
-		}
+		exe = stableExe(exe)
 		addr, err := freePort()
 		if err != nil {
 			return err
@@ -128,8 +141,34 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err := service.Install(spec); err != nil {
 			return serviceErr(err)
 		}
-		return e.out.result(awaitRunning(e.ctx, true, serviceStatus{}))
+		return e.awaitRunning(true, serviceStatus{})
 	}
+}
+
+// stableExe maps a package manager's versioned path to the one that
+// survives upgrades: Homebrew's Cellar/amdl/<version> to opt/amdl, which it
+// repoints on upgrade, and Scoop's apps/amdl/<version> to apps/amdl/current.
+// Linux reports the resolved Cellar path even when amdl ran through the bin
+// symlink. Any other path is already stable: the install scripts replace the
+// binary in place.
+func stableExe(exe string) string {
+	sep := string(filepath.Separator)
+	for _, m := range []struct{ dir, stable string }{
+		{sep + "Cellar" + sep + "amdl" + sep, sep + "opt" + sep + "amdl" + sep},
+		{sep + "apps" + sep + "amdl" + sep, sep + "apps" + sep + "amdl" + sep + "current" + sep},
+	} {
+		i := strings.Index(exe, m.dir)
+		if i < 0 {
+			continue
+		}
+		rest := exe[i+len(m.dir):] // <version>/bin/amdl, or <version>/amdl.exe
+		_, after, ok := strings.Cut(rest, sep)
+		if !ok || strings.HasPrefix(rest, "current"+sep) {
+			return exe
+		}
+		return exe[:i] + m.stable + after
+	}
+	return exe
 }
 
 // freePort picks the service's loopback address once, at install, so its URL
@@ -155,7 +194,7 @@ func serviceUninstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err := service.Uninstall(); err != nil {
 			return serviceErr(err)
 		}
-		return e.out.result(awaitRunning(e.ctx, false, before))
+		return e.awaitRunning(false, before)
 	}
 }
 
@@ -167,7 +206,7 @@ func serviceStartCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err := service.Start(); err != nil {
 			return serviceErr(err)
 		}
-		return e.out.result(awaitRunning(e.ctx, true, serviceStatus{}))
+		return e.awaitRunning(true, serviceStatus{})
 	}
 }
 
@@ -183,7 +222,7 @@ func serviceStopCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err := service.Stop(); err != nil {
 			return serviceErr(err)
 		}
-		return e.out.result(awaitRunning(e.ctx, false, before))
+		return e.awaitRunning(false, before)
 	}
 }
 

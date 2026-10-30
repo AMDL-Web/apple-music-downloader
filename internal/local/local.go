@@ -20,6 +20,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"amdl/configs"
 	"amdl/internal/buildinfo"
 	"amdl/internal/config"
 	"amdl/internal/server"
@@ -97,7 +98,7 @@ const configHeader = `# Written by the AMDL clients (the desktop app, amdl --ser
 var ErrNoWrapper = errors.New("no wrapper address: the embedded backend needs one on its first start")
 
 // WriteConfig writes the embedded backend's config.yaml. A first start begins
-// from the backend's defaults with every path made absolute, since an app has
+// from the shipped example (config.FromExample) with every path made absolute, since an app has
 // no meaningful working directory; later starts keep what is in the file, such
 // as settings changed through the API, and set only the keys given.
 func (b Backend) WriteConfig() error {
@@ -112,6 +113,9 @@ func (b Backend) WriteConfig() error {
 	} else {
 		if b.Wrapper == "" {
 			return ErrNoWrapper
+		}
+		if cfg, err = config.FromExample(configs.Example); err != nil {
+			return err
 		}
 		cfg.Database.Path = filepath.Join(b.Dirs.ServerDir(), "db", "amdl.db")
 		cfg.Download.TempDir = filepath.Join(b.Dirs.Cache, "tmp")
