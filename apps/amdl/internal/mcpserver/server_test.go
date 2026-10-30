@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"amdl/internal/capability"
@@ -22,6 +23,43 @@ type session struct {
 	cs       *mcp.ClientSession
 	mu       sync.Mutex
 	progress []float64
+}
+
+type progressTransport struct {
+	mcp.Transport
+	s *session
+}
+
+func (t *progressTransport) Connect(ctx context.Context) (mcp.Connection, error) {
+	c, err := t.Transport.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &progressConnection{Connection: c, s: t.s}, nil
+}
+
+type progressConnection struct {
+	mcp.Connection
+	s *session
+}
+
+func (c *progressConnection) Read(ctx context.Context) (jsonrpc.Message, error) {
+	msg, err := c.Connection.Read(ctx)
+	if err != nil {
+		return msg, err
+	}
+	// Record progress in wire order: the SDK dispatches notification handlers
+	// on a separate queue that may still be pending when CallTool returns.
+	if r, ok := msg.(*jsonrpc.Request); ok && r.Method == "notifications/progress" {
+		var p mcp.ProgressNotificationParams
+		if err := json.Unmarshal(r.Params, &p); err != nil {
+			return nil, err
+		}
+		c.s.mu.Lock()
+		c.s.progress = append(c.s.progress, p.Progress)
+		c.s.mu.Unlock()
+	}
+	return msg, nil
 }
 
 func connect(t *testing.T, backend http.Handler) *session {
@@ -40,14 +78,8 @@ func connect(t *testing.T, backend http.Handler) *session {
 		t.Fatal(err)
 	}
 	s := &session{}
-	cl := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, &mcp.ClientOptions{
-		ProgressNotificationHandler: func(_ context.Context, r *mcp.ProgressNotificationClientRequest) {
-			s.mu.Lock()
-			s.progress = append(s.progress, r.Params.Progress)
-			s.mu.Unlock()
-		},
-	})
-	if s.cs, err = cl.Connect(ctx, ct, nil); err != nil {
+	cl := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
+	if s.cs, err = cl.Connect(ctx, &progressTransport{Transport: ct, s: s}, nil); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.cs.Close() })
