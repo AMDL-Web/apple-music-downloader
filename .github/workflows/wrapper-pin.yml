@@ -1,0 +1,45 @@
+# Keeps the pin of upstream's wrapper guest current. amdl wrapper install
+# reads it from the wrapper-pins branch (internal/wrapperhost#ManifestURL)
+# before the one built into the binary, which goes stale when GitHub deletes
+# the artifact 90 days after its build. Weekly, the job pins the newest
+# successful build-lite run's qemu-assets artifact once its downloaded bytes
+# match the digest GitHub reports, and commits the file only when it changed.
+name: wrapper-pin
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Pin the newest guest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/wrapper-pin.mjs "$RUNNER_TEMP/wrapper-pin.json"
+
+      - name: Commit it to wrapper-pins
+        run: |
+          set -eu
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git fetch --depth 1 origin wrapper-pins; then
+            git switch -C wrapper-pins FETCH_HEAD
+          else
+            git switch --orphan wrapper-pins
+          fi
+          cp "$RUNNER_TEMP/wrapper-pin.json" wrapper-pin.json
+          git add wrapper-pin.json
+          if git diff --cached --quiet; then echo "the pin is current"; exit 0; fi
+          git commit -s -m "chore(wrapper): pin $(node -p "require('./wrapper-pin.json').commit.slice(0, 12)")"
+          git push origin wrapper-pins
