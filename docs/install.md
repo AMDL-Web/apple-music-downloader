@@ -67,7 +67,7 @@ Its options are `-Version`, `-InstallDir`, `-Service`, `-Wrapper`, `-Force` and
 
 Each release renders a Homebrew formula and a Scoop manifest that install `amdl` with
 ffmpeg as a dependency (`deploy/packaging/`). They reach users through a tap and a bucket
-that are not published yet; once they are:
+from 2.0.1 on; 2.0.0 installs with the scripts above or Docker. Once they are published:
 
 ```bash
 brew install amdl-web/tap/amdl
@@ -185,8 +185,11 @@ secrets redacted, and `amdl wrapper stop` / `start` turn it off and on.
 | Windows on ARM | not supported |
 
 TCG is plain emulation. On a Linux PC it booted the guest in about 12 seconds and
-answered `/status` in 2 ms; whether downloads keep up on an Apple Silicon Mac is not
-measured yet.
+answered `/status` in 2 ms. On an M4 Pro Mac it booted in about 11 seconds and served
+again about 25 seconds after a login; a `/key` took 0.52 s at the median and 0.73 s at
+p95 (1.69 s for the first after a boot), and a 12-track ALAC 24-bit/96 kHz album of
+1011 MB downloaded in 65 seconds. QEMU used 16% of the CPU on average while downloading
+(44% at peak, about 7% idle) and at most about 176 MiB of memory.
 
 Known limits, all upstream's:
 

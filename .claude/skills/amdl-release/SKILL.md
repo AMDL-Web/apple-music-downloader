@@ -53,7 +53,8 @@ are handled per `REVIEW.md` and `HUMAN.md`.
 ## 4. Merge
 
 The maintainer merges. When branch protection blocks it, report what blocks it and
-wait (root `AGENTS.md` "Merging with `--admin`").
+wait (root `AGENTS.md` "Merging with `--admin`"): an `--admin` merge is asked of the
+maintainer for that release, never assumed from an earlier one.
 
 ## 5. After the merge
 
@@ -80,8 +81,8 @@ The first 2.0 release changes the image name and the website's host and starts t
 wrapper pin. These steps are the maintainer's unless marked; record each in the report.
 
 - **Image visibility.** The first push to `ghcr.io/amdl-web/apple-music-downloader`
-  creates a private package. The maintainer sets it public in the package settings;
-  then an anonymous pull works:
+  creates a private package. As soon as the release's push finishes, the maintainer
+  sets it public in the package settings; then an anonymous pull works:
   `DOCKER_CONFIG=$(mktemp -d) docker pull ghcr.io/amdl-web/apple-music-downloader:2.0.0`.
 - **Wrapper pin** (agent). `gh api repos/AMDL-Web/apple-music-downloader/branches/wrapper-pins`
   answers, and the manifest at `internal/wrapperhost#ManifestURL` has the same
@@ -93,9 +94,10 @@ wrapper pin. These steps are the maintainer's unless marked; record each in the 
   instead of republishing to Workers.
 - **NAS.** Redeploy the maintainer's own install on the new image name after the
   release (the `ssh-remote-ops` skill covers the host).
-- **Desktop app.** Not part of 2.0.0: the release workflow builds no desktop app, and
-  the notes say its builds come later.
-- **Homebrew and Scoop.** Not published for 2.0.0 unless the maintainer decides
-  otherwise: `PACKAGING_PUBLISH` stays unset, and the rendered `amdl.rb` and
-  `amdl.json` are still attached to the Release. Setup is in
-  [deploy/packaging/README.md](../../../deploy/packaging/README.md).
+- **Desktop app.** Not part of 2.0.0: the release workflow builds no desktop app. It
+  ships as a release of its own once a signing account is in place, and the v2.0.0
+  notes say so in one sentence.
+- **Homebrew and Scoop.** Not published for 2.0.0; they start with 2.0.1. For 2.0.0
+  `PACKAGING_PUBLISH` stays unset, and the rendered `amdl.rb` and `amdl.json` are
+  still attached to the Release. Before 2.0.1, set them up as
+  [deploy/packaging/README.md](../../../deploy/packaging/README.md) describes.
