@@ -12,8 +12,9 @@ link, then download, decrypt, remux and tag each track. Code map: the
   with a SQLite store. Its image is `deploy/server/`.
 - `apps/console`: the web console, embedded into the server; the one client this
   repository maintains today. Rules in `apps/console/AGENTS.md`.
-- apps/desktop (planned): a MyGo macOS app that imports the same core. Each product keeps
-  its own directory under `apps/`, including a future non-Go app with its own build.
+- `apps/desktop`: the desktop app for macOS, Windows and Linux, drawn with MyGo's native
+  UI. It imports the same core and embeds the server in standalone mode. Each product
+  keeps its own directory under `apps/`, including a future non-Go app with its own build.
 - `internal/`: the Go core every product shares. It never imports a product; the server
   passes the console in through `internal/api#Deps`.
 - `deploy/`: the Compose file and per-service image files. `tools/`: repository tooling.

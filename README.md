@@ -32,19 +32,19 @@ rest of this page describes it.
 served at `/console/`. It uses only the public API. Its design contract is
 [apps/console/DESIGN.md](apps/console/DESIGN.md).
 
-### Desktop app (planned)
+### Desktop app (in development)
 
-A native macOS app built with [MyGo](https://github.com/egoist/mygo) will live in
-apps/desktop. It will run either as a client of a remote server or as a standalone
-backend that runs the pipeline in-process and talks to a remote wrapper. Standalone mode
-embeds the server through `internal/server#Run` on a loopback listener; the app's own
-packages will sit under apps/desktop/internal, private to it.
+`apps/desktop` is a native app for macOS, Windows and Linux, drawn with
+[MyGo](https://github.com/egoist/mygo)'s native UI. It runs either as a client of a remote
+server or as a standalone backend that runs the pipeline in-process and talks to a remote
+wrapper. Standalone mode embeds the server through `internal/server#Run` on a loopback
+listener; the app's own packages sit under apps/desktop/internal, private to it.
 
 ## Repository layout
 
 | Path | What it holds |
 | --- | --- |
-| `apps/` | One directory per product: `server`, `console`, and later `desktop`. A non-Go app keeps its own build system in its directory. |
+| `apps/` | One directory per product: `server`, `console` and `desktop`. A non-Go app keeps its own build system in its directory. |
 | `internal/` | The Go core every product shares: the HTTP API, jobs, the download pipeline, the Apple and wrapper clients, storage and config. [Architecture](docs/architecture.md#2-packages) lists each package. |
 | `deploy/` | The Compose file and, under `deploy/server/`, the server's Dockerfile and entrypoint. |
 | `configs/` | The example config and hooks template every install is seeded from. |

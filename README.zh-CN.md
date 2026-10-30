@@ -29,17 +29,18 @@ Server-Sent Events 接口，以及同一端口上的网页控制台。它以容�
 `apps/console` 是浏览器客户端：一个免构建的 Preact 应用，嵌入服务端，在 `/console/` 提供。
 它只使用公开 API。设计约定见 [apps/console/DESIGN.md](apps/console/DESIGN.md)。
 
-### 桌面应用（规划中）
+### 桌面应用（开发中）
 
-一个用 [MyGo](https://github.com/egoist/mygo) 写的原生 macOS 应用将放在 apps/desktop。它可以作为
-远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程 wrapper。单机模式通过
-`internal/server#Run` 在本机回环地址上内嵌服务端；应用自己的包放在 apps/desktop/internal 下，只归它用。
+`apps/desktop` 是一个面向 macOS、Windows 和 Linux 的原生应用，用 [MyGo](https://github.com/egoist/mygo)
+的原生界面绘制。它可以作为远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程
+wrapper。单机模式通过 `internal/server#Run` 在本机回环地址上内嵌服务端；应用自己的包放在
+apps/desktop/internal 下，只归它用。
 
 ## 仓库结构
 
 | 路径 | 内容 |
 | --- | --- |
-| `apps/` | 一个产品一个目录：`server`、`console`，以后还有 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
+| `apps/` | 一个产品一个目录：`server`、`console` 和 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
 | `internal/` | 所有产品共用的 Go 核心：HTTP API、作业、下载流水线、Apple 与 wrapper 客户端、存储和配置。[Architecture](docs/architecture.md#2-packages) 列出了每个包。 |
 | `deploy/` | Compose 文件，以及 `deploy/server/` 下服务端的 Dockerfile 和入口脚本。 |
 | `configs/` | 每个安装据以生成配置的示例配置和钩子模板。 |
