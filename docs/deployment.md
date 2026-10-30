@@ -42,8 +42,8 @@ docker run -d --name amdl-backend \
 The image is a multi-stage build: the build stage cross-compiles a static binary
 (`CGO_ENABLED=0`, pure-Go SQLite), and the runtime stage is Alpine with `ffmpeg`,
 `ca-certificates`, `tzdata` and `su-exec`. The container starts the entrypoint as root,
-seeds config and fixes mount ownership, then drops to `PUID:PGID` (default `1000:1000`)
-via `su-exec` to run the backend.
+seeds config and gives the backend's own state to `PUID:PGID` (default `1000:1000`), then
+drops to that user via `su-exec` to run the backend.
 
 The container health check hits `GET /api/v1/health`, deriving the port from
 `AMDL_SERVER_LISTEN`.
@@ -103,7 +103,7 @@ Container variables:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `PUID` | `1000` | UID the backend runs as. Applied on every start: the config directory's ownership is fixed wholesale, while data directories are fixed recursively only when the top-level owner does not match — so the first bind mount, or a `PUID`/`PGID` change, can make one start slower. |
+| `PUID` | `1000` | UID the backend runs as. Applied on every start, when the entrypoint gives the backend's own state to `PUID:PGID` (see [Ownership](#ownership)); the downloads directory is never re-owned. |
 | `PGID` | `1000` | GID the backend runs as. Same behaviour as `PUID`. |
 | `TZ` | UTC | Container timezone (IANA name, e.g. `Asia/Shanghai`). Affects log timestamps and the local time exec hooks see. `tzdata` is in the image. |
 | `AMDL_SERVER_LISTEN` | `:18080` (entrypoint default) | Overrides `server.listen` on every start. The health check derives its port from this. |
@@ -147,8 +147,29 @@ is slow, mount it separately onto a fast host disk, kept apart from `data/downlo
 Logs go to stdout (`docker logs amdl-backend`) and to the in-memory buffer the console's
 Logs page reads; the backend writes no log file, so there is no log mount.
 
-Set `PUID`/`PGID` to the uid/gid that owns the host directories and the entrypoint fixes
-ownership inside the container for you.
+### Ownership
+
+Set `PUID`/`PGID` to the uid/gid that owns the host directories. Started as root, the
+entrypoint gives only the backend's own state to `PUID:PGID`, and only entries whose owner
+differs:
+
+- the config directory itself, `config.yaml`, `config.example.yaml` and `hooks.yaml`;
+- `/app/data` itself;
+- the database directory and its files (`amdl.db`, `-wal`, `-shm`, `-journal`), at
+  `AMDL_DATABASE_PATH` or the default `data/db/amdl.db`;
+- `/app/data/tmp` and everything in it, without crossing into another mount.
+
+It never touches `/app/data/downloads`, which is usually a music library. That directory
+must already be writable by `PUID:PGID`: create the host directory before the first start
+(Docker creates a missing bind-mount source as root) and give it to that uid/gid, for
+example `mkdir -p data/downloads && chown 1000:1000 data/downloads`. The entrypoint logs a
+warning at start when it is not writable. A `database.path` or `download.temp_dir` set
+only in `config.yaml` to another place is not re-owned either.
+
+To check the entrypoint after changing it, start the container as root with a `PUID` that
+differs from the owner of a bind-mounted downloads directory holding a file, then compare
+`stat -c '%u:%g'` of that directory and file before and after: neither may change, while
+`/app/data/tmp` and the database files now belong to `PUID:PGID`.
 
 ## The wrapper
 

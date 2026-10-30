@@ -49,8 +49,9 @@ COPY --from=build /out/amdl-api /app/amdl-api
 
 # Pre-create the config and data directories and hand them to the default
 # runtime user (uid 1000). The container starts the entrypoint as root; the
-# script fixes the ownership of mounted directories according to PUID/PGID
-# (default 1000:1000) and then drops privileges to run the backend. A non-root
+# script gives the backend's own state (config files, database, data/tmp, never
+# data/downloads) to PUID:PGID (default 1000:1000) and then drops privileges to
+# run the backend. A non-root
 # user can also be set directly with docker run --user, in which case the
 # privilege-drop logic is skipped.
 RUN mkdir -p /app/configs /app/data && chown -R amdl:amdl /app

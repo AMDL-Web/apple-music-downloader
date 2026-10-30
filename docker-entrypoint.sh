@@ -6,10 +6,10 @@
 # script never rewrites it.
 #
 # Runtime user: by default the image runs this script as root; after seeding
-# and fixing volume ownership it drops to PUID:PGID (default 1000:1000) with
-# su-exec to run the backend. When started as a non-root user with
-# docker run --user (or compose's user:), PUID/PGID are ignored, the ownership
-# fix is skipped, and the backend runs directly as that user.
+# and re-owning the backend's own state it drops to PUID:PGID (default
+# 1000:1000) with su-exec to run the backend. When started as a non-root user
+# with docker run --user (or compose's user:), PUID/PGID are ignored, the
+# ownership fix is skipped, and the backend runs directly as that user.
 set -eu
 
 CONFIG_PATH="${AMDL_CONFIG:-/app/configs/config.yaml}"
@@ -46,28 +46,63 @@ if [ ! -f "$HOOKS_PATH" ]; then
     cp "$DIST_DIR/hooks.yaml" "$HOOKS_PATH"
 fi
 
-# When started as root, fix volume ownership and drop privileges; when started
-# as a non-root user given by --user, run directly (the volumes must then be
-# made writable by that user beforehand).
-if [ "$(id -u)" = "0" ]; then
-    # The config directory is small, so it is fixed in full on every start and
-    # a PUID/PGID change takes effect immediately.
-    chown -R "$PUID:$PGID" "$CONFIG_DIR"
-    if [ -f "$HOOKS_PATH" ]; then
-        chown "$PUID:$PGID" "$HOOKS_PATH"
-    fi
-    # Data directories are checked mount point by mount point: a bind-mounted
-    # host directory is owned by root when Docker first creates it, and the
-    # downloads directory may hold a large number of files, so ownership is
-    # fixed recursively only once, when the top level does not match (the
-    # first mount or a PUID/PGID change).
-    for dir in /app/data /app/data/db /app/data/downloads; do
-        mkdir -p "$dir"
-        if [ "$(stat -c '%u:%g' "$dir")" != "$PUID:$PGID" ]; then
-            echo "fixing ownership of $dir to $PUID:$PGID"
-            chown -R "$PUID:$PGID" "$dir"
+# own_path PATH...: gives each existing PATH (not its contents) to PUID:PGID,
+# skipping one that already has that owner. Symlinks are not followed.
+own_path() {
+    for p in "$@"; do
+        if [ -e "$p" ] || [ -L "$p" ]; then
+            find "$p" -maxdepth 0 \( ! -user "$PUID" -o ! -group "$PGID" \) \
+                -exec chown -h "$PUID:$PGID" {} +
         fi
     done
+}
+
+# own_tree DIR: gives DIR and everything below it to PUID:PGID, skipping
+# entries that already have that owner. It stays on DIR's filesystem: -xdev
+# keeps find out of other mounts, and mount points below DIR are pruned too,
+# since -xdev alone would still re-own the mount point's own directory.
+own_tree() {
+    [ -d "$1" ] || return 0
+    root="$1"
+    set --
+    for m in $(awk -v d="$root/" 'index($5, d) == 1 { print $5 }' /proc/self/mountinfo); do
+        set -- "$@" -path "$m" -prune -o
+    done
+    find "$root" -xdev "$@" \( ! -user "$PUID" -o ! -group "$PGID" \) \
+        -exec chown -h "$PUID:$PGID" {} +
+}
+
+# When started as root, re-own the backend's own state and drop privileges;
+# when started as a non-root user given by --user, run directly (the mounts
+# must then be writable by that user beforehand).
+#
+# Only paths the backend creates are re-owned: the config directory itself and
+# its config files, the database directory and files, and the temp directory
+# data/tmp. The downloads directory is never touched: it is usually a
+# bind-mounted music library, and it must already be writable by PUID:PGID.
+# The backend writes no log file, so there are no logs to re-own.
+if [ "$(id -u)" = "0" ]; then
+    DOWNLOADS_DIR=/app/data/downloads
+    DB_PATH="${AMDL_DATABASE_PATH:-data/db/amdl.db}"
+    case "$DB_PATH" in
+        /*) ;;
+        *) DB_PATH="/app/$DB_PATH" ;;
+    esac
+    DB_DIR="$(dirname "$DB_PATH")"
+
+    mkdir -p /app/data/tmp "$DB_DIR"
+    own_path /app/data "$CONFIG_DIR" "$CONFIG_PATH" \
+        "$CONFIG_DIR/config.example.yaml" "$HOOKS_PATH"
+    case "$DB_DIR" in
+        "$DOWNLOADS_DIR" | "$DOWNLOADS_DIR"/*) ;;
+        *) own_path "$DB_DIR" ;;
+    esac
+    own_path "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm" "$DB_PATH-journal"
+    own_tree /app/data/tmp
+
+    if [ -d "$DOWNLOADS_DIR" ] && ! su-exec "$PUID:$PGID" test -w "$DOWNLOADS_DIR"; then
+        echo "warning: $DOWNLOADS_DIR is not writable by $PUID:$PGID; give the host directory to that uid/gid (docs/deployment.md, Ownership)" >&2
+    fi
     exec su-exec "$PUID:$PGID" /app/amdl-api "$@"
 fi
 

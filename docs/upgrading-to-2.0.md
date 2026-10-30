@@ -64,7 +64,10 @@ needs the API changes below before it works against 2.0.
      (a `host:port` value fails startup);
    - drop the `./data/logs` mount and any `.p8` key mount;
    - keep `stop_grace_period: 2m`;
-   - remove every other `AMDL_*` variable except the five 2.0 reads.
+   - remove every other `AMDL_*` variable except the five 2.0 reads;
+   - make sure the host downloads directory is writable by `PUID:PGID`: the 2.0
+     entrypoint re-owns only the backend's own state and no longer changes the
+     downloads directory's owner ([Deployment](deployment.md#ownership)).
 5. Check the wrapper host: `unshare -Ur true` must succeed, or use the QEMU variant (see [Wrapper](#wrapper)).
 6. Start 2.0, then confirm `GET /api/v1/wrapper/status` reports `ready` and a region, and
    read `login_supported` to know whether the console can log in.

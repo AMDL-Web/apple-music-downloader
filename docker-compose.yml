@@ -40,11 +40,12 @@ services:
     ports:
       - "18080:18080"
     environment:
-      # Runtime user: the container starts the entrypoint as root, which fixes
-      # the ownership of mounted directories and then drops to PUID:PGID to run
-      # the backend; default 1000:1000. Set them to the uid/gid that owns the
-      # host directories. Applied on every start; after a change, ownership of
-      # the mounted directories is fixed recursively once, automatically.
+      # Runtime user: the container starts the entrypoint as root, which gives
+      # the backend's own state (configs, database, data/tmp) to PUID:PGID and
+      # then drops to that user to run the backend; default 1000:1000. Set them
+      # to the uid/gid that owns the host directories. The downloads directory
+      # is never re-owned: create it on the host before the first start and
+      # make it writable by PUID:PGID.
       # PUID: "1000"
       # PGID: "1000"
       # Time zone for log timestamps and for the local time seen by commands in
