@@ -10,7 +10,7 @@ import { appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
 import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
 import { actionPlan, jobAllows } from '../lib/jobactions.js';
-import { useApp, Icon, Segmented, Empty, ErrorNote, SkeletonRows, Button, LinkButton } from '../ui/components.js';
+import { useApp, Icon, Segmented, Empty, ErrorNote, SkeletonJobRows, Button, LinkButton } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
 import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 import { JobRow, applyFeedToList } from './queue-row.js';
@@ -239,7 +239,7 @@ export function QueuePage({ route }) {
   useChipRow(`${filters.tab}|${haveCounts}`);
 
   let body;
-  if (waiting || (state.loading && state.jobs.length === 0)) body = html`<${SkeletonRows} n=${6} kind="row" />`;
+  if (waiting || (state.loading && state.jobs.length === 0)) body = html`<${SkeletonJobRows} n=${6} />`;
   else if (state.error && state.jobs.length === 0)
     body = html`<${ErrorNote} title="Couldn't load downloads" error=${state.error} onRetry=${() => load(0)} />`;
   else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} onShowAll=${() => setParams({ tab: 'all' })} />`;
@@ -300,13 +300,12 @@ export function QueuePage({ route }) {
             onInput=${(e) => setQInput(e.currentTarget.value)}
           />
         </label>
-        ${filters.q && !state.loading ? html`<span class="queue-count" role="status">${count(state.total)} ${state.total === 1 ? 'result' : 'results'}</span>` : null}
+        ${filters.q && (!state.loading || state.total > 0) ? html`<span class="queue-count" role="status">${count(state.total)} ${state.total === 1 ? 'result' : 'results'}</span>` : null}
         <select class="select" aria-label="Job type" value=${filters.type} onChange=${(e) => setParams({ type: e.currentTarget.value })}>
           ${TYPE_OPTIONS.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}
         </select>
       </div>
-      ${selecting || state.jobs.length > 0
-        ? html`<div class="queue-tools">
+      ${html`<div class="queue-tools">
             ${(filters.tab === 'failed' || filters.tab === 'cancelled') && retryable.length > 0
               ? html`<${Button}
                   icon="rotate"
@@ -322,10 +321,10 @@ export function QueuePage({ route }) {
               aria-pressed=${String(selecting)}
               aria-keyshortcuts="x"
               title="Select jobs (x selects the focused one, Esc leaves)"
+              disabled=${!selecting && state.jobs.length === 0}
               onClick=${() => (selecting ? leaveSelection() : setSelecting(true))}
             >${selecting ? 'Done' : 'Select'}</${Button}>
-          </div>`
-        : null}
+          </div>`}
     </div>
     ${state.error && state.jobs.length > 0 ? html`<${ErrorNote} title="Couldn't refresh downloads" error=${state.error} onRetry=${() => load(0)} />` : null}
     ${selecting || bulk.run

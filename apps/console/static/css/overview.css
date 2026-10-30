@@ -46,6 +46,11 @@
   margin: 0;
 }
 
+/* The loading bar stands on the number's own line, so the tile keeps its height. */
+.kpi-value > .skel {
+  height: 1lh;
+}
+
 .kpi-value {
   align-self: center;
   font-family: var(--font-display);
@@ -377,7 +382,8 @@
   margin: 0;
 }
 
-.health-strip[data-state="ok"] {
+.health-strip[data-state="ok"],
+.health-strip[data-state="loading"] {
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);

@@ -119,15 +119,47 @@ const SETTLED = ['completed'];
  * What a track row shows beyond number, title, length and size: `artist`
  * when it differs from the album artist, `codec` when its chip differs from
  * the album's, `status` while the track is working or has anything but a
- * plain completion to report (failed, skipped, cancelled, waiting).
+ * plain completion to report (failed, skipped, cancelled, waiting), and for
+ * every track while `keepStatus` is set (a job that was live in this drawer,
+ * so finished rows keep their height instead of collapsing one by one).
  */
-export function trackView(item, albumArtist, modeCodec) {
+export function trackView(item, albumArtist, modeCodec, keepStatus = false) {
   const chip = codecLabel(item);
   return {
     artist: item.artist && item.artist !== albumArtist ? item.artist : '',
     codec: chip && chip !== modeCodec ? chip : '',
-    status: !SETTLED.includes(item.status),
+    status: keepStatus || !SETTLED.includes(item.status),
   };
+}
+
+/**
+ * The fraction of the measurable stage a working track is in, as "35%", for
+ * its size column until the file exists; '' while the stage has no fraction
+ * (resolving, remuxing, tagging, saving, a transfer of unknown size).
+ */
+export function stagePercent(item) {
+  const p = (item && item.progress) || {};
+  const status = item && item.status;
+  const f = status === 'downloading' ? p.download : status === 'decrypting' ? p.decrypt : undefined;
+  return typeof f === 'number' && f > 0 && f < 1 ? `${Math.round(f * 100)}%` : '';
+}
+
+const WORKING = ['resolving', 'downloading', 'decrypting', 'remuxing', 'tagging', 'saving'];
+
+/**
+ * The status message beside a track's status, or ''. A finished track has
+ * none, nor has a message that only repeats the status label, or that only
+ * restates the progress of a working track ("decrypting 35%", "ALAC
+ * download 53%" under Downloading: the bar and the size column show it).
+ */
+export function trackNote(item, statusLabel) {
+  if (!item || ['completed', 'skipped_existing'].includes(item.status)) return '';
+  const msg = String(item.status_message || '').trim();
+  const label = String(statusLabel || '').trim().toLowerCase();
+  const plain = msg.replace(/[.\s]+$/, '').toLowerCase();
+  if (!msg || plain === label) return '';
+  if (WORKING.includes(item.status) && ((label && plain.startsWith(label)) || /\d%$/.test(plain))) return '';
+  return msg;
 }
 
 /**

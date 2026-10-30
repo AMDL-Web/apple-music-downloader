@@ -275,7 +275,8 @@ export function LogsPage({ route }) {
           const lv = logLevelView(l);
           const on = filters.levels.includes(l);
           return html`<button key=${l} type="button" class="level-chip" data-role=${lv.role} aria-pressed=${String(on)} onClick=${() => toggleLevel(l)}>
-            ${on ? html`<${Icon} name="circle-check" size="sm" />` : html`<span class="log-dot"></span>`}${lv.label}
+            <span class="level-chip-mark">${on ? html`<${Icon} name="circle-check" size="sm" />` : html`<span class="log-dot"></span>`}</span>
+            <span class="level-chip-label" data-label=${lv.label}>${lv.label}</span>
           </button>`;
         })}
       </div>

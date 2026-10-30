@@ -174,13 +174,13 @@ const HEALTH_ICONS = { Backend: 'server', Wrapper: 'key', 'Library sync': 'rotat
  * .health-status (the badge), .health-detail.
  */
 export function HealthList({ rows, wrapDetail }) {
-  return html`<ul class="health-list">
+  return html`<ul class="health-list" aria-busy=${rows.some(([, v]) => !v) ? 'true' : undefined}>
     ${rows.map(
-      ([name, view]) => html`<li key=${name} class="health-row" data-role=${view.role}>
+      ([name, view]) => html`<li key=${name} class="health-row" data-role=${view ? view.role : 'neutral'}>
         <span class="health-icon" aria-hidden="true"><${Icon} name=${HEALTH_ICONS[name] || 'info'} /></span>
         <span class="health-name">${name}</span>
-        <span class="health-status"><${Badge} view=${view} /></span>
-        ${view.detail ? html`<span class=${wrapDetail ? 'health-detail wrap-any' : 'health-detail'} title=${view.title || view.detail}>${view.detail}</span>` : null}
+        <span class="health-status">${view ? html`<${Badge} view=${view} />` : html`<span class="skel skel-lh skel-short"></span>`}</span>
+        ${view && view.detail ? html`<span class=${wrapDetail ? 'health-detail wrap-any' : 'health-detail'} title=${view.title || view.detail}>${view.detail}</span>` : null}
       </li>`,
     )}
   </ul>`;
@@ -231,6 +231,29 @@ export function Notice({ role = 'neutral', icon = 'info', children, action }) {
 
 export function Skeleton({ kind = 'text' }) {
   return html`<span class=${`skel skel-${kind}`} aria-hidden="true"></span>`;
+}
+
+/**
+ * Placeholder job rows built from the job row's own boxes (cover, title and
+ * second line), so the list keeps its height when the jobs arrive.
+ */
+export function SkeletonJobRows({ n = 6, compact }) {
+  return html`<ul class=${compact ? 'job-list job-list-compact' : 'job-list'} aria-busy="true" aria-label="Loading">
+    ${Array.from(
+      { length: n },
+      (_, i) => html`<li key=${i}><span class="job-row is-skel" data-progress="off">
+        <span class="art art-40 skel"></span>
+        <span class="job-main"><span class="job-title"><span class="skel skel-lh"></span></span><span class="job-sub"><span class="skel skel-lh skel-short"></span></span></span>
+      </span></li>`,
+    )}
+  </ul>`;
+}
+
+/** Label/value rows with the labels already in place and the values loading: the card keeps its final height. */
+export function SkeletonKV({ labels }) {
+  return html`<dl class="kv" aria-busy="true" aria-label="Loading">
+    ${labels.map((k) => html`<div class="kv-row" key=${k}><dt>${k}</dt><dd><span class="skel skel-lh"></span></dd></div>`)}
+  </dl>`;
 }
 
 /** Repeats a skeleton row `n` times inside a busy container. */

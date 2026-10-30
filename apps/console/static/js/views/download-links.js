@@ -150,7 +150,7 @@ function LinkRow({ entry, status, issue, prior, picked, row }) {
         </div>`}
     <div class="new-link-main">
       <span class="new-link-head">
-        <span class=${facts ? 'new-link-title' : 'new-link-title is-url'} dir="auto">${facts ? name : breakable(name)}</span>
+        <span class=${facts ? 'new-link-title' : loading ? 'new-link-title is-url is-pending' : 'new-link-title is-url'} dir="auto">${facts ? name : breakable(name)}</span>
         ${facts && facts.explicit ? html`<span class="new-link-explicit" title="Explicit" aria-label="Explicit">E</span>` : null}
         ${facts && facts.adm ? html`<span class="chip new-link-adm" title="Mastered for Apple's high-resolution formats">Apple Digital Master</span>` : null}
         ${sf ? html`<span class="chip new-link-sf" title=${sfTitle}>${sf.toUpperCase()}</span>` : null}

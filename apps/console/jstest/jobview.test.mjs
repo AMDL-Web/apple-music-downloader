@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isNotFound, activeFirst, rowView, albumCodec, codecNote, drawerSummary, trackView, activityRows } from '../static/js/lib/jobview.js';
+import { isNotFound, activeFirst, rowView, albumCodec, codecNote, drawerSummary, trackView, stagePercent, trackNote, activityRows } from '../static/js/lib/jobview.js';
 
 const done = { id: 'a', status: 'completed', type: 'album', storefront: 'us', title: 'folklore', artist_name: 'Taylor Swift', total_items: 16, completed_items: 16 };
 
@@ -85,6 +85,29 @@ test('trackView shows an artist, codec or status only when it adds something', (
   assert.deepEqual(trackView(items[2], 'Taylor Swift', mode), { artist: 'Bon Iver', codec: 'AAC', status: false });
   assert.equal(trackView(t({ status: 'skipped_existing' }), 'Taylor Swift', mode).status, true);
   assert.equal(trackView(t({ status: 'downloading' }), 'Taylor Swift', mode).status, true);
+  assert.equal(trackView(items[0], 'Taylor Swift', mode, true).status, true, 'a job seen live keeps every row its stage line');
+});
+
+test('stagePercent reads the fraction of the measurable stage a track is in', () => {
+  assert.equal(stagePercent({ status: 'downloading', progress: { download: 0.454 } }), '45%');
+  assert.equal(stagePercent({ status: 'decrypting', progress: { download: 1, decrypt: 0.35 } }), '35%');
+  assert.equal(stagePercent({ status: 'downloading', progress: { download: 0 } }), '', 'unknown size');
+  assert.equal(stagePercent({ status: 'remuxing', progress: { download: 1, decrypt: 1 } }), '');
+  assert.equal(stagePercent({ status: 'completed', progress: { download: 1, decrypt: 1 } }), '');
+  assert.equal(stagePercent({ status: 'queued' }), '');
+});
+
+test('trackNote drops messages that restate the stage, keeps the ones that explain', () => {
+  assert.equal(trackNote({ status: 'decrypting', status_message: 'decrypting 35%' }, 'Decrypting'), '');
+  assert.equal(trackNote({ status: 'downloading', status_message: 'downloading encrypted AAC-LC media' }, 'Downloading'), '');
+  assert.equal(trackNote({ status: 'downloading', status_message: 'ALAC download 53%' }, 'Downloading'), '');
+  assert.equal(trackNote({ status: 'decrypting', status_message: 'opening decrypt session' }, 'Decrypting'), 'opening decrypt session');
+  const retry = 'download attempt 2/3 failed; retrying in 2s: connection reset';
+  assert.equal(trackNote({ status: 'downloading', status_message: retry }, 'Downloading'), retry);
+  assert.equal(trackNote({ status: 'cancelled', status_message: 'Cancelled.' }, 'Cancelled'), '');
+  assert.equal(trackNote({ status: 'cancelled', status_message: 'Cancelled by the user' }, 'Cancelled'), 'Cancelled by the user', 'only a working stage drops a longer message');
+  assert.equal(trackNote({ status: 'completed', status_message: 'ALAC download completed' }, 'Completed'), '');
+  assert.equal(trackNote({ status: 'skipped_existing', status_message: 'File already exists; skipped' }, 'Already on disk'), '');
 });
 
 test('activityRows folds Gave up into the Failed that says the same', () => {

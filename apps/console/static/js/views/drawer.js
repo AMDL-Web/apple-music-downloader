@@ -178,6 +178,11 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
         .join(' · ');
   const summary = drawerSummary(items);
   const live = !isTerminal(job.status) && !streamEnded;
+  // Once this drawer has shown the job live, finished tracks keep their stage
+  // row, so the list does not shrink under the reader as each one completes.
+  const seenLive = useRef({ id: '', on: false });
+  if (seenLive.current.id !== job.id) seenLive.current = { id: job.id, on: false };
+  if (live) seenLive.current.on = true;
   // A finished job with no tracks (a link that never resolved) has nothing to list.
   const tracks = items.length > 0 || !isTerminal(job.status);
   // The bar says where a finished job ended up; a clean completion needs none.
@@ -219,7 +224,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
             : [
                 html`<${TrackStrip} key="strip" items=${items} />`,
                 codecKinds(items).length > 1 ? html`<${TrackLegend} key="legend" items=${items} />` : null,
-                html`<${TrackList} key="list" items=${items} albumArtist=${job.artist_name || ''} />`,
+                html`<${TrackList} key="list" items=${items} albumArtist=${job.artist_name || ''} keepStatus=${seenLive.current.on} />`,
               ]}
         </section>`
       : null}

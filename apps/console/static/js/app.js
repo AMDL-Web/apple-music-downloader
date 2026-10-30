@@ -8,6 +8,9 @@ import { buildHash, newDownloadHash, newDownloadUrls } from './lib/route.js';
 import { extractLinks } from './lib/links.js';
 import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
 import { count, pageSummary } from './lib/format.js';
+
+// Pages whose head has a live summary line: the line is there before the counts are.
+const SUB_PAGES = ['overview', 'queue'];
 import { AppContext, Icon } from './ui/components.js';
 import { isDialogOpen } from './ui/dialogs.js';
 import { useFieldFocus } from './ui/field-focus.js';
@@ -351,7 +354,7 @@ export function App() {
         <main id="main" class="main" tabindex="-1" ref=${mainRef} data-page=${route.page}>
           <div class="page-head">
             <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
-            ${summary ? html`<p class="page-sub">${summary}</p>` : null}
+            ${summary || SUB_PAGES.includes(route.page) ? html`<p class="page-sub">${summary || '\u00a0'}</p>` : null}
           </div>
           <${Banners} conn=${conn} onRetry=${() => retryRef.current()} />
           ${page}

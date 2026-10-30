@@ -8,7 +8,7 @@ import { backendHealthView, wrapperView, librarySyncView, hooksView, missingTool
 import { uniqueByTarget } from '../lib/albums.js';
 import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
-import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
+import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
 import { usePoll, useColumns, useNow } from '../ui/hooks.js';
 import { JobRow, applyFeedToList } from './queue.js';
 import { ThroughputCard } from './throughput.js';
@@ -44,8 +44,8 @@ function KpiRow() {
   const tile = (t, value, meta) => html`<a key=${t.key} class="kpi" data-key=${t.key} data-role=${t.role} data-zero=${value === 0 ? '' : undefined} href=${t.href}>
     <span class="kpi-label">${t.label}</span>
     <span class="kpi-icon"><${Icon} name=${t.icon} /></span>
-    ${counts ? html`<span class="kpi-value">${stale ? '—' : count(value)}</span>` : html`<${Skeleton} kind="kpi" />`}
-    <span class="kpi-meta">${counts ? meta : ''}</span>
+    <span class="kpi-value">${counts ? (stale ? '—' : count(value)) : html`<${Skeleton} kind="kpi" />`}</span>
+    <span class="kpi-meta">${counts ? meta : '\u00a0'}</span>
   </a>`;
   return html`<${Card} section="kpis" title="Jobs" labelId="kpis-title" note="All time">
     <div class="kpis">
@@ -98,9 +98,14 @@ function LiveQueue() {
   );
   const c = app.counts;
   let body;
-  if (state.loading) body = html`<${SkeletonRows} n=${4} kind="row" />`;
+  // The seeded counts already say how many jobs are active: the placeholder
+  // has their rows, or is the idle line itself, so the card keeps its height.
+  // Before the counts, it holds the idle line's room (the common case).
+  const active = c ? Math.min(LIVE_LIMIT, c.running + c.queued) : 0;
+  if (state.loading && !c) body = html`<p class="live-idle" aria-hidden="true">\u00a0</p>`;
+  else if (state.loading && active > 0) body = html`<${SkeletonJobRows} n=${active} compact />`;
   else if (state.error) body = html`<${ErrorNote} title="Couldn't load the queue" error=${state.error} onRetry=${load} />`;
-  else if (state.jobs.length === 0)
+  else if (state.loading || state.jobs.length === 0)
     body = html`<p class="live-idle">Nothing downloading. <a class="link" href=${buildHash('new')}>Start a download</a></p>`;
   else
     body = html`<ul class="job-list job-list-compact" aria-label="Active jobs">
@@ -111,7 +116,7 @@ function LiveQueue() {
     section="live"
     title="Live queue"
     labelId="live-queue-title"
-    note=${c ? `${count(c.running)} running · ${count(c.queued)} queued` : null}
+    note=${c ? `${count(c.running)} running · ${count(c.queued)} queued` : '\u00a0'}
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('queue', {})}>Open queue</${LinkButton}>`}
   >${body}</${Card}>`;
 }
@@ -249,7 +254,8 @@ export function healthRows(results) {
  * Nothing renders until the first read settles.
  */
 function HealthStrip({ poll }) {
-  if (!poll.data) return null;
+  // Until the first check answers, an empty line holds the strip's place.
+  if (!poll.data) return html`<p class="health-strip" data-state="loading" aria-hidden="true">\u00a0</p>`;
   const sys = poll.data[4] && poll.data[4].data;
   const rows = [...healthRows(poll.data), ...missingToolRows(sys), ...storageRows(poll.data[4])];
   const bad = rows.filter(([, v]) => v.role === 'danger' || v.role === 'warning');
@@ -308,12 +314,19 @@ function RecentStrip() {
     section="recent"
     title="Recently completed"
     labelId="recent-title"
-    note=${app.counts ? `${count(app.counts.completed)} completed` : null}
+    note=${app.counts ? `${count(app.counts.completed)} completed` : '\u00a0'}
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('showcase')}>Showcase</${LinkButton}>`}
   >
     <div class="strip" ref=${ref}>
       ${state.loading
-        ? Array.from({ length: cols || 1 }, (_, i) => html`<${Skeleton} key=${i} kind="tile" />`)
+        ? Array.from(
+            { length: cols || 1 },
+            (_, i) => html`<span key=${i} class="strip-tile is-skel" aria-hidden="true">
+              <span class="art art-square skel"></span>
+              <span class="strip-title"><span class="skel skel-lh"></span></span>
+              <span class="strip-sub"><span class="skel skel-lh skel-short"></span></span>
+            </span>`,
+          )
         : state.error
           ? html`<${ErrorNote} title="Couldn't load completed jobs" error=${state.error} onRetry=${load} />`
           : state.jobs.length === 0

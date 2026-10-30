@@ -77,10 +77,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Empty while the box has no links; it stays in place to announce the
-   first count, out of the bar's flow. */
-.new-count:empty {
-  position: absolute;
+/* Empty while the box has no links, but its line stays, so the first link
+   does not push Download down. */
+.new-count {
+  min-height: 1lh;
 }
 
 .new-submit-row {
@@ -128,6 +128,9 @@
 
 .new-submit-btn {
   margin-inline-start: auto;
+  /* Wide enough for "Paste a link to start", so a shorter label does not resize it. */
+  min-width: 13.5em;
+  justify-content: center;
 }
 
 .new-cfg-note {
@@ -294,6 +297,11 @@
   font-weight: var(--w-regular);
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* While the lookup runs the link holds one line, as the title will. */
+.new-link-title.is-url.is-pending {
+  white-space: nowrap;
 }
 
 /* One meta line; the whole of it is the tooltip. */

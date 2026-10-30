@@ -5,7 +5,7 @@
 
 import { html } from '../ui/preact.js';
 import { trackLength, bytes, codecMeaning } from '../lib/format.js';
-import { albumCodec, codecNote, trackView } from '../lib/jobview.js';
+import { albumCodec, codecNote, trackView, trackNote, stagePercent } from '../lib/jobview.js';
 import { itemStatusView } from '../lib/status.js';
 import { StatusText, StageTrack, Icon, Chip } from '../ui/components.js';
 
@@ -17,9 +17,6 @@ export function TrackStrip({ items }) {
     })}
   </div>`;
 }
-
-// A status message that only repeats the status label adds nothing under it.
-const sameWords = (a, b) => String(a).trim().replace(/[.\s]+$/, '').toLowerCase() === String(b).trim().toLowerCase();
 
 /**
  * The key to the codec chips below it, said once: the codec most tracks carry
@@ -35,12 +32,14 @@ export function TrackLegend({ items }) {
   </p>`;
 }
 
-export function TrackList({ items, albumArtist }) {
+export function TrackList({ items, albumArtist, keepStatus }) {
   const mode = albumCodec(items);
   return html`<ol class="tracks">
     ${items.map((it) => {
       const v = itemStatusView(it);
-      const t = trackView(it, albumArtist, mode);
+      const t = trackView(it, albumArtist, mode, keepStatus);
+      const note = it.status === 'failed' && it.error ? '' : trackNote(it, v.label);
+      const pct = it.file_size > 0 ? '' : stagePercent(it);
       return html`<li key=${it.id} class="track" data-row tabindex="-1" data-status=${it.status} data-detail=${t.status ? '' : undefined}>
         <span class="track-index num">${it.index}</span>
         <span class="track-main">
@@ -49,19 +48,16 @@ export function TrackList({ items, albumArtist }) {
         </span>
         <span class="track-codec">${t.codec ? html`<${Chip} title=${codecMeaning(it) || undefined}>${t.codec}</${Chip}>` : null}</span>
         <span class="track-len num">${trackLength(it.duration_ms)}</span>
-        <span class="track-size num">${it.file_size > 0 ? bytes(it.file_size) : ''}</span>
+        <span class="track-size num">${it.file_size > 0 ? bytes(it.file_size) : pct ? html`<span class="track-pct">${pct}</span>` : ''}</span>
         ${t.status
           ? html`<span class="track-stages"><${StageTrack} item=${it} /></span>
               <span class="track-status">
                 <${StatusText} view=${v} />
                 ${v.retry ? html`<span class="badge" data-role="warning"><${Icon} name="rotate" size="sm" /><span class="badge-label">${v.retry}</span></span>` : null}
+                ${note ? html`<span class="track-note" title=${note}>${note}</span>` : null}
               </span>`
           : null}
-        ${it.status === 'failed' && it.error
-          ? html`<p class="track-error">${it.error}</p>`
-          : it.status_message && !['completed', 'skipped_existing'].includes(it.status) && !sameWords(it.status_message, v.label)
-            ? html`<p class="track-note">${it.status_message}</p>`
-            : null}
+        ${it.status === 'failed' && it.error ? html`<p class="track-error">${it.error}</p>` : null}
       </li>`;
     })}
   </ol>`;
