@@ -73,7 +73,19 @@ What the server needs:
 
 ## Quick start
 
-The repository's [`deploy/docker-compose.yml`](deploy/docker-compose.yml) runs amdl from the prebuilt
+Two ways to run it, side by side:
+
+| | Binary | Docker |
+| --- | --- | --- |
+| Suits | A desktop or laptop (macOS, Linux, Windows), no Docker | A NAS or server, next to the wrapper |
+| Install | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh` (PowerShell: `irm …/install.ps1 \| iex`) | Copy [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
+| Runs as | A service that starts at login: `amdl service install --wrapper <url>` | `docker compose up -d` |
+| ffmpeg | Install it yourself; `amdl doctor` prints the command | In the image |
+| Wrapper | Elsewhere, or locally through upstream's QEMU launcher | A compose service on the same host |
+| Guide | [docs/install.md](docs/install.md) | Below and [docs/deployment.md](docs/deployment.md) |
+
+The rest of this section is the Docker path. The repository's
+[`deploy/docker-compose.yml`](deploy/docker-compose.yml) runs amdl from the prebuilt
 image on GHCR and carries both wrapper setups as commented services. Copy it to an empty
 directory; the first start creates `configs/` and `data/` next to it.
 

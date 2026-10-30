@@ -2,6 +2,9 @@
 
 > Type: runbook
 
+This page runs amdl in Docker. To install the `amdl` binary and run the backend
+without Docker, see [install.md](install.md).
+
 ## Docker
 
 [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) pulls the prebuilt multi-arch
