@@ -25,11 +25,13 @@ test('the css scan reads the scale and finds literals and layout transitions wit
   const dir = mkdtempSync(join(tmpdir(), 'uia-'));
   const tokens = join(dir, 'tokens.css');
   const page = join(dir, 'page.css');
-  writeFileSync(tokens, ':root {\n  --s-1: 4px;\n  --s-2: 8px;\n  --r-card: 22px;\n  --fs-13: 13px;\n}\n');
+  writeFileSync(tokens, ':root {\n  --s-1: 4px;\n  --s-2: 8px;\n  --r-card: 22px;\n  --r-sheet: calc(var(--r-card) + var(--s-1));\n  --fs-13: 13px;\n}\n');
   writeFileSync(page, '.a {\n  padding: 4px var(--s-2);\n  gap: 5px;\n  /* margin: 7px; */\n  border-radius: calc(var(--r-card) - 4px);\n  transition: height 200ms;\n}\n');
   assert.deepEqual(declarations('.x{a:1px;}\n.y{\n b: 2px;\n}')[1], { prop: 'b', value: '2px', line: 3 });
   const scale = readScale([tokens], { space: /^--s-/, radius: /^--r-/, font: /^--fs-/ });
   assert.deepEqual(scale.space, [0, 4, 8]);
+  assert.deepEqual(scale.radius, [0, 22]);
+  assert.deepEqual(scale.vars, { space: [], radius: ['--r-sheet'], font: [] });
   const found = scanCss([page], { root: dir, scale });
   const at = (line) => found.filter((f) => f.line === line).map((f) => f.check);
   assert.deepEqual(at(2), ['tokens']);

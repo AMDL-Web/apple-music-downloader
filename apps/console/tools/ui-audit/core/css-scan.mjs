@@ -19,20 +19,31 @@ export function declarations(css) {
   return out;
 }
 
-/** The scale: every token matching a pattern whose value is a plain px length. */
+/**
+ * The scale: every token matching a pattern whose value is a plain px length.
+ * Tokens written another way (calc(), var(), a value a media query changes)
+ * are listed by name under `vars`, for the page probe to resolve at its width.
+ */
 export function readScale(files, patterns) {
   const scale = {};
-  for (const [name, re] of Object.entries(patterns)) scale[name] = new Set([0]);
+  const vars = {};
+  for (const [name] of Object.entries(patterns)) {
+    scale[name] = new Set([0]);
+    vars[name] = new Set();
+  }
   for (const f of files) {
     for (const d of declarations(readFileSync(f, 'utf8'))) {
       for (const [name, re] of Object.entries(patterns)) {
+        if (!re.test(d.prop)) continue;
         const m = d.value.match(/^(-?[\d.]+)px$/);
-        if (re.test(d.prop) && m) scale[name].add(+m[1]);
+        if (m) scale[name].add(+m[1]);
+        else vars[name].add(d.prop);
       }
     }
   }
   const out = {};
   for (const [k, v] of Object.entries(scale)) out[k] = [...v].sort((a, b) => a - b);
+  out.vars = Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, [...v].sort()]));
   return out;
 }
 

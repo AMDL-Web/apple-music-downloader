@@ -127,6 +127,27 @@ function mergeLines(rects) {
   return lines;
 }
 
+/** The scale plus its non-px tokens (calc(), var()) as they compute at this width. */
+function resolveScale(base) {
+  const box = document.createElement('div');
+  box.style.position = 'absolute';
+  box.style.visibility = 'hidden';
+  box.style.height = '0';
+  document.documentElement.append(box);
+  const out = { ...base };
+  for (const [kind, names] of Object.entries(base.vars || {})) {
+    const extra = [];
+    for (const n of names) {
+      box.style.width = `var(${n})`;
+      const v = parseFloat(getComputedStyle(box).width);
+      if (Number.isFinite(v)) extra.push(v);
+    }
+    out[kind] = [...new Set([...(base[kind] || []), ...extra])].sort((a, b) => a - b);
+  }
+  box.remove();
+  return out;
+}
+
 function radii(s) {
   return [px(s.borderTopLeftRadius), px(s.borderTopRightRadius), px(s.borderBottomRightRadius), px(s.borderBottomLeftRadius)];
 }
@@ -429,7 +450,7 @@ uia.scan = function scan(cfg) {
   }
 
   // ---- spacing scale (computed values)
-  const scale = cfg.scale;
+  const scale = resolveScale(cfg.scale);
   const offScale = new Map();
   const note = (el, prop, v, list) => {
     if (v === 0 || Math.abs(v) <= 1) return;
