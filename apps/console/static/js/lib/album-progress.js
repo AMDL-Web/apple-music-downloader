@@ -2,6 +2,8 @@
 // SegmentedProgressBar (DownloadDetailSummaryView.swift): one bar with a solid
 // fill for the tracks that have finished and a translucent fill for the
 // overall progress, cut into one cell per track while the cells stay legible.
+// internal/progress#AlbumProgress is the Go version for the CLI, TUI and
+// desktop app; keep the two in step.
 
 import { STAGE_WEIGHTS } from './status.js';
 

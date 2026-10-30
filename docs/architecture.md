@@ -70,6 +70,9 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/ids` | random IDs (`job_<32 hex>`, `item_<32 hex>`) | |
 | `internal/buildinfo` | version, commit, build date (ldflags), process start time | |
 | `internal/sysproc` | how external commands start: no console window on Windows | |
+| `internal/client` | the Go client of `/api/v1`: typed requests, SSE with a silence watchdog, followers that resume the job list or one job | import a product or anything but `internal/config` and `internal/domain` |
+| `internal/progress` | the clients' stage weights, stage bar, album bar and remaining-time estimate, kept equal to the console's by a test | |
+| `internal/format` | sizes, durations, rates and quality labels the clients show | |
 
 ### 2.1 The wrapper and decryption
 

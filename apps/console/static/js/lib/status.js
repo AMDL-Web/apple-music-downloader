@@ -320,7 +320,8 @@ const STAGE_LABELS = { resolve: 'Resolve', download: 'Download', decrypt: 'Decry
  * and the finishing steps a sliver each. The same shares the AMDL iOS app
  * gives the stages of ItemProgress. They add up to 1: they size the stage
  * segments, and the drawer's album bar weights its overall progress with them
- * (lib/album-progress.js).
+ * (lib/album-progress.js). The Go clients use the same values
+ * (internal/progress#Weights); TestWeightsMatchConsole there keeps them equal.
  */
 export const STAGE_WEIGHTS = Object.freeze({ resolve: 0.04, download: 0.56, decrypt: 0.26, remux: 0.06, verify: 0.03, tag: 0.03, save: 0.02 });
 
