@@ -120,6 +120,20 @@ function withoutMessage(payload) {
   return rest;
 }
 
+const COUNTED = { completed: 'completed_items', skipped_existing: 'skipped_items', failed: 'failed_items', cancelled: 'cancelled_items' };
+
+/**
+ * The job's per-status track counts from its tracks, as the server derives
+ * them (internal/db jobColumns). Item events carry the track, not the job, so
+ * the counts are recounted here; otherwise they keep the snapshot's values
+ * while the rows below move on.
+ */
+function itemCounts(items) {
+  const out = { completed_items: 0, skipped_items: 0, failed_items: 0, cancelled_items: 0 };
+  for (const it of items) if (it && COUNTED[it.status]) out[COUNTED[it.status]]++;
+  return out;
+}
+
 /**
  * Applies a batch of per-job events (already JSON-parsed) to the drawer
  * state. Events at or before the cursor are skipped, so a replay after a
@@ -169,7 +183,7 @@ export function applyJobEvents(state, events) {
     }
     activity = addActivity(activity || s.activity, ev);
   }
-  if (items) s = { ...s, items };
+  if (items) s = { ...s, items, job: s.job && { ...s.job, ...itemCounts(items) } };
   if (hooks) s = { ...s, hooks };
   if (activity && activity !== s.activity) s = { ...s, activity };
   return s;

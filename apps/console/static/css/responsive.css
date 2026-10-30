@@ -662,7 +662,7 @@
   .pcell,
   .stage,
   .meter,
-  .track-block,
+  .abar,
   .conn-dot,
   .log-dot,
   .pulse,
@@ -676,5 +676,16 @@
   .pcell:not([data-state="remaining"]) {
     forced-color-adjust: none;
     background: CanvasText;
+  }
+
+  .abar-run {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .abar-live {
+    forced-color-adjust: none;
+    background: GrayText;
+    opacity: 1;
   }
 }

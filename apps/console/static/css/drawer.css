@@ -112,6 +112,13 @@
   line-height: var(--lh-12);
 }
 
+/* Its size grows while the job runs; on one line, the head keeps its height. */
+.drawer-summary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* The link of a job that never resolved, under its title. */
 .drawer-input {
   overflow-wrap: anywhere;
@@ -186,29 +193,65 @@
   gap: var(--s-4);
 }
 
-.section-head .jprog,
-.section-progress {
-  flex: 1;
-  display: flex;
+/* The album bar (views/drawer-tracks.js AlbumProgress), after the AMDL iOS
+   app: the finished tracks fill solid, in the order they finished; the
+   overall progress fills translucent behind them; and up to TICK_MAX tracks
+   (lib/album-progress.js) a mask cuts the bar into one cell per track. The
+   mask is one gap wider than the bar, so the last cell keeps its rounded end. */
+.abar-wrap {
+  display: grid;
+  gap: var(--s-1_5);
 }
 
-/* A clean completion needs no bar, but its room stays, so the tracks do not
-   move up when the job finishes under the reader. */
-.section-progress.is-hidden {
-  visibility: hidden;
-}
-
-.track-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-0_5);
-}
-
-.track-block {
-  width: 8px;
-  height: 12px;
+.abar {
+  position: relative;
+  height: var(--bar-h);
   border-radius: var(--r-bar);
+  background: var(--track);
+  overflow: hidden;
+}
+
+.abar[data-ticks] {
+  mask-image: repeating-linear-gradient(to right, black 0 calc(100% / var(--n) - 2px), transparent 0 calc(100% / var(--n)));
+  mask-size: calc(100% + 2px) 100%;
+  mask-repeat: no-repeat;
+}
+
+.abar.is-indeterminate {
+  background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
+}
+
+.abar-live,
+.abar-done {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+}
+
+.abar-live {
+  width: calc(var(--w) * 100%);
+  background: var(--text-primary);
+  opacity: 0.38;
+}
+
+.abar-done {
+  right: 0;
+  display: flex;
+}
+
+.abar-run {
+  flex: none;
+  width: calc(var(--w) * 100%);
   background: var(--role);
+}
+
+.abar-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-secondary);
 }
 
 .tracks {
@@ -282,8 +325,12 @@
   text-overflow: ellipsis;
 }
 
+/* Flex, so the chip sets its height and not a text line around it: a row
+   whose chip comes or goes keeps the height of the rows without one. */
 .track-codec {
   grid-area: codec;
+  display: flex;
+  align-items: center;
 }
 
 .track-len {
@@ -458,14 +505,22 @@
 }
 
 /* The key to the codec chips: "ALAC 24/44.1" and what it means, above the list. */
+/* Always two lines, each cut to one: the codec it names changes while
+   tracks are matched, and a wrap that came and went moved the list. */
 .track-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-0_5) var(--s-4);
+  flex-direction: column;
+  gap: var(--s-0_5);
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--fs-12);
   line-height: var(--lh-12);
+}
+
+.track-legend > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .track-legend-label {

@@ -660,8 +660,7 @@
   box-shadow: inset 0 0 0 1px var(--border-control);
 }
 
-:root[data-skin="music"] .pcell[data-state="failed"],
-:root[data-skin="music"] .track-block[data-role="danger"] {
+:root[data-skin="music"] .pcell[data-state="failed"] {
   background: var(--danger-tint);
   box-shadow: inset 0 0 0 1.5px var(--danger);
 }
@@ -1710,17 +1709,6 @@
 :root[data-skin="music"] .track-title {
   font-size: var(--fs-14);
   line-height: var(--lh-14);
-}
-
-:root[data-skin="music"] .track-block {
-  width: 10px;
-  height: 10px;
-}
-
-/* The section head's cells already map every track, and each row below
-   carries its own status; a second strip would repeat them. */
-:root[data-skin="music"] .drawer-section .track-strip {
-  display: none;
 }
 
 /* Stage fills are calm ink; only a track still working shows the running red. */

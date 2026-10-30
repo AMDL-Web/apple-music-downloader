@@ -96,6 +96,24 @@ test('per-job events merge payload objects by item and skip anything at or befor
   assert.deepEqual(s.activity, [], 'progress and per-track completion events stay out of the activity list');
 });
 
+test('the job counts follow the tracks the stream moves, not the snapshot they started from', () => {
+  // The drawer once kept the snapshot's completed_items (0) while a row below
+  // already said Completed: only lifecycle events touched the job.
+  let s = snapshot();
+  s = applyJobEvents(s, [
+    { id: 51, type: 'item_completed', item_id: 'item_2', payload: { id: 'item_2', status: 'completed', file_size: 1 } },
+  ]);
+  assert.equal(s.items[1].status, 'completed');
+  assert.equal(s.job.completed_items, 1);
+  s = applyJobEvents(s, [
+    { id: 52, type: 'item_failed', item_id: 'item_1', payload: { id: 'item_1', status: 'failed', error: 'x' } },
+  ]);
+  assert.deepEqual(
+    [s.job.total_items, s.job.completed_items, s.job.skipped_items, s.job.failed_items, s.job.cancelled_items],
+    [2, 1, 0, 1, 0],
+  );
+});
+
 test('events at or before the cursor fill Activity without touching the job or its tracks', () => {
   let s = snapshot();
   const replay = [

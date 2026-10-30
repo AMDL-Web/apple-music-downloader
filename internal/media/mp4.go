@@ -15,6 +15,7 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/logging"
+	"amdl/internal/sysproc"
 	"github.com/Eyevinn/mp4ff/mp4"
 	"github.com/zhaarey/go-mp4tag"
 )
@@ -229,6 +230,7 @@ func (p *MP4Processor) produceToFlatFile(
 		"-y", "-f", "mp4", "-i", "pipe:0",
 		"-fflags", "+bitexact", "-map_metadata", "0",
 		"-c:a", "copy", "-c:v", "copy", "-f", "mp4", "-brand", "M4A ", outPath)
+	sysproc.NoConsole(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdin, err := cmd.StdinPipe()
@@ -296,6 +298,7 @@ func (p *MP4Processor) streamDecryptToFlatFile(
 // it becomes the item's error and the only clue to what was wrong.
 func (p *MP4Processor) checkIntegrityFile(ctx context.Context, path string) error {
 	cmd := exec.CommandContext(ctx, p.cfg.Tools.FFmpeg, "-y", "-v", "error", "-i", path, "-c:a", "pcm_s16le", "-f", "null", "/dev/null")
+	sysproc.NoConsole(cmd)
 	out, err := cmd.CombinedOutput()
 	diagnostic := toolDiagnostic(out)
 	switch {

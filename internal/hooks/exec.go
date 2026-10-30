@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"amdl/internal/sysproc"
 )
 
 // stderrTailBytes caps how much of a failed exec hook's stderr is kept. The
@@ -42,6 +44,7 @@ func (r *execRunner) Run(ctx context.Context, entry Entry, payload Payload) erro
 	// Put the command in its own process group and kill the whole group on
 	// timeout, so a shell script's child processes don't outlive the hook.
 	setupProcessGroup(cmd)
+	sysproc.NoConsole(cmd)
 
 	stderr := &tailWriter{limit: stderrTailBytes}
 	cmd.Stderr = stderr

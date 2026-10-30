@@ -1,20 +1,54 @@
-// The job drawer's track sections: the track strip, the key to the codec chips
-// and the track list. A track is one line of number, title, length and size;
+// The job drawer's track sections: the album progress bar, the key to the codec
+// chips and the track list. A track is one line of number, title, length and size;
 // its artist, codec chip and status with stage meters appear only when they
 // say something (lib/jobview.js trackView).
 
 import { html } from '../ui/preact.js';
 import { trackLength, bytes, codecMeaning } from '../lib/format.js';
 import { albumCodec, codecNote, trackView, trackNote, stagePercent } from '../lib/jobview.js';
-import { itemStatusView } from '../lib/status.js';
+import { itemStatusView, isTerminal } from '../lib/status.js';
+import { albumProgress } from '../lib/album-progress.js';
 import { StatusText, StageTrack, Icon, Chip } from '../ui/components.js';
 
-export function TrackStrip({ items }) {
-  return html`<div class="track-strip" aria-hidden="true">
-    ${items.map((it) => {
-      const v = itemStatusView(it);
-      return html`<span key=${it.id} class="track-block" data-role=${v.role} title=${`${it.index}. ${it.title || ''}: ${v.label}`}></span>`;
-    })}
+const OUTCOME_WORDS = { completed: 'saved', skipped_existing: 'already on disk', failed: 'failed', cancelled: 'cancelled' };
+
+/**
+ * The album bar, after the AMDL iOS app (lib/album-progress.js): a solid fill
+ * of the finished tracks in the order they finished, a translucent fill to the
+ * overall stage-weighted progress, and under it the finished count and the
+ * percent. Drawn from the first render, resolving included, so nothing below
+ * it moves when tracks arrive or the job ends.
+ */
+export function AlbumProgress({ job, items }) {
+  const p = albumProgress(job.status, items);
+  const resolving = p.total === 0;
+  const counts = {};
+  for (const it of items) if (OUTCOME_WORDS[it.status]) counts[it.status] = (counts[it.status] || 0) + 1;
+  const extra = Object.keys(OUTCOME_WORDS)
+    .filter((k) => k !== 'completed' && counts[k])
+    .map((k) => `${counts[k]} ${OUTCOME_WORDS[k]}`);
+  const text = resolving ? 'Resolving tracks' : [`${p.lit} of ${p.total} tracks finished`, ...extra, `${p.percent}% overall`].join(', ');
+  return html`<div class="abar-wrap">
+    <div
+      class=${resolving && !isTerminal(job.status) ? 'abar is-indeterminate' : 'abar'}
+      role="progressbar"
+      aria-label="Album progress"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow=${resolving ? undefined : p.percent}
+      aria-valuetext=${text}
+      data-ticks=${p.ticks ? '' : undefined}
+      style=${{ '--n': String(p.ticks || 1) }}
+    >
+      <span class="abar-live" style=${{ '--w': String(p.live) }}></span>
+      <span class="abar-done">
+        ${p.runs.map((r, i) => html`<span key=${i} class="abar-run" data-state=${r.state} data-role=${r.role} style=${{ '--w': String(r.share) }}></span>`)}
+      </span>
+    </div>
+    <div class="abar-caption num" aria-hidden="true">
+      <span class="abar-count">${resolving ? 'Resolving' : `${p.lit} / ${p.total}`}</span>
+      <span class="abar-pct">${resolving ? '' : `${p.percent}%`}</span>
+    </div>
   </div>`;
 }
 
@@ -26,8 +60,9 @@ export function TrackStrip({ items }) {
 export function TrackLegend({ items }) {
   const note = codecNote(items);
   if (!note) return null;
+  const most = `Most tracks: ${note.label}${note.text ? ` (${note.text})` : ''}.`;
   return html`<p class="track-legend">
-    <span><span class="track-legend-label">Most tracks: ${note.label}</span>${note.text ? ` (${note.text})` : ''}.</span>
+    <span title=${most}><span class="track-legend-label">Most tracks: ${note.label}</span>${note.text ? ` (${note.text})` : ''}.</span>
     <span>Other formats are marked on their rows.</span>
   </p>`;
 }

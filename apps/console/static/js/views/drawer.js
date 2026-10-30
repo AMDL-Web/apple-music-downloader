@@ -20,17 +20,16 @@ import {
   inputLabel,
 } from '../lib/format.js';
 import { drawerSummary, codecKinds, isNotFound, rowView } from '../lib/jobview.js';
-import { jobStatusView, jobCounts, isTerminal } from '../lib/status.js';
+import { jobStatusView, isTerminal } from '../lib/status.js';
 import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
 import { buildHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
-import { TrackStrip, TrackLegend, TrackList } from './drawer-tracks.js';
+import { AlbumProgress, TrackLegend, TrackList } from './drawer-tracks.js';
 import { FailureNotice, FilesSection, DetailsSection } from './drawer-info.js';
 import {
   useApp,
   Artwork,
   Badge,
-  JobProgress,
   Button,
   LinkButton,
   Empty,
@@ -190,10 +189,6 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
   if (live) seenLive.current.on = true;
   // A finished job with no tracks (a link that never resolved) has nothing to list.
   const tracks = items.length > 0 || !isTerminal(job.status);
-  // The bar says where a finished job ended up; a clean completion needs none,
-  // and hides it rather than dropping it, so the head keeps its height.
-  const c = jobCounts(job);
-  const showProgress = !isTerminal(job.status) || c.failed > 0 || c.cancelled > 0;
 
   return html`<div class="drawer-body">
     <header class="drawer-head" style=${paletteStyle(palette)}>
@@ -209,7 +204,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
             : html`<p class="drawer-artist" dir="auto">${sub}</p>`
           : null}
         ${meta ? html`<p class="drawer-meta">${meta}</p>` : null}
-        ${summary ? html`<p class="drawer-meta drawer-summary">${summary}</p>` : null}
+        ${summary ? html`<p class="drawer-meta drawer-summary" title=${summary}>${summary}</p>` : null}
         <div class="drawer-badges">
           <${Badge} view=${jobStatusView(job)} />
           ${live ? html`<span class="live-tag"><span class="pulse-static" aria-hidden="true"></span>Live</span>` : null}
@@ -225,12 +220,11 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
       ? html`<section class="drawer-section" aria-labelledby="tracks-title">
           <div class="section-head">
             <h3 id="tracks-title" class="section-title">Tracks</h3>
-            <span class=${showProgress ? 'section-progress' : 'section-progress is-hidden'} aria-hidden=${showProgress ? undefined : 'true'}><${JobProgress} job=${job} /></span>
           </div>
+          <${AlbumProgress} job=${job} items=${items} />
           ${items.length === 0
             ? html`<${Empty} icon="list" title="No tracks resolved yet" />`
             : [
-                html`<${TrackStrip} key="strip" items=${items} />`,
                 codecKinds(items).length > 1 ? html`<${TrackLegend} key="legend" items=${items} />` : null,
                 html`<${TrackList} key="list" items=${items} albumArtist=${job.artist_name || ''} keepStatus=${seenLive.current.on} />`,
               ]}
