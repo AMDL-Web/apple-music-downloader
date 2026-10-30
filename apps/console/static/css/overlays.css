@@ -419,6 +419,24 @@
   background-clip: padding-box;
 }
 
+/* A line of text to be: it holds a no-break space, so it has the baseline a
+   word would have there (rows aligned on baselines keep their height), and
+   draws its bar across the middle of the line. */
+.skel-text {
+  display: inline-block;
+  width: min(60%, 14em);
+  background: linear-gradient(var(--bg-hover), var(--bg-hover)) 0 50% / 100% 0.6lh no-repeat;
+}
+
+.skel-badge > .icon {
+  visibility: hidden;
+}
+
+.skel-badge > .skel-text {
+  width: 5em;
+  height: 1lh;
+}
+
 .skel-short {
   width: min(35%, 8em);
 }

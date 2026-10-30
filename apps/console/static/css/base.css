@@ -115,6 +115,11 @@ kbd {
   border: 0;
 }
 
+/* Unseen but keeps its room: a placeholder shaped like what loads into it. */
+.holds-room {
+  visibility: hidden;
+}
+
 .mono {
   font-family: var(--font-mono);
 }

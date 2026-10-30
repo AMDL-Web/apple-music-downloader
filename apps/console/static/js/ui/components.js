@@ -251,10 +251,19 @@ export function SkeletonJobRows({ n = 6, compact }) {
   </ul>`;
 }
 
-/** Label/value rows with the labels already in place and the values loading: the card keeps its final height. */
-export function SkeletonKV({ labels }) {
+/**
+ * Label/value rows with the labels already in place and the values loading:
+ * the card keeps its final height. A label in `badges`
+ * gets a badge-shaped placeholder (its icon box and a bar), so the row is as
+ * tall as the status badge that replaces it.
+ */
+export function SkeletonKV({ labels, badges = [] }) {
   return html`<dl class="kv" aria-busy="true" aria-label="Loading">
-    ${labels.map((k) => html`<div class="kv-row" key=${k}><dt>${k}</dt><dd><span class="skel skel-lh"></span></dd></div>`)}
+    ${labels.map(
+      (k) => html`<div class="kv-row" key=${k}><dt>${k}</dt><dd>${badges.includes(k)
+        ? html`<span class="badge skel-badge"><${Icon} name="circle-dashed" size="sm" /><span class="badge-label skel skel-text">\u00a0</span></span>`
+        : html`<span class="skel skel-text">\u00a0</span>`}</dd></div>`,
+    )}
   </dl>`;
 }
 

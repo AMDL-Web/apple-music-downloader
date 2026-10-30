@@ -9,7 +9,7 @@ import { uniqueByTarget } from '../lib/albums.js';
 import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
 import { MotionCover } from '../ui/motion.js';
-import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
+import { useApp, Card, Icon, Artwork, Badge, Empty, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText, JobProgress } from '../ui/components.js';
 import { usePoll, useColumns, useNow } from '../ui/hooks.js';
 import { JobRow, applyFeedToList } from './queue.js';
 import { ThroughputCard } from './throughput.js';
@@ -101,13 +101,13 @@ function LiveQueue() {
   let body;
   // The seeded counts already say how many jobs are active: the placeholder
   // has their rows, or is the idle line itself, so the card keeps its height.
-  // Before the counts, it holds the idle line's room (the common case).
+  // Before the counts, it is the idle card with its words held back (the
+  // common case).
   const active = c ? Math.min(LIVE_LIMIT, c.running + c.queued) : 0;
-  if (state.loading && !c) body = html`<p class="live-idle" aria-hidden="true">\u00a0</p>`;
+  if (state.loading && !c) body = html`<${LiveIdle} pending />`;
   else if (state.loading && active > 0) body = html`<${SkeletonJobRows} n=${active} compact />`;
   else if (state.error) body = html`<${ErrorNote} title="Couldn't load the queue" error=${state.error} onRetry=${load} />`;
-  else if (state.loading || state.jobs.length === 0)
-    body = html`<p class="live-idle">Nothing downloading. <a class="link" href=${buildHash('new')}>Start a download</a></p>`;
+  else if (state.loading || state.jobs.length === 0) body = html`<${LiveIdle} />`;
   else
     body = html`<ul class="job-list job-list-compact" aria-label="Active jobs">
       ${state.jobs.map((job) => html`<li key=${job.id}><${JobRow} job=${job} href=${buildHash('queue', {}, job.id)} /></li>`)}
@@ -120,6 +120,30 @@ function LiveQueue() {
     note=${c ? `${count(c.running)} running · ${count(c.queued)} queued` : '\u00a0'}
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('queue', {})}>Open queue</${LinkButton}>`}
   >${body}</${Card}>`;
+}
+
+/** A job's progress row as it first looks, held invisible so the idle card is as tall as a job's. */
+const IDLE_PROGRESS_JOB = { status: 'running', total_items: 10 };
+const IDLE_VIEW = { icon: 'circle-dashed', role: 'neutral', label: 'Idle' };
+
+/**
+ * The live queue with nothing in it: a card shaped like a job's (the same
+ * cover square, the same four text lines and progress row), so the first
+ * job that starts takes its place without moving the page below.
+ */
+function LiveIdle({ pending }) {
+  return html`<div class="job-list job-list-compact" aria-hidden=${pending ? 'true' : undefined}>
+    <div class="job-row live-idle-card" data-progress="on" data-pending=${pending ? '' : undefined}>
+      <span class="art live-idle-art" aria-hidden="true"><${Icon} name="music" /></span>
+      <span class="job-main">
+        <span class="job-facts"><span class="job-fact">Albums, songs, playlists, artists</span></span>
+        <span class="job-title">Nothing downloading</span>
+        <span class="job-sub"><a class="link" href=${buildHash('new')}>Start a download</a></span>
+      </span>
+      <span class="job-status"><${Badge} view=${IDLE_VIEW} /></span>
+      <span class="job-progress live-idle-progress" aria-hidden="true"><${JobProgress} job=${IDLE_PROGRESS_JOB} /></span>
+    </div>
+  </div>`;
 }
 
 const ATTENTION_LIMIT = 2;
