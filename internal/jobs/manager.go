@@ -80,6 +80,17 @@ func NewManager(store *db.Store, hub *events.Hub, processor Processor, workers i
 // is called) is a safe no-op — Dispatcher.Dispatch handles a nil receiver.
 func (m *Manager) SetHooks(d *hooks.Dispatcher) {
 	m.hooks = d
+	d.OnIdle(m.wakeStreams)
+}
+
+// wakeStreams tells the job's event streams that it may have nothing left
+// to deliver: its worker or finalize sequence, or its last hook, has just
+// ended. Their end depends on that state, which no event announces, so
+// without the wake they would notice only at their next re-drain.
+func (m *Manager) wakeStreams(jobID string) {
+	if m.hub != nil {
+		m.hub.Wake(jobID)
+	}
 }
 
 // ListHooks returns the sanitized hook configuration snapshot used by

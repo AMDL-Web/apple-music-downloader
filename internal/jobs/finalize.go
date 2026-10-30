@@ -99,6 +99,7 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 	m.mu.Lock()
 	delete(m.finalizing, jobID)
 	m.mu.Unlock()
+	m.wakeStreams(jobID)
 	logging.FromContext(ctx, m.logger).Info("queued job cancelled", "job_id", jobID)
 	return nil
 }
@@ -197,6 +198,7 @@ func (m *Manager) run(parent context.Context, jobID string) {
 		m.mu.Lock()
 		delete(m.cancels, jobID)
 		m.mu.Unlock()
+		m.wakeStreams(jobID)
 	}()
 
 	// A download's decrypt/remux pipeline allocates on the order of a track's

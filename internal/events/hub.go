@@ -90,6 +90,17 @@ func (h *Hub) Publish(ev domain.Event) {
 	}
 }
 
+// Wake wakes the subscribers of jobID without an event: something their
+// stream's end depends on changed outside the store, such as the job's
+// finalize sequence or its last hook ending.
+func (h *Hub) Wake(jobID string) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for ch := range h.subs[jobID] {
+		wake(ch)
+	}
+}
+
 // wake must run under h.mu (read or write) so it never races cancel's close.
 func wake(ch chan struct{}) {
 	select {

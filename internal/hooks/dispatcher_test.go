@@ -344,6 +344,38 @@ func TestPendingTracksInFlightHookExecution(t *testing.T) {
 // TestPendingIsNilSafe mirrors Dispatch's existing nil-receiver contract so
 // callers (e.g. jobs.Manager.HooksPending) don't need to branch on whether
 // hooks are configured at all.
+// A stream that saw a job's last hook event may still have read the hook as
+// pending; OnIdle is how it learns, at once, that nothing more will come.
+func TestOnIdleRunsWhenTheLastHookEnds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer server.Close()
+	cfg := Config{Enabled: true, Entries: []Entry{
+		{Name: "a", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
+		{Name: "b", Type: "webhook", Events: []string{"job_finished"}, URL: server.URL},
+	}}
+	d := NewDispatcher(cfg, newEventCollector(4).record, discardLogger())
+	idle := make(chan string, 4)
+	d.OnIdle(func(jobID string) {
+		if d.Pending(jobID) {
+			t.Errorf("OnIdle ran while %s still had a hook pending", jobID)
+		}
+		idle <- jobID
+	})
+	d.Dispatch("job_finished", domain.Job{ID: "job-1", Type: "song"}, nil)
+	select {
+	case got := <-idle:
+		if got != "job-1" {
+			t.Fatalf("OnIdle(%q), want job-1", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnIdle never ran")
+	}
+	d.Shutdown(context.Background())
+	if len(idle) != 0 {
+		t.Errorf("OnIdle ran %d more times for two hooks of one job", len(idle))
+	}
+}
+
 func TestPendingIsNilSafe(t *testing.T) {
 	var d *Dispatcher
 	if d.Pending("job-1") {

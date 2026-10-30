@@ -73,6 +73,9 @@ type Dispatcher struct {
 	// timeout, well after the job itself reached a terminal status. See
 	// Pending.
 	pending map[string]int
+	// onIdle, set by OnIdle and guarded by mu, runs when a job's pending
+	// count drops to zero.
+	onIdle func(jobID string)
 }
 
 func NewDispatcher(cfg Config, recorder EventRecorder, logger *slog.Logger) *Dispatcher {
@@ -251,13 +254,33 @@ func (d *Dispatcher) waitRetry() bool {
 // event has already been recorded (record is called synchronously earlier in
 // execute, before its deferred calls unwind), so Pending only ever drops to
 // false once every dispatched execution's outcome is durably visible.
+//
+// When the last pending execution of a job ends, the idle callback runs, so a
+// stream that saw the last hook event while the hook still counted as pending
+// can end now instead of at its next re-drain.
 func (d *Dispatcher) donePending(jobID string) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	d.pending[jobID]--
-	if d.pending[jobID] <= 0 {
+	idle := d.pending[jobID] <= 0
+	if idle {
 		delete(d.pending, jobID)
 	}
+	onIdle := d.onIdle
+	d.mu.Unlock()
+	if idle && onIdle != nil {
+		onIdle(jobID)
+	}
+}
+
+// OnIdle sets the function called with a job's id when its last pending hook
+// execution ends.
+func (d *Dispatcher) OnIdle(f func(jobID string)) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	d.onIdle = f
+	d.mu.Unlock()
 }
 
 // record persists one hook lifecycle event through the recorder. It runs on

@@ -36,6 +36,21 @@ func TestHubWakesSubscriberOfTheJob(t *testing.T) {
 	}
 }
 
+func TestHubWakeWithoutAnEvent(t *testing.T) {
+	hub := NewHub()
+	ch, cancel := hub.Subscribe("job-1")
+	defer cancel()
+	all, cancelAll := hub.SubscribeAll()
+	defer cancelAll()
+	hub.Wake("job-1")
+	if !received(ch) {
+		t.Fatal("subscriber of job-1 was not woken")
+	}
+	if received(all) {
+		t.Fatal("an overview subscriber was woken by a per-job wake")
+	}
+}
+
 func TestHubCoalescesWakes(t *testing.T) {
 	hub := NewHub()
 	ch, cancel := hub.Subscribe("job-1")
