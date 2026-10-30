@@ -668,13 +668,17 @@ and motion covers.
   in page-title type and Download all; it is a history entry, so the
   browser's Back returns too, and focus goes to Back and then to that
   artist's tile. Keys: ArrowDown on the box's last line or Return go to the
-  first hit, ArrowUp and ArrowDown move between the hits' one stop each
-  (Download, an artist's tile), ArrowUp from the first returns to the box,
-  Home and End, Return downloads or opens, Escape returns to the box. While a
-  term is in the box the room the results take never shrinks, so results
-  that come back shorter leave canvas under them instead of pulling up
-  what follows; hits are keyed by
-  position, so a new term's hits replace the old ones in place. The count
+  first hit. The hits are one Tab stop (the one last focused, else the
+  first); each hit has one stop (Download, an artist's tile). ArrowLeft and
+  ArrowRight move within a section; ArrowUp and ArrowDown go to the nearest
+  hit in the row above or below by where it is drawn, across sections
+  (`lib/search.js` `nextStop`), and ArrowUp with nothing above returns to
+  the box; Home and End; Return downloads or opens; Escape returns to the
+  box. A move scrolls the whole tile or row clear of the top bar (and the
+  phone tab bar). While a term is in the box the room the results take
+  never shrinks, so results that come back shorter leave canvas under them
+  instead of pulling up what follows; hits are keyed by position, so a new
+  term's hits replace the old ones in place. The count
   line, announced, reads "5 songs, 5 albums and 1 artist for “Yorushika”";
   there is no dock while searching. The palette offers "Search Apple Music for “…”"
   for words, which opens `#/new?q=`; a box holding links keeps them and a

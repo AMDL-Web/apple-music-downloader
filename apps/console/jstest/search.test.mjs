@@ -13,6 +13,7 @@ import {
   trackJobs,
   hitPreview,
   shownHits,
+  nextStop,
   searchCountLine,
   sentJob,
   SEARCH_FIRST,
@@ -341,4 +342,22 @@ test('the count line says what was found, or that nothing was', () => {
   assert.equal(searchCountLine({ term: '', status: 'idle' }), '');
   assert.equal(searchCountLine(null, { status: 'ready', artist: { name: 'Yorushika' }, albums: { items: [album('1'), album('2')], next_offset: 25 } }), 'Yorushika: 2 albums so far');
   assert.equal(searchCountLine(null, { status: 'loading' }), 'Loading albums…');
+});
+
+test('the arrow keys move among the hits by where they are drawn', () => {
+  const box = (left, top, group, w = 100, h = 100) => ({ left, top, right: left + w, bottom: top + h, group });
+  // Albums: one row of three tiles; Songs: two rows of two, wider; Artists: one tile.
+  const stops = [box(0, 0, 'a'), box(120, 0, 'a'), box(240, 0, 'a'), box(0, 200, 's', 160, 40), box(180, 200, 's', 160, 40), box(0, 250, 's', 160, 40), box(180, 250, 's', 160, 40), box(0, 400, 'r')];
+  assert.equal(nextStop(stops, 0, 'ArrowRight'), 1);
+  assert.equal(nextStop(stops, 2, 'ArrowRight'), 2, 'the last of a group stays');
+  assert.equal(nextStop(stops, 3, 'ArrowLeft'), 3, 'the first of a group stays');
+  assert.equal(nextStop(stops, 2, 'ArrowDown'), 4, 'down to the nearest across in the next row');
+  assert.equal(nextStop(stops, 4, 'ArrowDown'), 6);
+  assert.equal(nextStop(stops, 6, 'ArrowDown'), 7, 'across sections');
+  assert.equal(nextStop(stops, 7, 'ArrowDown'), 7, 'nothing below: stay');
+  assert.equal(nextStop(stops, 5, 'ArrowUp'), 3);
+  assert.equal(nextStop(stops, 1, 'ArrowUp'), -1, 'nothing above: back to the box');
+  assert.equal(nextStop(stops, 4, 'Home'), 0);
+  assert.equal(nextStop(stops, 4, 'End'), 7);
+  assert.equal(nextStop(stops, 1, 'Enter'), 1);
 });

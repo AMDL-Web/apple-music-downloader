@@ -429,3 +429,45 @@ export function sentJob(result) {
   if (result.status === 'duplicate_active' && result.existing_job_id) return { id: result.existing_job_id, status: 'queued' };
   return null;
 }
+
+/**
+ * Where an arrow key moves among the search's focus stops, by where they
+ * are drawn: `stops` are {top, bottom, left, right, group} boxes in page
+ * order, `at` the index of the one with focus. ArrowLeft and ArrowRight
+ * step to the previous or next stop of the same group; ArrowDown takes,
+ * among the stops that start below this one's bottom, the nearest row, and
+ * in it the one nearest across; ArrowUp the same upward. Home and End go to
+ * the first and last. Returns an index, -1 for "leave the hits upward" (the
+ * box), or `at` when there is nowhere to go.
+ */
+export function nextStop(stops, at, key) {
+  const here = stops[at];
+  if (!here) return at;
+  if (key === 'Home') return 0;
+  if (key === 'End') return stops.length - 1;
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    const step = key === 'ArrowRight' ? 1 : -1;
+    const to = at + step;
+    return stops[to] && stops[to].group === here.group ? to : at;
+  }
+  if (key !== 'ArrowDown' && key !== 'ArrowUp') return at;
+  const down = key === 'ArrowDown';
+  const mid = (b) => (b.left + b.right) / 2;
+  let best = -1;
+  let bestDy = Infinity;
+  let bestDx = Infinity;
+  stops.forEach((b, i) => {
+    if (i === at) return;
+    const dy = down ? b.top - here.bottom : here.top - b.bottom;
+    if (dy < -1) return;
+    const dx = Math.abs(mid(b) - mid(here));
+    // Rows within a few pixels of each other are one row.
+    if (dy < bestDy - 4 || (Math.abs(dy - bestDy) <= 4 && dx < bestDx)) {
+      best = i;
+      bestDy = Math.min(dy, bestDy);
+      bestDx = dx;
+    }
+  });
+  if (best >= 0) return best;
+  return down ? at : -1;
+}

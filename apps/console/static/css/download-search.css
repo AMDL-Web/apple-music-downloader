@@ -85,6 +85,8 @@
 
 .new-tile {
   min-width: 0;
+  /* The arrow keys scroll a tile clear of the top bar. */
+  scroll-margin-block: calc(var(--topbar-h) + var(--s-4)) var(--s-10);
 }
 
 /* The cover carries what the tile says: its first quality bottom left,
@@ -464,6 +466,12 @@
 /* ---- Phone --------------------------------------------------------- */
 
 @media (max-width: 639px) {
+  /* Clear of the tab bar too. */
+  .new-tile,
+  .new-hit {
+    scroll-margin-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-4));
+  }
+
   /* The title takes two lines before it gives way, and the meta line wraps
      between its facts, as on a link row. */
   .new-hit {

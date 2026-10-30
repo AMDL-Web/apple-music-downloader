@@ -13,7 +13,7 @@
 
 import { html, useState, useRef, useLayoutEffect } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths, shortDate } from '../lib/format.js';
-import { hitView, hitKey, shownHits, SEARCH_GROUPS, SEARCH_FIRST, SEARCH_MAX_TERM } from '../lib/search.js';
+import { hitView, hitKey, shownHits, nextStop, SEARCH_GROUPS, SEARCH_FIRST, SEARCH_MAX_TERM } from '../lib/search.js';
 import { shortError } from '../lib/lookup.js';
 import { Card, Button, Icon, Artwork, Skeleton, Notice } from '../ui/components.js';
 import { AlbumTile, ArtistTile, SkeletonTiles } from './download-tiles.js';
@@ -231,13 +231,31 @@ export function SearchCard({ s, term, tooLong, inputRef, openHit, focusArtist, r
     if (el) el.focus();
   });
 
+  // The hits are one Tab stop: the one last focused (else the first) keeps
+  // tabindex 0 and the arrows move between the rest.
+  const stopsOf = () => (body.current ? [...body.current.querySelectorAll('[data-hit-primary]')].filter((el) => !el.disabled && el.offsetParent !== null) : []);
+  const roving = useRef(null);
+  useLayoutEffect(() => {
+    const stops = stopsOf();
+    const keep = stops.includes(roving.current) ? roving.current : stops[0];
+    for (const el of stops) el.tabIndex = el === keep ? 0 : -1;
+  });
+  const onFocusIn = (e) => {
+    const stops = stopsOf();
+    if (!stops.includes(e.target)) return;
+    roving.current = e.target;
+    for (const el of stops) el.tabIndex = el === e.target ? 0 : -1;
+  };
+
   const onKeyDown = (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey || !body.current) return;
-    const stops = [...body.current.querySelectorAll('[data-hit-primary]')].filter((el) => !el.disabled && el.offsetParent !== null);
+    const stops = stopsOf();
     const at = stops.indexOf(document.activeElement);
+    // The whole tile or row comes into view, not just its button.
     const go = (el) => {
       e.preventDefault();
-      el.focus();
+      el.focus({ preventScroll: true });
+      (el.closest('li') || el).scrollIntoView({ block: 'nearest', inline: 'nearest' });
     };
     const toInput = () => {
       e.preventDefault();
@@ -253,11 +271,18 @@ export function SearchCard({ s, term, tooLong, inputRef, openHit, focusArtist, r
       } else toInput();
       return;
     }
-    if (at < 0) return;
-    if (e.key === 'ArrowDown' && at < stops.length - 1) go(stops[at + 1]);
-    else if (e.key === 'ArrowUp') at > 0 ? go(stops[at - 1]) : toInput();
-    else if (e.key === 'Home') go(stops[0]);
-    else if (e.key === 'End') go(stops[stops.length - 1]);
+    if (at < 0 || !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    // Where each hit (its tile or row, not its button) is drawn, and which
+    // section it is in.
+    const boxes = stops.map((el) => {
+      const r = (el.closest('li') || el).getBoundingClientRect();
+      const group = el.closest('[data-section], .new-artist-head, .new-artist');
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, group };
+    });
+    const to = nextStop(boxes, at, e.key);
+    if (to === -1) toInput();
+    else if (to !== at) go(stops[to]);
+    else if (e.key.startsWith('Arrow')) e.preventDefault();
   };
 
   let content;
@@ -292,6 +317,7 @@ export function SearchCard({ s, term, tooLong, inputRef, openHit, focusArtist, r
       data-state=${viewing ? 'artist' : loading ? 'loading' : stale ? 'stale' : search.status}
       aria-busy=${loading || stale ? 'true' : undefined}
       onKeyDown=${onKeyDown}
+      onfocusin=${onFocusIn}
     >
       <h2 id="new-search-title" class="sr-only">Search results</h2>
       ${content}
