@@ -186,8 +186,16 @@
   gap: var(--s-4);
 }
 
-.section-head .jprog {
+.section-head .jprog,
+.section-progress {
   flex: 1;
+  display: flex;
+}
+
+/* A clean completion needs no bar, but its room stays, so the tracks do not
+   move up when the job finishes under the reader. */
+.section-progress.is-hidden {
+  visibility: hidden;
 }
 
 .track-strip {

@@ -190,7 +190,8 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
   if (live) seenLive.current.on = true;
   // A finished job with no tracks (a link that never resolved) has nothing to list.
   const tracks = items.length > 0 || !isTerminal(job.status);
-  // The bar says where a finished job ended up; a clean completion needs none.
+  // The bar says where a finished job ended up; a clean completion needs none,
+  // and hides it rather than dropping it, so the head keeps its height.
   const c = jobCounts(job);
   const showProgress = !isTerminal(job.status) || c.failed > 0 || c.cancelled > 0;
 
@@ -224,7 +225,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
       ? html`<section class="drawer-section" aria-labelledby="tracks-title">
           <div class="section-head">
             <h3 id="tracks-title" class="section-title">Tracks</h3>
-            ${showProgress ? html`<${JobProgress} job=${job} />` : null}
+            <span class=${showProgress ? 'section-progress' : 'section-progress is-hidden'} aria-hidden=${showProgress ? undefined : 'true'}><${JobProgress} job=${job} /></span>
           </div>
           ${items.length === 0
             ? html`<${Empty} icon="list" title="No tracks resolved yet" />`
