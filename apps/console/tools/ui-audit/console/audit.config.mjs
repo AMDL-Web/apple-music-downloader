@@ -384,7 +384,8 @@ export default {
     // By design (DESIGN.md): progress legends list every state, zeros included; KPI tiles are counts.
     noise: '.jprog-key, .kpi-value, .seg-count, .tp-totals, .throughput .chart-xaxis, .chart, [data-zero]',
     prose: '.dialog-body, .notice-raw, .log-msg, .attention-error, .job-error, .track-error, .new-result-msg, .notice-more',
-    duplicate: '.sr-only, .chart, .tp-formats',
+    // A track's formats repeat values across their chips ("2 ch" in each).
+    duplicate: '.sr-only, .chart, .tp-formats, .quality-opt-spec',
   },
   css: {
     files: cssFiles,

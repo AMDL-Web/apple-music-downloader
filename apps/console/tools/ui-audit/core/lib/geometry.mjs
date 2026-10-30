@@ -21,14 +21,17 @@ export function gaps(intervals, lo, hi) {
 /**
  * A blank band worth reporting: larger than `minPx` and than `ratio` of the
  * container's height. `edge` says whether it touches the top or bottom of
- * the content box (a void on one side: unbalanced composition).
+ * the content box (a void on one side: unbalanced composition). Equal room
+ * above and below is centred content, not a void: neither edge counts.
  */
 export function blankBands(intervals, lo, hi, { minPx = 48, ratio = 0.25 } = {}) {
   const h = hi - lo;
   if (h <= 0) return [];
-  return gaps(intervals, lo, hi)
-    .filter((g) => g.size > minPx && g.size > ratio * h)
-    .map((g) => ({ ...g, edge: g.start <= lo + 0.5 ? 'top' : g.end >= hi - 0.5 ? 'bottom' : 'inside', share: g.size / h }));
+  const all = gaps(intervals, lo, hi).map((g) => ({ ...g, edge: g.start <= lo + 0.5 ? 'top' : g.end >= hi - 0.5 ? 'bottom' : 'inside', share: g.size / h }));
+  const top = all.find((g) => g.edge === 'top');
+  const bottom = all.find((g) => g.edge === 'bottom');
+  const centred = top && bottom && Math.abs(top.size - bottom.size) <= Math.max(8, 0.2 * Math.max(top.size, bottom.size));
+  return all.filter((g) => g.size > minPx && g.size > ratio * h && !(centred && g.edge !== 'inside'));
 }
 
 /** Snaps a px value to the nearest scale step; returns {step, off} where off is the distance. */
@@ -107,6 +110,15 @@ function roundAll(o) {
   const r = {};
   for (const k of Object.keys(o)) r[k] = round(o[k]);
   return r;
+}
+
+/**
+ * How far a box moved along one axis, from the change of its two edges: the
+ * smaller one. A box that changed size with one edge held (a right-aligned
+ * label a digit shorter, a card that grew at the bottom) did not move.
+ */
+export function edgeShift(startDelta, endDelta) {
+  return Math.abs(startDelta) <= Math.abs(endDelta) ? startDelta : endDelta;
 }
 
 /** Spread of a list of edges: max − min. */

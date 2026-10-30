@@ -863,8 +863,8 @@ uia.shiftStop = function shiftStop(cfg) {
   for (const [el, { r }] of st.boxes) {
     if (!el.isConnected || !visible(el)) continue;
     const n = contentRect(el);
-    const dy = n.top - r.top;
-    const dx = n.left - r.left;
+    const dy = edgeShift(n.top - r.top, n.bottom - r.bottom);
+    const dx = edgeShift(n.left - r.left, n.right - r.right);
     const dh = n.height - r.height;
     const dw = n.width - r.width;
     if (Math.abs(dy) > 1 || Math.abs(dx) > 1) moved.push({ el, dy, dx, dh, dw });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseColor, contrast, over } from './color.mjs';
-import { gaps, blankBands, shapeProblems, modeOf, clsWindows, nearestStep } from './geometry.mjs';
+import { gaps, blankBands, shapeProblems, modeOf, clsWindows, nearestStep, edgeShift } from './geometry.mjs';
 import { noiseReason, proseScore, hiddenDistinctions } from './text.mjs';
 import { analyzeFrames } from './flicker.mjs';
 
@@ -113,4 +113,18 @@ test('analyzeFrames: blank frames, loader flashes, focus loss, theme flashes', (
   assert.ok(!analyzeFrames([frame(0, { bg: 1 }), frame(16, { bg: 0.02 })], { expectThemeChange: true }).some((f) => f.kind === 'theme-flash'));
   const early = analyzeFrames([frame(0, { scroll: 600 }), frame(16, { scroll: 0 }), frame(40, { added: 30, removed: 30 })], { expectScroll: 0 });
   assert.ok(early.some((f) => f.kind === 'scroll-before-commit'));
+});
+
+test('edgeShift counts a resize with one edge held as no move', () => {
+  assert.equal(edgeShift(8.4, 0), 0);
+  assert.equal(edgeShift(0, -44), 0);
+  assert.equal(edgeShift(44, 44), 44);
+  assert.equal(edgeShift(-9, -18), -9);
+});
+
+test('blankBands leaves centred content alone', () => {
+  // A 214 px empty state with its 102 px of content in the middle.
+  assert.deepEqual(blankBands([[56, 158]], 0, 214), []);
+  // The same content pinned to the top is a void below it.
+  assert.equal(blankBands([[0, 102]], 0, 214)[0].edge, 'bottom');
 });
