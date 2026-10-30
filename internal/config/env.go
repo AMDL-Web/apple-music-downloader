@@ -19,8 +19,10 @@ var envOverrides = map[string]func(*Config, string){
 	"AMDL_DATABASE_PATH":   func(c *Config, v string) { c.Database.Path = v },
 }
 
-// envPaths are the variables main reads for the two file paths.
-var envPaths = []string{"AMDL_CONFIG", "AMDL_HOOKS_CONFIG"}
+// envPaths are the variables main reads for the two file paths, and
+// AMDL_URL, the server the amdl client commands talk to, which a shell that
+// also runs amdl serve may well have set.
+var envPaths = []string{"AMDL_CONFIG", "AMDL_HOOKS_CONFIG", "AMDL_URL"}
 
 // applyEnvOverrides overlays the override variables set in environ onto cfg.
 // Values are taken verbatim; Validate runs after the overlay.

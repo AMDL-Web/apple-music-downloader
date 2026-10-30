@@ -1,19 +1,13 @@
 package api
 
 import (
-	_ "embed"
 	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
 
-// openAPISpec is internal/api/openapi.yaml, the contract the parity tests
-// check the route table, error codes and runtime config against. The server
-// does not serve it.
-//
-//go:embed openapi.yaml
-var openAPISpec []byte
+var openAPISpec = OpenAPI
 
 func TestOpenAPISpecification(t *testing.T) {
 	var spec struct {

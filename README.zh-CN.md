@@ -30,6 +30,12 @@ Server-Sent Events 接口，以及同一端口上的网页控制台。它以容�
 `apps/console` 是浏览器客户端：一个免构建的 Preact 应用，嵌入服务端，在 `/console/` 提供。
 它只使用公开 API。设计约定见 [apps/console/DESIGN.md](apps/console/DESIGN.md)。
 
+### 命令行
+
+`apps/amdl` 构建出 `amdl`，一个面向 agent 和脚本的 API 客户端：每个结果都是 stdout 上的
+JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli search "<任务>"` 能找到对应
+的命令。详见 [docs/cli.md](docs/cli.md)。
+
 ### 桌面应用（规划中）
 
 一个用 [MyGo](https://github.com/egoist/mygo) 写的原生 macOS 应用将放在 apps/desktop。它可以作为

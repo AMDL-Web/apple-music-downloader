@@ -57,7 +57,7 @@ func TestUnreadEnvVariablesAreIgnoredAndNamed(t *testing.T) {
 	if got := UnreadEnv(environ); !reflect.DeepEqual(got, want) {
 		t.Fatalf("UnreadEnv = %v, want %v", got, want)
 	}
-	if got := UnreadEnv([]string{"AMDL_SERVER_LISTEN=:1", "PATH=/bin"}); len(got) != 0 {
+	if got := UnreadEnv([]string{"AMDL_SERVER_LISTEN=:1", "AMDL_URL=http://nas:18080", "PATH=/bin"}); len(got) != 0 {
 		t.Fatalf("UnreadEnv = %v, want none", got)
 	}
 }

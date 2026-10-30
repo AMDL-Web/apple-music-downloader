@@ -73,6 +73,7 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/client` | the Go client of `/api/v1`: typed requests, SSE with a silence watchdog, followers that resume the job list or one job | import a product or anything but `internal/config` and `internal/domain` |
 | `internal/progress` | the clients' stage weights, stage bar, album bar and remaining-time estimate, kept equal to the console's by a test | |
 | `internal/format` | sizes, durations, rates and quality labels the clients show | |
+| `internal/capability` | the one table of client capabilities (CLI command, MCP tool, safety) and the operations parsed from the embedded spec | hold behaviour; a capability without an operation runs in its client |
 
 ### 2.1 The wrapper and decryption
 

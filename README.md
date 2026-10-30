@@ -33,6 +33,13 @@ rest of this page describes it.
 served at `/console/`. It uses only the public API. Its design contract is
 [apps/console/DESIGN.md](apps/console/DESIGN.md).
 
+### Command line
+
+`apps/amdl` builds `amdl`, a client of the API written for agents and scripts: every
+result is JSON on stdout, errors are JSON on stderr with an exit status per kind of
+failure, and `amdl cli search "<task>"` finds the command for a task. [docs/cli.md](docs/cli.md)
+describes it.
+
 ### Desktop app (planned)
 
 A native macOS app built with [MyGo](https://github.com/egoist/mygo) will live in

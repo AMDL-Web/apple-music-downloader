@@ -1,0 +1,222 @@
+package cli
+
+import (
+	"flag"
+	"math"
+	"sort"
+	"strings"
+	"unicode"
+
+	"amdl/internal/capability"
+)
+
+// exitCodes lists the statuses a command can end with, for amdl schema.
+func exitCodes(c capability.Capability) []int {
+	codes := []int{exitOK, exitInput}
+	if len(c.Ops) > 0 {
+		codes = append(codes, exitUnavailable)
+	}
+	switch {
+	case strings.HasPrefix(c.Command, "jobs ") && c.Command != "jobs list":
+		codes = append(codes, exitNotFound, exitConflict)
+	case strings.HasPrefix(c.Command, "wrapper "):
+		codes = append(codes, exitAuth, exitConflict, exitNotFound)
+	}
+	if c.Command == "jobs wait" || c.Command == "download" {
+		codes = append(codes, exitJobFailed, exitWaitTimeout)
+	}
+	if c.Safety == capability.Destructive || c.Command == "download" {
+		codes = append(codes, exitConfirm)
+	}
+	sort.Ints(codes)
+	return codes
+}
+
+func cliCommandsCmd(*flag.FlagSet) func(e *env, args []string) error {
+	return func(e *env, args []string) error {
+		type row struct {
+			Command string            `json:"command"`
+			Tool    string            `json:"tool,omitempty"`
+			Safety  capability.Safety `json:"safety"`
+			Summary string            `json:"summary"`
+		}
+		var rows []row
+		for _, c := range commands() {
+			rows = append(rows, row{"amdl " + c.Command + argSynopsis(c.Capability), c.Tool, c.Safety, c.Summary})
+		}
+		return e.out.result(rows)
+	}
+}
+
+func schemaCmd(*flag.FlagSet) func(e *env, args []string) error {
+	return func(e *env, args []string) error {
+		if len(args) == 0 {
+			return usageErr("usage: amdl schema <command>, such as amdl schema jobs list")
+		}
+		cmds := commands()
+		cmd, rest, ok := match(cmds, args)
+		if !ok || len(rest) > 0 {
+			return &cliError{Code: "usage_error", exit: exitInput, Message: "no command " + strings.Join(args, " "),
+				Hint: "amdl cli commands"}
+		}
+		fs := flag.NewFlagSet(cmd.Command, flag.ContinueOnError)
+		cmd.setup(fs)
+		type flagInfo struct {
+			Flag  string `json:"flag"`
+			Usage string `json:"usage"`
+		}
+		var flags []flagInfo
+		fs.VisitAll(func(f *flag.Flag) { flags = append(flags, flagInfo{"--" + f.Name, f.Usage}) })
+		out := map[string]any{
+			"command": "amdl " + cmd.Command + argSynopsis(cmd.Capability),
+			"summary": cmd.Summary, "safety": cmd.Safety, "args": cmd.Args, "flags": flags,
+			"exitCodes": exitCodes(cmd.Capability), "examples": cmd.Examples,
+		}
+		if cmd.Tool != "" {
+			out["tool"] = cmd.Tool
+		}
+		if len(cmd.Ops) > 0 {
+			var ops []capability.Operation
+			for _, id := range cmd.Ops {
+				ops = append(ops, capability.Lookup(id))
+			}
+			out["operations"] = ops
+		}
+		return e.out.result(out)
+	}
+}
+
+func cliSearchCmd(fs *flag.FlagSet) func(e *env, args []string) error {
+	limit := fs.Int("limit", 5, "how many commands to return")
+	return func(e *env, args []string) error {
+		if len(args) == 0 {
+			return usageErr(`usage: amdl cli search "<what you want to do>"`)
+		}
+		type hit struct {
+			Command string `json:"command"`
+			Summary string `json:"summary"`
+			Example string `json:"example,omitempty"`
+		}
+		var hits []hit
+		for _, r := range rank(commands(), strings.Join(args, " ")) {
+			if r.Command == "cli search" {
+				continue
+			}
+			h := hit{Command: "amdl " + r.Command + argSynopsis(r.Capability), Summary: r.Summary}
+			if len(r.Examples) > 0 {
+				h.Example = r.Examples[0]
+			}
+			hits = append(hits, h)
+		}
+		if len(hits) > *limit {
+			hits = hits[:*limit]
+		}
+		if hits == nil {
+			hits = []hit{}
+		}
+		return e.out.result(hits)
+	}
+}
+
+// synonyms widen a command's words with the ones people use for them.
+var synonyms = map[string]string{
+	"download": "get fetch save grab rip add queue", "search": "find look query catalog song album artist",
+	"jobs": "job download downloads queue task tasks", "list": "show all failed running recent",
+	"delete": "remove rm clear", "cancel": "stop abort", "retry": "again rerun restart failed",
+	"wait": "until finish done block", "watch": "follow events stream progress live",
+	"lookup": "preview info metadata link", "quality": "codec bitrate lossless alac atmos hires",
+	"logs": "log error errors debug", "config": "setting settings option options", "wrapper": "login account apple id signin",
+	"system": "status server version health disk space", "library": "finished completed downloaded collection",
+	"artists": "artist discography albums", "context": "server address remote nas host",
+	"wrapper login": "sign signin log authenticate password", "wrapper logout": "signout logoff",
+	"wrapper 2fa": "code two step verification sms", "jobs get": "detail details tracks show",
+}
+
+func searchTerms(c command) []string {
+	text := c.Command + " " + c.Summary + " " + strings.Join(c.Args, " ")
+	for _, w := range strings.Fields(c.Command) {
+		text += " " + synonyms[w]
+	}
+	text += " " + synonyms[c.Command]
+	return tokens(text)
+}
+
+func tokens(s string) []string {
+	var out []string
+	for _, f := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if len(f) > 1 && !stop[f] {
+			out = append(out, strings.TrimSuffix(f, "s"))
+		}
+	}
+	return out
+}
+
+var stop = map[string]bool{"the": true, "a": true, "an": true, "of": true, "to": true, "and": true, "or": true,
+	"in": true, "on": true, "for": true, "by": true, "with": true, "my": true, "me": true, "it": true, "is": true, "amdl": true}
+
+// bm25 scores one command's words against the query.
+func bm25(query, doc []string, df map[string]int, n int, avg float64) float64 {
+	const k1, b = 1.2, 0.75
+	tf := map[string]int{}
+	for _, t := range doc {
+		tf[t]++
+	}
+	score := 0.0
+	for _, q := range query {
+		f := float64(tf[q])
+		if f == 0 {
+			continue
+		}
+		idf := math.Log(1 + (float64(n)-float64(df[q])+0.5)/(float64(df[q])+0.5))
+		score += idf * f * (k1 + 1) / (f + k1*(1-b+b*float64(len(doc))/avg))
+	}
+	return score
+}
+
+// rank returns the commands that match a free-text task, best first.
+func rank(cmds []command, text string) []command {
+	docs := make([][]string, len(cmds))
+	df := map[string]int{}
+	avg := 0.0
+	for i, c := range cmds {
+		docs[i] = searchTerms(c)
+		seen := map[string]bool{}
+		for _, t := range docs[i] {
+			if !seen[t] {
+				df[t]++
+				seen[t] = true
+			}
+		}
+		avg += float64(len(docs[i]))
+	}
+	avg /= float64(len(cmds))
+	query := tokens(text)
+	type scored struct {
+		c command
+		s float64
+	}
+	var hits []scored
+	for i, c := range cmds {
+		if s := bm25(query, docs[i], df, len(cmds), avg); s > 0 {
+			hits = append(hits, scored{c, s})
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].s > hits[j].s })
+	out := make([]command, len(hits))
+	for i, h := range hits {
+		out[i] = h.c
+	}
+	return out
+}
+
+// suggest names up to three commands close to an unknown one.
+func suggest(cmds []command, text string) []string {
+	out := []string{}
+	for _, c := range rank(cmds, text) {
+		if len(out) == 3 {
+			break
+		}
+		out = append(out, "amdl "+c.Command)
+	}
+	return out
+}
