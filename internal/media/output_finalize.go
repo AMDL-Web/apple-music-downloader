@@ -23,7 +23,7 @@ import (
 // and the item_overwrite event says so.
 func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Reporter, job domain.Job, item *domain.JobItem, outPath string) (bool, error) {
 	backend := d.backend()
-	item.OutputPath = outPath
+	item.OutputPath = domain.AbsolutePath(outPath)
 	// d.cfg is the job's effective config (runtime snapshot plus overrides),
 	// so overrides.force_overwrite already won over the global key here.
 	force := d.cfg.Download.ForceOverwrite
@@ -146,7 +146,7 @@ func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBacke
 	item.Status = domain.ItemCompleted
 	markSaved(&item.Progress)
 	item.Progress.CompleteTransfers()
-	item.OutputPath = out.outPath
+	item.OutputPath = domain.AbsolutePath(out.outPath)
 	item.Codec = out.codec
 	item.FileSize = size
 	return nil

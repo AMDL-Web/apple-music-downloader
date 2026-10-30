@@ -150,10 +150,11 @@ type JobItem struct {
 	Attempt       int    `json:"attempt,omitempty"`
 	MaxAttempts   int    `json:"max_attempts,omitempty"`
 	StatusMessage string `json:"status_message,omitempty"`
-	// OutputPath is where the pipeline writes (or found) the track's file, as
-	// built from download.downloads_dir, so it is relative when that is. The
-	// pipeline sets it before the file exists; MarshalJSON decides what the
-	// API shows.
+	// OutputPath is where the pipeline writes (or found) the track's file,
+	// made absolute against the working directory of the run that wrote it, so
+	// a later start from another directory still points at the file. Rows
+	// written before that may hold a relative path. The pipeline sets it
+	// before the file exists; MarshalJSON decides what the API shows.
 	OutputPath string    `json:"output_path,omitempty"`
 	Error      string    `json:"error,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`

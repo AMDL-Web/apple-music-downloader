@@ -74,6 +74,26 @@ func TestHandleExistingOutputHonorsForceOverwriteConfig(t *testing.T) {
 	})
 }
 
+func TestExistingOutputIsRecordedAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("track.m4a", []byte("existing"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Download.TempDir = t.TempDir()
+	d := newTestDownloader(&Downloader{cfg: cfg})
+	item := domain.JobItem{ID: "item-1", JobID: "job-1"}
+	if _, err := d.handleExistingOutput(context.Background(), &recordingReporter{}, domain.Job{ID: "job-1"}, &item, "track.m4a"); err != nil {
+		t.Fatal(err)
+	}
+	// The stored path, not only the API's view of it, is absolute: the
+	// next start may run from another directory.
+	if !filepath.IsAbs(item.OutputPath) || filepath.Base(item.OutputPath) != "track.m4a" {
+		t.Fatalf("OutputPath = %q, want the file's absolute path", item.OutputPath)
+	}
+}
+
 func TestCleanupFailedOutputRemovesPartFile(t *testing.T) {
 	dir := t.TempDir()
 	outPath := filepath.Join(dir, "song.m4a")

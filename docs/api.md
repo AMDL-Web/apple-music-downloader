@@ -320,7 +320,8 @@ curl http://localhost:18080/api/v1/downloads/{job_id}
 
 Returns `{job, items, hooks, event_cursor}`. A finished item (`completed` or
 `skipped_existing`) carries `output_path`, the absolute path of its file on the machine
-that runs the backend; the console's Files section shows the folder it sits in. An item
+that runs the backend, fixed when the track was written; the console's Files section
+shows the folder it sits in. An item
 that is not finished omits it, and the item events on the stream follow the same rule.
 
 ```bash
