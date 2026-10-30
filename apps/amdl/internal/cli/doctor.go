@@ -122,6 +122,12 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 		}
 	default:
 		c.Detail["wrapper_ready"], c.Detail["wrapper_logged_in"], c.Detail["regions"] = w.Ready, w.Status, w.Regions
+		if m := w.Managed; m != nil {
+			c.Detail["wrapper_managed"] = m
+			if m.LoginResidue {
+				c.Hint = "the local wrapper's disk may still hold the last login's password until it has served for a few seconds: amdl wrapper start"
+			}
+		}
 		if sys.Simulate {
 			break
 		}

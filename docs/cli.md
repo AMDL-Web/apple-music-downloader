@@ -227,6 +227,15 @@ command that installs ffmpeg with the package manager found; any required check 
 exits 5 with `checks_failed`. `amdl service install` fails the same way, with
 `ffmpeg_missing`, before it registers anything ([install.md](install.md#ffmpeg)).
 
+## A wrapper amdl runs
+
+`amdl wrapper install|update|import|uninstall|start|stop|logs` manage a wrapper that the
+local backend runs in a QEMU guest (`internal/wrapperhost`); the steps, platforms and
+limits are in [install.md](install.md#a-wrapper-amdl-runs). These commands work on the
+local files and talk to no server. `wrapper status`, `login`, `2fa` and `logout` stay API
+commands: with a managed wrapper the backend logs in through the guest, so they work as
+with a wrapper-manager, and they wait up to `apps/amdl/internal/cli#loginWait`.
+
 ## Agent setup
 
 `amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing

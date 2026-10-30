@@ -35,6 +35,13 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 		"mcp":               mcpCmd,
 		"tui":               tuiCmd,
 		"doctor":            doctorCmd,
+		"wrapper install":   wrapperInstallCmd(false),
+		"wrapper update":    wrapperInstallCmd(true),
+		"wrapper import":    wrapperImportCmd,
+		"wrapper uninstall": wrapperUninstallCmd,
+		"wrapper start":     wrapperSwitchCmd(true),
+		"wrapper stop":      wrapperSwitchCmd(false),
+		"wrapper logs":      wrapperLogsCmd,
 		"service install":   serviceInstallCmd,
 		"service uninstall": serviceUninstallCmd,
 		"service start":     serviceStartCmd,
@@ -47,7 +54,8 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 var offline = map[string]bool{
 	"cli search": true, "cli commands": true, "cli setup": true, "schema": true, "context list": true,
 	"context add": true, "context use": true, "context remove": true, "serve": true, "version": true,
-	"doctor": true, "service install": true, "service uninstall": true, "service start": true, "service stop": true, "service status": true,
+	"doctor": true, "wrapper install": true, "wrapper update": true, "wrapper import": true, "wrapper uninstall": true,
+	"wrapper start": true, "wrapper stop": true, "wrapper logs": true, "service install": true, "service uninstall": true, "service start": true, "service stop": true, "service status": true,
 }
 
 func noFlags(run func(e *env, args []string) error) func(*flag.FlagSet) func(*env, []string) error {

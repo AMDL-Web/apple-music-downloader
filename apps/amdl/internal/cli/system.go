@@ -127,7 +127,7 @@ func wrapperLoginCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 				LoginID string `json:"login_id"`
 			}
 			if json.Unmarshal(raw, &r) == nil && r.Status == "needs_2fa" {
-				e.note("enter the code within 60 seconds: amdl wrapper 2fa %s <code>", r.LoginID)
+				e.note("enter the code within 60 seconds (4 minutes for a wrapper amdl runs): amdl wrapper 2fa %s <code>", r.LoginID)
 			}
 			return e.out.result(json.RawMessage(raw))
 		})
@@ -196,7 +196,7 @@ func serveLocal(e *env, background bool, listen string, withConsole bool) error 
 	if err != nil {
 		return err
 	}
-	b := local.Backend{Dirs: dirs, Wrapper: or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS")), LogOutput: os.Stdout}
+	b := local.Backend{Dirs: dirs, Wrapper: or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS")), LogOutput: os.Stdout, ManageWrapper: true}
 	if withConsole {
 		b.Console = console.Handler()
 	}

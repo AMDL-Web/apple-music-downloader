@@ -120,9 +120,11 @@ amdl only needs its address. Three ways to get one:
 - **On Linux with user namespaces** (`unshare -Ur true` succeeds), run
   `wrapper-lite-rootless` or wrapper-manager v2 natively on the same machine, then use
   `--wrapper http://127.0.0.1:12340` (wrapper-lite's default port).
+- **Let amdl run it** in a QEMU guest on this machine: [A wrapper amdl runs](#a-wrapper-amdl-runs).
+  This is the self-contained setup for macOS and Windows.
 - **On macOS, Windows, or Linux without user namespaces** (such as Synology DSM), run
-  upstream's `wrapper-lite-qemu`, which boots wrapper-lite in a small QEMU guest and
-  forwards its port to the host; the
+  upstream's `wrapper-lite-qemu` yourself, which boots wrapper-lite in a small QEMU guest
+  and forwards its port to the host; the
   [wrapper-lite README](https://github.com/WorldObservationLog/wrapper/tree/lite#run-with-qemu-recommended)
   calls it the recommended way to run. wrapper-manager v2 has an equivalent,
   `wrapper-manager-qemu`
@@ -144,6 +146,59 @@ Notes on `wrapper-lite-qemu`, from upstream's sources:
 - Log in once, then serve, as the README shows:
   `./wrapper-lite-qemu --login user:pass --code-from-file`, then `./wrapper-lite-qemu`.
   It listens on `127.0.0.1:12340`, so `--wrapper http://127.0.0.1:12340`.
+
+### A wrapper amdl runs
+
+```bash
+amdl wrapper install          # QEMU, then upstream's guest
+amdl service install          # runs the backend, which runs the wrapper
+printf '%s\n' "$PASSWORD" | amdl wrapper login --username you@example.com --password-stdin
+amdl wrapper 2fa <login_id> <code>   # when Apple asks for one
+```
+
+`amdl wrapper install` needs QEMU (`qemu-system-x86_64`). Without it, it offers to run
+`brew install qemu` on macOS or `winget install --id SoftwareFreedomConservancy.QEMU -e`
+on Windows (pass `--yes` when no one can answer), and prints the package command on
+Linux, where it needs `sudo`; `--qemu PATH` names one elsewhere. It then downloads
+upstream's guest: the kernel, initramfs and empty disk image of the `qemu-assets`
+artifact of upstream's `build-lite` workflow, through nightly.link, and installs it
+only if its sha256 matches the pin amdl carries (`internal/wrapperhost#Builtin`) or
+the newer one published at `internal/wrapperhost#ManifestURL`. Upstream's artifacts
+expire 90 days after their build; when no pin can be downloaded, fetch the artifact
+yourself and run `amdl wrapper import <zip|dir>`, which also accepts one of
+upstream's `wrapper-lite-qemu` packages. Nothing upstream builds is shipped with amdl:
+the guest holds Apple's Android libraries.
+
+The backend runs the guest whenever it runs on the local files with this machine's
+wrapper installed (the service, `amdl serve --local` and the desktop app; not a
+per-command `--server embedded`), points `wrapper.address` at it, restarts it after a
+crash and stops it with itself. Its port is on `127.0.0.1` only. Log in from the
+console's Account page, the terminal interface's `/login`, or `amdl wrapper login`;
+`amdl wrapper status` shows its `managed` state, `amdl wrapper logs` its console with
+secrets redacted, and `amdl wrapper stop` / `start` turn it off and on.
+
+| Host | Acceleration |
+| --- | --- |
+| Linux | KVM when `/dev/kvm` opens for you (the `kvm` group), else TCG |
+| Windows x64 | WHPX, which needs the *Windows Hypervisor Platform* feature, else TCG |
+| Intel Mac | HVF |
+| Apple Silicon Mac | TCG: the guest is x86_64, which HVF cannot run there |
+| Windows on ARM | not supported |
+
+TCG is plain emulation. On a Linux PC it booted the guest in about 12 seconds and
+answered `/status` in 2 ms; whether downloads keep up on an Apple Silicon Mac is not
+measured yet.
+
+Known limits, all upstream's:
+
+- A login's password reaches the guest in a 0600 file that is deleted once the guest
+  has read it, never on a command line. The guest copies it to its own disk, and the boot
+  that follows each login deletes it; `managed.login_residue` in `amdl wrapper status`
+  is true until then. The disk, `data.img` in the data directory's `wrapper/`, holds the
+  account's tokens: it stays owner-only and survives `amdl wrapper update`.
+- wrapper-lite does not verify Apple's TLS certificates
+  ([upstream issue #75](https://github.com/WorldObservationLog/wrapper/issues/75)).
+- One account per machine.
 
 ## Run the backend
 

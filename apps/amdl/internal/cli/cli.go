@@ -16,6 +16,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"amdl/internal/capability"
 	"amdl/internal/client"
@@ -118,6 +119,11 @@ func Run(ctx context.Context, args []string, io IO) int {
 			return fail(io, err)
 		}
 		e.c = c
+		if cmd.Command == "wrapper login" || cmd.Command == "wrapper 2fa" {
+			// A wrapper amdl runs in a QEMU guest boots twice per login, which
+			// emulation can stretch to minutes.
+			c.SetTimeout(loginWait)
+		}
 	}
 	err = runner(e, pos)
 	if e.running != nil {
@@ -134,6 +140,9 @@ func Run(ctx context.Context, args []string, io IO) int {
 	}
 	return exitOK
 }
+
+// loginWait bounds a wrapper login or two-step request.
+const loginWait = 10 * time.Minute
 
 // hoistGlobals moves global flags written before the command, as in
 // amdl --server nas jobs list, after it, where the command's flag set parses

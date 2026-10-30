@@ -17,6 +17,7 @@ import (
 	"amdl/internal/config"
 	"amdl/internal/local"
 	"amdl/internal/media"
+	"amdl/internal/wrapperhost"
 )
 
 // serviceStatus is what amdl service status and the other service commands
@@ -101,6 +102,9 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 			return err
 		}
 		b := local.Backend{Dirs: dirs, Wrapper: or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS"))}
+		if in, err := (wrapperhost.Home{Dir: dirs.WrapperDir()}).Current(); err == nil && b.Wrapper == "" {
+			b.Wrapper = in.URL() // the service runs the local wrapper
+		}
 		// A service starts with a short PATH (launchd's is /usr/bin:/bin:…),
 		// so ffmpeg is pinned to where this shell finds it.
 		ffmpeg, simulate := config.Default().Tools.FFmpeg, false
