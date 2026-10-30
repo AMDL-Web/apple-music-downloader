@@ -406,19 +406,8 @@ func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper
 	// Booting and reaching the code prompt share one step.
 	step := time.NewTimer(loginStepLimit)
 	defer step.Stop()
-	select {
-	case line := <-x.banner:
-		if !strings.Contains(line, "custom args from file") {
-			// Without its fw_cfg module upstream's init boots to serve and
-			// silently ignores the login.
-			return wrapper.LoginResult{}, s.endLogin(x, fmt.Errorf("the guest did not receive the login (%q): this QEMU lacks fw_cfg support", x.redact(line)))
-		}
-	case <-x.g.done:
-		return wrapper.LoginResult{}, s.endLogin(x, fmt.Errorf("QEMU exited before the guest booted: %v", x.g.err))
-	case <-step.C:
-		return wrapper.LoginResult{}, s.endLogin(x, wrapper.ErrLoginTimeout)
-	case <-ctx.Done():
-		return wrapper.LoginResult{}, s.endLogin(x, ctx.Err())
+	if err := x.awaitBanner(ctx, step.C); err != nil {
+		return wrapper.LoginResult{}, s.endLogin(x, err)
 	}
 	select {
 	case <-x.need2FA:
@@ -431,6 +420,37 @@ func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper
 	case <-ctx.Done():
 		return wrapper.LoginResult{}, s.endLogin(x, ctx.Err())
 	}
+}
+
+// awaitBanner waits for the login boot's first console line and checks it.
+func (x *session) awaitBanner(ctx context.Context, step <-chan time.Time) error {
+	select {
+	case line := <-x.banner:
+		return x.bannerErr(line)
+	case <-x.g.done:
+		// Every console line is handled before done closes, so a guest that
+		// printed its banner and exited at once, as lite does when it refuses
+		// a login, has its banner waiting; select may still have picked done.
+		select {
+		case line := <-x.banner:
+			return x.bannerErr(line)
+		default:
+			return fmt.Errorf("QEMU exited before the guest booted: %v", x.g.err)
+		}
+	case <-step:
+		return wrapper.ErrLoginTimeout
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// bannerErr checks the login boot's first console line: without its fw_cfg
+// module upstream's init boots to serve and silently ignores the login.
+func (x *session) bannerErr(line string) error {
+	if strings.Contains(line, "custom args from file") {
+		return nil
+	}
+	return fmt.Errorf("the guest did not receive the login (%q): this QEMU lacks fw_cfg support", x.redact(line))
 }
 
 // awaitCode ends login x when no code comes within loginStepLimit or its

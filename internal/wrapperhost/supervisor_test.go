@@ -276,3 +276,22 @@ func TestStopAndStart(t *testing.T) {
 		t.Errorf("state.json = %+v, %v", st, err)
 	}
 }
+
+// TestBannerOfAGuestThatAlreadyExited covers a login guest that printed its
+// banner and exited before StartLogin waited for it, as a refused login can
+// on a busy host: both are ready, and the banner has to win.
+func TestBannerOfAGuestThatAlreadyExited(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	failed := 0
+	for range 1000 {
+		x := &session{banner: make(chan string, 1), g: &guest{done: done}}
+		x.banner <- "[init] wrapper-lite QEMU guest (custom args from file)"
+		if err := x.awaitBanner(context.Background(), nil); err != nil {
+			failed++
+		}
+	}
+	if failed > 0 {
+		t.Fatalf("%d of 1000 waits took the exit for a missing banner", failed)
+	}
+}
