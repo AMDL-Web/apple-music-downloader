@@ -50,6 +50,7 @@ function Get-FFmpegHint {
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\amdl' }
+$resolved = -not $Version
 if (-not $Version) {
     if ($BaseUrl) { throw '-Version is needed with -BaseUrl' }
     $Version = (Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/$repo/releases/latest").tag_name
@@ -89,7 +90,12 @@ if ($current -eq $Version) {
     New-Item -ItemType Directory -Path $tmp | Out-Null
     try {
         Say "downloading amdl $Version for windows/amd64"
-        Get-File "$base$sep$name.zip" (Join-Path $tmp "$name.zip")
+        try { Get-File "$base$sep$name.zip" (Join-Path $tmp "$name.zip") } catch {
+            # GitHub's latest release skips prereleases, so it can be an older
+            # release that has no archive for this machine.
+            if ($resolved) { throw "could not download $name.zip from ${base}: the latest release, $Version, may not ship windows/amd64 (a prerelease is never the latest). Pick a release with -Version vX.Y.Z: https://github.com/$repo/releases" }
+            throw "could not download $name.zip from ${base}: check that -Version $Version names a release that ships windows/amd64 (https://github.com/$repo/releases) and that the network is up"
+        }
         Get-File "$base${sep}SHA256SUMS" (Join-Path $tmp 'SHA256SUMS')
         $want = $null
         foreach ($line in Get-Content (Join-Path $tmp 'SHA256SUMS')) {

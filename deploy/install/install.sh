@@ -103,7 +103,9 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
+resolved=0
 if [ -z "$version" ]; then
+	resolved=1
 	[ -z "$base_url" ] || die "--version is needed with AMDL_INSTALL_BASE_URL"
 	fetch "https://api.github.com/repos/$repo/releases/latest" "$tmp/latest.json" ||
 		die "could not look up the latest release; pass --version"
@@ -137,7 +139,12 @@ if [ $force = 0 ] && [ -x "$bin_dir/amdl" ] &&
 	say "amdl $version is already installed in $bin_dir"
 else
 	say "downloading amdl $version for $os/$arch"
-	fetch "$base/$name.tar.gz" "$tmp/$name.tar.gz" || die "could not download $base/$name.tar.gz"
+	if ! fetch "$base/$name.tar.gz" "$tmp/$name.tar.gz"; then
+		# GitHub's latest release skips prereleases, so it can be an older
+		# release that has no archive for this machine.
+		[ $resolved = 1 ] && die "could not download $name.tar.gz from $base: the latest release, $version, may not ship $os/$arch (a prerelease is never the latest). Pick a release with --version vX.Y.Z: https://github.com/$repo/releases"
+		die "could not download $name.tar.gz from $base: check that --version $version names a release that ships $os/$arch (https://github.com/$repo/releases) and that the network is up"
+	fi
 	fetch "$base/SHA256SUMS" "$tmp/SHA256SUMS" || die "could not download $base/SHA256SUMS"
 	want=$(awk -v f="$name.tar.gz" '$2 == f || $2 == "*" f { print $1 }' "$tmp/SHA256SUMS")
 	[ -n "$want" ] || die "SHA256SUMS lists no $name.tar.gz"

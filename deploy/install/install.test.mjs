@@ -73,6 +73,14 @@ test('refuses an archive whose checksum does not match', () => {
   assert.equal(existsSync(bin), false);
 });
 
+test('a release without this machine\'s archive points at --version', () => {
+  const { bin, first } = install(mkdtempSync(join(tmpdir(), 'amdl-release-')));
+  assert.notEqual(first.status, 0);
+  assert.match(first.stderr, /could not download amdl_v9\.9\.9_linux_amd64\.tar\.gz/);
+  assert.match(first.stderr, /--version v9\.9\.9 names a release that ships linux\/amd64/);
+  assert.equal(existsSync(bin), false);
+});
+
 test('--service registers the service with the wrapper address', () => {
   const { bin, first } = install(release(), '--service', '--wrapper', 'http://nas:30020');
   assert.equal(first.status, 0, first.stderr);
@@ -129,4 +137,13 @@ test('install.ps1 parses and dry-runs', { skip: !has('pwsh') && 'pwsh is not ins
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stderr, /would install amdl v9.9.9 \(windows\/amd64\)/);
   assert.match(r.stderr, /would run: amdl service install --wrapper http:\/\/nas:30020/);
+});
+
+test('install.ps1 points at -Version when the archive is missing', { skip: !has('pwsh') && 'pwsh is not installed' }, () => {
+  // pwsh wraps an uncaught error to the console width, so print the message itself.
+  const run = `try { & '${join(here, 'install.ps1')}' -Version ${version} -InstallDir '${mkdtempSync(join(tmpdir(), 'amdl-ps1-'))}'` +
+    ` -BaseUrl '${mkdtempSync(join(tmpdir(), 'amdl-release-'))}' } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }`;
+  const r = spawnSync('pwsh', ['-NoProfile', '-Command', run], { encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stderr, /-Version v9\.9\.9 names a release that ships windows\/amd64/);
 });
