@@ -27,7 +27,14 @@ services:
     image: ghcr.io/amdl-web/apple-music-downloader-backend:latest
     # To build locally from source instead of pulling the image: uncomment the
     # build line below (the image line then becomes the tag of the locally built
-    # image), then run docker compose up -d --build.
+    # image), then run docker compose up -d --build. Where proxy.golang.org or
+    # dl-cdn.alpinelinux.org is unreachable, use the long form with mirror
+    # build args instead (docs/deployment.md lists both):
+    #   build:
+    #     context: .
+    #     args:
+    #       GOPROXY: "https://goproxy.cn,direct"
+    #       ALPINE_MIRROR: "https://mirrors.tuna.tsinghua.edu.cn/alpine"
     # build: .
     container_name: amdl-backend
     restart: unless-stopped

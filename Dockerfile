@@ -12,6 +12,11 @@ FROM --platform=${BUILDPLATFORM:-linux} golang:1.26.10-alpine AS build
 
 WORKDIR /src
 
+# Go module proxy; the default is Go's own. Where proxy.golang.org is
+# unreachable, pass another, e.g. --build-arg GOPROXY=https://goproxy.cn,direct.
+# go.sum pins every module, so the checksum database is not consulted.
+ARG GOPROXY=https://proxy.golang.org,direct
+
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -40,7 +45,13 @@ FROM alpine:3.24
 # tzdata: time zone support for log and hook timestamps.
 # su-exec: the entrypoint runs as root to give the backend's own state to
 #   PUID:PGID, then drops to that user to run the backend.
-RUN apk add --no-cache ca-certificates ffmpeg tzdata su-exec \
+# ALPINE_MIRROR replaces https://dl-cdn.alpinelinux.org/alpine in the package
+# repositories (and stays in the image's /etc/apk/repositories); the default
+# leaves them unchanged. Where dl-cdn is unreachable, pass a mirror, e.g.
+# --build-arg ALPINE_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/alpine.
+ARG ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+RUN sed -i "s#https\{0,1\}://dl-cdn\.alpinelinux\.org/alpine#${ALPINE_MIRROR}#" /etc/apk/repositories \
+    && apk add --no-cache ca-certificates ffmpeg tzdata su-exec \
     && addgroup -g 1000 amdl \
     && adduser -D -u 1000 -G amdl amdl
 

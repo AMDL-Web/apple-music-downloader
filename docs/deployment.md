@@ -43,6 +43,23 @@ The Dockerfile needs no BuildKit: `docker build` works with the classic builder 
 on Synology DSM, whose Docker has no buildx, and builds for the host's architecture.
 Multi-arch images (`--platform linux/amd64,linux/arm64`) need buildx.
 
+Two build args point the build at mirrors where `proxy.golang.org` or
+`dl-cdn.alpinelinux.org` is unreachable; the defaults leave both unchanged:
+
+| Build arg | Default | Meaning |
+| --- | --- | --- |
+| `GOPROXY` | `https://proxy.golang.org,direct` | Go module proxy for the build stage. `go.sum` pins every module, so `GOSUMDB` needs no change. |
+| `ALPINE_MIRROR` | `https://dl-cdn.alpinelinux.org/alpine` | Replaces that URL in the runtime stage's `/etc/apk/repositories` before `apk add`; the mirror stays in the image's file. |
+
+```bash
+docker build -t amdl-backend \
+  --build-arg GOPROXY=https://goproxy.cn,direct \
+  --build-arg ALPINE_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/alpine .
+```
+
+With compose, use the long `build:` form with `args:`; `docker-compose.yml` has it as a
+comment.
+
 The image is a multi-stage build: the build stage cross-compiles a static binary
 (`CGO_ENABLED=0`, pure-Go SQLite), and the runtime stage is Alpine with `ffmpeg`,
 `ca-certificates`, `tzdata` and `su-exec`. The container starts the entrypoint as root,
