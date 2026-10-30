@@ -45,3 +45,11 @@ func TestParseFFmpegVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestFFmpegOutdated(t *testing.T) {
+	for v, want := range map[string]bool{"7.0.2": true, "6.1.1-3ubuntu5": true, "8.0.1": false, "8.1.3": false, "10.0": false, "N-118312-g1d5b2a3": false, "": false} {
+		if got := FFmpegOutdated(v); got != want {
+			t.Errorf("FFmpegOutdated(%q) = %v, want %v", v, got, want)
+		}
+	}
+}

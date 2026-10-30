@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -161,6 +162,9 @@ func ffmpegCheck(e *env, dirs local.Dirs, required bool) check {
 	c.Detail["path"] = path
 	if v, err := media.FFmpegVersion(e.ctx, path); err == nil {
 		c.Detail["version"] = v
+		if media.FFmpegOutdated(v) {
+			c.Hint = fmt.Sprintf("ffmpeg %s works, but %d or later is recommended: older versions can write an ALAC track's duration one partial frame short", v, media.RecommendedFFmpegMajor)
+		}
 	}
 	return c
 }

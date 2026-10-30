@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +64,24 @@ func FFmpegVersion(ctx context.Context, path string) (string, error) {
 		return "", err
 	}
 	return parseFFmpegVersion(string(out)), nil
+}
+
+// RecommendedFFmpegMajor is the oldest ffmpeg major version amdl recommends:
+// ffmpeg 7.0.2 wrote a 24-bit/96 kHz ALAC track's duration without its last,
+// partial frame (about 16 ms short), with the same audio bytes, where 8.0.1
+// and later match the catalog's duration.
+const RecommendedFFmpegMajor = 8
+
+// FFmpegOutdated reports whether version, as FFmpegVersion returns it, is
+// older than RecommendedFFmpegMajor. A version that does not start with a
+// number, such as a git build's "N-…", is not judged.
+func FFmpegOutdated(version string) bool {
+	digits := version
+	if i := strings.IndexFunc(version, func(r rune) bool { return r < '0' || r > '9' }); i >= 0 {
+		digits = version[:i]
+	}
+	major, err := strconv.Atoi(digits)
+	return err == nil && major < RecommendedFFmpegMajor
 }
 
 // parseFFmpegVersion reads "ffmpeg version 7.1.1 Copyright …", the first line

@@ -317,6 +317,9 @@ tools:
   # operations (sample extraction, re-encapsulation, metadata, cover art) are
   # now handled in-process via the Go mp4ff/go-mp4tag libraries, so gpac,
   # MP4Box and the Bento4 tools (mp4extract/mp4edit) are no longer required.
+  # ffmpeg 8 or later is recommended: 7.0.2 wrote a 24-bit/96 kHz ALAC
+  # track's duration without its last, partial frame (about 16 ms short),
+  # with the same audio; amdl doctor says when the one found is older.
   # Requires a restart.
   ffmpeg: "ffmpeg"
 

@@ -102,6 +102,11 @@ with the package manager it finds:
 | Alpine | `sudo apk add ffmpeg` |
 | Windows | `winget install --id Gyan.FFmpeg -e`, or `scoop install ffmpeg` |
 
+Use ffmpeg 8 or later (`internal/media#RecommendedFFmpegMajor`). The audio is the same
+with older ones, but ffmpeg 7.0.2 wrote a 24-bit/96 kHz ALAC track's duration without its
+last, partial frame, about 16 ms short of the catalog's; `amdl doctor` says when the
+ffmpeg it finds is older. The Docker image ships a current one.
+
 `amdl service install` refuses to register the service while ffmpeg is missing, and
 records the full path of the one it finds as `tools.ffmpeg`, because a service starts
 with a shorter `PATH` than a terminal. Set `tools.ffmpeg` yourself for an ffmpeg
