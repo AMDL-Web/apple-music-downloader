@@ -6,7 +6,7 @@
 
 GO ?= go
 # ci.yml runs `make vuln`, so this is the only govulncheck version pin.
-GOVULNCHECK_VERSION ?= v1.6.0
+GOVULNCHECK_VERSION ?= v1.9.0
 # Package directories, which leaves out dot-directories such as nested
 # worktrees under .claude/worktrees/ that `gofmt -l .` would descend into.
 GO_DIRS = $(shell $(GO) list -e -f '{{.Dir}}' ./... | sed 's|^$(CURDIR)/||')
