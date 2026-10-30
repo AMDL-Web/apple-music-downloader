@@ -130,6 +130,25 @@ To avoid running as root at all, use `docker run --user <uid>:<gid>` (or compose
 `PUID`/`PGID`, and you are responsible for making the mounts writable by that user; the
 image's own directories, `data/tmp` included, already are (see [Mounts](#mounts)).
 
+### Shares granted through a group (Synology)
+
+`PUID`/`PGID` mode runs the backend with exactly one group, `PGID`: `su-exec` drops every
+supplementary group, and Compose's `group_add` has no effect there. On a share whose
+write access comes through a supplementary group, such as Synology DSM's
+`administrators` (gid 101), run the container as that user instead, with the extra group
+added:
+
+```yaml
+services:
+  amdl-backend:
+    user: "1026:100"   # the DSM user's uid and its primary gid (users)
+    group_add:
+      - "101"          # administrators, which grants write on the share
+```
+
+Check the ids with `id <user>` on the NAS. This shape ran on a Synology DS923+ (DSM 7.3.2).
+The mounts still need write access for that uid or one of its groups.
+
 ## Mounts
 
 `docker-compose.yml` bind-mounts three directories:

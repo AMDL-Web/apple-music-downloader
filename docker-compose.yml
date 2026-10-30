@@ -45,7 +45,10 @@ services:
       # then drops to that user to run the backend; default 1000:1000. Set them
       # to the uid/gid that owns the host directories. The downloads directory
       # is never re-owned: create it on the host before the first start and
-      # make it writable by PUID:PGID.
+      # make it writable by PUID:PGID. This mode keeps only the one group
+      # PGID; when write access comes through a supplementary group (Synology's
+      # administrators, gid 101), use user: plus group_add instead, see
+      # docs/deployment.md.
       # PUID: "1000"
       # PGID: "1000"
       # Time zone for log timestamps and for the local time seen by commands in
