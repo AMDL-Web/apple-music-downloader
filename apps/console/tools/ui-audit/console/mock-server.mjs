@@ -102,7 +102,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
   const send = (res, id, name, data) => res.write(`id: ${id}\nevent: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
 
   function setWorld(name, opts = {}) {
-    const make = typeof name === 'function' ? name : WORLDS[name];
+    const make = typeof name === 'function' ? name : Object.hasOwn(WORLDS, name) ? WORLDS[name] : undefined;
     if (!make) throw new Error(`unknown world ${name}`);
     const w = make(Date.now());
     Object.assign(w, opts);
@@ -253,8 +253,9 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     const q = url.searchParams;
     const key = `${req.method} ${path.replace(/job_[0-9a-f]{32}/, '{id}')}`;
     const fault = state.faults[key] || state.faults[`${req.method} ${path}`];
-    const wait = state.latencies[key] ?? state.latency;
-    if (wait) await new Promise((r) => setTimeout(r, wait));
+    // A scenario's latency, capped so that no request can hold the server.
+    const wait = Math.min(Number(state.latencies[key] ?? state.latency) || 0, 60_000);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     if (fault) {
       if (fault.hang) return;
       return apiError(res, fault.status || 500, fault.code || 'internal_error', fault.message || 'Injected failure', fault.details);

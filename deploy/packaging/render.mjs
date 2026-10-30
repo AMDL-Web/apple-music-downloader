@@ -14,7 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // sums maps "darwin_arm64" to the archive's SHA-256 for the tag's archives.
 export function parseSums(text, tag) {
   const sums = {};
-  const name = new RegExp(`^\\*?amdl_${tag.replace(/\./g, '\\.')}_([a-z0-9]+_[a-z0-9]+)\\.(tar\\.gz|zip)$`);
+  const name = new RegExp(`^\\*?amdl_${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_([a-z0-9]+_[a-z0-9]+)\\.(tar\\.gz|zip)$`);
   for (const line of text.split('\n')) {
     const [hash, file] = line.trim().split(/\s+/);
     const m = file && name.exec(file);

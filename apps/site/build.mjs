@@ -275,7 +275,7 @@ export function renderPage(c, ctx) {
   const hero = `<section class="hero" aria-labelledby="hero-title">
 <div class="hero-copy">
 <p class="eyebrow"><span class="dot" aria-hidden="true"></span>${esc(c.hero.eyebrow)}</p>
-<h1 id="hero-title">${esc(c.hero.title).replace('\n', '<br>')}<span>${esc(c.hero.subtitle)}</span></h1>
+<h1 id="hero-title">${esc(c.hero.title).replaceAll('\n', '<br>')}<span>${esc(c.hero.subtitle)}</span></h1>
 <p class="lead">${inline(c.hero.lead)}</p>
 <div class="cta">
 <div class="cmd"><code><span class="c-p" aria-hidden="true">$</span> ${esc(CODE.hero)}</code>${copyButton(ui, CODE.hero)}</div>
