@@ -39,7 +39,7 @@ type codecNotFoundError struct {
 }
 
 func (e codecNotFoundError) Error() string {
-	return fmt.Sprintf("codec %s not found in manifest", e.Codec)
+	return fmt.Sprintf("codec %s not found in manifest; amdl quality <url> lists the codecs a track has", e.Codec)
 }
 
 func (e codecNotFoundError) NonRetryable() bool {
