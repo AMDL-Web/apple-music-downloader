@@ -90,7 +90,9 @@ light, dark) is a separate axis, and the skin supports all three.
   value an earlier version stored in the browser is never read.
 - The theme is stored per browser under `localStorage["amdl.console.theme"]`
   with a guarded read and write (`lib/prefs.js`: `normalizeTheme`, `readPref`,
-  `writePref`); `main.js` applies it before mounting.
+  `writePref`); `js/theme-boot.js`, a classic script in `<head>`, puts it on
+  `<html>` before the first paint (a module runs only after one paint in the
+  system theme), and `main.js` applies it again before mounting.
 - The theme is `<html data-theme="light|dark">` or no attribute for "system";
   `css/tokens.css` sets `color-scheme` from it, and the skin writes every color
   as `light-dark(<light>, <dark>)`, which resolves against that. The skin never

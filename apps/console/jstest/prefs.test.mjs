@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_THEME, THEME_KEY, normalizeTheme, readPref, writePref } from '../static/js/lib/prefs.js';
+import { DEFAULT_THEME, THEME_KEY, THEMES, normalizeTheme, readPref, writePref } from '../static/js/lib/prefs.js';
 
 const memory = (init = {}) => {
   const data = { ...init };
@@ -24,4 +24,11 @@ test('readPref and writePref survive missing or throwing storage', () => {
   assert.equal(store.data[THEME_KEY], 'light');
   assert.equal(writePref(broken, THEME_KEY, 'light'), false);
   assert.equal(writePref(null, THEME_KEY, 'light'), false);
+});
+
+test('the blocking theme script reads the same key and the same explicit themes', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../static/js/theme-boot.js', import.meta.url), 'utf8');
+  assert.ok(src.includes(`'${THEME_KEY}'`), 'theme-boot.js reads THEME_KEY');
+  for (const t of THEMES.filter((x) => x !== DEFAULT_THEME)) assert.ok(src.includes(`'${t}'`), `theme-boot.js applies ${t}`);
 });
