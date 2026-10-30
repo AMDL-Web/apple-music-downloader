@@ -79,9 +79,8 @@ export function TabBar({ route, moreOpen, onMore }) {
   return html`<nav class="tabbar" aria-label="Primary">
     ${tab(navItem('overview'))}
     ${tab(navItem('queue'))}
-    <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${current('new')} aria-label=${NEW_DOWNLOAD.label}>
+    <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${current('new')} aria-label=${NEW_DOWNLOAD.label} title=${NEW_DOWNLOAD.label}>
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
-      <span class="tab-label">New</span>
     </a>
     ${tab(navItem('showcase'))}
     <button

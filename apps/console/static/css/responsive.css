@@ -210,19 +210,21 @@
     cursor: pointer;
   }
 
-  /* New download, the center tab, is the primary action. The mark rises
-     above the icon line instead of pushing its label down, so all five
-     labels share a line; a skin that resizes the mark or the tab icons
-     restates margin-top as icon height minus mark height. */
+  /* New download, the center tab, is the primary action: one large mark
+     with no label, centred in the bar. The whole tab stays the hit target. */
   .tab-new-mark {
     display: grid;
     place-items: center;
-    width: var(--touch);
-    height: calc(var(--icon-nav) + var(--s-2));
-    margin-top: calc(-1 * var(--s-2));
+    width: calc(var(--touch) + var(--s-3));
+    height: calc(var(--touch) - var(--s-1));
     border-radius: var(--r-control);
     background: var(--accent);
     color: var(--on-accent);
+  }
+
+  .tab-new-mark .icon {
+    width: calc(var(--icon-nav) + var(--s-1));
+    height: calc(var(--icon-nav) + var(--s-1));
   }
 
   .tab-new[aria-current="page"]::before {
