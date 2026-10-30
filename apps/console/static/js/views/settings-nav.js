@@ -61,17 +61,21 @@ export function SettingsNav({ section, dirty, invalid, views }) {
 /**
  * Under 640 px, #/settings without a section: every section as a row of a
  * grouped list (icon, label, its live one-line summary, mark, chevron),
- * each opening as its own view, then Open Logs, the phone's quiet way to
- * the Logs page (the sidebar's foot on a wider screen). `summaries` holds
- * each row's {text, role?}; a row without one yet keeps the line's room.
+ * each opening as its own view. Logs, whose summary counts errors, opens the
+ * Logs page instead (its errors when there are some): the phone's way there,
+ * the sidebar's foot on a wider screen; the Logs page's head links back to
+ * its settings. `summaries` holds each row's {text, role?}; a row without
+ * one yet keeps the line's room.
  */
 export function SettingsList({ dirty, invalid, views, summaries }) {
   const row = (s) => {
     const v = views[s.id];
     const sum = summaries[s.id];
     const role = v && v.role ? v.role : undefined;
+    const errors = s.id === 'logging' && v && v.viz && v.viz.kind === 'bars' && v.viz.buckets.some((n) => n > 0);
+    const href = s.id === 'logging' ? buildHash('logs', errors ? { level: 'error' } : {}) : settingsHash(s.id);
     return html`<li key=${s.id}>
-      <a class="settings-list-row" href=${settingsHash(s.id)} data-domain=${s.id}>
+      <a class="settings-list-row" href=${href} data-domain=${s.id}>
         <span class="settings-list-icon" data-role=${role}><${Icon} name=${s.icon} /></span>
         <span class="settings-list-text">
           <span class="settings-list-label">${s.label}</span>
@@ -86,11 +90,6 @@ export function SettingsList({ dirty, invalid, views, summaries }) {
   return html`<nav class="settings-list-card" aria-label="Settings sections">
     <div class="card settings-list-group"><ul class="settings-list">${SETTINGS_SECTIONS.slice(0, split).map(row)}</ul></div>
     <div class="card settings-list-group"><ul class="settings-list">${SETTINGS_SECTIONS.slice(split).map(row)}</ul></div>
-    <a class="settings-list-logs" href=${buildHash('logs')}>
-      <${Icon} name="file-text" />
-      <span>Open Logs</span>
-      <${Icon} name="chevron-right" size="sm" />
-    </a>
   </nav>`;
 }
 

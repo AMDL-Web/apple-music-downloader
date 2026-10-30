@@ -3,9 +3,9 @@
 // router and its leave guard are in ui/router.js.
 
 import { html, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from './ui/preact.js';
-import { buildHash, newDownloadHash, newDownloadUrls, settingsSection, settingsField, queueHash } from './lib/route.js';
+import { buildHash, newDownloadHash, newDownloadUrls, settingsSection, settingsField, settingsHash, queueHash } from './lib/route.js';
 import { sectionById } from './lib/settings-sections.js';
-import { extractLinks } from './lib/links.js';
+import { pastedLinks } from './lib/links.js';
 import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
 import { count, pageSummary } from './lib/format.js';
 
@@ -261,12 +261,13 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [overlay, route.jobId, closeDrawer, navigate]);
 
-  // Pasting Apple Music links outside a text field opens New download with
-  // them; on that page they join the links already in ?url=.
+  // Pasting text with an Apple Music link outside a text field opens New
+  // download with its links, other sites' too so the page flags them; on
+  // that page they join the links already in ?url=.
   useEffect(() => {
     const onPaste = (e) => {
       if (isTyping(e.target) || overlay || isDialogOpen() || !e.clipboardData) return;
-      const links = extractLinks(e.clipboardData.getData('text/plain'));
+      const links = pastedLinks(e.clipboardData.getData('text/plain'));
       if (links.length === 0) return;
       e.preventDefault();
       const onNew = route.page === 'new';
@@ -341,6 +342,7 @@ export function App() {
             <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
             ${summary || SUB_PAGES.includes(route.page) ? html`<p class="page-sub">${summary || '\u00a0'}</p>` : null}
             ${route.page === 'settings' ? html`<div class="page-actions"><${KeysToggle} /></div>` : null}
+            ${route.page === 'logs' ? html`<div class="page-actions"><a class="btn btn-ghost btn-icon" href=${settingsHash('logging')} aria-label="Log settings" title="Log settings"><${Icon} name="settings" /></a></div>` : null}
           </div>
           <${Banners} conn=${conn} onRetry=${() => retryRef.current()} />
           ${page}

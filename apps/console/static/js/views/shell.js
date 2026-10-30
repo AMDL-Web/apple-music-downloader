@@ -15,7 +15,7 @@ export const NAV = [
   { page: 'queue', label: 'Queue', icon: 'list', key: 'q' },
   // g y opened System, which Settings now holds.
   { page: 'settings', label: 'Settings', icon: 'settings', key: ',', alias: 'y' },
-  // Seldom opened: a quieter item at the foot of the sidebar, and the phone's More sheet.
+  // Seldom opened: a quieter item at the foot of the sidebar; on a phone, reached from Settings.
   { page: 'logs', label: 'Logs', icon: 'file-text', key: 'l', secondary: true },
 ];
 

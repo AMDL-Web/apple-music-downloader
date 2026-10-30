@@ -7,7 +7,7 @@
 // health, system, wrapper, librarySync, hooks, stats, logs, config. `ctx` is
 // {now, counts, conn, simulate}: the feed's counts and connection state.
 
-import { count, bytes, elapsed, relTime, clockTime } from './format.js';
+import { count, bytes, elapsed, relTime, clockTime, errorSummary } from './format.js';
 import { formatShares } from './format-codec.js';
 import { summarizeError } from './health.js';
 import { groupByDisk, diskRole } from './storage.js';
@@ -295,12 +295,14 @@ function logging(s, ctx) {
   const n = buckets.reduce((a, b) => a + b, 0);
   const last = entries.length ? entries[entries.length - 1] : state.last || null;
   const label = errorCountLabel(state);
+  // A failed job logs "job finished"; its reason is the error attribute.
+  const cause = last && last.attributes && typeof last.attributes.error === 'string' ? last.attributes.error : '';
   return {
     ...v,
     tag: { icon: 'circle-check', role: 'neutral', label: 'On' },
     figure: n > 0 ? { value: label, unit: `${n === 1 && !state.full ? 'error' : 'errors'} · 24 h` } : { value: 'No errors', unit: 'in 24 h', word: true },
     viz: { kind: 'bars', buckets, label: peak ? `Errors per hour, last 24 hours, peak ${peak.count} at ${clockTime(new Date(peak.at).toISOString(), false).slice(0, 5)}` : 'Errors per hour, last 24 hours: none' },
-    note: last ? { text: `Last error ${relTime(last.time, ctx.now)}: ${last.message}`, title: last.message } : null,
+    note: last ? { text: `Last error ${relTime(last.time, ctx.now)}: ${cause ? errorSummary(cause) : last.message}`, title: cause ? `${last.message}: ${cause}` : last.message } : null,
     summary: { text: n > 0 ? `${label} ${n === 1 && !state.full ? 'error' : 'errors'} in 24 h` : 'No errors in 24 h' },
   };
 }

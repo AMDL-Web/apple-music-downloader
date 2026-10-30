@@ -187,6 +187,15 @@ export function scanLinks(text, fallback = '') {
   return out;
 }
 
+/**
+ * The links a paste outside the text box brings to New download: every link
+ * scanLinks finds, other sites' too so the page can say they are not Apple
+ * Music, provided extractLinks finds an Apple Music link; else none.
+ */
+export function pastedLinks(text, fallback = '') {
+  return extractLinks(text, fallback).length ? scanLinks(text, fallback).map((e) => e.url) : [];
+}
+
 /** How many links in `text` repeat an earlier one (scanLinks lists each once). */
 export function duplicateCount(text, fallback = '') {
   if (typeof text !== 'string' || !text) return 0;

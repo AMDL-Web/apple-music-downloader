@@ -6,7 +6,7 @@
 
 import { buildHash, newDownloadHash, newSearchHash, settingsHash, queueHash } from './route.js';
 import { searchTerm } from './search.js';
-import { extractLinks } from './links.js';
+import { pastedLinks } from './links.js';
 import { FIELDS } from './settings.js';
 import { SETTINGS_SECTIONS, SETTINGS_GROUPS, groupById } from './settings-sections.js';
 import { jobTitle, jobSubtitle, typeLabel, dateTime } from './format.js';
@@ -114,7 +114,7 @@ export function paletteItems(query, jobs = []) {
     return [...STATIC_ITEMS, ...SECTIONS_SHOWN_EMPTY.map((id) => SECTION_ITEMS.find((s) => s.section === id)), ...PREF_ITEMS];
   }
   const out = [];
-  const links = extractLinks(query);
+  const links = pastedLinks(query);
   if (links.length > 0) {
     out.push({
       id: 'act-download-links',

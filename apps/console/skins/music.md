@@ -153,12 +153,11 @@ base durations (120 ms color, 200 ms overlays).
   that rises 6 px over the 24 px icon line, so "New" sits on the other
   labels' line; Settings turns red like any current tab while Logs is
   shown.
-- **Open Logs** (phones): under the Settings list, secondary text with the
-  file glyph and a chevron, as quiet as the sidebar's foot.
 - **Page head**: title with its summary line beneath (15 px secondary; only
   Overview (the date) and Queue (its live counts) have one), as an Apple
-  large title. No page actions: New download lives in the sidebar and the
-  tab bar.
+  large title. Page actions are icon buttons at the row's end (Settings' config
+  keys, Logs' link to its settings); New download lives in the sidebar and
+  the tab bar.
 - **Sections**: every card with a head is a shelf: the head sits on the
   canvas, the body is the grouped surface. Section actions are red text links
   with a chevron; an action in place (a `button`, such as Clear or Reset) is
@@ -179,7 +178,8 @@ base durations (120 ms color, 200 ms overlays).
 - **Overview order**: Needs attention (only with failures), Now downloading (an
   idle card as tall as a job's when nothing runs, its content centred), Recently completed, Jobs, Throughput, each full width, so
   the phone and desktop reading order are the same.
-- **Live queue**: each job is a card filled with its album gradient; 136 px
+- **Live queue**: each job is a card filled with its album gradient, in
+  columns at least 440 px wide (a lone job spans the row, as the idle card does); 136 px
   cover (96 on phones); eyebrow = equalizer + RUNNING in `--art-t3`; title on
   one line, so every card (and the idle one) is the same height; artist in `--art-t2`; genre · year · started below; per-track
   cells in `--art-t1`, remaining cells outlined at 75 %. A job without a palette

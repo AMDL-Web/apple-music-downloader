@@ -194,6 +194,10 @@ test('logs: retention off warns; no errors is words', () => {
   assert.equal(some.figure.value, '1');
   assert.equal(some.figure.unit, 'error · 24 h');
   assert.equal(some.note.text, 'Last error 2h ago: wrapper: refused');
+  const job = { ...one, sequence: 5, message: 'job finished', attributes: { job_id: 'job_1', error: 'Apple Music has no album 9 in storefront cn (404)' } };
+  const failed = domainView('logging', { logs: ok({ entries: [one, job], cursor: 5, full: false }) }, ctx());
+  assert.equal(failed.note.text, 'Last error 2h ago: Apple Music has nothing at this link in the CN storefront', 'the reason, not the fixed message');
+  assert.equal(failed.note.title, 'job finished: Apple Music has no album 9 in storefront cn (404)');
 });
 
 test('server: degraded beats offline beats ffmpeg missing beats simulate', () => {

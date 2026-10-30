@@ -309,6 +309,10 @@
   }
 }
 
+.domain-head[data-compact] {
+  grid-template-rows: var(--domain-title-h) 40px;
+}
+
 .domain-head .domain-figure {
   align-items: center;
   height: 40px;
@@ -349,6 +353,10 @@
 
   .domain-head[data-plain] {
     grid-template-rows: var(--domain-title-h);
+  }
+
+  .domain-head[data-compact] {
+    grid-template-rows: var(--domain-title-h) var(--lh-kpi);
   }
 
   .domain-head .domain-figure {

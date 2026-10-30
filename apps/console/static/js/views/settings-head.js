@@ -81,6 +81,9 @@ function Viz({ viz, note }) {
   }
 }
 
+/** Whether `viz` draws anything: chips with no items or bars with no hours do not. */
+const drawsViz = (viz) => Boolean(viz) && !(viz.kind === 'chips' && !viz.items.length) && !(viz.kind === 'bars' && !viz.buckets.length);
+
 function Figure({ view, loading }) {
   if (loading) return html`<span class="skel skel-figure" aria-hidden="true"></span>`;
   const f = view.figure;
@@ -135,7 +138,10 @@ export function DomainHead({ section, view, variant = 'head', actions, titleId }
       </div>
     </header>`;
   }
-  return html`<header class="domain-head" data-role=${role} data-domain=${section.id}>
+  // With no chart and no note once the answer is in, the head is its title
+  // and figure: the rows held for them while loading close once.
+  const compact = !loading && !drawsViz(view.viz) && !view.note;
+  return html`<header class="domain-head" data-role=${role} data-domain=${section.id} data-compact=${compact ? '' : undefined}>
     <div class="domain-title-row">
       <${DomainIcon} icon=${section.icon} role=${role} />
       <h2 class="card-title" id=${titleId}>${section.label}</h2>
@@ -143,8 +149,10 @@ export function DomainHead({ section, view, variant = 'head', actions, titleId }
       ${actions ? html`<div class="domain-actions">${actions}</div>` : null}
     </div>
     <div class="domain-figure"><${Figure} view=${view} loading=${loading} /></div>
-    <div class="domain-viz" data-kind=${vizKind}>${loading ? null : html`<${Viz} viz=${view.viz} note=${view.note} />`}</div>
-    <p class="domain-note"><${Note} view=${view} loading=${loading} linked /></p>
+    ${compact
+      ? null
+      : html`<div class="domain-viz" data-kind=${vizKind}>${loading ? null : html`<${Viz} viz=${view.viz} note=${view.note} />`}</div>
+          <p class="domain-note"><${Note} view=${view} loading=${loading} linked /></p>`}
   </header>`;
 }
 

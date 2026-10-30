@@ -205,7 +205,8 @@
   }
 
   /* New download, the third of four tabs, is the primary action: one large
-     mark with no label. The whole tab stays the hit target. */
+     mark with no label. The whole tab stays the hit target. There is no
+     fifth page to put it in the middle: Logs stays out of the bar. */
   .tab-new-mark {
     display: grid;
     place-items: center;

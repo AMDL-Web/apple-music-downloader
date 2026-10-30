@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLink, extractLinks, scanLinks, removeLink, duplicateCount, pasteStorefront, mergeLinks, openingText, LINK_KINDS } from '../static/js/lib/links.js';
+import { parseLink, extractLinks, scanLinks, removeLink, duplicateCount, pasteStorefront, mergeLinks, openingText, pastedLinks, LINK_KINDS } from '../static/js/lib/links.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
 const MIDNIGHTS = 'https://music.apple.com/us/album/midnights/1650841512';
@@ -163,6 +163,13 @@ test('mergeLinks appends new links once, normalized', () => {
   assert.equal(mergeLinks('', [IGOR]), IGOR);
   assert.equal(mergeLinks(`${IGOR}\n`, [`${IGOR}?l=en`, MIDNIGHTS]), `${IGOR}\n${MIDNIGHTS}`);
   assert.equal(mergeLinks('notes', []), 'notes');
+});
+
+test('pastedLinks keeps other sites beside an Apple Music link, and nothing without one', () => {
+  assert.deepEqual(pastedLinks(`${IGOR}\nhttps://example.com/a\n${MIDNIGHTS}`), [IGOR, 'https://example.com/a', MIDNIGHTS]);
+  assert.deepEqual(pastedLinks('see https://example.com/a'), [], 'a plain web link is not a download');
+  assert.deepEqual(pastedLinks('just words'), []);
+  assert.deepEqual(pastedLinks('see https://music.apple.com/'), [], 'a bare host is not a link');
 });
 
 test('openingText: links brought in replace the draft, a draft holding them stays', () => {
