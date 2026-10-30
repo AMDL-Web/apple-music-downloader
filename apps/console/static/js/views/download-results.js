@@ -6,7 +6,8 @@
 import { html, useMemo, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
 import { getDownload } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, seedJob, servedNote, RESULTS_KEY } from '../lib/submit.js';
+import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, seedJob, RESULTS_KEY } from '../lib/submit.js';
+import { servedNote } from '../lib/submit-check.js';
 import { readPref, writePref } from '../lib/prefs.js';
 import { jobTitle, sentence } from '../lib/format.js';
 import { useApp, Card, Button, LinkButton, Icon } from '../ui/components.js';

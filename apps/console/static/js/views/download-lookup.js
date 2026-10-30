@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useMemo } from '../ui/preact.js';
 import { lookupLink, listDownloads } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
 import { createLookupQueue, priorJob, priorQuery, applyFeedToJobs, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
-import { linkIssue, submittable } from '../lib/submit.js';
+import { linkIssue, submittable } from '../lib/submit-check.js';
 
 // Previews outlive the page, so coming back does not look links up again.
 // An album ?i= link previews as a song or the album depending on

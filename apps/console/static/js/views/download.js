@@ -12,7 +12,8 @@ import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/p
 import { createDownload } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
-import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError, submittable, downloadLabel, countLine, servedRegions } from '../lib/submit.js';
+import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError } from '../lib/submit.js';
+import { submittable, downloadLabel, countLine, servedRegions } from '../lib/submit-check.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
 import { isPicked, qualityOverview } from '../lib/lookup.js';
 import { searchTerm, searchCountLine, SEARCH_DEBOUNCE_MS } from '../lib/search.js';

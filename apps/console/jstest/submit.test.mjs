@@ -1,11 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scanLinks, removeLink } from '../static/js/lib/links.js';
+import { linkIssue, servedRegions, servedNote, submittable, TOKEN_SETTINGS_HASH, downloadLabel, countLine } from '../static/js/lib/submit-check.js';
 import {
-  linkIssue,
-  servedRegions,
-  servedNote,
-  submittable,
   chunk,
   resultView,
   pairResults,
@@ -17,9 +14,6 @@ import {
   bookmarklet,
   storedResults,
   parseStoredResults,
-  TOKEN_SETTINGS_HASH,
-  downloadLabel,
-  countLine,
   seedJob,
 } from '../static/js/lib/submit.js';
 

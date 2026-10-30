@@ -527,7 +527,7 @@ and motion covers.
   rows leave through the feed, never by hand.
 - **New download** (views/download.js and its download-* parts; the logic is
   pure in `lib/links.js` `scanLinks`/`removeLink`, `lib/lookup.js`,
-  `lib/submit.js` and `lib/overrides.js`): the text box is the source of the
+  `lib/submit-check.js`, `lib/submit.js` and `lib/overrides.js`): the text box is the source of the
   links; `?url=` prefills it and the page writes its links back (replace), so a
   reload and the global paste keep them, also after `n` or the sidebar opened
   a bare `#/new`. It takes focus one frame after the
