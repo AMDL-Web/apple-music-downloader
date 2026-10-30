@@ -23,7 +23,8 @@ const REQUEST_TIMEOUT_MS = 15000;
 // track and has no server-side deadline. Both outlast the default bound.
 const LOGIN_TIMEOUT_MS = 130000;
 const QUALITY_TIMEOUT_MS = 180000;
-// The server bounds a lookup at 15 s and answers 504; wait a little longer.
+// The server bounds a lookup at 15 s and a search at 10 s and answers 504;
+// wait a little longer.
 const LOOKUP_TIMEOUT_MS = 20000;
 
 /** Resolves an "/api/..." path against the server root above /console/. */
@@ -130,6 +131,14 @@ export const queryQuality = (url, signal) =>
  */
 export const lookupLink = (url, { signal } = {}) =>
   request('POST', '/api/v1/lookup', undefined, { body: { url }, timeoutMs: LOOKUP_TIMEOUT_MS, signal });
+/**
+ * Searches the catalog (SearchResponse): query {term, types?, offset?,
+ * limit?}; the backend's default storefront unless query names one.
+ */
+export const searchCatalog = (query, { signal } = {}) => request('GET', '/api/v1/search', query, { timeoutMs: LOOKUP_TIMEOUT_MS, signal });
+/** An artist and one page of its albums (ArtistAlbumsResponse): query {offset?, limit?}. */
+export const getArtistAlbums = (id, query, { signal } = {}) =>
+  request('GET', `/api/v1/artists/${encodeURIComponent(id)}/albums`, query, { timeoutMs: LOOKUP_TIMEOUT_MS, signal });
 /**
  * Merges `partial` into the runtime config and answers the new ConfigResponse.
  * Send only the changed fields of a fresh GET; 422 config_key_not_mutable or

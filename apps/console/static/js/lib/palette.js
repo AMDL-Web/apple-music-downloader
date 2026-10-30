@@ -1,9 +1,11 @@
 // What the command palette lists for a query (views/palette.js renders it):
 // pages, actions, filters and themes; with a query, also a download
-// action for Apple Music links in it, Settings sections and fields, and the
-// jobs the search found.
+// action for Apple Music links in it, Settings sections and fields, a
+// catalog search for words (New download runs it), and the jobs the search
+// found.
 
-import { buildHash, newDownloadHash, settingsHash } from './route.js';
+import { buildHash, newDownloadHash, newSearchHash, settingsHash } from './route.js';
+import { searchTerm } from './search.js';
 import { extractLinks } from './links.js';
 import { SETTINGS_SECTIONS, SETTINGS_GROUPS, FIELDS, groupById } from './settings.js';
 import { jobTitle, jobSubtitle, typeLabel, dateTime } from './format.js';
@@ -135,6 +137,10 @@ export function paletteItems(query, jobs = []) {
     }
   }
   out.push(...PREF_ITEMS.filter((it) => matches(q, it.label, it.group)));
+  const term = links.length === 0 ? searchTerm(query, []).term : '';
+  if (term) {
+    out.push({ id: 'act-search', group: 'Apple Music', label: `Search Apple Music for “${term}”`, icon: 'search', hash: newSearchHash(term), dir: 'auto' });
+  }
   out.push(...jobs.map(jobItem));
   return out;
 }

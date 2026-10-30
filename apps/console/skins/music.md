@@ -239,6 +239,12 @@ base durations (120 ms color, 200 ms overlays).
   glyph. The submit bar is the canvas under a hairline; Download is the
   red pill, the only solid red on the page. The browser shortcut's code is
   an inset cell; the steps are 13 px secondary.
+  Search hits are the same rows without the include box, under 15 px
+  semibold group titles (Songs, Albums, Artists) with no rule between
+  groups; quality hints are the quiet filled tags; an artist has a round
+  cover and a chevron. An open artist heads its albums with a 64 px round
+  cover with the tinted shadow and a 20 px bold name, Back a ghost button
+  and Download all a filled pill.
 - **Qualities sheet**: per-slot summaries are 16 px `--bg-group` cells with a
   15 px semibold label; each track's formats are filled pills with the label
   in semibold; hairlines between tracks start at the title.

@@ -11,8 +11,9 @@
 <p align="center"><a href="README.zh-CN.md">中文</a></p>
 
 amdl downloads music from Apple Music to your own disk. Paste a song, album, playlist,
-artist or radio station link into its web console; it resolves the tracks, downloads the
-encrypted media, decrypts it, remuxes and tags it, and saves finished `.m4a` files.
+artist or radio station link into its web console, or search the catalog there; it resolves
+the tracks, downloads the encrypted media, decrypts it, remuxes and tags it, and saves
+finished `.m4a` files.
 
 This repository holds the whole AMDL project. Each product has its own directory under
 `apps/`, and they share one Go core under `internal/`.
