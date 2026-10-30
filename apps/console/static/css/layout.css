@@ -562,6 +562,12 @@
   line-height: var(--lh-12);
 }
 
+/* Beside a title the link is the extra: it gives way first, so a phone shows
+   the title and not "Beet…" next to most of a URL. */
+.attention-title > .attention-input:not(.attention-link) {
+  flex-shrink: 100;
+}
+
 /* ---- Artwork ------------------------------------------------------- */
 
 .art {

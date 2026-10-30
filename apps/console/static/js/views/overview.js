@@ -248,7 +248,7 @@ function Attention({ onKnown }) {
             : html`<a class="attention-link" href=${buildHash('overview', {}, job.id)} dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</a>`}
           ${isUnresolved(job)
             ? html`<a class="attention-link attention-input" href=${buildHash('queue', {}, job.id)} title=${job.input}>${linkLabel(job.input)}</a>`
-            : html`<span class="attention-input" title=${job.input}>${job.input}</span>`}
+            : html`<span class="attention-input" title=${job.input}>${linkLabel(job.input)}</span>`}
           <span class="attention-time"><${RelTime} value=${job.finished_at || job.updated_at} /></span>
         </span>
         ${job.error
