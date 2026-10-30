@@ -3,7 +3,6 @@
 // router and its leave guard are in ui/router.js.
 
 import { html, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from './ui/preact.js';
-import { getSystem, getConfig } from './api.js';
 import { buildHash, newDownloadHash, newDownloadUrls } from './lib/route.js';
 import { extractLinks } from './lib/links.js';
 import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
@@ -18,6 +17,7 @@ import { useToasts, useOfflineToasts, ToastStack } from './ui/toasts.js';
 import { loadSprite, spriteLoaded } from './ui/icons.js';
 import { useHashRouter } from './ui/router.js';
 import { useFeed } from './ui/feed.js';
+import { useStatus, statusEpoch } from './ui/system-status.js';
 import { OverviewPage } from './views/overview.js';
 import { QueuePage } from './views/queue.js';
 import { LogsPage } from './views/logs.js';
@@ -86,8 +86,6 @@ function leaveField(e) {
 
 export function App() {
   const { route, navigate, resumeLeave, setLeaveGuard } = useHashRouter();
-  const [simulate, setSimulate] = useState(false);
-  const [defaultStorefront, setDefaultStorefront] = useState('');
   const [theme, setThemeState] = useState(loadTheme);
   const [overlay, setOverlay] = useState(null);
   const opener = useRef(null);
@@ -129,27 +127,19 @@ export function App() {
     if (epoch > 0 && !spriteLoaded()) loadSprite();
   }, [epoch]);
 
-  // Simulate mode comes from /system; a backend without it still reports it in /config.
+  // After an outage every status read is suspect (ui/system-status.js).
   useEffect(() => {
-    let cancelled = false;
-    getSystem().then(
-      (s) => {
-        if (cancelled) return;
-        setSimulate(Boolean(s.simulate));
-        setDefaultStorefront(typeof s.default_storefront === 'string' ? s.default_storefront : '');
-      },
-      (err) => {
-        if (cancelled || err.status !== 404) return;
-        getConfig().then(
-          (c) => !cancelled && setSimulate(Boolean(c && c.config && c.config.simulate && c.config.simulate.enabled)),
-          () => {},
-        );
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
+    if (epoch > 0) statusEpoch();
   }, [epoch]);
+
+  // Simulate mode comes from /system; a backend without it still reports it in /config.
+  const { system } = useStatus(['system']);
+  const sys = system && system.data;
+  const noSystem = Boolean(system && system.error && system.error.status === 404 && !sys);
+  const { config } = useStatus(noSystem ? ['config'] : []);
+  const cfg = config && config.data && config.data.config;
+  const simulate = sys ? Boolean(sys.simulate) : Boolean(cfg && cfg.simulate && cfg.simulate.enabled);
+  const defaultStorefront = sys && typeof sys.default_storefront === 'string' ? sys.default_storefront : '';
 
   const counts = feed.counts;
   const running = counts ? counts.running : 0;

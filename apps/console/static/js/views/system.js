@@ -3,39 +3,30 @@
 // build facts from /system last. Cards sit in pairs of similar height.
 
 import { html } from '../ui/preact.js';
-import {
-  getSystem,
-  getStats,
-  getConfig,
-  getHealth,
-  getWrapperStatus,
-  getLibrarySync,
-  getHooks,
-  settle,
-} from '../api.js';
 import { count, bytes, elapsed, absTime, relTime } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/health.js';
-import { useApp, Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonKV, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
-import { usePoll } from '../ui/hooks.js';
+import { Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonKV, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
+import { useStatus, refreshStatus } from '../ui/system-status.js';
 import { midTruncate, groupByDisk, diskRole } from '../lib/storage.js';
 
 export function SystemPage() {
-  const app = useApp();
-  const sys = usePoll(getSystem, 30000, [app.epoch], 'system');
-  const health = usePoll(() => Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks())]), 30000, [app.epoch], 'system-health');
-  const stats = usePoll(() => getStats(14), 60000, [app.epoch], 'stats-14');
-  const [h, w, ls, hk] = health.data || [];
+  const st = useStatus(['system', 'health', 'wrapper', 'librarySync', 'hooks', 'stats']);
+  const sys = { ...st.system, reload: () => refreshStatus('system') };
+  const stats = st.stats || {};
+  const { health: h, wrapper: w, librarySync: ls, hooks: hk } = st;
+  // The health cards wait for all four answers, so they change once.
+  const loading = !(h && w && ls && hk);
   const entries = hk && !hk.error ? hk.data.entries || [] : [];
   // One flowing grid: pairs of cards, and a hooks table wide enough for its columns.
   return html`<div class="page page-system">
     <div class="grid-2">
-      <${HealthCard} backend=${h} wrapper=${w} sync=${ls} hooks=${hk} tools=${missingToolRows(sys.data)} loading=${!health.data} />
-      <${WrapperCard} res=${w} loading=${!health.data} />
+      <${HealthCard} backend=${h} wrapper=${w} sync=${ls} hooks=${hk} tools=${missingToolRows(sys.data)} loading=${loading} />
+      <${WrapperCard} res=${w} loading=${loading} />
       <${StorageCard} sys=${sys} />
       <${ConfigCard} />
-      <${LibrarySyncCard} res=${ls} loading=${!health.data} />
-      <${HooksCard} res=${hk} stats=${stats} loading=${!health.data} wide=${entries.length > 0} />
+      <${LibrarySyncCard} res=${ls} loading=${loading} />
+      <${HooksCard} res=${hk} stats=${stats} loading=${loading} wide=${entries.length > 0} />
       <${RuntimeCard} sys=${sys} />
       <${AboutCard} sys=${sys} />
     </div>
@@ -286,11 +277,10 @@ const CODEC_NAMES = { alac: 'ALAC', ec3: 'Dolby Atmos', ac3: 'Dolby Digital', aa
 
 /** A few runtime settings at a glance; Settings edits them. Folders, simulate and library sync show in Storage, Runtime and Library sync. */
 function ConfigCard() {
-  const app = useApp();
-  const cfg = usePoll(getConfig, 0, [app.epoch], 'config');
+  const cfg = useStatus(['config']).config || {};
   const data = cfg.data;
   let body;
-  if (cfg.error && !data) body = html`<${ErrorNote} title="Couldn't load the config" error=${cfg.error} onRetry=${cfg.reload} />`;
+  if (cfg.error && !data) body = html`<${ErrorNote} title="Couldn't load the config" error=${cfg.error} onRetry=${() => refreshStatus('config')} />`;
   else if (!data) body = html`<${SkeletonKV} labels=${['Codec priority', 'Log level', 'Media user token']} /><p class="muted small"><span class="skel skel-lh"></span></p>`;
   else {
     const c = data.config || {};

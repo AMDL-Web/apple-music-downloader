@@ -2,13 +2,14 @@
 // completed artwork, the job counts and throughput from /stats.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, settle } from '../api.js';
+import { listDownloads, retryDownload } from '../api.js';
 import { count, bytes, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/health.js';
 import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
 import { useApp, Card, Icon, Badge, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
-import { usePoll, useNow } from '../ui/hooks.js';
+import { useNow } from '../ui/hooks.js';
+import { useStatus } from '../ui/system-status.js';
 import { cached, remember } from '../lib/cache.js';
 import { JobRow, applyFeedToList } from './queue.js';
 import { RecentSection } from './overview-recent.js';
@@ -19,8 +20,7 @@ import { ThroughputCard } from './throughput.js';
 // failures), Live queue, Recently completed, Jobs, Throughput. The Log tail
 // is the Logs page; System health is the status line and the System page.
 export function OverviewPage() {
-  const app = useApp();
-  const health = usePoll(loadHealth, 30000, [app.epoch], 'overview-health');
+  const status = useStatus(STRIP_KEYS);
   // Needs attention sits above everything and is known only after its read:
   // the sections below wait unseen for that answer (or HOLD_MS), so the card
   // never arrives late and pushes the page down.
@@ -31,7 +31,7 @@ export function OverviewPage() {
     return () => clearTimeout(t);
   }, []);
   return html`<div class="page page-overview" data-held=${held ? '' : undefined}>
-    <${HealthStrip} poll=${health} />
+    <${HealthStrip} status=${status} />
     <${Attention} onKnown=${() => setHeld(false)} />
     <${LiveQueue} />
     <${RecentSection} />
@@ -260,17 +260,15 @@ function Attention({ onKnown }) {
   </ul></${Card}>`;
 }
 
-function loadHealth() {
-  return Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks()), settle(getSystem())]);
-}
+const STRIP_KEYS = ['health', 'wrapper', 'librarySync', 'hooks', 'system'];
 
 /**
  * A Storage row when a disk is nearly full (System's red). System's orange
  * stays there: a large disk can sit at 85 % for months with room to spare.
  * A failed /system read stays on the System page too.
  */
-function storageRows(res) {
-  const disk = res && res.data ? lowSpaceDisk(res.data.storage) : null;
+function storageRows(sys) {
+  const disk = sys ? lowSpaceDisk(sys.storage) : null;
   if (!disk || diskRole(disk) !== 'danger') return [];
   return [['Storage', { role: 'danger', label: 'Low space', detail: `${bytes(disk.free)} free` }]];
 }
@@ -291,13 +289,13 @@ export function healthRows(results) {
  * status when everything is fine, a notice naming each service that is not
  * (the wrapper unreachable, library sync failing), a missing ffmpeg and a
  * nearly full disk, with a link to System.
- * Nothing renders until the first read settles.
+ * Nothing renders until every read has answered, so the line changes once.
  */
-function HealthStrip({ poll }) {
-  // Until the first check answers, an empty line holds the strip's place.
-  if (!poll.data) return html`<p class="health-strip" data-state="loading" aria-hidden="true">\u00a0</p>`;
-  const sys = poll.data[4] && poll.data[4].data;
-  const rows = [...healthRows(poll.data), ...missingToolRows(sys), ...storageRows(poll.data[4])];
+function HealthStrip({ status }) {
+  // Until then, an empty line holds the strip's place.
+  if (STRIP_KEYS.some((k) => !status[k])) return html`<p class="health-strip" data-state="loading" aria-hidden="true">\u00a0</p>`;
+  const sys = status.system.error ? undefined : status.system.data;
+  const rows = [...healthRows([status.health, status.wrapper, status.librarySync, status.hooks]), ...missingToolRows(sys), ...storageRows(sys)];
   const bad = rows.filter(([, v]) => v.role === 'danger' || v.role === 'warning');
   const details = html`<a class="health-strip-link" href=${buildHash('system')}>Details</a>`;
   if (bad.length === 0) {

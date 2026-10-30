@@ -1,7 +1,6 @@
 // Shared Preact hooks for timers, polling and layout measurement.
 
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from './preact.js';
-import { cached, remember } from '../lib/cache.js';
 
 const nowListeners = new Set();
 let nowTimer = null;
@@ -54,13 +53,11 @@ const FOCUS_REFRESH_MS = 5000;
 /**
  * Runs `load` now and every `intervalMs` while the tab is visible, and again
  * when the tab regains focus. Returns {data, error, loading, reload}.
- * `load` must return a promise; deps restart the cycle. With `cacheKey` the
- * last answer (lib/cache.js) is the data until the first read answers.
+ * `load` must return a promise; deps restart the cycle. Status endpoints
+ * shared between pages read through ui/system-status.js instead.
  */
-export function usePoll(load, intervalMs, deps = [], cacheKey = '') {
-  const [state, setState] = useState(() => ({ data: cached(cacheKey), error: undefined, loading: true }));
-  const keyRef = useRef(cacheKey);
-  keyRef.current = cacheKey;
+export function usePoll(load, intervalMs, deps = []) {
+  const [state, setState] = useState({ data: undefined, error: undefined, loading: true });
   const loadRef = useRef(load);
   loadRef.current = load;
   const seq = useRef(0);
@@ -71,7 +68,6 @@ export function usePoll(load, intervalMs, deps = [], cacheKey = '') {
     return loadRef.current().then(
       (data) => {
         if (mine !== seq.current) return;
-        remember(keyRef.current, data);
         setState({ data, error: undefined, loading: false });
       },
       (error) => {

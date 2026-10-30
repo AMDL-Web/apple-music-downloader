@@ -9,6 +9,7 @@ import { settingsHash } from '../lib/route.js';
 import { useApp, Badge, Button, KV, Notice, RelTime, SkeletonRows, ErrorNote } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { usePoll } from '../ui/hooks.js';
+import { invalidateStatus } from '../ui/system-status.js';
 
 const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 
@@ -36,6 +37,7 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
       app.toast({ message: `Library sync starts over: forgot ${plural(res.cleared, 'track', 'tracks')}; the next check downloads nothing`, role: 'success' });
       setAsking(false);
       poll.reload();
+      invalidateStatus(['librarySync']);
     } catch (e) {
       setError(e);
     } finally {

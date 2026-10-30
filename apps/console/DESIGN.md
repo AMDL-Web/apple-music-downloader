@@ -251,7 +251,7 @@ shadows are skin tokens.
 Loading placeholders (`.skel`, `.skel-badge`) hold the room of what they
 stand for but stay transparent for `--skel-delay` and then fade in, so an
 answer faster than that replaces them unseen. A page opened again draws the
-last answer of each read (`lib/cache.js`: `usePoll`'s cache key, the
+last answer of each read (the status store below; `lib/cache.js`: the
 Queue's list per tab and filter, Needs attention) while it reads again,
 instead of its placeholders.
 
@@ -667,6 +667,11 @@ secondary stream from their snapshot cursor. Streams pause 30 s after the tab
 hides and resume from the stored cursor. When the feed is live again after
 any outage, or the browser fires `online`, `app.epoch` (AppContext) goes up:
 every page refetches what it loads, and a page showing a load error reloads.
+The status endpoints (health, system, wrapper status, library sync, hooks,
+stats, config) are read once for the whole tab (`lib/status-store.js`, bound
+in `ui/system-status.js`): a key is read while a page shows it, at most once
+per its interval, every page that shows it shares the answer, and a write
+that changes it (a Settings save, a login) reads it again.
 Settings is the exception: it reads the config only as its component notes
 say, so a reconnect never replaces values on screen.
 

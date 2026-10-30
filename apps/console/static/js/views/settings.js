@@ -10,6 +10,7 @@
 import { html, useState, useEffect, useMemo, useRef, useCallback } from '../ui/preact.js';
 import { useMedia } from '../ui/hooks.js';
 import { getConfig, putConfig } from '../api.js';
+import { primeStatus, invalidateStatus } from '../ui/system-status.js';
 import { FIELD_KEYS, fieldByKey } from '../lib/settings.js';
 import { sectionById, groupById } from '../lib/settings-sections.js';
 import {
@@ -80,7 +81,9 @@ export function SettingsPage({ route }) {
     [cfg.base, dirtyKeys, checks],
   );
 
+  // Every answer is also the status store's display-only config (System's summary).
   const apply = useCallback((res) => {
+    primeStatus('config', res);
     setCfg({
       loaded: true,
       error: null,
@@ -89,6 +92,16 @@ export function SettingsPage({ route }) {
       reloadError: (res && res.reload_error) || '',
     });
   }, []);
+
+  // A save or a reload can change what /system and /library-sync report
+  // (simulate, folders, library sync): pages that show them read again.
+  const applyWritten = useCallback(
+    (res) => {
+      apply(res);
+      invalidateStatus(['system', 'librarySync']);
+    },
+    [apply],
+  );
 
   // Load on mount, on Retry and after Discard, but never under unsaved
   // edits: Discard is the way to see the server's values again.
@@ -168,7 +181,7 @@ export function SettingsPage({ route }) {
     try {
       const res = await putConfig(body);
       quietZero.current = true;
-      apply(res);
+      applyWritten(res);
       setDraft((d) => draftAfterSave(d, sent));
       app.toast({ message: `Saved ${dirtyKeys.length === 1 ? '1 setting' : `${dirtyKeys.length} settings`}`, role: 'success' });
       return true;
@@ -272,7 +285,7 @@ export function SettingsPage({ route }) {
     form=${form}
     dirty=${dirty}
     onRetry=${() => setLoadSeq((n) => n + 1)}
-    onReloaded=${apply}
+    onReloaded=${applyWritten}
     setShowKeys=${changeShowKeys}
   />`;
 

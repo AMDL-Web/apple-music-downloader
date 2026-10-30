@@ -6,12 +6,12 @@
 // as the last block.
 
 import { html, useState } from '../ui/preact.js';
-import { getWrapperStatus, loginWrapper, submitWrapperTwoStep, logoutWrapper, settle } from '../api.js';
+import { loginWrapper, submitWrapperTwoStep, logoutWrapper } from '../api.js';
 import { wrapperErrorText, wrapperUnreachable, unreachableLine } from '../lib/settings-account.js';
 import { wrapperView } from '../lib/health.js';
 import { useApp, Badge, Button, Icon, KV, Notice, SkeletonKV } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
-import { usePoll } from '../ui/hooks.js';
+import { useStatus, refreshStatus } from '../ui/system-status.js';
 
 /** A failed wrapper call as a notice: the message, then the server's text in mono. */
 function WrapperError({ error, step, role = 'danger' }) {
@@ -24,9 +24,8 @@ function WrapperError({ error, step, role = 'danger' }) {
 }
 
 export function AccountPanel({ children }) {
-  const app = useApp();
-  const status = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch], 'wrapper-status');
-  const res = status.data;
+  const res = useStatus(['wrapper']).wrapper;
+  const reload = () => refreshStatus('wrapper');
   // Login needs the session service; say why it cannot be used instead of failing late.
   const down = res && res.error ? wrapperUnreachable(res.error) : null;
   // null: no dialog; '': ask for the Apple ID; else the account to log out.
@@ -38,7 +37,7 @@ export function AccountPanel({ children }) {
         <p class="account-down" role="status">
           <${Icon} name="triangle-alert" size="sm" />
           <span>${unreachableLine(down)}</span>
-          <${Button} variant="ghost" size="sm" icon="rotate" className="account-down-refresh" onClick=${status.reload}>Refresh</${Button}>
+          <${Button} variant="ghost" size="sm" icon="rotate" className="account-down-refresh" onClick=${reload}>Refresh</${Button}>
         </p>
       </section>
       ${children}
@@ -68,7 +67,7 @@ export function AccountPanel({ children }) {
     <section class="account-block" aria-labelledby="account-status-title">
       <div class="account-block-head">
         <h3 class="section-title" id="account-status-title">Session service</h3>
-        <${Button} variant="ghost" size="sm" icon="rotate" onClick=${status.reload}>Refresh</${Button}>
+        <${Button} variant="ghost" size="sm" icon="rotate" onClick=${reload}>Refresh</${Button}>
       </div>
       ${state}
     </section>
@@ -97,7 +96,7 @@ export function AccountPanel({ children }) {
     ${!res
       ? html`<${CommandLineLogin} pending />`
       : canLogin
-        ? html`<${LoginForm} onDone=${status.reload} again=${accounts.length > 0 || Boolean(w && w.status)} />`
+        ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.status)} />`
         : html`<${CommandLineLogin} />`}
     ${logout !== null
       ? html`<${LogoutDialog}
@@ -105,7 +104,7 @@ export function AccountPanel({ children }) {
           onClose=${() => setLogout(null)}
           onDone=${() => {
             setLogout(null);
-            status.reload();
+            reload();
           }}
         />`
       : null}

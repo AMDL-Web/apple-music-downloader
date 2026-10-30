@@ -3,12 +3,10 @@
 // is one sentence instead: a chart of one bar says nothing.
 
 import { html, useState } from '../ui/preact.js';
-import { getStats } from '../api.js';
 import { count, bytes, dayLabel, formatShares } from '../lib/format.js';
-import { useApp, Card, Empty, ErrorNote, Skeleton, Unavailable, Facts } from '../ui/components.js';
-import { usePoll } from '../ui/hooks.js';
+import { Card, Empty, ErrorNote, Skeleton, Unavailable, Facts } from '../ui/components.js';
+import { useStatus, refreshStatus, STATS_DAYS } from '../ui/system-status.js';
 
-const STATS_DAYS = 14;
 const SPARSE_DAYS = 3;
 
 const hasData = (d) => (d.tracks_completed || 0) > 0 || (d.bytes_written || 0) > 0 || (d.jobs_completed || 0) > 0 || (d.jobs_failed || 0) > 0;
@@ -22,8 +20,7 @@ export function sparseSummary(totals) {
 }
 
 export function ThroughputCard() {
-  const app = useApp();
-  const poll = usePoll(() => getStats(STATS_DAYS), 60000, [app.epoch], `stats-${STATS_DAYS}`);
+  const poll = useStatus(['stats']).stats || {};
   if (poll.error && poll.error.status === 404) {
     return html`<${Card} section="throughput" title="Throughput" labelId="throughput-title"><${Unavailable} what="Throughput history (GET /api/v1/stats)" /></${Card}>`;
   }
@@ -62,7 +59,7 @@ export function ThroughputCard() {
     ${stats
       ? html`<${Throughput} daily=${daily} today=${today} />`
       : poll.error
-        ? html`<${ErrorNote} title="Couldn't load stats" error=${poll.error} onRetry=${poll.reload} />`
+        ? html`<${ErrorNote} title="Couldn't load stats" error=${poll.error} onRetry=${() => refreshStatus('stats')} />`
         : html`<${Skeleton} kind="chart" />`}
   </${Card}>`;
 }
