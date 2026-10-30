@@ -28,6 +28,9 @@ import (
 // server-side at 15 s, so this leaves it room to answer.
 const requestTimeout = 25 * time.Second
 
+// headerTimeout bounds the wait for a response's headers, a stream's too.
+var headerTimeout = 20 * time.Second
+
 // Client is one backend. Its methods are safe for concurrent use.
 type Client struct {
 	base   string
@@ -57,7 +60,7 @@ func New(base string) (*Client, error) {
 		DialContext:           (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		MaxIdleConnsPerHost:   8,
 		IdleConnTimeout:       90 * time.Second,
-		ResponseHeaderTimeout: 20 * time.Second,
+		ResponseHeaderTimeout: headerTimeout,
 	}
 	return &Client{
 		base:     origin,
@@ -141,9 +144,20 @@ func (c *Client) Call(ctx context.Context, method, path string, query url.Values
 	return raw, err
 }
 
-// SetTimeout replaces the bound on each non-streaming call, 25 seconds by
-// default.
-func (c *Client) SetTimeout(d time.Duration) { c.api.Timeout = d }
+// LoginWait bounds a wrapper login or two-step request: longer than a wrapper
+// amdl runs may take (wrapperhost.LoginLimit, which a test checks) and than
+// wrapper.login_timeout_seconds' default for a wrapper-manager.
+const LoginWait = 10 * time.Minute
+
+// WithTimeout returns a client whose non-streaming calls wait up to d, for the
+// response headers too; c keeps its own bounds.
+func (c *Client) WithTimeout(d time.Duration) *Client {
+	t := c.api.Transport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = d
+	cp := *c
+	cp.api = &http.Client{Transport: t, Timeout: d}
+	return &cp
+}
 
 // do sends one request and decodes a 2xx JSON body into out (when non-nil).
 // okStatus lists the statuses that count as success; empty means any 2xx.

@@ -13,11 +13,15 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"amdl/internal/client"
 )
 
 // wantCSP is written out independently of ContentSecurityPolicy so a change
@@ -739,5 +743,16 @@ func TestSettingsFieldsCoverRuntimeConfig(t *testing.T) {
 		if strings.TrimSpace(excluded[key]) == "" {
 			t.Errorf("NOT_EDITED lists %s without a reason", key)
 		}
+	}
+}
+
+func TestLoginWaitMatchesTheGoClient(t *testing.T) {
+	m := regexp.MustCompile(`const LOGIN_TIMEOUT_MS = (\d+);`).FindStringSubmatch(readStatic(t, "js/api.js"))
+	if m == nil {
+		t.Fatal("LOGIN_TIMEOUT_MS not found in api.js")
+	}
+	ms, _ := strconv.Atoi(m[1]) // the pattern only matches digits
+	if got := time.Duration(ms) * time.Millisecond; got != client.LoginWait {
+		t.Fatalf("LOGIN_TIMEOUT_MS is %v, client.LoginWait %v: a login to a wrapper amdl runs outlasts the shorter one", got, client.LoginWait)
 	}
 }

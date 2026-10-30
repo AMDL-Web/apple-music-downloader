@@ -85,14 +85,22 @@ type Supervisor struct {
 }
 
 // Tunables: how long a TCG guest may take to boot, how long a login may
-// wait for each step, how long a serving boot must run for its disk to hold
-// init's deletion of the login arguments (ext4 commits every 5 seconds).
+// wait for lite before and after the two-step code, how long a logged-in
+// guest may take to serve a storefront, how long a serving boot must run for
+// its disk to hold init's deletion of the login arguments (ext4 commits every
+// 5 seconds).
 var (
 	readyTimeout   = 3 * time.Minute
 	loginStepLimit = 4 * time.Minute
+	storefrontWait = 20 * time.Second
 	residueSettle  = 15 * time.Second
 	pollEvery      = 2 * time.Second
 )
+
+// LoginLimit is the longest a login or two-step request can take: one login
+// step, then the serving boot and its storefront check. Clients wait longer
+// (client.LoginWait).
+func LoginLimit() time.Duration { return loginStepLimit + readyTimeout + storefrontWait }
 
 // NewSupervisor prepares to run the installed guest with qemu and accel.
 func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, error) {
@@ -233,10 +241,15 @@ func (s *Supervisor) startServingLocked() {
 	}()
 }
 
-// consoleLine logs a console line with the session's secrets redacted and
-// hands it to the session, if any.
+// tokenPrefix matches the token prefixes lite logs when it loads its token
+// cache ("token cache loaded (dev=… music=…)").
+var tokenPrefix = regexp.MustCompile(`\b(dev|music)=[^\s)]+`)
+
+// consoleLine logs a console line with the session's secrets and every token
+// prefix redacted and hands it to the session, if any.
 func (s *Supervisor) consoleLine(sess *session) func(string) {
 	return func(line string) {
+		line = tokenPrefix.ReplaceAllString(line, "$1=<redacted>")
 		if sess != nil {
 			line = sess.redact(line)
 			sess.onLine(line)
@@ -332,6 +345,9 @@ func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper
 	if err != nil {
 		return wrapper.LoginResult{}, s.endLogin(x, err)
 	}
+	// Booting and reaching the code prompt share one step.
+	step := time.NewTimer(loginStepLimit)
+	defer step.Stop()
 	select {
 	case line := <-x.banner:
 		if !strings.Contains(line, "custom args from file") {
@@ -341,7 +357,7 @@ func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper
 		}
 	case <-x.g.done:
 		return wrapper.LoginResult{}, s.endLogin(x, fmt.Errorf("QEMU exited before the guest booted: %v", x.g.err))
-	case <-time.After(loginStepLimit):
+	case <-step.C:
 		return wrapper.LoginResult{}, s.endLogin(x, wrapper.ErrLoginTimeout)
 	}
 	select {
@@ -357,7 +373,7 @@ func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper
 		return wrapper.LoginResult{Status: wrapper.LoginStatusNeedsTwoStep, LoginID: x.id}, nil
 	case <-x.g.done:
 		return s.finishLogin(ctx, x)
-	case <-time.After(loginStepLimit):
+	case <-step.C:
 		return wrapper.LoginResult{}, s.endLogin(x, wrapper.ErrLoginTimeout)
 	}
 }
@@ -453,7 +469,7 @@ func (s *Supervisor) finishLogin(ctx context.Context, x *session) (wrapper.Login
 	if err := g.waitReady(ctx, s.in.Port, readyTimeout); err != nil {
 		return wrapper.LoginResult{}, err
 	}
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(storefrontWait)
 	for time.Now().Before(deadline) {
 		if regions, err := statusOf(ctx, s.in.Port); err == nil && len(regions) > 0 {
 			return wrapper.LoginResult{Status: wrapper.LoginStatusLoggedIn}, nil

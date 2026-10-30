@@ -15,10 +15,11 @@ function Chip({ chip }) {
  * The fact rows of `section` from `system` (the /system body), then `extra`
  * rows ({id, label, value: {text, mono?, role?}, title?, action?}). Rows
  * whose value is unknown are left out; with none, nothing renders. While
- * `pending`, the rows are drawn with empty values.
+ * `pending`, the rows are drawn with empty values. `wrapper` is the
+ * GET /wrapper/status body, when known.
  */
-export function FactRows({ section, system, pending, showKeys, extra = [] }) {
-  const rows = [...factRows(section, system, pending).map((r) => ({ ...r, chipView: chipOf(r) })), ...extra];
+export function FactRows({ section, system, pending, showKeys, wrapper, extra = [] }) {
+  const rows = [...factRows(section, system, pending, wrapper).map((r) => ({ ...r, chipView: chipOf(r) })), ...extra];
   if (rows.length === 0) return null;
   return html`<dl class="fact-list" data-domain=${section}>
     ${rows.map(

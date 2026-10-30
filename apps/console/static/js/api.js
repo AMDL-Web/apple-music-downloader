@@ -18,10 +18,12 @@ export class ApiError extends Error {
 }
 
 const REQUEST_TIMEOUT_MS = 15000;
-// The wrapper waits up to wrapper.login_timeout_seconds (120 s by default)
-// for a login or 2FA answer; a quality probe reads one master playlist per
+// A login or 2FA answer comes within wrapper.login_timeout_seconds (120 s by
+// default) from a wrapper-manager, and within several minutes from a wrapper
+// amdl runs, which reboots its guest; keep in sync with client.LoginWait,
+// which console_test.go checks. A quality probe reads one master playlist per
 // track and has no server-side deadline. Both outlast the default bound.
-const LOGIN_TIMEOUT_MS = 130000;
+const LOGIN_TIMEOUT_MS = 600000;
 const QUALITY_TIMEOUT_MS = 180000;
 // The server bounds a lookup at 15 s and a search at 10 s and answers 504;
 // wait a little longer.

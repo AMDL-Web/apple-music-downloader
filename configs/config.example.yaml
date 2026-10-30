@@ -61,7 +61,9 @@ wrapper:
   timeout_seconds: 30
   # integer seconds: bound on one console login request, for a wrapper-manager (a bare wrapper-lite has
   # no login API and logs in from its own command line, --login). A login that needs a two-step code
-  # takes two requests, each bounded by this. Values <= 0 fall back to 120 seconds. Requires a restart.
+  # takes two requests, each bounded by this. amdl's CLI, terminal interface and console wait up to 10
+  # minutes for each, so a longer value does not help them. A wrapper amdl runs itself ignores this key.
+  # Values <= 0 fall back to 120 seconds. Requires a restart.
   login_timeout_seconds: 120
 
 catalog:

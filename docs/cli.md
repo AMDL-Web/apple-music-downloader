@@ -239,7 +239,7 @@ local backend runs in a QEMU guest (`internal/wrapperhost`); the steps, platform
 limits are in [install.md](install.md#a-wrapper-amdl-runs). These commands work on the
 local files and talk to no server. `wrapper status`, `login`, `2fa` and `logout` stay API
 commands: with a managed wrapper the backend logs in through the guest, so they work as
-with a wrapper-manager, and they wait up to `apps/amdl/internal/cli#loginWait`.
+with a wrapper-manager, and they wait up to `internal/client#LoginWait`, longer than the backend spends on one (`internal/wrapperhost#LoginLimit`).
 
 ## Agent setup
 

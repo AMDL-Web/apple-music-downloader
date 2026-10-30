@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"amdl/internal/client"
 	"amdl/internal/wrapper"
 )
 
@@ -74,6 +75,7 @@ func fakeQEMU(args []string) {
 		os.Exit(0)
 	}
 	fmt.Println("[init] wrapper-lite QEMU guest booting...")
+	fmt.Println("2026-10-30 09:00:02.000 [INFO ] token cache loaded (dev=eyJhbGciOiJFUzI1... music=AqPLtJ3x9fKz0bQw...)")
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		os.Exit(3)
@@ -85,6 +87,26 @@ func fakeQEMU(args []string) {
 		}
 		fmt.Fprintf(w, `{"code":0,"msg":"SUCCESS","data":{"regions":%s}}`, regions)
 	}))
+}
+
+// defaultLoginLimit is LoginLimit before init shortens the tunables.
+var defaultLoginLimit = LoginLimit()
+
+func TestClientsOutwaitALogin(t *testing.T) {
+	if client.LoginWait <= defaultLoginLimit {
+		t.Fatalf("client.LoginWait %v does not outwait a login's %v", client.LoginWait, defaultLoginLimit)
+	}
+}
+
+func TestTokenPrefixesAreRedacted(t *testing.T) {
+	_, _, log := runFake(t)
+	for i := 0; i < 100 && !strings.Contains(log.String(), "token cache loaded"); i++ {
+		time.Sleep(50 * time.Millisecond)
+	}
+	got := log.String()
+	if !strings.Contains(got, "(dev=<redacted> music=<redacted>)") || strings.Contains(got, "eyJhbG") || strings.Contains(got, "AqPLtJ") {
+		t.Fatalf("console log = %q", got)
+	}
 }
 
 func init() {

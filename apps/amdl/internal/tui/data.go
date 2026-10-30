@@ -146,8 +146,7 @@ func submit(ctx context.Context, c *client.Client, urls []string) tea.Cmd {
 
 func login(ctx context.Context, c *client.Client, username, password string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
-		defer cancel()
+		c := c.WithTimeout(client.LoginWait)
 		var r struct {
 			Status  string `json:"status"`
 			LoginID string `json:"login_id"`
@@ -162,8 +161,7 @@ func login(ctx context.Context, c *client.Client, username, password string) tea
 
 func twoStep(ctx context.Context, c *client.Client, loginID, code string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
-		defer cancel()
+		c := c.WithTimeout(client.LoginWait)
 		var r struct {
 			Status string `json:"status"`
 		}

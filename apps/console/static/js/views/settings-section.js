@@ -118,7 +118,7 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
   switch (section.id) {
     case 'account': {
       const syncWaits = cfg.loaded && cfg.base['library_sync.enabled'] === true && !cfg.base['catalog.media_user_token'];
-      return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} />
+      return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${st.wrapper && st.wrapper.data} />
         <${AccountPanel}>
           <section class="account-block" aria-label="Media user token">
             ${fieldRows(fields)}

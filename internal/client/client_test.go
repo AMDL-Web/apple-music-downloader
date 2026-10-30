@@ -27,6 +27,27 @@ func newTestClient(t *testing.T, h http.Handler) *Client {
 	return c
 }
 
+func TestWithTimeoutOutwaitsTheHeaderBound(t *testing.T) {
+	defer func(d time.Duration) { headerTimeout = d }(headerTimeout)
+	headerTimeout = 100 * time.Millisecond
+	// A login to a wrapper amdl runs answers only after the guest has
+	// rebooted, long after the usual header bound.
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(400 * time.Millisecond)
+		fmt.Fprint(w, `{"status":"logged_in"}`)
+	}))
+	if _, err := c.Call(context.Background(), http.MethodPost, "/api/v1/wrapper/login", nil, nil); err == nil {
+		t.Fatal("the default client waited past its header bound")
+	}
+	raw, err := c.WithTimeout(5*time.Second).Call(context.Background(), http.MethodPost, "/api/v1/wrapper/login", nil, nil)
+	if err != nil || !strings.Contains(string(raw), "logged_in") {
+		t.Fatalf("WithTimeout call = %s, %v", raw, err)
+	}
+	if _, err := c.Call(context.Background(), http.MethodPost, "/api/v1/wrapper/login", nil, nil); err == nil {
+		t.Fatal("WithTimeout changed the original client's bound")
+	}
+}
+
 func TestNormalizeBase(t *testing.T) {
 	for in, want := range map[string]string{
 		"192.168.3.5:18570":            "http://192.168.3.5:18570",

@@ -19,7 +19,7 @@ function logBuffer(system) {
   return n === 0 ? { text: 'Off', role: 'warning' } : { text: `${count(n)} lines` };
 }
 
-// { id, label, section, configKey?, chip: 'config' | 'builtin' | 'file', read(system) -> {text, mono?, role?} | null, title? }
+// { id, label, section, configKey?, chip: 'config' | 'builtin' | 'file' | 'managed', read(system) -> {text, mono?, role?} | null, title? }
 export const FIXED_ROWS = [
   { id: 'default_storefront', label: 'Default storefront', section: 'account', configKey: 'catalog.default_storefront', chip: 'config', read: (s) => str(typeof s.default_storefront === 'string' ? s.default_storefront.toUpperCase() : null) },
   { id: 'catalog_language', label: 'Catalog language', section: 'account', configKey: 'catalog.language', chip: 'config', read: (s) => str(s.startup && s.startup.catalog_language) },
@@ -37,14 +37,29 @@ export const FIXED_ROWS = [
 ].map((row) => ({ ...row, read: (system) => (system && typeof system === 'object' ? row.read(system) : null) }));
 
 /**
+ * The session service row when amdl runs the wrapper itself (`managed` of
+ * GET /wrapper/status): config.yaml does not set it then.
+ */
+function managedWrapperRow(row, system, managed) {
+  const address = system && system.startup && system.startup.wrapper_address;
+  const accel = typeof managed.accel === 'string' && managed.accel ? managed.accel : 'QEMU';
+  return { ...row, chip: 'managed', title: address || undefined, value: { text: `This machine, QEMU (${accel})` } };
+}
+
+/**
  * The rows of one section, in table order, each with its `value`; rows whose
  * value is unknown are left out. While `pending` (no answer from GET /system
  * yet) every row comes with an empty value, so the rows hold their place.
+ * `wrapper` is the GET /wrapper/status body, when known.
  */
-export function factRows(section, system, pending = false) {
+export function factRows(section, system, pending = false, wrapper = null) {
   const out = [];
   for (const row of FIXED_ROWS) {
     if (row.section !== section) continue;
+    if (row.id === 'wrapper_address' && !pending && wrapper && wrapper.managed) {
+      out.push(managedWrapperRow(row, system, wrapper.managed));
+      continue;
+    }
     const value = pending ? { text: '' } : row.read(system);
     if (value) out.push({ ...row, value });
   }
@@ -56,6 +71,7 @@ export function chipOf(row) {
   if (row.chip === 'config') {
     return { label: 'config.yaml', icon: 'lock', title: `Set in configs/config.yaml (${row.configKey}); restart to change` };
   }
+  if (row.chip === 'managed') return { label: 'Run by amdl', icon: '', title: 'amdl runs it in a QEMU guest; amdl wrapper start, stop and update manage it' };
   if (row.chip === 'builtin') return { label: 'Built in', icon: '', title: row.title || 'Fixed by the server' };
   return { label: 'At startup', icon: 'lock', title: 'Read at startup; restart to change' };
 }

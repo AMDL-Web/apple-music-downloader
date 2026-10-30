@@ -74,7 +74,7 @@ export function AccountPanel({ children }) {
     ${!res
       ? html`<${CommandLineLogin} pending />`
       : canLogin
-        ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.status)} />`
+        ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.status)} managed=${Boolean(w && w.managed)} />`
         : html`<${CommandLineLogin} />`}
     ${logout !== null
       ? html`<${LogoutDialog}
@@ -184,7 +184,7 @@ function CommandLineSteps(id) {
  * when a code fails (the backend drops its copy then too, so the form starts
  * over from the password).
  */
-function LoginForm({ onDone, again }) {
+function LoginForm({ onDone, again, managed }) {
   const app = useApp();
   const [step, setStep] = useState('credentials');
   const [username, setUsername] = useState('');
@@ -279,8 +279,10 @@ function LoginForm({ onDone, again }) {
   }
 
   return html`<form class="account-block login-form" data-step="credentials" aria-labelledby="login-title" onSubmit=${submitCredentials}>
-    <h3 class="section-title" id="login-title">${again ? 'Log in another account' : 'Log in'}</h3>
-    <p class="muted small">The session service keeps the login. This service holds the password in memory only while you enter a two-step code, and never stores it. Logging in can take up to two minutes.</p>
+    <h3 class="section-title" id="login-title">${!again ? 'Log in' : managed ? 'Replace the account' : 'Log in another account'}</h3>
+    ${managed
+      ? html`<p class="muted small">This machine's session service keeps one account, so a login replaces it. amdl hands it the password in a file only you can read, deleted as it starts, and keeps no copy. Logging in restarts it and can take several minutes.</p>`
+      : html`<p class="muted small">The session service keeps the login. This service holds the password in memory only while you enter a two-step code, and never stores it. Logging in can take up to two minutes.</p>`}
     <div class="form-row">
       <label class="field-label" for="login-user">Apple ID</label>
       <p class="field-help" id="login-user-help">The email address or phone number you sign in to Apple Music with.</p>
