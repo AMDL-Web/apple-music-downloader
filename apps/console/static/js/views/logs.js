@@ -230,14 +230,10 @@ export function LogsPage({ route }) {
   let body;
   if (loading) body = html`<${SkeletonRows} n=${12} kind="log" />`;
   else if (retentionOff)
-    body = html`<${Empty} icon="file-text" title=${LOG_RETENTION_OFF}>
-      The backend writes records only to its standard output. Set logging.buffer_size above 0 and restart it to read them here.
-    </${Empty}>`;
+    body = html`<${Empty} icon="file-text" title=${LOG_RETENTION_OFF} />`;
   else if (error && logs.entries.length === 0) body = html`<${ErrorNote} title=${error.status === 400 ? 'The filter was rejected' : "Couldn't load logs"} error=${error} />`;
   else if (logs.entries.length === 0)
-    body = html`<${Empty} icon="file-text" title=${filtered ? 'No records match' : 'No log records yet'} action=${filtered ? html`<${Button} size="sm" onClick=${clear}>Clear filters</${Button}>` : null}>
-      ${filtered ? null : 'Records appear here as the backend logs them. Retention is set by logging.buffer_size.'}
-    </${Empty}>`;
+    body = html`<${Empty} icon="file-text" title=${filtered ? 'No records match' : 'No log records yet'} action=${filtered ? html`<${Button} size="sm" onClick=${clear}>Clear filters</${Button}>` : null} />`;
   else
     body = [
       logs.truncated || logs.dropped

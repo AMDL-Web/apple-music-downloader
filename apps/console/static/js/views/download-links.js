@@ -121,6 +121,7 @@ function LinkRow({ entry, status, issue, prior, picked, row }) {
     facts && facts.sub ? { key: 'artist', text: facts.sub, auto: true } : null,
     facts && facts.album ? { key: 'album', text: facts.album, auto: true } : null,
     ...(facts ? facts.facts.filter((f) => f.key !== 'type' && f.key !== 'genre') : []),
+    artist ? { key: 'scope', text: 'Whole discography' } : null,
   ].filter(Boolean);
   const probed = data && !blocked ? row.probed(entry.url) : null;
   return html`<li
@@ -162,7 +163,6 @@ function LinkRow({ entry, status, issue, prior, picked, row }) {
         ${loading ? html`<span class="new-link-loading">Looking up…</span>` : null}
       </span>
       ${status.state === 'idle' && link && !issue ? html`<span class="new-link-note">Not checked</span>` : null}
-      ${artist ? html`<span class="new-link-note" data-note="artist">Downloads every album by this artist, the whole discography</span>` : null}
       ${link && link.noStorefront && link.storefront && !issue
         ? html`<span class="new-link-note" data-note="storefront">No storefront in the link: read as ${link.storefront.toUpperCase()}, like the other links</span>`
         : null}

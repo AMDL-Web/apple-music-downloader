@@ -150,6 +150,9 @@ test('previewFacts reads a LookupResponse', () => {
   assert.equal(song.album, 'Midnights (3am Edition)');
   const playlist = previewFacts({ type: 'playlist', title: "Today's Hits", curator_name: 'Apple Music Hits', track_count: 50 });
   assert.equal(playlist.sub, 'Apple Music Hits');
+  // Each name once: an artist link's title is the artist, a single's album is the song.
+  assert.equal(previewFacts({ type: 'artist', title: 'Yorushika', artist_name: 'Yorushika' }).sub, '');
+  assert.equal(previewFacts({ type: 'song', title: 'Show', artist_name: 'Ado', album_name: 'Show' }).album, '');
   assert.equal(previewFacts(null), null);
 });
 

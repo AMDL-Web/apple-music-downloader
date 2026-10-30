@@ -136,16 +136,15 @@ const IDLE_VIEW = { icon: 'circle-dashed', role: 'neutral', label: 'Idle' };
 
 /**
  * The live queue with nothing in it: a card shaped like a job's (the same
- * cover square and four text lines), as tall as one with its progress row's
- * room split above and below (the skin's padding), so the first job that
- * starts takes its place without moving the page below.
+ * cover square, which sets its height), as tall as one with its progress
+ * row's room split above and below (the skin's padding), so the first job
+ * that starts takes its place without moving the page below.
  */
 function LiveIdle({ pending }) {
   return html`<div class="job-list job-list-compact" aria-hidden=${pending ? 'true' : undefined}>
     <div class="job-row live-idle-card" data-progress="on" data-pending=${pending ? '' : undefined}>
       <span class="art live-idle-art" aria-hidden="true"><${Icon} name="music" /></span>
       <span class="job-main">
-        <span class="job-facts"><span class="job-fact">Albums, songs, playlists, artists</span></span>
         <span class="job-title">Nothing downloading</span>
         <span class="job-sub"><a class="link" href=${buildHash('new')}>Start a download</a></span>
       </span>

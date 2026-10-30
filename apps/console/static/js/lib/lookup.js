@@ -165,10 +165,14 @@ export function previewFacts(data) {
   add('year', releaseYear(data));
   add('length', data.type === 'song' ? trackLength(data.duration_ms) : '');
   add('genre', typeof data.genre === 'string' ? data.genre : '');
+  const title = data.title || '';
+  const sub = data.artist_name || data.curator_name || '';
+  // An artist link's title is the artist, a single's album is named after the
+  // song: the row says each name once.
   return {
-    title: data.title || '',
-    sub: data.artist_name || data.curator_name || '',
-    album: data.type === 'song' && data.album_name ? data.album_name : '',
+    title,
+    sub: sub === title ? '' : sub,
+    album: data.type === 'song' && data.album_name && data.album_name !== title ? data.album_name : '',
     facts,
     explicit: data.content_rating === 'explicit',
     adm: data.apple_digital_master === true,

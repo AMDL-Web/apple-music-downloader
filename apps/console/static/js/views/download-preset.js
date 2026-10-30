@@ -88,16 +88,13 @@ export function CustomSheet({ defaults, start, onDone, onFollow, onClose }) {
       <h2 id="new-custom-title" class="card-title" tabindex="-1" data-autofocus>Custom quality</h2>
       <${Button} variant="ghost" size="sm" icon="x" aria-label="Close" onClick=${onClose} />
     </div>
-    <p class="new-custom-for">For this download only; Settings stay as they are.</p>
     <div class="new-custom-body">
       <div class="new-custom-group">
         <span class="new-custom-label" id="new-custom-codecs-label">Codec priority</span>
-        <p class="new-hint" id="new-custom-codecs-hint">Tried top to bottom · AAC always last</p>
         <${ListEditor}
           field=${fieldByKey('download.quality_priority')}
           id="new-custom-codecs"
           value=${draft.quality_priority}
-          described="new-custom-codecs-hint"
           onChange=${(v) => set('quality_priority', v)}
         />
       </div>

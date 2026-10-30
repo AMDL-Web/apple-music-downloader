@@ -65,7 +65,7 @@ export function RecentSection() {
     // As many tiles as the completed count allows, so the wall keeps its rows.
     const n = completed === null ? slots : Math.min(slots, Math.max(0, completed - 1));
     body = completed === 0
-      ? html`<${Empty} icon="disc" title="Completed downloads will appear here" />`
+      ? html`<${Empty} icon="disc" title="No completed downloads" />`
       : [
           html`<div key="latest" class="latest is-skel" aria-hidden="true">
             <span class="art art-square skel"></span>
@@ -81,7 +81,7 @@ export function RecentSection() {
   } else if (state.error) {
     body = html`<${ErrorNote} title="Couldn't load completed jobs" error=${state.error} onRetry=${load} />`;
   } else if (albums.length === 0) {
-    body = html`<${Empty} icon="disc" title="Completed downloads will appear here" />`;
+    body = html`<${Empty} icon="disc" title="No completed downloads" />`;
   } else {
     const wall = albums.slice(1, 1 + slots);
     body = [

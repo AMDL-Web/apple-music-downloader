@@ -507,7 +507,7 @@ and motion covers.
   only checked rows are sent and counted on Download; a row in the library
   or the queue starts unchecked with its cover dimmed (`isPicked`), and
   checking one in the library adds that tracks on disk are skipped unless
-  Overwrite is on. The count line reads "2 links · 1 new · 1 in library". An artist row says it queues the whole discography, and a
+  Overwrite is on. The count line reads "2 links · 1 new · 1 in library". An artist row says it queues the whole discography (a "Whole discography" fact; a name the row's title already says is not repeated in its meta line), and a
   submit with artist links asks first. The only media-user-token is
   Settings' `catalog.media_user_token`: while it is empty a station (or a
   link whose preview says `needs_media_user_token`) gets a warning with a
@@ -602,10 +602,10 @@ and motion covers.
 
 | Surface | Loading | Empty | Error |
 | --- | --- | --- | --- |
-| KPI | skeleton of final size | zeros | "—" while disconnected |
+| KPI | skeleton of final size | zeros | "—" offline, or while the feed reconnects before its first snapshot |
 | Queue | 6 skeleton rows | per tab, with Clear filters when filtered; Active and All offer "Start a download" | inline note + Retry |
 | Drawer | skeleton tracks | "No tracks resolved yet" | 404 on first load "No download with this id"; 404 after it loaded "This job was deleted"; a failed first load retries when the feed reconnects; 204 on the stream means finished |
-| Recently completed | skeleton banner and tiles (cover plus two text lines) | "Completed downloads will appear here" | inline note + Retry; a broken cover shows bg color + glyph |
+| Recently completed | skeleton banner and tiles (cover plus two text lines) | "No completed downloads" | inline note + Retry; a broken cover shows bg color + glyph |
 | Logs | 12 skeleton lines | "No records match" + Clear filters | the API's validation message |
 | System, throughput | skeleton rows | per card | per card; a 404 endpoint shows a quiet "not available" note |
 | Settings | 6 skeleton lines in the section | | inline note + Retry; a refused save keeps the draft with a notice and per-field errors; wrapper errors as notices in plain words with the server's text under "Details"; a failed load retries only with Retry |

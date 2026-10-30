@@ -228,13 +228,6 @@
   overscroll-behavior: contain;
 }
 
-.new-custom-for {
-  margin-top: calc(-1 * var(--s-3));
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
 .new-custom-body {
   display: flex;
   flex-direction: column;

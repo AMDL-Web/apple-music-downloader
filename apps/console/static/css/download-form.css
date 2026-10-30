@@ -44,10 +44,6 @@
   color: var(--text-disabled);
 }
 
-.new-compose .new-hint {
-  margin-top: var(--s-2);
-}
-
 /* ---- Submit bar ---------------------------------------------------- */
 
 /* Under the links and stuck to the bottom of the viewport while they run

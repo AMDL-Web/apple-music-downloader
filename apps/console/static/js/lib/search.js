@@ -307,7 +307,8 @@ export function hitView(hit) {
   };
   if (hit.type === 'song') {
     add('artist', hit.artist_name, true);
-    add('album', hit.album_name, true);
+    // A single's album is named after the song: saying it twice says nothing.
+    if (hit.album_name !== hit.name) add('album', hit.album_name, true);
     add('length', trackLength(hit.duration_ms));
   } else if (hit.type === 'album') {
     add('artist', hit.artist_name, true);

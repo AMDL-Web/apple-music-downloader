@@ -424,9 +424,7 @@ function QueueEmpty({ filters, tabs, onClear, onShowAll }) {
         ${all && all.count > 0 ? html`<${Button} size="sm" onClick=${onShowAll}>See all jobs (${all.count})</${Button}>` : null}
         ${startAction()}
       </div>`}
-    >
-      Paste an Apple Music link anywhere in the console, or start one here.
-    </${Empty}>`;
+    />`;
   }
   return html`<${Empty} icon="list" title="No jobs yet" action=${startAction()} />`;
 }

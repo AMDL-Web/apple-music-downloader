@@ -272,6 +272,8 @@ test('a hit row shows what its type has', () => {
   });
   assert.deepEqual(hitView(album('2', { artist_name: 'Taylor Swift', release_date: '2022-10-21', track_count: 20 })).facts.map((f) => f.text), ['Taylor Swift', '2022', '20 tracks']);
   assert.deepEqual(hitView(album('3', { track_count: 1 })).facts.map((f) => f.text), ['1 track']);
+  // A single's album is named after the song: the meta line leaves it out.
+  assert.deepEqual(hitView({ id: '5', type: 'song', name: 'Show', artist_name: 'Ado', album_name: 'Show' }).facts.map((f) => f.key), ['artist']);
   assert.deepEqual(hitView({ id: '4', type: 'artist', name: 'Micah', genre: '动画', audio_traits: ['lossless'] }), {
     title: 'Micah',
     facts: [{ key: 'genre', text: '动画', auto: true }],

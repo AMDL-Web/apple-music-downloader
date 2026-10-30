@@ -17,7 +17,7 @@ import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuali
 import { isPicked, qualityOverview } from '../lib/lookup.js';
 import { searchTerm, searchCountLine, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
 import { useApp, Card } from '../ui/components.js';
-import { useDebounced, useMedia, usePoll } from '../ui/hooks.js';
+import { useDebounced, usePoll } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { useServerConfig } from './download-config.js';
 import { useLookups } from './download-lookup.js';
@@ -29,8 +29,6 @@ import { ResultsCard, BrowserShortcut, useResults } from './download-results.js'
 import { SearchCard } from './download-search.js';
 import { useSearch, useHitActions, toResults } from './download-search-state.js';
 import { useAddressSync } from './download-address.js';
-
-const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
 
 // The text box outlives the page for the life of the tab, so leaving New
 // download through the sidebar and coming back keeps a draft, notes and
@@ -317,9 +315,6 @@ export function DownloadPage({ route }) {
   // room for it below the last row.
   const [barRef, barH] = useBarHeight();
 
-  // The shortcut hint only where there is a keyboard to press it on.
-  const keyboard = useMedia('(hover: hover) and (pointer: fine)');
-  const keys = isMac() ? '⌘ Return' : 'Ctrl+Enter';
 
   return html`<div class="page page-new" style=${barH ? { '--new-bar-h': `${barH}px` } : undefined}>
     <${Card}
@@ -337,14 +332,13 @@ export function DownloadPage({ route }) {
         value=${text}
         placeholder="Search for a song, album or artist, or paste Apple Music links"
         aria-labelledby="new-compose-title"
-        aria-describedby=${keyboard ? 'new-input-hint' : undefined}
+        aria-keyshortcuts=${term ? 'ArrowDown Enter' : 'Control+Enter Meta+Enter'}
         autocomplete="off"
         autocapitalize="off"
         spellcheck=${false}
         onInput=${(e) => edit(e.currentTarget.value)}
         onKeyDown=${onKeyDown}
       ></textarea>
-      ${keyboard ? html`<p id="new-input-hint" class="new-hint">${term ? 'Press ↓ or Return to go to the results' : `Press ${keys} to download`}</p>` : null}
     </${Card}>
     ${searching
       ? html`<${SearchCard}

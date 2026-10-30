@@ -153,7 +153,6 @@ export function BrowserShortcut() {
   return html`<details class="new-shortcut">
     <summary class="new-shortcut-summary"><${Icon} name="chevron-down" size="sm" /><span>Browser shortcut</span></summary>
     <div class="new-shortcut-body">
-      <p class="new-hint">A bookmark that sends the Apple Music page you are on to this page.</p>
       <div class="new-bookmarklet">
         <code id="new-bookmarklet-code" class="new-bookmarklet-code">${code}</code>
         <${Button} size="sm" icon="copy" className="new-bookmarklet-copy" onClick=${copy}>Copy</${Button}>

@@ -169,7 +169,7 @@ function shortcutGroups(mod) {
     [
       'New download',
       [
-        [['Paste a link'], 'Outside a text field: New download with that link'],
+        [['Paste a link'], 'New download with that link'],
         [[k(mod), ' ', k(mod === '⌘' ? 'Return' : 'Enter')], 'Download the links in the box'],
         [[k('↓'), ' or ', k(mod === '⌘' ? 'Return' : 'Enter'), ' in the box'], 'Go to the search results'],
         [[k('↑'), ' / ', k('↓')], 'Move between search results'],
@@ -203,7 +203,6 @@ export function ShortcutSheet({ onClose }) {
           </section>`,
         )}
       </div>
-      <p class="muted small">Single-key shortcuts are off while you type in a field; Esc leaves it.</p>
     </div>
   </${Dialog}>`;
 }

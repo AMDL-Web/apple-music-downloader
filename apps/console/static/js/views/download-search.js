@@ -259,7 +259,7 @@ export function SearchCard({ s, term, tooLong, inputRef, openHit, focusArtist, r
   } else if (empty) {
     content = html`<p class="new-search-note new-search-empty">
       <${Icon} name="search" size="sm" />
-      <span>Nothing in Apple Music matches “<span dir="auto">${search.term}</span>”. Check the spelling, or try the name as Apple writes it.</span>
+      <span>Nothing in Apple Music matches “<span dir="auto">${search.term}</span>”</span>
     </p>`;
   } else {
     content = html`<${Groups} data=${search.data} loading=${loading} more=${search.more} row=${row} onMore=${s.more} />`;
