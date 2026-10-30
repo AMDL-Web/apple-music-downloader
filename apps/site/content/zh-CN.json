@@ -192,7 +192,7 @@
         },
         {
           "title": "运行后端",
-          "text": "这条命令把后端注册成登录后自动启动的服务，wrapper 也随它一起启动。wrapper 在别处的话，加上 `--wrapper <它的地址>`。`amdl service status` 会打印控制台地址，在它的 Account 页登录。"
+          "text": "这条命令把后端注册成登录后自动启动的服务，wrapper 也随它一起启动。wrapper 在别处的话，加上 `--wrapper <它的地址>`。`amdl service status` 会打印控制台地址，在它的 Account 页登录；也可以直接在终端里运行 `amdl wrapper login`。"
         }
       ]
     },

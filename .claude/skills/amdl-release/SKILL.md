@@ -15,6 +15,8 @@ merges; agents prepare and check.
 - `git fetch origin && git log --oneline origin/main..origin/dev` lists what ships.
 - CI is green on the tip of `dev`:
   `timeout 900 gh run watch $(gh run list --branch dev --workflow CI --limit 1 --json databaseId --jq '.[0].databaseId') --exit-status`.
+- The website describes the release: `apps/site/build.mjs#REF` is `main`, and the
+  hero eyebrow in both `apps/site/content/` files no longer says "in development".
 
 ## 2. Version and notes
 
@@ -55,5 +57,6 @@ Bound each wait with `timeout 900`; on timeout record FAIL with the last state.
   lists `linux/amd64` and `linux/arm64`, and the `X.Y` and `latest` tags have the
   same digest.
 - `git log --oneline origin/dev..origin/main` shows only the merge commit.
+- Republish the website from `main` ([apps/site/README.md](../../../apps/site/README.md#publishing)).
 
 Report the version, release URL, image digest, and anything skipped.

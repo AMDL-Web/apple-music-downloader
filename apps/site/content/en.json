@@ -192,7 +192,7 @@
         },
         {
           "title": "Run the backend",
-          "text": "This registers the backend as a service that starts at login, and it starts the wrapper with it. For a wrapper elsewhere, add `--wrapper <its address>`. `amdl service status` prints the console's address: sign in on its Account page."
+          "text": "This registers the backend as a service that starts at login, and it starts the wrapper with it. For a wrapper elsewhere, add `--wrapper <its address>`. `amdl service status` prints the console's address: sign in on its Account page, or here with `amdl wrapper login`."
         }
       ]
     },

@@ -17,6 +17,7 @@ nothing from another host.
 | `content/` | The page text, one file per language with the same keys. Strings may use `` `code` ``, `**strong**` and `[text](href)`; an href may start with `{repo}` or `{blob}` |
 | `static/` | Stylesheet, script, favicon, Open Graph card, the hero animation (`hero.html`), the terminal capture (`tui.html`), the CLI and MCP samples, and the screenshots in `img/` |
 | `build.test.mjs` | Content parity, links and anchors, local-only resources, image sizes, arguments |
+| `wrangler.jsonc` | The Cloudflare Workers project that serves `dist/` at the site's domain |
 
 ## Build and preview
 
@@ -44,6 +45,19 @@ node --test apps/site/
 ```
 
 runs the tests; `make node-test` includes them.
+
+## Publishing
+
+The site is Cloudflare Workers static assets, deployed by hand with the maintainer's
+Cloudflare login. Build with the domain from `wrangler.jsonc` as `--base`, then deploy:
+
+```bash
+node apps/site/build.mjs --base https://amdl.lyjw.me/
+npx wrangler deploy --config apps/site/wrangler.jsonc
+```
+
+Links into the repository, the install scripts and the Compose file come from the
+branch in `build.mjs#REF`, so it names the branch the published page describes.
 
 ## Changing the content
 

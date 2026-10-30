@@ -6,7 +6,7 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { LANGS, SHOTS, UsageError, build, commands, inline, loadContent, parseArgs, webpSize } from './build.mjs';
+import { LANGS, REF, REPO, SHOTS, UsageError, build, commands, inline, loadContent, parseArgs, webpSize } from './build.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const script = path.join(here, 'build.mjs');
@@ -70,7 +70,7 @@ describe('content', () => {
     assert.equal(inline('**Settings › Account**'), '<strong>Settings › Account</strong>');
     assert.equal(
       inline('see [the guide]({blob}/docs/deployment.md)'),
-      'see <a href="https://github.com/AMDL-Web/apple-music-downloader/blob/main/docs/deployment.md">the guide</a>',
+      `see <a href="${REPO}/blob/${REF}/docs/deployment.md">the guide</a>`,
     );
     assert.equal(inline('`**not bold**`'), '<code>**not bold**</code>');
   });

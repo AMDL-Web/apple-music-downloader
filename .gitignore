@@ -11,6 +11,8 @@ data/
 /dist/
 # node apps/site/build.mjs output.
 /apps/site/dist/
+# wrangler's cache from deploying the site.
+/.wrangler/
 
 test/
 

@@ -10,9 +10,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const REPO = 'https://github.com/AMDL-Web/apple-music-downloader';
-// Links into the repository follow the release branch, so they point at what a
-// visitor can install.
-export const REF = 'main';
+// Links into the repository, the install scripts and the Compose file follow the
+// branch the published site describes, so a visitor reads and installs what the
+// page shows.
+export const REF = 'dev';
 const BLOB = `${REPO}/blob/${REF}`;
 const RAW = `https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/${REF}`;
 
