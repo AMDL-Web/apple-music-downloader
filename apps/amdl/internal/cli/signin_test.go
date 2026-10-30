@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type call struct {
@@ -178,6 +179,36 @@ func TestTwoStepCodeInATerminal(t *testing.T) {
 	}
 	if got := calls(); len(got) != 1 || got[0].body["two_step_code"] != "111222" {
 		t.Fatalf("requests = %+v", got)
+	}
+}
+
+func TestAppleIDPromptGivesUpOnInterrupt(t *testing.T) {
+	srv, calls := fakeWrapper(t, false)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	stdin, typed := io.Pipe() // nobody types: the read would block forever
+	defer typed.Close()
+	ctx, interrupt := context.WithCancel(context.Background())
+	done := make(chan result, 1)
+	go func() {
+		var out, errb bytes.Buffer
+		code := Run(ctx, []string{"wrapper", "login", "--server", srv.URL}, IO{Stdin: stdin, Stdout: &out, Stderr: &errb,
+			InTTY: true, ErrTTY: true, ReadSecret: func(context.Context) (string, error) { return "unused", nil },
+			Getenv: func(string) string { return "" }})
+		done <- result{code, out.String(), errb.String()}
+	}()
+	time.Sleep(50 * time.Millisecond) // let the prompt start reading
+	interrupt()
+	select {
+	case r := <-done:
+		if r.code != exitInterrupted {
+			t.Fatalf("exit %d, want %d: %s", r.code, exitInterrupted, r.stderr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the Apple ID prompt ignored the interrupt")
+	}
+	if got := calls(); len(got) != 0 {
+		t.Fatalf("a cancelled login sent %+v", got)
 	}
 }
 

@@ -50,11 +50,26 @@ func TerminalSecret(f *os.File) func(ctx context.Context) (string, error) {
 func (e *env) ask(prompt string, secret bool) (string, error) {
 	fmt.Fprint(e.Stderr, prompt)
 	if !secret {
-		line, err := bufio.NewReader(e.Stdin).ReadString('\n')
-		if err != nil && line == "" {
-			return "", usageErr("nothing was entered")
+		type read struct {
+			line string
+			err  error
 		}
-		return strings.TrimSpace(line), nil
+		done := make(chan read, 1)
+		go func() {
+			line, err := bufio.NewReader(e.Stdin).ReadString('\n')
+			done <- read{line, err}
+		}()
+		select {
+		case r := <-done:
+			if r.err != nil && r.line == "" {
+				return "", usageErr("nothing was entered")
+			}
+			return strings.TrimSpace(r.line), nil
+		case <-e.ctx.Done():
+			// Like TerminalSecret: the read stays blocked until the process
+			// exits, which an interrupt is about to do.
+			return "", e.ctx.Err()
+		}
 	}
 	if e.ReadSecret == nil {
 		return "", usageErr("this terminal cannot be read without echoing")
