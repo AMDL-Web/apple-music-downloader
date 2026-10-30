@@ -74,7 +74,7 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
   given.
   Every command takes it except `mcp`.
 - **`jobs get` prints a summary by default**: the job, `album_progress`
-  (`internal/progress#Album`, the console's album bar) and one short entry per track
+  (`total` tracks, how many have `finished`, and the overall `percent`) and one short entry per track
   (`index, title, status, quality, file_size, output_path, error`). `--view full` prints
   the API's `DownloadDetail`.
 - **Streams are NDJSON.** `jobs watch <job_id>` prints each `Event` as one line,

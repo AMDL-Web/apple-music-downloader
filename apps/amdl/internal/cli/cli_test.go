@@ -233,16 +233,14 @@ func TestJobsWaitReportsAFailedJob(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 	var s struct {
-		Status        string `json:"status"`
-		AlbumProgress struct {
-			Lit, Total int
-		} `json:"album_progress"`
-		Tracks []jobview.Track `json:"tracks"`
+		Status        string                `json:"status"`
+		AlbumProgress jobview.AlbumProgress `json:"album_progress"`
+		Tracks        []jobview.Track       `json:"tracks"`
 	}
 	if err := json.Unmarshal([]byte(r.stdout), &s); err != nil {
 		t.Fatal(err)
 	}
-	if s.Status != "failed" || s.AlbumProgress.Lit != 2 || len(s.Tracks) != 2 || s.Tracks[1].Error != "decrypt failed" {
+	if s.Status != "failed" || s.AlbumProgress.Finished != 2 || len(s.Tracks) != 2 || s.Tracks[1].Error != "decrypt failed" {
 		t.Errorf("summary = %+v", s)
 	}
 }

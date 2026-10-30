@@ -25,6 +25,15 @@ type Track struct {
 	Error      string `json:"error,omitempty"`
 }
 
+// AlbumProgress is how far a job is in its summary: of Total tracks, Finished
+// have ended (saved, already on disk, failed or cancelled), and Percent is
+// the overall progress, 100 once the job completes.
+type AlbumProgress struct {
+	Total    int `json:"total"`
+	Finished int `json:"finished"`
+	Percent  int `json:"percent"`
+}
+
 // Summary is the default view of a job: the Job without its cover palettes,
 // plus its album bar and one short entry per track, about half the size of the
 // full detail. hooks_running is set while a finished job's post-download
@@ -51,7 +60,10 @@ func Summary(d client.DownloadDetail) map[string]any {
 		}
 		tracks = append(tracks, t)
 	}
-	out["album_progress"] = progress.AlbumProgress(d.Job.Status, d.Items)
+	// The bar's drawing (runs, fill ends, ticks) is for the console; an
+	// agent reads how far the job is.
+	a := progress.AlbumProgress(d.Job.Status, d.Items)
+	out["album_progress"] = AlbumProgress{Total: a.Total, Finished: a.Lit, Percent: a.Percent}
 	out["tracks"] = tracks
 	return out
 }
