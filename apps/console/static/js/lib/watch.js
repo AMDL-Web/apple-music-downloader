@@ -10,7 +10,7 @@ import { jobTitle, typeLabel } from './format.js';
 export const BURST_MS = 3000;
 
 /** Pages with a job drawer route; "Open" stays on them, else it opens the Queue's. */
-const DRAWER_PAGES = new Set(['queue', 'showcase', 'new']);
+const DRAWER_PAGES = new Set(['overview', 'queue', 'new']);
 
 const ENDED = { completed: 'finished', failed: 'failed', cancelled: 'was cancelled' };
 

@@ -474,11 +474,6 @@
   height: 220px;
 }
 
-.skel-hero {
-  height: 288px;
-  border-radius: var(--r-card);
-}
-
 @keyframes skel {
   from {
     opacity: 1;

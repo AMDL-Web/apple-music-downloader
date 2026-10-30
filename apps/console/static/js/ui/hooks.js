@@ -1,6 +1,6 @@
 // Shared Preact hooks for timers, polling and layout measurement.
 
-import { useEffect, useRef, useState, useCallback } from './preact.js';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from './preact.js';
 
 const nowListeners = new Set();
 let nowTimer = null;
@@ -106,10 +106,14 @@ export function usePoll(load, intervalMs, deps = []) {
   return { ...state, reload: run };
 }
 
-/** How many columns of at least `min` px (plus `gap`) fit in the element's width. */
+/**
+ * How many columns of at least `min` px (plus `gap`) fit in the element's
+ * width. Measured before the first paint, so a grid sized by it is drawn at
+ * its final size.
+ */
 export function useColumns(ref, min, gap) {
   const [cols, setCols] = useState(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
     const measure = () => {

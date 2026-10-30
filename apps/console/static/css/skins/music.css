@@ -1,6 +1,6 @@
 /*
- * Skin "music": Apple Music, immersive. Artwork leads: running jobs, the
- * showcase hero and showcase tiles take each album's own Apple colors
+ * Skin "music": Apple Music, immersive. Artwork leads: running jobs and the
+ * latest-release banner take each album's own Apple colors
  * (--art-bg, --art-t1..t3, set per element by the page). Large radii, tight
  * SF Pro Display-style headlines, an Apple Music red accent, inset grouped
  * lists for the operations data, a blurred bottom tab bar on phones.
@@ -1044,6 +1044,10 @@
 
 /* Quiet queue: one line, no empty-state block. */
 :root[data-skin="music"] [data-section="live"] .live-idle-card {
+  /* A job card's progress row (its margin and its two lines), split above
+     and below: as tall as a job's card, with its content in the middle. */
+  --idle-band: calc(var(--s-5) + 2 * var(--lh-13) + var(--s-2));
+  padding-block: calc(var(--s-5) + var(--idle-band) / 2);
   background: var(--card-bg);
 }
 
@@ -1058,71 +1062,92 @@
 
 /* ---- Recently completed -------------------------------------------- */
 
-/* A shelf with no surface behind it; every tile is shown and the row scrolls. */
+/* The banner and the wall sit on the page, with no card surface behind them. */
 :root[data-skin="music"] [data-section="recent"] > .card-body {
   padding: 0;
   background: transparent;
   border-radius: 0;
+  overflow: visible;
 }
 
-:root[data-skin="music"] .strip {
-  grid-auto-flow: column;
-  grid-template-columns: none;
-  grid-auto-columns: calc((100% - 6 * var(--s-5)) / 7);
-  gap: var(--s-5);
-  padding-bottom: var(--s-2);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: thin;
-}
-
-:root[data-skin="music"] .strip:has(> .empty, > .error-note) {
-  display: block;
-}
-
-:root[data-skin="music"] .strip > .empty {
+:root[data-skin="music"] [data-section="recent"] .empty {
   border-radius: var(--r-card);
   background: var(--card-bg);
 }
 
-:root[data-skin="music"] .strip-tile,
-:root[data-skin="music"] .strip-tile.is-overflow {
-  display: flex;
-  gap: 0;
-  scroll-snap-align: start;
+/* The latest release: an album-colored card, like a running job's. */
+:root[data-skin="music"] .latest {
+  grid-template-columns: 112px minmax(0, 1fr);
+  border-radius: var(--r-live);
+  background: linear-gradient(
+    140deg,
+    var(--art-bg, var(--card-bg)) 30%,
+    color-mix(in srgb, var(--art-bg, var(--card-bg)) 88%, var(--art-t1, var(--text-primary))) 100%
+  );
 }
 
-:root[data-skin="music"] .strip-tile > .art {
+:root[data-skin="music"] a.latest:hover {
+  background: linear-gradient(
+    140deg,
+    var(--art-bg, var(--bg-hover)) 30%,
+    color-mix(in srgb, var(--art-bg, var(--bg-hover)) 82%, var(--art-t1, var(--text-primary))) 100%
+  );
+}
+
+:root[data-skin="music"] .latest > .art {
+  box-shadow: 0 16px 34px -14px color-mix(in srgb, var(--art-t1, var(--text-primary)) 60%, transparent);
+}
+
+:root[data-skin="music"] .latest-kicker {
+  color: var(--art-t3, var(--text-secondary));
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  letter-spacing: var(--tracking-eyebrow);
+}
+
+:root[data-skin="music"] .latest-title {
+  font-size: var(--fs-live-title);
+  line-height: var(--lh-live-title);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.025em;
+}
+
+:root[data-skin="music"] .latest-artist {
+  font-size: var(--fs-artist);
+  line-height: var(--lh-artist);
+  font-weight: var(--w-medium);
+}
+
+/* A wall on the page surface: no tile fill, so a dark or missing cover is not a black block. */
+:root[data-skin="music"] .wall {
+  gap: var(--s-5);
+}
+
+:root[data-skin="music"] .wall-tile {
+  gap: 0;
+}
+
+:root[data-skin="music"] .wall-tile > .art {
   margin-bottom: var(--s-2);
   box-shadow: 0 14px 28px -16px var(--art-bg, transparent), 0 0 0 0.5px var(--border-subtle);
 }
 
-:root[data-skin="music"] .strip-title {
+:root[data-skin="music"] .wall-title {
   font-size: var(--fs-14);
   line-height: var(--lh-14);
 }
 
-:root[data-skin="music"] .strip-sub {
+:root[data-skin="music"] .wall-sub {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
 }
 
-:root[data-skin="music"] .strip-tile:hover .strip-title {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-@media (max-width: 1279px) {
-  :root[data-skin="music"] .strip {
-    grid-auto-columns: calc((100% - 4 * var(--s-5)) / 5);
-  }
-}
-
 /* ---- Jobs (KPIs) ----------------------------------------------------- */
 
+/* No padding around the cells: a hovered cell fills its whole column, and the
+   card's radius clips the end ones, as a row of a grouped list does. */
 :root[data-skin="music"] [data-section="kpis"] > .card-body {
-  padding: var(--s-1_5) 0;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -1173,17 +1198,6 @@
 
 :root[data-skin="music"] .kpi[data-zero] .kpi-value {
   color: var(--text-secondary);
-}
-
-:root[data-skin="music"] .kpi-meta {
-  grid-column: 1 / -1;
-}
-
-/* "of N total" repeats on four columns; Total already shows N, so only its
-   own sublabel (cancelled) shows. The others keep their line, so every
-   column's label and value stay on one baseline. */
-:root[data-skin="music"] .kpi:not([data-key="total"]) .kpi-meta {
-  visibility: hidden;
 }
 
 :root[data-skin="music"] .kpi .skel-kpi {
@@ -1460,6 +1474,37 @@
   :root[data-skin="music"] [data-section="jobs"] .job-row {
     grid-template-columns: 48px minmax(0, 1fr) var(--job-prog, 128px) 140px var(--job-trail, 16px);
   }
+}
+
+/* ---- Rows and cells on a grouped surface ------------------------- */
+
+/* A row or cell inside a card fills its whole box on hover and draws its
+   focus ring inside. The ones at the card's corners take its radius, so the
+   fill and the ring follow the corner instead of being cut square by it. */
+:root[data-skin="music"] .card-body > .job-list > li:first-child > .job-row,
+:root[data-skin="music"] .card-body > .job-list.is-selecting > li:first-child {
+  border-start-start-radius: var(--r-card);
+  border-start-end-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .card-body > .job-list:last-child > li:last-child > .job-row,
+:root[data-skin="music"] .card-body > .job-list.is-selecting:last-child > li:last-child {
+  border-end-start-radius: var(--r-card);
+  border-end-end-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .kpi:focus-visible {
+  outline-offset: -2px;
+}
+
+:root[data-skin="music"] .kpi:first-child {
+  border-start-start-radius: var(--r-card);
+  border-end-start-radius: var(--r-card);
+}
+
+:root[data-skin="music"] .kpi:last-child {
+  border-start-end-radius: var(--r-card);
+  border-end-end-radius: var(--r-card);
 }
 
 /* ---- Queue selection ----------------------------------------------- */
@@ -1746,85 +1791,6 @@
     border-radius: var(--r-card);
     overflow: hidden;
   }
-}
-
-/* ---- Showcase ------------------------------------------------------ */
-
-/* The latest album leads the page as a compact banner, above the type switch. */
-:root[data-skin="music"] .page-showcase > .hero {
-  order: -1;
-}
-
-:root[data-skin="music"] .hero {
-  border-radius: var(--r-live);
-  background: linear-gradient(
-    150deg,
-    var(--art-bg, var(--bg-surface)) 35%,
-    color-mix(in srgb, var(--art-bg, var(--bg-surface)) 84%, var(--art-t1, var(--text-primary))) 100%
-  );
-}
-
-:root[data-skin="music"] .hero-skel {
-  padding: 0;
-  background: transparent;
-}
-
-:root[data-skin="music"] .hero-art .art {
-  box-shadow: 0 18px 36px -22px color-mix(in srgb, var(--art-t1, var(--text-primary)) 70%, transparent);
-}
-
-:root[data-skin="music"] .hero-kicker {
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-  font-weight: var(--w-semibold);
-  letter-spacing: var(--tracking-eyebrow);
-}
-
-:root[data-skin="music"] .hero-title {
-  font-weight: var(--w-heavy);
-  letter-spacing: -0.03em;
-}
-
-:root[data-skin="music"] .hero-artist {
-  color: var(--art-t1, var(--text-primary));
-  font-size: var(--fs-20);
-  line-height: var(--lh-20);
-  font-weight: var(--w-semibold);
-  letter-spacing: var(--tracking-title);
-}
-
-:root[data-skin="music"] .hero-facts {
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-/* A grid on the page surface: no tile fill, so a dark or missing cover is not a black block. */
-:root[data-skin="music"] .gallery {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--s-6) var(--s-5);
-}
-
-:root[data-skin="music"] .tile {
-  gap: var(--s-0_5);
-}
-
-:root[data-skin="music"] .tile-art {
-  margin-bottom: var(--s-2);
-}
-
-:root[data-skin="music"] .tile-art .art {
-  box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--text-primary) 45%, transparent), 0 0 0 0.5px var(--border-subtle);
-}
-
-:root[data-skin="music"] .tile-title {
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
-  font-weight: var(--w-semibold);
-}
-
-:root[data-skin="music"] .tile-sub {
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
 }
 
 /* ---- Logs page ----------------------------------------------------- */
@@ -2803,11 +2769,6 @@
   border-radius: var(--r-art);
 }
 
-:root[data-skin="music"] .skel-hero {
-  height: 188px;
-  border-radius: var(--r-live);
-}
-
 :root[data-skin="music"] .empty {
   gap: var(--s-2);
 }
@@ -2889,11 +2850,6 @@
 
   :root[data-skin="music"] .kpis {
     grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  :root[data-skin="music"] .strip {
-    grid-auto-columns: calc((100% - 3 * var(--s-4)) / 4);
-    gap: var(--s-4);
   }
 
 }
@@ -3021,13 +2977,25 @@
     margin-top: var(--s-4);
   }
 
-  :root[data-skin="music"] .strip {
-    grid-auto-columns: 138px;
-    gap: var(--s-3);
-    margin-right: calc(-1 * var(--main-x));
-    padding-right: var(--main-x);
-    scroll-padding-inline: 0 var(--main-x);
-    scrollbar-width: none;
+  :root[data-skin="music"] [data-section="live"] .live-idle-card {
+    --idle-band: calc(var(--s-4) + 2 * var(--lh-13) + var(--s-2));
+    padding-block: calc(var(--s-4) + var(--idle-band) / 2);
+  }
+
+  :root[data-skin="music"] .latest {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: var(--s-4);
+    padding: var(--s-4);
+    border-radius: var(--r-card);
+  }
+
+  :root[data-skin="music"] .latest > .art {
+    width: 88px;
+    height: 88px;
+  }
+
+  :root[data-skin="music"] .wall {
+    gap: var(--s-4) var(--s-3);
   }
 
   :root[data-skin="music"] .kpis {
@@ -3040,6 +3008,24 @@
 
   :root[data-skin="music"] .kpi:nth-child(4) {
     box-shadow: none;
+  }
+
+  /* Three cells then two: the card's corners are the first, third and fourth. */
+  :root[data-skin="music"] .kpi:first-child {
+    border-end-start-radius: 0;
+  }
+
+  :root[data-skin="music"] .kpi:nth-child(3) {
+    border-start-end-radius: var(--r-card);
+  }
+
+  :root[data-skin="music"] .kpi:nth-child(4) {
+    border-end-start-radius: var(--r-card);
+  }
+
+  :root[data-skin="music"] .kpi:last-child {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
   }
 
   :root[data-skin="music"] .kpi:nth-child(n + 4) {
@@ -3062,10 +3048,6 @@
   :root[data-skin="music"] .kpi[data-key="total"] .kpi-value {
     font-size: var(--fs-kpi);
     line-height: var(--lh-kpi);
-  }
-
-  :root[data-skin="music"] .kpi[data-key="total"] .kpi-meta {
-    margin-left: 0;
   }
 
   :root[data-skin="music"] .health-row {
@@ -3128,16 +3110,6 @@
   :root[data-skin="music"] .drawer-title {
     font-size: var(--fs-20);
     line-height: var(--lh-20);
-  }
-
-  :root[data-skin="music"] .gallery {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s-5) var(--s-3);
-  }
-
-  :root[data-skin="music"] .tile-title {
-    font-size: var(--fs-14);
-    line-height: var(--lh-14);
   }
 
   :root[data-skin="music"] .log-line {

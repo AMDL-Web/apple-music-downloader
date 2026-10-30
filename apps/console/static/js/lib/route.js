@@ -1,17 +1,18 @@
 // Pure hash routing and filter mapping. Routes are #/ (also #/overview),
-// #/queue, #/queue/:id, #/showcase, #/showcase/:id, #/logs, #/system, #/new,
-// #/new/:id and #/settings; filters live in the hash query so a filtered
-// view is a shareable link.
+// #/overview/:id, #/queue, #/queue/:id, #/logs, #/system, #/new, #/new/:id
+// and #/settings; filters live in the hash query so a filtered view is a
+// shareable link.
 
-export const PAGES = ['overview', 'queue', 'showcase', 'logs', 'system', 'new', 'settings'];
+export const PAGES = ['overview', 'queue', 'logs', 'system', 'new', 'settings'];
 
-const PAGE_PATHS = { overview: '', queue: 'queue', showcase: 'showcase', logs: 'logs', system: 'system', new: 'new', settings: 'settings' };
+const PAGE_PATHS = { overview: '', queue: 'queue', logs: 'logs', system: 'system', new: 'new', settings: 'settings' };
 // #/overview is an alias of #/: a natural guess at the address. buildHash
-// always writes #/.
-const PATH_PAGES = { ...Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k])), overview: 'overview' };
+// writes #/, or #/overview/:id with a job. #/showcase is the address of a
+// page the Overview replaced; its links, drawer included, land there.
+const PATH_PAGES = { ...Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k])), overview: 'overview', showcase: 'overview' };
 
 /** Pages whose route may carry a job id that opens the job drawer. */
-const DRAWER_PAGES = new Set(['queue', 'showcase', 'new']);
+const DRAWER_PAGES = new Set(['overview', 'queue', 'new']);
 
 /** decodeURIComponent, or null for a malformed escape such as "%E0%A4%A". */
 function decodeSegment(s) {
@@ -47,8 +48,10 @@ export function parseHash(hash) {
 
 /** Builds a hash from a page, optional job id and params (empty values omitted). */
 export function buildHash(page, params = {}, jobId = null) {
-  let path = `#/${PAGE_PATHS[page] ?? ''}`;
-  if (jobId && DRAWER_PAGES.has(page)) path += `${path.endsWith('/') ? '' : '/'}${encodeURIComponent(jobId)}`;
+  const withJob = Boolean(jobId) && DRAWER_PAGES.has(page);
+  // The Overview's path is empty; with a job it needs its name back.
+  let path = `#/${withJob && page === 'overview' ? 'overview' : (PAGE_PATHS[page] ?? '')}`;
+  if (withJob) path += `/${encodeURIComponent(jobId)}`;
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null || v === '' || v === false) continue;
@@ -124,18 +127,6 @@ export function queueQuery(filters, offset = 0, limit = 50) {
 /** Whether new rows go to the end of a queue view (oldest-first order). */
 export function queueAppends(filters) {
   return filters.tab === 'active';
-}
-
-export const SHOWCASE_TYPES = ['album', 'playlist', 'song'];
-
-/** Normalizes the showcase type. */
-export function showcaseType(params = {}) {
-  return SHOWCASE_TYPES.includes(params.type) ? params.type : 'album';
-}
-
-/** GET /api/v1/downloads query for the showcase grid. */
-export function showcaseQuery(type, offset = 0, limit = 24) {
-  return { status: 'completed', type, sort: 'updated_at', order: 'desc', limit, offset };
 }
 
 /**

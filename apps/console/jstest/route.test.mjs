@@ -8,8 +8,6 @@ import {
   queueFilters,
   queueQuery,
   queueMatchFilter,
-  showcaseType,
-  showcaseQuery,
   logFilters,
   logParams,
   logQuery,
@@ -26,16 +24,22 @@ test('parseHash', () => {
   assert.deepEqual(parseHash('#/'), { page: 'overview', jobId: null, params: {} });
   assert.deepEqual(parseHash('#/queue?tab=failed&q=a%20b'), { page: 'queue', jobId: null, params: { tab: 'failed', q: 'a b' } });
   assert.deepEqual(parseHash('#/queue/job_abc?tab=all'), { page: 'queue', jobId: 'job_abc', params: { tab: 'all' } });
-  assert.deepEqual(parseHash('#/showcase/job_x'), { page: 'showcase', jobId: 'job_x', params: {} });
+  assert.deepEqual(parseHash('#/overview/job_x'), { page: 'overview', jobId: 'job_x', params: {} });
   assert.equal(parseHash('#/logs/job_x').page, 'notfound', 'logs has no drawer route');
   assert.equal(parseHash('#/nope').page, 'notfound');
 });
 
-test('#/overview is an alias of #/, and buildHash keeps #/', () => {
+test('#/overview is an alias of #/, and buildHash keeps #/ until a job opens', () => {
   assert.deepEqual(parseHash('#/overview'), { page: 'overview', jobId: null, params: {} });
   assert.deepEqual(parseHash('#/overview?x=1'), { page: 'overview', jobId: null, params: { x: '1' } });
-  assert.equal(parseHash('#/overview/job_1').page, 'notfound', 'overview has no drawer route');
   assert.equal(buildHash('overview'), '#/');
+  assert.equal(buildHash('overview', {}, 'job_1'), '#/overview/job_1');
+  assert.deepEqual(parseHash(buildHash('overview', {}, 'job 1')), { page: 'overview', jobId: 'job 1', params: {} });
+});
+
+test('#/showcase, a page the Overview replaced, lands on the Overview, drawer included', () => {
+  assert.deepEqual(parseHash('#/showcase'), { page: 'overview', jobId: null, params: {} });
+  assert.deepEqual(parseHash('#/showcase/job_x?type=song'), { page: 'overview', jobId: 'job_x', params: { type: 'song' } });
 });
 
 test('a job id with a malformed percent escape is Not found, not a thrown URIError', () => {
@@ -100,12 +104,6 @@ test('queue tabs map to API queries', () => {
   assert.equal(queueFilters({ tab: 'cancelled' }).tab, 'cancelled');
   assert.equal(queueFilters({ tab: 'bogus', type: 'bogus' }).tab, 'active');
   assert.deepEqual(queueMatchFilter({ tab: 'failed', type: 'song', q: 'z' }), { statuses: ['failed'], types: ['song'], q: 'z' });
-});
-
-test('showcase queries completed jobs newest first', () => {
-  assert.equal(showcaseType({ type: 'playlist' }), 'playlist');
-  assert.equal(showcaseType({ type: 'station' }), 'album');
-  assert.deepEqual(showcaseQuery('album', 24), { status: 'completed', type: 'album', sort: 'updated_at', order: 'desc', limit: 24, offset: 24 });
 });
 
 test('log filters, params and queries', () => {
