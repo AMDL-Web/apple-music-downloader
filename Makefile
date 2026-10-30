@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION ?= v1.9.0
 # Package directories, which leaves out dot-directories such as nested
 # worktrees under .claude/worktrees/ that `gofmt -l .` would descend into.
 GO_DIRS = $(shell $(GO) list -e -f '{{.Dir}}' ./... | sed 's|^$(CURDIR)/||')
-NODE_TESTS = $(wildcard .github/scripts/*.test.mjs .claude/hooks/*.test.mjs apps/console/jstest/*.test.mjs apps/site/*.test.mjs deploy/install/*.test.mjs deploy/packaging/*.test.mjs)
+NODE_TESTS = $(wildcard .github/scripts/*.test.mjs .claude/hooks/*.test.mjs apps/console/jstest/*.test.mjs apps/console/tools/ui-audit/core/*.test.mjs apps/console/tools/ui-audit/core/lib/*.test.mjs apps/site/*.test.mjs deploy/install/*.test.mjs deploy/packaging/*.test.mjs)
 
 # Build identity stamped into internal/buildinfo (GET /api/v1/system). Each
 # falls back quietly when git or the .git directory is missing, such as in a
