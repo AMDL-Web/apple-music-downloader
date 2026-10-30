@@ -27,7 +27,7 @@ wins and this page is fixed in the same change. Sources are listed in
 
 | Route | Page | Content |
 | --- | --- | --- |
-| `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component and a disk System marks red otherwise, linking to System), `attention` (only while a job failed in the last 24 h: up to 2, each with Retry), `live` (8 active jobs; one line when none), `recent` (one tile per album), `kpis`, `throughput` (from `/stats`; one sentence under three days of data) |
+| `#/` (also `#/overview`) | Overview | Sections (in DOM order) a server-health strip (`.health-strip`, one line when healthy, a notice naming each unhealthy component and a disk System marks red otherwise, linking to System), `attention` (only while a job failed in the last 24 h: up to 2, each with Retry), `live` (8 active jobs; when none, a card shaped like a job's), `recent` (one tile per album), `kpis`, `throughput` (from `/stats`; one sentence under three days of data) |
 | `#/queue?tab=active\|completed\|failed\|cancelled\|all&type=&q=` | Queue | Tabs with counts from the feed's `status_counts`, search over title, artist and URL, type filter, dense job list, Load more, selection mode (Retry, Cancel, Delete on many jobs), Retry all on the Failed and Cancelled tabs |
 | `#/queue/:id`, `#/showcase/:id`, `#/new/:id` | Job drawer | Over its page: header with a summary line ("ALAC 24/44.1 · 14 tracks · 692 MB"), the failure reason, Cancel/Retry/Remove, the tracks (one line each; stage meters only on a track that is working or has an outcome, and on every track once the drawer has shown the job live), Files (completed jobs), and a closed Details (times, job ID, Activity with persisted history plus live events, hooks) |
 | `#/showcase?type=album\|playlist\|song` | Showcase | "Latest" hero in Apple's colors, cover grid, Load more |
@@ -152,7 +152,7 @@ Stable class names and attributes the skin can style without touching JS:
 | Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`; every completed album renders once (newest job of a link target), those past the whole-tile count carry `.is-overflow` |
 | Showcase | `a.hero.has-palette` (a banner at most 200 px tall, hidden under 640 px) > `.hero-art`, `.hero-text` (`.hero-kicker`, `.hero-title`, `.hero-artist`, `.hero-facts`); `ul.gallery` > `li[.is-latest][.is-new]` > `a.tile` > `.tile-art` (`.tile-motion` text chip "Motion cover"), `.tile-title`, `.tile-sub`; the `li.is-latest` is the banner's release, shown only under 640 px; one entry per link target |
 | Status strip, Activity, failure | Overview `p.health-strip[data-state=ok]` or `.health-strip.notice[data-state=problem][data-role=danger\|warning]` > `.health-strip-link`; drawer `details.drawer-section.drawer-details` (closed) > `.drawer-details-body` > `dl.drawer-times`, `.drawer-id` (`code` + Copy), `section.activity` > `ol.activity-list` > `li.activity-row[data-role]` (`.activity-time`, `.activity-label`, `.activity-msg`) and a Hooks `section`; failure notice with `details.notice-more` > `pre.notice-raw`; album bar `.abar-wrap` > `.abar[data-ticks][.is-indeterminate]` (`--n` cells) > `.abar-live` (`--w`) + `.abar-done` > `.abar-run[data-state][data-role]` (`--w`, one per run of an outcome), then `.abar-caption` > `.abar-count` + `.abar-pct`; Files `section` > `.drawer-files` > `code.drawer-files-dir` + Copy, `p.drawer-files-note` (several folders only), `a.drawer-files-link`; tracks `ol.tracks` > `li.track[data-status][data-detail]` (`data-detail` on a track with stage meters and a status) > `.track-index`, `.track-main` (`.track-title`, `.track-artist` only when it differs from the album artist), `.track-codec` (only when it differs from the album's), `.track-len`, `.track-size` (the file's size; while a track downloads or decrypts, `.track-pct` with that stage's percentage), then `.track-stages` (`.stages` > `.stage[data-key][data-state=empty\|partial\|done\|indeterminate\|unverified\|skipped]`, each `--w` wide; a track already on disk is a full bar of `skipped`, which the skin draws in its quiet ink), `.track-status` (with `.track-note`, the status message on one line, its full text the tooltip), `.track-error` (a failed track's reason, its own line) for a detail track; Logs `.log-err`, `.attr-chip-job` > `.attr-chip-name`, `.filter-chip-name`, rows `[data-seq]` with the one tab stop |
-| Needs attention | `section.card[data-section=attention]` > `ul.attention` > `li.attention-row[data-role=danger]` > `.attention-title` (`.attention-label` "Failed" with a circle-x icon, `a.attention-link` to the drawer, mono `.attention-input`, `.attention-time`), `.attention-detail` (`.attention-error`, clamped to two lines), Retry `.btn`; `p.live-idle` is the empty live queue; `p.tp-sparse` the short Throughput card |
+| Needs attention | `section.card[data-section=attention]` > `ul.attention` > `li.attention-row[data-role=danger]` > `.attention-title` (`.attention-label` "Failed" with a circle-x icon, `a.attention-link` to the drawer, mono `.attention-input`, `.attention-time`), `.attention-detail` (`.attention-error`, clamped to two lines), Retry `.btn`; `.live-idle-card` is the empty live queue (a `.job-row` without `data-row`: `.live-idle-art`, the title, a Start a download link and an invisible `.live-idle-progress`, so it is as tall as a job's card); `p.tp-sparse` the short Throughput card |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-err`, then up to three `key=value` pairs in `.log-attrs`); toolbar `button.level-chip[aria-pressed]` (a pressed one holds a check icon, an unpressed one the hollow `.log-dot`) and `button.wrap-switch[aria-pressed]` > `.wrap-switch-track` "Wrap lines" |
 | Shell | `.brand-sub`, `a.sidebar-new.btn.btn-primary[aria-current]` > `.icon` + `.sidebar-new-label` (visually hidden on the rail), `.nav-item[aria-current]`, `.nav-badge`, `.tab[data-page][aria-current]`, `a.tab.tab-new[aria-label][title]` > `.tab-new-mark` (one large accent pill around the plus, centred in the bar, no visible label), `button.tab.tab-more[aria-expanded][aria-current]`, `.theme` > `button.theme-cycle` (one button cycling System, Light, Dark; its label names the next), `.sim-tag` (simulate mode, explanation in its title and an `.sr-only` span); loading shell `.boot` > `.boot-mark` + `.boot-text` (static in `index.html`, replaced on mount); `svg.sprite` at the start of `body`, the in-document icon sprite (`ui/icons.js`), never styled by the skin; `meta[name=theme-color]` set from the body background; `.conn[data-role][data-state=connecting\|live\|reconnecting\|offline\|paused]` > `.conn-dot` + `.conn-label` (the base hides the label visually unless `data-state` is `reconnecting` or `offline`, and always under 640 px) |
@@ -262,8 +262,10 @@ and motion covers.
   which keeps the drawn order). Header with cover, artist link, meta, a summary
   line computed from the tracks (`lib/jobview.js` `drawerSummary`), status, live
   tag; for a failed job the notice with the trimmed reason (full error under a
-  disclosure) comes first, then Cancel (inline confirm) for queued or running,
-  Retry for failed or cancelled, View logs, Open in Apple Music, Remove (a
+  disclosure) comes first, then the actions in two rows that every status
+  keeps, so a job finishing or being cancelled changes no height: View logs
+  and Open in Apple Music, then Cancel (inline confirm) for queued or
+  running, Retry for failed or cancelled, Remove (a
   `ConfirmDialog` beside the panel; it removes the job's records, never the
   files) for completed, failed or cancelled jobs,
   which closes the drawer. A job Apple has nothing at (a 404) makes Open in
@@ -280,8 +282,8 @@ and motion covers.
   completes, so nothing below it moves. Tracks:
   one 44 px line each (number, title, length, size); the artist shows when it
   differs from the album artist, a codec chip such as `ALAC 24/96` when it
-  differs from the album's (`.track-legend` says once which codec most tracks carry and that the
-  others are marked on their rows, only when the codecs differ), and stage meters, status and error only for a track that is
+  differs from the album's (the header's summary line says "Mostly ALAC 24/96"
+  when the codecs differ, so a second codec turning up moves nothing), and stage meters, status and error only for a track that is
   working, failed, skipped or waiting, or for every track once the drawer has
   shown the job live (so finished rows keep their height). The stage
   segments are as wide as each stage's share of a track's run
@@ -374,7 +376,9 @@ and motion covers.
   that asks for the Apple ID, because no wrapper lists its accounts) and the
   login form (with a show-password toggle) with its two-step code step, which
   starts over from the password after any failed code; a session service
-  without a login API gets the command-line steps in place of the form;
+  without a login API gets the command-line steps in place of the form, and
+  until the status loads those steps hold their room unseen (`.holds-room`),
+  since a bare wrapper-lite is the usual service;
   while the service cannot be reached, one line ("Can't reach the session
   service at <address>.") with Refresh; the page and its errors say "session
   service" and leave wrapper-manager to the server's own text under "Details

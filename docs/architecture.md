@@ -2,7 +2,7 @@
 
 > Type: reference
 
-How the server (`apps/server`, which runs `internal/server#Run`) and the shared Go core under `internal/` are put
+How the server (`amdl serve` in `apps/amdl`, which runs `internal/server#Run`) and the shared Go core under `internal/` are put
 together, and the rules each layer keeps. The repository layout is in the
 [README](../README.md#repository-layout). When this page and
 the code disagree, the code wins and this page gets fixed in the same commit. Breaking
@@ -10,7 +10,7 @@ changes against 1.x are listed in [Upgrading to 2.0](upgrading-to-2.0.md).
 
 ## 1. Process and lifecycle
 
-`apps/server` only reads the config paths from the environment, mounts the console and
+`amdl serve` only reads the config paths from its flags or the environment, mounts the console and
 calls `internal/server#Run`; an embedding app such as the desktop app calls it with its
 own `net.Listener`. In `Run`, every deferred close runs on every exit path, and a startup
 failure is returned and logged; the binary turns it into exit status 1. `Run` builds the
@@ -47,7 +47,7 @@ was running stays `running` and resumes on the next start.
 ## 2. Packages
 
 Products live under `apps/`; `internal/` is the core they share. The core never imports a
-product: `apps/server` hands the console's handler to `internal/server#Options`, which
+product: `amdl serve` hands the console's handler to `internal/server#Options`, which
 passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/` out when it gets none.
 
 | Package | Owns | Must not |
@@ -73,6 +73,7 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/client` | the Go client of `/api/v1`: typed requests, SSE with a silence watchdog, followers that resume the job list or one job | import a product or anything but `internal/config` and `internal/domain` |
 | `internal/progress` | the clients' stage weights, stage bar, album bar and remaining-time estimate, kept equal to the console's by a test | |
 | `internal/format` | sizes, durations, rates and quality labels the clients show | |
+| `internal/capability` | the one table of client capabilities (CLI command, MCP tool, safety) and the operations parsed from the embedded spec | hold behaviour; a capability without an operation runs in its client |
 
 ### 2.1 The wrapper and decryption
 

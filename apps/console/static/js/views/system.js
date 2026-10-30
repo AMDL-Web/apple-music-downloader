@@ -190,7 +190,7 @@ function HealthCard({ backend, wrapper, sync, hooks, tools = [], loading }) {
 
 function WrapperCard({ res, loading }) {
   let body;
-  if (loading) body = html`<${SkeletonKV} labels=${['State', 'Error']} /><p class="muted small"><span class="skel skel-lh"></span></p>`;
+  if (loading) body = html`<${SkeletonKV} labels=${['State', 'Error']} badges=${['State']} /><p class="muted small"><span class="skel skel-lh"></span></p>`;
   else if (!res || res.error) {
     const view = wrapperView(res);
     body = html`<${KV}

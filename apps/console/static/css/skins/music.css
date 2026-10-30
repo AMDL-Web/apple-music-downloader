@@ -843,10 +843,12 @@
   --role: var(--art-t3);
 }
 
+/* One line: a card's height then never depends on its title, so the idle
+   card and the first job that replaces it are the same size. */
 :root[data-skin="music"] [data-section="live"] .job-title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   font-family: var(--font-display);
   font-size: var(--fs-live-title);
   line-height: var(--lh-live-title);
@@ -885,6 +887,7 @@
 
 :root[data-skin="music"] [data-section="live"] .job-progress {
   grid-area: prog;
+  min-height: calc(2 * var(--lh-13) + var(--s-2));
   margin-top: var(--s-5);
 }
 
@@ -919,7 +922,7 @@
   background: color-mix(in srgb, var(--art-t1) 18%, transparent);
 }
 
-:root[data-skin="music"] [data-section="live"] .job-row:hover {
+:root[data-skin="music"] [data-section="live"] a.job-row:hover {
   background: linear-gradient(
     140deg,
     var(--art-bg, var(--bg-hover)) 30%,
@@ -928,7 +931,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  :root[data-skin="music"] [data-section="live"] .job-row:hover > .art {
+  :root[data-skin="music"] [data-section="live"] a.job-row:hover > .art {
     transform: scale(1.02);
   }
 }
@@ -1040,8 +1043,17 @@
 }
 
 /* Quiet queue: one line, no empty-state block. */
-:root[data-skin="music"] [data-section="live"] > .card-body:has(> .live-idle) {
-  padding: var(--s-3) var(--s-5);
+:root[data-skin="music"] [data-section="live"] .live-idle-card {
+  background: var(--card-bg);
+}
+
+:root[data-skin="music"] [data-section="live"] .live-idle-card > .live-idle-art {
+  box-shadow: none;
+}
+
+:root[data-skin="music"] [data-section="live"] .live-idle-art .icon {
+  width: 32px;
+  height: 32px;
 }
 
 /* ---- Recently completed -------------------------------------------- */

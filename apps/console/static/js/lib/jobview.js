@@ -112,14 +112,16 @@ export function codecKinds(items) {
 
 /**
  * The drawer's one-line summary of a job from its tracks: "ALAC 24/44.1 ·
- * 14 tracks · 692 MB". The format is "Mixed formats" when tracks differ, and
- * the size is left out until a file exists. '' for a job without tracks.
+ * 14 tracks · 692 MB". When the tracks' codecs differ it names the one most
+ * carry ("Mostly ALAC 24/96"; the rows mark the others), so a second codec
+ * turning up mid-run changes this line, not the height of the list. The size
+ * is left out until a file exists. '' for a job without tracks.
  */
 export function drawerSummary(items) {
   if (!items || items.length === 0) return '';
   const kinds = codecKinds(items);
   const size = items.reduce((n, it) => n + (it.file_size > 0 ? it.file_size : 0), 0);
-  return [kinds.length === 1 ? kinds[0] : kinds.length > 1 ? 'Mixed formats' : '', plural(items.length, 'track', 'tracks'), size > 0 ? bytes(size) : '']
+  return [kinds.length === 1 ? kinds[0] : kinds.length > 1 ? `Mostly ${albumCodec(items)}` : '', plural(items.length, 'track', 'tracks'), size > 0 ? bytes(size) : '']
     .filter(Boolean)
     .join(' · ');
 }

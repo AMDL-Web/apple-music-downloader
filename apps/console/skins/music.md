@@ -163,12 +163,12 @@ base durations (120 ms color, 200 ms overlays).
   Failures of the last 24 h sit above them in a "Needs attention" card as grouped rows: a red circle
   glyph, "Failed" as a tinted chip, the title and the mono link, the error and its age,
   and a Retry button (under the text on phones).
-- **Overview order**: Needs attention (only with failures), Now downloading (one
-  line when idle), Recently completed, Jobs, Throughput, each full width, so
+- **Overview order**: Needs attention (only with failures), Now downloading (an
+  idle card as tall as a job's when nothing runs), Recently completed, Jobs, Throughput, each full width, so
   the phone and desktop reading order are the same.
 - **Live queue**: each job is a card filled with its album gradient; 136 px
-  cover (96 on phones); eyebrow = equalizer + RUNNING in `--art-t3`; title up
-  to two lines; artist in `--art-t2`; genre · year · started below; per-track
+  cover (96 on phones); eyebrow = equalizer + RUNNING in `--art-t3`; title on
+  one line, so every card (and the idle one) is the same height; artist in `--art-t2`; genre · year · started below; per-track
   cells in `--art-t1`, remaining cells outlined at 75 %. A job without a palette
   (queued, resolving) falls back to the grouped surface.
 - **Recently completed**: a shelf with no surface; every tile is shown and the

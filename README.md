@@ -22,7 +22,7 @@ This repository holds the whole AMDL project. Each product has its own directory
 
 ### Server
 
-`apps/server` is the backend you deploy: one Go process with a SQLite database, a REST +
+`amdl serve` (`apps/amdl`) is the backend you deploy: one Go process with a SQLite database, a REST +
 Server-Sent Events API on `/api/v1`, and the web console on the same port. It ships as a
 container image built from `deploy/server/`. [Quick start](#quick-start) runs it; the
 rest of this page describes it.
@@ -32,6 +32,14 @@ rest of this page describes it.
 `apps/console` is the browser client: a no-build Preact app, embedded into the server and
 served at `/console/`. It uses only the public API. Its design contract is
 [apps/console/DESIGN.md](apps/console/DESIGN.md).
+
+### Command line
+
+`apps/amdl` builds `amdl`, a client of the API written for agents and scripts: every
+result is JSON on stdout, errors are JSON on stderr with an exit status per kind of
+failure, and `amdl cli search "<task>"` finds the command for a task. `amdl mcp` serves the same
+capabilities as MCP tools, and `amdl` alone in a terminal opens an interactive interface
+for people. [docs/cli.md](docs/cli.md) describes all three.
 
 ### Desktop app (in development)
 
@@ -45,7 +53,7 @@ listener; the app's own packages sit under apps/desktop/internal, private to it.
 
 | Path | What it holds |
 | --- | --- |
-| `apps/` | One directory per product: `server`, `console` and `desktop`. A non-Go app keeps its own build system in its directory. |
+| `apps/` | One directory per product: `amdl` (the server and the command line), `console` and `desktop`. A non-Go app keeps its own build system in its directory. |
 | `internal/` | The Go core every product shares: the HTTP API, jobs, the download pipeline, the Apple and wrapper clients, storage and config. [Architecture](docs/architecture.md#2-packages) lists each package. |
 | `deploy/` | The Compose file and, under `deploy/server/`, the server's Dockerfile and entrypoint. |
 | `configs/` | The example config and hooks template every install is seeded from. |
@@ -111,7 +119,7 @@ account and logs in from its own command line, not from the console.
 ### From source
 
 ```bash
-go run ./apps/server
+go run ./apps/amdl serve
 ```
 
 This reads `configs/config.yaml`, created from

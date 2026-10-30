@@ -7,9 +7,10 @@ link, then download, decrypt, remux and tag each track. Code map: the
 
 ## Products and layout
 
-- `apps/server`: the backend binary `amdl-server`, a thin main around
+- `apps/amdl`: the one binary `amdl`. `amdl serve` is the backend, a thin wrapper around
   `internal/server#Run`, which wires the core and serves REST and SSE under `/api/v1`
-  with a SQLite store. Its image is `deploy/server/`.
+  with a SQLite store; its image is `deploy/server/`. The other commands are the
+  agent-facing client (`docs/cli.md`).
 - `apps/console`: the web console, embedded into the server; the one client this
   repository maintains today. Rules in `apps/console/AGENTS.md`.
 - `apps/desktop`: the desktop app for macOS, Windows and Linux, drawn with MyGo's native

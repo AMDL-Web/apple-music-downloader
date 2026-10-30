@@ -37,7 +37,7 @@ ARG BUILD_DATE=
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath \
       -ldflags="-s -w -X amdl/internal/buildinfo.Version=${VERSION} -X amdl/internal/buildinfo.Commit=${COMMIT} -X amdl/internal/buildinfo.BuildDate=${BUILD_DATE}" \
-      -o /out/amdl-server ./apps/server
+      -o /out/amdl ./apps/amdl
 
 # ---- Runtime stage -----------------------------------------------------
 FROM alpine:3.24
@@ -66,7 +66,7 @@ WORKDIR /app
 # the example built into the binary.
 COPY configs/config.example.yaml configs/hooks.yaml /opt/amdl/
 COPY deploy/server/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-COPY --from=build /out/amdl-server /app/amdl-server
+COPY --from=build /out/amdl /app/amdl
 
 # Pre-create the config and data directories and hand them to the default
 # runtime user (uid 1000). The container starts the entrypoint as root; the

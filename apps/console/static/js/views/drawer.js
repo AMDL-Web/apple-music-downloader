@@ -19,12 +19,12 @@ import {
   isUnresolved,
   inputLabel,
 } from '../lib/format.js';
-import { drawerSummary, codecKinds, isNotFound, rowView } from '../lib/jobview.js';
+import { drawerSummary, codecNote, isNotFound, rowView } from '../lib/jobview.js';
 import { jobStatusView, isTerminal } from '../lib/status.js';
 import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
 import { buildHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
-import { AlbumProgress, TrackLegend, TrackList } from './drawer-tracks.js';
+import { AlbumProgress, TrackList } from './drawer-tracks.js';
 import { FailureNotice, FilesSection, DetailsSection } from './drawer-info.js';
 import {
   useApp,
@@ -181,6 +181,8 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
         .filter(Boolean)
         .join(' · ');
   const summary = drawerSummary(items);
+  const note = codecNote(items);
+  const summaryTitle = note && note.text ? `${summary}. ${note.label}: ${note.text}` : summary;
   const live = !isTerminal(job.status) && !streamEnded;
   // Once this drawer has shown the job live, finished tracks keep their stage
   // row, so the list does not shrink under the reader as each one completes.
@@ -204,7 +206,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
             : html`<p class="drawer-artist" dir="auto">${sub}</p>`
           : null}
         ${meta ? html`<p class="drawer-meta">${meta}</p>` : null}
-        ${summary ? html`<p class="drawer-meta drawer-summary" title=${summary}>${summary}</p>` : null}
+        ${summary ? html`<p class="drawer-meta drawer-summary" title=${summaryTitle}>${summary}</p>` : null}
         <div class="drawer-badges">
           <${Badge} view=${jobStatusView(job)} />
           ${live ? html`<span class="live-tag"><span class="pulse-static" aria-hidden="true"></span>Live</span>` : null}
@@ -224,10 +226,7 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
           <${AlbumProgress} job=${job} items=${items} />
           ${items.length === 0
             ? html`<${Empty} icon="list" title="No tracks resolved yet" />`
-            : [
-                codecKinds(items).length > 1 ? html`<${TrackLegend} key="legend" items=${items} />` : null,
-                html`<${TrackList} key="list" items=${items} albumArtist=${job.artist_name || ''} keepStatus=${seenLive.current.on} />`,
-              ]}
+            : html`<${TrackList} items=${items} albumArtist=${job.artist_name || ''} keepStatus=${seenLive.current.on} />`}
         </section>`
       : null}
 
@@ -260,23 +259,29 @@ function Actions({ job, app, onChanged, onDelete }) {
   // way out is the link in Apple Music, and Retry steps back.
   const notFound = job.status === 'failed' && isNotFound(job.error);
   const open = safeHttpUrl(job.input);
+  // Two rows in every state: the links that never change, then what this
+  // status allows. A job that finishes or is cancelled swaps buttons inside
+  // the second row; nothing around them moves.
   return html`<div class="drawer-actions">
-    ${canCancel && !confirming
-      ? html`<${Button} variant="secondary" icon="circle-slash" onClick=${() => setConfirming(true)} disabled=${busy}>Cancel job</${Button}>`
-      : null}
-    ${canCancel && confirming
-      ? html`<div class="confirm" role="group" aria-label="Confirm cancel">
-          <span>Cancel this job? Finished tracks stay on disk, and Retry queues the rest again.</span>
-          <${Button} variant="danger" onClick=${() => run('cancel', cancelDownload, 'Job cancelled')} disabled=${busy}>Cancel job</${Button}>
-          <${Button} variant="ghost" onClick=${() => setConfirming(false)}>Keep running</${Button}>
-        </div>`
-      : null}
-    ${notFound && open ? html`<${LinkButton} href=${open} variant="primary" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
-    ${canRetry
-      ? html`<${Button} variant=${notFound ? 'secondary' : 'primary'} icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>`
-      : null}
-    <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
-    ${open && !notFound ? html`<${LinkButton} href=${open} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
-    ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Remove</${Button}>` : null}
+    <div class="drawer-actions-row">
+      <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
+      ${open ? html`<${LinkButton} href=${open} variant=${notFound ? 'primary' : 'ghost'} icon="music" external>Open in Apple Music</${LinkButton}>` : null}
+    </div>
+    <div class="drawer-actions-row">
+      ${canCancel && !confirming
+        ? html`<${Button} variant="secondary" icon="circle-slash" onClick=${() => setConfirming(true)} disabled=${busy}>Cancel job</${Button}>`
+        : null}
+      ${canCancel && confirming
+        ? html`<div class="confirm" role="group" aria-label="Confirm cancel">
+            <span>Cancel this job? Finished tracks stay on disk, and Retry queues the rest again.</span>
+            <${Button} variant="danger" onClick=${() => run('cancel', cancelDownload, 'Job cancelled')} disabled=${busy}>Cancel job</${Button}>
+            <${Button} variant="ghost" onClick=${() => setConfirming(false)}>Keep running</${Button}>
+          </div>`
+        : null}
+      ${canRetry
+        ? html`<${Button} variant=${notFound ? 'secondary' : 'primary'} icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>`
+        : null}
+      ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Remove</${Button}>` : null}
+    </div>
   </div>`;
 }

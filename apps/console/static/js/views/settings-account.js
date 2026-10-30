@@ -46,7 +46,7 @@ export function AccountPanel({ children }) {
   }
 
   let state;
-  if (!res) state = html`<${SkeletonKV} labels=${['State', 'Connected', 'Regions']} />`;
+  if (!res) state = html`<${SkeletonKV} labels=${['State', 'Connected', 'Regions']} badges=${['State']} />`;
   else if (res.error) {
     state = html`<${KV} rows=${[['State', html`<${Badge} view=${wrapperView(res)} />`]]} />
       <${WrapperError} error=${res.error} step="status" role="warning" />`;
@@ -94,9 +94,11 @@ export function AccountPanel({ children }) {
               : html`<p class="muted small">No account is logged in. Log in below so downloads can be decrypted.</p>`}
         </section>`
       : null}
-    ${canLogin
-      ? html`<${LoginForm} onDone=${status.reload} again=${accounts.length > 0 || Boolean(w && w.status)} />`
-      : html`<${CommandLineLogin} />`}
+    ${!res
+      ? html`<${CommandLineLogin} pending />`
+      : canLogin
+        ? html`<${LoginForm} onDone=${status.reload} again=${accounts.length > 0 || Boolean(w && w.status)} />`
+        : html`<${CommandLineLogin} />`}
     ${logout !== null
       ? html`<${LogoutDialog}
           account=${logout}
@@ -176,14 +178,26 @@ function LogoutDialog({ account, onClose, onDone }) {
   </${ConfirmDialog}>`;
 }
 
-/** What replaces the login form when the session service has no login API. */
-function CommandLineLogin() {
+/**
+ * What replaces the login form when the session service has no login API.
+ * `pending` holds its room, unseen, while the status loads: a bare
+ * wrapper-lite is the usual service, so its answer then moves nothing.
+ */
+function CommandLineLogin({ pending }) {
+  if (pending) {
+    return html`<div class="account-block holds-room" aria-hidden="true">${CommandLineSteps()}</div>`;
+  }
   return html`<section class="account-block" aria-labelledby="login-title">
-    <h3 class="section-title" id="login-title">Log in from the command line</h3>
+    ${CommandLineSteps('login-title')}
+  </section>`;
+}
+
+/** The command-line login steps; `id` names the heading when it labels the section. */
+function CommandLineSteps(id) {
+  return html`<h3 class="section-title" id=${id}>Log in from the command line</h3>
     <p class="small">This session service is a bare wrapper-lite, which has no login of its own. On the machine that runs it, log in once with <code>--login</code>; it saves the login and exits:</p>
     <code class="account-cmd mono">wrapper-lite-rootless --login APPLE_ID:PASSWORD</code>
-    <p class="muted small">It asks for the two-step code in the terminal; without one, add <code>--code-from-file</code> and write the code to <code>2fa.txt</code> in its data folder. Then start it again without <code>--login</code> and select Refresh above. To log in from this page instead, run wrapper-manager v2 in front of it and set <code>wrapper.address</code> to that.</p>
-  </section>`;
+    <p class="muted small">It asks for the two-step code in the terminal; without one, add <code>--code-from-file</code> and write the code to <code>2fa.txt</code> in its data folder. Then start it again without <code>--login</code> and select Refresh above. To log in from this page instead, run wrapper-manager v2 in front of it and set <code>wrapper.address</code> to that.</p>`;
 }
 
 /**

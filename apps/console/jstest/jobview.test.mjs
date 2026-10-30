@@ -65,7 +65,7 @@ const t = (o) => ({ status: 'completed', artist: 'Taylor Swift', codec: 'alac', 
 
 test('drawerSummary names the format, the tracks and the size', () => {
   assert.equal(drawerSummary([t(), t()]), 'ALAC 24/44.1 · 2 tracks · 80.0 MB');
-  assert.equal(drawerSummary([t(), t({ codec: 'aac', bit_depth: 0, sample_rate: 0 })]), 'Mixed formats · 2 tracks · 80.0 MB');
+  assert.equal(drawerSummary([t(), t(), t({ codec: 'aac', bit_depth: 0, sample_rate: 0 })]), 'Mostly ALAC 24/44.1 · 3 tracks · 120 MB');
   assert.equal(drawerSummary([t({ file_size: 0, codec: '' })]), '1 track');
   assert.equal(drawerSummary([]), '');
 });
