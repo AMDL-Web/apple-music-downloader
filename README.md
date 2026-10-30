@@ -11,8 +11,9 @@
 <p align="center"><a href="README.zh-CN.md">中文</a></p>
 
 amdl downloads music from Apple Music to your own disk. Paste a song, album, playlist,
-artist or radio station link into its web console; it resolves the tracks, downloads the
-encrypted media, decrypts it, remuxes and tags it, and saves finished `.m4a` files.
+artist or radio station link into its web console, or search the catalog there; it resolves
+the tracks, downloads the encrypted media, decrypts it, remuxes and tags it, and saves
+finished `.m4a` files.
 
 This repository holds the whole AMDL project. Each product has its own directory under
 `apps/`, and they share one Go core under `internal/`.
@@ -191,6 +192,7 @@ is the API's only browser client: responses carry no CORS headers.
 | **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
 | **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed (SSE) |
 | **Lookup** | `POST /lookup`: preview a link's title, artist and cover without creating a job |
+| **Search** | `GET /search`: search the catalog for songs, albums and artists · `GET /artists/{id}/albums`: an artist's albums, page by page |
 | **Quality** | `POST /quality`: probe a link's codecs and audio quality without creating a job |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |

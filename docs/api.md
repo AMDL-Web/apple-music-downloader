@@ -93,7 +93,7 @@ Returns what is running and what it has to work with:
 - `simulate` (`simulate.enabled`), `motion_artwork_enabled`,
   `default_storefront` (`catalog.default_storefront`, a startup key). The API refuses a
   link without a storefront in its path (`invalid_url`); a client that accepts such links, like the
-  web console, completes them with this value.
+  web console, completes them with this value. Search and artist albums default to it.
 - `jobs`: `workers` (`download.max_running_jobs` at startup), `active`, `queue_depth` of
   `queue_capacity` (a full queue rejects submissions with `queue_full`), and
   `recovery_backlog`, the jobs resumed at startup that still wait for a worker.
@@ -435,6 +435,72 @@ The body is `{url}` only. A private playlist's cover is read with
 
 `details.link` carries `input`, `type`, `storefront`, `id` and `track_id` of the parsed
 link, so the client can still show what was pasted.
+
+## Catalog search
+
+```bash
+curl 'http://localhost:18080/api/v1/search?term=Taylor+Swift&storefront=us&limit=2'
+```
+
+```json
+{"term":"Taylor Swift","storefront":"us",
+ "songs":{"items":[{"id":"6814997425","type":"song","name":"Patient Zero",
+   "url":"https://music.apple.com/us/song/patient-zero/6814997425",
+   "artwork_url":"https://is1-ssl.mzstatic.com/image/thumb/…/{w}x{h}bb.jpg","artwork_bg_color":"2b080c",
+   "artist_name":"Taylor Swift","album_name":"The Life of a Showgirl: The Encore",
+   "release_date":"2026-09-24","genre":"Pop","duration_ms":225868,"apple_digital_master":true,
+   "audio_traits":["atmos","lossless","lossy-stereo","spatial"]}, …],"next_offset":2},
+ "albums":{"items":[{"id":"6814997249","type":"album","name":"The Life of a Showgirl: The Encore",
+   "url":"https://music.apple.com/us/album/the-life-of-a-showgirl-the-encore/6814997249",
+   "artist_name":"Taylor Swift","release_date":"2026-09-24","track_count":16,
+   "content_rating":"explicit","prior_job":{"id":"job_…","status":"completed",
+   "finished_at":"2026-10-30T03:12:09Z"}, …}, …],"next_offset":2},
+ "artists":{"items":[{"id":"159260351","type":"artist","name":"Taylor Swift",
+   "url":"https://music.apple.com/us/artist/taylor-swift/159260351","genre":"Pop", …}]}}
+```
+
+Searches the Apple Music catalog for songs, albums and artists, one page per group in
+Apple's relevance order. Nothing is downloaded and no job is created.
+
+| Parameter | Meaning |
+| --- | --- |
+| `term` | Required. Runs of white space count as one space; at most 200 characters. |
+| `types` | A subset of `songs`, `albums`, `artists`, comma-separated or repeated; default all three. Groups come back in that order whatever order is given. |
+| `storefront` | A two-letter storefront code; default `catalog.default_storefront`. |
+| `limit`, `offset` | Hits per group, 1-50 (default 10), and where each group's page starts (default 0). |
+
+Each requested group is there, `items` empty when Apple has nothing, and carries
+`next_offset` when Apple has more: pass it as `offset` with that group alone in `types` to
+read the next page. Apple reports no totals.
+
+A hit's `url` is ready to submit to `POST /downloads` and downloads exactly that item: a
+song's is a `/song/` link, which `catalog.album_track_url_mode` cannot turn into the whole
+album. The metadata fields have the names and meaning of the `POST /lookup` fields.
+`audio_traits` is Apple's list for the song or album, such as `lossless`,
+`hi-res-lossless`, `atmos` and `spatial`, when the catalog sends one.
+
+`prior_job` names the job that put a hit in the library or holds it in the queue: the newest
+queued or running job of the same type and id, else the newest completed one, whatever the
+storefront of its link. A song downloaded as part of an album or playlist job is not marked,
+and a failed or cancelled job marks nothing. When the job store cannot be read the hits
+come back unmarked rather than failing the search.
+
+### Artist albums
+
+```bash
+curl 'http://localhost:18080/api/v1/artists/159260351/albums?storefront=us&limit=25'
+```
+
+Returns `storefront`, the `artist` as a search hit, and `albums`, one page of the artist's
+albums in the order an artist download takes them, as album hits with `next_offset`.
+`limit` is 1-100 (default 25). The artist and the page are read at once, so every page
+carries the artist.
+
+| Case | Answer |
+| --- | --- |
+| No `term`, a bad `types`, `storefront`, `limit` or `offset`, an artist id that is not digits | `400 invalid_request` |
+| The catalog read fails (an unknown storefront or Apple's 404 for an unknown artist included) | `502 upstream_error` |
+| No answer within 10 seconds | `504 upstream_timeout` |
 
 ## Quality probe
 

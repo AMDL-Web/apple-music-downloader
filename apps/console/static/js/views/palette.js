@@ -172,6 +172,9 @@ function shortcutGroups(mod) {
       [
         [['Paste a link'], 'Outside a text field: New download with that link'],
         [[k(mod), ' ', k(mod === '⌘' ? 'Return' : 'Enter')], 'Download the links in the box'],
+        [[k('↓'), ' or ', k(mod === '⌘' ? 'Return' : 'Enter'), ' in the box'], 'Go to the search results'],
+        [[k('↑'), ' / ', k('↓')], 'Move between search results'],
+        [[k(mod === '⌘' ? 'Return' : 'Enter'), ' on a result'], 'Download it, or open the artist'],
       ],
     ],
     ['Settings', [[[k(mod), ' ', k('S')], 'Save settings']]],

@@ -2069,6 +2069,89 @@
   line-height: var(--lh-13);
 }
 
+/* Search hits: the detected-link rows without the include box. Group
+   titles are quiet section labels; an artist's head carries a round cover
+   with the album-tinted shadow. */
+:root[data-skin="music"] .new-hits > li + li {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-hit {
+  padding: var(--s-3) var(--s-4) var(--s-3) var(--card-pad-x);
+}
+
+:root[data-skin="music"] .new-hits > .new-hit + .new-hit::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(var(--card-pad-x) + 48px + var(--s-3));
+  border-top: var(--row-divider);
+}
+
+:root[data-skin="music"] .new-hit-art {
+  border-radius: var(--r-art-sm);
+  box-shadow: 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-hit.has-palette .new-hit-art,
+:root[data-skin="music"] .new-artist-head.has-palette .new-artist-art {
+  box-shadow: 0 10px 20px -12px var(--art-bg), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-hit[data-kind="artist"] .new-hit-art,
+:root[data-skin="music"] .new-artist-art {
+  border-radius: var(--r-full);
+}
+
+:root[data-skin="music"] .new-hit-title,
+:root[data-skin="music"] .new-hit-open {
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-hit-head .chip {
+  height: 18px;
+  padding: 0 var(--s-1_5);
+  border-color: transparent;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-search-group-title {
+  padding-top: var(--s-4);
+  color: var(--text-primary);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--w-semibold);
+}
+
+:root[data-skin="music"] .new-search-group + .new-search-group {
+  border-top: 0;
+}
+
+:root[data-skin="music"] .new-artist-name {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--w-bold);
+}
+
+:root[data-skin="music"] .new-artist-head {
+  border-bottom: 0;
+}
+
+@media (max-width: 639px) {
+  :root[data-skin="music"] .new-hit {
+    padding: var(--s-3) var(--s-4);
+  }
+
+  :root[data-skin="music"] .new-hits > .new-hit + .new-hit::before {
+    left: calc(var(--s-4) + 48px + var(--s-2));
+  }
+}
+
 /* Submitted: Queue rows (covers, capsule bar, hairlines from the text) and
    the per-link outcomes with their role glyph and word. */
 :root[data-skin="music"] .new-results-summary {

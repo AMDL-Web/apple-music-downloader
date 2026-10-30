@@ -152,6 +152,11 @@ export function newDownloadHash(urls = []) {
   return buildHash('new', { url: urls.join('\n') });
 }
 
+/** The #/new hash that searches the catalog for `term` (the text box takes it unless it holds links). */
+export function newSearchHash(term = '') {
+  return buildHash('new', { q: term });
+}
+
 /**
  * The section #/settings?section= names, or '' (the page's first section).
  * Section names are lowercase words joined by underscores; the settings page

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"amdl/internal/applemusic"
@@ -24,12 +25,19 @@ type fakeCatalog struct {
 	playlist *applemusic.Collection
 	station  *applemusic.StationInfo
 	artist   *applemusic.Artist
+	search   *applemusic.SearchResults
+	albums   *applemusic.AlbumPage
 	err      error
-	calls    []string
-	token    string
+	// mu guards calls: GET /artists/{id}/albums reads the artist and the
+	// albums page at once.
+	mu    sync.Mutex
+	calls []string
+	token string
 }
 
 func (f *fakeCatalog) record(method, storefront, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, fmt.Sprintf("%s %s/%s", method, storefront, id))
 	return f.err
 }
@@ -68,6 +76,20 @@ func (f *fakeCatalog) Artist(_ context.Context, storefront, id string) (applemus
 		return applemusic.Artist{}, f.missing(err, "artist")
 	}
 	return *f.artist, nil
+}
+
+func (f *fakeCatalog) Search(_ context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int) (applemusic.SearchResults, error) {
+	if err := f.record("search", storefront, fmt.Sprintf("%s %v %d+%d", term, types, limit, offset)); err != nil || f.search == nil {
+		return applemusic.SearchResults{}, f.missing(err, "search")
+	}
+	return *f.search, nil
+}
+
+func (f *fakeCatalog) ArtistAlbumsPage(_ context.Context, storefront, id string, limit, offset int) (applemusic.AlbumPage, error) {
+	if err := f.record("artist albums", storefront, fmt.Sprintf("%s %d+%d", id, limit, offset)); err != nil || f.albums == nil {
+		return applemusic.AlbumPage{}, f.missing(err, "artist albums")
+	}
+	return *f.albums, nil
 }
 
 func (f *fakeCatalog) missing(err error, what string) error {

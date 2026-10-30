@@ -85,3 +85,16 @@ test('parallel and concurrency find where worker pools live, and template finds 
   assert.equal(parseHash(retries.hash).params.section, 'advanced');
   assert.ok(paletteItems('folder').some((it) => it.field === 'download.downloads_dir'));
 });
+
+test('words offer a catalog search on New download; links do not', () => {
+  const search = (q) => paletteItems(q).find((it) => it.id === 'act-search');
+  const item = search('  Taylor   Swift ');
+  assert.equal(item.label, 'Search Apple Music for “Taylor Swift”');
+  assert.equal(item.group, 'Apple Music');
+  assert.deepEqual(parseHash(item.hash), { page: 'new', jobId: null, params: { q: 'Taylor Swift' } });
+  assert.equal(search('https://music.apple.com/us/album/igor/1463409338'), undefined);
+  assert.equal(search('x'.repeat(201)), undefined, 'longer than the backend searches');
+  assert.equal(search(''), undefined);
+  // Matching pages and settings come first: Return still opens them.
+  assert.equal(paletteItems('queue')[0].label, 'Queue');
+});

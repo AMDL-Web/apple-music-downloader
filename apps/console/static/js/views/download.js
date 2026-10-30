@@ -1,15 +1,20 @@
-// New download (#/new?url=, #/new/:id for the drawer): paste Apple Music
-// links, see what each one is, choose the quality and submit. One column:
-// the text box, the detected links, then the submit bar (quality preset,
-// Overwrite, the count, Download), which stays in view while the list is
-// long, then what the last submit did. The text box is the source of the
-// links; ?url= prefills it, and the page writes its links back into ?url=
-// so a reload or the global paste keeps them; the whole text also lasts for
-// the tab when the page is left. The page head comes from app.js. Parts:
-// download-config.js (server defaults), download-lookup.js (previews),
-// download-links.js (rows), download-preset.js (quality controls),
+// New download (#/new?url=&q=&artist=, #/new/:id for the drawer): paste
+// Apple Music links, see what each one is, choose the quality and submit;
+// or type words to search the catalog and download a hit. One column: the
+// text box, the detected links or the search results, then the submit bar
+// (quality preset, Overwrite, the count, Download), which stays in view
+// while the list is long, then what the last submit did. The text box is
+// the source of the links and the search term; ?url= and ?q= prefill it,
+// and the page writes its links into ?url= (its term into ?q=, an open
+// artist into ?artist=) so a reload or the global paste keeps them; the
+// whole text also lasts for the tab when the page is left. The page head
+// comes from app.js. Parts: download-config.js (server defaults),
+// download-lookup.js (previews), download-links.js (rows),
+// download-search.js and download-search-state.js (search),
+// download-preset.js (quality controls),
 // download-quality.js, download-results.js; the logic is pure in
-// lib/links.js, lib/lookup.js, lib/submit.js and lib/overrides.js.
+// lib/links.js, lib/lookup.js, lib/search.js, lib/submit.js and
+// lib/overrides.js.
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
 import { createDownload, getWrapperStatus, settle } from '../api.js';
@@ -18,6 +23,7 @@ import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.
 import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError, submittable, downloadLabel, countLine, servedRegions } from '../lib/submit.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
 import { isPicked, qualityOverview } from '../lib/lookup.js';
+import { searchTerm, searchCountLine, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
 import { useApp, Card } from '../ui/components.js';
 import { useDebounced, useMedia, usePoll } from '../ui/hooks.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -28,6 +34,8 @@ import { QualityControls, CustomSheet } from './download-preset.js';
 import { SubmitBar, PasteButton, useBarHeight } from './download-bar.js';
 import { QualitySheet, PROBES } from './download-quality.js';
 import { ResultsCard, BrowserShortcut, useResults } from './download-results.js';
+import { SearchCard } from './download-search.js';
+import { useSearch, useHitActions, useTermParam, toResults } from './download-search-state.js';
 
 const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
 
@@ -52,6 +60,11 @@ export function DownloadPage({ route }) {
   const entries = useMemo(() => scanLinks(text, storefront), [text, storefront]);
   const dupes = useMemo(() => duplicateCount(text, storefront), [text, storefront]);
   const settled = useDebounced(text, 350);
+  // Words and no link: the box searches the catalog.
+  const { term, tooLong } = searchTerm(text, entries);
+  const searching = Boolean(term) || tooLong;
+  const artistId = term ? route.params.artist || '' : '';
+  const search = useSearch({ term, debounced: useDebounced(term, SEARCH_DEBOUNCE_MS), artistId, epoch: app.epoch, subscribeFeed: app.subscribeFeed });
   // The submit error under the button (failure) belongs to the text it was
   // sent from and to the connection it failed on: an edit or a reconnect
   // clears it. A submit that drops handled links from the text does not.
@@ -75,6 +88,9 @@ export function DownloadPage({ route }) {
     if (incoming.length) edit((t) => mergeLinks(t, incoming, storefront));
   }, [urlParam]);
 
+  // ?q= -> text (download-search.js).
+  const wroteQ = useTermParam({ app, qParam: route.params.q || '', text, storefront, edit });
+
   // text -> ?url=: the links follow the text, so a reload keeps them, also
   // after the address lost them (n, the sidebar and the palette open bare
   // #/new). When only the address changed and it holds links the text does
@@ -85,14 +101,20 @@ export function DownloadPage({ route }) {
   const settledSeen = useRef(settled);
   useEffect(() => {
     const r = routeRef.current;
-    const urls = scanLinks(settled, storefront).map((e) => e.url);
+    const found = scanLinks(settled, storefront);
+    const urls = found.map((e) => e.url);
+    const q = searchTerm(settled, found).term;
+    // An open artist belongs to the term it was found with.
+    const artist = q && q === (r.params.q || '') ? r.params.artist : undefined;
     const inParam = newDownloadUrls(r.params);
     const textMoved = settledSeen.current !== settled;
     settledSeen.current = settled;
-    if (sameList(urls, inParam)) return;
+    if (sameList(urls, inParam) && q === (r.params.q || '') && artist === r.params.artist) return;
     if (!textMoved && scanLinks(inParam.join('\n'), storefront).some((e) => !urls.includes(e.url))) return;
-    app.navigate(buildHash('new', { ...r.params, url: urls.join('\n') }, r.jobId), { replace: true });
-  }, [settled, urlParam, storefront]);
+    if (!textMoved && r.params.q && r.params.q !== q) return;
+    wroteQ.current = q;
+    app.navigate(buildHash('new', { ...r.params, url: urls.join('\n'), q, artist }, r.jobId), { replace: true });
+  }, [settled, urlParam, route.params.q, storefront]);
 
   // Focus the text box once the shell has focused the heading (a fine
   // pointer only: on a phone it would open the keyboard unasked).
@@ -204,15 +226,43 @@ export function DownloadPage({ route }) {
     const e = entries.find((x) => x.url === u);
     return e && e.link && e.link.kind === 'artist';
   });
+  /**
+   * Shows what a submit did: its failure under the bar, its rows in the
+   * results (after the rows already there when `keep`, a search hit's
+   * download), a toast; returns false when nothing was submitted.
+   */
+  const report = (pairs, fail, previewFor, keep = false) => {
+    if (fail) {
+      if (fail.kind === 'overrides') setRefusal(fail.message);
+      else setFailure(fail.message);
+    }
+    if (!pairs.length) {
+      app.toast({ message: fail ? fail.message : 'Nothing was submitted', role: 'danger' });
+      return false;
+    }
+    const rows = resultRows(pairs, previewFor);
+    setResults((r) => ({ rows: keep ? [...rows, ...r.rows.filter((x) => !rows.some((n) => n.url === x.url))] : rows, overrides }));
+    const ids = rows.filter((r) => r.job).map((r) => r.job.id);
+    app.toast({
+      message: submitSummary(rows),
+      role: ids.length ? 'success' : 'warning',
+      action: ids.length ? { label: 'View in Queue', hash: '#/queue' } : null,
+    });
+    if (ids.length && app.watchJobs) app.watchJobs(ids);
+    return true;
+  };
+
   const submit = async (confirmed = false) => {
     if (busy || sendable.length === 0) return;
     if (artists.length && !confirmed) {
-      setConfirm(
-        artists.map((u) => {
+      setConfirm({
+        names: artists.map((u) => {
           const s = statusOf(u);
           return (s.state === 'ready' && s.data && s.data.title) || u.replace(/^https?:\/\//i, '');
         }),
-      );
+        label: `Download ${sendable.length}`,
+        run: () => submit(true),
+      });
       return;
     }
     setConfirm(null);
@@ -221,23 +271,7 @@ export function DownloadPage({ route }) {
     setRefusal('');
     const { pairs, fail } = await send(sendable, overrides);
     setBusy(false);
-    if (fail) {
-      if (fail.kind === 'overrides') setRefusal(fail.message);
-      else setFailure(fail.message);
-    }
-    if (!pairs.length) {
-      app.toast({ message: fail ? fail.message : 'Nothing was submitted', role: 'danger' });
-      return;
-    }
-    const rows = resultRows(pairs, previewOf);
-    setResults({ rows, overrides });
-    const ids = rows.filter((r) => r.job).map((r) => r.job.id);
-    app.toast({
-      message: submitSummary(rows),
-      role: ids.length ? 'success' : 'warning',
-      action: ids.length ? { label: 'View in Queue', hash: '#/queue' } : null,
-    });
-    if (ids.length && app.watchJobs) app.watchJobs(ids);
+    if (!report(pairs, fail, previewOf)) return;
     forgetPrior(pairs.map((p) => p.url));
     // Keep what was not handled: links not sent (flagged, or after a failed
     // chunk), links the server did not take, and anything typed meanwhile.
@@ -250,6 +284,8 @@ export function DownloadPage({ route }) {
       if (el) el.focus({ preventScroll: false });
     });
   };
+
+  const hits = useHitActions({ app, route, term, artistId, search, send, report, overrides, setConfirm, clearNotes: () => (setFailure(''), setRefusal('')) });
 
   const retry = async (urls) => {
     setRetrying((s) => new Set([...s, ...urls]));
@@ -287,7 +323,9 @@ export function DownloadPage({ route }) {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       submit();
+      return;
     }
+    if (term) toResults(e, term, search);
   };
 
   // The count line is announced (role=status), so it follows the settled
@@ -295,7 +333,7 @@ export function DownloadPage({ route }) {
   const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
   const settledSend = submittable(settledEntries, issueOf);
   const priorState = (url) => (priorOf(url) || {}).state;
-  const count = countLine({
+  const linkCount = countLine({
     links: settledEntries.length,
     fresh: settledSend.filter((u) => !priorOf(u)).length,
     library: settledSend.filter((u) => priorState(u) === 'done').length,
@@ -313,7 +351,8 @@ export function DownloadPage({ route }) {
     const link = e && e.link;
     return link ? (link.kind === 'album' && link.trackId && trackMode !== 'album' ? 'song' : link.kind) : 'item';
   };
-  const label = busy ? 'Submitting…' : downloadLabel(sendable.map(kindOf), entries.length > 0, allowed.length > 0);
+  const count = searching ? searchCountLine(search.search, search.artist.status !== 'idle' ? search.artist : null) : linkCount;
+  const label = busy ? 'Submitting…' : searching ? 'Choose a result' : downloadLabel(sendable.map(kindOf), entries.length > 0, allowed.length > 0);
 
   // Under 640 px the submit bar is fixed above the tab bar; the page keeps
   // room for it below the last row.
@@ -327,7 +366,7 @@ export function DownloadPage({ route }) {
     <${Card}
       section="compose"
       className="new-compose"
-      title="Apple Music links"
+      title="Search or paste links"
       labelId="new-compose-title"
       actions=${html`<${PasteButton} storefront=${storefront} onLinks=${(urls) => edit((t) => mergeLinks(t, urls, storefront))} />`}
     >
@@ -337,7 +376,7 @@ export function DownloadPage({ route }) {
         ref=${inputRef}
         rows="6"
         value=${text}
-        placeholder="Paste Apple Music links"
+        placeholder="Search for a song, album or artist, or paste Apple Music links"
         aria-labelledby="new-compose-title"
         aria-describedby=${keyboard ? 'new-input-hint' : undefined}
         autocomplete="off"
@@ -346,8 +385,21 @@ export function DownloadPage({ route }) {
         onInput=${(e) => edit(e.currentTarget.value)}
         onKeyDown=${onKeyDown}
       ></textarea>
-      ${keyboard ? html`<p id="new-input-hint" class="new-hint">Press ${keys} to download</p>` : null}
+      ${keyboard ? html`<p id="new-input-hint" class="new-hint">${term ? 'Press ↓ or Return to go to the results' : `Press ${keys} to download`}</p>` : null}
     </${Card}>
+    ${searching
+      ? html`<${SearchCard}
+          s=${search}
+          term=${term}
+          tooLong=${tooLong}
+          inputRef=${inputRef}
+          openHit=${hits.openedHit}
+          focusArtist=${hits.focusArtist}
+          row=${{ busy: hits.busy, jobHref, onDownload: hits.download, onOpenArtist: hits.openArtist, priorOf: search.priorOf }}
+          onBack=${hits.closeArtist}
+          onDownloadAll=${hits.download}
+        />`
+      : null}
     ${entries.length
       ? html`<${LinksCard}
           entries=${entries}
@@ -430,13 +482,16 @@ export function DownloadPage({ route }) {
       : null}
     ${confirm
       ? html`<${ConfirmDialog}
-          title=${confirm.length === 1 ? `Download everything by ${confirm[0]}?` : `Download everything by ${confirm.length} artists?`}
-          confirmLabel=${`Download ${sendable.length}`}
-          onConfirm=${() => submit(true)}
+          title=${confirm.names.length === 1 ? `Download everything by ${confirm.names[0]}?` : `Download everything by ${confirm.names.length} artists?`}
+          confirmLabel=${confirm.label}
+          onConfirm=${() => {
+            setConfirm(null);
+            confirm.run();
+          }}
           onCancel=${() => setConfirm(null)}
         >
           <p>An artist link queues the artist's whole discography as one job: every album, often hundreds of tracks or more. You can cancel it from the queue.</p>
-          ${confirm.length > 1 ? html`<p dir="auto">${confirm.join(', ')}</p>` : null}
+          ${confirm.names.length > 1 ? html`<p dir="auto">${confirm.names.join(', ')}</p>` : null}
         </${ConfirmDialog}>`
       : null}
   </div>`;

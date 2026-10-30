@@ -11,7 +11,8 @@
 <p align="center"><a href="README.md">English</a></p>
 
 amdl 把 Apple Music 上的音乐下载到你自己的磁盘。把单曲、专辑、歌单、艺人或电台链接贴进它的
-网页控制台，它会解析出曲目，下载加密媒体，解密、重封装、打标签，保存成完整的 `.m4a` 文件。
+网页控制台，或在那里直接搜索曲库，它会解析出曲目，下载加密媒体，解密、重封装、打标签，保存成完整的
+`.m4a` 文件。
 
 这个仓库容纳整个 AMDL 项目。每个产品在 `apps/` 下有自己的目录，共用 `internal/` 下的
 同一套 Go 核心。
@@ -172,6 +173,7 @@ CORS 头。
 | **下载** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
 | **事件** | `GET /downloads/{id}/events` 单个作业 · `GET /downloads/events` 总览流（SSE） |
 | **链接预览** | `POST /lookup`：不建作业，预览链接的标题、艺人和封面 |
+| **搜索** | `GET /search`：在曲库里搜歌曲、专辑和艺人 · `GET /artists/{id}/albums`：分页列出艺人的专辑 |
 | **音质探测** | `POST /quality`：不建作业，探测链接的编码和音质 |
 | **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` |

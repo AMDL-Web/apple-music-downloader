@@ -13,14 +13,18 @@ import (
 )
 
 // CatalogService reads the Apple Music catalog metadata that POST /lookup
-// previews. Each method is one light read on the client's catalog host, never
-// an amp-api-only read; *applemusic.CatalogClient implements it.
+// previews and GET /search and GET /artists/{id}/albums browse. Each method is
+// one light read (a song, album or playlist read pages through its tracks);
+// none reads motion artwork or Enhanced HLS. *applemusic.CatalogClient
+// implements it.
 type CatalogService interface {
 	SongMetadata(ctx context.Context, storefront, id string) (applemusic.Song, error)
 	Album(ctx context.Context, storefront, id string) (applemusic.Collection, error)
 	Playlist(ctx context.Context, storefront, id, mediaUserToken string) (applemusic.Collection, error)
 	Station(ctx context.Context, storefront, id string) (applemusic.StationInfo, error)
 	Artist(ctx context.Context, storefront, id string) (applemusic.Artist, error)
+	Search(ctx context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int) (applemusic.SearchResults, error)
+	ArtistAlbumsPage(ctx context.Context, storefront, id string, limit, offset int) (applemusic.AlbumPage, error)
 }
 
 // lookupTimeout bounds one lookup: the album and playlist reads page through
@@ -117,19 +121,30 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, resp)
 	case errors.As(err, new(notDownloadableError)):
 		writeErrorDetails(w, http.StatusBadRequest, CodeInvalidRequest, err.Error(), details)
-	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
-		writeErrorDetails(w, http.StatusGatewayTimeout, CodeUpstreamTimeout,
-			fmt.Sprintf("the Apple Music catalog did not answer within %s", lookupTimeout), details)
 	default:
-		// The response carries only err.Error(); a raw upstream body an
-		// Apple error holds stays in the log line.
-		attrs := []any{"link", link.Input, "error", err}
+		s.writeCatalogError(ctx, w, r, err, lookupTimeout, details, "lookup failed", "link", link.Input)
+	}
+}
+
+// writeCatalogError answers a failed catalog read bounded by ctx: 504
+// upstream_timeout when that bound ran out, else 502 upstream_error. The
+// response carries only err.Error(); a raw upstream body an Apple error holds
+// stays in the log line, which is skipped when the client has gone away (the
+// console aborts a search the person typed past).
+func (s *Server) writeCatalogError(ctx context.Context, w http.ResponseWriter, r *http.Request, err error, timeout time.Duration, details any, logMsg string, logAttrs ...any) {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		writeErrorDetails(w, http.StatusGatewayTimeout, CodeUpstreamTimeout,
+			fmt.Sprintf("the Apple Music catalog did not answer within %s", timeout), details)
+		return
+	}
+	if r.Context().Err() == nil {
+		attrs := append(logAttrs, "error", err)
 		if body := logging.UpstreamBody(err); body != "" {
 			attrs = append(attrs, "upstream_body", body)
 		}
-		logging.FromContext(r.Context(), s.logger).Warn("lookup failed", attrs...)
-		writeErrorDetails(w, http.StatusBadGateway, CodeUpstreamError, "read Apple Music catalog: "+err.Error(), details)
+		logging.FromContext(r.Context(), s.logger).Warn(logMsg, attrs...)
 	}
+	writeErrorDetails(w, http.StatusBadGateway, CodeUpstreamError, "read Apple Music catalog: "+err.Error(), details)
 }
 
 // previewLink reads the catalog metadata of parsed, filling the display fields
