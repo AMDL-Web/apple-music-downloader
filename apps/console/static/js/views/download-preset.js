@@ -74,7 +74,7 @@ const pick = (values) => {
  * that opens with its heading focused, so no control changes on the next
  * key, and returns focus to the menu when it closes. Props: defaults,
  * start (the values it opens with), onDone(values), onFollow() (back to
- * Follow Settings), onClose() (Escape, the scrim, Close: nothing changes).
+ * Quality: Settings), onClose() (Escape, the scrim, Close: nothing changes).
  */
 export function CustomSheet({ defaults, start, onDone, onFollow, onClose }) {
   const phone = useMedia('(max-width: 639px)');

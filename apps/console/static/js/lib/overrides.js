@@ -1,6 +1,6 @@
 // Pure download overrides for the New download page: the server's download
 // defaults (GET config `download`), the quality presets of the submit row
-// (Follow Settings, Lossless, Dolby Atmos then lossless, AAC, Custom) and the
+// (Quality: Settings, Lossless, Dolby Atmos then lossless, AAC, Custom) and the
 // Overwrite switch, and the DownloadOverrides a submission sends, which holds
 // only what differs from the defaults. Everything else is a Settings value
 // for every download. Field names, enums and value lists follow
@@ -142,7 +142,7 @@ export const QUALITY_KEYS = ['quality_priority', 'codec_alternative', 'alac_max_
  * ALAC limits to Settings; "custom" (not listed) is the edited values.
  */
 export const PRESETS = [
-  { id: 'follow', label: 'Follow Settings', values: {} },
+  { id: 'follow', label: 'Quality: Settings', values: {} },
   { id: 'lossless', label: 'Lossless (ALAC)', values: { quality_priority: ['alac'], codec_alternative: true } },
   { id: 'atmos', label: 'Dolby Atmos, then lossless', values: { quality_priority: ['ec3', 'alac'], codec_alternative: true } },
   { id: 'aac', label: 'AAC', values: { quality_priority: ['aac'], codec_alternative: true } },

@@ -236,13 +236,16 @@ test('a row needs attention for any issue or an earlier job still in flight, not
   assert.equal(needsAttention(null, null), false);
 });
 
-test('rows with an earlier job start unchecked; a pick wins', () => {
+test('rows with an earlier job start unchecked, unless Overwrite is on for one in the library; a pick wins', () => {
   const done = { state: 'done', job: { id: 'j' } };
   assert.equal(isPicked('u', null, new Map()), true);
   assert.equal(isPicked('u', done, new Map()), false);
   assert.equal(isPicked('u', { state: 'active', job: { id: 'j' } }, null), false);
   assert.equal(isPicked('u', done, new Map([['u', true]])), true);
   assert.equal(isPicked('u', null, new Map([['u', false]])), false);
+  assert.equal(isPicked('u', done, new Map(), true), true, 'Overwrite on: a row in the library starts checked');
+  assert.equal(isPicked('u', { state: 'active', job: { id: 'j' } }, null, true), false, 'a row in the queue stays unchecked');
+  assert.equal(isPicked('u', done, new Map([['u', false]]), true), false, 'the pick still wins');
 });
 
 test('the feed keeps an earlier-job answer live', () => {

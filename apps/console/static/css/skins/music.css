@@ -2150,7 +2150,7 @@
   padding: 0 var(--s-5);
 }
 
-:root[data-skin="music"] .new-hit-download:hover:not(:disabled) {
+:root[data-skin="music"] .new-hit-download:hover:not([aria-disabled="true"]) {
   color: var(--accent-text);
 }
 

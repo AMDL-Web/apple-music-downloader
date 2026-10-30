@@ -141,10 +141,10 @@ export function DownloadPage({ route }) {
   // library or the queue starts unchecked unless the person checks it.
   const [picks, setPicks] = useState(() => new Map());
   const onPick = (url, on) => setPicks((m) => new Map(m).set(url, on));
-  const sendable = allowed.filter((u) => isPicked(u, priorOf(u), picks));
+  const overwriteOn = overwrite === null ? Boolean(defaults && defaults.force_overwrite) : overwrite;
+  const sendable = allowed.filter((u) => isPicked(u, priorOf(u), picks, overwriteOn));
   // What the chosen preset resolves to, for the Will download lines.
   const chosenValues = defaults ? presetValues(defaults, choice.preset, choice.custom) : null;
-  const overwriteOn = overwrite === null ? Boolean(defaults && defaults.force_overwrite) : overwrite;
   const previewOf = (url) => {
     const st = statusOf(url);
     return st.state === 'ready' ? st.data : null;
@@ -193,7 +193,14 @@ export function DownloadPage({ route }) {
   };
 
   const submit = async (confirmed = false) => {
-    if (busy || sendable.length === 0) return;
+    if (busy) return;
+    // Only Cmd/Ctrl+Enter gets here with nothing to send (the button is
+    // disabled): say why, as the button does, or what the count line says
+    // stops every link.
+    if (sendable.length === 0) {
+      app.toast({ message: label === 'Download' ? linkCount || "These links can't be downloaded" : label, role: 'warning' });
+      return;
+    }
     if (artists.length && !confirmed) {
       setConfirm({
         names: artists.map((u) => {
@@ -359,7 +366,7 @@ export function DownloadPage({ route }) {
           statusOf=${statusOf}
           issueOf=${issueOf}
           priorOf=${priorOf}
-          picked=${(url) => isPicked(url, priorOf(url), picks)}
+          picked=${(url) => isPicked(url, priorOf(url), picks, overwriteOn)}
           skipped=${skipped}
           row=${{
             jobHref,

@@ -120,23 +120,24 @@ export function downloadLabel(kinds, hasLinks = true, pickable = false) {
 }
 
 /**
- * The dock's count line: "4 links · 1 merged · 1 new · 2 in library · 1
- * can't be downloaded"; '' with no links. `merged`
- * counts repeats folded into one link, `fresh` links that can be sent and
- * were never downloaded, `library` and `queued` those with an earlier job
- * done or still in the queue, `blocked` those that cannot be sent,
- * `warned` those with a warning.
+ * The dock's count line: "4 links · 1 can't be downloaded · 1 merged · 1
+ * new · 2 in library"; '' with no links. What stops or needs a look comes
+ * first, so a line cut short on a phone keeps it. `blocked` counts the
+ * links that cannot be sent, `warned` those with a warning, `merged`
+ * repeats folded into one link, `fresh` links that can be sent and were
+ * never downloaded, `library` and `queued` those with an earlier job done
+ * or still in the queue.
  */
 export function countLine({ links = 0, merged = 0, fresh = 0, library = 0, queued = 0, blocked = 0, warned = 0 } = {}) {
   if (!links) return '';
   return [
     `${links} ${links === 1 ? 'link' : 'links'}`,
+    blocked ? `${blocked} can't be downloaded` : '',
+    warned ? `${warned} ${warned === 1 ? 'needs' : 'need'} a look` : '',
     merged ? `${merged} merged` : '',
     fresh ? `${fresh} new` : '',
     library ? `${library} in library` : '',
     queued ? `${queued} in the queue` : '',
-    blocked ? `${blocked} can't be downloaded` : '',
-    warned ? `${warned} ${warned === 1 ? 'needs' : 'need'} a look` : '',
   ]
     .filter(Boolean)
     .join(' · ');

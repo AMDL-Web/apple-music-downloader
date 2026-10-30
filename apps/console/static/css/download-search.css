@@ -64,8 +64,9 @@
   }
 
   /* On a phone the sections are shelves that scroll sideways, edge to
-     edge; the padding keeps the covers' shadows out of the clip. */
-  .new-search-group .new-wall {
+     edge, until Show more opens one into rows; the padding keeps the
+     covers' shadows out of the clip. */
+  .new-search-group .new-wall:not([data-expanded]) {
     grid-template-columns: none;
     grid-auto-flow: column;
     grid-auto-columns: 42%;
@@ -78,7 +79,7 @@
     padding: var(--s-2) var(--main-x) var(--s-4);
   }
 
-  .new-search-group .new-wall > li {
+  .new-search-group .new-wall:not([data-expanded]) > li {
     scroll-snap-align: start;
   }
 }
@@ -179,7 +180,7 @@
   opacity: 1;
 }
 
-.new-tile-go:hover:not(:disabled) {
+.new-tile-go:hover:not([aria-disabled="true"]) {
   background: var(--accent);
   color: var(--on-accent);
 }
@@ -191,6 +192,22 @@
 @media (hover: none) {
   .new-tile-go {
     opacity: 1;
+  }
+}
+
+/* In the queue: still a focus stop, drawn as a disabled button. */
+.new-tile-go[aria-disabled="true"]:not([aria-busy]) {
+  cursor: not-allowed;
+}
+
+.new-tile:hover .new-tile-go[aria-disabled="true"]:not([aria-busy]),
+.new-tile-go[aria-disabled="true"]:not([aria-busy]):focus-visible {
+  opacity: 0.55;
+}
+
+@media (hover: none) {
+  .new-tile-go[aria-disabled="true"]:not([aria-busy]) {
+    opacity: 0.55;
   }
 }
 
@@ -461,6 +478,15 @@
 
 .new-artist-all {
   grid-area: all;
+}
+
+/* With a touch target Show more is 44 px tall: the head keeps that room
+   while the placeholders show, so the sections do not move when it
+   arrives. */
+@media (max-width: 639px), (pointer: coarse) {
+  .new-search-group > .card-head {
+    min-height: var(--touch);
+  }
 }
 
 /* ---- Phone --------------------------------------------------------- */

@@ -113,7 +113,7 @@ test('choices adds a server value outside the usual list', () => {
   assert.equal(rateLabel(192000), '192 kHz');
 });
 
-test('each preset maps to its overrides; Follow Settings with Overwrite untouched sends none', () => {
+test('each preset maps to its overrides; following Settings with Overwrite untouched sends none', () => {
   const d = optionDefaults(SERVER);
   assert.deepEqual(PRESETS.map((p) => p.id), ['follow', 'lossless', 'atmos', 'aac']);
   assert.deepEqual(presetOverrides(d, 'follow'), {});

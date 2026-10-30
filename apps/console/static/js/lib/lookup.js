@@ -323,12 +323,13 @@ export function priorJob(jobs, link, trackMode = 'song') {
 /**
  * Whether a detected row is checked for the submit: the person's own pick
  * when there is one (`picks`, a Map of url -> boolean), else unchecked when
- * the item has an earlier job, done or still in the queue (`prior`, from
- * priorJob), else checked.
+ * the item has an earlier job still in the queue, or a done one while
+ * `overwrite` is off (`prior`, from priorJob), else checked.
  */
-export function isPicked(url, prior, picks) {
+export function isPicked(url, prior, picks, overwrite = false) {
   if (picks && picks.has(url)) return picks.get(url) === true;
-  return !prior;
+  if (!prior) return true;
+  return overwrite && prior.state === 'done';
 }
 
 const sameTarget = (a, b) => Boolean(a && b && a.type === b.type && a.id === b.id);

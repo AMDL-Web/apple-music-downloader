@@ -37,7 +37,9 @@ function PriorNote({ prior, href }) {
 
 /**
  * A song: a row on the Songs surface. Download is its one focus stop
- * (data-hit-primary); a song in the queue offers none to press.
+ * (data-hit-primary). While it is sent, and once the song is in the queue,
+ * it is aria-disabled rather than disabled, so focus and the arrow keys
+ * stay on it.
  */
 function HitRow({ hit, row }) {
   const v = hitView(hit);
@@ -66,11 +68,11 @@ function HitRow({ hit, row }) {
       icon="download"
       className="new-hit-download"
       data-hit-primary
-      disabled=${busy || queued}
+      aria-disabled=${busy || queued ? 'true' : undefined}
       aria-busy=${busy ? 'true' : undefined}
       aria-label=${queued ? `${v.title} is in the queue` : `Download ${v.title}`}
       title=${queued ? 'Already in the queue' : prior ? 'In your library; tracks on disk are skipped unless Overwrite is on' : 'Download'}
-      onClick=${() => row.onDownload(hit)}
+      onClick=${() => busy || queued || row.onDownload(hit)}
     />
   </li>`;
 }
@@ -142,7 +144,8 @@ function Groups({ data, loading, more, row, onMore }) {
         ${group.items.map((hit, i) => html`<${HitRow} key=${i} hit=${hit} row=${row} />`)}
       </ul>`;
     } else {
-      body = html`<ul class="wall new-wall" data-kind=${kind} aria-labelledby=${label}>
+      // Past its first answer (Show more), a phone's shelf opens into rows.
+      body = html`<ul class="wall new-wall" data-kind=${kind} data-expanded=${group.items.length > SEARCH_FIRST ? '' : undefined} aria-labelledby=${label}>
         ${group.items.map((hit, i) => html`<${Tile} key=${i} hit=${hit} row=${row} />`)}
       </ul>`;
     }

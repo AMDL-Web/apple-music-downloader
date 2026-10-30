@@ -135,7 +135,7 @@ export function useHitActions({ app, route, term, artistId, search, send, report
  */
 export function toResults(e, term, s) {
   if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-  const first = () => document.querySelector('.new-search [data-hit-primary]:not(:disabled)');
+  const first = () => document.querySelector('.new-search [data-hit-primary]:not(:disabled):not([aria-disabled="true"])');
   const el = e.currentTarget;
   if (e.key === 'Enter') {
     e.preventDefault();

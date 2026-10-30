@@ -13,8 +13,9 @@ const TILE_SIZES = '(max-width: 639px) 45vw, 232px';
 
 /**
  * An album hit. row: {busy, jobHref(id), onDownload(hit), priorOf(hit)}.
- * Download (data-hit-primary) is the tile's one focus stop; a hit in the
- * queue has none.
+ * Download (data-hit-primary) is the tile's one focus stop, aria-disabled
+ * (not disabled, so focus stays on it) while it is sent and once the hit
+ * is in the queue.
  */
 export function AlbumTile({ hit, row }) {
   const v = hitView(hit);
@@ -36,18 +37,16 @@ export function AlbumTile({ hit, row }) {
               <${Icon} name=${queued ? 'clock' : 'circle-check'} size="sm" />
             </span>`
           : null}
-        ${queued
-          ? null
-          : html`<button
-              type="button"
-              class="new-tile-go"
-              data-hit-primary
-              disabled=${busy}
-              aria-busy=${busy ? 'true' : undefined}
-              aria-label=${`Download ${v.title}`}
-              title=${prior ? 'In your library; tracks on disk are skipped unless Overwrite is on' : 'Download'}
-              onClick=${() => row.onDownload(hit)}
-            ><${Icon} name="download" /></button>`}
+        <button
+          type="button"
+          class="new-tile-go"
+          data-hit-primary
+          aria-disabled=${busy || queued ? 'true' : undefined}
+          aria-busy=${busy ? 'true' : undefined}
+          aria-label=${queued ? `${v.title} is in the queue` : `Download ${v.title}`}
+          title=${queued ? 'Already in the queue' : prior ? 'In your library; tracks on disk are skipped unless Overwrite is on' : 'Download'}
+          onClick=${() => busy || queued || row.onDownload(hit)}
+        ><${Icon} name="download" /></button>
       </div>
       <span class="wall-title new-tile-title" title=${v.title}>
         <span class="new-tile-name" dir="auto">${v.title}</span>
