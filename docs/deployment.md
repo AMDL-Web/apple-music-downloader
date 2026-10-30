@@ -127,7 +127,8 @@ and drops comments.
 
 To avoid running as root at all, use `docker run --user <uid>:<gid>` (or compose's
 `user:`). The entrypoint then skips the privilege drop and the ownership fixes, ignores
-`PUID`/`PGID`, and you are responsible for making the mounts writable by that user.
+`PUID`/`PGID`, and you are responsible for making the mounts writable by that user; the
+image's own directories, `data/tmp` included, already are (see [Mounts](#mounts)).
 
 ## Mounts
 
@@ -139,7 +140,11 @@ To avoid running as root at all, use `docker run --user <uid>:<gid>` (or compose
 | `./data/db` | `/app/data/db` | SQLite database (`database.path`, default `data/db/amdl.db`) |
 | `./data/downloads` | `/app/data/downloads` | Finished files. Change the host side to put them elsewhere, e.g. `/path/to/music:/app/data/downloads` |
 
-`data/tmp` stays inside the container and needs no mount. It is the staging area for the
+`data/tmp` stays inside the container and needs no mount, whatever uid the backend runs
+as: the image creates `/app/configs` and `/app/data` with its `db`, `tmp` and `downloads`
+directories world-writable with the sticky bit, like `/tmp`, so a `user:` uid can write
+to any of them that is not mounted. A mount brings the host directory's own permissions
+instead. `data/tmp` is the staging area for the
 download, decrypt, remux, verify and tag steps (see `download.temp_dir` in
 [`configs/config.example.yaml`](../configs/config.example.yaml)). If your storage driver
 is slow, mount it separately onto a fast host disk, kept apart from `data/downloads`.

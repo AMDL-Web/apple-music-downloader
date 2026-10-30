@@ -51,10 +51,14 @@ COPY --from=build /out/amdl-api /app/amdl-api
 # runtime user (uid 1000). The container starts the entrypoint as root; the
 # script gives the backend's own state (config files, database, data/tmp, never
 # data/downloads) to PUID:PGID (default 1000:1000) and then drops privileges to
-# run the backend. A non-root
-# user can also be set directly with docker run --user, in which case the
-# privilege-drop logic is skipped.
-RUN mkdir -p /app/configs /app/data && chown -R amdl:amdl /app
+# run the backend. A non-root user can also be set directly with docker run
+# --user (compose's user:), in which case the privilege drop is skipped. Any
+# such uid must be able to create files in the directories that are not
+# mounted, data/tmp above all, so they are world-writable with the sticky bit,
+# like /tmp. A mount replaces them with the host directory and its permissions.
+RUN mkdir -p /app/configs /app/data/db /app/data/tmp /app/data/downloads \
+    && chown -R amdl:amdl /app \
+    && chmod 1777 /app/configs /app/data /app/data/db /app/data/tmp /app/data/downloads
 
 EXPOSE 18080
 
