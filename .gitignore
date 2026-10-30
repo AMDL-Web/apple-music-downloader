@@ -6,7 +6,8 @@
 
 # Runtime data produced by the rewritten backend.
 data/
-/amdl-api
+# make build output.
+/bin/
 
 test/
 
@@ -35,3 +36,6 @@ configs/runtime.yaml.pre-merge.bak*
 # Backup created by the previous single-to-split migration may still contain
 # runtime secrets in upgraded workspaces.
 configs/config.yaml.pre-split.bak
+# What deploy/docker-compose.yml creates beside itself when run from a clone
+# (data/ above already matches at any depth).
+/deploy/configs/

@@ -1,3 +1,6 @@
+# Build from the repository root, which is the build context:
+#   docker build -f deploy/server/Dockerfile .
+#
 # The Dockerfile uses no BuildKit-only syntax, so the classic builder (a
 # docker build without buildx, as on Synology DSM) builds it too, for the host
 # platform. Multi-arch images need buildx.
@@ -34,7 +37,7 @@ ARG BUILD_DATE=
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath \
       -ldflags="-s -w -X amdl/internal/buildinfo.Version=${VERSION} -X amdl/internal/buildinfo.Commit=${COMMIT} -X amdl/internal/buildinfo.BuildDate=${BUILD_DATE}" \
-      -o /out/amdl-api ./cmd/amdl-api
+      -o /out/amdl-server ./apps/server
 
 # ---- Runtime stage -----------------------------------------------------
 FROM alpine:3.24
@@ -60,8 +63,8 @@ WORKDIR /app
 # The example configs are baked into /opt/amdl; on first start the entrypoint
 # seeds them into the config directory /app/configs.
 COPY configs/config.example.yaml configs/hooks.yaml /opt/amdl/
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-COPY --from=build /out/amdl-api /app/amdl-api
+COPY deploy/server/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY --from=build /out/amdl-server /app/amdl-server
 
 # Pre-create the config and data directories and hand them to the default
 # runtime user (uid 1000). The container starts the entrypoint as root; the

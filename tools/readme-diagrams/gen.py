@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the README's blueprint-style SVG diagrams.
 
-Usage, from the repository root: python3 tools/readme-diagrams/gen.py assets/readme
+Usage, from the repository root: python3 tools/readme-diagrams/gen.py docs/assets
 """
 import sys
 from xml.sax.saxutils import escape

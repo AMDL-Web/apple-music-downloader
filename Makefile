@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION ?= v1.6.0
 # Package directories, which leaves out dot-directories such as nested
 # worktrees under .claude/worktrees/ that `gofmt -l .` would descend into.
 GO_DIRS = $(shell $(GO) list -e -f '{{.Dir}}' ./... | sed 's|^$(CURDIR)/||')
-NODE_TESTS = $(wildcard .github/scripts/*.test.mjs scripts/*.test.mjs internal/console/jstest/*.test.mjs)
+NODE_TESTS = $(wildcard .github/scripts/*.test.mjs .claude/hooks/*.test.mjs apps/console/jstest/*.test.mjs)
 
 # Build identity stamped into internal/buildinfo (GET /api/v1/system). Each
 # falls back quietly when git or the .git directory is missing, such as in a
@@ -29,14 +29,14 @@ DOCKER_IMAGE ?= amdl-backend:dev
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
 
-build: ## Compile every package, then the ./amdl-api binary with the version stamped from git
+build: ## Compile every package, then bin/amdl-server with the version stamped from git
 	$(GO) build ./...
-	$(GO) build -ldflags "$(LDFLAGS)" -o amdl-api ./cmd/amdl-api
+	$(GO) build -ldflags "$(LDFLAGS)" -o bin/amdl-server ./apps/server
 
-run: ## Run the API with configs/config.yaml (needs a wrapper for real downloads)
-	$(GO) run -ldflags "$(LDFLAGS)" ./cmd/amdl-api
+run: ## Run the server with configs/config.yaml (needs a wrapper for real downloads)
+	$(GO) run -ldflags "$(LDFLAGS)" ./apps/server
 
-dev: ## Run the API in simulate mode on 127.0.0.1:18080 with a throwaway config and data under data/dev/
+dev: ## Run the server in simulate mode on 127.0.0.1:18080 with a throwaway config and data under data/dev/
 	@mkdir -p $(DEV_DIR)
 	@printf 'catalog:\n  language: "en-US"\ndownload:\n  downloads_dir: "%s"\n  temp_dir: "%s"\n  album_path_format: "albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"\n  artist_path_format: "artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"\nsimulate:\n  enabled: true\n' \
 		$(DEV_DIR)/downloads $(DEV_DIR)/tmp > $(DEV_DIR)/config.yaml
@@ -45,7 +45,7 @@ dev: ## Run the API in simulate mode on 127.0.0.1:18080 with a throwaway config 
 	AMDL_HOOKS_CONFIG=$(DEV_DIR)/hooks.yaml \
 	AMDL_SERVER_LISTEN=$(DEV_LISTEN) \
 	AMDL_DATABASE_PATH=$(DEV_DIR)/amdl.db \
-	$(GO) run -ldflags "$(LDFLAGS)" ./cmd/amdl-api
+	$(GO) run -ldflags "$(LDFLAGS)" ./apps/server
 
 fmt: ## Rewrite Go files with gofmt
 	@test -n "$(strip $(GO_DIRS))" || { echo "fmt: go list found no packages" >&2; exit 1; }
@@ -72,7 +72,7 @@ race: ## Run the test suite under the race detector
 vuln: ## Scan dependencies with govulncheck
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-node-test: ## Run the Node tests for release tooling, guard scripts and console JS
+node-test: ## Run the Node tests for release tooling, the guard hook and console JS
 	@command -v node >/dev/null 2>&1 || { echo "node-test: node is not installed; install Node.js 24 or newer (CI uses 24)" >&2; exit 1; }
 	@if [ -z "$(strip $(NODE_TESTS))" ]; then echo "node-test: no *.test.mjs files found"; exit 1; fi
 	node --test $(NODE_TESTS)
@@ -82,5 +82,5 @@ check: fmt-check build vet test race vuln node-test ## The CI gate: everything a
 temaridiff: ## Compare internal/fairplay with upstream Temari (own CI job; downloads Temari's cdylib)
 	cd tools/temaridiff && $(GO) test -count=1 ./...
 
-docker: ## Build the container image locally (single arch, not pushed)
-	docker build -t $(DOCKER_IMAGE) .
+docker: ## Build the server image locally (single arch, not pushed)
+	docker build -f deploy/server/Dockerfile -t $(DOCKER_IMAGE) .

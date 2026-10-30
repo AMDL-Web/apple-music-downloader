@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/guard-commands.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-commands.mjs\""
           }
         ]
       }

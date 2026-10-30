@@ -1,6 +1,8 @@
-# The build context needs only the Go sources and the example configs;
-# everything else is excluded so runtime data, keys or local artifacts never
-# end up in the image.
+# The build context is the repository root (docker build -f
+# deploy/server/Dockerfile .). It needs only the Go sources, the console's
+# static files, the example configs and the entrypoint; everything else is
+# excluded so runtime data, keys or local artifacts never end up in the image.
+# The classic builder reads this file only from the context root.
 .git
 .github
 .claude
@@ -19,7 +21,7 @@ keys/
 *.p8
 
 # Local build output and coverage files.
-/amdl-api
+/bin
 *.out
 coverage.txt
 
@@ -35,7 +37,8 @@ configs/config.yaml.pre-split.bak
 # Release scripts and other tools unrelated to the image.
 tools/
 
-# Docker's own files do not need to be in the context.
-Dockerfile
-docker-compose.yml
+# Deployment files other than the entrypoint. This also keeps out the configs/
+# and data/ that compose creates beside itself when run from deploy/ in a clone.
+deploy/
+!deploy/server/docker-entrypoint.sh
 .dockerignore

@@ -4,8 +4,9 @@
 
 ## Docker
 
-`docker-compose.yml` pulls the prebuilt multi-arch image (linux/amd64 + linux/arm64) from
-GHCR, so nothing is built locally:
+[`deploy/docker-compose.yml`](../deploy/docker-compose.yml) pulls the prebuilt multi-arch
+image (linux/amd64 + linux/arm64) from GHCR, so nothing is built locally. Copy it to an
+empty directory and start it there:
 
 ```bash
 docker compose up -d
@@ -19,16 +20,18 @@ Pin a version by replacing `:latest` in the compose file with a concrete tag.
 > fails with `unauthorized` / `denied` — flip it to public in your repository's Packages
 > settings, or build locally instead.
 
-To build from source, uncomment `build: .` in `docker-compose.yml`:
+To build from source, uncomment the `build:` block in `deploy/docker-compose.yml` in a
+clone and start Compose from `deploy/`. The build context is the repository root and the
+Dockerfile is `deploy/server/Dockerfile`; the configs and data then live under `deploy/`:
 
 ```bash
-docker compose up -d --build
+cd deploy && docker compose up -d --build
 ```
 
 Or without compose:
 
 ```bash
-docker build -t amdl-backend .
+docker build -f deploy/server/Dockerfile -t amdl-backend .
 docker run -d --name amdl-backend \
   --stop-timeout 120 \
   -p 18080:18080 \
@@ -52,13 +55,13 @@ Two build args point the build at mirrors where `proxy.golang.org` or
 | `ALPINE_MIRROR` | `https://dl-cdn.alpinelinux.org/alpine` | Replaces that URL in the runtime stage's `/etc/apk/repositories` before `apk add`; the mirror stays in the image's file. |
 
 ```bash
-docker build -t amdl-backend \
+docker build -f deploy/server/Dockerfile -t amdl-backend \
   --build-arg GOPROXY=https://goproxy.cn,direct \
   --build-arg ALPINE_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/alpine .
 ```
 
-With compose, use the long `build:` form with `args:`; `docker-compose.yml` has it as a
-comment.
+With compose, uncomment the `args:` under `build:`; `deploy/docker-compose.yml` has them
+as a comment.
 
 The image is a multi-stage build: the build stage cross-compiles a static binary
 (`CGO_ENABLED=0`, pure-Go SQLite), and the runtime stage is Alpine with `ffmpeg`,
@@ -78,7 +81,7 @@ resume on the next start (`job_recovered`), skipping tracks that already finishe
 Partial transfers resume too while the container's `data/tmp` survives (a restart keeps
 it; recreating the container starts those tracks over). Each shutdown step is bounded,
 about 105 s in the worst case, so the container needs more than Docker's default 10 s:
-`docker-compose.yml` sets `stop_grace_period: 2m`, and `docker run` needs
+`deploy/docker-compose.yml` sets `stop_grace_period: 2m`, and `docker run` needs
 `--stop-timeout 120`. With less, Docker kills the process before it closes the database.
 The order of the steps is in [Architecture](architecture.md#1-process-and-lifecycle).
 
@@ -172,7 +175,7 @@ The mounts still need write access for that uid or one of its groups.
 
 ## Mounts
 
-`docker-compose.yml` bind-mounts three directories:
+`deploy/docker-compose.yml` bind-mounts three directories:
 
 | Host | Container | Contents |
 | --- | --- | --- |
@@ -250,7 +253,7 @@ which runs the manager inside a QEMU guest with its own kernel and needs `/dev/k
 - A guest started this way answered `/status` with `ready: true` on a Synology DS923+
   (DSM 7.3.2). Logging in an Apple account inside the guest is not verified.
 
-`docker-compose.yml` has both as commented services. To use one, uncomment it and set
+`deploy/docker-compose.yml` has both as commented services. To use one, uncomment it and set
 `AMDL_WRAPPER_ADDRESS` to its URL:
 
 - wrapper-manager as a compose service: `http://wrapper-manager:8080`. It keeps its

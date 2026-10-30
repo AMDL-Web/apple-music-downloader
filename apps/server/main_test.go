@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"amdl/apps/console"
 	"amdl/internal/db"
 )
 
@@ -103,37 +104,68 @@ func TestRunStopsCleanlyWhenItsContextEnds(t *testing.T) {
 	_ = store.Close()
 }
 
-// An open SSE stream must not hold shutdown for the HTTP drain timeout: run
-// registers api.Server.EndStreams with RegisterOnShutdown, so the stream ends
-// when the drain starts.
-func TestRunEndsOpenStreamsAtShutdown(t *testing.T) {
+// startRun runs run on a free loopback port and waits until it answers
+// /api/v1/health. Cancelling ctx stops it; run's result arrives on done.
+func startRun(t *testing.T, ctx context.Context) (addr string, done <-chan error) {
+	t.Helper()
 	files := newRunEnv(t, "")
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := probe.Addr().String()
+	addr = probe.Addr().String()
 	_ = probe.Close()
 	t.Setenv("AMDL_SERVER_LISTEN", addr)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan error, 1)
-	go func() { done <- run(ctx, files) }()
+	result := make(chan error, 1)
+	go func() { result <- run(ctx, files) }()
 
-	base := "http://" + addr + "/api/v1"
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		resp, err := http.Get(base + "/health")
+		resp, err := http.Get("http://" + addr + "/api/v1/health")
 		if err == nil {
 			_ = resp.Body.Close()
-			break
+			return addr, result
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("server did not come up on %s: %v", addr, err)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+// The binary mounts the web console; the api package's own tests use a stub.
+func TestRunServesTheConsole(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	addr, done := startRun(t, ctx)
+	page, err := http.Get("http://" + addr + "/console/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = page.Body.Close()
+	if page.StatusCode != http.StatusOK || page.Header.Get("Content-Security-Policy") != console.ContentSecurityPolicy {
+		t.Errorf("GET /console/ = %d CSP %q, want the console", page.StatusCode, page.Header.Get("Content-Security-Policy"))
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run() = %v, want nil", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("run did not return after its context ended")
+	}
+}
+
+// An open SSE stream must not hold shutdown for the HTTP drain timeout: run
+// registers api.Server.EndStreams with RegisterOnShutdown, so the stream ends
+// when the drain starts.
+func TestRunEndsOpenStreamsAtShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addr, done := startRun(t, ctx)
+
+	base := "http://" + addr + "/api/v1"
 	stream, err := http.Get(base + "/downloads/events")
 	if err != nil {
 		t.Fatal(err)

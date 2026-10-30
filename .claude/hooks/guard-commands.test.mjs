@@ -105,7 +105,7 @@ test("commit messages that mention forbidden commands are not parsed as commands
     "git commit -s -m \"docs: explain why git commit without -s is blocked\"",
     "git commit -s -F - <<'EOF'\ndocs: guard\n\ngit push origin main\ngh pr merge 1 --admin\ngit add -f configs/config.yaml\nEOF",
     "echo 'git push origin main'",
-    "rg -n 'git add -f keys/' scripts",
+    "rg -n 'git add -f keys/' .claude/hooks",
   ]);
 });
 
@@ -132,7 +132,7 @@ test("ordinary adds and adds of example files are allowed", () => {
     "git add configs/config.yaml",
     "git add -A",
     "git add internal/api/server.go docs/api.md",
-    "git add -f internal/repocheck/docs_test.go",
+    "git add -f tools/repocheck/docs_test.go",
   ]);
 });
 

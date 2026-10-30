@@ -438,7 +438,7 @@ var (
 // console calls must be a path in internal/api/openapi.yaml, so a renamed
 // or removed route fails here before it fails in a browser.
 func TestAPIPathsExistInSpec(t *testing.T) {
-	spec, err := os.ReadFile("../api/openapi.yaml")
+	spec, err := os.ReadFile("../../internal/api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read the API contract: %v", err)
 	}
@@ -483,7 +483,7 @@ var (
 // list lacks can only be reached by editing the URL.
 func TestLogComponentsMatchBackend(t *testing.T) {
 	backend := map[string]bool{}
-	for _, root := range []string{"../../cmd", "../../internal"} {
+	for _, root := range []string{"../server", "../../internal"} {
 		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
 				return err
@@ -660,7 +660,7 @@ var (
 // A new runtime key therefore fails here until the page can edit it or says
 // why it does not.
 func TestSettingsFieldsCoverRuntimeConfig(t *testing.T) {
-	spec, err := os.ReadFile("../api/openapi.yaml")
+	spec, err := os.ReadFile("../../internal/api/openapi.yaml")
 	if err != nil {
 		t.Fatalf("read the API contract: %v", err)
 	}

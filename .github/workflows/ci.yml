@@ -109,12 +109,13 @@ jobs:
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      # Single-arch and never pushed: this only proves the Dockerfile and
-      # .dockerignore still produce an image before a release tag depends on it.
+      # Single-arch and never pushed: this only proves deploy/server/Dockerfile
+      # and .dockerignore still produce an image before a release tag depends on it.
       - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: deploy/server/Dockerfile
           platforms: linux/amd64
           push: false
           build-args: |

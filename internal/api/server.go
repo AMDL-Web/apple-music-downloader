@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"amdl/internal/config"
-	"amdl/internal/console"
 	"amdl/internal/db"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
@@ -18,8 +17,8 @@ import (
 )
 
 // Deps are the components the HTTP layer serves. Every field is required
-// except Logger and Logging; New refuses a nil one, so no handler answers 503
-// for a missing dependency.
+// except Logger, Logging and Console; New refuses a nil one, so no handler
+// answers 503 for a missing dependency.
 type Deps struct {
 	// Config is the live runtime config shared with the download pipeline;
 	// the /config routes read, reload and replace its snapshot.
@@ -39,6 +38,10 @@ type Deps struct {
 	LibrarySync LibrarySyncService
 	// Catalog backs POST /lookup.
 	Catalog CatalogService
+	// Console serves the web console under /console/ (apps/console), and GET /
+	// redirects to it. Nil leaves both routes out. The binary passes it in so
+	// this package does not import a product.
+	Console http.Handler
 }
 
 // Server holds the HTTP handlers; build it with New and serve Routes.
@@ -57,6 +60,7 @@ type Server struct {
 	quality     QualityService
 	librarySync LibrarySyncService
 	catalog     CatalogService
+	console     http.Handler
 	// now is the clock of GET /system uptime and the GET /stats window and
 	// cache; nil means time.Now.
 	now        func() time.Time
@@ -90,7 +94,7 @@ func New(deps Deps) (*Server, error) {
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync,
-		catalog: deps.Catalog,
+		catalog: deps.Catalog, console: deps.Console,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())
 	// logging.buffer_size is a startup key, so the snapshot read here is the
@@ -125,10 +129,7 @@ type route struct {
 
 func (s *Server) routes() []route {
 	h := func(f http.HandlerFunc) http.Handler { return f }
-	return []route{
-		{http.MethodGet, "/{$}", h(redirectToConsole)},
-		{http.MethodGet, "/console/", http.StripPrefix("/console", console.Handler())},
-
+	table := []route{
 		{http.MethodGet, "/api/v1/health", h(s.health)},
 		{http.MethodGet, "/api/v1/system", h(s.systemInfo)},
 		{http.MethodGet, "/api/v1/stats", h(s.stats)},
@@ -158,6 +159,13 @@ func (s *Server) routes() []route {
 		{http.MethodPost, "/api/v1/downloads/{id}/retry", h(s.retryDownload)},
 		{http.MethodGet, "/api/v1/downloads/{id}/events", h(s.jobEvents)},
 	}
+	if s.console == nil {
+		return table
+	}
+	return append(table,
+		route{http.MethodGet, "/{$}", h(redirectToConsole)},
+		route{http.MethodGet, "/console/", http.StripPrefix("/console", s.console)},
+	)
 }
 
 // Routes returns the handler to serve: the route table on one mux, wrapped in

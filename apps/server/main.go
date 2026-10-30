@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"amdl/apps/console"
 	"amdl/internal/api"
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
@@ -174,7 +175,7 @@ func run(ctx context.Context, files configFiles) (err error) {
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperClient, Quality: qualityService, LibrarySync: libraryWatcher,
-		Catalog: catalog,
+		Catalog: catalog, Console: console.Handler(),
 	})
 	if err != nil {
 		return fmt.Errorf("build api server: %w", err)

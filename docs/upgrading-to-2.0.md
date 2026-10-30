@@ -59,7 +59,7 @@ needs the API changes below before it works against 2.0.
      (`lyrics` is `line`, `syllable-lyrics` is `word`).
 4. In the Compose file:
    - add the wrapper service (wrapper-manager v2 or wrapper-lite) from
-     [`docker-compose.yml`](../docker-compose.yml), or keep a wrapper on the host;
+     [`deploy/docker-compose.yml`](../deploy/docker-compose.yml), or keep a wrapper on the host;
    - set `AMDL_WRAPPER_ADDRESS` to its URL, for example `http://wrapper-manager:8080`
      (a `host:port` value fails startup);
    - drop the `./data/logs` mount and any `.p8` key mount;
@@ -67,7 +67,10 @@ needs the API changes below before it works against 2.0.
    - remove every other `AMDL_*` variable except the five 2.0 reads;
    - make sure the host downloads directory is writable by `PUID:PGID`: the 2.0
      entrypoint re-owns only the backend's own state and no longer changes the
-     downloads directory's owner ([Deployment](deployment.md#ownership)).
+     downloads directory's owner ([Deployment](deployment.md#ownership));
+   - if a `command:`, `entrypoint:` or health check names `/app/amdl-api`, change it to
+     `/app/amdl-server`, and if you build the image yourself, see
+     [Image and source tree](#image-and-source-tree).
 5. Check the wrapper host: `unshare -Ur true` must succeed, or use the QEMU variant (see [Wrapper](#wrapper)).
 6. Start 2.0, then confirm `GET /api/v1/wrapper/status` reports `ready` and a region, and
    read `login_supported` to know whether the console can log in.
@@ -190,6 +193,19 @@ needs the API changes below before it works against 2.0.
   `syllable-lyrics` is `word`). The old keys are rejected at startup. `lyrics_extras`
   keeps its values and now shapes LRC only. Lyrics come from the wrapper account's
   storefront, whatever the job's, with the translation in `catalog.language`.
+
+## Image and source tree
+
+The repository holds every AMDL product, so the server's entry point, Dockerfile and
+Compose file moved. The image name, the paths inside the image (`/app/configs`,
+`/app/data`, the entrypoint), the port, the environment variables and the Compose service
+name stay as they were.
+
+| Area | 1.x | 2.0 | Affects |
+| --- | --- | --- | --- |
+| Server binary | `/app/amdl-api` in the image; `go run ./cmd/amdl-api` from source | `/app/amdl-server`; `go run ./apps/server` | a Compose `command:` or `entrypoint:`, `docker exec` or a process monitor that names the binary; the image's entrypoint starts it, so the shipped Compose file needs no change |
+| Compose file | `docker-compose.yml` at the repository root | `deploy/docker-compose.yml` | anyone who downloads it from the repository or runs Compose inside a clone, where its relative `./configs` and `./data` now live under `deploy/`; a copy in its own directory is unaffected |
+| Dockerfile | `Dockerfile` at the root: `docker build .`, Compose `build: .` | `deploy/server/Dockerfile`, still with the repository root as context: `docker build -f deploy/server/Dockerfile .`; Compose from `deploy/` uses `context: ..` and `dockerfile: deploy/server/Dockerfile` | anyone who builds the image from source |
 
 ## Wrapper
 

@@ -146,7 +146,7 @@ func TestShutdownStepsMovePastStuckSteps(t *testing.T) {
 // docker-compose.yml's stop_grace_period must outlast the whole shutdown
 // budget, or Docker kills the backend before it closes the store.
 func TestShutdownBudgetFitsComposeGracePeriod(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docker-compose.yml"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "deploy", "docker-compose.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}

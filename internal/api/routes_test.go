@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"amdl/internal/config"
-	"amdl/internal/console"
 
 	"gopkg.in/yaml.v3"
 )
@@ -176,7 +175,7 @@ func TestSubmitErrorCodesMatchProducers(t *testing.T) {
 // runtime config keys, which GET /api/v1/config returns (config.MutableView,
 // derived from the config package's runtime classification). The console's
 // Settings page is checked against this schema
-// (TestSettingsFieldsCoverRuntimeConfig in internal/console), so a runtime key
+// (TestSettingsFieldsCoverRuntimeConfig in apps/console), so a runtime key
 // missing here would silently get no setting.
 func TestRuntimeConfigSchemaMatchesRuntimeKeys(t *testing.T) {
 	type schema struct {
@@ -281,15 +280,16 @@ func TestNoCrossOriginAccess(t *testing.T) {
 	}
 }
 
+// The console handler is mounted with the /console prefix stripped, and the
+// bare root redirects to it. The real handler is wired in apps/server.
 func TestConsoleMount(t *testing.T) {
-	routes := (&Server{}).Routes()
+	var gotPath string
+	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { gotPath = r.URL.Path })
+	routes := (&Server{console: stub}).Routes()
 
-	recorder := requestJSON(t, routes, http.MethodGet, "/console/", "")
-	if recorder.Code != http.StatusOK || !strings.Contains(strings.ToLower(recorder.Body.String()), "<!doctype html>") {
-		t.Fatalf("GET /console/ = %d, want the console index", recorder.Code)
-	}
-	if got := recorder.Header().Get("Content-Security-Policy"); got != console.ContentSecurityPolicy {
-		t.Fatalf("GET /console/ CSP = %q, want the console policy", got)
+	recorder := requestJSON(t, routes, http.MethodGet, "/console/js/app.js", "")
+	if recorder.Code != http.StatusOK || gotPath != "/js/app.js" {
+		t.Fatalf("GET /console/js/app.js = %d reaching %q, want the console handler at /js/app.js", recorder.Code, gotPath)
 	}
 
 	recorder = requestJSON(t, routes, http.MethodGet, "/", "")
@@ -304,6 +304,16 @@ func TestConsoleMount(t *testing.T) {
 
 	recorder = requestJSON(t, routes, http.MethodGet, "/api/v1/nope", "")
 	assertErrorCode(t, recorder, http.StatusNotFound, "route_not_found")
+}
+
+// Without a console the server is the API alone: / and /console/ are unknown.
+func TestNoConsole(t *testing.T) {
+	routes := (&Server{}).Routes()
+	for _, p := range []string{"/", "/console/"} {
+		if recorder := requestJSON(t, routes, http.MethodGet, p, ""); recorder.Code != http.StatusNotFound {
+			t.Errorf("GET %s without a console = %d, want 404", p, recorder.Code)
+		}
+	}
 }
 
 // A process missing a required service fails at startup instead of serving
