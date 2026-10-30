@@ -286,9 +286,9 @@ test('Download names what it sends, and the count line what the links are', () =
   assert.equal(downloadLabel(['song', 'song']), 'Download 2 songs');
   assert.equal(downloadLabel(['album', 'song', 'playlist']), 'Download 3 items');
   assert.equal(countLine({}), '');
-  assert.equal(countLine({ links: 4, fresh: 1, blocked: 3 }), "4 links · 3 can't be downloaded · 1 new", 'what stops comes first, where a cut line keeps it');
+  assert.equal(countLine({ links: 4, fresh: 1, blocked: 3 }), "4 links · 3 can't download · 1 new", 'what stops comes first, where a cut line keeps it');
   assert.equal(countLine({ links: 2, fresh: 1, library: 1 }), '2 links · 1 new · 1 in library');
-  assert.equal(countLine({ links: 3, fresh: 1, queued: 1, warned: 1 }), '3 links · 1 needs a look · 1 new · 1 in the queue');
+  assert.equal(countLine({ links: 3, fresh: 1, queued: 1, warned: 1 }), '3 links · 1 to check · 1 new · 1 queued');
   assert.doesNotMatch(countLine({ links: 5, blocked: 2, warned: 2 }), /flagged/);
   assert.equal(countLine({ links: 3, merged: 2, fresh: 3 }), '3 links · 2 merged · 3 new', 'repeats folded into one link are counted after the links');
 });

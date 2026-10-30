@@ -16,7 +16,8 @@ const OUTCOME_WORDS = { completed: 'saved', skipped_existing: 'already on disk',
  * of the finished tracks in the order they finished, a translucent fill to the
  * overall stage-weighted progress, and under it the finished count and the
  * percent. A job that failed or was cancelled counts the tracks on disk
- * instead and drops the percent, which no longer measures anything. Drawn
+ * instead and drops the percent, which no longer measures anything; so does
+ * a single track, whose row has its own stage percent beside it. Drawn
  * from the first render, resolving included, so nothing below it moves when
  * tracks arrive or the job ends.
  */
@@ -53,7 +54,7 @@ export function AlbumProgress({ job, items }) {
     </div>
     <div class="abar-caption num" aria-hidden="true">
       <span class="abar-count">${resolving ? 'Resolving' : `${short ? p.onDisk : p.lit} / ${p.total}`}</span>
-      <span class="abar-pct">${resolving || short ? '' : `${p.percent}%`}</span>
+      <span class="abar-pct">${resolving || short || p.total === 1 ? '' : `${p.percent}%`}</span>
     </div>
   </div>`;
 }

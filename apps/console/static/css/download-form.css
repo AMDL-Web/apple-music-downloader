@@ -545,15 +545,21 @@
   gap: var(--s-1);
 }
 
+/* It wraps between its parts on a narrow phone, the glyph on the first line,
+   as an issue's. */
 .new-link-prior {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--s-1);
   align-self: flex-start;
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
   text-decoration: none;
+}
+
+.new-link-prior .icon {
+  margin-top: var(--s-0_5);
 }
 
 .new-link-open {

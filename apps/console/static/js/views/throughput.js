@@ -1,7 +1,6 @@
 // Throughput: the /stats card on the Overview, with totals and two per-day
-// small multiples. Under SPARSE_DAYS days with data the card is one sentence
-// instead: a chart of one bar says nothing. The formats mix is in Settings ›
-// Quality.
+// small multiples. Under SPARSE_DAYS days with data there is no card: a chart
+// of one bar says nothing. The formats mix is in Settings › Quality.
 
 import { html, useState } from '../ui/preact.js';
 import { count, bytes, dayLabel } from '../lib/format.js';
@@ -11,14 +10,6 @@ import { useStatus, refreshStatus, STATS_DAYS } from '../ui/system-status.js';
 const SPARSE_DAYS = 3;
 
 const hasData = (d) => (d.tracks_completed || 0) > 0 || (d.bytes_written || 0) > 0 || (d.jobs_completed || 0) > 0 || (d.jobs_failed || 0) > 0;
-
-/** "246 tracks, 11.1 GB", for a window that has little history; the card head names the period. */
-export function sparseSummary(totals) {
-  const tracks = totals.tracks_completed || 0;
-  const failed = totals.tracks_failed ? `, ${count(totals.tracks_failed)} failed` : '';
-  if (tracks === 0 && !(totals.bytes_written > 0)) return 'Nothing downloaded.';
-  return `${count(tracks)} ${tracks === 1 ? 'track' : 'tracks'}, ${bytes(totals.bytes_written || 0)}${failed}.`;
-}
 
 export function ThroughputCard() {
   const poll = useStatus(['stats']).stats || {};
@@ -31,11 +22,7 @@ export function ThroughputCard() {
   const daily = (stats && stats.daily) || [];
   const jobsDone = daily.reduce((n, d) => n + (d.jobs_completed || 0), 0);
   const jobsFailed = daily.reduce((n, d) => n + (d.jobs_failed || 0), 0);
-  if (totals && daily.filter(hasData).length < SPARSE_DAYS) {
-    return html`<${Card} section="throughput" title="Throughput" labelId="throughput-title" note=${period}>
-      <p class="tp-sparse">${sparseSummary(totals)}</p>
-    </${Card}>`;
-  }
+  if (totals && daily.filter(hasData).length < SPARSE_DAYS) return null;
   const today = stats && typeof stats.generated_at === 'string' ? stats.generated_at.slice(0, 10) : '';
   return html`<${Card}
     section="throughput"

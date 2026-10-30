@@ -254,10 +254,10 @@ function Actions({ job, app, onChanged, onDelete }) {
     }
   };
   const canCancel = jobAllows(job, 'cancel');
-  const canRetry = jobAllows(job, 'retry');
-  // Apple has nothing at this link: asking again fails the same way, so the
-  // way out is the link in Apple Music, and Retry steps back.
+  // Apple has nothing at this link: asking again fails the same way, so
+  // there is no Retry, as in the lists, and the link stays a quiet one.
   const notFound = job.status === 'failed' && isNotFound(job.error);
+  const canRetry = jobAllows(job, 'retry') && !notFound;
   const open = safeHttpUrl(job.input);
   // Two rows in every state: the links that never change, then what this
   // status allows. A job that finishes or is cancelled swaps buttons inside
@@ -265,7 +265,7 @@ function Actions({ job, app, onChanged, onDelete }) {
   return html`<div class="drawer-actions">
     <div class="drawer-actions-row">
       <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
-      ${open ? html`<${LinkButton} href=${open} variant=${notFound ? 'primary' : 'ghost'} icon="music" external>Open in Apple Music</${LinkButton}>` : null}
+      ${open ? html`<${LinkButton} href=${open} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
     </div>
     <div class="drawer-actions-row">
       ${canCancel && !confirming
@@ -279,7 +279,7 @@ function Actions({ job, app, onChanged, onDelete }) {
           </div>`
         : null}
       ${canRetry
-        ? html`<${Button} variant=${notFound ? 'secondary' : 'primary'} icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>`
+        ? html`<${Button} variant="primary" icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>`
         : null}
       ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Remove</${Button}>` : null}
     </div>

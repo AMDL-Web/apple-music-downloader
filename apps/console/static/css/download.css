@@ -518,6 +518,14 @@
     }
   }
 
+  /* The count breaks only between its parts, so the narrowest phones give
+     it a third line. */
+  @media (max-width: 359px) {
+    .new-dock-count {
+      -webkit-line-clamp: 3;
+    }
+  }
+
   .new-dock-count {
     font-size: var(--fs-14);
     line-height: var(--lh-14);
@@ -651,9 +659,6 @@
     text-align: center;
   }
 
-  .new-link-prior {
-    white-space: nowrap;
-  }
 
   /* Albums are the usual case; the kind is spelled out for the others. */
   .new-link[data-kind="album"] .new-link-fact[data-key="type"],

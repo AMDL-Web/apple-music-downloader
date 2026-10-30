@@ -439,9 +439,3 @@
 .live-idle-card[data-pending] .job-main {
   visibility: hidden;
 }
-
-.tp-sparse {
-  margin: 0;
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
-}

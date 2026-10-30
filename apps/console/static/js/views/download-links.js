@@ -78,13 +78,17 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, picked, skipped
   </${Card}>`;
 }
 
-/** The quiet note for an earlier job: in the queue now, or in the library since when, with Open. */
+/**
+ * The quiet note for an earlier job: in the queue now, or in the library
+ * since when, with Open. It breaks only between its parts.
+ */
 function PriorNote({ prior, href }) {
   const active = prior.state === 'active';
   const when = active ? '' : shortDate(prior.job.finished_at);
+  const text = [active ? 'In the queue now' : 'In your library', when].filter(Boolean).map((p) => p.replaceAll(' ', '\u00a0'));
   return html`<span class="new-link-prior" data-state=${prior.state}>
     <${Icon} name=${active ? 'clock' : 'circle-check'} size="sm" />
-    <span>${active ? 'In the queue now' : 'In your library'}${when ? ` · ${when}` : ''} · <a class="link new-link-open" href=${href} title="Open that job">Open</a></span>
+    <span>${text.join(' · ')} · <a class="link new-link-open" href=${href} title="Open that job">Open</a></span>
   </span>`;
 }
 

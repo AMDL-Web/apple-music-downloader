@@ -23,12 +23,13 @@ const SUBMIT_KEYS = isMac() ? '⌘↵' : 'Ctrl ↵';
  */
 export function Dock({ on, count, asks, label, disabled, busy, title, onSubmit, failure, refusal, onCustom, barRef }) {
   // "Download 3 albums": on a narrow phone the button says "Download" and
-  // the count beside it says how many.
-  const [verb, what] = /^Download /.test(label) ? ['Download', label.slice(8)] : [label, ''];
+  // the count beside it says how many; "Select a link to download" says
+  // "Select a link", leaving the count its room.
+  const [verb, what] = /^Download /.test(label) ? ['Download', label.slice(8)] : /^Select a link /.test(label) ? ['Select a link', label.slice(13)] : [label, ''];
   return html`<div class="new-dock-wrap" ref=${barRef} data-on=${on ? '' : undefined}>
     <div class="new-dock">
       <div class="new-dock-text">
-        <p class="new-dock-count" aria-hidden="true">${count}</p>
+        <p class="new-dock-count" aria-hidden="true">${count.split(' · ').map((part) => part.replaceAll(' ', '\u00a0')).join(' · ')}</p>
         ${asks ? html`<p class="new-dock-asks" title=${asks}>${asks}</p>` : null}
       </div>
       <${Button}
