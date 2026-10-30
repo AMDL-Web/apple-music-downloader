@@ -1,0 +1,251 @@
+{
+ "results": {
+  "albums": {
+   "href": "/v1/catalog/us/search?l=zh-Hans-CN&limit=2&term=Taylor+Swift&types=albums",
+   "next": "/v1/catalog/us/search?l=zh-Hans-CN&offset=2&term=Taylor+Swift&types=albums",
+   "data": [
+    {
+     "id": "6814997249",
+     "type": "albums",
+     "href": "/v1/catalog/us/albums/6814997249?l=zh-Hans-CN",
+     "attributes": {
+      "artistName": "Taylor Swift",
+      "artwork": {
+       "bgColor": "2b080c",
+       "hasP3": false,
+       "height": 3000,
+       "textColor1": "e2a971",
+       "textColor2": "e5693c",
+       "textColor3": "bd895d",
+       "textColor4": "c05532",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a0/dd/fd/a0ddfd72-ee9e-f046-6466-a5dbefc696fa/26UM1IM21436.rgb.jpg/{w}x{h}bb.jpg",
+       "width": 3000
+      },
+      "audioTraits": [
+       "lossless",
+       "lossy-stereo"
+      ],
+      "contentRating": "explicit",
+      "copyright": "℗ 2026 Taylor Swift",
+      "genreNames": [
+       "流行乐",
+       "音乐"
+      ],
+      "isCompilation": false,
+      "isComplete": true,
+      "isMasteredForItunes": true,
+      "isPrerelease": false,
+      "isSingle": false,
+      "name": "The Life of a Showgirl: The Encore",
+      "playParams": {
+       "id": "6814997249",
+       "kind": "album"
+      },
+      "recordLabel": "Taylor Swift",
+      "releaseDate": "2026-09-24",
+      "trackCount": 16,
+      "upc": "00881061651819",
+      "url": "https://music.apple.com/us/album/the-life-of-a-showgirl-the-encore/6814997249?l=zh-Hans-CN"
+     }
+    },
+    {
+     "id": "1742057774",
+     "type": "albums",
+     "href": "/v1/catalog/us/albums/1742057774?l=zh-Hans-CN",
+     "attributes": {
+      "artistName": "Taylor Swift",
+      "artwork": {
+       "bgColor": "302b27",
+       "hasP3": false,
+       "height": 3000,
+       "textColor1": "e8e2dd",
+       "textColor2": "d5cfc8",
+       "textColor3": "c3beb8",
+       "textColor4": "b4aea8",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a4/86/59/a486593a-53c9-1c2a-5122-8f25339f7359/24UMGIM44778.rgb.jpg/{w}x{h}bb.jpg",
+       "width": 3000
+      },
+      "audioTraits": [
+       "atmos",
+       "lossless",
+       "lossy-stereo",
+       "spatial"
+      ],
+      "contentRating": "explicit",
+      "copyright": "℗ 2024 Taylor Swift",
+      "genreNames": [
+       "流行乐",
+       "音乐"
+      ],
+      "isCompilation": false,
+      "isComplete": true,
+      "isMasteredForItunes": true,
+      "isPrerelease": false,
+      "isSingle": false,
+      "name": "THE TORTURED POETS DEPARTMENT: THE ANTHOLOGY",
+      "playParams": {
+       "id": "1742057774",
+       "kind": "album"
+      },
+      "recordLabel": "Taylor Swift",
+      "releaseDate": "2024-04-19",
+      "trackCount": 31,
+      "upc": "00602465709216",
+      "url": "https://music.apple.com/us/album/the-tortured-poets-department-the-anthology/1742057774?l=zh-Hans-CN"
+     }
+    }
+   ]
+  },
+  "artists": {
+   "href": "/v1/catalog/us/search?l=zh-Hans-CN&limit=2&term=Taylor+Swift&types=artists",
+   "data": [
+    {
+     "id": "159260351",
+     "type": "artists",
+     "href": "/v1/catalog/us/artists/159260351?l=zh-Hans-CN",
+     "attributes": {
+      "artwork": {
+       "bgColor": "070706",
+       "defaultCropCode": "bb",
+       "hasP3": true,
+       "height": 1640,
+       "textColor1": "e2ac8d",
+       "textColor2": "cf9e85",
+       "textColor3": "b68b72",
+       "textColor4": "a7806c",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/AMCArtistImages221/v4/6d/67/88/6d67888b-9e7f-53af-7853-0f91d6fd2332/ami_U003aidentity_U003a994af5c375f4c3aa96cd6ced4a700799-2026-09-25T04-00-05.358Z_cropped.png/{w}x{h}bb.jpg",
+       "width": 1640
+      },
+      "genreNames": [
+       "流行乐"
+      ],
+      "name": "Taylor Swift",
+      "url": "https://music.apple.com/us/artist/taylor-swift/159260351?l=zh-Hans-CN"
+     },
+     "relationships": {
+      "albums": {
+       "href": "/v1/catalog/us/artists/159260351/albums?l=zh-Hans-CN",
+       "next": "/v1/catalog/us/artists/159260351/albums?l=zh-Hans-CN&offset=25",
+       "data": [
+        {
+         "id": "1440933849",
+         "type": "albums",
+         "href": "/v1/catalog/us/albums/1440933849?l=zh-Hans-CN"
+        },
+        {
+         "id": "1468058165",
+         "type": "albums",
+         "href": "/v1/catalog/us/albums/1468058165?l=zh-Hans-CN"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "songs": {
+   "href": "/v1/catalog/us/search?l=zh-Hans-CN&limit=2&term=Taylor+Swift&types=songs",
+   "next": "/v1/catalog/us/search?l=zh-Hans-CN&offset=2&term=Taylor+Swift&types=songs",
+   "data": [
+    {
+     "id": "6814997425",
+     "type": "songs",
+     "href": "/v1/catalog/us/songs/6814997425?l=zh-Hans-CN",
+     "attributes": {
+      "albumArtistName": "Taylor Swift",
+      "albumName": "The Life of a Showgirl: The Encore",
+      "artistName": "Taylor Swift",
+      "artwork": {
+       "bgColor": "2b080c",
+       "hasP3": false,
+       "height": 3000,
+       "textColor1": "e2a971",
+       "textColor2": "e5693c",
+       "textColor3": "bd895d",
+       "textColor4": "c05532",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a0/dd/fd/a0ddfd72-ee9e-f046-6466-a5dbefc696fa/26UM1IM21436.rgb.jpg/{w}x{h}bb.jpg",
+       "width": 3000
+      },
+      "audioLocale": "en-US",
+      "audioTraits": [
+       "atmos",
+       "lossless",
+       "lossy-stereo",
+       "spatial"
+      ],
+      "composerName": "Taylor Swift, Max Martin & Shellback",
+      "discNumber": 2,
+      "durationInMillis": 225868,
+      "genreNames": [
+       "流行乐",
+       "音乐"
+      ],
+      "hasLyrics": true,
+      "hasTimeSyncedLyrics": true,
+      "isAppleDigitalMaster": true,
+      "isMasteredForItunes": true,
+      "isVocalAttenuationAllowed": true,
+      "isrc": "USUG12602391",
+      "name": "Patient Zero",
+      "playParams": {
+       "id": "6814997425",
+       "kind": "song"
+      },
+      "releaseDate": "2026-09-24",
+      "trackNumber": 1,
+      "url": "https://music.apple.com/us/album/patient-zero/6814997249?i=6814997425&l=zh-Hans-CN"
+     }
+    },
+    {
+     "id": "6775527443",
+     "type": "songs",
+     "href": "/v1/catalog/us/songs/6775527443?l=zh-Hans-CN",
+     "attributes": {
+      "albumArtistName": "Taylor Swift",
+      "albumName": "I Knew It, I Knew You (From \"Toy Story 5\") - Single",
+      "artistName": "Taylor Swift",
+      "artwork": {
+       "bgColor": "9b211c",
+       "hasP3": false,
+       "height": 3000,
+       "textColor1": "fde8be",
+       "textColor2": "f1b665",
+       "textColor3": "e9c09d",
+       "textColor4": "df9956",
+       "url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/34/35/6c/34356cb4-bd0b-3bac-b118-1a6d7264dc64/26UMGIM69942.rgb.jpg/{w}x{h}bb.jpg",
+       "width": 3000
+      },
+      "audioLocale": "en-US",
+      "audioTraits": [
+       "atmos",
+       "lossless",
+       "lossy-stereo",
+       "spatial"
+      ],
+      "composerName": "Taylor Swift & Jack Antonoff",
+      "discNumber": 1,
+      "durationInMillis": 178186,
+      "genreNames": [
+       "乡村",
+       "音乐"
+      ],
+      "hasLyrics": true,
+      "hasTimeSyncedLyrics": true,
+      "isAppleDigitalMaster": true,
+      "isMasteredForItunes": true,
+      "isVocalAttenuationAllowed": true,
+      "isrc": "USWD12641055",
+      "name": "I Knew It, I Knew You (From \"Toy Story 5\")",
+      "playParams": {
+       "id": "6775527443",
+       "kind": "song"
+      },
+      "releaseDate": "2026-06-05",
+      "trackNumber": 1,
+      "url": "https://music.apple.com/us/album/i-knew-it-i-knew-you-from-toy-story-5/6775527442?i=6775527443&l=zh-Hans-CN"
+     }
+    }
+   ]
+  }
+ }
+}

@@ -55,6 +55,12 @@ type Song struct {
 	// amp-api returns audioTraits, so it is always false for a song read from
 	// the public host.
 	HiResLossless bool
+	// AudioTraits is attributes.audioTraits as Apple sends it, for example
+	// "lossless", "hi-res-lossless", "atmos", "spatial", "lossy-stereo".
+	AudioTraits []string
+	// URL is the song's music.apple.com page (attributes.url), an album link
+	// whose i parameter names the song.
+	URL string
 }
 
 type Collection struct {
@@ -80,7 +86,13 @@ type Collection struct {
 	// them.
 	ContentRating      string
 	AppleDigitalMaster bool
-	Tracks             []Song
+	// URL (attributes.url), TrackCount (attributes.trackCount, the whole
+	// release) and AudioTraits (amp-api's attributes.audioTraits) are filled
+	// for album summaries: search hits and an artist's albums.
+	URL         string
+	TrackCount  int
+	AudioTraits []string
+	Tracks      []Song
 }
 
 type Artist struct {
@@ -250,6 +262,7 @@ type songAttributes struct {
 	// AudioTraits is amp-api only and comes without extend=. The public host
 	// documents a different, extended attribute, audioVariants, instead.
 	AudioTraits []string `json:"audioTraits"`
+	URL         string   `json:"url"`
 }
 
 type albumAttributes struct {
@@ -270,6 +283,9 @@ type albumAttributes struct {
 	// attributes of the public catalog's Albums resource.
 	ContentRating       string `json:"contentRating"`
 	IsMasteredForItunes bool   `json:"isMasteredForItunes"`
+	URL                 string `json:"url"`
+	// AudioTraits is amp-api only, as on songs.
+	AudioTraits []string `json:"audioTraits"`
 }
 
 type playlistAttributes struct {

@@ -64,7 +64,8 @@ func mapSong(raw catalogSongData) Song {
 		ContentRating:    raw.Attributes.ContentRating, HasLyrics: raw.Attributes.HasLyrics || raw.Attributes.HasTimeSyncedLyrics,
 		AppleDigitalMaster: raw.Attributes.IsAppleDigitalMaster,
 		HiResLossless:      slices.Contains(raw.Attributes.AudioTraits, "hi-res-lossless"),
-		ArtworkURL:         raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
+		AudioTraits:        raw.Attributes.AudioTraits, URL: raw.Attributes.URL,
+		ArtworkURL: raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
 		EnhancedHLS: raw.Attributes.ExtendedAssetURLs.EnhancedHLS,
 	}
 	if len(raw.Relationships.Albums.Data) > 0 {
@@ -101,6 +102,15 @@ func mapAlbumSummary(raw catalogAlbumData) Collection {
 		ArtworkURL: raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
 		ArtistID: artistID, ArtistArtworkURL: artistArtworkURL, ArtistURL: artistURL,
 		ReleaseDate: raw.Attributes.ReleaseDate, GenreNames: raw.Attributes.GenreNames,
+		ContentRating: raw.Attributes.ContentRating, AppleDigitalMaster: raw.Attributes.IsMasteredForItunes,
+		URL: raw.Attributes.URL, TrackCount: raw.Attributes.TrackCount, AudioTraits: raw.Attributes.AudioTraits,
+	}
+}
+
+func mapArtist(raw artistData) Artist {
+	return Artist{
+		ID: raw.ID, Name: raw.Attributes.Name, URL: raw.Attributes.URL, GenreNames: raw.Attributes.GenreNames,
+		ArtworkURL: raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
 	}
 }
 

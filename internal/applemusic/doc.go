@@ -1,7 +1,8 @@
 // Package applemusic parses Apple Music links (ParseWithAlbumTrackMode) and
 // reads catalog, artwork and library metadata through CatalogClient, built
 // once by NewCatalogClient: Song, Album, Playlist, StationTracks, ArtistAlbums,
-// FetchCover, LibrarySongsNewestFirst, LibraryAlbumCatalogURL. EnrichWithAlbum
+// FetchCover, LibrarySongsNewestFirst, LibraryAlbumCatalogURL, and for browsing
+// Search and ArtistAlbumsPage. EnrichWithAlbum
 // merges album-level fields into a song for every caller. Startup runs
 // RunTokenRefresher until shutdown.
 //

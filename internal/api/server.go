@@ -36,7 +36,7 @@ type Deps struct {
 	Wrapper     WrapperService
 	Quality     QualityService
 	LibrarySync LibrarySyncService
-	// Catalog backs POST /lookup.
+	// Catalog backs POST /lookup, GET /search and GET /artists/{id}/albums.
 	Catalog CatalogService
 	// Console serves the web console under /console/ (apps/console), and GET /
 	// redirects to it. Nil leaves both routes out. The binary passes it in so
@@ -147,6 +147,8 @@ func (s *Server) routes() []route {
 		{http.MethodPost, "/api/v1/wrapper/logout", h(s.wrapperLogout)},
 		{http.MethodPost, "/api/v1/quality", h(s.queryQuality)},
 		{http.MethodPost, "/api/v1/lookup", h(s.lookupLink)},
+		{http.MethodGet, "/api/v1/search", h(s.search)},
+		{http.MethodGet, "/api/v1/artists/{artist_id}/albums", h(s.artistAlbums)},
 		{http.MethodPost, "/api/v1/downloads", h(s.createDownload)},
 		{http.MethodGet, "/api/v1/downloads", h(s.listDownloads)},
 		// The literal "events" segment is more specific than "{id}", so the

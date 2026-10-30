@@ -1,0 +1,139 @@
+{
+ "next": "/v1/catalog/us/artists/159260351/albums?l=zh-Hans-CN&offset=6",
+ "data": [
+  {
+   "id": "1650841512",
+   "type": "albums",
+   "href": "/v1/catalog/us/albums/1650841512?l=zh-Hans-CN",
+   "attributes": {
+    "artistName": "Taylor Swift",
+    "artwork": {
+     "bgColor": "eae7e3",
+     "hasP3": false,
+     "height": 3000,
+     "textColor1": "0d0c13",
+     "textColor2": "291216",
+     "textColor3": "39383d",
+     "textColor4": "4f3c3f",
+     "url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/59/13/5c/59135ccc-8425-415c-7f89-8aeada60088e/22UM1IM22440.rgb.jpg/{w}x{h}bb.jpg",
+     "width": 3000
+    },
+    "audioTraits": [
+     "atmos",
+     "lossless",
+     "lossy-stereo",
+     "spatial"
+    ],
+    "contentRating": "explicit",
+    "copyright": "℗ 2022 Taylor Swift",
+    "genreNames": [
+     "流行乐",
+     "音乐"
+    ],
+    "isCompilation": false,
+    "isComplete": true,
+    "isMasteredForItunes": true,
+    "isPrerelease": false,
+    "isSingle": false,
+    "name": "Midnights (3am Edition)",
+    "playParams": {
+     "id": "1650841512",
+     "kind": "album"
+    },
+    "recordLabel": "Taylor Swift",
+    "releaseDate": "2022-10-21",
+    "trackCount": 20,
+    "upc": "00602448851413",
+    "url": "https://music.apple.com/us/album/midnights-3am-edition/1650841512?l=zh-Hans-CN"
+   }
+  },
+  {
+   "id": "1833328839",
+   "type": "albums",
+   "href": "/v1/catalog/us/albums/1833328839?l=zh-Hans-CN",
+   "attributes": {
+    "artistName": "Taylor Swift",
+    "artwork": {
+     "bgColor": "4c592e",
+     "hasP3": false,
+     "height": 3000,
+     "textColor1": "c7ebd0",
+     "textColor2": "acdcc4",
+     "textColor3": "aeceb0",
+     "textColor4": "98c2a6",
+     "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2d/46/e0/2d46e0bc-8ab9-85dd-4b56-ee6951351034/25UM1IM19577.rgb.jpg/{w}x{h}bb.jpg",
+     "width": 3000
+    },
+    "audioTraits": [
+     "lossless",
+     "lossy-stereo"
+    ],
+    "contentRating": "explicit",
+    "copyright": "℗ 2025 Taylor Swift",
+    "genreNames": [
+     "流行乐",
+     "音乐"
+    ],
+    "isCompilation": false,
+    "isComplete": false,
+    "isMasteredForItunes": true,
+    "isPrerelease": false,
+    "isSingle": false,
+    "name": "The Life of a Showgirl",
+    "playParams": {
+     "id": "1833328839",
+     "kind": "album"
+    },
+    "recordLabel": "Taylor Swift",
+    "releaseDate": "2025-10-03",
+    "trackCount": 13,
+    "upc": "00602478924439",
+    "url": "https://music.apple.com/us/album/the-life-of-a-showgirl/1833328839?l=zh-Hans-CN"
+   }
+  },
+  {
+   "id": "1528112358",
+   "type": "albums",
+   "href": "/v1/catalog/us/albums/1528112358?l=zh-Hans-CN",
+   "attributes": {
+    "artistName": "Taylor Swift",
+    "artwork": {
+     "bgColor": "c6c6c6",
+     "hasP3": false,
+     "height": 3000,
+     "textColor1": "090909",
+     "textColor2": "0d0d0d",
+     "textColor3": "2f2f2f",
+     "textColor4": "323232",
+     "url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/b5/80/dc/b580dca0-349d-036b-e09b-bd849f6affd8/20UMGIM64216.rgb.jpg/{w}x{h}bb.jpg",
+     "width": 3000
+    },
+    "audioTraits": [
+     "lossless",
+     "lossy-stereo"
+    ],
+    "contentRating": "explicit",
+    "copyright": "℗ 2020 Taylor Swift",
+    "genreNames": [
+     "另类音乐",
+     "音乐"
+    ],
+    "isCompilation": false,
+    "isComplete": true,
+    "isMasteredForItunes": true,
+    "isPrerelease": false,
+    "isSingle": false,
+    "name": "folklore (deluxe version)",
+    "playParams": {
+     "id": "1528112358",
+     "kind": "album"
+    },
+    "recordLabel": "Taylor Swift",
+    "releaseDate": "2020-07-24",
+    "trackCount": 17,
+    "upc": "00602435145044",
+    "url": "https://music.apple.com/us/album/folklore-deluxe-version/1528112358?l=zh-Hans-CN"
+   }
+  }
+ ]
+}

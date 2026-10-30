@@ -66,7 +66,8 @@ wrapper:
 
 catalog:
   # The following catalog client keys are startup-bound and require a restart.
-  # string: default Apple Music storefront code, for example "us", "cn", "jp". The API does not read it: a link
+  # string: default Apple Music storefront code, for example "us", "cn", "jp". GET /api/v1/search and
+  # GET /api/v1/artists/{artist_id}/albums use it when the request names no storefront. Submissions never do: a link
   # without a storefront in its path is refused with invalid_url. The web console reads it from GET /api/v1/system
   # (default_storefront) to complete pasted links that have no region.
   default_storefront: "cn"

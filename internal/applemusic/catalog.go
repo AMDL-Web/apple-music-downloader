@@ -403,9 +403,5 @@ func (c *CatalogClient) Artist(ctx context.Context, storefront, id string) (Arti
 	if len(resp.Data) == 0 {
 		return Artist{}, fmt.Errorf("artist %s not found", id)
 	}
-	raw := resp.Data[0]
-	return Artist{
-		ID: raw.ID, Name: raw.Attributes.Name, URL: raw.Attributes.URL, GenreNames: raw.Attributes.GenreNames,
-		ArtworkURL: raw.Attributes.Artwork.URL, ArtworkColors: raw.Attributes.Artwork.colors(),
-	}, nil
+	return mapArtist(resp.Data[0]), nil
 }
