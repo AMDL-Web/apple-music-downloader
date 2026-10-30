@@ -62,7 +62,6 @@ export function JobProgress({ job }) {
         </span>`
       : null,
   ];
-  const live = p.working ? html`<span key="live" class="jprog-live" style=${{ '--w': String(p.fraction) }}></span>` : null;
   if (cells) {
     return html`<div class="jprog" data-mode="cells" data-working=${p.working ? '' : undefined}>
       <div
@@ -75,11 +74,12 @@ export function JobProgress({ job }) {
         aria-valuetext=${p.aria}
         style=${{ '--n': String(cells.length) }}
       >
-        ${cells.map((c, i) => html`<span key=${i} class="pcell" data-state=${c.state} data-role=${c.role || undefined}></span>`)} ${live}
+        ${cells.map((c, i) => html`<span key=${i} class="pcell" data-state=${c.state} data-role=${c.role || undefined} style=${p.working ? { '--f': String(Math.min(1, Math.max(0, p.fraction * cells.length - i))) } : undefined}></span>`)}
       </div>
       ${text}
     </div>`;
   }
+  const live = p.working ? html`<span key="live" class="jprog-live" style=${{ '--w': String(p.fraction) }}></span>` : null;
   const seg = (role, n) =>
     n > 0 ? html`<span key=${role} class="pbar-seg" data-role=${role} style=${{ '--w': String(n / p.total) }}></span>` : null;
   return html`<div class="jprog" data-mode="bar" data-working=${p.working ? '' : undefined}>

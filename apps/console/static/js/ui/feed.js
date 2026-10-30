@@ -15,7 +15,7 @@ const ANNOUNCE_GAP_MS = 5000;
 
 /**
  * Downloads feed, connection state and live announcements for App():
- * {feed, counts, conn, epoch, retryRef, retryFeed, subscribeFeed, watchJobs, announce, liveText}.
+ * {feed, counts, conn, epoch, retryRef, retryFeed, subscribeFeed, watchJobs, unwatchJobs, announce, liveText}.
  */
 export function useFeed({ toast, route }) {
   const [feed, setFeed] = useState({ counts: null, cursor: null });
@@ -53,19 +53,31 @@ export function useFeed({ toast, route }) {
     },
     [flushEnded],
   );
+  // Returns the ids it started watching, so a view can drop its own later.
+  // `catchUp: false` (a view watching what it shows) skips a job that has
+  // already ended: its row may come from a stale list.
   const watchJobs = useCallback(
-    (ids) => {
+    (ids, { catchUp = true } = {}) => {
+      const added = [];
       for (const id of ids || []) {
         if (!id) continue;
         // The feed can report the end before the submit answer arrives.
         const done = recentEnded.current.get(id);
-        if (done) noteEnded(done);
-        else watched.current.add(id);
+        if (done) {
+          if (catchUp) noteEnded(done);
+        } else if (!watched.current.has(id)) {
+          watched.current.add(id);
+          added.push(id);
+        }
       }
       if (watched.current.size > 500) watched.current = new Set([...watched.current].slice(-500));
+      return added;
     },
     [noteEnded],
   );
+  const unwatchJobs = useCallback((ids) => {
+    for (const id of ids || []) watched.current.delete(id);
+  }, []);
   const noteEndedRef = useRef(noteEnded);
   noteEndedRef.current = noteEnded;
 
@@ -198,5 +210,5 @@ export function useFeed({ toast, route }) {
     };
   }, []);
 
-  return { feed, counts: feed.counts, conn, epoch, retryRef, retryFeed: () => retryRef.current(), subscribeFeed, watchJobs, announce, liveText };
+  return { feed, counts: feed.counts, conn, epoch, retryRef, retryFeed: () => retryRef.current(), subscribeFeed, watchJobs, unwatchJobs, announce, liveText };
 }

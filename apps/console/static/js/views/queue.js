@@ -11,7 +11,7 @@ import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends, re
 import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
 import { actionPlan, jobAllows } from '../lib/jobactions.js';
 import { useApp, Icon, Segmented, ErrorNote, SkeletonJobRows, Button } from '../ui/components.js';
-import { useDebounced } from '../ui/hooks.js';
+import { useDebounced, useWatchShown } from '../ui/hooks.js';
 import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 import { JobRow, applyFeedToList } from './queue-row.js';
 import { useChipRow } from './queue-chips.js';
@@ -179,6 +179,8 @@ export function QueuePage({ route }) {
   // The rows as shown (running jobs first, then queued ones, on Active and
   // All), which is the order Shift-click ranges follow.
   const rows = filters.tab === 'active' || filters.tab === 'all' ? activeFirst(state.jobs) : state.jobs;
+  // A job that finishes leaves Active at once; its toast (Open) says where it went.
+  useWatchShown(app, filters.tab === 'active' ? state.jobs.map((j) => j.id) : []);
   const jobsRef = useRef(rows);
   jobsRef.current = rows;
   const anchorId = useRef(null);

@@ -17,7 +17,7 @@ const OFFLINE_HELD_RETRY_MS = 1000;
 /** The toast list for App(): {toasts, toast, dismissToast, toastsRef, toastsHeld}; `route` is the current route. */
 export function useToasts(route) {
   const [toasts, setToasts] = useState([]);
-  // Toasts: {id, message, role, sticky, offline, at, action: {label, hash}}.
+  // Toasts: {id, message, role, sticky, offline, at, action: {label, hash} or {label, run}}.
   const toastTimers = useRef(new Map());
   const toastsHeld = useRef(false);
   const toastsRef = useRef(null);
@@ -141,9 +141,19 @@ export function ToastStack({ toasts, toastsRef, dismissToast }) {
         (t) => html`<div key=${t.id} class="toast" data-role=${t.role}>
           <${Icon} name=${t.role === 'danger' ? 'circle-x' : t.role === 'success' ? 'circle-check' : t.role === 'warning' ? 'triangle-alert' : 'info'} />
           <span class="toast-msg">${t.message}</span>
-          ${t.action
-            ? html`<${LinkButton} variant="ghost" size="sm" className="toast-action" href=${t.action.hash} onClick=${() => dismissToast(t.id)}>${t.action.label}</${LinkButton}>`
-            : null}
+          ${t.action && t.action.run
+            ? html`<${Button}
+                variant="ghost"
+                size="sm"
+                className="toast-action"
+                onClick=${() => {
+                  dismissToast(t.id);
+                  t.action.run();
+                }}
+              >${t.action.label}</${Button}>`
+            : t.action
+              ? html`<${LinkButton} variant="ghost" size="sm" className="toast-action" href=${t.action.hash} onClick=${() => dismissToast(t.id)}>${t.action.label}</${LinkButton}>`
+              : null}
           <${Button} variant="ghost" size="sm" icon="x" aria-label="Dismiss" onClick=${() => dismissToast(t.id)} />
         </div>`,
       )}

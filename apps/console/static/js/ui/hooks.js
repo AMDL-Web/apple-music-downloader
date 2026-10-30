@@ -155,3 +155,28 @@ export function useMedia(query) {
   }, [query]);
   return match;
 }
+
+/**
+ * Watches the jobs in `ids` while a view shows them (app.watchJobs), so one
+ * that ends there raises the finished toast with Open; the ones this view
+ * started watching are dropped once they leave it (another tab, another
+ * page). Ending removes a job from the watch by itself.
+ */
+export function useWatchShown(app, ids) {
+  const mine = useRef(new Set());
+  const key = ids.join(' ');
+  useEffect(() => {
+    if (!app.watchJobs) return;
+    const shown = new Set(ids);
+    const gone = [...mine.current].filter((id) => !shown.has(id));
+    if (gone.length && app.unwatchJobs) app.unwatchJobs(gone);
+    for (const id of gone) mine.current.delete(id);
+    for (const id of app.watchJobs(ids, { catchUp: false }) || []) mine.current.add(id);
+  }, [key]);
+  useEffect(
+    () => () => {
+      if (app.unwatchJobs) app.unwatchJobs([...mine.current]);
+    },
+    [],
+  );
+}

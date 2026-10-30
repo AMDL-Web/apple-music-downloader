@@ -442,20 +442,23 @@
 }
 
 /* Running, tracks resolved, none finished: the job's overall progress fills
-   the track, translucent like the drawer's album bar, over the cells or bar
-   it shares a box with. currentColor follows a section's text color. */
-.jprog[data-working] :is(.pcells, .pbar) {
+   the cells in order, each to its share (--f), or the bar, translucent like
+   the drawer's album bar (--live-fill; currentColor follows a section's text
+   color). */
+.jprog[data-working] :is(.pcell, .pbar) {
   position: relative;
+  overflow: hidden;
 }
 
+.jprog[data-working] .pcell::before,
 .jprog-live {
+  content: "";
   position: absolute;
   inset-block: 0;
   left: 0;
-  width: calc(var(--w) * 100%);
+  width: calc(var(--f, var(--w, 0)) * 100%);
   border-radius: inherit;
-  background: currentColor;
-  opacity: 0.38;
+  background: var(--live-fill, color-mix(in srgb, currentColor 38%, transparent));
   pointer-events: none;
   transition: width var(--dur-base) ease-out;
 }

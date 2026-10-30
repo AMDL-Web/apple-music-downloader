@@ -182,7 +182,8 @@ base durations (120 ms color, 200 ms overlays).
   columns at least 440 px wide (a lone job spans the row, as the idle card does); 136 px
   cover (96 on phones); eyebrow = equalizer + RUNNING in `--art-t3`; title on
   one line, so every card (and the idle one) is the same height; artist in `--art-t2`; genre · year · started below; per-track
-  cells in `--art-t1`, remaining cells outlined at 75 %. A job without a palette
+  cells in `--art-t1`, remaining cells outlined at 75 %; before a track
+  finishes, the job's progress fills the cells in `--art-t1` too. A job without a palette
   (queued, resolving) falls back to the grouped surface.
 - **Recently completed**: no surface behind it. The latest release is a card in
   its album gradient like a running job's (112 px cover, 88 on phones, its

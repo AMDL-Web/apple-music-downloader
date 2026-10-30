@@ -1016,6 +1016,12 @@
   }
 }
 
+/* On the album's colour a running job's progress fills in its foreground,
+   as finished cells do: a translucent fill there barely shows. */
+:root[data-skin="music"] [data-section="live"] .has-palette .jprog {
+  --live-fill: var(--art-t1);
+}
+
 /* The legend under the cells names each shape; states at zero stay out. */
 :root[data-skin="music"] [data-section="live"] .jprog {
   flex-wrap: wrap;

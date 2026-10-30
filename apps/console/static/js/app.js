@@ -120,7 +120,7 @@ export function App() {
 
   const { toasts, toast, dismissToast, toastsRef, toastsHeld } = useToasts(route);
 
-  const { feed, conn, epoch, retryRef, subscribeFeed, watchJobs, announce, liveText } = useFeed({ toast, route });
+  const { feed, conn, epoch, retryRef, subscribeFeed, watchJobs, unwatchJobs, announce, liveText } = useFeed({ toast, route });
   useOfflineToasts(conn, toasts, dismissToast, toastsHeld);
 
   // A sprite that could not load at startup is tried again after an outage.
@@ -283,6 +283,7 @@ export function App() {
       navigate,
       toast,
       watchJobs,
+      unwatchJobs,
       announce,
       subscribeFeed,
       counts,
@@ -294,7 +295,7 @@ export function App() {
       resumeLeave,
       retryFeed: () => retryRef.current(),
     }),
-    [navigate, toast, watchJobs, announce, subscribeFeed, counts, conn, epoch, simulate, defaultStorefront, setLeaveGuard, resumeLeave],
+    [navigate, toast, watchJobs, unwatchJobs, announce, subscribeFeed, counts, conn, epoch, simulate, defaultStorefront, setLeaveGuard, resumeLeave],
   );
 
   const title = TITLES[route.page] || 'AMDL';

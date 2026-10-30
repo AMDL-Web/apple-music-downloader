@@ -3,12 +3,48 @@
 // settled text writes its links into ?url=, its search term into ?q= and
 // keeps ?artist= while the term it was found with stays.
 
-import { useEffect, useRef } from '../ui/preact.js';
+import { useEffect, useRef, useState } from '../ui/preact.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
-import { scanLinks, mergeLinks } from '../lib/links.js';
+import { scanLinks, mergeLinks, openingText } from '../lib/links.js';
 import { searchTerm } from '../lib/search.js';
 
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+// The text box outlives the page for the life of the tab, so leaving New
+// download through the sidebar and coming back keeps a draft, notes and
+// links that are not Apple Music included (?url= keeps only the links).
+let draft = '';
+
+/**
+ * The text box, kept as the tab's draft: [text, setText]. Links brought
+ * from another page start a new download (lib/links.js openingText); when
+ * that replaces a draft, a toast offers Undo, which brings the draft back
+ * with the box's links joined to it (into the draft alone once the page has
+ * gone).
+ */
+export function useDraft({ app, incoming, storefront }) {
+  const [start] = useState(() => {
+    const text = openingText(draft, incoming, storefront);
+    return { text, replaced: text !== draft && draft.trim() ? draft : '' };
+  });
+  const [text, setText] = useState(start.text);
+  draft = text;
+  const alive = useRef(true);
+  useEffect(() => {
+    if (start.replaced) {
+      const undo = () => {
+        const next = mergeLinks(start.replaced, scanLinks(draft, storefront).map((e) => e.url), storefront);
+        if (alive.current) setText(next);
+        else draft = next;
+      };
+      app.toast({ message: 'Replaced your earlier draft', action: { label: 'Undo', run: undo } });
+    }
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  return [text, setText];
+}
 
 /**
  * ?q= -> text: a term from the address (the palette's search, a reload)

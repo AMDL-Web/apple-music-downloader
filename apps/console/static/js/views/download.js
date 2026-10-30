@@ -10,7 +10,7 @@
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
-import { scanLinks, removeLink, openingText } from '../lib/links.js';
+import { scanLinks, removeLink } from '../lib/links.js';
 import { handledUrls, resultRows, submitSummary } from '../lib/submit.js';
 import { downloadLabel, servedRegions } from '../lib/submit-check.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, linkQuality, dockQuality } from '../lib/overrides.js';
@@ -30,13 +30,9 @@ import { QualitySheet, PROBES } from './download-quality.js';
 import { ResultsCard, BrowserShortcut, useResults, sendUrls } from './download-results.js';
 import { SearchCard } from './download-search.js';
 import { useSearch, useHitActions, toResults } from './download-search-state.js';
-import { useAddressSync } from './download-address.js';
+import { useAddressSync, useDraft } from './download-address.js';
 import { Compose, Options, clearBox } from './download-hero.js';
 
-// The text box outlives the page for the life of the tab, so leaving New
-// download through the sidebar and coming back keeps a draft, notes and
-// links that are not Apple Music included (?url= keeps only the links).
-let draft = '';
 // The quality choice lasts for the tab too, so the next album can follow
 // with the same one: a PRESETS id or 'custom' with its values.
 let chosen = { preset: 'follow', custom: null };
@@ -47,8 +43,7 @@ export function DownloadPage({ route }) {
   // A link without a storefront borrows another link's, else the server's
   // catalog.default_storefront (GET /system), '' until that has loaded.
   const storefront = app.defaultStorefront;
-  const [text, setText] = useState(() => openingText(draft, incoming, storefront));
-  draft = text;
+  const [text, setText] = useDraft({ app, incoming, storefront });
   const entries = useMemo(() => scanLinks(text, storefront), [text, storefront]);
   const settled = useDebounced(text, 350);
   // Words and no link: the box searches the catalog.
