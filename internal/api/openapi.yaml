@@ -762,6 +762,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: catalog_not_found; Apple answered 404 for the search.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '502':
           description: upstream_error; the catalog read failed (Apple refuses an unknown storefront).
           content:

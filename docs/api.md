@@ -526,7 +526,7 @@ carries the artist.
 | Case | Answer |
 | --- | --- |
 | No `term`, a bad `types`, `storefront`, `limit` or `offset`, an artist id that is not digits | `400 invalid_request` |
-| Apple has no artist with that id (its 404) | `404 catalog_not_found` |
+| Apple answers 404 (an unknown artist id) | `404 catalog_not_found` |
 | The catalog read fails otherwise (an unknown storefront included) | `502 upstream_error` |
 | No answer within 10 seconds | `504 upstream_timeout` |
 
