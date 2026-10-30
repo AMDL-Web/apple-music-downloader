@@ -83,10 +83,10 @@ func Run(ctx context.Context, args []string, io IO) int {
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return rootHelp(io, cmds)
 	}
+	args = hoistGlobals(args)
 	if args[0] == "--version" || args[0] == "-v" || args[0] == "-V" {
 		args = append([]string{"version"}, args[1:]...)
 	}
-	args = hoistGlobals(args)
 	cmd, rest, ok := match(cmds, args)
 	if !ok {
 		words := leadingWords(args)

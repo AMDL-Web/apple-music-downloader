@@ -18,6 +18,9 @@ func TestVersionFlagsPrintTheVersionCommand(t *testing.T) {
 			t.Errorf("amdl %s = %+v, want amdl version's %q", flag, r, want.stdout)
 		}
 	}
+	if r := run(t, nil, "", "--quiet", "--version"); r.code != 0 || r.stdout != want.stdout {
+		t.Errorf("amdl --quiet --version = %+v", r)
+	}
 }
 
 func TestACommandGroupListsItsCommands(t *testing.T) {
