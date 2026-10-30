@@ -80,8 +80,8 @@ func mustRead(t *testing.T, path string) string {
 
 func TestWriteConfigRejectsBadWrapper(t *testing.T) {
 	d := testDirs(t)
-	if err := (Backend{Dirs: d, Wrapper: "192.168.3.5:12340", DownloadsDir: d.DefaultDownloads()}).WriteConfig(); err == nil {
-		t.Fatal("a wrapper address without a scheme was accepted")
+	if err := (Backend{Dirs: d, Wrapper: "ftp://192.168.3.5:12340", DownloadsDir: d.DefaultDownloads()}).WriteConfig(); err == nil {
+		t.Fatal("a wrapper address that is not http or https was accepted")
 	}
 }
 
@@ -122,5 +122,18 @@ func TestWrapperTest(t *testing.T) {
 	}
 	if bad := TestWrapper(context.Background(), "http://127.0.0.1:1"); len(bad) != 1 || bad[0].OK {
 		t.Errorf("unreachable wrapper: %v", bad)
+	}
+}
+
+func TestWrapperURLAddsTheScheme(t *testing.T) {
+	for in, want := range map[string]string{
+		"127.0.0.1:12340":         "http://127.0.0.1:12340",
+		" http://nas:12340 ":      "http://nas:12340",
+		"https://wrapper.example": "https://wrapper.example",
+		"":                        "",
+	} {
+		if got := WrapperURL(in); got != want {
+			t.Errorf("WrapperURL(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

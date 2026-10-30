@@ -63,7 +63,7 @@ func TestWrapper(ctx context.Context, address string) []Check {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 	cfg := config.Default().Wrapper
-	cfg.Address = strings.TrimSpace(address)
+	cfg.Address = WrapperURL(address)
 	cfg.TimeoutSeconds = 10
 	w, err := wrapper.NewClient(cfg)
 	if err != nil {

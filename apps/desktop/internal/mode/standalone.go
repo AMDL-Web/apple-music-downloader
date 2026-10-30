@@ -55,7 +55,7 @@ func (b Backend) WriteConfig() error {
 		// The listener comes from the app, so this only has to be valid.
 		cfg.Server.Listen = "127.0.0.1:0"
 	}
-	cfg.Wrapper.Address = b.Wrapper
+	cfg.Wrapper.Address = WrapperURL(b.Wrapper)
 	cfg.Download.DownloadsDir = b.DownloadsDir
 	if b.FFmpeg != "" {
 		cfg.Tools.FFmpeg = b.FFmpeg

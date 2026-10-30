@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Kind names a mode.
@@ -97,4 +98,14 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// WrapperURL is address as the backend's wrapper.address takes it: a bare
+// host:port, as people often write a wrapper's address, gets http://.
+func WrapperURL(address string) string {
+	a := strings.TrimSpace(address)
+	if a != "" && !strings.Contains(a, "://") {
+		a = "http://" + a
+	}
+	return a
 }
