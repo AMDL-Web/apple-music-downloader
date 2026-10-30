@@ -78,6 +78,15 @@
   --icon-nav: 20px;
   --drawer-w: 520px;
   --content-max: 1600px;
+  /* New download's compose field (css/download-form.css): the widest it
+     gets, its one-line height and the inset of what it holds. The dock
+     shares the inset. */
+  --compose-w: 800px;
+  --compose-h: 72px;
+  --compose-pad: var(--s-2);
+  /* The circles inside it (the glyph, Clear). */
+  --compose-in: calc(var(--compose-h) - 2 * var(--compose-pad));
+  --dock-h: 64px;
 
   /* Motion */
   --dur-fast: 120ms;
@@ -87,6 +96,22 @@
   --skel-delay: 180ms;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@media (min-width: 1680px) {
+  :root {
+    --compose-w: 880px;
+    --compose-h: 80px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --compose-w: 100%;
+    --compose-h: 60px;
+    --compose-pad: var(--s-1_5);
+    --dock-h: 56px;
+  }
 }
 
 :root[data-theme="light"] {

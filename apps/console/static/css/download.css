@@ -461,67 +461,76 @@
 /* ---- Phone --------------------------------------------------------- */
 
 @media (max-width: 639px) {
-  .new-input {
-    min-height: 128px;
-  }
-
-  /* The submit bar is fixed above the tab bar, outside the cards, and the
-     page keeps its height free below the last row (--new-bar-h, measured
-     by the page). The quality menu has a line to itself, so a preset's
-     whole name shows; Overwrite and Download share the next. */
+  /* The dock is fixed above the tab bar, outside the cards, and the page
+     keeps its height free below the last row (--new-bar-h, measured by the
+     page). */
   .page.page-new {
     padding-bottom: var(--new-bar-h, 0px);
   }
 
-  :root:has(.page-new) .toasts {
-    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 2 * var(--touch) + 3 * var(--s-2) + var(--s-3) + var(--s-2));
-  }
-
-  .new-submit {
+  .page-new > .new-dock-wrap {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    left: var(--s-3);
+    right: var(--s-3);
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
     z-index: 15;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      "quality quality"
-      "overwrite button";
-    align-items: center;
-    gap: var(--s-2) var(--s-3);
-    margin: 0;
-    padding: var(--s-2) var(--s-4) var(--s-3);
-    border-top: 1px solid var(--border-subtle);
-    background: var(--bg-canvas);
+    width: auto;
+    max-width: none;
   }
 
-  .new-submit-row,
-  .new-controls {
-    display: contents;
+  :root:has(.new-dock-wrap) .toasts {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2) + var(--new-bar-h, var(--dock-h)) + var(--s-2));
   }
 
-  /* The rows and the button say what the count says; it stays announced. */
-  .new-count {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  /* Fixed to the bottom, the dock keeps its place; the notes grow upward. */
+  .new-notes {
+    order: -1;
   }
 
-  .new-overwrite {
-    grid-area: overwrite;
-    min-height: var(--touch);
+  .new-dock {
+    gap: var(--s-3);
+    padding-left: var(--s-4);
   }
 
-  .new-overwrite-more {
+  /* The count keeps its room down to 320 px: the button drops its glyph. */
+  .new-dock-go {
+    min-width: 0;
+    padding: 0 var(--s-4);
+  }
+
+  .new-dock-go > .icon {
     display: none;
   }
 
+  /* Under 400 px the count takes both lines; the quality menu above says
+     the rest. */
+  @media (max-width: 399px) {
+    .new-dock-what,
+    .new-dock-asks {
+      display: none;
+    }
+
+    .new-dock-count {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      white-space: normal;
+    }
+  }
+
+  .new-dock-count {
+    font-size: var(--fs-14);
+    line-height: var(--lh-14);
+  }
+
+  /* Both options share one line down to 320 px: the menu gives way first;
+     the Settings retry takes the next line. */
+  .new-options {
+    gap: var(--s-2) var(--s-3);
+  }
+
   .new-quality {
-    grid-area: quality;
+    flex: 1 1 0;
   }
 
   .new-quality-select {
@@ -529,20 +538,9 @@
     max-width: none;
   }
 
-  .new-quality {
-    min-width: 0;
-  }
-
-  .new-submit-btn {
-    grid-area: button;
-    width: 100%;
-    margin: 0;
-  }
-
-  .new-submit > .notice,
-  .new-cfg-note {
-    grid-column: 1 / -1;
-    margin-bottom: var(--s-2);
+  .new-overwrite {
+    flex: none;
+    min-height: var(--touch);
   }
 
   .new-shortcut,

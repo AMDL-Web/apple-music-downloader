@@ -30,6 +30,19 @@
   --seg-thumb: light-dark(#ffffff, #636366);
   --topbar-bg: light-dark(rgba(255, 255, 255, 0.78), rgba(0, 0, 0, 0.72));
   --toast-bg: light-dark(rgba(255, 255, 255, 0.92), rgba(44, 44, 46, 0.92));
+  /* New download: the compose field (filled at rest, raised while typed
+     in, over a soft red halo) and the dock that floats over the links. */
+  --compose-bg: var(--bg-surface);
+  --compose-bg-hover: light-dark(#f0f0f3, #222224);
+  --compose-bg-focus: light-dark(#ffffff, #222224);
+  --compose-edge: var(--border-subtle);
+  --compose-shadow: 0 1px 2px light-dark(rgba(0, 0, 0, 0.06), transparent), 0 24px 56px -28px light-dark(rgba(250, 45, 72, 0.34), rgba(250, 45, 72, 0.5));
+  --dock-bg: var(--toast-bg);
+  /* The stage glow behind New download: red and purple, or the first
+     cover's colour (--stage-tint) once one has loaded. */
+  --stage-glow-a: light-dark(rgba(250, 45, 72, 0.1), rgba(250, 45, 72, 0.16));
+  --stage-glow-b: light-dark(rgba(137, 68, 171, 0.08), rgba(191, 90, 242, 0.1));
+  --stage-glow-tint: light-dark(color-mix(in srgb, var(--stage-tint) 16%, transparent), color-mix(in srgb, var(--stage-tint) 24%, transparent));
 
   /* Lines and text. Contrast on --bg-surface: text-secondary 4.66 / 6.61. */
   --border-subtle: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1));
@@ -48,8 +61,10 @@
   --accent-pressed: #b0172c;
   --accent-text: light-dark(#d60f2c, #ff4d61);
   --on-accent: #ffffff;
-  /* Focus rings follow the accent, as in Apple Music. */
+  /* Focus rings follow the accent, as in Apple Music; a text field's ring
+     is neutral, so a field being typed in never reads as an error. */
   --focus: var(--accent-text);
+  --focus-field: light-dark(rgba(29, 29, 31, 0.72), rgba(245, 245, 247, 0.72));
   /* A disabled button: a neutral fill, its label 4.6 / 4.85 on it. */
   --disabled-bg: var(--bg-fill);
   --disabled-text: light-dark(#636366, #98989d);
@@ -107,6 +122,8 @@
   --lh-live-title: 30px;
   --fs-artist: 17px;
   --lh-artist: 22px;
+  --fs-compose: 28px;
+  --lh-compose: 36px;
   --fs-mono-log: 12.5px;
   --w-display: var(--w-bold);
   --w-title: var(--w-bold);
@@ -141,6 +158,10 @@
   --r-notice: var(--r-panel);
   --r-overlay: var(--r-float);
   --r-drawer: 0;
+  /* New download's capsules, the compose field and the dock: their
+     circles' radius plus the inset, half their one-line height. */
+  --r-compose: calc(var(--compose-h) / 2);
+  --r-dock: calc(var(--dock-h) / 2);
   --bar-h: 6px;
   --cell-h: 8px;
   --cell-gap: 3px;
@@ -206,6 +227,13 @@
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a1a1a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
+@media (min-width: 1680px) {
+  :root[data-skin="music"] {
+    --fs-compose: var(--fs-32);
+    --lh-compose: var(--lh-32);
+  }
+}
+
 @media (max-width: 1023px) {
   :root[data-skin="music"] {
     --main-x: var(--s-6);
@@ -228,6 +256,8 @@
     --lh-live-title: 24px;
     --fs-artist: 15px;
     --lh-artist: 20px;
+    --fs-compose: var(--fs-20);
+    --lh-compose: var(--lh-20);
     --page-gap: var(--s-8);
     --grid-gap: var(--s-3);
     --card-pad: var(--s-4);
@@ -1880,7 +1910,6 @@
 /* Text fields, selects and lists inside a card are inset cells (white on the
    gray surface in light, the second grouped level in dark), still outlined
    in --border-control so a field reads as a field. */
-:root[data-skin="music"] .new-input,
 :root[data-skin="music"] .field-input,
 :root[data-skin="music"] .card-body .select {
   background: var(--bg-inset);
@@ -1894,15 +1923,56 @@
 
 /* ---- New download -------------------------------------------------- */
 
-:root[data-skin="music"] .new-input {
-  min-height: 168px;
-  padding: var(--s-3) var(--s-4);
-  border-radius: var(--r-art);
+/* The stage: a glow at the top of the page, under the field. It turns to
+   the first cover's colour once one has loaded. */
+@property --stage-tint {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
 }
 
-:root[data-skin="music"] .new-submit-btn {
-  height: var(--btn-lg-h);
-  padding: 0 var(--s-5);
+:root[data-skin="music"] .main[data-page="new"] {
+  position: relative;
+  isolation: isolate;
+}
+
+:root[data-skin="music"] .page-new {
+  transition: --stage-tint 400ms var(--ease-out);
+}
+
+:root[data-skin="music"] .page-new::before,
+:root[data-skin="music"] .page-new::after {
+  /* Centred on the field: the main column's top padding, the title, the
+     page gap, half the field. */
+  --glow-x: calc(var(--main-x) + var(--compose-w) / 2);
+  --glow-y: calc(var(--s-3) + var(--lh-page-title) + var(--page-gap) + var(--compose-h) / 2);
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: calc(2 * var(--glow-y) + 320px);
+  pointer-events: none;
+  /* Fades in under the top bar and out below, so it has no edge. */
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--glow-y), transparent);
+}
+
+:root[data-skin="music"] .page-new::before {
+  background:
+    radial-gradient(var(--compose-w) 280px at var(--glow-x) var(--glow-y), var(--stage-glow-a), transparent),
+    radial-gradient(calc(var(--compose-w) * 0.6) 240px at calc(var(--glow-x) + var(--compose-w) * 0.55) var(--s-10), var(--stage-glow-b), transparent);
+}
+
+:root[data-skin="music"] .page-new::after {
+  background: radial-gradient(var(--compose-w) 300px at var(--glow-x) var(--glow-y), var(--stage-glow-tint), transparent);
+  opacity: 0;
+  transition: opacity 400ms var(--ease-out);
+}
+
+:root[data-skin="music"] .page-new[data-tinted]::after {
+  opacity: 1;
+}
+
+:root[data-skin="music"] .new-dock-go {
   font-size: var(--fs-15);
   line-height: var(--lh-15);
 }
@@ -1988,8 +2058,7 @@
   text-underline-offset: 2px;
 }
 
-:root[data-skin="music"] .new-links-more,
-:root[data-skin="music"] .new-links-will {
+:root[data-skin="music"] .new-links-more {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
 }
@@ -2283,6 +2352,24 @@
     font-size: var(--fs-16);
     line-height: var(--lh-16);
   }
+}
+
+/* The compose field keeps its own size on a touch screen (20 px there). */
+:root[data-skin="music"] .new-compose > .new-compose-input {
+  font-size: var(--fs-compose);
+  line-height: var(--lh-compose);
+}
+
+:root[data-skin="music"] .new-compose[data-dense] > .new-compose-input {
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+}
+
+/* A text field's ring is neutral; selects, switches and buttons keep the
+   accent. */
+:root[data-skin="music"] :is(textarea, input:not([type="checkbox"], [type="radio"], [type="range"])):focus-visible,
+:root[data-skin="music"] .search:focus-within {
+  outline-color: var(--focus-field);
 }
 
 /* A field's focus ring sits on its own border: one ring, not the border, a

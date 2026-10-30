@@ -1,8 +1,8 @@
 // New download (#/new?url=&q=&artist=, #/new/:id for the drawer): paste
 // links or search the catalog, choose the quality and submit. One column:
-// the text box, the detected links or the search results, the submit bar
-// (quality, Overwrite, the count, Download; it stays in view), then what
-// the last submit did. The text box is the source of the links and the
+// the compose field and its options, the detected links or the search
+// results, the dock (the count, Download; it floats at the bottom while
+// the box holds links), then what the last submit did. The text box is the source of the links and the
 // term and follows the address both ways; it lasts for the tab. Parts:
 // download-hero.js, download-config.js, download-address.js, download-lookup.js,
 // download-links.js, download-search*.js, download-preset.js,
@@ -16,7 +16,8 @@ import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySub
 import { submittable, downloadLabel, countLine, servedRegions } from '../lib/submit-check.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
 import { isPicked, qualityOverview } from '../lib/lookup.js';
-import { searchTerm, searchCountLine, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
+import { searchTerm, searchCountLine, shownHits, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
+import { artPalette } from '../lib/format.js';
 import { useApp } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
 import { useStatus } from '../ui/system-status.js';
@@ -25,13 +26,13 @@ import { useServerConfig } from './download-config.js';
 import { useLookups } from './download-lookup.js';
 import { LinksCard } from './download-links.js';
 import { QualityControls, CustomSheet } from './download-preset.js';
-import { SubmitBar, useBarHeight } from './download-bar.js';
+import { Dock, useBarHeight } from './download-bar.js';
 import { QualitySheet, PROBES } from './download-quality.js';
 import { ResultsCard, BrowserShortcut, useResults } from './download-results.js';
 import { SearchCard } from './download-search.js';
 import { useSearch, useHitActions, toResults } from './download-search-state.js';
 import { useAddressSync } from './download-address.js';
-import { Compose } from './download-hero.js';
+import { Compose, Options, clearBox } from './download-hero.js';
 
 // The text box outlives the page for the life of the tab, so leaving New
 // download through the sidebar and coming back keeps a draft, notes and
@@ -50,7 +51,6 @@ export function DownloadPage({ route }) {
   const [text, setText] = useState(() => mergeLinks(draft, incoming, storefront));
   draft = text;
   const entries = useMemo(() => scanLinks(text, storefront), [text, storefront]);
-  const dupes = useMemo(() => duplicateCount(text, storefront), [text, storefront]);
   const settled = useDebounced(text, 350);
   // Words and no link: the box searches the catalog.
   const { term, tooLong } = searchTerm(text, entries);
@@ -285,16 +285,26 @@ export function DownloadPage({ route }) {
       submit();
       return;
     }
+    // Esc empties the box as one undo step, then leaves it.
+    if (e.key === 'Escape' && !e.isComposing) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.currentTarget.value) clearBox(e.currentTarget, edit);
+      else e.currentTarget.blur();
+      return;
+    }
     if (term) toResults(e, term, search);
   };
 
   // The count line is announced (role=status), so it follows the settled
   // text, not every keystroke.
   const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
+  const settledDupes = useMemo(() => duplicateCount(settled, storefront), [settled, storefront]);
   const settledSend = submittable(settledEntries, issueOf);
   const priorState = (url) => (priorOf(url) || {}).state;
   const linkCount = countLine({
     links: settledEntries.length,
+    merged: settledDupes,
     fresh: settledSend.filter((u) => !priorOf(u)).length,
     library: settledSend.filter((u) => priorState(u) === 'done').length,
     queued: settledSend.filter((u) => priorState(u) === 'active').length,
@@ -312,15 +322,61 @@ export function DownloadPage({ route }) {
     return link ? (link.kind === 'album' && link.trackId && trackMode !== 'album' ? 'song' : link.kind) : 'item';
   };
   const count = searching ? searchCountLine(search.search, search.artist.status !== 'idle' ? search.artist : null) : linkCount;
-  const label = busy ? 'Submitting…' : searching ? 'Choose a result' : downloadLabel(sendable.map(kindOf), entries.length > 0, allowed.length > 0);
+  const label = busy ? 'Submitting…' : downloadLabel(sendable.map(kindOf), entries.length > 0, allowed.length > 0);
 
-  // Under 640 px the submit bar is fixed above the tab bar; the page keeps
-  // room for it below the last row.
+  // Under 640 px the dock is fixed above the tab bar; the page keeps room
+  // for it below the last row, and toasts rise above it (--new-bar-h on the
+  // root, which both read).
   const [barRef, barH] = useBarHeight();
+  useEffect(() => {
+    const root = document.documentElement.style;
+    if (barH) root.setProperty('--new-bar-h', `${barH}px`);
+    else root.removeProperty('--new-bar-h');
+    return () => root.removeProperty('--new-bar-h');
+  }, [barH]);
+
+  // Docked: anything in the box or below it. Empty: the field alone, with
+  // the browser shortcut under it.
+  const docked = Boolean(text.trim()) || entries.length > 0 || results.rows.length > 0;
+  const view = artistId ? 'artist' : searching ? 'search' : entries.length ? 'links' : 'none';
+  // The stage takes its glow from the first cover that has a palette.
+  const firstPalette = (list) => list.map((x) => artPalette(x)).find(Boolean);
+  const palette = searching
+    ? firstPalette([...(search.artist.artist ? [search.artist.artist] : []), ...shownHits(search.search.data)])
+    : firstPalette(entries.map((e) => previewOf(e.url)).filter(Boolean));
+  const tint = palette ? palette.bg : '';
+  const style = tint ? { '--stage-tint': tint } : undefined;
 
 
-  return html`<div class="page page-new" style=${barH ? { '--new-bar-h': `${barH}px` } : undefined}>
-    <${Compose} text=${text} inputRef=${inputRef} term=${term} storefront=${storefront} edit=${edit} onKeyDown=${onKeyDown} />
+  const asks = chosenValues ? qualityText(chosenValues) : '';
+  return html`<div class="page page-new" data-mode=${docked ? 'docked' : 'empty'} data-view=${view} data-tinted=${tint ? '' : undefined} style=${style}>
+    <div class="new-top">
+      <${Compose}
+        text=${text}
+        inputRef=${inputRef}
+        term=${term}
+        links=${entries.length}
+        busy=${searching && (search.pending || search.search.status === 'loading')}
+        storefront=${storefront}
+        edit=${edit}
+        onKeyDown=${onKeyDown}
+      />
+      <${Options}
+        controls=${html`<${QualityControls}
+          defaults=${defaults}
+          preset=${choice.preset}
+          custom=${choice.custom}
+          asks=${asks}
+          onPreset=${(preset) => setChoice({ ...choice, preset })}
+          onCustom=${() => setCustomOpen(true)}
+          overwrite=${overwriteOn}
+          onOverwrite=${(v) => setOverwrite(defaults && v === defaults.force_overwrite ? null : v)}
+        />`}
+        cfgError=${Boolean(cfg.error && !defaults)}
+        onRetryCfg=${() => setCfgRun((n) => n + 1)}
+      />
+      <p id="new-status" class="sr-only" role="status" aria-live="polite">${count}</p>
+    </div>
     ${searching
       ? html`<${SearchCard}
           s=${search}
@@ -342,8 +398,6 @@ export function DownloadPage({ route }) {
           priorOf=${priorOf}
           picked=${(url) => isPicked(url, priorOf(url), picks)}
           skipped=${skipped}
-          dupes=${dupes}
-          asks=${chosenValues ? qualityText(chosenValues) : ''}
           row=${{
             jobHref,
             onRemove: removeEntry,
@@ -356,30 +410,22 @@ export function DownloadPage({ route }) {
           }}
         />`
       : null}
-    <${SubmitBar}
-      barRef=${barRef}
-      count=${count}
-      controls=${html`<${QualityControls}
-        defaults=${defaults}
-        preset=${choice.preset}
-        custom=${choice.custom}
-        asks=${chosenValues ? qualityText(chosenValues) : ''}
-        onPreset=${(preset) => setChoice({ ...choice, preset })}
-        onCustom=${() => setCustomOpen(true)}
-        overwrite=${overwriteOn}
-        onOverwrite=${(v) => setOverwrite(defaults && v === defaults.force_overwrite ? null : v)}
-      />`}
-      label=${label}
-      disabled=${busy || sendable.length === 0}
-      busy=${busy}
-      title=${sendable.length === 0 && entries.length ? 'No checked link can be downloaded' : undefined}
-      onSubmit=${() => submit()}
-      failure=${failure}
-      refusal=${refusal}
-      onCustom=${() => setCustomOpen(true)}
-      cfgError=${Boolean(cfg.error && !defaults)}
-      onRetryCfg=${() => setCfgRun((n) => n + 1)}
-    />
+    ${entries.length || failure || refusal
+      ? html`<${Dock}
+          barRef=${barRef}
+          on=${entries.length > 0}
+          count=${linkCount}
+          asks=${asks}
+          label=${label}
+          disabled=${busy || sendable.length === 0}
+          busy=${busy}
+          title=${sendable.length === 0 && entries.length ? 'No checked link can be downloaded' : undefined}
+          onSubmit=${() => submit()}
+          failure=${failure}
+          refusal=${refusal}
+          onCustom=${() => setCustomOpen(true)}
+        />`
+      : null}
     ${results.rows.length
       ? html`<${ResultsCard}
           rows=${results.rows}
@@ -389,7 +435,7 @@ export function DownloadPage({ route }) {
           onClear=${clearResults}
         />`
       : null}
-    <${BrowserShortcut} />
+    ${docked ? null : html`<${BrowserShortcut} />`}
     ${customOpen && defaults
       ? html`<${CustomSheet}
           defaults=${defaults}

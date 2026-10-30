@@ -202,8 +202,30 @@ const SCENARIOS = [
     path: `#/new?url=${encodeURIComponent([albumUrl(7), albumUrl(9)].join('\n'))}`,
     setup: async (ctx) => {
       await ctx.settle();
-      await ctx.page.locator('.new-submit-btn').first().click();
+      await ctx.page.locator('.new-dock-go').first().click();
       await ctx.page.waitForSelector('.new-results', { timeout: 4000 });
+    },
+  },
+  { id: 'new/many-links', world: 'active', path: `#/new?url=${encodeURIComponent(Array.from({ length: 30 }, (_, i) => albumUrl(i + 20)).join('\n'))}` },
+  {
+    id: 'new/overwrite-on',
+    world: 'active',
+    path: `#/new?url=${encodeURIComponent(albumUrl(7))}`,
+    setup: async (ctx) => {
+      await ctx.settle();
+      await ctx.page.locator('.new-overwrite input:not([disabled])').first().check({ timeout: 4000 });
+    },
+  },
+  { id: 'new/config-error', world: 'active', path: '#/new', faults: { 'GET /api/v1/config': { status: 500, code: 'internal_error', message: 'config unreadable' } } },
+  {
+    id: 'new/submit-failed',
+    world: 'active',
+    path: `#/new?url=${encodeURIComponent(albumUrl(7))}`,
+    faults: { 'POST /api/v1/downloads': { status: 503, code: 'store_error', message: 'database is locked' } },
+    setup: async (ctx) => {
+      await ctx.settle();
+      await ctx.page.locator('.new-dock-go').first().click();
+      await ctx.page.waitForSelector('.new-notes .notice', { timeout: 4000 });
     },
   },
   {
@@ -243,6 +265,16 @@ const SCENARIOS = [
       { id: 'drill-artist', title: 'opening an artist from the hits', ignoreFocus: true, expectContent: true, before: async (ctx) => {
         await ctx.page.locator('#new-input').fill('yorushika');
       }, run: (ctx) => ctx.page.locator('.new-hit[data-kind=artist] .new-hit-open').first().click({ timeout: 3000 }) },
+    ],
+  },
+  {
+    id: 'new/typing-stale',
+    world: 'active',
+    path: '#/new?q=yorushika',
+    noStates: true,
+    transitions: [
+      { id: 'refine', title: 'refining the term over earlier hits', ignoreFocus: false, expectContent: true, run: (ctx) => ctx.page.locator('#new-input').pressSequentially(' sea', { delay: 80 }) },
+      { id: 'clear', title: 'clearing the box with Esc', ignoreFocus: false, run: (ctx) => ctx.page.locator('#new-input').press('Escape') },
     ],
   },
 

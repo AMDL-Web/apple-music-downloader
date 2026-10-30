@@ -6,9 +6,9 @@
 // shown only where it is not the server's default or was borrowed from
 // another link; the URL stays in the row's tooltip. Each row that can be
 // sent has a checkbox; one already in the library or the queue starts
-// unchecked (lib/lookup.js isPicked). The card ends with what the chosen
-// quality asks for; a row whose qualities were read says what it will
-// download for that link. The page owns the lookup queues and the picks; rows read them. The
+// unchecked (lib/lookup.js isPicked). A row whose qualities were read
+// says what it will download for that link; the dock says what the chosen
+// quality asks for. The page owns the lookup queues and the picks; rows read them. The
 // first ROWS_SHOWN rows are listed, plus every one that needs a look (an
 // issue, an earlier job still queued or running), until Show all.
 
@@ -36,28 +36,19 @@ const LINK_ART = artWidths(48);
  * 'idle' for a link past the lookup limit), issueOf(entry), priorOf(url)
  * (an earlier job, lib/lookup.js priorJob), picked(url) (the checkbox),
  * skipped (links past the lookup limit that would otherwise be looked up),
- * dupes (repeats merged), asks (what the chosen quality asks for, in
- * words), and row: {jobHref(id), onRemove(url), onRetry(url),
+ * and row: {jobHref(id), onRemove(url), onRetry(url),
  * onQuality(entry, data), onPick(url, checked), overwrite (whether the
  * submit overwrites existing files), storefront (the server's default),
  * probed(url) ({text, warning} once the link's qualities were read, else
  * null)}.
  */
-export function LinksCard({ entries, statusOf, issueOf, priorOf, picked, skipped, dupes, asks, row }) {
+export function LinksCard({ entries, statusOf, issueOf, priorOf, picked, skipped, row }) {
   const [all, setAll] = useState(false);
-  const flagged = entries.filter((e) => (issueOf(e) || {}).blocking).length;
-  const note = [
-    `${entries.length} ${entries.length === 1 ? 'link' : 'links'}`,
-    dupes ? `${dupes} ${dupes === 1 ? 'duplicate' : 'duplicates'} merged` : '',
-    flagged ? `${flagged} can't be downloaded` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
   const shown = all ? entries : entries.filter((e, i) => i < ROWS_SHOWN || needsAttention(issueOf(e), priorOf(e.url)));
   const hidden = entries.length - shown.length;
   // Hidden rows only have, at most, a quiet "In your library" note.
   const hiddenPrior = all ? 0 : entries.filter((e) => !shown.includes(e) && priorOf(e.url)).length;
-  return html`<${Card} section="links" className="card-flush new-links-card" title="Detected links" labelId="new-links-title" note=${note}>
+  return html`<${Card} section="links" className="card-flush new-links-card" title="Detected links" labelId="new-links-title">
     <ul class="new-links" aria-labelledby="new-links-title">
       ${shown.map(
         (e) => html`<${LinkRow}
@@ -84,7 +75,6 @@ export function LinksCard({ entries, statusOf, issueOf, priorOf, picked, skipped
           <span>Links are checked up to the first ${LOOKUP_LIMIT}; ${skipped} more ${skipped === 1 ? 'is' : 'are'} downloaded without a check.</span>
         </p>`
       : null}
-    ${asks ? html`<p class="new-links-will"><${Icon} name="disc" size="sm" /><span>Quality: ${keepSpec(asks)}</span></p>` : null}
   </${Card}>`;
 }
 

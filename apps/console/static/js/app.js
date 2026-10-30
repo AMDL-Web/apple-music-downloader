@@ -69,7 +69,8 @@ const isTyping = (el) =>
  * Escape in a field outside a dialog: a search field with text is cleared
  * first (an input event, so the page's own state follows); otherwise the
  * field gives up focus, so j/k and the other single keys work again. Other
- * fields (the New download box, settings) are never cleared.
+ * fields are never cleared here; the New download box clears itself as
+ * one undo step (views/download.js).
  */
 function leaveField(e) {
   const el = e.target;

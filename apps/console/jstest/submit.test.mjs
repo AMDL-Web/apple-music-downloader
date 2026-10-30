@@ -288,6 +288,7 @@ test('Download names what it sends, and the count line what the links are', () =
   assert.equal(countLine({ links: 2, fresh: 1, library: 1 }), '2 links · 1 new · 1 in library');
   assert.equal(countLine({ links: 3, fresh: 1, queued: 1, warned: 1 }), '3 links · 1 new · 1 in the queue · 1 needs a look');
   assert.doesNotMatch(countLine({ links: 5, blocked: 2, warned: 2 }), /flagged/);
+  assert.equal(countLine({ links: 3, merged: 2, fresh: 3 }), '3 links · 2 merged · 3 new', 'repeats folded into one link are counted after the links');
 });
 
 test('a submitted row shows the preview until its job resolves', () => {

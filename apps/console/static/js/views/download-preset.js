@@ -1,4 +1,4 @@
-// New download: the quality controls of the submit row. A preset menu
+// New download: the quality controls under the text box. A preset menu
 // (lib/overrides.js PRESETS, the custom values once set, and Custom…), the
 // Overwrite switch, and the Custom… sheet that edits the codec order, the
 // fallback and the ALAC limits for this download only. The page owns the
@@ -19,8 +19,8 @@ const EDIT = 'custom-edit';
 /**
  * Props: defaults (lib/overrides.js optionDefaults, null until GET config
  * answers), preset (a PRESETS id or 'custom'), custom (the custom values),
- * asks (what the choice asks for in words, the menu's tooltip; the links
- * card prints it), onPreset(id), onCustom() (opens the sheet), overwrite
+ * asks (what the choice asks for in words, the menu's tooltip; the dock
+ * prints it), onPreset(id), onCustom() (opens the sheet), overwrite
  * (the switch's state), onOverwrite(bool). The closed menu shows only the
  * preset's name, so it fits a phone. Until the config loads only Follow
  * Settings can be chosen and the switch waits.
@@ -58,7 +58,7 @@ export function QualityControls({ defaults, preset, custom, asks, onPreset, onCu
         disabled=${!ready}
         onChange=${(e) => onOverwrite(e.currentTarget.checked)}
       />
-      <span aria-hidden="true">Overwrite<span class="new-overwrite-more"> existing files</span></span>
+      <span aria-hidden="true">Overwrite</span>
     </label>
   </div>`;
 }

@@ -43,7 +43,12 @@ Contrast is measured on `--bg-surface` (the grouped surface) unless noted.
 | `--disabled-bg` / `-text` | `--bg-fill` / `#636366` | `--bg-fill` / `#98989d` | a disabled primary button: gray, not faded red | 4.90 / 4.85 |
 | `--accent-text` | `#d60f2c` | `#ff4d61` | "See all" links, current tab | 4.87 / 5.26 |
 | `--mark` / `--brand` | `#fa2d48` / `#e0213a` | same | logo | non-text |
-| `--focus` | `--accent-text` | `--accent-text` | 2 px focus ring in the accent as in Apple Music: offset 2 px, on a text field, select or the filter box drawn over its border (offset -1 px) so it is one ring | 5.30 on white / 6.49 on black |
+| `--focus` | `--accent-text` | `--accent-text` | 2 px focus ring in the accent as in Apple Music: offset 2 px, on a select drawn over its border (offset -1 px) so it is one ring | 5.30 on white / 6.49 on black |
+| `--focus-field` | `#1d1d1f` at 72% | `#f5f5f7` at 72% | the ring of a field you type in (text fields, the filter box, the compose field's 1 px edge): neutral, so typing never reads as an error | 6.67 on white, 6.42 on surface / 9.70 on black, 8.59 on surface |
+| `--compose-bg` / `-hover` / `-focus` | `--bg-surface` / `#f0f0f3` / `#ffffff` | `--bg-surface` / `#222224` / `#222224` | New download's compose field at rest, under the pointer, typed in; its placeholder is `--text-secondary` | placeholder 5.49 / 6.61 at rest, 5.97 / 6.17 typed in |
+| `--compose-edge` / `--compose-shadow` | `--border-subtle` / a red halo | same | the field's 1 px edge at rest; the halo under it while typed in | non-text |
+| `--dock-bg` | `--toast-bg` | `--toast-bg` | the New download dock, frosted | secondary text 5.97 / 5.72 |
+| `--stage-glow-a` / `-b` / `-tint` | red 10%, purple 8%, the cover 16% | red 16%, purple 10%, the cover 24% | the glow behind the compose field; `-tint` mixes `--stage-tint`, the first cover's colour | non-text |
 | `--info` | `#fa2d48` | same | running: equalizer, cells | 3.79 on white / 5.53 on black |
 | `--info-text` | `#d60f2c` | `#ff4d61` | "Running" label | 4.87 / 5.26 |
 | `--success` / `-text` | `#248a3d` / `#1b7a34` | `#30d158` | completed marks / "Healthy" | text 4.97 / 8.42 |
@@ -91,12 +96,14 @@ running cards, the banner, the drawer sheet, dialogs and the notices that
 stand on the page take `--r-card`, the
 panel radius plus the card padding (28 px, 24 under 640 px), and so does the
 top of a phone bottom sheet. What they hold takes `--r-panel`, 8 px: fields,
-nav and palette items, artwork and covers, inset lists, the link text box,
+nav and palette items, artwork and covers, inset lists,
 notices, drawer groups, quality slots, the More list and icon tiles. Keys,
 inline code, loading bars and a chart bar's top take `--r-tag`, 4 px. The
 palette and toasts float with `--r-float`, 16 px, since their items sit
 8 px in. Buttons, badges, chips, level chips, the segmented control and its
-thumb, the selection bar and the save bar are pills; on phones, where its
+thumb, the selection bar, the save bar, New download's compose field and
+its dock are pills (the field keeps its half-height radius when its text
+runs to more lines); on phones, where its
 actions can wrap under the count, the selection bar's radius is its 44 px
 pills' plus its 8 px padding (30), still a capsule on one row. Data marks keep
 `--r-mark`, 2 px. Every other corner is `--corner`, `superellipse(1.25)`
@@ -159,8 +166,7 @@ base durations (120 ms color, 200 ms overlays).
   with a chevron; an action in place (a `button`, such as Clear or Reset) is
   red text without one. A shelf never clips (only its body does), so a
   heading's glyph overshoot is never cut by the rounded corner.
-- **Fields in a grouped surface**: text fields, selects, the link text box
-  and inset lists are `--bg-inset` cells (white on the gray surface in light,
+- **Fields in a grouped surface**: text fields, selects and inset lists are `--bg-inset` cells (white on the gray surface in light,
   the second grouped level in dark), still outlined in `--border-control`.
   Dotted config keys (`.field-key`, shown on demand) are quiet mono text with no
   fill. Selects draw their own 12 px chevron 12 px in from the right edge
@@ -238,7 +244,15 @@ base durations (120 ms color, 200 ms overlays).
   level chip then shows a check; off is outlined in both themes, and an off
   level chip hollows its dot. Wrap lines is the Apple switch with its label.
   Filled attribute chips, a grouped log surface.
-- **New download**: the link text box is an inset cell with the panel radius. Detected links
+- **New download**: the compose field is a filled capsule (half its height,
+  round corners) whose glyph and Clear sit in circles 8 px in (6 on
+  phones); typed in, it turns `--compose-bg-focus` with a 1 px
+  `--focus-field` edge over a soft red halo, and its text is display type
+  in medium weight with a red caret (body text once it holds a link). The
+  options under it are the shared select and switch. The dock is the same
+  capsule shape, frosted `--dock-bg` with `--shadow-float`, a 15 px
+  semibold count, a 13 px secondary line and the red Download pill 8 px
+  in. A glow sits behind the field (`--stage-glow-*`). Detected links
   are Queue-style rows: 48 px covers (8 px radius) with an `--art-bg` shadow,
   hairlines from the text, a 15 px semibold title with a gray E mark and
   Apple Digital Master (and a storefront that is not the default) as quiet
@@ -246,8 +260,8 @@ base durations (120 ms color, 200 ms overlays).
   filled pill and remove a secondary glyph. Submitted reuses
   the Queue list language (covers, the joined capsule bar, hairlines from the
   text; on phones the bar starts under the title); an outcome row names its result in its role color beside the role
-  glyph. The submit bar is the canvas under a hairline; Download is the
-  red pill, the only solid red on the page. The browser shortcut's code is
+  glyph. Download is the red pill, the only solid red on the page. The
+  browser shortcut's code is
   an inset cell; the steps are 13 px secondary.
   Search hits are the same rows without the include box, under 15 px
   semibold group titles (Songs, Albums, Artists) with no rule between

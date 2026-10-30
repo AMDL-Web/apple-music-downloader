@@ -1,62 +1,76 @@
-// New download: the submit bar under the detected links (the count line,
-// the quality controls, Download, and what went wrong with the last
-// submit), its height for the room the page keeps under 640 px, and the
-// Paste button of the text box on a touch screen.
+// New download: the dock that floats at the bottom of the viewport while
+// the box holds links (what will be sent, what the quality asks for,
+// Download, and under it what went wrong with the last submit), its
+// height for the room the page keeps under 640 px, and the Paste button of
+// the text box on a touch screen.
 
-import { html, useState, useEffect, useRef } from '../ui/preact.js';
+import { html, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
 import { scanLinks } from '../lib/links.js';
 import { useApp, Button, Notice } from '../ui/components.js';
 import { useMedia } from '../ui/hooks.js';
+import { isMac } from './palette.js';
+
+const SUBMIT_KEYS = isMac() ? '⌘↵' : 'Ctrl ↵';
 
 /**
- * Props: count (the announced count line), controls (the quality
- * controls), label (the Download text), disabled, busy, title, onSubmit,
- * failure (the last submit's error), refusal (the server's invalid_overrides
- * message) and onCustom (opens Custom… from it), cfgError with
- * onRetryCfg (GET config failed: downloads use Settings as they are),
- * barRef.
+ * Props: on (the box holds links: the capsule shows), count (the count
+ * line; #new-status announces it), asks (what the chosen quality asks for),
+ * label (the Download text), disabled, busy, title, onSubmit, failure (the
+ * last submit's error), refusal (the server's invalid_overrides message)
+ * and onCustom (opens Custom… from it), barRef. The notes come under the
+ * capsule, so nothing above them moves.
  */
-export function SubmitBar({ count, controls, label, disabled, busy, title, onSubmit, failure, refusal, onCustom, cfgError, onRetryCfg, barRef }) {
-  return html`<div class="new-submit" ref=${barRef}>
-    <p class="new-count" role="status" aria-live="polite">${count}</p>
-    <div class="new-submit-row">
-      ${controls}
+export function Dock({ on, count, asks, label, disabled, busy, title, onSubmit, failure, refusal, onCustom, barRef }) {
+  // "Download 3 albums": on a narrow phone the button says "Download" and
+  // the count beside it says how many.
+  const [verb, what] = /^Download /.test(label) ? ['Download', label.slice(8)] : [label, ''];
+  return html`<div class="new-dock-wrap" ref=${barRef} data-on=${on ? '' : undefined}>
+    <div class="new-dock">
+      <div class="new-dock-text">
+        <p class="new-dock-count" aria-hidden="true">${count}</p>
+        ${asks ? html`<p class="new-dock-asks" title=${asks}>${asks}</p>` : null}
+      </div>
       <${Button}
         variant="primary"
         icon="download"
-        className="new-submit-btn"
+        className="new-dock-go"
         disabled=${disabled}
         aria-busy=${busy ? 'true' : undefined}
+        aria-keyshortcuts="Meta+Enter Control+Enter"
         title=${title}
         onClick=${onSubmit}
-      >${label}</${Button}>
+      >${verb}${what ? html`<span class="new-dock-what">${what}</span>` : null}<span class="new-dock-key" aria-hidden="true">${SUBMIT_KEYS}</span></${Button}>
     </div>
-    ${failure ? html`<${Notice} role="danger" icon="circle-x">${failure}</${Notice}>` : null}
-    ${refusal
-      ? html`<${Notice} role="danger" icon="circle-x" action=${html`<${Button} size="sm" onClick=${onCustom}>Custom…</${Button}>`}>
-          <strong>The server refused these quality options.</strong> ${refusal}
-        </${Notice}>`
-      : null}
-    ${cfgError
-      ? html`<p class="new-cfg-note">
-          <span>Couldn't load your Settings; downloads use them as they are.</span>
-          <button type="button" class="link" onClick=${onRetryCfg}>Retry</button>
-        </p>`
-      : null}
+    <div class="new-notes">
+      ${failure ? html`<${Notice} role="danger" icon="circle-x">${failure}</${Notice}>` : null}
+      ${refusal
+        ? html`<${Notice} role="danger" icon="circle-x" action=${html`<${Button} size="sm" onClick=${onCustom}>Custom…</${Button}>`}>
+            <strong>The server refused these quality options.</strong> ${refusal}
+          </${Notice}>`
+        : null}
+    </div>
   </div>`;
 }
 
-/** [ref, height]: the rendered height of the element in ref, kept current. */
+/**
+ * [ref, height]: a callback ref and the rendered height of the element it
+ * holds, kept current; 0 while nothing is mounted there.
+ */
 export function useBarHeight() {
-  const ref = useRef(null);
   const [h, setH] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver !== 'function') return undefined;
-    const ro = new ResizeObserver(() => setH(Math.ceil(el.getBoundingClientRect().height)));
-    ro.observe(el);
-    return () => ro.disconnect();
+  const ro = useRef(null);
+  const ref = useCallback((el) => {
+    if (ro.current) ro.current.disconnect();
+    ro.current = null;
+    if (!el) {
+      setH(0);
+      return;
+    }
+    if (typeof ResizeObserver !== 'function') return;
+    ro.current = new ResizeObserver(() => setH(Math.ceil(el.getBoundingClientRect().height)));
+    ro.current.observe(el);
   }, []);
+  useEffect(() => () => ro.current && ro.current.disconnect(), []);
   return [ref, h];
 }
 
