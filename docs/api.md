@@ -340,7 +340,11 @@ filter), `total`, `limit`, `offset` and the global `event_cursor`.
 Every job carries `total_items` (tracks the input resolved to) and four disjoint item
 counters, always present: `completed_items` (written by this job), `skipped_items`
 (already on disk), `failed_items` and `cancelled_items`. They are derived from the job's
-items on every read, so a running job's counters match its `items`. `started_at` is set
+items on every read, so a running job's counters match its `items`. `progress` (0 to 1, to
+three decimals) is the job's overall progress, the mean of its tracks' stage-weighted
+progress as the console's album bar shows it (`internal/progress#Overall`): below 1 while
+a track has not finished, 1 once the job completed. It is derived on every read too, and
+event payloads leave it out. `started_at` is set
 when a worker first starts the current run and kept across restarts; a retry starts a
 new run and clears it. `finished_at` is set when the job reaches a terminal status and
 cleared by a retry. Both are RFC 3339 and absent until set. Forcing an overwrite is `overrides.force_overwrite`.
@@ -387,8 +391,10 @@ milestones that change how a job appears in the list, so a client can render the
 downloads page without subscribing to each job. Messages are named `download_upserted`
 (data: `{type, job, event_id, status_counts}`, the job's current snapshot) and
 `download_deleted` (`{type, job_id, event_id, status_counts}`); `status_counts` is global.
-`event_id` is also the SSE id and only moves forward; a resent message is idempotent. The
-feed never ends on its own. It is the only stream that delivers a motion artwork resolved
+`event_id` is also the SSE id and only moves forward; a resent message is idempotent.
+Progress has no milestone, so every 2 seconds (`internal/api#feedProgressInterval`) the
+feed also sends `download_upserted` for each running job whose `progress` moved since it
+last sent it, with the `event_id` already reached. The feed never ends on its own. It is the only stream that delivers a motion artwork resolved
 after a job finished.
 
 Each event is `{id, job_id, item_id?, type, phase?, message?, payload?, created_at}`

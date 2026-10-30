@@ -1011,7 +1011,9 @@ paths:
         Only "milestone" events that affect how the list is displayed trigger a
         push (created/recovered/started/input resolved/animated cover
         resolved/song completed, skipped or failed/terminal state/deleted);
-        high-frequency details such as per-track download progress are not pushed.
+        per-track progress events are not pushed. Instead, every 2 seconds the
+        feed sends a download_upserted for each running job whose progress has
+        moved since it was last sent, with the event_id already reached.
         The animated cover is the only kind of change that can still arrive after a
         job reaches a terminal state: it is resolved out of band, and by then the
         per-job event stream has usually closed, so only this endpoint delivers it.
@@ -2931,6 +2933,17 @@ components:
           type: integer
           minimum: 0
           description: Items that were cancelled (item status cancelled).
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: >-
+            The job's overall progress, the mean of its tracks' stage-weighted
+            progress (what the console's album bar shows): below 1 while a track
+            has not finished, 1 once the job completed. Derived from the items on
+            every read, to three decimals. Present in GET /downloads, GET
+            /downloads/{job_id} and the overview feed's snapshots; event payloads
+            leave it out.
         error:
           type: string
         started_at:

@@ -92,7 +92,7 @@ test('log levels and connection states', () => {
   assert.equal(connectionView('offline').label, 'Offline');
 });
 
-test('jobProgress counts tracks and never reports a percentage', () => {
+test('jobProgress counts tracks once one has finished', () => {
   const p = jobProgress({ status: 'running', total_items: 14, completed_items: 11, skipped_items: 1, failed_items: 1 });
   assert.equal(p.text, '12 / 14');
   assert.equal(p.aria, '12 of 14 tracks, 1 already on disk, 1 failed');
@@ -103,12 +103,15 @@ test('jobProgress counts tracks and never reports a percentage', () => {
   assert.equal(resolving.text, 'Resolving');
 });
 
-test('a running job with tracks and nothing finished is working, not empty', () => {
-  const song = jobProgress({ status: 'running', total_items: 1 });
+test('a running job with nothing finished shows its overall progress', () => {
+  const song = jobProgress({ status: 'running', total_items: 1, progress: 0.426 });
   assert.equal(song.working, true);
-  assert.equal(song.aria, '0 of 1 tracks, working');
-  assert.equal(song.text, 'Working', 'a lone track would read 0 / 1 for the whole run');
-  assert.equal(jobProgress({ status: 'running', total_items: 12 }).text, '0 / 12');
+  assert.equal(song.fraction, 0.426);
+  assert.equal(song.aria, '0 of 1 tracks, 42% done');
+  assert.equal(song.text, '42%', 'a lone track would read 0 / 1 for the whole run');
+  assert.equal(jobProgress({ status: 'running', total_items: 12, progress: 0.05 }).text, '5%');
+  assert.equal(jobProgress({ status: 'running', total_items: 12 }).text, '0%', 'a snapshot without progress has not moved');
+  assert.equal(jobProgress({ status: 'running', total_items: 12, completed_items: 1, progress: 0.2 }).text, '1 / 12');
   assert.equal(jobProgress({ status: 'completed', total_items: 1, completed_items: 1 }).text, '1 / 1');
   assert.equal(jobProgress({ status: 'failed', total_items: 1 }).text, '0 / 1');
   assert.equal(jobProgress({ status: 'running', total_items: 5, completed_items: 1 }).working, false);

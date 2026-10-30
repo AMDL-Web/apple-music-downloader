@@ -83,15 +83,10 @@ var outcomeRank = map[domain.ItemStatus]int{
 func AlbumProgress(status domain.JobStatus, items []domain.JobItem) Album {
 	total := len(items)
 	var finished []domain.JobItem
-	mean := 0.0
 	for _, it := range items {
 		if _, ok := outcomeRank[it.Status]; ok {
 			finished = append(finished, it)
 		}
-		mean += ItemFraction(it)
-	}
-	if total > 0 {
-		mean /= float64(total)
 	}
 	sort.SliceStable(finished, func(i, j int) bool {
 		a, b := finished[i], finished[j]
@@ -103,14 +98,7 @@ func AlbumProgress(status domain.JobStatus, items []domain.JobItem) Album {
 		}
 		return a.Index < b.Index
 	})
-	working := len(finished) < total
-	overall := mean
-	switch {
-	case status == domain.JobCompleted:
-		overall = 1
-	case working:
-		overall = min(mean, 0.99)
-	}
+	overall := Overall(status, items)
 
 	var runs []Run
 	if total == 1 {
@@ -144,6 +132,30 @@ func AlbumProgress(status domain.JobStatus, items []domain.JobItem) Album {
 		out.Ticks = total
 	}
 	return out
+}
+
+// Overall is a job's progress in [0,1]: the mean of its tracks' ItemFraction,
+// held below 1 while a track has not finished and 1 once the job completed.
+// Album.Percent is Overall in percent.
+func Overall(status domain.JobStatus, items []domain.JobItem) float64 {
+	mean := 0.0
+	working := false
+	for _, it := range items {
+		if _, ok := outcomeRank[it.Status]; !ok {
+			working = true
+		}
+		mean += ItemFraction(it)
+	}
+	if len(items) > 0 {
+		mean /= float64(len(items))
+	}
+	switch {
+	case status == domain.JobCompleted:
+		return 1
+	case working:
+		return min(mean, 0.99)
+	}
+	return mean
 }
 
 // finishTime is when a finished track reached its final status; an unknown time

@@ -129,12 +129,17 @@ type Job struct {
 	// are disjoint, never stored, and filled from job_items by every store
 	// read: CompletedItems were written by this job, SkippedItems were already
 	// on disk (skipped_existing).
-	TotalItems     int    `json:"total_items"`
-	CompletedItems int    `json:"completed_items"`
-	SkippedItems   int    `json:"skipped_items"`
-	FailedItems    int    `json:"failed_items"`
-	CancelledItems int    `json:"cancelled_items"`
-	Error          string `json:"error,omitempty"`
+	TotalItems     int `json:"total_items"`
+	CompletedItems int `json:"completed_items"`
+	SkippedItems   int `json:"skipped_items"`
+	FailedItems    int `json:"failed_items"`
+	CancelledItems int `json:"cancelled_items"`
+	// Progress is the job's overall progress in [0,1]
+	// (internal/progress#Overall), never stored: the API fills it from the
+	// items in GET /downloads, GET /downloads/{id} and the overview feed, and
+	// leaves it out elsewhere (event payloads, hook payloads).
+	Progress *float64 `json:"progress,omitempty"`
+	Error    string   `json:"error,omitempty"`
 	// StartedAt is set when a worker first starts the current run and kept
 	// across recovery after a restart; a retry starts a new run and clears it.
 	// FinishedAt is set on the terminal transition and cleared by retry. Both

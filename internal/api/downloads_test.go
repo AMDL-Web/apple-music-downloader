@@ -617,3 +617,39 @@ func TestCancelMissingJobIsNotFound(t *testing.T) {
 		})
 	}
 }
+
+func TestListAndDetailCarryTheJobsProgress(t *testing.T) {
+	server := newTestServerWithManager(t)
+	ctx := context.Background()
+	job := domain.Job{ID: "job-progress", Input: "album|us|9", Type: "album", CanonicalKey: "album:us:9", Status: domain.JobRunning}
+	if err := server.store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range []domain.JobItem{
+		{ID: "p1", JobID: job.ID, Index: 1, Status: domain.ItemCompleted, Progress: domain.ItemProgress{Saved: true}},
+		{ID: "p2", JobID: job.ID, Index: 2, Status: domain.ItemQueued},
+	} {
+		if err := server.store.CreateItem(ctx, it); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var list struct {
+		Downloads []domain.Job `json:"downloads"`
+	}
+	if err := json.Unmarshal(requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads", "").Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	var detail struct {
+		Job domain.Job `json:"job"`
+	}
+	if err := json.Unmarshal(requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/downloads/"+job.ID, "").Body.Bytes(), &detail); err != nil {
+		t.Fatal(err)
+	}
+	// One of two tracks saved, the other not started: half the job.
+	if len(list.Downloads) != 1 || list.Downloads[0].Progress == nil || *list.Downloads[0].Progress != 0.5 {
+		t.Fatalf("list progress = %+v", list.Downloads)
+	}
+	if detail.Job.Progress == nil || *detail.Job.Progress != 0.5 {
+		t.Fatalf("detail progress = %v", detail.Job.Progress)
+	}
+}

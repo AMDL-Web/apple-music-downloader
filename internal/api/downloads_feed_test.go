@@ -432,3 +432,61 @@ func TestDownloadsFeedFlushesHeadWithoutBacklog(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }
+
+// A running job's progress has no milestone, so the feed sends it on its
+// progress tick, once per move: a tick with nothing new sends nothing.
+func TestDownloadsFeedSendsARunningJobsProgressAsItMoves(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	job := domain.Job{ID: "moving", Input: "album|us|1", Type: "album", CanonicalKey: "album:1", Status: domain.JobRunning}
+	if err := store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	done := domain.JobItem{ID: "i1", JobID: job.ID, Index: 1, Status: domain.ItemCompleted, Progress: domain.ItemProgress{Download: 1, Decrypt: 1, Resolved: true, Remuxed: true, Verified: true, Tagged: true, Saved: true}}
+	busy := domain.JobItem{ID: "i2", JobID: job.ID, Index: 2, Status: domain.ItemDownloading, Progress: domain.ItemProgress{Resolved: true, Download: 0.2}}
+	for _, it := range []domain.JobItem{done, busy} {
+		if err := store.CreateItem(ctx, it); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	hub := events.NewHub()
+	server := &Server{store: store, hub: hub, manager: jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())}
+	ticks := make(chan time.Time)
+	sent := make(chan struct{}, 4)
+	sink := &recordingSink{onSend: func(int) { sent <- struct{}{} }}
+	go func() {
+		defer cancel()
+		ticks <- time.Now()
+		<-sent
+		ticks <- time.Now() // nothing moved
+		busy.Progress.Download = 0.8
+		if err := store.UpdateItem(ctx, busy); err != nil {
+			t.Error(err)
+			return
+		}
+		ticks <- time.Now()
+		<-sent
+	}()
+	server.runDownloadsFeed(ctx, sink, 0, make(chan struct{}), streamTicks{progress: ticks})
+
+	var got []float64
+	for _, frame := range sink.frames {
+		var msg domain.DownloadFeedMessage
+		if err := json.Unmarshal(frame.data, &msg); err != nil {
+			t.Fatal(err)
+		}
+		if msg.Type != "download_upserted" || msg.Job == nil || msg.Job.Progress == nil || msg.StatusCounts.Running != 1 {
+			t.Fatalf("message = %+v", msg)
+		}
+		got = append(got, *msg.Job.Progress)
+	}
+	if len(got) != 2 || !(got[0] > 0.5 && got[0] < got[1] && got[1] < 1) {
+		t.Fatalf("progress sent = %v, want two rising values between one track and two", got)
+	}
+}

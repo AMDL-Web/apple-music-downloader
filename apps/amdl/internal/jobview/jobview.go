@@ -41,6 +41,7 @@ type AlbumProgress struct {
 // that did not finish has none: its codec is only the one it tried.
 func Summary(d client.DownloadDetail) map[string]any {
 	out := jobMap(d.Job)
+	delete(out, "progress") // album_progress.percent says it
 	for k := range out {
 		if isPalette(k) {
 			delete(out, k)
@@ -111,7 +112,7 @@ func dropPalette(v any) any {
 // rowKeys are the Job fields a list row keeps.
 var rowKeys = []string{"id", "type", "status", "title", "artist_name", "curator_name", "input",
 	"total_items", "completed_items", "skipped_items", "failed_items", "cancelled_items",
-	"error", "created_at", "finished_at"}
+	"progress", "error", "created_at", "finished_at"}
 
 // Row is a job cut down to what a list needs.
 func Row(j domain.Job) map[string]any {

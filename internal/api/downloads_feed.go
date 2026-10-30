@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"amdl/internal/db"
 	"amdl/internal/domain"
@@ -35,10 +36,17 @@ func (s *Server) downloadsFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	ticks, stop := newStreamTicks()
 	defer stop()
+	progressTicker := time.NewTicker(feedProgressInterval)
+	defer progressTicker.Stop()
+	ticks.progress = progressTicker.C
 	ctx, end := s.streamContext(r)
 	defer end()
 	s.runDownloadsFeed(ctx, stream, int64(cursor), wake, ticks)
 }
+
+// feedProgressJobs bounds how many running jobs one progress tick reads; no
+// more run at once than download.max_running_jobs allows.
+const feedProgressJobs = 64
 
 // runDownloadsFeed drives the overview feed loop. It drains milestone events
 // newer than lastID into one message per affected job (deduped to the latest
@@ -128,6 +136,50 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 		}
 	}
 
+	// pushProgress sends each running job whose progress moved since it was
+	// last sent, at the cursor already reached: it is no event, so a client
+	// resuming from it misses nothing.
+	sent := map[string]float64{}
+	pushProgress := func() error {
+		running, _, err := s.store.ListJobs(ctx, db.JobListFilter{Statuses: []domain.JobStatus{domain.JobRunning}, Limit: feedProgressJobs})
+		if err != nil || s.fillProgress(ctx, running) != nil {
+			return nil // the next tick tries again
+		}
+		live := make(map[string]bool, len(running))
+		var moved []domain.Job
+		for _, job := range running {
+			live[job.ID] = true
+			if last, ok := sent[job.ID]; !ok || last != *job.Progress {
+				moved = append(moved, job)
+			}
+		}
+		for id := range sent {
+			if !live[id] {
+				delete(sent, id)
+			}
+		}
+		if len(moved) == 0 {
+			return nil
+		}
+		counts, err := s.store.CountJobsByStatus(ctx, db.JobListFilter{})
+		if err != nil {
+			return nil
+		}
+		total := 0
+		for _, count := range counts {
+			total += count
+		}
+		statusCounts := makeJobStatusCounts(counts, total)
+		for i := range moved {
+			job := moved[i]
+			if err := write(domain.DownloadFeedMessage{Type: "download_upserted", Job: &job, EventID: lastID, StatusCounts: statusCounts}); err != nil {
+				return err
+			}
+			sent[job.ID] = *job.Progress
+		}
+		return nil
+	}
+
 	if err := drain(); err != nil {
 		return
 	}
@@ -141,6 +193,10 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 			}
 		case <-ticks.redrain:
 			if drain() != nil {
+				return
+			}
+		case <-ticks.progress:
+			if pushProgress() != nil {
 				return
 			}
 		case <-ticks.keepalive:

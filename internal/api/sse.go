@@ -20,12 +20,18 @@ const (
 	// buffer is full, so this bounds how long such an event waits. It is not
 	// the keepalive: one bounds latency, the other keeps the connection open.
 	storeRedrainInterval = 10 * time.Second
+	// feedProgressInterval is how often the overview feed sends a running
+	// job whose progress moved. No milestone event announces progress, so
+	// without it the list would show a running job standing still.
+	feedProgressInterval = 2 * time.Second
 )
 
 // streamTicks are a stream loop's timers; tests pass channels they control.
+// progress drives only the overview feed and is nil for the others.
 type streamTicks struct {
 	redrain   <-chan time.Time
 	keepalive <-chan time.Time
+	progress  <-chan time.Time
 }
 
 // newStreamTicks starts the production timers; call stop when the stream ends.

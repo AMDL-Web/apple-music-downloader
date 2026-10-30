@@ -39,11 +39,12 @@ export function Chip({ children, title, mono }) {
 }
 
 /**
- * Job progress, never a percentage. Up to CELL_MAX tracks it is one cell per
- * track (completed, already on disk, failed, cancelled, remaining); above that
- * a segmented bar. Either way the counter text follows, then an opt-in hook
- * the base hides: .jprog-legend (a count per cell state), hidden from screen
- * readers because it repeats aria-valuetext.
+ * Job progress. Up to CELL_MAX tracks it is one cell per track (completed,
+ * already on disk, failed, cancelled, remaining); above that a segmented bar.
+ * While a running job has nothing finished, .jprog-live fills either one to
+ * the job's overall progress. The counter text (or that percentage) follows,
+ * then an opt-in hook the base hides: .jprog-legend (a count per cell state),
+ * hidden from screen readers because it repeats aria-valuetext.
  */
 export function JobProgress({ job }) {
   const p = jobProgress(job);
@@ -61,6 +62,7 @@ export function JobProgress({ job }) {
         </span>`
       : null,
   ];
+  const live = p.working ? html`<span key="live" class="jprog-live" style=${{ '--w': String(p.fraction) }}></span>` : null;
   if (cells) {
     return html`<div class="jprog" data-mode="cells" data-working=${p.working ? '' : undefined}>
       <div
@@ -73,7 +75,7 @@ export function JobProgress({ job }) {
         aria-valuetext=${p.aria}
         style=${{ '--n': String(cells.length) }}
       >
-        ${cells.map((c, i) => html`<span key=${i} class="pcell" data-state=${c.state} data-role=${c.role || undefined}></span>`)}
+        ${cells.map((c, i) => html`<span key=${i} class="pcell" data-state=${c.state} data-role=${c.role || undefined}></span>`)} ${live}
       </div>
       ${text}
     </div>`;
@@ -90,7 +92,7 @@ export function JobProgress({ job }) {
       aria-valuenow=${p.indeterminate ? undefined : p.done}
       aria-valuetext=${p.aria}
     >
-      ${p.total > 0 ? [seg('success', p.completed), seg('skipped', p.skipped), seg('danger', p.failed), seg('neutral', p.cancelled)] : null}
+      ${p.total > 0 ? [seg('success', p.completed), seg('skipped', p.skipped), seg('danger', p.failed), seg('neutral', p.cancelled)] : null} ${live}
     </div>
     ${text}
   </div>`;

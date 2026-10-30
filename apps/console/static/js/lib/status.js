@@ -152,25 +152,28 @@ export function connectionView(state) {
 
 /**
  * Segmented progress of a job: done (completed + skipped), failed, of total.
- * No aggregate percentage; the text is a count.
+ * The text is a count, except while a running job has nothing finished yet:
+ * the count would stand still for the whole first track, so the job's overall
+ * progress (Job.progress, from each track's stages) fills the track and the
+ * text is its percentage.
  */
 export function jobProgress(job) {
   const c = jobCounts(job);
   const indeterminate = c.total === 0 && job && (job.status === 'running' || job.status === 'queued');
-  // Running with tracks resolved but none finished: the list payload has no
-  // byte progress, so the row shows motion instead of an empty bar.
   const working = Boolean(job) && job.status === 'running' && c.total > 0 && c.done === 0 && c.failed === 0 && c.cancelled === 0;
+  const fraction = working ? clamp01(job.progress) : 0;
+  const percent = Math.floor(fraction * 100);
   let aria = `${c.done} of ${c.total} tracks`;
   if (c.skipped) aria += `, ${c.skipped} already on disk`;
   if (c.failed) aria += `, ${c.failed} failed`;
   if (c.cancelled) aria += `, ${c.cancelled} cancelled`;
-  if (working) aria += ', working';
+  if (working) aria += `, ${percent}% done`;
   return {
     ...c,
     indeterminate,
     working,
-    // A lone track in flight stays at 0 / 1 for the whole run; say it is working.
-    text: indeterminate ? 'Resolving' : working && c.total === 1 ? 'Working' : `${c.done} / ${c.total}`,
+    fraction,
+    text: indeterminate ? 'Resolving' : working ? `${percent}%` : `${c.done} / ${c.total}`,
     aria: indeterminate ? 'Resolving tracks' : aria,
   };
 }

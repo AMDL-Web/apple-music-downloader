@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/jobs"
+	"amdl/internal/progress"
 )
 
 // maxBatchSubmitURLs caps the number of URLs accepted in a single batch
@@ -104,6 +106,10 @@ func (s *Server) listDownloads(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, "list jobs", err)
 		return
 	}
+	if err := s.fillProgress(r.Context(), jobs); err != nil {
+		writeStoreError(w, "read item progress", err)
+		return
+	}
 	counts, err := s.store.CountJobsByStatus(r.Context(), filter)
 	if err != nil {
 		writeStoreError(w, "count jobs", err)
@@ -136,7 +142,34 @@ func (s *Server) jobSnapshot(ctx context.Context, id string) (*domain.Job, error
 	if err != nil {
 		return nil, err
 	}
-	return &job, nil
+	jobs := []domain.Job{job}
+	if err := s.fillProgress(ctx, jobs); err != nil {
+		return nil, err
+	}
+	return &jobs[0], nil
+}
+
+// fillProgress sets each job's Progress from its items, read in one query.
+func (s *Server) fillProgress(ctx context.Context, jobs []domain.Job) error {
+	ids := make([]string, len(jobs))
+	for i, j := range jobs {
+		ids[i] = j.ID
+	}
+	items, err := s.store.ItemProgress(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for i := range jobs {
+		p := jobProgress(jobs[i].Status, items[jobs[i].ID])
+		jobs[i].Progress = &p
+	}
+	return nil
+}
+
+// jobProgress is progress.Overall to three decimals, so a client and the
+// overview feed compare it without float noise.
+func jobProgress(status domain.JobStatus, items []domain.JobItem) float64 {
+	return math.Round(progress.Overall(status, items)*1000) / 1000
 }
 
 func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
@@ -200,6 +233,8 @@ func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, "list items", err)
 		return
 	}
+	p := jobProgress(job.Status, items)
+	job.Progress = &p
 	// The snapshot and the SSE stream are two access modes of one state, so
 	// hook outcomes — which the stream pushes as hook_* events — must be
 	// visible here too, derived from those same persisted events.

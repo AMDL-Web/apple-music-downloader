@@ -441,10 +441,23 @@
   background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
 }
 
-/* Running, tracks resolved, none finished: striped instead of empty. */
-.jprog[data-working] .pcell[data-state="remaining"],
-.jprog[data-working] .pbar {
-  background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
+/* Running, tracks resolved, none finished: the job's overall progress fills
+   the track, translucent like the drawer's album bar, over the cells or bar
+   it shares a box with. currentColor follows a section's text color. */
+.jprog[data-working] :is(.pcells, .pbar) {
+  position: relative;
+}
+
+.jprog-live {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: calc(var(--w) * 100%);
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.38;
+  pointer-events: none;
+  transition: width var(--dur-base) ease-out;
 }
 
 /* As wide as "Resolving", so the bar does not change length when the

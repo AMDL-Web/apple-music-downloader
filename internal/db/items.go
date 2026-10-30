@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"amdl/internal/domain"
@@ -61,6 +62,35 @@ func (s *Store) CancelUnfinishedItems(ctx context.Context, jobID, statusMessage 
 func (s *Store) DeleteItem(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM job_items WHERE id=?`, id)
 	return err
+}
+
+// ItemProgress returns the items of each of jobIDs with only what a job's
+// progress is computed from: status and the progress columns. One query
+// serves a whole list page.
+func (s *Store) ItemProgress(ctx context.Context, jobIDs []string) (map[string][]domain.JobItem, error) {
+	out := make(map[string][]domain.JobItem, len(jobIDs))
+	if len(jobIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(jobIDs))
+	for i, id := range jobIDs {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT job_id,status,download_progress,decrypt_progress,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved FROM job_items WHERE job_id IN (?`+strings.Repeat(",?", len(jobIDs)-1)+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var it domain.JobItem
+		var status string
+		if err := rows.Scan(&it.JobID, &status, &it.Progress.Download, &it.Progress.Decrypt, &it.Progress.Resolved, &it.Progress.Remuxed, &it.Progress.Verified, &it.Progress.Tagged, &it.Progress.Saved); err != nil {
+			return nil, err
+		}
+		it.Status = domain.ItemStatus(status)
+		out[it.JobID] = append(out[it.JobID], it)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) ListItems(ctx context.Context, jobID string) ([]domain.JobItem, error) {

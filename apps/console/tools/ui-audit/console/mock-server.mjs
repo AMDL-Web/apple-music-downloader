@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { albumProgress } from '../../../static/js/lib/album-progress.js';
 import { WORLDS, CATALOG, CODECS, STAGE_ORDER, stageFields, findAlbum, makeJob, stats, system, iso } from './fixtures.mjs';
 
 const STATIC_DIR = fileURLToPath(new URL('../../../static/', import.meta.url));
@@ -40,6 +41,11 @@ const TYPES = {
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 const MILESTONES = new Set(['job_queued', 'job_started', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'job_retried', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
+
+/** A job as the API sends it: with progress, derived from its items like the server's internal/progress#Overall. */
+function withProgress(world, job) {
+  return { ...job, progress: albumProgress(job.status, world.items.get(job.id) || []).percent / 100 };
+}
 
 function statusCounts(world) {
   const c = { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0, total: 0 };
@@ -111,7 +117,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       if (MILESTONES.has(ev.type)) {
         const job = w.jobs.get(ev.job_id);
         const msg = job
-          ? { type: 'download_upserted', job, event_id: ev.id, status_counts: statusCounts(w) }
+          ? { type: 'download_upserted', job: withProgress(w, job), event_id: ev.id, status_counts: statusCounts(w) }
           : { type: 'download_deleted', job_id: ev.job_id, event_id: ev.id, status_counts: statusCounts(w) };
         for (const res of feeds) send(res, ev.id, msg.type, msg);
       }
@@ -312,7 +318,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
         const all = filteredJobs(q);
         const limit = Math.min(200, Number(q.get('limit')) || 50);
         const offset = Number(q.get('offset')) || 0;
-        return json(res, 200, { downloads: all.slice(offset, offset + limit), total: all.length, limit, offset, status_counts: statusCounts(w), event_cursor: w.cursor });
+        return json(res, 200, { downloads: all.slice(offset, offset + limit).map((j) => withProgress(w, j)), total: all.length, limit, offset, status_counts: statusCounts(w), event_cursor: w.cursor });
       }
       case 'POST /api/v1/downloads':
         return submit(req, res);
@@ -349,7 +355,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     const job = w.jobs.get(id);
     if (!job) return apiError(res, 404, 'not_found', 'job not found');
     if (!action && req.method === 'GET') {
-      return json(res, 200, { job, items: w.items.get(id) || [], hooks: [], event_cursor: w.cursor });
+      return json(res, 200, { job: withProgress(w, job), items: w.items.get(id) || [], hooks: [], event_cursor: w.cursor });
     }
     if (!action && req.method === 'DELETE') {
       if (!TERMINAL.has(job.status)) return apiError(res, 409, 'job_active', 'job is still active');

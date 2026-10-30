@@ -1443,11 +1443,6 @@
   box-shadow: none;
 }
 
-/* Running with nothing finished: the joined capsule is striped, not empty. */
-:root[data-skin="music"] :is([data-section="jobs"], [data-section="results"]) .jprog[data-working] .pcells {
-  background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
-}
-
 :root[data-skin="music"] [data-section="jobs"] .job-row > .art {
   width: 48px;
   height: 48px;
