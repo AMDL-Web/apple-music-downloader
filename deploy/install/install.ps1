@@ -70,6 +70,11 @@ if ($DryRun) {
     return
 }
 
+function Test-ServiceActive {
+    if (-not (Test-Path -LiteralPath $exe)) { return $false }
+    return ((& $exe service status 2>$null | Out-String) -match '"active":true')
+}
+
 # The refused AMDL_URL keeps amdl version from looking for a server.
 $current = $null
 if ((-not $Force) -and (Test-Path -LiteralPath $exe)) {
@@ -96,24 +101,40 @@ if ($current -eq $Version) {
         if ($got -ne $want) { throw "checksum mismatch for ${name}.zip: got $got, want $want" }
         Expand-Archive -LiteralPath (Join-Path $tmp "$name.zip") -DestinationPath $tmp -Force
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-        # A running amdl.exe, such as the service, cannot be overwritten but
-        # can be renamed; it keeps running from the old file.
-        $old = "$exe.old"
-        if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue }
-        if (Test-Path -LiteralPath $exe) { Move-Item -LiteralPath $exe -Destination $old -Force }
-        Copy-Item -LiteralPath (Join-Path $tmp "$name\amdl.exe") -Destination $exe
+        # A service the user keeps running is stopped for the swap and started
+        # on the new binary; one they stopped stays stopped.
+        $active = Test-ServiceActive
+        if ($active) {
+            Say 'stopping the amdl service for the upgrade'
+            & $exe service stop | Out-Null
+        }
+        # The old exe is renamed aside, which works even while a process
+        # still runs it, and comes back if anything after fails.
+        $old = $null
+        if (Test-Path -LiteralPath $exe) {
+            $old = "$exe.old-" + [DateTime]::UtcNow.Ticks
+            Move-Item -LiteralPath $exe -Destination $old
+        }
+        try {
+            Copy-Item -LiteralPath (Join-Path $tmp "$name\amdl.exe") -Destination $exe
+            if ($active) {
+                & $exe service start | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "amdl $Version did not start the service" }
+            }
+        } catch {
+            if ($old) {
+                Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue
+                Move-Item -LiteralPath $old -Destination $exe -Force
+                if ($active) { & $exe service start | Out-Null }
+            }
+            throw "$($_.Exception.Message); the previous amdl.exe is back. Its log: amdl service status"
+        }
         Say "installed $exe ($Version)"
+        # Leftovers of earlier upgrades whose process has since exited.
+        Get-ChildItem -LiteralPath $InstallDir -Filter 'amdl.exe.old-*' -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
     } finally {
         Remove-Item -Recurse -Force -LiteralPath $tmp -ErrorAction SilentlyContinue
-    }
-    if (-not $Service) {
-        $status = & $exe service status 2>$null | Out-String
-        if ($status -match '"installed":true') {
-            Say 'restarting the amdl service on the new binary'
-            & $exe service stop | Out-Null
-            & $exe service start | Out-Null
-            if ($LASTEXITCODE -ne 0) { Say 'the restart failed; run: amdl service stop; amdl service start' }
-        }
     }
 }
 
@@ -130,5 +151,6 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 
 if ($Service) {
     if ($Wrapper) { & $exe service install --wrapper $Wrapper } else { & $exe service install }
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    # throw, not exit: under irm | iex, exit would close the user's PowerShell.
+    if ($LASTEXITCODE -ne 0) { throw "amdl service install failed (exit $LASTEXITCODE)" }
 }

@@ -65,6 +65,11 @@ x86_64 | amd64) arch=amd64 ;;
 arm64 | aarch64) arch=arm64 ;;
 *) die "unsupported CPU $(uname -m); releases are built for amd64 and arm64" ;;
 esac
+# A shell under Rosetta reports x86_64 on Apple Silicon; install the native build.
+if [ -z "${AMDL_INSTALL_ARCH:-}" ] && [ $os = darwin ] && [ $arch = amd64 ] &&
+	[ "$(sysctl -in sysctl.proc_translated 2>/dev/null)" = 1 ]; then
+	arch=arm64
+fi
 
 fetch() {
 	if command -v curl >/dev/null 2>&1; then
@@ -138,26 +143,38 @@ else
 	[ -n "$want" ] || die "SHA256SUMS lists no $name.tar.gz"
 	if command -v sha256sum >/dev/null 2>&1; then
 		got=$(sha256sum "$tmp/$name.tar.gz" | cut -d ' ' -f 1)
-	else
+	elif command -v shasum >/dev/null 2>&1; then
 		got=$(shasum -a 256 "$tmp/$name.tar.gz" | cut -d ' ' -f 1)
+	else
+		die "neither sha256sum nor shasum is installed, so the download cannot be checked"
 	fi
 	[ "$got" = "$want" ] || die "checksum mismatch for $name.tar.gz: got $got, want $want"
 	tar -xzf "$tmp/$name.tar.gz" -C "$tmp"
 	[ -n "$sudo" ] && say "writing $bin_dir needs root; running sudo"
-	# Written beside the old binary and renamed over it, so a running amdl
-	# keeps its file and nothing sees a half-written one.
+	# A service the user keeps running is stopped for the swap and started on
+	# the new binary; one they stopped stays stopped.
+	active=0
+	if [ -x "$bin_dir/amdl" ] && "$bin_dir/amdl" service status 2>/dev/null | grep -q '"active":true'; then
+		active=1
+		say "stopping the amdl service for the upgrade"
+		"$bin_dir/amdl" service stop >/dev/null || say "the service did not stop cleanly; replacing the binary anyway"
+	fi
+	# Written beside the old binary and renamed over it, so nothing sees a
+	# half-written one; the old one is kept until the new one has started.
 	$sudo mkdir -p "$bin_dir"
 	$sudo cp "$tmp/$name/amdl" "$bin_dir/.amdl.new"
 	$sudo chmod 0755 "$bin_dir/.amdl.new"
+	[ -f "$bin_dir/amdl" ] && $sudo cp -p "$bin_dir/amdl" "$bin_dir/.amdl.prev"
 	$sudo mv -f "$bin_dir/.amdl.new" "$bin_dir/amdl"
-	say "installed $bin_dir/amdl ($version)"
-	# A service already running keeps the old binary until it restarts.
-	if [ $service = 0 ] && "$bin_dir/amdl" service status 2>/dev/null | grep -q '"installed":true'; then
-		say "restarting the amdl service on the new binary"
-		if ! { "$bin_dir/amdl" service stop >/dev/null && "$bin_dir/amdl" service start >/dev/null; }; then
-			say "the restart failed; run: amdl service stop && amdl service start"
+	if [ $active = 1 ] && ! "$bin_dir/amdl" service start >/dev/null; then
+		if [ -f "$bin_dir/.amdl.prev" ]; then
+			$sudo mv -f "$bin_dir/.amdl.prev" "$bin_dir/amdl"
+			"$bin_dir/amdl" service start >/dev/null || say "the previous binary did not start the service either"
 		fi
+		die "amdl $version did not start the service; the previous binary is back. Its log: amdl service status"
 	fi
+	$sudo rm -f "$bin_dir/.amdl.prev"
+	say "installed $bin_dir/amdl ($version)"
 fi
 
 case ":$PATH:" in

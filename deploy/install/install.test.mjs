@@ -14,18 +14,25 @@ const script = join(here, 'install.sh');
 const version = 'v9.9.9';
 const name = `amdl_${version}_linux_amd64`;
 
-// A stand-in amdl: it answers `version` like the real one and records every
-// other command line in calls.log beside itself.
-const fakeAmdl = (v) => `#!/bin/sh
+// A stand-in amdl: it answers `version` like the real one, records every other
+// command line in calls.log beside itself, reports the service active while an
+// "active" file sits there, and with failStart cannot start it.
+const fakeAmdl = (v, failStart) => `#!/bin/sh
+d=$(dirname "$0")
 if [ "$1" = version ]; then printf '{"client":{"build_date":"","commit":"","version":"${v}"}}\\n'; exit 0; fi
-echo "$*" >> "$(dirname "$0")/calls.log"
-if [ "$1 $2" = "service status" ]; then echo '{"installed":false}'; fi
+echo "${v} $*" >> "$d/calls.log"
+case "$1 $2" in
+"service status") if [ -f "$d/active" ]; then echo '{"installed":true,"active":true}'; else echo '{"installed":true,"active":false}'; fi ;;
+"service stop") rm -f "$d/active" ;;
+"service start") ${failStart ? 'exit 1' : 'touch "$d/active"'} ;;
+esac
 `;
 
-function release(v = version) {
-  const dir = mkdtempSync(join(tmpdir(), 'amdl-release-'));
+function release(v = version, failStart = false, rel = mkdtempSync(join(tmpdir(), 'amdl-release-'))) {
+  const dir = rel;
+  const name = `amdl_${v}_linux_amd64`;
   mkdirSync(join(dir, name));
-  writeFileSync(join(dir, name, 'amdl'), fakeAmdl(v));
+  writeFileSync(join(dir, name, 'amdl'), fakeAmdl(v, failStart));
   chmodSync(join(dir, name, 'amdl'), 0o755);
   const tar = spawnSync('tar', ['-czf', `${name}.tar.gz`, name], { cwd: dir });
   assert.equal(tar.status, 0, String(tar.stderr));
@@ -39,6 +46,10 @@ function install(rel, ...args) {
   const run = (...more) => spawnSync('sh', [script, '--version', version, '--bin-dir', join(home, 'bin'), ...more], {
     encoding: 'utf8',
     env: { ...process.env, HOME: home, AMDL_INSTALL_BASE_URL: `file://${rel}`, AMDL_INSTALL_OS: 'Linux', AMDL_INSTALL_ARCH: 'x86_64' },
+  });
+  run.upgrade = (rel2, v2) => spawnSync('sh', [script, '--version', v2, '--bin-dir', join(home, 'bin')], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: home, AMDL_INSTALL_BASE_URL: `file://${rel2}`, AMDL_INSTALL_OS: 'Linux', AMDL_INSTALL_ARCH: 'x86_64' },
   });
   return { home, bin: join(home, 'bin', 'amdl'), first: run(...args), run };
 }
@@ -65,7 +76,35 @@ test('refuses an archive whose checksum does not match', () => {
 test('--service registers the service with the wrapper address', () => {
   const { bin, first } = install(release(), '--service', '--wrapper', 'http://nas:30020');
   assert.equal(first.status, 0, first.stderr);
-  assert.match(readFileSync(join(dirname(bin), 'calls.log'), 'utf8'), /^service install --wrapper http:\/\/nas:30020$/m);
+  assert.match(readFileSync(join(dirname(bin), 'calls.log'), 'utf8'), /^v9\.9\.9 service install --wrapper http:\/\/nas:30020$/m);
+});
+
+test('an upgrade restarts a running service on the new binary', () => {
+  const { bin, run } = install(release());
+  writeFileSync(join(dirname(bin), 'active'), '');
+  const up = run.upgrade(release('v9.9.10'), 'v9.9.10');
+  assert.equal(up.status, 0, up.stderr);
+  const calls = readFileSync(join(dirname(bin), 'calls.log'), 'utf8');
+  assert.match(calls, /^v9\.9\.9 service stop$/m);
+  assert.match(calls, /^v9\.9\.10 service start$/m);
+  assert.equal(existsSync(join(dirname(bin), 'active')), true);
+});
+
+test('an upgrade leaves a stopped service stopped', () => {
+  const { bin, run } = install(release());
+  const up = run.upgrade(release('v9.9.10'), 'v9.9.10');
+  assert.equal(up.status, 0, up.stderr);
+  assert.doesNotMatch(readFileSync(join(dirname(bin), 'calls.log'), 'utf8'), /service (stop|start)/);
+});
+
+test('a new binary that cannot start the service is rolled back', () => {
+  const { bin, run } = install(release());
+  writeFileSync(join(dirname(bin), 'active'), '');
+  const up = run.upgrade(release('v9.9.10', true), 'v9.9.10');
+  assert.notEqual(up.status, 0);
+  assert.match(up.stderr, /previous binary is back/);
+  assert.match(readFileSync(bin, 'utf8'), /"version":"v9.9.9"/);
+  assert.match(readFileSync(join(dirname(bin), 'calls.log'), 'utf8'), /^v9\.9\.9 service start$/m);
 });
 
 test('--dry-run downloads nothing', () => {

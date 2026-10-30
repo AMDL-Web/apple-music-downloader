@@ -36,6 +36,7 @@ and the command that installs ffmpeg when ffmpeg is missing. Options go after
 | `--bin-dir DIR` | Install into `DIR` |
 | `--service` | Run `amdl service install` afterwards ([Run the backend](#run-the-backend)) |
 | `--wrapper URL` | The wrapper address for `--service` |
+| `--force` | Reinstall even when that version is already installed |
 | `--dry-run` | Print the plan and change nothing |
 
 ```bash
@@ -44,10 +45,11 @@ curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/mai
 
 ### Windows
 
-In PowerShell:
+In PowerShell. The first statement turns on TLS 1.2, which Windows PowerShell 5.1 may
+not offer by default and GitHub requires:
 
 ```powershell
-irm https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.ps1 | iex
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.ps1 | iex
 ```
 
 The script (`deploy/install/install.ps1`) does the same as the shell script, installs
@@ -183,7 +185,11 @@ config moves the downloads.
 ## Upgrade
 
 Run the install script again. It replaces the binary only when the version differs (or
-with `--force` / `-Force`) and restarts a running service on the new one. With Homebrew
+with `--force` / `-Force`). A service that was running is stopped for the swap and
+started on the new binary; if that fails, the script puts the previous binary back,
+starts the service on it and exits with an error. A service you stopped stays stopped.
+The service runs the stable path, `opt/amdl` for Homebrew and `current` for Scoop, so
+package-manager upgrades keep it valid. With Homebrew
 or Scoop, `brew upgrade amdl` or `scoop update amdl`, then
 `amdl service stop` and `amdl service start`.
 
