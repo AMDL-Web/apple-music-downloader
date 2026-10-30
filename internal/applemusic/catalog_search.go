@@ -101,6 +101,8 @@ func (c *CatalogClient) Search(ctx context.Context, storefront, term string, typ
 
 // ArtistAlbumsPage reads limit of an artist's albums from offset, in the order
 // of Apple's albums relationship, which is the list ArtistAlbums downloads.
+// Apple answers 404 for an offset past the last album as for a missing
+// artist; past the first page that is an empty page, not an error.
 func (c *CatalogClient) ArtistAlbumsPage(ctx context.Context, storefront, id string, limit, offset int) (AlbumPage, error) {
 	params := url.Values{
 		"limit": []string{strconv.Itoa(limit)},
@@ -111,6 +113,9 @@ func (c *CatalogClient) ArtistAlbumsPage(ctx context.Context, storefront, id str
 	}
 	var resp relationshipAlbums
 	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/artists/%s/albums", ampAPIBase, storefront, id), params, &resp); err != nil {
+		if offset > 0 && IsNotFound(err) {
+			return AlbumPage{Albums: []Collection{}}, nil
+		}
 		return AlbumPage{}, err
 	}
 	page := AlbumPage{Albums: make([]Collection, 0, len(resp.Data)), NextOffset: nextOffset(resp.Next, offset+limit)}

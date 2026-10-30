@@ -37,6 +37,9 @@ const (
 	classicalAppleMusicHost = "classical.music.apple.com"
 )
 
+// linkShape is what a parse error says a link should look like.
+const linkShape = "expected https://music.apple.com/{storefront}/{album|song|playlist|artist|station|music-video}/..."
+
 func ParseWithAlbumTrackMode(raw, albumTrackURLMode string) (ParsedURL, error) {
 	if albumTrackURLMode != "song" && albumTrackURLMode != "album" {
 		return ParsedURL{}, fmt.Errorf("invalid album_track_url_mode %q (expected song or album)", albumTrackURLMode)
@@ -45,8 +48,11 @@ func ParseWithAlbumTrackMode(raw, albumTrackURLMode string) (ParsedURL, error) {
 	if err != nil {
 		return ParsedURL{}, err
 	}
+	if u.Host == "" {
+		return ParsedURL{}, fmt.Errorf("not an http(s) URL; %s", linkShape)
+	}
 	if u.Host != appleMusicHost && u.Host != betaAppleMusicHost && u.Host != classicalAppleMusicHost {
-		return ParsedURL{}, fmt.Errorf("unsupported host %q", u.Host)
+		return ParsedURL{}, fmt.Errorf("unsupported host %q; %s", u.Host, linkShape)
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) < 3 {

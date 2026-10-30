@@ -168,6 +168,14 @@ func TestArtistAlbumsPageNamesAMissingArtist(t *testing.T) {
 	}
 }
 
+func TestArtistAlbumsPagePastTheEndIsEmpty(t *testing.T) {
+	client, _ := recordedCatalog(t, "", http.StatusNotFound)
+	page, err := client.ArtistAlbumsPage(context.Background(), "us", "159260351", 100, 400)
+	if err != nil || len(page.Albums) != 0 || page.NextOffset != 0 {
+		t.Fatalf("page = %+v, err = %v; want an empty last page", page, err)
+	}
+}
+
 func TestNextOffset(t *testing.T) {
 	for _, c := range []struct {
 		next     string
