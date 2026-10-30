@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"amdl/apps/amdl/skill"
 	"amdl/internal/capability"
 	"amdl/internal/client"
 )
@@ -237,6 +238,33 @@ func TestWaitForJobReportsProgressAndTheEnd(t *testing.T) {
 	for i := 1; i < len(s.progress); i++ {
 		if s.progress[i] <= s.progress[i-1] {
 			t.Errorf("progress went %v", s.progress)
+		}
+	}
+}
+
+func TestInstructionsKeepTheSkillsRules(t *testing.T) {
+	for _, r := range rules {
+		if !strings.Contains(skill.Text, r) {
+			t.Errorf("apps/amdl/skill/SKILL.md lacks the rule %q", r)
+		}
+		if !strings.Contains(instructions, r) {
+			t.Errorf("the instructions lack the rule %q", r)
+		}
+	}
+}
+
+func TestChangingToolsAreMarkedConservatively(t *testing.T) {
+	for _, c := range capability.All {
+		if c.Tool == "" {
+			continue
+		}
+		ann := tool(c).Annotations
+		if ann.ReadOnlyHint != (c.Safety == capability.Read) {
+			t.Errorf("%s: readOnlyHint %v for safety %v", c.Tool, ann.ReadOnlyHint, c.Safety)
+		}
+		wantDestructive := c.Safety == capability.Destructive || c.Tool == "set_config" || c.Tool == "cancel_job"
+		if c.Safety != capability.Read && (ann.DestructiveHint == nil || *ann.DestructiveHint != wantDestructive) {
+			t.Errorf("%s: destructiveHint %v, want %v", c.Tool, ann.DestructiveHint, wantDestructive)
 		}
 	}
 }

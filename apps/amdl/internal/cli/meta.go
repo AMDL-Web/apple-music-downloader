@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"amdl/apps/amdl/skill"
 	"amdl/internal/capability"
 )
 
@@ -253,7 +254,10 @@ func cliSetupCmd(*flag.FlagSet) func(e *env, args []string) error {
 			"claude_code": "claude mcp add amdl -- " + exe + " " + strings.Join(mcpArgs, " "),
 			"codex_toml":  "[mcp_servers.amdl]\ncommand = " + strconv.Quote(exe) + "\nargs = [" + strings.Join(quoted, ", ") + "]",
 			"mcp_json":    map[string]any{"mcpServers": map[string]any{"amdl": map[string]any{"command": exe, "args": mcpArgs}}},
-			"agents_md":   agentsNote,
+			// The agent skill, for ~/.claude/skills/amdl/SKILL.md or a project's
+			// .claude/skills: amdl cli setup --fields skill | jq -r .skill
+			"skill":     skill.Text,
+			"agents_md": agentsNote,
 		})
 	}
 }

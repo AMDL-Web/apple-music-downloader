@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"amdl/apps/amdl/internal/jobview"
+	"amdl/apps/amdl/skill"
 	"amdl/apps/console"
 	"amdl/internal/capability"
 )
@@ -298,5 +299,26 @@ func TestGlobalFlagsBeforeTheCommand(t *testing.T) {
 		if got := hoistGlobals(c.in); strings.Join(got, " ") != strings.Join(c.want, " ") {
 			t.Errorf("hoistGlobals(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestSkillListsEveryExitCode(t *testing.T) {
+	want := map[string]bool{}
+	for _, c := range []int{exitOK, exitInternal, exitInput, exitNotFound, exitConflict, exitUnavailable,
+		exitAuth, exitJobFailed, exitWaitTimeout, exitConfirm, exitInterrupted} {
+		want[fmt.Sprint(c)] = true
+	}
+	_, table, _ := strings.Cut(skill.Text, "## Exit codes")
+	table, _, _ = strings.Cut(table, "\n## ")
+	got := map[string]bool{}
+	for _, line := range strings.Split(table, "\n") {
+		if f := strings.Split(line, "|"); len(f) > 2 {
+			if code := strings.TrimSpace(f[1]); code != "" && code[0] >= '0' && code[0] <= '9' {
+				got[code] = true
+			}
+		}
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("SKILL.md lists exit codes %v, the CLI has %v", got, want)
 	}
 }

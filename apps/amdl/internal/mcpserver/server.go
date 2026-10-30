@@ -22,10 +22,19 @@ import (
 	"amdl/internal/progress"
 )
 
-// instructions tell a model how the tools fit together.
-const instructions = `amdl downloads music from Apple Music through an amdl server.
-Find music with search_catalog (or list_artist_albums for an artist hit), pass the hits' url values to start_download, then follow each job_id with wait_for_job, calling it again while it answers done=false.
-lookup_link previews a pasted link. get_status says whether the wrapper is signed in; signing in is done by a person (amdl wrapper login, or the web console), never through these tools.`
+// Rules are the sentences the instructions share, word for word, with the
+// agent skill (apps/amdl/skill), which a test checks.
+var rules = []string{
+	"Find music with search_catalog (or list_artist_albums for an artist hit), pass the hits' url values to start_download, then follow each job_id with wait_for_job, calling it again while it answers done=false.",
+	"Signing in to Apple is done by a person, never by an agent: do not ask for, type, read or store an Apple ID password or two-step code.",
+	"Do not route around a refusal.",
+}
+
+// instructions tell a model how the tools fit together: a short form of the
+// skill.
+var instructions = "amdl downloads music from Apple Music through an amdl server.\n" + rules[0] + "\n" +
+	"lookup_link previews a pasted link. get_status says whether the wrapper is signed in. " + rules[1] + "\n" +
+	"A tool error carries a code and often a hint. " + rules[2]
 
 // New returns an MCP server whose tools call the amdl server behind c.
 func New(c *client.Client, version string) *mcp.Server {
@@ -113,7 +122,7 @@ func tool(c capability.Capability) *mcp.Tool {
 	t := &mcp.Tool{Name: c.Tool, Description: c.Summary + ".", InputSchema: inputSchema(c)}
 	ann := &mcp.ToolAnnotations{ReadOnlyHint: c.Safety == capability.Read, OpenWorldHint: ptr(openWorld[c.Tool])}
 	if c.Safety != capability.Read {
-		ann.DestructiveHint = ptr(c.Safety == capability.Destructive)
+		ann.DestructiveHint = ptr(c.Safety == capability.Destructive || alsoDestructive[c.Tool])
 		ann.IdempotentHint = idempotent[c.Tool]
 	}
 	t.Annotations = ann
@@ -126,6 +135,11 @@ var openWorld = map[string]bool{"search_catalog": true, "list_artist_albums": tr
 
 // idempotent are the changing tools that a repeat leaves as the first call did.
 var idempotent = map[string]bool{"start_download": true, "cancel_job": true, "delete_job": true}
+
+// alsoDestructive are changing tools marked destructive although their CLI
+// command needs no --yes: set_config replaces settings and cancel_job throws
+// away a job's unfinished work, so a client should confirm them.
+var alsoDestructive = map[string]bool{"set_config": true, "cancel_job": true}
 
 func ptr[T any](v T) *T { return &v }
 

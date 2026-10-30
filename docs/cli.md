@@ -133,7 +133,8 @@ Windows, closes a console window it was given alone.
 server picked as above: `claude mcp add amdl -- amdl mcp --server nas`. Each capability
 of `internal/capability#All` that names a tool becomes one, with the safety level as its
 annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` for the
-tools that read Apple's catalog) and, for a tool that passes a request through, the
+tools that read Apple's catalog; `set_config` and `cancel_job` count as destructive too,
+`apps/amdl/internal/mcpserver#alsoDestructive`) and, for a tool that passes a request through, the
 operation's parameters and body fields as its input schema. Results are JSON, as
 structured content and as text; a failure is a tool error whose text is the error object
 of the [Errors](#errors-and-exit-statuses) table.
@@ -240,7 +241,13 @@ with a wrapper-manager, and they wait up to `apps/amdl/internal/cli#loginWait`.
 
 `amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
 nothing: the `claude mcp add` command, a Codex `config.toml` entry, an `mcpServers` JSON
-entry, and a paragraph for `AGENTS.md` or `CLAUDE.md`.
+entry, a paragraph for `AGENTS.md` or `CLAUDE.md`, and the agent skill
+(`apps/amdl/skill/SKILL.md`): which way in to use, the download flow, the output, the
+exit codes and what to do on each, and the rules an agent keeps, such as never handling
+an Apple ID password. Install it with
+`amdl cli setup --fields skill | jq -r .skill > ~/.claude/skills/amdl/SKILL.md`. The MCP
+server's instructions repeat the skill's rules word for word
+(`apps/amdl/internal/mcpserver#rules`).
 
 ## Releases
 
