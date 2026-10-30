@@ -120,6 +120,7 @@ func (a *App) ready() {
 		BackgroundColor: "#111219",
 		Content:         ui.View(a.view.View),
 	})
+	keepOnScreen(a.win)
 	a.shell = shell.New(shell.Options{
 		Open:      a.showWindow,
 		OpenJob:   func(id string) { a.showWindow(); a.view.OpenJob(id) },
@@ -140,6 +141,23 @@ func (a *App) ready() {
 	a.connect()
 	if a.opts.Shots != "" {
 		go a.captureScreens(a.opts.Shots)
+	}
+}
+
+// keepOnScreen moves w inside the work area of the display nearest it.
+// MyGo restores a remembered frame as long as part of it shows, so after a
+// display shrank the hidden title bar, the one strip that drags the window,
+// can sit above the screen.
+func keepOnScreen(w *mygo.Window) {
+	b := w.Bounds()
+	d := mygo.Screen.DisplayNearestPoint(mygo.Point{X: b.X + b.Width/2, Y: b.Y + b.Height/2}).WorkArea
+	if d.Width == 0 || d.Height == 0 {
+		return
+	}
+	x := min(max(b.X, d.X), d.X+max(d.Width-b.Width, 0))
+	y := min(max(b.Y, d.Y), d.Y+max(d.Height-b.Height, 0))
+	if x != b.X || y != b.Y {
+		w.SetPosition(x, y)
 	}
 }
 
