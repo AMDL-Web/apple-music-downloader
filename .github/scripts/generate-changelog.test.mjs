@@ -6,8 +6,16 @@ import {
   formatAuthors,
   generateMd,
   parseCoAuthors,
+  parseCategory,
   parseGitLog,
 } from './generate-changelog.js';
+
+test('parseCategory keeps a breaking build commit and drops a plain one', () => {
+  assert.match(parseCategory('build!: ship one amdl binary'), /Breaking/i);
+  assert.match(parseCategory('build(docker)!: rename the image'), /Breaking/i);
+  assert.equal(parseCategory('build: bump the Go toolchain'), null);
+  assert.equal(parseCategory('style: gofmt'), null);
+});
 
 test('parseCoAuthors extracts every Co-authored-by trailer', () => {
   const trailers = `Co-authored-by: Bob Example <123+Bob@users.noreply.github.com>

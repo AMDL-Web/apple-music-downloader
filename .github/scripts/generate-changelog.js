@@ -113,13 +113,14 @@ function getCurrentTag() {
 }
 
 function parseCategory(message) {
+  const m = message.match(CONVENTIONAL_PREFIX);
+  // A breaking change is listed whatever its type, build! included.
+  if (m && m.groups.breaking) return BREAKING;
   if (IGNORE_PREFIXES.test(message)) {
     return null;
   }
 
-  const m = message.match(CONVENTIONAL_PREFIX);
   if (m) {
-    if (m.groups.breaking) return BREAKING;
     const prefix = m.groups.prefix.toLowerCase();
     return typeMap[prefix] || '其他 | Other';
   }
@@ -394,6 +395,7 @@ if (isMain) main();
 
 export {
   classifyCommits,
+  parseCategory,
   formatAuthor,
   formatAuthors,
   generateMd,
