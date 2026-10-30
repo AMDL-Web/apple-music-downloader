@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"amdl/internal/capability"
 	"amdl/internal/client"
@@ -62,6 +64,9 @@ type command struct {
 	noServer bool
 }
 
+// discard takes what the flag package would print about a parse error.
+var discard io.Writer = io.Discard
+
 // Run runs one amdl invocation and returns its exit status.
 func Run(ctx context.Context, args []string, io IO) int {
 	if io.Getenv == nil {
@@ -87,7 +92,7 @@ func Run(ctx context.Context, args []string, io IO) int {
 	}
 	e := &env{IO: io, ctx: ctx, cmd: cmd.Capability}
 	fs := flag.NewFlagSet("amdl "+cmd.Command, flag.ContinueOnError)
-	fs.SetOutput(io.Stderr)
+	fs.SetOutput(discard) // fail reports a parse error once, as the error object
 	var fields string
 	fs.StringVar(&e.server, "server", "", "server URL, saved context name or embedded (default: $AMDL_URL, the current context, this machine's backend, then http://127.0.0.1:18080)")
 	fs.StringVar(&e.wrapper, "wrapper", "", "the wrapper address a local backend needs on its first start (--server embedded, serve --local, service install)")
@@ -105,7 +110,7 @@ func Run(ctx context.Context, args []string, io IO) int {
 	fs.Usage = func() {}
 	pos, err := parseInterspersed(fs, rest)
 	if err != nil {
-		return fail(io, usageErr("%v", err))
+		return fail(io, flagErr(fs, err))
 	}
 	if help {
 		commandHelp(io.Stdout, cmd, fs)
@@ -141,6 +146,25 @@ func Run(ctx context.Context, args []string, io IO) int {
 		return fail(io, err)
 	}
 	return exitOK
+}
+
+// badValue matches the flag package's error for a value it cannot parse.
+var badValue = regexp.MustCompile(`^invalid value ".*" for flag -(\S+): parse error$`)
+
+// flagErr is the usage error for a flag the parser rejected. A duration given
+// without a unit, as --timeout 30, gets a hint with examples.
+func flagErr(fs *flag.FlagSet, err error) error {
+	ue := usageErr("%v", err).(*cliError)
+	if m := badValue.FindStringSubmatch(err.Error()); m != nil {
+		if f := fs.Lookup(m[1]); f != nil {
+			if g, ok := f.Value.(flag.Getter); ok {
+				if _, isDuration := g.Get().(time.Duration); isDuration {
+					ue.Hint = "give --" + m[1] + " a unit, such as 30s, 10m or 2h"
+				}
+			}
+		}
+	}
+	return ue
 }
 
 // hoistGlobals moves global flags written before the command, as in
