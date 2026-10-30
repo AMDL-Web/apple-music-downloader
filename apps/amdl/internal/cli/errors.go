@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"amdl/internal/client"
 )
@@ -40,6 +41,13 @@ func (e *cliError) Error() string { return e.Message }
 func usageErr(format string, a ...any) error {
 	return &cliError{Code: "usage_error", Message: fmt.Sprintf(format, a...), exit: exitInput}
 }
+
+// restartWithWrapper is the one way the CLI tells a person how to see and
+// change the wrapper a backend uses: wrapper.address is a startup key, so a
+// change is a restart.
+const restartWithWrapper = "amdl system get shows the address in use as startup.wrapper_address; to change it, " +
+	"restart the backend with --wrapper <address> (amdl service install or amdl serve --local), " +
+	"or for a backend amdl does not run, edit wrapper.address in the file at startup.config_path and restart it"
 
 // exitFor maps an API error code to its exit status.
 func exitFor(code string, status int) int {
@@ -89,8 +97,14 @@ func asCLIError(err error) *cliError {
 			msg = api.Error()
 		}
 		ce := &cliError{Code: code, Message: msg, Details: api.Details, exit: exitFor(code, api.Status)}
-		if code == "config_key_not_mutable" {
-			ce.Hint = "a startup key: edit the file at startup.config_path (amdl system get) and restart the backend; for wrapper.address, restart it with --wrapper"
+		switch code {
+		case "config_key_not_mutable":
+			ce.Hint = "a startup key: edit the file at startup.config_path (amdl system get) and restart the backend"
+			if strings.Contains(string(api.Details), "wrapper.address") {
+				ce.Hint = restartWithWrapper
+			}
+		case "wrapper_unavailable":
+			ce.Hint = "the backend cannot reach its wrapper; start the wrapper, or point the backend at another: " + restartWithWrapper
 		}
 		return ce
 	}

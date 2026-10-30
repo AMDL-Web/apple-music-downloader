@@ -32,12 +32,16 @@ type managedView struct {
 	URL       string                 `json:"url,omitempty"`
 	Enabled   *bool                  `json:"enabled,omitempty"`
 	State     *wrapperhost.State     `json:"state,omitempty"`
-	Log       string                 `json:"log"`
+	Log       string                 `json:"log,omitempty"`
 	Next      string                 `json:"next,omitempty"`
 }
 
+// viewOf describes h; the log is named only while it exists.
 func viewOf(h wrapperhost.Home) managedView {
-	v := managedView{Log: h.LogPath()}
+	var v managedView
+	if exists(h.LogPath()) {
+		v.Log = h.LogPath()
+	}
 	if in, err := h.Current(); err == nil {
 		on := h.Enabled() // meaningless without an installed guest, so absent then
 		v.Installed, v.URL, v.Enabled = &in, in.URL(), &on
@@ -175,7 +179,11 @@ func wrapperUninstallCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 			return err
 		}
 		v := viewOf(h)
-		v.Next = "to use another wrapper, run amdl service install --wrapper <address> (or restart amdl serve --local with --wrapper <address>)"
+		if *purge {
+			v.Next = "to remove amdl as well: amdl service uninstall, then delete the amdl binary"
+		} else {
+			v.Next = "the account's disk is kept for a later amdl wrapper install; until then the backend needs a wrapper elsewhere: " + restartWithWrapper
+		}
 		return e.out.result(v)
 	}
 }

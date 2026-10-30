@@ -63,7 +63,8 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
 
 - **stdout holds one JSON value**, the API's response body as the spec describes it,
   indented and coloured in a terminal and on one line in a pipe. A change with an empty
-  answer prints nothing. `NO_COLOR` turns colour off.
+  answer prints nothing. `NO_COLOR` turns colour off. Times are RFC 3339 in UTC, as the
+  API gives them; the backend's log lines use local time with its offset.
 - **`--fields a,b`** keeps only those keys: of the object itself when it has one of
   them, otherwise of each element of the arrays inside it (the jobs of a list, the hits of
   each search group). `search`, `lookup` and `artists albums` leave out the artwork color
@@ -123,13 +124,15 @@ and prints the batch, whose results carry `existing_job_id`.
 ## Safety
 
 - **Destructive commands** (`jobs delete`, `library sync reset`, `wrapper logout`,
-  `download --overwrite`) ask `[y/N]` when stdin and stderr are a terminal and otherwise
-  need `--yes`; without it they exit 10 before sending anything.
+  `download --overwrite`, `wrapper uninstall --purge`, and `wrapper install` when it
+  would install QEMU) ask `[y/N]` when stdin and stderr are a terminal and otherwise
+  need `--yes`; without it they exit 10 before changing anything.
 - **`--dry-run`** on every command that changes something, except `mcp`, prints
   `{"method","url","body"}` and sends nothing; it needs no reachable server.
   `service install` and `service uninstall` take it too and print their plan
   (`{"dry_run":true,"action","manager","definition",…}`, with the command line, log and
-  config paths for `install`), writing and registering nothing.
+  config paths and the console's URL for `install`, and a `note` when a backend already
+  runs on the local files), writing and registering nothing.
 
 ## Which server
 
@@ -303,13 +306,16 @@ with a wrapper-manager, and they wait up to `internal/client#LoginWait`, longer 
 stdout, which keeps only the final JSON: one line rewritten in place on a terminal, else
 a line at each 10% or every 15 seconds, then a line each for the sha256 check and the
 unpack. `--quiet` silences it. After `wrapper uninstall` the result omits `enabled`,
-which only describes an installed guest.
+which only describes an installed guest, and `log` once `--purge` deleted it; `next`
+says what is left to do.
 
 While the guest is installed, `--wrapper` and `AMDL_WRAPPER_ADDRESS` do not apply to a
 backend that runs on the local files: it logs that the address is ignored and keeps
 using the guest. To use another wrapper, run `amdl wrapper uninstall`, then
 `amdl service install --wrapper <address>` (or restart `amdl serve --local` with
-`--wrapper`). `wrapper.address` cannot be changed through the API.
+`--wrapper`). `wrapper.address` cannot be changed through the API; `amdl system get`
+shows the one in use as `startup.wrapper_address`, and every hint about the wrapper's
+address says the same.
 
 ## Agent setup
 

@@ -119,11 +119,15 @@ func Run(ctx context.Context, args []string, io IO) int {
 		fs.StringVar(&fields, "fields", "", "comma-separated keys to keep in each result")
 	}
 	fs.BoolVar(&e.quiet, "quiet", false, "write nothing to stderr but errors")
-	if cmd.Safety == capability.Destructive || cmd.Command == "download" {
+	if cmd.Safety == capability.Destructive || asksToConfirm[cmd.Command] {
 		fs.BoolVar(&e.yes, "yes", false, "confirm a destructive action without asking")
 	}
 	if cmd.dryRun {
-		fs.BoolVar(&e.dry, "dry-run", false, "print the request instead of sending it")
+		dryUsage := "print the request instead of sending it"
+		if cmd.noServer {
+			dryUsage = "print what would be done instead of doing it"
+		}
+		fs.BoolVar(&e.dry, "dry-run", false, dryUsage)
 	}
 	runner := cmd.setup(fs)
 	help := false
@@ -321,6 +325,11 @@ func (e *env) note(format string, a ...any) {
 
 // confirm asks before a destructive action: a terminal answers y or n, and
 // anywhere else --yes is required.
+// asksToConfirm lists the commands that are not destructive as a whole but
+// can ask before one step (download --overwrite, installing QEMU, wrapper
+// uninstall --purge), so they take --yes too.
+var asksToConfirm = map[string]bool{"download": true, "wrapper install": true, "wrapper update": true, "wrapper uninstall": true}
+
 func (e *env) confirm(what string) error {
 	if e.yes || e.dry {
 		return nil

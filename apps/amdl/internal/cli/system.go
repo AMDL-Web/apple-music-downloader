@@ -42,8 +42,12 @@ func configGetCmd(*flag.FlagSet) func(e *env, args []string) error {
 		for _, key := range args {
 			v, ok := dig(resp.Config, key)
 			if !ok {
+				hint := "amdl config get lists the runtime keys; startup keys are under startup in amdl system get"
+				if key == "wrapper.address" {
+					hint = restartWithWrapper
+				}
 				return &cliError{Code: "config_key_not_found", exit: exitNotFound,
-					Message: key + " is not a runtime config key", Hint: "amdl config get"}
+					Message: key + " is not a runtime config key", Hint: hint}
 			}
 			out[key] = v
 		}

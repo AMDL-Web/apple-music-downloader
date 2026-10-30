@@ -134,7 +134,7 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 			c.OK = false
 			c.Detail["wrapper_address"] = sys.Startup.WrapperAddress
 			c.Hint = "the wrapper at " + or(sys.Startup.WrapperAddress, "its configured address") +
-				" does not answer; start it, or set wrapper.address in config.yaml (or AMDL_WRAPPER_ADDRESS) and restart the backend"
+				" does not answer; start it, or point the backend at another: " + restartWithWrapper
 			if onThisMachine && localQEMUMissing(dirs) != "" {
 				c.Hint = "this machine's wrapper is installed but cannot run without QEMU; see the local check"
 			}

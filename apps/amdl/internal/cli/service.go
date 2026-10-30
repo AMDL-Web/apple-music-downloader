@@ -44,6 +44,8 @@ type servicePlan struct {
 	Log        string   `json:"log,omitempty"`
 	Config     string   `json:"config,omitempty"`
 	Wrapper    string   `json:"wrapper,omitempty"`
+	Console    string   `json:"console,omitempty"`
+	Note       string   `json:"note,omitempty"`
 }
 
 // notManaged finishes a stop or uninstall that has no service to act on: it
@@ -182,9 +184,13 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 			if err != nil {
 				return serviceErr(err)
 			}
-			return e.out.result(servicePlan{DryRun: true, Action: "install", Manager: st.Manager, Definition: st.Definition,
+			plan := servicePlan{DryRun: true, Action: "install", Manager: st.Manager, Definition: st.Definition,
 				Installed: st.Installed, Exe: spec.Exe, Args: spec.Args, Log: spec.Log, Config: b.ConfigPath(),
-				Wrapper: local.WrapperURL(b.Wrapper)})
+				Wrapper: local.WrapperURL(b.Wrapper), Console: "http://" + addr + "/console/"}
+			if rt, ok := local.ReadRuntime(e.ctx, dirs); ok {
+				plan.Note = fmt.Sprintf("a backend (pid %d) already runs on these files; the service waits until it stops", rt.PID)
+			}
+			return e.out.result(plan)
 		}
 		if err := os.MkdirAll(filepath.Dir(dirs.LogPath()), 0o755); err != nil {
 			return err

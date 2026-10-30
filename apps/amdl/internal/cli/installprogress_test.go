@@ -127,3 +127,33 @@ func TestWrapperUninstallOmitsEnabled(t *testing.T) {
 		t.Errorf("uninstall still reports an installed guest: %s", r.stdout)
 	}
 }
+
+// Outside a terminal, wrapper uninstall --purge asks for --yes, and the
+// command it suggests is one that works; after the purge the result names
+// no log, which went with the wrapper's directory.
+func TestWrapperPurgeTakesYes(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	src := t.TempDir()
+	for _, n := range []string{"vmlinuz-lite-qemu", "lite-initramfs.cpio.gz", "data.img"} {
+		if err := os.WriteFile(filepath.Join(src, n), []byte(n), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runHere := func(args ...string) result {
+		var out, errb bytes.Buffer
+		code := Run(context.Background(), args, IO{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb,
+			Getenv: func(string) string { return "" }})
+		return result{code, out.String(), errb.String()}
+	}
+	if r := runHere("wrapper", "import", src); r.code != exitOK {
+		t.Fatalf("import: %+v", r)
+	}
+	if r := runHere("wrapper", "uninstall", "--purge"); r.code != exitConfirm || errorCode(t, r.stderr) != "confirmation_required" {
+		t.Fatalf("without --yes: %+v", r)
+	}
+	r := runHere("wrapper", "uninstall", "--purge", "--yes")
+	if r.code != exitOK || strings.Contains(r.stdout, `"log"`) || !strings.Contains(r.stdout, `"next"`) {
+		t.Fatalf("with --yes: %+v", r)
+	}
+}
