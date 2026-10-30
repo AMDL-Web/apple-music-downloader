@@ -21,6 +21,9 @@ type Tokens struct {
 	Accent, AccentInk, AccentSoft ui.Color
 	OK, Warn, Bad                 ui.Color
 	OKSoft, WarnSoft, BadSoft     ui.Color
+	// Skip is a track that was already on disk, as the web console's
+	// --skipped.
+	Skip ui.Color
 	// Glass is the sidebar over the window material; Track an empty bar.
 	Glass, Track ui.Color
 	// Pill is the selected segment and the big action button: white on
@@ -41,6 +44,7 @@ var DarkTokens = Tokens{
 	Accent: ui.Hex("#93a8ff"), AccentInk: ui.Hex("#0c1030"), AccentSoft: rgba("#93a8ff", .16),
 	OK: ui.Hex("#62d69a"), Warn: ui.Hex("#f3b75e"), Bad: ui.Hex("#ff8a7c"),
 	OKSoft: rgba("#62d69a", .14), WarnSoft: rgba("#f3b75e", .14), BadSoft: rgba("#ff8a7c", .14),
+	Skip:  ui.Hex("#bf5af2"),
 	Glass: rgba("#181a24", .62), Track: rgba("#eceef8", .10),
 	Pill: ui.Hex("#f4f5fa"), PillInk: ui.Hex("#12131a"),
 	TileQueue: ui.Hex("#4f7cff"), TileLibrary: ui.Hex("#e0507a"), TileSystem: ui.Hex("#2fb36f"),
@@ -55,6 +59,7 @@ var LightTokens = Tokens{
 	Accent: ui.Hex("#3d58e0"), AccentInk: ui.Hex("#ffffff"), AccentSoft: rgba("#3d58e0", .12),
 	OK: ui.Hex("#17834b"), Warn: ui.Hex("#9a5c00"), Bad: ui.Hex("#c23a2c"),
 	OKSoft: rgba("#17834b", .10), WarnSoft: rgba("#9a5c00", .10), BadSoft: rgba("#c23a2c", .10),
+	Skip:  ui.Hex("#8944ab"),
 	Glass: rgba("#fafbfd", .70), Track: rgba("#141622", .10),
 	Pill: ui.Hex("#161822"), PillInk: ui.Hex("#ffffff"),
 	TileQueue: ui.Hex("#4f7cff"), TileLibrary: ui.Hex("#e0507a"), TileSystem: ui.Hex("#2fb36f"),

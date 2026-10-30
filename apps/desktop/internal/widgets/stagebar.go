@@ -1,6 +1,6 @@
 // Package widgets draws the desktop app's own controls: the weighted stage
-// bar, covers that color in as they download, the album-palette backdrop and
-// the motion-cover player.
+// bar, the album bar, covers that color in as they download, the
+// album-palette backdrop and the motion-cover player.
 package widgets
 
 import (

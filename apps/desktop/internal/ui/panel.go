@@ -176,8 +176,8 @@ func (a *App) panelNow(c *ui.Context, k *Tokens, j *store.Job) {
 		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 112), Placeholder: pal.Bg, Size: 56, Radius: 9, Color: 1}.Show(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(5).Children(func() {
 			ui.Text(c, j.Name()).FontSize(14).FontWeight(700).TextColor(t1).SingleLine().Ellipsis("…")
-			mono(c, fmt.Sprintf("%s · %d of %d", j.By(), j.Done(), j.TotalItems), 10.5).TextColor(t2).Ellipsis("…")
-			widgets.StageBar{Stages: j.Stages, Color: accent, Track: t1.Alpha(0.18), Height: 4, Running: true}.Show(c, "panel-now")
+			mono(c, j.By(), 10.5).TextColor(t2).Ellipsis("…")
+			albumProgress(c, k, j, "panel-now", 5, t1, t1.Alpha(0.18), accent, t2, 10.5)
 		})
 	})
 }

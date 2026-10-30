@@ -81,6 +81,9 @@ func (a *App) detail(c *ui.Context, k *Tokens) {
 					stat("Created", format.Clock(j.CreatedAt), "")
 				}
 			})
+			ui.Column(c).FillWidth().MaxWidth(620).Margin(6, 0, 0, 0).Children(func() {
+				albumProgress(c, k, j, "album", 8, hc.title, hc.title.Alpha(0.16), hc.accent, hc.meta, 12)
+			})
 		})
 		ui.Column(c).Gap(8).Children(func() {
 			if a.Settings.Mode == mode.Standalone {
@@ -103,6 +106,33 @@ func (a *App) detail(c *ui.Context, k *Tokens) {
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Background(k.Ink.Alpha(0.72)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Children(func() {
 		a.trackList(c, k, j, hc.accent)
 		a.activity(c, k, j)
+	})
+}
+
+// albumProgress is a job's album bar with how many tracks finished under
+// its left end and the overall percent under its right. ink is the text
+// color the bar's live fill is drawn from.
+func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32, ink, track, working, text ui.Color, size float32) {
+	a := j.Album()
+	lit, total := a.Lit, a.Total
+	if total == 0 {
+		// Before the tracks arrive the list feed still has the counts.
+		lit, total = j.Done(), j.TotalItems
+	}
+	resolving := total == 0 && (j.Status == domain.JobQueued || j.Status == domain.JobRunning)
+	ui.Column(c).Gap(5).Children(func() {
+		widgets.AlbumBar{Album: a, Completed: k.OK, Skipped: k.Skip, Failed: k.Bad, Cancelled: k.Muted, Working: working,
+			Live: ink.Alpha(0.38), Track: track, Resolving: resolving, Height: h}.Show(c, key)
+		ui.Row(c).Gap(8).Children(func() {
+			switch {
+			case resolving:
+				mono(c, "Resolving tracks", size).TextColor(text)
+			default:
+				mono(c, fmt.Sprintf("%d / %d finished", lit, total), size).TextColor(text)
+				ui.Spacer(c)
+				mono(c, fmt.Sprintf("%d%%", a.Percent), size).TextColor(text)
+			}
+		})
 	})
 }
 
@@ -200,7 +230,7 @@ func trackState(c *ui.Context, k *Tokens, it *domain.JobItem) {
 	case domain.ItemCompleted:
 		show(icCheck, "Saved", k.OK)
 	case domain.ItemSkipped:
-		show(icCheck, "On disk", k.OK)
+		show(icCheck, "On disk", k.Skip)
 	case domain.ItemFailed:
 		show(icCross, "Failed", k.Bad)
 	case domain.ItemCancelled:
