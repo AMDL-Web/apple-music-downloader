@@ -1,11 +1,10 @@
-// The job drawer's track sections: the album progress bar, the key to the codec
-// chips and the track list. A track is one line of number, title, length and size;
+// The job drawer's track sections: the album progress bar and the track list. A track is one line of number, title, length and size;
 // its artist, codec chip and status with stage meters appear only when they
 // say something (lib/jobview.js trackView).
 
 import { html } from '../ui/preact.js';
 import { trackLength, bytes, codecMeaning } from '../lib/format.js';
-import { albumCodec, codecNote, trackView, trackNote, stagePercent } from '../lib/jobview.js';
+import { albumCodec, trackView, trackNote, stagePercent } from '../lib/jobview.js';
 import { itemStatusView, isTerminal } from '../lib/status.js';
 import { albumProgress } from '../lib/album-progress.js';
 import { StatusText, StageTrack, Icon, Chip } from '../ui/components.js';
@@ -50,21 +49,6 @@ export function AlbumProgress({ job, items }) {
       <span class="abar-pct">${resolving ? '' : `${p.percent}%`}</span>
     </div>
   </div>`;
-}
-
-/**
- * The key to the codec chips below it, said once: the codec most tracks carry
- * (the rows without a chip), and that the others are marked on their rows,
- * where each chip's title spells it out.
- */
-export function TrackLegend({ items }) {
-  const note = codecNote(items);
-  if (!note) return null;
-  const most = `Most tracks: ${note.label}${note.text ? ` (${note.text})` : ''}.`;
-  return html`<p class="track-legend">
-    <span title=${most}><span class="track-legend-label">Most tracks: ${note.label}</span>${note.text ? ` (${note.text})` : ''}.</span>
-    <span>Other formats are marked on their rows.</span>
-  </p>`;
 }
 
 export function TrackList({ items, albumArtist, keepStatus }) {

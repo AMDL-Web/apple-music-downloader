@@ -262,8 +262,10 @@ and motion covers.
   which keeps the drawn order). Header with cover, artist link, meta, a summary
   line computed from the tracks (`lib/jobview.js` `drawerSummary`), status, live
   tag; for a failed job the notice with the trimmed reason (full error under a
-  disclosure) comes first, then Cancel (inline confirm) for queued or running,
-  Retry for failed or cancelled, View logs, Open in Apple Music, Remove (a
+  disclosure) comes first, then the actions in two rows that every status
+  keeps, so a job finishing or being cancelled changes no height: View logs
+  and Open in Apple Music, then Cancel (inline confirm) for queued or
+  running, Retry for failed or cancelled, Remove (a
   `ConfirmDialog` beside the panel; it removes the job's records, never the
   files) for completed, failed or cancelled jobs,
   which closes the drawer. A job Apple has nothing at (a 404) makes Open in
@@ -280,8 +282,8 @@ and motion covers.
   completes, so nothing below it moves. Tracks:
   one 44 px line each (number, title, length, size); the artist shows when it
   differs from the album artist, a codec chip such as `ALAC 24/96` when it
-  differs from the album's (`.track-legend` says once which codec most tracks carry and that the
-  others are marked on their rows, only when the codecs differ), and stage meters, status and error only for a track that is
+  differs from the album's (the header's summary line says "Mostly ALAC 24/96"
+  when the codecs differ, so a second codec turning up moves nothing), and stage meters, status and error only for a track that is
   working, failed, skipped or waiting, or for every track once the drawer has
   shown the job live (so finished rows keep their height). The stage
   segments are as wide as each stage's share of a track's run

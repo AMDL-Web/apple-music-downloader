@@ -153,7 +153,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* views/drawer.js Actions: the links row, then the row of what the status
+   allows; both are always there, so a status change keeps the height. */
 .drawer-actions {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.drawer-actions-row {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
@@ -505,29 +512,6 @@
 }
 
 /* The key to the codec chips: "ALAC 24/44.1" and what it means, above the list. */
-/* Always two lines, each cut to one: the codec it names changes while
-   tracks are matched, and a wrap that came and went moved the list. */
-.track-legend {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-0_5);
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-}
-
-.track-legend > span {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.track-legend-label {
-  color: var(--text-primary);
-  font-weight: var(--w-medium);
-}
-
 /* Where a finished job's files are: the folder with its Copy button, and the
    link to the settings that name them. */
 .drawer-files {

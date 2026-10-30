@@ -386,8 +386,10 @@
     padding: var(--s-4);
   }
 
+  /* The last column is as wide as on a desktop: a size replacing a stage
+     percentage would otherwise move the length above it. */
   .track {
-    grid-template-columns: 24px minmax(0, 1fr) auto auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto 64px;
     grid-template-areas:
       "idx main main len"
       "idx stages stages stages"
