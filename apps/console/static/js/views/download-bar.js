@@ -1,11 +1,12 @@
 // New download: the dock that floats at the bottom of the viewport while
-// the box holds links (what will be sent, what the quality asks for,
-// Download, and under it what went wrong with the last submit), its
-// height for the room the page keeps under 640 px, and the Paste button of
-// the text box on a touch screen.
+// the box holds links (what will be sent and its count line, what the
+// quality asks for, Download, and under it what went wrong with the last
+// submit), its height for the room the page keeps under 640 px, and the
+// Paste button of the text box on a touch screen.
 
-import { html, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
-import { scanLinks } from '../lib/links.js';
+import { html, useState, useEffect, useRef, useCallback, useMemo } from '../ui/preact.js';
+import { scanLinks, duplicateCount } from '../lib/links.js';
+import { submittable, countLine } from '../lib/submit-check.js';
 import { useApp, Button, Notice } from '../ui/components.js';
 import { useMedia } from '../ui/hooks.js';
 import { isMac } from './palette.js';
@@ -101,4 +102,27 @@ export function PasteButton({ storefront, onLinks }) {
     else app.toast({ message: 'No Apple Music link on the clipboard', role: 'warning' });
   };
   return html`<${Button} size="sm" className="new-paste" onClick=${paste}>Paste</${Button}>`;
+}
+
+/**
+ * The dock's count line for the links in the box. It is announced
+ * (role=status), so it follows the settled text, not every keystroke.
+ */
+export function useLinkCount({ settled, storefront, issueOf, priorOf }) {
+  const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
+  const settledDupes = useMemo(() => duplicateCount(settled, storefront), [settled, storefront]);
+  const settledSend = submittable(settledEntries, issueOf);
+  const priorState = (url) => (priorOf(url) || {}).state;
+  return countLine({
+    links: settledEntries.length,
+    merged: settledDupes,
+    fresh: settledSend.filter((u) => !priorOf(u)).length,
+    library: settledSend.filter((u) => priorState(u) === 'done').length,
+    queued: settledSend.filter((u) => priorState(u) === 'active').length,
+    blocked: settledEntries.filter((e) => (issueOf(e) || {}).blocking).length,
+    warned: settledEntries.filter((e) => {
+      const i = issueOf(e);
+      return i && !i.blocking;
+    }).length,
+  });
 }

@@ -9,11 +9,10 @@
 // download-quality.js, download-results.js; the logic is pure in lib/.
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
-import { createDownload } from '../api.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
-import { scanLinks, removeLink, mergeLinks, duplicateCount } from '../lib/links.js';
-import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySubmitError } from '../lib/submit.js';
-import { submittable, downloadLabel, countLine, servedRegions } from '../lib/submit-check.js';
+import { scanLinks, removeLink, mergeLinks } from '../lib/links.js';
+import { handledUrls, resultRows, submitSummary } from '../lib/submit.js';
+import { downloadLabel, servedRegions } from '../lib/submit-check.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
 import { isPicked, qualityOverview } from '../lib/lookup.js';
 import { searchTerm, searchCountLine, shownHits, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
@@ -26,9 +25,9 @@ import { useServerConfig } from './download-config.js';
 import { useLookups } from './download-lookup.js';
 import { LinksCard } from './download-links.js';
 import { QualityControls, CustomSheet } from './download-preset.js';
-import { Dock, useBarHeight } from './download-bar.js';
+import { Dock, useBarHeight, useLinkCount } from './download-bar.js';
 import { QualitySheet, PROBES } from './download-quality.js';
-import { ResultsCard, BrowserShortcut, useResults } from './download-results.js';
+import { ResultsCard, BrowserShortcut, useResults, sendUrls } from './download-results.js';
 import { SearchCard } from './download-search.js';
 import { useSearch, useHitActions, toResults } from './download-search-state.js';
 import { useAddressSync } from './download-address.js';
@@ -161,25 +160,6 @@ export function DownloadPage({ route }) {
   const [, setProbed] = useState(0);
   const [confirm, setConfirm] = useState(null);
 
-  /** Sends `urls` in chunks the backend accepts; returns {pairs, failure}. */
-  const send = async (urls, ov) => {
-    const pairs = [];
-    let fail = null;
-    for (const part of chunk(urls)) {
-      try {
-        const resp = await createDownload(Object.keys(ov).length ? { urls: part, overrides: ov } : { urls: part });
-        pairs.push(...pairResults(part, resp.results));
-      } catch (err) {
-        const c = classifySubmitError(err);
-        if (c.kind !== 'results') {
-          fail = c;
-          break;
-        }
-        pairs.push(...pairResults(part, c.response.results));
-      }
-    }
-    return { pairs, fail };
-  };
 
   // An artist link queues the whole discography as one job: ask first.
   const artists = sendable.filter((u) => {
@@ -229,7 +209,7 @@ export function DownloadPage({ route }) {
     setBusy(true);
     setFailure('');
     setRefusal('');
-    const { pairs, fail } = await send(sendable, overrides);
+    const { pairs, fail } = await sendUrls(sendable, overrides);
     setBusy(false);
     if (!report(pairs, fail, previewOf)) return;
     forgetPrior(pairs.map((p) => p.url));
@@ -245,11 +225,11 @@ export function DownloadPage({ route }) {
     });
   };
 
-  const hits = useHitActions({ app, route, term, artistId, search, send, report, overrides, setConfirm, clearNotes: () => (setFailure(''), setRefusal('')) });
+  const hits = useHitActions({ app, route, term, artistId, search, send: sendUrls, report, overrides, setConfirm, clearNotes: () => (setFailure(''), setRefusal('')) });
 
   const retry = async (urls) => {
     setRetrying((s) => new Set([...s, ...urls]));
-    const { pairs, fail } = await send(urls, results.overrides);
+    const { pairs, fail } = await sendUrls(urls, results.overrides);
     setRetrying((s) => new Set([...s].filter((u) => !urls.includes(u))));
     if (fail) app.toast({ message: fail.message, role: 'danger' });
     if (!pairs.length) return;
@@ -296,24 +276,7 @@ export function DownloadPage({ route }) {
     if (term) toResults(e, term, search);
   };
 
-  // The count line is announced (role=status), so it follows the settled
-  // text, not every keystroke.
-  const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
-  const settledDupes = useMemo(() => duplicateCount(settled, storefront), [settled, storefront]);
-  const settledSend = submittable(settledEntries, issueOf);
-  const priorState = (url) => (priorOf(url) || {}).state;
-  const linkCount = countLine({
-    links: settledEntries.length,
-    merged: settledDupes,
-    fresh: settledSend.filter((u) => !priorOf(u)).length,
-    library: settledSend.filter((u) => priorState(u) === 'done').length,
-    queued: settledSend.filter((u) => priorState(u) === 'active').length,
-    blocked: settledEntries.filter((e) => (issueOf(e) || {}).blocking).length,
-    warned: settledEntries.filter((e) => {
-      const i = issueOf(e);
-      return i && !i.blocking;
-    }).length,
-  });
+  const linkCount = useLinkCount({ settled, storefront, issueOf, priorOf });
   const kindOf = (url) => {
     const st = statusOf(url);
     if (st.state === 'ready' && st.data && st.data.type) return st.data.type;

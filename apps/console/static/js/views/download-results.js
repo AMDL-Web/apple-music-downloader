@@ -1,12 +1,12 @@
 // New download: what the last submit did, per link (accepted jobs as live
 // job rows that open the drawer over this page, the rest with the reason
-// and, where a later try may work, Retry), the state behind it, and the
-// Browser shortcut (the bookmarklet).
+// and, where a later try may work, Retry), the state behind it, the
+// Browser shortcut (the bookmarklet), and the send behind every submit.
 
 import { html, useMemo, useState, useEffect, useRef, useCallback } from '../ui/preact.js';
-import { getDownload } from '../api.js';
+import { createDownload, getDownload } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, seedJob, RESULTS_KEY } from '../lib/submit.js';
+import { chunk, pairResults, classifySubmitError, submitSummary, bookmarklet, applyFeedToResults, storedResults, parseStoredResults, seedJob, RESULTS_KEY } from '../lib/submit.js';
 import { servedNote } from '../lib/submit-check.js';
 import { readPref, writePref } from '../lib/prefs.js';
 import { jobTitle, sentence } from '../lib/format.js';
@@ -165,4 +165,24 @@ export function BrowserShortcut() {
       </ol>
     </div>
   </details>`;
+}
+
+/** Sends `urls` in chunks the backend accepts; returns {pairs, failure}. */
+export async function sendUrls(urls, ov) {
+  const pairs = [];
+  let fail = null;
+  for (const part of chunk(urls)) {
+    try {
+      const resp = await createDownload(Object.keys(ov).length ? { urls: part, overrides: ov } : { urls: part });
+      pairs.push(...pairResults(part, resp.results));
+    } catch (err) {
+      const c = classifySubmitError(err);
+      if (c.kind !== 'results') {
+        fail = c;
+        break;
+      }
+      pairs.push(...pairResults(part, c.response.results));
+    }
+  }
+  return { pairs, fail };
 }
