@@ -77,3 +77,11 @@ test('a single track is not segmented: the solid fill is its own progress', () =
   assert.equal(p.live, p.done);
   assert.deepEqual(albumProgress('failed', [item(1, 'failed')]).runs.map((r) => [r.role, r.share]), [['danger', 1]]);
 });
+
+test('albumProgress counts the tracks on disk for a job that ended short', () => {
+  const items = [item(1, 'completed'), item(2, 'skipped_existing'), item(3, 'failed', { progress: { resolved: true } }), item(4, 'cancelled')];
+  const p = albumProgress('failed', items);
+  assert.equal(p.lit, 4);
+  assert.equal(p.onDisk, 2);
+  assert.equal(albumProgress('running', [item(1, 'completed'), item(2, 'queued')]).onDisk, 1);
+});
