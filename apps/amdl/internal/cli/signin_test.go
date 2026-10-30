@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -220,5 +221,19 @@ func TestLoginDryRunReadsNothing(t *testing.T) {
 	}
 	if got := calls(); len(got) != 0 {
 		t.Fatalf("a dry run sent %+v", got)
+	}
+}
+
+// An agent's shell often gives /dev/null as stdin; it is a character device
+// but not a terminal, so wrapper login must ask for --password-stdin instead
+// of prompting.
+func TestDevNullIsNotATerminal(t *testing.T) {
+	f, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if IsTerminal(f) {
+		t.Fatalf("IsTerminal(%s) = true", os.DevNull)
 	}
 }

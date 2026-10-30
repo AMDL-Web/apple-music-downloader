@@ -7,13 +7,14 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/charmbracelet/x/term"
 )
 
-// IsTerminal reports whether f is a character device: a terminal, not a pipe
-// or a file.
+// IsTerminal reports whether f is a terminal. A character device is not
+// enough: /dev/null, which an agent's shell often gives as stdin, is one.
 func IsTerminal(f *os.File) bool {
-	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	return term.IsTerminal(f.Fd())
 }
 
 // printer writes results to stdout: one JSON value per command, indented and
