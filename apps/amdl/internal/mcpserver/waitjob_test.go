@@ -12,8 +12,8 @@ func TestWaitForJobRejectsATimeoutOutsideTheSchema(t *testing.T) {
 	s := connect(t, http.NotFoundHandler())
 	for _, timeout := range []any{0, -5, maxWait + 1, 9999, 1.5, "30"} {
 		out, isErr := s.call(t, "wait_for_job", map[string]any{"job_id": "job_a", "timeout_s": timeout})
-		if !isErr || out["error"].(map[string]any)["code"] != "invalid_arguments" {
-			t.Errorf("timeout_s %v = %v, isError %v; want invalid_arguments", timeout, out, isErr)
+		if !isErr || out["error"].(map[string]any)["code"] != "invalid_request" {
+			t.Errorf("timeout_s %v = %v, isError %v; want invalid_request", timeout, out, isErr)
 		}
 	}
 }

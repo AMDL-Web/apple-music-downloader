@@ -195,7 +195,7 @@ which are all queued or running already are not an error.
   `artwork_colors` is true.
 - **`wait_for_job`** follows one job for at most `timeout_s` seconds
   (`apps/amdl/internal/mcpserver#maxWait`, default 120; a value outside 1 to 300 is an
-  `invalid_arguments` error) and answers `{done, job}`, the job in the summary view of
+  `invalid_request` error) and answers `{done, job}`, the job in the summary view of
   `jobs get`, as soon as the job is finished, with `hooks_running: true` while its hooks
   still run. While it waits it sends `notifications/progress` with the
   album's percent, when the call carried a progress token. On `done: false`, or when the

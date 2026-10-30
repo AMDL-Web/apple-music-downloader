@@ -88,7 +88,11 @@ func asCLIError(err error) *cliError {
 		if msg == "" {
 			msg = api.Error()
 		}
-		return &cliError{Code: code, Message: msg, Details: api.Details, exit: exitFor(code, api.Status)}
+		ce := &cliError{Code: code, Message: msg, Details: api.Details, exit: exitFor(code, api.Status)}
+		if code == "config_key_not_mutable" {
+			ce.Hint = "a startup key: edit the file at startup.config_path (amdl system get) and restart the backend; for wrapper.address, restart it with --wrapper"
+		}
+		return ce
 	}
 	var netErr *url.Error
 	if errors.As(err, &netErr) || errors.Is(err, client.ErrWatchdog) {

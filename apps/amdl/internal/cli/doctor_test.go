@@ -23,7 +23,7 @@ func doctorServer(t *testing.T, wrapperOK bool) *httptest.Server {
 				http.Error(w, `{"error":{"code":"wrapper_unreachable","message":"down"}}`, http.StatusBadGateway)
 				return
 			}
-			fmt.Fprint(w, `{"ready":true,"status":false,"regions":[]}`)
+			fmt.Fprint(w, `{"ready":true,"logged_in":false,"regions":[]}`)
 		default:
 			http.NotFound(w, r)
 		}
