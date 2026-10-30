@@ -110,8 +110,8 @@ The first of these that is set wins:
 3. The current context, saved by `amdl context add` or `amdl context use` in
    `cli.yaml` under the user config directory (`~/Library/Application Support/amdl` on
    macOS, `$XDG_CONFIG_HOME/amdl` or `~/.config/amdl` on Linux).
-4. The backend running on this machine for the desktop app or `--server embedded`, when
-   its runtime file names one that answers ([Running the backend in amdl](#running-the-backend-in-amdl)).
+4. The backend running on this machine for the desktop app, `amdl service` or
+   `--server embedded`, when its runtime file names one that answers ([Running the backend in amdl](#running-the-backend-in-amdl)).
 5. `http://127.0.0.1:18080`, when its health check answers at once (`apps/amdl/internal/cli#probe`).
 
 Otherwise the command fails with `server_not_configured`.
@@ -122,6 +122,10 @@ Otherwise the command fails with `server_not_configured`.
 `internal/server#Run`: `--config` (default `$AMDL_CONFIG`, else
 `configs/config.yaml`) and `--hooks` (default `$AMDL_HOOKS_CONFIG`, else
 `configs/hooks.yaml`), stopping on SIGINT or SIGTERM and ignoring SIGHUP.
+`amdl serve --local` uses this machine's local files instead
+([Running the backend in amdl](#running-the-backend-in-amdl)), on a free loopback port
+or `--listen`; with `--background` it logs to `logs/server.log` beside them and, on
+Windows, closes a console window it was given alone.
 
 ## MCP server
 
@@ -185,6 +189,33 @@ Otherwise amdl starts one on a loopback port and stops it when the command ends;
 unfinished jobs resume on its next start, and a `download` waits for its jobs so they
 can finish. The first start needs the wrapper's address, from `--wrapper` or
 `AMDL_WRAPPER_ADDRESS`, and fails with `wrapper_not_configured` without it.
+
+Whichever process runs the backend holds `backend.lock` beside the database, and the
+OS releases it when that process exits. A second `--server embedded` finds it held and
+waits up to `apps/amdl/internal/cli#busyWait` for the other backend to answer; `amdl
+serve --local` waits for as long as it takes, then takes over.
+
+## Background service
+
+`amdl service install` registers `amdl serve --local --background` to start at login,
+so local downloads go on with no window or terminal open, and starts it:
+
+| OS | Registered as | Restarted after a crash |
+| --- | --- | --- |
+| macOS | a LaunchAgent in `~/Library/LaunchAgents` | by launchd, after 10 s |
+| Linux | a `systemd --user` unit in `~/.config/systemd/user` | by systemd, after 10 s |
+| Windows | a logon task in Task Scheduler (a real service needs an administrator) | by a trigger that repeats every 5 minutes |
+
+The service listens on a loopback port picked at install, so its URL survives
+restarts, and every client finds it through the runtime file. `install` takes
+`--wrapper` like `--server embedded` and pins `tools.ffmpeg` to the ffmpeg on the
+current `PATH`, since a service starts with a shorter one; run it again after moving the
+`amdl` binary. If another backend already runs on the files, the service waits for it
+to stop. `status` prints the manager's view and the running backend's PID, version, URL
+and log file. `stop` holds until the next login, and on Windows until `start`, where it
+ends the process outright and its jobs resume on the next start. `uninstall` removes
+the registration and leaves the data. A `systemd --user` unit stops at logout unless
+lingering is on (`loginctl enable-linger`).
 
 ## Agent setup
 

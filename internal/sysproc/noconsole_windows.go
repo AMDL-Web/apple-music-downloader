@@ -3,6 +3,7 @@ package sysproc
 import (
 	"os/exec"
 	"syscall"
+	"unsafe"
 )
 
 // createNoWindow is the CREATE_NO_WINDOW process creation flag.
@@ -18,4 +19,21 @@ func NoConsole(cmd *exec.Cmd) {
 	}
 	cmd.SysProcAttr.HideWindow = true
 	cmd.SysProcAttr.CreationFlags |= createNoWindow
+}
+
+var (
+	kernel32              = syscall.NewLazyDLL("kernel32.dll")
+	getConsoleProcessList = kernel32.NewProc("GetConsoleProcessList")
+	freeConsole           = kernel32.NewProc("FreeConsole")
+)
+
+// DetachConsole lets go of a console window this process has to itself, so
+// amdl serve run by a logon task closes the window Windows opened for it. A
+// console shared with a shell, where someone typed the command, stays.
+func DetachConsole() {
+	var pids [2]uint32
+	n, _, _ := getConsoleProcessList.Call(uintptr(unsafe.Pointer(&pids[0])), 2) // 0 on failure: no console to free
+	if n == 1 {
+		_, _, _ = freeConsole.Call() // a failure leaves the window open, nothing worse
+	}
 }

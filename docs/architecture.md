@@ -69,12 +69,12 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/limits` | semaphores and the Apple request gate | |
 | `internal/ids` | random IDs (`job_<32 hex>`, `item_<32 hex>`) | |
 | `internal/buildinfo` | version, commit, build date (ldflags), process start time | |
-| `internal/sysproc` | how external commands start: no console window on Windows | |
+| `internal/sysproc` | how external commands start: no console window on Windows, and a background process letting go of its own | |
 | `internal/client` | the Go client of `/api/v1`: typed requests, SSE with a silence watchdog, followers that resume the job list or one job | import a product or anything but `internal/config` and `internal/domain` |
 | `internal/progress` | the clients' stage weights, stage bar, album bar and remaining-time estimate, kept equal to the console's by a test | |
 | `internal/format` | sizes, durations, rates and quality labels the clients show | |
 | `internal/capability` | the one table of client capabilities (CLI command, MCP tool, safety) and the operations parsed from the embedded spec | hold behaviour; a capability without an operation runs in its client |
-| `internal/local` | the backend run inside a client's process (the desktop app, `amdl --server embedded`): its directories, its config, and the runtime file that lets a second client find it | |
+| `internal/local` | the backend run inside a client's process (the desktop app, `amdl --server embedded`): its directories, its config, and the runtime file that lets a second client find it, and the lock that keeps one backend per data directory | |
 
 ### 2.1 The wrapper and decryption
 

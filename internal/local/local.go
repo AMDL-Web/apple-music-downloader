@@ -20,6 +20,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"amdl/internal/buildinfo"
 	"amdl/internal/config"
 	"amdl/internal/server"
 )
@@ -76,6 +77,10 @@ type Backend struct {
 	FFmpeg string
 	// LogOutput receives the backend's console log; nil discards it.
 	LogOutput io.Writer
+	// LogFile is the file LogOutput writes, recorded in the runtime file.
+	LogFile string
+	// Console serves the web console next to the API; nil serves the API alone.
+	Console http.Handler
 }
 
 // ConfigPath is the embedded backend's config.yaml.
@@ -169,29 +174,37 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 // Runtime is the runtime file, server/runtime.json: the backend that is
 // running on this machine, written once it answers and removed when it stops.
 type Runtime struct {
-	URL string `json:"url"`
-	PID int    `json:"pid"`
+	URL     string    `json:"url"`
+	PID     int       `json:"pid"`
+	Version string    `json:"version"`
+	Started time.Time `json:"started"`
+	// Log is the backend's log file, when it writes one.
+	Log string `json:"log,omitempty"`
 }
 
 func runtimePath(d Dirs) string { return filepath.Join(d.ServerDir(), "runtime.json") }
 
-// Find returns the URL of an embedded backend running on this machine, when
-// the runtime file names one that answers its health check.
-func Find(ctx context.Context, d Dirs) (string, bool) {
+// ReadRuntime returns the runtime file and whether the backend it names
+// answers its health check.
+func ReadRuntime(ctx context.Context, d Dirs) (Runtime, bool) {
 	raw, err := os.ReadFile(runtimePath(d))
 	if err != nil {
-		return "", false
+		return Runtime{}, false
 	}
 	var r Runtime
 	if json.Unmarshal(raw, &r) != nil || r.URL == "" {
-		return "", false
+		return Runtime{}, false
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	if !healthy(ctx, r.URL) {
-		return "", false
-	}
-	return r.URL, true
+	return r, healthy(ctx, r.URL)
+}
+
+// Find returns the URL of a backend running on this machine, when the runtime
+// file names one that answers its health check.
+func Find(ctx context.Context, d Dirs) (string, bool) {
+	r, ok := ReadRuntime(ctx, d)
+	return r.URL, ok
 }
 
 func healthy(ctx context.Context, base string) bool {
@@ -207,11 +220,34 @@ func healthy(ctx context.Context, base string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// ErrBusy means another process holds the data directory's lock: a backend
+// runs there or is starting.
+var ErrBusy = errors.New("another backend is using this data directory")
+
+// lock takes server/backend.lock, which the process running the backend holds
+// for as long as it has the database open; the OS releases it when that
+// process exits, however it exits.
+func lock(d Dirs) (*os.File, error) {
+	if err := os.MkdirAll(d.ServerDir(), 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(filepath.Join(d.ServerDir(), "backend.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := tryLock(f); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
 // Running is a backend this process started.
 type Running struct {
 	// Base is its loopback origin, such as http://127.0.0.1:52011.
 	Base   string
 	dirs   Dirs
+	lock   *os.File
 	cancel context.CancelFunc
 	done   chan error
 }
@@ -219,15 +255,65 @@ type Running struct {
 // healthDeadline bounds how long Start waits for the backend to answer.
 const healthDeadline = 30 * time.Second
 
-// Start writes the config and runs the backend on a loopback port until Stop.
-// It returns once the backend answers its health check and the runtime file
-// names it, or with the error that ended its startup.
+// Start writes the config and runs the backend on a free loopback port until
+// Stop. It returns once the backend answers its health check and the runtime
+// file names it, or with the error that ended its startup; ErrBusy when
+// another process has the data directory, so the caller can wait for Find.
 func (b Backend) Start() (*Running, error) {
-	if err := b.WriteConfig(); err != nil {
+	l, err := lock(b.Dirs)
+	if err != nil {
 		return nil, err
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	return b.launch("127.0.0.1:0", l)
+}
+
+// lockPoll is how often Serve retries the lock while another backend has it.
+const lockPoll = time.Second
+
+// Serve runs the backend in the foreground on addr until ctx ends, as amdl
+// serve --local does under a service manager. While another process has the
+// data directory it waits, so a service that starts while the desktop app
+// runs takes over when the app quits instead of failing and restarting.
+func (b Backend) Serve(ctx context.Context, addr string) error {
+	var l *os.File
+	for {
+		var err error
+		if l, err = lock(b.Dirs); err == nil {
+			break
+		} else if !errors.Is(err, ErrBusy) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(lockPoll):
+		}
+	}
+	r, err := b.launch(addr, l)
 	if err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return r.Stop()
+	case err := <-r.done:
+		r.done <- err // Stop reads it
+		if err == nil {
+			err = errors.New("the backend stopped on its own")
+		}
+		_ = r.Stop() // cleans up; the backend's own error is what matters
+		return err
+	}
+}
+
+func (b Backend) launch(addr string, l *os.File) (*Running, error) {
+	if err := b.WriteConfig(); err != nil {
+		l.Close()
+		return nil, err
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		l.Close()
 		return nil, err
 	}
 	logOut := b.LogOutput
@@ -235,20 +321,22 @@ func (b Backend) Start() (*Running, error) {
 		logOut = io.Discard
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &Running{Base: "http://" + ln.Addr().String(), dirs: b.Dirs, cancel: cancel, done: make(chan error, 1)}
+	r := &Running{Base: "http://" + ln.Addr().String(), dirs: b.Dirs, lock: l, cancel: cancel, done: make(chan error, 1)}
 	go func() {
 		r.done <- server.Run(ctx, server.Options{
 			ConfigPath: b.ConfigPath(),
 			HooksPath:  filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
 			Listener:   ln,
 			LogOutput:  logOut,
+			Console:    b.Console,
 		})
 	}()
 	if err := r.waitHealthy(); err != nil {
 		_ = r.Stop() // the startup error is what matters
 		return nil, err
 	}
-	raw, _ := json.Marshal(Runtime{URL: r.Base, PID: os.Getpid()}) // two plain fields
+	raw, _ := json.Marshal(Runtime{URL: r.Base, PID: os.Getpid(), Version: buildinfo.Get().Version, // plain fields
+		Started: buildinfo.StartedAt, Log: b.LogFile})
 	if err := writeAtomic(runtimePath(b.Dirs), raw, 0o600); err != nil {
 		_ = r.Stop() // as above
 		return nil, err
@@ -284,7 +372,7 @@ func (r *Running) waitHealthy() error {
 const stopDeadline = 20 * time.Second
 
 // Stop shuts the backend down, removes the runtime file when it still names
-// this backend, and waits up to stopDeadline.
+// this backend, releases the lock and waits up to stopDeadline.
 func (r *Running) Stop() error {
 	if raw, err := os.ReadFile(runtimePath(r.dirs)); err == nil {
 		var rt Runtime
@@ -293,8 +381,10 @@ func (r *Running) Stop() error {
 		}
 	}
 	r.cancel()
+	defer r.lock.Close() // closing the file releases the lock
 	select {
 	case err := <-r.done:
+		r.done <- err // a second Stop returns the same
 		if server.Logged(err) {
 			return errors.Unwrap(err)
 		}
@@ -302,4 +392,23 @@ func (r *Running) Stop() error {
 	case <-time.After(stopDeadline):
 		return fmt.Errorf("the backend did not stop within %s", stopDeadline)
 	}
+}
+
+// logLimit is the size past which OpenLog starts a new log file, keeping the
+// previous one as server.log.1.
+const logLimit = 10 << 20
+
+// LogPath is the log file of a backend run as a service.
+func (d Dirs) LogPath() string { return filepath.Join(d.ServerDir(), "logs", "server.log") }
+
+// OpenLog opens LogPath for appending.
+func OpenLog(d Dirs) (*os.File, error) {
+	path := d.LogPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	if st, err := os.Stat(path); err == nil && st.Size() > logLimit {
+		_ = os.Rename(path, path+".1") // on failure the file keeps growing, which is no worse
+	}
+	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
 }

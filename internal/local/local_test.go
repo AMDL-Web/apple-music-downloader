@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"amdl/internal/config"
 )
@@ -60,5 +61,45 @@ func TestStartFindStop(t *testing.T) {
 	}
 	if _, ok := Find(context.Background(), d); ok {
 		t.Error("a stopped backend is not found")
+	}
+}
+
+func TestOneBackendPerDataDirectory(t *testing.T) {
+	d := tempDirs(t)
+	b := Backend{Dirs: d, Wrapper: "http://127.0.0.1:9"}
+	first, err := b.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Start(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a second Start: %v, want ErrBusy", err)
+	}
+	// Serve waits for the lock, then takes over.
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- b.Serve(ctx, "127.0.0.1:0") }()
+	time.Sleep(2 * lockPoll)
+	if u, _ := Find(context.Background(), d); u != first.Base {
+		t.Fatalf("while the first runs, Find = %q", u)
+	}
+	if err := first.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(healthDeadline)
+	for {
+		if u, ok := Find(context.Background(), d); ok && u != first.Base {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("Serve did not take over")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	cancel()
+	if err := <-served; err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := Find(context.Background(), d); ok {
+		t.Error("the runtime file outlived Serve")
 	}
 }

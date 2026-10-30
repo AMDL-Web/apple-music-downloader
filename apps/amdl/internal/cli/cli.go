@@ -86,7 +86,7 @@ func Run(ctx context.Context, args []string, io IO) int {
 	fs.SetOutput(io.Stderr)
 	var fields string
 	fs.StringVar(&e.server, "server", "", "server URL, saved context name or embedded (default: $AMDL_URL, the current context, this machine's backend, then http://127.0.0.1:18080)")
-	fs.StringVar(&e.wrapper, "wrapper", "", "with --server embedded: the wrapper address, needed on the first start")
+	fs.StringVar(&e.wrapper, "wrapper", "", "the wrapper address a local backend needs on its first start (--server embedded, serve --local, service install)")
 	fs.StringVar(&fields, "fields", "", "comma-separated keys to keep in each result")
 	fs.BoolVar(&e.quiet, "quiet", false, "write nothing to stderr but errors")
 	if cmd.Safety == capability.Destructive || cmd.Command == "download" {

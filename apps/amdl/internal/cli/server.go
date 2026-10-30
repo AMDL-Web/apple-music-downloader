@@ -178,9 +178,26 @@ func (e *env) embed() (target, error) {
 	e.note("starting the backend in this process (%s)", dirs.ServerDir())
 	r, err := local.Backend{Dirs: dirs, Wrapper: wrapper}.Start()
 	if errors.Is(err, local.ErrNoWrapper) {
-		return target{}, &cliError{Code: "wrapper_not_configured", exit: exitInput,
-			Message: "the embedded backend has no config yet and no wrapper address",
-			Hint:    "pass --wrapper http://<host>:<port> (or set AMDL_WRAPPER_ADDRESS) once"}
+		return target{}, errNoWrapper()
+	}
+	if errors.Is(err, local.ErrBusy) {
+		// Another process holds the data directory and writes the runtime
+		// file once its backend answers.
+		e.note("waiting for the backend another process is starting")
+		ctx, cancel := context.WithTimeout(e.ctx, busyWait)
+		defer cancel()
+		for ctx.Err() == nil {
+			if u, ok := local.Find(ctx, dirs); ok {
+				return target{URL: u, Name: "this machine's backend"}, nil
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+		return target{}, &cliError{Code: "server_unreachable", exit: exitUnavailable,
+			Message: "another process has the local data directory but its backend does not answer",
+			Hint:    "amdl service status shows whether the service runs; its log says why it does not answer"}
 	}
 	if err != nil {
 		return target{}, err
@@ -188,6 +205,15 @@ func (e *env) embed() (target, error) {
 	e.running = r
 	return target{URL: r.Base, Name: "embedded"}, nil
 }
+
+func errNoWrapper() error {
+	return &cliError{Code: "wrapper_not_configured", exit: exitInput,
+		Message: "the local backend has no config yet and no wrapper address",
+		Hint:    "pass --wrapper http://<host>:<port> (or set AMDL_WRAPPER_ADDRESS) once"}
+}
+
+// busyWait bounds how long embed waits for a backend another process starts.
+const busyWait = 45 * time.Second
 
 func contextList(e *env, _ []string) error {
 	ctxs, path, err := loadContexts()
