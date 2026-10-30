@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -44,6 +45,10 @@ type Options struct {
 	// Console serves the web console under /console/ (api.Deps.Console); nil
 	// serves the API alone.
 	Console http.Handler
+	// LogOutput receives the console log (logging.console); nil is stdout. A
+	// client that embeds the backend and prints its own results there passes
+	// another writer.
+	LogOutput io.Writer
 }
 
 // loggedError is an error Run has already written to the configured log.
@@ -67,7 +72,11 @@ func Run(ctx context.Context, opts Options) (err error) {
 		// Covers the returns before Serve owns it; a second Close is harmless.
 		defer func() { _ = opts.Listener.Close() }()
 	}
-	bootstrapLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logOut := opts.LogOutput
+	if logOut == nil {
+		logOut = os.Stdout
+	}
+	bootstrapLogger := slog.New(slog.NewTextHandler(logOut, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	created, err := config.EnsureFile(opts.ConfigPath, configs.Example)
 	if err != nil {
 		return fmt.Errorf("bootstrap config: %w", err)
@@ -79,7 +88,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	logSystem, err := logging.New(cfg.Logging)
+	logSystem, err := logging.NewTo(cfg.Logging, logOut)
 	if err != nil {
 		return fmt.Errorf("initialize logging: %w", err)
 	}

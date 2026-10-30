@@ -102,6 +102,11 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 			return err
 		}
 		ids := jobIDs(batch)
+		if e.running != nil && !*wait && !*watch {
+			// The backend lives only as long as this command.
+			e.note("waiting: the embedded backend stops when amdl exits")
+			*wait = true
+		}
 		if !*wait && !*watch {
 			return e.out.result(raw)
 		}

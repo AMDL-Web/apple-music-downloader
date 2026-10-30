@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -16,7 +17,9 @@ import (
 	"amdl/apps/console"
 	"amdl/internal/buildinfo"
 	"amdl/internal/capability"
+	"amdl/internal/local"
 	"amdl/internal/server"
+	"amdl/internal/sysproc"
 )
 
 func version() string { return buildinfo.Version }
@@ -162,9 +165,18 @@ func serveCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	cfg := fs.String("config", "", "config.yaml; created from the built-in example when missing (default $AMDL_CONFIG, else configs/config.yaml)")
 	hooks := fs.String("hooks", "", "hooks.yaml; missing disables hooks (default $AMDL_HOOKS_CONFIG, else configs/hooks.yaml)")
 	noConsole := fs.Bool("no-console", false, "serve the API without the web console")
+	onLocal := fs.Bool("local", false, "use this machine's local files, the desktop app's, instead of --config and --hooks")
+	background := fs.Bool("background", false, "with --local: log to the log file instead of the terminal, as amdl service runs it")
+	listen := fs.String("listen", "", "with --local: the loopback address to listen on (default a free port)")
 	return func(e *env, args []string) error {
 		if len(args) > 0 {
-			return usageErr("usage: amdl serve [--config path] [--hooks path]")
+			return usageErr("usage: amdl serve [--config path] [--hooks path] | amdl serve --local [--background] [--listen addr]")
+		}
+		if *onLocal {
+			return serveLocal(e, *background, *listen, !*noConsole)
+		}
+		if *background || *listen != "" {
+			return usageErr("--background and --listen go with --local; elsewhere server.listen in the config sets the address")
 		}
 		opts := serveOptions(e.Getenv, *cfg, *hooks, !*noConsole)
 		if err := server.Run(e.ctx, opts); err != nil {
@@ -175,6 +187,37 @@ func serveCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		}
 		return nil
 	}
+}
+
+// serveLocal runs the backend on this machine's local files in the
+// foreground: what amdl service registers with the OS.
+func serveLocal(e *env, background bool, listen string, withConsole bool) error {
+	dirs, err := local.DefaultDirs()
+	if err != nil {
+		return err
+	}
+	b := local.Backend{Dirs: dirs, Wrapper: or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS")), LogOutput: os.Stdout}
+	if withConsole {
+		b.Console = console.Handler()
+	}
+	if background {
+		f, err := local.OpenLog(dirs)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		b.LogOutput, b.LogFile = f, f.Name()
+		sysproc.DetachConsole()
+	}
+	err = b.Serve(e.ctx, or(listen, "127.0.0.1:0"))
+	if errors.Is(err, local.ErrNoWrapper) {
+		return errNoWrapper()
+	}
+	if err != nil {
+		fmt.Fprintf(b.LogOutput, "amdl backend failed: %v\n", err)
+		return &cliError{Code: "serve_failed", Message: err.Error(), exit: exitInternal}
+	}
+	return nil
 }
 
 // serveOptions takes the config paths from the flags, else AMDL_CONFIG and

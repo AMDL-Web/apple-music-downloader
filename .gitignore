@@ -8,6 +8,7 @@
 data/
 # make build output.
 /bin/
+/dist/
 
 test/
 

@@ -3,7 +3,9 @@ package cli
 import (
 	"flag"
 	"math"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -219,4 +221,39 @@ func suggest(cmds []command, text string) []string {
 		out = append(out, "amdl "+c.Command)
 	}
 	return out
+}
+
+// agentsNote is the AGENTS.md or CLAUDE.md paragraph amdl cli setup prints.
+const agentsNote = `## Apple Music downloads
+
+Use the amdl CLI for downloading music from Apple Music. Find a command with
+` + "`amdl cli search \"<task>\"`" + ` and read its flags and output with ` + "`amdl schema <command>`" + `.
+Results are JSON on stdout; errors are JSON on stderr with an exit status per kind
+of failure (2 change the input, 5 retry later, 10 needs the user's confirmation).
+Destructive commands need --yes: ask the user first.`
+
+func cliSetupCmd(*flag.FlagSet) func(e *env, args []string) error {
+	return func(e *env, args []string) error {
+		if len(args) > 0 {
+			return usageErr("usage: amdl cli setup [--server name|url]")
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			exe = "amdl"
+		}
+		mcpArgs := []string{"mcp"}
+		if e.server != "" {
+			mcpArgs = append(mcpArgs, "--server", e.server)
+		}
+		quoted := make([]string, len(mcpArgs))
+		for i, a := range mcpArgs {
+			quoted[i] = strconv.Quote(a)
+		}
+		return e.out.result(map[string]any{
+			"claude_code": "claude mcp add amdl -- " + exe + " " + strings.Join(mcpArgs, " "),
+			"codex_toml":  "[mcp_servers.amdl]\ncommand = " + strconv.Quote(exe) + "\nargs = [" + strings.Join(quoted, ", ") + "]",
+			"mcp_json":    map[string]any{"mcpServers": map[string]any{"amdl": map[string]any{"command": exe, "args": mcpArgs}}},
+			"agents_md":   agentsNote,
+		})
+	}
 }

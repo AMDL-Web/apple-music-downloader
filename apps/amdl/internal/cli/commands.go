@@ -13,33 +13,40 @@ import (
 // an operation becomes a passthrough command built from the spec.
 func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) error {
 	return map[string]func(fs *flag.FlagSet) func(e *env, args []string) error{
-		"download":       downloadCmd,
-		"jobs get":       jobsGetCmd,
-		"jobs watch":     jobsWatchCmd,
-		"jobs wait":      jobsWaitCmd,
-		"library list":   libraryListCmd,
-		"logs tail":      logsTailCmd,
-		"config get":     configGetCmd,
-		"config set":     configSetCmd,
-		"wrapper login":  wrapperLoginCmd,
-		"cli search":     cliSearchCmd,
-		"cli commands":   cliCommandsCmd,
-		"schema":         schemaCmd,
-		"context list":   noFlags(contextList),
-		"context add":    noFlags(contextAdd),
-		"context use":    noFlags(contextUse),
-		"context remove": noFlags(contextRemove),
-		"version":        versionCmd,
-		"serve":          serveCmd,
-		"mcp":            mcpCmd,
-		"tui":            tuiCmd,
+		"download":          downloadCmd,
+		"jobs get":          jobsGetCmd,
+		"jobs watch":        jobsWatchCmd,
+		"jobs wait":         jobsWaitCmd,
+		"library list":      libraryListCmd,
+		"logs tail":         logsTailCmd,
+		"config get":        configGetCmd,
+		"config set":        configSetCmd,
+		"wrapper login":     wrapperLoginCmd,
+		"cli search":        cliSearchCmd,
+		"cli commands":      cliCommandsCmd,
+		"cli setup":         cliSetupCmd,
+		"schema":            schemaCmd,
+		"context list":      noFlags(contextList),
+		"context add":       noFlags(contextAdd),
+		"context use":       noFlags(contextUse),
+		"context remove":    noFlags(contextRemove),
+		"version":           versionCmd,
+		"serve":             serveCmd,
+		"mcp":               mcpCmd,
+		"tui":               tuiCmd,
+		"service install":   serviceInstallCmd,
+		"service uninstall": serviceUninstallCmd,
+		"service start":     serviceStartCmd,
+		"service stop":      serviceStopCmd,
+		"service status":    serviceStatusCmd,
 	}
 }
 
-// local are the commands that never talk to a server.
-var local = map[string]bool{
-	"cli search": true, "cli commands": true, "schema": true, "context list": true,
+// offline are the commands that never talk to a server.
+var offline = map[string]bool{
+	"cli search": true, "cli commands": true, "cli setup": true, "schema": true, "context list": true,
 	"context add": true, "context use": true, "context remove": true, "serve": true, "version": true,
+	"service install": true, "service uninstall": true, "service start": true, "service stop": true, "service status": true,
 }
 
 func noFlags(run func(e *env, args []string) error) func(*flag.FlagSet) func(*env, []string) error {
@@ -54,7 +61,7 @@ func commands() []command {
 		if c.Command == "" {
 			continue
 		}
-		cmd := command{Capability: c, noServer: local[c.Command]}
+		cmd := command{Capability: c, noServer: offline[c.Command]}
 		if setup, ok := handwritten[c.Command]; ok {
 			cmd.setup = setup
 			cmd.dryRun = c.Safety != capability.Read && !cmd.noServer

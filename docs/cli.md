@@ -105,12 +105,14 @@ and prints the batch, whose results carry `existing_job_id`.
 
 The first of these that is set wins:
 
-1. `--server`, a URL or a saved context name.
+1. `--server`, a URL, a saved context name, or `embedded`.
 2. `AMDL_URL`, the same.
 3. The current context, saved by `amdl context add` or `amdl context use` in
    `cli.yaml` under the user config directory (`~/Library/Application Support/amdl` on
    macOS, `$XDG_CONFIG_HOME/amdl` or `~/.config/amdl` on Linux).
-4. `http://127.0.0.1:18080`, when its health check answers at once (`apps/amdl/internal/cli#probe`).
+4. The backend running on this machine for the desktop app, `amdl service` or
+   `--server embedded`, when its runtime file names one that answers ([Running the backend in amdl](#running-the-backend-in-amdl)).
+5. `http://127.0.0.1:18080`, when its health check answers at once (`apps/amdl/internal/cli#probe`).
 
 Otherwise the command fails with `server_not_configured`.
 
@@ -120,6 +122,10 @@ Otherwise the command fails with `server_not_configured`.
 `internal/server#Run`: `--config` (default `$AMDL_CONFIG`, else
 `configs/config.yaml`) and `--hooks` (default `$AMDL_HOOKS_CONFIG`, else
 `configs/hooks.yaml`), stopping on SIGINT or SIGTERM and ignoring SIGHUP.
+`amdl serve --local` uses this machine's local files instead
+([Running the backend in amdl](#running-the-backend-in-amdl)), on a free loopback port
+or `--listen`; with `--background` it logs to `logs/server.log` beside them and, on
+Windows, closes a console window it was given alone.
 
 ## MCP server
 
@@ -170,3 +176,55 @@ redrawn.
   rows; short ones keep fewer cards (`apps/amdl/internal/tui#wideCols` and its siblings).
 - **Leaving** takes `ctrl+c` twice, or `ctrl+d` on an empty prompt. Downloads keep
   running on the server.
+
+## Running the backend in amdl
+
+`--server embedded` runs a command against a backend inside the amdl process, the way
+the desktop app's standalone mode does, with the same files (`internal/local#Dirs`):
+the config, database and runtime file under `AMDL/server` in the user config directory,
+scratch files in the user cache directory, downloads in `~/Music/AMDL` unless the config
+says otherwise. When a backend is already running there, such as the desktop app's, the
+command connects to it instead, and so does a command that names no server at all.
+Otherwise amdl starts one on a loopback port and stops it when the command ends;
+unfinished jobs resume on its next start, and a `download` waits for its jobs so they
+can finish. The first start needs the wrapper's address, from `--wrapper` or
+`AMDL_WRAPPER_ADDRESS`, and fails with `wrapper_not_configured` without it.
+
+Whichever process runs the backend holds `backend.lock` beside the database, and the
+OS releases it when that process exits. A second `--server embedded` finds it held and
+waits up to `apps/amdl/internal/cli#busyWait` for the other backend to answer; `amdl
+serve --local` waits for as long as it takes, then takes over.
+
+## Background service
+
+`amdl service install` registers `amdl serve --local --background` to start at login,
+so local downloads go on with no window or terminal open, and starts it:
+
+| OS | Registered as | Restarted after a crash |
+| --- | --- | --- |
+| macOS | a LaunchAgent in `~/Library/LaunchAgents` | by launchd, after 10 s |
+| Linux | a `systemd --user` unit in `~/.config/systemd/user` | by systemd, after 10 s |
+| Windows | a logon task in Task Scheduler (a real service needs an administrator) | by a trigger that repeats every 5 minutes |
+
+The service listens on a loopback port picked at install, so its URL survives
+restarts, and every client finds it through the runtime file. `install` takes
+`--wrapper` like `--server embedded` and pins `tools.ffmpeg` to the ffmpeg on the
+current `PATH`, since a service starts with a shorter one; run it again after moving the
+`amdl` binary. If another backend already runs on the files, the service waits for it
+to stop. `status` prints the manager's view and the running backend's PID, version, URL
+and log file. `stop` holds until the next login, and on Windows until `start`, where it
+ends the process outright and its jobs resume on the next start. `uninstall` removes
+the registration and leaves the data. A `systemd --user` unit stops at logout unless
+lingering is on (`loginctl enable-linger`).
+
+## Agent setup
+
+`amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
+nothing: the `claude mcp add` command, a Codex `config.toml` entry, an `mcpServers` JSON
+entry, and a paragraph for `AGENTS.md` or `CLAUDE.md`.
+
+## Releases
+
+`make dist` cross-compiles `amdl` for Linux, macOS and Windows (`Makefile` lists the
+platforms) into one archive each plus `SHA256SUMS`; the release workflow attaches them
+to every GitHub release.

@@ -24,7 +24,7 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker
+.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker dist
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
@@ -84,3 +84,21 @@ temaridiff: ## Compare internal/fairplay with upstream Temari (own CI job; downl
 
 docker: ## Build the server image locally (single arch, not pushed)
 	docker build -f deploy/server/Dockerfile -t $(DOCKER_IMAGE) .
+
+# The platforms the release attaches an amdl binary for. modernc.org/sqlite is
+# pure Go, so CGO_ENABLED=0 cross-compiles each from any host.
+DIST_TARGETS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+
+dist: ## Cross-compile amdl for every release platform into dist/, one archive each plus SHA256SUMS
+	@rm -rf dist && mkdir -p dist
+	@for t in $(DIST_TARGETS); do \
+		os=$${t%/*}; arch=$${t#*/}; name=amdl_$(VERSION)_$${os}_$${arch}; ext=; \
+		if [ "$$os" = windows ]; then ext=.exe; fi; \
+		echo "dist: $$name"; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath -ldflags "-s -w $(LDFLAGS)" -o dist/$$name/amdl$$ext ./apps/amdl || exit 1; \
+		cp LICENSE README.md dist/$$name/ || exit 1; \
+		if [ "$$os" = windows ]; then (cd dist && zip -qr $$name.zip $$name) || exit 1; \
+		else tar -C dist -czf dist/$$name.tar.gz $$name || exit 1; fi; \
+		rm -rf dist/$$name; \
+	done
+	@cd dist && { sha256sum *.tar.gz *.zip 2>/dev/null || shasum -a 256 *.tar.gz *.zip; } > SHA256SUMS

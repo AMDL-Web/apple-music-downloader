@@ -8,8 +8,9 @@ name: Release
 #   - workflow_dispatch: release a given version by hand, the fallback when the
 #     PR title had no version.
 # Both paths run the CI gate (make check), use the hand-written release notes
-# or generate a changelog, create the tag and GitHub Release, then call
-# docker-publish to build and push the image (moving latest too).
+# or generate a changelog, create the tag and GitHub Release, then attach the
+# amdl binaries (make dist) and call docker-publish to build and push the image
+# (moving latest too).
 on:
   workflow_dispatch:
     inputs:
@@ -199,6 +200,40 @@ jobs:
           target_commitish: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Attach the amdl binaries (make dist) to the release just created.
+  binaries:
+    name: Attach amdl binaries
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.version }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build every platform
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: make dist VERSION="$VERSION"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          # Five archives and the checksum file, or the job fails.
+          test "$(ls dist | wc -l)" -eq 6
+          gh release upload "$VERSION" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
   # Build and push the image to GHCR after a successful release. It has to be
   # called explicitly: a tag created with GITHUB_TOKEN does not trigger
