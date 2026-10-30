@@ -14,19 +14,27 @@ import { THEMES } from '../lib/prefs.js';
 export const NAV = [
   { page: 'overview', label: 'Overview', icon: 'grid', key: 'o' },
   { page: 'queue', label: 'Queue', icon: 'list', key: 'q' },
-  { page: 'logs', label: 'Logs', icon: 'file-text', key: 'l' },
   // g y opened System, which Settings now holds.
   { page: 'settings', label: 'Settings', icon: 'settings', key: ',', alias: 'y' },
+  // Seldom opened: a quieter item at the foot of the sidebar, and the phone's More sheet.
+  { page: 'logs', label: 'Logs', icon: 'file-text', key: 'l', secondary: true },
 ];
 
 /** The primary action: its own button above the nav, `n` or `g n`. */
 export const NEW_DOWNLOAD = { page: 'new', label: 'New download', icon: 'plus', key: 'n' };
 
 /** Pages the phone tab bar reaches through its More sheet. */
-export const MORE_PAGES = ['settings'];
+export const MORE_PAGES = ['logs'];
 
 export function Sidebar({ route, counts }) {
   const active = counts ? counts.queued + counts.running : 0;
+  const navLink = (n) => html`<li key=${n.page}>
+    <a class="nav-item" href=${buildHash(n.page)} aria-current=${route.page === n.page ? 'page' : undefined} title=${n.label}>
+      <${Icon} name=${n.icon} size="nav" />
+      <span class="nav-label">${n.label}</span>
+      ${n.page === 'queue' && active > 0 ? html`<span class="nav-badge" aria-label=${`${active} active`}>${count(active)}</span>` : null}
+    </a>
+  </li>`;
   return html`<nav class="sidebar" aria-label="Primary">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><${Icon} name="music" /></span>
@@ -47,15 +55,10 @@ export function Sidebar({ route, counts }) {
       <span class="sidebar-new-label">${NEW_DOWNLOAD.label}</span>
     </a>
     <ul class="nav">
-      ${NAV.map(
-        (n) => html`<li key=${n.page}>
-          <a class="nav-item" href=${buildHash(n.page)} aria-current=${route.page === n.page ? 'page' : undefined} title=${n.label}>
-            <${Icon} name=${n.icon} size="nav" />
-            <span class="nav-label">${n.label}</span>
-            ${n.page === 'queue' && active > 0 ? html`<span class="nav-badge" aria-label=${`${active} active`}>${count(active)}</span>` : null}
-          </a>
-        </li>`,
-      )}
+      ${NAV.filter((n) => !n.secondary).map(navLink)}
+    </ul>
+    <ul class="nav-secondary">
+      ${NAV.filter((n) => n.secondary).map(navLink)}
     </ul>
   </nav>`;
 }
@@ -64,7 +67,7 @@ const navItem = (page) => NAV.find((n) => n.page === page);
 
 /**
  * The phone tab bar: Overview, Queue, New download (center, primary),
- * Logs and More, a button that opens MoreSheet. More is marked current
+ * Settings and More, a button that opens MoreSheet. More is marked current
  * while one of MORE_PAGES is shown and while its sheet is open.
  */
 export function TabBar({ route, moreOpen, onMore }) {
@@ -81,7 +84,7 @@ export function TabBar({ route, moreOpen, onMore }) {
     <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${current('new')} aria-label=${NEW_DOWNLOAD.label} title=${NEW_DOWNLOAD.label}>
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
     </a>
-    ${tab(navItem('logs'))}
+    ${tab(navItem('settings'))}
     <button
       type="button"
       class="tab tab-more"

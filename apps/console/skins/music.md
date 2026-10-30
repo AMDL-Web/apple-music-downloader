@@ -127,7 +127,8 @@ base durations (120 ms color, 200 ms overlays).
 
 - **Shell**: brand mark is a 34 px red gradient tile; "Console" group label via
   `.nav::before`; nav glyphs in secondary ink (the current one primary); the
-  current item is filled, with the panel radius. The top
+  current item is filled, with the panel radius. Logs at the sidebar's foot
+  has a secondary, regular-weight label until it is the current page. The top
   bar is the frosted canvas with, in simulate mode, a neutral "Simulate" tag;
   the live dot alone while connected ("Reconnecting in 3 s" or "Offline" in
   a surface pill otherwise; on phones without the fill, the word still next
@@ -144,7 +145,7 @@ base durations (120 ms color, 200 ms overlays).
   px the center tab's mark is a 48 x 30 red capsule with a soft red shadow
   that rises 6 px over the 24 px icon line, so "New" sits on the other
   labels' line; More turns red like any current tab
-  while Settings is shown or its sheet is open.
+  while Logs is shown or its sheet is open.
 - **More sheet** (phones): the frosted sheet holds an inset grouped list on
   `--bg-group` (panel radius, 48 px rows, 16 px labels), secondary glyphs as
   in the sidebar, hairlines from the label, the current page in semibold with

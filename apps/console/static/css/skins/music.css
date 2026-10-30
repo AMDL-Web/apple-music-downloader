@@ -388,6 +388,11 @@
   font-weight: var(--w-semibold);
 }
 
+:root[data-skin="music"] .nav-secondary .nav-item:not([aria-current="page"]) {
+  color: var(--text-secondary);
+  font-weight: var(--w-regular);
+}
+
 :root[data-skin="music"] .nav-badge {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
