@@ -127,22 +127,34 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeCatalogError answers a failed catalog read bounded by ctx: 504
-// upstream_timeout when that bound ran out, else 502 upstream_error. The
-// response carries only err.Error(); a raw upstream body an Apple error holds
-// stays in the log line, which is skipped when the client has gone away (the
-// console aborts a search the person typed past).
+// upstream_timeout when that bound ran out, 404 catalog_not_found when Apple
+// has no such id, else 502 upstream_error. The response carries only
+// err.Error(); a raw upstream body an Apple error holds stays in the log line,
+// which is skipped when the client has gone away (the console aborts a search
+// the person typed past). A missing id is the caller's input, not an upstream
+// fault, so it logs at Info.
 func (s *Server) writeCatalogError(ctx context.Context, w http.ResponseWriter, r *http.Request, err error, timeout time.Duration, details any, logMsg string, logAttrs ...any) {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		writeErrorDetails(w, http.StatusGatewayTimeout, CodeUpstreamTimeout,
 			fmt.Sprintf("the Apple Music catalog did not answer within %s", timeout), details)
 		return
 	}
+	notFound := applemusic.IsNotFound(err)
 	if r.Context().Err() == nil {
 		attrs := append(logAttrs, "error", err)
-		if body := logging.UpstreamBody(err); body != "" {
+		if body := logging.UpstreamBody(err); body != "" && !notFound {
 			attrs = append(attrs, "upstream_body", body)
 		}
-		logging.FromContext(r.Context(), s.logger).Warn(logMsg, attrs...)
+		logger := logging.FromContext(r.Context(), s.logger)
+		if notFound {
+			logger.Info(logMsg, attrs...)
+		} else {
+			logger.Warn(logMsg, attrs...)
+		}
+	}
+	if notFound {
+		writeErrorDetails(w, http.StatusNotFound, CodeCatalogNotFound, "read Apple Music catalog: "+err.Error(), details)
+		return
 	}
 	writeErrorDetails(w, http.StatusBadGateway, CodeUpstreamError, "read Apple Music catalog: "+err.Error(), details)
 }

@@ -40,10 +40,8 @@ export function linkIssue(entry, lookup = null, { hasToken = false, regions = nu
   const msg = err ? String(err.message || '') : '';
   // Apple answered 404 for the id: a job of this link could only fail. The
   // catalog read never carries the media-user-token (internal/applemusic
-  // Playlist), so this holds for private playlists too. Checked before the
-  // storefront case: every catalog error names its storefront
-  // (internal/applemusic catalogRequestError), a missing id included.
-  const notFound = Boolean(err && err.status === 502 && /\b404\b/.test(msg));
+  // Playlist), so this holds for private playlists too.
+  const notFound = Boolean(err && err.status === 404 && err.code === 'catalog_not_found');
   if (notFound) {
     return { code: 'not_found', role: 'danger', blocking: true, message: 'Apple Music has nothing at this link', title: err.message };
   }

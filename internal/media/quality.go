@@ -140,6 +140,11 @@ func (d *Downloader) querySongQualities(ctx context.Context, storefront string, 
 		}
 		return variants, err
 	}, nil)
+	if errors.Is(err, applemusic.ErrNoEnhancedHLS) {
+		// amp-api lists no Enhanced HLS master for this song: it is offered in
+		// none of the enhanced codecs, not a failed query.
+		variants, err = nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

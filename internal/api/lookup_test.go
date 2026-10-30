@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -270,6 +271,40 @@ func TestLookupCatalogFailures(t *testing.T) {
 	slow := &fakeCatalog{t: t, err: fmt.Errorf("get album: %w", context.DeadlineExceeded)}
 	recorder = requestJSON(t, newLookupServer(slow, nil), http.MethodPost, "/api/v1/lookup", link)
 	assertLookupErrorLink(t, recorder, http.StatusGatewayTimeout, CodeUpstreamTimeout, "album")
+}
+
+// notFoundError stands in for Apple's 404, which internal/applemusic reports
+// through a NotFound marker.
+type notFoundError struct{}
+
+func (notFoundError) Error() string {
+	return "Apple Music has no album 1463409338 in storefront us (404)"
+}
+
+func (notFoundError) NotFound() bool { return true }
+
+func TestLookupMissingIDIsNotFoundAndNoWarning(t *testing.T) {
+	const link = `{"url":"https://music.apple.com/us/album/igor/1463409338"}`
+	for _, tt := range []struct {
+		err      error
+		status   int
+		code     ErrorCode
+		logLevel string
+	}{
+		{fmt.Errorf("get album: %w", notFoundError{}), http.StatusNotFound, CodeCatalogNotFound, "level=INFO"},
+		{errors.New("Apple Music request for album 1463409338 in storefront us failed: 503 Service Unavailable"), http.StatusBadGateway, CodeUpstreamError, "level=WARN"},
+	} {
+		var logs strings.Builder
+		server := &Server{
+			cfg: config.NewStore(config.Default()), catalog: &fakeCatalog{t: t, err: tt.err},
+			logger: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		}
+		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/lookup", link)
+		assertLookupErrorLink(t, recorder, tt.status, tt.code, "album")
+		if line := logs.String(); !strings.Contains(line, "lookup failed") || !strings.Contains(line, tt.logLevel) {
+			t.Fatalf("%v logged %q, want a %s lookup failed line", tt.err, line, tt.logLevel)
+		}
+	}
 }
 
 // assertLookupErrorLink checks the error envelope and that details.link

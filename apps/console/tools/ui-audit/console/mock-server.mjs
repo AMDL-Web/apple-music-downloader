@@ -414,7 +414,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     const link = parseLink(body.url);
     if (!link) return apiError(res, 400, 'invalid_url', 'Not an Apple Music link.');
     const base = { input: body.url, type: link.type, storefront: link.storefront, id: link.id, ...(link.track_id ? { track_id: link.track_id } : {}) };
-    if (link.id === '1234567890') return apiError(res, 404, 'not_found', 'Apple Music has nothing at this link.', { link: base });
+    if (link.id === '1234567890') return apiError(res, 404, 'catalog_not_found', `read Apple Music catalog: Apple Music has no ${link.type} ${link.id} in storefront ${link.storefront} (404)`, { link: base });
     const a = findAlbum(link.id);
     const song = CATALOG.songs.find((s) => s.id === link.id || s.id === link.track_id);
     const artist = CATALOG.artists.find((x) => x.id === link.id);

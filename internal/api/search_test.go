@@ -262,6 +262,6 @@ func TestArtistAlbumsRefusesBadParameters(t *testing.T) {
 }
 
 func TestArtistAlbumsUnknownArtist(t *testing.T) {
-	catalog := &fakeCatalog{t: t, err: errors.New("Apple Music has no artist 1 in storefront us (404)")}
-	assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/artists/1/albums", ""), http.StatusBadGateway, CodeUpstreamError)
+	catalog := &fakeCatalog{t: t, err: notFoundError{}}
+	assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/artists/1/albums", ""), http.StatusNotFound, CodeCatalogNotFound)
 }

@@ -124,7 +124,7 @@ export const listLogs = (query) => request('GET', '/api/v1/logs', query);
 export const createDownload = (body) => request('POST', '/api/v1/downloads', undefined, { body });
 /** Deletes a finished job; 409 job_active while it is queued or running. */
 export const deleteDownload = (id) => request('DELETE', `/api/v1/downloads/${encodeURIComponent(id)}`);
-/** The qualities each track of a link offers (QualityResponse); 502 upstream_error when the lookup fails. */
+/** The qualities each track of a link offers (QualityResponse); 404 catalog_not_found or 502 upstream_error when the lookup fails. */
 export const queryQuality = (url, signal) =>
   request('POST', '/api/v1/quality', undefined, { body: { url }, timeoutMs: QUALITY_TIMEOUT_MS, signal });
 /**

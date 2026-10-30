@@ -246,6 +246,25 @@ audio.m3u8
 	}
 }
 
+func TestQualityQuerySongWithoutEnhancedHLSOffersNothing(t *testing.T) {
+	service := newTestQualityService(config.Default(), fakeQualityCatalog{song: applemusic.Song{
+		ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumName: "Album",
+	}}, countingQualityWrapper{})
+
+	result, err := service.QueryQuality(context.Background(), QualityRequest{URL: "https://music.apple.com/cn/song/example/song-1"})
+	if err != nil {
+		t.Fatalf("QueryQuality = %v, want every codec reported as not offered", err)
+	}
+	if len(result.Tracks) != 1 || len(result.Tracks[0].Qualities) != 6 {
+		t.Fatalf("tracks = %#v, want one track with all six codecs", result.Tracks)
+	}
+	for _, q := range result.Tracks[0].Qualities {
+		if q.Available {
+			t.Fatalf("quality %s available without an Enhanced HLS master", q.ID)
+		}
+	}
+}
+
 func TestQualityMasterInventoryRetriesSourceAndMasterAsOneUnit(t *testing.T) {
 	var masterHits atomic.Int32
 	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

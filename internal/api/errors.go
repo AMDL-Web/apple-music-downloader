@@ -27,6 +27,7 @@ const (
 	CodeJobNotFound     ErrorCode = "job_not_found"
 	CodeLoginNotFound   ErrorCode = "login_not_found"
 	CodeAccountNotFound ErrorCode = "account_not_found"
+	CodeCatalogNotFound ErrorCode = "catalog_not_found"
 	// 405
 	CodeMethodNotAllowed ErrorCode = "method_not_allowed"
 	// 409

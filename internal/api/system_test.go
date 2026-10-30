@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -209,4 +210,8 @@ func TestQualityEndpointErrors(t *testing.T) {
 	server := &Server{quality: &fakeQualityService{err: errors.New("catalog lookup failed")}}
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", body)
 	assertErrorCode(t, recorder, http.StatusBadGateway, "upstream_error")
+
+	server = &Server{quality: &fakeQualityService{err: fmt.Errorf("resolve album: %w", notFoundError{})}}
+	recorder = requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/quality", body)
+	assertErrorCode(t, recorder, http.StatusNotFound, CodeCatalogNotFound)
 }

@@ -207,3 +207,20 @@ func TestDecodeCatalogResponseKeepsRequestPath(t *testing.T) {
 		t.Fatalf("decodeCatalogResponse() without Request error = %v", err)
 	}
 }
+
+func TestIsNotFound(t *testing.T) {
+	missing := fmt.Errorf("get album: %w", catalogRequestError{statusCode: http.StatusNotFound, path: "/v1/catalog/us/albums/1"})
+	if !IsNotFound(missing) {
+		t.Fatalf("IsNotFound(%v) = false, want true for a wrapped 404", missing)
+	}
+	for _, err := range []error{
+		catalogRequestError{statusCode: http.StatusBadRequest},
+		catalogRequestError{statusCode: http.StatusInternalServerError},
+		errors.New("Apple Music has no album 1 in storefront us (404)"),
+		nil,
+	} {
+		if IsNotFound(err) {
+			t.Fatalf("IsNotFound(%v) = true, want false", err)
+		}
+	}
+}

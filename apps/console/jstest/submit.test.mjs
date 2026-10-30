@@ -75,7 +75,7 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
     title: upstream.error.message,
   });
   assert.equal(linkIssue(entry(IGOR), { state: 'error', error: { code: 'aborted' } }), null, 'a cancelled lookup is no issue');
-  const missing = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: catalog request failed: 404 Not Found: {}' } };
+  const missing = { state: 'error', error: { status: 404, code: 'catalog_not_found', message: 'read Apple Music catalog: Apple Music has no album 1463409338 in storefront us (404)' } };
   assert.deepEqual(
     [linkIssue(entry(IGOR), missing).code, linkIssue(entry(IGOR), missing).blocking],
     ['not_found', true],
@@ -244,8 +244,10 @@ test('linkIssue blocks a storefront Apple does not have and a link without one',
   const current = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: Apple Music request for album 1463409338 in storefront zz failed: 400 Bad Request' } };
   assert.equal(linkIssue(zz, current).code, 'bad_storefront');
   const us = entry(IGOR);
-  const gone = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: Apple Music has no album 1463409338 in storefront us (404)' } };
+  const gone = { state: 'error', error: { status: 404, code: 'catalog_not_found', message: 'read Apple Music catalog: Apple Music has no album 1463409338 in storefront us (404)' } };
   assert.equal(linkIssue(us, gone).code, 'not_found');
+  const stray = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: request failed: 404 Not Found' } };
+  assert.equal(linkIssue(us, stray).code, 'preview_failed', 'a 404 in the text of another error is not a missing id');
   const busy = { state: 'error', error: { status: 502, code: 'upstream_error', message: 'read Apple Music catalog: Apple Music request for album 1463409338 in storefront us failed: 503 Service Unavailable' } };
   assert.equal(linkIssue(us, busy).code, 'preview_failed', 'an outage in a real storefront is a warning, not a bad storefront');
   const bare = entry('https://music.apple.com/album/igor/1463409338');

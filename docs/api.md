@@ -32,7 +32,7 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | --- | --- |
 | 400 | `invalid_request` (query or body validation, a malformed stream cursor), `invalid_json` (the body is not well-formed JSON) |
 | 401 | `authentication_failed` |
-| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
+| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `catalog_not_found` |
 | 405 | `method_not_allowed`, with an `Allow` header |
 | 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
@@ -456,7 +456,8 @@ The body is `{url}` only. A private playlist's cover is read with
 | `url` missing, unknown body field | `400 invalid_request` |
 | Not an Apple Music link the backend parses | `400 invalid_request` |
 | A music video or a live radio station | `400 invalid_request`, `details.link` |
-| The catalog read fails (Apple's 404 for an unknown id included) | `502 upstream_error`, `details.link` |
+| Apple has no resource with the link's id (its 404) | `404 catalog_not_found`, `details.link` |
+| The catalog read fails otherwise | `502 upstream_error`, `details.link` |
 | No answer within 15 seconds | `504 upstream_timeout`, `details.link` |
 
 `details.link` carries `input`, `type`, `storefront`, `id` and `track_id` of the parsed
@@ -525,7 +526,8 @@ carries the artist.
 | Case | Answer |
 | --- | --- |
 | No `term`, a bad `types`, `storefront`, `limit` or `offset`, an artist id that is not digits | `400 invalid_request` |
-| The catalog read fails (an unknown storefront or Apple's 404 for an unknown artist included) | `502 upstream_error` |
+| Apple has no artist with that id (its 404) | `404 catalog_not_found` |
+| The catalog read fails otherwise (an unknown storefront included) | `502 upstream_error` |
 | No answer within 10 seconds | `504 upstream_timeout` |
 
 ## Quality probe
@@ -539,7 +541,9 @@ curl -X POST http://localhost:18080/api/v1/quality \
 Reports the codecs and audio quality a song, album, playlist, artist or station URL
 currently declares in its master playlist, without creating a job. It reuses the download
 path's region validation, collection resolution, metadata refresh, retries, concurrency
-scheduling, HLS source selection and codec/ALAC filtering rules. Any failure of the lookup,
+scheduling, HLS source selection and codec/ALAC filtering rules. A song the catalog lists
+no Enhanced HLS master for reports every quality with `available: false`. Apple's 404 for
+the link's id or a track's is `404 catalog_not_found`; any other failure of the lookup,
 including a URL it cannot parse, is `502 upstream_error`.
 
 The success path reads one master playlist per track occurrence and summarises every

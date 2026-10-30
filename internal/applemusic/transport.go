@@ -3,6 +3,7 @@ package applemusic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +43,16 @@ func (e catalogRequestError) Error() string {
 		return fmt.Sprintf("Apple Music request failed: %s", status)
 	}
 }
+
+// IsNotFound reports whether err, or an error it wraps, is Apple answering
+// 404 for a catalog resource: the id does not exist in that storefront.
+func IsNotFound(err error) bool {
+	var marker interface{ NotFound() bool }
+	return errors.As(err, &marker) && marker.NotFound()
+}
+
+// NotFound reports whether Apple answered 404.
+func (e catalogRequestError) NotFound() bool { return e.statusCode == http.StatusNotFound }
 
 // UpstreamBody exposes the raw response body excerpt for log lines. It stays
 // out of Error() because that text is persisted in job and item errors and

@@ -543,9 +543,11 @@ paths:
         not read individual media playlists, does not verify media segments, and
         never enters the encrypted media transfer. The region check requires the
         wrapper/decryptor to be ready and the URL's storefront to be among the
-        regions it reports. music-video is not supported. Any failure after the
-        url field is present, including a URL the backend cannot parse, is 502
-        upstream_error.
+        regions it reports. music-video is not supported. A song for which the
+        catalog lists no Enhanced HLS master reports every quality with
+        available=false. Apple answering 404 for the link's id, or for a track's,
+        is 404 catalog_not_found; any other failure after the url field is
+        present, including a URL the backend cannot parse, is 502 upstream_error.
       operationId: queryQuality
       requestBody:
         required: true
@@ -562,6 +564,12 @@ paths:
                 $ref: '#/components/schemas/QualityResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '404':
+          description: catalog_not_found; Apple answered 404 for the link's id or a track's.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
           $ref: '#/components/responses/JSONBodyTooLarge'
         '502':
@@ -664,14 +672,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >-
+            catalog_not_found; Apple answered 404 for the link's id: it has no
+            such resource in that storefront. details.link carries the parsed link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '413':
           $ref: '#/components/responses/JSONBodyTooLarge'
         '500':
           $ref: '#/components/responses/InternalError'
         '502':
           description: >-
-            upstream_error; the catalog read failed (including Apple answering
-            404 for an id it does not have). details.link carries the parsed link.
+            upstream_error; the catalog read failed. details.link carries the parsed link.
           content:
             application/json:
               schema:
@@ -800,8 +815,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: catalog_not_found; Apple answered 404 for the artist id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '502':
-          description: upstream_error; the catalog read failed, Apple's 404 for an unknown artist included.
+          description: upstream_error; the catalog read failed.
           content:
             application/json:
               schema:
@@ -1387,7 +1408,8 @@ components:
         Stable, machine-readable error code, sent with the status listed here.
         400 invalid_request (query or body validation), invalid_json (the body
         is not well-formed JSON); 401 authentication_failed; 404
-        route_not_found, job_not_found, login_not_found, account_not_found; 405
+        route_not_found, job_not_found, login_not_found, account_not_found,
+        catalog_not_found (Apple has no resource with that id); 405
         method_not_allowed (with an Allow header); 409 job_active,
         job_not_retryable, job_finalizing, duplicate_active, already_logged_in,
         login_pending; 413 request_too_large; 422
@@ -1404,6 +1426,7 @@ components:
         - job_not_found
         - login_not_found
         - account_not_found
+        - catalog_not_found
         - method_not_allowed
         - job_active
         - job_not_retryable

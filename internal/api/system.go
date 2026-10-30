@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"amdl/internal/applemusic"
 	"amdl/internal/media"
 )
 
@@ -25,6 +26,10 @@ func (s *Server) queryQuality(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := s.quality.QueryQuality(r.Context(), req)
+	if applemusic.IsNotFound(err) {
+		writeError(w, http.StatusNotFound, CodeCatalogNotFound, err.Error())
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusBadGateway, CodeUpstreamError, err.Error())
 		return

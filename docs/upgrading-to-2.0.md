@@ -93,6 +93,8 @@ needs the API changes below before it works against 2.0.
 | Wrapper login without a login API | not applicable (wrapper-manager always had one) | `501 login_unsupported` from login, two-step and logout when `wrapper.address` is a bare wrapper-lite; log in with its `--login` instead | account screens |
 | Wrapper logout | listed accounts to pick from | the request names the Apple ID; no wrapper lists its accounts | account screens |
 | Wrapper login password | trimmed | sent as typed; only an all-whitespace password is `400` | account screens |
+| Apple has no such id | `502` from `POST /quality` | `404 catalog_not_found` from `POST /quality`, `POST /lookup` and `GET /artists/{id}/albums`; other catalog failures stay `502 upstream_error` | quality and link-preview clients |
+| Quality of a song with no Enhanced HLS master | `502` | `200`, every quality `available: false` | quality clients |
 | Config `PUT` with an invalid file on disk | `500` | `422 invalid_config` | settings screens |
 | Logs with `logging.buffer_size: 0` | `GET /logs` an empty `200`; `GET /logs/stream` live records only | `503 feature_unavailable` on both | log viewers |
 | Stream cursor in snapshots | `last_event_id` on `GET /downloads` and `GET /downloads/{id}` | `event_cursor` | stream clients |
