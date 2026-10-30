@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"amdl/apps/amdl/internal/jobview"
 	"amdl/internal/capability"
 )
 
@@ -152,12 +153,21 @@ func specFlags(fs *flag.FlagSet, op capability.Operation, positional []string) m
 	return values
 }
 
+// paletteCommands answer with catalog hits that carry the artwork color
+// palette, which an agent has no use for; they leave it out unless
+// --artwork-colors asks for it, as the MCP tools do.
+var paletteCommands = map[string]bool{"search": true, "lookup": true, "artists albums": true}
+
 // passthrough builds a command that sends one request from its flags and
 // positional arguments and prints the answer as is.
 func passthrough(c capability.Capability) func(fs *flag.FlagSet) func(e *env, args []string) error {
 	return func(fs *flag.FlagSet) func(e *env, args []string) error {
 		op := capability.Lookup(c.Ops[0])
 		values := specFlags(fs, op, c.Args)
+		var palette *bool
+		if paletteCommands[c.Command] {
+			palette = fs.Bool("artwork-colors", false, "keep the artwork color palette (artwork_bg_color, artwork_text_color1 to 4) in the hits")
+		}
 		return func(e *env, args []string) error {
 			if len(args) > len(c.Args) {
 				return usageErr("too many arguments; usage: amdl %s%s", c.Command, usageLine(c, op))
@@ -168,6 +178,9 @@ func passthrough(c capability.Capability) func(fs *flag.FlagSet) func(e *env, ar
 			req, err := op.Build(values)
 			if err != nil {
 				return usageErr("%v; usage: amdl %s%s", err, c.Command, usageLine(c, op))
+			}
+			if palette != nil && !*palette {
+				return e.send(req, func(raw []byte) error { return e.out.result(jobview.DropPalette(raw)) })
 			}
 			return e.send(req, nil)
 		}

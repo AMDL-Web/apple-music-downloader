@@ -318,19 +318,25 @@ Results are JSON on stdout; errors are JSON on stderr with an exit status per ki
 of failure (2 change the input, 5 retry later, 10 needs the user's confirmation).
 Destructive commands need --yes: ask the user first.`
 
-// mcpServer is the --server a client's amdl mcp needs to reach the server this
-// run would use: the one named, else the one AMDL_URL or the current context
-// picks, which the client's process may not have. The default address and this
-// machine's own backend need none, since mcp finds them itself.
-func (e *env) mcpServer() string {
+// mcpServer is the --server a client's amdl mcp is given, so the snippet does
+// not depend on what this shell's environment holds: the one named, else the
+// URL this run resolves to, else the default address with a hint that nothing
+// answers there. This machine's own backend gets none: mcp finds it itself,
+// and its port can change between starts.
+func (e *env) mcpServer() (server, hint string) {
 	if e.server != "" {
-		return e.server
+		return e.server, ""
 	}
 	t, err := e.resolve()
-	if err != nil || t.Embedded || t.From == "default" || t.From == "desktop" {
-		return ""
+	switch {
+	case err != nil:
+		return defaultURL, "no amdl server answers yet; start one (amdl service install), or rerun with --server <url> and use that snippet"
+	case t.Embedded:
+		return "embedded", ""
+	case t.From == "desktop":
+		return "", ""
 	}
-	return t.URL
+	return t.URL, ""
 }
 
 func cliSetupCmd(*flag.FlagSet) func(e *env, args []string) error {
@@ -343,14 +349,15 @@ func cliSetupCmd(*flag.FlagSet) func(e *env, args []string) error {
 			exe = "amdl"
 		}
 		mcpArgs := []string{"mcp"}
-		if server := e.mcpServer(); server != "" {
+		server, hint := e.mcpServer()
+		if server != "" {
 			mcpArgs = append(mcpArgs, "--server", server)
 		}
 		quoted := make([]string, len(mcpArgs))
 		for i, a := range mcpArgs {
 			quoted[i] = strconv.Quote(a)
 		}
-		return e.out.result(map[string]any{
+		out := map[string]any{
 			"claude_code": "claude mcp add amdl -- " + exe + " " + strings.Join(mcpArgs, " "),
 			"codex_toml":  "[mcp_servers.amdl]\ncommand = " + strconv.Quote(exe) + "\nargs = [" + strings.Join(quoted, ", ") + "]",
 			"mcp_json":    map[string]any{"mcpServers": map[string]any{"amdl": map[string]any{"command": exe, "args": mcpArgs}}},
@@ -358,6 +365,10 @@ func cliSetupCmd(*flag.FlagSet) func(e *env, args []string) error {
 			// .claude/skills: amdl cli setup --fields skill | jq -r .skill
 			"skill":     skill.Text,
 			"agents_md": agentsNote,
-		})
+		}
+		if hint != "" {
+			out["hint"] = hint
+		}
+		return e.out.result(out)
 	}
 }

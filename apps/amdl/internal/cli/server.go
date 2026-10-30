@@ -245,15 +245,22 @@ func contextAdd(e *env, args []string) error {
 	if err != nil {
 		return err
 	}
-	ctxs.Servers[args[0]], ctxs.Current = u, args[0]
+	// A server that does not answer is saved but not made current, so a typo
+	// does not take every later command away from the server that works.
+	reachable := probe(e.ctx, u)
+	ctxs.Servers[args[0]] = u
+	if reachable {
+		ctxs.Current = args[0]
+	}
 	if err := ctxs.save(path); err != nil {
 		return err
 	}
-	reachable := probe(e.ctx, u)
+	out := map[string]any{"name": args[0], "url": u, "current": reachable, "reachable": reachable}
 	if !reachable {
-		e.note("warning: %s does not answer right now", u)
+		out["hint"] = "it does not answer now; amdl context use " + args[0] + " once it does"
+		e.note("warning: %s does not answer right now; it is saved but not current", u)
 	}
-	return e.out.result(map[string]any{"name": args[0], "url": u, "current": true, "reachable": reachable})
+	return e.out.result(out)
 }
 
 func contextUse(e *env, args []string) error {

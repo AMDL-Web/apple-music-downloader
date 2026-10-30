@@ -378,3 +378,16 @@ func TestHelpAndUsageAreASCII(t *testing.T) {
 		ascii("amdl "+strings.Join(args, " "), r.stdout+r.stderr)
 	}
 }
+
+func TestSearchLeavesOutThePaletteUnlessAsked(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"songs":{"hits":[{"id":"1","name":"Lemon","artwork_bg_color":"eae7e3","artwork_text_color1":"0d0c13"}]}}`)
+	}))
+	defer srv.Close()
+	if r := run(t, srv, "", "search", "lemon"); r.code != 0 || strings.Contains(r.stdout, "artwork_") || !strings.Contains(r.stdout, `"Lemon"`) {
+		t.Errorf("search: %+v", r)
+	}
+	if r := run(t, srv, "", "search", "lemon", "--artwork-colors"); r.code != 0 || !strings.Contains(r.stdout, "artwork_bg_color") {
+		t.Errorf("search --artwork-colors: %+v", r)
+	}
+}

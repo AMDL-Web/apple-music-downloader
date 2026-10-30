@@ -66,8 +66,9 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
   answer prints nothing. `NO_COLOR` turns colour off.
 - **`--fields a,b`** keeps only those keys: of the object itself when it has one of
   them, otherwise of each element of the arrays inside it (the jobs of a list, the hits of
-  each search group). `search` and `lookup` hits carry the artwork color palette
-  (`artwork_bg_color`, `artwork_text_color1` to `4`); `--fields id,name,url` leaves it out.
+  each search group). `search`, `lookup` and `artists albums` leave out the artwork color
+  palette (`artwork_bg_color`, `artwork_text_color1` to `4`) unless `--artwork-colors` is
+  given.
   Every command takes it except `mcp`.
 - **`jobs get` prints a summary by default**: the job, `album_progress`
   (`internal/progress#Album`, the console's album bar) and one short entry per track
@@ -78,7 +79,7 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
   `{"type":"job_snapshot","job":…}` once the job has finished. Without an id it prints the
   overview feed's messages until interrupted. `logs tail` prints `LogEntry` lines.
 - **stderr** carries notes for people only when it is a terminal: the server in use
-  (`→ nas (http://…)`) and a progress line while waiting. `--quiet` drops them. Anywhere
+  (`-> nas (http://…)`) and a progress line while waiting. `--quiet` drops them. Anywhere
   else stderr holds nothing but the error object.
 
 ## Waiting
@@ -146,9 +147,10 @@ The first of these that is set wins:
 Otherwise the command fails with `server_not_configured`, except `amdl mcp`, which
 starts anyway on `http://127.0.0.1:18080`.
 
-`amdl context add` saves the server and makes it current even when it does not answer, so
-a server can be registered before it starts; its result is `{name, url, current,
-reachable}`, with `reachable` false when the health check failed.
+`amdl context add` saves the server, and makes it current when it answers a health check.
+One that does not answer is saved but not made current, so a server can be registered
+before it starts; the result is `{name, url, current, reachable}` plus a `hint` to run
+`amdl context use <name>` once it answers.
 
 ## Serving
 
@@ -312,9 +314,10 @@ using the guest. To use another wrapper, run `amdl wrapper uninstall`, then
 ## Agent setup
 
 `amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
-nothing: the `claude mcp add` command (with `--server` set to the one named, or to the
-URL that `AMDL_URL` or the current context resolves to; the default address and this
-machine's own backend need none), a Codex `config.toml` entry, an `mcpServers` JSON
+nothing: the `claude mcp add` command (with `--server` set to the one named, else to
+the URL this run resolves to, so the snippet does not depend on the shell it ran in; when
+nothing answers it is the default address and the result carries a `hint`; this
+machine's own backend gets none, since `amdl mcp` finds it and its port can change), a Codex `config.toml` entry, an `mcpServers` JSON
 entry, a paragraph for `AGENTS.md` or `CLAUDE.md`, and the agent skill
 (`apps/amdl/skill/SKILL.md`): which way in to use, the download flow, the output, the
 exit codes and what to do on each, and the rules an agent keeps, such as never handling

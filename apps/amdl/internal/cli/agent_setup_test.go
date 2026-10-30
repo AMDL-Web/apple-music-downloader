@@ -104,8 +104,10 @@ func TestSetupCarriesTheServerThisRunWouldUse(t *testing.T) {
 		}
 		return out.ClaudeCode
 	}
-	if cmd := setup(nil); strings.Contains(cmd, "--server") {
-		t.Errorf("with nothing configured the snippet names a server: %s", cmd)
+	// With nothing configured and nothing answering, the snippet still names
+	// the address the client's mcp will try.
+	if cmd := setup(nil); !strings.HasSuffix(cmd, " mcp --server http://127.0.0.1:18080") {
+		t.Errorf("with nothing configured: %s", cmd)
 	}
 	if cmd := setup(nil, "--server", "nas"); !strings.HasSuffix(cmd, " mcp --server nas") {
 		t.Errorf("--server nas: %s", cmd)
@@ -115,6 +117,9 @@ func TestSetupCarriesTheServerThisRunWouldUse(t *testing.T) {
 	}
 	if r := withEnv(t, nil, "context", "add", "nas", "http://192.0.2.7:18570"); r.code != 0 {
 		t.Fatalf("context add: %+v", r)
+	}
+	if r := withEnv(t, nil, "context", "use", "nas"); r.code != 0 {
+		t.Fatalf("context use: %+v", r)
 	}
 	if cmd := setup(nil); !strings.HasSuffix(cmd, " mcp --server http://192.0.2.7:18570") {
 		t.Errorf("current context: %s", cmd)

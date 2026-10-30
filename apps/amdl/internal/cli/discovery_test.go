@@ -108,7 +108,7 @@ func TestContextAddReportsReachability(t *testing.T) {
 		Current   bool
 		Reachable *bool
 	}
-	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.Name != "nowhere" || !out.Current || out.Reachable == nil || *out.Reachable {
+	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.Name != "nowhere" || out.Current || out.Reachable == nil || *out.Reachable {
 		t.Errorf("got %+v", r)
 	}
 }
