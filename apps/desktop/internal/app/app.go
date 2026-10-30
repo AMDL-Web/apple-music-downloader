@@ -4,7 +4,6 @@
 package app
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"amdl/apps/desktop/internal/store"
 	appui "amdl/apps/desktop/internal/ui"
 	"amdl/internal/client"
+	"amdl/internal/local"
 )
 
 // Options are the command line's choices. The flags exist for development
@@ -53,7 +53,10 @@ type App struct {
 	shell *shell.Shell
 	view  *appui.App
 
-	backend  *mode.Running
+	// backend is the backend this app runs in standalone mode, and shared
+	// the one another program on this computer runs that it uses instead.
+	backend  *ownBackend
+	shared   local.Runtime
 	starting bool
 	startErr string
 	// gen counts connections, so a backend that finishes starting after the
@@ -235,7 +238,7 @@ func (a *App) connect() {
 	gen := a.gen
 	a.startErr = ""
 	old := a.backend
-	a.backend = nil
+	a.backend, a.shared = nil, local.Runtime{}
 	a.store.Connect(nil)
 	switch a.settings.Mode {
 	case mode.Remote:
@@ -249,50 +252,11 @@ func (a *App) connect() {
 		}
 		a.store.Connect(c)
 	case mode.Standalone:
-		a.starting = true
-		b := mode.Backend{Dirs: a.dirs, Wrapper: a.settings.WrapperAddress, DownloadsDir: a.dirs.Downloads(a.settings)}
-		if path, _, err := ffmpeg.Find(a.settings.FFmpeg, a.dirs.Resources); err == nil {
-			b.FFmpeg = path
-		} else {
-			a.log.Warn("no ffmpeg; downloads will fail at remux", "error", err)
-		}
-		go func() {
-			if old != nil {
-				a.stopBackend(old)
-			}
-			r, err := b.Start()
-			a.post(func() {
-				if gen != a.gen || a.quitting {
-					if r != nil {
-						go a.stopBackend(r)
-					}
-					return
-				}
-				a.starting = false
-				if err != nil {
-					a.startErr = err.Error()
-					a.log.Error("embedded backend did not start", "error", err)
-					return
-				}
-				a.backend = r
-				c, err := client.New(r.Base)
-				if err != nil {
-					a.startErr = err.Error()
-					return
-				}
-				a.store.Connect(c)
-			})
-		}()
+		a.startLocal(gen, old)
 	default:
 		if old != nil {
 			go a.stopBackend(old)
 		}
-	}
-}
-
-func (a *App) stopBackend(r *mode.Running) {
-	if err := r.Stop(); err != nil && err != context.Canceled {
-		a.log.Warn("embedded backend stopped with an error", "error", err)
 	}
 }
 

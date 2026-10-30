@@ -2,17 +2,19 @@
 
 The desktop app for macOS, Windows and Linux, drawn with MyGo's native UI
 (`github.com/egoist/mygo/ui`). It runs in one of two modes, both over the
-public HTTP and SSE API: a client of a remote amdl, or a standalone backend
-that runs `internal/server#Run` on a loopback listener and talks to a remote
-wrapper.
+public HTTP and SSE API: a client of a remote amdl, or standalone, where
+this computer runs the backend and a remote wrapper holds the account.
 
 ## Rules
 
 - The app reads the backend only through `internal/client`, in both modes,
   so it never depends on more than the API contract; bars and numbers come
   from `internal/progress` and `internal/format`, shared with the other Go
-  clients. The one call into the backend itself is `internal/server#Run` in
-  `apps/desktop/internal/mode`.
+  clients.
+- Standalone mode runs or finds the backend only through `internal/local`
+  (`apps/desktop/internal/app#startOrAttach`): one backend per data
+  directory. When another program, such as `amdl service`, already runs it,
+  the app uses that one; otherwise it runs its own, which the CLI finds.
 - `internal/` never imports this directory. Desktop-only code stays here.
 - No `AMDL_*` environment variables: `internal/config#UnreadEnv` warns about
   each one. Development switches are command-line flags (`main.go`).

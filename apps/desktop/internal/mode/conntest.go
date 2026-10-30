@@ -8,6 +8,7 @@ import (
 
 	"amdl/internal/client"
 	"amdl/internal/config"
+	"amdl/internal/local"
 	"amdl/internal/wrapper"
 )
 
@@ -63,7 +64,7 @@ func TestWrapper(ctx context.Context, address string) []Check {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 	cfg := config.Default().Wrapper
-	cfg.Address = WrapperURL(address)
+	cfg.Address = local.WrapperURL(address)
 	cfg.TimeoutSeconds = 10
 	w, err := wrapper.NewClient(cfg)
 	if err != nil {

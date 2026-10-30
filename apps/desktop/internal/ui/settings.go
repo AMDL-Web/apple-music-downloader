@@ -113,6 +113,16 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	if d.Mode == "" {
 		return
 	}
+	if shared := a.Act.Shared(); shared != "" && d.Mode == mode.Standalone && a.Settings.Mode == mode.Standalone {
+		ui.Row(c).Padding(10, 14).Gap(10).Radius(10).Background(k.AccentSoft).AlignItems(ui.Start).Children(func() {
+			ui.Icon(c, icLaptop).FontSize(16).TextColor(k.Accent)
+			ui.Column(c).Grow(1).Shrink(1).Gap(3).Children(func() {
+				ui.Text(c, "Using the backend already running on this computer").FontSize(12.5).FontWeight(650)
+				ui.Text(c, "Another program, such as amdl service, runs it ("+shared+"), so the app uses it instead of starting a second one. Its own wrapper and download folder apply; the settings below take effect when the app runs the backend itself.").
+					FontSize(12).TextColor(k.Muted).LineHeight(1.5)
+			})
+		})
+	}
 	card(c, k).Gap(14).Children(func() {
 		addr, name, help := &d.RemoteURL, "Server address", "The address of the amdl backend, as the web console opens it."
 		if d.Mode == mode.Standalone {

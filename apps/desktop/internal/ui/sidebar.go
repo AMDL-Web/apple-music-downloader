@@ -128,6 +128,9 @@ func (a *App) modeText() (title, sub string) {
 	case mode.Remote:
 		return "Server · remote", hostOf(a.Settings.RemoteURL)
 	case mode.Standalone:
+		if shared := a.Act.Shared(); shared != "" {
+			return "This computer · shared", shared
+		}
 		return "This computer", "wrapper " + hostOf(a.Settings.WrapperAddress)
 	}
 	return "Not connected", "choose where downloads run"

@@ -53,6 +53,10 @@ type Actions interface {
 	// why the last start failed.
 	Starting() bool
 	StartErr() string
+	// Shared names the backend another program on this computer runs, such
+	// as amdl service, which standalone mode uses instead of its own; "" when
+	// the app runs its own.
+	Shared() string
 }
 
 // App is the main window's view and the state of its screens. Use it on the

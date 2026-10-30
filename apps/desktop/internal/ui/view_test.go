@@ -22,6 +22,7 @@ func (f *fakeActions) ShowWindow()                            {}
 func (f *fakeActions) FitPanel(float32)                       {}
 func (f *fakeActions) Starting() bool                         { return false }
 func (f *fakeActions) StartErr() string                       { return "" }
+func (f *fakeActions) Shared() string                         { return "" }
 
 func newTestApp(s mode.Settings) (*App, *fakeActions) {
 	post := func(fn func()) { fn() }
