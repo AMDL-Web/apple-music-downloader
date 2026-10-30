@@ -398,8 +398,9 @@ paths:
         written to disk by a wrapper-manager. A wrapper amdl runs on this
         machine (WrapperStatus.managed) logs in by booting its guest with the
         password in a 0600 file passed through QEMU fw_cfg and deleted at the
-        guest's first console line; the guest keeps a copy on its disk until
-        the next boot, which follows at once (managed.login_residue). Its
+        guest's first console line; the guest copies it to its disk, and amdl
+        zeroes that copy before the next boot, which follows at once
+        (managed.login_residue). Its
         steps may each take up to four minutes, and a username with a colon,
         or either value with a line break or NUL, is 400 invalid_request.
         Needs a wrapper-manager or a managed wrapper; a bare wrapper-lite
@@ -1475,7 +1476,7 @@ components:
           type: boolean
           description: >-
             The guest disk may still hold the last login's arguments, password
-            included, until a serving boot has run a few seconds.
+            included: amdl zeroes them before the next serving boot.
         last_error:
           type: string
     HealthResponse:

@@ -53,6 +53,11 @@ func fakeQEMU(args []string) {
 			os.Exit(0)
 		}
 		fmt.Println("[init] wrapper-lite QEMU guest (custom args from file)")
+		// Upstream's init copies the arguments onto the guest disk.
+		if f, err := os.OpenFile(image, os.O_WRONLY|os.O_APPEND, 0); err == nil {
+			f.Write(raw)
+			f.Close()
+		}
 		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 		user, pass, _ := strings.Cut(lines[1], ":")
 		fmt.Println("2026-10-30 09:00:00.000 [INFO ] wrapper-lite login mode for " + user)
@@ -66,7 +71,10 @@ func fakeQEMU(args []string) {
 			fmt.Println("2026-10-30 09:00:00.100 [INFO ] credentialHandler: {title: , message: , 2FA: false}")
 		}
 		if pass == "right" || pass == "right123456" {
-			os.WriteFile(image, []byte("tokens"), 0o600) // the real guest keeps them on its disk too
+			if f, err := os.OpenFile(image, os.O_WRONLY, 0); err == nil { // the real guest keeps them on its disk too
+				f.WriteAt([]byte("tokens"), 0)
+				f.Close()
+			}
 		} else {
 			fmt.Println("2026-10-30 09:00:01.000 [WARN ] auth error: code=-1, message=iTunesStoreErrorCategory")
 			fmt.Println("2026-10-30 09:00:01.000 [ERROR] login failed")
@@ -82,7 +90,7 @@ func fakeQEMU(args []string) {
 	}
 	http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		regions := "[]"
-		if raw, _ := os.ReadFile(image); string(raw) == "tokens" {
+		if raw, _ := os.ReadFile(image); strings.HasPrefix(string(raw), "tokens") {
 			regions = `["us"]`
 		}
 		fmt.Fprintf(w, `{"code":0,"msg":"SUCCESS","data":{"regions":%s}}`, regions)
@@ -111,7 +119,6 @@ func TestTokenPrefixesAreRedacted(t *testing.T) {
 
 func init() {
 	pollEvery = 50 * time.Millisecond
-	residueSettle = time.Second
 	readyTimeout = 20 * time.Second
 }
 
@@ -189,8 +196,11 @@ func TestLoginWithTwoStepCode(t *testing.T) {
 			t.Errorf("the console log holds %q:\n%s", secret, log.String())
 		}
 	}
-	if !s.Managed().LoginResidue {
-		t.Error("right after a login, its arguments may still be on the guest disk")
+	if s.Managed().LoginResidue {
+		t.Error("the serving boot after a login left its arguments on the guest disk")
+	}
+	if img, _ := os.ReadFile(h.ImagePath()); strings.Contains(string(img), "2fa@example.com:right") || !strings.HasPrefix(string(img), "tokens") {
+		t.Errorf("guest disk after the login = %q", img)
 	}
 	if err := s.Logout(context.Background(), ""); err != nil {
 		t.Fatal(err)

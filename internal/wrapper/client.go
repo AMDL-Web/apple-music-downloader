@@ -107,8 +107,8 @@ type Managed struct {
 	// Guest names the installed guest: its upstream commit, or an import.
 	Guest string `json:"guest"`
 	// LoginResidue means the guest disk may still hold the last login's
-	// arguments, password included, until a serving boot has run a few
-	// seconds.
+	// arguments, password included: amdl zeroes them before the next
+	// serving boot.
 	LoginResidue bool   `json:"login_residue"`
 	LastError    string `json:"last_error,omitempty"`
 }

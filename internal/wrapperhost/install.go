@@ -159,7 +159,7 @@ func copyOut(src string, want map[string]bool, dir string) (map[string]bool, err
 // Uninstall removes the installed guest. With purge it also removes data.img,
 // which logs the account out for good.
 func (h Home) Uninstall(purge bool) error {
-	for _, p := range []string{h.path("installed.json"), h.path("assets"), h.path("state.json")} {
+	for _, p := range []string{h.path("installed.json"), h.path("assets"), h.path("state.json"), h.path("login-args")} {
 		if err := os.RemoveAll(p); err != nil {
 			return err
 		}

@@ -201,8 +201,8 @@ the login; start again from the password.
 With a wrapper amdl runs, a login boots the guest with the password in a 0600 file that
 QEMU passes to it through `fw_cfg` and that is deleted at the guest's first console line;
 the password never appears on a command line. The guest copies it onto its own disk, and
-the next boot, which follows at once, deletes it there: `managed.login_residue` stays true
-until that boot has served for a few seconds. Each step may take up to four minutes, since
+amdl zeroes that copy before the next boot, which follows at once: `managed.login_residue`
+stays true until then. Each step may take up to four minutes, since
 the guest boots twice per login and may run emulated. A username with a colon, or either
 value with a line break or NUL, is `400 invalid_request`. Logout gives the guest a fresh
 disk, whatever the username.

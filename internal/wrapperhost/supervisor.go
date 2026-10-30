@@ -29,9 +29,9 @@ type State struct {
 	// on TCG.
 	AccelFallback bool   `json:"accel_fallback,omitempty"`
 	QEMU          string `json:"qemu"`
-	// LoginResidue means a login boot ran and no serving boot has run long
-	// enough since to remove its arguments, the password among them, from
-	// the guest disk: upstream's init deletes them on the next boot.
+	// LoginResidue means a login boot ran and its arguments, the password
+	// among them, may still be on the guest disk: amdl zeroes them
+	// (scrubLogin) before the next serving boot.
 	LoginResidue bool      `json:"login_residue,omitempty"`
 	LastError    string    `json:"last_error,omitempty"`
 	Updated      time.Time `json:"updated"`
@@ -82,18 +82,18 @@ type Supervisor struct {
 	// run is Run's context: serving guests live as long as it, not as long
 	// as the request that restarted them after a login.
 	run context.Context
+	// unscrubbed means no serving boot of this supervisor has scrubbed the
+	// disk yet, which covers a process that died during a login.
+	unscrubbed bool
 }
 
 // Tunables: how long a TCG guest may take to boot, how long a login may
 // wait for lite before and after the two-step code, how long a logged-in
-// guest may take to serve a storefront, how long a serving boot must run for
-// its disk to hold init's deletion of the login arguments (ext4 commits every
-// 5 seconds).
+// guest may take to serve a storefront.
 var (
 	readyTimeout   = 3 * time.Minute
 	loginStepLimit = 4 * time.Minute
 	storefrontWait = 20 * time.Second
-	residueSettle  = 15 * time.Second
 	pollEvery      = 2 * time.Second
 )
 
@@ -115,8 +115,12 @@ func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, erro
 	s.st = State{Mode: "stopped", Port: in.Port, Accel: accel, QEMU: qemu}
 	if prev, err := h.ReadState(); err == nil {
 		reapStale(prev)
-		s.st.LoginResidue = prev.LoginResidue
+		s.st.LoginResidue = prev.LoginResidue || prev.Mode == "login"
 	}
+	// No login runs yet: a file left here is from a process that died in
+	// one. The first serving boot scrubs the disk the same way.
+	_ = os.Remove(h.path("login-args")) // absent is the usual case
+	s.unscrubbed = true
 	return s, nil
 }
 
@@ -189,9 +193,9 @@ func (s *Supervisor) Run(ctx context.Context) {
 }
 
 // startServingLocked boots the guest without arguments, so its lite serves
-// on guestPort and init removes what a login boot left. A failure is retried
-// on the next turn after a backoff; a non-TCG accelerator that fails at once
-// is replaced by TCG.
+// on guestPort, after zeroing what a login boot left on its disk. A failure
+// is retried on the next turn after a backoff; a non-TCG accelerator that
+// fails at once is replaced by TCG.
 func (s *Supervisor) startServingLocked() {
 	ctx := s.run
 	if s.g != nil && s.g.exited() {
@@ -199,6 +203,19 @@ func (s *Supervisor) startServingLocked() {
 			return
 		}
 		s.fails++
+	}
+	if s.unscrubbed || s.st.LoginResidue {
+		n, err := scrubLogin(s.home.ImagePath())
+		if err != nil {
+			fmt.Fprintf(s.log, "[amdl] could not clear the login's arguments from the guest disk: %v\n", err)
+			s.setState(func(st *State) { st.LoginResidue = true })
+		} else {
+			if n > 0 {
+				fmt.Fprintf(s.log, "[amdl] cleared %d copies of a login's arguments from the guest disk\n", n)
+			}
+			s.unscrubbed = false
+			s.setState(func(st *State) { st.LoginResidue = false })
+		}
 	}
 	kernel, initrd := s.home.assets(s.in)
 	g, err := startGuest(s.qemu, RunOpts{Accel: s.st.Accel, Kernel: kernel, Initrd: initrd, Image: s.home.ImagePath(),
@@ -229,15 +246,6 @@ func (s *Supervisor) startServingLocked() {
 		}
 		s.fails = 0
 		s.setState(func(st *State) { st.Mode, st.LastError = "serving", "" })
-		if s.st.LoginResidue {
-			time.AfterFunc(residueSettle, func() {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				if s.g == g && !g.exited() {
-					s.setState(func(st *State) { st.LoginResidue = false })
-				}
-			})
-		}
 	}()
 }
 
@@ -387,8 +395,7 @@ func (s *Supervisor) bootLoginLocked(x *session) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"--login", x.user + ":" + x.pass, "--base-dir", "/data", "--host", "0.0.0.0", "--port", fmt.Sprint(guestPort)}
-	_, err = io.WriteString(f, strings.Join(args, "\n")+"\n")
+	_, err = io.WriteString(f, strings.Join(loginArgs(x.user, x.pass), "\n")+"\n")
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}

@@ -191,9 +191,10 @@ measured yet.
 Known limits, all upstream's:
 
 - A login's password reaches the guest in a 0600 file that is deleted once the guest
-  has read it, never on a command line. The guest copies it to its own disk, and the boot
-  that follows each login deletes it; `managed.login_residue` in `amdl wrapper status`
-  is true until then. The disk, `data.img` in the data directory's `wrapper/`, holds the
+  has read it, never on a command line. The guest copies it to its own disk, where deleting
+  the file leaves its blocks, so amdl zeroes every copy in `data.img` before the boot
+  that follows each login, and once when the backend starts; `managed.login_residue`
+  in `amdl wrapper status` is true until then. The disk, `data.img` in the data directory's `wrapper/`, holds the
   account's tokens: it stays owner-only and survives `amdl wrapper update`.
 - wrapper-lite does not verify Apple's TLS certificates
   ([upstream issue #75](https://github.com/WorldObservationLog/wrapper/issues/75)).
