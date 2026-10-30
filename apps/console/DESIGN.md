@@ -419,7 +419,8 @@ and motion covers.
   also goes once the feed is live again, after 3 s up and not while the pointer
   or focus is on the toasts; the toast list is
   `ui/toasts.js`;
-  `.toast` > `.icon`, `.toast-msg`, `a.toast-action`, Dismiss),
+  `.toast` > `.icon`, `.toast-msg`, `a.toast-action`, Dismiss; the icon and
+  the buttons sit on the message's first line),
   completion toasts (`app.watchJobs(ids)`: when watched jobs end, one toast
   per 3 s burst, "Album X finished" with Open to its drawer or "3 downloads
   finished" with a link to the Queue, `lib/watch.js`; such a job is not also

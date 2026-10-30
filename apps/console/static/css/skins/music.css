@@ -35,7 +35,7 @@
   --border-subtle: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1));
   --border-control: light-dark(#86868b, #6e6e73);
   --text-primary: light-dark(#1d1d1f, #f5f5f7);
-  --text-secondary: light-dark(#6e6e73, #a1a1a6);
+  --text-secondary: light-dark(#636368, #a1a1a6);
   --text-disabled: light-dark(#86868b, #6e6e73);
 
   /* Accent: Apple Music red, solid only on the primary action (primary
@@ -183,7 +183,7 @@
   --switch-on: light-dark(#636366, #8e8e93);
   --check-size: 22px;
   /* The select chevron, drawn in --text-secondary (a data image cannot read a token). */
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%236e6e73' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23636368' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 @media (prefers-color-scheme: dark) {
@@ -2520,8 +2520,7 @@
 }
 
 :root[data-skin="music"] .toast {
-  min-height: 48px;
-  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+  padding: calc(var(--s-2) + var(--s-0_5)) var(--s-2) calc(var(--s-2) + var(--s-0_5)) var(--s-4);
   border: 0;
   border-radius: var(--r-notice);
   background: var(--toast-bg);

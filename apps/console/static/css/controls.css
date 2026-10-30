@@ -114,6 +114,11 @@
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 
+/* The track scrolls sideways on a phone, so it clips: the ring goes inside. */
+.seg-btn:focus-visible {
+  outline-offset: -2px;
+}
+
 .seg-btn:hover {
   color: var(--text-primary);
 }

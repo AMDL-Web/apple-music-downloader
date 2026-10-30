@@ -70,6 +70,9 @@
   --control-h: 32px;
   --control-h-sm: 28px;
   --touch: 44px;
+  /* A toast's first line: its buttons' height, which a one-line message is
+     padded to (css/responsive.css raises it to --touch on a phone). */
+  --toast-row: var(--control-h-sm);
   --icon: 16px;
   --icon-sm: 14px;
   --icon-nav: 20px;

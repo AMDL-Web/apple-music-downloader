@@ -134,15 +134,17 @@ function LinkRow({ entry, status, issue, prior, picked, row }) {
     aria-busy=${loading ? 'true' : undefined}
     style=${paletteStyle(palette)}
   >
-    <input
-      type="checkbox"
-      class="job-check-input new-link-pick"
-      checked=${!blocked && picked}
-      disabled=${blocked}
-      aria-label=${blocked ? `${name}: can't be downloaded` : `Download ${name}`}
-      title=${blocked ? "Can't be downloaded" : undefined}
-      onChange=${(e) => row.onPick(entry.url, e.currentTarget.checked)}
-    />
+    <label class="new-link-pick">
+      <input
+        type="checkbox"
+        class="job-check-input"
+        checked=${!blocked && picked}
+        disabled=${blocked}
+        aria-label=${blocked ? `${name}: can't be downloaded` : `Download ${name}`}
+        title=${blocked ? "Can't be downloaded" : undefined}
+        onChange=${(e) => row.onPick(entry.url, e.currentTarget.checked)}
+      />
+    </label>
     ${data
       ? html`<${Artwork} url=${data.artwork_url} bg=${palette && palette.bg} px=${100} widths=${LINK_ART} sizes="48px" className="art-48 new-link-art" />`
       : html`<div class="art art-48 new-link-art" aria-hidden="true">

@@ -175,14 +175,20 @@
   grid-area: art;
 }
 
-/* The include checkbox (the Queue's selection control), centered on the cover. */
+/* The include checkbox (the Queue's selection control), centered on the
+   cover. Its label reaches out to a 44 px square around the 18 px box, so it
+   is easy to hit on a phone, without moving anything. */
 .new-link-pick {
   grid-area: pick;
   align-self: center;
+  display: flex;
+  padding: calc((var(--touch) - 18px) / 2);
+  margin: calc((18px - var(--touch)) / 2);
+  cursor: pointer;
 }
 
 /* A row that can't be sent has nothing to tick: its slot stays empty. */
-.new-link-pick:disabled {
+.new-link-pick:has(:disabled) {
   visibility: hidden;
 }
 

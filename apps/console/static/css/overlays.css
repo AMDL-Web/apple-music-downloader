@@ -173,9 +173,11 @@
   pointer-events: none;
 }
 
+/* Items sit on the first line (--toast-row): the icon and buttons stay
+   beside a long message's first line instead of its middle. */
 .toast {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--s-2);
   min-width: 240px;
   max-width: 400px;
@@ -191,8 +193,18 @@
 .toast-msg {
   flex: 1;
   min-width: 0;
+  padding-block: calc((var(--toast-row) - 1lh) / 2);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+}
+
+.toast > .icon {
+  flex-shrink: 0;
+  margin-top: calc((var(--toast-row) - var(--icon)) / 2);
+}
+
+.toast > .btn {
+  margin-top: calc((var(--toast-row) - var(--control-h-sm)) / 2);
 }
 
 /* Dialog panels (ui/dialogs.js) take focus only when they hold no control. */

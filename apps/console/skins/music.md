@@ -36,7 +36,7 @@ Contrast is measured on `--bg-surface` (the grouped surface) unless noted.
 | `--bg-chrome` | `rgba(246,246,248,.86)` | `rgba(28,28,30,.82)` | sidebar, tab bar (blurred) | |
 | `--topbar-bg` | `rgba(255,255,255,.78)` | `rgba(0,0,0,.72)` | sticky top bar (blurred, no rule) | |
 | `--text-primary` | `#1d1d1f` | `#f5f5f7` | text | 15.6 / 15.4 |
-| `--text-secondary` | `#6e6e73` | `#a1a1a6` | labels, meta | 4.66 / 6.61 (5.07 / 8.16 on canvas) |
+| `--text-secondary` | `#636368` | `#a1a1a6` | labels, meta; light passes 4.5:1 on every fill it sits on (4.67 on `--bg-selected`) | 5.49 / 6.61 (5.97 / 8.16 on canvas) |
 | `--border-control` | `#86868b` | `#6e6e73` | outlined remaining cells, field outline | 3.33 / 3.36 |
 | `--accent` | `#e0213a` | same | the only red fill: primary buttons, New download (sidebar pill, rail disc, tab mark), and a switch that is on, the one fill that is not an action (an Apple toggle in the app's tint; the fill says the state) | white on it 4.72 |
 | `--accent-hover` / `-pressed` | `#c81c33` / `#b0172c` | same | primary button hover / pressed, the current page's New download pill | white 5.72 / 6.99 |
@@ -52,7 +52,7 @@ Contrast is measured on `--bg-surface` (the grouped surface) unless noted.
 | `--neutral` | `#77777c` | `#8e8e93` | off, queued (marks) | 3.6 / 5.22 |
 | `--skipped` / `-text` | `#8944ab` | `#bf5af2` / `#da8fff` | already in library | 5.54 / 7.58 |
 | `--on-role` | `#ffffff` | `#000000` | glyph on a solid health tile, the bar in a partly checked circle | 4.3+ / 6.6+ |
-| `--select-chevron` | chevron in `#6e6e73` | in `#a1a1a6` | the select arrow (a data image, so it has a value per theme) | non-text |
+| `--select-chevron` | chevron in `#636368` | in `#a1a1a6` | the select arrow (a data image, so it has a value per theme) | non-text |
 | `--track` | `#e8e8ed` | `#3a3a3c` | empty bars | |
 | `--chart-bar` | `#6b7b93` | `#8d9bb3` | per-day chart bars: blue-gray, so red stays with the primary action and failures | 3.95 / 6.05 |
 | `--series-1` to `-4` | `#007aff`, `#ff9500`, `#8944ab`, `#77777c` | `#0a84ff`, `#ff9f0a`, `#bf5af2`, `#8e8e93` | formats bar and legend, by position | non-text |

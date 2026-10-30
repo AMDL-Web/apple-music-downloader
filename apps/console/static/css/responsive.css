@@ -505,6 +505,24 @@
    Targets grow with min-height / min-width or an invisible hit area, never
    the drawn size of a chip or a switch. */
 @media (max-width: 639px), (pointer: coarse) {
+  .toast {
+    --toast-row: var(--touch);
+  }
+
+  .toast > .btn {
+    margin-top: 0;
+  }
+
+  /* Text toggles that are the only way to their content: a full 44 px to tap. */
+  .drawer-details > summary,
+  .notice-more > summary {
+    padding-block: calc((var(--touch) - 1lh) / 2);
+  }
+
+  .wrap-switch {
+    min-height: var(--touch);
+  }
+
   /* 16 px or more, or iOS Safari zooms the page into a focused field. */
   :is(textarea, input, select, .select, .field-input, .new-input, .search input) {
     font-size: var(--fs-16);
