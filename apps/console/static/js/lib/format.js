@@ -225,6 +225,22 @@ export function inputLabel(input) {
   }
 }
 
+export const LINK_SHOWN = 36;
+
+/**
+ * An input URL for a tight spot (a list row, a chip): inputLabel without the
+ * music.apple.com host every link shares, cut in the middle past `max`
+ * characters, so rows of different links never read the same up to an
+ * ellipsis: "cn/album/mr.-morale-%26-…/1623854804".
+ */
+export function linkLabel(input, max = LINK_SHOWN) {
+  const label = inputLabel(input).replace(/^music\.apple\.com\//, '');
+  if (label.length <= max) return label;
+  const keep = max - 1;
+  const tail = Math.ceil(keep * 0.55);
+  return `${label.slice(0, keep - tail)}…${label.slice(label.length - tail)}`;
+}
+
 /** The line that stands where an unresolved job's artist would be, by status. */
 export function unresolvedHint(job) {
   switch (job && job.status) {

@@ -41,7 +41,7 @@ test('a failed link reads Link not found for a 404, with the link under it and t
   const job = { id: 'x', status: 'failed', type: 'album', storefront: 'us', input: 'https://music.apple.com/us/album/not-a-real-album/1', error: 'catalog request failed: 404 Not Found: {"errors":[]}' };
   const v = rowView(job, 'us');
   assert.equal(v.title, 'Link not found');
-  assert.equal(v.sub, 'music.apple.com/us/album/not-a-real-album/1');
+  assert.equal(v.sub, 'us/album/not-a-real-album/1');
   assert.equal(v.reason, 'Apple Music has nothing at this link (404)');
   assert.equal(v.progress, false);
   assert.equal(v.mono, false);

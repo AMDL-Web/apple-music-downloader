@@ -3,7 +3,7 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, settle } from '../api.js';
-import { count, bytes, jobTitle, isUnresolved, inputLabel, errorSummary } from '../lib/format.js';
+import { count, bytes, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/status.js';
 import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
@@ -248,7 +248,7 @@ function Attention({ onKnown }) {
             ? null
             : html`<a class="attention-link" href=${buildHash('overview', {}, job.id)} dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</a>`}
           ${isUnresolved(job)
-            ? html`<a class="attention-link attention-input" href=${buildHash('queue', {}, job.id)} title=${job.input}>${inputLabel(job.input)}</a>`
+            ? html`<a class="attention-link attention-input" href=${buildHash('queue', {}, job.id)} title=${job.input}>${linkLabel(job.input)}</a>`
             : html`<span class="attention-input" title=${job.input}>${job.input}</span>`}
           <span class="attention-time"><${RelTime} value=${job.finished_at || job.updated_at} /></span>
         </span>

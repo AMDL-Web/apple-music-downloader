@@ -13,12 +13,9 @@
 // issue, an earlier job still queued or running), until Show all.
 
 import { html, useState } from '../ui/preact.js';
-import { artPalette, paletteStyle, shortDate, artWidths } from '../lib/format.js';
+import { artPalette, paletteStyle, shortDate, artWidths, linkLabel } from '../lib/format.js';
 import { kindLabel, previewFacts, needsAttention, ROWS_SHOWN, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { Card, Button, Icon, Artwork, Skeleton } from '../ui/components.js';
-
-/** The link without its scheme, the title of a row with no preview. */
-const bare = (url) => url.replace(/^https?:\/\//i, '');
 
 /** Quality words with their "24-bit / 44.1 kHz" kept on one line. */
 const keepSpec = (text) => {
@@ -109,7 +106,9 @@ function LinkRow({ entry, status, issue, prior, picked, row }) {
   const kind = link ? link.kind : 'invalid';
   const typeText = data && data.type ? kindLabel(data.type) : link ? kindLabel(link.kind, link.trackId) : 'Not Apple Music';
   const loading = status.state === 'loading' || status.state === 'queued';
-  const name = facts ? facts.title : bare(entry.url);
+  // A row with no preview is titled by its link, cut like a Queue row's so
+  // rows of the same storefront never read the same up to an ellipsis.
+  const name = facts ? facts.title : linkLabel(entry.url);
   const cls = ['new-link', palette ? 'has-palette' : ''].filter(Boolean).join(' ');
   const blocked = !link || Boolean(issue && issue.blocking);
   const artist = kind === 'artist' && !blocked;

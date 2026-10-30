@@ -30,6 +30,8 @@ import {
   jobSubtitle,
   isUnresolved,
   inputLabel,
+  linkLabel,
+  LINK_SHOWN,
   unresolvedHint,
   errorSummary,
   shortId,
@@ -330,6 +332,12 @@ test('an unresolved job is shown by its link, not by a guessed title', () => {
   assert.equal(inputLabel('https://music.apple.com/us/album/after-hours/1499378108?i=3&l=en'), 'music.apple.com/us/album/after-hours/1499378108');
   assert.equal(inputLabel('https://music.apple.com/us/album/x/'), 'music.apple.com/us/album/x');
   assert.equal(inputLabel('not a url'), 'not a url');
+  assert.equal(linkLabel('https://music.apple.com/cn/album/1234567890'), 'cn/album/1234567890');
+  const cut = linkLabel('https://music.apple.com/cn/album/mr.-morale-%26-the-big-steppers/1623854804');
+  assert.equal(cut.length, LINK_SHOWN);
+  assert.ok(cut.startsWith('cn/album/'));
+  assert.ok(cut.endsWith('/1623854804'), cut);
+  assert.equal(linkLabel('https://example.com/x'), 'example.com/x');
   assert.equal(unresolvedHint({ status: 'queued' }), 'Not resolved yet');
   assert.equal(unresolvedHint({ status: 'failed' }), "Couldn't be resolved");
   assert.equal(unresolvedHint({ status: 'cancelled' }), 'Cancelled before it resolved');

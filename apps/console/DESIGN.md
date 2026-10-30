@@ -261,8 +261,10 @@ and motion covers.
 - **Job row**: cover, facts, title, artist/curator · type · storefront,
   progress, status badge, relative time, chevron. Indeterminate "Resolving"
   while `total_items` is 0; a running one-track job with nothing finished reads
-  "Working" instead of a "0 / 1" that never moves. A job without a title shows its link (host and path)
-  muted, with a hint line instead of an artist. A failed job shows a one-line
+  "Working" instead of a "0 / 1" that never moves. A job without a title shows its link (`lib/format.js`
+  `linkLabel`: the path without the shared music.apple.com host, cut in the
+  middle so two links never read the same up to an ellipsis) muted, with a
+  hint line instead of an artist. A failed job shows a one-line
   reason (`errorSummary` in `lib/format.js`), never raw JSON; a stored legacy
   catalog failure ("catalog request failed: 404 Not Found") reads in plain words
   (`legacyCatalogError`), and the drawer keeps the stored text under "Full error". Under 640 px it is a two-line card.

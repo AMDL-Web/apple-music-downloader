@@ -1,7 +1,7 @@
 // What a job list row and the job drawer say about a job. Pure: the views
 // (views/queue-row.js, views/drawer*.js) only draw what these return.
 
-import { jobTitle, jobSubtitle, typeLabel, isUnresolved, inputLabel, unresolvedHint, errorSummary, codecLabel, codecMeaning, bytes } from './format.js';
+import { jobTitle, jobSubtitle, typeLabel, isUnresolved, linkLabel, unresolvedHint, errorSummary, codecLabel, codecMeaning, bytes } from './format.js';
 import { jobCounts, jobStatusView, activityView } from './status.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -44,9 +44,9 @@ export function rowView(job, defaultStorefront = '') {
   let mono = false;
   if (unresolved && failed) {
     title = isNotFound(job.error) ? 'Link not found' : "Couldn't resolve this link";
-    parts.push(inputLabel(job.input));
+    parts.push(linkLabel(job.input));
   } else if (unresolved) {
-    title = inputLabel(job.input) || jobTitle(job);
+    title = linkLabel(job.input) || jobTitle(job);
     mono = true;
     parts.push(unresolvedHint(job));
   } else {

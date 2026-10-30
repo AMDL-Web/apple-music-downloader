@@ -3,7 +3,7 @@
 
 import { html, useState, useEffect, useRef, useLayoutEffect } from '../ui/preact.js';
 import { listLogs, listDownloads, getDownload, logStreamUrl, parseData } from '../api.js';
-import { shortId, count, inputLabel } from '../lib/format.js';
+import { shortId, count, linkLabel } from '../lib/format.js';
 import { logLevelView } from '../lib/status.js';
 import { appendLogs, emptyLogs, LOG_CAP } from '../lib/store.js';
 import { StreamClient, claimSecondary, releaseSecondary, createCoalescer, isFeatureUnavailable } from '../lib/stream.js';
@@ -25,7 +25,7 @@ function useJobNames(app, filterJobId) {
   const [names, setNames] = useState(() => new Map());
   useEffect(() => {
     let live = true;
-    const name = (job) => job.title || inputLabel(job.input);
+    const name = (job) => job.title || linkLabel(job.input);
     listDownloads({ limit: 200, sort: 'updated_at', order: 'desc' }).then(
       (body) => {
         if (!live) return;
@@ -56,7 +56,7 @@ function useJobNames(app, filterJobId) {
     let live = true;
     getDownload(filterJobId).then(
       (body) => {
-        if (live && body && body.job) setNames((m) => new Map(m).set(filterJobId, body.job.title || inputLabel(body.job.input)));
+        if (live && body && body.job) setNames((m) => new Map(m).set(filterJobId, body.job.title || linkLabel(body.job.input)));
       },
       () => {},
     );
