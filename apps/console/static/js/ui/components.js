@@ -96,12 +96,12 @@ export function JobProgress({ job }) {
   </div>`;
 }
 
-/** Seven pipeline stage segments for one item; download and decrypt fill to their fraction. */
+/** Seven pipeline stage segments for one item, each as wide as its share of the run; download and decrypt fill to their fraction. */
 export function StageTrack({ item }) {
   const segs = stageSegments(item);
   return html`<div class="stages" role="img" aria-label=${stageText(segs)}>
     ${segs.map(
-      (s) => html`<span key=${s.key} class="stage" data-state=${s.state} title=${s.state === 'unverified' ? `${s.label}: not verified` : s.label}>
+      (s) => html`<span key=${s.key} class="stage" data-key=${s.key} data-state=${s.state} style=${{ '--w': String(s.weight) }} title=${s.state === 'unverified' ? `${s.label}: not verified` : s.label}>
         <span class="stage-fill" style=${{ '--f': String(s.fraction) }}></span>
       </span>`,
     )}

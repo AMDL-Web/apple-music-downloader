@@ -463,15 +463,18 @@
   white-space: nowrap;
 }
 
+/* Each segment grows by its stage's share (--w, lib/status.js STAGE_WEIGHTS);
+   the short stages keep a visible minimum on a narrow bar. */
 .stages {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  display: flex;
   gap: var(--s-0_5);
   width: 100%;
   min-width: 112px;
 }
 
 .stage {
+  flex: var(--w, 1) 1 0;
+  min-width: 6px;
   position: relative;
   height: var(--bar-h);
   border-radius: var(--r-bar);
