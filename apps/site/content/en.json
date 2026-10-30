@@ -1,0 +1,283 @@
+{
+  "meta": {
+    "title": "AMDL: Apple Music to your own disk, lossless and tagged",
+    "description": "AMDL is a self-hosted, open-source downloader. Paste an Apple Music link or search the catalog, and it saves finished, tagged .m4a files: ALAC up to 24-bit/192 kHz, Dolby Atmos or AAC. Use it from a web console, a terminal, or an AI agent over MCP.",
+    "ogAlt": "AMDL: Apple Music, on your own disk."
+  },
+  "ui": {
+    "skip": "Skip to content",
+    "nav": "Sections",
+    "theme": "Switch between light and dark",
+    "github": "AMDL on GitHub",
+    "otherLang": "中文",
+    "otherLangLabel": "阅读中文版",
+    "copy": "Copy",
+    "copied": "Copied",
+    "home": "AMDL home"
+  },
+  "nav": {
+    "products": "Products",
+    "quickStart": "Quick start",
+    "agents": "For agents",
+    "docs": "Docs"
+  },
+  "hero": {
+    "eyebrow": "2.0 in development · Self-hosted · Open source",
+    "title": "Apple Music,\non your own disk.",
+    "subtitle": "Lossless, tagged.",
+    "lead": "Paste a song, album, playlist, artist or station link, or search the catalog. AMDL downloads, decrypts, remuxes and tags every track into a finished `.m4a`: ALAC up to 24-bit/192 kHz, Dolby Atmos or AAC.",
+    "cta": "Get started"
+  },
+  "stats": [
+    {
+      "value": "192",
+      "unit": "kHz",
+      "label": "ALAC, up to 24-bit"
+    },
+    {
+      "value": "5",
+      "unit": "",
+      "label": "Kinds of link, song to station"
+    },
+    {
+      "value": "1",
+      "unit": "binary",
+      "label": "Server, CLI, MCP and TUI"
+    },
+    {
+      "value": "0",
+      "unit": "",
+      "label": "Apple developer keys needed"
+    }
+  ],
+  "how": {
+    "kicker": "01 · How it works",
+    "title": "From a link to a finished file.",
+    "lead": "By default, when one codec runs out of attempts, the next one on your list takes over, with AAC-LC as the last resort.",
+    "steps": [
+      {
+        "title": "Resolve",
+        "text": "Reads the song, album, playlist, artist or station behind the link from Apple's catalog, with each track's metadata."
+      },
+      {
+        "title": "Download",
+        "text": "Fetches the encrypted segments from Apple's CDN and retries with backoff."
+      },
+      {
+        "title": "Decrypt",
+        "text": "In process, in pure Go. Your wrapper supplies a key template; AMDL itself holds no Apple account and no keys."
+      },
+      {
+        "title": "Remux",
+        "text": "Decrypted samples go straight into ffmpeg, so no plaintext copy of the whole track is written to disk."
+      },
+      {
+        "title": "Tag",
+        "text": "Verifies the file, then writes the metadata, artwork and lyrics."
+      },
+      {
+        "title": "Save",
+        "text": "Moves the finished file to the path your template gives it. A file that is already there is skipped, unless you ask for it to be overwritten."
+      }
+    ]
+  },
+  "products": {
+    "kicker": "02 · Products",
+    "title": "One core, four ways in.",
+    "lead": "Every product runs on the same Go core. Deploy the server once, then use whichever fits the moment.",
+    "server": {
+      "label": "Server",
+      "name": "amdl serve",
+      "text": "The backend you deploy: one Go process with a SQLite database, a REST and Server-Sent Events API under `/api/v1`, and the web console on the same port. Images for amd64 and arm64 are on GHCR.",
+      "points": [
+        "Jobs survive a restart and pick up where they stopped.",
+        "Downloads, decryption and wrapper calls share process-wide pools.",
+        "No accounts or auth, on purpose: put a reverse proxy in front."
+      ],
+      "codeTitle": "Submit an album, follow it"
+    },
+    "console": {
+      "label": "Web console",
+      "name": "Web console",
+      "text": "The browser client, embedded in the server at `/console/`. Search the catalog or paste links, watch each track move through its stages, and browse what you saved in each album's own colors.",
+      "points": [
+        "A live queue with per-track stages and an album progress bar",
+        "Apple's animated covers, where an album has one",
+        "Logs, system health and settings, on desktop and phone"
+      ],
+      "shots": {
+        "overview": "The console's overview: two albums downloading in the live queue, the latest finished album and a wall of covers below",
+        "drawer": "A finished album's drawer in its own colors: the album progress bar and every track with its length and size",
+        "search": "New download: catalog search results for Yorushika with each song's audio formats",
+        "phone": "A finished album's drawer on a phone"
+      }
+    },
+    "terminal": {
+      "label": "Terminal",
+      "name": "CLI · MCP · TUI",
+      "text": "`amdl` is one binary with three faces. Scripts and agents get JSON on stdout and an exit status for each kind of failure. `amdl mcp` serves the same commands as MCP tools. And `amdl` on its own opens an interactive interface: paste a link, or type to search.",
+      "points": [
+        "Renders inline, so finished jobs stay in your terminal's scrollback.",
+        "One card per running job, colored after its album artwork.",
+        "No server of your own? `amdl service install` runs the backend on this machine as a background service that starts at login."
+      ],
+      "shot": "amdl's terminal interface: a job card with the album progress bar and per-track stage bars, a list of search results, the prompt and a status line"
+    },
+    "desktop": {
+      "label": "Desktop",
+      "badge": "In development",
+      "name": "Desktop app",
+      "text": "A native app for macOS, Windows and Linux, drawn with MyGo's native UI. It works as a client of your server, or runs the pipeline itself and talks to a remote wrapper, sharing one backend and one download history with the command line. It is not released yet.",
+      "shot": "A development build of the desktop app on Windows, searching the catalog for Yorushika",
+      "caption": "Development build on Windows"
+    }
+  },
+  "features": {
+    "kicker": "03 · Details",
+    "title": "The parts you would otherwise script.",
+    "items": [
+      {
+        "title": "Codec fallback",
+        "text": "List codecs in order: ALAC, Dolby Atmos, AAC and more. Each gets its own retry budget before the next one takes over.",
+        "doc": "docs/download-pipeline.md#retries-and-codec-fallback"
+      },
+      {
+        "title": "Lyrics",
+        "text": "Embedded as LRC, timed by line or by word, with translation and romanization if you want them. `.lrc` and `.ttml` files next to the track, too.",
+        "doc": "docs/download-pipeline.md#lyrics"
+      },
+      {
+        "title": "Animated covers",
+        "text": "Apple's motion artwork plays in the console when an album has it. Looking it up never holds up a download.",
+        "doc": "docs/configuration.md#catalog-tokens-and-the-hi-res-manifest"
+      },
+      {
+        "title": "Library sync",
+        "text": "Watches your Apple Music library and downloads the album behind each song you add.",
+        "doc": "docs/automation.md#library-sync"
+      },
+      {
+        "title": "Job hooks",
+        "text": "Call a webhook or run a command when a job is queued or ends, for example to refresh your media server.",
+        "doc": "docs/automation.md#job-hooks"
+      },
+      {
+        "title": "Your folder layout",
+        "text": "Path templates for songs, albums, artists, playlists and stations, built from variables such as `{ArtistName}` and `{AlbumName}`.",
+        "doc": "docs/download-pipeline.md#output-paths"
+      }
+    ]
+  },
+  "quickStart": {
+    "kicker": "04 · Quick start",
+    "title": "Up and running in a few minutes.",
+    "lead": "You need an Apple Music subscription and a wrapper: the service that holds your Apple Music login. Run the wrapper on a Linux box, or let amdl run it in a QEMU guest on your own machine.",
+    "tabs": {
+      "binary": "Binary",
+      "docker": "Docker"
+    },
+    "binary": {
+      "steps": [
+        {
+          "title": "Install amdl",
+          "text": "The script checks the release against its `SHA256SUMS` and puts `amdl` in `~/.local/bin`, printing the line to add to `PATH` if that folder is not on it. On Windows it goes to your user programs folder."
+        },
+        {
+          "title": "Check ffmpeg",
+          "text": "Every track goes through ffmpeg. `amdl doctor` says whether this machine has it, and prints the command that installs it if not."
+        },
+        {
+          "title": "Get a wrapper",
+          "text": "This downloads upstream's wrapper guest and checks it against a pinned hash; it needs QEMU, which it offers to install. Already run a wrapper on a NAS or server? Skip this step."
+        },
+        {
+          "title": "Run the backend",
+          "text": "This registers the backend as a service that starts at login, and it starts the wrapper with it. For a wrapper elsewhere, add `--wrapper <its address>`. `amdl service status` prints the console's address: sign in on its Account page."
+        }
+      ]
+    },
+    "docker": {
+      "steps": [
+        {
+          "title": "Get the Compose file",
+          "text": "In an empty directory. Create `data/downloads` first and give it to the backend's user (`PUID:PGID`, 1000:1000 unless you set them); otherwise Docker creates it as root. The first start adds `configs/` and the rest of `data/`."
+        },
+        {
+          "title": "Turn on the wrapper",
+          "text": "In `docker-compose.yml`, uncomment the `wrapper-manager` service and the `volumes:` block at the end of the file, then set the wrapper address:"
+        },
+        {
+          "title": "Start both",
+          "text": "Compose builds wrapper-manager from its v2 branch, so the host needs internet access."
+        },
+        {
+          "title": "Sign in and download",
+          "text": "Open `http://localhost:18080/`, go to **Settings › Account** and sign in with your Apple ID. Paste a link into **New download**; finished files land in `./data/downloads`."
+        }
+      ]
+    },
+    "nas": {
+      "label": "NAS",
+      "text": "The wrapper needs user namespaces: `unshare -Ur true` must succeed. On a host without them, such as Synology DSM, use wrapper-manager v2's QEMU variant, which needs `/dev/kvm`.",
+      "link": "Wrapper setup"
+    },
+    "more": "Every option of both paths is in the [install guide]({blob}/docs/install.md) and the [deployment guide]({blob}/docs/deployment.md)."
+  },
+  "agents": {
+    "kicker": "05 · For AI agents",
+    "title": "Made for agents to drive.",
+    "lead": "Every result is JSON on stdout, and every error a JSON object on stderr with an exit status for each kind of failure. `amdl cli search` finds the command for a task, `--dry-run` prints a change instead of sending it, and a destructive command asks first, or needs `--yes` outside a terminal.",
+    "tabs": {
+      "cli": "CLI",
+      "mcp": "MCP"
+    },
+    "mcpNote": "`amdl cli setup` prints everything a coding agent needs to connect and changes no files: the `claude mcp add` command, a Codex `config.toml` entry, an `mcpServers` entry, a paragraph for `AGENTS.md` and an agent skill. From a search to a download then takes two calls, `search_catalog` and `start_download`, and `wait_for_job` reports the album's progress while it waits. No tool signs the wrapper in, so a password never passes through a model.",
+    "install": "Releases attach `amdl` for Linux, macOS and Windows, and the server image ships it at `/app/amdl`.",
+    "cliDoc": "Command line reference"
+  },
+  "notice": {
+    "label": "Notice",
+    "text": "AMDL needs your own Apple Music subscription and is for personal use: each install serves one person. It relies on Apple's undocumented web-player API, which can change without notice."
+  },
+  "links": {
+    "title": "Read more",
+    "items": [
+      {
+        "title": "Documentation",
+        "text": "Every page in the docs folder",
+        "href": "{blob}/docs/README.md"
+      },
+      {
+        "title": "Command line",
+        "text": "Commands, JSON output, exit statuses, MCP",
+        "href": "{blob}/docs/cli.md"
+      },
+      {
+        "title": "HTTP API",
+        "text": "Every endpoint, with curl examples",
+        "href": "{blob}/docs/api.md"
+      },
+      {
+        "title": "Deployment",
+        "text": "Docker, the wrapper, reverse proxies",
+        "href": "{blob}/docs/deployment.md"
+      },
+      {
+        "title": "Releases",
+        "text": "Changelogs and container tags",
+        "href": "{repo}/releases"
+      },
+      {
+        "title": "Source",
+        "text": "AMDL-Web/apple-music-downloader",
+        "href": "{repo}"
+      }
+    ]
+  },
+  "footer": {
+    "license": "AGPL-3.0",
+    "docs": "Docs",
+    "releases": "Releases",
+    "github": "GitHub"
+  }
+}

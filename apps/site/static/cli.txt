@@ -1,0 +1,8 @@
+$ amdl search yorushika --types albums --limit 2 --fields name,url
+{"albums":{"items":[{"name":"Beyond the Clouds, Only Me Downwind - Single","url":"https://music.apple.com/cn/album/beyond-the-clouds-only-me-downwind-single/6817316270"},{"name":"Plagiarism","url":"https://music.apple.com/cn/album/plagiarism/1519740112"}],"next_offset":2},"storefront":"cn","term":"yorushika"}
+$ amdl download https://music.apple.com/cn/album/plagiarism/1519740112 --dry-run
+{"body":{"urls":["https://music.apple.com/cn/album/plagiarism/1519740112"]},"method":"POST","url":"http://nas.local:18080/api/v1/downloads"}
+$ amdl jobs delete job_4467…
+{"error":{"code":"confirmation_required","message":"amdl jobs delete changes data that cannot be restored; nothing was changed","hint":"amdl jobs delete job_4467… --yes"}}
+$ echo $?
+10

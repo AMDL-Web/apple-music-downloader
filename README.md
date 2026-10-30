@@ -43,6 +43,12 @@ for people. Without a server of its own, `amdl service install` runs the backend
 machine as a background service that starts at login. [docs/cli.md](docs/cli.md)
 describes it all.
 
+### Website
+
+`apps/site` is the project's website, in English and Simplified Chinese: static pages built
+by a zero-dependency Node script. [apps/site/README.md](apps/site/README.md) explains how to
+build and preview it.
+
 ### Desktop app (in development)
 
 `apps/desktop` is a native app for macOS, Windows and Linux, drawn with
@@ -57,7 +63,7 @@ apps/desktop/internal, private to it.
 
 | Path | What it holds |
 | --- | --- |
-| `apps/` | One directory per product: `amdl` (the server and the command line), `console` and `desktop`. A non-Go app keeps its own build system in its directory. |
+| `apps/` | One directory per product: `amdl` (the server and the command line), `console`, `desktop` and `site` (the website). A non-Go app keeps its own build system in its directory. |
 | `internal/` | The Go core every product shares: the HTTP API, jobs, the download pipeline, the Apple and wrapper clients, storage and config. [Architecture](docs/architecture.md#2-packages) lists each package. |
 | `deploy/` | The Compose file and, under `deploy/server/`, the server's Dockerfile and entrypoint. |
 | `configs/` | The example config and hooks template every install is seeded from. |
@@ -300,6 +306,7 @@ so it stays valid when files inside the package are split.
 | What do job hooks send? | `internal/hooks#Dispatcher` |
 | How does library sync pick albums? | `internal/librarysync#Watcher` |
 | How is the web console served? | `apps/console#Handler` |
+| How is the website built? | `apps/site/build.mjs#renderPage` |
 
 ## Development
 
@@ -312,6 +319,7 @@ script tests.
 | `make test`, `make race` | The test suite, without or with the race detector |
 | `make dev` | The API in simulate mode on `127.0.0.1:18080`, with a throwaway config and database under `data/dev/` |
 | `make docker` | Build the container image locally |
+| `node apps/site/build.mjs --serve 8080` | Build the website and preview it on `127.0.0.1:8080` |
 | `make help` | Every target |
 
 `make dev` needs no wrapper: simulate mode reads real catalog data and selects real media,

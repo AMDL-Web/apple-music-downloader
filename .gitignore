@@ -9,6 +9,8 @@ data/
 # make build output.
 /bin/
 /dist/
+# node apps/site/build.mjs output.
+/apps/site/dist/
 
 test/
 

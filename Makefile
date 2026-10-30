@@ -10,7 +10,7 @@ GOVULNCHECK_VERSION ?= v1.9.0
 # Package directories, which leaves out dot-directories such as nested
 # worktrees under .claude/worktrees/ that `gofmt -l .` would descend into.
 GO_DIRS = $(shell $(GO) list -e -f '{{.Dir}}' ./... | sed 's|^$(CURDIR)/||')
-NODE_TESTS = $(wildcard .github/scripts/*.test.mjs .claude/hooks/*.test.mjs apps/console/jstest/*.test.mjs deploy/install/*.test.mjs deploy/packaging/*.test.mjs)
+NODE_TESTS = $(wildcard .github/scripts/*.test.mjs .claude/hooks/*.test.mjs apps/console/jstest/*.test.mjs apps/site/*.test.mjs deploy/install/*.test.mjs deploy/packaging/*.test.mjs)
 
 # Build identity stamped into internal/buildinfo (GET /api/v1/system). Each
 # falls back quietly when git or the .git directory is missing, such as in a
@@ -72,7 +72,7 @@ race: ## Run the test suite under the race detector
 vuln: ## Scan dependencies with govulncheck
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-node-test: ## Run the Node tests for release tooling, the guard hook and console JS
+node-test: ## Run the Node tests for release tooling, the guard hook, console JS and the website build
 	@command -v node >/dev/null 2>&1 || { echo "node-test: node is not installed; install Node.js 26 or newer (CI uses 26)" >&2; exit 1; }
 	@if [ -z "$(strip $(NODE_TESTS))" ]; then echo "node-test: no *.test.mjs files found"; exit 1; fi
 	node --test $(NODE_TESTS)

@@ -1,0 +1,14 @@
+$ amdl context add nas http://nas.local:18080
+{"current":true,"name":"nas","url":"http://nas.local:18080"}
+$ amdl cli setup --server nas --fields claude_code,mcp_json
+{"claude_code":"claude mcp add amdl -- /home/me/.local/bin/amdl mcp --server nas","mcp_json":{"mcpServers":{"amdl":{"args":["mcp","--server","nas"],"command":"/home/me/.local/bin/amdl"}}}}
+$ claude mcp add amdl -- /home/me/.local/bin/amdl mcp --server nas
+---
+{
+  "mcpServers": {
+    "amdl": {
+      "args": ["mcp", "--server", "nas"],
+      "command": "/home/me/.local/bin/amdl"
+    }
+  }
+}

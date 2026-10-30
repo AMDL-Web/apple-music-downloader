@@ -37,6 +37,11 @@ JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli se
 的命令。`amdl mcp` 把同样的能力作为 MCP 工具提供；在终端里直接运行 `amdl` 会打开给人用的交互界面。没有单独部署服务器时，`amdl service install`
 会把后端作为登录即启动的后台服务跑在本机。详见 [docs/cli.md](docs/cli.md)。
 
+### 官网
+
+`apps/site` 是项目官网，有英文和简体中文两版：由一个零依赖的 Node 脚本构建的静态页面。构建和本地预览方法见
+[apps/site/README.md](apps/site/README.md)。
+
 ### 桌面应用（开发中）
 
 `apps/desktop` 是一个面向 macOS、Windows 和 Linux 的原生应用，用 [MyGo](https://github.com/egoist/mygo)
@@ -49,7 +54,7 @@ apps/desktop/internal 下，只归它用。
 
 | 路径 | 内容 |
 | --- | --- |
-| `apps/` | 一个产品一个目录：`amdl`（服务端和命令行）、`console` 和 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
+| `apps/` | 一个产品一个目录：`amdl`（服务端和命令行）、`console`、`desktop` 和 `site`（官网）。非 Go 应用在自己的目录里保留自己的构建系统。 |
 | `internal/` | 所有产品共用的 Go 核心：HTTP API、作业、下载流水线、Apple 与 wrapper 客户端、存储和配置。[Architecture](docs/architecture.md#2-packages) 列出了每个包。 |
 | `deploy/` | Compose 文件，以及 `deploy/server/` 下服务端的 Dockerfile 和入口脚本。 |
 | `configs/` | 每个安装据以生成配置的示例配置和钩子模板。 |
@@ -273,6 +278,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 | 作业钩子发送什么？ | `internal/hooks#Dispatcher` |
 | 资料库同步如何挑选专辑？ | `internal/librarysync#Watcher` |
 | 网页控制台怎么提供？ | `apps/console#Handler` |
+| 官网怎么构建？ | `apps/site/build.mjs#renderPage` |
 
 ## 开发
 
@@ -284,6 +290,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 | `make test`、`make race` | 测试套件，不带或带竞态检测 |
 | `make dev` | 以模拟模式在 `127.0.0.1:18080` 启动 API，配置和数据库是 `data/dev/` 下的临时文件 |
 | `make docker` | 在本地构建容器镜像 |
+| `node apps/site/build.mjs --serve 8080` | 构建官网，并在 `127.0.0.1:8080` 上预览 |
 | `make help` | 列出所有目标 |
 
 `make dev` 不需要 wrapper：模拟模式读取真实的曲库数据、选择真实的媒体，然后模拟传输、解密和

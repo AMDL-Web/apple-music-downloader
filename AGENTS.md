@@ -13,6 +13,8 @@ link, then download, decrypt, remux and tag each track. Code map: the
   agent-facing client (`docs/cli.md`).
 - `apps/console`: the web console, embedded into the server; the one client this
   repository maintains today. Rules in `apps/console/AGENTS.md`.
+- `apps/site`: the bilingual static website, built by a zero-dependency Node script. Rules
+  in `apps/site/AGENTS.md`.
 - `apps/desktop`: the desktop app for macOS, Windows and Linux, drawn with MyGo's native
   UI. It imports the same core and embeds the server in standalone mode. Each product
   keeps its own directory under `apps/`, including a future non-Go app with its own build.
@@ -33,8 +35,9 @@ link, then download, decrypt, remux and tag each track. Code map: the
   deadline or client timeout in Go.
 - Docs change in the commit that changes the behavior. `rg` the changed symbols,
   keys and rule words across `README.md`, `README.zh-CN.md`, `docs/`, the AGENTS.md
-  files, `REVIEW.md`, `GLOSSARY.md`, `.claude/`, `internal/api/openapi.yaml` and
-  `configs/config.example.yaml`. When a doc and the code disagree, fix the doc.
+  files, `REVIEW.md`, `GLOSSARY.md`, `.claude/`, `internal/api/openapi.yaml`,
+  `configs/config.example.yaml` and the website's `apps/site/content/`. When a doc
+  and the code disagree, fix the doc.
 - Reports keep changed, tested, pushed and released apart, and label behavior
   inferred from reading code as inference.
 - Rules for some paths live in `.claude/rules/` and in `AGENTS.md` files under
@@ -103,7 +106,8 @@ two kinds (`internal/applemusic/AGENTS.md`):
 
 Everything in the repository is English: code, comments, docs, config comments, CI,
 OpenAPI descriptions and commit messages. Exceptions: `README.zh-CN.md` (a
-translation of `README.md`), hand-written release notes (may be Chinese), and
+translation of `README.md`), the website's Chinese page
+(`apps/site/content/zh-CN.json`), hand-written release notes (may be Chinese), and
 review-bot PR comments (Simplified Chinese, set in `REVIEW.md`).
 
 ## Verification
@@ -123,6 +127,7 @@ and console checks and the report format.
 | Config keys | `go test ./internal/config/ ./internal/api/`, then reread the key's example comment |
 | DB schema | `go test ./internal/db/` and a run against a copy of a real database |
 | Console | the commands in `apps/console/AGENTS.md` and a browser check |
+| Website | `node --test apps/site/` and a browser check |
 | Dependencies | `make vuln` |
 | Scripts, release tooling | `make node-test` |
 | Dockerfile, entrypoint | `make docker` |

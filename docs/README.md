@@ -25,6 +25,7 @@ here or its type here disagrees with the page.
 | [benchmarks.md](benchmarks.md) | record | Measured post-decrypt and end-to-end results |
 | [references.md](references.md) | reference | Outside practices this repo adopted, adapted or declined, and where they landed |
 
-New pages get a row here in the same commit. Agent-facing rules live elsewhere:
+New pages get a row here in the same commit. The website's build and preview steps
+are in [apps/site/README.md](../apps/site/README.md). Agent-facing rules live elsewhere:
 [AGENTS.md](../AGENTS.md), [REVIEW.md](../REVIEW.md), [GLOSSARY.md](../GLOSSARY.md)
 and `.claude/`.

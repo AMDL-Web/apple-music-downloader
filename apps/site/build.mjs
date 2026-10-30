@@ -1,0 +1,490 @@
+#!/usr/bin/env node
+// Builds the AMDL website: one page per language from content/<lang>.json,
+// with static/site.css and static/site.js inlined, into a directory that any
+// static host can serve at its root or under a subpath.
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+export const REPO = 'https://github.com/AMDL-Web/apple-music-downloader';
+// Links into the repository follow the release branch, so they point at what a
+// visitor can install.
+export const REF = 'main';
+const BLOB = `${REPO}/blob/${REF}`;
+const RAW = `https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/${REF}`;
+
+export const LANGS = [
+  { code: 'en', og: 'en_US' },
+  { code: 'zh-CN', og: 'zh_CN' },
+];
+
+const THEME_KEY = 'amdl-site-theme';
+const LANG_KEY = 'amdl-site-lang';
+
+const USAGE = `usage: node apps/site/build.mjs [--out <dir>] [--base <url>] [--serve <port>]
+
+  --out <dir>     where to write the site (default: apps/site/dist)
+  --base <url>    absolute URL the site is served from, such as https://example.org/;
+                  adds canonical, hreflang and Open Graph URLs
+  --serve <port>  after building, serve the output on 127.0.0.1:<port>`;
+
+export class UsageError extends Error {}
+
+export function parseArgs(argv) {
+  const opts = { out: path.join(here, 'dist'), base: '', serve: 0 };
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i];
+    if (!['--out', '--base', '--serve'].includes(flag)) throw new UsageError(`unknown argument: ${flag}`);
+    const value = argv[++i];
+    if (value === undefined || value.startsWith('--')) throw new UsageError(`${flag} needs a value`);
+    if (flag === '--out') opts.out = path.resolve(value);
+    if (flag === '--base') {
+      let url;
+      try {
+        url = new URL(value);
+      } catch {
+        throw new UsageError(`--base is not an absolute URL: ${value}`);
+      }
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new UsageError(`--base must be http or https: ${value}`);
+      opts.base = url.href.endsWith('/') ? url.href : `${url.href}/`;
+    }
+    if (flag === '--serve') {
+      const port = Number(value);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new UsageError(`--serve needs a port number: ${value}`);
+      opts.serve = port;
+    }
+  }
+  return opts;
+}
+
+// ---- text ------------------------------------------------------------------
+
+export const esc = (s) =>
+  String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const expand = (href) => href.replace('{blob}', BLOB).replace('{repo}', REPO);
+
+// Content strings carry three marks: `code`, **strong** and [text](href),
+// where href may start with {blob} or {repo}.
+export function inline(s) {
+  const parts = String(s).split(/(`[^`]+`)/);
+  return parts
+    .map((part) => {
+      if (part.startsWith('`') && part.endsWith('`') && part.length > 1) return `<code>${esc(part.slice(1, -1))}</code>`;
+      return esc(part)
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, href) => `<a href="${esc(expand(href))}">${text}</a>`);
+    })
+    .join('');
+}
+
+// ---- code blocks -----------------------------------------------------------
+
+// Code is the same in every language. Each block is a list of lines: "$ cmd"
+// is a command, "# text" a comment, anything else output, shown as JSON when
+// it parses as JSON.
+const CODE = {
+  hero: 'docker compose up -d',
+  server: [
+    '$ curl -X POST http://localhost:18080/api/v1/downloads \\',
+    "    -H 'Content-Type: application/json' \\",
+    `    -d '{"urls":["https://music.apple.com/us/album/1519740112"]}'`,
+    '{"accepted":1,"rejected":0,"results":[{"status":"accepted","job":{"id":"job_4467…","status":"queued",…}}]}',
+    '',
+    '$ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events',
+  ],
+  // One list of code blocks per step; a block may carry a label.
+  quickStart: {
+    binary: [
+      [
+        { label: 'macOS · Linux', lines: [`$ curl -fsSL ${RAW}/deploy/install/install.sh | sh`] },
+        {
+          label: 'Windows · PowerShell',
+          lines: [`PS> [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm ${RAW}/deploy/install/install.ps1 | iex`],
+        },
+      ],
+      [{ lines: ['$ amdl doctor'] }],
+      [{ lines: ['$ amdl wrapper install'] }],
+      [{ lines: ['$ amdl service install', '$ amdl service status'] }],
+    ],
+    docker: [
+      [{ lines: ['$ mkdir amdl && cd amdl', '$ mkdir -p data/downloads && chown 1000:1000 data/downloads', `$ curl -fsSLO ${RAW}/deploy/docker-compose.yml`] }],
+      [{ lines: ['AMDL_WRAPPER_ADDRESS: "http://wrapper-manager:8080"'] }],
+      [{ lines: ['$ docker compose up -d'] }],
+      [],
+    ],
+  },
+};
+
+export function codeLines(lines) {
+  return lines
+    .map((line) => {
+      if (line.startsWith('$ ')) return `<span class="c-p" aria-hidden="true">$</span> ${esc(line.slice(2))}`;
+      if (line.startsWith('PS> ')) return `<span class="c-p" aria-hidden="true">PS&gt;</span> ${esc(line.slice(4))}`;
+      if (line.startsWith('# ')) return `<span class="c-c">${esc(line)}</span>`;
+      if (/^\s*[[{}\]"]/.test(line)) return `<span class="c-o">${json(line)}</span>`;
+      if (/^\s/.test(line)) return esc(line);
+      return line === '' ? '' : `<span class="c-o">${esc(line)}</span>`;
+    })
+    .join('\n');
+}
+
+// Colors keys, strings and numbers of one JSON line; "…" marks elided parts.
+function json(line) {
+  return esc(line).replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)?|(-?\b\d+(?:\.\d+)?\b)/g, (m, str, colon, num) => {
+    if (str) return colon ? `<span class="c-k">${str}</span>${colon}` : `<span class="c-s">${str}</span>`;
+    return `<span class="c-n">${num}</span>`;
+  });
+}
+
+// The commands of a block, for its copy button: prompt lines, each with the
+// indented lines a trailing backslash continues it onto.
+export function commands(lines) {
+  const out = [];
+  let open = false;
+  for (const line of lines) {
+    if (/^(\$|PS>) /.test(line)) out.push(line.replace(/^(\$|PS>) /, ''));
+    else if (open && /^\s/.test(line)) out[out.length - 1] += `\n${line}`;
+    else {
+      open = false;
+      continue;
+    }
+    open = line.endsWith('\\');
+  }
+  return out.join('\n');
+}
+
+// ---- images ----------------------------------------------------------------
+
+// Reads the pixel size from a WebP header (lossy VP8, lossless VP8L or VP8X).
+export function webpSize(buf) {
+  if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WEBP') throw new Error('not a WebP file');
+  const chunk = buf.toString('ascii', 12, 16);
+  if (chunk === 'VP8 ') return { width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff };
+  if (chunk === 'VP8L') {
+    const b = buf.readUInt32LE(21);
+    return { width: (b & 0x3fff) + 1, height: ((b >> 14) & 0x3fff) + 1 };
+  }
+  if (chunk === 'VP8X') return { width: buf.readUIntLE(24, 3) + 1, height: buf.readUIntLE(27, 3) + 1 };
+  throw new Error(`unknown WebP chunk ${chunk}`);
+}
+
+// Every screenshot exists as <name>-<theme>-<width>.webp in static/img, in a
+// large and a small width; the page shows the one that matches the theme.
+export const SHOTS = {
+  overview: { widths: [1600, 800], sizes: '(min-width: 1240px) 1160px, 100vw' },
+  drawer: { widths: [1600, 800], sizes: '(min-width: 960px) 560px, 100vw' },
+  search: { widths: [1600, 800], sizes: '(min-width: 960px) 560px, 100vw' },
+  phone: { widths: [780, 390], sizes: '(min-width: 960px) 260px, 60vw' },
+  desktop: { widths: [1600, 800], sizes: '(min-width: 960px) 620px, 100vw' },
+};
+
+function shot(ctx, name, alt) {
+  const spec = SHOTS[name];
+  return ['light', 'dark']
+    .map((theme) => {
+      const files = spec.widths.map((w) => `${name}-${theme}-${w}.webp`);
+      const { width, height } = ctx.image(files[0]);
+      const srcset = files.map((f, i) => `../img/${f} ${spec.widths[i]}w`).join(', ');
+      return `<img class="shot only-${theme}" src="../img/${files[0]}" srcset="${srcset}" sizes="${spec.sizes}" width="${width}" height="${height}" alt="${esc(alt)}" loading="lazy" decoding="async">`;
+    })
+    .join('');
+}
+
+// ---- icons -----------------------------------------------------------------
+
+const svg = (body, extra = '') =>
+  `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${extra}>${body}</svg>`;
+const ICON = {
+  // Octicons mark-github (MIT).
+  github:
+    '<svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>',
+  sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>', ' class="i-sun"'),
+  moon: svg('<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>', ' class="i-moon"'),
+  copy: svg('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>', ' class="i-copy"'),
+  check: svg('<polyline points="5 12.5 10 17.5 19 7"/>', ' class="i-check"'),
+  arrow: svg('<line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/>'),
+  out: svg('<line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/>'),
+};
+
+const copyButton = (ui, text) =>
+  `<button class="copy" type="button" data-copy="${esc(text)}" data-copied="${esc(ui.copied)}" aria-label="${esc(ui.copy)}">${ICON.copy}${ICON.check}</button>`;
+
+const codeBlock = (ui, lines, { label = '', copy = true, wrap = false } = {}) =>
+  `<div class="code${label ? '' : ' code-solo'}${wrap ? ' code-wrap' : ''}">${label ? `<div class="code-bar"><span>${esc(label)}</span>${copy ? copyButton(ui, commands(lines)) : ''}</div>` : ''}<pre tabindex="0"><code>${codeLines(lines)}</code></pre>${!label && copy ? copyButton(ui, commands(lines).length ? commands(lines) : lines.join('\n')) : ''}</div>`;
+
+// A tab list over panels; site.js wires it up, and without the script every
+// panel shows, one after another.
+const tabs = (label, items) =>
+  `<div class="tabs"><div class="tablist" role="tablist" aria-label="${esc(label)}" hidden>${items
+    .map((t, i) => `<button type="button" role="tab" id="tab-${t.id}" aria-controls="panel-${t.id}" aria-selected="${i === 0}"${i ? ' tabindex="-1"' : ''}>${esc(t.label)}</button>`)
+    .join('')}</div>${items.map((t) => `<div class="panel" id="panel-${t.id}" role="tabpanel" aria-labelledby="tab-${t.id}">${t.html}</div>`).join('')}</div>`;
+
+// ---- page ------------------------------------------------------------------
+
+export function renderPage(c, ctx) {
+  const { lang, other, base } = ctx;
+  const ui = c.ui;
+  const url = (code) => `${base}${code}/`;
+  const head = [
+    `<meta charset="utf-8">`,
+    `<meta name="viewport" content="width=device-width, initial-scale=1">`,
+    `<title>${esc(c.meta.title)}</title>`,
+    `<meta name="description" content="${esc(c.meta.description)}">`,
+    `<meta name="color-scheme" content="light dark">`,
+    `<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">`,
+    `<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a">`,
+    `<link rel="icon" href="../favicon.svg" type="image/svg+xml">`,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:site_name" content="AMDL">`,
+    `<meta property="og:title" content="${esc(c.meta.title)}">`,
+    `<meta property="og:description" content="${esc(c.meta.description)}">`,
+    `<meta property="og:locale" content="${lang.og}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+  ];
+  if (base) {
+    head.push(
+      `<link rel="canonical" href="${url(lang.code)}">`,
+      ...LANGS.map((l) => `<link rel="alternate" hreflang="${l.code}" href="${url(l.code)}">`),
+      `<link rel="alternate" hreflang="x-default" href="${base}">`,
+      `<meta property="og:url" content="${url(lang.code)}">`,
+      `<meta property="og:image" content="${base}og.png">`,
+      `<meta property="og:image:alt" content="${esc(c.meta.ogAlt)}">`,
+    );
+  }
+  head.push(
+    `<script>try{var d=document.documentElement,t=localStorage.getItem(${JSON.stringify(THEME_KEY)});if(t==="light"||t==="dark")d.setAttribute("data-theme",t);localStorage.setItem(${JSON.stringify(LANG_KEY)},d.lang)}catch(e){}</script>`,
+    `<style>${ctx.css}</style>`,
+  );
+
+  const p = c.products;
+  const header = `<header class="top">
+<a class="brand" href="./" aria-label="${esc(ui.home)}">AMDL<span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i></span></a>
+<nav class="nav" aria-label="${esc(ui.nav)}"><a href="#products">${esc(c.nav.products)}</a><a href="#quick-start">${esc(c.nav.quickStart)}</a><a href="#agents">${esc(c.nav.agents)}</a><a href="${BLOB}/docs/README.md">${esc(c.nav.docs)}</a></nav>
+<div class="tools">
+<a class="lang" href="../${other.code}/" hreflang="${other.code}" lang="${other.code}" title="${esc(ui.otherLangLabel)}">${esc(ui.otherLang)}</a>
+<a class="icon" href="${REPO}" aria-label="${esc(ui.github)}">${ICON.github}</a>
+<button class="icon" type="button" data-theme-toggle aria-label="${esc(ui.theme)}">${ICON.sun}${ICON.moon}</button>
+</div>
+</header>`;
+
+  const hero = `<section class="hero" aria-labelledby="hero-title">
+<div class="hero-copy">
+<p class="eyebrow"><span class="dot" aria-hidden="true"></span>${esc(c.hero.eyebrow)}</p>
+<h1 id="hero-title">${esc(c.hero.title).replace('\n', '<br>')}<span>${esc(c.hero.subtitle)}</span></h1>
+<p class="lead">${inline(c.hero.lead)}</p>
+<div class="cta">
+<div class="cmd"><code><span class="c-p" aria-hidden="true">$</span> ${esc(CODE.hero)}</code>${copyButton(ui, CODE.hero)}</div>
+<a class="btn" href="#quick-start">${esc(c.hero.cta)}${ICON.arrow}</a>
+</div>
+</div>
+<div class="hero-art">${ctx.hero}</div>
+</section>`;
+
+  const stats = `<dl class="stats">${c.stats
+    .map((s) => `<div><dt>${esc(s.label)}</dt><dd>${esc(s.value)}${s.unit ? `<span>${esc(s.unit)}</span>` : ''}</dd></div>`)
+    .join('')}</dl>`;
+
+  const secHead = (s, id) =>
+    `<header class="sec-head"><p class="kicker">${esc(s.kicker)}</p><h2 id="${id}">${esc(s.title)}</h2>${s.lead ? `<p class="lead">${inline(s.lead)}</p>` : ''}</header>`;
+
+  const how = `<section class="sec" id="how" aria-labelledby="how-title">${secHead(c.how, 'how-title')}
+<ol class="steps">${c.how.steps
+    .map((s, i) => `<li><span class="num">${String(i + 1).padStart(2, '0')}</span><h3>${esc(s.title)}</h3><p>${inline(s.text)}</p></li>`)
+    .join('')}</ol></section>`;
+
+  const points = (list) => `<ul class="points">${list.map((x) => `<li>${inline(x)}</li>`).join('')}</ul>`;
+  const prodCopy = (x, extra = '') =>
+    `<div class="prod-copy"><p class="kicker">${esc(x.label)}${x.badge ? ` <span class="badge">${esc(x.badge)}</span>` : ''}</p><h3>${esc(x.name)}</h3><p>${inline(x.text)}</p>${x.points ? points(x.points) : ''}${extra}</div>`;
+
+  const products = `<section class="sec" id="products" aria-labelledby="products-title">${secHead(p, 'products-title')}
+<article class="prod prod-split" id="server" aria-label="${esc(p.server.label)}">${prodCopy(p.server)}<div class="prod-media">${codeBlock(ui, CODE.server, { label: p.server.codeTitle, wrap: true })}</div></article>
+<article class="prod" id="console" aria-label="${esc(p.console.label)}">${prodCopy(p.console)}
+<div class="gallery">
+<div class="g-main"><figure>${shot(ctx, 'overview', p.console.shots.overview)}</figure><figure class="g-phone">${shot(ctx, 'phone', p.console.shots.phone)}</figure></div>
+<figure>${shot(ctx, 'drawer', p.console.shots.drawer)}</figure>
+<figure>${shot(ctx, 'search', p.console.shots.search)}</figure>
+</div></article>
+<article class="prod" id="terminal" aria-label="${esc(p.terminal.label)}">${prodCopy(p.terminal)}<div class="term-wrap"><div class="term" role="img" aria-label="${esc(p.terminal.shot)}"><pre>${ctx.tui}</pre></div></div></article>
+<article class="prod prod-split" id="desktop" aria-label="${esc(p.desktop.label)}">${prodCopy(p.desktop)}<div class="prod-media"><figure>${shot(ctx, 'desktop', p.desktop.shot)}<figcaption>${esc(p.desktop.caption)}</figcaption></figure></div></article>
+</section>`;
+
+  const features = `<section class="sec" id="details" aria-labelledby="details-title">${secHead(c.features, 'details-title')}
+<ul class="features">${c.features.items
+    .map((f) => `<li><a href="${BLOB}/${f.doc}"><h3>${esc(f.title)}${ICON.arrow}</h3><p>${inline(f.text)}</p></a></li>`)
+    .join('')}</ul></section>`;
+
+  const q = c.quickStart;
+  const steps = (list, code) =>
+    `<ol class="qs">${list
+      .map((s, i) => {
+        const blocks = (code[i] ?? []).map((b) => codeBlock(ui, b.lines, { label: b.label })).join('');
+        return `<li><span class="num">${i + 1}</span><div class="qs-body"><div><h3>${esc(s.title)}</h3><p>${inline(s.text)}</p></div>${blocks ? `<div class="qs-code">${blocks}</div>` : ''}</div></li>`;
+      })
+      .join('')}</ol>`;
+  const quick = `<section class="sec" id="quick-start" aria-labelledby="quick-title">${secHead(q, 'quick-title')}
+${tabs(q.kicker, [
+  { id: 'binary', label: q.tabs.binary, html: steps(q.binary.steps, CODE.quickStart.binary) },
+  { id: 'docker', label: q.tabs.docker, html: steps(q.docker.steps, CODE.quickStart.docker) },
+])}
+<aside class="callout"><p class="kicker">${esc(q.nas.label)}</p><p>${inline(q.nas.text)} <a href="${BLOB}/docs/deployment.md#the-wrapper">${esc(q.nas.link)}</a></p></aside>
+<p class="more">${inline(q.more)}</p>
+</section>`;
+
+  const a = c.agents;
+  const agents = `<section class="sec" id="agents" aria-labelledby="agents-title">${secHead(a, 'agents-title')}
+${tabs(a.kicker, [
+  { id: 'cli', label: a.tabs.cli, html: `${codeBlock(ui, ctx.cli, { label: 'shell', copy: false, wrap: true })}<p class="panel-note">${inline(a.install)} <a href="${BLOB}/docs/cli.md">${esc(a.cliDoc)}</a></p>` },
+  { id: 'mcp', label: a.tabs.mcp, html: `${codeBlock(ui, ctx.mcp[0], { label: 'shell', copy: false, wrap: true })}${codeBlock(ui, ctx.mcp[1], { label: 'mcp.json', copy: false })}<p class="panel-note">${inline(a.mcpNote)}</p>` },
+])}</section>`;
+
+  const notice = `<aside class="notice" aria-label="${esc(c.notice.label)}"><p class="kicker">${esc(c.notice.label)}</p><p>${inline(c.notice.text)}</p></aside>`;
+
+  const links = `<nav class="links" aria-labelledby="links-title"><h2 id="links-title" class="kicker">${esc(c.links.title)}</h2><ul>${c.links.items
+    .map((l) => `<li><a href="${esc(expand(l.href))}"><span>${esc(l.title)}${ICON.out}</span><small>${esc(l.text)}</small></a></li>`)
+    .join('')}</ul></nav>`;
+
+  const footer = `<footer class="foot"><span>AMDL · ${esc(c.footer.license)}</span><span class="foot-links"><a href="${BLOB}/docs/README.md">${esc(c.footer.docs)}</a><a href="${REPO}/releases">${esc(c.footer.releases)}</a><a href="${REPO}">${esc(c.footer.github)}</a></span></footer>`;
+
+  return `<!doctype html>
+<html lang="${lang.code}">
+<head>
+${head.join('\n')}
+</head>
+<body>
+<a class="skip" href="#main">${esc(ui.skip)}</a>
+<div class="frame">
+${header}
+<main id="main">
+${hero}
+${stats}
+${how}
+${products}
+${features}
+${quick}
+${agents}
+${notice}
+${links}
+</main>
+${footer}
+</div>
+<script>${ctx.js}</script>
+</body>
+</html>
+`;
+}
+
+// The root page sends a visitor to their language: the one they picked last,
+// else the first Chinese or English entry in navigator.languages, else English.
+export function renderRoot(base) {
+  const links = base ? LANGS.map((l) => `<link rel="alternate" hreflang="${l.code}" href="${base}${l.code}/">`).join('\n') : '';
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMDL</title>
+${links}
+${base ? `<link rel="alternate" hreflang="x-default" href="${base}">` : ''}
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script>(function(){var l;try{l=localStorage.getItem(${JSON.stringify(LANG_KEY)})}catch(e){}if(l!=="en"&&l!=="zh-CN"){l="en";var a=navigator.languages||[navigator.language||""];for(var i=0;i<a.length;i++){var s=String(a[i]).toLowerCase();if(s.indexOf("zh")===0){l="zh-CN";break}if(s.indexOf("en")===0)break}}location.replace(l+"/"+location.hash)})()</script>
+<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#fff;color:#0a0a0a}@media(prefers-color-scheme:dark){body{background:#0a0a0a;color:#fafafa}}a{color:inherit;margin:0 .75em}</style>
+</head>
+<body>
+<p><a href="en/" hreflang="en">English</a><a href="zh-CN/" hreflang="zh-CN" lang="zh-CN">简体中文</a></p>
+</body>
+</html>
+`;
+}
+
+// Drops comments and the whitespace around punctuation. Safe for site.css,
+// which has no strings that contain these characters and no selector where a
+// colon or comma is followed by a space that matters.
+const squeeze = (css) =>
+  css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s*([{};])\s*/g, '$1')
+    .replace(/([,:])\s+/g, '$1')
+    .replace(/;}/g, '}')
+    .trim();
+
+export function loadContent(code) {
+  return JSON.parse(fs.readFileSync(path.join(here, 'content', `${code}.json`), 'utf8'));
+}
+
+export function build({ out, base = '' }) {
+  const staticDir = path.join(here, 'static');
+  const read = (rel) => fs.readFileSync(path.join(staticDir, rel), 'utf8');
+  const sizes = new Map();
+  const image = (file) => {
+    if (!sizes.has(file)) sizes.set(file, webpSize(fs.readFileSync(path.join(staticDir, 'img', file))));
+    return sizes.get(file);
+  };
+  const shared = {
+    css: squeeze(read('site.css')),
+    js: read('site.js').trim(),
+    tui: read('tui.html').trim(),
+    hero: read('hero.html').trim(),
+    cli: read('cli.txt').trimEnd().split('\n'),
+    mcp: read('mcp.txt').trimEnd().split('\n---\n').map((b) => b.split('\n')),
+    image,
+    base,
+  };
+
+  fs.rmSync(out, { recursive: true, force: true });
+  fs.mkdirSync(out, { recursive: true });
+  fs.cpSync(path.join(staticDir, 'img'), path.join(out, 'img'), { recursive: true });
+  for (const file of ['favicon.svg', 'og.png']) fs.copyFileSync(path.join(staticDir, file), path.join(out, file));
+
+  const pages = [];
+  for (const lang of LANGS) {
+    const other = LANGS.find((l) => l !== lang);
+    const html = renderPage(loadContent(lang.code), { ...shared, lang, other });
+    fs.mkdirSync(path.join(out, lang.code), { recursive: true });
+    fs.writeFileSync(path.join(out, lang.code, 'index.html'), html);
+    pages.push(`${lang.code}/index.html`);
+  }
+  fs.writeFileSync(path.join(out, 'index.html'), renderRoot(base));
+  pages.push('index.html');
+  return pages;
+}
+
+const TYPES = { '.html': 'text/html; charset=utf-8', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png' };
+
+function serve(root, port) {
+  http
+    .createServer((req, res) => {
+      const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+      let file = path.join(root, path.normalize(rel));
+      if (!file.startsWith(root)) {
+        res.writeHead(403).end();
+        return;
+      }
+      if (rel.endsWith('/')) file = path.join(file, 'index.html');
+      fs.readFile(file, (err, body) => {
+        if (err) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream' }).end(body);
+      });
+    })
+    .listen(port, '127.0.0.1', () => console.log(`serving ${root} on http://127.0.0.1:${port}/`));
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  let opts;
+  try {
+    opts = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    if (!(err instanceof UsageError)) throw err;
+    console.error(`${err.message}\n\n${USAGE}`);
+    process.exit(2);
+  }
+  const pages = build(opts);
+  console.log(`wrote ${pages.join(', ')} to ${opts.out}`);
+  if (opts.serve) serve(opts.out, opts.serve);
+}

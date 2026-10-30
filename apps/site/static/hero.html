@@ -1,0 +1,219 @@
+<!-- AMDL hero animation: drop-in block (decorative, aria-hidden). Theme via prefers-color-scheme or <html data-theme="light|dark">. -->
+<style>.amdl-hero{--ah-ink:#1c2042;
+--ah-bird:#62d5b3;--ah-bird-shade:#38aa8d;--ah-belly:#fff4de;--ah-belly-shade:#efd5a8;
+--ah-beak:#ffb443;--ah-beak-shade:#e7882b;--ah-blush:#ff8ea6;
+--ah-phones:#f2405a;--ah-phones-shade:#c42c45;--ah-phones-hi:#ff7488;--ah-band:#2c3262;--ah-band-pad:#4a5296;--ah-pad:#1f2348;
+--ah-note:#ffcc4d;--ah-note-shade:#e09a1f;--ah-note-hi:#fff5cc;
+--ah-plate-1:#f4f5ff;--ah-plate-2:#dfe4fb;--ah-rim:#c3cbef;--ah-groove:#4b5bc0;--ah-groove-o:.13;--ah-gap:rgba(255,255,255,.85);--ah-sheen:#fff;--ah-sheen-o:.6;
+--ah-label:#8c7cf6;--ah-label-2:#7766ea;--ah-label-ink:#fff8ea;--ah-hole:#ffffff;--ah-flash:#fff;
+--ah-streak:#5b6fdc;--ah-trail:#e49a24;--ah-glow:#ffc95a;
+--ah-star-1:#e9a91c;--ah-star-2:#17ab86;--ah-star-3:#ec4f63;--ah-star-4:#7f6ff0;--ah-star-5:#5f7be6;
+display:block;position:relative;width:100%;aspect-ratio:700/560;contain:layout paint}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .amdl-hero:not([data-theme=light]){--ah-plate-1:#1e2547;--ah-plate-2:#121730;--ah-rim:#2b3460;--ah-groove:#b9c4ff;--ah-groove-o:.09;--ah-gap:rgba(6,8,20,.55);--ah-sheen:#c9d2ff;--ah-sheen-o:.26;
+--ah-label:#8c7cf6;--ah-label-2:#7564e6;--ah-label-ink:#fff8ea;--ah-hole:#0a0a0a;--ah-flash:#fff;
+--ah-streak:#b5c4ff;--ah-trail:#ffd27c;--ah-glow:#ffd57a;
+--ah-star-1:#ffcb47;--ah-star-2:#5fe0b9;--ah-star-3:#ff7a8a;--ah-star-4:#a99cff;--ah-star-5:#dfe5ff;}}
+:root[data-theme=dark] .amdl-hero:not([data-theme=light]),.amdl-hero[data-theme=dark]{--ah-plate-1:#1e2547;--ah-plate-2:#121730;--ah-rim:#2b3460;--ah-groove:#b9c4ff;--ah-groove-o:.09;--ah-gap:rgba(6,8,20,.55);--ah-sheen:#c9d2ff;--ah-sheen-o:.26;
+--ah-label:#8c7cf6;--ah-label-2:#7564e6;--ah-label-ink:#fff8ea;--ah-hole:#0a0a0a;--ah-flash:#fff;
+--ah-streak:#b5c4ff;--ah-trail:#ffd27c;--ah-glow:#ffd57a;
+--ah-star-1:#ffcb47;--ah-star-2:#5fe0b9;--ah-star-3:#ff7a8a;--ah-star-4:#a99cff;--ah-star-5:#dfe5ff;}
+.amdl-hero .ah-svg{display:block;width:100%;height:100%;max-width:none;max-height:none;overflow:hidden;-webkit-mask:linear-gradient(90deg,#0000,#000 14%,#000 97%,#0000),linear-gradient(#0000,#000 5%,#000 92%,#0000);-webkit-mask-composite:source-in;mask:linear-gradient(90deg,#0000,#000 14%,#000 97%,#0000),linear-gradient(#0000,#000 5%,#000 92%,#0000);mask-composite:intersect}
+.amdl-hero .ah-svg *{transform-box:view-box;transform-origin:0 0}
+.amdl-hero .ah-k{stroke:var(--ah-ink);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
+.amdl-hero .ah-ks{stroke-width:2.2}
+.ah-s-p1{stop-color:var(--ah-plate-1)}.ah-s-p2{stop-color:var(--ah-plate-2)}.ah-s-sh{stop-color:var(--ah-sheen)}.ah-s-st{stop-color:var(--ah-streak)}.ah-s-gl{stop-color:var(--ah-glow)}
+.amdl-hero .ah-plate{fill:url(#ah-pg);stroke:var(--ah-rim);stroke-width:2}
+.amdl-hero .ah-gv{fill:none;stroke:var(--ah-groove);stroke-width:1.2;opacity:var(--ah-groove-o);animation:ah-gw 8s linear infinite;animation-delay:calc(var(--i) * .035s - 8s)}
+.amdl-hero .ah-gv.ah-gap{stroke:var(--ah-gap);stroke-width:3.5;opacity:1;animation:none}
+.amdl-hero .ah-sheen path{opacity:.2}
+.amdl-hero .ah-prim{fill:none;stroke:var(--ah-sheen);stroke-width:2.5;stroke-linecap:round;opacity:calc(var(--ah-sheen-o) * 1.6)}
+.amdl-hero .ah-lead{fill:none;stroke:var(--ah-rim);stroke-width:2}
+.amdl-hero .ah-sheen{fill:url(#ah-shg);opacity:var(--ah-sheen-o);animation:ah-sheen 8s ease-in-out infinite alternate}
+.amdl-hero .ah-spin{animation:ah-spin 16s linear infinite}
+.amdl-hero .ah-lab{fill:var(--ah-label)}.amdl-hero .ah-lab2{fill:var(--ah-label-2)}
+.amdl-hero .ah-labring{fill:none;stroke:var(--ah-label-ink);stroke-width:1.4;opacity:.45}
+.amdl-hero .ah-labtxt{fill:none;stroke:var(--ah-label-ink);stroke-width:2.2;stroke-dasharray:2.5 4.5;stroke-linecap:round;opacity:.8}
+.amdl-hero .ah-labarrow{fill:none;stroke:var(--ah-label-ink);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.amdl-hero .ah-hole{fill:var(--ah-hole)}
+.amdl-hero .ah-flash{fill:var(--ah-flash);opacity:0;animation:ah-flash 8s ease-out infinite}
+.amdl-hero .ah-bst{opacity:0;animation:ah-bst 8s ease-out infinite;animation-delay:calc(var(--j,0) * .09s)}
+.amdl-hero .ah-sk{fill:url(#ah-sg);animation:ah-sk var(--t) linear var(--d) infinite}
+.amdl-hero .ah-dr{animation:ah-dr var(--t) linear var(--d) infinite}
+.amdl-hero .ah-tw{animation:ah-tw 2s cubic-bezier(.2,.7,.3,1) infinite;animation-delay:calc(var(--k) * .5s - 2.16s)}
+.amdl-hero .ah-c1{fill:var(--ah-star-1)}.amdl-hero .ah-c2{fill:var(--ah-star-2)}.amdl-hero .ah-c3{fill:var(--ah-star-3)}.amdl-hero .ah-c4{fill:var(--ah-star-4)}.amdl-hero .ah-c5{fill:var(--ah-star-5)}
+.amdl-hero .ah-glow{fill:url(#ah-gg);opacity:.8;animation:ah-pulse .5s ease-out infinite}
+.amdl-hero .ah-glow-b{animation-delay:-.25s}
+.amdl-hero .ah-glow2{fill:url(#ah-gg)}
+.amdl-hero .ah-arc{fill:none;stroke:var(--ah-trail);stroke-width:3.4;stroke-linecap:round;opacity:0;animation:ah-arc 2s linear infinite;animation-delay:calc(var(--i) * -.5s)}
+.amdl-hero .ah-bob{animation:ah-bob 2s ease-in-out -1s infinite alternate}
+.amdl-hero .ah-sway{animation:ah-sway 3s ease-in-out -1.5s infinite alternate}
+.amdl-hero .ah-roll{animation:ah-roll 2.5s ease-in-out -1.25s infinite alternate}
+.amdl-hero .ah-head{animation:ah-nod 8s ease-in-out infinite}
+.amdl-hero .ah-blink{animation:ah-blink 8s linear infinite}
+.amdl-hero .ah-eyes{animation:ah-eyes 8s step-end infinite}
+.amdl-hero .ah-happy{fill:none;stroke:var(--ah-ink);stroke-width:3.2;stroke-linecap:round;opacity:0;animation:ah-happy 8s step-end infinite}
+.amdl-hero .ah-bu{animation:ah-bu 8s ease-in-out infinite}
+.amdl-hero .ah-bl{animation:ah-bl 8s ease-in-out infinite}
+.amdl-hero .ah-wing{animation:ah-wing 8s ease-in-out infinite}
+.amdl-hero .ah-dx{animation:ah-dx 8s ease-in-out infinite}
+.amdl-hero .ah-dy{animation:ah-dy 8s linear infinite}
+.amdl-hero .ah-ds{opacity:0;animation:ah-ds 8s ease-out infinite}
+.amdl-hero .ah-bf{fill:var(--ah-bird)}.amdl-hero .ah-bs{fill:var(--ah-bird-shade)}
+.amdl-hero .ah-yf{fill:var(--ah-belly)}.amdl-hero .ah-ys{fill:var(--ah-belly-shade)}
+.amdl-hero .ah-bk{fill:var(--ah-beak)}.amdl-hero .ah-bkd{fill:var(--ah-beak-shade)}
+.amdl-hero .ah-blush{fill:var(--ah-blush);opacity:.75}
+.amdl-hero .ah-ink{fill:var(--ah-ink)}.amdl-hero .ah-wt{fill:#fff}
+.amdl-hero .ah-pf{fill:var(--ah-phones)}.amdl-hero .ah-pd{fill:var(--ah-phones-shade)}.amdl-hero .ah-ps{fill:var(--ah-phones-hi)}.amdl-hero .ah-ph{fill:var(--ah-phones-hi)}
+.amdl-hero .ah-band2{fill:var(--ah-band)}
+.amdl-hero .ah-hk{stroke:var(--ah-ink);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.amdl-hero .ah-bandk,.amdl-hero .ah-band,.amdl-hero .ah-cushk,.amdl-hero .ah-cush,.amdl-hero .ah-yokek,.amdl-hero .ah-yoke{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.amdl-hero .ah-bandk{stroke:var(--ah-ink);stroke-width:8.4}.amdl-hero .ah-band{stroke:var(--ah-band);stroke-width:3.6}
+.amdl-hero .ah-cushk{stroke:var(--ah-ink);stroke-width:10.2}.amdl-hero .ah-cush{stroke:var(--ah-band-pad);stroke-width:5.4}
+.amdl-hero .ah-yokek{stroke:var(--ah-ink);stroke-width:6.6}.amdl-hero .ah-yoke{stroke:var(--ah-band);stroke-width:1.8}
+.amdl-hero .ah-bandhl,.amdl-hero .ah-cushhl{fill:none;stroke:#fff;stroke-width:1.1;stroke-linecap:round;opacity:.32}.amdl-hero .ah-cushhl{stroke-width:1.4;opacity:.28}
+.amdl-hero .ah-rimc{fill:none;stroke:var(--ah-phones-shade);stroke-width:1.4}
+.amdl-hero .ah-rimf{fill:none;stroke:var(--ah-phones);stroke-width:1.2;stroke-linecap:round;opacity:.8}
+.amdl-hero .ah-pad{fill:var(--ah-pad)}.amdl-hero .ah-seam{fill:none;stroke:var(--ah-band-pad);stroke-width:1;stroke-linecap:round}
+.amdl-hero .ah-rim{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;opacity:.45}
+.amdl-hero .ah-whl{fill:none;stroke:var(--ah-bird);stroke-width:2.4;stroke-linecap:round}
+.amdl-hero .ah-nf{fill:var(--ah-note)}.amdl-hero .ah-nd{fill:var(--ah-note-shade)}.amdl-hero .ah-nh{fill:var(--ah-note-hi)}
+.amdl-hero .ah-nhl{fill:none;stroke:var(--ah-note-hi);stroke-width:2.4;stroke-linecap:round}
+.amdl-hero .ah-podhl{fill:none;stroke:var(--ah-note-hi);stroke-width:5;stroke-linecap:round}
+.amdl-hero .ah-pp,.amdl-hero .ah-pr,.amdl-hero .ah-ps2,.amdl-hero .ah-ps3,.amdl-hero .ah-pf2{transition:translate 1.2s cubic-bezier(.2,.8,.2,1)}
+.amdl-hero .ah-pp{translate:calc(var(--ah-mx,0) * -6px) calc(var(--ah-my,0) * -4px)}
+.amdl-hero .ah-pr{translate:calc(var(--ah-mx,0) * 9px) calc(var(--ah-my,0) * 6px)}
+.amdl-hero .ah-ps2,.amdl-hero .ah-pf2{translate:calc(var(--ah-mx,0) * -12px) calc(var(--ah-my,0) * -8px)}
+.amdl-hero .ah-ps3{translate:calc(var(--ah-mx,0) * 16px) calc(var(--ah-my,0) * 10px)}
+.amdl-hero.ah-off *,.amdl-hero.ah-hid *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.amdl-hero *{animation-play-state:paused!important;transition:none!important}}
+@keyframes ah-gw{0%,81%{opacity:var(--ah-groove-o)}82.5%{opacity:.55}90%,100%{opacity:var(--ah-groove-o)}}
+@keyframes ah-sheen{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+@keyframes ah-spin{to{transform:rotate(360deg)}}
+@keyframes ah-flash{0%,80.5%{opacity:0}82.5%{opacity:.55}92%,100%{opacity:0}}
+@keyframes ah-bst{0%,81.5%{transform:scale(0);opacity:0}84.5%{transform:scale(.85) rotate(25deg);opacity:1}93%,100%{transform:scale(0) rotate(70deg);opacity:0}}
+@keyframes ah-sk{from{transform:translateX(500px)}to{transform:translateX(-500px)}}
+@keyframes ah-dr{0%{transform:translate(23px,-7.5px);opacity:0}12%,88%{opacity:1}100%{transform:translate(-23px,7.5px);opacity:0}}
+@keyframes ah-tw{0%{transform:scale(.45);opacity:.35}8%{transform:scale(1) rotate(12deg);opacity:1}45%{transform:scale(.65) rotate(28deg);opacity:.6}100%{transform:scale(.45) rotate(45deg);opacity:.35}}
+@keyframes ah-pulse{from{transform:scale(1.12);opacity:.75}to{transform:scale(.92);opacity:.5}}
+@keyframes ah-arc{0%{transform:translateX(0) scale(.6);opacity:0}6%{opacity:1}100%{transform:translateX(-190px) scale(1.9);opacity:0}}
+@keyframes ah-bob{from{transform:translateY(-5px)}to{transform:translateY(5px)}}
+@keyframes ah-sway{from{transform:translateX(-3.5px)}to{transform:translateX(3.5px)}}
+@keyframes ah-roll{from{transform:rotate(-1.4deg)}to{transform:rotate(1.4deg)}}
+@keyframes ah-nod{0%,5%,25%,30%,55%,70%,100%{transform:rotate(0)}1.9%,26.9%{transform:rotate(3deg)}60%{transform:rotate(-6deg)}63%{transform:rotate(3.5deg)}}
+@keyframes ah-blink{0%,19.4%,21.2%,89.4%,91.2%,100%{transform:scaleY(1)}20.3%,90.3%{transform:scaleY(.1)}}
+@keyframes ah-eyes{0%{opacity:1}61.5%{opacity:0}71%{opacity:1}}
+@keyframes ah-happy{0%{opacity:0}61.5%{opacity:1}71%{opacity:0}}
+@keyframes ah-bu{0%,61%,70%,100%{transform:rotate(0)}63%,67.5%{transform:rotate(-16deg)}}
+@keyframes ah-bl{0%,61%,70%,100%{transform:rotate(0)}63%,67.5%{transform:rotate(20deg)}}
+@keyframes ah-wing{0%,59%,73%,100%{transform:rotate(0)}63%{transform:rotate(-40deg)}67%{transform:rotate(-26deg)}70.5%{transform:rotate(6deg)}}
+@keyframes ah-dx{0%,66%{transform:translateX(0)}80.6%,100%{transform:translateX(159.3px)}}
+@keyframes ah-dy{0%,66%{transform:translateY(0);animation-timing-function:cubic-bezier(.3,.7,.5,1)}73.3%{transform:translateY(-90.3px);animation-timing-function:cubic-bezier(.5,0,.7,.4)}80.6%,100%{transform:translateY(-28.3px)}}
+@keyframes ah-ds{0%,62%{transform:scale(0);opacity:0}64.5%{transform:scale(1.18);opacity:1}66.5%{transform:scale(1)}79.4%{transform:scale(.92);opacity:1}82%{transform:scale(.15);opacity:0}100%{transform:scale(0);opacity:0}}</style>
+<div class="amdl-hero"><svg class="ah-svg" viewBox="0 0 700 560" width="700" height="560" aria-hidden="true" focusable="false">
+<defs>
+<radialGradient id="ah-pg" cx=".42" cy=".38" r=".72"><stop offset="0" class="ah-s-p1"/><stop offset="1" class="ah-s-p2"/></radialGradient>
+<radialGradient id="ah-shg" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="204"><stop offset=".3" class="ah-s-sh" stop-opacity="0"/><stop offset=".6" class="ah-s-sh"/><stop offset="1" class="ah-s-sh" stop-opacity="0"/></radialGradient>
+<linearGradient id="ah-sg"><stop offset="0" class="ah-s-st" stop-opacity="0"/><stop offset=".3" class="ah-s-st"/><stop offset="1" class="ah-s-st" stop-opacity="0"/></linearGradient>
+<radialGradient id="ah-gg"><stop offset="0" class="ah-s-gl"/><stop offset="1" class="ah-s-gl" stop-opacity="0"/></radialGradient>
+<path id="ah-spk" d="M0-10C1.4-1.4 1.4-1.4 10 0 1.4 1.4 1.4 1.4 0 10-1.4 1.4-1.4 1.4-10 0-1.4-1.4-1.4-1.4 0-10Z"/>
+<path id="ah-nt" d="M1.2 5.6V-10.5h2.4c.4 2.6 2 4 3.8 5.5 2.1 1.8 3 4.3 1.9 7.3.2-2.6-1-4.4-3.5-5.4-.8-.3-1.5-.5-2.2-.5V5.6c0 2.6-2.6 4.6-5.6 4.6-2.2 0-3.6-1.1-3.6-2.8 0-2.6 2.7-4.6 5.7-4.6.4 0 .8 0 1.1.1z"/>
+<clipPath id="ah-cb"><ellipse rx="46" ry="48"/></clipPath>
+<clipPath id="ah-cn"><ellipse rx="27" ry="19.5"/></clipPath>
+</defs>
+<g class="ah-pp"><g transform="translate(478 236)">
+<circle class="ah-plate" r="200"/><path class="ah-prim" d="M-157.8 -108.7A193 193 0 0 1 -32.7 -190"/>
+<g class="ah-grooves"><circle class="ah-gv" r="66" style="--i:0"/><circle class="ah-gv" r="72" style="--i:1"/><circle class="ah-gv" r="78" style="--i:2"/><circle class="ah-gv" r="84" style="--i:3"/><circle class="ah-gv" r="90" style="--i:4"/><circle class="ah-gv" r="96" style="--i:5"/><circle class="ah-gv ah-gap" r="102" style="--i:6"/><circle class="ah-gv" r="108" style="--i:7"/><circle class="ah-gv" r="114" style="--i:8"/><circle class="ah-gv" r="120" style="--i:9"/><circle class="ah-gv" r="126" style="--i:10"/><circle class="ah-gv" r="132" style="--i:11"/><circle class="ah-gv" r="138" style="--i:12"/><circle class="ah-gv ah-gap" r="144" style="--i:13"/><circle class="ah-gv" r="150" style="--i:14"/><circle class="ah-gv" r="156" style="--i:15"/><circle class="ah-gv" r="162" style="--i:16"/><circle class="ah-gv" r="168" style="--i:17"/><circle class="ah-gv" r="174" style="--i:18"/><circle class="ah-gv" r="180" style="--i:19"/><circle class="ah-gv" r="186" style="--i:20"/><circle class="ah-gv" r="192" style="--i:21"/></g>
+<circle class="ah-lead" r="59"/>
+<g class="ah-sheen"><path d="M0 0L185.3 63.8A196 196 0 0 1 63.8 185.3ZM0 0L-185.3 -63.8A196 196 0 0 1 -63.8 -185.3Z"/><path d="M0 0L174.6 89A196 196 0 0 1 89 174.6ZM0 0L-174.6 -89A196 196 0 0 1 -89 -174.6Z"/><path d="M0 0L164.4 106.7A196 196 0 0 1 106.7 164.4ZM0 0L-164.4 -106.7A196 196 0 0 1 -106.7 -164.4Z"/><path d="M0 0L154.5 120.7A196 196 0 0 1 120.7 154.5ZM0 0L-154.5 -120.7A196 196 0 0 1 -120.7 -154.5Z"/><path d="M0 0L145.7 131.1A196 196 0 0 1 131.1 145.7ZM0 0L-145.7 -131.1A196 196 0 0 1 -131.1 -145.7Z"/></g>
+<g class="ah-spin">
+<circle class="ah-lab" r="54"/><path class="ah-lab2" d="M-54 0A54 54 0 0 0 54 0Z"/>
+<circle class="ah-labring" r="44"/>
+<path class="ah-labtxt" d="M-31-16A35 35 0 0 1 31-16"/>
+<circle class="ah-hole" r="5"/>
+</g>
+<path class="ah-labarrow" d="M0 13v13M-6 20.5l6 6 6-6"/>
+<circle class="ah-flash" r="54"/>
+<g transform="translate(-52 -50)"><use class="ah-bst ah-c1" href="#ah-spk"/></g><g transform="translate(64 -36)"><use class="ah-bst ah-c2" href="#ah-spk" style="--j:1"/></g><g transform="translate(48 58)"><use class="ah-bst ah-c3" href="#ah-spk" style="--j:2"/></g>
+</g></g>
+<g class="ah-pf2"><g transform="translate(350 280) rotate(-16)"><rect class="ah-sk" x="-18.1" y="-294.9" width="60.5" height="1.32" rx="0.66" opacity="0.49" style="--t:3.1s;--d:-1.6s"/><rect class="ah-sk" x="-58.2" y="-243.7" width="194" height="2.27" rx="1.14" opacity="0.49" style="--t:1.75s;--d:-0.08s"/><rect class="ah-sk" x="-29.2" y="-210.8" width="97.3" height="1.5" rx="0.75" opacity="0.93" style="--t:2.29s;--d:-1.8s"/><rect class="ah-sk" x="-55" y="-151.3" width="183.5" height="1" rx="0.5" opacity="0.87" style="--t:2.68s;--d:-1.83s"/><rect class="ah-sk" x="-25.7" y="-125" width="85.6" height="2.22" rx="1.11" opacity="0.78" style="--t:1.99s;--d:-1.89s"/><rect class="ah-sk" x="-29.1" y="-67.5" width="97.1" height="1.17" rx="0.58" opacity="0.46" style="--t:2.68s;--d:-0.44s"/><rect class="ah-sk" x="-43.3" y="-27.4" width="144.3" height="1.78" rx="0.89" opacity="0.53" style="--t:2.42s;--d:-0.58s"/><rect class="ah-sk" x="-26" y="22.5" width="86.8" height="1.05" rx="0.53" opacity="0.42" style="--t:2.31s;--d:-0.06s"/><rect class="ah-sk" x="-34.9" y="72.9" width="116.3" height="1.4" rx="0.7" opacity="0.57" style="--t:2.74s;--d:-1.88s"/><rect class="ah-sk" x="-43.8" y="93.5" width="146" height="1.41" rx="0.7" opacity="0.87" style="--t:2.41s;--d:-0.18s"/><rect class="ah-sk" x="-54.5" y="142.6" width="181.7" height="1.98" rx="0.99" opacity="0.56" style="--t:2.9s;--d:-1.61s"/><rect class="ah-sk" x="-35.4" y="212" width="117.9" height="1.6" rx="0.8" opacity="0.97" style="--t:2.83s;--d:-0.19s"/><rect class="ah-sk" x="-32.9" y="239.7" width="109.7" height="1.51" rx="0.76" opacity="0.91" style="--t:2.68s;--d:-1.18s"/><rect class="ah-sk" x="-24.3" y="277.2" width="81.1" height="1.59" rx="0.8" opacity="0.92" style="--t:2.16s;--d:-0.39s"/></g></g>
+<g class="ah-ps2"><g transform="translate(150 92)"><g class="ah-dr" style="--t:8s;--d:-7.4s"><g class="ah-tw ah-c1" style="--k:0"><use href="#ah-spk" transform="scale(1.41)"/></g></g></g><g transform="translate(214 186)"><g class="ah-dr" style="--t:12s;--d:-8.07s"><g class="ah-tw ah-c2" style="--k:2"><circle r="3.4"/></g></g></g><g transform="translate(620 58)"><g class="ah-dr" style="--t:16s;--d:-3.12s"><g class="ah-tw ah-c4" style="--k:1"><use href="#ah-spk" transform="scale(1.02)"/></g></g></g><g transform="translate(680 300)"><g class="ah-dr" style="--t:8s;--d:-4.97s"><g class="ah-tw ah-c3" style="--k:3"><use href="#ah-spk" transform="scale(1.15)"/></g></g></g><g transform="translate(610 478)"><g class="ah-dr" style="--t:12s;--d:-0.63s"><g class="ah-tw ah-c2" style="--k:2"><use href="#ah-spk" transform="scale(1.15)"/></g></g></g><g transform="translate(372 512)"><g class="ah-dr" style="--t:16s;--d:-14.73s"><g class="ah-tw ah-c1" style="--k:1"><circle r="3.4"/></g></g></g><g transform="translate(92 300)"><g class="ah-dr" style="--t:8s;--d:-5.18s"><g class="ah-tw ah-c3" style="--k:1"><use href="#ah-spk" transform="scale(0.9)"/></g></g></g><g transform="translate(300 64)"><g class="ah-dr" style="--t:12s;--d:-6.51s"><g class="ah-tw ah-c1" style="--k:3"><use href="#ah-nt" transform="scale(1.15)"/></g></g></g><g transform="translate(532 112)"><g class="ah-dr" style="--t:16s;--d:-15.17s"><g class="ah-tw ah-c5" style="--k:0"><circle r="3"/></g></g></g><g transform="translate(620 380)"><g class="ah-dr" style="--t:8s;--d:-6.72s"><g class="ah-tw ah-c4" style="--k:0"><use href="#ah-nt" transform="scale(0.98)"/></g></g></g><g transform="translate(214 500)"><g class="ah-dr" style="--t:12s;--d:-9.78s"><g class="ah-tw ah-c4" style="--k:3"><use href="#ah-spk" transform="scale(0.9)"/></g></g></g><g transform="translate(432 30)"><g class="ah-dr" style="--t:16s;--d:-0.33s"><g class="ah-tw ah-c3" style="--k:2"><circle r="3.4"/></g></g></g><g transform="translate(664 520)"><g class="ah-dr" style="--t:8s;--d:-5.92s"><g class="ah-tw ah-c1" style="--k:1"><circle r="2.8"/></g></g></g><g transform="translate(380 150)"><g class="ah-dr" style="--t:12s;--d:-2.97s"><g class="ah-tw ah-c5" style="--k:1"><use href="#ah-spk" transform="scale(0.64)"/></g></g></g></g>
+<g transform="translate(276 318) scale(1.22)"><g class="ah-pr"><g class="ah-bob"><g class="ah-sway"><g class="ah-roll">
+<g transform="translate(-152 132) rotate(-16)"><circle class="ah-glow" r="22"/><path class="ah-arc" style="--i:0" d="M-9-15.6A18 18 0 0 0-9 15.6"/><path class="ah-arc" style="--i:1" d="M-9-15.6A18 18 0 0 0-9 15.6"/><path class="ah-arc" style="--i:2" d="M-9-15.6A18 18 0 0 0-9 15.6"/><path class="ah-arc" style="--i:3" d="M-9-15.6A18 18 0 0 0-9 15.6"/></g><g transform="translate(48 100) rotate(-16) scale(.8)"><circle class="ah-glow ah-glow-b" r="20"/><path class="ah-arc" style="--i:0.5" d="M-9-15.6A18 18 0 0 0-9 15.6"/><path class="ah-arc" style="--i:1.5" d="M-9-15.6A18 18 0 0 0-9 15.6"/><path class="ah-arc" style="--i:2.5" d="M-9-15.6A18 18 0 0 0-9 15.6"/><path class="ah-arc" style="--i:3.5" d="M-9-15.6A18 18 0 0 0-9 15.6"/></g>
+<rect class="ah-k ah-nf" x="-108" y="26" width="8" height="100" rx="4"/>
+<rect class="ah-k ah-nf" x="92" y="-31" width="8" height="125" rx="4"/>
+<g transform="translate(-128 128) rotate(-24)">
+<ellipse class="ah-nd" rx="27" ry="19.5"/>
+<g clip-path="url(#ah-cn)"><ellipse class="ah-nf" rx="27" ry="19.5" transform="translate(-4.5 -4.5)"/></g>
+<path class="ah-podhl" d="M-17-7C-14-13-7-16 1-16"/>
+<ellipse class="ah-k" rx="27" ry="19.5" fill="none"/>
+</g><g transform="translate(72 96) rotate(-24)">
+<ellipse class="ah-nd" rx="27" ry="19.5"/>
+<g clip-path="url(#ah-cn)"><ellipse class="ah-nf" rx="27" ry="19.5" transform="translate(-4.5 -4.5)"/></g>
+<path class="ah-podhl" d="M-17-7C-14-13-7-16 1-16"/>
+<ellipse class="ah-k" rx="27" ry="19.5" fill="none"/>
+</g>
+<g transform="translate(-4 -51)">
+<path class="ah-k ah-bs" d="M-32 10C-46 10-58 18-64 30C-60 35-52 34-46 30C-46 38-42 44-36 46C-30 40-27 30-26 20Z"/>
+<g class="ah-head">
+<rect class="ah-hk ah-band2" x="43.3" y="-38.5" width="4.6" height="10" rx="2.3" transform="rotate(-22 45.6 -33.5)"/>
+<g transform="translate(46 -16) rotate(8)"><rect class="ah-hk ah-pd" x="-6.5" y="-12.5" width="13" height="25" rx="6.5"/><path class="ah-rimf" d="M2.6-8.6C4-6 4.4-2 4.4 0S4 6 2.6 8.6"/></g>
+</g>
+<ellipse class="ah-bs" rx="46" ry="48"/>
+<g clip-path="url(#ah-cb)">
+<ellipse class="ah-bf" rx="46" ry="48" transform="translate(-7 -8)"/>
+<ellipse class="ah-ys" cx="16" cy="18" rx="28" ry="27"/>
+<ellipse class="ah-yf" cx="12" cy="13" rx="28" ry="27"/>
+</g>
+<path class="ah-rim" d="M-39-14A42 44 0 0 1 7-42"/>
+<ellipse class="ah-k" rx="46" ry="48" fill="none"/>
+</g>
+<g transform="rotate(-16)"><rect class="ah-k ah-nf" x="-112" y="-8.6" width="221" height="17.2" rx="4.5"/><path class="ah-nhl" d="M-104-3.8H100"/></g>
+<g transform="rotate(-16)" class="ah-k ah-ks ah-bk"><path d="M-25-12v5.5a3 3 0 0 0 5.5 1.6 3 3 0 0 0 5.4 0 3 3 0 0 0 5.5-1.6V-12zM5-12v5.5a3 3 0 0 0 5.5 1.6 3 3 0 0 0 5.4 0 3 3 0 0 0 5.5-1.6V-12z"/></g>
+<g transform="translate(-4 -51)">
+<g transform="translate(-12 6)"><g class="ah-wing"><path class="ah-k ah-bs" d="M6-10C-12-18-34-8-38 10C-40 20-32 26-22 24C-8 20 4 8 6-10Z"/><path class="ah-whl" d="M-2-10C-14-12-26-6-31 4"/></g></g>
+<g class="ah-head">
+<ellipse class="ah-blush" cx="-5" cy="5" rx="6.5" ry="4"/><ellipse class="ah-blush" cx="38" cy="7" rx="5" ry="3.5"/>
+<g class="ah-eyes">
+<g transform="translate(5 -10)"><g class="ah-blink"><ellipse class="ah-ink" rx="6.6" ry="8.6"/><circle class="ah-wt" cx="-2.2" cy="-3.2" r="2.7"/><circle class="ah-wt" cx="2.4" cy="3" r="1.2"/></g></g>
+<g transform="translate(30 -8)"><g class="ah-blink"><ellipse class="ah-ink" rx="6" ry="8.4"/><circle class="ah-wt" cx="-2" cy="-3.2" r="2.5"/><circle class="ah-wt" cx="2.2" cy="3" r="1.1"/></g></g>
+</g>
+<g class="ah-happy"><path d="M-1-8Q5-15 11-8"/><path d="M24-6Q30-13 36-6"/></g>
+<g transform="translate(21 1)">
+<g class="ah-bl"><path class="ah-k ah-ks ah-bkd" d="M-3 2.5Q8 2 17 3.5Q8 9.5-2 6.5Z"/></g>
+<g class="ah-bu"><path class="ah-k ah-ks ah-bk" d="M-4-4.5Q10-8 21 1Q9 .5-3 3.5Z"/></g>
+</g>
+<path class="ah-k ah-bs" d="M-2-46C-8-58-2-68 8-68C3-63 3-56 6-47Z"/>
+<path class="ah-k ah-bf" d="M4-47C2-62 12-74 26-70C30-69 32-65 29-62C24-66 17-63 15-56C14-52 14-49 14-46Z"/>
+<path class="ah-cushk" d="M-11-50.2A49.5 51.5 0 0 1 22-46.1"/><path class="ah-cush" d="M-11-50.2A49.5 51.5 0 0 1 22-46.1"/><path class="ah-cushhl" d="M-7-52.2A50.7 52.7 0 0 1 9-51.9"/>
+<path class="ah-bandk" d="M-28.9-32.7C-29.5-44-21.3-55.9-12.5-57.9A57.3 59.3 0 0 1 43.6-38.5"/><path class="ah-band" d="M-28.9-32.7C-29.5-44-21.3-55.9-12.5-57.9A57.3 59.3 0 0 1 43.6-38.5"/><path class="ah-bandhl" d="M-25.5-45C-22.5-52-17-56-10-58.3A57.9 59.9 0 0 1 10-59"/>
+<g transform="translate(-25 -5) rotate(-8)">
+<path class="ah-yokek" d="M-13.2-3V-12.5C-13.2-19.5-7.5-23.4 0-23.4S13.2-19.5 13.2-12.5V-3"/><path class="ah-yoke" d="M-13.2-3V-12.5C-13.2-19.5-7.5-23.4 0-23.4S13.2-19.5 13.2-12.5V-3"/>
+<rect class="ah-hk ah-band2" x="-2.6" y="-30" width="5.2" height="9" rx="2.6"/>
+<rect class="ah-hk ah-pf" x="-11" y="-17" width="22" height="34" rx="10"/>
+<rect class="ah-rimc" x="-7.6" y="-13.4" width="15.2" height="26.8" rx="7.2"/>
+<ellipse class="ah-ph" cx="-2.6" cy="-2.5" rx="3.6" ry="7.2"/>
+<ellipse class="ah-wt" cx="-4.4" cy="-8.2" rx="1.3" ry="2.6" opacity=".8"/>
+<rect class="ah-hk ah-pad" x="7" y="-15" width="8.6" height="30" rx="4.3"/>
+<path class="ah-seam" d="M11.3-10.5V10.5"/>
+<circle class="ah-hk ah-band2" cx="-13.2" cy="-4.5" r="2.1"/>
+</g>
+</g>
+</g>
+</g></g></g></g></g>
+<g transform="translate(318.7 264.3)"><g class="ah-dx"><g class="ah-dy"><g class="ah-ds">
+<circle class="ah-glow2" r="22"/><use class="ah-k ah-ks ah-nf" href="#ah-nt" transform="scale(1.7)"/>
+</g></g></g></g>
+<g transform="translate(350 280) rotate(-16)"><rect class="ah-sk" x="-76.5" y="-170" width="255" height="1.17" rx="0.58" opacity="0.45" style="--t:1.63s;--d:-0.88s"/><rect class="ah-sk" x="-62.7" y="92" width="209" height="1.16" rx="0.58" opacity="0.45" style="--t:1.38s;--d:-0.11s"/><rect class="ah-sk" x="-74.1" y="214" width="246.9" height="1.46" rx="0.73" opacity="0.45" style="--t:1.39s;--d:-0.47s"/></g>
+<g class="ah-ps3"><g transform="translate(110 420)"><g class="ah-dr" style="--t:16s;--d:-10.73s"><g class="ah-tw ah-c2" style="--k:0"><circle r="3.4"/></g></g></g><g transform="translate(500 530)"><g class="ah-dr" style="--t:8s;--d:-2.52s"><g class="ah-tw ah-c1" style="--k:3"><use href="#ah-spk" transform="scale(0.77)"/></g></g></g></g>
+</svg></div>
+<script>(()=>{if(window.__amdlHero)return;window.__amdlHero=1;
+const els=[...document.querySelectorAll('.amdl-hero')],vis=new Set();if(!els.length)return;
+const io=new IntersectionObserver(es=>es.forEach(e=>{e.target.classList.toggle('ah-off',!e.isIntersecting);e.isIntersecting?vis.add(e.target):vis.delete(e.target)}));
+els.forEach(el=>io.observe(el));
+const hid=()=>els.forEach(el=>el.classList.toggle('ah-hid',document.hidden));
+document.addEventListener('visibilitychange',hid);hid();
+const fine=matchMedia('(hover:hover) and (pointer:fine)'),calm=matchMedia('(prefers-reduced-motion:reduce)');
+let raf=0,x=0,y=0;
+addEventListener('pointermove',e=>{if(!fine.matches||calm.matches)return;x=e.clientX/innerWidth*2-1;y=e.clientY/innerHeight*2-1;
+if(!raf)raf=requestAnimationFrame(()=>{raf=0;vis.forEach(el=>{el.style.setProperty('--ah-mx',x.toFixed(3));el.style.setProperty('--ah-my',y.toFixed(3))})})},{passive:true});
+})();</script>
