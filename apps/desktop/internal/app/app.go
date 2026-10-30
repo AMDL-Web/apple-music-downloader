@@ -17,6 +17,7 @@ import (
 	"amdl/apps/desktop/internal/client"
 	"amdl/apps/desktop/internal/ffmpeg"
 	"amdl/apps/desktop/internal/mode"
+	"amdl/apps/desktop/internal/motion"
 	"amdl/apps/desktop/internal/shell"
 	"amdl/apps/desktop/internal/store"
 	appui "amdl/apps/desktop/internal/ui"
@@ -102,6 +103,8 @@ func (a *App) ready() {
 
 	a.store = store.New(a.post, nil)
 	a.view = &appui.App{Store: a.store, Art: artwork.New(a.post), Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme}
+	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
+	a.findFFmpeg()
 	if a.settings.Mode == "" {
 		a.view.Screen = appui.ScreenSettings
 	}
@@ -138,6 +141,17 @@ func (a *App) ready() {
 	if a.opts.Shots != "" {
 		go a.captureScreens(a.opts.Shots)
 	}
+}
+
+// findFFmpeg gives the motion covers the ffmpeg the settings lead to. In
+// remote mode the backend's own ffmpeg is on its machine, so motion covers
+// need one here too; without one the stills show.
+func (a *App) findFFmpeg() {
+	p, _, err := ffmpeg.Find(a.settings.FFmpeg, a.dirs.Resources)
+	if err != nil {
+		a.log.Info("no ffmpeg for motion covers", "error", err)
+	}
+	a.view.Motion.SetFFmpeg(p)
 }
 
 // vibrancy is the sidebar's system material on macOS. Elsewhere the design's

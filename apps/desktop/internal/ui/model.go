@@ -9,6 +9,7 @@ import (
 
 	"amdl/apps/desktop/internal/artwork"
 	"amdl/apps/desktop/internal/mode"
+	"amdl/apps/desktop/internal/motion"
 	"amdl/apps/desktop/internal/store"
 )
 
@@ -55,14 +56,19 @@ type Actions interface {
 // App is the main window's view and the state of its screens. Use it on the
 // UI thread.
 type App struct {
-	Store    *store.Store
-	Art      *artwork.Cache
+	Store *store.Store
+	Art   *artwork.Cache
+	// Motion plays motion covers; nil shows the stills only.
+	Motion   *motion.Cache
 	Settings mode.Settings
 	Dirs     mode.Dirs
 	Act      Actions
 	// Theme overrides the system appearance for screenshots: "light",
 	// "dark", or "" to follow the settings.
 	Theme string
+	// NoMotion shows stills in place of motion covers, for a render of the
+	// view beside its window.
+	NoMotion bool
 
 	Screen Screen
 	// Tab is the queue's filter.

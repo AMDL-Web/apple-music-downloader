@@ -21,6 +21,9 @@ func (a *App) ApplySettings(s mode.Settings) {
 	if err := mode.SaveSettings(a.dirs.Data, s); err != nil {
 		a.log.Error("settings not saved", "error", err)
 	}
+	if s.FFmpeg != prev.FFmpeg {
+		a.findFFmpeg()
+	}
 	if s.Mode != prev.Mode || s.RemoteURL != prev.RemoteURL || s.WrapperAddress != prev.WrapperAddress ||
 		(s.Mode == mode.Standalone && (s.DownloadsDir != prev.DownloadsDir || s.FFmpeg != prev.FFmpeg)) {
 		a.connect()

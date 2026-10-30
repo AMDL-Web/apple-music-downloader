@@ -32,7 +32,7 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 	if j == nil {
 		return
 	}
-	pal := jobPalette(j, false)
+	pal := jobPalette(j, a.motionShown(c, j.MotionArtworkURL))
 	if !pal.OK {
 		return
 	}
@@ -120,14 +120,17 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 // hero is the "downloading now" band: the cover, the album in big type, its
 // stage bar and the percent, all in the album's colors.
 func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
-	pal := jobPalette(j, false)
-	hc := heroColorsFor(pal, k)
 	size := float32(196)
+	var video *ui.VideoPlayer
 	if compact {
 		size = 88
+	} else {
+		video = a.motionPlayer(c, j.MotionArtworkURL, size)
 	}
+	pal := jobPalette(j, video != nil)
+	hc := heroColorsFor(pal, k)
 	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.End).Children(func() {
-		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: 14, Color: 1, Shadow: true}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: 14, Color: 1, Shadow: true, Video: video}.Show(c)
 		if j.MotionArtworkURL != "" && !compact {
 			cover.Children(func() { motionBadge(c, "MOTION") })
 		}

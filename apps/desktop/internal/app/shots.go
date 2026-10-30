@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -44,6 +45,8 @@ func (a *App) captureScreens(dir string) {
 	}
 	// Covers and the followed jobs' tracks arrive a moment after the list.
 	time.Sleep(4 * time.Second)
+	// moving names the shots whose motion cover plays.
+	moving := map[string]bool{"02-detail": true, "07-library": true}
 	shot := func(name string, setup func(), settle time.Duration) {
 		a.post(setup)
 		time.Sleep(settle)
@@ -58,6 +61,9 @@ func (a *App) captureScreens(dir string) {
 			return
 		}
 		fmt.Println("wrote", path)
+		if moving[name] {
+			a.motionStrip(dir, name)
+		}
 		// The narrow window may not show what the wide view does, as the
 		// new download screen's large cover: a first render asks for its
 		// images, the second shows them.
@@ -78,7 +84,7 @@ func (a *App) captureScreens(dir string) {
 		} else if len(a.store.Jobs) > 0 {
 			a.view.OpenJob(a.store.Jobs[0].ID)
 		}
-	}, 3500*time.Millisecond)
+	}, 6*time.Second)
 	shot("03-settings", func() { a.view.Go(appui.ScreenSettings) }, 1500*time.Millisecond)
 	// A lookup only reads the catalog; the music video shows the row of a
 	// link that cannot download.
@@ -86,7 +92,7 @@ func (a *App) captureScreens(dir string) {
 		a.view.Go(appui.ScreenNew)
 		a.store.SetOmniText(shotAlbum + "\nhttps://music.apple.com/cn/music-video/clip/1")
 	}, 4*time.Second)
-	shot("07-library", func() { a.store.SetOmniText(""); a.view.Go(appui.ScreenLibrary) }, 4*time.Second)
+	shot("07-library", func() { a.store.SetOmniText(""); a.view.Go(appui.ScreenLibrary) }, 6*time.Second)
 	shot("08-system", func() { a.view.Go(appui.ScreenSystem) }, 3*time.Second)
 	shot("04-light", func() { a.view.Theme = "light"; a.view.Go(appui.ScreenQueue) }, 2000*time.Millisecond)
 	shot("10-new-light", func() {
@@ -107,22 +113,66 @@ func (a *App) captureScreens(dir string) {
 func (a *App) render(view func(*ui.Context), width, height int, path string) {
 	done := make(chan error, 1)
 	a.post(func() {
+		a.view.NoMotion = true
+		defer func() { a.view.NoMotion = false }()
 		tt := ui.NewTester(view, width, height)
 		tt.SetScale(2)
 		// The Tester's clock stands still: move it past the animations.
 		tt.Advance(2 * time.Second)
-		f, err := os.Create(path)
-		if err == nil {
-			err = png.Encode(f, tt.Image())
-			if cerr := f.Close(); err == nil {
-				err = cerr
-			}
-		}
-		done <- err
+		done <- writePNG(path, tt.Image())
 	})
 	if err := <-done; err != nil {
 		a.log.Error("render", "path", path, "error", err)
 	}
+}
+
+// motionStrip renders the view as it stands without a window, half a
+// second of playback apart, with its motion cover playing: the window shows
+// stills where the desktop asks for less motion, and a render has
+// preferences of its own.
+func (a *App) motionStrip(dir, name string) {
+	var tt *ui.Tester
+	step := func(d time.Duration, path string) {
+		done := make(chan error, 1)
+		a.post(func() {
+			if tt == nil {
+				tt = ui.NewTester(a.view.View, 1280, 800)
+				tt.SetScale(2)
+			}
+			tt.Advance(d)
+			if path == "" {
+				done <- nil
+				return
+			}
+			done <- writePNG(path, tt.Image())
+		})
+		if err := <-done; err != nil {
+			a.log.Error("render", "path", path, "error", err)
+		}
+	}
+	step(0, "") // asks for the player
+	time.Sleep(8 * time.Second)
+	for i := 1; i <= 3; i++ {
+		// The player decodes a couple of frames ahead in real time: move
+		// the render's clock along with it.
+		for range 10 {
+			time.Sleep(50 * time.Millisecond)
+			step(50*time.Millisecond, "")
+		}
+		step(0, filepath.Join(dir, fmt.Sprintf("%s-motion-%d.png", name, i)))
+	}
+}
+
+func writePNG(path string, img image.Image) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	err = png.Encode(f, img)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // shotAlbum is the album the shots preview: the one test downloads may

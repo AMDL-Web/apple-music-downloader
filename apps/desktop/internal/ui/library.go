@@ -122,7 +122,12 @@ func (a *App) libraryHero(c *ui.Context, k *Tokens, dj domain.Job, d *client.Dow
 	if d != nil && d.Job.ID == dj.ID {
 		j.Items = d.Items
 	}
-	pal := jobPalette(j, false)
+	// The library shows the 3:4 loop, lit by its own palette.
+	video := a.motionPlayer(c, j.MotionArtworkTallURL, 184)
+	pal, tall := jobPalette(j, false), float32(0)
+	if video != nil {
+		pal, tall = tallPalette(j), 184*4/3
+	}
 	bg := k.Raise
 	if pal.OK {
 		bg = pal.Bg
@@ -139,8 +144,11 @@ func (a *App) libraryHero(c *ui.Context, k *Tokens, dj domain.Job, d *client.Dow
 			{Color: shown, At: 0.45},
 			{Color: shown.Mix(ui.RGB(0, 0, 0), 0.16), At: 1},
 		}}).Children(func() {
-			cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 400), Placeholder: bg.Mix(k.Ink, 0.2), Size: 184, Radius: 12, Color: 1, Shadow: true}.Show(c)
-			if j.MotionArtworkURL != "" {
+			cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 400), Placeholder: bg.Mix(k.Ink, 0.2), Size: 184, Height: tall, Radius: 12, Color: 1, Shadow: true, Video: video}.Show(c)
+			switch {
+			case video != nil:
+				cover.Children(func() { motionBadge(c, "3:4 LOOP") })
+			case j.MotionArtworkURL != "":
 				cover.Children(func() { motionBadge(c, "MOTION") })
 			}
 			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {

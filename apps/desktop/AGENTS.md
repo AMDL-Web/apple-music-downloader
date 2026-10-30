@@ -21,6 +21,13 @@ wrapper.
 - Colors come from `apps/desktop/internal/ui#Tokens`; an album's palette is
   used only after a contrast check (`ui#Readable`, `ui#AccentFor`).
 - No cgo: every target cross-compiles with `CGO_ENABLED=0`.
+- MyGo paints absolute children above in-flow ones, in build order: a
+  decorative layer goes before an absolute content layer, as the main
+  window's view (`apps/desktop/internal/ui#App`) builds it, never into a
+  card beside its content.
+- ffmpeg and other console programs start through `hideWindow`
+  (`apps/desktop/internal/motion`), or each start flashes a console on
+  Windows.
 
 ## Verify
 
@@ -31,4 +38,7 @@ GOOS=windows go vet ./apps/desktop/... && GOOS=darwin go vet ./apps/desktop/... 
 
 Screens: build the app and run it with `-shots <dir>` (and `-remote` or
 `-wrapper`, `-data <dir>`), which captures every screen with
-`Window.CapturePage` and quits.
+`Window.CapturePage`, renders each again at 1280×800 without a window
+(`*-wide.png`, `*-motion-N.png` for playing motion covers), and quits. The
+window shows stills where the desktop asks for less motion; the renders do
+not.

@@ -24,10 +24,11 @@ func (a *App) detail(c *ui.Context, k *Tokens) {
 		a.Go(ScreenQueue)
 		return
 	}
-	pal := jobPalette(j, false)
+	video := a.motionPlayer(c, j.MotionArtworkURL, 248)
+	pal := jobPalette(j, video != nil)
 	hc := heroColorsFor(pal, k)
 	ui.Row(c).Padding(26, 32, 22, 32).Gap(32).AlignItems(ui.End).Children(func() {
-		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 512), Placeholder: pal.Bg, Size: 248, Radius: 16, Color: 1, Shadow: true}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 512), Placeholder: pal.Bg, Size: 248, Radius: 16, Color: 1, Shadow: true, Video: video}.Show(c)
 		if j.MotionArtworkURL != "" {
 			cover.Children(func() { motionBadge(c, "MOTION") })
 		}
