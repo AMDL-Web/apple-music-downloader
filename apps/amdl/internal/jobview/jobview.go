@@ -4,6 +4,7 @@
 package jobview
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -30,7 +31,7 @@ type Track struct {
 func Summary(d client.DownloadDetail) map[string]any {
 	out := jobMap(d.Job)
 	for k := range out {
-		if strings.Contains(k, "_bg_color") || strings.Contains(k, "_text_color") {
+		if isPalette(k) {
 			delete(out, k)
 		}
 	}
@@ -45,6 +46,46 @@ func Summary(d client.DownloadDetail) map[string]any {
 	out["album_progress"] = progress.AlbumProgress(d.Job.Status, d.Items)
 	out["tracks"] = tracks
 	return out
+}
+
+// isPalette reports whether a key is one of the artwork colors of Apple's
+// catalog or of a job: artwork_bg_color, artwork_text_color1 to 4.
+func isPalette(key string) bool {
+	return strings.Contains(key, "_bg_color") || strings.Contains(key, "_text_color")
+}
+
+// DropPalette removes the artwork color keys from raw JSON at any depth, and
+// returns raw unchanged when it is not JSON.
+func DropPalette(raw json.RawMessage) json.RawMessage {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil {
+		return raw
+	}
+	out, err := json.Marshal(dropPalette(v))
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+func dropPalette(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, x := range t {
+			if isPalette(k) {
+				delete(t, k)
+				continue
+			}
+			t[k] = dropPalette(x)
+		}
+	case []any:
+		for i, x := range t {
+			t[i] = dropPalette(x)
+		}
+	}
+	return v
 }
 
 // rowKeys are the Job fields a list row keeps.

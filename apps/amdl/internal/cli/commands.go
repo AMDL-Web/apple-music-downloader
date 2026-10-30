@@ -75,10 +75,10 @@ func commands() []command {
 		if c.Command == "" {
 			continue
 		}
-		cmd := command{Capability: c, noServer: offline[c.Command]}
+		cmd := command{Capability: c, noServer: offline[c.Command], serverOptional: c.Command == "mcp"}
 		if setup, ok := handwritten[c.Command]; ok {
 			cmd.setup = setup
-			cmd.dryRun = c.Safety != capability.Read && (!cmd.noServer || planned[c.Command])
+			cmd.dryRun = c.Safety != capability.Read && !cmd.serverOptional && (!cmd.noServer || planned[c.Command])
 		} else {
 			cmd.setup = passthrough(c)
 			cmd.dryRun = c.Safety != capability.Read

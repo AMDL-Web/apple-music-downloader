@@ -186,8 +186,140 @@ func TestErrorsAreToolErrors(t *testing.T) {
 		t.Errorf("retry_job = %v, isError %v", out, isErr)
 	}
 	out, isErr = s.call(t, "lookup_link", map[string]any{})
-	if !isErr || out["error"].(map[string]any)["code"] != "invalid_arguments" {
+	if !isErr || out["error"].(map[string]any)["code"] != "invalid_request" {
 		t.Errorf("lookup_link without url = %v", out)
+	}
+}
+
+// batchBackend answers POST /downloads with status and body.
+func batchBackend(status int, body string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/downloads" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(status)
+		fmt.Fprint(w, body)
+	})
+}
+
+func errorOf(t *testing.T, out map[string]any) map[string]any {
+	t.Helper()
+	e, ok := out["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("not an error result: %v", out)
+	}
+	return e
+}
+
+func TestStartDownloadWithNothingAcceptedIsAnError(t *testing.T) {
+	s := connect(t, batchBackend(http.StatusUnprocessableEntity, `{"error":{"code":"no_urls_accepted","message":"no URL was accepted",
+		"details":{"accepted":0,"rejected":1,"results":[{"url":"https://example.com/x","status":"invalid",
+		"error":{"code":"invalid_link","message":"not an Apple Music link"}}]}}}`))
+	out, isErr := s.call(t, "start_download", map[string]any{"urls": []string{"https://example.com/x"}})
+	e := errorOf(t, out)
+	if !isErr || e["code"] != "no_urls_accepted" {
+		t.Fatalf("start_download = %v, isError %v", out, isErr)
+	}
+	rejected := e["details"].(map[string]any)["rejected"].([]any)
+	if len(rejected) != 1 || rejected[0].(map[string]any)["code"] != "invalid_link" {
+		t.Errorf("details = %v", e["details"])
+	}
+}
+
+func TestStartDownloadOfRunningLinksIsNotAnError(t *testing.T) {
+	s := connect(t, batchBackend(http.StatusUnprocessableEntity, `{"error":{"code":"no_urls_accepted","message":"no URL was accepted",
+		"details":{"accepted":0,"rejected":1,"results":[{"url":"https://music.apple.com/us/album/igor/1","status":"duplicate_active",
+		"existing_job_id":"job_a","error":{"code":"duplicate_active","message":"already running"}}]}}}`))
+	out, isErr := s.call(t, "start_download", map[string]any{"urls": []string{"https://music.apple.com/us/album/igor/1"}})
+	rejected, _ := out["rejected"].([]any)
+	if isErr || len(rejected) != 1 || rejected[0].(map[string]any)["existing_job_id"] != "job_a" {
+		t.Errorf("start_download = %v, isError %v", out, isErr)
+	}
+}
+
+func TestBadArgumentsNameTheField(t *testing.T) {
+	s := connect(t, http.NotFoundHandler())
+	for _, tc := range []struct {
+		tool string
+		args map[string]any
+		want string
+	}{
+		{"start_download", map[string]any{"urls": "https://music.apple.com/us/album/igor/1"}, "urls must be an array of strings"},
+		{"start_download", map[string]any{"urls": []any{1}}, "urls must be an array of strings"},
+		{"start_download", map[string]any{"urls": []string{"x"}, "bogus": true}, `unknown argument "bogus"`},
+		{"get_status", map[string]any{"verbose": true}, "takes no arguments"},
+		{"list_jobs", map[string]any{"limit": "5"}, "limit must be a whole number"},
+		{"list_jobs", map[string]any{"limit": 1.5}, "limit must be a whole number"},
+		{"set_config", map[string]any{"changes": []string{"a"}}, "changes must be an object"},
+		{"get_job", map[string]any{"job_id": 7}, "job_id must be a string"},
+		{"start_download", map[string]any{"urls": []string{"x"}, "overwrite": "yes"}, "overwrite must be true or false"},
+	} {
+		out, isErr := s.call(t, tc.tool, tc.args)
+		e := errorOf(t, out)
+		if !isErr || e["code"] != "invalid_request" || !strings.Contains(e["message"].(string), tc.want) {
+			t.Errorf("%s %v = %v, want invalid_request %q", tc.tool, tc.args, out, tc.want)
+		}
+	}
+	out, isErr := s.call(t, "start_download", map[string]any{})
+	if e := errorOf(t, out); !isErr || e["code"] != "invalid_request" || e["message"] != "urls is required" {
+		t.Errorf("start_download without urls = %v", out)
+	}
+}
+
+func TestGetConfigOfAnUnknownKeyIsConfigKeyNotFound(t *testing.T) {
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"config":{"logging":{"level":"info"}}}`)
+	}))
+	out, isErr := s.call(t, "get_config", map[string]any{"keys": []string{"logging.level"}})
+	if isErr || out["logging.level"] != "info" {
+		t.Errorf("get_config = %v", out)
+	}
+	out, isErr = s.call(t, "get_config", map[string]any{"keys": []string{"logging.nope"}})
+	if e := errorOf(t, out); !isErr || e["code"] != "config_key_not_found" {
+		t.Errorf("get_config of an unknown key = %v", out)
+	}
+}
+
+func TestResultsAreTextOnlyAndSearchDropsTheArtworkPalette(t *testing.T) {
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"term":"igor","albums":{"items":[{"id":"1","name":"IGOR","adam_id":12345678901234567,
+			"artwork_bg_color":"ffffff","artwork_text_color1":"000000","artwork_text_color4":"111111","audio_traits":["lossless"]}]}}`)
+	}))
+	for _, keep := range []bool{false, true} {
+		args := map[string]any{"term": "igor"}
+		if keep {
+			args["artwork_colors"] = true
+		}
+		res, err := s.cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "search_catalog", Arguments: args})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.StructuredContent != nil || len(res.Content) != 1 {
+			t.Errorf("result repeats itself: structured %v, %d content blocks", res.StructuredContent, len(res.Content))
+		}
+		text := res.Content[0].(*mcp.TextContent).Text
+		hasPalette := strings.Contains(text, "artwork_bg_color") || strings.Contains(text, "artwork_text_color")
+		if hasPalette != keep {
+			t.Errorf("artwork_colors=%v: palette present = %v in %s", keep, hasPalette, text)
+		}
+		if !strings.Contains(text, `"audio_traits"`) || !strings.Contains(text, "12345678901234567") {
+			t.Errorf("the rest of the hit changed: %s", text)
+		}
+	}
+}
+
+func TestListJobsDefaultsToFiftyRows(t *testing.T) {
+	var limit atomic.Value
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limit.Store(r.URL.Query().Get("limit"))
+		fmt.Fprint(w, `{"downloads":[],"total":0,"offset":0,"limit":50}`)
+	}))
+	if out, isErr := s.call(t, "list_jobs", map[string]any{}); isErr {
+		t.Fatalf("list_jobs = %v", out)
+	}
+	if limit.Load() != "50" {
+		t.Errorf("limit = %v, want 50, the CLI's default", limit.Load())
 	}
 }
 
@@ -249,6 +381,24 @@ func TestInstructionsKeepTheSkillsRules(t *testing.T) {
 		}
 		if !strings.Contains(instructions, r) {
 			t.Errorf("the instructions lack the rule %q", r)
+		}
+	}
+}
+
+func TestEveryToolAndParameterIsDescribed(t *testing.T) {
+	for _, c := range capability.All {
+		if c.Tool == "" {
+			continue
+		}
+		tl := tool(c)
+		if strings.TrimSpace(tl.Description) == "" {
+			t.Errorf("%s has no description", c.Tool)
+		}
+		props := tl.InputSchema.(map[string]any)["properties"].(map[string]any)
+		for name, p := range props {
+			if d, _ := p.(map[string]any)["description"].(string); strings.TrimSpace(d) == "" {
+				t.Errorf("%s: parameter %s has no description", c.Tool, name)
+			}
 		}
 	}
 }

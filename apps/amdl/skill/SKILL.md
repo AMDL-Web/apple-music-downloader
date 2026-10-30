@@ -8,7 +8,7 @@ description: Download music from Apple Music with the amdl command line or the a
 One amdl server, two ways in:
 
 - **MCP tools** (`search_catalog`, `start_download`, `wait_for_job`, …) when this client has the amdl MCP server: use them in a conversation.
-- **The `amdl` command** otherwise, and in shells, scripts and CI. `amdl cli search "<task>"` finds the command for a task; `amdl schema <command>` shows its request, output and exit codes.
+- **The `amdl` command** otherwise, and in shells, scripts and CI. `amdl cli search "<task>"` finds the command for a task; `amdl schema <command>` shows its flags, request and exit codes (`--view full` adds the body and output schemas).
 
 ## Download
 
@@ -22,7 +22,7 @@ On the command line:
 
 ## Output
 
-- stdout is the result as JSON, the API's own response, and nothing else. `--fields a,b` keeps those keys.
+- stdout is the result as JSON, the API's own response, and nothing else. `--fields a,b` keeps those keys (`search` and `lookup` hits carry an artwork color palette; `--fields id,name,url` cuts it).
 - stderr has progress notes and, on failure, `{"error":{"code","message","hint","details"}}`. The exit status is the class of failure; `error.code` is the exact cause, `error.hint` the next command.
 
 ## Before you change anything

@@ -34,6 +34,9 @@ type Capability struct {
 	// in order; the rest are flags.
 	Args    []string `json:"args,omitempty"`
 	Summary string   `json:"summary"`
+	// ToolSummary is the MCP tool's description when Summary, worded for the
+	// command line, would mislead there: it names the shape the tool returns.
+	ToolSummary string `json:"tool_summary,omitempty"`
 	// Examples are full command lines.
 	Examples []string `json:"examples,omitempty"`
 }
@@ -62,23 +65,27 @@ var All = []Capability{
 		Summary:  "Show the codecs and audio quality each track of a link can be downloaded in",
 		Examples: []string{"amdl quality https://music.apple.com/us/album/igor/1463409338"}},
 	{Command: "download", Tool: "start_download", Ops: []string{"createDownload", "streamDownloadEvents"}, Safety: Write, Args: []string{"urls"},
-		Summary: "Download songs, albums, playlists, stations or artists by link; --wait blocks until done",
+		Summary:     "Download songs, albums, playlists, stations or artists by link; --wait blocks until done",
+		ToolSummary: "Queue songs, albums, playlists, stations or artists by link and answer at once with {accepted: [{url, job_id, title}], rejected: [{url, status, code, message, existing_job_id}]}; follow each job_id with wait_for_job",
 		Examples: []string{
 			"amdl download https://music.apple.com/us/album/igor/1463409338 --wait --timeout 20m",
 			"amdl search igor --types albums | jq -r '.albums.items[].url' | amdl download -",
 		}},
 	{Command: "jobs list", Tool: "list_jobs", Ops: []string{"listDownloads"}, Safety: Read,
-		Summary:  "List download jobs, filtered by status, type or text",
-		Examples: []string{"amdl jobs list --status failed --fields id,title,error"}},
+		Summary:     "List download jobs, filtered by status, type or text",
+		ToolSummary: "List download jobs as compact rows, filtered by status, type or text: {jobs, total, offset, status_counts}; get_job shows one job in full",
+		Examples:    []string{"amdl jobs list --status failed --fields id,title,error"}},
 	{Command: "jobs get", Tool: "get_job", Ops: []string{"getDownload"}, Safety: Read, Args: []string{"job_id"},
-		Summary:  "Show one job with its tracks, album progress and each finished track's output path (where the files are)",
-		Examples: []string{"amdl jobs get job_8f3c... --view full"}},
+		Summary:     "Show one job with its tracks, album progress and each finished track's output path (where the files are)",
+		ToolSummary: "Show one job with its album progress and one short entry per track; detail=full returns every field the API has",
+		Examples:    []string{"amdl jobs get job_8f3c... --view full"}},
 	{Command: "jobs watch", Ops: []string{"streamDownloadEvents", "streamDownloadsFeed"}, Safety: Read, Args: []string{"job_id"},
 		Summary:  "Stream a job's events, or every job's milestones without an id, as NDJSON",
 		Examples: []string{"amdl jobs watch job_8f3c... --types item_completed,item_failed"}},
 	{Command: "jobs wait", Tool: "wait_for_job", Ops: []string{"getDownload", "streamDownloadEvents"}, Safety: Read, Args: []string{"job_id"},
-		Summary:  "Wait until a job finishes and print it; the exit status says how it ended",
-		Examples: []string{"amdl jobs wait job_8f3c... --timeout 10m"}},
+		Summary:     "Wait until a job finishes and print it; the exit status says how it ended",
+		ToolSummary: "Wait until a job finishes or timeout_s passes, then answer {done, job}; while done is false the job is still running, so call again",
+		Examples:    []string{"amdl jobs wait job_8f3c... --timeout 10m"}},
 	{Command: "jobs cancel", Tool: "cancel_job", Ops: []string{"cancelDownload"}, Safety: Write, Args: []string{"job_id"},
 		Summary: "Cancel a queued or running job; finished tracks stay on disk"},
 	{Command: "jobs retry", Tool: "retry_job", Ops: []string{"retryDownload"}, Safety: Write, Args: []string{"job_id"},
@@ -98,7 +105,8 @@ var All = []Capability{
 	{Command: "logs tail", Ops: []string{"streamLogs"}, Safety: Read,
 		Summary: "Stream log entries as NDJSON"},
 	{Command: "system get", Tool: "get_status", Ops: []string{"getSystem", "getHealth", "getWrapperStatus", "getLibrarySyncStatus"}, Safety: Read,
-		Summary: "Show the server's version, queue, pools, tools and free space"},
+		Summary:     "Show the server's version, queue, pools, tools and free space",
+		ToolSummary: "Show whether the server is up and ready to download: {system (version, queue, pools, tools, free space), health, wrapper (signed in or not), library_sync}; a section that fails carries its error"},
 	{Command: "system health", Ops: []string{"getHealth"}, Safety: Read,
 		Summary: "Check that the server and its database answer"},
 	{Command: "system stats", Ops: []string{"getStats"}, Safety: Read,
@@ -109,8 +117,9 @@ var All = []Capability{
 		Summary:  "Show the runtime config, or the dotted keys given",
 		Examples: []string{"amdl config get download.quality_priority logging.level"}},
 	{Command: "config set", Tool: "set_config", Ops: []string{"updateConfig"}, Safety: Write, Args: []string{"changes"},
-		Summary:  "Change runtime config keys (key=value, values in YAML)",
-		Examples: []string{"amdl config set logging.level=debug download.quality_priority=[alac,aac]"}},
+		Summary:     "Change runtime config keys (key=value, values in YAML)",
+		ToolSummary: "Change runtime config keys: changes maps dotted keys to their new values and the answer is the updated config",
+		Examples:    []string{"amdl config set logging.level=debug download.quality_priority=[alac,aac]"}},
 	{Command: "config reload", Ops: []string{"reloadConfig"}, Safety: Write,
 		Summary: "Re-read config.yaml on the server and apply its runtime keys"},
 	{Command: "wrapper status", Ops: []string{"getWrapperStatus"}, Safety: Read,
@@ -141,7 +150,7 @@ var All = []Capability{
 	{Command: "cli setup", Safety: Read, Summary: "Print the snippets that connect a coding agent to amdl: MCP config and an AGENTS.md note",
 		Examples: []string{"amdl cli setup --server nas"}},
 	{Command: "schema", Safety: Read, Args: []string{"command"},
-		Summary:  "Show a command's API request, parameters, output schema and exit codes",
+		Summary:  "Show a command's flags, API request and exit codes; --view full adds parameter descriptions and the body and output schemas",
 		Examples: []string{"amdl schema jobs list"}},
 	{Command: "context list", Safety: Read, Summary: "List the saved servers and which one is current"},
 	{Command: "context add", Safety: Write, Args: []string{"name", "url"}, Summary: "Save a server under a name and make it current",

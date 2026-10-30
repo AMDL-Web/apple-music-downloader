@@ -52,10 +52,14 @@ func cliCommandsCmd(*flag.FlagSet) func(e *env, args []string) error {
 	}
 }
 
-func schemaCmd(*flag.FlagSet) func(e *env, args []string) error {
+func schemaCmd(fs *flag.FlagSet) func(e *env, args []string) error {
+	view := fs.String("view", "summary", "summary (each operation's method, path and parameter names) or full (adds parameter descriptions, the request body and output JSON Schema)")
 	return func(e *env, args []string) error {
 		if len(args) == 0 {
 			return usageErr("usage: amdl schema <command>, such as amdl schema jobs list")
+		}
+		if *view != "summary" && *view != "full" {
+			return usageErr("--view is summary or full, not %q", *view)
 		}
 		cmds := commands()
 		cmd, rest, ok := match(cmds, args)
@@ -82,12 +86,28 @@ func schemaCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if len(cmd.Ops) > 0 {
 			var ops []capability.Operation
 			for _, id := range cmd.Ops {
-				ops = append(ops, capability.Lookup(id))
+				op := capability.Lookup(id)
+				if *view == "summary" {
+					op = slimOperation(op)
+				}
+				ops = append(ops, op)
 			}
 			out["operations"] = ops
 		}
 		return e.out.result(out)
 	}
+}
+
+// slimOperation is op without what makes amdl schema large: the parameters'
+// descriptions, the request body schema and the output schema. The flags list
+// has the descriptions; --view full has the rest.
+func slimOperation(op capability.Operation) capability.Operation {
+	op.Body, op.OutputSchema = nil, nil
+	op.Params = slices.Clone(op.Params)
+	for i := range op.Params {
+		op.Params[i].Description = ""
+	}
+	return op
 }
 
 func cliSearchCmd(fs *flag.FlagSet) func(e *env, args []string) error {
@@ -298,6 +318,21 @@ Results are JSON on stdout; errors are JSON on stderr with an exit status per ki
 of failure (2 change the input, 5 retry later, 10 needs the user's confirmation).
 Destructive commands need --yes: ask the user first.`
 
+// mcpServer is the --server a client's amdl mcp needs to reach the server this
+// run would use: the one named, else the one AMDL_URL or the current context
+// picks, which the client's process may not have. The default address and this
+// machine's own backend need none, since mcp finds them itself.
+func (e *env) mcpServer() string {
+	if e.server != "" {
+		return e.server
+	}
+	t, err := e.resolve()
+	if err != nil || t.Embedded || t.From == "default" || t.From == "desktop" {
+		return ""
+	}
+	return t.URL
+}
+
 func cliSetupCmd(*flag.FlagSet) func(e *env, args []string) error {
 	return func(e *env, args []string) error {
 		if len(args) > 0 {
@@ -308,8 +343,8 @@ func cliSetupCmd(*flag.FlagSet) func(e *env, args []string) error {
 			exe = "amdl"
 		}
 		mcpArgs := []string{"mcp"}
-		if e.server != "" {
-			mcpArgs = append(mcpArgs, "--server", e.server)
+		if server := e.mcpServer(); server != "" {
+			mcpArgs = append(mcpArgs, "--server", server)
 		}
 		quoted := make([]string, len(mcpArgs))
 		for i, a := range mcpArgs {

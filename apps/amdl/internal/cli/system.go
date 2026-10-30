@@ -219,7 +219,7 @@ func mcpCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if len(args) > 0 {
 			return usageErr("usage: amdl mcp [--server url]")
 		}
-		return mcpserver.Run(e.ctx, e.c, version())
+		return mcpserver.Run(e.ctx, e.c, version(), e.Stdin, e.Stdout)
 	}
 }
 

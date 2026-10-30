@@ -93,7 +93,7 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		var batch domain.BatchSubmitResponse
 		if err != nil {
 			var api *client.APIError
-			if !errors.As(err, &api) || api.Code != "no_urls_accepted" || json.Unmarshal(api.Details, &batch) != nil || !allDuplicates(batch) {
+			if !errors.As(err, &api) || api.Code != "no_urls_accepted" || json.Unmarshal(api.Details, &batch) != nil || !batch.AllDuplicates() {
 				return err
 			}
 			// Every link is already downloading: the request's goal holds.
@@ -167,18 +167,6 @@ func readURLs(e *env, args []string) ([]string, error) {
 		return nil, usageErr("no link given; usage: amdl download <url>... (or - to read them from stdin)")
 	}
 	return args, nil
-}
-
-func allDuplicates(b domain.BatchSubmitResponse) bool {
-	if len(b.Results) == 0 {
-		return false
-	}
-	for _, r := range b.Results {
-		if r.ExistingJobID == "" {
-			return false
-		}
-	}
-	return true
 }
 
 // jobIDs are the jobs a submission created or found already running, in

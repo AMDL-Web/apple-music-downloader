@@ -9,7 +9,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -50,28 +53,36 @@ func New(c *client.Client, version string) *mcp.Server {
 		if !ok {
 			run = h.passthrough(cap)
 		}
-		s.AddTool(t, wrap(run))
+		s.AddTool(t, wrap(t.InputSchema.(map[string]any), run))
 	}
 	return s
 }
 
-// Run serves the tools over stdin and stdout until ctx ends or the client
-// leaves.
-func Run(ctx context.Context, c *client.Client, version string) error {
-	return New(c, version).Run(ctx, &mcp.StdioTransport{})
+// Run serves the tools over in and out, the process's stdin and stdout, until
+// ctx ends or the client leaves.
+func Run(ctx context.Context, c *client.Client, version string, in io.Reader, out io.Writer) error {
+	return New(c, version).Run(ctx, &mcp.IOTransport{Reader: io.NopCloser(in), Writer: nopWriteCloser{out}})
 }
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }
 
 type runner func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error)
 
-// wrap decodes the arguments and turns the result or error into a tool
-// result: JSON as structured content and as text.
-func wrap(run runner) mcp.ToolHandler {
+// wrap decodes the arguments, checks them against the tool's schema and turns
+// the result or error into a tool result: the JSON as text, once. The tools
+// declare no output schema, so structured content would only repeat it.
+func wrap(schema map[string]any, run runner) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := map[string]any{}
 		if len(req.Params.Arguments) > 0 {
 			if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
-				return errorResult("invalid_arguments", "arguments are not a JSON object: "+err.Error(), nil), nil
+				return errorResult("invalid_request", "arguments are not a JSON object: "+err.Error(), nil), nil
 			}
+		}
+		if err := checkArgs(schema, args); err != nil {
+			return errorResult("invalid_request", err.Error(), nil), nil
 		}
 		out, err := run(ctx, req, args)
 		if err != nil {
@@ -81,7 +92,7 @@ func wrap(run runner) mcp.ToolHandler {
 			}
 			var ae argError
 			if errors.As(err, &ae) {
-				return errorResult("invalid_arguments", ae.msg, nil), nil
+				return errorResult("invalid_request", ae.msg, nil), nil
 			}
 			return errorResult("server_unreachable", err.Error(), nil), nil
 		}
@@ -89,12 +100,93 @@ func wrap(run runner) mcp.ToolHandler {
 		if err != nil {
 			return nil, err
 		}
-		var structured any
-		if len(raw) > 0 {
-			_ = json.Unmarshal(raw, &structured) // raw came from json.Marshal or the server's JSON
-		}
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(raw)}}, StructuredContent: structured}, nil
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(raw)}}}, nil
 	}
+}
+
+// checkArgs rejects an argument the tool does not declare and one of the wrong
+// JSON type, naming the field. A null counts as absent.
+func checkArgs(schema map[string]any, args map[string]any) error {
+	props, _ := schema["properties"].(map[string]any)
+	names := make([]string, 0, len(args))
+	for name := range args {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if _, ok := props[name]; !ok {
+			return fmt.Errorf("unknown argument %q; %s", name, takes(props))
+		}
+	}
+	for _, name := range names {
+		if args[name] == nil {
+			delete(args, name)
+			continue
+		}
+		prop, _ := props[name].(map[string]any)
+		if want := wantType(prop, args[name]); want != "" {
+			return fmt.Errorf("%s must be %s", name, want)
+		}
+	}
+	return nil
+}
+
+func takes(props map[string]any) string {
+	if len(props) == 0 {
+		return "this tool takes no arguments"
+	}
+	names := make([]string, 0, len(props))
+	for name := range props {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return "this tool takes " + strings.Join(names, ", ")
+}
+
+// wantType names the JSON type a property asks for when v is not one, and is
+// empty when v fits or the schema states no plain type.
+func wantType(prop map[string]any, v any) string {
+	t, _ := prop["type"].(string)
+	switch t {
+	case "string":
+		if _, ok := v.(string); !ok {
+			return "a string"
+		}
+	case "integer":
+		if n, ok := v.(float64); !ok || n != math.Trunc(n) {
+			return "a whole number"
+		}
+	case "number":
+		if _, ok := v.(float64); !ok {
+			return "a number"
+		}
+	case "boolean":
+		if _, ok := v.(bool); !ok {
+			return "true or false"
+		}
+	case "object":
+		if _, ok := v.(map[string]any); !ok {
+			return "an object"
+		}
+	case "array":
+		items, _ := prop["items"].(map[string]any)
+		want := "an array"
+		if items["type"] == "string" {
+			want = "an array of strings"
+		}
+		list, ok := v.([]any)
+		if !ok {
+			return want
+		}
+		if items["type"] == "string" {
+			for _, x := range list {
+				if _, ok := x.(string); !ok {
+					return want
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func errorResult(code, message string, details json.RawMessage) *mcp.CallToolResult {
@@ -119,7 +211,7 @@ func toJSON(v any) (json.RawMessage, error) {
 
 // tool describes a capability as an MCP tool.
 func tool(c capability.Capability) *mcp.Tool {
-	t := &mcp.Tool{Name: c.Tool, Description: c.Summary + ".", InputSchema: inputSchema(c)}
+	t := &mcp.Tool{Name: c.Tool, Description: or(c.ToolSummary, c.Summary) + ".", InputSchema: inputSchema(c)}
 	ann := &mcp.ToolAnnotations{ReadOnlyHint: c.Safety == capability.Read, OpenWorldHint: ptr(openWorld[c.Tool])}
 	if c.Safety != capability.Read {
 		ann.DestructiveHint = ptr(c.Safety == capability.Destructive || alsoDestructive[c.Tool])
@@ -152,23 +244,58 @@ func inputSchema(c capability.Capability) map[string]any {
 	op := capability.Lookup(c.Ops[0])
 	props := map[string]any{}
 	var required []string
+	describe := func(name string, schema map[string]any, desc string) map[string]any {
+		if d, ok := paramDescriptions[c.Tool+"."+name]; ok {
+			desc = d
+		} else if d, ok := paramDescriptions[name]; ok && desc == "" {
+			desc = d
+		}
+		return withDescription(schema, desc)
+	}
 	for _, p := range op.Params {
-		props[p.Name] = withDescription(p.Schema, p.Description)
+		props[p.Name] = describe(p.Name, p.Schema, p.Description)
 		if p.Required {
 			required = append(required, p.Name)
 		}
 	}
 	for _, f := range op.BodyFields() {
-		props[f.Name] = withDescription(f.Schema, f.Description)
+		props[f.Name] = describe(f.Name, f.Schema, f.Description)
 		if f.Required {
 			required = append(required, f.Name)
 		}
+	}
+	if paletteTools[c.Tool] {
+		props[paletteArg] = withDescription(toggle, "Keep the artwork color fields (artwork_bg_color, artwork_text_color1 to 4), which are left out by default.")
 	}
 	s := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
 	if len(required) > 0 {
 		s["required"] = required
 	}
 	return s
+}
+
+// paramDescriptions word the parameters whose spec description is missing or
+// written for an HTTP client: by "tool.param", else by parameter name where the
+// spec has none.
+var paramDescriptions = map[string]string{
+	"job_id":               "The job's id, job_<32 hex>.",
+	"url":                  "One Apple Music link, such as the url of a search hit.",
+	"search_catalog.types": "The groups to search: any of songs, albums, artists; default all three.",
+	"get_logs.cursor":      "Only entries after this sequence number: the next_cursor of the previous page.",
+	"get_logs.limit":       "Maximum number of entries to return; default 200.",
+}
+
+// paletteTools are the tools whose answer carries the artwork color palette of
+// each hit, which a model has no use for; paletteArg brings it back.
+var paletteTools = map[string]bool{"search_catalog": true, "list_artist_albums": true, "lookup_link": true}
+
+const paletteArg = "artwork_colors"
+
+func or(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func withDescription(schema map[string]any, desc string) map[string]any {
@@ -210,8 +337,8 @@ var customSchemas = map[string]map[string]any{
 		"status": withDescription(strs, "Job statuses to keep: queued, running, completed, failed, cancelled."),
 		"type":   withDescription(strs, "Job types to keep: song, album, playlist, artist, station."),
 		"q":      withDescription(str, "Text to find in the title, artist name or link."),
-		"limit":  map[string]any{"type": "integer", "minimum": 1, "maximum": 200, "description": "Jobs per page, default 20."},
-		"offset": map[string]any{"type": "integer", "minimum": 0},
+		"limit":  map[string]any{"type": "integer", "minimum": 1, "maximum": 200, "description": "Jobs per page, default 50."},
+		"offset": map[string]any{"type": "integer", "minimum": 0, "description": "Jobs to skip, default 0; pass offset plus the rows returned to read the next page."},
 	}),
 	"get_job": obj(map[string]any{
 		"job_id": jobID,
@@ -257,6 +384,11 @@ func (h handlers) custom() map[string]runner {
 func (h handlers) passthrough(c capability.Capability) runner {
 	op := capability.Lookup(c.Ops[0])
 	return func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
+		keepPalette := false
+		if paletteTools[c.Tool] {
+			keepPalette, _ = args[paletteArg].(bool)
+			delete(args, paletteArg)
+		}
 		values, err := typed(op, args)
 		if err != nil {
 			return nil, err
@@ -270,10 +402,16 @@ func (h handlers) passthrough(c capability.Capability) runner {
 			body = req.Body
 		}
 		raw, err := h.c.Call(ctx, req.Method, req.Path, req.Query, body)
-		if err != nil || len(raw) > 0 {
+		if err != nil {
 			return raw, err
 		}
-		return map[string]any{"ok": true}, nil
+		if len(raw) == 0 {
+			return map[string]any{"ok": true}, nil
+		}
+		if paletteTools[c.Tool] && !keepPalette {
+			raw = jobview.DropPalette(raw)
+		}
+		return raw, nil
 	}
 }
 
@@ -367,9 +505,9 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 	}
 	raw, err := h.c.Call(ctx, http.MethodPost, "/api/v1/downloads", nil, body)
 	var batch domain.BatchSubmitResponse
+	var refused *client.APIError
 	if err != nil {
-		var api *client.APIError
-		if !errors.As(err, &api) || api.Code != "no_urls_accepted" || json.Unmarshal(api.Details, &batch) != nil {
+		if !errors.As(err, &refused) || refused.Code != "no_urls_accepted" || json.Unmarshal(refused.Details, &batch) != nil {
 			return nil, err
 		}
 	} else if err := json.Unmarshal(raw, &batch); err != nil {
@@ -402,11 +540,17 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 		}
 		out.Rejected = append(out.Rejected, rj)
 	}
+	if refused != nil && !batch.AllDuplicates() {
+		// Nothing was queued and not because the links are already running:
+		// an error, as in the CLI, with the reasons per link.
+		details, _ := json.Marshal(map[string]any{"rejected": out.Rejected}) // strings only
+		return nil, &client.APIError{Status: refused.Status, Code: refused.Code, Message: refused.Message, Details: details}
+	}
 	return out, nil
 }
 
 func (h handlers) listJobs(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
-	q := client.ListQuery{Limit: intArg(args, "limit", 20), Offset: intArg(args, "offset", 0),
+	q := client.ListQuery{Limit: intArg(args, "limit", 50), Offset: intArg(args, "offset", 0),
 		Types: stringsArg(args, "type")}
 	for _, s := range stringsArg(args, "status") {
 		q.Status = append(q.Status, domain.JobStatus(s))
@@ -553,7 +697,7 @@ func (h handlers) getConfig(ctx context.Context, _ *mcp.CallToolRequest, args ma
 	for _, k := range keys {
 		v, ok := dig(resp.Config, k)
 		if !ok {
-			return nil, argError{k + " is not a runtime config key"}
+			return nil, &client.APIError{Status: http.StatusNotFound, Code: "config_key_not_found", Message: k + " is not a runtime config key"}
 		}
 		out[k] = v
 	}

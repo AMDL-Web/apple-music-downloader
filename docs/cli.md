@@ -16,7 +16,7 @@ that passes a request through are read from `internal/api/openapi.yaml`, so `--h
 | `amdl` | With stdout not a terminal, a short JSON list of every command; in a terminal, the same as text |
 | `amdl cli search "<task>"` | The five commands that best match a task, offline: `[{command, summary, example}]` |
 | `amdl cli commands` | Every command with its MCP tool and safety level |
-| `amdl schema <command>` | The command's flags, positional arguments, safety, exit statuses, examples, and each API operation it calls: method, path, parameters, request body and output JSON Schema |
+| `amdl schema <command>` | The command's flags, positional arguments, safety, exit statuses, examples, and each API operation it calls: method, path and parameters. `--view full` adds the parameters' descriptions, the request body and the output JSON Schema |
 | `amdl <command> --help` | The same as text |
 | `amdl <group>`, `amdl <group> --help` | The commands under a group such as `jobs` or `library sync`: `{group, commands: [{command, summary}]}`, text in a terminal |
 | `amdl --version`, `-v`, `-V` | The same as `amdl version` |
@@ -66,7 +66,9 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
   answer prints nothing. `NO_COLOR` turns colour off.
 - **`--fields a,b`** keeps only those keys: of the object itself when it has one of
   them, otherwise of each element of the arrays inside it (the jobs of a list, the hits of
-  each search group).
+  each search group). `search` and `lookup` hits carry the artwork color palette
+  (`artwork_bg_color`, `artwork_text_color1` to `4`); `--fields id,name,url` leaves it out.
+  Every command takes it except `mcp`.
 - **`jobs get` prints a summary by default**: the job, `album_progress`
   (`internal/progress#Album`, the console's album bar) and one short entry per track
   (`index, title, status, quality, file_size, output_path, error`). `--view full` prints
@@ -121,7 +123,7 @@ and prints the batch, whose results carry `existing_job_id`.
 - **Destructive commands** (`jobs delete`, `library sync reset`, `wrapper logout`,
   `download --overwrite`) ask `[y/N]` when stdin and stderr are a terminal and otherwise
   need `--yes`; without it they exit 10 before sending anything.
-- **`--dry-run`** on every command that sends a request prints
+- **`--dry-run`** on every command that changes something, except `mcp`, prints
   `{"method","url","body"}` and sends nothing; it needs no reachable server.
   `service install` and `service uninstall` take it too and print their plan
   (`{"dry_run":true,"action","manager","definition",…}`, with the command line, log and
@@ -140,7 +142,8 @@ The first of these that is set wins:
    `--server embedded`, when its runtime file names one that answers ([Running the backend in amdl](#running-the-backend-in-amdl)).
 5. `http://127.0.0.1:18080`, when its health check answers at once (`apps/amdl/internal/cli#probe`).
 
-Otherwise the command fails with `server_not_configured`.
+Otherwise the command fails with `server_not_configured`, except `amdl mcp`, which
+starts anyway on `http://127.0.0.1:18080`.
 
 `amdl context add` saves the server and makes it current even when it does not answer, so
 a server can be registered before it starts; its result is `{name, url, current,
@@ -165,19 +168,31 @@ listening` log line carries `addr` and, unless `--no-console`, `console`, the UR
 ## MCP server
 
 `amdl mcp` serves the same capabilities to an MCP client over stdio, talking to the
-server picked as above: `claude mcp add amdl -- amdl mcp --server nas`. Each capability
+server picked as above: `claude mcp add amdl -- amdl mcp --server nas`. It answers the MCP
+handshake even when no server is configured or answering, so the client lists the tools;
+each call then fails with `server_unreachable` until a server answers at
+`http://127.0.0.1:18080` or the `--server` the client passed. It takes neither `--dry-run`
+nor `--fields`. Each capability
 of `internal/capability#All` that names a tool becomes one, with the safety level as its
 annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` for the
 tools that read Apple's catalog; `set_config` and `cancel_job` count as destructive too,
 `apps/amdl/internal/mcpserver#alsoDestructive`) and, for a tool that passes a request through, the
-operation's parameters and body fields as its input schema. Results are JSON, as
-structured content and as text; a failure is a tool error whose text is the error object
-of the [Errors](#errors-and-exit-statuses) table.
+operation's parameters and body fields as its input schema. Every parameter is described,
+and an argument the tool does not declare or of the wrong JSON type is refused, naming the
+field. A result is the JSON in one text block, with no structured copy of it. A failure is
+a tool error whose text is the error object of the [Errors](#errors-and-exit-statuses)
+table, with the same codes as the CLI: `invalid_request` for a bad argument,
+`config_key_not_found` for an unknown key of `get_config`, and `no_urls_accepted` when
+`start_download` queues nothing (`details.rejected` says why per link), except that links
+which are all queued or running already are not an error.
 
 - **From a search to a download takes two calls**: `search_catalog`, then
   `start_download` with the hits' `url` values. It answers at once with
   `accepted[].job_id` and `rejected[]`; links already queued or running come back
-  rejected with `existing_job_id`.
+  rejected with `existing_job_id`. This shape is the MCP's own: the CLI's `download`
+  prints the API's batch, whose jobs are `results[].job.id`. `search_catalog`,
+  `list_artist_albums` and `lookup_link` leave out the artwork color palette unless
+  `artwork_colors` is true.
 - **`wait_for_job`** follows one job for at most `timeout_s` seconds
   (`apps/amdl/internal/mcpserver#maxWait`, default 120; a value outside 1 to 300 is an
   `invalid_arguments` error) and answers `{done, job}`, the job in the summary view of
@@ -185,7 +200,8 @@ of the [Errors](#errors-and-exit-statuses) table.
   still run. While it waits it sends `notifications/progress` with the
   album's percent, when the call carried a progress token. On `done: false`, or when the
   client lost the request, calling it again is safe.
-- **`list_jobs`** returns compact rows (`apps/amdl/internal/jobview#Row`), and
+- **`list_jobs`** returns compact rows (`apps/amdl/internal/jobview#Row`), 50 by default as
+  in the CLI, and
   **`get_status`** gathers the system, health, wrapper and library-sync answers.
 - **No tool signs the wrapper in**: a password never passes through a model. When
   `get_status` shows no account, a person runs `amdl wrapper login` or uses the console.
@@ -293,7 +309,9 @@ using the guest. To use another wrapper, run `amdl wrapper uninstall`, then
 ## Agent setup
 
 `amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
-nothing: the `claude mcp add` command, a Codex `config.toml` entry, an `mcpServers` JSON
+nothing: the `claude mcp add` command (with `--server` set to the one named, or to the
+URL that `AMDL_URL` or the current context resolves to; the default address and this
+machine's own backend need none), a Codex `config.toml` entry, an `mcpServers` JSON
 entry, a paragraph for `AGENTS.md` or `CLAUDE.md`, and the agent skill
 (`apps/amdl/skill/SKILL.md`): which way in to use, the download flow, the output, the
 exit codes and what to do on each, and the rules an agent keeps, such as never handling

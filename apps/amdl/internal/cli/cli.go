@@ -63,6 +63,12 @@ type command struct {
 	dryRun bool
 	// noServer marks a command that never talks to a server.
 	noServer bool
+	// serverOptional marks a command that starts although no server is
+	// configured or answering, using the default address: amdl mcp, whose
+	// client expects the handshake first and reports an unreachable server
+	// per tool call. It runs for as long as its client does, so it takes
+	// neither --dry-run nor --fields.
+	serverOptional bool
 }
 
 // discard takes what the flag package would print about a parse error.
@@ -109,7 +115,9 @@ func Run(ctx context.Context, args []string, io IO) int {
 	var fields string
 	fs.StringVar(&e.server, "server", "", "server URL, saved context name or embedded (default: $AMDL_URL, the current context, this machine's backend, then http://127.0.0.1:18080)")
 	fs.StringVar(&e.wrapper, "wrapper", "", "the wrapper address a local backend needs on its first start (--server embedded, serve --local, service install); ignored while this machine's own wrapper is installed")
-	fs.StringVar(&fields, "fields", "", "comma-separated keys to keep in each result")
+	if !cmd.serverOptional {
+		fs.StringVar(&fields, "fields", "", "comma-separated keys to keep in each result")
+	}
 	fs.BoolVar(&e.quiet, "quiet", false, "write nothing to stderr but errors")
 	if cmd.Safety == capability.Destructive || cmd.Command == "download" {
 		fs.BoolVar(&e.yes, "yes", false, "confirm a destructive action without asking")
@@ -135,6 +143,10 @@ func Run(ctx context.Context, args []string, io IO) int {
 	}
 	if !cmd.noServer {
 		c, err := e.connect()
+		var ce *cliError
+		if err != nil && cmd.serverOptional && errors.As(err, &ce) && ce.Code == "server_not_configured" {
+			c, err = client.New(defaultURL)
+		}
 		if err != nil {
 			return fail(io, err)
 		}
@@ -398,7 +410,7 @@ func rootHelp(io IO, cmds []command) int {
 	for _, e := range list {
 		fmt.Fprintf(io.Stdout, "  %-*s  %s\n", width, e.Command, e.Summary)
 	}
-	fmt.Fprintln(io.Stdout, "\nEvery command takes --help, --server, --fields and --quiet.")
+	fmt.Fprintln(io.Stdout, "\nEvery command takes --help, --server and --quiet; all but mcp take --fields.")
 	return exitOK
 }
 

@@ -66,6 +66,20 @@ type BatchSubmitResponse struct {
 	Results  []SubmitResult `json:"results"`
 }
 
+// AllDuplicates reports whether every link of the batch is already queued or
+// running, so a client can treat a no_urls_accepted answer as met.
+func (b BatchSubmitResponse) AllDuplicates() bool {
+	if len(b.Results) == 0 {
+		return false
+	}
+	for _, r := range b.Results {
+		if r.ExistingJobID == "" {
+			return false
+		}
+	}
+	return true
+}
+
 type Capability struct {
 	Name      string `json:"name"`
 	Available bool   `json:"available"`
