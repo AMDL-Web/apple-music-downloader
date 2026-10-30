@@ -5,6 +5,7 @@ import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload } from '../api.js';
 import { count, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
 import { attentionRows } from '../lib/domains.js';
+import { isNotFound } from '../lib/jobview.js';
 import { SETTINGS_SECTIONS } from '../lib/settings-sections.js';
 import { buildHash, settingsHash } from '../lib/route.js';
 import { useApp, Card, Icon, Badge, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
@@ -163,7 +164,8 @@ const FAILED_FILTER = { statuses: ['failed'] };
 
 /**
  * The "Needs attention" card above the live queue, only while there are
- * failures: the latest failed jobs of the last 24 hours, each with Retry. A
+ * failures: the latest failed jobs of the last 24 hours, each with Retry
+ * unless Apple has nothing at its link (a retry fails the same way). A
  * retried or deleted job leaves through the feed, and the next one in line
  * comes from a fresh read.
  */
@@ -258,7 +260,7 @@ function Attention({ onKnown }) {
         ${job.error
           ? html`<span class="attention-detail"><span class="attention-error" title=${job.error}>${errorSummary(job.error)}</span></span>`
           : null}
-        <${Button} size="sm" icon="rotate" onClick=${() => retry(job)} disabled=${busy === job.id}>Retry</${Button}>
+        ${isNotFound(job.error) ? null : html`<${Button} size="sm" icon="rotate" onClick=${() => retry(job)} disabled=${busy === job.id}>Retry</${Button}>`}
       </li>`,
     )}
   </ul></${Card}>`;

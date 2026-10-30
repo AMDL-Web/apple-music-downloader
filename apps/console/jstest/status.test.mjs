@@ -216,7 +216,7 @@ test('activityView names the event and keeps one useful line', () => {
   assert.deepEqual(activityView({ type: 'resolved_input', message: 'album' }), { label: 'Resolved', role: 'neutral', text: 'album' });
   const failed = activityView({ type: 'job_failed', message: 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q"}]}' });
   assert.equal(failed.role, 'danger');
-  assert.equal(failed.text, 'Apple Music has nothing at this link (404)');
+  assert.equal(failed.text, 'Apple Music has nothing at this link');
   assert.equal(activityView({ type: 'operation_exhausted', phase: 'resolve_tracks' }).text, 'resolve tracks');
   assert.equal(activityView({ type: 'some_new_event' }).label, 'Some new event');
 });

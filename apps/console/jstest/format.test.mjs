@@ -344,7 +344,7 @@ test('an unresolved job is shown by its link, not by a guessed title', () => {
 });
 
 test('errorSummary keeps the first line, drops an embedded JSON body and reads a bare one', () => {
-  assert.equal(errorSummary('Apple Music has no album 1 in storefront us (404)'), 'Apple Music has no album 1 in storefront us (404)');
+  assert.equal(errorSummary('Apple Music has no album 1 in storefront us (404)'), 'Apple Music has nothing at this link in the US storefront');
   assert.equal(errorSummary('Apple Music has nothing at this link.'), 'Apple Music has nothing at this link.');
   assert.equal(errorSummary('first line\nsecond line'), 'first line');
   assert.equal(errorSummary('{"error":"x"}'), 'x');
@@ -361,8 +361,8 @@ test('errorSummary keeps the first line, drops an embedded JSON body and reads a
 
 test('legacyCatalogError puts the stored catalog failures into plain words', () => {
   const nf = 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}';
-  assert.equal(legacyCatalogError(nf), 'Apple Music has nothing at this link (404)');
-  assert.equal(legacyCatalogError('read Apple Music catalog: catalog request failed: 404 Not Found'), 'Apple Music has nothing at this link (404)');
+  assert.equal(legacyCatalogError(nf), 'Apple Music has nothing at this link');
+  assert.equal(legacyCatalogError('read Apple Music catalog: catalog request failed: 404 Not Found'), 'Apple Music has nothing at this link');
   assert.equal(legacyCatalogError('catalog request failed: 403 Forbidden'), 'Apple Music refused access (403)');
   assert.equal(legacyCatalogError('catalog request failed: 401 Unauthorized'), 'Apple Music refused access (401)');
   assert.equal(legacyCatalogError('catalog request failed: 429 Too Many Requests'), 'Apple Music is limiting requests, try again later (429)');
@@ -376,7 +376,7 @@ test('legacyCatalogError puts the stored catalog failures into plain words', () 
 
 test('errorSummary words a stored legacy catalog error and the caller keeps the full text', () => {
   const raw = 'catalog request failed: 404 Not Found: {"errors":[{"id":"Q","title":"Resource Not Found"}]}';
-  assert.equal(errorSummary(raw), 'Apple Music has nothing at this link (404)');
+  assert.equal(errorSummary(raw), 'Apple Music has nothing at this link');
   assert.equal(errorSummary('catalog request failed: 502 Bad Gateway\nretry later'), 'Apple Music had a server problem (502)');
   assert.notEqual(errorSummary(raw), raw.trim(), 'the drawer offers "Full error" when the summary differs');
 });

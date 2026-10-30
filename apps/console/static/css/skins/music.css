@@ -1095,6 +1095,20 @@
   border-top: 0;
 }
 
+/* The rows share their columns, so a row with no Retry (a link Apple has
+   nothing at) keeps its time in line with the others. */
+@media (min-width: 640px) {
+  :root[data-skin="music"] [data-section="attention"] .attention {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--s-4);
+  }
+
+  :root[data-skin="music"] [data-section="attention"] .attention-row {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+}
+
 :root[data-skin="music"] [data-section="attention"] .attention-title {
   font-weight: var(--w-semibold);
 }

@@ -6,7 +6,8 @@ import { useState, useEffect, useRef, useCallback } from './preact.js';
 import { listDownloads, feedStreamUrl, parseData } from '../api.js';
 import { applyFeedMessage, EMPTY_COUNTS } from '../lib/store.js';
 import { StreamClient, createCoalescer, backoffDelay, EPOCH_AFTER_MS } from '../lib/stream.js';
-import { jobTitle, typeLabel } from '../lib/format.js';
+import { jobTitle, typeLabel, isUnresolved } from '../lib/format.js';
+import { rowView } from '../lib/jobview.js';
 import { isTerminal } from '../lib/status.js';
 import { BURST_MS, endsWatch, addEnded, finishedToast } from '../lib/watch.js';
 
@@ -113,7 +114,8 @@ export function useFeed({ toast, route }) {
           // Its toast is announced through the toasts' own live region.
           noteEndedRef.current(job);
         } else if (prev && prev !== job.status && (job.status === 'completed' || job.status === 'failed')) {
-          announce(`${typeLabel(job.type)} ${jobTitle(job)} ${job.status}`);
+          // A link that never resolved is named as its row names it, not by its slug.
+          announce(isUnresolved(job) ? `${rowView(job).title} ${job.status}` : `${typeLabel(job.type)} ${jobTitle(job)} ${job.status}`);
         }
       }
       if (lastStatus.current.size > 1000) {

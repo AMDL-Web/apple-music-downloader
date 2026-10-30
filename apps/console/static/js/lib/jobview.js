@@ -6,6 +6,9 @@ import { jobCounts, jobStatusView, activityView } from './status.js';
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+// A track's statuses after which it changes no more.
+const ITEM_FINISHED = ['completed', 'skipped_existing', 'failed', 'cancelled'];
+
 /** Whether a job's error says Apple has nothing at the link (a 404 in the text before any JSON body). */
 export function isNotFound(error) {
   return /\b404\b/.test(String(error || '').split(/[{\n]/)[0]);
@@ -115,12 +118,15 @@ export function codecKinds(items) {
  * 14 tracks · 692 MB". When the tracks' codecs differ it names the one most
  * carry ("Mostly ALAC 24/96"; the rows mark the others), so a second codec
  * turning up mid-run changes this line, not the height of the list. The size
- * is left out until a file exists. '' for a job without tracks.
+ * waits until every track has finished (mid-run, the files written so far
+ * would read as the album's size) and a file exists. '' for a job without
+ * tracks.
  */
 export function drawerSummary(items) {
   if (!items || items.length === 0) return '';
   const kinds = codecKinds(items);
-  const size = items.reduce((n, it) => n + (it.file_size > 0 ? it.file_size : 0), 0);
+  const finished = items.every((it) => ITEM_FINISHED.includes(it.status));
+  const size = finished ? items.reduce((n, it) => n + (it.file_size > 0 ? it.file_size : 0), 0) : 0;
   return [kinds.length === 1 ? kinds[0] : kinds.length > 1 ? `Mostly ${albumCodec(items)}` : '', plural(items.length, 'track', 'tracks'), size > 0 ? bytes(size) : '']
     .filter(Boolean)
     .join(' · ');

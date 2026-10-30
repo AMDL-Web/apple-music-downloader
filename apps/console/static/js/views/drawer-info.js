@@ -58,13 +58,17 @@ export function FilesSection({ items }) {
     <h3 id="files-title" class="section-title">Files</h3>
     <div class="drawer-files">
       ${dir
-        ? html`<code class="drawer-files-dir mono" title=${dir}>${dir}</code><${CopyButton} text=${dir} label="Copy folder path" />`
+        ? html`<code class="drawer-files-dir mono" title=${dir}>${pathBreaks(dir)}</code><${CopyButton} text=${dir} label="Copy folder path" />`
         : html`<span class="muted">The downloads folder</span>`}
     </div>
     ${folders.length > 1 ? html`<p class="drawer-files-note muted small">Spread over ${count(folders.length)} folders.</p>` : null}
     <a class="drawer-files-link" href=${settingsHash('files')}>Files & naming</a>
   </section>`;
 }
+
+// A folder path wraps after a slash (each one a <wbr>, the folder names kept
+// whole by .drawer-files-dir), so an artist's name is not cut in two.
+const pathBreaks = (dir) => dir.split('/').flatMap((part, i, all) => (i < all.length - 1 ? [`${part}/`, html`<wbr key=${i} />`] : [part]));
 
 const when = (value) =>
   value ? html`<time datetime=${value} title=${absTime(value)}>${dateTime(value)}</time>` : html`<span class="muted">Not yet</span>`;

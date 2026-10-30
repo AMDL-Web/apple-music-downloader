@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
 import { jobTitle, isUnresolved, inputLabel, count } from '../lib/format.js';
-import { activeFirst } from '../lib/jobview.js';
+import { activeFirst, isNotFound } from '../lib/jobview.js';
 import { appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
 import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
@@ -214,7 +214,9 @@ export function QueuePage({ route }) {
     if (action === 'retry') runAction('retry', plan.retry);
     else setConfirm({ action, jobs: null });
   };
-  const retryable = state.jobs.filter((j) => jobAllows(j, 'retry'));
+  // A link Apple has nothing at fails the same way again: Retry all leaves
+  // it out, and its row offers no Retry (the drawer still does).
+  const retryable = state.jobs.filter((j) => jobAllows(j, 'retry') && !isNotFound(j.error));
 
   // Escape leaves selection mode; x toggles the focused row (and enters the
   // mode). Both stand down while typing, under the drawer or any overlay.
@@ -288,7 +290,7 @@ export function QueuePage({ route }) {
     body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs">
         ${rows.map((job) => {
           const on = selecting && selected.has(job.id);
-          const retry = !selecting && job.status === 'failed';
+          const retry = !selecting && job.status === 'failed' && !isNotFound(job.error);
           return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined} data-action=${retry ? 'retry' : undefined}>
             ${selecting
               ? html`<label class="job-check">

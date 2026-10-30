@@ -42,7 +42,7 @@ test('a failed link reads Link not found for a 404, with the link under it and t
   const v = rowView(job, 'us');
   assert.equal(v.title, 'Link not found');
   assert.equal(v.sub, 'us/album/not-a-real-album/1');
-  assert.equal(v.reason, 'Apple Music has nothing at this link (404)');
+  assert.equal(v.reason, 'Apple Music has nothing at this link');
   assert.equal(v.progress, false);
   assert.equal(v.mono, false);
   assert.equal(rowView({ ...job, error: 'network down' }, 'us').title, "Couldn't resolve this link");
@@ -67,6 +67,8 @@ test('drawerSummary names the format, the tracks and the size', () => {
   assert.equal(drawerSummary([t(), t()]), 'ALAC 24/44.1 · 2 tracks · 80.0 MB');
   assert.equal(drawerSummary([t(), t(), t({ codec: 'aac', bit_depth: 0, sample_rate: 0 })]), 'Mostly ALAC 24/44.1 · 3 tracks · 120 MB');
   assert.equal(drawerSummary([t({ file_size: 0, codec: '' })]), '1 track');
+  assert.equal(drawerSummary([t(), t({ status: 'downloading', file_size: 0 })]), 'ALAC 24/44.1 · 2 tracks', 'no size while a track is still working');
+  assert.equal(drawerSummary([t(), t({ status: 'failed', file_size: 0 })]), 'ALAC 24/44.1 · 2 tracks · 40.0 MB');
   assert.equal(drawerSummary([]), '');
 });
 

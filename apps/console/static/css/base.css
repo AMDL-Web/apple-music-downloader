@@ -80,6 +80,12 @@ select {
   outline: none;
 }
 
+/* Nor does a button it focuses when a click or a tap opened it (main.js
+   sets data-input); opened from the keyboard, the ring stays. */
+:root[data-input="pointer"] :is(button, a)[data-autofocus]:focus-visible {
+  outline: none;
+}
+
 code,
 kbd,
 pre {

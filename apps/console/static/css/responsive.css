@@ -363,14 +363,15 @@
     display: none;
   }
 
-  /* Actions fill their rows evenly, Remove included, so no button is left
-     alone and small at the end of a row. */
+  /* Actions fill their rows evenly, except Remove: it keeps its own width
+     at the row's end, away from where a thumb reaches for the others. */
   .drawer-actions .btn {
     flex: 1 1 auto;
   }
 
-  .drawer-delete {
-    margin-left: 0;
+  .drawer-actions .drawer-delete {
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .drawer-actions .confirm {

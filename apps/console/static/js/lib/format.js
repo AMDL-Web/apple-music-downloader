@@ -256,6 +256,8 @@ export function unresolvedHint(job) {
 const ERROR_SUMMARY_MAX = 140;
 
 const CATALOG_FAILED = /catalog request failed:\s*(\d{3})\b/i;
+// The server's words for a link Apple has nothing at.
+const CATALOG_MISSING = /^Apple Music has no \S+ \S+ in storefront (\w+) \(404\)$/i;
 
 /**
  * Jobs stored before the server named Apple's answers keep "catalog request
@@ -266,7 +268,7 @@ export function legacyCatalogError(text) {
   const m = CATALOG_FAILED.exec(String(text || ''));
   if (!m) return '';
   const code = Number(m[1]);
-  if (code === 404) return 'Apple Music has nothing at this link (404)';
+  if (code === 404) return 'Apple Music has nothing at this link';
   if (code === 401 || code === 403) return `Apple Music refused access (${code})`;
   if (code === 429) return 'Apple Music is limiting requests, try again later (429)';
   if (code >= 500) return `Apple Music had a server problem (${code})`;
@@ -293,7 +295,9 @@ function jsonMessage(text) {
  * embedded JSON body ("404 Not Found: {"errors":...}" -> "404 Not Found"), or
  * the message inside an error that is only a JSON body, at most 140
  * characters, with a stored legacy catalog error in plain words
- * (legacyCatalogError). Clean one-line text passes through unchanged; the
+ * (legacyCatalogError) and the server's "Apple Music has no album 1 in
+ * storefront us (404)" as "Apple Music has nothing at this link in the US
+ * storefront". Clean one-line text passes through unchanged; the
  * full text stays available to the caller (a title attribute).
  */
 export function errorSummary(error) {
@@ -304,6 +308,8 @@ export function errorSummary(error) {
   text = text.replace(/[\s:;,]+$/, '').trim();
   const plain = legacyCatalogError(text);
   if (plain) return plain;
+  const missing = CATALOG_MISSING.exec(text);
+  if (missing) return `Apple Music has nothing at this link in the ${missing[1].toUpperCase()} storefront`;
   return text.length > ERROR_SUMMARY_MAX ? `${text.slice(0, ERROR_SUMMARY_MAX - 1).trimEnd()}…` : text;
 }
 
