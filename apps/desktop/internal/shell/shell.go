@@ -112,8 +112,9 @@ func (s *Shell) Sync(sum store.Summary) {
 	// shows; the tooltip sums up every running job.
 	title, now := "", 0.0
 	if sum.Now != nil {
-		now = sum.Now.Progress
-		title = fmt.Sprintf("%d%%", int(now*100))
+		pct := sum.Now.Percent()
+		now = float64(pct) / 100
+		title = fmt.Sprintf("%d%%", pct)
 	}
 	if title != s.shownTitle {
 		s.shownTitle = title

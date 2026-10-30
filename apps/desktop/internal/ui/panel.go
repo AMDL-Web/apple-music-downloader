@@ -199,7 +199,7 @@ func (a *App) panelMini(c *ui.Context, k *Tokens, j *store.Job) {
 				ui.Spacer(c)
 				state := "queued"
 				if !queued {
-					state = fmt.Sprintf("%d/%d · %d%%", j.Done(), j.TotalItems, int(j.Progress*100))
+					state = fmt.Sprintf("%d/%d · %d%%", j.Done(), j.TotalItems, j.Percent())
 				}
 				mono(c, state, 10.5).TextColor(k.Muted)
 			})

@@ -163,7 +163,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		}
 		ui.Column(c).AlignItems(ui.End).Gap(10).Children(func() {
 			ui.Row(c).AlignItems(ui.Baseline).Children(func() {
-				display(c, fmt.Sprint(int(j.Progress*100)), 64).LetterSpacing(-1.9).TextColor(hc.title).FontFeatures("tnum")
+				display(c, fmt.Sprint(j.Percent()), 64).LetterSpacing(-1.9).TextColor(hc.title).FontFeatures("tnum")
 				ui.Text(c, "%").FontSize(26).FontWeight(700).TextColor(hc.meta)
 			})
 			ui.Row(c).Gap(8).Children(func() {
@@ -299,7 +299,7 @@ func rowCount(j *store.Job) string {
 	}
 	s := fmt.Sprintf("%d/%d", j.Done(), j.TotalItems)
 	if j.Status == domain.JobRunning {
-		s += fmt.Sprintf(" · %d%%", int(j.Progress*100))
+		s += fmt.Sprintf(" · %d%%", j.Percent())
 	}
 	return s
 }

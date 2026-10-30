@@ -165,3 +165,21 @@ func TestQualityOverrides(t *testing.T) {
 		t.Errorf("lossless %+v", o)
 	}
 }
+
+func TestItemEventsRecountTracks(t *testing.T) {
+	s, _ := newTestStore(t)
+	stale := domain.Job{ID: "j", Status: domain.JobRunning, TotalItems: 2}
+	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{stale}})
+	s.applyDetail("j", client.DownloadDetail{
+		Job:         stale,
+		Items:       []domain.JobItem{{ID: "a", Index: 1, Status: domain.ItemDownloading}, {ID: "b", Index: 2, Status: domain.ItemDownloading}},
+		EventCursor: 10,
+	})
+	// Item events carry only the track; the job's counters must follow it.
+	s.applyEvent("j", domain.Event{ID: 11, ItemID: "a", Type: domain.EventItemCompleted, Payload: mustJSON(domain.JobItem{ID: "a", Index: 1, Status: domain.ItemCompleted})})
+	s.applyEvent("j", domain.Event{ID: 12, ItemID: "b", Type: domain.EventItemFailed, Payload: mustJSON(domain.JobItem{ID: "b", Index: 2, Status: domain.ItemFailed})})
+	j := s.Job("j")
+	if j.CompletedItems != 1 || j.FailedItems != 1 || j.Done() != 1 {
+		t.Fatalf("counters completed=%d failed=%d done=%d, want 1, 1, 1", j.CompletedItems, j.FailedItems, j.Done())
+	}
+}

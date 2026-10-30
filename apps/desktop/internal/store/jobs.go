@@ -78,6 +78,16 @@ func (j *Job) Done() int { return j.CompletedItems + j.SkippedItems }
 // Album is the job's album bar, from the tracks the app has followed.
 func (j *Job) Album() progress.Album { return progress.AlbumProgress(j.Status, j.Items) }
 
+// Percent is the job's overall progress as its album bar states it, so every
+// number the app shows for a job agrees with the web console's; a job whose
+// tracks the app has not followed falls back to its counters.
+func (j *Job) Percent() int {
+	if len(j.Items) > 0 {
+		return j.Album().Percent
+	}
+	return int(j.Progress*100 + 0.5)
+}
+
 // Bytes sums the file sizes of the tracks written so far in this run.
 func (j *Job) Bytes() int64 {
 	var n int64
@@ -158,8 +168,9 @@ func (j *Job) Phase() Phase {
 	return PhaseDownloading
 }
 
-// recompute refreshes the derived progress fields.
+// recompute refreshes the track counters and the derived progress fields.
 func (j *Job) recompute(now time.Time) {
+	j.recount()
 	j.Stages = progress.JobStages(j.Job, j.Items)
 	j.Progress = j.Stages.Weighted()
 	if j.Status == domain.JobRunning {
@@ -167,6 +178,29 @@ func (j *Job) recompute(now time.Time) {
 		j.Remaining = j.rate.Remaining()
 	} else {
 		j.rate, j.Remaining = progress.Rate{}, 0
+	}
+}
+
+// recount fills the job's track counters from its tracks, as the backend
+// does on every read: an item event carries the track, not the job, so the
+// counters would otherwise keep the last job payload's values while the
+// tracks move on. A partial track list leaves them alone.
+func (j *Job) recount() {
+	if len(j.Items) == 0 || len(j.Items) < j.TotalItems {
+		return
+	}
+	j.CompletedItems, j.SkippedItems, j.FailedItems, j.CancelledItems = 0, 0, 0, 0
+	for _, it := range j.Items {
+		switch it.Status {
+		case domain.ItemCompleted:
+			j.CompletedItems++
+		case domain.ItemSkipped:
+			j.SkippedItems++
+		case domain.ItemFailed:
+			j.FailedItems++
+		case domain.ItemCancelled:
+			j.CancelledItems++
+		}
 	}
 }
 
