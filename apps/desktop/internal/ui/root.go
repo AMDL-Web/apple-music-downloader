@@ -48,7 +48,9 @@ func (a *App) View(c *ui.Context) {
 						a.settings(c, k)
 					case ScreenDetail:
 						a.detail(c, k)
-					case ScreenLibrary, ScreenSystem, ScreenNew:
+					case ScreenNew:
+						a.newDownload(c, k, compact)
+					case ScreenLibrary, ScreenSystem:
 						a.notYet(c, k)
 					default:
 						a.queueScreen(c, k, compact)

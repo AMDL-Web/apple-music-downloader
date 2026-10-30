@@ -65,6 +65,10 @@ type App struct {
 	omni    ui.Handle
 	omniTxt string
 	set     settingsForm
+	// linksTxt is the new download screen's field, and newSel the link its
+	// preview shows.
+	linksTxt string
+	newSel   string
 }
 
 // tokens returns the colors of the current appearance.

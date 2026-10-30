@@ -84,6 +84,10 @@ func (a *App) ready() {
 		return
 	}
 	a.dirs = dirs
+	if err := appui.RegisterFonts(); err != nil {
+		// The system's monospace face stands in; the app still works.
+		a.log.Warn("embedded fonts unreadable", "error", err)
+	}
 	if a.settings, err = mode.LoadSettings(dirs.Data); err != nil {
 		a.log.Warn("settings unreadable; starting from the defaults", "error", err)
 	}

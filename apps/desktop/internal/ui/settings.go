@@ -237,6 +237,7 @@ func (a *App) aboutSettings(c *ui.Context, k *Tokens) {
 		display(c, "AMDL", 28)
 		ui.Text(c, "Downloads music from Apple Music. Free software under the GNU AGPL 3.0.").TextColor(k.Muted)
 		ui.Text(c, "Built with MyGo (MIT). ffmpeg, when shipped with the app, is under the LGPL.").FontSize(12).TextColor(k.Faint)
+		ui.Text(c, "JetBrains Mono © 2020 The JetBrains Mono Project Authors, under the SIL Open Font License 1.1.").FontSize(12).TextColor(k.Faint)
 		ui.Text(c, "Data: "+a.Dirs.Data).Font(MonoFont).FontSize(11.5).TextColor(k.Faint)
 	})
 }
