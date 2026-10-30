@@ -277,7 +277,7 @@ so it stays valid when files inside the package are split.
 
 ## Development
 
-You need Go (version in [`go.mod`](go.mod)), `ffmpeg` on `PATH`, and Node.js 24 for the
+You need Go (version in [`go.mod`](go.mod)), `ffmpeg` on `PATH`, and Node.js 26 for the
 script tests.
 
 | Command | What it does |

@@ -9,7 +9,7 @@ import { html, useState } from '../ui/preact.js';
 import { getWrapperStatus, loginWrapper, submitWrapperTwoStep, logoutWrapper, settle } from '../api.js';
 import { wrapperErrorText, wrapperUnreachable, unreachableLine } from '../lib/settings-account.js';
 import { wrapperView } from '../lib/status.js';
-import { useApp, Badge, Button, Icon, KV, Notice, SkeletonRows } from '../ui/components.js';
+import { useApp, Badge, Button, Icon, KV, Notice, SkeletonKV } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { usePoll } from '../ui/hooks.js';
 
@@ -46,7 +46,7 @@ export function AccountPanel({ children }) {
   }
 
   let state;
-  if (!res) state = html`<${SkeletonRows} n=${3} kind="line" />`;
+  if (!res) state = html`<${SkeletonKV} labels=${['State', 'Connected', 'Regions']} />`;
   else if (res.error) {
     state = html`<${KV} rows=${[['State', html`<${Badge} view=${wrapperView(res)} />`]]} />
       <${WrapperError} error=${res.error} step="status" role="warning" />`;

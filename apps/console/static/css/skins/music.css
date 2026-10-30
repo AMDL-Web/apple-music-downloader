@@ -2875,20 +2875,16 @@
     display: none;
   }
 
-  /* New, the center tab: a red capsule around the plus with a soft red
-     shadow, the word under it like every other tab. */
+  /* New, the center tab: a red capsule around a large plus with a soft red
+     shadow, no word under it. */
   :root[data-skin="music"] .tab-new-mark {
-    width: 48px;
-    height: 30px;
-    /* Tab icons are 24 px here: the capsule rises 6 px above their line. */
-    margin-top: -6px;
     border-radius: var(--r-full);
     box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent) 70%, transparent);
   }
 
   :root[data-skin="music"] .tab-new-mark .icon {
-    width: 20px;
-    height: 20px;
+    width: 28px;
+    height: 28px;
   }
 
   /* Two lines on a phone, so the capsule becomes the card radius. */

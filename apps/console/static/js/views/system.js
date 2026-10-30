@@ -16,7 +16,7 @@ import {
 import { count, bytes, elapsed, absTime, relTime } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/status.js';
-import { useApp, Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonRows, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
+import { useApp, Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonKV, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
 import { midTruncate, groupByDisk, diskRole } from '../lib/storage.js';
 
@@ -49,7 +49,7 @@ function AboutCard({ sys }) {
   let body;
   if (notFound(sys)) body = html`<${Unavailable} what="Build and uptime information (GET /api/v1/system)" />`;
   else if (sys.error && !s) body = html`<${ErrorNote} title="Couldn't load system information" error=${sys.error} onRetry=${sys.reload} />`;
-  else if (!s) body = html`<${SkeletonRows} n=${5} kind="line" />`;
+  else if (!s) body = html`<${SkeletonKV} labels=${['Version', 'Commit', 'Built', 'Started', 'Uptime', 'Go', 'Platform']} />`;
   else
     body = html`<${KV}
       rows=${[
@@ -69,7 +69,11 @@ function RuntimeCard({ sys }) {
   const s = sys.data;
   let body;
   if (notFound(sys)) body = html`<${Unavailable} what="Runtime capacity" />`;
-  else if (!s) body = sys.error ? null : html`<${SkeletonRows} n=${5} kind="line" />`;
+  else if (!s)
+    body = sys.error
+      ? null
+      : html`<${SkeletonKV} labels=${['Mode', 'Motion covers', 'Workers', 'Queue', 'Recovery backlog', 'Pools']} />
+          <ul class="tool-list" aria-hidden="true"><li class="tool-row"><span class="tool-name mono">ffmpeg</span><span class="tool-value"><span class="skel skel-lh"></span></span></li></ul>`;
   else {
     const j = s.jobs || {};
     const p = s.pools || {};
@@ -88,10 +92,12 @@ function RuntimeCard({ sys }) {
         ? html`<ul class="tool-list" aria-label="Tools">
             ${s.tools.map(
               (t) => html`<li key=${t.name} class="tool-row">
-                <span class="mono">${t.name}</span>
-                <${StatusText} view=${t.available ? { icon: 'circle-check', role: 'success', label: 'Available' } : { icon: 'circle-x', role: 'danger', label: 'Missing' }} />
-                ${t.path ? html`<span class="mono muted small wrap-any">${t.path}</span>` : null}
-                ${t.available ? null : html`<span class="muted small" title=${t.error || undefined}>Install it, or set <code>tools.${t.name}</code> in configs/config.yaml to its path and restart.</span>`}
+                <span class="tool-name mono">${t.name}</span>
+                <span class="tool-value">
+                  <${StatusText} view=${t.available ? { icon: 'circle-check', role: 'success', label: 'Available' } : { icon: 'circle-x', role: 'danger', label: 'Missing' }} />
+                  ${t.path ? html`<span class="mono muted small wrap-any">${t.path}</span>` : null}
+                  ${t.available ? null : html`<span class="muted small" title=${t.error || undefined}>Install it, or set <code>tools.${t.name}</code> in configs/config.yaml to its path and restart.</span>`}
+                </span>
               </li>`,
             )}
           </ul>`
@@ -115,7 +121,24 @@ function StorageCard({ sys }) {
   const s = sys.data;
   let body;
   if (notFound(sys)) body = html`<${Unavailable} what="Free space" />`;
-  else if (!s) body = sys.error ? null : html`<${SkeletonRows} n=${2} kind="line" />`;
+  else if (!s)
+    // The usual shape: both folders on one disk, their paths and free space loading.
+    body = sys.error
+      ? null
+      : html`<ul class="storage-list" aria-busy="true" aria-label="Loading">
+          <li class="storage-row">
+            <ul class="storage-folders">
+              ${Object.entries(FOLDER_NAMES).map(
+                ([k, name]) => html`<li key=${k} class="storage-folder">
+                  <span class="storage-name">${name}</span>
+                  <span class="storage-path mono muted small"><span class="skel skel-lh"></span></span>
+                </li>`,
+              )}
+            </ul>
+            <span class="meter"></span>
+            <span class="small"><span class="skel skel-lh skel-short"></span></span>
+          </li>
+        </ul>`;
   else if (!Array.isArray(s.storage) || s.storage.length === 0) body = html`<p class="muted small">No storage information.</p>`;
   else
     body = html`<ul class="storage-list">
@@ -145,6 +168,9 @@ function StorageCard({ sys }) {
   return html`<${Card} className="span-6" title="Storage" labelId="storage-title">${body}</${Card}>`;
 }
 
+// The rows the Health card always has, shown with their status loading.
+const HEALTH_NAMES = ['Backend', 'Wrapper', 'Library sync', 'Hooks'];
+
 function HealthCard({ backend, wrapper, sync, hooks, tools = [], loading }) {
   const rows = loading
     ? null
@@ -158,13 +184,13 @@ function HealthCard({ backend, wrapper, sync, hooks, tools = [], loading }) {
   return html`<${Card} className="span-6" title="Health" labelId="sys-health-title" note="Checked every 30 s">
     ${rows
       ? html`<${HealthList} rows=${rows} wrapDetail />`
-      : html`<${SkeletonRows} n=${4} kind="line" />`}
+      : html`<${HealthList} rows=${HEALTH_NAMES.map((n) => [n, null])} />`}
   </${Card}>`;
 }
 
 function WrapperCard({ res, loading }) {
   let body;
-  if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
+  if (loading) body = html`<${SkeletonKV} labels=${['State', 'Error']} /><p class="muted small"><span class="skel skel-lh"></span></p>`;
   else if (!res || res.error) {
     const view = wrapperView(res);
     body = html`<${KV}
@@ -201,7 +227,7 @@ function WrapperCard({ res, loading }) {
 
 function LibrarySyncCard({ res, loading }) {
   let body;
-  if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
+  if (loading) body = html`<p class="muted small"><span class="skel skel-lh"></span></p>`;
   else if (!res || res.error) body = html`<${Badge} view=${librarySyncView(res)} />`;
   else if (!res.data.enabled) body = html`<p class="muted small">Library sync is off. You can turn it on in <a class="link" href=${settingsHash()}>Settings</a>.</p>`;
   else {
@@ -222,7 +248,7 @@ function LibrarySyncCard({ res, loading }) {
 function HooksCard({ res, stats, loading, wide }) {
   let body;
   const outcomes = new Map(((stats.data && stats.data.hooks) || []).map((h) => [h.name, h]));
-  if (loading) body = html`<${SkeletonRows} n=${3} kind="line" />`;
+  if (loading) body = html`<p class="quiet-note"><span class="skel skel-lh"></span></p>`;
   else if (!res || res.error) body = html`<${ErrorNote} title="Couldn't load hooks" error=${res && res.error} />`;
   else {
     const entries = res.data.entries || [];
@@ -265,7 +291,7 @@ function ConfigCard() {
   const data = cfg.data;
   let body;
   if (cfg.error && !data) body = html`<${ErrorNote} title="Couldn't load the config" error=${cfg.error} onRetry=${cfg.reload} />`;
-  else if (!data) body = html`<${SkeletonRows} n=${6} kind="line" />`;
+  else if (!data) body = html`<${SkeletonKV} labels=${['Codec priority', 'Log level', 'Media user token']} /><p class="muted small"><span class="skel skel-lh"></span></p>`;
   else {
     const c = data.config || {};
     const d = c.download || {};

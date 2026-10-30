@@ -410,6 +410,23 @@
   height: 12px;
 }
 
+/* One line of the text it stands in for: inside a title, as tall as the title's line. */
+.skel-lh {
+  box-sizing: border-box;
+  width: min(60%, 14em);
+  height: 1lh;
+  border-block: 0.2lh solid transparent;
+  background-clip: padding-box;
+}
+
+.skel-short {
+  width: min(35%, 8em);
+}
+
+.job-row.is-skel {
+  pointer-events: none;
+}
+
 .skel-line {
   height: 20px;
 }

@@ -13,7 +13,7 @@
 // issue, an earlier job still queued or running), until Show all.
 
 import { html, useState } from '../ui/preact.js';
-import { artPalette, paletteStyle, shortDate } from '../lib/format.js';
+import { artPalette, paletteStyle, shortDate, artWidths } from '../lib/format.js';
 import { kindLabel, previewFacts, needsAttention, ROWS_SHOWN, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { Card, Button, Icon, Artwork, Skeleton } from '../ui/components.js';
 
@@ -32,6 +32,7 @@ const breakable = (text) => text.split('/').map((part, i, all) => (i < all.lengt
 // Types the quality probe is quick and meaningful for: one release. An
 // artist or station would read every track of a whole catalog.
 const QUALITY_TYPES = ['album', 'song'];
+const LINK_ART = artWidths(48);
 
 /**
  * Props: entries (scanLinks), statusOf(url) (the lookup status, with
@@ -144,13 +145,13 @@ function LinkRow({ entry, status, issue, prior, picked, row }) {
       onChange=${(e) => row.onPick(entry.url, e.currentTarget.checked)}
     />
     ${data
-      ? html`<${Artwork} url=${data.artwork_url} bg=${palette && palette.bg} px=${160} className="art-48 new-link-art" />`
+      ? html`<${Artwork} url=${data.artwork_url} bg=${palette && palette.bg} px=${100} widths=${LINK_ART} sizes="48px" className="art-48 new-link-art" />`
       : html`<div class="art art-48 new-link-art" aria-hidden="true">
           ${loading ? html`<${Skeleton} kind="tile" />` : html`<span class="art-glyph"><${Icon} name=${link ? 'music' : 'circle-slash'} /></span>`}
         </div>`}
     <div class="new-link-main">
       <span class="new-link-head">
-        <span class=${facts ? 'new-link-title' : 'new-link-title is-url'} dir="auto">${facts ? name : breakable(name)}</span>
+        <span class=${facts ? 'new-link-title' : loading ? 'new-link-title is-url is-pending' : 'new-link-title is-url'} dir="auto">${facts ? name : breakable(name)}</span>
         ${facts && facts.explicit ? html`<span class="new-link-explicit" title="Explicit" aria-label="Explicit">E</span>` : null}
         ${facts && facts.adm ? html`<span class="chip new-link-adm" title="Mastered for Apple's high-resolution formats">Apple Digital Master</span>` : null}
         ${sf ? html`<span class="chip new-link-sf" title=${sfTitle}>${sf.toUpperCase()}</span>` : null}

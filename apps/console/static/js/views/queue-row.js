@@ -2,7 +2,10 @@
 // Submitted list), and the feed reducer those lists share.
 
 import { html } from '../ui/preact.js';
-import { artPalette, paletteStyle, jobFacts } from '../lib/format.js';
+import { artPalette, paletteStyle, jobFacts, artWidths } from '../lib/format.js';
+
+// The row's cover is drawn 48 px wide (40 in the base, 48 in the skin).
+const ROW_ART = artWidths(40, 48);
 import { rowView } from '../lib/jobview.js';
 import { upsertJob, removeJob } from '../lib/store.js';
 import { useApp, Artwork, Badge, JobProgress, RelTime, Icon } from '../ui/components.js';
@@ -42,7 +45,7 @@ export function JobRow({ job, href, selected, onSelect }) {
     style=${paletteStyle(palette)}
     onClick=${onClick}
   >
-    <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${160} className="art-40" />
+    <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${100} widths=${ROW_ART} sizes="48px" className="art-40" />
     <span class="job-main">
       <span class="job-facts">
         ${f.type ? html`<span class="job-fact" data-key="type">${f.type}</span>` : null}

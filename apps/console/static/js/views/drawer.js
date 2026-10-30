@@ -13,6 +13,7 @@ import {
   typeLabel,
   artPalette,
   paletteStyle,
+  artWidths,
   count,
   safeHttpUrl,
   isUnresolved,
@@ -37,6 +38,10 @@ import {
   SkeletonRows,
 } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
+import { MotionCover } from '../ui/motion.js';
+
+// The header cover: 112 px wide from 640 px up, 88 px on a phone.
+const HEAD_ART = artWidths(88, 112);
 
 const FOCUSABLE = 'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -178,15 +183,23 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
         .join(' · ');
   const summary = drawerSummary(items);
   const live = !isTerminal(job.status) && !streamEnded;
+  // Once this drawer has shown the job live, finished tracks keep their stage
+  // row, so the list does not shrink under the reader as each one completes.
+  const seenLive = useRef({ id: '', on: false });
+  if (seenLive.current.id !== job.id) seenLive.current = { id: job.id, on: false };
+  if (live) seenLive.current.on = true;
   // A finished job with no tracks (a link that never resolved) has nothing to list.
   const tracks = items.length > 0 || !isTerminal(job.status);
-  // The bar says where a finished job ended up; a clean completion needs none.
+  // The bar says where a finished job ended up; a clean completion needs none,
+  // and hides it rather than dropping it, so the head keeps its height.
   const c = jobCounts(job);
   const showProgress = !isTerminal(job.status) || c.failed > 0 || c.cancelled > 0;
 
   return html`<div class="drawer-body">
     <header class="drawer-head" style=${paletteStyle(palette)}>
-      <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${128} className="art-64" eager />
+      <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${240} widths=${HEAD_ART} sizes="(max-width: 639px) 88px, 112px" className="art-64" eager>
+        ${job.motion_artwork_url ? html`<${MotionCover} job=${job} size=${112} />` : null}
+      </${Artwork}>
       <div class="drawer-head-text">
         <h2 id="drawer-title" class=${unresolved && !lost ? 'drawer-title is-unresolved' : 'drawer-title'} dir="auto">${title}</h2>
         ${lost && lostRow.sub ? html`<p class="drawer-meta drawer-input" dir="auto">${lostRow.sub}</p>` : null}
@@ -212,14 +225,14 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
       ? html`<section class="drawer-section" aria-labelledby="tracks-title">
           <div class="section-head">
             <h3 id="tracks-title" class="section-title">Tracks</h3>
-            ${showProgress ? html`<${JobProgress} job=${job} />` : null}
+            <span class=${showProgress ? 'section-progress' : 'section-progress is-hidden'} aria-hidden=${showProgress ? undefined : 'true'}><${JobProgress} job=${job} /></span>
           </div>
           ${items.length === 0
             ? html`<${Empty} icon="list" title="No tracks resolved yet" />`
             : [
                 html`<${TrackStrip} key="strip" items=${items} />`,
                 codecKinds(items).length > 1 ? html`<${TrackLegend} key="legend" items=${items} />` : null,
-                html`<${TrackList} key="list" items=${items} albumArtist=${job.artist_name || ''} />`,
+                html`<${TrackList} key="list" items=${items} albumArtist=${job.artist_name || ''} keepStatus=${seenLive.current.on} />`,
               ]}
         </section>`
       : null}

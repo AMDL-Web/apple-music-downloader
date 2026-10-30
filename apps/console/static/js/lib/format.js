@@ -13,17 +13,35 @@ export function isArtworkTemplate(url) {
   return typeof url === 'string' && PLACEHOLDER.test(url);
 }
 
-/** Fills an artwork template for a square image of `size` pixels. */
-export function artworkUrl(url, size, format = 'jpg') {
+// Apple's image server renders a template ending in "{w}x{h}bb.jpg" in any
+// format its extension names, so the extension is a format slot too.
+const JPG_TAIL = /(\{w\}x\{h\}[a-z-]*)\.jpg$/;
+
+/**
+ * Fills an artwork template for a square image of `size` pixels, in `format`
+ * (WebP unless asked otherwise: about half the bytes of the JPEG).
+ */
+export function artworkUrl(url, size, format = 'webp') {
   if (!url) return '';
   if (!isArtworkTemplate(url)) return url;
-  return url.replaceAll('{w}', String(size)).replaceAll('{h}', String(size)).replaceAll('{f}', format);
+  return url.replace(JPG_TAIL, '$1.{f}').replaceAll('{w}', String(size)).replaceAll('{h}', String(size)).replaceAll('{f}', format);
 }
 
 /** Width-descriptor srcset for a template; empty for verbatim URLs. */
 export function artworkSrcset(url, widths) {
   if (!isArtworkTemplate(url)) return '';
   return widths.map((w) => `${artworkUrl(url, w)} ${w}w`).join(', ');
+}
+
+/**
+ * Srcset widths for a cover drawn at the given CSS sizes: each at 1x, 2x and
+ * 3x pixel density, rounded up to 10 px, so every screen gets a sharp image
+ * and none a far larger one than it draws.
+ */
+export function artWidths(...css) {
+  const out = new Set();
+  for (const c of css) for (const d of [1, 2, 3]) out.add(Math.ceil((c * d) / 10) * 10);
+  return [...out].sort((a, b) => a - b);
 }
 
 /** Formats an integer with thousands separators ("1,284"). */

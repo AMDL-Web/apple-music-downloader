@@ -312,10 +312,22 @@ export function progressLegend(job) {
 
 const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 
+const STAGE_LABELS = { resolve: 'Resolve', download: 'Download', decrypt: 'Decrypt', remux: 'Remux', verify: 'Verify', tag: 'Tag', save: 'Save' };
+
+/**
+ * Each stage's share of a track's run time, which sets the width of its
+ * segment: download is most of it, decrypt about half of that, and resolve
+ * and the finishing steps a sliver each. The same shares the AMDL iOS app
+ * gives the stages of ItemProgress. They add up to 1 and shape the bar only;
+ * no overall percentage is shown.
+ */
+export const STAGE_WEIGHTS = Object.freeze({ resolve: 0.04, download: 0.56, decrypt: 0.26, remux: 0.06, verify: 0.03, tag: 0.03, save: 0.02 });
+
 /**
  * The seven pipeline stages of one item. Download and decrypt carry their
- * own fraction; the others are done/not done. There is deliberately no
- * overall percentage (ItemProgress in the API).
+ * own fraction; the others are done/not done. Each carries its
+ * STAGE_WEIGHTS share as `weight`. There is deliberately no overall
+ * percentage (ItemProgress in the API).
  */
 export function stageSegments(item) {
   const p = (item && item.progress) || {};
@@ -326,9 +338,14 @@ export function stageSegments(item) {
   const frac = (key, label, v, active) => {
     let state = v >= 1 ? 'done' : v > 0 ? 'partial' : 'empty';
     if (active && v === 0) state = 'indeterminate';
-    return { key, label, state, fraction: v };
+    return { key, label, state, fraction: v, weight: STAGE_WEIGHTS[key] };
   };
-  const flag = (key, label, on) => ({ key, label, state: on ? 'done' : 'empty', fraction: on ? 1 : 0 });
+  const flag = (key, label, on) => ({ key, label, state: on ? 'done' : 'empty', fraction: on ? 1 : 0, weight: STAGE_WEIGHTS[key] });
+  // A track already on disk ran no stage, but it is finished: a full bar in
+  // the skipped state, which the skin draws in its quiet ink, not success.
+  if (status === 'skipped_existing') {
+    return Object.entries(STAGE_LABELS).map(([key, label]) => ({ key, label, state: 'skipped', fraction: 1, weight: STAGE_WEIGHTS[key] }));
+  }
   const verify = flag('verify', 'Verify', Boolean(p.verified));
   if (finished && !p.verified) verify.state = 'unverified';
   return [
@@ -344,6 +361,7 @@ export function stageSegments(item) {
 
 /** Accessible description of the stage segments, e.g. "Download 45%, decrypt not started". */
 export function stageText(segments) {
+  if (segments.length && segments.every((s) => s.state === 'skipped')) return 'Already on disk, nothing downloaded';
   return segments
     .map((s) => {
       if (s.state === 'unverified') return `${s.label}: not verified`;

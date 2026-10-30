@@ -1,31 +1,25 @@
 // Showcase: a grid of completed albums, playlists or songs, one tile per
 // release (jobs of the same link target collapse to the newest), under a
 // compact banner for the latest one (desktop only; on a phone it is the first
-// tile). Motion covers play on hover or focus where the browser plays HLS
-// natively.
+// tile). Motion covers play on hover or focus (ui/motion.js).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { jobTitle, jobSubtitle, artPalette, paletteStyle, artworkUrl, typeLabel, jobFacts } from '../lib/format.js';
+import { jobTitle, jobSubtitle, artPalette, paletteStyle, typeLabel, jobFacts, artWidths } from '../lib/format.js';
 import { uniqueByTarget } from '../lib/albums.js';
 import { upsertJob, removeJob, appendPage, jobMatches } from '../lib/store.js';
 import { buildHash, showcaseType, showcaseQuery, SHOWCASE_TYPES } from '../lib/route.js';
 import { useApp, Artwork, Segmented, Empty, ErrorNote, Skeleton, Button, LinkButton, Facts } from '../ui/components.js';
 import { useReducedMotion } from '../ui/hooks.js';
+import { MotionCover } from '../ui/motion.js';
 
 const PAGE_SIZE = 24;
 const TYPE_LABELS = { album: 'Albums', playlist: 'Playlists', song: 'Songs' };
 
-let hlsSupport = null;
-
-/** Whether this browser plays HLS in a <video> without a library (Safari, iOS). */
-function canPlayHls() {
-  if (hlsSupport === null) {
-    const v = document.createElement('video');
-    hlsSupport = Boolean(v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl'));
-  }
-  return hlsSupport;
-}
+// The banner's cover is at most 160 px wide (the banner is hidden on a
+// phone); a tile is half a phone screen, or about 240 px on a desktop.
+const HERO_ART = artWidths(140, 160);
+const TILE_ART = artWidths(190, 240);
 
 export function ShowcasePage({ route }) {
   const app = useApp();
@@ -34,7 +28,6 @@ export function ShowcasePage({ route }) {
   const [fresh, setFresh] = useState(() => new Set());
   const [playing, setPlaying] = useState(null);
   const reduced = useReducedMotion();
-  const motionOk = !reduced && canPlayHls();
   const seq = useRef(0);
 
   const load = (offset) => {
@@ -86,7 +79,7 @@ export function ShowcasePage({ route }) {
   const href = (job) => buildHash('showcase', route.params, job.id);
   const hover = {
     enter: (job) => {
-      if (motionOk && job.motion_artwork_url) setPlaying(job.id);
+      if (!reduced && job.motion_artwork_url) setPlaying(job.id);
     },
     leave: (job) => setPlaying((p) => (p === job.id ? null : p)),
   };
@@ -133,23 +126,6 @@ export function ShowcasePage({ route }) {
   </div>`;
 }
 
-/** Muted looping motion cover over the still, in the motion asset's own colors. */
-function MotionCover({ job }) {
-  const p = artPalette(job, true);
-  return html`<video
-    class="motion"
-    style=${p ? { '--art-bg': p.bg } : undefined}
-    src=${job.motion_artwork_url}
-    poster=${artworkUrl(job.artwork_url, 600) || undefined}
-    muted
-    autoplay
-    loop
-    playsinline
-    disablepictureinpicture
-    aria-hidden="true"
-  ></video>`;
-}
-
 function Hero({ job, href, playing, hover }) {
   const motion = playing && job.motion_artwork_url;
   const palette = artPalette(job, Boolean(motion)) || artPalette(job);
@@ -170,8 +146,8 @@ function Hero({ job, href, playing, hover }) {
     onBlur=${() => hover.leave(job)}
   >
     <div class="hero-art">
-      <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${480} widths=${[300, 600, 1200]} sizes="(max-width: 639px) 100vw, 50vw" className="art-square" eager />
-      ${motion ? html`<${MotionCover} job=${job} />` : null}
+      <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${320} widths=${HERO_ART} sizes="160px" className="art-square" eager />
+      ${motion ? html`<${MotionCover} job=${job} size=${160} />` : null}
     </div>
     <div class="hero-text">
       <span class="hero-kicker">Latest · ${typeLabel(job.type)}</span>
@@ -194,8 +170,8 @@ function Tile({ job, href, playing, hover }) {
     onBlur=${() => hover.leave(job)}
   >
     <div class="tile-art">
-      <${Artwork} url=${job.artwork_url} px=${300} widths=${[300, 600]} sizes="(max-width: 639px) 50vw, 240px" className="art-square" />
-      ${playing && job.motion_artwork_url ? html`<${MotionCover} job=${job} />` : null}
+      <${Artwork} url=${job.artwork_url} px=${480} widths=${TILE_ART} sizes="(max-width: 639px) 50vw, 240px" className="art-square" />
+      ${playing && job.motion_artwork_url ? html`<${MotionCover} job=${job} size=${240} />` : null}
       ${job.motion_artwork_url ? html`<span class="tile-motion">Motion cover</span>` : null}
     </div>
     <span class="tile-title" dir="auto" title=${title}>${title}</span>

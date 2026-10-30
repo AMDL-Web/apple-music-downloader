@@ -1,0 +1,402 @@
+/*
+ * The New download page's form (#/new, views/download*.js): the column
+ * layout, link entry, the submit bar with the quality controls and the link
+ * previews. Linked after responsive.css and before download.css, whose phone
+ * rules at its end also cover these parts. Base structure only; it reads
+ * tokens like every other base stylesheet, and the skin restyles it.
+ */
+
+/* ---- Layout -------------------------------------------------------- */
+
+/* One centered column: the text box, the links, the submit bar, the
+   results, the browser shortcut. */
+.page.page-new,
+.main[data-page="new"] > .page-head {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.new-hint {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+/* ---- Compose ------------------------------------------------------- */
+
+.new-input {
+  display: block;
+  width: 100%;
+  min-height: 152px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--r-control);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  resize: vertical;
+}
+
+.new-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.new-compose .new-hint {
+  margin-top: var(--s-2);
+}
+
+/* ---- Submit bar ---------------------------------------------------- */
+
+/* Under the links and stuck to the bottom of the viewport while they run
+   past it, so Download stays in reach. */
+.new-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: calc(var(--s-4) - var(--page-gap));
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+}
+
+/* Toasts rise above the bar so they never cover Download. */
+:root:has(.page-new) .toasts {
+  bottom: calc(var(--s-6) + 96px);
+}
+
+.new-count {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty while the box has no links, but its line stays, so the first link
+   does not push Download down. */
+.new-count {
+  min-height: 1lh;
+}
+
+.new-submit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+}
+
+.new-controls {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  min-width: 0;
+}
+
+.new-quality {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.new-quality-select {
+  min-width: 0;
+  max-width: 320px;
+  text-overflow: ellipsis;
+}
+
+.new-overwrite {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  cursor: pointer;
+}
+
+.new-overwrite:has(:disabled) {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.new-submit-btn {
+  margin-inline-start: auto;
+  /* Wide enough for "Paste a link to start", so a shorter label does not resize it. */
+  min-width: 13.5em;
+  justify-content: center;
+}
+
+.new-cfg-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-cfg-note .link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* ---- Detected links ------------------------------------------------ */
+
+.new-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.new-links > li + li {
+  border-top: var(--row-divider);
+}
+
+.new-link {
+  display: grid;
+  grid-template-columns: auto 48px minmax(0, 1fr) auto;
+  grid-template-areas: "pick art main actions";
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--card-pad-x);
+}
+
+.new-link-art {
+  grid-area: art;
+}
+
+/* The include checkbox (the Queue's selection control), centered on the cover. */
+.new-link-pick {
+  grid-area: pick;
+  align-self: center;
+}
+
+/* A row that can't be sent has nothing to tick: its slot stays empty. */
+.new-link-pick:disabled {
+  visibility: hidden;
+}
+
+/* Unchecked rows (in the library, in the queue, or unchosen) stay listed
+   but quiet. */
+.new-link[data-excluded] .new-link-art {
+  opacity: 0.6;
+}
+
+.art-48 {
+  width: 48px;
+  height: 48px;
+}
+
+.new-link-art > .skel {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
+.new-link[data-blocking] .new-link-art {
+  opacity: 0.55;
+}
+
+.new-link-main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0_5);
+  min-width: 0;
+}
+
+/* The cover stays at the top when notes make the row taller. */
+.new-link-art,
+.new-link-actions {
+  align-self: start;
+}
+
+.new-link:not(:has(.new-link-note, .new-link-prior, .new-link-issue, .new-link-will)) .new-link-actions {
+  align-self: center;
+}
+
+/* Title, the Explicit mark and the quiet tags on one line; when it is
+   short of room the Apple Digital Master tag gives way first, then the
+   title. The storefront tag is two letters and keeps them. */
+.new-link-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.new-link-head > .new-link-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.new-link-head > .chip {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.new-link-head > .new-link-sf {
+  flex: none;
+}
+
+/* Tags on this page read as words in the page's 13 px, not small caps. */
+.new-link-head > .chip,
+.quality-track-head > .chip {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.new-link-explicit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-badge);
+  background: var(--text-secondary);
+  color: var(--bg-canvas);
+  font-size: var(--fs-13);
+  line-height: 16px;
+  font-weight: var(--w-semibold);
+}
+
+.new-link-loading,
+.new-link-note {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-link-title {
+  min-width: 0;
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-link-title.is-url {
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-regular);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* While the lookup runs the link holds one line, as the title will. */
+.new-link-title.is-url.is-pending {
+  white-space: nowrap;
+}
+
+/* One meta line; the whole of it is the tooltip. */
+.new-link-sub {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-link-sub > * + *::before {
+  content: " · ";
+}
+
+.new-link-will {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.new-spec {
+  white-space: nowrap;
+}
+
+.new-link-will .status-text[data-role="warning"] {
+  color: var(--warning-text);
+}
+
+.new-link-issue {
+  align-items: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.new-link-issue .icon {
+  margin-top: var(--s-0_5);
+}
+
+.new-link-issue[data-role="danger"] {
+  color: var(--danger-text);
+}
+
+.new-link-issue[data-role="warning"] {
+  color: var(--warning-text);
+}
+
+.new-link-fix {
+  white-space: nowrap;
+}
+
+.new-link-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.new-link-prior {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  align-self: flex-start;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  text-decoration: none;
+}
+
+.new-link-open {
+  white-space: nowrap;
+}
+
+.new-links-all {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  padding: var(--s-3) var(--card-pad-x);
+  border-top: var(--row-divider);
+}
+
+.new-links-more,
+.new-links-will {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-1_5);
+  padding: var(--s-3) var(--card-pad-x);
+  border-top: var(--row-divider);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}

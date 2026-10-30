@@ -8,6 +8,7 @@ import {
   sentence,
   artworkUrl,
   artworkSrcset,
+  artWidths,
   isArtworkTemplate,
   bytes,
   count,
@@ -50,8 +51,22 @@ const TEMPLATE = 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/{w
 const PRESIGNED = 'https://example-bucket.s3.amazonaws.com/cover.jpg?X-Amz-Signature=abc';
 
 test('artworkUrl fills {w}, {h} and {f}', () => {
-  assert.equal(artworkUrl(TEMPLATE, 300), 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/300x300bb.jpg');
-  assert.equal(artworkUrl(TEMPLATE, 600, 'webp'), 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/600x600bb.webp');
+  assert.equal(artworkUrl(TEMPLATE, 300), 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/300x300bb.webp');
+  assert.equal(artworkUrl(TEMPLATE, 600, 'jpg'), 'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/600x600bb.jpg');
+});
+
+test('artworkUrl treats the .jpg of an Apple template as the format', () => {
+  // The shape the catalog sends (artwork.url): no {f}, a fixed .jpg.
+  const apple = 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b4/1c/0d/x/4547366802955.jpg/{w}x{h}bb.jpg';
+  assert.equal(artworkUrl(apple, 224), 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b4/1c/0d/x/4547366802955.jpg/224x224bb.webp');
+  assert.equal(artworkUrl(apple, 224, 'jpg'), 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b4/1c/0d/x/4547366802955.jpg/224x224bb.jpg');
+  const odd = 'https://example.com/cover/{w}x{h}.png';
+  assert.equal(artworkUrl(odd, 100), 'https://example.com/cover/100x100.png', 'only a .jpg tail is a format slot');
+});
+
+test('artWidths covers 1x to 3x of every drawn size, rounded up to 10 px', () => {
+  assert.deepEqual(artWidths(48), [50, 100, 150]);
+  assert.deepEqual(artWidths(88, 112), [90, 120, 180, 230, 270, 340]);
 });
 
 test('artworkUrl leaves a pre-signed URL without placeholders untouched', () => {
@@ -65,7 +80,7 @@ test('artworkUrl leaves a pre-signed URL without placeholders untouched', () => 
 test('artworkSrcset lists width descriptors', () => {
   assert.equal(
     artworkSrcset(TEMPLATE, [300, 600]),
-    'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/300x300bb.jpg 300w, https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/600x600bb.jpg 600w',
+    'https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/300x300bb.webp 300w, https://is1-ssl.mzstatic.com/image/thumb/Music/ab/cd/source/600x600bb.webp 600w',
   );
 });
 
