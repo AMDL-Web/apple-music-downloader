@@ -55,16 +55,18 @@ func startOrAttach(b local.Backend) (*ownBackend, local.Runtime, error) {
 		if rt, ok := local.ReadRuntime(ctx, b.Dirs); ok {
 			return nil, rt, nil
 		}
-		f, err := local.OpenLog(b.Dirs)
-		if err == nil {
-			b.LogOutput, b.LogFile = f, f.Name()
+		var logFile io.Closer
+		if f, err := local.OpenLog(b.Dirs); err == nil {
+			b.LogOutput, b.LogFile, logFile = f, f.Name(), f
 		}
 		r, err := b.Start()
 		if err == nil {
-			return &ownBackend{Running: r, log: f}, local.Runtime{}, nil
+			return &ownBackend{Running: r, log: logFile}, local.Runtime{}, nil
 		}
-		if f != nil {
-			f.Close()
+		if logFile != nil {
+			// Start's error says why the backend did not run; a failed
+			// close of its log would add nothing to it.
+			_ = logFile.Close()
 		}
 		if !errors.Is(err, local.ErrBusy) {
 			return nil, local.Runtime{}, err
@@ -174,7 +176,9 @@ func (a *App) stopBackend(r *ownBackend) {
 		a.log.Warn("embedded backend stopped with an error", "error", err)
 	}
 	if r.log != nil {
-		r.log.Close()
+		if err := r.log.Close(); err != nil {
+			a.log.Warn("the embedded backend's log did not close", "error", err)
+		}
 	}
 }
 

@@ -35,7 +35,9 @@ func TestStandaloneAttachesOrRunsTheOneBackend(t *testing.T) {
 		if err := own.Stop(); err != nil {
 			t.Error(err)
 		}
-		own.log.Close()
+		if err := own.log.Close(); err != nil {
+			t.Error(err)
+		}
 	}()
 	if u, ok := local.Find(context.Background(), d); !ok || u != own.Base {
 		t.Errorf("another client finds %q, %v; want %s", u, ok, own.Base)
