@@ -1,8 +1,8 @@
 # Docs
 
-Reference documentation for the backend. Every page states its type on the line
-after its title, and `internal/repocheck` fails when a page is missing here or its
-type here disagrees with the page.
+Reference documentation for the server and the web console. Every page states its
+type on the line after its title, and `tools/repocheck` fails when a page is missing
+here or its type here disagrees with the page.
 
 | Type | Meaning |
 | --- | --- |

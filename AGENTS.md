@@ -1,10 +1,21 @@
-# amdl-backend
+# amdl
 
-Go service that resolves Apple Music links and runs the download, decrypt, remux
-and tag pipeline: REST and SSE under `/api/v1`, a SQLite store, and the web console
-in `internal/console`, the one client this repository maintains. Code map: the
+The monorepo for the AMDL project, which downloads music from Apple Music: resolve a
+link, then download, decrypt, remux and tag each track. Code map: the
 [README reading map](README.md#reading-map); vocabulary: `GLOSSARY.md`; docs index:
 `docs/README.md`.
+
+## Products and layout
+
+- `apps/server`: the backend binary `amdl-server`, which wires the core and serves REST
+  and SSE under `/api/v1` with a SQLite store. Its image is `deploy/server/`.
+- `apps/console`: the web console, embedded into the server; the one client this
+  repository maintains today. Rules in `apps/console/AGENTS.md`.
+- apps/desktop (planned): a MyGo macOS app that imports the same core. Each product keeps
+  its own directory under `apps/`, including a future non-Go app with its own build.
+- `internal/`: the Go core every product shares. It never imports a product; the server
+  passes the console in through `internal/api#Deps`.
+- `deploy/`: the Compose file and per-service image files. `tools/`: repository tooling.
 
 ## Working agreements
 
@@ -24,7 +35,7 @@ in `internal/console`, the one client this repository maintains. Code map: the
 - Reports keep changed, tested, pushed and released apart, and label behavior
   inferred from reading code as inference.
 - Rules for some paths live in `.claude/rules/` and in `AGENTS.md` files under
-  `internal/`; open the matching one before editing there.
+  `apps/` and `internal/`; open the matching one before editing there.
 
 ## This service has no auth, on purpose
 
@@ -101,14 +112,14 @@ and console checks and the report format.
 
 | Change | Run |
 | --- | --- |
-| Docs, AGENTS.md, rules, skills | `go test -count=1 ./internal/repocheck/` |
+| Docs, AGENTS.md, rules, skills | `go test -count=1 ./tools/repocheck/` |
 | Go logic | the package's tests, then `make test` |
 | Decryption (`internal/fairplay`, `tools/temaridiff`) | `go test ./internal/fairplay/` and `make temaridiff`, which `make check` does not run |
 | Concurrency (jobs, media pools, events, SSE) | `make race` |
 | API routes, schemas, SSE | `go test ./internal/api/` and a live check with `make dev` |
 | Config keys | `go test ./internal/config/ ./internal/api/`, then reread the key's example comment |
 | DB schema | `go test ./internal/db/` and a run against a copy of a real database |
-| Console | the commands in `internal/console/AGENTS.md` and a browser check |
+| Console | the commands in `apps/console/AGENTS.md` and a browser check |
 | Dependencies | `make vuln` |
 | Scripts, release tooling | `make node-test` |
 | Dockerfile, entrypoint | `make docker` |
@@ -153,9 +164,9 @@ sit in front of it and adds the login API the console uses; a bare wrapper-lite 
 | Routes, error codes and runtime config keys match `internal/api/openapi.yaml` | parity tests in `internal/api` |
 | Output paths | golden tests in `internal/media` |
 | `internal/fairplay` decrypts like upstream Temari, and `internal/fairplay/rounds_gen.go` is the pinned version's translation | CI Temari parity job (`make temaridiff`); Renovate opens a PR per Temari release |
-| Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `internal/console` |
-| Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md size, CLAUDE.md pairs, docs types and index | `internal/repocheck` tests |
-| DCO sign-off | DCO GitHub App on PRs; `scripts/guard-commands.mjs` on `git commit` |
+| Console: API paths exist in the spec, Settings cover runtime keys, design guard, vendor checksum | tests in `apps/console` |
+| Docs links, backticked paths, `path#Symbol` pointers, AGENTS.md size, CLAUDE.md pairs, docs types and index | `tools/repocheck` tests |
+| DCO sign-off | DCO GitHub App on PRs; `.claude/hooks/guard-commands.mjs` on `git commit` |
 | `main` only through a PR | branch protection; guard hook on `git push` |
 | No `--admin` merge without approval | guard hook on `gh pr merge` (Claude Code only) |
 | Never commit config, keys or data | `.gitignore`; guard hook on `git add -f` |

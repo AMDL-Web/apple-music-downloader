@@ -51,7 +51,7 @@ wins when they disagree, so details are not copied here.
 | Job hook | A webhook or command fired on `job_queued` or a terminal job event | `internal/hooks#Dispatcher` |
 | Library sync | The poller that turns newly added library songs into album jobs | `internal/librarysync#Watcher` |
 | Watermark | Library sync's position-based anchor in the newest-first library list | [docs/automation.md](docs/automation.md#why-the-watermark-is-a-position-not-a-timestamp) |
-| Skin | The console's look, one skin (`music`) on `<html data-skin>`, separate from the light/dark theme | [internal/console/DESIGN.md](internal/console/DESIGN.md#skin) |
+| Skin | The console's look, one skin (`music`) on `<html data-skin>`, separate from the light/dark theme | [apps/console/DESIGN.md](apps/console/DESIGN.md#skin) |
 
 ## Repository workflow
 
@@ -60,6 +60,6 @@ wins when they disagree, so details are not copied here.
 | dev, main | Work lands on `dev`; `main` changes only through the release PR | [AGENTS.md](AGENTS.md#commits-and-releases) |
 | DCO sign-off | The `Signed-off-by` trailer every commit needs (`git commit -s`) | [CONTRIBUTING.md](CONTRIBUTING.md#sign-off-dco) |
 | Move-only split | Moving declarations between files of one package with no code change, proven by `tools/splitdecls` verify | [amdl-refactor](.claude/skills/amdl-refactor/SKILL.md) |
-| Repo checks | Go tests that keep docs pointers and agent files honest | `internal/repocheck` |
-| Guard hook | The Claude Code PreToolUse script that blocks forbidden git and gh commands | `scripts/guard-commands.mjs` |
+| Repo checks | Go tests that keep docs pointers and agent files honest | `tools/repocheck` |
+| Guard hook | The Claude Code PreToolUse script that blocks forbidden git and gh commands | `.claude/hooks/guard-commands.mjs` |
 | Dev server | `make dev`: simulate mode on 127.0.0.1:18080 with data under `data/dev/` | `Makefile#dev` |

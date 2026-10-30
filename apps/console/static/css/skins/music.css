@@ -5,7 +5,7 @@
  * SF Pro Display-style headlines, an Apple Music red accent, inset grouped
  * lists for the operations data, a blurred bottom tab bar on phones.
  * Everything here is scoped under :root[data-skin="music"]; colors are
- * light-dark(<light>, <dark>). Spec: internal/console/skins/music.md.
+ * light-dark(<light>, <dark>). Spec: apps/console/skins/music.md.
  */
 
 /* ---- Tokens -------------------------------------------------------- */

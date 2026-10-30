@@ -1,6 +1,6 @@
 ---
 name: amdl-refactor
-description: Split a large Go file in amdl-backend, or move declarations between files of one package, as a provably move-only change with tools/splitdecls (list, plan, move, verify production and test files, build, vet, race, one signed-off commit per package, recorded in .git-blame-ignore-revs). Use when a change touches a source file over about 20 KB, or when asked to "split this file", "reorganize the package" or "move these functions".
+description: Split a large Go file in amdl, or move declarations between files of one package, as a provably move-only change with tools/splitdecls (list, plan, move, verify production and test files, build, vet, race, one signed-off commit per package, recorded in .git-blame-ignore-revs). Use when a change touches a source file over about 20 KB, or when asked to "split this file", "reorganize the package" or "move these functions".
 ---
 
 # Move-only refactor
@@ -39,4 +39,4 @@ Commit one package at a time, signed off and marked move-only:
 it lands on `dev`, add its full sha with a one-line comment to
 `.git-blame-ignore-revs` (create the file if missing) in a follow-up commit. Docs
 should point at `package#Symbol`, which survives the split;
-`go test -count=1 ./internal/repocheck/` finds stale pointers.
+`go test -count=1 ./tools/repocheck/` finds stale pointers.

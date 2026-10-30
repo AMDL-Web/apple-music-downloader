@@ -24,5 +24,5 @@ The full list of files a new key touches is in
 ## Verify
 
 ```bash
-go test ./internal/config/ ./internal/api/ ./internal/console/
+go test ./internal/config/ ./internal/api/ ./apps/console/
 ```

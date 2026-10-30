@@ -1,6 +1,6 @@
 ---
 name: amdl-api-change
-description: What changes together when an amdl-backend contract surface changes - HTTP routes, request and response schemas, error codes, SSE event types, job statuses, config keys, DB columns, output paths - and how a breaking change is marked. Use when adding or changing an endpoint, field, enum value, event, setting or column, or when asked to "add an API", "expose X" or "add a setting".
+description: What changes together when an amdl contract surface changes - HTTP routes, request and response schemas, error codes, SSE event types, job statuses, config keys, DB columns, output paths - and how a breaking change is marked. Use when adding or changing an endpoint, field, enum value, event, setting or column, or when asked to "add an API", "expose X" or "add a setting".
 ---
 
 # Change a contract surface
@@ -36,7 +36,7 @@ Route, request or response:
   `assertErrorCode`);
 - [docs/api.md](../../../docs/api.md) and the API table in `README.md` and
   `README.zh-CN.md`;
-- `internal/console` when it calls the route or reads the field.
+- `apps/console` when it calls the route or reads the field.
 
 Error code: the constant in `internal/api/errors.go`, the spec's `ErrorCode` enum
 and the table in docs/api.md. A per-URL submit code also goes in the spec's
@@ -52,7 +52,7 @@ Config key: the struct field (yaml and json tags), `Default()`, `Config.Validate
 the full comment in `configs/config.example.yaml`, the runtime or startup
 classification (`internal/config/AGENTS.md`). A runtime key also gets its
 `RuntimeConfig` property in the spec and its Settings field in
-`internal/console/static/js/lib/settings.js`; a runtime `download.*` key gets a
+`apps/console/static/js/lib/settings.js`; a runtime `download.*` key gets a
 job override or an exclusion. Concept changes go to
 [docs/configuration.md](../../../docs/configuration.md).
 
@@ -65,8 +65,8 @@ Breaking change: a `!` commit title and a row in the upgrade guide in `docs/`.
 ## Verify
 
 ```bash
-go test ./internal/api/ ./internal/config/ ./internal/db/ ./internal/console/
-go test -count=1 ./internal/repocheck/
+go test ./internal/api/ ./internal/config/ ./internal/db/ ./apps/console/
+go test -count=1 ./tools/repocheck/
 ```
 
 Then `make dev` and exercise the change with curl, error cases included

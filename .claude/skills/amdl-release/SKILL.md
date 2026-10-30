@@ -1,6 +1,6 @@
 ---
 name: amdl-release
-description: Cut an amdl-backend release - confirm dev is green, write release notes at .github/release-notes/<version>.md with the author and co-author attribution, open the dev -> main PR titled with the vX.Y.Z version, wait for the maintainer's merge, then check the GitHub Release and the GHCR image tags. Use when asked to "release", "cut vX.Y.Z", "ship to main", "write release notes" or "publish an image".
+description: Cut an amdl release - confirm dev is green, write release notes at .github/release-notes/<version>.md with the author and co-author attribution, open the dev -> main PR titled with the vX.Y.Z version, wait for the maintainer's merge, then check the GitHub Release and the GHCR image tags. Use when asked to "release", "cut vX.Y.Z", "ship to main", "write release notes" or "publish an image".
 ---
 
 # Cut a release

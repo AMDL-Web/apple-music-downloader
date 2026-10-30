@@ -14,9 +14,9 @@ paths:
 - One fact, one place; elsewhere, point to it: `path#Symbol` for code (a package
   directory survives file splits), a link with `#anchor` for docs. Point at
   constants instead of copying their values.
-- `internal/repocheck` checks links, anchors, backticked repo paths and
+- `tools/repocheck` checks links, anchors, backticked repo paths and
   `path#Symbol` pointers, so write something that does not exist yet in plain text.
 - An `AGENTS.md` holds only rules, invariants, traps, change-together lists and
-  verify commands, within `internal/repocheck#rootAgentsMaxBytes` (root) or
-  `internal/repocheck#nestedAgentsMaxBytes` (nested), next to a `CLAUDE.md` that is
+  verify commands, within `tools/repocheck#rootAgentsMaxBytes` (root) or
+  `tools/repocheck#nestedAgentsMaxBytes` (nested), next to a `CLAUDE.md` that is
   exactly `@AGENTS.md`. Procedures go into `.claude/skills/`.

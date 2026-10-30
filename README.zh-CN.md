@@ -1,4 +1,4 @@
-# AMDL Backend
+# AMDL
 
 <p align="center">
   <a href="https://github.com/AMDL-Web/apple-music-downloader-backend/actions/workflows/ci.yml"><img src="https://github.com/AMDL-Web/apple-music-downloader-backend/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -12,10 +12,41 @@
 
 amdl 把 Apple Music 上的音乐下载到你自己的磁盘。把单曲、专辑、歌单、艺人或电台链接贴进它的
 网页控制台，它会解析出曲目，下载加密媒体，解密、重封装、打标签，保存成完整的 `.m4a` 文件。
-它是一个 Go 服务，带一个 SQLite 数据库、`/api/v1` 上的 REST + Server-Sent Events 接口，
-以及同一端口上提供的网页控制台。
 
-需要准备：
+这个仓库容纳整个 AMDL 项目。每个产品在 `apps/` 下有自己的目录，共用 `internal/` 下的
+同一套 Go 核心。
+
+## 产品
+
+### 服务端
+
+`apps/server` 是要部署的后端：一个 Go 进程，带一个 SQLite 数据库、`/api/v1` 上的 REST +
+Server-Sent Events 接口，以及同一端口上的网页控制台。它以容器镜像发布，镜像由 `deploy/server/`
+构建。[快速开始](#快速开始)讲怎么运行它，本页其余部分都在介绍它。
+
+### 网页控制台
+
+`apps/console` 是浏览器客户端：一个免构建的 Preact 应用，嵌入服务端，在 `/console/` 提供。
+它只使用公开 API。设计约定见 [apps/console/DESIGN.md](apps/console/DESIGN.md)。
+
+### 桌面应用（规划中）
+
+一个用 [MyGo](https://github.com/egoist/mygo) 写的原生 macOS 应用将放在 apps/desktop。它可以作为
+远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程 wrapper，和服务端
+导入同一套 `internal/` 包。
+
+## 仓库结构
+
+| 路径 | 内容 |
+| --- | --- |
+| `apps/` | 一个产品一个目录：`server`、`console`，以后还有 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
+| `internal/` | 所有产品共用的 Go 核心：HTTP API、作业、下载流水线、Apple 与 wrapper 客户端、存储和配置。[Architecture](docs/architecture.md#2-packages) 列出了每个包。 |
+| `deploy/` | Compose 文件，以及 `deploy/server/` 下服务端的 Dockerfile 和入口脚本。 |
+| `configs/` | 每个安装据以生成配置的示例配置和钩子模板。 |
+| `docs/` | 参考文档和操作手册（[索引](docs/README.md)）。 |
+| `tools/` | 仓库工具：文档检查、文件拆分、Temari 一致性检查、README 配图生成。 |
+
+服务端需要准备：
 
 - Apple Music 订阅。
 - 一个 wrapper：保存 Apple Music 登录状态的上游服务。它跑在 Linux（x86_64 或 arm64）上，
@@ -25,7 +56,7 @@ amdl 把 Apple Music 上的音乐下载到你自己的磁盘。把单曲、专�
 
 ## 快速开始
 
-仓库里的 [`docker-compose.yml`](docker-compose.yml) 用 GHCR 上的预构建镜像运行 amdl，两种
+仓库里的 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) 用 GHCR 上的预构建镜像运行 amdl，两种
 wrapper 部署方式都以注释掉的服务写在里面。把它复制到一个空目录；第一次启动会在旁边建出
 `configs/` 和 `data/`。
 
@@ -69,7 +100,7 @@ wrapper-lite，并且可以在控制台里登录。
 ### 从源码运行
 
 ```bash
-go run ./cmd/amdl-api
+go run ./apps/server
 ```
 
 它读取 `configs/config.yaml`（第一次启动时由
@@ -88,7 +119,7 @@ go run ./cmd/amdl-api
 ## 工作原理
 
 <p align="center">
-  <img src="./assets/readme/architecture.svg" width="100%"
+  <img src="./docs/assets/architecture.svg" width="100%"
        alt="架构：网页控制台调用 amdl 的 REST 与 SSE 接口；amdl 把作业存进 SQLite，让每首曲目走流水线，把文件写进 downloads_dir；wrapper 提供密钥模板、清单、歌词和许可证；Apple 的 amp-api 提供曲库数据，其 CDN 提供加密分片">
 </p>
 
@@ -102,7 +133,7 @@ wrapper 还提供歌词、AAC-LC 许可证，以及 Hi-Res ALAC 曲目的设备�
 抓取的令牌；amdl 不需要 Apple 开发者密钥。这个接口没有公开文档，可能随时变化。
 
 <p align="center">
-  <img src="./assets/readme/track-download.svg" width="100%"
+  <img src="./docs/assets/track-download.svg" width="100%"
        alt="一首曲目的状态图：先解析，然后每个编码依次经过获取阶段（选清单、占用输出路径、下载）和解密阶段（解密、重封装、校验、打标签、保存），某阶段次数用完就换下一个编码；结局为 completed、skipped_existing、failed 或 cancelled">
 </p>
 
@@ -207,7 +238,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 
 | 问题 | 从这里读 |
 | --- | --- |
-| 进程是怎么组装起来的？ | `cmd/amdl-api/main.go` |
+| 进程是怎么组装起来的？ | `apps/server/main.go` |
 | 有哪些 HTTP 路由？ | `internal/api#Server.Routes` |
 | API 到底接收和返回什么？ | `internal/api/openapi.yaml` |
 | 作业如何排队、运行、取消和重试？ | `internal/jobs#Manager` |
@@ -219,7 +250,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 | 配置如何加载和校验？ | `internal/config#Load`、`internal/config#Config.Validate` |
 | 作业钩子发送什么？ | `internal/hooks#Dispatcher` |
 | 资料库同步如何挑选专辑？ | `internal/librarysync#Watcher` |
-| 网页控制台怎么提供？ | `internal/console#Handler` |
+| 网页控制台怎么提供？ | `apps/console#Handler` |
 
 ## 开发
 

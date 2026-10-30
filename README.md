@@ -1,4 +1,4 @@
-# AMDL Backend
+# AMDL
 
 <p align="center">
   <a href="https://github.com/AMDL-Web/apple-music-downloader-backend/actions/workflows/ci.yml"><img src="https://github.com/AMDL-Web/apple-music-downloader-backend/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -12,11 +12,45 @@
 
 amdl downloads music from Apple Music to your own disk. Paste a song, album, playlist,
 artist or radio station link into its web console; it resolves the tracks, downloads the
-encrypted media, decrypts it, remuxes and tags it, and saves finished `.m4a` files. It is
-one Go service with a SQLite database, a REST + Server-Sent Events API on `/api/v1`, and
-a web console served from the same port.
+encrypted media, decrypts it, remuxes and tags it, and saves finished `.m4a` files.
 
-What you need:
+This repository holds the whole AMDL project. Each product has its own directory under
+`apps/`, and they share one Go core under `internal/`.
+
+## Products
+
+### Server
+
+`apps/server` is the backend you deploy: one Go process with a SQLite database, a REST +
+Server-Sent Events API on `/api/v1`, and the web console on the same port. It ships as a
+container image built from `deploy/server/`. [Quick start](#quick-start) runs it; the
+rest of this page describes it.
+
+### Web console
+
+`apps/console` is the browser client: a no-build Preact app, embedded into the server and
+served at `/console/`. It uses only the public API. Its design contract is
+[apps/console/DESIGN.md](apps/console/DESIGN.md).
+
+### Desktop app (planned)
+
+A native macOS app built with [MyGo](https://github.com/egoist/mygo) will live in
+apps/desktop. It will run either as a client of a remote server or as a standalone
+backend that runs the pipeline in-process and talks to a remote wrapper, importing the
+same `internal/` packages as the server.
+
+## Repository layout
+
+| Path | What it holds |
+| --- | --- |
+| `apps/` | One directory per product: `server`, `console`, and later `desktop`. A non-Go app keeps its own build system in its directory. |
+| `internal/` | The Go core every product shares: the HTTP API, jobs, the download pipeline, the Apple and wrapper clients, storage and config. [Architecture](docs/architecture.md#2-packages) lists each package. |
+| `deploy/` | The Compose file and, under `deploy/server/`, the server's Dockerfile and entrypoint. |
+| `configs/` | The example config and hooks template every install is seeded from. |
+| `docs/` | Reference docs and runbooks ([index](docs/README.md)). |
+| `tools/` | Repository tooling: doc checks, the file splitter, the Temari parity check, the README diagrams. |
+
+What the server needs:
 
 - An Apple Music subscription.
 - A wrapper: the upstream service that holds your Apple Music login. It runs on Linux
@@ -27,7 +61,7 @@ What you need:
 
 ## Quick start
 
-The repository's [`docker-compose.yml`](docker-compose.yml) runs amdl from the prebuilt
+The repository's [`deploy/docker-compose.yml`](deploy/docker-compose.yml) runs amdl from the prebuilt
 image on GHCR and carries both wrapper setups as commented services. Copy it to an empty
 directory; the first start creates `configs/` and `data/` next to it.
 
@@ -75,7 +109,7 @@ account and logs in from its own command line, not from the console.
 ### From source
 
 ```bash
-go run ./cmd/amdl-api
+go run ./apps/server
 ```
 
 This reads `configs/config.yaml`, created from
@@ -95,7 +129,7 @@ read [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) before you upgrade.
 ## How it works
 
 <p align="center">
-  <img src="./assets/readme/architecture.svg" width="100%"
+  <img src="./docs/assets/architecture.svg" width="100%"
        alt="Architecture: the web console calls amdl's REST and SSE API; amdl keeps jobs in SQLite, runs each track through its pipeline and writes files to downloads_dir; the wrapper supplies key templates, manifests, lyrics and licenses; Apple's amp-api serves the catalog and its CDN the encrypted segments">
 </p>
 
@@ -112,7 +146,7 @@ scraped from `music.apple.com`; amdl needs no Apple developer key. That API is
 undocumented and can change without notice.
 
 <p align="center">
-  <img src="./assets/readme/track-download.svg" width="100%"
+  <img src="./docs/assets/track-download.svg" width="100%"
        alt="Statechart of one track: resolve, then per codec a fetch phase (choose a manifest, claim the output path, download) and a decrypt phase (decrypt, remux, verify, tag, save), falling back to the next codec when a phase runs out of attempts; ends completed, skipped_existing, failed or cancelled">
 </p>
 
@@ -226,7 +260,7 @@ so it stays valid when files inside the package are split.
 
 | Question | Start at |
 | --- | --- |
-| How is the process wired together? | `cmd/amdl-api/main.go` |
+| How is the process wired together? | `apps/server/main.go` |
 | Which HTTP routes exist? | `internal/api#Server.Routes` |
 | What exactly does the API accept and return? | `internal/api/openapi.yaml` |
 | How are jobs queued, run, cancelled and retried? | `internal/jobs#Manager` |
@@ -238,7 +272,7 @@ so it stays valid when files inside the package are split.
 | How is config loaded and validated? | `internal/config#Load`, `internal/config#Config.Validate` |
 | What do job hooks send? | `internal/hooks#Dispatcher` |
 | How does library sync pick albums? | `internal/librarysync#Watcher` |
-| How is the web console served? | `internal/console#Handler` |
+| How is the web console served? | `apps/console#Handler` |
 
 ## Development
 

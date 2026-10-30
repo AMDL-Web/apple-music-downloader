@@ -1,4 +1,4 @@
-# internal/console
+# apps/console
 
 The embedded web console served at `/console/`: plain ES modules and a vendored
 Preact+htm bundle. [DESIGN.md](DESIGN.md) is the contract for structure, states,
@@ -37,9 +37,9 @@ then update `vendorFile` and `vendorSHA256` in `console_test.go` and the import 
 ## Verify
 
 ```bash
-for f in $(find internal/console/static -name '*.js' -o -name '*.mjs'); do node --check "$f"; done
-node --test internal/console/jstest/*.test.mjs
-go vet ./internal/console/ && go test -race -count=1 ./internal/console/
+for f in $(find apps/console/static -name '*.js' -o -name '*.mjs'); do node --check "$f"; done
+node --test apps/console/jstest/*.test.mjs
+go vet ./apps/console/ && go test -race -count=1 ./apps/console/
 ```
 
 Then `make dev`, open `http://127.0.0.1:18080/console/`, and check the change at

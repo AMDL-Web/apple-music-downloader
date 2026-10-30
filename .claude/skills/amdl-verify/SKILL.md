@@ -1,6 +1,6 @@
 ---
 name: amdl-verify
-description: Verify an amdl-backend change before pushing to dev or reporting it done - the local gates for the change type, a live API and SSE check against `make dev` in simulate mode, a browser check of the web console when it changed, and a PASS/FAIL/SKIPPED report with evidence. Use after any code, config, API, docs or workflow change, and when asked to "verify", "test this", "is it done" or "ready to push?".
+description: Verify an amdl change before pushing to dev or reporting it done - the local gates for the change type, a live API and SSE check against `make dev` in simulate mode, a browser check of the web console when it changed, and a PASS/FAIL/SKIPPED report with evidence. Use after any code, config, API, docs or workflow change, and when asked to "verify", "test this", "is it done" or "ready to push?".
 ---
 
 # Verify a change
@@ -53,7 +53,7 @@ the `go run` child listening.
 
 ## Console check
 
-When `internal/console` changed: with `make dev` running, open
+When `apps/console` changed: with `make dev` running, open
 `http://127.0.0.1:18080/console/` at desktop width and 375 px, light and dark. The
 changed view renders, the browser console has no errors, and a submitted job
 updates live. Attach a screenshot per width and theme.

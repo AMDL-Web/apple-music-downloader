@@ -1,6 +1,6 @@
 ---
 name: amdl-diagnose
-description: Find and fix an amdl-backend bug by reproducing it first - evidence from the job record, events and logs, one command that goes red on the reported symptom (go test -run, httptest against Server.Routes, make dev plus curl, a saved Apple response, a copy of the user's database, -race -count=N, git bisect run), then a fix with a regression test proven red then green. Use when told "X is broken", "this job fails", "SSE stops", "wrong file name", for a flaky or failing test, a crash, a slowdown, or an error from a deployed instance.
+description: Find and fix an amdl bug by reproducing it first - evidence from the job record, events and logs, one command that goes red on the reported symptom (go test -run, httptest against Server.Routes, make dev plus curl, a saved Apple response, a copy of the user's database, -race -count=N, git bisect run), then a fix with a regression test proven red then green. Use when told "X is broken", "this job fails", "SSE stops", "wrong file name", for a flaky or failing test, a crash, a slowdown, or an error from a deployed instance.
 ---
 
 # Diagnose a bug

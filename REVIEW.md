@@ -19,7 +19,7 @@ Report a change that breaks one of these when used as intended:
   names) without the maintainer's OK and an upgrade note.
 - A route, request or response change without the matching
   `internal/api/openapi.yaml`, [docs/api.md](docs/api.md) and README API table
-  update, or without the console change when `internal/console` uses it.
+  update, or without the console change when `apps/console` uses it.
 - A config key added or changed without its full comment in
   `configs/config.example.yaml`.
 - A migration that loses user data (jobs, items, milestone events, the library-sync
@@ -38,7 +38,7 @@ Report a change that breaks one of these when used as intended:
 - Missing authentication or authorization (AGENTS.md "This service has no auth, on
   purpose").
 - What CI already gates: formatting, build, vet, tests, race detector, govulncheck,
-  Node tests, the Docker build, `internal/repocheck`.
+  Node tests, the Docker build, `tools/repocheck`.
 - `.github/release-notes/`, `go.sum`, and `docs/` pages of type `record`.
 - Follow-ups for the iOS app or amdl-web.
 - Problems in code the PR did not touch, unless marked non-blocking.
