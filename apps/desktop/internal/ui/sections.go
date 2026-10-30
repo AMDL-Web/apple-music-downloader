@@ -66,7 +66,7 @@ func (a *App) sectionFields(c *ui.Context, k *Tokens, id string) {
 		}
 		card(c, k).Gap(12).Children(func() {
 			for i := range min(len(fields), 6) {
-				el := ui.Box(c.Key(i)).Height(14).WidthPercent(float32(40 + 9*(i%3))).Radius(4).Background(k.Track)
+				el := ui.Box(c.Key(i)).Height(14).WidthPercent(float32(40 + 9*(i%3))).Radius(radiusInner).Background(k.Track)
 				el.Opacity(0.55 + 0.45*el.Loop("sk", 1400*time.Millisecond, ui.Bounce(ui.EaseInOut)))
 			}
 		})
@@ -91,7 +91,7 @@ func (a *App) sectionFields(c *ui.Context, k *Tokens, id string) {
 		if g != "" {
 			label(c, k, g).Padding(6, 0, 0, 0)
 		}
-		ui.Column(c.Key("fields-"+g)).Padding(4, 18).Radius(18).Background(k.Raise).Dividers(1, k.Line).Children(func() {
+		ui.Column(c.Key("fields-"+g)).Padding(4, padCard).Radius(radiusCard).Background(k.Raise).Dividers(1, k.Line).Children(func() {
 			for _, f := range in {
 				a.fieldRow(c, k, f)
 			}
@@ -174,7 +174,7 @@ func (a *App) facts(c *ui.Context, k *Tokens, id string) {
 	if len(fs) == 0 {
 		return
 	}
-	ui.Column(c.Key("facts")).Padding(4, 18).Radius(18).Background(k.Raise).Dividers(1, k.Line).Children(func() {
+	ui.Column(c.Key("facts")).Padding(4, padCard).Radius(radiusCard).Background(k.Raise).Dividers(1, k.Line).Children(func() {
 		for _, f := range fs {
 			ui.Row(c.Key(f.label)).Height(40).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, f.label).FontSize(13).FontWeight(500).Grow(1).Shrink(0).SingleLine()
@@ -217,7 +217,7 @@ func (a *App) folderState(c *ui.Context, k *Tokens, key string) {
 
 // actionRow is an action that is not a setting, beside what it does.
 func actionRow(c *ui.Context, k *Tokens, what, verb string, do func()) {
-	ui.Row(c).Padding(14, 18).Gap(12).Radius(18).Background(k.Raise).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Padding(padCard).Gap(12).Radius(radiusCard).Background(k.Raise).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, what).FontSize(13).Grow(1).Shrink(1)
 		if button(c, k, buttonPlain, verb, nil).Clicked() {
 			do()
@@ -233,7 +233,7 @@ func (a *App) configFile(c *ui.Context, k *Tokens) {
 		return
 	}
 	label(c, k, "Configuration file").Padding(6, 0, 0, 0)
-	ui.Column(c).Padding(14, 18).Gap(10).Radius(18).Background(k.Raise).Children(func() {
+	ui.Column(c).Padding(padCard).Gap(10).Radius(radiusCard).Background(k.Raise).Children(func() {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			ui.Column(c).Grow(1).Shrink(1).Gap(3).Children(func() {
 				ui.Text(c, "Reload from file").FontSize(13).FontWeight(600)
@@ -264,7 +264,7 @@ func (a *App) hookList(c *ui.Context, k *Tokens) {
 	if h == nil || len(h.Entries) == 0 {
 		return
 	}
-	ui.Column(c.Key("hook-list")).Padding(4, 18).Radius(18).Background(k.Raise).Dividers(1, k.Line).Children(func() {
+	ui.Column(c.Key("hook-list")).Padding(4, padCard).Radius(radiusCard).Background(k.Raise).Dividers(1, k.Line).Children(func() {
 		for _, e := range h.Entries {
 			ui.Row(c.Key(e.Name)).Height(44).Gap(10).AlignItems(ui.Center).Children(func() {
 				name := mono(c, e.Name, 12.5).Grow(1).Shrink(1).SingleLine()

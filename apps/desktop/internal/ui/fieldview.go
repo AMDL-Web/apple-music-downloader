@@ -231,7 +231,7 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 	}
 	ui.Column(c).Gap(8).AlignItems(ui.End).Children(func() {
 		sel := ui.SelectBase(c.Key(f.key), &cur)
-		trigger := sel.Trigger.Width(220).Height(32).PaddingX(10).Gap(8).Radius(8).Background(k.Raise2).Border(1, k.Line2).
+		trigger := sel.Trigger.Width(220).Height(32).PaddingX(10).Gap(8).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2).
 			AlignItems(ui.Center).Justify(ui.SpaceBetween).Label(f.label).Disabled(off)
 		if sel.Open() || trigger.Focused() {
 			trigger.Border(1, k.Accent)
@@ -241,7 +241,7 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 			ui.Icon(c, icChevron).FontSize(12).TextColor(k.Muted)
 		})
 		sel.Popup(func(panel ui.Element) {
-			panel.Width(220).Padding(4).Gap(1).Radius(10).Background(k.Raise2).Border(1, k.Line2).Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.3))
+			panel.Width(220).Padding(padControl).Gap(1).Radius(radiusMenu).Background(k.Raise2).Border(1, k.Line2).Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.3))
 			labels := make([]string, 0, len(f.options)+1)
 			for _, o := range f.options {
 				labels = append(labels, o.label)
@@ -250,7 +250,7 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 				labels = append(labels, customLabel)
 			}
 			for _, l := range labels {
-				item := sel.Item(l).Height(28).PaddingX(10).Radius(6).AlignItems(ui.Center)
+				item := sel.Item(l).Height(28).PaddingX(10).Radius(radiusControl).AlignItems(ui.Center)
 				col := k.Fg
 				switch {
 				case item.Highlighted():
@@ -385,7 +385,7 @@ func (a *App) listField(c *ui.Context, k *Tokens, f *configField, items []string
 		return v
 	}
 	set := func(next []string) { a.Store.SetConfig(f.key, next) }
-	ui.Column(c).Radius(10).Border(1, k.Line).Dividers(1, k.Line).Children(func() {
+	ui.Column(c).Radius(radiusControl).Border(1, k.Line).Dividers(1, k.Line).Children(func() {
 		for i, it := range items {
 			ui.Row(c.Key(it)).Height(38).PaddingX(12).Gap(10).AlignItems(ui.Center).Children(func() {
 				mono(c, strconv.Itoa(i+1), 11.5).TextColor(k.Faint).Width(14)
@@ -420,15 +420,15 @@ func (a *App) listField(c *ui.Context, k *Tokens, f *configField, items []string
 	}
 	add := ""
 	sel := ui.SelectBase(c.Key(f.key+"-add"), &add)
-	sel.Trigger.AlignSelf(ui.Start).Height(30).PaddingX(10).Gap(6).Radius(8).Background(k.Raise).Border(1, k.Line2).AlignItems(ui.Center).
+	sel.Trigger.AlignSelf(ui.Start).Height(30).PaddingX(10).Gap(6).Radius(radiusControl).Background(k.Raise).Border(1, k.Line2).AlignItems(ui.Center).
 		Label("Add codec").Cursor(ui.CursorPointer).Children(func() {
 		ui.Icon(c, icPlus).FontSize(13).TextColor(k.Muted)
 		ui.Text(c, "Add codec").FontSize(12.5).SingleLine()
 	})
 	sel.Popup(func(panel ui.Element) {
-		panel.MinWidth(200).Padding(4).Gap(1).Radius(10).Background(k.Raise2).Border(1, k.Line2).Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.3))
+		panel.MinWidth(200).Padding(padControl).Gap(1).Radius(radiusMenu).Background(k.Raise2).Border(1, k.Line2).Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.3))
 		for _, l := range rest {
-			item := sel.Item(l).Height(28).PaddingX(10).Radius(6).AlignItems(ui.Center)
+			item := sel.Item(l).Height(28).PaddingX(10).Radius(radiusControl).AlignItems(ui.Center)
 			col := k.Fg
 			if item.Highlighted() {
 				item.Background(k.Accent)
@@ -453,7 +453,7 @@ func (a *App) setField(c *ui.Context, k *Tokens, f *configField, items []string,
 		for _, o := range f.options {
 			v := valueText(o.value)
 			on := slices.Contains(items, v)
-			b := ui.ButtonBase(c.Key(v)).Height(28).PaddingX(10).Gap(6).Radius(8).AlignItems(ui.Center).
+			b := ui.ButtonBase(c.Key(v)).Height(28).PaddingX(10).Gap(6).Radius(radiusControl).AlignItems(ui.Center).
 				Label(o.label).Selected(on).Disabled(off)
 			col := k.Muted
 			if on {
@@ -488,7 +488,7 @@ func (a *App) setField(c *ui.Context, k *Tokens, f *configField, items []string,
 // iconButton is a small square button with an icon and a name for
 // assistive technology.
 func iconButton(c *ui.Context, k *Tokens, key string, ic *ui.SVG, name string, disabled bool) ui.Element {
-	b := ui.ButtonBase(c.Key(key)).Size(26, 26).Radius(6).Center().Label(name).Tooltip(name).Disabled(disabled)
+	b := ui.ButtonBase(c.Key(key)).Size(26, 26).Radius(radiusInner).Center().Label(name).Tooltip(name).Disabled(disabled)
 	col := k.Muted
 	if disabled {
 		col = k.Track
@@ -510,7 +510,7 @@ func (a *App) confirmDialog(c *ui.Context, k *Tokens) {
 	pc := e.confirm
 	ui.DialogBase(c.Key("confirm"), &pc.open, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.45))
-		panel.Width(460).Padding(22).Gap(12).Radius(14).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
+		panel.Width(460).Padding(padCard).Gap(12).Radius(radiusCard).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
 		ui.Text(c, pc.title).FontSize(15).FontWeight(650)
 		ui.Text(c, pc.body).FontSize(12.5).TextColor(k.Muted).LineHeight(1.5)
 		if pc.detail != "" {

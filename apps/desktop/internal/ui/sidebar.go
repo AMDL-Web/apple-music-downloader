@@ -72,7 +72,7 @@ func (a *App) systemReading(k *Tokens) (string, ui.Color) {
 
 func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, tile ui.Color, name, reading string, readingColor ui.Color) {
 	on := a.Screen == s || (s == ScreenQueue && (a.Screen == ScreenDetail || a.Screen == ScreenNew))
-	item := ui.ButtonBase(c.Key(name)).Height(30).PaddingX(10).Gap(10).Radius(7).AlignItems(ui.Center).Justify(ui.Start).Label(name)
+	item := ui.ButtonBase(c.Key(name)).Height(30).PaddingX(10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label(name)
 	if on {
 		item.Background(k.AccentSoft)
 	} else if item.Hovered() {
@@ -82,7 +82,7 @@ func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, tile ui.Co
 		a.Go(s)
 	}
 	item.Cursor(ui.CursorPointer).Children(func() {
-		ui.Box(c).Size(22, 22).Radius(6).Background(tile).Center().Children(func() {
+		ui.Box(c).Size(22, 22).Radius(radiusInner).Background(tile).Center().Children(func() {
 			ui.Icon(c, ic).FontSize(13).TextColor(ui.RGB(255, 255, 255))
 		})
 		ui.Text(c, name).FontSize(13).TextColor(k.Fg).Grow(1).SingleLine()
@@ -107,13 +107,13 @@ func (a *App) modeCard(c *ui.Context, k *Tokens) {
 	case a.Act.Starting() || a.Store.Conn.Phase == client.Connecting:
 		dot, ring = k.Warn, k.WarnSoft
 	}
-	card := ui.ButtonBase(c.Key("mode")).Padding(8, 10).Gap(10).Radius(10).AlignItems(ui.Center).Justify(ui.Start).
+	card := ui.ButtonBase(c.Key("mode")).Padding(8, 10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).
 		Background(k.Raise2).Border(1, k.Line).Label("Connection settings")
 	if card.Clicked() {
 		a.Go(ScreenSettings)
 	}
 	card.Cursor(ui.CursorPointer).Children(func() {
-		ui.Box(c).Size(8, 8).Radius(999).Background(dot).Shadow(0, 0, 0, 3, ring)
+		ui.Box(c).Size(8, 8).Radius(radiusFull).Background(dot).Shadow(0, 0, 0, 3, ring)
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Children(func() {
 			ui.Text(c, title).FontSize(12.5).FontWeight(600).SingleLine()
 			mono(c, sub, 11).TextColor(k.Faint).Ellipsis("…")
@@ -151,12 +151,12 @@ func (a *App) nowCard(c *ui.Context, k *Tokens) {
 	}
 	pal := jobPalette(j, false)
 	accent := AccentFor(pal, k)
-	card := ui.ButtonBase(c.Key("now")).Padding(10).Gap(10).Radius(12).AlignItems(ui.Center).Justify(ui.Start).Background(k.Raise2).Label("Downloading now")
+	card := ui.ButtonBase(c.Key("now")).Padding(8).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Background(k.Raise2).Label("Downloading now")
 	if card.Clicked() {
 		a.OpenJob(j.ID)
 	}
 	card.Cursor(ui.CursorPointer).Children(func() {
-		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 80), Placeholder: pal.Bg, Size: 40, Radius: 7, Color: 0.25 + 0.75*float32(j.Progress)}.Show(c)
+		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 80), Placeholder: pal.Bg, Size: 40, Radius: radiusInner, Color: 0.25 + 0.75*float32(j.Progress)}.Show(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(12).FontWeight(600).Ellipsis("…").SingleLine()
 			line := fmt.Sprintf("%d of %d", j.Done(), j.TotalItems)
@@ -194,7 +194,7 @@ func (a *App) rail(c *ui.Context, k *Tokens, vib bool) {
 }
 
 func (a *App) railItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, name string) {
-	b := ui.ButtonBase(c.Key("rail-"+name)).Size(38, 34).Radius(8).Center().Label(name)
+	b := ui.ButtonBase(c.Key("rail-"+name)).Size(38, 34).Radius(radiusControl).Center().Label(name)
 	col := k.Muted
 	if a.Screen == s {
 		b.Background(k.AccentSoft)

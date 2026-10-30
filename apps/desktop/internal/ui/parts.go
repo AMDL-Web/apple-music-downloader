@@ -57,7 +57,7 @@ func pill(c *ui.Context, k *Tokens, kind pillKind, ic *ui.SVG, text string) ui.E
 	case pillWarn:
 		bg, fg = k.WarnSoft, k.Warn
 	}
-	return ui.Row(c).Height(20).PaddingX(8).Gap(5).Radius(999).Background(bg).AlignItems(ui.Center).Children(func() {
+	return ui.Row(c).Height(20).PaddingX(8).Gap(5).Radius(radiusFull).Background(bg).AlignItems(ui.Center).Children(func() {
 		if ic != nil {
 			ui.Icon(c, ic).FontSize(11).TextColor(fg)
 		}
@@ -68,7 +68,7 @@ func pill(c *ui.Context, k *Tokens, kind pillKind, ic *ui.SVG, text string) ui.E
 // tag is the small outlined label of an audio fact; hi gives Hi-Res its
 // gold.
 func tag(c *ui.Context, k *Tokens, s string, hi bool, fg ui.Color) ui.Element {
-	el := ui.Row(c).Height(18).PaddingX(6).Radius(4).AlignItems(ui.Center)
+	el := ui.Row(c).Height(18).PaddingX(6).Radius(radiusInner).AlignItems(ui.Center)
 	if hi {
 		el.LinearGradient(ui.LinearGradient{Stops: []ui.GradientStop{{Color: ui.Hex("#c9b27a"), At: 0}, {Color: ui.Hex("#e9d7a6"), At: 1}}, Angle: 90})
 		fg = ui.Hex("#2a2210")
@@ -89,7 +89,7 @@ func chip(c *ui.Context, k *Tokens, s string, fg ui.Color) ui.Element {
 	if fg.A == 0 {
 		fg = k.Muted
 	}
-	return ui.Row(c).PaddingX(7).PaddingY(2).Radius(6).Background(k.Track).Children(func() {
+	return ui.Row(c).PaddingX(7).PaddingY(2).Radius(radiusInner).Background(k.Track).Children(func() {
 		mono(c, s, 11).FontWeight(600).TextColor(fg)
 	})
 }
@@ -110,7 +110,7 @@ const (
 // button is the design's button; it returns the base, whose Clicked reports
 // a press.
 func button(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SVG) ui.Element {
-	b := ui.ButtonBase(c).Height(30).PaddingX(12).Gap(6).Radius(8).AlignItems(ui.Center).Justify(ui.Center)
+	b := ui.ButtonBase(c).Height(30).PaddingX(12).Gap(6).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Center)
 	fg := k.Fg
 	switch kind {
 	case buttonPrimary:
@@ -119,7 +119,7 @@ func button(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SVG) 
 	case buttonGhost:
 		fg = k.Muted
 	case buttonPill:
-		b.Height(44).PaddingX(34).Radius(999).Background(k.Pill)
+		b.Height(44).PaddingX(34).Radius(radiusFull).Background(k.Pill)
 		fg = k.PillInk
 	case buttonOnArt:
 		b.Background(ui.RGBA(255, 255, 255, 0.08)).Border(1, ui.RGBA(247, 235, 246, 0.16))
@@ -153,9 +153,9 @@ func button(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SVG) 
 // as Failed in red.
 func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []string, colors map[int]ui.Color) {
 	s := ui.SegmentedBase(c.Key(key), selected, len(labels))
-	s.Track.Padding(2).Radius(8).Background(k.Raise2).Border(1, k.Line).Children(func() {
+	s.Track.Padding(padControl).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line).Children(func() {
 		for i, l := range labels {
-			seg := s.Segment(i).PaddingX(10).PaddingY(4).Radius(6)
+			seg := s.Segment(i).PaddingX(10).PaddingY(2).Radius(radiusInner)
 			fg := k.Muted
 			if col, ok := colors[i]; ok {
 				fg = col
@@ -174,7 +174,7 @@ func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []str
 
 // toggle is a switch in the design's look.
 func toggle(c *ui.Context, k *Tokens, key string, on *bool, name string) ui.Element {
-	sw := ui.SwitchBase(c.Key(key), on).Width(34).Height(20).Radius(999).Label(name)
+	sw := ui.SwitchBase(c.Key(key), on).Width(34).Height(20).Radius(radiusFull).Label(name)
 	if *on {
 		sw.Background(k.Accent)
 	} else {
@@ -182,19 +182,19 @@ func toggle(c *ui.Context, k *Tokens, key string, on *bool, name string) ui.Elem
 	}
 	x := sw.AnimateTo("knob", map[bool]float32{true: 16, false: 2}[*on], ui.Snappy)
 	sw.Cursor(ui.CursorPointer).Children(func() {
-		ui.Box(c).Size(16, 16).Radius(999).Background(ui.RGB(255, 255, 255)).Absolute().Top(2).Left(x)
+		ui.Box(c).Size(16, 16).Radius(radiusFull).Background(ui.RGB(255, 255, 255)).Absolute().Top(2).Left(x)
 	})
 	return sw
 }
 
 // card is the Mole card: large radius, no border.
 func card(c *ui.Context, k *Tokens) ui.Element {
-	return ui.Column(c).Padding(16, 18).Gap(10).Radius(18).Background(k.Raise)
+	return ui.Column(c).Padding(padCard).Gap(10).Radius(radiusCard).Background(k.Raise)
 }
 
 // artButton is a solid button in an album's colors, as the hero's Details.
 func artButton(c *ui.Context, text string, bg, fg ui.Color) ui.Element {
-	b := ui.ButtonBase(c).Height(30).PaddingX(12).Radius(8).AlignItems(ui.Center).Justify(ui.Center).Background(bg)
+	b := ui.ButtonBase(c).Height(30).PaddingX(12).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Center).Background(bg)
 	if b.Hovered() {
 		b.Opacity(0.92)
 	}

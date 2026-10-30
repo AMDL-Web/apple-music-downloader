@@ -33,7 +33,7 @@ func (a *App) statusBoard(c *ui.Context, k *Tokens) {
 			// Grid cells size themselves: skeleton's full width would
 			// overflow them.
 			for i := range 8 {
-				el := ui.Box(c.Key(i)).Height(148).Radius(18).Background(k.Track)
+				el := ui.Box(c.Key(i)).Height(148).Radius(radiusCard).Background(k.Track)
 				el.Opacity(0.55 + 0.45*el.Loop("sk", 1400*time.Millisecond, ui.Bounce(ui.EaseInOut)))
 			}
 			return
@@ -90,7 +90,7 @@ func moleCard(c *ui.Context, k *Tokens, key string, span int, tile ui.Color, ic 
 	}
 	el.Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(18, 18).Radius(5).Background(tile).Center().Children(func() {
+			ui.Box(c).Size(18, 18).Radius(radiusInner).Background(tile).Center().Children(func() {
 				ui.Icon(c, ic).FontSize(11).TextColor(ui.RGB(255, 255, 255))
 			})
 			ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(titleColor).SingleLine()
@@ -160,7 +160,7 @@ func (a *App) healthCard(c *ui.Context, k *Tokens, sv *store.Server, span int) u
 // motion.
 func planet(c *ui.Context, k *Tokens, glow ui.Color) {
 	deep := ui.Hex("#05104b")
-	p := ui.Box(c).Size(92, 92).Radius(999)
+	p := ui.Box(c).Size(92, 92).Radius(radiusFull)
 	breath := float32(0.5)
 	if !c.Preferences().ReduceMotion {
 		breath = p.Loop("breath", 5*time.Second, ui.Bounce(ui.EaseInOut))
@@ -178,7 +178,7 @@ func planet(c *ui.Context, k *Tokens, glow ui.Color) {
 	}
 	// The light's reflection, high on the left.
 	p.Clip().Children(func() {
-		ui.Box(c).Size(34, 30).Radius(999).Background(ui.RGBA(255, 255, 255, 0.55)).Blur(9).Absolute().Left(16).Top(12)
+		ui.Box(c).Size(34, 30).Radius(radiusFull).Background(ui.RGBA(255, 255, 255, 0.55)).Blur(9).Absolute().Left(16).Top(12)
 	})
 }
 
@@ -247,7 +247,7 @@ func bars(c *ui.Context, k *Tokens, vals []float64, slots int, col ui.Color) {
 			if j := i - (slots - len(vals)); j >= 0 {
 				v, empty = vals[j], false
 			}
-			b := ui.Box(c.Key(i)).Grow(1).Radius(2).Height(max(2, float32(v)*26))
+			b := ui.Box(c.Key(i)).Grow(1).Radius(radiusInner).Height(max(2, float32(v)*26))
 			if empty || v == 0 {
 				b.Background(k.Track)
 			} else {
@@ -291,10 +291,10 @@ func (a *App) filesCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui
 // gold.
 func meter(c *ui.Context, k *Tokens, used float64, h float32) {
 	used = min(max(used, 0), 1)
-	ui.Row(c).Height(h).Radius(h / 2).Background(k.Track).Clip().Children(func() {
+	ui.Row(c).Height(h).Radius(radiusFull).Background(k.Track).Clip().Children(func() {
 		// Rows do not stretch their children's height: each part sets it.
 		if used > 0 {
-			ui.Box(c).Grow(float32(used)).Height(h).Radius(h / 2).LinearGradient(ui.LinearGradient{Angle: 90, Stops: []ui.GradientStop{
+			ui.Box(c).Grow(float32(used)).Height(h).Radius(radiusFull).LinearGradient(ui.LinearGradient{Angle: 90, Stops: []ui.GradientStop{
 				{Color: ui.Hex("#8a6a3e"), At: 0}, {Color: ui.Hex("#e2c08a"), At: 1},
 			}})
 		}
@@ -394,7 +394,7 @@ func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server, span int) 
 		if w != nil && len(w.Accounts) > 0 {
 			ui.Row(c).Gap(8).Wrap().Children(func() {
 				for _, acc := range w.Accounts {
-					ui.Row(c.Key(acc)).Height(28).PaddingX(10).Gap(6).Radius(8).Background(k.Raise2).Border(1, k.Line2).AlignItems(ui.Center).Children(func() {
+					ui.Row(c.Key(acc)).Height(28).PaddingX(10).Gap(6).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2).AlignItems(ui.Center).Children(func() {
 						ui.Icon(c, icPerson).FontSize(12).TextColor(k.Faint)
 						mono(c, acc, 12)
 					})

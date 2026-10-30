@@ -69,7 +69,7 @@ func (a *App) searchScreen(c *ui.Context, k *Tokens, compact bool, term string, 
 // a button, here where its words show.
 func (a *App) compactSearchField(c *ui.Context, k *Tokens) {
 	s := a.Store
-	box := ui.Row(c).Height(30).PaddingX(10).Gap(8).Radius(9).AlignItems(ui.Center).Background(k.Raise2).Border(1, k.Line)
+	box := ui.Row(c).Height(30).PaddingX(10).Gap(8).Radius(radiusControl).AlignItems(ui.Center).Background(k.Raise2).Border(1, k.Line)
 	box.Children(func() {
 		ui.Icon(c, icSearch).FontSize(14).TextColor(k.Faint)
 		a.omniTxt = s.Omni.Text
@@ -363,7 +363,7 @@ func (a *App) hitRow(c *ui.Context, k *Tokens, h client.SearchHit, key string, s
 	s := a.Store
 	hk := store.HitKey(h)
 	on := sel != nil && store.HitKey(*sel) == hk
-	row := ui.ButtonBase(c.Key(key)).Height(searchRowHeight).PaddingX(12).Gap(12).Radius(10).AlignItems(ui.Center).Justify(ui.Start).
+	row := ui.ButtonBase(c.Key(key)).Height(searchRowHeight).PaddingX(12).Gap(12).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).
 		Background(k.Raise).Border(1, k.Line).Label(h.Name)
 	if on {
 		row.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
@@ -377,9 +377,9 @@ func (a *App) hitRow(c *ui.Context, k *Tokens, h client.SearchHit, key string, s
 	}
 	row.Cursor(ui.CursorPointer).Children(func() {
 		pal := hitPalette(h)
-		radius := float32(6)
+		radius := float32(radiusInner)
 		if h.Type == "artist" {
-			radius = 22
+			radius = radiusFull
 		}
 		widgets.Cover{Image: a.Art.Get(h.ArtworkURL, 88), Placeholder: pal.Bg, Size: 44, Radius: radius, Color: 1}.Show(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
@@ -423,13 +423,13 @@ func (a *App) hitRow(c *ui.Context, k *Tokens, h client.SearchHit, key string, s
 
 // markButton is a hit's library or queue mark, which opens its job.
 func markButton(c *ui.Context, k *Tokens, text string, kind pillKind, ic *ui.SVG) ui.Element {
-	b := ui.ButtonBase(c.Key("mark")).Radius(999).Label(text + ": open the download")
+	b := ui.ButtonBase(c.Key("mark")).Radius(radiusFull).Label(text + ": open the download")
 	b.Cursor(ui.CursorPointer).Children(func() { pill(c, k, kind, ic, text) })
 	return b
 }
 
 func explicitBadge(c *ui.Context, k *Tokens) {
-	ui.Box(c).Size(15, 15).Radius(3).Background(k.Faint.Alpha(0.35)).Center().Children(func() {
+	ui.Box(c).Size(15, 15).Radius(radiusInner).Background(k.Faint.Alpha(0.35)).Center().Children(func() {
 		ui.Text(c, "E").FontSize(9.5).FontWeight(700).TextColor(k.Fg)
 	})
 }
@@ -492,7 +492,7 @@ func hitPalette(h client.SearchHit) Palette {
 // button on the right.
 func (a *App) hitBar(c *ui.Context, k *Tokens, sel *client.SearchHit) {
 	s := a.Store
-	ui.Row(c).Padding(12, 14, 12, 16).Gap(14).Radius(16).Background(k.Raise2).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Padding(12, padCard).Gap(14).Radius(radiusCard).Background(k.Raise2).AlignItems(ui.Center).Children(func() {
 		if sel == nil {
 			ui.Column(c).Shrink(1).MinWidth(0).Gap(1).Children(func() {
 				ui.Text(c, "Nothing chosen").FontSize(13).FontWeight(650).SingleLine()
@@ -504,9 +504,9 @@ func (a *App) hitBar(c *ui.Context, k *Tokens, sel *client.SearchHit) {
 		}
 		h := *sel
 		pal := hitPalette(h)
-		radius := float32(6)
+		radius := float32(radiusInner)
 		if h.Type == "artist" {
-			radius = 15
+			radius = radiusFull
 		}
 		widgets.Cover{Image: a.Art.Get(h.ArtworkURL, 64), Placeholder: pal.Bg, Size: 30, Radius: radius, Color: 1}.Show(c)
 		mark, _ := s.HitMark(h)
@@ -611,7 +611,7 @@ func skeletonGroups(c *ui.Context, k *Tokens) {
 	ui.Column(c).Gap(18).Children(func() {
 		for i, n := range []int{store.SearchFirst, store.SearchFirst, 2} {
 			ui.Column(c.Key(i)).Gap(8).Children(func() {
-				ui.Box(c).Width(64).Height(10).Radius(3).Background(k.Track)
+				ui.Box(c).Width(64).Height(10).Radius(radiusInner).Background(k.Track)
 				skeletonRows(c, k, n)
 			})
 		}
@@ -620,11 +620,11 @@ func skeletonGroups(c *ui.Context, k *Tokens) {
 
 func skeletonRows(c *ui.Context, k *Tokens, n int) {
 	for i := range n {
-		ui.Row(c.Key(i)).Height(searchRowHeight).PaddingX(12).Gap(12).Radius(10).AlignItems(ui.Center).Background(k.Raise).Border(1, k.Line).Children(func() {
-			ui.Box(c).Size(44, 44).Radius(6).Background(k.Track)
+		ui.Row(c.Key(i)).Height(searchRowHeight).PaddingX(12).Gap(12).Radius(radiusControl).AlignItems(ui.Center).Background(k.Raise).Border(1, k.Line).Children(func() {
+			ui.Box(c).Size(44, 44).Radius(radiusInner).Background(k.Track)
 			ui.Column(c).Grow(1).Gap(7).Children(func() {
-				ui.Box(c).Width(float32(160 + (i*37)%90)).Height(11).Radius(3).Background(k.Track)
-				ui.Box(c).Width(float32(220 + (i*53)%120)).Height(9).Radius(3).Background(k.Track.Alpha(0.6))
+				ui.Box(c).Width(float32(160 + (i*37)%90)).Height(11).Radius(radiusInner).Background(k.Track)
+				ui.Box(c).Width(float32(220 + (i*53)%120)).Height(9).Radius(radiusInner).Background(k.Track.Alpha(0.6))
 			})
 		})
 	}

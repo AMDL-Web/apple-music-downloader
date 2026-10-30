@@ -109,7 +109,7 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 
 func (a *App) settingsNavItem(c *ui.Context, k *Tokens, p settingsPage) {
 	f := &a.set
-	it := ui.ButtonBase(c.Key("nav-" + p.id)).Height(30).PaddingX(10).Gap(9).Radius(7).AlignItems(ui.Center).Label(p.label)
+	it := ui.ButtonBase(c.Key("nav-" + p.id)).Height(30).PaddingX(10).Gap(9).Radius(radiusControl).AlignItems(ui.Center).Label(p.label)
 	col, w := k.Muted, 500
 	if p.id == f.page {
 		it.Background(k.Raise2)
@@ -168,7 +168,7 @@ func (a *App) consoleURL() string {
 // fieldBox is a one-line text input in the design's look: the box and the
 // input inside it.
 func fieldBox(c *ui.Context, k *Tokens, key string, value *string, placeholder string, monoFace bool) (box, in ui.Element) {
-	box = ui.Row(c).Grow(1).Height(32).PaddingX(10).Radius(8).AlignItems(ui.Center).Background(k.Raise2).Border(1, k.Line2)
+	box = ui.Row(c).Grow(1).Height(32).PaddingX(10).Radius(radiusControl).AlignItems(ui.Center).Background(k.Raise2).Border(1, k.Line2)
 	box.Children(func() {
 		in = ui.TextInputBase(c.Key(key), value).Grow(1).Placeholder(placeholder).Label(placeholder)
 		if monoFace {
@@ -192,7 +192,7 @@ func field(c *ui.Context, k *Tokens, key string, value *string, placeholder stri
 // settingRow is a switch with its title and an explanation.
 func settingRow(c *ui.Context, k *Tokens, key string, on *bool, title, help string) ui.Element {
 	var sw ui.Element
-	ui.Row(c).Gap(12).Padding(12, 14).Radius(10).Border(1, k.Line).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Gap(12).Padding(12, 16).Radius(radiusControl).Border(1, k.Line).AlignItems(ui.Center).Children(func() {
 		sw = toggle(c, k, key, on, title)
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
 			ui.Text(c, title).FontSize(13).FontWeight(600)

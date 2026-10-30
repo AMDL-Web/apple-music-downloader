@@ -29,7 +29,7 @@ func (a *App) detail(c *ui.Context, k *Tokens) {
 	pal := jobPalette(j, video != nil)
 	hc := heroColorsFor(pal, k)
 	ui.Row(c).Padding(26, 32, 22, 32).Gap(32).AlignItems(ui.End).Children(func() {
-		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 512), Placeholder: pal.Bg, Size: 248, Radius: 16, Color: 1, Shadow: true, Video: video}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 512), Placeholder: pal.Bg, Size: 248, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		if j.MotionArtworkURL != "" {
 			cover.Children(func() { motionBadge(c, "MOTION") })
 		}
@@ -194,7 +194,7 @@ func (a *App) trackRow(c *ui.Context, k *Tokens, it *domain.JobItem, accent ui.C
 		it.Status != domain.ItemFailed && it.Status != domain.ItemCancelled
 	row := ui.Row(c.Key(it.ID)).Gap(16).Padding(11, 4).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(k.Line)
 	if running {
-		row.Background(k.AccentSoft.Alpha(0.45)).Radius(8)
+		row.Background(k.AccentSoft.Alpha(0.45)).Radius(radiusControl)
 	}
 	row.Children(func() {
 		mono(c, fmt.Sprint(it.Index), 12).TextColor(k.Faint).Width(28).TextAlign(ui.End)

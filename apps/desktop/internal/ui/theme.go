@@ -73,6 +73,31 @@ const (
 	MonoFont = "JetBrains Mono"
 )
 
+// Corner radii, from the outside in. A box inside another takes the outer
+// radius less the room between them (r = R − p), so both arcs share a
+// center; the elements of a level share its radius, and none goes under
+// radiusInner. Pills and circles stay fully round.
+const (
+	// radiusCard rounds the window's own boxes: cards, dialogs, bars, the
+	// tray panel.
+	radiusCard = 24
+	// padCard is the room inside a card around what sits in its corners.
+	padCard = 16
+	// radiusControl rounds what sits in a card or on a screen: buttons,
+	// fields, list rows, small panels, the wall's covers.
+	radiusControl = radiusCard - padCard
+	// padControl is the room inside a control around a box in it.
+	padControl = 4
+	// radiusInner rounds what sits in a control: segments, chips, tags,
+	// thumbnails.
+	radiusInner = radiusControl - padControl
+	// radiusMenu rounds a menu's panel, whose rows are controls.
+	radiusMenu = radiusControl + padControl
+	// radiusCover rounds a hero's cover: a picture, not a box.
+	radiusCover = 16
+	radiusFull  = 999
+)
+
 // applyTheme sets the widgets' theme from the tokens, so the toolkit's own
 // controls (inputs, switches, menus) match the app.
 func applyTheme(c *ui.Context, k *Tokens) {
@@ -86,7 +111,7 @@ func applyTheme(c *ui.Context, k *Tokens) {
 	t.AccentHover, t.AccentPressed = k.Accent.Mix(k.Fg, 0.12), k.Accent.Mix(k.Ink, 0.15)
 	t.Danger, t.Warning, t.Success = k.Bad, k.Warn, k.OK
 	t.Selection, t.Focus = k.AccentSoft, k.Accent
-	t.Radius, t.FontSize = 8, 13
+	t.Radius, t.FontSize = radiusControl, 13
 	c.SetTheme(&t)
 }
 

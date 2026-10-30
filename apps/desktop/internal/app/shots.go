@@ -81,7 +81,13 @@ func (a *App) captureScreens(dir string) {
 	}, 3*time.Second)
 	shot("04-light", func() { a.view.Theme = "light"; a.view.Go(appui.ScreenQueue) }, 2000*time.Millisecond)
 	shot("05-compact", func() { a.view.Theme = a.opts.Theme; a.win.SetContentSize(820, 560) }, 2500*time.Millisecond)
-	shot("03-settings", func() { a.win.SetContentSize(1280, 800); a.view.GoSettings("connection") }, 1500*time.Millisecond)
+	shot("16-compact-light", func() { a.view.Theme = "light" }, 2000*time.Millisecond)
+	shot("17-files-compact", func() { a.view.Theme = a.opts.Theme; a.view.GoSettings("files") }, 1500*time.Millisecond)
+	shot("03-settings", func() {
+		a.view.Theme = a.opts.Theme
+		a.win.SetContentSize(1280, 800)
+		a.view.GoSettings("connection")
+	}, 1500*time.Millisecond)
 	// A lookup only reads the catalog; the music video shows the row of a
 	// link that cannot download.
 	shot("06-new", func() {

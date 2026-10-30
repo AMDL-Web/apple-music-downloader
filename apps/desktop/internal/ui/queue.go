@@ -150,7 +150,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	pal := jobPalette(j, video != nil)
 	hc := heroColorsFor(pal, k)
 	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.End).Children(func() {
-		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: 14, Color: 1, Shadow: true, Video: video}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		if j.MotionArtworkURL != "" && !compact {
 			cover.Children(func() { motionBadge(c, "MOTION") })
 		}
@@ -234,10 +234,10 @@ func (a *App) heroRateText(c *ui.Context, j *store.Job) string {
 
 // motionBadge marks a cover that has a motion loop.
 func motionBadge(c *ui.Context, text string) {
-	b := ui.Row(c).Absolute().Left(8).Bottom(8).PaddingX(7).PaddingY(3).Gap(5).Radius(999).AlignItems(ui.Center).
+	b := ui.Row(c).Absolute().Left(8).Bottom(8).PaddingX(7).PaddingY(3).Gap(5).Radius(radiusFull).AlignItems(ui.Center).
 		Background(ui.RGBA(10, 12, 20, 0.55))
 	b.Children(func() {
-		d := ui.Box(c).Size(6, 6).Radius(999).Background(ui.Hex("#f2f3f8"))
+		d := ui.Box(c).Size(6, 6).Radius(radiusFull).Background(ui.Hex("#f2f3f8"))
 		d.Opacity(1 - 0.65*d.Loop("pulse", 1600*time.Millisecond, ui.Bounce(ui.EaseInOut)))
 		mono(c, text, 10).FontWeight(600).LetterSpacing(0.4).TextColor(ui.Hex("#f2f3f8"))
 	})
@@ -276,7 +276,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		case domain.JobFailed, domain.JobCancelled:
 			dim = 0.3
 		}
-		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 88), Placeholder: pal.Bg, Size: 44, Radius: 6, Color: color, Dim: dim}.Show(c)
+		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 88), Placeholder: pal.Bg, Size: 44, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(13.5).FontWeight(600).Ellipsis("…").SingleLine()
 			ui.Text(c, rowSubtitle(j)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
@@ -295,7 +295,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		if !compact {
 			ui.Box(c).Width(110).Children(func() { statusPill(c, k, j) })
 		}
-		more := ui.ButtonBase(c.Key("more")).Size(28, 28).Radius(7).Center().Label("More actions")
+		more := ui.ButtonBase(c.Key("more")).Size(28, 28).Radius(radiusControl).Center().Label("More actions")
 		more.PopoverMenu(func(m *ui.Menu) { a.jobMenu(m, j) })
 		more.Cursor(ui.CursorPointer).Children(func() { ui.Icon(c, icMore).FontSize(16).TextColor(k.Faint) })
 	})

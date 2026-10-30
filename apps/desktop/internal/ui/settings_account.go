@@ -129,7 +129,7 @@ func (a *App) logoutDialog(c *ui.Context, k *Tokens) {
 	named := f.logout != ""
 	ui.DialogBase(c.Key("logout"), &f.logoutOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.45))
-		panel.Width(440).Padding(22).Gap(12).Radius(14).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
+		panel.Width(440).Padding(padCard).Gap(12).Radius(radiusCard).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
 		title := "Log out of Apple Music?"
 		if named {
 			title = "Log out " + f.logout + "?"

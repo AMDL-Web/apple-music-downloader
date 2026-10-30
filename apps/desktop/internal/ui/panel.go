@@ -32,14 +32,14 @@ func (a *App) Panel(c *ui.Context) {
 	s.WatchServer()
 	c.After(store.ServerEvery)
 	c.Root().Background(ui.Transparent)
-	box := ui.Column(c).Padding(12).Gap(10)
+	box := ui.Column(c).Padding(padCard).Gap(10)
 	switch {
 	case c.Vibrancy(): // the popover's material on macOS
 	case runtime.GOOS == "windows": // which rounds and outlines the flyout
 		c.Root().Background(k.Raise)
 		box.Background(k.Raise)
 	default:
-		box.Background(k.Raise).Radius(16).Border(1, k.Line2)
+		box.Background(k.Raise).Radius(radiusCard).Border(1, k.Line2)
 	}
 	sum := s.Summary()
 	box.Children(func() {
@@ -85,7 +85,7 @@ func (a *App) Panel(c *ui.Context) {
 				a.Go(ScreenNew)
 				a.FocusOmni()
 			}
-			b := ui.ButtonBase(c.Key("open")).Grow(1).Height(30).Radius(8).AlignItems(ui.Center).Justify(ui.Center).Background(k.Pill)
+			b := ui.ButtonBase(c.Key("open")).Grow(1).Height(30).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Center).Background(k.Pill)
 			if b.Clicked() {
 				a.Act.ShowWindow()
 			}
@@ -158,7 +158,7 @@ func (a *App) panelNow(c *ui.Context, k *Tokens, j *store.Job) {
 	pal := jobPalette(j, false)
 	accent := AccentFor(pal, k)
 	t1, t2 := k.Fg, k.Muted
-	card := ui.ButtonBase(c.Key("now")).Padding(10).Gap(12).Radius(12).AlignItems(ui.Center).Justify(ui.Start).Label("Downloading now")
+	card := ui.ButtonBase(c.Key("now")).Padding(8).Gap(12).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label("Downloading now")
 	if pal.OK {
 		deep := pal.Bg.Mix(ui.Hex("#05104b"), 0.6)
 		card.LinearGradient(ui.LinearGradient{Angle: 135, Stops: []ui.GradientStop{{Color: pal.Bg.Alpha(0.55), At: 0}, {Color: deep.Alpha(0.55), At: 1}}})
@@ -173,7 +173,7 @@ func (a *App) panelNow(c *ui.Context, k *Tokens, j *store.Job) {
 		a.OpenJob(j.ID)
 	}
 	card.Cursor(ui.CursorPointer).Children(func() {
-		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 112), Placeholder: pal.Bg, Size: 56, Radius: 9, Color: 1}.Show(c)
+		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 112), Placeholder: pal.Bg, Size: 56, Radius: radiusInner, Color: 1}.Show(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(5).Children(func() {
 			ui.Text(c, j.Name()).FontSize(14).FontWeight(700).TextColor(t1).SingleLine().Ellipsis("…")
 			mono(c, j.By(), 10.5).TextColor(t2).Ellipsis("…")
@@ -191,7 +191,7 @@ func (a *App) panelMini(c *ui.Context, k *Tokens, j *store.Job) {
 		if queued {
 			color, dim = 0, 0.2
 		}
-		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 64), Placeholder: pal.Bg, Size: 32, Radius: 6, Color: color, Dim: dim}.Show(c)
+		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 64), Placeholder: pal.Bg, Size: 32, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(12.5).FontWeight(600).SingleLine().Ellipsis("…")
 			ui.Row(c).Children(func() {
@@ -210,7 +210,7 @@ func (a *App) panelMini(c *ui.Context, k *Tokens, j *store.Job) {
 
 // smallCard is one of the panel's two small cards.
 func smallCard(c *ui.Context, k *Tokens, key, title string, body func()) {
-	ui.Column(c.Key(key)).Padding(10, 12).Gap(6).Radius(12).Background(k.Fg.Alpha(0.05)).MinWidth(0).Children(func() {
+	ui.Column(c.Key(key)).Padding(10, 12).Gap(6).Radius(radiusControl).Background(k.Fg.Alpha(0.05)).MinWidth(0).Children(func() {
 		ui.Text(c, title).FontSize(11).FontWeight(600).TextColor(k.Muted)
 		body()
 	})

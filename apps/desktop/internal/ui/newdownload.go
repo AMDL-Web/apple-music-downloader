@@ -28,7 +28,7 @@ func (a *App) newDownload(c *ui.Context, k *Tokens, compact bool) {
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Padding(24, 28).Gap(14).Children(func() {
 			label(c, k, fmt.Sprintf("Links · %d found", len(o.Links)))
-			box := ui.Column(c).Height(92).Padding(10, 12).Radius(8).Background(k.Raise2).Border(1, k.Line2)
+			box := ui.Column(c).Height(92).Padding(10, 12).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2)
 			box.Children(func() {
 				a.linksTxt = o.Text
 				in := ui.TextAreaBase(c.Key("links"), &a.linksTxt).Fill().Font(MonoFont).FontSize(12).LineHeight(1.7).
@@ -116,7 +116,7 @@ func (a *App) chosenLink() *store.Link {
 func (a *App) linkRow(c *ui.Context, k *Tokens, l *store.Link) {
 	s := a.Store
 	on := a.chosenLink() == l
-	row := ui.ButtonBase(c.Key(l.URL)).Padding(10, 12).Gap(12).Radius(10).AlignItems(ui.Center).Justify(ui.Start).
+	row := ui.ButtonBase(c.Key(l.URL)).Padding(8, 12).Gap(12).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).
 		Background(k.Raise).Border(1, k.Line).Label(l.URL)
 	if on {
 		row.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
@@ -128,13 +128,13 @@ func (a *App) linkRow(c *ui.Context, k *Tokens, l *store.Link) {
 	row.Cursor(ui.CursorPointer).Children(func() {
 		pal := ParsePalette(lk.ArtworkBgColor, lk.ArtworkTextColor1, lk.ArtworkTextColor2, lk.ArtworkTextColor3, lk.ArtworkTextColor4)
 		if l.State == store.LinkReady {
-			widgets.Cover{Image: a.Art.Get(lk.ArtworkURL, 96), Placeholder: pal.Bg, Size: 48, Radius: 6, Color: 1}.Show(c)
+			widgets.Cover{Image: a.Art.Get(lk.ArtworkURL, 96), Placeholder: pal.Bg, Size: 48, Radius: radiusInner, Color: 1}.Show(c)
 		} else {
 			ic := icLink
 			if strings.Contains(l.URL, "/music-video/") {
 				ic = icVideo
 			}
-			ui.Box(c).Size(48, 48).Radius(6).Background(k.Raise2).Center().Children(func() {
+			ui.Box(c).Size(48, 48).Radius(radiusInner).Background(k.Raise2).Center().Children(func() {
 				ui.Icon(c, ic).FontSize(18).TextColor(k.Faint)
 			})
 		}
@@ -227,19 +227,20 @@ func (a *App) actionBar(c *ui.Context, k *Tokens) {
 			running++
 		}
 	}
-	ui.Row(c).Padding(12, 14, 12, 16).Gap(14).Radius(16).Background(k.Raise2).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Padding(12, padCard).Gap(14).Radius(radiusCard).Background(k.Raise2).AlignItems(ui.Center).Children(func() {
 		ui.Row(c).Children(func() {
 			for i, l := range start {
 				if i == 3 {
 					break
 				}
 				pal := ParsePalette(l.Lookup.ArtworkBgColor, "", "", "", "")
-				cv := ui.Box(c.Key(l.URL)).Radius(8).Border(2, k.Raise2)
+				// The ring is 2 wide: its corners round the cover's.
+				cv := ui.Box(c.Key(l.URL)).Radius(radiusInner+2).Border(2, k.Raise2)
 				if i > 0 {
 					cv.Margin(0, 0, 0, -10)
 				}
 				cv.Children(func() {
-					widgets.Cover{Image: a.Art.Get(l.Lookup.ArtworkURL, 64), Placeholder: pal.Bg, Size: 30, Radius: 6, Color: 1}.Show(c)
+					widgets.Cover{Image: a.Art.Get(l.Lookup.ArtworkURL, 64), Placeholder: pal.Bg, Size: 30, Radius: radiusInner, Color: 1}.Show(c)
 				})
 			}
 		})
@@ -381,9 +382,9 @@ func (a *App) previewPane(c *ui.Context, k *Tokens, p *preview, ic *ui.SVG, hint
 	}
 	t1, t2, t3 := Readable(pal.Text1, pal.Bg, k), Readable(pal.Text2, pal.Bg, k), Readable(pal.Text3, pal.Bg, k)
 	pane.Background(bg).Children(func() {
-		radius := float32(14)
+		radius := float32(radiusCover)
 		if p.Round {
-			radius = 172
+			radius = radiusFull
 		}
 		widgets.Cover{Image: a.Art.Get(p.ArtworkURL, 700), Placeholder: pal.Bg.Mix(k.Ink, 0.2), Size: 344, Radius: radius, Color: 1, Shadow: true}.Show(c)
 		var facts []string
@@ -410,7 +411,7 @@ func (a *App) previewPane(c *ui.Context, k *Tokens, p *preview, ic *ui.SVG, hint
 			}
 		})
 		if p.Note != "" {
-			ui.Text(c, p.Note).FontSize(12.5).TextColor(t1).Padding(8, 10).Radius(8).Background(ui.RGBA(0, 0, 0, 0.18))
+			ui.Text(c, p.Note).FontSize(12.5).TextColor(t1).Padding(8, 10).Radius(radiusControl).Background(ui.RGBA(0, 0, 0, 0.18))
 		}
 	})
 }

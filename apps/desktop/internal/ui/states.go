@@ -13,7 +13,7 @@ import (
 
 // skeleton is a shimmering placeholder bar.
 func skeleton(c *ui.Context, k *Tokens, w, h float32) ui.Element {
-	el := ui.Box(c).Height(h).Radius(6).Background(k.Track)
+	el := ui.Box(c).Height(h).Radius(radiusInner).Background(k.Track)
 	if w > 0 {
 		el.Width(w)
 	} else {
@@ -32,7 +32,7 @@ func (a *App) loadingState(c *ui.Context, k *Tokens) {
 	}
 	ui.Column(c).Grow(1).Children(func() {
 		ui.Row(c).Padding(18, 28).Gap(18).AlignItems(ui.Center).Children(func() {
-			skeleton(c, k, 120, 120).Radius(12)
+			skeleton(c, k, 120, 120).Radius(radiusCover)
 			ui.Column(c).Grow(1).Gap(10).Children(func() {
 				skeleton(c, k, 140, 10)
 				skeleton(c, k, 360, 22)
@@ -68,7 +68,7 @@ func (a *App) offlineBanner(c *ui.Context, k *Tokens) {
 	if a.Settings.Mode == mode.Standalone {
 		name, where = "the backend", "this computer"
 	}
-	ui.Column(c).Margin(10, 18, 0, 18).Padding(14).Gap(8).Radius(10).Background(k.BadSoft).Children(func() {
+	ui.Column(c).Margin(10, 18, 0, 18).Padding(padCard).Gap(8).Radius(radiusCard).Background(k.BadSoft).Children(func() {
 		ui.Text(c, "Can’t reach "+name).FontWeight(600).TextColor(k.Bad)
 		msg := "No answer from " + where + "."
 		if wait := s.Conn.RetryAt.Sub(c.Now()); wait > 0 {
@@ -89,7 +89,7 @@ func (a *App) offlineBanner(c *ui.Context, k *Tokens) {
 
 // startFailed explains why the standalone backend did not start.
 func (a *App) startFailed(c *ui.Context, k *Tokens) {
-	ui.Column(c).Margin(18).Padding(14).Gap(8).Radius(10).Background(k.BadSoft).Children(func() {
+	ui.Column(c).Margin(18).Padding(padCard).Gap(8).Radius(radiusCard).Background(k.BadSoft).Children(func() {
 		ui.Text(c, "The backend on this computer did not start").FontWeight(600).TextColor(k.Bad)
 		ui.Text(c, a.Act.StartErr()).FontSize(12.5).Font(MonoFont)
 		if button(c, k, buttonPlain, "Check settings", nil).Clicked() {
@@ -117,7 +117,7 @@ func (a *App) emptyQueue(c *ui.Context, k *Tokens, quiet bool) {
 		stack := ui.Box(c).Size(150, 110)
 		stack.Children(func() {
 			for i, x := range []float32{0, 32, 64} {
-				card := ui.Box(c.Key(i)).Size(86, 86).Radius(10).Absolute().Left(x).Top([]float32{18, 6, 18}[i]).Rotate([]float32{-8, 0, 8}[i])
+				card := ui.Box(c.Key(i)).Size(86, 86).Radius(radiusControl).Absolute().Left(x).Top([]float32{18, 6, 18}[i]).Rotate([]float32{-8, 0, 8}[i])
 				if i == 2 {
 					card.LinearGradient(ui.LinearGradient{From: ui.Hex("#7d93bd"), To: ui.Hex("#05104b"), Angle: 160})
 				} else {

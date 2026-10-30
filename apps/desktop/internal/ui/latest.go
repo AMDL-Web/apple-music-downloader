@@ -57,7 +57,7 @@ func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	pal := latestPalette(j, video != nil)
 	hc := heroColorsFor(pal, k)
 	ui.Row(c).Padding(18, 28, 20, 28).Gap(28).AlignItems(ui.End).Children(func() {
-		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Height: height, Radius: 14, Color: 1, Shadow: true, Video: video}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Height: height, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		switch {
 		case compact:
 		case height > 0:
@@ -189,17 +189,17 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 		video = a.motionPlayer(c, j.MotionArtworkURL, size)
 	}
 	t.Cursor(ui.CursorPointer).Tooltip(j.Name() + " — " + j.By()).Children(func() {
-		frame := ui.Box(c).Size(size, size).Radius(8).Scale(1+0.06*lift, 1+0.06*lift)
+		frame := ui.Box(c).Size(size, size).Radius(radiusControl).Scale(1+0.06*lift, 1+0.06*lift)
 		if lift > 0.01 {
 			frame.Shadow(0, 10*lift, 24*lift, 0, ui.RGBA(0, 0, 0, 0.45*lift))
 		}
 		frame.Children(func() {
-			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: jobPalette(j, false).Bg, Size: size, Radius: 8, Color: 1, Video: video}.Show(c)
+			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: jobPalette(j, false).Bg, Size: size, Radius: radiusControl, Color: 1, Video: video}.Show(c)
 			if lift > 0.01 {
-				ui.Box(c).Fill().Radius(8).Absolute().Top(0).Left(0).Border(2, k.Accent.Alpha(lift)).PassThrough()
+				ui.Box(c).Fill().Radius(radiusControl).Absolute().Top(0).Left(0).Border(2, k.Accent.Alpha(lift)).PassThrough()
 			}
 			if j.MotionArtworkURL != "" && video == nil {
-				ui.Box(c).Size(16, 16).Radius(999).Background(ui.RGBA(10, 12, 20, 0.55)).Absolute().Right(5).Top(5).Center().Children(func() {
+				ui.Box(c).Size(16, 16).Radius(radiusFull).Background(ui.RGBA(10, 12, 20, 0.55)).Absolute().Right(5).Top(5).Center().Children(func() {
 					ui.Icon(c, icPlay).FontSize(7).TextColor(ui.Hex("#f2f3f8"))
 				})
 			}

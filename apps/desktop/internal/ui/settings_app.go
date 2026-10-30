@@ -22,7 +22,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		ui.Row(c).Gap(14).Children(func() {
 			modeCard := func(m mode.Kind, ic *ui.SVG, title, body string) {
 				on := d.Mode == m
-				card := ui.ButtonBase(c.Key(string(m))).Grow(1).Basis(0).Padding(16).Gap(8).Radius(12).Border(1, k.Line2).Background(k.Raise).
+				card := ui.ButtonBase(c.Key(string(m))).Grow(1).Basis(0).Padding(padCard).Gap(8).Radius(radiusCard).Border(1, k.Line2).Background(k.Raise).
 					AlignItems(ui.Start).Justify(ui.Start).Label(title)
 				card.Column()
 				if on {
@@ -50,7 +50,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	}
 	here := d.Mode == mode.Standalone && a.Settings.Mode == mode.Standalone
 	if shared := a.Act.Shared(); shared != "" && here {
-		ui.Row(c).Padding(10, 14).Gap(10).Radius(10).Background(k.AccentSoft).AlignItems(ui.Start).Children(func() {
+		ui.Row(c).Padding(10, 14).Gap(10).Radius(radiusControl).Background(k.AccentSoft).AlignItems(ui.Start).Children(func() {
 			ui.Icon(c, icLaptop).FontSize(16).TextColor(k.Accent)
 			ui.Column(c).Grow(1).Shrink(1).Gap(3).Children(func() {
 				ui.Text(c, "Using the backend already running on this computer").FontSize(12.5).FontWeight(650)
@@ -144,7 +144,7 @@ func (a *App) checkList(c *ui.Context, k *Tokens, checks []mode.Check) {
 	if !allOK {
 		bg = k.BadSoft
 	}
-	ui.Column(c).Padding(4, 14).Radius(10).Background(bg).Dividers(1, k.Line).Children(func() {
+	ui.Column(c).Padding(4, 14).Radius(radiusControl).Background(bg).Dividers(1, k.Line).Children(func() {
 		for i, ch := range checks {
 			ui.Row(c.Key(i)).Gap(10).PaddingY(7).AlignItems(ui.Center).Children(func() {
 				ic, col := icCheck, k.OK

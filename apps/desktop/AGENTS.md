@@ -25,6 +25,10 @@ this computer runs the backend and the account is held by the wrapper
   `path/filepath` or show them as this computer's.
 - Colors come from `apps/desktop/internal/ui#Tokens`; an album's palette is
   used only after a contrast check (`ui#Readable`, `ui#AccentFor`).
+- The views' corner radii come from the levels beside the tokens
+  (`apps/desktop/internal/ui#radiusCard` and the constants after it), never
+  a number: a box inside another takes the outer radius less the room
+  between them, so both corners share a center.
 - No cgo: every target cross-compiles with `CGO_ENABLED=0`.
 - MyGo paints absolute children above in-flow ones, in build order: a
   decorative layer goes before an absolute content layer, as the main

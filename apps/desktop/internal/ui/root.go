@@ -105,7 +105,7 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, compact bool) {
 func (a *App) omniField(c *ui.Context, k *Tokens) {
 	s := a.Store
 	focused := c.Focused(a.omni)
-	box := ui.Row(c).Grow(1).MaxWidth(500).Height(30).PaddingX(10).Gap(8).Radius(9).AlignItems(ui.Center).
+	box := ui.Row(c).Grow(1).MaxWidth(500).Height(30).PaddingX(10).Gap(8).Radius(radiusControl).AlignItems(ui.Center).
 		Background(k.Raise2).Border(1, k.Line)
 	if focused {
 		box.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
@@ -135,7 +135,7 @@ func (a *App) omniField(c *ui.Context, k *Tokens) {
 				s.Submit()
 			}
 		}
-		ui.Row(c).PaddingX(5).PaddingY(1).Radius(4).Border(1, k.Line2).Children(func() {
+		ui.Row(c).PaddingX(5).PaddingY(1).Radius(radiusInner).Border(1, k.Line2).Children(func() {
 			mono(c, shortcutLabel, 10.5).TextColor(k.Muted)
 		})
 	})
@@ -154,7 +154,7 @@ func (a *App) toast(c *ui.Context, k *Tokens) {
 	c.After(4*time.Second - age)
 	ui.Overlay(c, func() {
 		ui.Row(c).Attach(ui.AnchorBottom, ui.AnchorBottom).Bottom(24).
-			PaddingX(14).PaddingY(9).Gap(8).Radius(10).AlignItems(ui.Center).
+			PaddingX(14).PaddingY(9).Gap(8).Radius(radiusFull).AlignItems(ui.Center).
 			Background(k.Pill).Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.35)).Children(func() {
 			ic, col := icCheck, k.OK
 			if n.Error {
