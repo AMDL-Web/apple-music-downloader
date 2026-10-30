@@ -134,6 +134,6 @@ page in `apps/console/skins/`.
 | Server-Sent Events read with `fetch` instead of `EventSource` | `apps/console/static/js/lib/stream.js` | adopted | The client must tell 204 (finished) from 404 and 5xx, and own its backoff and hidden-tab pause. |
 | Alpine.js, petite-vue, htmx with Go templates, plain DOM | none | not adopting | Larger or less testable; htmx would add a second rendering path that bypasses the public API. |
 | A bundler (Vite) and a committed `dist/` | none | not adopting | The image has no Node stage, and the console stays plain ES modules. |
-| hls.js for motion covers outside Safari | none | not adopting | Motion covers play only where the browser plays HLS natively; revisit if the showcase needs them everywhere. |
+| hls.js for motion covers outside Safari | none | not adopting | The console plays the single MP4 behind Apple's HLS (`apps/console/static/js/lib/motion.js`), which every browser plays; Safari falls back to the HLS itself. |
 | Sparklines in KPI tiles | none | not adopting | Throughput history has its own chart from `/stats`; tiles stay single numbers. |
 | Favicon status dot | none | not adopting | It would need color literals outside the token file; the tab title carries the running count. |

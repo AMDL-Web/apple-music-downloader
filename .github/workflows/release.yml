@@ -9,8 +9,10 @@ name: Release
 #     PR title had no version.
 # Both paths run the CI gate (make check), use the hand-written release notes
 # or generate a changelog, create the tag and GitHub Release, then attach the
-# amdl binaries (make dist) and call docker-publish to build and push the image
-# (moving latest too).
+# amdl binaries (make dist) with the Homebrew formula and Scoop manifest
+# rendered for them, copy those two into the tap and the bucket once that is
+# set up (deploy/packaging/README.md), and call docker-publish to build and
+# push the image (moving latest too).
 on:
   workflow_dispatch:
     inputs:
@@ -226,14 +228,57 @@ jobs:
           VERSION: ${{ needs.release.outputs.version }}
         run: make dist VERSION="$VERSION"
 
+      - name: Render the Homebrew formula and the Scoop manifest
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: node deploy/packaging/render.mjs "$VERSION" dist/SHA256SUMS dist
+
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
-          # Five archives and the checksum file, or the job fails.
-          test "$(ls dist | wc -l)" -eq 6
+          # Five archives, the checksum file, the formula and the manifest,
+          # or the job fails.
+          test "$(ls dist | wc -l)" -eq 8
           gh release upload "$VERSION" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  # Copy the formula and the manifest into the tap and the bucket. Off until
+  # the maintainer creates AMDL-Web/homebrew-tap and AMDL-Web/scoop-bucket,
+  # adds PACKAGING_TOKEN and sets PACKAGING_PUBLISH (deploy/packaging/README.md).
+  packaging:
+    name: Publish to the Homebrew tap and the Scoop bucket
+    needs: [release, binaries]
+    if: vars.PACKAGING_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Fetch the rendered files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: gh release download "$VERSION" --repo "$GITHUB_REPOSITORY" --pattern amdl.rb --pattern amdl.json --dir out
+
+      - name: Push them
+        env:
+          TOKEN: ${{ secrets.PACKAGING_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -eu
+          publish() {
+            repo=$1 src=$2 dst=$3 dir=work-${1#*/}
+            git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/$repo.git" "$dir"
+            mkdir -p "$dir/$(dirname "$dst")"
+            cp "$src" "$dir/$dst"
+            git -C "$dir" add "$dst"
+            if git -C "$dir" diff --cached --quiet; then echo "$repo already has $VERSION"; return; fi
+            git -C "$dir" -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "amdl $VERSION"
+            git -C "$dir" push
+          }
+          publish AMDL-Web/homebrew-tap out/amdl.rb Formula/amdl.rb
+          publish AMDL-Web/scoop-bucket out/amdl.json bucket/amdl.json
 
   # Build and push the image to GHCR after a successful release. It has to be
   # called explicitly: a tag created with GITHUB_TOKEN does not trigger

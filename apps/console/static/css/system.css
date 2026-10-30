@@ -1,0 +1,74 @@
+/* ---- System -------------------------------------------------------- */
+
+.storage-list {
+  gap: var(--s-4);
+}
+
+.storage-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1_5);
+}
+
+.storage-folders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Name and Copy on one line, the path (cut in the middle, full text in its title) under them. */
+.storage-folder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s-2);
+  min-width: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.storage-name {
+  font-weight: var(--w-medium);
+}
+
+.storage-path {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.storage-folder > .btn {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.tool-list {
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.accounts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.account-list {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.quiet-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+

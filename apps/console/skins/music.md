@@ -7,7 +7,7 @@ is particular to this skin.
 
 ## Intent
 
-Artwork leads. Running jobs, the showcase banner and the job
+Artwork leads. Running jobs, the latest-release banner and the job
 drawer's header take each album's own Apple colors (`--art-bg`, `--art-t1` to
 `--art-t3`). Large rounded radii, SF Pro Display-style tight headlines, a red
 accent close to Apple Music's. Dark first, with a designed light theme. The
@@ -108,9 +108,8 @@ text color; shelf covers and New download's link covers cast one tinted with
 `--art-bg`. Sidebar, tab bar, top bar, palette, sheets and toasts are
 translucent with a backdrop blur; the save bar and the Queue selection bar
 float over the content they stick to, so they are frosted `--toast-bg` with
-`--shadow-float`. Showcase covers
-lift 2 px and live covers scale 1.02 on hover,
-both only under `prefers-reduced-motion: no-preference`. Running shows a
+`--shadow-float`. Live covers scale 1.02 on hover,
+only under `prefers-reduced-motion: no-preference`. Running shows a
 three-bar equalizer (two pseudo-elements animating `scaleY`, out of phase); it
 freezes into a static glyph under reduced motion. Everything else uses the
 base durations (120 ms color, 200 ms overlays).
@@ -142,7 +141,7 @@ base durations (120 ms color, 200 ms overlays).
   in the sidebar, hairlines from the label, the current page in semibold with
   "Current" and the chevron in secondary.
 - **Page head**: title with its summary line beneath (15 px secondary; only
-  Overview, Queue and Showcase have one, their live counts), as an Apple
+  Overview and Queue have one, their live counts), as an Apple
   large title. No page actions: New download lives in the sidebar and the
   tab bar.
 - **Sections**: every card with a head is a shelf: the head sits on the
@@ -164,21 +163,25 @@ base durations (120 ms color, 200 ms overlays).
   glyph, "Failed" as a tinted chip, the title and the mono link, the error and its age,
   and a Retry button (under the text on phones).
 - **Overview order**: Needs attention (only with failures), Now downloading (an
-  idle card as tall as a job's when nothing runs), Recently completed, Jobs, Throughput, each full width, so
+  idle card as tall as a job's when nothing runs, its content centred), Recently completed, Jobs, Throughput, each full width, so
   the phone and desktop reading order are the same.
 - **Live queue**: each job is a card filled with its album gradient; 136 px
   cover (96 on phones); eyebrow = equalizer + RUNNING in `--art-t3`; title on
   one line, so every card (and the idle one) is the same height; artist in `--art-t2`; genre · year · started below; per-track
   cells in `--art-t1`, remaining cells outlined at 75 %. A job without a palette
   (queued, resolving) falls back to the grouped surface.
-- **Recently completed**: a shelf with no surface; every tile is shown and the
-  row scrolls (7 per view at 1280+, 5, 4, then 138 px tiles on phones running
-  to the screen edge). Title and artist only; the finish time is the tile's
-  title attribute.
+- **Recently completed**: no surface behind it. The latest release is a card in
+  its album gradient like a running job's (112 px cover, 88 on phones, its
+  motion cover playing; an uppercase LATEST · ALBUM eyebrow, the title at the
+  live-card size, the artist, one line of facts). Under it a wall of two rows
+  of covers with no tile fill (at least 100 px each, so three per row on a
+  phone): the cover with a tinted shadow, the title in 14 px, the artist in
+  13 px secondary.
 - **Jobs**: one grouped surface, five hairline-separated columns (three per row
-  on phones); icon and label share a line; a zero value goes secondary. Only
-  Total shows its sublabel (cancelled); the others' repeated "of N total" is
-  hidden but keeps its line, so the columns share one baseline.
+  on phones); icon and label share a line; a zero value goes secondary. No
+  sublabel: label and number set the height, equal across columns. A hovered
+  column fills its whole box and the surface's radius clips the end ones, as
+  a grouped-list row does.
 - **System health**: inset grouped list, 30 px solid icon tiles in the role
   color (a failed component's tile is the danger tint with a red glyph), hairlines inset to the text, status word right-aligned in its role
   color, detail in mono (System page).
@@ -217,12 +220,6 @@ base durations (120 ms color, 200 ms overlays).
   takes the base drawing in the skin's 6 px capsule (`--bar-h`, `--r-bar`).
   Track stage fills are calm secondary ink and turn red only on a track that
   is still running.
-- **Showcase**: the latest album is a banner above the type switch, at most
-  200 px tall: album gradient, 140 px cover, a 32 px heavy title, the artist
-  in 20 px, one line of facts; hidden under 640 px, where the same album is
-  the first tile. Tiles have no fill: the cover (a neutral placeholder with the
-  music glyph when it has none), the title in 15 px semibold and the artist
-  in 13 px secondary. A motion cover is marked with a small "Motion cover" chip.
 - **Logs**: level chips and Pause are one kind of toggle pill: pressed is
   `--chip-on-bg` (the gray fill in light, the raised thumb in dark) and a
   level chip then shows a check; off is outlined in both themes, and an off

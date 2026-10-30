@@ -20,6 +20,7 @@ here or its type here disagrees with the page.
 | [configuration.md](configuration.md) | reference | Config file, env overrides, runtime vs startup keys, simulate mode |
 | [download-pipeline.md](download-pipeline.md) | reference | Stages, retries, codec fallback, concurrency pools, memory modes, lyrics, output paths |
 | [automation.md](automation.md) | reference | Job hooks and library sync |
+| [install.md](install.md) | runbook | Installing the `amdl` binary on macOS, Linux and Windows: install scripts, Homebrew and Scoop, ffmpeg, the wrapper options, the background service, upgrade and uninstall |
 | [deployment.md](deployment.md) | runbook | Docker, mounts, `PUID`/`PGID`, config seeding, releases and image tags |
 | [benchmarks.md](benchmarks.md) | record | Measured post-decrypt and end-to-end results |
 | [references.md](references.md) | reference | Outside practices this repo adopted, adapted or declined, and where they landed |

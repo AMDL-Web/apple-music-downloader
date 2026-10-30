@@ -20,7 +20,6 @@ import { useHashRouter } from './ui/router.js';
 import { useFeed } from './ui/feed.js';
 import { OverviewPage } from './views/overview.js';
 import { QueuePage } from './views/queue.js';
-import { ShowcasePage } from './views/showcase.js';
 import { LogsPage } from './views/logs.js';
 import { SystemPage } from './views/system.js';
 import { DownloadPage } from './views/download.js';
@@ -32,7 +31,6 @@ import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, Sim
 const TITLES = {
   overview: 'Overview',
   queue: 'Queue',
-  showcase: 'Showcase',
   logs: 'Logs',
   system: 'System',
   new: 'New download',
@@ -314,9 +312,6 @@ export function App() {
       break;
     case 'queue':
       page = html`<${QueuePage} route=${route} />`;
-      break;
-    case 'showcase':
-      page = html`<${ShowcasePage} route=${route} />`;
       break;
     case 'logs':
       page = html`<${LogsPage} key=${'logs'} route=${route} />`;

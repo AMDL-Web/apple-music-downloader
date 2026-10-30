@@ -147,7 +147,6 @@ function shortcutGroups(mod) {
         [[k('n')], 'New download'],
         go('o', 'Overview'),
         go('q', 'Queue'),
-        go('s', 'Showcase'),
         go('l', 'Logs'),
         go('y', 'System'),
         go(',', 'Settings'),

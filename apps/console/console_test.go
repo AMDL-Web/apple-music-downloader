@@ -537,7 +537,7 @@ var (
 	runtimeVars = map[string]bool{
 		"--art-bg": true, "--art-t1": true, "--art-t2": true, "--art-t3": true,
 		"--w": true, "--f": true, "--v": true, "--n": true, "--swatch": true,
-		"--role": true, "--role-tint": true, "--new-bar-h": true, "--job-prog": true, "--job-trail": true,
+		"--role": true, "--role-tint": true, "--new-bar-h": true, "--job-prog": true, "--job-trail": true, "--cols": true,
 	}
 )
 

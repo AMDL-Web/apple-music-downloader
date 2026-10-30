@@ -40,7 +40,7 @@ func (c *ToolChecker) Check(ctx context.Context) []domain.Capability {
 func (c *ToolChecker) Require(ctx context.Context) error {
 	for _, capability := range c.Check(ctx) {
 		if !capability.Available {
-			return &MissingToolError{Name: capability.Name, Err: capability.Error}
+			return &MissingToolError{Name: capability.Name, Err: capability.Error, Hint: InstallHint()}
 		}
 	}
 	return nil
@@ -50,8 +50,14 @@ func (c *ToolChecker) Require(ctx context.Context) error {
 type MissingToolError struct {
 	Name string
 	Err  string
+	// Hint is how to install it on this machine.
+	Hint string
 }
 
 func (e *MissingToolError) Error() string {
-	return "missing required media tool: " + e.Name + " (" + e.Err + ")"
+	msg := "missing required media tool: " + e.Name + " (" + e.Err + ")"
+	if e.Hint != "" {
+		msg += "; install it with: " + e.Hint + ", or set tools.ffmpeg to its full path"
+	}
+	return msg
 }

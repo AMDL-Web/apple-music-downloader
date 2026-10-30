@@ -247,11 +247,12 @@ test('pageSummary reads the feed counts per page', () => {
   assert.equal(pageSummary('overview', counts, now), 'Oct 29 · 16 jobs');
   assert.equal(pageSummary('overview', { ...counts, total: 1 }, now), 'Oct 29 · 1 job');
   assert.equal(pageSummary('overview', null, now), 'Oct 29');
-  assert.equal(pageSummary('queue', counts, now), '2 running · 0 queued · 1 failed');
+  assert.equal(pageSummary('queue', counts, now), '2 running · 1 failed');
+  assert.equal(pageSummary('queue', { ...counts, running: 0, failed: 0 }, now), 'Nothing active');
   assert.equal(pageSummary('queue', null, now), '');
   assert.equal(pageSummary('notfound', counts, now), '');
-  // The page names say what these pages are; only live counts get a line. Showcase shows albums, not the feed's job counts.
-  for (const page of ['showcase', 'logs', 'system', 'new', 'settings']) assert.equal(pageSummary(page, counts, now), '', page);
+  // The page names say what these pages are; only live counts get a line.
+  for (const page of ['logs', 'system', 'new', 'settings']) assert.equal(pageSummary(page, counts, now), '', page);
 });
 
 test('jobFacts gives kicker and meta parts, empty when unknown', () => {

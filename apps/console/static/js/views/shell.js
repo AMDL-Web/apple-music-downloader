@@ -14,7 +14,6 @@ import { THEMES } from '../lib/prefs.js';
 export const NAV = [
   { page: 'overview', label: 'Overview', icon: 'grid', key: 'o' },
   { page: 'queue', label: 'Queue', icon: 'list', key: 'q' },
-  { page: 'showcase', label: 'Showcase', icon: 'disc', key: 's' },
   { page: 'logs', label: 'Logs', icon: 'file-text', key: 'l' },
   { page: 'system', label: 'System', icon: 'server', key: 'y' },
   { page: 'settings', label: 'Settings', icon: 'settings', key: ',' },
@@ -24,7 +23,7 @@ export const NAV = [
 export const NEW_DOWNLOAD = { page: 'new', label: 'New download', icon: 'plus', key: 'n' };
 
 /** Pages the phone tab bar reaches through its More sheet. */
-export const MORE_PAGES = ['logs', 'system', 'settings'];
+export const MORE_PAGES = ['system', 'settings'];
 
 export function Sidebar({ route, counts }) {
   const active = counts ? counts.queued + counts.running : 0;
@@ -65,7 +64,7 @@ const navItem = (page) => NAV.find((n) => n.page === page);
 
 /**
  * The phone tab bar: Overview, Queue, New download (center, primary),
- * Showcase and More, a button that opens MoreSheet. More is marked current
+ * Logs and More, a button that opens MoreSheet. More is marked current
  * while one of MORE_PAGES is shown and while its sheet is open.
  */
 export function TabBar({ route, moreOpen, onMore }) {
@@ -82,7 +81,7 @@ export function TabBar({ route, moreOpen, onMore }) {
     <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${current('new')} aria-label=${NEW_DOWNLOAD.label} title=${NEW_DOWNLOAD.label}>
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
     </a>
-    ${tab(navItem('showcase'))}
+    ${tab(navItem('logs'))}
     <button
       type="button"
       class="tab tab-more"

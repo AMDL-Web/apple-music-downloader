@@ -1,0 +1,29 @@
+{
+    "##": "Generated for {{tag}} by deploy/packaging/render.mjs; edit deploy/packaging/amdl.json.tmpl in AMDL-Web/apple-music-downloader instead.",
+    "version": "{{version}}",
+    "description": "Apple Music downloader: CLI, MCP server and local backend",
+    "homepage": "https://github.com/AMDL-Web/apple-music-downloader",
+    "license": "AGPL-3.0-only",
+    "depends": "ffmpeg",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/AMDL-Web/apple-music-downloader/releases/download/{{tag}}/amdl_{{tag}}_windows_amd64.zip",
+            "hash": "{{sha256 windows_amd64}}",
+            "extract_dir": "amdl_{{tag}}_windows_amd64"
+        }
+    },
+    "bin": "amdl.exe",
+    "notes": "To run the backend in the background from logon: amdl service install --wrapper http://<wrapper-host>:<port>",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/AMDL-Web/apple-music-downloader/releases/download/v$version/amdl_v$version_windows_amd64.zip",
+                "extract_dir": "amdl_v$version_windows_amd64"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS"
+        }
+    }
+}

@@ -168,15 +168,18 @@ const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 
 /**
  * The line under a page title, from the feed's status counts (null before
- * the first snapshot) and the current time. Showcase has none: the counts are
- * jobs, and its grid shows albums.
+ * the first snapshot) and the current time.
  */
 export function pageSummary(page, counts, now = new Date()) {
   switch (page) {
     case 'overview':
       return counts ? `${shortDate(now)} · ${plural(counts.total, 'job', 'jobs')}` : shortDate(now);
-    case 'queue':
-      return counts ? `${count(counts.running)} running · ${count(counts.queued)} queued · ${count(counts.failed)} failed` : '';
+    case 'queue': {
+      // Only what there is: a column of zeros says nothing the tabs don't.
+      if (!counts) return '';
+      const parts = [['running', counts.running], ['queued', counts.queued], ['failed', counts.failed]].filter(([, n]) => n > 0);
+      return parts.map(([word, n]) => `${count(n)} ${word}`).join(' · ') || 'Nothing active';
+    }
     default:
       return '';
   }
