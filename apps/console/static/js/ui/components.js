@@ -111,8 +111,9 @@ export function StageTrack({ item }) {
 /**
  * Apple artwork with its background color behind it while loading and on
  * failure (an expired pre-signed URL, for example), where a music glyph shows.
+ * `children` lie over the image (a motion cover).
  */
-export function Artwork({ url, bg, px, widths, sizes, className, eager }) {
+export function Artwork({ url, bg, px, widths, sizes, className, eager, children }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [url]);
   const src = artworkUrl(url, px);
@@ -129,6 +130,7 @@ export function Artwork({ url, bg, px, widths, sizes, className, eager }) {
           onError=${() => setFailed(true)}
         />`
       : html`<span class="art-glyph"><${Icon} name="music" /></span>`}
+    ${children}
   </div>`;
 }
 

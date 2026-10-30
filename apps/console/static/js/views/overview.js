@@ -3,11 +3,12 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, settle } from '../api.js';
-import { count, bytes, jobTitle, jobSubtitle, artPalette, paletteStyle, absTime, isUnresolved, inputLabel, errorSummary } from '../lib/format.js';
+import { count, bytes, jobTitle, jobSubtitle, artPalette, paletteStyle, absTime, isUnresolved, inputLabel, errorSummary, artWidths } from '../lib/format.js';
 import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/status.js';
 import { uniqueByTarget } from '../lib/albums.js';
 import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
+import { MotionCover } from '../ui/motion.js';
 import { useApp, Card, Icon, Artwork, Empty, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
 import { usePoll, useColumns, useNow } from '../ui/hooks.js';
 import { JobRow, applyFeedToList } from './queue.js';
@@ -282,6 +283,9 @@ const RECENT_FILTER = { statuses: ['completed'] };
 const RECENT_FETCH = 32;
 const RECENT_SHOWN = 16;
 const TILE_MIN = 120;
+// Tiles start at TILE_MIN and stretch to fill the row: about 120-130 px on a
+// desktop, 140 on a phone.
+const TILE_ART = artWidths(130, 140);
 const TILE_GAP = 16;
 
 function RecentStrip() {
@@ -335,7 +339,9 @@ function RecentStrip() {
                 const p = artPalette(job);
                 const cls = ['strip-tile', p ? 'has-palette' : '', cols > 0 && i >= cols ? 'is-overflow' : ''].filter(Boolean).join(' ');
                 return html`<a key=${job.id} class=${cls} href=${buildHash('showcase', {}, job.id)} style=${paletteStyle(p)} title=${job.finished_at ? `Finished ${absTime(job.finished_at)}` : undefined}>
-                  <${Artwork} url=${job.artwork_url} bg=${p && p.bg} px=${240} className="art-square" />
+                  <${Artwork} url=${job.artwork_url} bg=${p && p.bg} px=${260} widths=${TILE_ART} sizes="(max-width: 639px) 140px, 130px" className="art-square">
+                    ${job.motion_artwork_url ? html`<${MotionCover} job=${job} size=${140} />` : null}
+                  </${Artwork}>
                   <span class="strip-title" dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</span>
                   <span class="strip-sub" dir="auto">${jobSubtitle(job)}</span>
                 </a>`;

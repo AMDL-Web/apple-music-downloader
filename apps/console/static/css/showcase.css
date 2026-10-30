@@ -159,17 +159,6 @@
   white-space: nowrap;
 }
 
-.motion {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--r-art);
-  background: var(--art-bg, var(--bg-hover));
-  animation: fade-in var(--dur-base) var(--ease-out);
-}
-
 /* Hover underlines the title in every mode. Movement is added only where
    motion is allowed, so reduced motion keeps the feedback as a plain change. */
 .tile:hover .tile-title,

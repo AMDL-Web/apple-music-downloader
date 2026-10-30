@@ -171,6 +171,18 @@ page. A playing motion cover switches to the
 `motion_artwork_*` palette; the two are never mixed. `.art` also sets `--art-bg`
 behind a cover while it loads or when it fails.
 
+**Covers.** Every cover is requested as WebP (`lib/format.js` `artworkUrl`;
+Apple's `{w}x{h}bb.jpg` extension is a format slot) with a `srcset` of 1x-3x
+the CSS size it is drawn at (`artWidths`) and `sizes` for that box, lazy
+below the fold. **Motion covers** (`ui/motion.js` `MotionCover`) lie over the
+still in the drawer header, the Overview's Recently completed tiles (both
+always) and Showcase (on hover or focus): `lib/motion.js` picks the smallest
+H.264 rendition of Apple's HLS master whose side reaches the box times the
+pixel ratio and plays the single MP4 its byte ranges cut, muted, looped,
+inline, paused off screen, never under `prefers-reduced-motion`; Safari falls
+back to the HLS itself if that MP4 fails. The video is invisible until it
+plays, and any failure leaves the still.
+
 **Opt-in hooks** are hidden by the base and shown by the skin when it wants them:
 `.brand-sub`, `.job-facts`, `.health-icon`,
 `.strip-tile.is-overflow`, `.jprog-legend`,
@@ -276,11 +288,10 @@ and motion covers.
   the "Failed" that says the same) and hooks.
 - **Showcase**: a compact banner for the newest release (desktop only), then a
   grid, one tile per album (jobs of one link target collapse to the newest),
-  of cover, title and artist on the page surface, with `srcset`
-  300w/600w and lazy loading. Covers keep pre-signed URLs without placeholders
-  verbatim. Motion covers play muted on hover or focus, one at a time, only
-  where `video.canPlayType` accepts HLS and motion is allowed. Titles underline
-  on hover.
+  of cover, title and artist on the page surface, with a `srcset` and lazy
+  loading. Covers keep pre-signed URLs without placeholders verbatim. Motion
+  covers play muted on hover or focus, one at a time, while motion is allowed.
+  Titles underline on hover.
 - **Throughput**: under three days with data one sentence ("246 tracks, 11.1 GB" under the card's "Last 14 days"); otherwise totals as facts, the formats mix of every retained job
   (`/stats` `codecs`, the top four with the rest as "Other"; nothing before
   a track completes), then two small multiples sharing the date

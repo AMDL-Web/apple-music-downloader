@@ -13,6 +13,7 @@ import {
   typeLabel,
   artPalette,
   paletteStyle,
+  artWidths,
   count,
   safeHttpUrl,
   isUnresolved,
@@ -37,6 +38,10 @@ import {
   SkeletonRows,
 } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
+import { MotionCover } from '../ui/motion.js';
+
+// The header cover: 112 px wide from 640 px up, 88 px on a phone.
+const HEAD_ART = artWidths(88, 112);
 
 const FOCUSABLE = 'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -191,7 +196,9 @@ function DrawerBody({ detail, streamEnded, onChanged, onDelete, app }) {
 
   return html`<div class="drawer-body">
     <header class="drawer-head" style=${paletteStyle(palette)}>
-      <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${128} className="art-64" eager />
+      <${Artwork} url=${job.artwork_url} bg=${palette && palette.bg} px=${240} widths=${HEAD_ART} sizes="(max-width: 639px) 88px, 112px" className="art-64" eager>
+        ${job.motion_artwork_url ? html`<${MotionCover} job=${job} size=${112} />` : null}
+      </${Artwork}>
       <div class="drawer-head-text">
         <h2 id="drawer-title" class=${unresolved && !lost ? 'drawer-title is-unresolved' : 'drawer-title'} dir="auto">${title}</h2>
         ${lost && lostRow.sub ? html`<p class="drawer-meta drawer-input" dir="auto">${lostRow.sub}</p>` : null}

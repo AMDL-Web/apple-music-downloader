@@ -23,11 +23,12 @@ var embedded embed.FS
 
 // ContentSecurityPolicy is sent with every console response. The app loads
 // scripts and styles only from its own origin, artwork from Apple's CDNs
-// (https:), and motion artwork as HLS (https:, blob:). Inline scripts and
+// (https:), and motion artwork as video (https:, blob:), reading its HLS
+// playlists from Apple's motion CDN (connect-src). Inline scripts and
 // style attributes are blocked, so the app sets dynamic colors through the
 // CSSOM only.
 const ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; " +
-	"img-src 'self' https: data:; media-src 'self' https: blob:; connect-src 'self'; " +
+	"img-src 'self' https: data:; media-src 'self' https: blob:; connect-src 'self' https://mvod.itunes.apple.com; " +
 	"base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 const (

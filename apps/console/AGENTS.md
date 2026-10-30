@@ -13,7 +13,10 @@ Settings coverage.
   browser runs and what `//go:embed` ships.
 - The console uses only the public API, with every call a full `/api/v1/...`
   literal in `static/js/api.js`. A widget whose endpoint answers 404 shows a quiet
-  note instead of breaking the page.
+  note instead of breaking the page. The one exception: `static/js/ui/motion.js`
+  reads motion cover playlists straight from `mvod.itunes.apple.com` (the one
+  host besides 'self' in the CSP's `connect-src`), to play the MP4 behind the HLS, which Chrome
+  does not play, sized to the box it is drawn in.
 - URLs stay relative (`resolveUrl`), so the console works under any path prefix.
 - The CSP allows no inline scripts or styles: dynamic values go through Preact
   style objects, and data is rendered through htm, never `innerHTML`.

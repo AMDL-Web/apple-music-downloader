@@ -567,6 +567,24 @@
   background: var(--art-bg, var(--bg-hover));
 }
 
+/* A motion cover (ui/motion.js) over the still: invisible until its first
+   frame plays, so a slow or failed video never blanks the cover. */
+.motion {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--r-art);
+  background: var(--art-bg, var(--bg-hover));
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.motion.is-ready {
+  opacity: 1;
+}
+
 .art img {
   display: block;
   width: 100%;

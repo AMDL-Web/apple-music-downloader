@@ -23,7 +23,7 @@ import (
 // wantCSP is written out independently of ContentSecurityPolicy so a change
 // to the policy has to be made in two places on purpose.
 const wantCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; " +
-	"media-src 'self' https: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	"media-src 'self' https: blob:; connect-src 'self' https://mvod.itunes.apple.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 // vendorFile and vendorSHA256 pin the vendored Preact+htm bundle; see AGENTS.md.
 const (
