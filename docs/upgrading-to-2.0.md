@@ -35,8 +35,11 @@ needs the API changes below before it works against 2.0.
    uses, or a bare
    [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite), logged in
    with its own `--login`. Set `wrapper.address` (or `AMDL_WRAPPER_ADDRESS`) to its URL,
-   such as `http://wrapper-manager:8080` or `http://127.0.0.1:12340`. 2.0 no longer
-   speaks the fork's gRPC and decrypts media itself.
+   such as `http://wrapper-manager:8080` or `http://127.0.0.1:12340`. Without Docker, the
+   `amdl` binary can also run wrapper-lite itself in a QEMU guest on the backend's machine
+   (`amdl wrapper install`, [Install](install.md#a-wrapper-amdl-runs)), which sets
+   `wrapper.address` for you and has a login of its own. 2.0 no longer speaks the fork's
+   gRPC and decrypts media itself.
 
 ## Upgrade checklist
 
@@ -71,7 +74,7 @@ needs the API changes below before it works against 2.0.
    - if a `command:`, `entrypoint:` or health check names `/app/amdl-api`, change it to
      `/app/amdl serve`, and if you build the image yourself, see
      [Image and source tree](#image-and-source-tree).
-5. Check the wrapper host: `unshare -Ur true` must succeed, or use the QEMU variant (see [Wrapper](#wrapper)).
+5. Check the wrapper host: `unshare -Ur true` must succeed, or use a QEMU guest (see [Wrapper](#wrapper)).
 6. Start 2.0, then confirm `GET /api/v1/wrapper/status` reports `ready` and a region, and
    read `login_supported` to know whether the console can log in.
 
@@ -102,14 +105,14 @@ needs the API changes below before it works against 2.0.
 | Logs paging | `after`, `next_cursor` | `cursor`, `next_cursor` | log viewers |
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
-| Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays, and `accounts` stays empty because neither wrapper-lite nor wrapper-manager v2 names its accounts; `login_supported` says whether the wrapper has the login API | account screens |
+| Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays, and `accounts` stays empty because no 2.0 wrapper names its accounts; `login_supported` says whether the wrapper has a login (wrapper-manager v2 or a wrapper amdl runs), and `managed` describes a wrapper amdl runs | account screens |
 | Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `status`, `regions`, `accounts`, `login_supported` | account screens that showed the count |
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
 | Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
-| `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were startup keys (`422 config_key_not_mutable`) | `400 invalid_request` naming the unknown field, like any removed key | settings screens |
+| `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were startup keys, and changing one was a `422` with a plain-text body | `400 invalid_request` naming the unknown field, like any removed key | settings screens |
 | `GET /config` and `PUT /config` lyrics and catalog fields | `download.save_lyrics_file`, `download.lyrics_format`, `download.lyrics_type` and `catalog.signed_mode_hls_source` (enum `wrapper`, `web_token`) were runtime fields | the three lyrics fields are replaced by `download.lyrics_files` (array of `lrc`, `ttml`) and `download.lyrics_timing` (`line`, `word`); `catalog.signed_mode_hls_source` is gone; `PUT` with an old field is `400 invalid_request` naming it | settings screens, scripts that PUT lyrics settings |
-| Env-pinned keys | `GET /config` listed the runtime keys an `AMDL_*` variable set in `pinned`; `PUT /config` refused them with `422 config_key_pinned` | `pinned`, the `PinnedKey` schema and the `config_key_pinned` code are gone: no environment variable can set a runtime key any more | settings screens |
-| Developer token | `GET /developer-token` signed a token for other clients in local signing mode (`409 signing_disabled` in legacy mode) | removed (`404 route_not_found`), and the `signing_disabled` code with it; the backend no longer signs any token and reads the catalog with the web player's token | browser players that fetched a token |
+| Env-pinned keys | an `AMDL_*` variable could set any runtime key; `PUT /config` refused a key one set with a `422` and a plain-text body, and `GET /config` did not say which keys were set that way | no environment variable can set a runtime key any more, so `PUT /config` accepts every runtime key | settings screens |
+| Developer token | `GET /developer-token` signed a token for other clients in local signing mode (a `409` with a plain-text body in legacy mode) | removed (`404 route_not_found`); the backend no longer signs any token and reads the catalog with the web player's token | browser players that fetched a token |
 | API reference | Swagger UI at `/docs` (from unpkg.com) and the spec at `/api/openapi.yaml` | neither is served (`404`); read `internal/api/openapi.yaml` and `docs/api.md` in the repository | API explorers, client generators that fetched the spec |
 | CORS | `Access-Control-Allow-Origin: *` on every response; `OPTIONS` answered `204` | no CORS headers; `OPTIONS` under `/api/` is `405 method_not_allowed`. Only same-origin pages (the console) and non-browser clients can call the API | web clients on another origin, such as amdl-web |
 | Request id | a well-formed incoming `X-Request-ID` was adopted and echoed | always generated by the server; read it from the response to filter `GET /logs?request_id=` | scripts that set their own id |
@@ -117,8 +120,8 @@ needs the API changes below before it works against 2.0.
 | Submit `overrides` | overlaid the whole job-mutable `download` section (directories, path templates, lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`) plus `media_user_token` and a `hooks` allow-list | only `quality_priority`, `codec_alternative`, `alac_max_sample_rate`, `alac_max_bit_depth`, `force_overwrite`; any other field is `400 invalid_request` naming it. Set the rest in the runtime config; every enabled matching hook runs | scripts that sent per-batch folders, lyrics or cover settings, a token or a hook list |
 | Media-user-token per request | `overrides.media_user_token` on `POST /downloads` and `media_user_token` on `POST /lookup` overlaid `catalog.media_user_token` (`""` cleared it) | removed (`400 invalid_request` naming the field); downloads and lookups always use `catalog.media_user_token` | scripts that passed a token per request |
 | Job `overrides` in responses and events | could hold every field above; the token was redacted | holds only the five fields above | job detail clients |
-| Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | |
-| New | | `GET /system` (with `default_storefront`; it reports no signing mode, because the backend signs no token), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search` and `GET /artists/{id}/albums` (catalog search and an artist's albums), web console at `/console/` (`/` redirects there) | |
+| Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | client generators that key on `info.version`; requests are unchanged |
+| New | | `GET /system` (with `default_storefront`; it reports no signing mode, because the backend signs no token), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search` and `GET /artists/{id}/albums` (catalog search and an artist's albums), web console at `/console/` (`/` redirects there) | none: additions only |
 
 ## Config and environment
 
@@ -166,6 +169,7 @@ needs the API changes below before it works against 2.0.
   | Key | 1.x default | 2.0 default |
   | --- | --- | --- |
   | `wrapper.address` | `127.0.0.1:8080` | `http://127.0.0.1:12340` |
+  | `AMDL_WRAPPER_ADDRESS` in the image, when Compose does not set it | `host.docker.internal:8080` | `http://host.docker.internal:12340` |
   | `catalog.default_storefront` | `us` | `cn` |
   | `catalog.language` | `en-US` | `zh-Hans_CN` |
   | `download.quality_priority` | `[alac, aac]` | `[alac]` |
@@ -217,9 +221,10 @@ the Compose service name stay as they were.
 | `wrapper.address` | gRPC `host:port` | wrapper URL (wrapper-lite or wrapper-manager v2), `http://host:port` or `https://host:port`; anything else, in the file or in `AMDL_WRAPPER_ADDRESS`, fails startup | `config.yaml`, Compose files |
 | `wrapper.insecure` | `true` for plaintext gRPC, `false` for TLS | rejected in the file; the URL scheme picks plaintext (`http`) or TLS 1.2+ (`https`) | `config.yaml` |
 | `wrapper.timeout_seconds` | bound on a unary RPC and on each decrypt-fragment wait | bound on one wrapper HTTP request; decryption has no wrapper timeout | `config.yaml` |
-| Where the wrapper runs | whatever your wrapper-manager deployment needed | `wrapper-lite-rootless`, which both wrapper-lite's Docker image and wrapper-manager v2 run, needs user namespaces and `chroot`: `unshare -Ur true` must succeed on the wrapper host, and a Docker container needs `privileged: true` or a seccomp profile that allows them. A host without them uses wrapper-manager v2's QEMU variant, which needs `/dev/kvm` ([deployment guide](deployment.md#the-wrapper)) | wrapper hosts, Compose files |
-| Logging in from the console | `POST /wrapper/login`, `/login/{login_id}/2fa` and `/logout` went to the fork's gRPC login | they work only when `wrapper.address` is a wrapper-manager v2, whose `POST /login` and `POST /logout` the backend forwards to; against a bare wrapper-lite they are `501 login_unsupported` and the console's Account page shows the wrapper's `--login` command instead. `GET /wrapper/status` reports which one it is in `login_supported` | the console's Account page, scripts that log in through the API |
-| Wrapper requests | gRPC calls, with `download.max_parallel_wrapper_requests` bounding them | HTTP; 24 lyrics, web playback and license requests and 2 `/key` and `/m3u8` requests at a time, fixed in the code | |
+| Where the wrapper runs | whatever your wrapper-manager deployment needed | `wrapper-lite-rootless`, which both wrapper-lite's Docker image and wrapper-manager v2 run, needs user namespaces and `chroot`: `unshare -Ur true` must succeed on the wrapper host, and a Docker container needs `privileged: true` or a seccomp profile that allows them. A host without them uses wrapper-manager v2's QEMU variant, which needs `/dev/kvm` ([deployment guide](deployment.md#the-wrapper)), or, without Docker, a QEMU guest the `amdl` binary runs ([Install](install.md#a-wrapper-amdl-runs)) | wrapper hosts, Compose files |
+| Logging in from the console | `POST /wrapper/login`, `/login/{login_id}/2fa` and `/logout` went to the fork's gRPC login | they work when `wrapper.address` is a wrapper-manager v2, whose `POST /login` and `POST /logout` the backend forwards to, and with a wrapper amdl runs, which logs in by booting its guest; against a bare wrapper-lite they are `501 login_unsupported` and the console's Account page shows the wrapper's `--login` command instead. `GET /wrapper/status` reports which one it is in `login_supported` | the console's Account page, scripts that log in through the API |
+| A wrapper amdl runs | none | `amdl wrapper install` downloads upstream's guest and the backend runs it in QEMU on its own machine, with `wrapper.address` pointing at it (`amdl serve --local`, `amdl service install`, the desktop app); see [Install](install.md#a-wrapper-amdl-runs) | new: binary installs without Docker |
+| Wrapper requests | gRPC calls, with `download.max_parallel_wrapper_requests` bounding them | HTTP; 24 lyrics, web playback and license requests and 2 `/key` and `/m3u8` requests at a time, fixed in the code | `config.yaml` files that set `download.max_parallel_wrapper_requests`, which is rejected (see [Config and environment](#config-and-environment)) |
 
 ## Hooks
 
@@ -236,11 +241,12 @@ the Compose service name stay as they were.
 | Hook limits | top-level `timeout_seconds` (default 30) and `max_concurrent` (default 2) in `hooks.yaml` | removed, fixed at 30 seconds per attempt and 2 executions at once; a file that still has either fails startup naming it | `hooks.yaml` files that set either |
 | Per-entry `timeout_seconds` | overrode the top-level timeout for one hook | removed; every attempt is cut off after 30 seconds; a file that still has it fails startup naming the entry | `hooks.yaml` entries that set it |
 | Webhook `send_payload` | `send_payload: false` sent an empty body | removed; the body is always the JSON payload, and a receiver that ignores the body ignores it; a file that still has it fails startup naming the entry | `hooks.yaml` webhook entries that set it |
-| Shutdown while a hook retries | slept out every remaining retry | retries stop; an attempt still running after the drain is cancelled and recorded as `hook_failed` | |
+| Shutdown while a hook retries | slept out every remaining retry | retries stop; an attempt still running after the drain is cancelled and recorded as `hook_failed` | hooks whose last retry used to run during a shutdown; nothing to change |
 
 ## Output paths
 
-Unchanged, with three exceptions that only affect unusual titles:
+Unchanged, with the exceptions below. The first three only affect unusual titles; the
+last two only templates that use `{SongNumber}` or `{TrackCount}`:
 
 - Leading dots (and spaces between them) are stripped from path segments, so a title
   such as "...Baby One More Time" is no longer written as a hidden file. Files written
@@ -252,9 +258,19 @@ Unchanged, with three exceptions that only affect unusual titles:
   longer names only after the whole download (file names over 251 bytes, folder names
   over 255); a name between 241 bytes and those limits is now shorter, so that track
   downloads again.
+- In an artist job, `{SongNumber}` restarts at 1 with each album when
+  `download.artist_path_format` names `{AlbumName}` or `{AlbumId}`; 1.x numbered the whole
+  discography in one run. An install whose own artist template uses `{SongNumber}` that
+  way downloads those artists' albums again. 1.x's example and a config without the key
+  use `{TrackNumber}` there and are unaffected.
+- `{TrackCount}` is the number of tracks on the track's own disc; 1.x used the album-wide
+  count. A template that uses `{TrackCount}` downloads multi-disc albums again.
 
 ## Downloads
 
+- The track-total tag of a multi-disc album counts the tracks on its own disc ("3 of
+  19", not "3 of 48"). Files 1.x wrote keep the old total unless a job runs with
+  `force_overwrite`.
 - Cancelling a job ends each of its unfinished items `cancelled`; 1.x left them in
   their last state, such as `downloading`. Items of a running job each get an
   `item_progress` event whose `phase` is `cancelled`; a queued job's leftover items
