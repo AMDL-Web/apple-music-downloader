@@ -173,6 +173,7 @@ function shortcutGroups(mod) {
         [[k('↓'), ' or ', k(mod === '⌘' ? 'Return' : 'Enter'), ' in the box'], 'Go to the search results'],
         [[k('↑'), ' ', k('↓'), ' ', k('←'), ' ', k('→')], 'Move between search results'],
         [[k(mod === '⌘' ? 'Return' : 'Enter'), ' on a result'], 'Download it, or open the artist'],
+        [[k('Esc'), ' on a result'], 'Back to the box, or from an artist to the results'],
       ],
     ],
     ['Settings', [[[k(mod), ' ', k('S')], 'Save settings']]],
