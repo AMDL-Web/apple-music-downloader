@@ -164,7 +164,7 @@ func readURLs(e *env, args []string) ([]string, error) {
 		args = urls
 	}
 	if len(args) == 0 {
-		return nil, usageErr("no link given; usage: amdl download <url>… (or - to read them from stdin)")
+		return nil, usageErr("no link given; usage: amdl download <url>... (or - to read them from stdin)")
 	}
 	return args, nil
 }

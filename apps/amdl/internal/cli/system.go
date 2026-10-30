@@ -68,7 +68,7 @@ func dig(m map[string]any, key string) (any, bool) {
 func configSetCmd(*flag.FlagSet) func(e *env, args []string) error {
 	return func(e *env, args []string) error {
 		if len(args) == 0 {
-			return usageErr("usage: amdl config set <key=value>… (values are YAML: true, 3, [alac, aac])")
+			return usageErr("usage: amdl config set <key=value>... (values are YAML: true, 3, [alac, aac])")
 		}
 		patch := map[string]any{}
 		for _, a := range args {

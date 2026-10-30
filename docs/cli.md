@@ -29,7 +29,7 @@ An unknown command fails with `usage_error` and `details.did_you_mean`.
 | `artists albums <artist_id> [--storefront] [--limit] [--offset]` | `GET /artists/{artist_id}/albums` | read |
 | `lookup <url>` | `POST /lookup` | read |
 | `quality <url>` | `POST /quality` | read |
-| `download <url>… [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--overwrite] [--wait\|--watch] [--timeout]` | `POST /downloads` | write; destructive with `--overwrite` |
+| `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--overwrite] [--wait\|--watch] [--timeout]` | `POST /downloads` | write; destructive with `--overwrite` |
 | `jobs list [--status] [--type] [--q] [--sort] [--order] [--limit] [--offset]` | `GET /downloads` | read |
 | `jobs get <job_id> [--view summary\|full]` | `GET /downloads/{job_id}` | read |
 | `jobs watch [<job_id>] [--types] [--progress-interval]` | the job's event stream, or the overview feed | read |
@@ -40,7 +40,7 @@ An unknown command fails with `usage_error` and `details.did_you_mean`.
 | `library sync get`, `library sync reset` | `/library-sync`, `…/reset` | read, destructive |
 | `logs list [filters]`, `logs tail [filters]` | `GET /logs`, `/logs/stream` | read |
 | `system get`, `system health`, `system stats [--days]`, `hooks list` | `/system`, `/health`, `/stats`, `/hooks` | read |
-| `config get [key…]`, `config set <key=value>…`, `config reload` | `GET`/`PUT /config`, `…/reload` | read, write, write |
+| `config get [key...]`, `config set <key=value>...`, `config reload` | `GET`/`PUT /config`, `…/reload` | read, write, write |
 | `wrapper status`, `wrapper login [--username <id>] [--password-stdin]`, `wrapper 2fa <login_id>`, `wrapper logout --username <id>` | `/wrapper/*` | read, write, write, destructive |
 | `context list\|add <name> <url>\|use <name>\|remove <name>`, `version` | local, `/system` | |
 | `serve [--config] [--hooks] [--no-console]` | runs the backend in this process | |

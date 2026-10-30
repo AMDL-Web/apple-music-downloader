@@ -139,7 +139,7 @@ func (e *env) connect() (*client.Client, error) {
 		e.target = t.Name + " (" + c.Base() + ")"
 	}
 	if e.cmd.Command != "tui" {
-		e.note("→ %s", e.target)
+		e.note("-> %s", e.target)
 	}
 	return c, nil
 }

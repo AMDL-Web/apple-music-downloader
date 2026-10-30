@@ -322,3 +322,29 @@ func TestSkillListsEveryExitCode(t *testing.T) {
 		t.Errorf("SKILL.md lists exit codes %v, the CLI has %v", got, want)
 	}
 }
+
+// A Windows console on a legacy code page shows UTF-8 punctuation as
+// mojibake, so the help and usage text stays ASCII.
+func TestHelpAndUsageAreASCII(t *testing.T) {
+	ascii := func(what, s string) {
+		t.Helper()
+		for _, r := range s {
+			if r > 0x7f {
+				t.Fatalf("%s prints %q in %q", what, r, s)
+			}
+		}
+	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	var out, errb bytes.Buffer
+	Run(context.Background(), []string{"--help"}, IO{Stdout: &out, Stderr: &errb, OutTTY: true, Getenv: func(string) string { return "" }})
+	ascii("amdl --help", out.String()+errb.String())
+	for _, c := range commands() {
+		r := run(t, nil, "", append(strings.Fields(c.Command), "--help")...)
+		ascii("amdl "+c.Command+" --help", r.stdout+r.stderr)
+	}
+	for _, args := range [][]string{{"download"}, {"config", "set"}} {
+		r := run(t, nil, "", args...)
+		ascii("amdl "+strings.Join(args, " "), r.stdout+r.stderr)
+	}
+}

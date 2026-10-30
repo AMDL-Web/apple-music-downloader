@@ -305,7 +305,7 @@ func rootHelp(io IO, cmds []command) int {
 		fmt.Fprintf(io.Stdout, "%s\n", raw)
 		return exitOK
 	}
-	fmt.Fprintf(io.Stdout, "amdl %s — download music from Apple Music through an amdl server.\n\n", version())
+	fmt.Fprintf(io.Stdout, "amdl %s - download music from Apple Music through an amdl server.\n\n", version())
 	fmt.Fprintln(io.Stdout, `Agents: run amdl cli search "<task>" first; results are JSON on stdout.`)
 	fmt.Fprintln(io.Stdout)
 	width := 0
@@ -324,11 +324,11 @@ func argSynopsis(c capability.Capability) string {
 	for _, a := range c.Args {
 		switch a {
 		case "urls":
-			b.WriteString(" <url>…")
+			b.WriteString(" <url>...")
 		case "keys":
-			b.WriteString(" [key…]")
+			b.WriteString(" [key...]")
 		case "changes":
-			b.WriteString(" <key=value>…")
+			b.WriteString(" <key=value>...")
 		case "job_id":
 			if c.Command == "jobs watch" {
 				b.WriteString(" [<job_id>]")
