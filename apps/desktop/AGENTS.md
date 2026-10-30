@@ -36,8 +36,7 @@ GOOS=windows go vet ./apps/desktop/... && GOOS=darwin go vet ./apps/desktop/... 
 ```
 
 Screens: build the app and run it with `-shots <dir>` (and `-remote` or
-`-wrapper`, `-data <dir>`), which captures every screen with
-`Window.CapturePage`, renders each again at 1280×800 without a window
-(`*-wide.png`, `*-motion-N.png` for playing motion covers), and quits. The
-window shows stills where the desktop asks for less motion; the renders do
-not.
+`-wrapper`, `-data <dir>`), which captures every screen in a 1280×800 window
+with `Window.CapturePage`, renders playing motion covers without a window
+(`*-motion-N.png`), and quits. The window shows stills where the desktop asks
+for less motion; the renders do not.
