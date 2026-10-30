@@ -159,8 +159,14 @@ func TestRunEndsOpenStreamsAtShutdown(t *testing.T) {
 	defer cancel()
 	addr, done := startRun(t, ctx, nil)
 
+	// The stream gets a transport of its own. On the shared default transport it
+	// races startRun's health probe for the probe's idle connection and can
+	// dial a spare one that never carries a request; the server holds such a
+	// new connection as active for five seconds, which stalls the drain.
+	client := &http.Client{Transport: &http.Transport{}}
+	defer client.CloseIdleConnections()
 	base := "http://" + addr + "/api/v1"
-	stream, err := http.Get(base + "/downloads/events")
+	stream, err := client.Get(base + "/downloads/events")
 	if err != nil {
 		t.Fatal(err)
 	}

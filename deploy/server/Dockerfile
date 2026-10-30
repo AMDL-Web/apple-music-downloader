@@ -11,7 +11,7 @@
 # no BUILDPLATFORM and would fail on an empty --platform; "linux" alone means
 # linux on the daemon's own architecture there, and TARGETOS/TARGETARCH stay
 # empty, so Go builds for the host.
-FROM --platform=${BUILDPLATFORM:-linux} golang:1.26.10-alpine AS build
+FROM --platform=${BUILDPLATFORM:-linux} golang:1.27.3-alpine AS build
 
 WORKDIR /src
 
