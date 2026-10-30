@@ -254,7 +254,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 
 ## 开发
 
-需要 Go（版本见 [`go.mod`](go.mod)）、`PATH` 上的 `ffmpeg`，以及运行脚本测试用的 Node.js 24。
+需要 Go（版本见 [`go.mod`](go.mod)）、`PATH` 上的 `ffmpeg`，以及运行脚本测试用的 Node.js 26。
 
 | 命令 | 作用 |
 | --- | --- |

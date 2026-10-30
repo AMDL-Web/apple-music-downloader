@@ -73,7 +73,7 @@ vuln: ## Scan dependencies with govulncheck
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 node-test: ## Run the Node tests for release tooling, the guard hook and console JS
-	@command -v node >/dev/null 2>&1 || { echo "node-test: node is not installed; install Node.js 24 or newer (CI uses 24)" >&2; exit 1; }
+	@command -v node >/dev/null 2>&1 || { echo "node-test: node is not installed; install Node.js 26 or newer (CI uses 26)" >&2; exit 1; }
 	@if [ -z "$(strip $(NODE_TESTS))" ]; then echo "node-test: no *.test.mjs files found"; exit 1; fi
 	node --test $(NODE_TESTS)
 
