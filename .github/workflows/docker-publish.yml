@@ -11,8 +11,9 @@ name: Docker Publish
 #   - release published: a release created and published by hand on GitHub.
 #   - workflow_dispatch: build or rebuild the image for an existing tag by hand.
 #
-# The first push creates a private package on GHCR; to allow public pulls, make
-# the package public in its GitHub Packages settings.
+# A package linked to a public repository through the OCI source label is
+# normally public; if anonymous pulls are denied, make it public in its GitHub
+# Packages settings.
 
 on:
   release:

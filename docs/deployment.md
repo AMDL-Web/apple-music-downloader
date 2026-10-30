@@ -19,9 +19,9 @@ Image tags follow the release version — `v1.2.3` publishes `1.2.3`, `1.2` and 
 Pin a version by replacing `:latest` in the compose file with a concrete tag.
 
 > Anonymous pulls need the GHCR package to be public. This repository's is. If you fork
-> and self-host, your first push creates a **private** package and `docker compose up -d`
-> fails with `unauthorized` / `denied` — flip it to public in your repository's Packages
-> settings, or build locally instead.
+> and self-host, your first push may create a **private** package, and then
+> `docker compose up -d` fails with `unauthorized` / `denied` — flip it to public in your
+> repository's Packages settings, or build locally instead.
 
 To build from source, uncomment the `build:` block in `deploy/docker-compose.yml` in a
 clone and start Compose from `deploy/`. The build context is the repository root and the

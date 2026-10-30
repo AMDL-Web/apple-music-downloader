@@ -80,10 +80,11 @@ Report the version, release URL, image digest, and anything skipped.
 The first 2.0 release changes the image name and the website's host and starts the
 wrapper pin. These steps are the maintainer's unless marked; record each in the report.
 
-- **Image visibility.** The first push to `ghcr.io/amdl-web/apple-music-downloader`
-  creates a private package. As soon as the release's push finishes, the maintainer
-  sets it public in the package settings; then an anonymous pull works:
+- **Image visibility** (agent). As soon as the release's push finishes, pull it
+  anonymously:
   `DOCKER_CONFIG=$(mktemp -d) docker pull ghcr.io/amdl-web/apple-music-downloader:2.0.0`.
+  Only when that is refused (`unauthorized` or `denied`) does the maintainer set the
+  package public in its settings.
 - **Wrapper pin** (agent). `gh api repos/AMDL-Web/apple-music-downloader/branches/wrapper-pins`
   answers, and the manifest at `internal/wrapperhost#ManifestURL` has the same
   `sha256` as `internal/wrapperhost#Builtin` and an `expires_at` weeks away. Otherwise
