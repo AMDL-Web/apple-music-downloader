@@ -15,7 +15,7 @@ const DomainIcon = ({ icon, role }) => html`<span class="domain-icon" data-role=
 
 function Chips({ items }) {
   return html`<span class="viz-chips">
-    ${items.map((c) => html`<span key=${c.label} class="viz-chip" data-outlined=${c.outlined ? '' : undefined}>${c.label}</span>`)}
+    ${items.map((c) => html`<span key=${c.label} class="viz-chip">${c.label}</span>`)}
   </span>`;
 }
 

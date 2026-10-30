@@ -123,9 +123,9 @@ test('account: Ready with storefronts, a warning when the default is not served,
   const view = (w, c = ctx(), sys = system()) => domainView('account', { wrapper: w, system: ok(sys) }, c);
   const ready = view(wrapper());
   assert.equal(ready.tag.label, 'Ready');
-  assert.equal(ready.figure.value, 'CN · US');
-  assert.equal(ready.note.text, 'Default storefront US');
-  assert.deepEqual(ready.viz.items, [{ label: 'CN', outlined: false }, { label: 'US', outlined: true }]);
+  assert.deepEqual([ready.figure.value, ready.figure.unit], ['2', 'storefronts']);
+  assert.equal(ready.note, null, 'the default storefront is a fact row, said once');
+  assert.deepEqual(ready.viz.items, [{ label: 'CN' }, { label: 'US' }]);
   const unserved = view(wrapper(), ctx(), system({ default_storefront: 'jp' }));
   assert.equal(unserved.role, 'warning');
   assert.equal(unserved.note.text, "Default storefront JP isn't served by this account");
@@ -139,7 +139,7 @@ test('account: Ready with storefronts, a warning when the default is not served,
   const sim = view({ data: undefined, error: { status: 503, code: 'wrapper_unavailable', message: raw }, at: NOW, okAt: 0 }, ctx({ simulate: true }));
   assert.equal(sim.role, null, 'simulate jobs never call the session service');
   assert.equal(sim.tag.label, 'Not used in simulate');
-  assert.equal(sim.note.text, 'Default storefront US');
+  assert.equal(sim.note, null);
 });
 
 test('account: a wrapper amdl runs says what it does instead of serving, never "No account"', () => {

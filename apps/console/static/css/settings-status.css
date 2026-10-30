@@ -404,10 +404,6 @@
   font-weight: var(--w-semibold);
 }
 
-.viz-chip[data-outlined] {
-  box-shadow: inset 0 0 0 1.5px var(--text-secondary);
-}
-
 .viz-split {
   display: flex;
   gap: 2px;

@@ -423,8 +423,11 @@ and motion covers.
   does not serve (Starting and Logging in neutral, Stopped a warning naming
   `amdl wrapper start`, Failed a danger with `last_error`, its full text and
   `amdl wrapper logs` in the body), never "No account", keeps its login form
-  disabled while stopped, says that a login replaces its one account and where the
-  password goes, and adds one line while `login_residue` is true; a session service
+  disabled while stopped, says in one line that a login replaces its one
+  account (where the password goes is in [the API reference](../../docs/api.md#wrapper)), and adds one line
+  while `login_residue` is true. Account's head counts the storefronts its
+  account serves and names them; the default storefront is its fact row,
+  and the head speaks of it only when the account does not serve it; a session service
   without a login API gets the command-line steps in place of the form, and
   until the status loads those steps hold their room unseen (`.holds-room`),
   since a bare wrapper-lite is the usual service;

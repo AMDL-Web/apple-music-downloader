@@ -13,12 +13,12 @@ export function account(s, ctx) {
   const down = w && w.error ? wrapperUnreachable(w.error) : null;
   const d = w && !down && w.data ? w.data : null;
   const regions = d && Array.isArray(d.regions) ? d.regions.filter((r) => typeof r === 'string' && r).map((r) => r.toLowerCase()) : [];
-  const chips = { kind: 'chips', items: regions.map((r) => ({ label: r.toUpperCase(), outlined: r === storefront })) };
-  const served = regions.length ? { value: regions.map((r) => r.toUpperCase()).join(' · '), unit: regions.length === 1 ? 'storefront' : 'storefronts' } : null;
+  // The head counts the storefronts and names them; the default storefront is the section's fact row.
+  const chips = { kind: 'chips', items: regions.map((r) => ({ label: r.toUpperCase() })) };
+  const served = regions.length ? { value: String(regions.length), unit: regions.length === 1 ? 'storefront' : 'storefronts' } : null;
   // Simulate jobs never call the session service (internal/media simulatedMedia).
   if (ctx.simulate && w) {
-    const note = storefront ? { text: `Default storefront ${storefront.toUpperCase()}` } : null;
-    return { ...frame('account', { data: {}, okAt: 0 }, ctx), asOf: 0, tag: { icon: 'circle-minus', role: 'neutral', label: 'Not used in simulate' }, figure: served || { value: 'Simulate', word: true }, viz: chips, note, summary: { text: 'Not used in simulate' } };
+    return { ...frame('account', { data: {}, okAt: 0 }, ctx), asOf: 0, tag: { icon: 'circle-minus', role: 'neutral', label: 'Not used in simulate' }, figure: served || { value: 'Simulate', word: true }, viz: chips, summary: { text: 'Not used in simulate' } };
   }
   if (down) {
     return {
@@ -49,11 +49,7 @@ export function account(s, ctx) {
     };
   }
   const unserved = storefront && regions.length > 0 && !regions.includes(storefront);
-  const note = storefront
-    ? unserved
-      ? { text: `Default storefront ${storefront.toUpperCase()} isn't served by this account`, role: 'warning' }
-      : { text: `Default storefront ${storefront.toUpperCase()}` }
-    : null;
+  const note = unserved ? { text: `Default storefront ${storefront.toUpperCase()} isn't served by this account`, role: 'warning' } : null;
   return {
     ...v,
     role: unserved ? 'warning' : null,

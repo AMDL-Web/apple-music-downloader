@@ -307,9 +307,7 @@ function LoginForm({ onDone, again, managed, off }) {
 
   return html`<form class="account-block login-form" data-step="credentials" aria-labelledby="login-title" onSubmit=${submitCredentials}>
     <h3 class="section-title" id="login-title">${!again ? 'Log in' : managed ? 'Replace the account' : 'Log in another account'}</h3>
-    ${managed
-      ? html`<p class="muted small">This machine's session service keeps one account, so a login replaces it; it restarts and can take several minutes. amdl passes the password in a file only you can read and deletes the file as the guest starts; the guest copies it to its disk, and amdl clears that copy before the guest starts again right after the login.</p>`
-      : html`<p class="muted small">The session service keeps the login. This service holds the password in memory only while you enter a two-step code, and never stores it. Logging in can take up to two minutes.</p>`}
+    <p class="muted small">${managed ? 'A login replaces the current account and takes several minutes.' : 'Logging in can take up to two minutes.'}</p>
     <div class="form-row">
       <label class="field-label" for="login-user">Apple ID</label>
       <p class="field-help" id="login-user-help">The email address or phone number you sign in to Apple Music with.</p>
