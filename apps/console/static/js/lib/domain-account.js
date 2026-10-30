@@ -28,7 +28,8 @@ export function account(s, ctx) {
       asOf: 0,
       role: 'danger',
       tag: { icon: 'circle-x', role: 'danger', label: 'Unreachable' },
-      figure: { value: 'Unreachable', word: true },
+      // The tag says Unreachable; the figure does not say it again.
+      figure: { value: 'No answer', word: true },
       note: { text: summarizeError(down.detail) || unreachableLine(down), title: down.detail },
       detail: summarizeError(down.detail) || '',
       summary: { text: "Can't reach the session service", role: 'danger' },

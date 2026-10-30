@@ -2,7 +2,7 @@
 
 /* Until the status line and Needs attention have answered, the sections they
    would push down are laid out but not drawn (OverviewPage's hold). */
-.page-overview[data-held] > :not(.health-strip, [data-section="attention"]),
+.page-overview[data-held] > :not(.health-strip, .health-strips, [data-section="attention"]),
 .page-overview[data-held="strip"] > [data-section="attention"] {
   visibility: hidden;
 }
@@ -205,8 +205,10 @@
   line-height: var(--lh-12);
 }
 
-/* Hover underlines the title; the cover's motion plays (ui/motion.js). */
-.wall-tile:hover .wall-title,
+/* Hover underlines the title of a tile that opens something (a link, or a
+   button such as an artist's); the cover's motion plays (ui/motion.js). A
+   New download album tile is neither: only its Download acts. */
+:is(a, button).wall-tile:hover .wall-title,
 .latest:hover .latest-title {
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -356,6 +358,14 @@
 .health-strip[data-state="problem"] {
   flex-wrap: nowrap;
   align-items: flex-start;
+}
+
+/* A notice per severity, stacked at the banners' gap. */
+.health-strips {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--s-2);
+  min-width: 0;
 }
 
 /* The problem strip stands on the page beside the cards: their radius. */

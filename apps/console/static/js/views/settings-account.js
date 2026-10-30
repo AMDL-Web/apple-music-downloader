@@ -32,15 +32,11 @@ export function AccountPanel({ children }) {
   // null: no dialog; '': ask for the Apple ID; else the account to log out.
   const [logout, setLogout] = useState(null);
 
-  // The section head says the service is unreachable; the body keeps the
-  // server's own words, closed.
+  // The section head says the service is unreachable, its note the error in
+  // a line with the server's own words as its tooltip; the body has nothing
+  // more to add.
   if (down) {
-    return html`<div class="account">
-      <section class="account-block" aria-label="Session service">
-        <details class="account-error-details"><summary>Details from the server</summary><span class="mono small wrap-any account-error-detail">${down.detail}</span></details>
-      </section>
-      ${children}
-    </div>`;
+    return html`<div class="account">${children}</div>`;
   }
 
   const w = res && !res.error ? res.data : null;

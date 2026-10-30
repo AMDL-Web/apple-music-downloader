@@ -23,7 +23,7 @@ export function AlbumTile({ hit, row }) {
   const prior = row.priorOf(hit);
   const queued = prior && prior.state === 'active';
   const busy = row.busy.has(hit.url);
-  const sub = v.facts.filter((f) => f.key !== 'tracks').map((f) => f.text).join(' · ');
+  const sub = v.facts.map((f) => f.text).join(' · ');
   const cover = html`<${Artwork} url=${hit.artwork_url} bg=${palette && palette.bg} px=${464} widths=${TILE_ART} sizes=${TILE_SIZES} className="art-square" />`;
   return html`<li class=${palette ? 'new-tile has-palette' : 'new-tile'} data-kind=${hit.type} data-id=${hit.id} data-prior=${prior ? prior.state : undefined} style=${paletteStyle(palette)}>
     <div class="wall-tile">
@@ -52,7 +52,9 @@ export function AlbumTile({ hit, row }) {
         <span class="new-tile-name" dir="auto">${v.title}</span>
         ${v.explicit ? html`<span class="new-link-explicit" title="Explicit" aria-label="Explicit">E</span>` : null}
       </span>
-      <span class="wall-sub" dir="auto" title=${sub}>${sub}</span>
+      <span class="wall-sub new-tile-sub" title=${sub}>
+        ${v.facts.map((f) => html`<span key=${f.key} class="new-tile-fact" dir=${f.auto ? 'auto' : undefined}>${f.text}</span>`)}
+      </span>
     </div>
   </li>`;
 }

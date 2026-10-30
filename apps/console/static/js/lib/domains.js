@@ -386,3 +386,12 @@ export function attentionRows(s, ctx, sections) {
   return rows;
 }
 
+/**
+ * The status line's notices: attentionRows grouped by severity, danger
+ * first, as [{role, rows}], so a warning (no account) keeps its color beside
+ * a danger (a full disk).
+ */
+export function attentionGroups(rows) {
+  return ['danger', 'warning'].map((role) => ({ role, rows: rows.filter((r) => r.role === role) })).filter((g) => g.rows.length);
+}
+

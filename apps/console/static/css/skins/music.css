@@ -1067,7 +1067,7 @@
 
 /* The server status line is a banner too: under the stacked banners it sits at
    their gap, not at the page gap. */
-:root[data-skin="music"] .banners:not(:empty) + .page-overview:has(> .health-strip:first-child) {
+:root[data-skin="music"] .banners:not(:empty) + .page-overview:has(> :is(.health-strip, .health-strips):first-child) {
   margin-top: calc(var(--s-2) - var(--page-gap));
 }
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { domainView, domainLabel, attentionRows, librarySyncState } from '../static/js/lib/domains.js';
+import { domainView, domainLabel, attentionRows, librarySyncState, attentionGroups } from '../static/js/lib/domains.js';
 import { SETTINGS_SECTIONS, BOARD_SECTIONS } from '../static/js/lib/settings-sections.js';
 
 const NOW = Date.parse('2026-10-30T12:00:00Z');
@@ -137,7 +137,7 @@ test('account: Ready with storefronts, a warning when the default is not served,
   assert.equal(view(wrapper({ ready: false, logged_in: false, regions: [] })).tag.label, 'Not logged in');
   const raw = 'rpc error: code = Unavailable desc = dial tcp 127.0.0.1:1: connect: connection refused';
   const down = view({ data: undefined, error: { status: 503, code: 'wrapper_unavailable', message: raw }, at: NOW, okAt: 0 });
-  assert.equal(down.tag.label, 'Unreachable');
+  assert.deepEqual([down.tag.label, down.figure.value], ['Unreachable', 'No answer'], 'said once');
   assert.equal(down.role, 'danger');
   assert.equal(down.note.text, 'Connection refused (127.0.0.1:1)');
   assert.equal(down.note.title, raw);
@@ -256,4 +256,15 @@ test('accessible names join label, tag and figure; Overview lists only what need
   assert.equal(rows[0].text, 'unreachable: Connection refused (127.0.0.1:1)');
   const full = attentionRows({ ...s, system: ok(system({ storage: [disk(10 * GB)] })) }, ctx(), SETTINGS_SECTIONS);
   assert.ok(full.some((r) => r.id === 'files' && r.role === 'danger'));
+});
+
+test('the status line keeps each severity in its own notice, danger first', () => {
+  const rows = [
+    { id: 'account', role: 'warning', text: 'not logged in' },
+    { id: 'files', role: 'danger', text: 'almost full' },
+    { id: 'library_sync', role: 'warning', text: 'needs token' },
+  ];
+  assert.deepEqual(attentionGroups(rows).map((g) => [g.role, g.rows.map((r) => r.id)]), [['danger', ['files']], ['warning', ['account', 'library_sync']]]);
+  assert.deepEqual(attentionGroups([rows[0]]).map((g) => g.role), ['warning'], 'a lone warning is not painted red');
+  assert.deepEqual(attentionGroups([]), []);
 });

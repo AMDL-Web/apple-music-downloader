@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload } from '../api.js';
 import { count, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
-import { attentionRows } from '../lib/domains.js';
+import { attentionRows, attentionGroups, domainView } from '../lib/domains.js';
 import { isNotFound } from '../lib/jobview.js';
 import { SETTINGS_SECTIONS } from '../lib/settings-sections.js';
 import { buildHash, settingsHash } from '../lib/route.js';
@@ -21,6 +21,7 @@ import { ThroughputCard } from './throughput.js';
 // failures), Live queue, Recently completed, Jobs, Throughput. The Log tail
 // is the Logs page; server health is the status line and the Settings board.
 export function OverviewPage() {
+  const app = useApp();
   const status = useStatus(STRIP_KEYS);
   // The status line and Needs attention sit above everything and are known
   // only after their reads: what they would push down waits unseen for both
@@ -35,10 +36,13 @@ export function OverviewPage() {
     return () => clearTimeout(t);
   }, []);
   const held = late ? undefined : !stripKnown ? 'strip' : attentionKnown ? undefined : '';
+  // With no account logged in, the empty live queue leads to logging in.
+  const account = stripKnown ? domainView('account', status, { simulate: app.simulate, conn: app.conn }) : null;
+  const loggedOut = Boolean(account && account.tag && account.tag.label === 'Not logged in');
   return html`<div class="page page-overview" data-held=${held}>
     <${HealthStrip} status=${status} />
     <${Attention} onKnown=${() => setAttentionKnown(true)} />
-    <${LiveQueue} />
+    <${LiveQueue} loggedOut=${loggedOut} />
     <${RecentSection} />
     <${KpiRow} />
     <${ThroughputCard} />
@@ -73,7 +77,7 @@ function KpiRow() {
 const LIVE_LIMIT = 8;
 const LIVE_FILTER = { statuses: ['running', 'queued'] };
 
-function LiveQueue() {
+function LiveQueue({ loggedOut }) {
   const app = useApp();
   const [state, setState] = useState({ jobs: [], loading: true, error: null });
   const [stamp, setStamp] = useState(0);
@@ -121,7 +125,7 @@ function LiveQueue() {
   if (state.loading && !c) body = html`<${LiveIdle} pending />`;
   else if (state.loading && active > 0) body = html`<${SkeletonJobRows} n=${active} compact />`;
   else if (state.error) body = html`<${ErrorNote} title="Couldn't load the queue" error=${state.error} onRetry=${load} />`;
-  else if (state.loading || state.jobs.length === 0) body = html`<${LiveIdle} />`;
+  else if (state.loading || state.jobs.length === 0) body = html`<${LiveIdle} loggedOut=${loggedOut} />`;
   else
     body = html`<ul class="job-list job-list-compact" aria-label="Active jobs">
       ${state.jobs.map((job) => html`<li key=${job.id}><${JobRow} job=${job} href=${buildHash('overview', {}, job.id)} /></li>`)}
@@ -143,13 +147,15 @@ const IDLE_VIEW = { icon: 'circle-dashed', role: 'neutral', label: 'Idle' };
  * row's room split above and below (the skin's padding), so the first job
  * that starts takes its place without moving the page below.
  */
-function LiveIdle({ pending }) {
+function LiveIdle({ pending, loggedOut }) {
   return html`<div class="job-list job-list-compact" aria-hidden=${pending ? 'true' : undefined}>
     <div class="job-row live-idle-card" data-progress="on" data-pending=${pending ? '' : undefined}>
       <span class="art live-idle-art" aria-hidden="true"><${Icon} name="music" /></span>
       <span class="job-main">
         <span class="job-title">Nothing downloading</span>
-        <span class="job-sub"><a class="link" href=${buildHash('new')}>Start a download</a></span>
+        <span class="job-sub">
+          ${loggedOut ? html`<a class="link" href=${settingsHash('account')}>Log in</a>` : html`<a class="link" href=${buildHash('new')}>Start a download</a>`}
+        </span>
       </span>
       <span class="job-status"><${Badge} view=${IDLE_VIEW} /></span>
     </div>
@@ -268,9 +274,9 @@ const STRIP_KEYS = ['health', 'wrapper', 'librarySync', 'system', 'config'];
 
 /**
  * One line under the page head that answers "is the server healthy?": a quiet
- * status when everything is fine, else a notice naming each Settings domain
- * that needs action (lib/domains.js attentionRows), each linking to its
- * section, and Status to the Settings board.
+ * status when everything is fine, else a notice per severity naming each
+ * Settings domain that needs action (lib/domains.js attentionRows), each
+ * linking to its section, and Status to the Settings board.
  * Nothing renders until every read has answered, so the line changes once.
  */
 function HealthStrip({ status }) {
@@ -285,12 +291,16 @@ function HealthStrip({ status }) {
       <${StatusText} view=${{ icon: 'circle-check', role: 'success', label: 'All systems healthy' }} />${details}
     </p>`;
   }
-  const worst = bad.some((r) => r.role === 'danger') ? 'danger' : 'warning';
-  return html`<div class="health-strip notice" data-state="problem" data-role=${worst} role="status">
-    <${Icon} name=${worst === 'danger' ? 'circle-x' : 'triangle-alert'} />
-    <div class="notice-body">
-      ${bad.map((r) => html`<a key=${r.id} class="health-strip-item" href=${r.href}><strong>${r.label}</strong> ${r.text}</a>`)}
-      ${details}
-    </div>
+  const groups = attentionGroups(bad);
+  return html`<div class="health-strips" role="status">
+    ${groups.map(
+      ({ role, rows }, i) => html`<div key=${role} class="health-strip notice" data-state="problem" data-role=${role}>
+        <${Icon} name=${role === 'danger' ? 'circle-x' : 'triangle-alert'} />
+        <div class="notice-body">
+          ${rows.map((r) => html`<a key=${r.id} class="health-strip-item" href=${r.href}><strong>${r.label}</strong> ${r.text}</a>`)}
+          ${i === groups.length - 1 ? details : null}
+        </div>
+      </div>`,
+    )}
   </div>`;
 }

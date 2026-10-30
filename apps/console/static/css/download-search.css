@@ -82,6 +82,12 @@
   .new-search-group .new-wall:not([data-expanded]) > li {
     scroll-snap-align: start;
   }
+
+  /* A shelf's album facts take two lines there (they wrap between facts),
+     so the placeholders keep that room and the answer moves nothing. */
+  .new-search-group .new-wall[data-kind="album"]:not([data-expanded]) .wall-sub {
+    min-height: 2lh;
+  }
 }
 
 .new-tile {
@@ -226,6 +232,12 @@
 
 .new-tile-title > .new-link-explicit {
   flex: none;
+}
+
+/* Artist · year · tracks, one line cut at its end; on a phone it wraps
+   between facts instead (below). */
+.new-tile-fact + .new-tile-fact::before {
+  content: " · ";
 }
 
 /* An artist: one button, a round cover over the name. */
@@ -511,6 +523,37 @@
     -webkit-line-clamp: 2;
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+
+  /* An album tile's facts wrap between facts, two lines at most, as a
+     song's meta line does. */
+  .new-tile-sub {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: 2lh;
+    margin-inline-start: -1em;
+    clip-path: inset(0 0 0 1em);
+    white-space: normal;
+  }
+
+  .new-tile-sub > .new-tile-fact {
+    position: relative;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    padding-inline-start: 1em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .new-tile-sub > .new-tile-fact::before,
+  .new-tile-sub > .new-tile-fact + .new-tile-fact::before {
+    content: "·";
+    position: absolute;
+    inset-inline-start: 0;
+    width: 1em;
+    text-align: center;
   }
 
   /* As .new-link-sub: dots in a clipped strip, never at a line's end. */
