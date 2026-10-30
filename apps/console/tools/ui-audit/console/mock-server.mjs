@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { albumProgress } from '../../../static/js/lib/album-progress.js';
-import { WORLDS, CATALOG, CODECS, STAGE_ORDER, stageFields, findAlbum, makeJob, stats, system, iso } from './fixtures.mjs';
+import { WORLDS, CATALOG, LOSSY_ALBUM, CODECS, STAGE_ORDER, stageFields, findAlbum, makeJob, stats, system, iso } from './fixtures.mjs';
 
 const STATIC_DIR = fileURLToPath(new URL('../../../static/', import.meta.url));
 const CONSOLE_GO = fileURLToPath(new URL('../../../console.go', import.meta.url));
@@ -421,7 +421,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     if (!link) return apiError(res, 400, 'invalid_url', 'Not an Apple Music link.');
     const base = { input: body.url, type: link.type, storefront: link.storefront, id: link.id, ...(link.track_id ? { track_id: link.track_id } : {}) };
     if (link.id === '1234567890') return apiError(res, 404, 'catalog_not_found', `read Apple Music catalog: Apple Music has no ${link.type} ${link.id} in storefront ${link.storefront} (404)`, { link: base });
-    const a = findAlbum(link.id);
+    const a = link.id === LOSSY_ALBUM.id ? LOSSY_ALBUM : findAlbum(link.id);
     const song = CATALOG.songs.find((s) => s.id === link.id || s.id === link.track_id);
     const artist = CATALOG.artists.find((x) => x.id === link.id);
     const src = a || song || artist || CATALOG.albums[[...link.id].reduce((n, c) => n + c.charCodeAt(0), 0) % CATALOG.albums.length];
@@ -440,9 +440,11 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     const body = (await readBody(req)) || {};
     const link = parseLink(body.url);
     if (!link) return apiError(res, 400, 'invalid_url', 'Not an Apple Music link.');
-    const a = findAlbum(link.id) || CATALOG.albums[0];
+    const lossy = link.id === LOSSY_ALBUM.id;
+    const a = lossy ? LOSSY_ALBUM : findAlbum(link.id) || CATALOG.albums[0];
     const n = link.type === 'song' ? 1 : Math.min(a.track_count || 10, 30);
-    const opt = (id, label, extra, available = true) => ({ id, label, available, ...extra });
+    // A release without Enhanced HLS: every quality unavailable, as the server answers.
+    const opt = (id, label, extra, available = true) => ({ id, label, available: available && !lossy, ...(available && !lossy ? extra : {}) });
     const tracks = [];
     for (let i = 0; i < n; i++) {
       const s = CATALOG.songs[i % CATALOG.songs.length];

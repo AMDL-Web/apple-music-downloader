@@ -86,9 +86,10 @@ type Collection struct {
 	// them.
 	ContentRating      string
 	AppleDigitalMaster bool
-	// URL (attributes.url), TrackCount (attributes.trackCount, the whole
-	// release) and AudioTraits (amp-api's attributes.audioTraits) are filled
-	// for album summaries: search hits and an artist's albums.
+	// URL (attributes.url) and TrackCount (attributes.trackCount, the whole
+	// release) are filled for album summaries: search hits and an artist's
+	// albums. AudioTraits (amp-api's attributes.audioTraits) is filled for
+	// those and by Album.
 	URL         string
 	TrackCount  int
 	AudioTraits []string

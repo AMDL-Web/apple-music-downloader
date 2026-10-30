@@ -9,6 +9,7 @@ import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { queryQuality } from '../api.js';
 import { qualityOverview, qualitySpecParts, shortError, differingTracks, slotName } from '../lib/lookup.js';
 import { count } from '../lib/format.js';
+import { AAC_LC } from '../lib/overrides.js';
 import { Dialog } from '../ui/dialogs.js';
 import { Button, Icon, Chip, Notice } from '../ui/components.js';
 import { useMedia } from '../ui/hooks.js';
@@ -86,19 +87,21 @@ export function QualitySheet({ url, title, tracks: expected, onProbed, onClose }
       : null}
     ${data
       ? html`<div class="quality-body" tabindex="0" role="region" aria-label="Available qualities by track">
-          <ul class="quality-slots" aria-label="Qualities offered">
-            ${offered.map(
-              (s) => html`<li key=${s.id} class="quality-slot" data-id=${s.id}>
-                <span class="quality-slot-label">${slotName(s).label}${slotName(s).codec ? html`<span class="quality-slot-codec">${slotName(s).codec}</span>` : null}</span>
-                <span class="quality-slot-count">${s.total === 1 ? '1 track' : s.tracks === s.total ? `All ${count(s.total)} tracks` : `${count(s.tracks)} of ${count(s.total)} tracks`}</span>
-                ${s.bestParts.length
-                  ? html`<span class="quality-slot-best dot-strip">${s.bestParts.map((p, i) => html`<span key=${i}>${i ? p : `Up to ${p}`}</span>`)}</span>`
-                  : null}
-              </li>`,
-            )}
-          </ul>
-          ${missing.length ? html`<p class="new-hint">Not offered: ${missing.map((s) => s.label).join(', ')}.</p>` : null}
-          ${tracks.length > 1 && !all
+          ${offered.length
+            ? html`<ul class="quality-slots" aria-label="Qualities offered">
+              ${offered.map(
+                (s) => html`<li key=${s.id} class="quality-slot" data-id=${s.id}>
+                  <span class="quality-slot-label">${slotName(s).label}${slotName(s).codec ? html`<span class="quality-slot-codec">${slotName(s).codec}</span>` : null}</span>
+                  <span class="quality-slot-count">${s.total === 1 ? '1 track' : s.tracks === s.total ? `All ${count(s.total)} tracks` : `${count(s.tracks)} of ${count(s.total)} tracks`}</span>
+                  ${s.bestParts.length
+                    ? html`<span class="quality-slot-best dot-strip">${s.bestParts.map((p, i) => html`<span key=${i}>${i ? p : `Up to ${p}`}</span>`)}</span>`
+                    : null}
+                </li>`,
+              )}
+              </ul>`
+            : html`<p class="quality-same">No enhanced formats. Downloads fall back to ${AAC_LC}.</p>`}
+          ${missing.length && offered.length ? html`<p class="new-hint">Not offered: ${missing.map((s) => s.label).join(', ')}.</p>` : null}
+          ${tracks.length > 1 && !all && offered.length
             ? html`<p class="quality-same">
                 <span>${differ.length ? `${count(differ.length)} of ${count(tracks.length)} tracks offer other formats:` : `All ${count(tracks.length)} tracks offer the same formats.`}</span>
                 <${Button} size="sm" className="quality-all" onClick=${() => setAll(true)}>Show tracks</${Button}>

@@ -33,15 +33,15 @@ func fixtureCatalogClient(t *testing.T, bodies map[string]string) *CatalogClient
 
 func TestAlbumMapsContentRatingAndAppleDigitalMaster(t *testing.T) {
 	client := fixtureCatalogClient(t, map[string]string{
-		"/v1/catalog/us/albums/1": `{"data":[{"id":"1","type":"albums","attributes":{"name":"A","artistName":"X","contentRating":"explicit","isMasteredForItunes":true,"artwork":{"url":"art"}},"relationships":{"tracks":{"data":[{"id":"s1","type":"songs","attributes":{"name":"One"}}]}}}]}`,
+		"/v1/catalog/us/albums/1": `{"data":[{"id":"1","type":"albums","attributes":{"name":"A","artistName":"X","contentRating":"explicit","isMasteredForItunes":true,"audioTraits":["lossy-stereo"],"artwork":{"url":"art"}},"relationships":{"tracks":{"data":[{"id":"s1","type":"songs","attributes":{"name":"One"}}]}}}]}`,
 		"/v1/catalog/us/albums/2": `{"data":[{"id":"2","type":"albums","attributes":{"name":"B","artistName":"Y","artwork":{"url":"art"}},"relationships":{"tracks":{"data":[{"id":"s2","type":"songs","attributes":{"name":"Two"}}]}}}]}`,
 	})
 	rated, err := client.Album(context.Background(), "us", "1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rated.ContentRating != "explicit" || !rated.AppleDigitalMaster {
-		t.Fatalf("album 1 rating/ADM = %q/%v, want explicit/true", rated.ContentRating, rated.AppleDigitalMaster)
+	if rated.ContentRating != "explicit" || !rated.AppleDigitalMaster || !reflect.DeepEqual(rated.AudioTraits, []string{"lossy-stereo"}) {
+		t.Fatalf("album 1 rating/ADM/traits = %q/%v/%v, want explicit/true/[lossy-stereo]", rated.ContentRating, rated.AppleDigitalMaster, rated.AudioTraits)
 	}
 	plain, err := client.Album(context.Background(), "us", "2")
 	if err != nil {

@@ -595,11 +595,16 @@ Back, stays) and the page writes its links back (replace), so a
   Available qualities (albums and songs only) opens a read-only sheet from
   `POST /quality`: each offered slot once, then only the tracks whose formats
   differ from the album's ("All 12 tracks offer the same formats" otherwise,
-  Show tracks lists them all); errors show inline with the server's message.
+  Show tracks lists them all); a release with no enhanced format says only
+  "No enhanced formats. Downloads fall back to AAC-LC, 256 kbps."; errors show
+  inline with the server's message.
   The answer is kept per link for the tab, and the row then says what the
   chosen quality gets there ("Will download: Lossless (ALAC), 24-bit / 44.1
-  kHz"), with a warning when its first codec is missing ("Dolby Atmos not
-  offered", `lib/overrides.js` `probedQuality`).
+  kHz", or AAC-LC through the fallback), with a warning when its first codec
+  is missing ("Dolby Atmos not offered", `lib/overrides.js` `probedQuality`).
+  Before that, a preview whose `audio_traits` hold none of lossless, Dolby
+  Atmos or spatial already says "Will download: AAC-LC, 256 kbps"
+  (`linkQuality`).
   The compose field is a capsule in display type (28 px, 32 from 1680 px,
   20 under 640 px) with a search glyph that turns to a link glyph once the
   box holds a link and breathes while a search is under way; a link or a

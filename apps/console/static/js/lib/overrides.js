@@ -8,6 +8,7 @@
 // configs/config.example.yaml.
 
 import { fieldByKey } from './settings.js';
+import { qualityOverview } from './lookup.js';
 
 // Labels and value lists come from the Settings fields of the same keys
 // (lib/settings.js FIELDS), so both pages use one vocabulary.
@@ -215,12 +216,15 @@ export function probeWarning(values, slots) {
   return slot.tracks === 0 ? `${name} not offered` : `${name} on ${slot.tracks} of ${slot.total} tracks`;
 }
 
+/** What a download gets from a release with no enhanced format, through the fallback. */
+export const AAC_LC = 'AAC-LC, 256 kbps';
+
 /**
  * What a link will download once its qualities are known (`slots`,
  * lib/lookup.js qualityOverview): the first codec of `values` some track
  * offers (only the first without the fallback), with the best format the
- * probe saw, else the AAC-LC every track has; plus probeWarning. Returns
- * {text, warning}.
+ * probe saw, else AAC_LC through the fallback, or nothing without it; plus
+ * probeWarning. Returns {text, warning}.
  */
 export function probedQuality(values, slots) {
   const list = values && Array.isArray(values.quality_priority) ? values.quality_priority : [];
@@ -228,7 +232,8 @@ export function probedQuality(values, slots) {
   const offered = (Array.isArray(slots) ? slots : []).filter((s) => s.tracks > 0);
   const hit = tried.map((c) => offered.find((s) => s.id === c)).find(Boolean);
   const best = hit && hit.best ? hit.best.split(' · ')[0] : '';
-  const text = hit ? `${codecName(hit.id, true)}${best ? `, ${best}` : ''}` : 'AAC (the fallback every track has)';
+  const fallback = values && values.codec_alternative === false ? 'nothing' : AAC_LC;
+  const text = hit ? `${codecName(hit.id, true)}${best ? `, ${best}` : ''}` : fallback;
   return { text, warning: probeWarning(values, slots) };
 }
 
@@ -245,4 +250,21 @@ export function dockQuality(values, probed) {
   const texts = new Set(probed.map((p) => (p ? p.text : null)));
   if (probed.length && !texts.has(null) && texts.size === 1) return `Will download: ${[...texts][0]}`;
   return `Asks for ${qualityText(values)}`;
+}
+
+const ENHANCED_TRAITS = ['lossless', 'hi-res-lossless', 'atmos', 'spatial'];
+
+/**
+ * What a link will download, for its row and the dock: from its qualities
+ * once read (`probe`, the QualityResponse), else from the preview's
+ * audio_traits (`preview`, the LookupResponse) where they settle it: traits
+ * with none of lossless, Dolby Atmos or spatial mean no enhanced format, so
+ * AAC_LC through the fallback. Null when neither says.
+ */
+export function linkQuality(values, probe, preview) {
+  if (!values) return null;
+  if (probe) return probedQuality(values, qualityOverview(probe));
+  const traits = preview && Array.isArray(preview.audio_traits) ? preview.audio_traits : [];
+  if (!traits.length || traits.some((t) => ENHANCED_TRAITS.includes(t)) || values.codec_alternative === false) return null;
+  return { text: AAC_LC, warning: '' };
 }

@@ -166,7 +166,7 @@ func (c *CatalogClient) Album(ctx context.Context, storefront, id string) (Colle
 		ArtistID: albumArtistID, ArtistArtworkURL: albumArtistArtworkURL, ArtistURL: albumArtistURL,
 		ReleaseDate: album.Attributes.ReleaseDate, GenreNames: album.Attributes.GenreNames,
 		ContentRating: album.Attributes.ContentRating, AppleDigitalMaster: album.Attributes.IsMasteredForItunes,
-		Tracks: tracks,
+		AudioTraits: album.Attributes.AudioTraits, Tracks: tracks,
 	}, nil
 }
 

@@ -6,7 +6,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMockServer } from './mock-server.mjs';
-import { jobId, JOB_KEYS, CATALOG } from './fixtures.mjs';
+import { jobId, JOB_KEYS, CATALOG, LOSSY_ALBUM } from './fixtures.mjs';
 
 const root = fileURLToPath(new URL('../../../../../', import.meta.url));
 const css = join(root, 'apps/console/static/css');
@@ -236,6 +236,16 @@ const SCENARIOS = [
       await ctx.settle();
       await ctx.page.locator('.new-link-quality').first().click();
       await ctx.page.waitForSelector('[data-dialog=quality] .quality-slots', { timeout: 4000 });
+    },
+  },
+  {
+    id: 'new/aac-only-sheet',
+    world: 'active',
+    path: `#/new?url=${encodeURIComponent(LOSSY_ALBUM.url)}`,
+    setup: async (ctx) => {
+      await ctx.settle();
+      await ctx.page.locator('.new-link-quality').first().click();
+      await ctx.page.waitForSelector('[data-dialog=quality] .quality-same', { timeout: 4000 });
     },
   },
   {

@@ -2541,6 +2541,8 @@ components:
                 True when the catalog marks the song (isAppleDigitalMaster) or
                 album (isMasteredForItunes) as an Apple Digital Master; absent
                 otherwise.
+            audio_traits:
+              $ref: '#/components/schemas/AudioTraits'
             needs_media_user_token:
               type: boolean
               description: >-

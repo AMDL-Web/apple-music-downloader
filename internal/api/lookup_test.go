@@ -125,7 +125,7 @@ func TestLookupAlbumReturnsLinkAndJobRowMetadata(t *testing.T) {
 		ID: "1463409338", Name: "IGOR", Artist: "Tyler, The Creator", ArtistURL: "https://music.apple.com/us/artist/420368335",
 		ArtworkURL: "https://is1.mzstatic.com/a/{w}x{h}bb.jpg", ArtworkColors: palette,
 		ReleaseDate: "2019-05-17", GenreNames: []string{"Music", "Hip-Hop/Rap"},
-		ContentRating: "explicit", AppleDigitalMaster: true,
+		ContentRating: "explicit", AppleDigitalMaster: true, AudioTraits: []string{"lossless", "lossy-stereo"},
 		Tracks: make([]applemusic.Song, 12),
 	}}
 	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodPost, "/api/v1/lookup",
@@ -139,7 +139,7 @@ func TestLookupAlbumReturnsLinkAndJobRowMetadata(t *testing.T) {
 		"artwork_url": "https://is1.mzstatic.com/a/{w}x{h}bb.jpg", "artwork_bg_color": "101010",
 		"artwork_text_color1": "f1f1f1", "artwork_text_color2": "e2e2e2", "artwork_text_color3": "d3d3d3", "artwork_text_color4": "c4c4c4",
 		"release_date": "2019-05-17", "genre": "Hip-Hop/Rap", "track_count": float64(12),
-		"content_rating": "explicit", "apple_digital_master": true,
+		"content_rating": "explicit", "apple_digital_master": true, "audio_traits": []any{"lossless", "lossy-stereo"},
 	}
 	if got := decodeLookup(t, recorder.Body.Bytes()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("response = %v\nwant       %v", got, want)

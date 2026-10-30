@@ -445,7 +445,8 @@ curl -X POST http://localhost:18080/api/v1/lookup \
  "artwork_url":"https://is1-ssl.mzstatic.com/image/thumb/…/886447710180.jpg/{w}x{h}bb.jpg",
  "artwork_bg_color":"f1a8bf","artwork_text_color1":"171615","artwork_text_color2":"272021",
  "artwork_text_color3":"423337","artwork_text_color4":"4f3b41","release_date":"2019-05-17",
- "genre":"Hip-Hop/Rap","track_count":12,"content_rating":"explicit","apple_digital_master":true}
+ "genre":"Hip-Hop/Rap","track_count":12,"content_rating":"explicit","apple_digital_master":true,
+ "audio_traits":["lossless","lossy-stereo"]}
 ```
 
 Previews one link without creating a job, so a client can show the cover, title and artist
@@ -454,7 +455,8 @@ and `id` are what the job would be, and the `?i=` of an album link follows
 `catalog.album_track_url_mode` (reported as `track_id` either way). The metadata fields
 have the names and meaning of the job fields; `track_count` is the number of songs a
 download would contain (absent for artists and stations, whose track lists are not read),
-and a station adds `needs_media_user_token`. Each type costs light catalog reads only (an
+a song or album carries Apple's `audio_traits` as search hits do, and a station adds
+`needs_media_user_token`. Each type costs light catalog reads only (an
 album or playlist pages through its track list): never the animated-cover or Enhanced
 HLS reads, never a station's next-tracks feed, at most 15 seconds in all.
 

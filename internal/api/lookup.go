@@ -45,24 +45,25 @@ type lookupLinkFields struct {
 // names and meaning of the matching Job fields.
 type lookupResponse struct {
 	lookupLinkFields
-	Title               string `json:"title"`
-	ArtistName          string `json:"artist_name,omitempty"`
-	ArtistURL           string `json:"artist_url,omitempty"`
-	CuratorName         string `json:"curator_name,omitempty"`
-	AlbumName           string `json:"album_name,omitempty"`
-	ArtworkURL          string `json:"artwork_url,omitempty"`
-	ArtworkBgColor      string `json:"artwork_bg_color,omitempty"`
-	ArtworkTextColor1   string `json:"artwork_text_color1,omitempty"`
-	ArtworkTextColor2   string `json:"artwork_text_color2,omitempty"`
-	ArtworkTextColor3   string `json:"artwork_text_color3,omitempty"`
-	ArtworkTextColor4   string `json:"artwork_text_color4,omitempty"`
-	ReleaseDate         string `json:"release_date,omitempty"`
-	Genre               string `json:"genre,omitempty"`
-	TrackCount          int    `json:"track_count,omitempty"`
-	DurationMS          int    `json:"duration_ms,omitempty"`
-	ContentRating       string `json:"content_rating,omitempty"`
-	AppleDigitalMaster  bool   `json:"apple_digital_master,omitempty"`
-	NeedsMediaUserToken bool   `json:"needs_media_user_token,omitempty"`
+	Title               string   `json:"title"`
+	ArtistName          string   `json:"artist_name,omitempty"`
+	ArtistURL           string   `json:"artist_url,omitempty"`
+	CuratorName         string   `json:"curator_name,omitempty"`
+	AlbumName           string   `json:"album_name,omitempty"`
+	ArtworkURL          string   `json:"artwork_url,omitempty"`
+	ArtworkBgColor      string   `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1   string   `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2   string   `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3   string   `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4   string   `json:"artwork_text_color4,omitempty"`
+	ReleaseDate         string   `json:"release_date,omitempty"`
+	Genre               string   `json:"genre,omitempty"`
+	TrackCount          int      `json:"track_count,omitempty"`
+	DurationMS          int      `json:"duration_ms,omitempty"`
+	ContentRating       string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster  bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits         []string `json:"audio_traits,omitempty"`
+	NeedsMediaUserToken bool     `json:"needs_media_user_token,omitempty"`
 }
 
 func (r *lookupResponse) setArtwork(url string, colors applemusic.ArtworkColors) {
@@ -174,7 +175,7 @@ func (s *Server) previewLink(ctx context.Context, parsed applemusic.ParsedURL, m
 		resp.setArtwork(song.DisplayArtwork())
 		resp.ReleaseDate, resp.Genre = song.ReleaseDate, applemusic.PrimaryGenre(song.GenreNames)
 		resp.TrackCount, resp.DurationMS = 1, song.DurationInMillis
-		resp.ContentRating, resp.AppleDigitalMaster = song.ContentRating, song.AppleDigitalMaster
+		resp.ContentRating, resp.AppleDigitalMaster, resp.AudioTraits = song.ContentRating, song.AppleDigitalMaster, song.AudioTraits
 	case applemusic.TypeAlbum:
 		album, err := s.catalog.Album(ctx, parsed.Storefront, parsed.ID)
 		if err != nil {
@@ -184,7 +185,7 @@ func (s *Server) previewLink(ctx context.Context, parsed applemusic.ParsedURL, m
 		resp.setArtwork(album.ArtworkURL, album.ArtworkColors)
 		resp.ReleaseDate, resp.Genre = album.ReleaseDate, applemusic.PrimaryGenre(album.GenreNames)
 		resp.TrackCount = len(album.Tracks)
-		resp.ContentRating, resp.AppleDigitalMaster = album.ContentRating, album.AppleDigitalMaster
+		resp.ContentRating, resp.AppleDigitalMaster, resp.AudioTraits = album.ContentRating, album.AppleDigitalMaster, album.AudioTraits
 	case applemusic.TypePlaylist:
 		playlist, err := s.catalog.Playlist(ctx, parsed.Storefront, parsed.ID, mediaUserToken)
 		if err != nil {

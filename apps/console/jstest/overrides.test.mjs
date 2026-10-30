@@ -16,6 +16,8 @@ import {
   probeWarning,
   probedQuality,
   dockQuality,
+  linkQuality,
+  AAC_LC,
   rateLabel,
   SAMPLE_RATES,
 } from '../static/js/lib/overrides.js';
@@ -157,7 +159,8 @@ test('qualityText, customLabel and probeWarning say what a download gets', () =>
     { id: 'ec3', tracks: 0, total: 12, best: '' },
   ];
   assert.deepEqual(probedQuality(presetValues(d, 'atmos'), probed), { text: 'Lossless (ALAC), 24-bit / 44.1\u00a0kHz', warning: 'Dolby Atmos not offered' });
-  assert.equal(probedQuality({ ...presetValues(d, 'atmos'), codec_alternative: false }, probed).text, 'AAC (the fallback every track has)');
+  assert.equal(probedQuality({ ...presetValues(d, 'atmos'), codec_alternative: false }, probed).text, 'nothing', 'no fallback to AAC-LC');
+  assert.equal(probedQuality({ ...presetValues(d, 'atmos'), quality_priority: ['ec3'] }, probed).text, 'AAC-LC, 256 kbps');
 });
 
 test('the dock says what the links will download once read, else what the choice asks for', () => {
@@ -170,6 +173,21 @@ test('the dock says what the links will download once read, else what the choice
   assert.equal(dockQuality(d, [cd, hires]), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz', 'links that differ');
   assert.equal(dockQuality(d, []), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz');
   assert.equal(dockQuality(null, [cd]), '');
+});
+
+test('linkQuality: the probe once read, else AAC-LC where the traits rule out enhanced formats', () => {
+  const d = optionDefaults(SERVER);
+  const lossy = { audio_traits: ['lossy-stereo'] };
+  assert.deepEqual(linkQuality(d, null, lossy), { text: AAC_LC, warning: '' });
+  assert.equal(linkQuality(d, null, { audio_traits: ['lossless', 'lossy-stereo'] }), null, 'lossless: what it gets needs the probe');
+  assert.equal(linkQuality(d, null, { audio_traits: ['atmos', 'lossy-stereo'] }), null);
+  assert.equal(linkQuality(d, null, {}), null, 'no traits, no claim');
+  assert.equal(linkQuality(d, null, undefined), null);
+  assert.equal(linkQuality({ ...d, codec_alternative: false }, null, lossy), null, 'without the fallback it could fail, so no claim');
+  assert.equal(linkQuality(null, null, lossy), null);
+  const none = { tracks: [{ song: { id: '1', name: 'One' }, qualities: [{ id: 'alac', available: false }] }] };
+  assert.equal(linkQuality(d, none, { audio_traits: ['lossless'] }).text, AAC_LC, 'the probe wins over the traits');
+  assert.equal(dockQuality(d, [linkQuality(d, null, lossy)]), `Will download: ${AAC_LC}`);
 });
 
 test('codec labels and ALAC choices match the Settings fields', async () => {

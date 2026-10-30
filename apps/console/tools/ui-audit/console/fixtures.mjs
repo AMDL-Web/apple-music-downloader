@@ -52,6 +52,17 @@ export function findAlbum(id) {
   return albumById.get(String(id));
 }
 
+/** An album with no enhanced formats (lossy-stereo only), outside CATALOG so its indices stay. */
+export const LOSSY_ALBUM = {
+  ...CATALOG.albums[10],
+  id: '1537248340',
+  name: 'MEMORIA - EP',
+  url: 'https://music.apple.com/cn/album/memoria-ep/1537248340',
+  release_date: '2011-08-24',
+  track_count: 4,
+  audio_traits: ['lossy-stereo'],
+};
+
 const PALETTE_KEYS = ['artwork_bg_color', 'artwork_text_color1', 'artwork_text_color2', 'artwork_text_color3', 'artwork_text_color4'];
 
 const CODECS = {

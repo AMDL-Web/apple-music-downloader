@@ -112,29 +112,30 @@ func (d DownloadDetail) HooksRunning() bool {
 // Lookup is the LookupResponse schema: a parsed link and its catalog
 // metadata, with the Job field names.
 type Lookup struct {
-	Input               string `json:"input"`
-	Type                string `json:"type"`
-	Storefront          string `json:"storefront"`
-	ID                  string `json:"id"`
-	TrackID             string `json:"track_id,omitempty"`
-	Title               string `json:"title"`
-	ArtistName          string `json:"artist_name,omitempty"`
-	ArtistURL           string `json:"artist_url,omitempty"`
-	CuratorName         string `json:"curator_name,omitempty"`
-	AlbumName           string `json:"album_name,omitempty"`
-	ArtworkURL          string `json:"artwork_url,omitempty"`
-	ArtworkBgColor      string `json:"artwork_bg_color,omitempty"`
-	ArtworkTextColor1   string `json:"artwork_text_color1,omitempty"`
-	ArtworkTextColor2   string `json:"artwork_text_color2,omitempty"`
-	ArtworkTextColor3   string `json:"artwork_text_color3,omitempty"`
-	ArtworkTextColor4   string `json:"artwork_text_color4,omitempty"`
-	ReleaseDate         string `json:"release_date,omitempty"`
-	Genre               string `json:"genre,omitempty"`
-	TrackCount          int    `json:"track_count,omitempty"`
-	DurationMS          int    `json:"duration_ms,omitempty"`
-	ContentRating       string `json:"content_rating,omitempty"`
-	AppleDigitalMaster  bool   `json:"apple_digital_master,omitempty"`
-	NeedsMediaUserToken bool   `json:"needs_media_user_token,omitempty"`
+	Input               string   `json:"input"`
+	Type                string   `json:"type"`
+	Storefront          string   `json:"storefront"`
+	ID                  string   `json:"id"`
+	TrackID             string   `json:"track_id,omitempty"`
+	Title               string   `json:"title"`
+	ArtistName          string   `json:"artist_name,omitempty"`
+	ArtistURL           string   `json:"artist_url,omitempty"`
+	CuratorName         string   `json:"curator_name,omitempty"`
+	AlbumName           string   `json:"album_name,omitempty"`
+	ArtworkURL          string   `json:"artwork_url,omitempty"`
+	ArtworkBgColor      string   `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1   string   `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2   string   `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3   string   `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4   string   `json:"artwork_text_color4,omitempty"`
+	ReleaseDate         string   `json:"release_date,omitempty"`
+	Genre               string   `json:"genre,omitempty"`
+	TrackCount          int      `json:"track_count,omitempty"`
+	DurationMS          int      `json:"duration_ms,omitempty"`
+	ContentRating       string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster  bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits         []string `json:"audio_traits,omitempty"`
+	NeedsMediaUserToken bool     `json:"needs_media_user_token,omitempty"`
 }
 
 // ListQuery is the query of GET /api/v1/downloads; zero fields are left out.
