@@ -547,7 +547,12 @@ uia.scan = function scan(cfg) {
         let next = el.nextElementSibling;
         while (next && (!visible(next) || srOnly(next) || S(next).position === 'absolute' || S(next).position === 'fixed')) next = next.nextElementSibling;
         if (!next) continue;
+        // A stuck sticky element is not where the flow puts it: measure that place.
+        const stuck = S(next).position === 'sticky';
+        const keep = next.style.position;
+        if (stuck) next.style.position = 'static';
         const nr = rectOf(next);
+        if (stuck) next.style.position = keep;
         rhythm.push({ name: rel.name, sel: sel(el), sig: sig(el), next: sig(next), values: { gap: rnd(nr.top - r.bottom) }, rect: r });
       } else if (rel.measure === 'edges') {
         const within = rel.within && el.parentElement ? el.parentElement.closest(rel.within) : null;
