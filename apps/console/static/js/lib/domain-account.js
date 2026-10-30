@@ -13,9 +13,11 @@ export function account(s, ctx) {
   const down = w && w.error ? wrapperUnreachable(w.error) : null;
   const d = w && !down && w.data ? w.data : null;
   const regions = d && Array.isArray(d.regions) ? d.regions.filter((r) => typeof r === 'string' && r).map((r) => r.toLowerCase()) : [];
-  // The head counts the storefronts and names them; the default storefront is the section's fact row.
-  const chips = { kind: 'chips', items: regions.map((r) => ({ label: r.toUpperCase() })) };
-  const served = regions.length ? { value: String(regions.length), unit: regions.length === 1 ? 'storefront' : 'storefronts' } : null;
+  // The head names the one storefront, or counts them and names each; the
+  // default storefront is the section's fact row.
+  const one = regions.length === 1;
+  const chips = { kind: 'chips', items: one ? [] : regions.map((r) => ({ label: r.toUpperCase() })) };
+  const served = one ? { value: regions[0].toUpperCase(), unit: 'storefront' } : regions.length ? { value: String(regions.length), unit: 'storefronts' } : null;
   // Simulate jobs never call the session service (internal/media simulatedMedia).
   if (ctx.simulate && w) {
     return { ...frame('account', { data: {}, okAt: 0 }, ctx), asOf: 0, tag: { icon: 'circle-minus', role: 'neutral', label: 'Not used in simulate' }, figure: served || { value: 'Simulate', word: true }, viz: chips, summary: { text: 'Not used in simulate' } };

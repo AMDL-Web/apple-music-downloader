@@ -63,7 +63,7 @@ export function AccountPanel({ children }) {
           <p class="small">Its log: <code>${WRAPPER_LOGS}</code></p>
         </section>`
       : null}
-    ${w && canLogin && (accounts.length || w.logged_in)
+    ${w && (accounts.length || w.logged_in)
       ? html`<section class="account-block" aria-labelledby="account-list-title">
           <div class="account-block-head">
             <h3 class="section-title" id="account-list-title">Logged-in accounts</h3>
@@ -73,15 +73,17 @@ export function AccountPanel({ children }) {
                 ${accounts.map(
                   (a) => html`<li key=${a} class="account-row">
                     <span class="account-name mono">${a}</span>
-                    <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout(a)}>Log out</${Button}>
+                    ${canLogin ? html`<${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout(a)}>Log out</${Button}>` : null}
                   </li>`,
                 )}
               </ul>`
             : w.logged_in
               ? html`<p class="small">An account is logged in. The session service does not say which one.</p>
-                  <div class="form-actions">
-                    <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout('')}>Log out…</${Button}>
-                  </div>`
+                  ${canLogin
+                    ? html`<div class="form-actions">
+                        <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout('')}>Log out…</${Button}>
+                      </div>`
+                    : null}`
               : null}
         </section>`
       : null}
@@ -89,7 +91,9 @@ export function AccountPanel({ children }) {
       ? html`<${CommandLineLogin} pending />`
       : canLogin
         ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.logged_in)} managed=${Boolean(managed)} off=${mode === 'stopped'} />`
-        : html`<${CommandLineLogin} />`}
+        : w && w.logged_in
+          ? null
+          : html`<${CommandLineLogin} />`}
     ${logout !== null
       ? html`<${LogoutDialog}
           account=${logout}
@@ -170,13 +174,17 @@ function LogoutDialog({ account, onClose, onDone }) {
 }
 
 /**
- * What replaces the login form when the session service has no login API.
- * `pending` holds its room, unseen, while the status loads: a bare
- * wrapper-lite is the usual service, so its answer then moves nothing.
+ * What replaces the login form when the session service has no login API
+ * and no account is logged in. `pending` holds, unseen, the room of the
+ * usual answer while the status loads (a bare wrapper-lite with its account
+ * logged in: one line), so that answer moves nothing.
  */
 function CommandLineLogin({ pending }) {
   if (pending) {
-    return html`<div class="account-block holds-room" aria-hidden="true">${CommandLineSteps()}</div>`;
+    return html`<div class="account-block holds-room" aria-hidden="true">
+      <h3 class="section-title">Logged-in accounts</h3>
+      <p class="small">An account is logged in. The session service does not say which one.</p>
+    </div>`;
   }
   return html`<section class="account-block" aria-labelledby="login-title">
     ${CommandLineSteps('login-title')}
@@ -188,7 +196,7 @@ function CommandLineSteps(id) {
   return html`<h3 class="section-title" id=${id}>Log in from the command line</h3>
     <p class="small">This session service is a bare wrapper-lite, which has no login of its own. On the machine that runs it, log in once with <code>--login</code>; it saves the login and exits:</p>
     <code class="account-cmd mono">wrapper-lite-rootless --login APPLE_ID:PASSWORD</code>
-    <p class="muted small">It asks for the two-step code in the terminal; without one, add <code>--code-from-file</code> and write the code to <code>2fa.txt</code> in its data folder. Then start it again without <code>--login</code> and select Refresh above. To log in from this page instead, run wrapper-manager v2 in front of it and set <code>wrapper.address</code> to that.</p>`;
+    <p class="muted small">It asks for the two-step code in the terminal; without one, add <code>--code-from-file</code> and write the code to <code>2fa.txt</code> in its data folder. Then start it again without <code>--login</code> and select Refresh above.</p>`;
 }
 
 /**

@@ -52,7 +52,7 @@ const olderLayout = " An install upgraded from an older version may use {TrackNu
 
 var configFields = []configField{
 	{key: "catalog.media_user_token", section: "account", kind: fieldToken, label: "Media user token",
-		help: "Needed for stations, private playlist covers and library sync."},
+		help: "Optional: stations, private playlist covers, library sync."},
 
 	{key: "download.quality_priority", section: "quality", kind: fieldList, label: "Codec priority",
 		help: "Tried top to bottom · AAC always last", min: 1, options: []option{

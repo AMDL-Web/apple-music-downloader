@@ -192,7 +192,8 @@ function librarySync(s, ctx) {
   let note;
   let summary;
   if (tag.label === 'Off') {
-    note = { text: anchor > 0 ? `${plural(anchor, 'track', 'tracks')} recorded` : 'Nothing recorded yet' };
+    // The figure already says what was recorded.
+    note = null;
     summary = { text: 'Off' };
   } else if (tag.label === 'Needs token') {
     note = { text: 'Needs the media user token', role: 'warning', link: { href: TOKEN_HREF, label: 'Set token' } };
@@ -244,14 +245,15 @@ function hooks(s, ctx) {
     .reduce((a, b) => (!a || Date.parse(b.last_failed_at) > Date.parse(a.last_failed_at) ? b : a), null);
   const recent = lastFail && ctx.now - Date.parse(lastFail.last_failed_at) < 24 * HOUR;
   if (!h.enabled || entries.length === 0) {
+    // Off says so once, in the tag; the figure is what is defined.
     const off = !h.enabled;
     return {
       ...v,
-      tag: { icon: 'circle-minus', role: 'neutral', label: off ? 'Off in hooks.yaml' : 'None' },
-      figure: { value: off ? 'Off' : 'None', word: true },
+      tag: { icon: 'circle-minus', role: 'neutral', label: off ? 'Off' : 'On' },
+      figure: entries.length ? { value: count(entries.length), unit: entries.length === 1 ? 'hook defined' : 'hooks defined' } : { value: 'No hooks', word: true },
       viz: { kind: 'shares', parts: [] },
-      note: { text: off && entries.length ? `${plural(entries.length, 'hook', 'hooks')} defined` : 'Add hooks in hooks.yaml' },
-      summary: { text: off ? 'Off' : 'None' },
+      note: null,
+      summary: { text: off ? 'Off' : 'No hooks' },
     };
   }
   const on = entries.filter((x) => x.enabled).length;
@@ -298,7 +300,7 @@ function logging(s, ctx) {
     tag: { icon: 'circle-check', role: 'neutral', label: 'On' },
     figure: n > 0 ? { value: label, unit: `${n === 1 && !state.full ? 'error' : 'errors'} · 24 h` } : { value: 'No errors', unit: 'in 24 h', word: true },
     viz: { kind: 'bars', buckets, label: peak ? `Errors per hour, last 24 hours, peak ${peak.count} at ${clockTime(new Date(peak.at).toISOString(), false).slice(0, 5)}` : 'Errors per hour, last 24 hours: none' },
-    note: last ? { text: `Last error ${relTime(last.time, ctx.now)}: ${last.message}`, title: last.message } : { text: 'No errors kept' },
+    note: last ? { text: `Last error ${relTime(last.time, ctx.now)}: ${last.message}`, title: last.message } : null,
     summary: { text: n > 0 ? `${label} ${n === 1 && !state.full ? 'error' : 'errors'} in 24 h` : 'No errors in 24 h' },
   };
 }

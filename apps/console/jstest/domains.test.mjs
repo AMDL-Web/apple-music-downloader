@@ -90,15 +90,18 @@ test('hooks: a failure in the last 24 h warns, never danger; 23 h 59 m vs 24 h',
   assert.equal(at(24 * 3600e3).tag.label, '1 on');
   assert.equal(at(3600e3).figure.value, '95%');
   assert.match(at(3600e3).note.text, /^Last failure: notify · 1h ago$/);
-  assert.equal(domainView('hooks', { hooks: ok({ enabled: false, entries: [] }) }, ctx()).tag.label, 'Off in hooks.yaml');
-  assert.equal(domainView('hooks', { hooks: ok({ enabled: true, entries: [] }) }, ctx()).figure.value, 'None');
+  const offHooks = domainView('hooks', { hooks: ok({ enabled: false, entries: [] }) }, ctx());
+  assert.deepEqual([offHooks.tag.label, offHooks.figure.value, offHooks.note], ['Off', 'No hooks', null], 'off is said once');
+  const offTwo = domainView('hooks', { hooks: ok({ enabled: false, entries: [{ name: 'a' }, { name: 'b' }] }) }, ctx());
+  assert.deepEqual([offTwo.figure.value, offTwo.figure.unit], ['2', 'hooks defined']);
+  assert.equal(domainView('hooks', { hooks: ok({ enabled: true, entries: [] }) }, ctx()).figure.value, 'No hooks');
 });
 
 test('library sync: Off, Needs token (its error not repeated), Error, Watching', () => {
   const sync = (over = {}) => ok({ enabled: true, interval_minutes: 15, anchor_size: 412, last_submitted: 0, total_submitted: 37, last_poll_at: new Date(NOW - 6 * 60e3).toISOString(), ...over });
   const view = (s, cfg = config()) => domainView('library_sync', { librarySync: s, config: cfg }, ctx());
   assert.equal(view(sync({ enabled: false })).tag.label, 'Off');
-  assert.equal(view(sync({ enabled: false })).note.text, '412 tracks recorded');
+  assert.equal(view(sync({ enabled: false })).note, null, 'the figure already says what was recorded');
   const needs = view(sync({ last_error: 'catalog.media_user_token is empty' }), config({ catalog: { media_user_token: '' } }));
   assert.equal(needs.tag.label, 'Needs token');
   assert.equal(needs.role, 'warning');
@@ -126,6 +129,8 @@ test('account: Ready with storefronts, a warning when the default is not served,
   assert.deepEqual([ready.figure.value, ready.figure.unit], ['2', 'storefronts']);
   assert.equal(ready.note, null, 'the default storefront is a fact row, said once');
   assert.deepEqual(ready.viz.items, [{ label: 'CN' }, { label: 'US' }]);
+  const single = view(wrapper({ regions: ['cn'] }));
+  assert.deepEqual([single.figure.value, single.figure.unit, single.viz.items], ['CN', 'storefront', []], 'one storefront is named, not counted');
   const unserved = view(wrapper(), ctx(), system({ default_storefront: 'jp' }));
   assert.equal(unserved.role, 'warning');
   assert.equal(unserved.note.text, "Default storefront JP isn't served by this account");
@@ -183,7 +188,7 @@ test('logs: retention off warns; no errors is words', () => {
   assert.equal(off.role, 'warning');
   const none = domainView('logging', { logs: ok({ entries: [], cursor: 3, full: false, last: null }) }, ctx());
   assert.equal(none.figure.value, 'No errors');
-  assert.equal(none.note.text, 'No errors kept');
+  assert.equal(none.note, null, 'the figure already says there are none');
   const one = { sequence: 4, time: new Date(NOW - 2 * 3600e3).toISOString(), level: 'error', message: 'wrapper: refused' };
   const some = domainView('logging', { logs: ok({ entries: [one], cursor: 4, full: false }) }, ctx());
   assert.equal(some.figure.value, '1');

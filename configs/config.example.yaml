@@ -93,8 +93,9 @@ catalog:
   # and config reload; no restart is required.
   # enum: song, album. song means album URLs containing ?i= are single-song tasks; album downloads the full album.
   album_track_url_mode: "song"
-  # string: optional Apple Music subscription token (media-user-token). Station downloads need it, private playlist covers
-  # and library sync use it, and it is the only token they use: a download or lookup request cannot supply its own.
+  # string: optional Apple Music subscription token (media-user-token); album, song and playlist downloads do not need it.
+  # Station downloads need it, private playlist covers and library sync use it, and it is the only token they use: a
+  # download or lookup request cannot supply its own.
   # Runtime: a change applies to jobs and lookups that start afterwards. GET /api/v1/config returns it; protect this
   # service at the deployment layer if the token is sensitive. Empty means none: stations fail and private playlists keep
   # the catalog cover.

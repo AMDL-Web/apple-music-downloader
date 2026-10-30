@@ -457,12 +457,13 @@ and motion covers.
   `amdl wrapper logs` in the body), never "No account", keeps its login form
   disabled while stopped, says in one line that a login replaces its one
   account (where the password goes is in [the API reference](../../docs/api.md#wrapper)), and adds one line
-  while `login_residue` is true. Account's head counts the storefronts its
-  account serves and names them; the default storefront is its fact row,
+  while `login_residue` is true. Account's head names the one storefront
+  its account serves, or counts them and names each; the default storefront is its fact row,
   and the head speaks of it only when the account does not serve it; a session service
-  without a login API gets the command-line steps in place of the form, and
-  until the status loads those steps hold their room unseen (`.holds-room`),
-  since a bare wrapper-lite is the usual service;
+  without a login API (a bare wrapper-lite, the usual service) shows its
+  logged-in account in one line and no Log out, and the command-line steps
+  in place of the form only while no account is logged in; until the status
+  loads that one line holds its room unseen (`.holds-room`);
   while the service cannot be reached, the head says so and the body keeps
   the server's own text, closed, under "Details from the server"; the page
   and its errors say "session service" and leave wrapper-manager to that

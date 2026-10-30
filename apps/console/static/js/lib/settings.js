@@ -27,7 +27,7 @@ export const FIELDS = [
     section: 'account',
     type: 'token',
     label: 'Media user token',
-    help: 'Needed for stations, private playlist covers and library sync.',
+    help: 'Optional: stations, private playlist covers, library sync.',
     defaultValue: '',
   },
   // Quality
