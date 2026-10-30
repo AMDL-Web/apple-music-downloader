@@ -7,7 +7,7 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { queryQuality } from '../api.js';
-import { qualityOverview, qualitySpec, shortError, differingTracks, slotName } from '../lib/lookup.js';
+import { qualityOverview, qualitySpecParts, shortError, differingTracks, slotName } from '../lib/lookup.js';
 import { count } from '../lib/format.js';
 import { Dialog } from '../ui/dialogs.js';
 import { Button, Icon, Chip, Notice } from '../ui/components.js';
@@ -91,7 +91,9 @@ export function QualitySheet({ url, title, tracks: expected, onProbed, onClose }
               (s) => html`<li key=${s.id} class="quality-slot" data-id=${s.id}>
                 <span class="quality-slot-label">${slotName(s).label}${slotName(s).codec ? html`<span class="quality-slot-codec">${slotName(s).codec}</span>` : null}</span>
                 <span class="quality-slot-count">${s.total === 1 ? '1 track' : s.tracks === s.total ? `All ${count(s.total)} tracks` : `${count(s.tracks)} of ${count(s.total)} tracks`}</span>
-                ${s.best ? html`<span class="quality-slot-best">Up to ${s.best}</span>` : null}
+                ${s.bestParts.length
+                  ? html`<span class="quality-slot-best dot-strip">${s.bestParts.map((p, i) => html`<span key=${i}>${i ? p : `Up to ${p}`}</span>`)}</span>`
+                  : null}
               </li>`,
             )}
           </ul>
@@ -118,7 +120,9 @@ export function QualitySheet({ url, title, tracks: expected, onProbed, onClose }
                         ? opts.map(
                             (q) => html`<span key=${q.id} class="quality-opt" data-id=${q.id} title=${q.description || ''}>
                               <span class="quality-opt-label">${q.label}</span>
-                              ${qualitySpec(q) ? html`<span class="quality-opt-spec">${qualitySpec(q)}</span>` : null}
+                              ${qualitySpecParts(q).length
+                                ? html`<span class="quality-opt-spec dot-strip">${qualitySpecParts(q).map((p, i) => html`<span key=${i}>${p}</span>`)}</span>`
+                                : null}
                             </span>`,
                           )
                         : html`<span class="status-text" data-role="warning"><${Icon} name="triangle-alert" size="sm" /><span>No quality available</span></span>`}

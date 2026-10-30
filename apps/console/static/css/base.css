@@ -48,6 +48,13 @@ figure {
   margin: 0;
 }
 
+/* A title that wraps splits into even lines, not one word left on the last. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
 a {
   color: inherit;
 }
@@ -139,6 +146,29 @@ kbd {
 
 .wrap-any {
   overflow-wrap: anywhere;
+}
+
+/* Facts separated by dots that wrap between facts, never inside one: each
+   item carries its dot, and the strip clips the dot that starts a line. */
+.dot-strip {
+  display: flex;
+  flex-wrap: wrap;
+  margin-inline-start: -1em;
+  clip-path: inset(0 0 0 1em);
+}
+
+.dot-strip > * {
+  position: relative;
+  padding-inline-start: 1em;
+  white-space: nowrap;
+}
+
+.dot-strip > *::before {
+  content: "·";
+  position: absolute;
+  inset-inline-start: 0;
+  width: 1em;
+  text-align: center;
 }
 
 .link {

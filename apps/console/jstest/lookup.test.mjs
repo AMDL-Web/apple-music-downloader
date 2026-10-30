@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLink } from '../static/js/lib/links.js';
-import { createLookupQueue, previewFacts, qualitySpec, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention, isPicked, applyFeedToJobs, differingTracks, slotName } from '../static/js/lib/lookup.js';
+import { createLookupQueue, previewFacts, qualitySpec, qualitySpecParts, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention, isPicked, applyFeedToJobs, differingTracks, slotName } from '../static/js/lib/lookup.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -174,6 +174,8 @@ test('qualitySpec formats what the response gives', () => {
   assert.equal(sp(qualitySpec({ bitrate: 263673, channels: 2 })), '264 kbps · 2 ch');
   assert.equal(qualitySpec({ bitrate: 1633000 }), '1,633\u00a0kbps', 'a number keeps its unit on its line');
   assert.equal(qualitySpec({ codec: 'E-AC-3' }), '');
+  assert.deepEqual(qualitySpecParts({ bitrate: 263673, channels: 2 }).map(sp), ['264 kbps', '2 ch']);
+  assert.deepEqual(qualitySpecParts(null), []);
 });
 
 test('qualityOverview counts tracks per slot and keeps the best format', () => {

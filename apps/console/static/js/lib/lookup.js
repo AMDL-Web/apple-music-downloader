@@ -184,13 +184,18 @@ const NBSP = '\u00a0';
  * by a no-break space, so a wrapped line never splits them.
  */
 export function qualitySpec(opt) {
-  if (!opt) return '';
+  return qualitySpecParts(opt).join(' · ');
+}
+
+/** qualitySpec's facts one by one, for a strip that wraps between them. */
+export function qualitySpecParts(opt) {
+  if (!opt) return [];
   const parts = [];
   if (opt.bit_depth > 0 && opt.sample_rate > 0) parts.push(`${opt.bit_depth}-bit / ${kHz(opt.sample_rate)}${NBSP}kHz`);
   else if (opt.sample_rate > 0) parts.push(`${kHz(opt.sample_rate)}${NBSP}kHz`);
   if (opt.bitrate > 0) parts.push(`${count(Math.round(opt.bitrate / 1000))}${NBSP}kbps`);
   if (opt.channels > 0) parts.push(`${opt.channels}${NBSP}ch`);
-  return parts.join(' · ');
+  return parts;
 }
 
 /**
@@ -228,7 +233,7 @@ export function qualityOverview(resp) {
       }
     }
   }
-  return [...slots.values()].map(({ bestOpt, ...s }) => ({ ...s, best: bestOpt ? qualitySpec(bestOpt) : '' }));
+  return [...slots.values()].map(({ bestOpt, ...s }) => ({ ...s, best: bestOpt ? qualitySpec(bestOpt) : '', bestParts: qualitySpecParts(bestOpt) }));
 }
 
 /**

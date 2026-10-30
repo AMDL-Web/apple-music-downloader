@@ -291,6 +291,9 @@
 }
 
 .new-link-title.is-url {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);

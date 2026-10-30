@@ -295,6 +295,12 @@
   min-height: 44px;
 }
 
+/* A detail row keeps the codec column for its status line; with no chip in
+   it, the title runs across it instead of stopping short. */
+.track[data-detail]:has(> .track-codec:empty) .track-main {
+  grid-column: main-start / codec-end;
+}
+
 .track:not([data-detail]) .track-index {
   align-self: center;
 }

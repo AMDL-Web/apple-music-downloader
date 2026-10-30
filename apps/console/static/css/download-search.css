@@ -110,10 +110,10 @@
   text-overflow: ellipsis;
 }
 
+/* A quality chip is whole or gone (the container queries below drop it on a
+   narrow row): a long title gives way with its ellipsis instead. */
 .new-hit-head > .chip {
-  flex: 0 100 auto;
-  min-width: 0;
-  overflow: hidden;
+  flex: none;
   font-size: var(--fs-13);
   line-height: var(--lh-13);
   letter-spacing: normal;
@@ -348,27 +348,34 @@
     overflow-wrap: anywhere;
   }
 
+  /* As .new-link-sub: dots in a clipped strip, never at a line's end. */
   .new-hit-sub {
     display: flex;
     flex-wrap: wrap;
     max-height: calc(2 * var(--lh-13));
+    margin-inline-start: -1em;
+    clip-path: inset(0 0 0 1em);
     white-space: normal;
   }
 
   .new-hit-sub > * {
+    position: relative;
+    box-sizing: border-box;
     min-width: 0;
     max-width: 100%;
+    padding-inline-start: 1em;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
+  .new-hit-sub > *::before,
   .new-hit-sub > * + *::before {
-    content: none;
-  }
-
-  .new-hit-sub > :not(:last-child)::after {
-    content: "\a0·\a0";
+    content: "·";
+    position: absolute;
+    inset-inline-start: 0;
+    width: 1em;
+    text-align: center;
   }
 
   .new-hit-download {

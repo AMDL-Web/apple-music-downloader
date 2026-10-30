@@ -629,25 +629,33 @@
     overflow-wrap: anywhere;
   }
 
+  /* Each fact carries its dot in front, in a strip the clip hides at the
+     start of every line: a wrapped line neither ends nor starts with a dot. */
   .new-link-sub {
     display: flex;
     flex-wrap: wrap;
     max-height: calc(2 * var(--lh-13));
+    margin-inline-start: -1em;
+    clip-path: inset(0 0 0 1em);
   }
 
   .new-link-sub > * {
+    position: relative;
+    box-sizing: border-box;
     min-width: 0;
     max-width: 100%;
+    padding-inline-start: 1em;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
+  .new-link-sub > *::before,
   .new-link-sub > * + *::before {
-    content: none;
-  }
-
-  .new-link-sub > :not(:last-child)::after {
-    content: "\a0·\a0";
+    content: "·";
+    position: absolute;
+    inset-inline-start: 0;
+    width: 1em;
+    text-align: center;
   }
 
   .new-link-prior {
