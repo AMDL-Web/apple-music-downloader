@@ -38,6 +38,11 @@ var (
 	// cannot pass to lite: its argument file is one argument per line and its
 	// login argument is user:pass.
 	ErrCredentialsUnusable = errors.New("the username or password contains a line break or NUL, or the username a colon")
+	// ErrInvalidTwoStepCode is a code in a form Apple never sends; the login
+	// it was meant for goes on.
+	ErrInvalidTwoStepCode = errors.New("invalid two-step code")
+	// ErrUnavailable means the wrapper is not running to take the call.
+	ErrUnavailable = errors.New("the wrapper is not running")
 )
 
 const (

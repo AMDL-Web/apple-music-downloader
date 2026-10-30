@@ -98,7 +98,7 @@ func (s *Server) wrapperLogout(w http.ResponseWriter, r *http.Request) {
 // the wrapper package does not classify is an upstream failure.
 func writeWrapperError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, wrapper.ErrCredentialsUnusable):
+	case errors.Is(err, wrapper.ErrCredentialsUnusable), errors.Is(err, wrapper.ErrInvalidTwoStepCode):
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	case errors.Is(err, wrapper.ErrAuthenticationFailed):
 		writeError(w, http.StatusUnauthorized, CodeAuthenticationFailed, err.Error())
@@ -112,6 +112,8 @@ func writeWrapperError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, CodeAccountNotFound, err.Error())
 	case errors.Is(err, wrapper.ErrLoginUnsupported):
 		writeError(w, http.StatusNotImplemented, CodeLoginUnsupported, err.Error())
+	case errors.Is(err, wrapper.ErrUnavailable):
+		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnavailable, err.Error())
 	case errors.Is(err, wrapper.ErrLoginTimeout):
 		writeError(w, http.StatusGatewayTimeout, CodeUpstreamTimeout, err.Error())
 	default:

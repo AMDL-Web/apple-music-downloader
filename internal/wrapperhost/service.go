@@ -2,6 +2,7 @@ package wrapperhost
 
 import (
 	"context"
+	"time"
 
 	"amdl/internal/wrapper"
 )
@@ -16,15 +17,21 @@ type Service struct {
 	Sup *Supervisor
 }
 
-// Status reports the guest; while it boots or is stopped, the answer is
-// "not ready" with the supervisor's state rather than an error.
+// Status reports the guest; while it is not serving, or does not answer
+// within a few seconds, the answer is "not ready" with the supervisor's
+// state rather than an error. A booting guest's port can take a connection
+// and never answer it.
 func (s Service) Status(ctx context.Context) (wrapper.Status, error) {
-	st, err := s.Wrapper.Status(ctx)
-	if err != nil {
-		st = wrapper.Status{Regions: []string{}, Accounts: []string{}}
+	m := s.Sup.Managed()
+	st := wrapper.Status{Regions: []string{}, Accounts: []string{}}
+	if m.Mode == "serving" {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if got, err := s.Wrapper.Status(ctx); err == nil {
+			st = got
+		}
 	}
 	st.LoginSupported = true
-	m := s.Sup.Managed()
 	st.Managed = &m
 	return st, nil
 }

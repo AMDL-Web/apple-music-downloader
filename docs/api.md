@@ -202,10 +202,14 @@ With a wrapper amdl runs, a login boots the guest with the password in a 0600 fi
 QEMU passes to it through `fw_cfg` and that is deleted at the guest's first console line;
 the password never appears on a command line. The guest copies it onto its own disk, and
 amdl zeroes that copy before the next boot, which follows at once: `managed.login_residue`
-stays true until then. Each step may take up to four minutes, since
-the guest boots twice per login and may run emulated. A username with a colon, or either
-value with a line break or NUL, is `400 invalid_request`. Logout gives the guest a fresh
-disk, whatever the username.
+stays true until then. A login or code answers within `internal/wrapperhost#LoginLimit`,
+since the guest boots twice per login and may run emulated. A caller that disconnects from
+the login before its answer ends the login; a submitted code runs to its outcome whether or
+not the caller waits. The code waits up to four minutes. A username with a
+colon, or either value with a line break or NUL, is `400 invalid_request`; so is a code
+that is not six digits, which leaves the login waiting for the right one. While
+`amdl wrapper stop` has turned the wrapper off, a login is `503 wrapper_unavailable`.
+Logout gives the guest a fresh disk, whatever the username.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login/{login_id}/2fa \

@@ -61,6 +61,9 @@ func fakeQEMU(args []string) {
 		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 		user, pass, _ := strings.Cut(lines[1], ":")
 		fmt.Println("2026-10-30 09:00:00.000 [INFO ] wrapper-lite login mode for " + user)
+		if user == "slow@example.com" {
+			time.Sleep(time.Minute) // a TCG guest still signing in
+		}
 		if user == "2fa@example.com" {
 			fmt.Println("2026-10-30 09:00:00.100 [INFO ] credentialHandler: {title: , message: , 2FA: true}")
 			fmt.Print("2FA code: ")
@@ -187,6 +190,12 @@ func TestLoginWithTwoStepCode(t *testing.T) {
 	if _, err := s.SubmitTwoStepCode(context.Background(), "nope", "123456"); !errors.Is(err, wrapper.ErrLoginSessionNotFound) {
 		t.Errorf("a wrong login id: %v", err)
 	}
+	if st, err := h.ReadState(); err != nil || st.Mode != "login" || st.PID == 0 {
+		t.Errorf("state.json during the login = %+v, %v: a later process could not reap its guest", st, err)
+	}
+	if _, err := s.SubmitTwoStepCode(context.Background(), r.LoginID, "12345"); !errors.Is(err, wrapper.ErrInvalidTwoStepCode) {
+		t.Errorf("a five-digit code: %v", err)
+	}
 	r, err = s.SubmitTwoStepCode(context.Background(), r.LoginID, "123456")
 	if err != nil || r.Status != wrapper.LoginStatusLoggedIn {
 		t.Fatalf("SubmitTwoStepCode = %+v, %v", r, err)
@@ -227,6 +236,29 @@ func TestRefusedLogin(t *testing.T) {
 	}
 	if _, err := s.StartLogin(context.Background(), "a@example.com", "x\n--debug"); !errors.Is(err, wrapper.ErrCredentialsUnusable) {
 		t.Errorf("a newline in the password: %v", err)
+	}
+}
+
+func TestAbandonedLoginEnds(t *testing.T) {
+	s, _, _ := runFake(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := s.StartLogin(ctx, "slow@example.com", "right"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("StartLogin = %v", err)
+	}
+	waitMode(t, s, "serving")
+	if _, err := s.StartLogin(context.Background(), "someone@example.com", "wrong"); !errors.Is(err, wrapper.ErrAuthenticationFailed) {
+		t.Fatalf("the next login = %v, want it to run", err)
+	}
+}
+
+func TestNoLoginWhileStopped(t *testing.T) {
+	s, h, _ := runFake(t)
+	if err := h.SetEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartLogin(context.Background(), "someone@example.com", "right"); !errors.Is(err, wrapper.ErrUnavailable) {
+		t.Fatalf("StartLogin = %v", err)
 	}
 }
 

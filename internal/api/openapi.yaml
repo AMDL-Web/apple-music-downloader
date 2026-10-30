@@ -400,9 +400,12 @@ paths:
         password in a 0600 file passed through QEMU fw_cfg and deleted at the
         guest's first console line; the guest copies it to its disk, and amdl
         zeroes that copy before the next boot, which follows at once
-        (managed.login_residue). Its
-        steps may each take up to four minutes, and a username with a colon,
-        or either value with a line break or NUL, is 400 invalid_request.
+        (managed.login_residue). It answers within several minutes, since the
+        guest boots twice and may run emulated, and a caller that disconnects
+        before this call answers ends the login (a submitted two-step code
+        runs to its outcome either way). A username with a colon, or either
+        value with a line break or NUL, is 400 invalid_request, and a managed
+        wrapper turned off with amdl wrapper stop is 503 wrapper_unavailable.
         Needs a wrapper-manager or a managed wrapper; a bare wrapper-lite
         answers 501 login_unsupported.
       operationId: loginWrapper
@@ -437,6 +440,12 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         '502':
           $ref: '#/components/responses/BadGateway'
+        '503':
+          description: wrapper_unavailable; the managed wrapper is stopped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '504':
           $ref: '#/components/responses/GatewayTimeout'
   /api/v1/wrapper/login/{login_id}/2fa:
@@ -448,7 +457,9 @@ paths:
         login 60 seconds after it asks for the code (four minutes for a
         managed wrapper), so submit it promptly. The
         login ends with this call even when the code is wrong; start again from
-        POST /wrapper/login.
+        POST /wrapper/login. A managed wrapper answers a code that is not six
+        digits with 400 invalid_request and keeps the login waiting for the
+        right one.
       operationId: submitWrapperTwoStepCode
       parameters:
         - $ref: '#/components/parameters/LoginID'

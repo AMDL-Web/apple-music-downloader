@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -69,16 +70,19 @@ func (h Home) SetEnabled(on bool) error {
 // a serving guest up while enabled, restarts it after a crash, and runs the
 // login boots behind the backend's login routes.
 type Supervisor struct {
-	home  Home
-	in    Installed
-	qemu  string
-	log   io.Writer
-	mu    sync.Mutex
-	g     *guest
-	st    State
-	sess  *session
-	wake  chan struct{}
-	fails int
+	home Home
+	in   Installed
+	qemu string
+	log  io.Writer
+	mu   sync.Mutex
+	g    *guest
+	st   State
+	sess *session
+	wake chan struct{}
+	// fails counts serving boots in a row that did not reach serving, and
+	// failedAt is when the last one failed: the next waits a backoff.
+	fails    int
+	failedAt time.Time
 	// run is Run's context: serving guests live as long as it, not as long
 	// as the request that restarted them after a login.
 	run context.Context
@@ -93,7 +97,7 @@ type Supervisor struct {
 var (
 	readyTimeout   = 3 * time.Minute
 	loginStepLimit = 4 * time.Minute
-	storefrontWait = 20 * time.Second
+	storefrontWait = time.Minute
 	pollEvery      = 2 * time.Second
 )
 
@@ -138,8 +142,13 @@ func (s *Supervisor) poke() {
 func (s *Supervisor) setState(f func(*State)) {
 	f(&s.st)
 	s.st.Updated = time.Now().UTC()
-	if s.g != nil && !s.g.exited() {
-		s.st.PID = s.g.cmd.Process.Pid
+	g := s.g
+	if g == nil && s.sess != nil {
+		// A login boot's pid, so that a later process can reap it.
+		g = s.sess.g
+	}
+	if g != nil && !g.exited() {
+		s.st.PID = g.cmd.Process.Pid
 	} else {
 		s.st.PID = 0
 	}
@@ -169,6 +178,7 @@ func (s *Supervisor) Run(ctx context.Context) {
 			}
 			if s.sess != nil {
 				s.sess.end()
+				s.sess = nil
 			}
 			s.setState(func(st *State) { st.Mode = "stopped" })
 			s.mu.Unlock()
@@ -192,18 +202,37 @@ func (s *Supervisor) Run(ctx context.Context) {
 	}
 }
 
+// refreshLocked picks up a guest that amdl wrapper update or import
+// installed while this supervisor ran: they remove the assets it booted.
+// The port stays the backend's wrapper address.
+func (s *Supervisor) refreshLocked() {
+	if in, err := s.home.Current(); err == nil {
+		in.Port = s.in.Port
+		s.in = in
+	}
+}
+
+// failLocked records a serving boot that did not reach serving.
+func (s *Supervisor) failLocked(err error) {
+	s.fails++
+	s.failedAt = time.Now()
+	s.setState(func(st *State) { st.Mode, st.LastError = "failed", err.Error() })
+}
+
 // startServingLocked boots the guest without arguments, so its lite serves
 // on guestPort, after zeroing what a login boot left on its disk. A failure
-// is retried on the next turn after a backoff; a non-TCG accelerator that
-// fails at once is replaced by TCG.
+// is retried on a later turn after a backoff, and a guest that does not
+// answer in time is stopped for it; a non-TCG accelerator that fails at once
+// is replaced by TCG.
 func (s *Supervisor) startServingLocked() {
 	ctx := s.run
-	if s.g != nil && s.g.exited() {
-		if wait := min(time.Duration(1<<min(s.fails, 6))*time.Second, time.Minute); time.Since(s.st.Updated) < wait {
-			return
-		}
-		s.fails++
+	if ctx.Err() != nil {
+		return // Run has returned or is about to; nothing would stop this guest
 	}
+	if s.fails > 0 && time.Since(s.failedAt) < min(time.Duration(1<<min(s.fails-1, 6))*time.Second, time.Minute) {
+		return
+	}
+	s.refreshLocked()
 	if s.unscrubbed || s.st.LoginResidue {
 		n, err := scrubLogin(s.home.ImagePath())
 		if err != nil {
@@ -222,7 +251,7 @@ func (s *Supervisor) startServingLocked() {
 		HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: 512, CPUs: 2}, s.consoleLine(nil))
 	if err != nil {
 		s.g = nil
-		s.setState(func(st *State) { st.Mode, st.LastError = "failed", err.Error() })
+		s.failLocked(err)
 		return
 	}
 	s.g = g
@@ -240,7 +269,10 @@ func (s *Supervisor) startServingLocked() {
 				s.setState(func(st *State) { st.Accel, st.AccelFallback = "tcg", true })
 				fmt.Fprintf(s.log, "[amdl] %s could not start the guest; falling back to tcg\n", failed)
 			}
-			s.setState(func(st *State) { st.Mode, st.LastError = "failed", err.Error() })
+			if ctx.Err() == nil {
+				g.stop() // a guest that never answered is retried like one that crashed
+			}
+			s.failLocked(err)
 			s.poke()
 			return
 		}
@@ -253,16 +285,15 @@ func (s *Supervisor) startServingLocked() {
 // cache ("token cache loaded (dev=… music=…)").
 var tokenPrefix = regexp.MustCompile(`\b(dev|music)=[^\s)]+`)
 
-// consoleLine logs a console line with the session's secrets and every token
-// prefix redacted and hands it to the session, if any.
+// consoleLine logs a console line with every token prefix and the session's
+// secrets redacted, and hands it to the session, if any, as it came.
 func (s *Supervisor) consoleLine(sess *session) func(string) {
 	return func(line string) {
-		line = tokenPrefix.ReplaceAllString(line, "$1=<redacted>")
 		if sess != nil {
-			line = sess.redact(line)
 			sess.onLine(line)
+			line = sess.redact(line)
 		}
-		fmt.Fprintln(s.log, line)
+		fmt.Fprintln(s.log, tokenPrefix.ReplaceAllString(line, "$1=<redacted>"))
 	}
 }
 
@@ -278,22 +309,28 @@ type session struct {
 	code       string
 	banner     chan string   // the first [init] line
 	need2FA    chan struct{} // closed when lite asks for the code
-	failure    string        // lite's last error line
+	failure    string        // lite's last error line, redacted
 	bannerOnce sync.Once
 	askOnce    sync.Once
 }
 
+// redact replaces the session's secrets in line, the longest first and in
+// any case, so that a secret inside another cannot leave part of it.
 func (x *session) redact(line string) string {
 	x.mu.Lock()
-	defer x.mu.Unlock()
-	for _, secret := range []string{x.pass, x.code, x.user} {
+	secrets := []string{x.pass, x.code, x.user}
+	x.mu.Unlock()
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	for _, secret := range secrets {
 		if secret != "" {
-			line = strings.ReplaceAll(line, secret, "<redacted>")
+			line = regexp.MustCompile("(?i)"+regexp.QuoteMeta(secret)).ReplaceAllLiteralString(line, "<redacted>")
 		}
 	}
 	return line
 }
 
+// onLine reads one console line of the login boot, before redaction, so
+// that a short secret cannot hide the markers it looks for.
 func (x *session) onLine(line string) {
 	if strings.HasPrefix(line, "[init]") {
 		x.removeArgs()
@@ -305,9 +342,10 @@ func (x *session) onLine(line string) {
 		x.askOnce.Do(func() { close(x.need2FA) })
 	}
 	if strings.Contains(line, "[ERROR]") || strings.Contains(line, "auth error") {
+		red := x.redact(line)
 		x.mu.Lock()
 		if x.failure == "" || strings.Contains(line, "auth error") {
-			x.failure = line
+			x.failure = red
 		}
 		x.mu.Unlock()
 	}
@@ -326,12 +364,20 @@ func (x *session) end() {
 
 var twoStepCode = regexp.MustCompile(`^[0-9]{6}$`)
 
+// ErrStopped refuses a login while amdl wrapper stop has turned the wrapper
+// off: the serving boot that proves a login would be stopped at once.
+var ErrStopped = fmt.Errorf("%w: the local wrapper is stopped; amdl wrapper start turns it on", wrapper.ErrUnavailable)
+
 // StartLogin stops the serving guest and boots one that logs user in. It
 // returns needs_2fa with a login id when Apple asks for a code, else the
-// outcome once lite has finished.
+// outcome once lite has finished. A caller that gives up before then ends
+// the login.
 func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper.LoginResult, error) {
 	if strings.ContainsAny(user, ":\n\r\x00") || strings.ContainsAny(pass, "\n\r\x00") {
 		return wrapper.LoginResult{}, wrapper.ErrCredentialsUnusable
+	}
+	if !s.home.Enabled() {
+		return wrapper.LoginResult{}, ErrStopped
 	}
 	id := make([]byte, 8)
 	_, _ = rand.Read(id) // crypto/rand does not fail
@@ -341,6 +387,10 @@ func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper
 	if s.sess != nil {
 		s.mu.Unlock()
 		return wrapper.LoginResult{}, wrapper.ErrLoginPending
+	}
+	if s.run.Err() != nil {
+		s.mu.Unlock()
+		return wrapper.LoginResult{}, ErrStopped
 	}
 	s.sess = x
 	if s.g != nil {
@@ -361,28 +411,46 @@ func (s *Supervisor) StartLogin(ctx context.Context, user, pass string) (wrapper
 		if !strings.Contains(line, "custom args from file") {
 			// Without its fw_cfg module upstream's init boots to serve and
 			// silently ignores the login.
-			return wrapper.LoginResult{}, s.endLogin(x, fmt.Errorf("the guest did not receive the login (%q): this QEMU lacks fw_cfg support", line))
+			return wrapper.LoginResult{}, s.endLogin(x, fmt.Errorf("the guest did not receive the login (%q): this QEMU lacks fw_cfg support", x.redact(line)))
 		}
 	case <-x.g.done:
 		return wrapper.LoginResult{}, s.endLogin(x, fmt.Errorf("QEMU exited before the guest booted: %v", x.g.err))
 	case <-step.C:
 		return wrapper.LoginResult{}, s.endLogin(x, wrapper.ErrLoginTimeout)
+	case <-ctx.Done():
+		return wrapper.LoginResult{}, s.endLogin(x, ctx.Err())
 	}
 	select {
 	case <-x.need2FA:
-		time.AfterFunc(loginStepLimit, func() {
-			s.mu.Lock()
-			pending := s.sess == x && x.code == ""
-			s.mu.Unlock()
-			if pending {
-				_ = s.endLogin(x, wrapper.ErrLoginTimeout)
-			}
-		})
+		go s.awaitCode(x)
 		return wrapper.LoginResult{Status: wrapper.LoginStatusNeedsTwoStep, LoginID: x.id}, nil
 	case <-x.g.done:
 		return s.finishLogin(ctx, x)
 	case <-step.C:
 		return wrapper.LoginResult{}, s.endLogin(x, wrapper.ErrLoginTimeout)
+	case <-ctx.Done():
+		return wrapper.LoginResult{}, s.endLogin(x, ctx.Err())
+	}
+}
+
+// awaitCode ends login x when no code comes within loginStepLimit or its
+// guest stops while waiting for one.
+func (s *Supervisor) awaitCode(x *session) {
+	t := time.NewTimer(loginStepLimit)
+	defer t.Stop()
+	err := wrapper.ErrLoginTimeout
+	select {
+	case <-t.C:
+	case <-x.g.done:
+		err = fmt.Errorf("the guest stopped while waiting for the two-step code: %v", x.g.err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	x.mu.Lock()
+	pending := x.code == ""
+	x.mu.Unlock()
+	if s.sess == x && pending {
+		_ = s.endLoginLocked(x, err)
 	}
 }
 
@@ -403,6 +471,7 @@ func (s *Supervisor) bootLoginLocked(x *session) error {
 		x.removeArgs()
 		return err
 	}
+	s.refreshLocked()
 	kernel, initrd := s.home.assets(s.in)
 	g, err := startGuest(s.qemu, RunOpts{Accel: s.st.Accel, Kernel: kernel, Initrd: initrd, Image: s.home.ImagePath(),
 		HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: 512, CPUs: 2, ArgsFile: x.argsPath}, s.consoleLine(x))
@@ -415,6 +484,10 @@ func (s *Supervisor) bootLoginLocked(x *session) error {
 	return nil
 }
 
+// ErrBadTwoStepCode is a code that is not six digits. The login goes on,
+// so the right code can still be sent.
+var ErrBadTwoStepCode = fmt.Errorf("%w: a two-step code is six digits", wrapper.ErrInvalidTwoStepCode)
+
 // SubmitTwoStepCode answers the code prompt of login id over the guest's
 // serial console and returns the outcome once lite has finished.
 func (s *Supervisor) SubmitTwoStepCode(ctx context.Context, id, code string) (wrapper.LoginResult, error) {
@@ -426,20 +499,25 @@ func (s *Supervisor) SubmitTwoStepCode(ctx context.Context, id, code string) (wr
 	}
 	if !twoStepCode.MatchString(code) {
 		s.mu.Unlock()
-		return wrapper.LoginResult{}, fmt.Errorf("%w: a two-step code is six digits", wrapper.ErrAuthenticationFailed)
+		return wrapper.LoginResult{}, ErrBadTwoStepCode
 	}
-	if x.code != "" {
+	x.mu.Lock()
+	busy := x.code != ""
+	if !busy {
+		x.code = code
+	}
+	x.mu.Unlock()
+	if busy {
 		s.mu.Unlock()
 		return wrapper.LoginResult{}, wrapper.ErrLoginSessionBusy
 	}
-	x.mu.Lock()
-	x.code = code
-	x.mu.Unlock()
 	_, err := io.WriteString(x.g.stdin, code+"\n")
 	s.mu.Unlock()
 	if err != nil {
 		return wrapper.LoginResult{}, s.endLogin(x, err)
 	}
+	// The code is in: lite finishes whether or not the caller waits, and
+	// finishLogin must run to hand the wrapper back, so ctx does not end it.
 	select {
 	case <-x.g.done:
 		return s.finishLogin(ctx, x)
@@ -449,19 +527,32 @@ func (s *Supervisor) SubmitTwoStepCode(ctx context.Context, id, code string) (wr
 }
 
 // finishLogin runs after lite has powered the login boot off: it boots to
-// serve, which also removes the login's arguments from the guest disk, and
-// takes an account serving a storefront as the proof of success.
+// serve, which zeroes the login's arguments on the guest disk first, and
+// takes an account serving a storefront as the proof of success. The
+// session holds the wrapper until then.
 func (s *Supervisor) finishLogin(ctx context.Context, x *session) (wrapper.LoginResult, error) {
 	s.mu.Lock()
 	if s.sess != x {
+		stopping := s.run.Err() != nil
 		s.mu.Unlock()
+		if stopping {
+			return wrapper.LoginResult{}, ErrStopped
+		}
 		return wrapper.LoginResult{}, wrapper.ErrLoginSessionNotFound
 	}
 	x.removeArgs()
-	s.sess = nil
+	s.fails = 0 // the login's own boot goes first, whatever failed before
 	s.startServingLocked()
 	g := s.g
 	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		if s.sess == x {
+			s.sess = nil
+			s.poke()
+		}
+		s.mu.Unlock()
+	}()
 	x.mu.Lock()
 	failure := x.failure
 	x.mu.Unlock()
@@ -476,26 +567,34 @@ func (s *Supervisor) finishLogin(ctx context.Context, x *session) (wrapper.Login
 	if err := g.waitReady(ctx, s.in.Port, readyTimeout); err != nil {
 		return wrapper.LoginResult{}, err
 	}
-	deadline := time.Now().Add(storefrontWait)
-	for time.Now().Before(deadline) {
-		if regions, err := statusOf(ctx, s.in.Port); err == nil && len(regions) > 0 {
+	wait, cancel := context.WithTimeout(ctx, storefrontWait)
+	defer cancel()
+	for {
+		if regions, err := statusOf(wait, s.in.Port); err == nil && len(regions) > 0 {
 			return wrapper.LoginResult{Status: wrapper.LoginStatusLoggedIn}, nil
 		}
-		time.Sleep(time.Second)
+		select {
+		case <-wait.Done():
+			if ctx.Err() != nil {
+				return wrapper.LoginResult{}, ctx.Err()
+			}
+			// lite reported no refusal, so this is not a wrong password.
+			return wrapper.LoginResult{}, fmt.Errorf("the wrapper serves no storefront %s after the login; amdl wrapper status shows when it does", storefrontWait)
+		case <-g.done:
+			return wrapper.LoginResult{}, fmt.Errorf("%w: %v", errExited, g.err)
+		case <-time.After(time.Second):
+		}
 	}
-	x.mu.Lock()
-	why := x.failure
-	x.mu.Unlock()
-	if why == "" {
-		why = "the account serves no storefront after the login"
-	}
-	return wrapper.LoginResult{}, fmt.Errorf("%w: %s", wrapper.ErrAuthenticationFailed, why)
 }
 
 // endLogin abandons login x and lets Run boot to serve again.
 func (s *Supervisor) endLogin(x *session, err error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.endLoginLocked(x, err)
+}
+
+func (s *Supervisor) endLoginLocked(x *session, err error) error {
 	if s.sess == x {
 		x.end()
 		s.sess = nil
@@ -505,7 +604,8 @@ func (s *Supervisor) endLogin(x *session, err error) error {
 	return err
 }
 
-// Logout logs the account out by giving the guest a fresh disk.
+// Logout logs the account out by giving the guest a fresh disk. It has one
+// account, so the username is not checked.
 func (s *Supervisor) Logout(context.Context, string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -516,7 +616,10 @@ func (s *Supervisor) Logout(context.Context, string) error {
 		s.g.stop()
 		s.g = nil
 	}
+	s.refreshLocked()
 	if err := copyFile(s.home.path("assets", s.in.ID, imageName), s.home.ImagePath(), 0o600); err != nil {
+		s.setState(func(st *State) { st.Mode, st.LastError = "failed", "logout: "+err.Error() })
+		s.poke()
 		return err
 	}
 	s.setState(func(st *State) { st.Mode, st.LoginResidue = "stopped", false })
