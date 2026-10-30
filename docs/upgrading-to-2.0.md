@@ -196,13 +196,15 @@ needs the API changes below before it works against 2.0.
 
 ## Image and source tree
 
-The repository holds every AMDL product, so the server's entry point, Dockerfile and
-Compose file moved. The image name, the paths inside the image (`/app/configs`,
-`/app/data`, the entrypoint), the port, the environment variables and the Compose service
-name stay as they were.
+The repository holds every AMDL product, so it was renamed to `AMDL-Web/apple-music-downloader`
+and the server's entry point, Dockerfile and Compose file moved. The paths inside the
+image (`/app/configs`, `/app/data`, the entrypoint), the port, the environment variables and
+the Compose service name stay as they were.
 
 | Area | 1.x | 2.0 | Affects |
 | --- | --- | --- | --- |
+| Image | `ghcr.io/amdl-web/apple-music-downloader-backend` | `ghcr.io/amdl-web/apple-music-downloader`; 1.x tags stay at the old name | every Compose `image:` or `docker pull` that names the published image |
+| Repository | `github.com/AMDL-Web/apple-music-downloader-backend` | `github.com/AMDL-Web/apple-music-downloader`; GitHub redirects the old URL | clones and links; update a clone's remote with `git remote set-url origin` |
 | Server binary | `/app/amdl-api` in the image; `go run ./cmd/amdl-api` from source | `/app/amdl-server`; `go run ./apps/server` | a Compose `command:` or `entrypoint:`, `docker exec` or a process monitor that names the binary; the image's entrypoint starts it, so the shipped Compose file needs no change |
 | Compose file | `docker-compose.yml` at the repository root | `deploy/docker-compose.yml` | anyone who downloads it from the repository or runs Compose inside a clone, where its relative `./configs` and `./data` now live under `deploy/`; a copy in its own directory is unaffected |
 | Dockerfile | `Dockerfile` at the root: `docker build .`, Compose `build: .` | `deploy/server/Dockerfile`, still with the repository root as context: `docker build -f deploy/server/Dockerfile .`; Compose from `deploy/` uses `context: ..` and `dockerfile: deploy/server/Dockerfile` | anyone who builds the image from source |

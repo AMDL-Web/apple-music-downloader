@@ -51,7 +51,7 @@ Bound each wait with `timeout 900`; on timeout record FAIL with the last state.
 
 - `gh run list --workflow release.yml --limit 1` shows success.
 - `gh release view <version>` shows the notes.
-- `docker buildx imagetools inspect ghcr.io/amdl-web/apple-music-downloader-backend:<X.Y.Z>`
+- `docker buildx imagetools inspect ghcr.io/amdl-web/apple-music-downloader:<X.Y.Z>`
   lists `linux/amd64` and `linux/arm64`, and the `X.Y` and `latest` tags have the
   same digest.
 - `git log --oneline origin/dev..origin/main` shows only the merge commit.

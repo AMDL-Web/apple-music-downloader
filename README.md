@@ -1,10 +1,10 @@
 # AMDL
 
 <p align="center">
-  <a href="https://github.com/AMDL-Web/apple-music-downloader-backend/actions/workflows/ci.yml"><img src="https://github.com/AMDL-Web/apple-music-downloader-backend/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/AMDL-Web/apple-music-downloader-backend/releases"><img src="https://img.shields.io/github/v/release/AMDL-Web/apple-music-downloader-backend?label=release" alt="Latest release"></a>
-  <a href="https://github.com/AMDL-Web/apple-music-downloader-backend/pkgs/container/apple-music-downloader-backend"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%2B%20arm64-blue" alt="Container image on GHCR"></a>
-  <img src="https://img.shields.io/github/go-mod/go-version/AMDL-Web/apple-music-downloader-backend" alt="Go version">
+  <a href="https://github.com/AMDL-Web/apple-music-downloader/actions/workflows/ci.yml"><img src="https://github.com/AMDL-Web/apple-music-downloader/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/AMDL-Web/apple-music-downloader/releases"><img src="https://img.shields.io/github/v/release/AMDL-Web/apple-music-downloader?label=release" alt="Latest release"></a>
+  <a href="https://github.com/AMDL-Web/apple-music-downloader/pkgs/container/apple-music-downloader"><img src="https://img.shields.io/badge/ghcr.io-amd64%20%2B%20arm64-blue" alt="Container image on GHCR"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/AMDL-Web/apple-music-downloader" alt="Go version">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="AGPL-3.0"></a>
 </p>
 

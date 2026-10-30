@@ -300,7 +300,7 @@ does the workflow fall back to generating a changelog from commits, via
 `Co-authored-by` collaborators, deduplicated.
 
 `Docker Publish` builds linux/amd64 + linux/arm64 and pushes to
-`ghcr.io/amdl-web/apple-music-downloader-backend` with tags `{version}`, `{major}.{minor}`
+`ghcr.io/amdl-web/apple-music-downloader` with tags `{version}`, `{major}.{minor}`
 and, conditionally, `latest`. It can also be dispatched manually against an existing tag
 to re-issue an image; manual runs do **not** move `latest` unless you tick the option, so
 re-publishing an old version cannot drag `latest` backwards. Releases published by hand

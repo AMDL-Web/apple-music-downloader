@@ -24,7 +24,7 @@ services:
     # Pulls the prebuilt image from GHCR by default (multi-arch linux/amd64 +
     # linux/arm64). To pin a version, replace latest with a specific tag, for
     # example :1.1 or :1.1.0.
-    image: ghcr.io/amdl-web/apple-music-downloader-backend:latest
+    image: ghcr.io/amdl-web/apple-music-downloader:latest
     # To build locally from source instead of pulling the image, run compose
     # from deploy/ in a clone of the repository and uncomment the build block
     # below (the image line then becomes the tag of the locally built image),

@@ -89,7 +89,7 @@
     },
     {
       description: "This repository's own published image, pushed by docker-publish.yml; not an external dependency",
-      matchPackageNames: ["ghcr.io/amdl-web/apple-music-downloader-backend"],
+      matchPackageNames: ["ghcr.io/amdl-web/apple-music-downloader"],
       enabled: false,
     },
   ],

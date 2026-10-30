@@ -1,7 +1,7 @@
 name: Docker Publish
 
 # Build the multi-arch image (linux/amd64 + linux/arm64) and push it to GHCR:
-#   ghcr.io/amdl-web/apple-music-downloader-backend
+#   ghcr.io/amdl-web/apple-music-downloader
 #
 # Triggers (one of three):
 #   - workflow_call: called by release.yml after a successful release; the main
