@@ -36,6 +36,7 @@ type env struct {
 	ctx    context.Context
 	out    *printer
 	server string
+	target string
 	quiet  bool
 	yes    bool
 	dry    bool
@@ -60,6 +61,9 @@ func Run(ctx context.Context, args []string, io IO) int {
 		io.Getenv = os.Getenv
 	}
 	cmds := commands()
+	if len(args) == 0 && io.InTTY && io.OutTTY {
+		args = []string{"tui"}
+	}
 	if len(args) == 0 {
 		return rootHelp(io, cmds)
 	}

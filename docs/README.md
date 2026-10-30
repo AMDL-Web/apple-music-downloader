@@ -15,7 +15,7 @@ here or its type here disagrees with the page.
 | --- | --- | --- |
 | [architecture.md](architecture.md) | reference | Process lifecycle, package responsibilities, API conventions (errors, events, streams), storage, output-path and hook rules |
 | [upgrading-to-2.0.md](upgrading-to-2.0.md) | runbook | Every breaking change from 1.x to 2.0, with old and new shapes and the clients affected |
-| [cli.md](cli.md) | reference | The `amdl` command line: commands, JSON output, exit statuses, confirmation, server selection |
+| [cli.md](cli.md) | reference | The `amdl` command line: commands, JSON output, exit statuses, confirmation, server selection, the MCP server and the terminal interface |
 | [api.md](api.md) | reference | Every endpoint with curl examples, job overrides, error codes, SSE stream semantics |
 | [configuration.md](configuration.md) | reference | Config file, env overrides, runtime vs startup keys, simulate mode |
 | [download-pipeline.md](download-pipeline.md) | reference | Stages, retries, codec fallback, concurrency pools, memory modes, lyrics, output paths |

@@ -118,11 +118,13 @@ func (e *env) connect() (*client.Client, error) {
 	if err != nil {
 		return nil, usageErr("%v", err)
 	}
-	label := c.Base()
+	e.target = c.Base()
 	if t.Name != "" {
-		label = t.Name + " (" + c.Base() + ")"
+		e.target = t.Name + " (" + c.Base() + ")"
 	}
-	e.note("→ %s", label)
+	if e.cmd.Command != "tui" {
+		e.note("→ %s", e.target)
+	}
 	return c, nil
 }
 

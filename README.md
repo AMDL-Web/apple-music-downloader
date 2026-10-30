@@ -38,7 +38,8 @@ served at `/console/`. It uses only the public API. Its design contract is
 `apps/amdl` builds `amdl`, a client of the API written for agents and scripts: every
 result is JSON on stdout, errors are JSON on stderr with an exit status per kind of
 failure, and `amdl cli search "<task>"` finds the command for a task. `amdl mcp` serves the same
-capabilities as MCP tools. [docs/cli.md](docs/cli.md) describes both.
+capabilities as MCP tools, and `amdl` alone in a terminal opens an interactive interface
+for people. [docs/cli.md](docs/cli.md) describes all three.
 
 ### Desktop app (planned)
 

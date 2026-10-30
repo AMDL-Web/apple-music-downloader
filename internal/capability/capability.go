@@ -137,6 +137,7 @@ var All = []Capability{
 	{Command: "context remove", Safety: Write, Args: []string{"name"}, Summary: "Forget a saved server"},
 	{Command: "version", Ops: []string{"getSystem"}, Safety: Read, Summary: "Show this client's and the server's versions"},
 	{Command: "serve", Safety: Write, Summary: "Run the amdl backend and web console in this process"},
+	{Command: "tui", Safety: Write, Summary: "Open the interactive terminal interface (what amdl alone opens in a terminal)"},
 	{Command: "mcp", Safety: Write, Summary: "Serve the amdl tools to an MCP client over stdio",
 		Examples: []string{"claude mcp add amdl -- amdl mcp --server nas"}},
 }

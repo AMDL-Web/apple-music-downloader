@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"amdl/apps/amdl/internal/mcpserver"
+	"amdl/apps/amdl/internal/tui"
 	"amdl/apps/console"
 	"amdl/internal/buildinfo"
 	"amdl/internal/capability"
@@ -193,6 +194,18 @@ func mcpCmd(*flag.FlagSet) func(e *env, args []string) error {
 			return usageErr("usage: amdl mcp [--server url]")
 		}
 		return mcpserver.Run(e.ctx, e.c, version())
+	}
+}
+
+func tuiCmd(*flag.FlagSet) func(e *env, args []string) error {
+	return func(e *env, args []string) error {
+		if len(args) > 0 {
+			return usageErr("usage: amdl tui [--server url]")
+		}
+		if !e.InTTY || !e.OutTTY {
+			return usageErr("amdl tui needs a terminal; agents and scripts use the other commands")
+		}
+		return tui.Run(e.ctx, tui.Options{Client: e.c, Target: e.target, Version: version()})
 	}
 }
 

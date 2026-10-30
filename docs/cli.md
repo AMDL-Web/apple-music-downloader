@@ -145,3 +145,28 @@ of the [Errors](#errors-and-exit-statuses) table.
   **`get_status`** gathers the system, health, wrapper and library-sync answers.
 - **No tool signs the wrapper in**: a password never passes through a model. When
   `get_status` shows no account, a person runs `amdl wrapper login` or uses the console.
+
+## Terminal interface
+
+`amdl` with no arguments in a terminal, or `amdl tui`, opens an interactive interface
+for people (`apps/amdl/internal/tui`). It renders inline rather than taking over the
+screen: what is done goes into the terminal's own scrollback (each request and its
+answer, and one line per job when it finishes), and only the bottom of the screen is
+redrawn.
+
+- **The prompt** takes a pasted Apple Music link (several at once download as a batch),
+  which shows a preview to confirm with Enter; plain text, which searches the catalog and
+  lists the hits (↑↓ to move, Space to select several, Tab to filter by type, → to open an
+  artist's albums, Enter to download); or a `/` command, listed as you type it (`/help`
+  shows them all, `/login` signs the wrapper in without echoing the password).
+- **Above the prompt** sits one card per job in progress, up to three: its title, the
+  album bar of `internal/progress#AlbumProgress` (finished tracks in the order they
+  finished, the overall progress as a fainter fill, one cell per track up to
+  `internal/progress#TickMax`) with the count and percent, and a seven-stage bar for each
+  track in flight. The card takes its color from the album's artwork. `ctrl+o` shows every
+  track, `ctrl+t` every job.
+- **Below the prompt** a status line names the server and counts the jobs.
+- **Narrow terminals** drop the per-track status column, then the artist and the track
+  rows; short ones keep fewer cards (`apps/amdl/internal/tui#wideCols` and its siblings).
+- **Leaving** takes `ctrl+c` twice, or `ctrl+d` on an empty prompt. Downloads keep
+  running on the server.
