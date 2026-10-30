@@ -113,6 +113,33 @@ with a shorter `PATH` than a terminal. Set `tools.ffmpeg` yourself for an ffmpeg
 elsewhere. The backend logs a warning at startup without it, and each download fails
 with the same install hint.
 
+## Try it without a wrapper
+
+Simulate mode reads the real catalog and selects real media, then fakes the transfer,
+decryption and file writes, so it needs neither a wrapper nor ffmpeg
+([configuration.md](configuration.md#simulate-mode)). In an empty directory:
+
+```bash
+amdl serve
+```
+
+The first start writes `configs/config.yaml` and `data/` into the current directory and
+serves the API and web console on `http://127.0.0.1:18080`; its ffmpeg warning does not
+apply to simulated downloads. In a second terminal:
+
+```bash
+export AMDL_URL=http://127.0.0.1:18080
+amdl config set simulate.enabled=true
+amdl download <album or song link> --wait
+```
+
+For another port, start it with `AMDL_SERVER_LISTEN=127.0.0.1:18081 amdl serve` and
+set `AMDL_URL` to match. In PowerShell, set each variable on a line of its own, such as
+`$env:AMDL_URL = 'http://127.0.0.1:18080'`. `serve --listen` works with `--local` only;
+a plain `amdl serve` listens on `server.listen` from its config or `AMDL_SERVER_LISTEN`.
+Change other settings with `amdl config set` too. Stop it with Ctrl-C and delete the
+directory when done.
+
 ## The wrapper
 
 The wrapper holds the Apple Music account session and serves what the backend needs to
@@ -238,12 +265,15 @@ a hint for each failure.
 | | macOS | Linux | Windows |
 | --- | --- | --- | --- |
 | Config, database, log | `~/Library/Application Support/AMDL/server` | `~/.config/AMDL/server` | `%AppData%\AMDL\server` |
+| [A wrapper amdl runs](#a-wrapper-amdl-runs), with the account's disk | `~/Library/Application Support/AMDL/wrapper` | `~/.config/AMDL/wrapper` | `%AppData%\AMDL\wrapper` |
 | Scratch files | `~/Library/Caches/AMDL` | `~/.cache/AMDL` | `%LocalAppData%\AMDL` |
 | Downloads | `~/Music/AMDL` | `~/Music/AMDL` | `%UserProfile%\Music\AMDL` |
+| Saved servers (`amdl context`) | `~/Library/Application Support/amdl/cli.yaml` | `~/.config/amdl/cli.yaml` | `%AppData%\amdl\cli.yaml` |
 
 These follow `internal/local#DefaultDirs`; Linux honours `XDG_CONFIG_HOME` and
 `XDG_CACHE_HOME`. The desktop app uses the same files. `download.downloads_dir` in the
-config moves the downloads.
+config moves the downloads. `data.img` in `wrapper/` holds the Apple Music account's
+tokens.
 
 ## Upgrade
 
@@ -260,10 +290,18 @@ or Scoop, `brew upgrade amdl` or `scoop update amdl`, then
 
 ```bash
 amdl service uninstall
+amdl wrapper uninstall --purge
 ```
+
+The first stops the backend, and with it the wrapper amdl runs, and removes the
+registration. The second, needed only with [A wrapper amdl runs](#a-wrapper-amdl-runs),
+deletes its directory, the account's disk included, which logs the account out for
+good; without `--purge` it keeps `data.img` for a later `amdl wrapper install`.
 
 Then delete the binary: `~/.local/bin/amdl` (or `/usr/local/bin/amdl`), or
 `%LOCALAPPDATA%\Programs\amdl` on Windows, where you also remove that directory from the
 user `PATH`. With Homebrew or Scoop, `brew uninstall amdl` or `scoop uninstall amdl`.
-Neither step touches the data in [Where files go](#where-files-go); delete those
-directories to remove the download history and settings too.
+QEMU stays installed when `amdl wrapper install` installed it; remove it with
+`brew uninstall qemu` or `winget uninstall --id SoftwareFreedomConservancy.QEMU -e` if
+nothing else uses it. The rest of [Where files go](#where-files-go) stays too; delete
+those directories to remove the download history and settings.

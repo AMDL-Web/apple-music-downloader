@@ -92,7 +92,7 @@ Two ways to run it, side by side:
 | Install | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh` (PowerShell: see the guide) | Copy [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | Runs as | A service that starts at login: `amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | Install it yourself; `amdl doctor` prints the command | In the image |
-| Wrapper | Elsewhere, or one amdl runs in QEMU: `amdl wrapper install` | A compose service on the same host |
+| Wrapper | Elsewhere, or one amdl runs in QEMU: `amdl wrapper install`; none to [try it in simulate mode](docs/install.md#try-it-without-a-wrapper) | A compose service on the same host |
 | Guide | [docs/install.md](docs/install.md) | Below and [docs/deployment.md](docs/deployment.md) |
 
 The rest of this section is the Docker path. The repository's

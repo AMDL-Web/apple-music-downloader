@@ -82,7 +82,7 @@ apps/desktop/internal 下，只归它用。
 | 安装 | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh`（PowerShell 见指南） | 复制 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | 运行方式 | 登录即启动的后台服务：`amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | 自己安装；`amdl doctor` 会给出安装命令 | 镜像自带 |
-| wrapper | 用别处的，或让 amdl 在 QEMU 里跑一个：`amdl wrapper install` | 同一台机器上的 compose 服务 |
+| wrapper | 用别处的，或让 amdl 在 QEMU 里跑一个：`amdl wrapper install`；[用模拟模式试用](docs/install.md#try-it-without-a-wrapper)时不需要 | 同一台机器上的 compose 服务 |
 | 指南 | [docs/install.md](docs/install.md) | 下文和 [docs/deployment.md](docs/deployment.md) |
 
 本节下面讲 Docker 方式。仓库里的 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) 用 GHCR 上的预构建镜像运行 amdl，两种

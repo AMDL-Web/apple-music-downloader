@@ -125,8 +125,11 @@ Otherwise the command fails with `server_not_configured`.
 `amdl serve` runs the backend and web console in the process, as
 `internal/server#Run`: `--config` (default `$AMDL_CONFIG`, else
 `configs/config.yaml`) and `--hooks` (default `$AMDL_HOOKS_CONFIG`, else
-`configs/hooks.yaml`), stopping on SIGINT or SIGTERM and ignoring SIGHUP.
-`amdl serve --local` uses this machine's local files instead
+`configs/hooks.yaml`), stopping on SIGINT or SIGTERM and ignoring SIGHUP. It listens
+on `server.listen` from the config, or on `AMDL_SERVER_LISTEN` when that is set
+([configuration.md](configuration.md#environment-overrides)); a missing config is
+created from the built-in example. Trying it in simulate mode with no wrapper:
+[install.md](install.md#try-it-without-a-wrapper). `amdl serve --local` uses this machine's local files instead
 ([Running the backend in amdl](#running-the-backend-in-amdl)), on a free loopback port
 or `--listen`; with `--background` it logs to `logs/server.log` beside them and, on
 Windows, closes a console window it was given alone.

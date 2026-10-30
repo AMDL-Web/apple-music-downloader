@@ -65,8 +65,11 @@ Bound each wait with `timeout 900`; on timeout record FAIL with the last state.
   `SHA256SUMS`, `amdl.rb` and `amdl.json`. When the binaries job failed after the
   Release was created, attach them by hand from the tag:
   `make dist VERSION=<version> && node deploy/packaging/render.mjs <version> dist/SHA256SUMS dist && gh release upload <version> dist/* --clobber`.
-- `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh | sh -s -- --dry-run`
-  resolves `<version>` as the latest (not for a prerelease).
+- The install command in the README and on the website installs the release (not
+  for a prerelease, which never becomes the latest):
+  `d=$(mktemp -d) && curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh | sh -s -- --bin-dir "$d" && AMDL_URL=http://127.0.0.1:1 "$d/amdl" version --fields client`
+  prints `<version>`, and `git show origin/main:apps/site/build.mjs | grep -n "REF ="`
+  names `main`, the branch those commands point at.
 - `docker buildx imagetools inspect ghcr.io/amdl-web/apple-music-downloader:<X.Y.Z>`
   lists `linux/amd64` and `linux/arm64`, and the `X.Y` and `latest` tags have the
   same digest.
@@ -91,7 +94,7 @@ wrapper pin. These steps are the maintainer's unless marked; record each in the 
   run `gh workflow run wrapper-pin.yml`, and bump `Builtin` when upstream has a newer
   build.
 - **Website.** It moves from Cloudflare Workers back to GitHub Pages, built from
-  `main`; follow the cutover in [apps/site/README.md](../../../apps/site/README.md#publishing)
+  `main`; follow the cutover in [apps/site/README.md](../../../apps/site/README.md#release-day)
   instead of republishing to Workers.
 - **NAS.** Redeploy the maintainer's own install on the new image name after the
   release (the `ssh-remote-ops` skill covers the host).
