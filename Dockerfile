@@ -1,9 +1,14 @@
-# syntax=docker/dockerfile:1
+# The Dockerfile uses no BuildKit-only syntax, so the classic builder (a
+# docker build without buildx, as on Synology DSM) builds it too, for the host
+# platform. Multi-arch images need buildx.
 
 # ---- Build stage -------------------------------------------------------
-# Cross-compilation runs on the build platform (--platform=$BUILDPLATFORM),
-# so buildx can produce linux/amd64 and linux/arm64 images directly.
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine AS build
+# Under BuildKit, cross-compilation runs on the build platform, so buildx can
+# produce linux/amd64 and linux/arm64 images directly. The classic builder sets
+# no BUILDPLATFORM and would fail on an empty --platform; "linux" alone means
+# linux on the daemon's own architecture there, and TARGETOS/TARGETARCH stay
+# empty, so Go builds for the host.
+FROM --platform=${BUILDPLATFORM:-linux} golang:1.26.10-alpine AS build
 
 WORKDIR /src
 
@@ -33,8 +38,8 @@ FROM alpine:3.24
 #   default command name works as is).
 # ca-certificates: HTTPS requests to the Apple Music API.
 # tzdata: time zone support for log and hook timestamps.
-# su-exec: the entrypoint runs as root to fix volume ownership, then drops to
-#   PUID:PGID to run the backend.
+# su-exec: the entrypoint runs as root to give the backend's own state to
+#   PUID:PGID, then drops to that user to run the backend.
 RUN apk add --no-cache ca-certificates ffmpeg tzdata su-exec \
     && addgroup -g 1000 amdl \
     && adduser -D -u 1000 -G amdl amdl
@@ -44,7 +49,7 @@ WORKDIR /app
 # The example configs are baked into /opt/amdl; on first start the entrypoint
 # seeds them into the config directory /app/configs.
 COPY configs/config.example.yaml configs/hooks.yaml /opt/amdl/
-COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=build /out/amdl-api /app/amdl-api
 
 # Pre-create the config and data directories and hand them to the default
@@ -56,7 +61,10 @@ COPY --from=build /out/amdl-api /app/amdl-api
 # such uid must be able to create files in the directories that are not
 # mounted, data/tmp above all, so they are world-writable with the sticky bit,
 # like /tmp. A mount replaces them with the host directory and its permissions.
-RUN mkdir -p /app/configs /app/data/db /app/data/tmp /app/data/downloads \
+# The entrypoint is made executable here rather than with COPY --chmod, which
+# needs BuildKit.
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh \
+    && mkdir -p /app/configs /app/data/db /app/data/tmp /app/data/downloads \
     && chown -R amdl:amdl /app \
     && chmod 1777 /app/configs /app/data /app/data/db /app/data/tmp /app/data/downloads
 

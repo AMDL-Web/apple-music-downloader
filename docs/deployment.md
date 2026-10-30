@@ -39,6 +39,10 @@ docker run -d --name amdl-backend \
   amdl-backend
 ```
 
+The Dockerfile needs no BuildKit: `docker build` works with the classic builder too, as
+on Synology DSM, whose Docker has no buildx, and builds for the host's architecture.
+Multi-arch images (`--platform linux/amd64,linux/arm64`) need buildx.
+
 The image is a multi-stage build: the build stage cross-compiles a static binary
 (`CGO_ENABLED=0`, pure-Go SQLite), and the runtime stage is Alpine with `ffmpeg`,
 `ca-certificates`, `tzdata` and `su-exec`. The container starts the entrypoint as root,
