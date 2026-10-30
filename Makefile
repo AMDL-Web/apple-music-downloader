@@ -24,7 +24,7 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker dist
+.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker dist dist-check
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
@@ -102,3 +102,11 @@ dist: ## Cross-compile amdl for every release platform into dist/, one archive e
 		rm -rf dist/$$name; \
 	done
 	@cd dist && { sha256sum *.tar.gz *.zip 2>/dev/null || shasum -a 256 *.tar.gz *.zip; } > SHA256SUMS
+
+# What a release attaches: five archives, SHA256SUMS, amdl.rb and amdl.json.
+DIST_FILES = 8
+
+dist-check: ## Build and render the release files as a release does, for a made-up version, and count them
+	@$(MAKE) --no-print-directory dist VERSION=v0.0.0-ci
+	@node deploy/packaging/render.mjs v0.0.0-ci dist/SHA256SUMS dist
+	@n=$$(ls dist | wc -l); if [ $$n -ne $(DIST_FILES) ]; then echo "dist-check: $$n files in dist/, want $(DIST_FILES)"; ls dist; exit 1; fi

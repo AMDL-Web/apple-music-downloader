@@ -12,7 +12,8 @@ name: Release
 # amdl binaries (make dist) with the Homebrew formula and Scoop manifest
 # rendered for them, copy those two into the tap and the bucket once that is
 # set up (deploy/packaging/README.md), and call docker-publish to build and
-# push the image (moving latest too).
+# push the image (moving latest too). A version with a suffix such as -rc.1 is
+# a prerelease: it moves no latest and skips the tap and the bucket.
 on:
   workflow_dispatch:
     inputs:
@@ -46,6 +47,7 @@ jobs:
       contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
 
     steps:
       - name: Resolve version
@@ -56,8 +58,8 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           # vX.Y.Z with an optional suffix such as -rc.1; both paths accept
-          # exactly this shape.
-          PATTERN='v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?'
+          # exactly this shape, which deploy/packaging/render.mjs accepts too.
+          PATTERN='v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?'
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             VERSION="$INPUT_VERSION"
             if ! printf '%s' "$VERSION" | grep -qxE "$PATTERN"; then
@@ -72,6 +74,13 @@ jobs:
             fi
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # A suffixed version is a prerelease: it becomes neither the latest
+          # GitHub release, which the install scripts read, nor the latest
+          # image, and it is not published to the tap or the bucket.
+          case "$VERSION" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
           echo "Releasing $VERSION"
 
       - name: Checkout source
@@ -196,7 +205,8 @@ jobs:
           name: Release ${{ steps.version.outputs.version }}
           body: ${{ steps.changelog.outputs.changelog_content }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.version.outputs.prerelease == 'true' && 'false' || 'true' }}
           # On a PR merge, tag the merge commit. The default is GITHUB_SHA,
           # which for a closed event is not the merge commit.
           target_commitish: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
@@ -238,8 +248,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
-          # Five archives, the checksum file, the formula and the manifest,
-          # or the job fails.
+          # Five archives, the checksum file, the formula and the manifest
+          # (DIST_FILES in the Makefile, which make dist-check runs in CI), or
+          # the job fails.
           test "$(ls dist | wc -l)" -eq 8
           gh release upload "$VERSION" dist/* --clobber --repo "$GITHUB_REPOSITORY"
 
@@ -249,7 +260,7 @@ jobs:
   packaging:
     name: Publish to the Homebrew tap and the Scoop bucket
     needs: [release, binaries]
-    if: vars.PACKAGING_PUBLISH == 'true'
+    if: vars.PACKAGING_PUBLISH == 'true' && needs.release.outputs.prerelease != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -293,4 +304,4 @@ jobs:
       packages: write
     with:
       tag: ${{ needs.release.outputs.version }}
-      latest: true
+      latest: ${{ needs.release.outputs.prerelease != 'true' }}

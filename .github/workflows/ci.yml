@@ -89,6 +89,33 @@ jobs:
       - name: Compare with upstream Temari
         run: make temaridiff
 
+  # The release's binaries job runs only after the tag and the Release exist,
+  # so a broken cross-build or render would publish a release without assets.
+  # This builds and renders them for a made-up version on every push.
+  dist:
+    name: Release files
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      - name: Build and render the release files
+        run: make dist-check
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest
