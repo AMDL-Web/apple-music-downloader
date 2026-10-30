@@ -259,7 +259,9 @@ surface's radius as a `calc()` of its content's radius and padding, so the
 two never drift apart. Pills and circles (`--r-full`, `--r-badge`, `--r-bar`)
 stay round: each such `border-radius` declaration carries `corner-shape:
 round`, and a rule that turns a pill into a rounded box sets `corner-shape`
-back. Every other corner is the skin's `--corner`, which a skin may make a
+back, unless that radius is its own round pills' radius plus the inset to
+them (a capsule bar whose actions can wrap), which keeps both arcs circular
+and concentric. Every other corner is the skin's `--corner`, which a skin may make a
 continuous-curvature superellipse where the browser draws `corner-shape`
 (Chrome and Edge 139+); elsewhere the same radii are circular arcs. Outlines,
 box shadows (inset ones too) and overflow clipping follow the corner shape,
