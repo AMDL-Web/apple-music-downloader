@@ -1,7 +1,7 @@
 // Package ui builds the desktop app's screens with MyGo's native UI, to the
 // design canvas: the queue with the album-lit "downloading now" hero, the job
-// detail, the new-download preview and catalog search, the library, settings, system, the menu
-// bar panel, and their empty, loading and error states, dark and light.
+// detail, the new-download preview and catalog search, settings, system, the
+// menu bar panel, and their empty, loading and error states, dark and light.
 package ui
 
 import (
@@ -21,7 +21,6 @@ type Screen int
 // Screens.
 const (
 	ScreenQueue Screen = iota
-	ScreenLibrary
 	ScreenSystem
 	ScreenSettings
 	ScreenDetail
@@ -96,9 +95,6 @@ type App struct {
 	// click since confirmAt.
 	confirmAll string
 	confirmAt  time.Time
-	// libKind is the library's tab, an index of store.LibraryKinds.
-	libKind int
-	libList ui.ListState
 	// panelH is the height the tray panel was last fitted to.
 	panelH float32
 }

@@ -36,7 +36,7 @@ func (a *App) detail(c *ui.Context, k *Tokens) {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(12).Children(func() {
 			kind := strings.ToUpper(j.Type[:min(1, len(j.Type))]) + j.Type[min(1, len(j.Type)):]
 			if j.TotalItems > 0 {
-				kind += fmt.Sprintf(" · %d tracks", j.TotalItems)
+				kind += " · " + plural(j.TotalItems, "track")
 			}
 			label(c, k, kind).TextColor(hc.label)
 			display(c, j.Name(), 52).TextColor(hc.title).MaxLines(2).Ellipsis("…")
@@ -47,7 +47,7 @@ func (a *App) detail(c *ui.Context, k *Tokens) {
 					tag(c, k, q, isHiRes(format.Quality(it.Codec, it.BitDepth, it.SampleRate, 0)), hc.meta)
 				}
 				if b := j.Bytes(); b > 0 {
-					tag(c, k, fmt.Sprintf("%d tracks · %s", j.TotalItems, format.Bytes(b)), false, hc.meta)
+					tag(c, k, plural(j.TotalItems, "track")+" · "+format.Bytes(b), false, hc.meta)
 				}
 			})
 			ui.Row(c).Gap(12).MaxWidth(620).Margin(8, 0, 0, 0).Children(func() {

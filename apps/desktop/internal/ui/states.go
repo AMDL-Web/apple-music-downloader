@@ -98,8 +98,21 @@ func (a *App) startFailed(c *ui.Context, k *Tokens) {
 	})
 }
 
-// emptyQueue is the first launch, or a tab with nothing in it.
-func (a *App) emptyQueue(c *ui.Context, k *Tokens) {
+// emptyQueue is the first launch, or a tab with nothing in it. quiet leaves
+// out the drawing, under a hero that already holds the eye.
+func (a *App) emptyQueue(c *ui.Context, k *Tokens, quiet bool) {
+	if quiet {
+		ui.Column(c).Grow(1).Center().Gap(6).Padding(24).Children(func() {
+			if a.Tab != 0 {
+				ui.Text(c, "Nothing here").FontSize(15).FontWeight(650)
+				return
+			}
+			ui.Text(c, "Nothing downloading").FontSize(15).FontWeight(650)
+			ui.Text(c, "Paste a link or search Apple Music in the field above ("+shortcutLabel+").").
+				FontSize(12.5).TextColor(k.Muted).TextAlign(ui.Center).MaxWidth(360)
+		})
+		return
+	}
 	ui.Column(c).Grow(1).Center().Gap(14).Padding(24).Children(func() {
 		stack := ui.Box(c).Size(150, 110)
 		stack.Children(func() {

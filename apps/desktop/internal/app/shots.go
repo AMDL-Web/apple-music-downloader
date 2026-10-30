@@ -47,7 +47,7 @@ func (a *App) captureScreens(dir string) {
 	// Covers and the followed jobs' tracks arrive a moment after the list.
 	time.Sleep(4 * time.Second)
 	// moving names the shots whose motion cover plays.
-	moving := map[string]bool{"07-library": true, "13-detail-done": true}
+	moving := map[string]bool{"07-home": true, "13-detail-done": true}
 	shot := func(name string, setup func(), settle time.Duration) {
 		a.post(setup)
 		time.Sleep(settle)
@@ -88,16 +88,18 @@ func (a *App) captureScreens(dir string) {
 		a.view.Go(appui.ScreenNew)
 		a.store.SetOmniText(shotAlbum + "\nhttps://music.apple.com/cn/music-video/clip/1")
 	}, 4*time.Second)
-	shot("07-library", func() { a.store.SetOmniText(""); a.view.Go(appui.ScreenLibrary) }, 6*time.Second)
 	shot("08-system", func() { a.view.Go(appui.ScreenSystem) }, 3*time.Second)
 	shot("10-new-light", func() {
 		a.view.Theme = "light"
 		a.view.Go(appui.ScreenNew)
 		a.store.SetOmniText(shotAlbum)
 	}, 3*time.Second)
-	shot("11-library-light", func() { a.store.SetOmniText(""); a.view.Go(appui.ScreenLibrary) }, 2500*time.Millisecond)
 	shot("12-system-light", func() { a.view.Go(appui.ScreenSystem) }, 2500*time.Millisecond)
 	a.waitFinished(job)
+	// With nothing downloading, the queue shows the album that just
+	// finished, playing its 3:4 loop, over the covers of those before it.
+	shot("07-home", func() { a.store.SetOmniText(""); a.view.Theme = a.opts.Theme; a.view.Go(appui.ScreenQueue) }, 6*time.Second)
+	shot("11-home-light", func() { a.view.Theme = "light" }, 2500*time.Millisecond)
 	shot("13-detail-done", func() { a.view.Theme = a.opts.Theme; a.view.OpenJob(job) }, 3*time.Second)
 	a.searchShots(shot)
 	time.Sleep(500 * time.Millisecond)

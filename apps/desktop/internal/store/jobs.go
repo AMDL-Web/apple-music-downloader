@@ -295,9 +295,6 @@ func (s *Store) noteStatus(j *Job) {
 		return
 	}
 	s.notified[j.ID] = j.Status
-	if j.Status == domain.JobCompleted {
-		s.Library.stale = true
-	}
 	if s.notifier != nil && (j.Status == domain.JobCompleted || j.Status == domain.JobFailed) {
 		s.notifier.JobFinished(j)
 	}

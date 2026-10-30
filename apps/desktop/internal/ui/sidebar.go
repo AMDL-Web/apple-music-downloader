@@ -33,7 +33,6 @@ func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool) {
 		a.modeCard(c, k)
 		ui.Column(c).Gap(2).Children(func() {
 			a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(0)), ui.Color{})
-			a.navItem(c, k, ScreenLibrary, icLibrary, k.TileLibrary, "Library", countText(a.Store.Counts.Completed), ui.Color{})
 			ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Faint).Padding(8, 10, 4, 10)
 			reading, col := a.systemReading(k)
 			a.navItem(c, k, ScreenSystem, icSystem, k.TileSystem, "System", reading, col)
@@ -187,7 +186,7 @@ func (a *App) rail(c *ui.Context, k *Tokens, vib bool) {
 			s    Screen
 			ic   *ui.SVG
 			name string
-		}{{ScreenQueue, icQueue, "Queue"}, {ScreenLibrary, icLibrary, "Library"}, {ScreenNew, icPlus, "New download"}} {
+		}{{ScreenQueue, icQueue, "Queue"}, {ScreenNew, icPlus, "New download"}} {
 			a.railItem(c, k, it.s, it.ic, it.name)
 		}
 		ui.Spacer(c)

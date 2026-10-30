@@ -14,14 +14,20 @@ import (
 	"amdl/internal/format"
 )
 
-// heroJob is the job whose palette lights the screen: the one downloading
-// now on the queue, the open one on the detail screen.
+// heroJob is the job whose palette lights the screen: on the queue the one
+// downloading now, else the one that finished last; the open one on the
+// detail screen.
 func (a *App) heroJob() *store.Job {
 	switch a.Screen {
 	case ScreenDetail:
 		return a.Store.Detail()
 	case ScreenQueue:
-		return a.Store.Now()
+		if j := a.Store.Now(); j != nil {
+			return j
+		}
+		if f := a.Store.Finished(); len(f) > 0 {
+			return f[0]
+		}
 	}
 	return nil
 }
@@ -32,7 +38,14 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 	if j == nil {
 		return
 	}
-	pal := jobPalette(j, a.motionShown(c, j.MotionArtworkURL))
+	// A narrow window's queue hero shows the still cover.
+	w, _ := c.Size()
+	moving := a.Screen != ScreenQueue || w >= compactWidth
+	pal := jobPalette(j, moving && a.motionShown(c, j.MotionArtworkURL))
+	if a.Screen == ScreenQueue && j.Status == domain.JobCompleted {
+		master, _ := latestMotion(j)
+		pal = latestPalette(j, moving && a.motionShown(c, master))
+	}
 	if !pal.OK {
 		return
 	}
@@ -82,7 +95,8 @@ func jobQuality(j *store.Job) string {
 // 24/48 included.
 func isHiRes(q string) bool { return strings.HasPrefix(q, "ALAC 24/") }
 
-// queueScreen is the main screen: the album downloading now, then the queue.
+// queueScreen is the main screen: the album downloading now, or else the
+// one that finished last, the covers of those before it, then the queue.
 func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	s := a.Store
 	if s.Conn.Phase == client.Offline {
@@ -94,9 +108,15 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		}
 		return
 	}
+	finished := s.Finished()
+	var latest *store.Job
 	if j := s.Now(); j != nil {
 		a.hero(c, k, j, compact)
+	} else if len(finished) > 0 {
+		latest = finished[0]
+		a.latestHero(c, k, latest, compact)
 	}
+	a.recentWall(c, k, finished, latest, compact)
 	tabs := []string{fmt.Sprintf("Active · %d", s.Count(store.TabActive)), fmt.Sprintf("Done · %d", s.Count(store.TabDone)),
 		fmt.Sprintf("Failed · %d", s.Count(store.TabFailed)), "All"}
 	ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground).Children(func() {
@@ -109,7 +129,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	})
 	jobs := s.Filter(store.Tab(a.Tab), "")
 	if len(jobs) == 0 {
-		a.emptyQueue(c, k)
+		a.emptyQueue(c, k, latest != nil)
 		return
 	}
 	ui.List(c.Key("queue"), &a.queue, len(jobs), func(i int) {
@@ -146,7 +166,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 					tag(c, k, q, isHiRes(q), hc.meta)
 				}
 				if j.TotalItems > 0 {
-					tag(c, k, fmt.Sprintf("%d tracks", j.TotalItems), false, hc.meta)
+					tag(c, k, plural(j.TotalItems, "track"), false, hc.meta)
 				}
 			})
 			ui.Column(c).MaxWidth(600).Gap(6).Margin(6, 0, 0, 0).Children(func() {
@@ -179,7 +199,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 }
 
 func (a *App) heroProgressText(j *store.Job) string {
-	parts := []string{fmt.Sprintf("%d of %d tracks", j.Done(), j.TotalItems)}
+	parts := []string{fmt.Sprintf("%d of %s", j.Done(), plural(j.TotalItems, "track"))}
 	var down, dec int
 	for _, it := range j.Items {
 		switch it.Status {

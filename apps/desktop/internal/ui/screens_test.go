@@ -39,21 +39,53 @@ func TestNewDownloadSaysWhatWillStart(t *testing.T) {
 	}
 }
 
-func TestLibraryShowsTheNewestLarge(t *testing.T) {
+func TestQueueShowsTheLatestDownloadUntilOneRuns(t *testing.T) {
 	a, _ := newTestApp(remoteSettings())
-	a.Screen = ScreenLibrary
-	done := time.Now()
-	l := &a.Store.Library
-	l.Loaded, l.Total = true, 2
-	l.Jobs = []domain.Job{
-		{ID: "a", Type: "album", Status: domain.JobCompleted, Title: "Newest Album", ArtistName: "Artist A", TotalItems: 5, FinishedAt: &done},
-		{ID: "b", Type: "album", Status: domain.JobCompleted, Title: "Older Album", ArtistName: "Artist B", TotalItems: 9},
+	s := a.Store
+	now := time.Now()
+	job := func(id, title string, status domain.JobStatus, created time.Time, finished *time.Time) *store.Job {
+		return &store.Job{Job: domain.Job{ID: id, Type: "album", Status: status, Title: title, ArtistName: "Artist " + id, TotalItems: 5, CreatedAt: created, FinishedAt: finished}}
 	}
+	earlier, later := now.Add(-time.Hour), now.Add(-time.Minute)
+	// The feed lists jobs by creation: a, added first, finished last, as a
+	// retried download does.
+	s.Loaded = true
+	s.Counts = domain.JobStatusCounts{Completed: 12, Total: 12}
+	s.Jobs = []*store.Job{
+		job("b", "Older Album", domain.JobCompleted, now.Add(-2*time.Hour), &earlier),
+		job("a", "Newest Album", domain.JobCompleted, now.Add(-3*time.Hour), &later),
+	}
+	// The album downloaded once before: the hero's cover is not repeated.
+	again := job("a0", "Newest Album", domain.JobCompleted, now.Add(-5*time.Hour), &earlier)
+	again.ArtistName = "Artist a"
+	s.Jobs = append(s.Jobs, again)
 	tt := ui.NewTester(a.View, 1280, 800)
-	for _, want := range []string{"Library", "Albums", "Newest Album", "Older Album", "Artist B", "Details", "2 albums"} {
+	for _, want := range []string{"LATEST DOWNLOAD · FINISHED " + strings.ToUpper(dayClock(later, now)), "Newest Album", "Older Album", "All 12 in Done →"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in %q", want, tt.Texts())
 		}
+	}
+	if err := tt.Click("All 12 in Done →"); err != nil {
+		t.Fatal(err)
+	}
+	if store.Tab(a.Tab) != store.TabDone {
+		t.Errorf("the wall's link shows tab %d, want Done", a.Tab)
+	}
+	a.Tab = int(store.TabActive)
+	tt.Frame()
+	if got := strings.Count(strings.Join(tt.Texts(), "\n"), "Newest Album"); got != 1 {
+		t.Errorf("Newest Album shows %d times, want once, in the hero: %q", got, tt.Texts())
+	}
+
+	// A download under way takes the hero's place; the covers stay. The
+	// Active tab lists neither finished album, so only the covers name them.
+	s.Jobs = append([]*store.Job{job("c", "Running Album", domain.JobRunning, now, nil)}, s.Jobs...)
+	tt.Frame()
+	if !tt.HasText("DOWNLOADING NOW") || tt.HasText("LATEST DOWNLOAD · FINISHED "+strings.ToUpper(dayClock(later, now))) {
+		t.Errorf("with a download running: %q", tt.Texts())
+	}
+	if !tt.HasText("Newest Album") || !tt.HasText("Older Album") {
+		t.Errorf("the covers left with a download running: %q", tt.Texts())
 	}
 }
 

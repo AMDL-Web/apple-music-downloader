@@ -50,8 +50,6 @@ func (a *App) View(c *ui.Context) {
 						a.detail(c, k)
 					case ScreenNew:
 						a.newDownload(c, k, compact)
-					case ScreenLibrary:
-						a.library(c, k, compact)
 					case ScreenSystem:
 						a.system(c, k, compact)
 					default:
@@ -67,7 +65,6 @@ func (a *App) View(c *ui.Context) {
 func (a *App) shortcuts(c *ui.Context) {
 	c.OnShortcut(ui.Cmd, ui.KeyL, a.FocusOmni)
 	c.OnShortcut(ui.Cmd, ui.Key1, func() { a.Go(ScreenQueue) })
-	c.OnShortcut(ui.Cmd, ui.Key2, func() { a.Go(ScreenLibrary) })
 	c.OnShortcut(ui.Cmd, ui.KeyComma, func() { a.Go(ScreenSettings) })
 	if a.Screen == ScreenDetail && c.Shortcut(0, ui.KeyEscape) {
 		a.Go(ScreenQueue)
@@ -106,7 +103,7 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, compact bool) {
 }
 
 // omniField is the one field: paste links to download, or type to search
-// Apple Music (the library, on its screen).
+// Apple Music.
 func (a *App) omniField(c *ui.Context, k *Tokens) {
 	s := a.Store
 	focused := c.Focused(a.omni)
@@ -117,9 +114,7 @@ func (a *App) omniField(c *ui.Context, k *Tokens) {
 	}
 	box.Children(func() {
 		ic, hint := icLink, "Paste a link, or search Apple Music"
-		if a.Screen == ScreenLibrary {
-			ic, hint = icSearch, "Search the library"
-		} else if term, _ := a.searchText(); term != "" {
+		if term, _ := a.searchText(); term != "" {
 			ic = icSearch
 		}
 		ui.Icon(c, ic).FontSize(14).TextColor(k.Faint)
@@ -128,10 +123,9 @@ func (a *App) omniField(c *ui.Context, k *Tokens) {
 			Placeholder(hint).Label(hint)
 		if in.Changed() {
 			s.SetOmniText(a.omniTxt)
-			// Links preview and words search on the new download screen;
-			// the library keeps its own search.
+			// Links preview and words search on the new download screen.
 			term, _ := a.searchText()
-			if (len(s.Omni.Links) > 0 || term != "" && a.Screen != ScreenLibrary) && a.Screen != ScreenNew {
+			if (len(s.Omni.Links) > 0 || term != "") && a.Screen != ScreenNew {
 				a.Go(ScreenNew)
 			}
 		}

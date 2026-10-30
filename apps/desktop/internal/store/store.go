@@ -59,8 +59,6 @@ type Store struct {
 	Search Search
 	// Notice is the latest message for a toast, or zero.
 	Notice Notice
-	// Library is the finished downloads the library screen pages through.
-	Library Library
 	// Server is the backend's health, resources and settings in effect, for
 	// the system screen and the tray panel.
 	Server Server
@@ -68,6 +66,8 @@ type Store struct {
 	nextSeq   int
 	followers map[string]context.CancelFunc
 	notified  map[string]domain.JobStatus
+	// tracksRead names the jobs whose tracks WantTracks read.
+	tracksRead map[string]bool
 }
 
 // Notice is a short message about an action's outcome.
@@ -89,10 +89,10 @@ func (s *Store) reset() {
 	s.Conn, s.ConnChanged, s.LastLive, s.Loaded = client.ConnState{Phase: client.Connecting}, s.now(), time.Time{}, false
 	s.Jobs, s.byID, s.Counts = nil, map[string]*Job{}, domain.JobStatusCounts{}
 	s.Selection, s.DetailID = map[string]bool{}, ""
-	s.followers, s.notified = map[string]context.CancelFunc{}, map[string]domain.JobStatus{}
+	s.followers, s.notified, s.tracksRead = map[string]context.CancelFunc{}, map[string]domain.JobStatus{}, map[string]bool{}
 	s.Omni.reset()
 	s.Search.reset()
-	s.Library, s.Server = Library{}, Server{}
+	s.Server = Server{}
 }
 
 // SetNotifier sets who hears about finished jobs.
