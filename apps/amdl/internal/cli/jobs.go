@@ -54,7 +54,7 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	overwrite := fs.Bool("overwrite", false, "overwrite files already on disk instead of skipping them (destructive)")
 	wait := fs.Bool("wait", false, "wait until every job finishes and print them")
 	watch := fs.Bool("watch", false, "stream the jobs' events as NDJSON until they finish")
-	timeout := fs.Duration("timeout", 2*time.Hour, "how long --wait or --watch waits")
+	timeout := fs.Duration("timeout", 2*time.Hour, "how long --wait or --watch waits for all the jobs together, as a duration such as 90s, 20m or 2h (default 2h); 0 only looks once")
 	return func(e *env, args []string) error {
 		urls, err := readURLs(e, args)
 		if err != nil {
@@ -116,11 +116,11 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		var finals []map[string]any
 		failed := 0
 		for _, id := range ids {
-			d, err := e.follow(ctx, id, *watch, watchOpts{interval: 2 * time.Second})
+			d, err := e.follow(ctx, id, *watch, watchOpts{interval: 2 * time.Second, stopAtTerminal: !*watch})
 			if err != nil {
-				return e.waitErr(err, id, finals)
+				return e.waitErr(err, id, d, finals)
 			}
-			s := summary(d)
+			s := waitSummary(d)
 			if *watch {
 				if err := e.out.line(map[string]any{"type": "job_snapshot", "job": s}); err != nil {
 					return err
@@ -199,11 +199,26 @@ func jobIDs(b domain.BatchSubmitResponse) []string {
 type watchOpts struct {
 	types    map[string]bool
 	interval time.Duration
+	// stopAtTerminal returns once the job is finished instead of waiting for
+	// its post-download hooks.
+	stopAtTerminal bool
+}
+
+// waitSummary is the summary of a job a wait found finished, marked when its
+// post-download hooks are still running.
+func waitSummary(d client.DownloadDetail) map[string]any {
+	s := summary(d)
+	if client.Terminal(d.Job.Status) && d.HooksRunning() {
+		s["hooks_running"] = true
+	}
+	return s
 }
 
 // follow follows one job until it is finished and returns its final detail. It
 // prints the job's events as NDJSON when lines is set, and a progress line on a
-// terminal's stderr otherwise.
+// terminal's stderr otherwise. A job that is finished when ctx ends is not a
+// timeout, and a ctx that is over from the start makes follow a single look at
+// the job. On a timeout it returns the job's fresh detail with the error.
 func (e *env) follow(ctx context.Context, id string, lines bool, o watchOpts) (client.DownloadDetail, error) {
 	var d client.DownloadDetail
 	items := map[string]int{}
@@ -211,6 +226,7 @@ func (e *env) follow(ctx context.Context, id string, lines bool, o watchOpts) (c
 	var rate progress.Rate
 	var lineErr error
 	h := client.JobHandlers{
+		StopAtTerminal: o.stopAtTerminal,
 		Detail: func(dd client.DownloadDetail) {
 			d = dd
 			items = jobview.Index(d)
@@ -242,6 +258,17 @@ func (e *env) follow(ctx context.Context, id string, lines bool, o watchOpts) (c
 	if lineErr != nil {
 		return d, lineErr
 	}
+	if errors.Is(err, context.DeadlineExceeded) && e.ctx.Err() == nil {
+		if fresh, ferr := e.c.Download(e.ctx, id); ferr == nil {
+			d = fresh
+			if client.Terminal(d.Job.Status) {
+				err = nil
+				if d.HooksRunning() && !o.stopAtTerminal {
+					e.note("post-download hooks are still running")
+				}
+			}
+		}
+	}
 	if err == nil && !client.Terminal(d.Job.Status) {
 		d, err = e.c.Download(e.ctx, id)
 	}
@@ -269,14 +296,20 @@ func (e *env) progressLine(d client.DownloadDetail, rate *progress.Rate) {
 }
 
 // waitErr turns the end of a wait that did not see the job finish into the
-// right error, printing what is known so far first.
-func (e *env) waitErr(err error, id string, done []map[string]any) error {
+// right error, printing what is known so far first: d is the job's latest
+// detail and done holds the jobs of the same command that finished before it.
+func (e *env) waitErr(err error, id string, d client.DownloadDetail, done []map[string]any) error {
 	switch {
 	case errors.Is(err, client.ErrJobGone):
 		return &cliError{Code: "job_not_found", exit: exitNotFound, Message: "job " + id + " no longer exists"}
 	case errors.Is(err, context.DeadlineExceeded):
-		if d, derr := e.c.Download(e.ctx, id); derr == nil {
-			_ = e.out.result(append(done, summary(d))) // the error below is the outcome either way
+		if d.Job.ID != "" {
+			// One job is an object, as when it finishes; several are an array.
+			var out any = summary(d)
+			if len(done) > 0 {
+				out = append(done, summary(d))
+			}
+			_ = e.out.result(out) // the error below is the outcome either way
 		}
 		return &cliError{Code: "wait_timeout", exit: exitWaitTimeout,
 			Message: "job " + id + " is still running", Hint: "amdl jobs wait " + id}
@@ -285,18 +318,18 @@ func (e *env) waitErr(err error, id string, done []map[string]any) error {
 }
 
 func jobsWaitCmd(fs *flag.FlagSet) func(e *env, args []string) error {
-	timeout := fs.Duration("timeout", 2*time.Hour, "how long to wait")
+	timeout := fs.Duration("timeout", 2*time.Hour, "how long to wait, as a duration such as 90s, 20m or 2h (default 2h); 0 only looks once")
 	return func(e *env, args []string) error {
 		if len(args) != 1 {
 			return usageErr("usage: amdl jobs wait <job_id>")
 		}
 		ctx, cancel := context.WithTimeout(e.ctx, *timeout)
 		defer cancel()
-		d, err := e.follow(ctx, args[0], false, watchOpts{})
+		d, err := e.follow(ctx, args[0], false, watchOpts{stopAtTerminal: true})
 		if err != nil {
-			return e.waitErr(err, args[0], nil)
+			return e.waitErr(err, args[0], d, nil)
 		}
-		if err := e.out.result(summary(d)); err != nil {
+		if err := e.out.result(waitSummary(d)); err != nil {
 			return err
 		}
 		if d.Job.Status != domain.JobCompleted {
@@ -310,6 +343,7 @@ func jobsWaitCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 func jobsWatchCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	types := fs.String("types", "", "comma-separated event types to print, such as item_completed,item_failed (default all)")
 	interval := fs.Duration("progress-interval", 2*time.Second, "least time between two item_progress lines of one track; 0 prints all")
+	timeout := fs.Duration("timeout", 0, "with a job id, stop watching after this long, as a duration such as 90s, 20m or 2h (default 0: no limit)")
 	return func(e *env, args []string) error {
 		o := watchOpts{interval: *interval}
 		if *types != "" {
@@ -320,14 +354,23 @@ func jobsWatchCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		}
 		switch len(args) {
 		case 0:
+			if *timeout > 0 {
+				return usageErr("--timeout needs a job id: amdl jobs watch <job_id> --timeout 20m")
+			}
 			return e.watchFeed(o)
 		case 1:
 		default:
 			return usageErr("usage: amdl jobs watch [<job_id>]")
 		}
-		d, err := e.follow(e.ctx, args[0], true, o)
+		ctx := e.ctx
+		if *timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(e.ctx, *timeout)
+			defer cancel()
+		}
+		d, err := e.follow(ctx, args[0], true, o)
 		if err != nil {
-			return e.waitErr(err, args[0], nil)
+			return e.waitErr(err, args[0], d, nil)
 		}
 		return e.out.line(map[string]any{"type": "job_snapshot", "job": summary(d)})
 	}

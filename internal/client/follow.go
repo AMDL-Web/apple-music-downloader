@@ -134,13 +134,18 @@ type JobHandlers struct {
 	// up to that snapshot's EventCursor are older than it: a receiver keeps
 	// the snapshot's state over theirs.
 	FromStart bool
+	// StopAtTerminal ends the follow as soon as the job is finished, without
+	// waiting for its post-download hooks, which run after the terminal
+	// status. DownloadDetail.HooksRunning on the last Detail says whether any
+	// still do.
+	StopAtTerminal bool
 }
 
 // ErrJobGone is returned by FollowJob when the job no longer exists.
 var ErrJobGone = errors.New("job not found")
 
 // FollowJob follows one job until it is finished and nothing more will
-// arrive for it (nil), the job is deleted (ErrJobGone), or ctx ends. It reads
+// arrive for it, hooks included unless StopAtTerminal is set (nil), the job is deleted (ErrJobGone), or ctx ends. It reads
 // GET /api/v1/downloads/{id}, then its event stream from that snapshot's
 // cursor, resuming after breaks. When the stream ends cleanly or answers 204
 // it reads the snapshot again, which tells a finished job from a broken
@@ -170,12 +175,14 @@ func (c *Client) FollowJob(ctx context.Context, id string, h JobHandlers) error 
 			cursor, needDetail = strconv.FormatInt(d.EventCursor, 10), false
 			if first && h.FromStart {
 				cursor = "0"
-			} else if Terminal(d.Job.Status) && !hookRunning(d.Hooks) {
+			} else if Terminal(d.Job.Status) && (h.StopAtTerminal || !d.HooksRunning()) {
 				return nil
 			}
 			first = false
 		}
-		res, err := c.Stream(ctx, path, cursor, nil, func(ev Event) {
+		sctx, stop := context.WithCancel(ctx)
+		finished := false
+		res, err := c.Stream(sctx, path, cursor, nil, func(ev Event) {
 			var e domain.Event
 			if json.Unmarshal([]byte(ev.Data), &e) != nil {
 				return
@@ -183,12 +190,21 @@ func (c *Client) FollowJob(ctx context.Context, id string, h JobHandlers) error 
 			if h.Event != nil {
 				h.Event(e)
 			}
+			if h.StopAtTerminal && finishesJob(e.Type) {
+				finished = true
+				stop()
+			}
 		})
+		stop()
 		cursor = res.LastID
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		switch {
+		case finished:
+			// The snapshot decides: a job_failed event can be followed by a retry.
+			needDetail = true
+			retry.reset()
 		case res.Status == http.StatusNotFound:
 			return ErrJobGone
 		case res.Status == http.StatusNoContent || (err == nil && res.Status == http.StatusOK):
@@ -206,13 +222,9 @@ func (c *Client) FollowJob(ctx context.Context, id string, h JobHandlers) error 
 	return ctx.Err()
 }
 
-func hookRunning(hooks []domain.HookState) bool {
-	for _, h := range hooks {
-		if h.Status == "running" {
-			return true
-		}
-	}
-	return false
+// finishesJob reports whether an event type announces a terminal job status.
+func finishesJob(t domain.EventType) bool {
+	return t == domain.EventJobFinished || t == domain.EventJobFailed || t == domain.EventJobCancelled
 }
 
 // retry is an exponential backoff between RetryMin and RetryMax.

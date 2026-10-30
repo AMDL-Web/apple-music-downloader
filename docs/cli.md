@@ -32,7 +32,7 @@ An unknown command fails with `usage_error` and `details.did_you_mean`.
 | `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--overwrite] [--wait\|--watch] [--timeout]` | `POST /downloads` | write; destructive with `--overwrite` |
 | `jobs list [--status] [--type] [--q] [--sort] [--order] [--limit] [--offset]` | `GET /downloads` | read |
 | `jobs get <job_id> [--view summary\|full]` | `GET /downloads/{job_id}` | read |
-| `jobs watch [<job_id>] [--types] [--progress-interval]` | the job's event stream, or the overview feed | read |
+| `jobs watch [<job_id>] [--types] [--progress-interval] [--timeout]` | the job's event stream, or the overview feed | read |
 | `jobs wait <job_id> [--timeout]` | the job's event stream | read |
 | `jobs cancel <job_id>`, `jobs retry <job_id>` | `POST …/cancel`, `…/retry` | write |
 | `jobs delete <job_id>` | `DELETE /downloads/{job_id}` | destructive |
@@ -74,6 +74,20 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
 - **stderr** carries notes for people only when it is a terminal: the server in use
   (`→ nas (http://…)`) and a progress line while waiting. `--quiet` drops them. Anywhere
   else stderr holds nothing but the error object.
+
+## Waiting
+
+- `download --wait` and `jobs wait` return as soon as the job is finished, without waiting for
+  its post-download hooks, and add `hooks_running: true` to the result while any still run.
+- `download --watch` and `jobs watch <job_id>` keep streaming until the hooks have ended too.
+- A finished job never ends in `wait_timeout`, and `--timeout 0` (or a negative value) looks
+  once: a finished job gives its normal result and exit status, a running one `wait_timeout`.
+- `--timeout` takes a duration such as `90s`, `20m` or `2h`; it defaults to `2h` for
+  `jobs wait` and for `download --wait|--watch` (all its jobs together), and to no limit for
+  `jobs watch <job_id>`.
+- `logs tail` and `jobs watch` without an id have no timeout and run until interrupted.
+- A timed-out wait prints the job it was waiting for before the error: an object for one job,
+  an array for several.
 
 ## Errors and exit statuses
 
@@ -152,8 +166,10 @@ of the [Errors](#errors-and-exit-statuses) table.
   `accepted[].job_id` and `rejected[]`; links already queued or running come back
   rejected with `existing_job_id`.
 - **`wait_for_job`** follows one job for at most `timeout_s` seconds
-  (`apps/amdl/internal/mcpserver#maxWait`) and answers `{done, job}`, the job in the
-  summary view of `jobs get`. While it waits it sends `notifications/progress` with the
+  (`apps/amdl/internal/mcpserver#maxWait`, default 120; a value outside 1 to 300 is an
+  `invalid_arguments` error) and answers `{done, job}`, the job in the summary view of
+  `jobs get`, as soon as the job is finished, with `hooks_running: true` while its hooks
+  still run. While it waits it sends `notifications/progress` with the
   album's percent, when the call carried a progress token. On `done: false`, or when the
   client lost the request, calling it again is safe.
 - **`list_jobs`** returns compact rows (`apps/amdl/internal/jobview#Row`), and

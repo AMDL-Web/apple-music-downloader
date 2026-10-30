@@ -98,6 +98,17 @@ type DownloadDetail struct {
 	EventCursor int64              `json:"event_cursor"`
 }
 
+// HooksRunning reports whether a post-download hook of the job is still
+// running, which can outlast the job's terminal status.
+func (d DownloadDetail) HooksRunning() bool {
+	for _, h := range d.Hooks {
+		if h.Status == "running" {
+			return true
+		}
+	}
+	return false
+}
+
 // Lookup is the LookupResponse schema: a parsed link and its catalog
 // metadata, with the Job field names.
 type Lookup struct {

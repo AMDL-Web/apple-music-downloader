@@ -220,7 +220,7 @@ var customSchemas = map[string]map[string]any{
 	}, "job_id"),
 	"wait_for_job": obj(map[string]any{
 		"job_id":    jobID,
-		"timeout_s": map[string]any{"type": "integer", "minimum": 1, "maximum": maxWait, "description": "How long to wait, default 120 seconds. On done=false call again."},
+		"timeout_s": map[string]any{"type": "integer", "minimum": 1, "maximum": maxWait, "description": "How long to wait, default 120 seconds. On done=false call again. A finished job answers done=true at once, with hooks_running=true while its post-download hooks still run."},
 	}, "job_id"),
 	"get_status": obj(map[string]any{}),
 	"get_config": obj(map[string]any{
@@ -445,7 +445,13 @@ func (h handlers) waitForJob(ctx context.Context, req *mcp.CallToolRequest, args
 	if err != nil {
 		return nil, err
 	}
-	timeout := min(max(intArg(args, "timeout_s", 120), 1), maxWait)
+	timeout := intArg(args, "timeout_s", 120)
+	if v, ok := args["timeout_s"].(float64); (!ok && args["timeout_s"] != nil) || v != float64(int64(v)) {
+		return nil, argError{"timeout_s must be a whole number"}
+	}
+	if timeout < 1 || timeout > maxWait {
+		return nil, argError{fmt.Sprintf("timeout_s must be between 1 and %d", maxWait)}
+	}
 	wctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 	token := req.Params.GetProgressToken()
@@ -470,27 +476,31 @@ func (h handlers) waitForJob(ctx context.Context, req *mcp.CallToolRequest, args
 			ProgressToken: token, Progress: float64(a.Percent), Total: 100, Message: msg})
 	}
 	err = h.c.FollowJob(wctx, id, client.JobHandlers{
-		Detail: func(dd client.DownloadDetail) { d, index = dd, jobview.Index(dd); notify() },
-		Event:  func(ev domain.Event) { jobview.Apply(&d, index, ev); notify() },
+		StopAtTerminal: true,
+		Detail:         func(dd client.DownloadDetail) { d, index = dd, jobview.Index(dd); notify() },
+		Event:          func(ev domain.Event) { jobview.Apply(&d, index, ev); notify() },
 	})
 	switch {
 	case errors.Is(err, client.ErrJobGone):
 		return nil, &client.APIError{Status: http.StatusNotFound, Code: "job_not_found", Message: "job " + id + " no longer exists"}
 	case err != nil && wctx.Err() != nil && ctx.Err() == nil:
-		// The timeout passed with the job still going: report where it is.
+		// The timeout passed: report where the job is, which may be the end.
 		if fresh, ferr := h.c.Download(ctx, id); ferr == nil {
 			d = fresh
 		}
-		return map[string]any{"done": false, "job": jobview.Summary(d)}, nil
 	case err != nil:
 		return nil, err
 	}
-	if !client.Terminal(d.Job.Status) {
+	if !client.Terminal(d.Job.Status) && err == nil {
 		if d, err = h.c.Download(ctx, id); err != nil {
 			return nil, err
 		}
 	}
-	return map[string]any{"done": true, "job": jobview.Summary(d)}, nil
+	out := map[string]any{"done": client.Terminal(d.Job.Status), "job": jobview.Summary(d)}
+	if out["done"] == true && d.HooksRunning() {
+		out["hooks_running"] = true
+	}
+	return out, nil
 }
 
 // getStatus gathers what an agent checks before downloading: the server, its

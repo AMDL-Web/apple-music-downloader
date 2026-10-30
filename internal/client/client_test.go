@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -227,6 +228,37 @@ func TestFollowJobConfirmsTerminalAfter204(t *testing.T) {
 	}
 	if details != 2 {
 		t.Errorf("read the detail %d times, want 2 (start, then to confirm the end)", details)
+	}
+}
+
+// While a hook runs the backend keeps the stream open after the job is done.
+func TestFollowJobStopsAtTerminalWithoutWaitingForHooks(t *testing.T) {
+	var details atomic.Int32
+	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, `id: 4`+"\nevent: job_finished\n"+`data: {"id":4,"job_id":"j","type":"job_finished"}`+"\n\n")
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		status := domain.JobRunning
+		hooks := []domain.HookState{}
+		if details.Add(1) > 1 {
+			status = domain.JobCompleted
+			hooks = []domain.HookState{{Name: "notify", Status: "running"}}
+		}
+		_ = json.NewEncoder(w).Encode(DownloadDetail{Job: domain.Job{ID: "j", Status: status}, Hooks: hooks, EventCursor: 3})
+	}))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var last DownloadDetail
+	err := c.FollowJob(ctx, "j", JobHandlers{StopAtTerminal: true, Detail: func(d DownloadDetail) { last = d }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last.Job.Status != domain.JobCompleted || !last.HooksRunning() {
+		t.Errorf("last detail = %+v, want a completed job whose hook runs", last)
 	}
 }
 
