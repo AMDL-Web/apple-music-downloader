@@ -335,13 +335,22 @@
 }
 
 .hook-row,
+/* A tool continues the Runtime rows above it: the same two columns as .kv-row. */
 .tool-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2) var(--s-3);
+  display: grid;
+  grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--s-3);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+}
+
+.tool-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-3);
+  min-width: 0;
 }
 
 .hook-error {
@@ -363,11 +372,19 @@
   line-height: var(--lh-12);
 }
 
+/* One grid for the whole list: the label column is as wide as the widest
+   label (up to 11em), so every message starts at the same x. */
+.activity-list {
+  display: grid;
+  grid-template-columns: 5.5em fit-content(11em) minmax(0, 1fr);
+  column-gap: var(--s-2);
+}
+
 .activity-row {
   display: grid;
-  grid-template-columns: 5.5em auto minmax(0, 1fr);
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: baseline;
-  gap: var(--s-2);
 }
 
 .activity-time {
@@ -470,9 +487,11 @@
   font-weight: var(--w-semibold);
 }
 
+/* Label, id and Copy on one row; a long id wraps inside its own column. */
 .drawer-id {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-items: start;
   align-items: center;
   gap: var(--s-1) var(--s-2);
   font-size: var(--fs-12);

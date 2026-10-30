@@ -57,6 +57,18 @@
   .job-list.job-list-compact.new-results > .new-result > .job-row > .job-updated {
     display: none;
   }
+
+  /* A job with nothing in flight has no progress line: its status sits
+     beside the title, centered on the row like every list's status column. */
+  .job-list.job-list-compact.new-results > .new-result > .job-row[data-progress="off"] {
+    grid-template-rows: auto;
+    grid-template-areas: "art main status";
+    align-items: center;
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row[data-progress="off"] > .job-progress {
+    display: none;
+  }
 }
 
 .new-result-row {

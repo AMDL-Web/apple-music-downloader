@@ -88,10 +88,12 @@ function RuntimeCard({ sys }) {
         ? html`<ul class="tool-list" aria-label="Tools">
             ${s.tools.map(
               (t) => html`<li key=${t.name} class="tool-row">
-                <span class="mono">${t.name}</span>
-                <${StatusText} view=${t.available ? { icon: 'circle-check', role: 'success', label: 'Available' } : { icon: 'circle-x', role: 'danger', label: 'Missing' }} />
-                ${t.path ? html`<span class="mono muted small wrap-any">${t.path}</span>` : null}
-                ${t.available ? null : html`<span class="muted small" title=${t.error || undefined}>Install it, or set <code>tools.${t.name}</code> in configs/config.yaml to its path and restart.</span>`}
+                <span class="tool-name mono">${t.name}</span>
+                <span class="tool-value">
+                  <${StatusText} view=${t.available ? { icon: 'circle-check', role: 'success', label: 'Available' } : { icon: 'circle-x', role: 'danger', label: 'Missing' }} />
+                  ${t.path ? html`<span class="mono muted small wrap-any">${t.path}</span>` : null}
+                  ${t.available ? null : html`<span class="muted small" title=${t.error || undefined}>Install it, or set <code>tools.${t.name}</code> in configs/config.yaml to its path and restart.</span>`}
+                </span>
               </li>`,
             )}
           </ul>`
