@@ -231,3 +231,18 @@ export function probedQuality(values, slots) {
   const text = hit ? `${codecName(hit.id, true)}${best ? `, ${best}` : ''}` : 'AAC (the fallback every track has)';
   return { text, warning: probeWarning(values, slots) };
 }
+
+/**
+ * The dock's quality line. When the qualities of every link to be sent were
+ * read and agree, what each row's Will download line says ("Will download:
+ * Lossless (ALAC), 16-bit / 44.1 kHz"); else what the choice asks for, said
+ * as an ask ("Asks for Lossless (ALAC) up to 24-bit / 192 kHz"): a ceiling,
+ * not what a link has. `probed` holds each link's probedQuality, null while
+ * unread.
+ */
+export function dockQuality(values, probed) {
+  if (!values) return '';
+  const texts = new Set(probed.map((p) => (p ? p.text : null)));
+  if (probed.length && !texts.has(null) && texts.size === 1) return `Will download: ${[...texts][0]}`;
+  return `Asks for ${qualityText(values)}`;
+}

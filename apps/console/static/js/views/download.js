@@ -13,7 +13,7 @@ import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink, mergeLinks } from '../lib/links.js';
 import { handledUrls, resultRows, submitSummary } from '../lib/submit.js';
 import { downloadLabel, servedRegions } from '../lib/submit-check.js';
-import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
+import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality, dockQuality } from '../lib/overrides.js';
 import { isPicked, qualityOverview } from '../lib/lookup.js';
 import { searchTerm, searchCountLine, shownHits, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
 import { artPalette } from '../lib/format.js';
@@ -319,6 +319,7 @@ export function DownloadPage({ route }) {
 
 
   const asks = chosenValues ? qualityText(chosenValues) : '';
+  const probedOf = (url) => (chosenValues && PROBES.has(url) ? probedQuality(chosenValues, qualityOverview(PROBES.get(url))) : null);
   return html`<div class="page page-new" data-mode=${docked ? 'docked' : 'empty'} data-view=${view} data-tinted=${tint ? '' : undefined} style=${style}>
     <div class="new-top">
       <${Compose}
@@ -376,7 +377,7 @@ export function DownloadPage({ route }) {
             onPick,
             overwrite: overwriteOn,
             storefront,
-            probed: (url) => (chosenValues && PROBES.has(url) ? probedQuality(chosenValues, qualityOverview(PROBES.get(url))) : null),
+            probed: probedOf,
           }}
         />`
       : null}
@@ -385,7 +386,7 @@ export function DownloadPage({ route }) {
           barRef=${barRef}
           on=${entries.length > 0}
           count=${linkCount}
-          asks=${asks}
+          asks=${dockQuality(chosenValues, sendable.map(probedOf))}
           label=${label}
           disabled=${busy || sendable.length === 0}
           busy=${busy}

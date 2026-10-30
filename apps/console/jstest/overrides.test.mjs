@@ -15,6 +15,7 @@ import {
   customLabel,
   probeWarning,
   probedQuality,
+  dockQuality,
   rateLabel,
   SAMPLE_RATES,
 } from '../static/js/lib/overrides.js';
@@ -157,6 +158,18 @@ test('qualityText, customLabel and probeWarning say what a download gets', () =>
   ];
   assert.deepEqual(probedQuality(presetValues(d, 'atmos'), probed), { text: 'Lossless (ALAC), 24-bit / 44.1\u00a0kHz', warning: 'Dolby Atmos not offered' });
   assert.equal(probedQuality({ ...presetValues(d, 'atmos'), codec_alternative: false }, probed).text, 'AAC (the fallback every track has)');
+});
+
+test('the dock says what the links will download once read, else what the choice asks for', () => {
+  const d = optionDefaults(SERVER);
+  const cd = { text: 'Lossless (ALAC), 16-bit / 44.1\u00a0kHz', warning: '' };
+  const hires = { text: 'Lossless (ALAC), 24-bit / 96\u00a0kHz', warning: '' };
+  assert.equal(dockQuality(d, [cd]), 'Will download: Lossless (ALAC), 16-bit / 44.1\u00a0kHz', 'as the row says it');
+  assert.equal(dockQuality(d, [cd, cd]), 'Will download: Lossless (ALAC), 16-bit / 44.1\u00a0kHz');
+  assert.equal(dockQuality(d, [cd, null]), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz', 'a link not read yet: the ceiling, said as one');
+  assert.equal(dockQuality(d, [cd, hires]), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz', 'links that differ');
+  assert.equal(dockQuality(d, []), 'Asks for Lossless (ALAC) up to 24-bit / 192 kHz');
+  assert.equal(dockQuality(null, [cd]), '');
 });
 
 test('codec labels and ALAC choices match the Settings fields', async () => {
