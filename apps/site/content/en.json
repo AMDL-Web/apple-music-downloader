@@ -103,11 +103,11 @@
       "points": [
         "A live queue with per-track stages and an album progress bar",
         "Apple's animated covers, where an album has one",
-        "Logs, system health and settings, on desktop and phone"
+        "Logs, and status and settings on one page, on desktop and phone"
       ],
       "shots": {
-        "overview": "The console's overview: two albums downloading in the live queue, the latest finished album and a wall of covers below",
-        "drawer": "A finished album's drawer in its own colors: the album progress bar and every track with its length and size",
+        "overview": "The console's overview: the health line, two albums downloading in the live queue, the latest finished album and a wall of covers",
+        "drawer": "A finished album's drawer over the queue, in the album's colors: the progress bar and every track with its length and size",
         "search": "New download: catalog search results for Yorushika with each song's audio formats",
         "phone": "A finished album's drawer on a phone"
       }
