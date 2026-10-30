@@ -25,9 +25,8 @@ wrapper.
   decorative layer goes before an absolute content layer, as the main
   window's view (`apps/desktop/internal/ui#App`) builds it, never into a
   card beside its content.
-- ffmpeg and other console programs start through `hideWindow`
-  (`apps/desktop/internal/motion`), or each start flashes a console on
-  Windows.
+- ffmpeg and other console programs start through
+  `internal/sysproc#NoConsole`, or each start flashes a console on Windows.
 
 ## Verify
 

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"amdl/internal/sysproc"
 )
 
 // frameReader reads raw RGBA frames of one size from r, each dur long. It
@@ -65,7 +67,7 @@ func newDecoder(ffmpeg, file string, w, h int, fps float64) (*decoder, error) {
 func (d *decoder) start() error {
 	cmd := exec.Command(d.ffmpeg, "-nostdin", "-v", "error", "-stream_loop", "-1", "-i", d.file,
 		"-an", "-vf", "scale="+strconv.Itoa(d.w)+":"+strconv.Itoa(d.h), "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1")
-	hideWindow(cmd)
+	sysproc.NoConsole(cmd)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
