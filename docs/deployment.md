@@ -164,13 +164,25 @@ connection with `GET /api/v1/wrapper/status`.
 | wrapper-manager v2 (recommended) | [wrapper-manager `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
 | wrapper-lite | [wrapper `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
-Both run `wrapper-lite-rootless`, which needs user namespaces and `chroot` on a Linux
-host (x86_64 or arm64): `unshare -Ur true` must succeed there. Docker blocks them by
-default, so the wrapper-manager service runs `privileged: true` (upstream's compose) and
-the wrapper-lite service `security_opt: seccomp:unconfined` (upstream's compose); a
-seccomp profile that allows `unshare` is the alternative. On a host without user
-namespaces, upstream's `wrapper-lite-qemu` launcher boots a guest and serves the same
-HTTP API on port 12340.
+Run natively or in upstream's Docker image, both use `wrapper-lite-rootless`, which needs
+user namespaces and `chroot` on a Linux host (x86_64 or arm64): `unshare -Ur true` must
+succeed there. Docker blocks them by default, so the wrapper-manager service runs
+`privileged: true` (upstream's compose) and the wrapper-lite service
+`security_opt: seccomp:unconfined` (upstream's compose); a seccomp profile that allows
+`unshare` is the alternative.
+
+A host without user namespaces, such as Synology DSM, cannot run that launcher. Run
+wrapper-manager v2's QEMU variant instead (upstream's section
+["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/WorldObservationLog/wrapper-manager/tree/v2)),
+which runs the manager inside a QEMU guest with its own kernel and needs `/dev/kvm`:
+
+- In Docker, `--device /dev/kvm` was the only extra flag needed; no `privileged` and no
+  added capabilities.
+- Start the launcher with `--host 0.0.0.0` so the published port reaches it.
+- The QEMU in the container must have the `user` (slirp) network backend. DSM's own QEMU
+  8.1.5 lacks it; Alpine's `qemu-system-x86_64` package has it.
+- A guest started this way answered `/status` with `ready: true` on a Synology DS923+
+  (DSM 7.3.2). Logging in an Apple account inside the guest is not verified.
 
 `docker-compose.yml` has both as commented services. To use one, uncomment it and set
 `AMDL_WRAPPER_ADDRESS` to its URL:

@@ -20,8 +20,9 @@ What you need:
 
 - An Apple Music subscription.
 - A wrapper: the upstream service that holds your Apple Music login. It runs on Linux
-  (x86_64 or arm64) and needs user namespaces, so `unshare -Ur true` must succeed on that
-  host. Upstream also has QEMU launchers for hosts without them.
+  (x86_64 or arm64). The native and Docker launchers need user namespaces (`unshare -Ur true`
+  must succeed); on a host without them, such as Synology DSM, use wrapper-manager v2's
+  QEMU variant. See [Wrapper](docs/deployment.md#the-wrapper).
 - Docker with Compose, or Go (version in [`go.mod`](go.mod)) and `ffmpeg`.
 
 ## Quick start

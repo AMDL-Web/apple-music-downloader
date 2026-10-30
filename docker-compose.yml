@@ -96,6 +96,7 @@ services:
   # wrapper-lite payload from nightly.link. wrapper-lite-rootless needs user
   # namespaces and chroot, which Docker blocks by default, hence privileged
   # (a seccomp profile that allows unshare works too). Linux amd64 or arm64.
+  # Hosts without user namespaces: see docs/deployment.md, "The wrapper".
   # Uncomment, set AMDL_WRAPPER_ADDRESS above to "http://wrapper-manager:8080",
   # and add the wrapper-data volume at the bottom of this file. Then log in on
   # the console's Account page.

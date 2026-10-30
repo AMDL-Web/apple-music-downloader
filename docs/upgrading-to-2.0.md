@@ -65,7 +65,7 @@ needs the API changes below before it works against 2.0.
    - drop the `./data/logs` mount and any `.p8` key mount;
    - keep `stop_grace_period: 2m`;
    - remove every other `AMDL_*` variable except the five 2.0 reads.
-5. Check the wrapper host: `unshare -Ur true` must succeed (see [Wrapper](#wrapper)).
+5. Check the wrapper host: `unshare -Ur true` must succeed, or use the QEMU variant (see [Wrapper](#wrapper)).
 6. Start 2.0, then confirm `GET /api/v1/wrapper/status` reports `ready` and a region, and
    read `login_supported` to know whether the console can log in.
 
@@ -196,7 +196,7 @@ needs the API changes below before it works against 2.0.
 | `wrapper.address` | gRPC `host:port` | wrapper URL (wrapper-lite or wrapper-manager v2), `http://host:port` or `https://host:port`; anything else, in the file or in `AMDL_WRAPPER_ADDRESS`, fails startup | `config.yaml`, Compose files |
 | `wrapper.insecure` | `true` for plaintext gRPC, `false` for TLS | rejected in the file; the URL scheme picks plaintext (`http`) or TLS 1.2+ (`https`) | `config.yaml` |
 | `wrapper.timeout_seconds` | bound on a unary RPC and on each decrypt-fragment wait | bound on one wrapper HTTP request; decryption has no wrapper timeout | `config.yaml` |
-| Where the wrapper runs | whatever your wrapper-manager deployment needed | `wrapper-lite-rootless`, which both wrapper-lite's Docker image and wrapper-manager v2 run, needs user namespaces and `chroot`: `unshare -Ur true` must succeed on the wrapper host, and a Docker container needs `privileged: true` or a seccomp profile that allows them. Upstream's `wrapper-lite-qemu` launcher boots a guest instead and has no such requirement | wrapper hosts, Compose files |
+| Where the wrapper runs | whatever your wrapper-manager deployment needed | `wrapper-lite-rootless`, which both wrapper-lite's Docker image and wrapper-manager v2 run, needs user namespaces and `chroot`: `unshare -Ur true` must succeed on the wrapper host, and a Docker container needs `privileged: true` or a seccomp profile that allows them. A host without them uses wrapper-manager v2's QEMU variant, which needs `/dev/kvm` ([deployment guide](deployment.md#the-wrapper)) | wrapper hosts, Compose files |
 | Logging in from the console | `POST /wrapper/login`, `/login/{login_id}/2fa` and `/logout` went to the fork's gRPC login | they work only when `wrapper.address` is a wrapper-manager v2, whose `POST /login` and `POST /logout` the backend forwards to; against a bare wrapper-lite they are `501 login_unsupported` and the console's Account page shows the wrapper's `--login` command instead. `GET /wrapper/status` reports which one it is in `login_supported` | the console's Account page, scripts that log in through the API |
 | Wrapper requests | gRPC calls, with `download.max_parallel_wrapper_requests` bounding them | HTTP; 24 lyrics, web playback and license requests and 2 `/key` and `/m3u8` requests at a time, fixed in the code | |
 

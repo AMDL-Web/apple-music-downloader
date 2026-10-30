@@ -19,8 +19,8 @@ amdl 把 Apple Music 上的音乐下载到你自己的磁盘。把单曲、专�
 
 - Apple Music 订阅。
 - 一个 wrapper：保存 Apple Music 登录状态的上游服务。它跑在 Linux（x86_64 或 arm64）上，
-  需要 user namespace，也就是那台主机上 `unshare -Ur true` 必须能成功。没有 user namespace
-  的主机，上游另有 QEMU 启动器。
+  原生和 Docker 启动器需要 user namespace（`unshare -Ur true` 必须能成功）；没有它的主机，
+  例如群晖 DSM，改用 wrapper-manager v2 的 QEMU 变体。见 [Wrapper](docs/deployment.md#the-wrapper)。
 - 带 Compose 的 Docker，或者 Go（版本见 [`go.mod`](go.mod)）加 `ffmpeg`。
 
 ## 快速开始
