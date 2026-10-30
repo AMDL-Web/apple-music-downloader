@@ -24,11 +24,16 @@ func Load(path string) (Config, error) {
 // load is Load with an explicit environment, so tests and bootstrapping can
 // read files without baking process overrides into them.
 func load(path string, environ []string) (Config, error) {
-	cfg := Default()
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return cfg, err
+		return Default(), err
 	}
+	return loadBytes(path, raw, environ)
+}
+
+// loadBytes is load for a file already read; path labels its errors.
+func loadBytes(path string, raw []byte, environ []string) (Config, error) {
+	cfg := Default()
 	if unknown := unknownKeys(raw); len(unknown) > 0 {
 		return cfg, fmt.Errorf("%s: unknown config key(s) %s; removed keys and their replacements are listed in %s",
 			path, strings.Join(unknown, ", "), UpgradeGuide)

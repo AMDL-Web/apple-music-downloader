@@ -8,9 +8,9 @@ Everything lives in one file. `AMDL_CONFIG` picks its path; the default is:
 configs/config.yaml
 ```
 
-On first start the backend generates it from
-[`configs/config.example.yaml`](../configs/config.example.yaml), which must stay in the
-same directory. **The example file is the documentation** — allowed enum values, units,
+On first start the backend creates it from
+[`configs/config.example.yaml`](../configs/config.example.yaml), which is built into the
+binary (`configs#Example`), so no example needs to be on disk. **The example file is the documentation** — allowed enum values, units,
 defaults and template variables are written into its comments, key by key. `config.yaml`
 itself is managed by the backend and its comments do not survive a write.
 

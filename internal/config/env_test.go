@@ -96,11 +96,8 @@ func TestBootstrapDoesNotBakeEnvOverrides(t *testing.T) {
 	t.Setenv("AMDL_WRAPPER_ADDRESS", "http://wrapper:12340")
 	dir := t.TempDir()
 	example := "wrapper:\n  address: \"http://127.0.0.1:12340\"\n"
-	if err := os.WriteFile(filepath.Join(dir, "config.example.yaml"), []byte(example), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	configPath := filepath.Join(dir, "config.yaml")
-	if created, err := EnsureFile(configPath); err != nil || !created {
+	if created, err := EnsureFile(configPath, []byte(example)); err != nil || !created {
 		t.Fatalf("bootstrap = (%v, %v), want config created", created, err)
 	}
 	raw, err := os.ReadFile(configPath)

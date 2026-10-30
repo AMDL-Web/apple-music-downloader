@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"amdl/configs"
 )
 
 func writeFullConfig(t *testing.T, path string, cfg Config) {
@@ -20,17 +22,17 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 
-	if _, err := EnsureFile(path); err == nil {
-		t.Fatal("expected an error when neither config nor example exists")
+	if _, err := EnsureFile(path, []byte("nope: 1\n")); err == nil {
+		t.Fatal("expected an error when the example is invalid")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("an invalid example left a config behind: %v", err)
 	}
 
 	example := "# retained until the first API rewrite\n" +
 		"server:\n  listen: \"127.0.0.1:19999\"\n" +
 		"download:\n  cover_format: \"png\"\n"
-	if err := os.WriteFile(filepath.Join(dir, configExampleFileName), []byte(example), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	created, err := EnsureFile(path)
+	created, err := EnsureFile(path, []byte(example))
 	if err != nil || !created {
 		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
 	}
@@ -56,7 +58,7 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	if err := os.WriteFile(path, []byte("server:\n  listen: \"127.0.0.1:20000\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	created, err = EnsureFile(path)
+	created, err = EnsureFile(path, []byte(example))
 	if err != nil || created {
 		t.Fatalf("second bootstrap = (%v, %v), want no-op", created, err)
 	}
@@ -72,13 +74,10 @@ func TestEnsureFileIgnoresLegacyRuntimeFile(t *testing.T) {
 	configPath := filepath.Join(dir, "config.yaml")
 	runtimePath := filepath.Join(dir, "runtime.yaml")
 	runtimeRaw := []byte("download:\n  cover_format: \"png\"\n")
-	if err := os.WriteFile(filepath.Join(dir, configExampleFileName), []byte("download:\n  cover_format: \"jpg\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(runtimePath, runtimeRaw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if created, err := EnsureFile(configPath); err != nil || !created {
+	if created, err := EnsureFile(configPath, []byte("download:\n  cover_format: \"jpg\"\n")); err != nil || !created {
 		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
 	}
 	cfg, err := Load(configPath)
@@ -500,5 +499,23 @@ func TestStoreUpdateErrorLeavesSnapshotAndFileUntouched(t *testing.T) {
 	after, _ := os.ReadFile(path)
 	if !reflect.DeepEqual(before, after) || store.Get().Download.CoverFormat != Default().Download.CoverFormat {
 		t.Fatal("failed update changed snapshot or file")
+	}
+}
+
+// The embedded example is the shipped file and creates a config that loads.
+func TestEnsureFileFromEmbeddedExample(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "configs", "config.yaml")
+	if created, err := EnsureFile(path, configs.Example); err != nil || !created {
+		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
+	}
+	onDisk, err := os.ReadFile(examplePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written, err := os.ReadFile(path); err != nil || string(written) != string(onDisk) {
+		t.Fatalf("created config differs from %s (%v)", examplePath, err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load(created config) = %v", err)
 	}
 }

@@ -32,8 +32,8 @@ Server-Sent Events 接口，以及同一端口上的网页控制台。它以容�
 ### 桌面应用（规划中）
 
 一个用 [MyGo](https://github.com/egoist/mygo) 写的原生 macOS 应用将放在 apps/desktop。它可以作为
-远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程 wrapper，和服务端
-导入同一套 `internal/` 包。
+远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程 wrapper。单机模式通过
+`internal/server#Run` 在本机回环地址上内嵌服务端；应用自己的包放在 apps/desktop/internal 下，只归它用。
 
 ## 仓库结构
 
@@ -238,7 +238,7 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 
 | 问题 | 从这里读 |
 | --- | --- |
-| 进程是怎么组装起来的？ | `apps/server/main.go` |
+| 进程是怎么组装起来的？ | `internal/server#Run` |
 | 有哪些 HTTP 路由？ | `internal/api#Server.Routes` |
 | API 到底接收和返回什么？ | `internal/api/openapi.yaml` |
 | 作业如何排队、运行、取消和重试？ | `internal/jobs#Manager` |

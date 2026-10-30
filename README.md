@@ -36,8 +36,9 @@ served at `/console/`. It uses only the public API. Its design contract is
 
 A native macOS app built with [MyGo](https://github.com/egoist/mygo) will live in
 apps/desktop. It will run either as a client of a remote server or as a standalone
-backend that runs the pipeline in-process and talks to a remote wrapper, importing the
-same `internal/` packages as the server.
+backend that runs the pipeline in-process and talks to a remote wrapper. Standalone mode
+embeds the server through `internal/server#Run` on a loopback listener; the app's own
+packages will sit under apps/desktop/internal, private to it.
 
 ## Repository layout
 
@@ -260,7 +261,7 @@ so it stays valid when files inside the package are split.
 
 | Question | Start at |
 | --- | --- |
-| How is the process wired together? | `apps/server/main.go` |
+| How is the process wired together? | `internal/server#Run` |
 | Which HTTP routes exist? | `internal/api#Server.Routes` |
 | What exactly does the API accept and return? | `internal/api/openapi.yaml` |
 | How are jobs queued, run, cancelled and retried? | `internal/jobs#Manager` |

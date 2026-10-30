@@ -42,7 +42,7 @@ services:
     # Time between SIGTERM and SIGKILL. The backend's shutdown steps are each
     # bounded (HTTP drain 5s + handlers 5s + library sync 10s + jobs 45s +
     # downloader 15s + hooks 15s + 10s, about 105s worst case; see
-    # apps/server/shutdown.go), and Docker's default of 10s would cut them
+    # internal/server/shutdown.go), and Docker's default of 10s would cut them
     # before the database is closed. Keep this above that sum.
     stop_grace_period: 2m
     ports:

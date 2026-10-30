@@ -60,8 +60,10 @@ RUN sed -i "s#https\{0,1\}://dl-cdn\.alpinelinux\.org/alpine#${ALPINE_MIRROR}#" 
 
 WORKDIR /app
 
-# The example configs are baked into /opt/amdl; on first start the entrypoint
-# seeds them into the config directory /app/configs.
+# The example configs are baked into /opt/amdl; the entrypoint copies them
+# into the config directory /app/configs as the documentation and the hooks
+# template users edit. config.yaml itself the backend creates from the copy of
+# the example built into the binary.
 COPY configs/config.example.yaml configs/hooks.yaml /opt/amdl/
 COPY deploy/server/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --from=build /out/amdl-server /app/amdl-server

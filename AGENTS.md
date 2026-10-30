@@ -7,8 +7,9 @@ link, then download, decrypt, remux and tag each track. Code map: the
 
 ## Products and layout
 
-- `apps/server`: the backend binary `amdl-server`, which wires the core and serves REST
-  and SSE under `/api/v1` with a SQLite store. Its image is `deploy/server/`.
+- `apps/server`: the backend binary `amdl-server`, a thin main around
+  `internal/server#Run`, which wires the core and serves REST and SSE under `/api/v1`
+  with a SQLite store. Its image is `deploy/server/`.
 - `apps/console`: the web console, embedded into the server; the one client this
   repository maintains today. Rules in `apps/console/AGENTS.md`.
 - apps/desktop (planned): a MyGo macOS app that imports the same core. Each product keeps

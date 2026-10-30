@@ -2,7 +2,7 @@
 
 > Type: reference
 
-How the server (`apps/server`) and the shared Go core under `internal/` are put
+How the server (`apps/server`, which runs `internal/server#Run`) and the shared Go core under `internal/` are put
 together, and the rules each layer keeps. The repository layout is in the
 [README](../README.md#repository-layout). When this page and
 the code disagree, the code wins and this page gets fixed in the same commit. Breaking
@@ -10,11 +10,13 @@ changes against 1.x are listed in [Upgrading to 2.0](upgrading-to-2.0.md).
 
 ## 1. Process and lifecycle
 
-`apps/server/main.go` only parses the environment and calls `run(ctx) error`; every
-deferred close runs on every exit path, and a startup failure is returned, logged and
-turned into exit status 1 by `main`. `run` builds the components, starts them, and on
-SIGINT or SIGTERM (or a failing HTTP server) stops them in this order
-(`apps/server/shutdown.go`; SIGHUP is ignored):
+`apps/server` only reads the config paths from the environment, mounts the console and
+calls `internal/server#Run`; an embedding app such as the desktop app calls it with its
+own `net.Listener`. In `Run`, every deferred close runs on every exit path, and a startup
+failure is returned and logged; the binary turns it into exit status 1. `Run` builds the
+components, starts them, and when its context ends (SIGINT or SIGTERM for the binary) or
+the HTTP server fails, stops them in this order
+(`internal/server#shutdownSteps`; the binary ignores SIGHUP):
 
 1. HTTP: stop accepting connections and end every SSE stream at once
    (`internal/api#Server.EndStreams`, so a connected client never holds the drain;
@@ -33,7 +35,7 @@ SIGINT or SIGTERM (or a failing HTTP server) stops them in this order
 Each step waits at most its own named timeout and then logs and moves on, so a stuck
 component cannot keep the process alive. The timeouts add up to about 105 s;
 `deploy/docker-compose.yml` sets `stop_grace_period: 2m` above that, and a test in
-`apps/server` fails when the sum outgrows it.
+`internal/server` fails when the sum outgrows it.
 
 Every long-lived component has the same shape: a constructor that does no I/O, a
 `Start` that owns its goroutines or a blocking `Run(ctx)` that the caller runs on its
@@ -45,8 +47,8 @@ was running stays `running` and resumes on the next start.
 ## 2. Packages
 
 Products live under `apps/`; `internal/` is the core they share. The core never imports a
-product: `apps/server` hands the console's handler to `internal/api` through
-`internal/api#Deps`, and the API leaves `/` and `/console/` out when it gets none.
+product: `apps/server` hands the console's handler to `internal/server#Options`, which
+passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/` out when it gets none.
 
 | Package | Owns | Must not |
 | --- | --- | --- |

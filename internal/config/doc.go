@@ -1,7 +1,7 @@
 // Package config owns the service configuration: the Config struct and its
 // sections, their defaults (Default), and the YAML file they are stored in.
-// EnsureFile bootstraps config.yaml from config.example.yaml in the same
-// directory when it is missing. Load reads the file with unknown keys
+// EnsureFile bootstraps a missing config.yaml from the example it is given
+// (configs.Example, embedded from configs/config.example.yaml). Load reads the file with unknown keys
 // rejected, overlays the three AMDL_* environment overrides, clamps oversized
 // numeric limits and then runs Validate; UnreadEnv names the AMDL_* variables
 // it ignores. Store holds the live snapshot shared after

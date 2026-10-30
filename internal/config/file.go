@@ -22,34 +22,25 @@ const managedFileHeader = `# Managed by the amdl backend: PUT /api/v1/config rew
 # config.example.yaml.
 `
 
-// EnsureFile creates configPath from config.example.yaml in the same
-// directory when it does not exist yet, and reports whether it did. The
-// example is copied verbatim (comments included) after it passes Load without
-// AMDL_* overlays, so environment settings are never baked into the file.
-func EnsureFile(configPath string) (created bool, err error) {
+// EnsureFile creates configPath from example when it does not exist yet, and
+// reports whether it did. The example is written verbatim (comments included)
+// after it passes Load without AMDL_* overlays, so environment settings are
+// never baked into the file. Callers pass configs.Example.
+func EnsureFile(configPath string, example []byte) (created bool, err error) {
 	exists, err := fileExists(configPath)
 	if err != nil || exists {
 		return false, err
 	}
-	if err := bootstrapConfig(configPath); err != nil {
+	if _, err := loadBytes(configExampleFileName, example, nil); err != nil {
+		return false, fmt.Errorf("config file %s does not exist and the example to create it from is invalid: %w", configPath, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return false, err
+	}
+	if err := writeFileAtomic(configPath, example, 0o600); err != nil {
 		return false, err
 	}
 	return true, nil
-}
-
-func bootstrapConfig(configPath string) error {
-	examplePath := filepath.Join(filepath.Dir(configPath), configExampleFileName)
-	raw, err := os.ReadFile(examplePath)
-	if err != nil {
-		return fmt.Errorf("config file %s does not exist and bootstrapping from %s failed: %w", configPath, examplePath, err)
-	}
-	if _, err := load(examplePath, nil); err != nil {
-		return fmt.Errorf("config file %s does not exist and bootstrapping from %s failed: %w", configPath, examplePath, err)
-	}
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return err
-	}
-	return writeFileAtomic(configPath, raw, 0o600)
 }
 
 // saveConfig writes the complete configuration to path, owner-only because
