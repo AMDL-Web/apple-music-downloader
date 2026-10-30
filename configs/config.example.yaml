@@ -275,7 +275,8 @@ download:
   # the track's file name: <track>.lrc holds the same LRC as the tag; <track>.ttml holds Apple's TTML
   # unchanged, with word timing, the translation, the romanization, background vocals and duet
   # voices (Navidrome 0.63+ reads all of these; Jellyfin reads .lrc only). A song that Apple has only
-  # plain-text lyrics for gets no .ttml. Empty list: no sidecar. Default: [].
+  # plain-text lyrics for gets no .ttml, even when the wrapper wraps that text in a TTML document
+  # marked itunes:timing="None". Empty list: no sidecar. Default: [].
   lyrics_files: []
   # enum: line, word. line stamps each LRC line with its start time. word writes enhanced LRC, which
   # also stamps each word (<mm:ss.xx> before it, the line's end after the last one); songs that

@@ -191,7 +191,9 @@ Everything else is derived from that one document:
 - `download.embed_lyrics` — write LRC into the MP4 tag.
 - `download.lyrics_files` — sidecars next to the audio: `lrc` (the same LRC as the tag)
   and `ttml` (Apple's document unchanged, which keeps word timing, the translation, the
-  romanization, background vocals and duet voices).
+  romanization, background vocals and duet voices). A song with only plain-text lyrics
+  gets no `.ttml`, whether the wrapper sends bare text or a TTML document marked
+  `itunes:timing="None"`.
 - `download.lyrics_timing` — `line` stamps each LRC line; `word` writes enhanced LRC
   (`[mm:ss.xx]<mm:ss.xx>word <mm:ss.xx>word<mm:ss.xx>`). Songs Apple does not time word by
   word stay line by line. Background vocals stay on their line, in Apple's parentheses.

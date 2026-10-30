@@ -20,7 +20,8 @@ const appleLyricsNamespace = "http://music.apple.com/lyric-ttml-internal"
 
 // trackLyrics is one track's lyrics in the forms its outputs take: lrc for
 // the tag and the .lrc sidecar, ttml for the .ttml sidecar. ttml is empty
-// when the wrapper only had plain text.
+// when the wrapper only had plain text, which it sends either as a bare
+// string or as a TTML document with itunes:timing="None".
 type trackLyrics struct {
 	lrc  string
 	ttml string
@@ -113,9 +114,7 @@ func (r *trackRun) fetchLyrics(ctx context.Context) error {
 		_ = r.reporter.UpdateItem(ctx, item)
 	default:
 		r.lyrics = trackLyrics{lrc: lrc}
-		if isTTML(doc) {
-			r.lyrics.ttml = doc
-		}
+		r.lyrics.ttml = ttmlSidecar(doc)
 		item.LyricsStatus = domain.LyricsFetched
 		_ = r.reporter.UpdateItem(ctx, item)
 		if lyricsAttempts > 1 {
@@ -127,6 +126,25 @@ func (r *trackRun) fetchLyrics(ctx context.Context) error {
 
 func isTTML(doc string) bool {
 	return strings.HasPrefix(strings.TrimSpace(doc), "<")
+}
+
+// ttmlSidecar is the document the .ttml sidecar holds: doc itself when it is
+// TTML with timing, "" for plain text, whether bare or wrapped in TTML that
+// declares itunes:timing="None", which has nothing to sync.
+func ttmlSidecar(doc string) string {
+	if !isTTML(doc) {
+		return ""
+	}
+	if root, err := parseLyricsXML(doc); err == nil && root != nil && untimedTTML(root) {
+		return ""
+	}
+	return doc
+}
+
+// untimedTTML reports a document Apple marks itunes:timing="None": its lines
+// carry no times.
+func untimedTTML(root *lyricNode) bool {
+	return strings.EqualFold(attr(root, "itunes:timing", "timing"), "none")
 }
 
 // lyricsLRC renders the wrapper's lyrics document as LRC. Each line is
@@ -146,7 +164,7 @@ func lyricsLRC(doc string, word bool, extras []string) (string, error) {
 	if root == nil {
 		return "", fmt.Errorf("parse lyrics TTML: empty document")
 	}
-	if strings.EqualFold(attr(root, "itunes:timing", "timing"), "none") {
+	if untimedTTML(root) {
 		return plainTextLyrics(root), nil
 	}
 	var translations, romanizations map[string]*lyricNode

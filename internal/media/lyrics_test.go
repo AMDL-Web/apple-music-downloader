@@ -126,6 +126,28 @@ func TestLyricsLRCTimingNoneOutputsPlainText(t *testing.T) {
 	}
 }
 
+func TestTTMLSidecarSkipsPlainTextLyrics(t *testing.T) {
+	untimed := `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="None"><body><div><p>first line</p></div></body></tt>`
+	cases := []struct {
+		name string
+		doc  string
+		want string
+	}{
+		{name: "word timed", doc: wordTimedLyrics, want: wordTimedLyrics},
+		{name: "untimed TTML", doc: untimed},
+		{name: "bare plain text", doc: "first line\nsecond line"},
+	}
+	for _, tc := range cases {
+		if got := ttmlSidecar(tc.doc); got != tc.want {
+			t.Errorf("%s: sidecar = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+	lrc, err := lyricsLRC(untimed, false, nil)
+	if err != nil || lrc != "first line" {
+		t.Fatalf("untimed TTML keeps its .lrc and tag text: got %q, %v", lrc, err)
+	}
+}
+
 func TestLyricsLRCPassesPlainTextThrough(t *testing.T) {
 	got, err := lyricsLRC("first line\nsecond line\n", false, []string{"translation"})
 	if err != nil {
