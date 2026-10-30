@@ -20,15 +20,28 @@ test('an Apple Music link offers to download it, first', () => {
 
 test('Settings sections and fields are findable by label, id, key and what their panels do', () => {
   const sectionOf = (q) => paletteItems(q).filter((it) => it.group === 'Settings').map((it) => [it.label, parseHash(it.hash).params.section]);
-  assert.deepEqual(sectionOf('logging')[0], ['Settings: Logging', 'logging'], 'an Advanced group opens Advanced at it');
-  assert.ok(sectionOf('files').some(([l, s]) => l === 'Settings: Files & naming' && s === 'files'));
-  assert.ok(sectionOf('quality').some(([l, s]) => l === 'Settings: Quality & downloads' && s === 'quality'));
+  assert.deepEqual(sectionOf('logging')[0], ['Settings: Logs', 'logging']);
+  assert.ok(sectionOf('files').some(([l, s]) => l === 'Settings: Storage & files' && s === 'files'));
+  assert.ok(sectionOf('quality').some(([l, s]) => l === 'Settings: Quality' && s === 'quality'));
   assert.ok(sectionOf('reload').some(([, s]) => s === 'config_file'), 'Reload from file lives in Configuration file');
+  const group = paletteItems('reload').find((it) => it.id === 'set-config_file');
+  assert.equal(group.sub, 'Server', 'a sub-group names its section');
   const attempts = paletteItems('download.max_attempts').find((it) => it.label === 'Tries per file');
   assert.ok(attempts, 'a field is found by its config key');
-  assert.equal(parseHash(attempts.hash).params.section, 'advanced');
-  assert.equal(attempts.sub, 'Advanced › Downloading', 'the key is searchable but not shown');
+  assert.equal(parseHash(attempts.hash).params.section, 'jobs');
+  assert.equal(attempts.sub, 'Jobs', 'the key is searchable but not shown');
+  const simulate = paletteItems('simulate.enabled').find((it) => it.field === 'simulate.enabled');
+  assert.equal(simulate.sub, 'Server › Simulate');
   assert.ok(paletteItems('cover').some((it) => it.label === 'Cover size'));
+});
+
+test('System is part of Settings: no System row, and its words find Settings', () => {
+  assert.ok(!paletteItems('').some((it) => it.id === 'nav-system'));
+  for (const q of ['system', 'health', 'status']) {
+    assert.ok(paletteItems(q).some((it) => it.id === 'nav-settings'), `${q} finds Settings`);
+  }
+  const sections = paletteItems('settings').filter((it) => it.id.startsWith('set-') && !it.sub);
+  assert.equal(sections.length, 9, 'one row per section');
 });
 
 test('the empty palette keeps its short list', () => {
@@ -62,7 +75,7 @@ test('a Settings field result names its field, so the page can focus it', () => 
   const attempts = paletteItems('attempts').find((it) => it.id === 'field-download.max_attempts');
   assert.equal(attempts.field, 'download.max_attempts');
   const route = parseHash(attempts.hash);
-  assert.equal(route.params.section, 'advanced');
+  assert.equal(route.params.section, 'jobs');
   assert.equal(settingsField(route.params), 'download.max_attempts');
   assert.equal(settingsField({ field: 'Bad Value' }), '');
   assert.equal(settingsField({}), '');
@@ -72,9 +85,7 @@ test('a Settings field result names its field, so the page can focus it', () => 
 
 test('parallel and concurrency find where worker pools live, and template finds the path templates', () => {
   for (const q of ['concurrency', 'parallel', 'threads', 'workers']) {
-    const hit = paletteItems(q).find((it) => it.id === 'set-config_file');
-    assert.ok(hit, `${q} finds Configuration file`);
-    assert.match(hit.sub, /Worker pools/);
+    assert.ok(paletteItems(q).some((it) => it.id === 'set-jobs'), `${q} finds Jobs, which shows the pools`);
   }
   const templates = paletteItems('template').filter((it) => it.field);
   assert.ok(templates.length >= 5, 'every path template field answers to "template"');
@@ -82,7 +93,7 @@ test('parallel and concurrency find where worker pools live, and template finds 
   const retries = paletteItems('retries').find((it) => it.group === 'Settings');
   assert.equal(retries.field, 'download.max_attempts', 'the field is the first Settings result');
   assert.equal(retries.label, 'Tries per file');
-  assert.equal(parseHash(retries.hash).params.section, 'advanced');
+  assert.equal(parseHash(retries.hash).params.section, 'jobs');
   assert.ok(paletteItems('folder').some((it) => it.field === 'download.downloads_dir'));
 });
 

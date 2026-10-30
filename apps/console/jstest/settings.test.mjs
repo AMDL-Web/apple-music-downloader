@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FIELDS, FIELD_KEYS, NOT_EDITED, BY_KEY, valueLabel } from '../static/js/lib/settings.js';
-import { SETTINGS_SECTIONS, SETTINGS_GROUPS, sectionById, groupById } from '../static/js/lib/settings-sections.js';
+import { FIELDS, FIELD_KEYS, NOT_EDITED, BY_KEY, valueLabel, fieldDisabled } from '../static/js/lib/settings.js';
+import { SETTINGS_SECTIONS, SETTINGS_GROUPS, BOARD_SECTIONS, sectionById, groupById } from '../static/js/lib/settings-sections.js';
 import {
   flattenConfig,
   sameValue,
@@ -25,8 +25,6 @@ import {
   keysToLabels,
   rangeError,
   unsavedAnnouncement,
-  librarySyncState,
-  anchorResetState,
 } from '../static/js/lib/settings-draft.js';
 import { templateUnknownVars, templateExample, templateKind } from '../static/js/lib/settings-template.js';
 import { wrapperErrorText, wrapperUnreachable, unreachableLine } from '../static/js/lib/settings-account.js';
@@ -46,7 +44,7 @@ test('sections and fields: every field names a section, keys are unique dotted l
   const ids = new Set(SETTINGS_SECTIONS.map((s) => s.id));
   assert.deepEqual(
     SETTINGS_SECTIONS.map((s) => s.label),
-    ['Account', 'Quality & downloads', 'Files & naming', 'Lyrics & artwork', 'Advanced'],
+    ['Account', 'Quality', 'Storage & files', 'Lyrics & artwork', 'Jobs', 'Library sync', 'Hooks', 'Logs', 'Server'],
   );
   for (const id of [...ids, ...SETTINGS_GROUPS.map((g) => g.id)]) assert.match(id, /^[a-z][a-z0-9_]*$/, 'settingsSection accepts the id');
   assert.equal(new Set(FIELD_KEYS).size, FIELD_KEYS.length);
@@ -56,8 +54,8 @@ test('sections and fields: every field names a section, keys are unique dotted l
     assert.ok(f.label && f.help, `${f.key} has a label and help`);
     assert.ok(!/Default:/.test(f.help), `${f.key}: the default lives in defaultValue, not the help`);
     assert.ok(!/[.;] .*[.;] /.test(f.help), `${f.key}: the help is one short line`);
-    assert.equal(Boolean(f.group), f.section === 'advanced', `${f.key}: only Advanced fields name a group`);
-    if (f.group) assert.ok(groupById(f.group), `${f.key} names an unknown group`);
+    assert.equal(Boolean(f.group), f.key.startsWith('simulate.'), `${f.key}: only Server's simulate fields name a group`);
+    if (f.group) assert.equal(groupById(f.group).section, f.section, `${f.key} names a group of another section`);
     if (f.type === 'select' || f.type === 'list' || f.type === 'set') assert.ok(f.options.length > 0, `${f.key} has options`);
   }
   assert.deepEqual(NOT_EDITED, {});
@@ -66,14 +64,50 @@ test('sections and fields: every field names a section, keys are unique dotted l
 });
 
 test('retired section ids and fields open the section that holds them now', () => {
-  for (const [old, now] of [['downloads', 'quality'], ['artwork', 'lyrics_artwork'], ['lyrics', 'lyrics_artwork'], ['catalog', 'account'], ['library_sync', 'advanced'], ['logging', 'advanced'], ['simulate', 'advanced'], ['config_file', 'advanced'], ['files', 'files']]) {
+  for (const [old, now] of [
+    ['advanced', 'jobs'],
+    ['downloading', 'jobs'],
+    ['apple_requests', 'lyrics_artwork'],
+    ['simulate', 'server'],
+    ['config_file', 'server'],
+    ['library_sync', 'library_sync'],
+    ['logging', 'logging'],
+    ['downloads', 'quality'],
+    ['artwork', 'lyrics_artwork'],
+    ['lyrics', 'lyrics_artwork'],
+    ['catalog', 'account'],
+    ['files', 'files'],
+  ]) {
     assert.equal(sectionById(old).id, now, old);
   }
   // A field wins over the section named next to it (old links and bookmarks).
   assert.equal(sectionById('catalog', 'catalog.media_user_token').id, 'account');
-  assert.equal(sectionById('downloads', 'download.max_attempts').id, 'advanced');
+  assert.equal(sectionById('downloads', 'download.max_attempts').id, 'jobs');
+  assert.equal(sectionById('advanced', 'download.force_overwrite').id, 'files');
+  assert.equal(sectionById('advanced', 'catalog.motion_artwork_enabled').id, 'lyrics_artwork');
   assert.equal(sectionById('catalog', 'catalog.album_track_url_mode').id, 'quality');
   assert.equal(sectionById('quality', 'not.a_key').id, 'quality');
+});
+
+test('every runtime key belongs to exactly one of the nine sections, and the board leaves out Lyrics & artwork', () => {
+  const counts = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, FIELDS.filter((f) => f.section === s.id).length]));
+  assert.deepEqual(counts, { account: 1, quality: 5, files: 8, lyrics_artwork: 11, jobs: 4, library_sync: 2, hooks: 0, logging: 2, server: 3 });
+  assert.equal(FIELDS.length, 36);
+  assert.deepEqual(BOARD_SECTIONS.map((s) => s.id), ['account', 'quality', 'files', 'jobs', 'library_sync', 'hooks', 'logging', 'server']);
+  assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['simulate', 'server'], ['config_file', 'server']]);
+  assert.equal(SETTINGS_SECTIONS.findIndex((s) => s.split), 5, 'the nav splits before Library sync');
+});
+
+test('dependent fields are disabled, never hidden, while what they need is off', () => {
+  const at = (values) => (k) => values[k];
+  assert.equal(fieldDisabled('download.alac_max_bit_depth', at({ 'download.quality_priority': ['ec3', 'aac'] })), true);
+  assert.equal(fieldDisabled('download.alac_max_bit_depth', at({ 'download.quality_priority': ['ec3', 'alac'] })), false);
+  assert.equal(fieldDisabled('download.lyrics_timing', at({ 'download.embed_lyrics': false, 'download.lyrics_files': ['ttml'] })), true);
+  assert.equal(fieldDisabled('download.lyrics_timing', at({ 'download.embed_lyrics': false, 'download.lyrics_files': ['lrc'] })), false);
+  assert.equal(fieldDisabled('download.lyrics_extras', at({ 'download.embed_lyrics': true, 'download.lyrics_files': [] })), false);
+  assert.equal(fieldDisabled('simulate.max_speed_kbps', at({ 'simulate.enabled': false })), true);
+  assert.equal(fieldDisabled('simulate.max_speed_kbps', at({ 'simulate.enabled': true })), false);
+  assert.equal(fieldDisabled('download.cover_size', at({})), false, 'a field without a rule is never disabled');
 });
 
 test('valueLabel words a value the way the page shows it', () => {
@@ -306,25 +340,6 @@ test('fieldErrors marks only the keys of the PUT when the message names others',
   assert.deepEqual(Object.keys(fieldErrors(err).fields), ['download.downloads_dir', 'download.song_path_format'], 'without the PUT keys, every named key');
   assert.deepEqual(Object.keys(fieldErrors(err, ['download.song_path_format']).fields), ['download.song_path_format']);
   assert.deepEqual(Object.keys(fieldErrors(err, ['logging.level']).fields), ['download.downloads_dir', 'download.song_path_format'], 'none of the PUT keys named: keep all');
-});
-
-test('librarySyncState: on but idle is not Off', () => {
-  const base = { enabled: true, interval_minutes: 15, anchor_size: 0 };
-  assert.equal(librarySyncState({ ...base, enabled: false }, true).label, 'Off');
-  const idle = librarySyncState({ ...base, last_error: 'media user token is empty' }, false);
-  assert.equal(idle.label, 'On, idle');
-  assert.equal(idle.role, 'warning');
-  assert.equal(librarySyncState({ ...base, last_error: 'boom' }, true).label, 'Error');
-  assert.match(librarySyncState(base, true).detail, /first poll pending/);
-  assert.equal(librarySyncState({ ...base, last_poll_at: '2026-01-01T00:00:00Z' }, true).detail, 'Every 15 min');
-});
-
-test('anchorResetState disables Reset anchor without an anchor', () => {
-  assert.equal(anchorResetState(undefined).allowed, false);
-  const none = anchorResetState({ anchor_size: 0 });
-  assert.equal(none.allowed, false);
-  assert.match(none.reason, /Nothing to start over/);
-  assert.deepEqual(anchorResetState({ anchor_size: 120 }), { allowed: true, reason: '' });
 });
 
 test('wrapperUnreachable reads the address out of a dial error', () => {

@@ -90,7 +90,7 @@ test('a key is never read twice inside its interval', async () => {
   off();
   r.store.subscribe(['a'], () => {});
   assert.equal(r.calls.a, 1, 'a revisit within the interval paints the cache and reads nothing');
-  assert.deepEqual(r.store.get('a'), { data: 1, error: undefined, at: 1000 });
+  assert.deepEqual(r.store.get('a'), { data: 1, error: undefined, at: 1000, okAt: 1000 });
   await r.advance(19999);
   assert.equal(r.calls.a, 1);
   await r.advance(1);
@@ -111,6 +111,8 @@ test('subscribers hear only their keys, and a failed read keeps the last data', 
   await r.fail('a', err);
   assert.equal(r.store.get('a').data, 'one');
   assert.equal(r.store.get('a').error, err);
+  assert.equal(r.store.get('a').okAt, 1000, 'okAt stays at the last success');
+  assert.equal(r.store.get('a').at, 31000);
   assert.equal(r.store.get('b'), undefined, 'no answer yet');
 });
 

@@ -62,45 +62,6 @@
   letter-spacing: var(--tracking-display);
 }
 
-.health-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-}
-
-.health-row {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  align-items: center;
-  gap: var(--s-1) var(--s-3);
-}
-
-/* Skin opt-in: an icon per service. */
-.health-icon {
-  display: none;
-}
-
-.health-status {
-  min-width: 0;
-}
-
-.health-name {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-.health-detail {
-  grid-column: 2;
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-  min-width: 0;
-}
-
 /* Label/value facts (Facts): a wrapping row of small pairs by default. */
 .facts {
   display: flex;
@@ -369,86 +330,6 @@
   display: none;
 }
 
-/* Formats (/stats codecs): a decorative stacked bar and a labelled list. */
-.tp-formats {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  min-width: 0;
-}
-
-.tp-formats-title {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-}
-
-.formats-bar {
-  display: flex;
-  gap: var(--s-0_5);
-  height: var(--bar-h);
-  border-radius: var(--r-bar);
-  background: var(--track);
-  overflow: hidden;
-}
-
-/* The base tells formats apart by position only; each element also carries
-   --i (its index) for a skin that colors them. */
-.formats-seg,
-.formats-swatch {
-  background: var(--chart-bar);
-}
-
-.formats-seg:nth-child(2),
-.formats-item:nth-child(2) .formats-swatch {
-  opacity: 0.75;
-}
-
-.formats-seg:nth-child(3),
-.formats-item:nth-child(3) .formats-swatch {
-  opacity: 0.5;
-}
-
-.formats-seg:nth-child(n + 4),
-.formats-item:nth-child(n + 4) .formats-swatch {
-  opacity: 0.3;
-}
-
-.formats-seg {
-  flex: 0 1 calc(var(--w) * 100%);
-}
-
-.formats-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-1) var(--s-5);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-.formats-item {
-  display: flex;
-  align-items: center;
-  gap: var(--s-1_5);
-  min-width: 0;
-}
-
-.formats-swatch {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--r-full);
-}
-
-.formats-count {
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
 /* ---- Server status line ------------------------------------------- */
 
 /* One line above the sections that answers "is the server healthy?". */
@@ -472,6 +353,16 @@
 .health-strip[data-state="problem"] {
   flex-wrap: nowrap;
   align-items: flex-start;
+}
+
+/* Each item opens its Settings section; it reads as the notice's text. */
+.health-strip-item {
+  color: inherit;
+  text-decoration: none;
+}
+
+.health-strip-item:hover {
+  text-decoration: underline;
 }
 
 .health-strip-item + .health-strip-item::before {

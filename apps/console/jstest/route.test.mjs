@@ -54,7 +54,11 @@ test('buildHash round-trips and drops empty params', () => {
   assert.equal(buildHash('overview'), '#/');
   assert.equal(buildHash('queue', { tab: '', q: 'a b' }, 'job_1'), '#/queue/job_1?q=a+b');
   assert.equal(buildHash('logs', { job_id: 'job_1', level: '' }), '#/logs?job_id=job_1');
-  assert.equal(buildHash('system', {}, 'job_1'), '#/system', 'pages without a drawer drop the id');
+  assert.equal(buildHash('logs', {}, 'job_1'), '#/logs', 'pages without a drawer drop the id');
+  // System is part of Settings: its address opens the board and is replaced in place.
+  assert.deepEqual(parseHash('#/system'), { page: 'settings', jobId: null, params: {}, replace: true });
+  assert.equal(parseHash('#/settings').replace, undefined);
+  assert.equal(settingsHash(), '#/settings');
   const h = buildHash('queue', { tab: 'failed', type: 'album' }, 'job_9');
   const back = parseHash(h);
   assert.equal(back.jobId, 'job_9');

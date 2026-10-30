@@ -1,42 +1,34 @@
-// Settings panels that are not config fields: the library sync status with
-// "Start over from now" and the configuration file (persisted, Reload).
+// Settings action blocks that are not config fields: library sync's "Start
+// over from now" and the configuration file (saved to a file, Reload).
 
 import { html, useState } from '../ui/preact.js';
-import { flattenConfig, diffConfig, reloadSummary, splitReloadError, librarySyncState, anchorResetState } from '../lib/settings-draft.js';
-import { getLibrarySync, resetLibrarySync, reloadConfig } from '../api.js';
+import { flattenConfig, diffConfig, reloadSummary, splitReloadError } from '../lib/settings-draft.js';
+import { resetLibrarySync, reloadConfig } from '../api.js';
 import { count } from '../lib/format.js';
-import { settingsHash } from '../lib/route.js';
-import { useApp, Badge, Button, KV, Notice, RelTime, SkeletonRows, ErrorNote } from '../ui/components.js';
+import { useApp, Button, Icon, Notice } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
-import { usePoll } from '../ui/hooks.js';
 import { invalidateStatus } from '../ui/system-status.js';
 
 const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 
 /**
- * Live state from GET /library-sync (polled every 30 s, and again when a
- * save changes the switch or the interval) and "Start over from now" (POST
- * /library-sync/reset, which clears the anchor), offered only once a check
- * has recorded the library. `enabled`,
- * `interval` and `tokenSet` are the saved config values.
+ * "Start over from now" (POST /library-sync/reset, which clears the anchor),
+ * offered only once a check has recorded the library (`sync` is the
+ * GET /library-sync answer).
  */
-export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
+export function SyncResetAction({ sync, disabled }) {
   const app = useApp();
-  const poll = usePoll(getLibrarySync, 30000, [app.epoch, enabled, interval]);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const s = poll.data;
-  const resetState = anchorResetState(s);
-
+  if (!sync || !(sync.anchor_size > 0)) return null;
   const reset = async () => {
     setBusy(true);
     setError(null);
     try {
       const res = await resetLibrarySync();
-      app.toast({ message: `Library sync starts over: forgot ${plural(res.cleared, 'track', 'tracks')}; the next check downloads nothing`, role: 'success' });
+      app.toast({ message: `Library sync starts over: forgot ${plural(res.cleared, 'track', 'tracks')}`, role: 'success' });
       setAsking(false);
-      poll.reload();
       invalidateStatus(['librarySync']);
     } catch (e) {
       setError(e);
@@ -44,40 +36,9 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
       setBusy(false);
     }
   };
-
-  let body;
-  if (poll.error && !s) {
-    body = html`<${ErrorNote} title="Couldn't load the library sync status" error=${poll.error} onRetry=${poll.reload} />`;
-  } else if (!s) body = html`<${SkeletonRows} n=${4} kind="line" />`;
-  else
-    body = html`<${KV}
-      rows=${[
-        ['State', html`<${SyncState} view=${librarySyncState(s, tokenSet)} />`],
-        ['Last check', s.last_poll_at ? html`<${RelTime} value=${s.last_poll_at} />` : 'Never'],
-        ['Last error', s.last_error ? html`<span class="text-warning wrap-any">${s.last_error}</span>` : null],
-        ['Last seen in your library', s.anchor_size > 0 ? plural(s.anchor_size, 'track', 'tracks') : 'Nothing yet; the next check records it'],
-        ['Albums submitted', `${count(s.last_submitted)} last check · ${count(s.total_submitted)} since the backend started`],
-      ]}
-    />`;
-
-  return html`<section class="settings-panel" data-panel="library-sync" aria-labelledby="sync-status-title">
-    <div class="settings-panel-head">
-      <h3 class="section-title" id="sync-status-title">Status</h3>
-      <${Button} variant="ghost" size="sm" icon="rotate" onClick=${poll.reload}>Refresh</${Button}>
-    </div>
-    ${enabled && !tokenSet
-      ? html`<${Notice} role="warning" icon="triangle-alert">
-          Library sync is on but the media user token is empty, so it waits.${' '}
-          <a class="link" href=${settingsHash('account', 'catalog.media_user_token')}>Set the token in Account</a>.
-        </${Notice}>`
-      : null}
-    ${body}
-    ${resetState.allowed
-      ? html`<div class="settings-panel-actions">
-          <${Button} variant="secondary" icon="rotate" className="sync-reset" onClick=${() => setAsking(true)} aria-describedby="sync-reset-note">Start over from now…</${Button}>
-          <p class="muted small" id="sync-reset-note">Forgets which songs library sync has seen. Nothing is downloaded by this.</p>
-        </div>`
-      : null}
+  return html`<div class="settings-actions" data-action="sync-reset">
+    <span class="settings-actions-label">Start over from now</span>
+    <${Button} variant="secondary" className="sync-reset" onClick=${disabled ? undefined : () => setAsking(true)} aria-disabled=${disabled ? 'true' : undefined} title=${disabled ? 'Offline' : undefined}>Start Over…</${Button}>
     ${asking
       ? html`<${ConfirmDialog}
           title="Start library sync over from now?"
@@ -91,25 +52,20 @@ export function LibrarySyncPanel({ enabled, interval, tokenSet }) {
             setError(null);
           }}
         >
-          <p>Library sync forgets what it has seen. Its next check records your library as it is then and downloads nothing, so songs added before that moment are never downloaded by library sync.</p>
-          <p>To download one album again, submit its link on <a class="link" href="#/new">New download</a> instead.</p>
+          <p>Albums you added before now won't be downloaded.</p>
           ${error ? html`<${Notice} role="danger" icon="circle-x">${error.message}</${Notice}>` : null}
         </${ConfirmDialog}>`
       : null}
-  </section>`;
-}
-
-/** The State badge with its detail (why it is idle, how often it polls) beside it. */
-function SyncState({ view }) {
-  return html`<span class="sync-state"><${Badge} view=${view} />${view.detail ? html`<span class="muted small wrap-any">${view.detail}</span>` : null}</span>`;
+  </div>`;
 }
 
 /**
  * Where the settings live: whether PUT writes them to the file, the last
- * reload error, and "Reload from file"
- * (POST /config/reload). onReloaded gets the ConfigResponse.
+ * reload error, and "Reload from file" (POST /config/reload), then the one
+ * line naming the startup settings no row shows. onReloaded gets the
+ * ConfigResponse.
  */
-export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloaded }) {
+export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloaded, disabled }) {
   const app = useApp();
   const [busy, setBusy] = useState(false);
   // What the last Reload did, kept on the page: {role, text} or null.
@@ -139,14 +95,25 @@ export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloade
     }
   };
   return html`<div class="settings-panel" data-panel="config-file">
-    <${KV}
-      rows=${[
-        ['Saved to a file', persisted ? 'Yes: saved changes are written to configs/config.yaml and survive a restart' : 'No: saved changes last until the backend restarts'],
-      ]}
-    />
-    <div class="settings-panel-actions">
-      <${Button} variant="secondary" icon="rotate" className="config-reload" onClick=${reload} aria-disabled=${busy ? 'true' : undefined}>${busy ? 'Reloading…' : 'Reload from file'}</${Button}>
-      <p class="muted small">Reads configs/config.yaml again, for example after a hand edit.${dirty ? ' Your unsaved changes stay pending.' : ''}</p>
+    <dl class="fact-list">
+      <div class="fact-row" data-fact="persisted" data-role=${persisted ? undefined : 'warning'}>
+        <dt class="fact-row-text"><span class="fact-row-label">Saved to a file</span></dt>
+        <dd class="fact-row-value">
+          ${persisted ? null : html`<${Icon} name="triangle-alert" size="sm" />`}
+          <span class="fact-row-text-value">${persisted ? 'Yes' : 'No: saved changes last until a restart'}</span>
+        </dd>
+      </div>
+    </dl>
+    <div class="settings-actions" data-action="config-reload">
+      <span class="settings-actions-label">${dirty ? 'Your unsaved changes stay pending' : 'configs/config.yaml'}</span>
+      <${Button}
+        variant="secondary"
+        icon="rotate"
+        className="config-reload"
+        onClick=${disabled ? undefined : reload}
+        aria-disabled=${busy || disabled ? 'true' : undefined}
+        title=${disabled ? 'Offline' : undefined}
+      >${busy ? 'Reloading…' : 'Reload from file'}</${Button}>
     </div>
     ${outcome
       ? html`<div class="config-outcome" role=${outcome.role === 'success' ? undefined : 'alert'}>
@@ -155,9 +122,7 @@ export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloade
       : reloadError
         ? html`<${ReloadError} key=${tries} message=${reloadError} announce=${tries > 0} />`
         : null}
-    <p class="muted small">
-      Startup settings (listen address, database, log outputs, wrapper address, tools, catalog request limits, worker pools) are not on this page: edit configs/config.yaml and restart. configs/config.example.yaml documents every key.
-    </p>
+    <p class="settings-footnote">Also read at startup from configs/config.yaml: log outputs, session service timeouts, token cache.</p>
   </div>`;
 }
 

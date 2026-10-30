@@ -15,15 +15,15 @@ export const NAV = [
   { page: 'overview', label: 'Overview', icon: 'grid', key: 'o' },
   { page: 'queue', label: 'Queue', icon: 'list', key: 'q' },
   { page: 'logs', label: 'Logs', icon: 'file-text', key: 'l' },
-  { page: 'system', label: 'System', icon: 'server', key: 'y' },
-  { page: 'settings', label: 'Settings', icon: 'settings', key: ',' },
+  // g y opened System, which Settings now holds.
+  { page: 'settings', label: 'Settings', icon: 'settings', key: ',', alias: 'y' },
 ];
 
 /** The primary action: its own button above the nav, `n` or `g n`. */
 export const NEW_DOWNLOAD = { page: 'new', label: 'New download', icon: 'plus', key: 'n' };
 
 /** Pages the phone tab bar reaches through its More sheet. */
-export const MORE_PAGES = ['system', 'settings'];
+export const MORE_PAGES = ['settings'];
 
 export function Sidebar({ route, counts }) {
   const active = counts ? counts.queued + counts.running : 0;

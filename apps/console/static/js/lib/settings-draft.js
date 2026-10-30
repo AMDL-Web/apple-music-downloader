@@ -218,25 +218,6 @@ export function unsavedAnnouncement(n) {
   return n > 0 ? changesLabel(n) : 'No unsaved changes';
 }
 
-/**
- * The Library sync State badge from GET /library-sync data and whether the
- * media user token is set: on but idle is not "Off".
- */
-export function librarySyncState(s, tokenSet) {
-  if (!s.enabled) return { icon: 'circle-minus', role: 'neutral', label: 'Off' };
-  if (!tokenSet) return { icon: 'triangle-alert', role: 'warning', label: 'On, idle', detail: 'The media user token is empty' };
-  if (s.last_error) return { icon: 'triangle-alert', role: 'warning', label: 'Error', detail: s.last_error };
-  if (!s.last_poll_at) return { icon: 'circle-check', role: 'success', label: 'Watching', detail: `Every ${s.interval_minutes} min; first poll pending` };
-  return { icon: 'circle-check', role: 'success', label: 'Watching', detail: `Every ${s.interval_minutes} min` };
-}
-
-/** Whether "Start over from now" (the anchor reset) does anything, with the reason when it does not. */
-export function anchorResetState(s) {
-  if (!s) return { allowed: false, reason: 'Loading the status.' };
-  if (!(s.anchor_size > 0)) return { allowed: false, reason: 'Nothing to start over from yet: the next check records your library.' };
-  return { allowed: true, reason: '' };
-}
-
 /** Parses a number input: an integer, or the raw text when it is not one. */
 export function parseNumberInput(text) {
   const t = String(text).trim();

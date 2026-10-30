@@ -170,7 +170,7 @@ the wrapper for a white-box template (`/key`) and decrypts the samples itself, i
 with `internal/fairplay`, a pure-Go translation of
 [Temari](https://github.com/WorldObservationLog/Temari). The wrapper also serves lyrics,
 the AAC-LC license, and the device manifest for Hi-Res ALAC tracks. amdl starts without
-a wrapper; `GET /api/v1/wrapper/status` and the console's System page say whether it is
+a wrapper; `GET /api/v1/wrapper/status` and the console's Settings page say whether it is
 reachable and logged in.
 
 **Apple's catalog.** Every catalog read goes to `amp-api.music.apple.com` with a token

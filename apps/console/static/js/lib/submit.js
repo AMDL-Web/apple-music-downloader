@@ -12,7 +12,7 @@ import { settingsHash } from './route.js';
 import { summarizeError } from './health.js';
 
 /** Where Settings edits catalog.media_user_token, the only token a download uses. */
-export const TOKEN_SETTINGS_HASH = settingsHash('catalog', 'catalog.media_user_token');
+export const TOKEN_SETTINGS_HASH = settingsHash('account', 'catalog.media_user_token');
 
 /** The backend's per-request URL limit; larger batches are sent in chunks. */
 export const MAX_URLS_PER_REQUEST = 100;

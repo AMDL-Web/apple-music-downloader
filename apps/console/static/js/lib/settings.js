@@ -17,8 +17,8 @@ const OLDER_LAYOUT_NOTE = 'An install upgraded from an older version may still u
  * template | token | list (ordered, from options) | set (unordered, from
  * options). A `custom` select also takes any other value through a text box. `help` is one short line about the effect; `defaultValue` is the
  * value a key missing from the file takes (configs/config.example.yaml), shown
- * with the key on demand and used by Reset to default. Fields of Advanced
- * name their `group`. select options may carry a hint, added to the help line while chosen.
+ * with the key on demand and used by Reset to default. Fields under a
+ * section's sub-heading name their `group`. select options may carry a hint, added to the help line while chosen.
  */
 export const FIELDS = [
   // Account
@@ -30,7 +30,7 @@ export const FIELDS = [
     help: 'Needed for stations, private playlist covers and library sync.',
     defaultValue: '',
   },
-  // Quality & downloads
+  // Quality
   {
     key: 'download.quality_priority',
     section: 'quality',
@@ -87,14 +87,6 @@ export const FIELDS = [
     ],
   },
   {
-    key: 'download.force_overwrite',
-    section: 'quality',
-    type: 'switch',
-    label: 'Overwrite existing files',
-    help: 'Download tracks again even when they are already on disk.',
-    defaultValue: false,
-  },
-  {
     key: 'catalog.album_track_url_mode',
     section: 'quality',
     type: 'select',
@@ -106,7 +98,7 @@ export const FIELDS = [
       { value: 'album', label: 'Download the whole album' },
     ],
   },
-  // Files & naming
+  // Storage & files
   {
     key: 'download.downloads_dir',
     section: 'files',
@@ -122,6 +114,14 @@ export const FIELDS = [
     label: 'Temporary folder',
     help: 'Work space while a track is processed; on the same disk as the downloads folder is fastest.',
     defaultValue: 'data/tmp',
+  },
+  {
+    key: 'download.force_overwrite',
+    section: 'files',
+    type: 'switch',
+    label: 'Overwrite existing files',
+    help: 'Download tracks again even when they are already on disk.',
+    defaultValue: false,
   },
   { key: 'download.album_path_format', section: 'files', type: 'template', label: 'Albums', help: '{SongNumber} keeps counting across discs.', defaultValue: 'albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
   { key: 'download.song_path_format', section: 'files', type: 'template', label: 'Songs', help: '{SongNumber} is always 1; {TrackNumber} keeps the album position.', defaultValue: 'songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}' },
@@ -204,11 +204,10 @@ export const FIELDS = [
       { value: 'pronunciation', label: 'Romanization' },
     ],
   },
-  // Advanced › Downloading
+  // Jobs
   {
     key: 'download.max_attempts',
-    section: 'advanced',
-    group: 'downloading',
+    section: 'jobs',
     type: 'number',
     label: 'Tries per file',
     help: 'How many times each step is tried before the track fails (1-10).',
@@ -218,8 +217,7 @@ export const FIELDS = [
   },
   {
     key: 'download.memory_mode',
-    section: 'advanced',
-    group: 'downloading',
+    section: 'jobs',
     type: 'select',
     label: 'Memory use',
     help: 'Faster with more RAM, or slower and lighter.',
@@ -231,8 +229,7 @@ export const FIELDS = [
   },
   {
     key: 'download.progress_event_interval_ms',
-    section: 'advanced',
-    group: 'downloading',
+    section: 'jobs',
     type: 'number',
     label: 'Progress updates every',
     help: 'Shorter is smoother, longer is lighter; 0 updates each percent (0-10000).',
@@ -243,28 +240,24 @@ export const FIELDS = [
   },
   {
     key: 'download.check_integrity',
-    section: 'advanced',
-    group: 'downloading',
+    section: 'jobs',
     type: 'switch',
     label: 'Check file integrity',
     help: 'Verify each finished file and repair known ALAC issues.',
     defaultValue: true,
   },
-  // Advanced › Apple Music requests
   {
     key: 'catalog.motion_artwork_enabled',
-    section: 'advanced',
-    group: 'apple_requests',
+    section: 'lyrics_artwork',
     type: 'switch',
     label: 'Look up animated covers',
     help: 'One extra request per album; it never holds up a download.',
     defaultValue: true,
   },
-  // Advanced › Library sync
+  // Library sync
   {
     key: 'library_sync.enabled',
-    section: 'advanced',
-    group: 'library_sync',
+    section: 'library_sync',
     type: 'switch',
     label: 'Watch my library',
     help: 'Needs the media user token.',
@@ -272,8 +265,7 @@ export const FIELDS = [
   },
   {
     key: 'library_sync.interval_minutes',
-    section: 'advanced',
-    group: 'library_sync',
+    section: 'library_sync',
     type: 'number',
     label: 'Check every',
     help: 'A check is usually one Apple request (1-1440).',
@@ -282,11 +274,10 @@ export const FIELDS = [
     max: 1440,
     unit: 'min',
   },
-  // Advanced › Logging
+  // Logs
   {
     key: 'logging.level',
-    section: 'advanced',
-    group: 'logging',
+    section: 'logging',
     type: 'select',
     label: 'Log level',
     help: 'Messages below this level are dropped.',
@@ -298,19 +289,19 @@ export const FIELDS = [
       { value: 'error', label: 'Error' },
     ],
   },
-  { key: 'logging.access_log', section: 'advanced', group: 'logging', type: 'switch', label: 'HTTP access log', help: 'One line per HTTP request.', defaultValue: false },
-  // Advanced › Simulate
+  { key: 'logging.access_log', section: 'logging', type: 'switch', label: 'HTTP access log', help: 'One line per HTTP request.', defaultValue: false },
+  // Server › Simulate
   {
     key: 'simulate.enabled',
-    section: 'advanced',
+    section: 'server',
     group: 'simulate',
     type: 'switch',
     label: 'Simulate mode',
     help: 'Jobs move through their steps at the simulated speeds below.',
     defaultValue: false,
   },
-  { key: 'simulate.min_speed_kbps', section: 'advanced', group: 'simulate', type: 'number', label: 'Slowest simulated speed', help: 'At least 1.', defaultValue: 512, min: 1, unit: 'KB/s' },
-  { key: 'simulate.max_speed_kbps', section: 'advanced', group: 'simulate', type: 'number', label: 'Fastest simulated speed', help: 'At least the slowest speed.', defaultValue: 4096, min: 1, unit: 'KB/s' },
+  { key: 'simulate.min_speed_kbps', section: 'server', group: 'simulate', type: 'number', label: 'Slowest simulated speed', help: 'At least 1.', defaultValue: 512, min: 1, unit: 'KB/s' },
+  { key: 'simulate.max_speed_kbps', section: 'server', group: 'simulate', type: 'number', label: 'Fastest simulated speed', help: 'At least the slowest speed.', defaultValue: 4096, min: 1, unit: 'KB/s' },
 ];
 
 /**
@@ -323,6 +314,21 @@ export const FIELD_KEYS = FIELDS.map((f) => f.key);
 export const BY_KEY = new Map(FIELDS.map((f) => [f.key, f]));
 
 export const fieldByKey = (key) => BY_KEY.get(key);
+
+const has = (list, v) => Array.isArray(list) && list.includes(v);
+// Fields that apply only while another value allows them: shown disabled,
+// never hidden, so the section keeps its height when a switch flips.
+const REQUIRES = {
+  'download.alac_max_sample_rate': (v) => has(v('download.quality_priority'), 'alac'),
+  'download.alac_max_bit_depth': (v) => has(v('download.quality_priority'), 'alac'),
+  'download.lyrics_timing': (v) => v('download.embed_lyrics') === true || has(v('download.lyrics_files'), 'lrc'),
+  'download.lyrics_extras': (v) => v('download.embed_lyrics') === true || has(v('download.lyrics_files'), 'lrc'),
+  'simulate.min_speed_kbps': (v) => v('simulate.enabled') === true,
+  'simulate.max_speed_kbps': (v) => v('simulate.enabled') === true,
+};
+
+/** Whether the field of `key` takes no input under the values `valueOf` gives (the draft over the base). */
+export const fieldDisabled = (key, valueOf) => Object.hasOwn(REQUIRES, key) && !REQUIRES[key](valueOf);
 export const sectionFields = (id) => FIELDS.filter((f) => f.section === id);
 
 /** A value as the page words it: On/Off, an option's label, a list of labels, a number with its unit. */

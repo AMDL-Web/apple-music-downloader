@@ -1,15 +1,14 @@
-// Settings > Account: the session service status, the logged-in accounts with
+// Settings > Account, below its status head: the logged-in accounts with
 // Log out, and the login form with its two-step code step. A session service
 // without a login API (a bare wrapper-lite) gets the command-line steps
-// instead of the form. While the service cannot be reached, one line with
-// Refresh replaces all of it. `children` (the media user token field) follows
-// as the last block.
+// instead of the form. While the service cannot be reached, the server's
+// own text replaces all of it. `children` (the media user token field and
+// the fact rows) follows as the last block.
 
 import { html, useState } from '../ui/preact.js';
 import { loginWrapper, submitWrapperTwoStep, logoutWrapper } from '../api.js';
-import { wrapperErrorText, wrapperUnreachable, unreachableLine } from '../lib/settings-account.js';
-import { wrapperView } from '../lib/health.js';
-import { useApp, Badge, Button, Icon, KV, Notice, SkeletonKV } from '../ui/components.js';
+import { wrapperErrorText, wrapperUnreachable } from '../lib/settings-account.js';
+import { useApp, Button, Notice } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { useStatus, refreshStatus } from '../ui/system-status.js';
 
@@ -31,47 +30,26 @@ export function AccountPanel({ children }) {
   // null: no dialog; '': ask for the Apple ID; else the account to log out.
   const [logout, setLogout] = useState(null);
 
+  // The section head says the service is unreachable; the body keeps the
+  // server's own words, closed.
   if (down) {
     return html`<div class="account">
       <section class="account-block" aria-label="Session service">
-        <p class="account-down" role="status">
-          <${Icon} name="triangle-alert" size="sm" />
-          <span>${unreachableLine(down)}</span>
-          <${Button} variant="ghost" size="sm" icon="rotate" className="account-down-refresh" onClick=${reload}>Refresh</${Button}>
-        </p>
+        <details class="account-error-details"><summary>Details from the server</summary><span class="mono small wrap-any account-error-detail">${down.detail}</span></details>
       </section>
       ${children}
     </div>`;
   }
 
-  let state;
-  if (!res) state = html`<${SkeletonKV} labels=${['State', 'Connected', 'Regions']} badges=${['State']} />`;
-  else if (res.error) {
-    state = html`<${KV} rows=${[['State', html`<${Badge} view=${wrapperView(res)} />`]]} />
-      <${WrapperError} error=${res.error} step="status" role="warning" />`;
-  } else {
-    const w = res.data;
-    state = html`<${KV}
-      rows=${[
-        ['State', html`<${Badge} view=${wrapperView(res)} />`],
-        ['Connected', w.status ? 'Yes' : 'No'],
-        ['Regions', Array.isArray(w.regions) && w.regions.length ? w.regions.map((r) => r.toUpperCase()).join(', ') : 'None'],
-      ]}
-    />`;
-  }
-  const w = res && res.data;
+  const w = res && !res.error ? res.data : null;
   const accounts = w && Array.isArray(w.accounts) ? w.accounts : [];
   const canLogin = !w || w.login_supported !== false;
 
   return html`<div class="account">
-    <section class="account-block" aria-labelledby="account-status-title">
-      <div class="account-block-head">
-        <h3 class="section-title" id="account-status-title">Session service</h3>
-        <${Button} variant="ghost" size="sm" icon="rotate" onClick=${reload}>Refresh</${Button}>
-      </div>
-      ${state}
-    </section>
-    ${w && canLogin
+    ${res && res.error
+      ? html`<section class="account-block" aria-label="Session service"><${WrapperError} error=${res.error} step="status" role="warning" /></section>`
+      : null}
+    ${w && canLogin && (accounts.length || w.status)
       ? html`<section class="account-block" aria-labelledby="account-list-title">
           <div class="account-block-head">
             <h3 class="section-title" id="account-list-title">Logged-in accounts</h3>
@@ -90,7 +68,7 @@ export function AccountPanel({ children }) {
                   <div class="form-actions">
                     <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout('')}>Log out…</${Button}>
                   </div>`
-              : html`<p class="muted small">No account is logged in. Log in below so downloads can be decrypted.</p>`}
+              : null}
         </section>`
       : null}
     ${!res

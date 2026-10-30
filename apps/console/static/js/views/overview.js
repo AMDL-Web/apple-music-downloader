@@ -3,10 +3,10 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload } from '../api.js';
-import { count, bytes, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
-import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/health.js';
-import { diskRole, lowSpaceDisk } from '../lib/storage.js';
-import { buildHash } from '../lib/route.js';
+import { count, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
+import { attentionRows } from '../lib/domains.js';
+import { SETTINGS_SECTIONS } from '../lib/settings-sections.js';
+import { buildHash, settingsHash } from '../lib/route.js';
 import { useApp, Card, Icon, Badge, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
 import { useNow } from '../ui/hooks.js';
 import { useStatus } from '../ui/system-status.js';
@@ -18,7 +18,7 @@ import { ThroughputCard } from './throughput.js';
 // Sections follow the reading order of the skin, so Tab order equals the
 // visual order: the server status line, Needs attention (only with recent
 // failures), Live queue, Recently completed, Jobs, Throughput. The Log tail
-// is the Logs page; System health is the status line and the System page.
+// is the Logs page; server health is the status line and the Settings board.
 export function OverviewPage() {
   const status = useStatus(STRIP_KEYS);
   // Needs attention sits above everything and is known only after its read:
@@ -260,58 +260,33 @@ function Attention({ onKnown }) {
   </ul></${Card}>`;
 }
 
-const STRIP_KEYS = ['health', 'wrapper', 'librarySync', 'hooks', 'system'];
-
-/**
- * A Storage row when a disk is nearly full (System's red). System's orange
- * stays there: a large disk can sit at 85 % for months with room to spare.
- * A failed /system read stays on the System page too.
- */
-function storageRows(sys) {
-  const disk = sys ? lowSpaceDisk(sys.storage) : null;
-  if (!disk || diskRole(disk) !== 'danger') return [];
-  return [['Storage', { role: 'danger', label: 'Low space', detail: `${bytes(disk.free)} free` }]];
-}
-
-/** The four health rows behind the status line. */
-export function healthRows(results) {
-  const [health, wrapper, sync, hooks] = results;
-  return [
-    ['Backend', backendHealthView(health)],
-    ['Wrapper', wrapperView(wrapper)],
-    ['Library sync', librarySyncView(sync)],
-    ['Hooks', hooksView(hooks)],
-  ];
-}
+const STRIP_KEYS = ['health', 'wrapper', 'librarySync', 'system', 'config'];
 
 /**
  * One line under the page head that answers "is the server healthy?": a quiet
- * status when everything is fine, a notice naming each service that is not
- * (the wrapper unreachable, library sync failing), a missing ffmpeg and a
- * nearly full disk, with a link to System.
+ * status when everything is fine, else a notice naming each Settings domain
+ * that needs action (lib/domains.js attentionRows), each linking to its
+ * section, and Details to the Settings board.
  * Nothing renders until every read has answered, so the line changes once.
  */
 function HealthStrip({ status }) {
+  const app = useApp();
+  const now = useNow(15000);
   // Until then, an empty line holds the strip's place.
   if (STRIP_KEYS.some((k) => !status[k])) return html`<p class="health-strip" data-state="loading" aria-hidden="true">\u00a0</p>`;
-  const sys = status.system.error ? undefined : status.system.data;
-  const rows = [...healthRows([status.health, status.wrapper, status.librarySync, status.hooks]), ...missingToolRows(sys), ...storageRows(sys)];
-  const bad = rows.filter(([, v]) => v.role === 'danger' || v.role === 'warning');
-  const details = html`<a class="health-strip-link" href=${buildHash('system')}>Details</a>`;
+  const bad = attentionRows(status, { now, counts: app.counts, conn: app.conn, simulate: app.simulate }, SETTINGS_SECTIONS);
+  const details = html`<a class="health-strip-link" href=${settingsHash()}>Details</a>`;
   if (bad.length === 0) {
     return html`<p class="health-strip" data-state="ok" data-role="success">
       <${StatusText} view=${{ icon: 'circle-check', role: 'success', label: 'All systems healthy' }} />${details}
     </p>`;
   }
-  const worst = bad.some(([, v]) => v.role === 'danger') ? 'danger' : 'warning';
+  const worst = bad.some((r) => r.role === 'danger') ? 'danger' : 'warning';
   return html`<div class="health-strip notice" data-state="problem" data-role=${worst} role="status">
     <${Icon} name=${worst === 'danger' ? 'circle-x' : 'triangle-alert'} />
     <div class="notice-body">
-      ${bad.map(
-        ([name, v]) => html`<span key=${name} class="health-strip-item"><strong>${name}</strong> ${v.label.toLowerCase()}${v.detail ? `: ${v.detail}` : ''}</span>`,
-      )}
+      ${bad.map((r) => html`<a key=${r.id} class="health-strip-item" href=${r.href}><strong>${r.label}</strong> ${r.text}</a>`)}
       ${details}
     </div>
   </div>`;
 }
-

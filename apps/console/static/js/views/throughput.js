@@ -1,9 +1,10 @@
-// Throughput: the /stats card on the Overview, with totals, the formats mix
-// and two per-day small multiples. Under SPARSE_DAYS days with data the card
-// is one sentence instead: a chart of one bar says nothing.
+// Throughput: the /stats card on the Overview, with totals and two per-day
+// small multiples. Under SPARSE_DAYS days with data the card is one sentence
+// instead: a chart of one bar says nothing. The formats mix is in Settings ›
+// Quality.
 
 import { html, useState } from '../ui/preact.js';
-import { count, bytes, dayLabel, formatShares } from '../lib/format.js';
+import { count, bytes, dayLabel } from '../lib/format.js';
 import { Card, Empty, ErrorNote, Skeleton, Unavailable, Facts } from '../ui/components.js';
 import { useStatus, refreshStatus, STATS_DAYS } from '../ui/system-status.js';
 
@@ -55,38 +56,12 @@ export function ThroughputCard() {
           ].filter(Boolean)}
         />`
       : null}
-    ${stats ? html`<${Formats} codecs=${stats.codecs} />` : null}
     ${stats
       ? html`<${Throughput} daily=${daily} today=${today} />`
       : poll.error
         ? html`<${ErrorNote} title="Couldn't load stats" error=${poll.error} onRetry=${() => refreshStatus('stats')} />`
         : html`<${Skeleton} kind="chart" />`}
   </${Card}>`;
-}
-
-/**
- * The codec mix of every retained job (/stats `codecs`): a stacked bar
- * (decorative) and a list with label and track count. Nothing renders
- * before any track has completed.
- */
-function Formats({ codecs }) {
-  const shares = formatShares(codecs);
-  if (shares.length === 0) return null;
-  return html`<div class="tp-formats" role="group" aria-labelledby="tp-formats-title">
-    <p class="tp-formats-title" id="tp-formats-title">Formats, all jobs</p>
-    <div class="formats-bar" aria-hidden="true">
-      ${shares.map((f, i) => html`<span key=${f.key} class="formats-seg" data-key=${f.key} style=${{ '--w': String(f.share), '--i': String(i) }}></span>`)}
-    </div>
-    <ul class="formats-list">
-      ${shares.map(
-        (f, i) => html`<li key=${f.key} class="formats-item" data-key=${f.key} style=${{ '--i': String(i) }}>
-          <span class="formats-swatch" aria-hidden="true"></span>
-          <span class="formats-label">${f.label}</span>
-          <span class="formats-count">${count(f.tracks)} ${f.tracks === 1 ? 'track' : 'tracks'}</span>
-        </li>`,
-      )}
-    </ul>
-  </div>`;
 }
 
 /** Compact tick value: 1284 -> "1.3K". */

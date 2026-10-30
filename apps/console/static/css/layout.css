@@ -19,17 +19,6 @@
   grid-column: span 12;
 }
 
-.grid-2 {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  align-items: start;
-  gap: var(--grid-gap);
-}
-
-.grid-2 > * {
-  grid-column: span 12;
-}
-
 .card {
   display: flex;
   flex-direction: column;
@@ -628,3 +617,12 @@
   color: var(--text-secondary);
 }
 
+/* A widget whose endpoint this backend lacks (components.js Unavailable). */
+.quiet-note {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}

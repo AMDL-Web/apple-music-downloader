@@ -57,7 +57,7 @@
   color: var(--text-primary);
 }
 
-.settings-nav-item[aria-current="true"] {
+.settings-nav-item[aria-current] {
   background: var(--bg-selected);
   color: var(--text-primary);
   font-weight: var(--w-medium);
@@ -134,9 +134,12 @@
 }
 
 .settings-list-summary {
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-list-chevron {
@@ -164,12 +167,6 @@
   flex-direction: column;
   gap: var(--page-gap);
   min-width: 0;
-}
-
-.settings-intro {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
 }
 
 .save-bar {
@@ -450,11 +447,6 @@
   margin-block: auto;
 }
 
-.field[data-type="path"] .field-input,
-.field[data-type="template"] .field-input {
-  max-width: 640px;
-}
-
 /* A checkbox drawn as a switch: the filled track says it is on. */
 .field-switch {
   appearance: none;
@@ -592,12 +584,6 @@
   border-top: var(--row-divider);
 }
 
-.settings-group-intro {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
 /* ---- Panels: template reference, library sync, config file, account -- */
 
 /* A path template: the field and its Variables button in a row, the
@@ -606,7 +592,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-1_5);
-  max-width: 640px;
 }
 
 .template-row {
@@ -706,7 +691,6 @@
   border-top: 0;
 }
 
-.settings-panel-head,
 .account-block-head {
   display: flex;
   align-items: center;
@@ -714,27 +698,9 @@
   gap: var(--s-2);
 }
 
-.settings-panel-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2) var(--s-3);
-}
-
-.settings-panel-actions > .muted {
-  flex: 1 1 240px;
-}
-
 .settings-reload-error,
 .account-error-detail {
   display: block;
-}
-
-.sync-state {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-1) var(--s-2);
 }
 
 .account-error-details summary {
@@ -743,21 +709,6 @@
   font-size: var(--fs-12);
   line-height: var(--lh-12);
   cursor: pointer;
-}
-
-/* The session service cannot be reached: one line with Refresh. */
-.account-down {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--s-2);
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
-.account-down > .icon {
-  flex: none;
-  color: var(--warning-text);
 }
 
 /* The media user token: its state or an empty box, and the help steps. */
@@ -1003,7 +954,7 @@
 }
 
 @media (forced-colors: active) {
-  .settings-nav-item[aria-current="true"] {
+  .settings-nav-item[aria-current] {
     border: 1px solid CanvasText;
   }
 

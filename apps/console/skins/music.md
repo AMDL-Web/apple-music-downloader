@@ -55,7 +55,7 @@ Contrast is measured on `--bg-surface` (the grouped surface) unless noted.
 | `--select-chevron` | chevron in `#636368` | in `#a1a1a6` | the select arrow (a data image, so it has a value per theme) | non-text |
 | `--track` | `#e8e8ed` | `#3a3a3c` | empty bars | |
 | `--chart-bar` | `#6b7b93` | `#8d9bb3` | per-day chart bars: blue-gray, so red stays with the primary action and failures | 3.95 / 6.05 |
-| `--series-1` to `-4` | `#007aff`, `#ff9500`, `#8944ab`, `#77777c` | `#0a84ff`, `#ff9f0a`, `#bf5af2`, `#8e8e93` | formats bar and legend, by position | non-text |
+| `--series-1` to `-4` | `#007aff`, `#ff9500`, `#8944ab`, `#77777c` | `#0a84ff`, `#ff9f0a`, `#bf5af2`, `#8e8e93` | the formats bar (Settings › Quality), by position | non-text |
 
 Tints (`--*-tint`) are the role color at 10-20 % alpha. Badges carry no tint:
 an icon (or the equalizer) plus a word, so status never rests on color. The
@@ -135,7 +135,7 @@ base durations (120 ms color, 200 ms overlays).
   px the center tab's mark is a 48 x 30 red capsule with a soft red shadow
   that rises 6 px over the 24 px icon line, so "New" sits on the other
   labels' line; More turns red like any current tab
-  while Logs, System or Settings is shown or its sheet is open.
+  while Settings is shown or its sheet is open.
 - **More sheet** (phones): the frosted sheet holds an inset grouped list on
   `--bg-group` (16 px radius, 48 px rows, 16 px labels), secondary glyphs as
   in the sidebar, hairlines from the label, the current page in semibold with
@@ -182,16 +182,19 @@ base durations (120 ms color, 200 ms overlays).
   sublabel: label and number set the height, equal across columns. A hovered
   column fills its whole box and the surface's radius clips the end ones, as
   a grouped-list row does.
-- **System health**: inset grouped list, 30 px solid icon tiles in the role
-  color (a failed component's tile is the danger tint with a red glyph), hairlines inset to the text, status word right-aligned in its role
-  color, detail in mono (System page).
+- **Settings status**: board tiles are cards; a tile's or a head's icon tile
+  is `--bg-fill` with a secondary glyph, solid in its role (glyph in
+  `--on-role`) only for a warning or danger. Charts use `--track` for the
+  empty part, `--chart-bar` for meters and hourly bars, `--series-1..4` for
+  the formats bar, `--success`/`--danger` for hook outcomes and `--info`
+  for busy worker cells. The `{ }` keys button sits at the end of the page
+  head's title row.
 - **Grouped lists (keyline)**: every hairline starts at the text and runs to
-  the card's right edge: health rows and label/value lists
-  (About, Runtime). The tool rows (ffmpeg) continue the Runtime list with the
-  same row padding.
-- **Throughput**: totals as 20 px figures over their labels; the formats bar
-  and its legend dots take one hue per position (`--series-1` to `-4`: blue,
-  orange, purple, gray); the per-day bars are `--chart-bar`.
+  the card's right edge: label/value lists, Settings fields, fact rows,
+  hooks and action blocks.
+- **Throughput**: totals as 20 px figures over their labels; the per-day
+  bars are `--chart-bar`. The formats bar (Settings › Quality) takes one hue
+  per position (`--series-1` to `-4`: blue, orange, purple, gray).
 - **Queue**: one grouped list, 48 px covers, hairlines inset past the cover.
   Only a queued or running job draws progress; a finished row is title, then
   artist and track count, and a plain completed status is a green check with
@@ -248,8 +251,8 @@ base durations (120 ms color, 200 ms overlays).
 - **Settings**: the section list repeats the sidebar (secondary 18 px glyphs, 15 px
   labels, the current section a filled pill in semibold; 14 px on the rail).
   Fields are grouped rows whose hairlines run from the text to the card's
-  right edge, as do panel rules, the rules between Advanced's groups and the
-  library sync and account status rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
+  right edge, as do panel rules, the rules between Server's groups, fact
+  rows, hooks, action blocks and the account rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
   soft shadow, red when on, the off track keeping its `--border-control`
   outline, no On/Off word beside it). The ordered list is an inset list like
   the codec ranking. Panel actions

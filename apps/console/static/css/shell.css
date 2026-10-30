@@ -179,10 +179,14 @@
   outline: none;
 }
 
+/* Spans the bar with its items at the end, so a tag added on the left (Simulate) moves nothing. */
 .topbar-right {
   display: flex;
+  flex: 1;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--s-3);
+  min-width: 0;
 }
 
 .search-trigger {

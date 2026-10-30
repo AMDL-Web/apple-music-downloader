@@ -19,7 +19,7 @@ import {
   progressLegend,
   CELL_MAX,
 } from '../static/js/lib/status.js';
-import { backendHealthView, wrapperView, summarizeError, missingToolRows, librarySyncView, hooksView } from '../static/js/lib/health.js';
+import { summarizeError } from '../static/js/lib/health.js';
 
 const ROLES = new Set(['info', 'success', 'danger', 'warning', 'neutral', 'skipped']);
 
@@ -82,44 +82,6 @@ test('hook status views', () => {
   assert.equal(hookStatusView('succeeded').role, 'success');
   assert.equal(hookStatusView('failed').role, 'danger');
   assert.equal(hookStatusView('interrupted').role, 'warning');
-});
-
-test('health rows', () => {
-  assert.equal(backendHealthView({ data: { status: 'ok' } }).label, 'Healthy');
-  const degraded = backendHealthView({ error: { status: 503, message: 'x', body: { status: 'degraded', database_error: 'disk I/O error' } } });
-  assert.equal(degraded.label, 'Degraded');
-  assert.equal(degraded.detail, 'disk I/O error');
-  assert.equal(backendHealthView({ error: { status: 0, message: 'Cannot reach the server.' } }).label, 'Unreachable');
-
-  assert.deepEqual(wrapperView({ data: { ready: true, status: true, regions: ['us', 'jp'], accounts: ['a@example.com', 'b@example.com'] } }), {
-    icon: 'circle-check',
-    role: 'success',
-    label: 'Ready',
-    detail: 'US, JP',
-  });
-  // Ready without regions still says something: the accounts, else that it is signed in.
-  assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com'] } }).detail, '1 account signed in');
-  assert.equal(wrapperView({ data: { ready: true, status: true, regions: [], accounts: ['a@example.com', 'b@example.com'] } }).detail, '2 accounts signed in');
-  assert.equal(wrapperView({ data: { ready: true, status: true } }).detail, 'Signed in');
-  assert.equal(wrapperView({ data: { ready: false, status: false, regions: [], accounts: [] } }).detail, 'No account logged in');
-  assert.equal(wrapperView({ data: { ready: false, status: true, regions: [], accounts: [] } }).detail, 'Wrapper is not ready', 'a wrapper that names no accounts is judged by status');
-  // Answering without a storefront means nobody is logged in: not Ready.
-  assert.deepEqual(wrapperView({ data: { ready: true, status: false, regions: [], accounts: [], login_supported: false } }), {
-    icon: 'triangle-alert',
-    role: 'warning',
-    label: 'No account',
-    detail: 'Log in so downloads can be decrypted',
-  });
-  assert.equal(wrapperView({ error: { status: 503, message: 'unreachable' } }).label, 'Unreachable');
-
-  assert.equal(librarySyncView({ error: { status: 503, message: 'Service Unavailable' } }).label, 'Unavailable');
-  assert.equal(librarySyncView({ data: { enabled: false } }).label, 'Off');
-  assert.equal(librarySyncView({ data: { enabled: true, last_error: 'no token' } }).role, 'warning');
-  assert.equal(librarySyncView({ data: { enabled: true, interval_minutes: 30 } }).detail, 'Every 30 min');
-
-  assert.equal(hooksView({ data: { enabled: false, entries: [] } }).label, 'Off');
-  assert.equal(hooksView({ data: { enabled: true, entries: [] } }).label, 'None configured');
-  assert.equal(hooksView({ data: { enabled: true, entries: [{ enabled: true }, { enabled: false }] } }).detail, '1 of 2 enabled');
 });
 
 test('log levels and connection states', () => {
@@ -214,21 +176,7 @@ test('summarizeError turns gRPC dial chains into one line and keeps the full tex
   assert.equal(summarizeError('rpc error: code = Internal desc = boom'), 'boom');
   assert.equal(summarizeError('x'.repeat(100)).length, 80);
   assert.equal(summarizeError(undefined), undefined);
-  const view = wrapperView({ error: { status: 503, message: raw } });
-  assert.equal(view.detail, 'Connection refused (127.0.0.1:8080)');
-  assert.equal(view.title, raw);
-});
-
-test('missingToolRows flags a missing ffmpeg outside simulate mode', () => {
-  const err = 'exec: "ffmpeg": executable file not found in $PATH';
-  const sys = { simulate: false, tools: [{ name: 'ffmpeg', available: false, error: err }] };
-  const rows = missingToolRows(sys);
-  assert.deepEqual(rows.map(([name, v]) => [name, v.role, v.label]), [['ffmpeg', 'danger', 'Missing']]);
-  assert.equal(rows[0][1].detail, 'needed for every download');
-  assert.equal(rows[0][1].title, err);
-  assert.deepEqual(missingToolRows({ ...sys, simulate: true }), [], 'simulate mode needs no ffmpeg');
-  assert.deepEqual(missingToolRows({ tools: [{ name: 'ffmpeg', available: true, path: '/usr/bin/ffmpeg' }] }), []);
-  assert.deepEqual(missingToolRows(undefined), []);
+  assert.equal(summarizeError('rpc error: code = Unavailable desc = invalid target address 10.0.0.5:12340, missing port'), 'Invalid address (10.0.0.5:12340)');
 });
 
 test('progressCells gives one cell per track in ordered runs', () => {

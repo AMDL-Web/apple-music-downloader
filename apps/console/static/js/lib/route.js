@@ -1,15 +1,18 @@
 // Pure hash routing and filter mapping. Routes are #/ (also #/overview),
-// #/overview/:id, #/queue, #/queue/:id, #/logs, #/system, #/new, #/new/:id
-// and #/settings; filters live in the hash query so a filtered view is a
+// #/overview/:id, #/queue, #/queue/:id, #/logs, #/new, #/new/:id and
+// #/settings; filters live in the hash query so a filtered view is a
 // shareable link.
 
-export const PAGES = ['overview', 'queue', 'logs', 'system', 'new', 'settings'];
+export const PAGES = ['overview', 'queue', 'logs', 'new', 'settings'];
 
-const PAGE_PATHS = { overview: '', queue: 'queue', logs: 'logs', system: 'system', new: 'new', settings: 'settings' };
+const PAGE_PATHS = { overview: '', queue: 'queue', logs: 'logs', new: 'new', settings: 'settings' };
 // #/overview is an alias of #/: a natural guess at the address. buildHash
 // writes #/, or #/overview/:id with a job. #/showcase is the address of a
 // page the Overview replaced; its links, drawer included, land there.
 const PATH_PAGES = { ...Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k])), overview: 'overview', showcase: 'overview' };
+// Addresses of pages merged into another: the route reports `replace`, and
+// the router rewrites the address in place, so Back does not return to it.
+const PAGE_ALIASES = { system: 'settings' };
 
 /** Pages whose route may carry a job id that opens the job drawer. */
 const DRAWER_PAGES = new Set(['overview', 'queue', 'new']);
@@ -24,8 +27,9 @@ function decodeSegment(s) {
 }
 
 /**
- * Parses location.hash into {page, jobId, params}. Unknown paths, and a job
- * id with a malformed percent escape, give page "notfound".
+ * Parses location.hash into {page, jobId, params}, plus `replace: true` for
+ * an alias address. Unknown paths, and a job id with a malformed percent
+ * escape, give page "notfound".
  */
 export function parseHash(hash) {
   let h = typeof hash === 'string' ? hash : '';
@@ -36,6 +40,7 @@ export function parseHash(hash) {
   const params = {};
   for (const [k, v] of new URLSearchParams(query)) params[k] = v;
   const parts = path.split('/').filter(Boolean);
+  if (parts.length === 1 && PAGE_ALIASES[parts[0]]) return { page: PAGE_ALIASES[parts[0]], jobId: null, params: {}, replace: true };
   const page = PATH_PAGES[parts[0] || ''];
   if (!page) return { page: 'notfound', jobId: null, params };
   if (parts.length === 1 || parts.length === 0) return { page, jobId: null, params };

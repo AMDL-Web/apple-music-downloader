@@ -254,14 +254,22 @@ const SCENARIOS = [
     ],
   },
 
-  // ---- System
-  { id: 'system/default', world: 'active', path: '#/system' },
-  { id: 'system/simulate', world: 'active', path: '#/system', worldOpts: { simulate: true } },
-  { id: 'system/degraded', world: 'active', path: '#/system', mutate: (w) => Object.assign(w.wrapper, { ready: false, status: false, regions: [] }) && (w.storageFree = 2.1e9) },
-
-  // ---- Settings
-  ...['account', 'quality', 'files', 'lyrics_artwork', 'advanced'].map((s) => ({ id: `settings/${s}`, world: 'active', path: `#/settings?section=${s}` })),
+  // ---- Settings: the status board, every section, and the states a head can be in
+  { id: 'settings/board', world: 'active', path: '#/settings' },
+  { id: 'settings/board-slow', world: 'active', path: '#/settings', latency: 1500 },
+  { id: 'settings/board-empty', world: 'empty', path: '#/settings' },
+  { id: 'settings/board-simulate', world: 'active', path: '#/settings', worldOpts: { simulate: true }, faults: { 'GET /api/v1/wrapper/status': { status: 503, code: 'wrapper_unavailable', message: 'dial tcp 127.0.0.1:1: connect: connection refused' } } },
+  { id: 'settings/board-alarms', world: 'active', path: '#/settings', mutate: (w) => Object.assign(w.wrapper, { ready: false, status: false, regions: [] }) && (w.storageFree = 2.1e9) },
+  {
+    id: 'settings/board-missing',
+    world: 'active',
+    path: '#/settings',
+    faults: Object.fromEntries(['GET /api/v1/stats', 'GET /api/v1/hooks', 'GET /api/v1/library-sync'].map((k) => [k, { status: 404, code: 'not_found', message: 'not found' }])),
+  },
+  ...['account', 'quality', 'files', 'lyrics_artwork', 'jobs', 'library_sync', 'hooks', 'logging', 'server'].map((s) => ({ id: `settings/${s}`, world: 'active', path: `#/settings?section=${s}` })),
+  { id: 'settings/account-down', world: 'active', path: '#/settings?section=account', faults: { 'GET /api/v1/wrapper/status': { status: 503, code: 'wrapper_unavailable', message: 'dial tcp 127.0.0.1:1: connect: connection refused' } } },
   { id: 'settings/list', world: 'active', path: '#/settings', widths: [375, 320] },
+  { id: 'settings/section-phone', world: 'active', path: '#/settings?section=library_sync', widths: [375, 320] },
   { id: 'settings/account-login', world: 'active', path: '#/settings?section=account', mutate: (w) => Object.assign(w.wrapper, { login_supported: true, status: false, regions: [] }) },
   { id: 'settings/load-error', world: 'active', path: '#/settings?section=quality', faults: { 'GET /api/v1/config': { status: 500, code: 'internal_error', message: 'config store unavailable' } } },
   {
@@ -287,7 +295,14 @@ const SCENARIOS = [
     world: 'active',
     path: '#/settings?section=account',
     noStates: true,
-    transitions: ['quality', 'files', 'advanced'].map((s) => ({ id: `to-${s}`, title: `section → ${s}`, expectScroll: 0, run: (ctx) => ctx.hash(`#/settings?section=${s}`) })),
+    transitions: ['quality', 'files', 'jobs', 'server'].map((s) => ({ id: `to-${s}`, title: `section → ${s}`, expectScroll: 0, run: (ctx) => ctx.hash(`#/settings?section=${s}`) })),
+  },
+  {
+    id: 'settings/board-switching',
+    world: 'active',
+    path: '#/settings',
+    noStates: true,
+    transitions: ['#/settings?section=files', '#/settings', '#/', '#/settings'].map((h) => ({ id: `to-${h}`, title: `→ ${h}`, expectScroll: 0, run: (ctx) => ctx.hash(h) })),
   },
 
   // ---- Overlays
@@ -318,7 +333,7 @@ const SCENARIOS = [
     world: 'active',
     path: '#/',
     noStates: true,
-    transitions: ['#/queue', '#/new', '#/logs', '#/system', '#/settings', '#/', '#/queue'].map(nav),
+    transitions: ['#/queue', '#/new', '#/logs', '#/settings', '#/', '#/queue'].map(nav),
   },
 ];
 
@@ -352,9 +367,9 @@ export default {
   },
   variants: { stateWidths: [1280, 375] },
   selectors: {
-    container: 'section.card, .card, [data-dialog], .drawer-section, .settings-panel, .notice, .empty, .kpi, .live-idle-card, .job-row, .new-link, .new-hit, .health-row, .settings-list-card, .sheet',
-    row: 'li, .job-row, .track, .field, .new-link, .new-hit, .log-row, .health-row, .kv > div, .fact',
-    icon: 'svg, .icon, .status-icon, .conn-dot, .health-icon, .log-dot, .badge-dot',
+    container: 'section.card, .card, [data-dialog], .drawer-section, .settings-panel, .notice, .empty, .kpi, .live-idle-card, .job-row, .new-link, .new-hit, .status-tile, .domain-head, .settings-list-group, .sheet',
+    row: 'li, .job-row, .track, .field, .new-link, .new-hit, .log-row, .fact-row, .kv > div, .fact',
+    icon: 'svg, .icon, .status-icon, .conn-dot, .domain-icon, .log-dot, .badge-dot',
     badge: '.nav-badge, .seg-count',
     nav: 'nav.nav, nav.tabbar, nav.settings-nav',
     region: 'main.main',

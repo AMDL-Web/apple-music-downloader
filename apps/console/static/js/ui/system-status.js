@@ -3,15 +3,34 @@
 // Settings, New download and the shell. Keys and intervals:
 //   health, system, wrapper, librarySync, hooks  30 s
 //   stats (GET /stats?days=STATS_DAYS)           60 s (the server caches 30 s)
+//   logs (errors of the last 24 h, by cursor)     60 s
 //   config                                        no interval: first subscribe, invalidate, epoch
-// An entry is {data, error, at}: `error` set when the last read failed,
-// `data` from the last read that succeeded; undefined before the first answer.
+// An entry is {data, error, at, okAt}: `error` set when the last read failed,
+// `data` from the last read that succeeded (at okAt); undefined before the
+// first answer.
 
 import { useEffect, useRef, useState } from './preact.js';
-import { getHealth, getSystem, getWrapperStatus, getLibrarySync, getHooks, getStats, getConfig } from '../api.js';
+import { getHealth, getSystem, getWrapperStatus, getLibrarySync, getHooks, getStats, getConfig, listLogs } from '../api.js';
 import { createStatusStore } from '../lib/status-store.js';
+import { STATS_DAYS, logsQuery, mergeLogs } from '../lib/sysdata.js';
 
-export const STATS_DAYS = 14;
+export { STATS_DAYS };
+
+// The error log of the last 24 hours: one read of it, then only what is
+// newer (the cursor). With none in that window, `last` is the latest error
+// kept at all, read once.
+let logState = null;
+async function readLogs() {
+  const now = Date.now();
+  const page = await listLogs(logsQuery(logState, now));
+  const last = logState ? logState.last : undefined;
+  logState = { ...mergeLogs(logState, page, now), last };
+  if (logState.entries.length === 0 && last === undefined) {
+    const one = await listLogs({ level: 'error', limit: 1 });
+    logState = { ...logState, last: (one && Array.isArray(one.logs) && one.logs[one.logs.length - 1]) || null };
+  }
+  return logState;
+}
 
 const store = createStatusStore({
   fetchers: {
@@ -21,9 +40,10 @@ const store = createStatusStore({
     librarySync: getLibrarySync,
     hooks: getHooks,
     stats: () => getStats(STATS_DAYS),
+    logs: readLogs,
     config: getConfig,
   },
-  every: { health: 30000, system: 30000, wrapper: 30000, librarySync: 30000, hooks: 30000, stats: 60000 },
+  every: { health: 30000, system: 30000, wrapper: 30000, librarySync: 30000, hooks: 30000, stats: 60000, logs: 60000 },
   visible: () => document.visibilityState === 'visible',
 });
 
@@ -58,5 +78,8 @@ export const refreshStatus = (key) => store.refresh(key);
 export const invalidateStatus = (keys) => store.invalidate(keys);
 /** Stores an answer of the same GET read elsewhere. */
 export const primeStatus = (key, data) => store.prime(key, data);
-/** The feed came back after an outage (app.epoch went up). */
-export const statusEpoch = () => store.bumpEpoch();
+/** The feed came back after an outage (app.epoch went up); the server may have restarted, so the log cursor too. */
+export const statusEpoch = () => {
+  logState = null;
+  store.bumpEpoch();
+};

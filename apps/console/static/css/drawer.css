@@ -411,10 +411,7 @@
 }
 
 .hook-list,
-.activity-list,
-.tool-list,
-.storage-list,
-.account-list {
+.activity-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -423,23 +420,13 @@
   gap: var(--s-2);
 }
 
-.hook-row,
-/* A tool continues the Runtime rows above it: the same two columns as .kv-row. */
-.tool-row {
+.hook-row {
   display: grid;
   grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
   align-items: baseline;
   gap: var(--s-3);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
-}
-
-.tool-value {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--s-1) var(--s-3);
-  min-width: 0;
 }
 
 .hook-error {

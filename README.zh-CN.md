@@ -153,7 +153,7 @@ go run ./apps/amdl serve
 要一份白盒模板（`/key`），然后在本进程内用 `internal/fairplay` 自己解密样本；
 `internal/fairplay` 是 [Temari](https://github.com/WorldObservationLog/Temari) 的纯 Go 翻译。
 wrapper 还提供歌词、AAC-LC 许可证，以及 Hi-Res ALAC 曲目的设备清单。没有 wrapper 时 amdl
-也能启动；`GET /api/v1/wrapper/status` 和控制台的 System 页面会显示它是否可达、是否已登录。
+也能启动；`GET /api/v1/wrapper/status` 和控制台的 Settings 页面会显示它是否可达、是否已登录。
 
 **Apple 曲库。** 所有曲库读取都发往 `amp-api.music.apple.com`，用的是从 `music.apple.com`
 抓取的令牌；amdl 不需要 Apple 开发者密钥。这个接口没有公开文档，可能随时变化。

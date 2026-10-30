@@ -24,9 +24,11 @@ const GROUPED = new Set(['list', 'set']);
  * .field-help with a select's chosen .field-option-hint, then with `showKeys` .field-default and .field-key) +
  * .field-control, then .field-error, .field-warning. A saved value that
  * differs from the default offers "Reset to default", which is an edit like
- * any other (Undo takes it back).
+ * any other (Undo takes it back). A `disabled` field keeps its row and value
+ * but takes no input (it applies only while another setting allows it);
+ * `after` is a line under the row (a folder's free space).
  */
-export function SettingsField({ field, value, changed, error, warning, showKeys, onChange, onRevert }) {
+export function SettingsField({ field, value, changed, error, warning, showKeys, disabled, after, onChange, onRevert }) {
   const id = fieldId(field.key);
   const hasDefault = field.defaultValue !== undefined;
   const described = [`${id}-help`, showKeys && hasDefault ? `${id}-default` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
@@ -42,6 +44,7 @@ export function SettingsField({ field, value, changed, error, warning, showKeys,
     data-wide=${WIDE.has(field.type) ? '' : undefined}
     data-changed=${changed ? '' : undefined}
     data-invalid=${error ? '' : undefined}
+    data-disabled=${disabled ? '' : undefined}
   >
     <div class="field-text">
       <div class="field-label-row">
@@ -68,9 +71,10 @@ export function SettingsField({ field, value, changed, error, warning, showKeys,
         : null}
       ${showKeys ? html`<code class="field-key">${field.key}</code>` : null}
     </div>
-    <div class="field-control">${control(ctl)}</div>
+    ${disabled ? html`<fieldset class="field-control" disabled>${control(ctl)}</fieldset>` : html`<div class="field-control">${control(ctl)}</div>`}
     ${error ? html`<p class="field-error" id=${`${id}-error`} data-role="danger"><${Icon} name="circle-x" size="sm" /><span>${error}</span></p>` : null}
     ${warning && !error ? html`<p class="field-warning" id=${`${id}-warn`} data-role="warning"><${Icon} name="triangle-alert" size="sm" /><span>${warning}</span></p>` : null}
+    ${after ? html`<div class="field-after">${after}</div>` : null}
   </div>`;
 }
 

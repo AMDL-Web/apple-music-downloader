@@ -11,8 +11,8 @@
 export function wrapperUnreachable(err) {
   if (!err || !err.status) return null;
   const raw = err.message || '';
-  if (err.code !== 'wrapper_unavailable' && !/dial tcp /.test(raw)) return null;
-  const m = /dial tcp (\S+?):\s/.exec(raw);
+  if (err.code !== 'wrapper_unavailable' && !/dial tcp |invalid target address /.test(raw)) return null;
+  const m = /dial tcp (\S+?):\s/.exec(raw) || /invalid target address (\S+?)[,:]?(?:\s|$)/.exec(raw);
   return { address: m ? m[1] : '', detail: raw };
 }
 

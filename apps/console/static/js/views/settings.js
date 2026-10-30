@@ -1,18 +1,22 @@
-// Settings (#/settings?section=): the runtime configuration by section, the
-// Apple Music login, library sync and the configuration file. The page
-// head comes from app.js; this is the body: a section list beside the open
-// section (on a phone, the list first and each section its own view with a
-// way back), and a sticky save bar while anything differs
-// from the server. Save sends PUT /api/v1/config with only the changed
-// leaves (lib/settings-draft.js buildPatch); leaving with unsaved changes asks
-// first, inside the console (the app's leave guard) and on unload.
+// Settings (#/settings?section=): the server's status and its runtime
+// configuration in one page. The page head comes from app.js; this is the
+// body: the section list beside the status board (#/settings) or one open
+// section, its status head above its fields (on a phone, the list with live
+// summaries first and each section its own view with a way back), and a
+// fixed save bar while anything differs from the server. Save sends PUT
+// /api/v1/config with only the changed leaves (lib/settings-draft.js
+// buildPatch); leaving with unsaved changes asks first, inside the console
+// (the app's leave guard) and on unload. Status comes from the shared store
+// (ui/system-status.js), every key of it, since the board shows them all.
 
-import { html, useState, useEffect, useMemo, useRef, useCallback } from '../ui/preact.js';
-import { useMedia } from '../ui/hooks.js';
+import { html, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from '../ui/preact.js';
+import { useMedia, useNow } from '../ui/hooks.js';
 import { getConfig, putConfig } from '../api.js';
-import { primeStatus, invalidateStatus } from '../ui/system-status.js';
+import { useStatus, primeStatus, invalidateStatus, refreshStatus } from '../ui/system-status.js';
 import { FIELD_KEYS, fieldByKey } from '../lib/settings.js';
-import { sectionById, groupById } from '../lib/settings-sections.js';
+import { SETTINGS_SECTIONS, BOARD_SECTIONS, sectionById, groupById } from '../lib/settings-sections.js';
+import { domainView } from '../lib/domains.js';
+import { refreshKeys } from '../lib/facts.js';
 import {
   flattenConfig,
   changedKeys,
@@ -27,38 +31,52 @@ import {
   draftAfterSave,
 } from '../lib/settings-draft.js';
 import { punctuated } from '../lib/format.js';
-import { settingsSection, settingsField, settingsHash, parseHash } from '../lib/route.js';
-import { readPref, writePref } from '../lib/prefs.js';
-import { useApp, Card, Notice } from '../ui/components.js';
+import { settingsSection, settingsField, settingsHash, parseHash, buildHash } from '../lib/route.js';
+import { useApp, Notice, LinkButton } from '../ui/components.js';
 import { ConfirmDialog, isDialogOpen } from '../ui/dialogs.js';
 import { focusField } from '../ui/field-focus.js';
 import { SectionBody, groupDomId } from './settings-section.js';
 import { SettingsNav, SettingsList, SettingsBack, SaveBar } from './settings-nav.js';
-
-// "Show config keys and defaults" is a per-device preference.
-const KEYS_PREF = 'amdl.console.settings.keys';
-const storage = () => {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-};
+import { DomainHead, RefreshButton } from './settings-head.js';
+import { SettingsBoard } from './settings-board.js';
+import { useShowKeys } from './settings-keys.js';
 
 const EMPTY = { loaded: false, error: null, base: {}, persisted: true, reloadError: '' };
+const STATUS_KEYS = ['health', 'system', 'wrapper', 'librarySync', 'hooks', 'stats', 'logs', 'config'];
+
+// The head actions that read a domain again (D18), by section, and the keys they read.
+const REFRESH = {
+  account: { label: 'Refresh session status', keys: ['wrapper'] },
+  jobs: { label: 'Refresh jobs status', keys: ['system', 'stats'] },
+  library_sync: { label: 'Refresh library sync status', keys: ['librarySync'] },
+  hooks: { label: 'Refresh hooks status', keys: ['hooks', 'stats'] },
+};
+
+/** Lyrics & artwork's line on the phone list: "5000 × 5000 JPG · LRC", from the saved values. */
+function artworkSummary(base) {
+  const size = base['download.cover_size'];
+  const fmt = base['download.cover_format'];
+  const files = Array.isArray(base['download.lyrics_files']) ? base['download.lyrics_files'] : [];
+  const cover = [typeof size === 'string' ? size.replace(/x/, ' × ') : '', typeof fmt === 'string' ? fmt.toUpperCase() : ''].filter(Boolean).join(' ');
+  return [cover, files.map((f) => String(f).toUpperCase()).join(' + ')].filter(Boolean).join(' · ');
+}
 
 export function SettingsPage({ route }) {
   const app = useApp();
   const asked = settingsSection(route.params);
   const section = sectionById(asked, settingsField(route.params));
-  // A phone opens #/settings on the list of sections, each its own view.
+  // #/settings without a section is the status board; a phone shows the
+  // list of sections instead, each its own view.
   const phone = useMedia('(max-width: 639px)');
-  const listView = phone && !asked && !settingsField(route.params);
-  const [showKeys, setShowKeys] = useState(() => readPref(storage(), KEYS_PREF, (v) => v === '1'));
-  const changeShowKeys = (on) => {
-    setShowKeys(on);
-    writePref(storage(), KEYS_PREF, on ? '1' : '0');
-  };
+  const board = !asked && !settingsField(route.params);
+  const listView = phone && board;
+  const boardView = !phone && board;
+  const [showKeys] = useShowKeys();
+  const st = useStatus(STATUS_KEYS);
+  const now = useNow(15000);
+  const offline = app.conn && app.conn.state === 'offline';
+  const ctx = { now, counts: app.counts, conn: app.conn, simulate: app.simulate };
+  const views = Object.fromEntries(BOARD_SECTIONS.map((s) => [s.id, domainView(s.id, st, ctx)]));
   const [cfg, setCfg] = useState(EMPTY);
   const [draft, setDraft] = useState({});
   const [saving, setSaving] = useState(false);
@@ -93,12 +111,13 @@ export function SettingsPage({ route }) {
     });
   }, []);
 
-  // A save or a reload can change what /system and /library-sync report
-  // (simulate, folders, library sync): pages that show them read again.
+  // A save can change what /system and /library-sync report (simulate,
+  // folders, library sync): the keys its changes touch are read again
+  // (lib/facts.js refreshKeys). A reload from the file may change any.
   const applyWritten = useCallback(
-    (res) => {
+    (res, keys) => {
       apply(res);
-      invalidateStatus(['system', 'librarySync']);
+      invalidateStatus(keys ? refreshKeys(keys) : ['system', 'librarySync']);
     },
     [apply],
   );
@@ -163,7 +182,7 @@ export function SettingsPage({ route }) {
     const bad = firstErrorKey(checks.errors);
     if (bad) {
       const where = sectionOf(bad);
-      if (where === section.id) focusField(bad);
+      if (!board && where === section.id) focusField(bad);
       else app.navigate(settingsHash(where, bad));
       setLive(`Not saved: ${labelOf(bad)}. ${checks.errors[bad]}.`);
       return false;
@@ -181,7 +200,7 @@ export function SettingsPage({ route }) {
     try {
       const res = await putConfig(body);
       quietZero.current = true;
-      applyWritten(res);
+      applyWritten(res, dirtyKeys);
       setDraft((d) => draftAfterSave(d, sent));
       app.toast({ message: `Saved ${dirtyKeys.length === 1 ? '1 setting' : `${dirtyKeys.length} settings`}`, role: 'success' });
       return true;
@@ -250,8 +269,8 @@ export function SettingsPage({ route }) {
     window.scrollTo(0, 0);
   }, [section.id]);
 
-  // A ?section= naming an Advanced group (an earlier section) opens Advanced
-  // at that group once the fields are there; a ?field= focuses instead.
+  // A ?section= naming a sub-group opens its section at that group once the
+  // fields are there; a ?field= focuses instead.
   const group = groupById(asked) && !settingsField(route.params) ? asked : '';
   useEffect(() => {
     if (!group || !cfg.loaded) return;
@@ -278,27 +297,81 @@ export function SettingsPage({ route }) {
   const errorSections = new Set(Object.keys(errors).map(sectionOf).filter(Boolean));
   const valueOf = (key) => (Object.hasOwn(draft, key) ? draft[key] : cfg.base[key]);
 
+  // The fixed save bar spans the main column: its left edge and width follow
+  // it (a style object, so the CSP allows it).
+  const mainRef = useRef(null);
+  const [place, setPlace] = useState(null);
+  useLayoutEffect(() => {
+    const el = mainRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setPlace((p) => (p && p['--save-x'] === `${r.left}px` && p['--save-w'] === `${r.width}px` ? p : { '--save-x': `${r.left}px`, '--save-w': `${r.width}px` }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
+  // Say a domain's role change once ("Storage & files: Low space"), never a poll tick.
+  const roles = useRef(null);
+  useEffect(() => {
+    const next = Object.fromEntries(BOARD_SECTIONS.map((s) => [s.id, views[s.id] && views[s.id].state === 'ok' ? views[s.id].role || '' : null]));
+    const prev = roles.current;
+    roles.current = next;
+    if (!prev) return;
+    const changed = BOARD_SECTIONS.filter((s) => prev[s.id] !== null && next[s.id] !== null && prev[s.id] !== next[s.id]);
+    if (changed.length) setLive(changed.map((s) => `${s.label}: ${views[s.id].tag ? views[s.id].tag.label : 'OK'}`).join('. '));
+  });
+
   const form = { valueOf, dirtyKeys, errors, warnings, setValue, revert, showKeys };
-  const body = html`<${SectionBody}
-    section=${section}
-    cfg=${cfg}
-    form=${form}
-    dirty=${dirty}
-    onRetry=${() => setLoadSeq((n) => n + 1)}
-    onReloaded=${applyWritten}
-    setShowKeys=${changeShowKeys}
-  />`;
+  const refresh = REFRESH[section.id];
+  const actions =
+    section.id === 'logging'
+      ? html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('logs', { level: 'error' })}>Open Logs</${LinkButton}>`
+      : refresh
+        ? html`<${RefreshButton} label=${refresh.label} disabled=${offline} onRefresh=${() => Promise.all(refresh.keys.map(refreshStatus))} />`
+        : null;
+  const summaries = Object.fromEntries(
+    SETTINGS_SECTIONS.map((s) => [s.id, s.id === 'lyrics_artwork' ? (cfg.loaded ? { text: artworkSummary(cfg.base) } : null) : views[s.id] && views[s.id].summary]),
+  );
 
   const faultKeys = saveError ? FIELD_KEYS.filter((k) => saveError.fields[k]) : [];
+  let main;
+  if (listView) main = html`<${SettingsList} dirty=${dirtySections} invalid=${errorSections} views=${views} summaries=${summaries} />`;
+  else if (boardView) main = html`<${SettingsBoard} views=${views} />`;
+  else
+    main = html`${phone ? html`<${SettingsBack} />` : null}
+      <section key=${section.id} class="card settings-section" data-domain=${section.id} aria-labelledby="settings-section-title">
+        <${DomainHead} section=${section} view=${views[section.id] || null} actions=${actions} titleId="settings-section-title" />
+        <div class="settings-section-body">
+          <${SectionBody}
+            section=${section}
+            cfg=${cfg}
+            form=${form}
+            dirty=${dirty}
+            onRetry=${() => setLoadSeq((n) => n + 1)}
+            onReloaded=${applyWritten}
+            st=${st}
+            now=${now}
+            offline=${offline}
+          />
+        </div>
+      </section>`;
 
   return html`<div
     class="page page-settings"
-    data-section-active=${listView ? undefined : section.id}
-    data-view=${phone ? (listView ? 'list' : 'section') : undefined}
+    data-section-active=${listView || boardView ? undefined : section.id}
+    data-view=${phone ? (listView ? 'list' : 'section') : boardView ? 'board' : 'section'}
     data-dirty=${dirty ? '' : undefined}
   >
-    <${SettingsNav} section=${section} dirty=${dirtySections} invalid=${errorSections} />
-    <div class="settings-main">
+    <${SettingsNav} section=${board ? null : section} dirty=${dirtySections} invalid=${errorSections} views=${views} />
+    <div class="settings-main" ref=${mainRef}>
       ${saveError
         ? html`<div class="settings-error" tabindex="-1" ref=${errorRef} role="alert">
             <${Notice} role="danger" icon="circle-x">
@@ -309,16 +382,10 @@ export function SettingsPage({ route }) {
             </${Notice}>
           </div>`
         : null}
-      ${listView
-        ? html`<${SettingsList} dirty=${dirtySections} invalid=${errorSections} />`
-        : html`${phone ? html`<${SettingsBack} />` : null}
-            <${Card} section=${section.id} className="settings-section" title=${section.label} labelId="settings-section-title">
-              <p class="settings-intro">${section.intro}</p>
-              ${body}
-            </${Card}>`}
+      ${main}
     </div>
     ${dirty || saving
-      ? html`<${SaveBar} count=${dirtyKeys.length} sections=${dirtySections} saving=${saving} onDiscard=${askDiscard} onSave=${save} />`
+      ? html`<${SaveBar} count=${dirtyKeys.length} sections=${dirtySections} saving=${saving} onDiscard=${askDiscard} onSave=${save} place=${place} />`
       : null}
     ${leaveTo
       ? html`<${ConfirmDialog}

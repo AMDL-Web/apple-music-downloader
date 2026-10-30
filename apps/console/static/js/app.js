@@ -3,7 +3,8 @@
 // router and its leave guard are in ui/router.js.
 
 import { html, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from './ui/preact.js';
-import { buildHash, newDownloadHash, newDownloadUrls } from './lib/route.js';
+import { buildHash, newDownloadHash, newDownloadUrls, settingsSection, settingsField } from './lib/route.js';
+import { sectionById } from './lib/settings-sections.js';
 import { extractLinks } from './lib/links.js';
 import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
 import { count, pageSummary } from './lib/format.js';
@@ -21,9 +22,9 @@ import { useStatus, statusEpoch } from './ui/system-status.js';
 import { OverviewPage } from './views/overview.js';
 import { QueuePage } from './views/queue.js';
 import { LogsPage } from './views/logs.js';
-import { SystemPage } from './views/system.js';
 import { DownloadPage } from './views/download.js';
 import { SettingsPage } from './views/settings.js';
+import { KeysToggle } from './views/settings-keys.js';
 import { JobDrawer } from './views/drawer.js';
 import { CommandPalette, ShortcutSheet, isMac } from './views/palette.js';
 import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, SimulateTag, ThemeControl, Banners } from './views/shell.js';
@@ -32,7 +33,6 @@ const TITLES = {
   overview: 'Overview',
   queue: 'Queue',
   logs: 'Logs',
-  system: 'System',
   new: 'New download',
   settings: 'Settings',
   notfound: 'Not found',
@@ -143,10 +143,12 @@ export function App() {
 
   const counts = feed.counts;
   const running = counts ? counts.running : 0;
+  // An open Settings section leads its tab's title: "Storage & files · Settings · AMDL".
+  const askedSection = route.page === 'settings' && (settingsSection(route.params) || settingsField(route.params)) ? sectionById(settingsSection(route.params), settingsField(route.params)).label : '';
   useEffect(() => {
-    const page = TITLES[route.page] || 'AMDL';
+    const page = [askedSection, TITLES[route.page] || 'AMDL'].filter(Boolean).join(' · ');
     document.title = running > 0 ? `${count(running)} running · ${page} · AMDL` : `${page} · AMDL`;
-  }, [running, route.page]);
+  }, [running, route.page, askedSection]);
 
   // Focus: a new page focuses its heading; the drawer returns focus to the row that opened it.
   const prevPage = useRef(route.page);
@@ -210,7 +212,7 @@ export function App() {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target) || overlay || isDialogOpen()) return;
       if (gPending.current && Date.now() - gPending.current < 1200) {
         gPending.current = 0;
-        const target = CHORDS.find((n) => n.key === e.key);
+        const target = CHORDS.find((n) => n.key === e.key || n.alias === e.key);
         if (target) {
           e.preventDefault();
           navigate(buildHash(target.page));
@@ -306,9 +308,6 @@ export function App() {
     case 'logs':
       page = html`<${LogsPage} key=${'logs'} route=${route} />`;
       break;
-    case 'system':
-      page = html`<${SystemPage} />`;
-      break;
     case 'new':
       page = html`<${DownloadPage} route=${route} />`;
       break;
@@ -340,6 +339,7 @@ export function App() {
           <div class="page-head">
             <h1 class="page-title" tabindex="-1" ref=${h1Ref}>${title}</h1>
             ${summary || SUB_PAGES.includes(route.page) ? html`<p class="page-sub">${summary || '\u00a0'}</p>` : null}
+            ${route.page === 'settings' ? html`<div class="page-actions"><${KeysToggle} /></div>` : null}
           </div>
           <${Banners} conn=${conn} onRetry=${() => retryRef.current()} />
           ${page}

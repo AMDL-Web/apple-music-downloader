@@ -6,9 +6,10 @@
 // node --test drives it (ui/system-status.js binds it to the API).
 
 /**
- * @typedef {{data?: any, error?: any, at: number}} StatusEntry
+ * @typedef {{data?: any, error?: any, at: number, okAt: number}} StatusEntry
  * The last answer of a key: `data` from the last success (a failed read
- * keeps it), `error` from the last read if it failed, `at` when it answered.
+ * keeps it), `error` from the last read if it failed, `at` when it answered
+ * and `okAt` when the last success did (0 before one).
  */
 
 /**
@@ -57,8 +58,8 @@ export function createStatusStore({ fetchers, every = {}, now = Date.now, setTim
       read = Promise.reject(error);
     }
     s.inflight = read.then(
-        (data) => done({ data, error: undefined, at: now() }),
-        (error) => done({ data: s.entry ? s.entry.data : undefined, error, at: now() }),
+        (data) => done({ data, error: undefined, at: now(), okAt: now() }),
+        (error) => done({ data: s.entry ? s.entry.data : undefined, error, at: now(), okAt: s.entry ? s.entry.okAt : 0 }),
       );
     return s.inflight;
   }
@@ -145,7 +146,7 @@ export function createStatusStore({ fetchers, every = {}, now = Date.now, setTim
       s.inflight = null;
       s.ranAt = now();
       s.stale = false;
-      publish(key, { data, error: undefined, at: now() });
+      publish(key, { data, error: undefined, at: now(), okAt: now() });
       arm(key);
     },
 

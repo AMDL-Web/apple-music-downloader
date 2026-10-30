@@ -17,8 +17,7 @@ const STATIC_ITEMS = [
   { id: 'nav-overview', group: 'Navigate', label: 'Overview', icon: 'grid', hash: buildHash('overview'), keys: 'g o' },
   { id: 'nav-queue', group: 'Navigate', label: 'Queue', icon: 'list', hash: buildHash('queue'), keys: 'g q' },
   { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
-  { id: 'nav-system', group: 'Navigate', label: 'System', icon: 'server', hash: buildHash('system'), keys: 'g y' },
-  { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,' },
+  { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,', words: 'system status health server' },
   { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },
   { id: 'f-running', group: 'Filters', label: 'Show active jobs', icon: 'dot', hash: buildHash('queue', { tab: 'active' }) },
   { id: 'f-errors', group: 'Filters', label: 'Show error logs', icon: 'triangle-alert', hash: buildHash('logs', { level: 'warn,error' }) },
@@ -30,31 +29,31 @@ const PREF_ITEMS = [
   { id: 'theme-dark', group: 'Theme', label: 'Use dark theme', icon: 'moon', theme: 'dark' },
 ];
 
-/** Settings sections (and Advanced groups) listed before anything is typed. */
+/** Settings sections listed before anything is typed. */
 const SECTIONS_SHOWN_EMPTY = ['account', 'library_sync'];
 
 /** Words a section or group answers to besides its label and id (what its panels do). */
 const SECTION_WORDS = {
-  account: 'login log in log out wrapper session apple id media user token',
-  quality: 'codec alac atmos lossless overwrite',
-  files: 'folder path template naming',
-  lyrics_artwork: 'cover artwork lyrics lrc ttml karaoke translation romanization pronunciation',
-  advanced: 'tuning',
+  account: 'login log in log out wrapper session apple id media user token storefront language',
+  quality: 'codec alac atmos lossless formats',
+  files: 'folder path template naming disk storage space overwrite',
+  lyrics_artwork: 'cover artwork lyrics lrc ttml karaoke translation romanization pronunciation motion animated',
+  jobs: 'tuning workers parallel concurrency concurrent threads pool pools limits memory queue',
   library_sync: 'anchor poll',
-  config_file: 'reload yaml config locked startup restart parallel concurrency concurrent threads workers pool pools limits keys defaults',
-  logging: 'logs',
+  hooks: 'webhook exec notify',
+  logging: 'logs errors',
+  server: 'version uptime build ffmpeg database health status',
+  config_file: 'reload yaml config locked startup restart keys defaults',
 };
 
-// What the page says about the parallel pools: they are startup settings, so
-// no field has them, and a search for them lands here.
-const SECTION_SUBS = { config_file: 'Worker pools are set in the file' };
+const SECTION_LABELS = new Map(SETTINGS_SECTIONS.map((s) => [s.id, s]));
 
-// The five sections, then the Advanced groups, which open Advanced at the group.
+// The sections, then their sub-groups, which open the section at the group.
 const SECTION_ITEMS = [...SETTINGS_SECTIONS, ...SETTINGS_GROUPS].map((s) => ({
   id: `set-${s.id}`,
   group: 'Settings',
   label: `Settings: ${s.label}`,
-  sub: SECTION_SUBS[s.id] || (s.section ? 'Advanced' : undefined),
+  sub: s.section ? SECTION_LABELS.get(s.section).label : undefined,
   icon: s.icon,
   hash: settingsHash(s.id),
   section: s.id,
@@ -73,8 +72,6 @@ const KEY_WORDS = {
   'logging.level': 'verbose',
 };
 const fieldWords = (f) => `${TYPE_WORDS[f.type] || ''} ${KEY_WORDS[f.key] || ''}`;
-
-const SECTION_LABELS = new Map(SETTINGS_SECTIONS.map((s) => [s.id, s]));
 
 /** At most this many Settings fields for one query. */
 const FIELD_LIMIT = 6;
@@ -118,7 +115,7 @@ export function paletteItems(query, jobs = []) {
       hash: newDownloadHash(links),
     });
   }
-  out.push(...STATIC_ITEMS.filter((it) => matches(q, it.label, it.group)));
+  out.push(...STATIC_ITEMS.filter((it) => matches(q, it.label, it.group, it.words)));
   out.push(...SECTION_ITEMS.filter((it) => matches(q, it.label, it.words)));
   if (q.length >= 2 && links.length === 0) {
     const fields = FIELDS.filter((f) => matches(q, f.label, f.key, fieldWords(f))).slice(0, FIELD_LIMIT);

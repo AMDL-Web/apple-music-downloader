@@ -156,7 +156,6 @@
     padding: var(--s-4) var(--s-4) calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-4));
   }
 
-
   .tabbar {
     position: fixed;
     left: 0;
@@ -341,14 +340,6 @@
   .job-updated,
   .job-chevron {
     display: none;
-  }
-
-  .health-row {
-    grid-template-columns: 88px minmax(0, 1fr);
-  }
-
-  .health-row .badge {
-    justify-self: start;
   }
 
   .drawer {
@@ -677,16 +668,14 @@
   }
 
   .pbar,
-  .pcell,
-  .stage,
-  .meter,
-  .abar,
-  .conn-dot,
-  .log-dot,
-  .pulse,
-  .chart-bar,
-  .formats-seg,
-  .formats-swatch {
+.pcell,
+.stage,
+.meter,
+.abar,
+.conn-dot,
+.log-dot,
+.pulse,
+.chart-bar {
     border: 1px solid CanvasText;
   }
 

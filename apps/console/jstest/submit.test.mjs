@@ -62,7 +62,7 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
     href: TOKEN_SETTINGS_HASH,
     action: 'Set it in Settings',
   });
-  assert.equal(TOKEN_SETTINGS_HASH, '#/settings?section=catalog&field=catalog.media_user_token', 'the hint opens Settings at the token field');
+  assert.equal(TOKEN_SETTINGS_HASH, '#/settings?section=account&field=catalog.media_user_token', 'the hint opens Settings at the token field');
   assert.equal(linkIssue(entry(STATION), null, { hasToken: true }), null);
   assert.equal(linkIssue(entry(PRIVATE)), null, 'a private playlist downloads without a token; the token only finds its cover');
   const live = { state: 'error', error: { status: 400, code: 'invalid_request', message: 'station "Apple Music 1" is a live radio stream' } };

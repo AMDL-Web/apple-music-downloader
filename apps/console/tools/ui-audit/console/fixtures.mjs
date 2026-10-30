@@ -481,6 +481,14 @@ export function system(world) {
       { name: 'downloads_dir', path: '/app/data/downloads', free_bytes: world.storageFree, total_bytes: world.storageTotal },
       { name: 'temp_dir', path: '/app/data/tmp', free_bytes: world.storageFree, total_bytes: world.storageTotal },
     ],
+    startup: {
+      wrapper_address: 'http://wrapper:12340',
+      listen: '0.0.0.0:18080',
+      database_path: 'data/db/amdl.db',
+      log_buffer_size: 2000,
+      catalog_language: 'zh-Hans-CN',
+      max_parallel_requests: 16,
+    },
   };
 }
 

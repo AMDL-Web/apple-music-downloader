@@ -416,6 +416,15 @@
   gap: var(--s-1);
 }
 
+:root[data-skin="music"] .page-head:has(> .page-actions) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+:root[data-skin="music"] .page-head > .page-actions {
+  grid-row: 1;
+  grid-column: 2;
+}
+
 :root[data-skin="music"] .page-sub {
   font-size: var(--fs-15);
   line-height: var(--lh-15);
@@ -1213,81 +1222,6 @@
   }
 }
 
-/* ---- System health ------------------------------------------------- */
-
-/* An inset grouped list with colored icon tiles; hairlines inset to the text. */
-:root[data-skin="music"] .card-body:has(> .health-list:first-child) {
-  gap: 0;
-  padding: var(--s-1) 0;
-  overflow: hidden;
-}
-
-:root[data-skin="music"] .health-list {
-  gap: 0;
-}
-
-:root[data-skin="music"] .health-row {
-  position: relative;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  grid-template-areas:
-    "icon name status"
-    "icon detail status";
-  gap: var(--s-0_5) var(--s-3);
-  padding: var(--row-pad-y) var(--s-4);
-}
-
-:root[data-skin="music"] .health-row + .health-row::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: calc(var(--s-4) + 30px + var(--s-3));
-  border-top: var(--row-divider);
-}
-
-:root[data-skin="music"] .health-icon {
-  grid-area: icon;
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r-icon-tile);
-  background: var(--role, var(--neutral));
-  color: var(--on-role);
-}
-
-/* A failed component's tile is tinted with a red glyph, not a red block. */
-:root[data-skin="music"] [data-role="danger"] .health-icon {
-  background: var(--danger-tint);
-  color: var(--danger-text);
-}
-
-:root[data-skin="music"] .health-name {
-  grid-area: name;
-  color: var(--text-primary);
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
-}
-
-:root[data-skin="music"] .health-detail {
-  grid-area: detail;
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
-}
-
-:root[data-skin="music"] .health-status {
-  grid-area: status;
-  justify-self: end;
-}
-
-:root[data-skin="music"] .health-status .badge,
-:root[data-skin="music"] .health-row .badge {
-  color: var(--role-text, var(--text-secondary));
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-  font-weight: var(--w-semibold);
-}
-
 /* ---- Throughput ---------------------------------------------------- */
 
 :root[data-skin="music"] .tp-totals {
@@ -1342,28 +1276,6 @@
 
 :root[data-skin="music"] .chart-bar {
   border-radius: 4px 4px 1px 1px;
-}
-
-/* Formats: one hue per position, so the legend dots tell formats apart. */
-:root[data-skin="music"] .formats-seg,
-:root[data-skin="music"] .formats-swatch {
-  opacity: 1;
-  background: var(--series-1);
-}
-
-:root[data-skin="music"] .formats-seg:nth-child(2),
-:root[data-skin="music"] .formats-item:nth-child(2) .formats-swatch {
-  background: var(--series-2);
-}
-
-:root[data-skin="music"] .formats-seg:nth-child(3),
-:root[data-skin="music"] .formats-item:nth-child(3) .formats-swatch {
-  background: var(--series-3);
-}
-
-:root[data-skin="music"] .formats-seg:nth-child(n + 4),
-:root[data-skin="music"] .formats-item:nth-child(n + 4) .formats-swatch {
-  background: var(--series-4);
 }
 
 /* ---- Log tail ------------------------------------------------------ */
@@ -1913,24 +1825,6 @@
   font-weight: var(--w-semibold);
 }
 
-/* ---- System -------------------------------------------------------- */
-
-:root[data-skin="music"] .tool-list {
-  padding: var(--row-pad-y) var(--card-pad) 0 0;
-  margin-right: calc(-1 * var(--card-pad));
-  border-top: var(--row-divider);
-}
-
-/* Tools continue the Runtime list: no extra gap above the first tool. */
-:root[data-skin="music"] .kv + .tool-list {
-  margin-top: calc(-1 * var(--card-gap));
-}
-
-:root[data-skin="music"] .storage-folder {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
 /* ---- Fields inside grouped surfaces --------------------------------- */
 
 /* Text fields, selects and lists inside a card are inset cells (white on the
@@ -2229,24 +2123,22 @@
   background: color-mix(in srgb, var(--bg-selected) 60%, transparent);
 }
 
-:root[data-skin="music"] .settings-nav-item[aria-current="true"] {
+:root[data-skin="music"] .settings-nav-item[aria-current] {
   background: var(--bg-selected);
   font-weight: var(--w-semibold);
 }
 
-:root[data-skin="music"] .settings-intro {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
 /* Fields: grouped rows whose hairlines start at the text and run to the
    card's right edge (the keyline of every other grouped list here), and so
-   do the lines between Advanced's groups. */
+   do the lines between Server's groups, fact rows, hooks and action blocks. */
 :root[data-skin="music"] .field,
 :root[data-skin="music"] .settings-group,
 :root[data-skin="music"] .settings-panel,
 :root[data-skin="music"] .account-block + .account-block,
-:root[data-skin="music"] :is(.settings-panel, .account-block) > .kv > .kv-row {
+:root[data-skin="music"] :is(.settings-panel, .account-block) > .kv > .kv-row,
+:root[data-skin="music"] .fact-row,
+:root[data-skin="music"] .settings-hook,
+:root[data-skin="music"] .settings-actions {
   margin-right: calc(-1 * var(--card-pad));
   padding-right: var(--card-pad);
 }
@@ -2367,13 +2259,11 @@
   line-height: var(--lh-14);
 }
 
-:root[data-skin="music"] .settings-panel-head .btn-ghost,
 :root[data-skin="music"] .account-block-head .btn-ghost,
 :root[data-skin="music"] .token-replace {
   color: var(--accent-text);
 }
 
-:root[data-skin="music"] .settings-panel-head .btn-ghost:hover:not(:disabled),
 :root[data-skin="music"] .account-block-head .btn-ghost:hover:not(:disabled),
 :root[data-skin="music"] .token-replace:hover:not(:disabled) {
   background: transparent;
@@ -2388,7 +2278,7 @@
 /* Save bar: a frosted floating capsule, like the toasts, above the section. */
 :root[data-skin="music"] .save-bar {
   gap: var(--s-2) var(--s-4);
-  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-5);
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
   border: 0;
   border-radius: var(--r-full);
   background: var(--toast-bg);
@@ -2748,9 +2638,16 @@
 /* A link in a warning or failure notice wears the role's text color,
    underlined (4.75 / 5.23 on the tints over the canvas); the accent red would
    fall under 4.5:1 on the red tint. */
-:root[data-skin="music"] .notice[data-role] :is(a, .link, .health-strip-link) {
+:root[data-skin="music"] .notice[data-role] :is(a, .link, .health-strip-link):not(.health-strip-item) {
   color: var(--role-text, var(--accent-text));
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Overview's status line: each item opens its Settings section but reads
+   as the notice's own words, underlined only under the pointer. */
+:root[data-skin="music"] .notice[data-role] .health-strip-item {
+  color: var(--role-text, var(--accent-text));
   text-underline-offset: 2px;
 }
 
@@ -2927,14 +2824,13 @@
     height: 28px;
   }
 
-  /* Two lines on a phone, so the capsule becomes the card radius. */
+  /* One 52 px row on a phone: the count, then two 44 px buttons. */
   :root[data-skin="music"] .save-bar {
-    padding: var(--s-3);
-    border-radius: var(--r-card);
+    padding: var(--s-1) var(--s-1) var(--s-1) var(--s-4);
   }
 
-  :root[data-skin="music"] .save-bar-text {
-    padding: 0 var(--s-1);
+  :root[data-skin="music"] .save-bar-actions .btn {
+    height: var(--touch);
   }
 
   :root[data-skin="music"] .bulk-bar {
@@ -3053,14 +2949,6 @@
     line-height: var(--lh-kpi);
   }
 
-  :root[data-skin="music"] .health-row {
-    grid-template-columns: 30px minmax(0, 1fr) auto;
-  }
-
-  :root[data-skin="music"] .health-row .badge {
-    justify-self: end;
-  }
-
   /* Queue rows: two-line cards with the cover, hairlines inset to the text. */
   :root[data-skin="music"] [data-section="jobs"] .job-row {
     grid-template-columns: 48px minmax(0, 1fr) auto;
@@ -3174,7 +3062,6 @@
     background: CanvasText;
   }
 
-  :root[data-skin="music"] .health-icon,
   :root[data-skin="music"] .seg-btn[aria-pressed="true"] {
     border: 1px solid CanvasText;
   }

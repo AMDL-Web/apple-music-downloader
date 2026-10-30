@@ -1,0 +1,871 @@
+/*
+ * Settings status (views/settings-head.js, settings-board.js,
+ * settings-facts.js, settings-hooks.js, settings-nav.js): the board's
+ * tiles, the section heads, their small charts, fact rows, action blocks,
+ * the hooks list, the nav's marks and the fixed save bar. Base structure
+ * only; it reads tokens and the skin restyles it. Linked after settings.css.
+ * Heads and tiles have fixed tracks in every state, so an answer changes
+ * text inside its box and moves nothing.
+ */
+
+/* ---- Page head: the config keys toggle --------------------------- */
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  margin-left: auto;
+}
+
+.settings-keys-btn[aria-pressed="true"] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+/* ---- Nav: Status, the hairline between groups, the mark slot ---- */
+
+.settings-nav-split {
+  margin-top: var(--s-2);
+  padding-top: var(--s-2);
+  border-top: var(--row-divider);
+}
+
+.settings-nav-mark {
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.settings-nav-dot {
+  width: 6px;
+  height: 6px;
+}
+
+/* ---- Board ---------------------------------------------------------- */
+
+.status-tiles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--grid-gap, var(--s-4));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Two or four across only where a tile still has room for its figure and unit. */
+@container (min-width: 600px) {
+  .status-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1040px) {
+  .status-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.status-tile {
+  display: grid;
+  grid-template-rows: 24px var(--lh-kpi) 24px var(--lh-12);
+  row-gap: var(--s-2);
+  height: 100%;
+  min-width: 0;
+  padding: var(--card-pad, var(--s-4));
+  overflow: hidden;
+  border: var(--card-border);
+  border-radius: var(--r-card);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: background-image var(--dur-fast) var(--ease-out);
+}
+
+/* A full clipped fill over the tile's surface, in the tile's own shape. */
+.status-tile:hover {
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
+}
+
+.status-tile:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.tile-top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.tile-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--w-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tag truncates inside the tile; the tile's name says all of it. */
+.domain-tag {
+  display: inline-flex;
+  flex: none;
+  max-width: 60%;
+  min-width: 0;
+}
+
+.domain-tag .badge {
+  max-width: 100%;
+}
+
+.domain-tag .badge-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.domain-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-icon-tile, var(--r-control));
+  background: var(--bg-fill);
+  color: var(--text-secondary);
+}
+
+.domain-icon .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.domain-icon[data-role="warning"],
+.domain-icon[data-role="danger"] {
+  background: var(--role);
+  color: var(--on-role);
+}
+
+.domain-figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.domain-value {
+  flex: none;
+  font-size: var(--fs-kpi);
+  line-height: var(--lh-kpi);
+  font-weight: var(--w-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.domain-value[data-word] {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: var(--w-medium);
+  color: var(--text-secondary);
+}
+
+.domain-unit,
+.domain-second {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  text-overflow: ellipsis;
+}
+
+.domain-second {
+  flex: none;
+  margin-left: var(--s-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.domain-viz {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 24px;
+}
+
+.domain-note {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.domain-note-text[data-role="warning"],
+.domain-note-text[data-role="danger"] {
+  color: var(--role-text, var(--role));
+}
+
+.domain-asof {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  vertical-align: top;
+}
+
+.domain-asof .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.skel-figure {
+  width: 64px;
+  height: calc(var(--lh-kpi) - var(--s-2));
+}
+
+.skel-note {
+  width: 70%;
+}
+
+/* ---- Section card and its head ------------------------------------ */
+
+.settings-section {
+  gap: 0;
+  padding: 0;
+}
+
+/* The title row is 44 px on touch, where its buttons are 44 px targets. */
+.domain-head {
+  --domain-title-h: 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: var(--domain-title-h) 40px var(--lh-13);
+  gap: var(--s-2) var(--s-4);
+  padding: var(--card-pad, var(--s-4));
+  border-bottom: var(--card-divider, var(--row-divider));
+}
+
+.domain-head[data-plain] {
+  grid-template-rows: var(--domain-title-h);
+}
+
+.domain-title-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.domain-title-row .card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A section's own title stays whole; its tag gives way. */
+.domain-head .domain-title-row .card-title {
+  flex: none;
+}
+
+.domain-head .domain-tag {
+  flex: 0 1 auto;
+}
+
+.domain-head .domain-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.domain-head .domain-icon .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.domain-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s-1);
+  margin-left: auto;
+}
+
+.domain-refresh[data-busy] .icon {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.domain-head .domain-figure {
+  align-items: center;
+  height: 40px;
+}
+
+.domain-head .domain-viz {
+  grid-column: 2;
+  width: 200px;
+  height: 40px;
+}
+
+/* Three named checks are wider than a chart; the column follows its kind. */
+.domain-head .domain-viz[data-kind="checks"] {
+  width: auto;
+}
+
+.domain-head .domain-note {
+  grid-column: 1 / -1;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  min-width: 0;
+  padding: var(--s-6) var(--card-pad, var(--s-4)) var(--card-pad, var(--s-4));
+}
+
+/* A narrow main column stacks the head: title, figure, a full-width chart
+   and a two-line note, every row still fixed. */
+@container (max-width: 559px) {
+  .domain-head {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--domain-title-h) var(--lh-kpi) 24px calc(2 * var(--lh-13));
+  }
+
+  .domain-head[data-plain] {
+    grid-template-rows: var(--domain-title-h);
+  }
+
+  .domain-head .domain-figure {
+    height: var(--lh-kpi);
+  }
+
+  .domain-head .domain-viz {
+    grid-column: 1;
+    width: auto;
+    height: 24px;
+  }
+
+  .domain-head .domain-note {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+  }
+}
+
+/* The narrowest column gives the head's icon tile and some gap to its title and tag. */
+@container (max-width: 319px) {
+  .domain-head .domain-icon {
+    display: none;
+  }
+
+  .domain-head .domain-title-row {
+    gap: var(--s-2);
+  }
+}
+
+/* ---- Charts: chips, shares, meters, worker cells, hourly bars ----- */
+
+.viz-chips,
+.viz-checks {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.viz-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-full);
+  background: var(--bg-fill);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--w-semibold);
+}
+
+.viz-chip[data-outlined] {
+  box-shadow: inset 0 0 0 1.5px var(--text-secondary);
+}
+
+.viz-split {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: var(--bar-h, var(--s-2));
+  overflow: hidden;
+  border-radius: var(--r-bar, var(--r-full));
+  background: var(--track);
+}
+
+.viz-seg {
+  flex: none;
+  width: calc(var(--w) * 100%);
+  min-width: 2px;
+}
+
+.viz-seg[data-tone="series-1"] {
+  background: var(--series-1);
+}
+
+.viz-seg[data-tone="series-2"] {
+  background: var(--series-2);
+}
+
+.viz-seg[data-tone="series-3"] {
+  background: var(--series-3);
+}
+
+.viz-seg[data-tone="series-4"] {
+  background: var(--series-4);
+}
+
+.viz-seg[data-tone="success"] {
+  background: var(--success);
+}
+
+.viz-seg[data-tone="danger"] {
+  background: var(--danger);
+}
+
+.viz-meter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+}
+
+.viz-meter {
+  flex: 1;
+  height: var(--bar-h, var(--s-2));
+  overflow: hidden;
+  border-radius: var(--r-bar, var(--r-full));
+  background: var(--track);
+}
+
+.viz-meter-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--chart-bar);
+  transform: scaleX(var(--f));
+  transform-origin: left center;
+}
+
+.viz-meter-fill[data-role="warning"],
+.viz-meter-fill[data-role="danger"] {
+  background: var(--role);
+}
+
+.viz-meter-label {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-cells {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.viz-cell {
+  flex: none;
+  width: 8px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--track);
+}
+
+.viz-cell[data-on] {
+  background: var(--info);
+}
+
+.viz-bars {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  align-items: end;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+.viz-bar {
+  height: max(2px, calc(var(--v) * 100%));
+  border-radius: 1px;
+  background: var(--chart-bar);
+}
+
+.viz-bar[data-zero] {
+  height: 2px;
+  background: var(--track);
+}
+
+.viz-check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+}
+
+.viz-check .icon {
+  color: var(--role);
+}
+
+/* ---- Fact rows and action blocks ---------------------------------- */
+
+.fact-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+/* The value fills the row past its label, ending on the controls' edge, so a
+   value that arrives late is added in place and moves nothing. */
+.fact-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-2) var(--s-6);
+  padding: var(--s-3) 0;
+  border-top: var(--row-divider);
+}
+
+.fact-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.fact-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.fact-row-label {
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.fact-row-value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  text-align: right;
+}
+
+.fact-row-value > .icon {
+  flex: none;
+  color: var(--role);
+}
+
+.fact-row-text-value {
+  min-width: 0;
+}
+
+/* A narrow column puts the label over the value. */
+@container (max-width: 559px) {
+  .fact-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fact-row-value {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .fact-row-value > .fact-chip {
+    margin-left: auto;
+  }
+}
+
+.fact-chip,
+.settings-hook-chip,
+.settings-hook-event {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s-1);
+  height: 22px;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-full);
+  background: var(--bg-fill);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  white-space: nowrap;
+}
+
+.fact-chip .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: var(--row-divider);
+}
+
+.settings-actions-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.settings-footnote {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+.settings-panel[data-panel="config-file"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* ---- Fields: disabled dependents, the line under a folder --------- */
+
+fieldset.field-control {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.field[data-disabled] .field-control {
+  opacity: 0.45;
+}
+
+.field-after {
+  grid-column: 1 / -1;
+}
+
+.folder-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: var(--control-h-sm, var(--control-h));
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+}
+
+.folder-status[data-role] {
+  color: var(--role-text, var(--role));
+}
+
+/* ---- Hooks -------------------------------------------------------- */
+
+.settings-hooks {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-hook {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1_5);
+  padding: var(--s-3) 0;
+  border-top: var(--row-divider);
+}
+
+.settings-hook:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.settings-hook[data-off] .settings-hook-name {
+  color: var(--text-secondary);
+}
+
+.settings-hook-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.settings-hook-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: var(--w-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-hook-runs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-hook-split {
+  flex: none;
+  width: 48px;
+}
+
+.settings-hook-scope {
+  flex-wrap: wrap;
+}
+
+.settings-hook-types {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* ---- Frame: the fixed save bar and the room the page keeps for it - */
+
+.page-settings {
+  grid-template-areas: "nav main";
+  padding-bottom: calc(var(--btn-lg-h, var(--control-h)) + var(--s-6) + var(--s-4));
+}
+
+.save-bar {
+  position: fixed;
+  bottom: var(--s-4);
+  left: var(--save-x, var(--main-x, var(--s-4)));
+  width: var(--save-w, auto);
+}
+
+/* Toasts rise above the bar, so they never cover Save. */
+:root:has(.save-bar) .toasts {
+  bottom: calc(var(--btn-lg-h, var(--control-h)) + var(--s-6) + var(--s-4));
+}
+
+@media (max-width: 639px) {
+  .page-settings {
+    grid-template-areas: "main";
+  }
+
+  .settings-list-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-4);
+  }
+
+  /* Every row draws a 1 px line above it (clear on the first), so all are 60 px. */
+  .settings-list-row {
+    min-height: 59px;
+  }
+
+  .settings-list li:first-child .settings-list-row {
+    border-top: 1px solid transparent;
+  }
+
+  .page-settings {
+    padding-bottom: calc(52px + var(--s-4));
+  }
+
+  .save-bar {
+    right: var(--s-4);
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
+    left: var(--s-4);
+    flex-wrap: nowrap;
+    width: auto;
+    min-height: 52px;
+  }
+
+  .save-bar-text {
+    flex: 1;
+  }
+
+  .save-bar-actions {
+    flex: none;
+    width: auto;
+  }
+
+  .save-bar-actions .btn {
+    flex: none;
+    min-height: var(--touch);
+  }
+
+  :root:has(.save-bar) {
+    scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 52px + var(--s-6));
+  }
+
+  :root:has(.save-bar) .toasts {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 52px + var(--s-4));
+  }
+
+  .save-bar-where {
+    display: none;
+  }
+
+  /* The page head is for screen readers only in a section view; its
+     button would be a focus stop no one sees. */
+  .main:has(> .page-settings[data-view="section"]) > .page-head > .page-actions {
+    display: none;
+  }
+
+  .domain-actions .btn {
+    min-width: var(--touch);
+    min-height: var(--touch);
+  }
+}
+
+@media (pointer: coarse) {
+  .domain-head {
+    --domain-title-h: 44px;
+  }
+
+  .domain-actions .btn {
+    min-width: var(--touch);
+    min-height: var(--touch);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .domain-refresh[data-busy] .icon {
+    animation: none;
+  }
+}
