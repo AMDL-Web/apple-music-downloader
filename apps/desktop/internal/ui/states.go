@@ -6,6 +6,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"amdl/apps/desktop/internal/client"
 	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/mode"
 )
@@ -128,4 +129,28 @@ func (a *App) emptyQueue(c *ui.Context, k *Tokens) {
 			a.FocusOmni()
 		}
 	})
+}
+
+// unreachable stands in for a screen that reads the backend and has read
+// nothing yet, when the backend did not start or does not answer. It
+// reports whether it showed anything.
+func (a *App) unreachable(c *ui.Context, k *Tokens) bool {
+	s := a.Store
+	switch {
+	case a.Act.StartErr() != "":
+		a.startFailed(c, k)
+	case s.Client() == nil:
+		ui.Column(c).Grow(1).Center().Children(func() {
+			text := "Not connected"
+			if a.Act.Starting() {
+				text = "Starting the backend…"
+			}
+			pill(c, k, pillWait, nil, text)
+		})
+	case s.Conn.Phase == client.Offline:
+		a.offlineBanner(c, k)
+	default:
+		return false
+	}
+	return true
 }

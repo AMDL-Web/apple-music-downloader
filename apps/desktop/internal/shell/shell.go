@@ -23,6 +23,8 @@ type Options struct {
 	Open func()
 	// OpenJob shows the main window with a job's detail.
 	OpenJob func(id string)
+	// Panel opens the tray icon's panel, or closes it when it is open.
+	Panel func()
 	// Notify reports whether the settings allow notifications.
 	Notify func() bool
 	// KeepAwake reports whether the settings ask to keep the computer awake
@@ -55,26 +57,44 @@ func New(opts Options) *Shell {
 		opts.Log = slog.Default()
 	}
 	s := &Shell{opts: opts, shownStep: -1, shownBadge: -1}
-	menu := mygo.NewMenu([]*mygo.MenuItem{
-		{Label: "Open AMDL", Click: func(*mygo.MenuItem, *mygo.Window) { opts.Open() }},
-		mygo.Separator(),
-		{Role: mygo.RoleQuit},
-	})
-	tray, err := mygo.NewTray(mygo.TrayOptions{
+	items := []*mygo.MenuItem{{Label: "Open AMDL", Click: func(*mygo.MenuItem, *mygo.Window) { opts.Open() }}}
+	if runtime.GOOS == "linux" {
+		items = append(items, &mygo.MenuItem{Label: "Downloads", Click: func(*mygo.MenuItem, *mygo.Window) { opts.Panel() }})
+	}
+	menu := mygo.NewMenu(append(items, mygo.Separator(), &mygo.MenuItem{Role: mygo.RoleQuit}))
+	topts := mygo.TrayOptions{
 		ID:             "amdl",
 		Icon:           RingIcon(0, color.NRGBA{A: 255}, 32),
 		IconIsTemplate: true,
 		ToolTip:        "AMDL",
-		Menu:           menu,
-	})
+	}
+	if runtime.GOOS == "linux" {
+		// AppIndicator shows only menus and reports no clicks.
+		topts.Menu = menu
+	}
+	tray, err := mygo.NewTray(topts)
 	if err != nil {
 		opts.Log.Warn("no tray icon", "error", err)
 		return s
 	}
 	s.tray = tray
 	tray.OnAppearanceChange(func() { s.shownStep = -1 })
+	if runtime.GOOS != "linux" {
+		// A tray with a menu sends clicks to the menu, so the menu is set
+		// only for the right click's popup and the left click opens the
+		// panel.
+		tray.OnClick(opts.Panel)
+		tray.OnRightClick(func() {
+			tray.SetMenu(menu)
+			defer tray.SetMenu(nil)
+			tray.PopUpMenu()
+		})
+	}
 	return s
 }
+
+// Tray is the tray icon, or nil without one.
+func (s *Shell) Tray() *mygo.Tray { return s.tray }
 
 // Sync shows sum on the tray, the badge and the power state. Call it after
 // the store changes; it touches the system only when something it shows

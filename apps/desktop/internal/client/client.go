@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -215,6 +216,27 @@ func (c *Client) WrapperStatus(ctx context.Context) (WrapperStatus, error) {
 	var s WrapperStatus
 	err := c.do(ctx, http.MethodGet, "/api/v1/wrapper/status", nil, nil, &s)
 	return s, err
+}
+
+// Stats reads GET /api/v1/stats over the last days UTC days.
+func (c *Client) Stats(ctx context.Context, days int) (Stats, error) {
+	var s Stats
+	err := c.do(ctx, http.MethodGet, "/api/v1/stats", url.Values{"days": {strconv.Itoa(days)}}, nil, &s)
+	return s, err
+}
+
+// LibrarySync reads GET /api/v1/library-sync.
+func (c *Client) LibrarySync(ctx context.Context) (LibrarySync, error) {
+	var s LibrarySync
+	err := c.do(ctx, http.MethodGet, "/api/v1/library-sync", nil, nil, &s)
+	return s, err
+}
+
+// Hooks reads GET /api/v1/hooks.
+func (c *Client) Hooks(ctx context.Context) (Hooks, error) {
+	var h Hooks
+	err := c.do(ctx, http.MethodGet, "/api/v1/hooks", nil, nil, &h)
+	return h, err
 }
 
 // Downloads reads one page of GET /api/v1/downloads.

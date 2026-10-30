@@ -63,11 +63,61 @@ func (a *App) captureScreens(dir string) {
 		}
 	}, 3500*time.Millisecond)
 	shot("03-settings", func() { a.view.Go(appui.ScreenSettings) }, 1500*time.Millisecond)
+	// A lookup only reads the catalog; the music video shows the row of a
+	// link that cannot download.
+	shot("06-new", func() {
+		a.view.Go(appui.ScreenNew)
+		a.store.SetOmniText(shotAlbum + "\nhttps://music.apple.com/cn/music-video/clip/1")
+	}, 4*time.Second)
+	shot("07-library", func() { a.store.SetOmniText(""); a.view.Go(appui.ScreenLibrary) }, 4*time.Second)
+	shot("08-system", func() { a.view.Go(appui.ScreenSystem) }, 3*time.Second)
+	a.shotPanel(filepath.Join(dir, "09-panel.png"))
 	shot("04-light", func() { a.view.Theme = "light"; a.view.Go(appui.ScreenQueue) }, 2000*time.Millisecond)
-	shot("05-compact", func() { a.view.Theme = a.opts.Theme; a.win.SetSize(820, 560) }, 2500*time.Millisecond)
+	shot("10-new-light", func() {
+		a.view.Go(appui.ScreenNew)
+		a.store.SetOmniText(shotAlbum)
+	}, 3*time.Second)
+	shot("11-library-light", func() { a.store.SetOmniText(""); a.view.Go(appui.ScreenLibrary) }, 2500*time.Millisecond)
+	shot("12-system-light", func() { a.view.Go(appui.ScreenSystem) }, 2500*time.Millisecond)
+	shot("05-compact", func() { a.view.Theme = a.opts.Theme; a.view.Go(appui.ScreenQueue); a.win.SetSize(820, 560) }, 2500*time.Millisecond)
 	a.post(func() { a.win.SetSize(1280, 800) })
 	time.Sleep(500 * time.Millisecond)
 	mygo.App.Quit()
+}
+
+// shotAlbum is the album the shots preview: the one test downloads may
+// fetch.
+const shotAlbum = "https://music.apple.com/cn/album/1858184006"
+
+// shotPanel opens the tray panel, writes it to path and closes it.
+func (a *App) shotPanel(path string) {
+	opened := make(chan *mygo.Window, 1)
+	a.post(func() {
+		if a.panel == nil {
+			a.togglePanel()
+		}
+		opened <- a.panel
+	})
+	p := <-opened
+	if p == nil {
+		return
+	}
+	time.Sleep(2500 * time.Millisecond)
+	png, err := p.CapturePage()
+	if err == nil {
+		err = os.WriteFile(path, png, 0o644)
+	}
+	if err != nil {
+		a.log.Error("capture", "shot", "panel", "error", err)
+	} else {
+		fmt.Println("wrote", path)
+	}
+	a.post(func() {
+		if a.panel != nil {
+			a.panel.Close()
+		}
+	})
+	time.Sleep(500 * time.Millisecond)
 }
 
 // submitForShots downloads link and waits, up to a minute, until a track of

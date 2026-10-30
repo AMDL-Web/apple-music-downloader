@@ -57,6 +57,11 @@ type Store struct {
 	Omni Omnibox
 	// Notice is the latest message for a toast, or zero.
 	Notice Notice
+	// Library is the finished downloads the library screen pages through.
+	Library Library
+	// Server is the backend's health, resources and settings in effect, for
+	// the system screen and the tray panel.
+	Server Server
 
 	nextSeq   int
 	followers map[string]context.CancelFunc
@@ -84,6 +89,7 @@ func (s *Store) reset() {
 	s.Selection, s.DetailID = map[string]bool{}, ""
 	s.followers, s.notified = map[string]context.CancelFunc{}, map[string]domain.JobStatus{}
 	s.Omni.reset()
+	s.Library, s.Server = Library{}, Server{}
 }
 
 // SetNotifier sets who hears about finished jobs.

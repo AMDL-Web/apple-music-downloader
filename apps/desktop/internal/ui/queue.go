@@ -78,9 +78,9 @@ func jobQuality(j *store.Job) string {
 	return ""
 }
 
-func isHiRes(q string) bool {
-	return strings.HasPrefix(q, "ALAC 24/") && !strings.HasSuffix(q, "/44.1") && !strings.HasSuffix(q, "/48")
-}
+// isHiRes gives a quality the gold tag: the design gilds every 24-bit ALAC,
+// 24/48 included.
+func isHiRes(q string) bool { return strings.HasPrefix(q, "ALAC 24/") }
 
 // queueScreen is the main screen: the album downloading now, then the queue.
 func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {

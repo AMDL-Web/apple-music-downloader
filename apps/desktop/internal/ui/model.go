@@ -39,6 +39,13 @@ type Actions interface {
 	Reveal(path string)
 	// CopyText puts text on the clipboard.
 	CopyText(s string)
+	// ChooseFolder asks for a folder of this computer, starting at start,
+	// and hands it to done on the UI thread unless the user cancels.
+	ChooseFolder(start string, done func(dir string))
+	// ShowWindow brings the main window forward, closing the tray panel.
+	ShowWindow()
+	// FitPanel sizes the tray panel to its content's height in DIPs.
+	FitPanel(height float32)
 	// Starting reports a standalone backend that is starting, and StartErr
 	// why the last start failed.
 	Starting() bool
@@ -69,6 +76,11 @@ type App struct {
 	// preview shows.
 	linksTxt string
 	newSel   string
+	// libKind is the library's tab, an index of store.LibraryKinds.
+	libKind int
+	libList ui.ListState
+	// panelH is the height the tray panel was last fitted to.
+	panelH float32
 }
 
 // tokens returns the colors of the current appearance.
@@ -106,3 +118,6 @@ func (a *App) OpenJob(id string) {
 
 // FocusOmni puts the keyboard in the title bar's field.
 func (a *App) FocusOmni() { a.omni.Focus() }
+
+// PanelClosed forgets the tray panel's size, so the next one fits again.
+func (a *App) PanelClosed() { a.panelH = 0 }

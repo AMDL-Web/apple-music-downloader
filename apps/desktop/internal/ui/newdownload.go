@@ -126,6 +126,8 @@ func (a *App) linkRow(c *ui.Context, k *Tokens, l *store.Link) {
 			mono(c, meta, 11).TextColor(k.Faint).Ellipsis("…")
 		})
 		switch {
+		case l.State == store.LinkPending && s.Client() == nil:
+			pill(c, k, pillWait, nil, "Not connected")
 		case l.State == store.LinkPending:
 			pill(c, k, pillWait, nil, "Looking up…")
 		case l.State == store.LinkUnsupported:

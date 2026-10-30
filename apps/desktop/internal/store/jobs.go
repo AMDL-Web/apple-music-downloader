@@ -257,6 +257,9 @@ func (s *Store) noteStatus(j *Job) {
 		return
 	}
 	s.notified[j.ID] = j.Status
+	if j.Status == domain.JobCompleted {
+		s.Library.stale = true
+	}
 	if s.notifier != nil && (j.Status == domain.JobCompleted || j.Status == domain.JobFailed) {
 		s.notifier.JobFinished(j)
 	}
@@ -439,8 +442,9 @@ type Summary struct {
 	Progress float64
 	// FailedToday counts jobs that failed since local midnight.
 	FailedToday int
-	// CompletedToday counts jobs that completed since local midnight.
-	CompletedToday int
+	// CompletedToday counts jobs that completed since local midnight, and
+	// TracksToday the tracks they wrote.
+	CompletedToday, TracksToday int
 	// Now is the job the "downloading now" card shows, or nil.
 	Now *Job
 }
@@ -467,6 +471,7 @@ func (s *Store) Summary() Summary {
 		case domain.JobCompleted:
 			if j.FinishedAt != nil && !j.FinishedAt.Before(midnight) {
 				sum.CompletedToday++
+				sum.TracksToday += j.CompletedItems
 			}
 		}
 	}

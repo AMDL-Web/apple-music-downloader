@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"math"
 
 	"github.com/egoist/mygo"
 
 	"amdl/apps/desktop/internal/mode"
+	appui "amdl/apps/desktop/internal/ui"
 )
 
 // The methods below implement ui.Actions.
@@ -53,3 +55,34 @@ func (a *App) Starting() bool { return a.starting }
 
 // StartErr is why the backend could not be reached or started.
 func (a *App) StartErr() string { return a.startErr }
+
+// ChooseFolder shows the system's folder chooser off the UI thread.
+func (a *App) ChooseFolder(start string, done func(string)) {
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent: a.win, Title: "Download folder", DefaultPath: start, Directory: true, CreateDirectories: true,
+		})
+		if err != nil {
+			a.log.Warn("folder chooser", "error", err)
+			return
+		}
+		if len(paths) > 0 {
+			a.post(func() { done(paths[0]) })
+		}
+	}()
+}
+
+// ShowWindow brings the main window forward and closes the tray panel.
+func (a *App) ShowWindow() {
+	if a.panel != nil {
+		a.panel.Close()
+	}
+	a.showWindow()
+}
+
+// FitPanel sizes the tray panel to the height its content laid out.
+func (a *App) FitPanel(height float32) {
+	if a.panel != nil {
+		a.panel.SetContentSize(appui.PanelWidth, int(math.Ceil(float64(height))))
+	}
+}

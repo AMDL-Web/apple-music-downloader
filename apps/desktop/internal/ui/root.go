@@ -50,8 +50,10 @@ func (a *App) View(c *ui.Context) {
 						a.detail(c, k)
 					case ScreenNew:
 						a.newDownload(c, k, compact)
-					case ScreenLibrary, ScreenSystem:
-						a.notYet(c, k)
+					case ScreenLibrary:
+						a.library(c, k, compact)
+					case ScreenSystem:
+						a.system(c, k, compact)
 					default:
 						a.queueScreen(c, k, compact)
 					}
@@ -153,14 +155,6 @@ func (a *App) toast(c *ui.Context, k *Tokens) {
 			ui.Icon(c, ic).FontSize(13).TextColor(col.Mix(k.PillInk, 0.2))
 			ui.Text(c, n.Text).FontSize(12.5).FontWeight(600).TextColor(k.PillInk)
 		})
-	})
-}
-
-// notYet stands in for screens of the next milestone.
-func (a *App) notYet(c *ui.Context, k *Tokens) {
-	ui.Column(c).Fill().Center().Gap(8).Children(func() {
-		display(c, map[Screen]string{ScreenLibrary: "Library", ScreenSystem: "System", ScreenNew: "New download"}[a.Screen], 24)
-		ui.Text(c, "Coming in the next build.").TextColor(k.Muted)
 	})
 }
 

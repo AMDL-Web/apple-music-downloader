@@ -45,7 +45,9 @@ type App struct {
 	dirs     mode.Dirs
 	settings mode.Settings
 
-	win   *mygo.Window
+	win *mygo.Window
+	// panel is the tray icon's open panel, or nil.
+	panel *mygo.Window
 	store *store.Store
 	shell *shell.Shell
 	view  *appui.App
@@ -118,6 +120,7 @@ func (a *App) ready() {
 	a.shell = shell.New(shell.Options{
 		Open:      a.showWindow,
 		OpenJob:   func(id string) { a.showWindow(); a.view.OpenJob(id) },
+		Panel:     a.togglePanel,
 		Notify:    func() bool { return a.settings.Notify },
 		KeepAwake: func() bool { return a.settings.KeepAwake },
 		Log:       a.log,
@@ -154,6 +157,37 @@ func (a *App) post(fn func()) {
 		if a.shell != nil {
 			a.shell.Sync(a.store.Summary())
 		}
+		if a.panel != nil {
+			a.panel.Invalidate()
+		}
+	})
+}
+
+// togglePanel opens the tray icon's panel next to the icon, or closes it.
+func (a *App) togglePanel() {
+	if a.panel != nil {
+		a.panel.Close()
+		return
+	}
+	tray := a.shell.Tray()
+	if tray == nil {
+		a.showWindow()
+		return
+	}
+	a.panel = mygo.NewFlyout(mygo.FlyoutOptions{
+		Tray:      tray,
+		Placement: mygo.PlacementBottom,
+		Gap:       4,
+		Width:     appui.PanelWidth,
+		Height:    460,
+		Focusable: true,
+		Shadow:    true,
+		Popover:   runtime.GOOS == "darwin",
+		Content:   ui.View(a.view.Panel),
+	})
+	a.panel.OnClosed(func() {
+		a.panel = nil
+		a.view.PanelClosed()
 	})
 }
 

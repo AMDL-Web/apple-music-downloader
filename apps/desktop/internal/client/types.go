@@ -161,3 +161,55 @@ func (q ListQuery) values() url.Values {
 func Terminal(s domain.JobStatus) bool {
 	return s == domain.JobCompleted || s == domain.JobFailed || s == domain.JobCancelled
 }
+
+// Stats is the Stats schema of GET /api/v1/stats.
+type Stats struct {
+	GeneratedAt time.Time `json:"generated_at"`
+	Days        int       `json:"days"`
+	Totals      struct {
+		Jobs            int   `json:"jobs"`
+		TracksCompleted int   `json:"tracks_completed"`
+		TracksSkipped   int   `json:"tracks_skipped"`
+		TracksFailed    int   `json:"tracks_failed"`
+		BytesWritten    int64 `json:"bytes_written"`
+		DurationMS      int64 `json:"duration_ms"`
+	} `json:"totals"`
+	// Daily has one entry per UTC calendar day, oldest first, ending today.
+	Daily []StatsDay `json:"daily"`
+	Hooks []struct {
+		Name         string     `json:"name"`
+		Succeeded    int        `json:"succeeded"`
+		Failed       int        `json:"failed"`
+		LastFailedAt *time.Time `json:"last_failed_at,omitempty"`
+	} `json:"hooks"`
+}
+
+// StatsDay is one day of Stats.daily.
+type StatsDay struct {
+	Date            string `json:"date"`
+	TracksCompleted int    `json:"tracks_completed"`
+	BytesWritten    int64  `json:"bytes_written"`
+	JobsCompleted   int    `json:"jobs_completed"`
+	JobsFailed      int    `json:"jobs_failed"`
+}
+
+// LibrarySync is the LibrarySyncStatus schema.
+type LibrarySync struct {
+	Enabled         bool       `json:"enabled"`
+	IntervalMinutes int        `json:"interval_minutes"`
+	AnchorSize      int        `json:"anchor_size"`
+	LastPollAt      *time.Time `json:"last_poll_at,omitempty"`
+	LastError       string     `json:"last_error,omitempty"`
+	LastSubmitted   int        `json:"last_submitted"`
+	TotalSubmitted  int        `json:"total_submitted"`
+}
+
+// Hooks is the HooksResponse schema.
+type Hooks struct {
+	Enabled bool `json:"enabled"`
+	Entries []struct {
+		Name    string `json:"name"`
+		Enabled bool   `json:"enabled"`
+		Type    string `json:"type"`
+	} `json:"entries"`
+}

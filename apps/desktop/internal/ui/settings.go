@@ -138,16 +138,21 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		}
 	})
 	if d.Mode == mode.Standalone {
-		ui.Row(c).Gap(16).Children(func() {
+		ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
 			ui.Column(c).Grow(1).Basis(0).Gap(6).Children(func() {
 				ui.Text(c, "Download folder").FontSize(12).FontWeight(600)
 				dl := d.DownloadsDir
 				if dl == "" {
 					dl = a.Dirs.DefaultDownloads()
 				}
-				if field(c, k, "dl", &dl, a.Dirs.DefaultDownloads(), true).Changed() {
-					d.DownloadsDir = dl
-				}
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					if field(c, k, "dl", &dl, a.Dirs.DefaultDownloads(), true).Changed() {
+						d.DownloadsDir = dl
+					}
+					if button(c, k, buttonPlain, "Choose…", nil).Height(32).Clicked() {
+						a.Act.ChooseFolder(dl, func(dir string) { d.DownloadsDir = dir })
+					}
+				})
 			})
 			ui.Column(c).Grow(1).Basis(0).Gap(6).Children(func() {
 				ui.Text(c, "ffmpeg").FontSize(12).FontWeight(600)

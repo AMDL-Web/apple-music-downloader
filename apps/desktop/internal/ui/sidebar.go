@@ -66,6 +66,9 @@ func (a *App) systemReading(k *Tokens) (string, ui.Color) {
 	case client.Connecting:
 		return "…", k.Muted
 	}
+	if h := a.Store.Server.Health; h != nil && h.Status != "ok" {
+		return "Check", k.Warn
+	}
 	return "OK", ui.Color{}
 }
 

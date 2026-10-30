@@ -17,6 +17,9 @@ func (f *fakeActions) TestServer(string, func([]mode.Check))  {}
 func (f *fakeActions) TestWrapper(string, func([]mode.Check)) {}
 func (f *fakeActions) Reveal(string)                          {}
 func (f *fakeActions) CopyText(string)                        {}
+func (f *fakeActions) ChooseFolder(string, func(string))      {}
+func (f *fakeActions) ShowWindow()                            {}
+func (f *fakeActions) FitPanel(float32)                       {}
 func (f *fakeActions) Starting() bool                         { return false }
 func (f *fakeActions) StartErr() string                       { return "" }
 
