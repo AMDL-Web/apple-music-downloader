@@ -124,10 +124,26 @@ func ErrorCode(err error) string {
 func (c *Client) url(path string, query url.Values) string {
 	u := c.base + path
 	if len(query) > 0 {
-		u += "?" + query.Encode()
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		u += sep + query.Encode()
 	}
 	return u
 }
+
+// Call sends one request and returns the body of a 2xx answer as is, nil for an
+// empty one, for callers that pass the backend's JSON through unchanged.
+func (c *Client) Call(ctx context.Context, method, path string, query url.Values, body any) (json.RawMessage, error) {
+	var raw json.RawMessage
+	err := c.do(ctx, method, path, query, body, &raw)
+	return raw, err
+}
+
+// SetTimeout replaces the bound on each non-streaming call, 25 seconds by
+// default.
+func (c *Client) SetTimeout(d time.Duration) { c.api.Timeout = d }
 
 // do sends one request and decodes a 2xx JSON body into out (when non-nil).
 // okStatus lists the statuses that count as success; empty means any 2xx.

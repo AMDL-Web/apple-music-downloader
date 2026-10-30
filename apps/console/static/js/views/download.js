@@ -1,20 +1,12 @@
 // New download (#/new?url=&q=&artist=, #/new/:id for the drawer): paste
-// Apple Music links, see what each one is, choose the quality and submit;
-// or type words to search the catalog and download a hit. One column: the
-// text box, the detected links or the search results, then the submit bar
-// (quality preset, Overwrite, the count, Download), which stays in view
-// while the list is long, then what the last submit did. The text box is
-// the source of the links and the search term; ?url= and ?q= prefill it,
-// and the page writes its links into ?url= (its term into ?q=, an open
-// artist into ?artist=) so a reload or the global paste keeps them; the
-// whole text also lasts for the tab when the page is left. The page head
-// comes from app.js. Parts: download-config.js (server defaults),
-// download-lookup.js (previews), download-links.js (rows),
-// download-search.js and download-search-state.js (search),
-// download-preset.js (quality controls),
-// download-quality.js, download-results.js; the logic is pure in
-// lib/links.js, lib/lookup.js, lib/search.js, lib/submit.js and
-// lib/overrides.js.
+// links or search the catalog, choose the quality and submit. One column:
+// the text box, the detected links or the search results, the submit bar
+// (quality, Overwrite, the count, Download; it stays in view), then what
+// the last submit did. The text box is the source of the links and the
+// term and follows the address both ways; it lasts for the tab. Parts:
+// download-config.js, download-address.js, download-lookup.js,
+// download-links.js, download-search*.js, download-preset.js,
+// download-quality.js, download-results.js; the logic is pure in lib/.
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
 import { createDownload, getWrapperStatus, settle } from '../api.js';
@@ -35,11 +27,10 @@ import { SubmitBar, PasteButton, useBarHeight } from './download-bar.js';
 import { QualitySheet, PROBES } from './download-quality.js';
 import { ResultsCard, BrowserShortcut, useResults } from './download-results.js';
 import { SearchCard } from './download-search.js';
-import { useSearch, useHitActions, useTermParam, toResults } from './download-search-state.js';
+import { useSearch, useHitActions, toResults } from './download-search-state.js';
+import { useAddressSync } from './download-address.js';
 
 const isMac = () => /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
-
-const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 // The text box outlives the page for the life of the tab, so leaving New
 // download through the sidebar and coming back keeps a draft, notes and
@@ -81,40 +72,8 @@ export function DownloadPage({ route }) {
   }, [app.epoch]);
   const inputRef = useRef(null);
 
-  // ?url= -> text: links that arrive in the address (the global paste on
-  // this page, a bookmarklet, a shared link) join the text.
-  const urlParam = route.params.url || '';
-  useEffect(() => {
-    if (incoming.length) edit((t) => mergeLinks(t, incoming, storefront));
-  }, [urlParam]);
-
-  // ?q= -> text (download-search.js).
-  const wroteQ = useTermParam({ app, qParam: route.params.q || '', text, storefront, edit });
-
-  // text -> ?url=: the links follow the text, so a reload keeps them, also
-  // after the address lost them (n, the sidebar and the palette open bare
-  // #/new). When only the address changed and it holds links the text does
-  // not, the effect above is merging them; the next settled text writes
-  // the address.
-  const routeRef = useRef(route);
-  routeRef.current = route;
-  const settledSeen = useRef(settled);
-  useEffect(() => {
-    const r = routeRef.current;
-    const found = scanLinks(settled, storefront);
-    const urls = found.map((e) => e.url);
-    const q = searchTerm(settled, found).term;
-    // An open artist belongs to the term it was found with.
-    const artist = q && q === (r.params.q || '') ? r.params.artist : undefined;
-    const inParam = newDownloadUrls(r.params);
-    const textMoved = settledSeen.current !== settled;
-    settledSeen.current = settled;
-    if (sameList(urls, inParam) && q === (r.params.q || '') && artist === r.params.artist) return;
-    if (!textMoved && scanLinks(inParam.join('\n'), storefront).some((e) => !urls.includes(e.url))) return;
-    if (!textMoved && r.params.q && r.params.q !== q) return;
-    wroteQ.current = q;
-    app.navigate(buildHash('new', { ...r.params, url: urls.join('\n'), q, artist }, r.jobId), { replace: true });
-  }, [settled, urlParam, route.params.q, storefront]);
+  // The address and the text box follow each other (download-address.js).
+  const routeRef = useAddressSync({ app, route, incoming, text, settled, storefront, edit });
 
   // Focus the text box once the shell has focused the heading (a fine
   // pointer only: on a phone it would open the keyboard unasked).

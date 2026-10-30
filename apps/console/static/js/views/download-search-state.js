@@ -2,14 +2,12 @@
 // draws it). useSearch runs the searcher and an open artist's pages
 // (lib/search.js) and keeps the library and queue notes live;
 // useHitActions downloads a hit and opens or closes an artist as a history
-// entry; useTermParam and toResults tie the text box to ?q= and to the
-// results.
+// entry; toResults takes the text box's keys to the results.
 
 import { useState, useEffect, useRef } from '../ui/preact.js';
 import { searchCatalog, getArtistAlbums } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { scanLinks } from '../lib/links.js';
-import { searchTerm, createSearcher, createArtistPages, hitKey, hitPrior, trackJobs, shownHits, sentJob, hitPreview } from '../lib/search.js';
+import { createSearcher, createArtistPages, hitKey, hitPrior, trackJobs, shownHits, sentJob, hitPreview } from '../lib/search.js';
 
 // Answers outlive the page for the life of the tab, like link previews.
 const SEARCHES = new Map();
@@ -128,28 +126,6 @@ export function useHitActions({ app, route, term, artistId, search, send, report
     // An artist this page opened (not one a reload or a link opened) takes focus.
     focusArtist: pushed.current,
   };
-}
-
-/**
- * ?q= -> text: a term from the address (the palette's search, a reload)
- * replaces a box that holds no link, through `edit`; with links in the box
- * a toast says why it did not. Returns a ref the page sets to each term it
- * writes into ?q= itself, which is already in the box.
- */
-export function useTermParam({ app, qParam, text, storefront, edit }) {
-  const wrote = useRef('');
-  const textRef = useRef(text);
-  textRef.current = text;
-  useEffect(() => {
-    if (!qParam || qParam === wrote.current) return;
-    const now = textRef.current;
-    if (scanLinks(now, storefront).length) {
-      app.toast({ message: 'The box holds links: download or clear them to search', role: 'warning' });
-      return;
-    }
-    if (searchTerm(now, []).term !== qParam) edit(qParam);
-  }, [qParam]);
-  return wrote;
 }
 
 /**
