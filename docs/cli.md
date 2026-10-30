@@ -120,3 +120,28 @@ Otherwise the command fails with `server_not_configured`.
 `internal/server#Run`: `--config` (default `$AMDL_CONFIG`, else
 `configs/config.yaml`) and `--hooks` (default `$AMDL_HOOKS_CONFIG`, else
 `configs/hooks.yaml`), stopping on SIGINT or SIGTERM and ignoring SIGHUP.
+
+## MCP server
+
+`amdl mcp` serves the same capabilities to an MCP client over stdio, talking to the
+server picked as above: `claude mcp add amdl -- amdl mcp --server nas`. Each capability
+of `internal/capability#All` that names a tool becomes one, with the safety level as its
+annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` for the
+tools that read Apple's catalog) and, for a tool that passes a request through, the
+operation's parameters and body fields as its input schema. Results are JSON, as
+structured content and as text; a failure is a tool error whose text is the error object
+of the [Errors](#errors-and-exit-statuses) table.
+
+- **From a search to a download takes two calls**: `search_catalog`, then
+  `start_download` with the hits' `url` values. It answers at once with
+  `accepted[].job_id` and `rejected[]`; links already queued or running come back
+  rejected with `existing_job_id`.
+- **`wait_for_job`** follows one job for at most `timeout_s` seconds
+  (`apps/amdl/internal/mcpserver#maxWait`) and answers `{done, job}`, the job in the
+  summary view of `jobs get`. While it waits it sends `notifications/progress` with the
+  album's percent, when the call carried a progress token. On `done: false`, or when the
+  client lost the request, calling it again is safe.
+- **`list_jobs`** returns compact rows (`apps/amdl/internal/jobview#Row`), and
+  **`get_status`** gathers the system, health, wrapper and library-sync answers.
+- **No tool signs the wrapper in**: a password never passes through a model. When
+  `get_status` shows no account, a person runs `amdl wrapper login` or uses the console.

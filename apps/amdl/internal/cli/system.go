@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"amdl/apps/amdl/internal/mcpserver"
 	"amdl/apps/console"
 	"amdl/internal/buildinfo"
 	"amdl/internal/capability"
@@ -184,6 +185,15 @@ func serveOptions(getenv func(string) string, cfg, hooks string, withConsole boo
 		opts.Console = console.Handler()
 	}
 	return opts
+}
+
+func mcpCmd(*flag.FlagSet) func(e *env, args []string) error {
+	return func(e *env, args []string) error {
+		if len(args) > 0 {
+			return usageErr("usage: amdl mcp [--server url]")
+		}
+		return mcpserver.Run(e.ctx, e.c, version())
+	}
 }
 
 func or(a, b string) string {

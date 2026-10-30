@@ -34,7 +34,7 @@ Server-Sent Events 接口，以及同一端口上的网页控制台。它以容�
 
 `apps/amdl` 构建出 `amdl`，一个面向 agent 和脚本的 API 客户端：每个结果都是 stdout 上的
 JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli search "<任务>"` 能找到对应
-的命令。详见 [docs/cli.md](docs/cli.md)。
+的命令。`amdl mcp` 把同样的能力作为 MCP 工具提供。详见 [docs/cli.md](docs/cli.md)。
 
 ### 桌面应用（规划中）
 

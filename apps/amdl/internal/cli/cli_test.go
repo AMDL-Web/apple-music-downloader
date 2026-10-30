@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"amdl/apps/amdl/internal/jobview"
 	"amdl/apps/console"
 	"amdl/internal/capability"
 )
@@ -177,7 +178,7 @@ func TestJobsWaitReportsAFailedJob(t *testing.T) {
 		AlbumProgress struct {
 			Lit, Total int
 		} `json:"album_progress"`
-		Tracks []track `json:"tracks"`
+		Tracks []jobview.Track `json:"tracks"`
 	}
 	if err := json.Unmarshal([]byte(r.stdout), &s); err != nil {
 		t.Fatal(err)

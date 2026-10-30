@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"amdl/apps/amdl/internal/jobview"
 	"amdl/internal/capability"
 	"amdl/internal/client"
 	"amdl/internal/domain"
@@ -18,41 +19,7 @@ import (
 	"amdl/internal/progress"
 )
 
-// track is one item in the summary view of a job.
-type track struct {
-	Index      int    `json:"index"`
-	Title      string `json:"title,omitempty"`
-	Status     string `json:"status"`
-	Quality    string `json:"quality,omitempty"`
-	FileSize   int64  `json:"file_size,omitempty"`
-	OutputPath string `json:"output_path,omitempty"`
-	Error      string `json:"error,omitempty"`
-}
-
-// summary is the default view of a job: the Job itself plus its album bar and
-// one short entry per track, about a quarter of the full detail's size.
-func summary(d client.DownloadDetail) map[string]any {
-	raw, _ := json.Marshal(d.Job) // a domain.Job always marshals
-	var out map[string]any
-	_ = json.Unmarshal(raw, &out) // and decodes back into a map
-	tracks := make([]track, 0, len(d.Items))
-	for _, it := range d.Items {
-		tracks = append(tracks, track{
-			Index: it.Index, Title: it.Title, Status: string(it.Status),
-			Quality:  format.Quality(it.Codec, it.BitDepth, it.SampleRate, it.Bitrate),
-			FileSize: it.FileSize, OutputPath: it.OutputPath, Error: it.Error,
-		})
-	}
-	for k := range out {
-		// Palettes are for drawing covers; the full view keeps them.
-		if strings.Contains(k, "_bg_color") || strings.Contains(k, "_text_color") {
-			delete(out, k)
-		}
-	}
-	out["album_progress"] = progress.AlbumProgress(d.Job.Status, d.Items)
-	out["tracks"] = tracks
-	return out
-}
+var summary = jobview.Summary
 
 func jobsGetCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	view := fs.String("view", "summary", "summary (the job, its album progress and short tracks) or full (the API's DownloadDetail)")
@@ -241,13 +208,10 @@ func (e *env) follow(ctx context.Context, id string, lines bool, o watchOpts) (c
 	h := client.JobHandlers{
 		Detail: func(dd client.DownloadDetail) {
 			d = dd
-			items = map[string]int{}
-			for i, it := range d.Items {
-				items[it.ID] = i
-			}
+			items = jobview.Index(d)
 		},
 		Event: func(ev domain.Event) {
-			applyEvent(&d, items, ev)
+			jobview.Apply(&d, items, ev)
 			if lines {
 				if len(o.types) > 0 && !o.types[string(ev.Type)] {
 					return
@@ -277,31 +241,6 @@ func (e *env) follow(ctx context.Context, id string, lines bool, o watchOpts) (c
 		d, err = e.c.Download(e.ctx, id)
 	}
 	return d, err
-}
-
-// applyEvent merges an event's payload into the detail: lifecycle events carry
-// the Job's fields, item events the JobItem's.
-func applyEvent(d *client.DownloadDetail, items map[string]int, ev domain.Event) {
-	if len(ev.Payload) == 0 {
-		return
-	}
-	if ev.ItemID == "" {
-		if strings.HasPrefix(string(ev.Type), "job_") {
-			_ = json.Unmarshal(ev.Payload, &d.Job) // a malformed payload leaves the last snapshot
-		}
-		return
-	}
-	i, ok := items[ev.ItemID]
-	if !ok {
-		var it domain.JobItem
-		if json.Unmarshal(ev.Payload, &it) != nil || it.ID == "" {
-			return
-		}
-		items[it.ID] = len(d.Items)
-		d.Items = append(d.Items, it)
-		return
-	}
-	_ = json.Unmarshal(ev.Payload, &d.Items[i]) // as above
 }
 
 // progressLine redraws one line on a terminal's stderr: title, tracks done,

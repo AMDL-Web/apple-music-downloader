@@ -137,6 +137,8 @@ var All = []Capability{
 	{Command: "context remove", Safety: Write, Args: []string{"name"}, Summary: "Forget a saved server"},
 	{Command: "version", Ops: []string{"getSystem"}, Safety: Read, Summary: "Show this client's and the server's versions"},
 	{Command: "serve", Safety: Write, Summary: "Run the amdl backend and web console in this process"},
+	{Command: "mcp", Safety: Write, Summary: "Serve the amdl tools to an MCP client over stdio",
+		Examples: []string{"claude mcp add amdl -- amdl mcp --server nas"}},
 }
 
 // NotExposed lists the operations no capability calls, with the reason.

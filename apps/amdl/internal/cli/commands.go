@@ -31,6 +31,7 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 		"context remove": noFlags(contextRemove),
 		"version":        versionCmd,
 		"serve":          serveCmd,
+		"mcp":            mcpCmd,
 	}
 }
 
