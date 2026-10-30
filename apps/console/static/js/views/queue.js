@@ -10,11 +10,12 @@ import { appendPage } from '../lib/store.js';
 import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends, rememberQueue } from '../lib/route.js';
 import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
 import { actionPlan, jobAllows } from '../lib/jobactions.js';
-import { useApp, Icon, Segmented, Empty, ErrorNote, SkeletonJobRows, Button, LinkButton } from '../ui/components.js';
+import { useApp, Icon, Segmented, ErrorNote, SkeletonJobRows, Button } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
 import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 import { JobRow, applyFeedToList } from './queue-row.js';
 import { useChipRow } from './queue-chips.js';
+import { QueueEmpty } from './queue-empty.js';
 import { cached, remember } from '../lib/cache.js';
 
 export { JobRow, applyFeedToList };
@@ -411,33 +412,3 @@ const typing = (el) =>
     el.tagName === 'TEXTAREA' ||
     el.tagName === 'SELECT' ||
     el.isContentEditable);
-
-const startAction = () => html`<${LinkButton} variant="primary" size="sm" icon="plus" href=${buildHash('new')}>Start a download</${LinkButton}>`;
-
-function QueueEmpty({ filters, tabs, onClear, onShowAll }) {
-  if (filters.q || filters.type) {
-    // The search covers the current tab only; say so, and which tab.
-    const tab = tabs.find((t) => t.value === filters.tab);
-    const inTab = filters.tab !== 'all' && tab ? ` on the ${tab.label} tab` : '';
-    return html`<${Empty}
-      icon="search"
-      title=${`No jobs match these filters${inTab}`}
-      action=${html`<${Button} size="sm" onClick=${onClear}>Clear filters</${Button}>`}
-    >${filters.tab !== 'all' ? 'Other tabs may match; All searches every job.' : null}</${Empty}>`;
-  }
-  if (filters.tab === 'failed') return html`<${Empty} icon="circle-check" title="No failed jobs" />`;
-  if (filters.tab === 'completed') return html`<${Empty} icon="list" title="No completed jobs yet" />`;
-  if (filters.tab === 'cancelled') return html`<${Empty} icon="list" title="No cancelled jobs" />`;
-  if (filters.tab === 'active') {
-    const all = tabs.find((t) => t.value === 'all');
-    return html`<${Empty}
-      icon="list"
-      title="No active downloads"
-      action=${html`<div class="empty-actions">
-        ${all && all.count > 0 ? html`<${Button} size="sm" onClick=${onShowAll}>See all jobs (${all.count})</${Button}>` : null}
-        ${startAction()}
-      </div>`}
-    />`;
-  }
-  return html`<${Empty} icon="list" title="No jobs yet" action=${startAction()} />`;
-}
