@@ -50,8 +50,6 @@ func (a *App) View(c *ui.Context) {
 						a.detail(c, k)
 					case ScreenNew:
 						a.newDownload(c, k, compact)
-					case ScreenSystem:
-						a.system(c, k, compact)
 					default:
 						a.queueScreen(c, k, compact)
 					}

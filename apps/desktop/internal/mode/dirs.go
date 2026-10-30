@@ -45,15 +45,3 @@ func AppDirs() (Dirs, error) {
 
 // ServerDir holds the embedded backend's files.
 func (d Dirs) ServerDir() string { return filepath.Join(d.Data, "server") }
-
-// DefaultDownloads is where the standalone backend writes unless the
-// settings say otherwise.
-func (d Dirs) DefaultDownloads() string { return filepath.Join(d.Music, "AMDL") }
-
-// Downloads resolves the settings' downloads directory.
-func (d Dirs) Downloads(s Settings) string {
-	if s.DownloadsDir != "" {
-		return s.DownloadsDir
-	}
-	return d.DefaultDownloads()
-}

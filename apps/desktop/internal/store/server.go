@@ -2,6 +2,11 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -22,12 +27,16 @@ const activeSamples = 12
 // Server is what the backend reports about itself. A part the backend did
 // not answer for stays nil, with its error beside it when it failed.
 type Server struct {
-	Health    *client.Health
-	System    *client.SystemInfo
-	Wrapper   *client.WrapperStatus
-	Stats     *client.Stats
-	Sync      *client.LibrarySync
-	Hooks     *client.Hooks
+	Health  *client.Health
+	System  *client.SystemInfo
+	Wrapper *client.WrapperStatus
+	Stats   *client.Stats
+	Sync    *client.LibrarySync
+	Hooks   *client.Hooks
+	// Startup is what the backend read only when it started, from /system.
+	Startup *Startup
+	// Errors are the error logs of the last day, or nil.
+	Errors    *ErrorLogs
 	HealthErr string
 	// WrapperErr says why the wrapper's status could not be read.
 	WrapperErr string
@@ -65,10 +74,15 @@ func (s *Store) WatchServer() {
 			}
 		})
 		read(func(ctx context.Context) {
-			if v, err := c.System(ctx); err == nil {
-				next.System = &v
+			var v struct {
+				client.SystemInfo
+				Startup *Startup `json:"startup"`
+			}
+			if raw, err := c.Call(ctx, http.MethodGet, "/api/v1/system", nil, nil); err == nil && json.Unmarshal(raw, &v) == nil {
+				next.System, next.Startup = &v.SystemInfo, v.Startup
 			}
 		})
+		read(func(ctx context.Context) { next.Errors = readErrors(ctx, c, s.now()) })
 		read(func(ctx context.Context) {
 			if v, err := c.WrapperStatus(ctx); err == nil {
 				next.Wrapper = &v
@@ -105,6 +119,56 @@ func (s *Store) WatchServer() {
 			*sv = next
 		})
 	}()
+}
+
+// Startup is /system's startup block: configuration the backend reads only
+// when it starts, which Settings shows as facts.
+type Startup struct {
+	WrapperAddress      string `json:"wrapper_address"`
+	Listen              string `json:"listen"`
+	DatabasePath        string `json:"database_path"`
+	LogBufferSize       int    `json:"log_buffer_size"`
+	CatalogLanguage     string `json:"catalog_language"`
+	MaxParallelRequests int    `json:"max_parallel_requests"`
+}
+
+// ErrorLogs are the backend's error logs of the last day.
+type ErrorLogs struct {
+	// Times are when each error was logged, oldest first; Full means there
+	// were more than errorLimit.
+	Times []time.Time
+	Full  bool
+	// Last is the newest one's message.
+	Last string
+	// Off means the backend keeps no log history (logging.buffer_size 0).
+	Off bool
+}
+
+// errorLimit bounds the errors one read lists.
+const errorLimit = 200
+
+func readErrors(ctx context.Context, c *client.Client, now time.Time) *ErrorLogs {
+	q := url.Values{"level": {"error"}, "since": {now.Add(-24 * time.Hour).UTC().Format(time.RFC3339)}, "limit": {strconv.Itoa(errorLimit)}}
+	raw, err := c.Call(ctx, http.MethodGet, "/api/v1/logs", q, nil)
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) && apiErr.Code == "feature_unavailable" {
+		return &ErrorLogs{Off: true}
+	}
+	var v struct {
+		Logs []struct {
+			Time    time.Time `json:"time"`
+			Message string    `json:"message"`
+		} `json:"logs"`
+	}
+	if err != nil || json.Unmarshal(raw, &v) != nil {
+		return nil
+	}
+	e := &ErrorLogs{Full: len(v.Logs) >= errorLimit}
+	for _, l := range v.Logs {
+		e.Times = append(e.Times, l.Time)
+		e.Last = l.Message
+	}
+	return e
 }
 
 // DownloadsStorage is the free space of the backend's downloads folder,

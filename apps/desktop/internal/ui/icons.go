@@ -19,6 +19,7 @@ var (
 	icSearch   = icon(`<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/>`)
 	icBack     = icon(`<path d="M10 3 5 8l5 5"/>`)
 	icMore     = icon(`<path d="M4 8h.01M8 8h.01M12 8h.01" stroke-width="2.2"/>`)
+	icChevron  = icon(`<path d="M4.5 6.5 8 10l3.5-3.5"/>`)
 	icDown     = icon(`<path d="M8 2.7v8M4.7 7.7 8 11l3.3-3.3"/>`)
 	icLock     = icon(`<rect x="4" y="7" width="8" height="6" rx="1.2"/><path d="M5.7 7V5.3a2.3 2.3 0 0 1 4.6 0V7"/>`)
 	icClock    = icon(`<circle cx="8" cy="8" r="4.7"/><path d="M8 5.6v2.6l1.6 1.1"/>`)

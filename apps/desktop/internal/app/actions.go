@@ -25,7 +25,7 @@ func (a *App) ApplySettings(s mode.Settings) {
 		a.findFFmpeg()
 	}
 	if s.Mode != prev.Mode || s.RemoteURL != prev.RemoteURL || s.WrapperAddress != prev.WrapperAddress ||
-		(s.Mode == mode.Standalone && (s.DownloadsDir != prev.DownloadsDir || s.FFmpeg != prev.FFmpeg)) {
+		(s.Mode == mode.Standalone && s.FFmpeg != prev.FFmpeg) {
 		a.connect()
 	}
 	a.shell.Sync(a.store.Summary())

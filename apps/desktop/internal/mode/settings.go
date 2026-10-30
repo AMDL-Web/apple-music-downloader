@@ -29,9 +29,6 @@ type Settings struct {
 	RemoteURL string `json:"remote_url,omitempty"`
 	// WrapperAddress is the wrapper the standalone backend decrypts with.
 	WrapperAddress string `json:"wrapper_address,omitempty"`
-	// DownloadsDir is where the standalone backend writes; empty means
-	// Dirs.Music joined with "AMDL".
-	DownloadsDir string `json:"downloads_dir,omitempty"`
 	// FFmpeg overrides the ffmpeg the standalone backend runs; empty means
 	// the one shipped with the app, else the one on PATH.
 	FFmpeg string `json:"ffmpeg,omitempty"`

@@ -60,8 +60,12 @@ type Store struct {
 	// Notice is the latest message for a toast, or zero.
 	Notice Notice
 	// Server is the backend's health, resources and settings in effect, for
-	// the system screen and the tray panel.
+	// Settings and the tray panel.
 	Server Server
+	// Config is the backend's runtime configuration, which Settings edits.
+	Config Config
+	// Login is the Apple Music sign-in Settings runs.
+	Login Login
 
 	nextSeq   int
 	followers map[string]context.CancelFunc
@@ -92,7 +96,7 @@ func (s *Store) reset() {
 	s.followers, s.notified, s.tracksRead = map[string]context.CancelFunc{}, map[string]domain.JobStatus{}, map[string]bool{}
 	s.Omni.reset()
 	s.Search.reset()
-	s.Server = Server{}
+	s.Server, s.Config, s.Login = Server{}, Config{}, Login{}
 }
 
 // SetNotifier sets who hears about finished jobs.

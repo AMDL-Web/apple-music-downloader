@@ -21,7 +21,6 @@ type Screen int
 // Screens.
 const (
 	ScreenQueue Screen = iota
-	ScreenSystem
 	ScreenSettings
 	ScreenDetail
 	ScreenNew

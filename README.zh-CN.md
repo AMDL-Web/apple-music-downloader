@@ -45,8 +45,8 @@ JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli se
 ### 桌面应用（开发中）
 
 `apps/desktop` 是一个面向 macOS、Windows 和 Linux 的原生应用，用 [MyGo](https://github.com/egoist/mygo)
-的原生界面绘制。它可以作为远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接远程
-wrapper。单机模式通过 `internal/local` 在本机回环端口上运行后端；如果这台电脑上已有后端在跑（比如
+的原生界面绘制。它可以作为远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接
+wrapper：`amdl wrapper install` 装在这台电脑上的那个，或别的机器上的。单机模式通过 `internal/local` 在本机回环端口上运行后端；如果这台电脑上已有后端在跑（比如
 `amdl service`），就直接使用它，所以应用和命令行共用一个后端、一份下载记录；应用自己的包放在
 apps/desktop/internal 下，只归它用。
 

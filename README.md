@@ -53,8 +53,8 @@ build and preview it.
 
 `apps/desktop` is a native app for macOS, Windows and Linux, drawn with
 [MyGo](https://github.com/egoist/mygo)'s native UI. It runs either as a client of a remote
-server or as a standalone backend that runs the pipeline in-process and talks to a remote
-wrapper. Standalone mode runs the backend through `internal/local` on a loopback port, or
+server or as a standalone backend that runs the pipeline in-process and talks to a wrapper:
+the one `amdl wrapper install` put on this computer, or one on another machine. Standalone mode runs the backend through `internal/local` on a loopback port, or
 uses the one this computer already runs, such as `amdl service`, so the app and the command
 line share one backend and one download history; the app's own packages sit under
 apps/desktop/internal, private to it.

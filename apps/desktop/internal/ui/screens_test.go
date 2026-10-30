@@ -89,22 +89,32 @@ func TestQueueShowsTheLatestDownloadUntilOneRuns(t *testing.T) {
 	}
 }
 
-func TestSystemCardsReadTheServer(t *testing.T) {
+func TestStatusBoardTilesOpenTheirSections(t *testing.T) {
 	a, _ := newTestApp(remoteSettings())
-	a.Screen = ScreenSystem
+	a.GoSettings("")
 	sv := &a.Store.Server
 	sv.Read = time.Now()
 	sv.Health = &client.Health{Status: "ok"}
-	sv.System = &client.SystemInfo{Version: "2.0-dev", Commit: "01339f0aa", UptimeSeconds: 19 * 60}
+	sv.System = &client.SystemInfo{Version: "2.0-dev", Commit: "01339f0aa", UptimeSeconds: 19 * 60, DefaultStorefront: "us"}
 	sv.System.Jobs.Workers = 3
-	sv.System.Tools = []domain.Capability{{Name: "ffmpeg", Available: true}}
+	sv.System.Tools = []domain.Capability{{Name: "ffmpeg", Available: true, Path: "/usr/bin/ffmpeg"}}
 	sv.System.Storage = []client.Storage{{Name: "downloads_dir", Path: "data/downloads", FreeBytes: 1_620_000_000_000, TotalBytes: 7_670_000_000_000}}
 	sv.Wrapper = &client.WrapperStatus{Ready: true, Status: true, Accounts: []string{"someone@example.com"}, Regions: []string{"cn", "us"}}
+	sv.Errors = &store.ErrorLogs{Times: []time.Time{time.Now().Add(-2 * time.Hour)}, Last: "wrapper: connection refused"}
 	tt := ui.NewTester(a.View, 1280, 800)
-	for _, want := range []string{"All good", "01339f0", "of 3 busy", "Downloads folder", "1.62", "TB free", "Signed in", "someone@example.com"} {
+	for _, want := range []string{"All good", "01339f0", "of 3 busy", "Storage & files", "1.62", "TB free", "Signed in", "someone@example.com", "Last: wrapper: connection refused"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in %q", want, tt.Texts())
 		}
+	}
+	if tt.HasText("System") {
+		t.Errorf("the System screen is Settings' status board now: %q", tt.Texts())
+	}
+	if err := tt.Click("Account"); err != nil {
+		t.Fatal(err)
+	}
+	if a.set.page != "account" || !tt.HasText("Default storefront") || !tt.HasText("US") {
+		t.Errorf("the Account tile opened %q: %q", a.set.page, tt.Texts())
 	}
 }
 

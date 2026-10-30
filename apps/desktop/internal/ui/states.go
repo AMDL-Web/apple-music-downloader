@@ -81,7 +81,7 @@ func (a *App) offlineBanner(c *ui.Context, k *Tokens) {
 		ui.Text(c, msg).FontSize(12.5)
 		ui.Row(c).Gap(8).Children(func() {
 			if button(c, k, buttonPlain, "Change server", nil).Clicked() {
-				a.Go(ScreenSettings)
+				a.GoSettings("connection")
 			}
 		})
 	})
@@ -93,7 +93,7 @@ func (a *App) startFailed(c *ui.Context, k *Tokens) {
 		ui.Text(c, "The backend on this computer did not start").FontWeight(600).TextColor(k.Bad)
 		ui.Text(c, a.Act.StartErr()).FontSize(12.5).Font(MonoFont)
 		if button(c, k, buttonPlain, "Check settings", nil).Clicked() {
-			a.Go(ScreenSettings)
+			a.GoSettings("connection")
 		}
 	})
 }

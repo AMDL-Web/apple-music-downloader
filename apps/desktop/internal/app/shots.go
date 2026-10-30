@@ -81,20 +81,24 @@ func (a *App) captureScreens(dir string) {
 	}, 3*time.Second)
 	shot("04-light", func() { a.view.Theme = "light"; a.view.Go(appui.ScreenQueue) }, 2000*time.Millisecond)
 	shot("05-compact", func() { a.view.Theme = a.opts.Theme; a.win.SetContentSize(820, 560) }, 2500*time.Millisecond)
-	shot("03-settings", func() { a.win.SetContentSize(1280, 800); a.view.Go(appui.ScreenSettings) }, 1500*time.Millisecond)
+	shot("03-settings", func() { a.win.SetContentSize(1280, 800); a.view.GoSettings("connection") }, 1500*time.Millisecond)
 	// A lookup only reads the catalog; the music video shows the row of a
 	// link that cannot download.
 	shot("06-new", func() {
 		a.view.Go(appui.ScreenNew)
 		a.store.SetOmniText(shotAlbum + "\nhttps://music.apple.com/cn/music-video/clip/1")
 	}, 4*time.Second)
-	shot("08-system", func() { a.view.Go(appui.ScreenSystem) }, 3*time.Second)
+	shot("08-status", func() { a.store.SetOmniText(""); a.view.GoSettings("") }, 3*time.Second)
+	for _, page := range []string{"account", "quality", "files", "lyrics_artwork", "jobs", "library_sync", "hooks", "logging", "server"} {
+		shot("14-settings-"+page, func() { a.view.GoSettings(page) }, 1500*time.Millisecond)
+	}
 	shot("10-new-light", func() {
 		a.view.Theme = "light"
 		a.view.Go(appui.ScreenNew)
 		a.store.SetOmniText(shotAlbum)
 	}, 3*time.Second)
-	shot("12-system-light", func() { a.view.Go(appui.ScreenSystem) }, 2500*time.Millisecond)
+	shot("12-status-light", func() { a.view.GoSettings("") }, 2500*time.Millisecond)
+	shot("15-files-light", func() { a.view.GoSettings("files") }, 1500*time.Millisecond)
 	a.waitFinished(job)
 	// With nothing downloading, the queue shows the album that just
 	// finished, playing its 3:4 loop, over the covers of those before it.

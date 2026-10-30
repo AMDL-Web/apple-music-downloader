@@ -12,49 +12,76 @@ import (
 	"amdl/internal/format"
 )
 
-// system is the backend's own state as Mole's cards: health, workers, what
-// it downloaded, free space, the Apple Music account, library sync and
-// hooks. The cards only read: the backend's settings, the account's
-// sign-in and the library sync switch stay where they are configured.
-func (a *App) system(c *ui.Context, k *Tokens, compact bool) {
+// statusBoard is Settings' first page: one tile per domain of the backend,
+// each opening its section, as the web console's board.
+func (a *App) statusBoard(c *ui.Context, k *Tokens) {
 	s := a.Store
 	s.WatchServer()
+	s.WatchConfig()
 	c.After(store.ServerEvery)
 	sv := &s.Server
 	if sv.Read.IsZero() && a.unreachable(c, k) {
 		return
 	}
-	cols := 4
-	if compact {
-		cols = 2
+	w, _ := c.Size()
+	cols := 2
+	if w >= 1500 {
+		cols = 4
 	}
-	ui.Scroll(c.Key("system")).Grow(1).Children(func() {
-		ui.Grid(c).Columns(cols).Gap(14).Padding(6, 24, 20, 24).Children(func() {
-			if sv.Read.IsZero() {
-				// Grid cells size themselves: skeleton's full width would
-				// overflow them.
-				for i, span := range []int{2, 1, 1, 1, 1, 2} {
-					el := ui.Box(c.Key(i)).Height(148).Radius(18).Background(k.Track).ColumnSpan(span)
-					el.Opacity(0.55 + 0.45*el.Loop("sk", 1400*time.Millisecond, ui.Bounce(ui.EaseInOut)))
-				}
-				return
+	ui.Grid(c).Columns(cols).Gap(14).Children(func() {
+		if sv.Read.IsZero() {
+			// Grid cells size themselves: skeleton's full width would
+			// overflow them.
+			for i := range 8 {
+				el := ui.Box(c.Key(i)).Height(148).Radius(18).Background(k.Track)
+				el.Opacity(0.55 + 0.45*el.Loop("sk", 1400*time.Millisecond, ui.Bounce(ui.EaseInOut)))
 			}
-			a.healthCard(c, k, sv)
-			a.workersCard(c, k, sv)
-			a.downloadedCard(c, k, sv)
-			diskCard(c, k, "downloads", "Downloads folder", sv.DownloadsStorage())
-			diskCard(c, k, "temp", "Temporary folder", sv.TempStorage())
-			a.accountCard(c, k, sv)
-			syncCard(c, k, sv)
-			hooksCard(c, k, sv)
-		})
+			return
+		}
+		wide := map[string]int{"server": 2, "account": 2, "hooks": 2, "logging": 2}
+		for _, id := range []string{"server", "account", "quality", "files", "jobs", "library_sync", "hooks", "logging"} {
+			span := 1
+			if cols == 4 {
+				span = max(1, wide[id])
+			}
+			el := a.domainCard(c, k, id, span)
+			el.Cursor(ui.CursorPointer).OnClick(func() { a.set.page = id })
+			if el.Hovered() {
+				el.Background(k.Raise2)
+			}
+		}
 	})
+}
+
+// domainCard is a domain's state: a tile of the board, and the head of its
+// section.
+func (a *App) domainCard(c *ui.Context, k *Tokens, id string, span int) ui.Element {
+	sv := &a.Store.Server
+	switch id {
+	case "server":
+		return a.healthCard(c, k, sv, span)
+	case "account":
+		return a.accountCard(c, k, sv, span)
+	case "quality":
+		return a.downloadedCard(c, k, sv, span)
+	case "files":
+		return a.filesCard(c, k, sv, span)
+	case "jobs":
+		return a.workersCard(c, k, sv, span)
+	case "library_sync":
+		return syncCard(c, k, sv, span)
+	case "hooks":
+		return hooksCard(c, k, sv, span)
+	case "logging":
+		return logsCard(c, k, sv, span)
+	}
+	return ui.Element{}
 }
 
 // moleCard is a card of the system screen: a colored icon square, the
 // title, chips at the right, then body.
-func moleCard(c *ui.Context, k *Tokens, key string, span int, tile ui.Color, ic *ui.SVG, title string, titleColor ui.Color, chips []string, body func()) {
-	el := card(c.Key(key), k)
+func moleCard(c *ui.Context, k *Tokens, key string, span int, tile ui.Color, ic *ui.SVG, title string, titleColor ui.Color, chips []string, body func()) ui.Element {
+	el := card(c.Key(key), k).Label(title)
 	if span > 1 {
 		el.ColumnSpan(span)
 	}
@@ -76,6 +103,7 @@ func moleCard(c *ui.Context, k *Tokens, key string, span int, tile ui.Color, ic 
 		})
 		body()
 	})
+	return el
 }
 
 // cardFoot is a card's last lines of detail, two at most.
@@ -83,7 +111,7 @@ func cardFoot(c *ui.Context, k *Tokens, s string) {
 	ui.Text(c, s).Font(MonoFont).FontSize(11.5).FontWeight(500).LineHeight(1.45).TextColor(k.Muted).MaxLines(2).Ellipsis("…")
 }
 
-func (a *App) healthCard(c *ui.Context, k *Tokens, sv *store.Server) {
+func (a *App) healthCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
 	word, col, glow := "All good", k.OK, k.Accent
 	var problems []string
 	switch {
@@ -117,7 +145,7 @@ func (a *App) healthCard(c *ui.Context, k *Tokens, sv *store.Server) {
 	if len(problems) > 0 {
 		foot = strings.Join(problems, " · ")
 	}
-	moleCard(c, k, "health", 2, k.TileSystem, icCheck, "Health", col, chips, func() {
+	return moleCard(c, k, "health", span, k.TileSystem, icCheck, "Server", col, chips, func() {
 		ui.Row(c).Gap(18).AlignItems(ui.Center).Children(func() {
 			display(c, word, 44).SingleLine()
 			ui.Spacer(c)
@@ -154,12 +182,12 @@ func planet(c *ui.Context, k *Tokens, glow ui.Color) {
 	})
 }
 
-func (a *App) workersCard(c *ui.Context, k *Tokens, sv *store.Server) {
+func (a *App) workersCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
 	var chips []string
 	if sv.System != nil {
 		chips = []string{fmt.Sprintf("queue %d / %d", sv.System.Jobs.QueueDepth, sv.System.Jobs.QueueCapacity)}
 	}
-	moleCard(c, k, "workers", 1, k.TileQueue, icQueue, "Workers", ui.Color{}, chips, func() {
+	return moleCard(c, k, "workers", span, k.TileQueue, icQueue, "Jobs", ui.Color{}, chips, func() {
 		if sv.System == nil {
 			bigValue(c, k, "—", "", 34)
 			cardFoot(c, k, "The backend did not say")
@@ -177,8 +205,12 @@ func (a *App) workersCard(c *ui.Context, k *Tokens, sv *store.Server) {
 	})
 }
 
-func (a *App) downloadedCard(c *ui.Context, k *Tokens, sv *store.Server) {
-	moleCard(c, k, "downloaded", 1, k.TileLibrary, icNote, "Downloaded", ui.Color{}, []string{fmt.Sprintf("%d days", store.StatsDays)}, func() {
+func (a *App) downloadedCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
+	chips := []string{fmt.Sprintf("%d days", store.StatsDays)}
+	if first := strs(a.Store.Config.Value("download.quality_priority")); len(first) > 0 {
+		chips = append([]string{codecName(first[0]) + " first"}, chips...)
+	}
+	return moleCard(c, k, "downloaded", span, k.TileLibrary, icNote, "Quality", ui.Color{}, chips, func() {
 		if sv.Stats == nil {
 			bigValue(c, k, "—", "", 34)
 			cardFoot(c, k, "This backend keeps no statistics")
@@ -225,12 +257,15 @@ func bars(c *ui.Context, k *Tokens, vals []float64, slots int, col ui.Color) {
 	})
 }
 
-func diskCard(c *ui.Context, k *Tokens, key, title string, st *client.Storage) {
+// filesCard is the free space of the downloads folder's disk, and of the
+// temporary folder's when it says another.
+func (a *App) filesCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
+	st := sv.DownloadsStorage()
 	var total string
 	if st != nil && st.TotalBytes > 0 {
 		total = format.Bytes(st.TotalBytes)
 	}
-	moleCard(c, k, key, 1, k.TileDisk, icDisk, title, ui.Color{}, []string{total}, func() {
+	return moleCard(c, k, "files", span, k.TileDisk, icDisk, "Storage & files", ui.Color{}, []string{total}, func() {
 		if st == nil || st.Error != "" || st.TotalBytes == 0 {
 			bigValue(c, k, "—", "", 34)
 			why := "The backend did not say"
@@ -244,7 +279,11 @@ func diskCard(c *ui.Context, k *Tokens, key, title string, st *client.Storage) {
 		bigValue(c, k, format.Number(v, 2), unit+" free", 34)
 		used := 1 - float64(st.FreeBytes)/float64(st.TotalBytes)
 		meter(c, k, used, 8)
-		cardFoot(c, k, fmt.Sprintf("%s · %d%% used", st.Path, int(used*100+0.5)))
+		foot := fmt.Sprintf("%s · %d%% used", st.Path, int(used*100+0.5))
+		if t := sv.TempStorage(); t != nil && t.Error == "" && (t.TotalBytes != st.TotalBytes || t.FreeBytes != st.FreeBytes) {
+			foot += " · temporary folder " + format.Bytes(t.FreeBytes) + " free"
+		}
+		cardFoot(c, k, foot)
 	})
 }
 
@@ -282,42 +321,49 @@ type account struct {
 // accountState reads the wrapper's status. A wrapper amdl runs on the
 // backend's machine says first whether its guest runs at all: while it boots,
 // logs in, is stopped or failed, the guest cannot answer and the status reads
-// not ready and signed out.
+// not ready and signed out. Health's line is client.WrapperStatus.Problem's,
+// as the other clients say it.
 func accountState(w *client.WrapperStatus, err string) account {
 	if w == nil {
-		return account{"Unreachable", "No answer", pillBad, icCross, err, "the wrapper does not answer", false}
+		return account{word: "Unreachable", state: "No answer", kind: pillBad, icon: icCross, note: err, problem: "the wrapper does not answer"}
 	}
+	st := wrapperWords(w)
+	st.problem, _ = w.Problem()
+	return st
+}
+
+func wrapperWords(w *client.WrapperStatus) account {
 	if m := w.Managed; m != nil {
 		switch m.Mode {
 		case "starting":
-			return account{"Starting", "Booting", pillWait, nil, "The local wrapper boots in about 15 seconds", "the local wrapper is starting", false}
+			return account{word: "Starting", state: "Booting", kind: pillWait, note: "The local wrapper boots in about 15 seconds"}
 		case "login":
-			return account{"Logging in", "Logging in", pillWait, nil, "The local wrapper restarts with the account; this takes about half a minute", "the local wrapper is logging in", false}
+			return account{word: "Logging in", state: "Logging in", kind: pillWait, note: "The local wrapper restarts with the account; this takes about half a minute"}
 		case "stopped":
-			return account{"Stopped", "Stopped", pillWarn, icWarn, "Start it with amdl wrapper start", "the local wrapper is stopped", false}
+			return account{word: "Stopped", state: "Not running", kind: pillWarn, icon: icWarn, note: "Start it with amdl wrapper start"}
 		case "failed":
 			note := "See amdl wrapper logs"
 			if m.LastError != "" {
 				note = m.LastError + " · amdl wrapper logs"
 			}
-			return account{"Failed", "Failed", pillBad, icCross, note, "the local wrapper failed", false}
+			return account{word: "Failed", state: "Not running", kind: pillBad, icon: icCross, note: note}
 		}
 	}
 	switch {
 	case !w.Ready:
-		return account{"Starting", "Not ready", pillWait, nil, "The wrapper answers but is not ready yet", "the wrapper is not ready", false}
+		return account{word: "Starting", state: "Not ready", kind: pillWait, note: "The wrapper answers but is not ready yet"}
 	case !w.Status:
 		note := "Log in on the wrapper's own machine"
 		if w.LoginSupported {
 			note = "Log in so downloads can be decrypted"
 		}
-		return account{"Signed out", "No account", pillWarn, icWarn, note, "no Apple Music account is signed in", w.LoginSupported}
+		return account{word: "Signed out", state: "No account", kind: pillWarn, icon: icWarn, note: note, signIn: w.LoginSupported}
 	}
 	note := "Signed in"
 	if len(w.Regions) > 0 {
-		note = "Storefronts " + strings.Join(w.Regions, ", ")
+		note = "Storefronts " + strings.ToUpper(strings.Join(w.Regions, ", "))
 	}
-	return account{"Signed in", "Ready", pillOK, icCheck, note, "", false}
+	return account{word: "Signed in", state: "Ready", kind: pillOK, icon: icCheck, note: note}
 }
 
 // wrapperKind names the wrapper: one amdl runs here, or wrapper-manager or
@@ -337,10 +383,10 @@ func wrapperKind(w *client.WrapperStatus) string {
 	return "wrapper-lite"
 }
 
-func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server) {
+func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
 	w := sv.Wrapper
 	st := accountState(w, sv.WrapperErr)
-	moleCard(c, k, "account", 2, k.TileSettings, icPerson, "Apple Music account", ui.Color{}, []string{wrapperKind(w)}, func() {
+	return moleCard(c, k, "account", span, k.TileSettings, icPerson, "Account", ui.Color{}, []string{wrapperKind(w)}, func() {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			display(c, st.word, 24).SingleLine()
 			pill(c, k, st.kind, st.icon, st.state)
@@ -359,13 +405,13 @@ func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server) {
 	})
 }
 
-func syncCard(c *ui.Context, k *Tokens, sv *store.Server) {
+func syncCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
 	l := sv.Sync
 	var chips []string
 	if l != nil && l.IntervalMinutes > 0 {
 		chips = []string{fmt.Sprintf("%d min", l.IntervalMinutes)}
 	}
-	moleCard(c, k, "sync", 1, k.TileSystem, icSync, "Library sync", ui.Color{}, chips, func() {
+	return moleCard(c, k, "sync", span, k.TileSystem, icSync, "Library sync", ui.Color{}, chips, func() {
 		if l == nil {
 			display(c, "—", 24)
 			cardFoot(c, k, "This backend has no library sync")
@@ -395,13 +441,13 @@ func syncCard(c *ui.Context, k *Tokens, sv *store.Server) {
 	})
 }
 
-func hooksCard(c *ui.Context, k *Tokens, sv *store.Server) {
+func hooksCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {
 	h := sv.Hooks
 	var chips []string
 	if h != nil {
 		chips = []string{fmt.Sprint(len(h.Entries))}
 	}
-	moleCard(c, k, "hooks", 1, k.TileQueue, icPlus, "Hooks", ui.Color{}, chips, func() {
+	return moleCard(c, k, "hooks", span, k.TileQueue, icLink, "Hooks", ui.Color{}, chips, func() {
 		if h == nil || len(h.Entries) == 0 || !h.Enabled {
 			display(c, "None", 24)
 			foot := "No hooks in hooks.yaml"

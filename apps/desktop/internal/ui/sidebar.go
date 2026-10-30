@@ -35,8 +35,7 @@ func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool) {
 			a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(0)), ui.Color{})
 			ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Faint).Padding(8, 10, 4, 10)
 			reading, col := a.systemReading(k)
-			a.navItem(c, k, ScreenSystem, icSystem, k.TileSystem, "System", reading, col)
-			a.navItem(c, k, ScreenSettings, icSettings, k.TileSettings, "Settings", "", ui.Color{})
+			a.navItem(c, k, ScreenSettings, icSettings, k.TileSettings, "Settings", reading, col)
 		})
 		ui.Spacer(c)
 		a.nowCard(c, k)
@@ -57,7 +56,7 @@ func (a *App) serverHeading() string {
 	return "Server"
 }
 
-// systemReading is the System item's live value: OK, or what is wrong.
+// systemReading is the Settings item's live value: OK, or what is wrong.
 func (a *App) systemReading(k *Tokens) (string, ui.Color) {
 	switch a.Store.Conn.Phase {
 	case client.Offline:
@@ -190,7 +189,6 @@ func (a *App) rail(c *ui.Context, k *Tokens, vib bool) {
 			a.railItem(c, k, it.s, it.ic, it.name)
 		}
 		ui.Spacer(c)
-		a.railItem(c, k, ScreenSystem, icSystem, "System")
 		a.railItem(c, k, ScreenSettings, icSettings, "Settings")
 	})
 }
