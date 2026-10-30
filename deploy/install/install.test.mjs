@@ -123,6 +123,12 @@ test('--dry-run downloads nothing', () => {
   assert.equal(existsSync(bin), false);
 });
 
+test('a version without its v names the v tag', () => {
+  const { first } = install('/nonexistent', '--version', '9.9.9', '--dry-run');
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stderr, /would install amdl v9\.9\.9 \(linux\/amd64\) from file:\/\/\/nonexistent\/amdl_v9\.9\.9_linux_amd64\.tar\.gz/);
+});
+
 const has = (cmd) => spawnSync(cmd, ['--version'], { stdio: 'ignore' }).error === undefined;
 
 test('shellcheck finds nothing in install.sh', { skip: !has('shellcheck') && 'shellcheck is not installed' }, () => {
@@ -137,6 +143,13 @@ test('install.ps1 parses and dry-runs', { skip: !has('pwsh') && 'pwsh is not ins
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stderr, /would install amdl v9.9.9 \(windows\/amd64\)/);
   assert.match(r.stderr, /would run: amdl service install --wrapper http:\/\/nas:30020/);
+});
+
+test('install.ps1 adds the v to a bare version', { skip: !has('pwsh') && 'pwsh is not installed' }, () => {
+  const r = spawnSync('pwsh', ['-NoProfile', '-File', join(here, 'install.ps1'), '-Version', '9.9.9', '-InstallDir', join(tmpdir(), 'amdl-ps1'),
+    '-BaseUrl', '/nonexistent', '-DryRun'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /would install amdl v9\.9\.9 \(windows\/amd64\) from .*amdl_v9\.9\.9_windows_amd64\.zip/);
 });
 
 test('install.ps1 points at -Version when the archive is missing', { skip: !has('pwsh') && 'pwsh is not installed' }, () => {

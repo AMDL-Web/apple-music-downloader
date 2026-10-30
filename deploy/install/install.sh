@@ -53,6 +53,11 @@ while [ $# -gt 0 ]; do
 	esac
 	shift
 done
+# Release tags start with v; 2.0.0 means v2.0.0.
+case $version in
+'' | v*) ;;
+*) version=v$version ;;
+esac
 
 # AMDL_INSTALL_OS and AMDL_INSTALL_ARCH override detection, for tests.
 case ${AMDL_INSTALL_OS:-$(uname -s)} in

@@ -31,7 +31,7 @@ and the command that installs ffmpeg when ffmpeg is missing. Options go after
 
 | Option | Effect |
 | --- | --- |
-| `--version v2.0.0` | Install that release instead of the latest |
+| `--version v2.0.0` | Install that release instead of the latest; `2.0.0` works too |
 | `--system` | Install into `/usr/local/bin`; the script says so before it runs `sudo` |
 | `--bin-dir DIR` | Install into `DIR` |
 | `--service` | Run `amdl service install` afterwards ([Run the backend](#run-the-backend)) |

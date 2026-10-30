@@ -50,6 +50,8 @@ function Get-FFmpegHint {
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\amdl' }
+# Release tags start with v; 2.0.0 means v2.0.0.
+if ($Version -and -not $Version.StartsWith('v')) { $Version = "v$Version" }
 $resolved = -not $Version
 if (-not $Version) {
     if ($BaseUrl) { throw '-Version is needed with -BaseUrl' }
