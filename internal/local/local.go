@@ -77,9 +77,6 @@ type Backend struct {
 	Dirs Dirs
 	// Wrapper is the wrapper's address; empty keeps the one in config.yaml.
 	Wrapper string
-	// DownloadsDir is where tracks are written; empty keeps the one in
-	// config.yaml, or DefaultDownloads on a first start.
-	DownloadsDir string
 	// FFmpeg is the ffmpeg executable; empty keeps the configured one.
 	FFmpeg string
 	// LogOutput receives the backend's console log; nil discards it.
@@ -99,10 +96,10 @@ type Backend struct {
 func (b Backend) ConfigPath() string { return filepath.Join(b.Dirs.ServerDir(), "config.yaml") }
 
 const configHeader = `# Written by the AMDL clients (the desktop app, amdl --server embedded) each
-# time they start the embedded backend: wrapper.address, download.downloads_dir
-# and tools.ffmpeg come from their settings; the other keys are kept. The
-# documentation of every key is configs/config.example.yaml in the amdl
-# repository.
+# time they start the embedded backend: wrapper.address and tools.ffmpeg come
+# from their settings; the other keys are kept, and PUT /api/v1/config changes
+# them. The documentation of every key is configs/config.example.yaml in the
+# amdl repository.
 `
 
 // ErrNoWrapper means a first start was not told where the wrapper is.
@@ -136,9 +133,6 @@ func (b Backend) WriteConfig() error {
 	}
 	if b.Wrapper != "" {
 		cfg.Wrapper.Address = WrapperURL(b.Wrapper)
-	}
-	if b.DownloadsDir != "" {
-		cfg.Download.DownloadsDir = b.DownloadsDir
 	}
 	if b.FFmpeg != "" {
 		cfg.Tools.FFmpeg = b.FFmpeg
