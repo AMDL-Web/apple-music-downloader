@@ -170,7 +170,8 @@ listening` log line carries `addr` and, unless `--no-console`, `console`, the UR
 `amdl mcp` serves the same capabilities to an MCP client over stdio, talking to the
 server picked as above: `claude mcp add amdl -- amdl mcp --server nas`. It answers the MCP
 handshake even when no server is configured or answering, so the client lists the tools;
-each call then fails with `server_unreachable` until a server answers at
+each call then fails with `server_unreachable`, naming the address and with a `hint` to
+start the backend or pass `--server`, until a server answers at
 `http://127.0.0.1:18080` or the `--server` the client passed. It takes neither `--dry-run`
 nor `--fields`. Each capability
 of `internal/capability#All` that names a tool becomes one, with the safety level as its
@@ -184,7 +185,8 @@ a tool error whose text is the error object of the [Errors](#errors-and-exit-sta
 table, with the same codes as the CLI: `invalid_request` for a bad argument,
 `config_key_not_found` for an unknown key of `get_config`, and `no_urls_accepted` when
 `start_download` queues nothing (`details.rejected` says why per link), except that links
-which are all queued or running already are not an error.
+which are all queued or running already are not an error. `set_config`, like
+`config set`, answers with the keys it set and `persisted`.
 
 - **From a search to a download takes two calls**: `search_catalog`, then
   `start_download` with the hits' `url` values. It answers at once with

@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -94,7 +95,7 @@ func wrap(schema map[string]any, run runner) mcp.ToolHandler {
 			if errors.As(err, &ae) {
 				return errorResult("invalid_request", ae.msg, nil), nil
 			}
-			return errorResult("server_unreachable", err.Error(), nil), nil
+			return unreachable(err), nil
 		}
 		raw, err := toJSON(out)
 		if err != nil {
@@ -195,6 +196,24 @@ func errorResult(code, message string, details json.RawMessage) *mcp.CallToolRes
 		body["details"] = details
 	}
 	raw, _ := json.Marshal(map[string]any{"error": body}) // strings and raw JSON
+	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: string(raw)}}}
+}
+
+// unreachableHint is what an agent can do when the server does not answer.
+const unreachableHint = "start the amdl backend (amdl service start, or amdl serve), or give amdl mcp --server <url> in this MCP client's config"
+
+// unreachable is the tool error for a server that did not answer: every tool
+// says it the same way, naming the address rather than the request.
+func unreachable(err error) *mcp.CallToolResult {
+	msg := err.Error()
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		if u, perr := url.Parse(urlErr.URL); perr == nil {
+			msg = "the amdl server does not answer at " + u.Scheme + "://" + u.Host
+		}
+	}
+	raw, _ := json.Marshal(map[string]any{"error": map[string]any{ // strings only
+		"code": "server_unreachable", "message": msg, "hint": unreachableHint}})
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: string(raw)}}}
 }
 
@@ -516,7 +535,6 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 	type accepted struct {
 		URL   string `json:"url"`
 		JobID string `json:"job_id"`
-		Title string `json:"title,omitempty"`
 	}
 	type rejected struct {
 		URL           string `json:"url"`
@@ -531,7 +549,7 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 	}{Accepted: []accepted{}, Rejected: []rejected{}}
 	for _, r := range batch.Results {
 		if r.Job != nil {
-			out.Accepted = append(out.Accepted, accepted{r.URL, r.Job.ID, r.Job.Title})
+			out.Accepted = append(out.Accepted, accepted{r.URL, r.Job.ID})
 			continue
 		}
 		rj := rejected{URL: r.URL, Status: string(r.Status), ExistingJobID: r.ExistingJobID}
@@ -544,7 +562,7 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 		// Nothing was queued and not because the links are already running:
 		// an error, as in the CLI, with the reasons per link.
 		details, _ := json.Marshal(map[string]any{"rejected": out.Rejected}) // strings only
-		return nil, &client.APIError{Status: refused.Status, Code: refused.Code, Message: refused.Message, Details: details}
+		return nil, &client.APIError{Status: refused.Status, Code: refused.Code, Message: "no URL was accepted; see details.rejected", Details: details}
 	}
 	return out, nil
 }
@@ -737,5 +755,24 @@ func (h handlers) setConfig(ctx context.Context, _ *mcp.CallToolRequest, args ma
 		}
 		node[parts[len(parts)-1]] = v
 	}
-	return h.c.Call(ctx, http.MethodPut, "/api/v1/config", nil, patch)
+	raw, err := h.c.Call(ctx, http.MethodPut, "/api/v1/config", nil, patch)
+	if err != nil {
+		return nil, err
+	}
+	// The answer is the whole runtime config; echo only the keys set, as the
+	// CLI does.
+	var resp struct {
+		Config    map[string]any `json:"config"`
+		Persisted bool           `json:"persisted"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, err
+	}
+	set := map[string]any{}
+	for key := range changes {
+		if v, ok := dig(resp.Config, key); ok {
+			set[key] = v
+		}
+	}
+	return map[string]any{"config": set, "persisted": resp.Persisted}, nil
 }

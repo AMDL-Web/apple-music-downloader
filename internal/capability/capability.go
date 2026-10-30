@@ -66,7 +66,7 @@ var All = []Capability{
 		Examples: []string{"amdl quality https://music.apple.com/us/album/igor/1463409338"}},
 	{Command: "download", Tool: "start_download", Ops: []string{"createDownload", "streamDownloadEvents"}, Safety: Write, Args: []string{"urls"},
 		Summary:     "Download songs, albums, playlists, stations or artists by link; --wait blocks until done",
-		ToolSummary: "Queue songs, albums, playlists, stations or artists by link and answer at once with {accepted: [{url, job_id, title}], rejected: [{url, status, code, message, existing_job_id}]}; follow each job_id with wait_for_job",
+		ToolSummary: "Queue songs, albums, playlists, stations or artists by link and answer at once with {accepted: [{url, job_id}], rejected: [{url, status, code, message, existing_job_id}]}; follow each job_id with wait_for_job",
 		Examples: []string{
 			"amdl download https://music.apple.com/us/album/igor/1463409338 --wait --timeout 20m",
 			"amdl search igor --types albums | jq -r '.albums.items[].url' | amdl download -",
@@ -118,7 +118,7 @@ var All = []Capability{
 		Examples: []string{"amdl config get download.quality_priority logging.level"}},
 	{Command: "config set", Tool: "set_config", Ops: []string{"updateConfig"}, Safety: Write, Args: []string{"changes"},
 		Summary:     "Change runtime config keys (key=value, values in YAML)",
-		ToolSummary: "Change runtime config keys: changes maps dotted keys to their new values and the answer is the updated config",
+		ToolSummary: "Change runtime config keys: changes maps dotted keys to their new values and the answer is {config: those keys' new values, persisted}",
 		Examples:    []string{"amdl config set logging.level=debug download.quality_priority=[alac,aac]"}},
 	{Command: "config reload", Ops: []string{"reloadConfig"}, Safety: Write,
 		Summary: "Re-read config.yaml on the server and apply its runtime keys"},

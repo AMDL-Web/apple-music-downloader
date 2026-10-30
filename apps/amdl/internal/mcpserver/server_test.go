@@ -67,7 +67,13 @@ func connect(t *testing.T, backend http.Handler) *session {
 	t.Helper()
 	srv := httptest.NewServer(backend)
 	t.Cleanup(srv.Close)
-	c, err := client.New(srv.URL)
+	return connectTo(t, srv.URL)
+}
+
+// connectTo starts the MCP server against the amdl server at base.
+func connectTo(t *testing.T, base string) *session {
+	t.Helper()
+	c, err := client.New(base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,6 +284,35 @@ func TestGetConfigOfAnUnknownKeyIsConfigKeyNotFound(t *testing.T) {
 	out, isErr = s.call(t, "get_config", map[string]any{"keys": []string{"logging.nope"}})
 	if e := errorOf(t, out); !isErr || e["code"] != "config_key_not_found" {
 		t.Errorf("get_config of an unknown key = %v", out)
+	}
+}
+
+func TestSetConfigEchoesOnlyTheKeysSet(t *testing.T) {
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"config":{"catalog":{"media_user_token":"...9z8y"},"logging":{"level":"debug","access_log":false}},"persisted":true}`)
+	}))
+	out, isErr := s.call(t, "set_config", map[string]any{"changes": map[string]any{"logging.level": "debug"}})
+	cfg, _ := out["config"].(map[string]any)
+	if isErr || len(cfg) != 1 || cfg["logging.level"] != "debug" || out["persisted"] != true {
+		t.Errorf("set_config = %v, want only logging.level and persisted", out)
+	}
+}
+
+func TestUnreachableServerSaysWhereAndWhatToDo(t *testing.T) {
+	dead := httptest.NewServer(http.NotFoundHandler())
+	base := dead.URL
+	dead.Close()
+	s := connectTo(t, base)
+	for _, tool := range []string{"get_status", "search_catalog"} {
+		args := map[string]any{}
+		if tool == "search_catalog" {
+			args["term"] = "lemon"
+		}
+		out, isErr := s.call(t, tool, args)
+		e := errorOf(t, out)
+		if !isErr || e["code"] != "server_unreachable" || e["message"] != "the amdl server does not answer at "+base || e["hint"] == nil {
+			t.Errorf("%s = %v", tool, out)
+		}
 	}
 }
 
