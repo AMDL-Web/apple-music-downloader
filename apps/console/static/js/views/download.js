@@ -4,7 +4,7 @@
 // (quality, Overwrite, the count, Download; it stays in view), then what
 // the last submit did. The text box is the source of the links and the
 // term and follows the address both ways; it lasts for the tab. Parts:
-// download-config.js, download-address.js, download-lookup.js,
+// download-hero.js, download-config.js, download-address.js, download-lookup.js,
 // download-links.js, download-search*.js, download-preset.js,
 // download-quality.js, download-results.js; the logic is pure in lib/.
 
@@ -16,7 +16,7 @@ import { chunk, pairResults, handledUrls, resultRows, submitSummary, classifySub
 import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality } from '../lib/overrides.js';
 import { isPicked, qualityOverview } from '../lib/lookup.js';
 import { searchTerm, searchCountLine, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
-import { useApp, Card } from '../ui/components.js';
+import { useApp } from '../ui/components.js';
 import { useDebounced } from '../ui/hooks.js';
 import { useStatus } from '../ui/system-status.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
@@ -24,12 +24,13 @@ import { useServerConfig } from './download-config.js';
 import { useLookups } from './download-lookup.js';
 import { LinksCard } from './download-links.js';
 import { QualityControls, CustomSheet } from './download-preset.js';
-import { SubmitBar, PasteButton, useBarHeight } from './download-bar.js';
+import { SubmitBar, useBarHeight } from './download-bar.js';
 import { QualitySheet, PROBES } from './download-quality.js';
 import { ResultsCard, BrowserShortcut, useResults } from './download-results.js';
 import { SearchCard } from './download-search.js';
 import { useSearch, useHitActions, toResults } from './download-search-state.js';
 import { useAddressSync } from './download-address.js';
+import { Compose } from './download-hero.js';
 
 // The text box outlives the page for the life of the tab, so leaving New
 // download through the sidebar and coming back keeps a draft, notes and
@@ -318,29 +319,7 @@ export function DownloadPage({ route }) {
 
 
   return html`<div class="page page-new" style=${barH ? { '--new-bar-h': `${barH}px` } : undefined}>
-    <${Card}
-      section="compose"
-      className="new-compose"
-      title="Search or paste links"
-      labelId="new-compose-title"
-      actions=${html`<${PasteButton} storefront=${storefront} onLinks=${(urls) => edit((t) => mergeLinks(t, urls, storefront))} />`}
-    >
-      <textarea
-        id="new-input"
-        class="new-input"
-        ref=${inputRef}
-        rows="6"
-        value=${text}
-        placeholder="Search for a song, album or artist, or paste Apple Music links"
-        aria-labelledby="new-compose-title"
-        aria-keyshortcuts=${term ? 'ArrowDown Enter' : 'Control+Enter Meta+Enter'}
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck=${false}
-        onInput=${(e) => edit(e.currentTarget.value)}
-        onKeyDown=${onKeyDown}
-      ></textarea>
-    </${Card}>
+    <${Compose} text=${text} inputRef=${inputRef} term=${term} storefront=${storefront} edit=${edit} onKeyDown=${onKeyDown} />
     ${searching
       ? html`<${SearchCard}
           s=${search}
