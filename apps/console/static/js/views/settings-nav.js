@@ -4,7 +4,7 @@
 import { html } from '../ui/preact.js';
 import { SETTINGS_SECTIONS } from '../lib/settings-sections.js';
 import { changesLabel } from '../lib/settings-draft.js';
-import { settingsHash } from '../lib/route.js';
+import { settingsHash, buildHash } from '../lib/route.js';
 import { Icon, Button } from '../ui/components.js';
 
 /**
@@ -61,8 +61,9 @@ export function SettingsNav({ section, dirty, invalid, views }) {
 /**
  * Under 640 px, #/settings without a section: every section as a row of a
  * grouped list (icon, label, its live one-line summary, mark, chevron),
- * each opening as its own view. `summaries` holds each row's {text, role?};
- * a row without one yet keeps the line's room.
+ * each opening as its own view, then Open Logs, the phone's quiet way to
+ * the Logs page (the sidebar's foot on a wider screen). `summaries` holds
+ * each row's {text, role?}; a row without one yet keeps the line's room.
  */
 export function SettingsList({ dirty, invalid, views, summaries }) {
   const row = (s) => {
@@ -85,6 +86,11 @@ export function SettingsList({ dirty, invalid, views, summaries }) {
   return html`<nav class="settings-list-card" aria-label="Settings sections">
     <div class="card settings-list-group"><ul class="settings-list">${SETTINGS_SECTIONS.slice(0, split).map(row)}</ul></div>
     <div class="card settings-list-group"><ul class="settings-list">${SETTINGS_SECTIONS.slice(split).map(row)}</ul></div>
+    <a class="settings-list-logs" href=${buildHash('logs')}>
+      <${Icon} name="file-text" />
+      <span>Open Logs</span>
+      <${Icon} name="chevron-right" size="sm" />
+    </a>
   </nav>`;
 }
 

@@ -1,13 +1,12 @@
-// Shell chrome: primary navigation (sidebar, tab bar and its More sheet),
+// Shell chrome: primary navigation (sidebar and tab bar),
 // the New download entry point, the connection indicator, the simulate tag,
 // the theme control and the page banners.
 
 import { html } from '../ui/preact.js';
-import { buildHash } from '../lib/route.js';
+import { buildHash, queueHash } from '../lib/route.js';
 import { connectionView } from '../lib/status.js';
 import { clockTime, count } from '../lib/format.js';
 import { Icon, Button, Notice } from '../ui/components.js';
-import { Dialog } from '../ui/dialogs.js';
 import { useClock } from '../ui/hooks.js';
 import { THEMES } from '../lib/prefs.js';
 
@@ -23,13 +22,10 @@ export const NAV = [
 /** The primary action: its own button above the nav, `n` or `g n`. */
 export const NEW_DOWNLOAD = { page: 'new', label: 'New download', icon: 'plus', key: 'n' };
 
-/** Pages the phone tab bar reaches through its More sheet. */
-export const MORE_PAGES = ['logs'];
-
 export function Sidebar({ route, counts }) {
   const active = counts ? counts.queued + counts.running : 0;
   const navLink = (n) => html`<li key=${n.page}>
-    <a class="nav-item" href=${buildHash(n.page)} aria-current=${route.page === n.page ? 'page' : undefined} title=${n.label}>
+    <a class="nav-item" href=${n.page === 'queue' ? queueHash() : buildHash(n.page)} aria-current=${route.page === n.page ? 'page' : undefined} title=${n.label}>
       <${Icon} name=${n.icon} size="nav" />
       <span class="nav-label">${n.label}</span>
       ${n.page === 'queue' && active > 0 ? html`<span class="nav-badge" aria-label=${`${active} active`}>${count(active)}</span>` : null}
@@ -66,15 +62,13 @@ export function Sidebar({ route, counts }) {
 const navItem = (page) => NAV.find((n) => n.page === page);
 
 /**
- * The phone tab bar: Overview, Queue, New download (center, primary),
- * Settings and More, a button that opens MoreSheet. More is marked current
- * while one of MORE_PAGES is shown and while its sheet is open.
+ * The phone tab bar: Overview, Queue, New download (primary) and Settings.
+ * Logs, opened seldom, is reached from Settings, so Settings is the current
+ * tab on it too.
  */
-export function TabBar({ route, moreOpen, onMore }) {
-  // While the More sheet is open, More is the current tab and the page under
-  // the sheet loses its mark until the sheet closes.
-  const current = (page) => (!moreOpen && route.page === page ? 'page' : undefined);
-  const tab = (n) => html`<a key=${n.page} class="tab" data-page=${n.page} href=${buildHash(n.page)} aria-current=${current(n.page)}>
+export function TabBar({ route }) {
+  const current = (page) => (route.page === page || (page === 'settings' && route.page === 'logs') ? 'page' : undefined);
+  const tab = (n) => html`<a key=${n.page} class="tab" data-page=${n.page} href=${n.page === 'queue' ? queueHash() : buildHash(n.page)} aria-current=${current(n.page)}>
     <${Icon} name=${n.icon} size="nav" />
     <span class="tab-label">${n.label}</span>
   </a>`;
@@ -85,53 +79,7 @@ export function TabBar({ route, moreOpen, onMore }) {
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
     </a>
     ${tab(navItem('settings'))}
-    <button
-      type="button"
-      class="tab tab-more"
-      aria-haspopup="dialog"
-      aria-expanded=${String(Boolean(moreOpen))}
-      aria-current=${moreOpen || MORE_PAGES.includes(route.page) ? 'page' : undefined}
-      onClick=${onMore}
-    >
-      <${Icon} name="more" size="nav" />
-      <span class="tab-label">More</span>
-    </button>
   </nav>`;
-}
-
-/**
- * The tab bar's More sheet: a bottom sheet listing MORE_PAGES, the current
- * one marked. Choosing a page closes it; so do Escape, the scrim and Close.
- */
-export function MoreSheet({ route, onClose }) {
-  const items = MORE_PAGES.map(navItem);
-  const focus = MORE_PAGES.includes(route.page) ? route.page : MORE_PAGES[0];
-  return html`<${Dialog} name="more" className="sheet sheet-more" placement="bottom" labelledBy="more-title" onClose=${onClose}>
-    <div class="sheet-head">
-      <h2 id="more-title" class="card-title">More</h2>
-      <${Button} variant="ghost" icon="x" aria-label="Close" onClick=${onClose} />
-    </div>
-    <ul class="more-list">
-      ${items.map((n) => {
-        const current = route.page === n.page;
-        return html`<li key=${n.page}>
-          <a
-            class="more-item"
-            data-page=${n.page}
-            href=${buildHash(n.page)}
-            aria-current=${current ? 'page' : undefined}
-            data-autofocus=${n.page === focus ? '' : undefined}
-            onClick=${onClose}
-          >
-            <${Icon} name=${n.icon} size="nav" />
-            <span class="more-label">${n.label}</span>
-            ${current ? html`<span class="more-current" aria-hidden="true">Current</span>` : null}
-            <${Icon} name="chevron-right" size="sm" />
-          </a>
-        </li>`;
-      })}
-    </ul>
-  </${Dialog}>`;
 }
 
 /**

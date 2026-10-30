@@ -4,7 +4,7 @@
 // catalog search for words (New download runs it), and the jobs the search
 // found.
 
-import { buildHash, newDownloadHash, newSearchHash, settingsHash } from './route.js';
+import { buildHash, newDownloadHash, newSearchHash, settingsHash, queueHash } from './route.js';
 import { searchTerm } from './search.js';
 import { extractLinks } from './links.js';
 import { FIELDS } from './settings.js';
@@ -15,7 +15,17 @@ import { jobStatusView } from './status.js';
 const STATIC_ITEMS = [
   { id: 'act-new', group: 'Actions', label: 'New download', icon: 'plus', hash: buildHash('new'), keys: 'n' },
   { id: 'nav-overview', group: 'Navigate', label: 'Overview', icon: 'grid', hash: buildHash('overview'), keys: 'g o' },
-  { id: 'nav-queue', group: 'Navigate', label: 'Queue', icon: 'list', hash: buildHash('queue'), keys: 'g q' },
+  {
+    id: 'nav-queue',
+    group: 'Navigate',
+    label: 'Queue',
+    icon: 'list',
+    // Its last filters, read when the palette lists it.
+    get hash() {
+      return queueHash();
+    },
+    keys: 'g q',
+  },
   { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
   { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,', words: 'system status health server' },
   { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },

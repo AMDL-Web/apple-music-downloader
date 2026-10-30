@@ -390,7 +390,6 @@ const SCENARIOS = [
     },
   },
   { id: 'overlay/shortcuts', world: 'active', path: '#/', setup: (ctx) => ctx.page.keyboard.press('Shift+?') },
-  { id: 'overlay/more-sheet', world: 'active', path: '#/', widths: [375, 320], setup: (ctx) => ctx.page.locator('button.tab-more').click() },
   {
     id: 'overlay/toast',
     world: 'active',

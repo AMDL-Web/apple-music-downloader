@@ -97,7 +97,7 @@ stand on the page take `--r-card`, the
 panel radius plus the card padding (28 px, 24 under 640 px), and so does the
 top of a phone bottom sheet. What they hold takes `--r-panel`, 8 px: fields,
 nav and palette items, artwork and covers, inset lists,
-notices, drawer groups, quality slots, the More list and icon tiles. Keys,
+notices, drawer groups, quality slots and icon tiles. Keys,
 inline code, loading bars and a chart bar's top take `--r-tag`, 4 px. The
 palette and toasts float with `--r-float`, 16 px, since their items sit
 8 px in. Buttons, badges, chips, level chips, the segmented control and its
@@ -149,16 +149,14 @@ base durations (120 ms color, 200 ms overlays).
   row (36 px, 15 px semibold) above the "Console" label, a slightly darker
   fill (`--accent-hover`, no ring) while New download is open; on the rail a
   40 px red disc. Under 640
-  px the center tab's mark is a 48 x 30 red capsule with a soft red shadow
+  px the third tab's mark is a 48 x 30 red capsule with a soft red shadow
   that rises 6 px over the 24 px icon line, so "New" sits on the other
-  labels' line; More turns red like any current tab
-  while Logs is shown or its sheet is open.
-- **More sheet** (phones): the frosted sheet holds an inset grouped list on
-  `--bg-group` (panel radius, 48 px rows, 16 px labels), secondary glyphs as
-  in the sidebar, hairlines from the label, the current page in semibold with
-  "Current" and the chevron in secondary.
+  labels' line; Settings turns red like any current tab while Logs is
+  shown.
+- **Open Logs** (phones): under the Settings list, secondary text with the
+  file glyph and a chevron, as quiet as the sidebar's foot.
 - **Page head**: title with its summary line beneath (15 px secondary; only
-  Overview and Queue have one, their live counts), as an Apple
+  Overview (the date) and Queue (its live counts) have one), as an Apple
   large title. No page actions: New download lives in the sidebar and the
   tab bar.
 - **Sections**: every card with a head is a shelf: the head sits on the

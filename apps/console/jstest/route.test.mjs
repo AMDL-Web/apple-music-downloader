@@ -6,6 +6,8 @@ import {
   parseHash,
   buildHash,
   queueFilters,
+  rememberQueue,
+  queueHash,
   queueQuery,
   queueMatchFilter,
   logFilters,
@@ -148,4 +150,14 @@ test('refusedMove undoes a refused hash change without adding an entry', () => {
   assert.deepEqual(refusedMove(5, { amdlIdx: 4 }), { undo: 1, redo: -1 }, 'Back');
   assert.deepEqual(refusedMove(5, { amdlIdx: 7 }), { undo: -2, redo: 2 }, 'Forward twice');
   assert.equal(refusedMove(5, { amdlIdx: 5 }).undo, 0, 'the same stamp cannot be undone through the history');
+});
+
+test('the plain way to the Queue returns to its last filters', () => {
+  assert.equal(queueHash(), '#/queue', 'nothing kept yet');
+  rememberQueue({ tab: 'failed', type: 'album', q: 'ado' });
+  assert.equal(queueHash(), '#/queue?tab=failed&type=album&q=ado');
+  rememberQueue({ tab: '', type: '', q: 'ado' });
+  assert.equal(queueHash(), '#/queue?q=ado', 'a tab the page chose is not kept');
+  rememberQueue({});
+  assert.equal(queueHash(), '#/queue');
 });

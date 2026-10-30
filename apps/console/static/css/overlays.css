@@ -212,7 +212,7 @@
   outline: none;
 }
 
-/* Phone sheets (Dialog placement="bottom": More, Qualities, confirmations)
+/* Phone sheets (Dialog placement="bottom": Qualities, confirmations)
    share one look: full width, resting on the tab bar (down to the screen
    edge, past the safe area, over the full-screen drawer), rounded top
    corners, a grabber, and scrolling that stays inside. The scrim and
@@ -248,56 +248,6 @@
   border-radius: var(--r-full);
   corner-shape: round;
   background: var(--border-control);
-}
-
-.sheet-more {
-  gap: var(--s-2);
-  padding: var(--s-3) var(--s-3) var(--s-4);
-}
-
-.sheet-more .sheet-head {
-  padding-left: var(--s-2);
-}
-
-.more-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-0_5);
-}
-
-.more-item {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  min-height: var(--touch);
-  padding: 0 var(--s-3);
-  border-radius: var(--r-control);
-  color: var(--text-primary);
-  text-decoration: none;
-  transition: background-color var(--dur-fast) var(--ease-out);
-}
-
-.more-item:hover {
-  background: var(--bg-hover);
-}
-
-.more-item[aria-current="page"] {
-  background: var(--bg-selected);
-  font-weight: var(--w-medium);
-}
-
-.more-label {
-  flex: 1;
-  min-width: 0;
-}
-
-.more-current {
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
 }
 
 .dialog-confirm {

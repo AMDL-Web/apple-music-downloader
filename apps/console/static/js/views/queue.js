@@ -7,7 +7,7 @@ import { listDownloads } from '../api.js';
 import { jobTitle, isUnresolved, inputLabel, count } from '../lib/format.js';
 import { activeFirst, isNotFound } from '../lib/jobview.js';
 import { appendPage } from '../lib/store.js';
-import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends } from '../lib/route.js';
+import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends, rememberQueue } from '../lib/route.js';
 import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
 import { actionPlan, jobAllows } from '../lib/jobactions.js';
 import { useApp, Icon, Segmented, Empty, ErrorNote, SkeletonJobRows, Button, LinkButton } from '../ui/components.js';
@@ -66,10 +66,21 @@ export function QueuePage({ route }) {
     const t = setTimeout(() => setPatient(false), 1500);
     return () => clearTimeout(t);
   }, [implicitTab, haveCounts]);
+  // A tab this rule picks is not the person's, so the Queue does not keep it.
+  const autoTab = useRef(false);
   useEffect(() => {
     if (!implicitTab || !app.counts) return;
-    if (app.counts.queued + app.counts.running === 0) setParams({ tab: 'all' });
+    if (app.counts.queued + app.counts.running !== 0) return;
+    autoTab.current = true;
+    setParams({ tab: 'all' });
   }, [implicitTab, haveCounts]);
+  useEffect(() => {
+    rememberQueue({ tab: autoTab.current && route.params.tab === 'all' ? '' : route.params.tab || '', type: filters.type, q: filters.q });
+  }, [route.params.tab, filters.type, filters.q]);
+  const chooseTab = (tab) => {
+    autoTab.current = false;
+    setParams({ tab });
+  };
   const waiting = implicitTab && !haveCounts && patient;
   // The tabs carry the counts: on a cold load they wait unseen for them (or
   // HOLD_MS) instead of widening when the numbers arrive.
@@ -285,7 +296,7 @@ export function QueuePage({ route }) {
   if (waiting || (state.loading && state.jobs.length === 0)) body = html`<${SkeletonJobRows} n=${6} />`;
   else if (state.error && state.jobs.length === 0)
     body = html`<${ErrorNote} title="Couldn't load downloads" error=${state.error} onRetry=${() => load(0)} />`;
-  else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} onShowAll=${() => setParams({ tab: 'all' })} />`;
+  else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} onShowAll=${() => chooseTab('all')} />`;
   else
     body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs">
         ${rows.map((job) => {
@@ -330,7 +341,7 @@ export function QueuePage({ route }) {
 
   return html`<div class="page page-queue" data-selecting=${selecting || bulk.run ? '' : undefined} data-held=${held ? '' : undefined}>
     <div class="toolbar">
-      <${Segmented} label="Job status" options=${tabs} value=${filters.tab} onChange=${(tab) => setParams({ tab })} />
+      <${Segmented} label="Job status" options=${tabs} value=${filters.tab} onChange=${chooseTab} />
       <div class="toolbar-filters">
         <label class="search">
           <${Icon} name="search" />

@@ -3,7 +3,7 @@
 // router and its leave guard are in ui/router.js.
 
 import { html, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from './ui/preact.js';
-import { buildHash, newDownloadHash, newDownloadUrls, settingsSection, settingsField } from './lib/route.js';
+import { buildHash, newDownloadHash, newDownloadUrls, settingsSection, settingsField, queueHash } from './lib/route.js';
 import { sectionById } from './lib/settings-sections.js';
 import { extractLinks } from './lib/links.js';
 import { THEME_KEY, normalizeTheme, readPref, writePref } from './lib/prefs.js';
@@ -27,7 +27,7 @@ import { SettingsPage } from './views/settings.js';
 import { KeysToggle } from './views/settings-keys.js';
 import { JobDrawer } from './views/drawer.js';
 import { CommandPalette, ShortcutSheet, isMac } from './views/palette.js';
-import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, MoreSheet, ConnectionIndicator, SimulateTag, ThemeControl, Banners } from './views/shell.js';
+import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, ConnectionIndicator, SimulateTag, ThemeControl, Banners } from './views/shell.js';
 
 const TITLES = {
   overview: 'Overview',
@@ -216,7 +216,7 @@ export function App() {
         const target = CHORDS.find((n) => n.key === e.key || n.alias === e.key);
         if (target) {
           e.preventDefault();
-          navigate(buildHash(target.page));
+          navigate(target.page === 'queue' ? queueHash() : buildHash(target.page));
         }
         return;
       }
@@ -346,12 +346,11 @@ export function App() {
           ${page}
         </main>
       </div>
-      <${TabBar} route=${route} moreOpen=${overlay === 'more'} onMore=${() => setOverlay('more')} />
+      <${TabBar} route=${route} />
     </div>
     ${route.jobId ? html`<${JobDrawer} jobId=${route.jobId} onClose=${closeDrawer} />` : null}
     ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} />` : null}
     ${overlay === 'shortcuts' ? html`<${ShortcutSheet} onClose=${() => setOverlay(null)} />` : null}
-    ${overlay === 'more' ? html`<${MoreSheet} route=${route} onClose=${() => setOverlay(null)} />` : null}
     <${ToastStack} toasts=${toasts} toastsRef=${toastsRef} dismissToast=${dismissToast} />
     <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">${liveText}</div>
   </${AppContext.Provider}>`;

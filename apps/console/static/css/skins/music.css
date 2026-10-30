@@ -2668,69 +2668,6 @@
   line-height: var(--lh-15);
 }
 
-/* More (phones): an inset grouped list on the frosted sheet, secondary
-   glyphs as in the sidebar, hairlines from the text, the current page in semibold. */
-:root[data-skin="music"] .sheet-more {
-  gap: var(--s-3);
-  padding: var(--s-4) var(--s-3) var(--s-3);
-}
-
-:root[data-skin="music"] .sheet-more .card-title {
-  font-size: var(--fs-20);
-  line-height: var(--lh-20);
-}
-
-:root[data-skin="music"] .more-list {
-  gap: 0;
-  border-radius: var(--r-notice);
-  background: var(--bg-group);
-  overflow: hidden;
-}
-
-:root[data-skin="music"] .more-list > li {
-  position: relative;
-}
-
-:root[data-skin="music"] .more-list > li + li::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: calc(var(--s-4) + var(--icon-nav) + var(--s-3));
-  border-top: var(--row-divider);
-}
-
-:root[data-skin="music"] .more-item {
-  gap: var(--s-3);
-  min-height: 48px;
-  padding: 0 var(--s-3) 0 var(--s-4);
-  border-radius: 0;
-  font-size: var(--fs-16);
-  line-height: var(--lh-16);
-}
-
-:root[data-skin="music"] .more-item > .icon:first-child {
-  color: var(--text-secondary);
-}
-
-:root[data-skin="music"] .more-item > .icon:last-child {
-  color: var(--text-secondary);
-}
-
-:root[data-skin="music"] .more-item:hover {
-  background: var(--bg-hover);
-}
-
-:root[data-skin="music"] .more-item[aria-current="page"] {
-  background: transparent;
-  font-weight: var(--w-semibold);
-}
-
-:root[data-skin="music"] .more-current {
-  font-size: var(--fs-14);
-  line-height: var(--lh-14);
-}
-
 /* Qualities: per-slot summaries are grouped cells, each track's formats are
    filled pills, and hairlines between tracks start at the title. */
 :root[data-skin="music"] .sheet-quality {

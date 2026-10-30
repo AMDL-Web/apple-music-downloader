@@ -149,6 +149,19 @@
   color: var(--text-secondary);
 }
 
+/* Open Logs: quiet, as the sidebar's foot is on a wider screen, its glyph
+   and words in line with the rows' above. */
+.settings-list-logs {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  align-self: flex-start;
+  min-height: var(--touch);
+  padding-inline-start: var(--card-pad-x);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
 .settings-back {
   align-items: center;
   align-self: flex-start;

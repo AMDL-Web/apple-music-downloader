@@ -52,6 +52,21 @@ export function parseHash(hash) {
 }
 
 /** Builds a hash from a page, optional job id and params (empty values omitted). */
+// The Queue's last tab, type and words, kept for the life of the browser
+// tab, so a plain way back to it (the sidebar, the tab bar, `g q`, the
+// palette) returns to them; a link that names its own filters still wins.
+let queueKept = {};
+
+/** Keeps the Queue's filters; `tab` is '' when the page chose it, not the person. */
+export function rememberQueue({ tab = '', type = '', q = '' } = {}) {
+  queueKept = { tab, type, q };
+}
+
+/** The plain way to the Queue: its last filters. */
+export function queueHash() {
+  return buildHash('queue', queueKept);
+}
+
 export function buildHash(page, params = {}, jobId = null) {
   const withJob = Boolean(jobId) && DRAWER_PAGES.has(page);
   // The Overview's path is empty; with a job it needs its name back.
