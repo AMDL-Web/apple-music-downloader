@@ -160,18 +160,39 @@ func passthrough(c capability.Capability) func(fs *flag.FlagSet) func(e *env, ar
 		values := specFlags(fs, op, c.Args)
 		return func(e *env, args []string) error {
 			if len(args) > len(c.Args) {
-				return usageErr("too many arguments; usage: amdl %s%s", c.Command, argSynopsis(c))
+				return usageErr("too many arguments; usage: amdl %s%s", c.Command, usageLine(c, op))
 			}
 			for i, a := range args {
 				values[c.Args[i]] = a
 			}
 			req, err := op.Build(values)
 			if err != nil {
-				return usageErr("%v; usage: amdl %s%s", err, c.Command, argSynopsis(c))
+				return usageErr("%v; usage: amdl %s%s", err, c.Command, usageLine(c, op))
 			}
 			return e.send(req, nil)
 		}
 	}
+}
+
+// usageLine is the command's synopsis followed by the flags its request
+// requires, such as --username <username> for wrapper logout.
+func usageLine(c capability.Capability, op capability.Operation) string {
+	line := argSynopsis(c)
+	positional := map[string]bool{}
+	for _, a := range c.Args {
+		positional[a] = true
+	}
+	for _, p := range op.Params {
+		if p.Required && !positional[p.Name] {
+			line += " --" + flagName(p.Name) + " <" + p.Name + ">"
+		}
+	}
+	for _, f := range op.BodyFields() {
+		if f.Required && !positional[f.Name] {
+			line += " --" + flagName(f.Name) + " <" + f.Name + ">"
+		}
+	}
+	return line
 }
 
 // send runs one built request, honouring --dry-run and confirmation, and

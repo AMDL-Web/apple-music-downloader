@@ -175,7 +175,7 @@ func wrapperUninstallCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 			return err
 		}
 		v := viewOf(h)
-		v.Next = "restart the service so the backend stops running it, and set wrapper.address to another wrapper"
+		v.Next = "to use another wrapper, run amdl service install --wrapper <address> (or restart amdl serve --local with --wrapper <address>)"
 		return e.out.result(v)
 	}
 }

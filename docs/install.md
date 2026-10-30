@@ -109,9 +109,13 @@ ffmpeg it finds is older. The Docker image ships a current one.
 
 `amdl service install` refuses to register the service while ffmpeg is missing, and
 records the full path of the one it finds as `tools.ffmpeg`, because a service starts
-with a shorter `PATH` than a terminal. Set `tools.ffmpeg` yourself for an ffmpeg
-elsewhere. The backend logs a warning at startup without it, and each download fails
-with the same install hint.
+with a shorter `PATH` than a terminal. The backend logs a warning at startup without
+ffmpeg, and each download fails with the same install hint.
+
+Without root, download a static build from [ffmpeg.org](https://ffmpeg.org/download.html)
+and put the binary in a directory of your own that is on `PATH`, such as `~/.local/bin`;
+`amdl service install` then records its full path. For a backend that already has a
+`config.yaml`, set `tools.ffmpeg` to the full path instead.
 
 ## Try it without a wrapper
 
@@ -207,6 +211,12 @@ crash and stops it with itself. Its port is on `127.0.0.1` only. Log in from the
 console's Account page, the terminal interface's `/login`, or `amdl wrapper login`;
 `amdl wrapper status` shows its `managed` state, `amdl wrapper logs` its console with
 secrets redacted, and `amdl wrapper stop` / `start` turn it off and on.
+
+While the guest is installed, a `--wrapper` address (or `AMDL_WRAPPER_ADDRESS`) given to
+that backend is ignored, with a line in its log. To use another wrapper instead, run
+`amdl wrapper uninstall`, then `amdl service install --wrapper <address>` (or restart
+`amdl serve --local --wrapper <address>`); `wrapper.address` is a startup key that
+`amdl config set` cannot change.
 
 | Host | Acceleration |
 | --- | --- |

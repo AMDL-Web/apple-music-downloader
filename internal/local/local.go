@@ -319,8 +319,15 @@ func (b Backend) Serve(ctx context.Context, addr string) error {
 }
 
 func (b Backend) launch(addr string, l *os.File) (*Running, error) {
+	logOut := b.LogOutput
+	if logOut == nil {
+		logOut = io.Discard
+	}
 	host := b.wrapperHost()
 	if host != nil {
+		if b.Wrapper != "" && WrapperURL(b.Wrapper) != host.URL() {
+			fmt.Fprintf(logOut, "wrapper address %s ignored: this machine runs its own wrapper; amdl wrapper uninstall stops that and lets the address apply\n", b.Wrapper)
+		}
 		b.Wrapper = host.URL()
 	}
 	if err := b.WriteConfig(); err != nil {
@@ -331,10 +338,6 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	if err != nil {
 		l.Close()
 		return nil, err
-	}
-	logOut := b.LogOutput
-	if logOut == nil {
-		logOut = io.Discard
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Running{Base: "http://" + ln.Addr().String(), dirs: b.Dirs, lock: l, cancel: cancel, done: make(chan error, 1)}

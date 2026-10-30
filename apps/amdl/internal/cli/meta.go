@@ -4,6 +4,7 @@ import (
 	"flag"
 	"math"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -132,7 +133,7 @@ var synonyms = map[string]string{
 	"system": "status server version health disk space", "library": "finished completed downloaded collection",
 	"artists": "artist discography albums", "context": "server address remote nas host",
 	"wrapper login": "sign signin log authenticate password", "wrapper logout": "signout logoff",
-	"wrapper 2fa": "code two step verification sms", "jobs get": "detail details tracks show",
+	"wrapper 2fa": "code two step verification sms", "jobs get": "detail details tracks show file files path output location folder where",
 }
 
 func searchTerms(c command) []string {
@@ -212,16 +213,80 @@ func rank(cmds []command, text string) []command {
 	return out
 }
 
-// suggest names up to three commands close to an unknown one.
+// suggest names up to three commands close to an unknown one: first those
+// spelled almost the same (jobs lst for jobs list), then the best matches by
+// meaning.
 func suggest(cmds []command, text string) []string {
 	out := []string{}
-	for _, c := range rank(cmds, text) {
-		if len(out) == 3 {
-			break
+	add := func(c command) {
+		name := "amdl " + c.Command
+		if len(out) < 3 && !slices.Contains(out, name) {
+			out = append(out, name)
 		}
-		out = append(out, "amdl "+c.Command)
+	}
+	type near struct {
+		c    command
+		cost int
+	}
+	var nearby []near
+	words := strings.Fields(strings.ToLower(text))
+	for _, c := range cmds {
+		if cost, ok := spellingCost(strings.Fields(c.Command), words); ok {
+			nearby = append(nearby, near{c, cost})
+		}
+	}
+	sort.SliceStable(nearby, func(i, j int) bool { return nearby[i].cost < nearby[j].cost })
+	for _, n := range nearby {
+		add(n.c)
+	}
+	for _, c := range rank(cmds, text) {
+		add(c)
 	}
 	return out
+}
+
+// spellingCost says whether typed is a misspelling of the command words, and
+// how far off: each word equal, a prefix of the command's word, or one edit
+// away (two for words over four letters).
+func spellingCost(command, typed []string) (int, bool) {
+	if len(command) != len(typed) || len(typed) == 0 {
+		return 0, false
+	}
+	total := 0
+	for i, w := range typed {
+		switch d := editDistance(w, command[i]); {
+		case d == 0:
+		case len(w) >= 2 && strings.HasPrefix(command[i], w):
+			total++
+		case d <= 1 || d <= 2 && len(w) > 4:
+			total += d
+		default:
+			return 0, false
+		}
+	}
+	return total, true
+}
+
+// editDistance is the Levenshtein distance between a and b.
+func editDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	prev := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		cur := make([]int, len(rb)+1)
+		cur[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(rb)]
 }
 
 // agentsNote is the AGENTS.md or CLAUDE.md paragraph amdl cli setup prints.

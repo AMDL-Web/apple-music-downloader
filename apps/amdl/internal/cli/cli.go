@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -82,12 +83,24 @@ func Run(ctx context.Context, args []string, io IO) int {
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return rootHelp(io, cmds)
 	}
+	if args[0] == "--version" || args[0] == "-v" || args[0] == "-V" {
+		args = append([]string{"version"}, args[1:]...)
+	}
 	args = hoistGlobals(args)
 	cmd, rest, ok := match(cmds, args)
 	if !ok {
+		words := leadingWords(args)
+		if group := groupOf(cmds, words); len(group) > 0 {
+			return groupHelp(io, strings.Join(words, " "), group)
+		}
+		if len(words) == 0 {
+			return fail(io, &cliError{Code: "usage_error", exit: exitInput,
+				Message: fmt.Sprintf("no command given before %q", args[0]),
+				Hint:    "amdl --help lists every command; a command comes before its flags"})
+		}
 		return fail(io, &cliError{Code: "usage_error", exit: exitInput,
-			Message: fmt.Sprintf("unknown command %q", strings.Join(leadingWords(args), " ")),
-			Details: mustJSON(map[string]any{"did_you_mean": suggest(cmds, strings.Join(leadingWords(args), " "))}),
+			Message: fmt.Sprintf("unknown command %q", strings.Join(words, " ")),
+			Details: mustJSON(map[string]any{"did_you_mean": suggest(cmds, strings.Join(words, " "))}),
 			Hint:    `amdl cli search "<what you want to do>"`})
 	}
 	e := &env{IO: io, ctx: ctx, cmd: cmd.Capability}
@@ -95,7 +108,7 @@ func Run(ctx context.Context, args []string, io IO) int {
 	fs.SetOutput(discard) // fail reports a parse error once, as the error object
 	var fields string
 	fs.StringVar(&e.server, "server", "", "server URL, saved context name or embedded (default: $AMDL_URL, the current context, this machine's backend, then http://127.0.0.1:18080)")
-	fs.StringVar(&e.wrapper, "wrapper", "", "the wrapper address a local backend needs on its first start (--server embedded, serve --local, service install)")
+	fs.StringVar(&e.wrapper, "wrapper", "", "the wrapper address a local backend needs on its first start (--server embedded, serve --local, service install); ignored while this machine's own wrapper is installed")
 	fs.StringVar(&fields, "fields", "", "comma-separated keys to keep in each result")
 	fs.BoolVar(&e.quiet, "quiet", false, "write nothing to stderr but errors")
 	if cmd.Safety == capability.Destructive || cmd.Command == "download" {
@@ -218,6 +231,25 @@ func match(cmds []command, args []string) (command, []string, bool) {
 	return best, args[bestLen:], true
 }
 
+// groupOf returns the commands under a command group such as jobs or
+// library sync: those whose words start with words and go on after them.
+func groupOf(cmds []command, words []string) []command {
+	if len(words) == 0 {
+		return nil
+	}
+	var out []command
+	for _, c := range cmds {
+		cw := strings.Fields(c.Command)
+		if len(cw) <= len(words) {
+			continue
+		}
+		if slices.Equal(cw[:len(words)], words) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 func leadingWords(args []string) []string {
 	var out []string
 	for _, a := range args {
@@ -310,16 +342,43 @@ func mustJSON(v any) json.RawMessage {
 	return raw
 }
 
+// helpEntry is one command in a help listing.
+type helpEntry struct {
+	Command string `json:"command"`
+	Summary string `json:"summary"`
+}
+
+func helpEntries(cmds []command) []helpEntry {
+	var list []helpEntry
+	for _, c := range cmds {
+		list = append(list, helpEntry{"amdl " + c.Command + argSynopsis(c.Capability), c.Summary})
+	}
+	return list
+}
+
+// groupHelp is what a command group such as amdl jobs prints: the group's
+// commands, as rootHelp lists them.
+func groupHelp(io IO, name string, cmds []command) int {
+	list := helpEntries(cmds)
+	if !io.OutTTY {
+		raw, _ := marshal(map[string]any{"group": name, "commands": list}) // strings only
+		fmt.Fprintf(io.Stdout, "%s\n", raw)
+		return exitOK
+	}
+	fmt.Fprintf(io.Stdout, "amdl %s commands:\n\n", name)
+	width := 0
+	for _, e := range list {
+		width = max(width, len(e.Command))
+	}
+	for _, e := range list {
+		fmt.Fprintf(io.Stdout, "  %-*s  %s\n", width, e.Command, e.Summary)
+	}
+	return exitOK
+}
+
 // rootHelp is what amdl alone prints: JSON for an agent, text in a terminal.
 func rootHelp(io IO, cmds []command) int {
-	type entry struct {
-		Command string `json:"command"`
-		Summary string `json:"summary"`
-	}
-	var list []entry
-	for _, c := range cmds {
-		list = append(list, entry{"amdl " + c.Command + argSynopsis(c.Capability), c.Summary})
-	}
+	list := helpEntries(cmds)
 	if !io.OutTTY {
 		raw, _ := marshal(map[string]any{ // strings only
 			"name": "amdl", "version": version(),

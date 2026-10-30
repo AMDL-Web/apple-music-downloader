@@ -249,10 +249,11 @@ func contextAdd(e *env, args []string) error {
 	if err := ctxs.save(path); err != nil {
 		return err
 	}
-	if !probe(e.ctx, u) {
+	reachable := probe(e.ctx, u)
+	if !reachable {
 		e.note("warning: %s does not answer right now", u)
 	}
-	return e.out.result(map[string]any{"name": args[0], "url": u, "current": true})
+	return e.out.result(map[string]any{"name": args[0], "url": u, "current": true, "reachable": reachable})
 }
 
 func contextUse(e *env, args []string) error {

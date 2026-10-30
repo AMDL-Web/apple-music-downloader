@@ -18,8 +18,12 @@ that passes a request through are read from `internal/api/openapi.yaml`, so `--h
 | `amdl cli commands` | Every command with its MCP tool and safety level |
 | `amdl schema <command>` | The command's flags, positional arguments, safety, exit statuses, examples, and each API operation it calls: method, path, parameters, request body and output JSON Schema |
 | `amdl <command> --help` | The same as text |
+| `amdl <group>`, `amdl <group> --help` | The commands under a group such as `jobs` or `library sync`: `{group, commands: [{command, summary}]}`, text in a terminal |
+| `amdl --version`, `-v`, `-V` | The same as `amdl version` |
 
-An unknown command fails with `usage_error` and `details.did_you_mean`.
+An unknown command fails with `usage_error` and `details.did_you_mean`: up to three
+commands spelled almost the same (`jobs lst` suggests `jobs list`), then the best matches
+by meaning.
 
 ## Commands
 
@@ -138,6 +142,10 @@ The first of these that is set wins:
 
 Otherwise the command fails with `server_not_configured`.
 
+`amdl context add` saves the server and makes it current even when it does not answer, so
+a server can be registered before it starts; its result is `{name, url, current,
+reachable}`, with `reachable` false when the health check failed.
+
 ## Serving
 
 `amdl serve` runs the backend and web console in the process, as
@@ -255,8 +263,10 @@ lingering is on (`loginctl enable-linger`).
 command would use answers, has ffmpeg and a ready wrapper; and, when that server runs on
 this machine's local files, ffmpeg is installed here (with its version). It also reports
 the local data directory and service. Each failed check carries a hint, such as the
-command that installs ffmpeg with the package manager found; any required check failing
-exits 5 with `checks_failed`. `amdl service install` fails the same way, with
+command that installs ffmpeg with the package manager found (or, without root, where to
+put an ffmpeg binary and the `tools.ffmpeg` to set); any required check failing exits 5
+with `checks_failed`, whose own hint repeats the failed checks' hints. With a server
+that does not run on this machine's files there is no ffmpeg check here. `amdl service install` fails the same way, with
 `ffmpeg_missing`, before it registers anything ([install.md](install.md#ffmpeg)).
 
 ## A wrapper amdl runs
@@ -273,6 +283,12 @@ stdout, which keeps only the final JSON: one line rewritten in place on a termin
 a line at each 10% or every 15 seconds, then a line each for the sha256 check and the
 unpack. `--quiet` silences it. After `wrapper uninstall` the result omits `enabled`,
 which only describes an installed guest.
+
+While the guest is installed, `--wrapper` and `AMDL_WRAPPER_ADDRESS` do not apply to a
+backend that runs on the local files: it logs that the address is ignored and keeps
+using the guest. To use another wrapper, run `amdl wrapper uninstall`, then
+`amdl service install --wrapper <address>` (or restart `amdl serve --local` with
+`--wrapper`). `wrapper.address` cannot be changed through the API.
 
 ## Agent setup
 

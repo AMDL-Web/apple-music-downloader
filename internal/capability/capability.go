@@ -71,7 +71,7 @@ var All = []Capability{
 		Summary:  "List download jobs, filtered by status, type or text",
 		Examples: []string{"amdl jobs list --status failed --fields id,title,error"}},
 	{Command: "jobs get", Tool: "get_job", Ops: []string{"getDownload"}, Safety: Read, Args: []string{"job_id"},
-		Summary:  "Show one job with its tracks and album progress",
+		Summary:  "Show one job with its tracks, album progress and each finished track's output path (where the files are)",
 		Examples: []string{"amdl jobs get job_8f3c... --view full"}},
 	{Command: "jobs watch", Ops: []string{"streamDownloadEvents", "streamDownloadsFeed"}, Safety: Read, Args: []string{"job_id"},
 		Summary:  "Stream a job's events, or every job's milestones without an id, as NDJSON",

@@ -31,7 +31,8 @@ type check struct {
 
 // doctorCmd checks what a command needs: a server that answers and has
 // ffmpeg and a ready wrapper, and, when this machine runs the backend, ffmpeg
-// here. It never starts a backend.
+// here. A failed check's hint is also the error's hint. It never starts a
+// backend.
 func doctorCmd(*flag.FlagSet) func(e *env, args []string) error {
 	return func(e *env, args []string) error {
 		if len(args) > 0 {
@@ -42,11 +43,18 @@ func doctorCmd(*flag.FlagSet) func(e *env, args []string) error {
 			return err
 		}
 		srv, onThisMachine := e.serverCheck(dirs)
-		checks := []check{srv, ffmpegCheck(e, dirs, onThisMachine), localCheck(dirs)}
-		failed := []string{}
+		checks := []check{srv}
+		if onThisMachine {
+			checks = append(checks, ffmpegCheck(e, dirs))
+		}
+		checks = append(checks, localCheck(dirs))
+		failed, hints := []string{}, []string{}
 		for _, c := range checks {
 			if c.Required && !c.OK {
 				failed = append(failed, c.Name)
+				if c.Hint != "" {
+					hints = append(hints, c.Hint)
+				}
 			}
 		}
 		if err := e.out.result(map[string]any{"ok": len(failed) == 0, "checks": checks}); err != nil {
@@ -54,7 +62,7 @@ func doctorCmd(*flag.FlagSet) func(e *env, args []string) error {
 		}
 		if len(failed) > 0 {
 			return &cliError{Code: "checks_failed", exit: exitUnavailable,
-				Message: "failed: " + strings.Join(failed, ", "), Hint: "each failed check carries a hint"}
+				Message: "failed: " + strings.Join(failed, ", "), Hint: strings.Join(hints, "; ")}
 		}
 		return nil
 	}
@@ -100,6 +108,9 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 		Version  string              `json:"version"`
 		Simulate bool                `json:"simulate"`
 		Tools    []domain.Capability `json:"tools"`
+		Startup  struct {
+			WrapperAddress string `json:"wrapper_address"`
+		} `json:"startup"`
 	}
 	_ = json.Unmarshal(raw, &sys) // missing fields stay empty
 	c.OK = true
@@ -121,7 +132,9 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 		c.Detail["wrapper_error"] = asCLIError(err).Message
 		if !sys.Simulate {
 			c.OK = false
-			c.Hint = "the wrapper does not answer; check wrapper.address (amdl config get wrapper.address)"
+			c.Detail["wrapper_address"] = sys.Startup.WrapperAddress
+			c.Hint = "the wrapper at " + or(sys.Startup.WrapperAddress, "its configured address") +
+				" does not answer; start it, or set wrapper.address in config.yaml (or AMDL_WRAPPER_ADDRESS) and restart the backend"
 			if onThisMachine && localQEMUMissing(dirs) != "" {
 				c.Hint = "this machine's wrapper is installed but cannot run without QEMU; see the local check"
 			}
@@ -146,8 +159,8 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 
 // ffmpegCheck looks for the ffmpeg this machine's backend would run: the
 // local config's tools.ffmpeg, else the default.
-func ffmpegCheck(e *env, dirs local.Dirs, required bool) check {
-	c := check{Name: "ffmpeg", Required: required, Detail: map[string]any{}}
+func ffmpegCheck(e *env, dirs local.Dirs) check {
+	c := check{Name: "ffmpeg", Required: true, Detail: map[string]any{}}
 	name := config.Default().Tools.FFmpeg
 	if cfg, err := config.Load(local.Backend{Dirs: dirs}.ConfigPath()); err == nil {
 		name = cfg.Tools.FFmpeg
@@ -155,7 +168,7 @@ func ffmpegCheck(e *env, dirs local.Dirs, required bool) check {
 	c.Detail["tools.ffmpeg"] = name
 	path, err := exec.LookPath(name)
 	if err != nil {
-		c.Hint = media.InstallHint()
+		c.Hint = media.InstallHint() + "; without root, put an ffmpeg binary in your home directory and set tools.ffmpeg to its full path"
 		return c
 	}
 	c.OK = true

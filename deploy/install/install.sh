@@ -190,6 +190,7 @@ case ":$PATH:" in
 esac
 if ! command -v ffmpeg >/dev/null 2>&1; then
 	say "ffmpeg is missing; amdl needs it to write tracks. Install it with: $(ffmpeg_hint)"
+	say "Without sudo, put an ffmpeg binary in your home directory and set tools.ffmpeg to its full path."
 fi
 
 if [ $service = 1 ]; then
