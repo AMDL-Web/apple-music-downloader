@@ -12,8 +12,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/client"
 	appui "amdl/apps/desktop/internal/ui"
+	"amdl/internal/client"
 	"amdl/internal/domain"
 )
 

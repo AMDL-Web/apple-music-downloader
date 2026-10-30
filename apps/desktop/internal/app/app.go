@@ -14,13 +14,13 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/artwork"
-	"amdl/apps/desktop/internal/client"
 	"amdl/apps/desktop/internal/ffmpeg"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/motion"
 	"amdl/apps/desktop/internal/shell"
 	"amdl/apps/desktop/internal/store"
 	appui "amdl/apps/desktop/internal/ui"
+	"amdl/internal/client"
 )
 
 // Options are the command line's choices. The flags exist for development

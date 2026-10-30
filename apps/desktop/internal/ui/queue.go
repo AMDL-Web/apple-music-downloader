@@ -7,11 +7,11 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/client"
-	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/store"
 	"amdl/apps/desktop/internal/widgets"
+	"amdl/internal/client"
 	"amdl/internal/domain"
+	"amdl/internal/format"
 )
 
 // heroJob is the job whose palette lights the screen: the one downloading

@@ -13,8 +13,8 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/store"
+	"amdl/internal/format"
 )
 
 // Options configure a Shell.

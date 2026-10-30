@@ -5,8 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"amdl/apps/desktop/internal/client"
+	"amdl/internal/client"
 	"amdl/internal/domain"
+	"amdl/internal/progress"
 )
 
 // Job is one download as the app knows it.
@@ -19,14 +20,14 @@ type Job struct {
 	// Activity is what happened to the job, newest first, from its events.
 	Activity []Activity
 	// Stages is how far the job's tracks have come on average, and Progress
-	// their weighted sum (StageWeights).
-	Stages   Stages
+	// their weighted sum (progress.Weights).
+	Stages   progress.Stages
 	Progress float64
 	// Remaining estimates the time left from the recent progress rate; 0
 	// when there is not enough to go on.
 	Remaining time.Duration
 
-	samples        []sample
+	rate           progress.Rate
 	seq            int
 	snapshotCursor int64
 }
@@ -73,6 +74,9 @@ func (j *Job) By() string {
 
 // Done counts the tracks that are finished, written now or found on disk.
 func (j *Job) Done() int { return j.CompletedItems + j.SkippedItems }
+
+// Album is the job's album bar, from the tracks the app has followed.
+func (j *Job) Album() progress.Album { return progress.AlbumProgress(j.Status, j.Items) }
 
 // Bytes sums the file sizes of the tracks written so far in this run.
 func (j *Job) Bytes() int64 {
@@ -156,13 +160,13 @@ func (j *Job) Phase() Phase {
 
 // recompute refreshes the derived progress fields.
 func (j *Job) recompute(now time.Time) {
-	j.Stages = jobStages(j.Job, j.Items)
+	j.Stages = progress.JobStages(j.Job, j.Items)
 	j.Progress = j.Stages.Weighted()
 	if j.Status == domain.JobRunning {
-		j.samples = addSample(j.samples, now, j.Progress)
-		j.Remaining = remaining(j.samples)
+		j.rate.Add(now, j.Progress)
+		j.Remaining = j.rate.Remaining()
 	} else {
-		j.samples, j.Remaining = nil, 0
+		j.rate, j.Remaining = progress.Rate{}, 0
 	}
 }
 

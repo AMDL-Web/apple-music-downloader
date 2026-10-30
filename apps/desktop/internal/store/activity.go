@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"amdl/apps/desktop/internal/format"
 	"amdl/internal/domain"
+	"amdl/internal/format"
 )
 
 // eventItem is the part of an item event's payload an activity line needs.

@@ -8,9 +8,11 @@ wrapper.
 
 ## Rules
 
-- The app reads the backend only through `apps/desktop/internal/client`, in
-  both modes, so it never depends on more than the API contract. The one core
-  call outside it is `internal/server#Run` in `apps/desktop/internal/mode`.
+- The app reads the backend only through `internal/client`, in both modes,
+  so it never depends on more than the API contract; bars and numbers come
+  from `internal/progress` and `internal/format`, shared with the other Go
+  clients. The one call into the backend itself is `internal/server#Run` in
+  `apps/desktop/internal/mode`.
 - `internal/` never imports this directory. Desktop-only code stays here.
 - No `AMDL_*` environment variables: `internal/config#UnreadEnv` warns about
   each one. Development switches are command-line flags (`main.go`).

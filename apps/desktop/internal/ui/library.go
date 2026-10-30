@@ -7,12 +7,12 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/client"
-	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/store"
 	"amdl/apps/desktop/internal/widgets"
+	"amdl/internal/client"
 	"amdl/internal/domain"
+	"amdl/internal/format"
 )
 
 // libraryTabs name the library's tabs, and libraryNouns one item of each,

@@ -3,16 +3,16 @@ package widgets
 import (
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/store"
 	"amdl/internal/domain"
+	"amdl/internal/progress"
 )
 
-// AlbumBar is a job's album bar (store.Album): the finished tracks fill
+// AlbumBar is a job's album bar (progress.Album): the finished tracks fill
 // solid, left to right in the order they finished and colored by outcome;
 // the overall progress fills translucent behind them; and the bar is cut
 // into one cell per track while each cell stays wide enough.
 type AlbumBar struct {
-	Album store.Album
+	Album progress.Album
 	// The outcome colors fill a finished track's share; Working fills a
 	// single track that is still working.
 	Completed, Skipped, Failed, Cancelled, Working ui.Color

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"amdl/apps/desktop/internal/client"
+	"amdl/internal/client"
 )
 
 // ServerEvery is how often the server's state is read while a view shows

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"amdl/apps/desktop/internal/client"
+	"amdl/internal/client"
 	"amdl/internal/config"
 	"amdl/internal/wrapper"
 )

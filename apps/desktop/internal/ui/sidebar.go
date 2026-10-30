@@ -6,10 +6,10 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/client"
-	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/widgets"
+	"amdl/internal/client"
+	"amdl/internal/format"
 )
 
 // sidebar is the window's left column (Pulse, MyGo 云音乐): the connection,

@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/client"
-	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/mode"
+	"amdl/internal/client"
+	"amdl/internal/format"
 )
 
 // skeleton is a shimmering placeholder bar.

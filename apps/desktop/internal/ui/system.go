@@ -7,9 +7,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/client"
-	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/store"
+	"amdl/internal/client"
+	"amdl/internal/format"
 )
 
 // system is the backend's own state as Mole's cards: health, workers, what

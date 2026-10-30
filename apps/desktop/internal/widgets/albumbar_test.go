@@ -7,8 +7,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/store"
 	"amdl/internal/domain"
+	"amdl/internal/progress"
 )
 
 var (
@@ -21,7 +21,7 @@ func toUI(c color.RGBA) ui.Color { return ui.RGBA(c.R, c.G, c.B, 1) }
 // x 10, and returns the color at x in the middle of its height.
 func renderBar(t *testing.T, items []domain.JobItem, width float32) func(x float32) color.RGBA {
 	t.Helper()
-	bar := AlbumBar{Album: store.AlbumProgress(domain.JobRunning, items), Completed: toUI(green), Skipped: toUI(blue),
+	bar := AlbumBar{Album: progress.AlbumProgress(domain.JobRunning, items), Completed: toUI(green), Skipped: toUI(blue),
 		Failed: toUI(red), Cancelled: toUI(red), Working: toUI(red), Live: ui.RGBA(0, 0, 0, 0), Track: toUI(grey), Height: 10}
 	tt := ui.NewTester(func(c *ui.Context) {
 		ui.Row(c).Padding(0, 10).Children(func() {

@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/client"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/store"
+	"amdl/internal/client"
 	"amdl/internal/domain"
 )
 

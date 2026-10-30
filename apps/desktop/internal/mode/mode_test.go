@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"amdl/apps/desktop/internal/client"
+	"amdl/internal/client"
 	"amdl/internal/config"
 )
 

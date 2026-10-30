@@ -9,11 +9,12 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"amdl/apps/desktop/internal/format"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/store"
 	"amdl/apps/desktop/internal/widgets"
 	"amdl/internal/domain"
+	"amdl/internal/format"
+	"amdl/internal/progress"
 )
 
 // detail is one job: the album in big type over its palette, its numbers,
@@ -136,6 +137,10 @@ func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32
 	})
 }
 
+// stageLabels are the stage bar's legend, short enough for its narrow
+// segments.
+var stageLabels = [progress.StageCount]string{"R", "Download", "Decrypt", "M", "V", "T", "S"}
+
 func firstWithCodec(j *store.Job) *domain.JobItem {
 	for i := range j.Items {
 		if j.Items[i].Codec != "" {
@@ -166,8 +171,8 @@ func (a *App) trackList(c *ui.Context, k *Tokens, j *store.Job, accent ui.Color)
 			ui.Box(c).Width(28)
 			label(c, k, "Track").Grow(1)
 			ui.Row(c).Width(300).Gap(3).Children(func() {
-				for i, w := range store.StageWeights {
-					mono(c, store.StageLabels[i], 10).TextColor(k.Faint).Grow(float32(w)).Basis(0).ClipX()
+				for i, w := range progress.Weights {
+					mono(c, stageLabels[i], 10).TextColor(k.Faint).Grow(float32(w)).Basis(0).ClipX()
 				}
 			})
 			label(c, k, "State").Width(104).TextAlign(ui.End)
@@ -198,8 +203,8 @@ func (a *App) trackRow(c *ui.Context, k *Tokens, it *domain.JobItem, accent ui.C
 			mono(c, trackSub(it), 11).TextColor(k.Muted).Ellipsis("…")
 		})
 		ui.Box(c).Width(300).Children(func() {
-			widgets.StageBar{Stages: store.ItemStages(*it), Color: accent, Track: k.Track, Running: running,
-				Indeterminate: store.Indeterminate(*it), Failed: it.Status == domain.ItemFailed, Bad: k.Bad,
+			widgets.StageBar{Stages: progress.ItemStages(*it), Color: accent, Track: k.Track, Running: running,
+				Indeterminate: progress.Indeterminate(*it), Failed: it.Status == domain.ItemFailed, Bad: k.Bad,
 				Finished: true, Done: k.Fg.Alpha(0.85)}.Show(c, "bar")
 		})
 		ui.Row(c).Width(104).Gap(6).Justify(ui.End).AlignItems(ui.Center).Children(func() { trackState(c, k, it) })

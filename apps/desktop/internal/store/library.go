@@ -1,7 +1,7 @@
 package store
 
 import (
-	"amdl/apps/desktop/internal/client"
+	"amdl/internal/client"
 	"amdl/internal/domain"
 )
 
