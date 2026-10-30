@@ -30,6 +30,7 @@ import (
 	"amdl/internal/logging"
 	"amdl/internal/media"
 	"amdl/internal/wrapper"
+	"amdl/internal/wrapperhost"
 )
 
 // Options are what Run needs from its caller.
@@ -49,6 +50,10 @@ type Options struct {
 	// client that embeds the backend and prints its own results there passes
 	// another writer.
 	LogOutput io.Writer
+	// WrapperHost, when set, runs the wrapper on this machine
+	// (internal/wrapperhost): the wrapper routes log in through it and
+	// wrapper status reports it. The caller points wrapper.address at it.
+	WrapperHost *wrapperhost.Supervisor
 }
 
 // loggedError is an error Run has already written to the configured log.
@@ -181,7 +186,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 	apiServer, err := api.New(api.Deps{
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
-		Wrapper: wrapperClient, Quality: qualityService, LibrarySync: libraryWatcher,
+		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
 		Catalog: catalog, Console: opts.Console,
 	})
 	if err != nil {
@@ -253,4 +258,13 @@ func closeLogged(logger *slog.Logger, what string, closeFn func() error) {
 	if err := closeFn(); err != nil {
 		logger.Error(what, "error", err)
 	}
+}
+
+// wrapperService is the wrapper client, or the managed wrapper in front of
+// it when this process runs one.
+func wrapperService(c *wrapper.Client, host *wrapperhost.Supervisor) api.WrapperService {
+	if host == nil {
+		return c
+	}
+	return wrapperhost.Service{Wrapper: c, Sup: host}
 }

@@ -34,6 +34,10 @@ var (
 	// wrapper without wrapper-manager's login API: wrapper-lite logs in only
 	// from its own command line (--login).
 	ErrLoginUnsupported = errors.New("the wrapper has no login API; log in on the wrapper host")
+	// ErrCredentialsUnusable is a username or password a managed wrapper
+	// cannot pass to lite: its argument file is one argument per line and its
+	// login argument is user:pass.
+	ErrCredentialsUnusable = errors.New("the username or password contains a line break or NUL, or the username a colon")
 )
 
 const (
@@ -86,6 +90,27 @@ type Status struct {
 	Regions        []string `json:"regions"`
 	Accounts       []string `json:"accounts"`
 	LoginSupported bool     `json:"login_supported"`
+	// Managed is set when amdl runs the wrapper on this machine
+	// (internal/wrapperhost).
+	Managed *Managed `json:"managed,omitempty"`
+}
+
+// Managed describes a wrapper amdl runs in a QEMU guest on this machine.
+type Managed struct {
+	// Mode is starting, serving, login, stopped or failed.
+	Mode  string `json:"mode"`
+	Accel string `json:"accel"`
+	// AccelFallback means the chosen accelerator failed and the guest runs on
+	// TCG, plain emulation.
+	AccelFallback bool   `json:"accel_fallback"`
+	QEMU          string `json:"qemu"`
+	// Guest names the installed guest: its upstream commit, or an import.
+	Guest string `json:"guest"`
+	// LoginResidue means the guest disk may still hold the last login's
+	// arguments, password included, until a serving boot has run a few
+	// seconds.
+	LoginResidue bool   `json:"login_residue"`
+	LastError    string `json:"last_error,omitempty"`
 }
 
 // LyricsRequestOptions are wrapper-lite's /lyrics query parameters, sent as

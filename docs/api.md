@@ -167,10 +167,17 @@ curl http://localhost:18080/api/v1/wrapper/status
 Returns `ready`, `status`, `regions`, `accounts` and `login_supported`. `status` is true
 when an account is logged in and serves a storefront. `accounts` lists the account
 identifiers the wrapper reports (`[]` when none; neither wrapper-lite nor wrapper-manager
-reports any). `login_supported` is true when the wrapper is a wrapper-manager, which the
-three routes below need. The backend does not contact the wrapper at startup, so it starts
-fine without a reachable wrapper, and this endpoint is how you verify connectivity; an
-unreachable wrapper is `503 wrapper_unavailable`.
+reports any). `login_supported` is true when the wrapper is a wrapper-manager, or a
+wrapper amdl runs on this machine; the three routes below need one of them. The backend
+does not contact the wrapper at startup, so it starts fine without a reachable wrapper,
+and this endpoint is how you verify connectivity; an unreachable wrapper is
+`503 wrapper_unavailable`.
+
+When amdl runs the wrapper itself (`amdl wrapper install`, [install.md](install.md#the-wrapper)),
+the response also carries `managed`: `mode` (`starting`, `serving`, `login`, `stopped` or
+`failed`), the QEMU `accel` in use and whether it fell back to TCG (`accel_fallback`), the
+`qemu` binary, the installed `guest`, `last_error`, and `login_residue`. A booting or
+stopped managed wrapper answers `200` with `ready` false rather than `503`.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login \
@@ -183,8 +190,17 @@ part of it. If the response contains `"status":"needs_2fa"`, submit the code wit
 seconds using the `login_id` from that response. The password is held in memory for that
 wait (at most 75 seconds) and, once a code is submitted, until its verification ends: at most
 75 seconds plus `wrapper.login_timeout_seconds` (195 seconds by default) after the
-`needs_2fa` response. It is never written to disk. A wrong code ends the login; start
-again from the password.
+`needs_2fa` response. With a wrapper-manager it is never written to disk. A wrong code ends
+the login; start again from the password.
+
+With a wrapper amdl runs, a login boots the guest with the password in a 0600 file that
+QEMU passes to it through `fw_cfg` and that is deleted at the guest's first console line;
+the password never appears on a command line. The guest copies it onto its own disk, and
+the next boot, which follows at once, deletes it there: `managed.login_residue` stays true
+until that boot has served for a few seconds. Each step may take up to four minutes, since
+the guest boots twice per login and may run emulated. A username with a colon, or either
+value with a line break or NUL, is `400 invalid_request`. Logout gives the guest a fresh
+disk, whatever the username.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login/{login_id}/2fa \

@@ -65,6 +65,19 @@ type WrapperStatus struct {
 	Regions        []string `json:"regions"`
 	Accounts       []string `json:"accounts"`
 	LoginSupported bool     `json:"login_supported"`
+	// Managed is set when the backend runs the wrapper on its machine.
+	Managed *ManagedWrapper `json:"managed,omitempty"`
+}
+
+// ManagedWrapper is the ManagedWrapper schema.
+type ManagedWrapper struct {
+	Mode          string `json:"mode"`
+	Accel         string `json:"accel"`
+	AccelFallback bool   `json:"accel_fallback"`
+	QEMU          string `json:"qemu"`
+	Guest         string `json:"guest"`
+	LoginResidue  bool   `json:"login_residue"`
+	LastError     string `json:"last_error,omitempty"`
 }
 
 // DownloadList is the DownloadList schema.

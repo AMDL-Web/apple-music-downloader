@@ -14,7 +14,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"amdl/internal/buildinfo"
 	"amdl/internal/config"
 	"amdl/internal/server"
+	"amdl/internal/wrapperhost"
 )
 
 // appName is the directory name under the user's config, cache and music
@@ -60,6 +63,9 @@ func DefaultDirs() (Dirs, error) {
 	return Dirs{Data: filepath.Join(data, appName), Cache: filepath.Join(cache, appName), Music: filepath.Join(home, "Music")}, nil
 }
 
+// WrapperDir holds the wrapper amdl runs on this machine (internal/wrapperhost).
+func (d Dirs) WrapperDir() string { return filepath.Join(d.Data, "wrapper") }
+
 // ServerDir holds the embedded backend's files.
 func (d Dirs) ServerDir() string { return filepath.Join(d.Data, "server") }
 
@@ -82,6 +88,11 @@ type Backend struct {
 	LogFile string
 	// Console serves the web console next to the API; nil serves the API alone.
 	Console http.Handler
+	// ManageWrapper runs the wrapper installed in Dirs.WrapperDir, when there
+	// is one, for as long as the backend runs, and points wrapper.address at
+	// it. Long-lived backends set it (serve --local, the service, the desktop
+	// app); a per-command embedded backend does not boot a guest.
+	ManageWrapper bool
 }
 
 // ConfigPath is the embedded backend's config.yaml.
@@ -254,6 +265,9 @@ type Running struct {
 	lock   *os.File
 	cancel context.CancelFunc
 	done   chan error
+	// hostDone is closed when the managed wrapper's supervisor has stopped
+	// its guest; nil without one.
+	hostDone chan struct{}
 }
 
 // healthDeadline bounds how long Start waits for the backend to answer.
@@ -311,6 +325,10 @@ func (b Backend) Serve(ctx context.Context, addr string) error {
 }
 
 func (b Backend) launch(addr string, l *os.File) (*Running, error) {
+	host := b.wrapperHost()
+	if host != nil {
+		b.Wrapper = host.URL()
+	}
 	if err := b.WriteConfig(); err != nil {
 		l.Close()
 		return nil, err
@@ -326,13 +344,21 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Running{Base: "http://" + ln.Addr().String(), dirs: b.Dirs, lock: l, cancel: cancel, done: make(chan error, 1)}
+	if host != nil {
+		r.hostDone = make(chan struct{})
+		go func() {
+			defer close(r.hostDone)
+			host.Run(ctx)
+		}()
+	}
 	go func() {
 		r.done <- server.Run(ctx, server.Options{
-			ConfigPath: b.ConfigPath(),
-			HooksPath:  filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
-			Listener:   ln,
-			LogOutput:  logOut,
-			Console:    b.Console,
+			ConfigPath:  b.ConfigPath(),
+			HooksPath:   filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
+			Listener:    ln,
+			LogOutput:   logOut,
+			Console:     b.Console,
+			WrapperHost: host,
 		})
 	}()
 	if err := r.waitHealthy(); err != nil {
@@ -386,6 +412,14 @@ func (r *Running) Stop() error {
 	}
 	r.cancel()
 	defer r.lock.Close() // closing the file releases the lock
+	if r.hostDone != nil {
+		defer func() {
+			select {
+			case <-r.hostDone:
+			case <-time.After(stopDeadline):
+			}
+		}()
+	}
 	select {
 	case err := <-r.done:
 		r.done <- err // a second Stop returns the same
@@ -415,4 +449,50 @@ func OpenLog(d Dirs) (*os.File, error) {
 		_ = os.Rename(path, path+".1") // on failure the file keeps growing, which is no worse
 	}
 	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+}
+
+// wrapperHost returns the supervisor of the installed managed wrapper, or nil
+// when there is none to run. A wrapper that cannot run, such as one whose
+// QEMU was uninstalled, is reported on LogOutput and left out, so the backend
+// still starts and says why downloads fail.
+func (b Backend) wrapperHost() *wrapperhost.Supervisor {
+	if !b.ManageWrapper {
+		return nil
+	}
+	h := wrapperhost.Home{Dir: b.Dirs.WrapperDir()}
+	in, err := h.Current()
+	if err != nil {
+		return nil
+	}
+	logOut := b.LogOutput
+	if logOut == nil {
+		logOut = io.Discard
+	}
+	qemu := in.QEMU
+	if qemu == "" {
+		if qemu, err = wrapperhost.FindQEMU("", runtime.GOOS, exec.LookPath, exists); err != nil {
+			fmt.Fprintf(logOut, "the local wrapper is installed but cannot run: %v\n", err)
+			return nil
+		}
+	}
+	console, err := os.OpenFile(h.LogPath(), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		fmt.Fprintf(logOut, "the local wrapper's log %s: %v\n", h.LogPath(), err)
+		console = nil
+	}
+	var w io.Writer = io.Discard
+	if console != nil {
+		w = console // open for the life of the process, like the backend's own log
+	}
+	host, err := wrapperhost.NewSupervisor(h, qemu, wrapperhost.Accel(runtime.GOOS, runtime.GOARCH, wrapperhost.KVMUsable()), w)
+	if err != nil {
+		fmt.Fprintf(logOut, "the local wrapper cannot run: %v\n", err)
+		return nil
+	}
+	return host
+}
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }

@@ -395,7 +395,14 @@ paths:
         no code has arrived and, once a code is submitted, until its
         verification ends: at most 75 seconds plus wrapper.login_timeout_seconds
         (195 seconds by default) after the needs_2fa response. It is never
-        written to disk. Needs a wrapper-manager; a bare wrapper-lite
+        written to disk by a wrapper-manager. A wrapper amdl runs on this
+        machine (WrapperStatus.managed) logs in by booting its guest with the
+        password in a 0600 file passed through QEMU fw_cfg and deleted at the
+        guest's first console line; the guest keeps a copy on its disk until
+        the next boot, which follows at once (managed.login_residue). Its
+        steps may each take up to four minutes, and a username with a colon,
+        or either value with a line break or NUL, is 400 invalid_request.
+        Needs a wrapper-manager or a managed wrapper; a bare wrapper-lite
         answers 501 login_unsupported.
       operationId: loginWrapper
       requestBody:
@@ -437,7 +444,8 @@ paths:
       summary: Submit a two-step verification code
       description: >-
         Finishes the login that returned the login_id. The wrapper gives up on a
-        login 60 seconds after it asks for the code, so submit it promptly. The
+        login 60 seconds after it asks for the code (four minutes for a
+        managed wrapper), so submit it promptly. The
         login ends with this call even when the code is wrong; start again from
         POST /wrapper/login.
       operationId: submitWrapperTwoStepCode
@@ -1433,10 +1441,43 @@ components:
         login_supported:
           type: boolean
           description: >-
-            The wrapper is a wrapper-manager, so POST /wrapper/login and
-            /wrapper/logout work. False for a bare wrapper-lite, which those
-            routes answer with 501 login_unsupported; no login can start there,
-            so /wrapper/login/{login_id}/2fa has no session to find.
+            The wrapper is a wrapper-manager or a managed wrapper, so POST
+            /wrapper/login and /wrapper/logout work. False for a bare
+            wrapper-lite, which those routes answer with 501 login_unsupported;
+            no login can start there, so /wrapper/login/{login_id}/2fa has no
+            session to find.
+        managed:
+          $ref: '#/components/schemas/ManagedWrapper'
+    ManagedWrapper:
+      type: object
+      description: >-
+        Present only when amdl runs the wrapper on this machine in a QEMU
+        guest (amdl wrapper install). While that guest boots or is stopped,
+        GET /wrapper/status answers 200 with ready false instead of 503.
+      required: [mode, accel, accel_fallback, qemu, guest, login_residue]
+      properties:
+        mode:
+          type: string
+          enum: [starting, serving, login, stopped, failed]
+        accel:
+          type: string
+          description: The QEMU accelerator in use, such as kvm, whpx, hvf or tcg (plain emulation).
+        accel_fallback:
+          type: boolean
+          description: The chosen accelerator failed and the guest runs on tcg.
+        qemu:
+          type: string
+          description: The QEMU binary that runs the guest.
+        guest:
+          type: string
+          description: The installed guest, named by its upstream commit or as an import.
+        login_residue:
+          type: boolean
+          description: >-
+            The guest disk may still hold the last login's arguments, password
+            included, until a serving boot has run a few seconds.
+        last_error:
+          type: string
     HealthResponse:
       type: object
       required: [status]
