@@ -77,6 +77,20 @@ Siblings are spaced by the parent's `gap` (`--page-gap` between sections,
 `--grid-gap` inside grids, `--card-gap` inside cards), never by child margins.
 No horizontal page scroll at 390 px in either theme.
 
+The music skin's rhythm, the same on every page; the ui-audit tool's
+`rhythm` check (`apps/console/tools/ui-audit/console/audit.config.mjs`) measures it and
+flags a page that differs:
+
+| Relationship (px) | ≥1024 | 640-1023 | <640 | Set by |
+| --- | --- | --- | --- | --- |
+| Page gutter, page head included | 40 | 24 | 16 | the skin's `--main-x` |
+| Page head → content, section → section | 40 | 40 | 32 | `--page-gap` |
+| Section title → its card | 12 | 12 | 12 | the skin's titled card (`gap: var(--s-3)`) |
+| Inside a card | 20 | 20 | 16 | `--card-pad`, `--card-pad-x` |
+
+New download's single centered column (760 px at most) is the one
+deliberate exception to the gutter.
+
 ## Skin
 
 The skin is the console's look: colors, radii, shadows, font stacks, display
