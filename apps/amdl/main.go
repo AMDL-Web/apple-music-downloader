@@ -1,6 +1,6 @@
 // Command amdl is the AMDL client and server in one binary: commands for
 // agents and scripts with JSON results (internal/capability lists them), and
-// amdl serve, the backend and web console that amdl-server used to be.
+// amdl serve, the backend and web console.
 package main
 
 import (

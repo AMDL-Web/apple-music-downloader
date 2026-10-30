@@ -103,7 +103,7 @@ if [ "$(id -u)" = "0" ]; then
     if [ -d "$DOWNLOADS_DIR" ] && ! su-exec "$PUID:$PGID" test -w "$DOWNLOADS_DIR"; then
         echo "warning: $DOWNLOADS_DIR is not writable by $PUID:$PGID; give the host directory to that uid/gid (docs/deployment.md, Ownership)" >&2
     fi
-    exec su-exec "$PUID:$PGID" /app/amdl-server "$@"
+    exec su-exec "$PUID:$PGID" /app/amdl serve "$@"
 fi
 
-exec /app/amdl-server "$@"
+exec /app/amdl serve "$@"

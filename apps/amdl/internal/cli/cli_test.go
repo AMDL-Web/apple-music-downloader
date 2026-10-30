@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"amdl/apps/console"
 	"amdl/internal/capability"
 )
 
@@ -244,5 +245,26 @@ func TestFieldsOnAnObjectKeepItsKeys(t *testing.T) {
 	got, err := project([]byte(`{"accepted":1,"rejected":0,"results":[{"url":"x"}]}`), []string{"accepted", "rejected"})
 	if err != nil || string(got) != `{"accepted":1,"rejected":0}` {
 		t.Errorf("project = %s, %v", got, err)
+	}
+}
+
+func TestServeOptions(t *testing.T) {
+	env := map[string]string{}
+	getenv := func(k string) string { return env[k] }
+	if o := serveOptions(getenv, "", "", false); o.ConfigPath != "configs/config.yaml" || o.HooksPath != "configs/hooks.yaml" || o.Console != nil {
+		t.Fatalf("defaults = %+v", o)
+	}
+	env["AMDL_CONFIG"], env["AMDL_HOOKS_CONFIG"] = "/app/configs/config.yaml", "/app/configs/hooks.yaml"
+	if o := serveOptions(getenv, "", "", false); o.ConfigPath != "/app/configs/config.yaml" || o.HooksPath != "/app/configs/hooks.yaml" {
+		t.Fatalf("from the environment = %+v", o)
+	}
+	if o := serveOptions(getenv, "a.yaml", "b.yaml", false); o.ConfigPath != "a.yaml" || o.HooksPath != "b.yaml" {
+		t.Fatalf("flags = %+v", o)
+	}
+	// amdl serve mounts the real console; internal/server's tests use a stub.
+	rec := httptest.NewRecorder()
+	serveOptions(getenv, "", "", true).Console.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Security-Policy") != console.ContentSecurityPolicy {
+		t.Fatalf("console index = %d CSP %q", rec.Code, rec.Header().Get("Content-Security-Policy"))
 	}
 }

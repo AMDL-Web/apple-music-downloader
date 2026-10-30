@@ -164,16 +164,7 @@ func serveCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		if len(args) > 0 {
 			return usageErr("usage: amdl serve [--config path] [--hooks path]")
 		}
-		opts := server.Options{ConfigPath: *cfg, HooksPath: *hooks}
-		if opts.ConfigPath == "" {
-			opts.ConfigPath = or(e.Getenv("AMDL_CONFIG"), "configs/config.yaml")
-		}
-		if opts.HooksPath == "" {
-			opts.HooksPath = or(e.Getenv("AMDL_HOOKS_CONFIG"), "configs/hooks.yaml")
-		}
-		if !*noConsole {
-			opts.Console = console.Handler()
-		}
+		opts := serveOptions(e.Getenv, *cfg, *hooks, !*noConsole)
 		if err := server.Run(e.ctx, opts); err != nil {
 			if !server.Logged(err) {
 				fmt.Fprintf(os.Stderr, "amdl backend failed: %v\n", err)
@@ -182,6 +173,17 @@ func serveCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		}
 		return nil
 	}
+}
+
+// serveOptions takes the config paths from the flags, else AMDL_CONFIG and
+// AMDL_HOOKS_CONFIG, else configs/ under the working directory.
+func serveOptions(getenv func(string) string, cfg, hooks string, withConsole bool) server.Options {
+	opts := server.Options{ConfigPath: or(cfg, or(getenv("AMDL_CONFIG"), "configs/config.yaml")),
+		HooksPath: or(hooks, or(getenv("AMDL_HOOKS_CONFIG"), "configs/hooks.yaml"))}
+	if withConsole {
+		opts.Console = console.Handler()
+	}
+	return opts
 }
 
 func or(a, b string) string {

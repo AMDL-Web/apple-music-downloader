@@ -1,7 +1,7 @@
 // Package server runs the whole backend in-process: it loads the config,
 // opens the store, starts the job manager, the download pipeline, hooks and
 // library sync, serves the HTTP API on a listener, and stops every component
-// in order when its context ends. apps/server wraps Run in a process; an
+// in order when its context ends. amdl serve (apps/amdl) wraps Run in a process; an
 // embedding app such as the desktop app calls it with its own listener.
 package server
 

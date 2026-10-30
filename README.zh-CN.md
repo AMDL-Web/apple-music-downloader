@@ -21,7 +21,7 @@ amdl 把 Apple Music 上的音乐下载到你自己的磁盘。把单曲、专�
 
 ### 服务端
 
-`apps/server` 是要部署的后端：一个 Go 进程，带一个 SQLite 数据库、`/api/v1` 上的 REST +
+`amdl serve`（`apps/amdl`）是要部署的后端：一个 Go 进程，带一个 SQLite 数据库、`/api/v1` 上的 REST +
 Server-Sent Events 接口，以及同一端口上的网页控制台。它以容器镜像发布，镜像由 `deploy/server/`
 构建。[快速开始](#快速开始)讲怎么运行它，本页其余部分都在介绍它。
 
@@ -46,7 +46,7 @@ JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli se
 
 | 路径 | 内容 |
 | --- | --- |
-| `apps/` | 一个产品一个目录：`server`、`console`，以后还有 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
+| `apps/` | 一个产品一个目录：`amdl`（服务端和命令行）、`console`，以后还有 `desktop`。非 Go 应用在自己的目录里保留自己的构建系统。 |
 | `internal/` | 所有产品共用的 Go 核心：HTTP API、作业、下载流水线、Apple 与 wrapper 客户端、存储和配置。[Architecture](docs/architecture.md#2-packages) 列出了每个包。 |
 | `deploy/` | Compose 文件，以及 `deploy/server/` 下服务端的 Dockerfile 和入口脚本。 |
 | `configs/` | 每个安装据以生成配置的示例配置和钩子模板。 |
@@ -107,7 +107,7 @@ wrapper-lite，并且可以在控制台里登录。
 ### 从源码运行
 
 ```bash
-go run ./apps/server
+go run ./apps/amdl serve
 ```
 
 它读取 `configs/config.yaml`（第一次启动时由

@@ -29,12 +29,12 @@ DOCKER_IMAGE ?= amdl-backend:dev
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
 
-build: ## Compile every package, then bin/amdl-server with the version stamped from git
+build: ## Compile every package, then bin/amdl with the version stamped from git
 	$(GO) build ./...
-	$(GO) build -ldflags "$(LDFLAGS)" -o bin/amdl-server ./apps/server
+	$(GO) build -ldflags "$(LDFLAGS)" -o bin/amdl ./apps/amdl
 
 run: ## Run the server with configs/config.yaml (needs a wrapper for real downloads)
-	$(GO) run -ldflags "$(LDFLAGS)" ./apps/server
+	$(GO) run -ldflags "$(LDFLAGS)" ./apps/amdl serve
 
 dev: ## Run the server in simulate mode on 127.0.0.1:18080 with a throwaway config and data under data/dev/
 	@mkdir -p $(DEV_DIR)
@@ -45,7 +45,7 @@ dev: ## Run the server in simulate mode on 127.0.0.1:18080 with a throwaway conf
 	AMDL_HOOKS_CONFIG=$(DEV_DIR)/hooks.yaml \
 	AMDL_SERVER_LISTEN=$(DEV_LISTEN) \
 	AMDL_DATABASE_PATH=$(DEV_DIR)/amdl.db \
-	$(GO) run -ldflags "$(LDFLAGS)" ./apps/server
+	$(GO) run -ldflags "$(LDFLAGS)" ./apps/amdl serve
 
 fmt: ## Rewrite Go files with gofmt
 	@test -n "$(strip $(GO_DIRS))" || { echo "fmt: go list found no packages" >&2; exit 1; }

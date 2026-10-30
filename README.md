@@ -22,7 +22,7 @@ This repository holds the whole AMDL project. Each product has its own directory
 
 ### Server
 
-`apps/server` is the backend you deploy: one Go process with a SQLite database, a REST +
+`amdl serve` (`apps/amdl`) is the backend you deploy: one Go process with a SQLite database, a REST +
 Server-Sent Events API on `/api/v1`, and the web console on the same port. It ships as a
 container image built from `deploy/server/`. [Quick start](#quick-start) runs it; the
 rest of this page describes it.
@@ -52,7 +52,7 @@ packages will sit under apps/desktop/internal, private to it.
 
 | Path | What it holds |
 | --- | --- |
-| `apps/` | One directory per product: `server`, `console`, and later `desktop`. A non-Go app keeps its own build system in its directory. |
+| `apps/` | One directory per product: `amdl` (the server and the command line), `console`, and later `desktop`. A non-Go app keeps its own build system in its directory. |
 | `internal/` | The Go core every product shares: the HTTP API, jobs, the download pipeline, the Apple and wrapper clients, storage and config. [Architecture](docs/architecture.md#2-packages) lists each package. |
 | `deploy/` | The Compose file and, under `deploy/server/`, the server's Dockerfile and entrypoint. |
 | `configs/` | The example config and hooks template every install is seeded from. |
@@ -118,7 +118,7 @@ account and logs in from its own command line, not from the console.
 ### From source
 
 ```bash
-go run ./apps/server
+go run ./apps/amdl serve
 ```
 
 This reads `configs/config.yaml`, created from

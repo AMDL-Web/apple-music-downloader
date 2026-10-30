@@ -483,7 +483,7 @@ var (
 // list lacks can only be reached by editing the URL.
 func TestLogComponentsMatchBackend(t *testing.T) {
 	backend := map[string]bool{}
-	for _, root := range []string{"../server", "../../internal"} {
+	for _, root := range []string{"../amdl", "../../internal"} {
 		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
 				return err

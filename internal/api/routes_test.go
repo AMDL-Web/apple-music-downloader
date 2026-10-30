@@ -281,7 +281,7 @@ func TestNoCrossOriginAccess(t *testing.T) {
 }
 
 // The console handler is mounted with the /console prefix stripped, and the
-// bare root redirects to it. The real handler is wired in apps/server.
+// bare root redirects to it. The real handler is wired in by amdl serve (apps/amdl).
 func TestConsoleMount(t *testing.T) {
 	var gotPath string
 	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { gotPath = r.URL.Path })
