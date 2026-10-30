@@ -168,7 +168,7 @@ func (c countingQualityWrapper) Status(context.Context) (wrapper.Status, error) 
 	if c.status != nil {
 		return *c.status, nil
 	}
-	return wrapper.Status{Ready: true, Status: true, Regions: []string{"cn"}}, nil
+	return wrapper.Status{Ready: true, LoggedIn: true, Regions: []string{"cn"}}, nil
 }
 
 func (c countingQualityWrapper) M3U8(context.Context, string) (string, error) {
@@ -205,7 +205,7 @@ func TestQualityQueryUsesDownloadStorefrontValidation(t *testing.T) {
 		wantCode string
 	}{
 		{name: "decryptor unavailable", wrapper: countingQualityWrapper{statusErr: errors.New("offline")}, wantCode: "decryptor_unavailable"},
-		{name: "unsupported storefront", wrapper: countingQualityWrapper{status: &wrapper.Status{Ready: true, Status: true, Regions: []string{"us"}}}, wantCode: "unsupported_storefront"},
+		{name: "unsupported storefront", wrapper: countingQualityWrapper{status: &wrapper.Status{Ready: true, LoggedIn: true, Regions: []string{"us"}}}, wantCode: "unsupported_storefront"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

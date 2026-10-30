@@ -36,7 +36,7 @@ export function account(s, ctx) {
   if (v.state !== 'ok') return v;
   const mode = managedMode(d);
   if (mode) return { ...v, ...managedView(mode, d.managed) };
-  const ready = d.ready && d.status !== false;
+  const ready = d.ready && d.logged_in !== false;
   if (!ready) {
     return {
       ...v,

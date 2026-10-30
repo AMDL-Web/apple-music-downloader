@@ -352,7 +352,7 @@ func wrapperWords(w *client.WrapperStatus) account {
 	switch {
 	case !w.Ready:
 		return account{word: "Starting", state: "Not ready", kind: pillWait, note: "The wrapper answers but is not ready yet"}
-	case !w.Status:
+	case !w.LoggedIn:
 		note := "Log in on the wrapper's own machine"
 		if w.LoginSupported {
 			note = "Log in so downloads can be decrypted"

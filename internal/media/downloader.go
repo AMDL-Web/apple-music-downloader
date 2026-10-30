@@ -164,12 +164,12 @@ func (d *Downloader) validateStorefront(ctx context.Context, storefront string) 
 		message := fmt.Sprintf("cannot reach the wrapper: %v", err)
 		return &jobs.RequestError{Code: "decryptor_unavailable", Message: message, Cause: err}
 	}
-	if len(status.Regions) == 0 && (!status.Ready || !status.Status) {
+	if len(status.Regions) == 0 && (!status.Ready || !status.LoggedIn) {
 		return &jobs.RequestError{Code: "decryptor_unavailable", Message: "the wrapper is not ready"}
 	}
 	for _, region := range status.Regions {
 		if strings.EqualFold(region, storefront) {
-			if !status.Ready || !status.Status {
+			if !status.Ready || !status.LoggedIn {
 				return &jobs.RequestError{Code: "decryptor_unavailable", Message: "the wrapper is not ready"}
 			}
 			return nil

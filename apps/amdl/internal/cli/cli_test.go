@@ -103,6 +103,36 @@ func TestErrorsMapToExitCodes(t *testing.T) {
 	}
 }
 
+func TestCatalogNotFoundIsNotARetry(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"error":{"code":"catalog_not_found","message":"read Apple Music catalog: Apple Music has no album 1 in storefront us (404)"}}`)
+	}))
+	defer srv.Close()
+	r := run(t, srv, "", "lookup", "https://music.apple.com/us/album/x/1")
+	if r.code != exitNotFound || errorCode(t, r.stderr) != "catalog_not_found" {
+		t.Errorf("got %+v, want exit %d", r, exitNotFound)
+	}
+}
+
+func TestConfigSetEchoesOnlyTheKeysSet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"config":{"catalog":{"media_user_token":"...1a2b","motion_artwork_enabled":true},"logging":{"level":"debug","access_log":false}},"persisted":true}`)
+	}))
+	defer srv.Close()
+	r := run(t, srv, "", "config", "set", "logging.level=debug")
+	var out struct {
+		Config    map[string]any `json:"config"`
+		Persisted bool           `json:"persisted"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &out); err != nil || r.code != 0 {
+		t.Fatalf("got %+v (%v)", r, err)
+	}
+	if len(out.Config) != 1 || out.Config["logging.level"] != "debug" || !out.Persisted {
+		t.Fatalf("config set printed %s, want only logging.level and persisted", r.stdout)
+	}
+}
+
 func TestDestructiveNeedsYesAndDryRunSendsNothing(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

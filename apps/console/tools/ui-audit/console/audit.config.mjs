@@ -96,7 +96,7 @@ const SCENARIOS = [
   { id: 'overview/many', world: 'many', path: '#/' },
   { id: 'overview/slow', world: 'active', path: '#/', latency: 700 },
   { id: 'overview/offline', world: 'active', path: '#/', faults: { 'GET /api/v1/downloads': { status: 503, code: 'unavailable' }, 'GET /api/v1/downloads/events': { status: 503 }, 'GET /api/v1/stats': { status: 500 }, 'GET /api/v1/health': { status: 503 } } },
-  { id: 'overview/degraded', world: 'active', path: '#/', mutate: (w) => Object.assign(w.wrapper, { ready: false, status: false, regions: [] }) && (w.storageFree = 2.1e9) },
+  { id: 'overview/degraded', world: 'active', path: '#/', mutate: (w) => Object.assign(w.wrapper, { ready: false, logged_in: false, regions: [] }) && (w.storageFree = 2.1e9) },
   { id: 'overview/wrapper-failed', world: 'active', path: '#/', mutate: managed('failed') },
   { id: 'boot/theme-stored-dark', world: 'active', path: '#/', themes: ['light'], storage: { 'amdl.console.theme': 'dark' }, noStates: true },
 
@@ -312,7 +312,7 @@ const SCENARIOS = [
   { id: 'settings/board-slow', world: 'active', path: '#/settings', latency: 1500 },
   { id: 'settings/board-empty', world: 'empty', path: '#/settings' },
   { id: 'settings/board-simulate', world: 'active', path: '#/settings', worldOpts: { simulate: true }, faults: { 'GET /api/v1/wrapper/status': { status: 503, code: 'wrapper_unavailable', message: 'dial tcp 127.0.0.1:1: connect: connection refused' } } },
-  { id: 'settings/board-alarms', world: 'active', path: '#/settings', mutate: (w) => Object.assign(w.wrapper, { ready: false, status: false, regions: [] }) && (w.storageFree = 2.1e9) },
+  { id: 'settings/board-alarms', world: 'active', path: '#/settings', mutate: (w) => Object.assign(w.wrapper, { ready: false, logged_in: false, regions: [] }) && (w.storageFree = 2.1e9) },
   {
     id: 'settings/board-missing',
     world: 'active',
@@ -323,7 +323,7 @@ const SCENARIOS = [
   { id: 'settings/account-down', world: 'active', path: '#/settings?section=account', faults: { 'GET /api/v1/wrapper/status': { status: 503, code: 'wrapper_unavailable', message: 'dial tcp 127.0.0.1:1: connect: connection refused' } } },
   { id: 'settings/list', world: 'active', path: '#/settings', widths: [375, 320] },
   { id: 'settings/section-phone', world: 'active', path: '#/settings?section=library_sync', widths: [375, 320] },
-  { id: 'settings/account-login', world: 'active', path: '#/settings?section=account', mutate: (w) => Object.assign(w.wrapper, { login_supported: true, status: false, regions: [] }) },
+  { id: 'settings/account-login', world: 'active', path: '#/settings?section=account', mutate: (w) => Object.assign(w.wrapper, { login_supported: true, logged_in: false, regions: [] }) },
   ...['serving', 'starting', 'login', 'stopped', 'failed'].map((mode) => ({
     id: `settings/account-managed-${mode}`,
     world: 'active',

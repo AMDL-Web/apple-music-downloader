@@ -84,14 +84,14 @@ type LoginResult struct {
 
 // Status is the wrapper's state as GET /api/v1/wrapper/status returns it.
 // Ready means the wrapper answered and, for a wrapper-manager, has restored its
-// accounts; Status means an account is logged in, which wrapper-lite shows by
+// accounts; LoggedIn means an account is logged in, which wrapper-lite shows by
 // listing its storefront in Regions. Neither wrapper-lite nor wrapper-manager
 // names its accounts, so Accounts stays empty. LoginSupported is true when the
 // wrapper has the login API (a wrapper-manager). Regions and Accounts are never
 // nil, so they encode as [] when empty.
 type Status struct {
 	Ready          bool     `json:"ready"`
-	Status         bool     `json:"status"`
+	LoggedIn       bool     `json:"logged_in"`
 	Regions        []string `json:"regions"`
 	Accounts       []string `json:"accounts"`
 	LoginSupported bool     `json:"login_supported"`
@@ -346,7 +346,7 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	}
 	status := Status{
 		Ready:          true,
-		Status:         len(body.Regions) > 0,
+		LoggedIn:       len(body.Regions) > 0,
 		Regions:        nonNil(body.Regions),
 		Accounts:       []string{},
 		LoginSupported: body.ClientCount != nil,

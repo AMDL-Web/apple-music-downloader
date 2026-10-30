@@ -40,6 +40,11 @@ func NewFileStore(cfg Config, path string) *Store {
 	return s
 }
 
+// Path is the config file updates are written to; "" for an in-memory store.
+func (s *Store) Path() string {
+	return s.path
+}
+
 // Persistent reports whether updates are written back to config.yaml and
 // therefore survive a restart.
 func (s *Store) Persistent() bool {

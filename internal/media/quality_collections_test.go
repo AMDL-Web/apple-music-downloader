@@ -307,7 +307,7 @@ type collectionQualityWrapper struct {
 }
 
 func (w *collectionQualityWrapper) Status(context.Context) (wrapper.Status, error) {
-	return wrapper.Status{Ready: true, Status: true, Regions: []string{"cn"}}, nil
+	return wrapper.Status{Ready: true, LoggedIn: true, Regions: []string{"cn"}}, nil
 }
 
 func (w *collectionQualityWrapper) M3U8(_ context.Context, id string) (string, error) {

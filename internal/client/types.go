@@ -61,7 +61,7 @@ type Storage struct {
 // WrapperStatus is the WrapperStatus schema.
 type WrapperStatus struct {
 	Ready          bool     `json:"ready"`
-	Status         bool     `json:"status"`
+	LoggedIn       bool     `json:"logged_in"`
 	Regions        []string `json:"regions"`
 	Accounts       []string `json:"accounts"`
 	LoginSupported bool     `json:"login_supported"`

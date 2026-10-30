@@ -48,6 +48,7 @@ test('actionReason words every refusal the job routes answer', () => {
   assert.equal(actionReason('delete', err(404, 'job_not_found')), 'already deleted');
   assert.equal(actionReason('cancel', err(404, 'job_not_found')), 'no longer exists');
   assert.equal(actionReason('retry', err(409, 'job_not_retryable')), 'only failed or cancelled jobs can be retried');
+  assert.equal(actionReason('cancel', err(409, 'job_not_cancellable')), 'already finished');
   assert.equal(actionReason('retry', err(409, 'job_finalizing')), 'still finishing its last run, try again in a moment');
   assert.equal(actionReason('retry', err(409, 'duplicate_active')), 'another active job already downloads this link');
   assert.equal(actionReason('retry', err(503, 'queue_full')), 'the queue is full');

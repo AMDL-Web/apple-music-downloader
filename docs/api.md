@@ -34,7 +34,7 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 401 | `authentication_failed` |
 | 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `catalog_not_found` |
 | 405 | `method_not_allowed`, with an `Allow` header |
-| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
+| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
@@ -100,13 +100,15 @@ Returns what is running and what it has to work with:
 - `pools`: the startup sizes of the download, decrypt and wrapper-request pools.
 - `tools`: each external command (`ffmpeg`) with `available` and its resolved `path`, or
   the lookup `error`.
-- `storage`: `free_bytes` and `total_bytes` of the file systems holding
-  `download.downloads_dir` and `download.temp_dir`, or an `error` when a directory
+- `storage`: the absolute `path`, `free_bytes` and `total_bytes` of the file systems
+  holding `download.downloads_dir` and `download.temp_dir`, or an `error` when a directory
   cannot be inspected (it does not exist yet, or the platform is not Linux, macOS or
   FreeBSD).
 - `startup`: configuration read only at startup, for a client to show as read-only facts:
-  `wrapper_address` (`wrapper.address`, without user info, query or fragment),
-  `listen` (`server.listen`), `database_path` (`database.path`), `log_buffer_size`
+  `config_path` (the absolute path of the config file a startup key is edited in, `""`
+  when the config is kept in memory only), `wrapper_address` (`wrapper.address`, without
+  user info, query or fragment), `listen` (`server.listen`), `database_path`
+  (`database.path`, absolute), `log_buffer_size`
   (`logging.buffer_size`), `catalog_language` (`catalog.language`) and
   `max_parallel_requests` (`catalog.max_parallel_requests`, or 1 when it is 0 or less).
 
@@ -169,7 +171,7 @@ restart.
 curl http://localhost:18080/api/v1/wrapper/status
 ```
 
-Returns `ready`, `status`, `regions`, `accounts` and `login_supported`. `status` is true
+Returns `ready`, `logged_in`, `regions`, `accounts` and `login_supported`. `logged_in` is true
 when an account is logged in and serves a storefront. `accounts` lists the account
 identifiers the wrapper reports (`[]` when none; neither wrapper-lite nor wrapper-manager
 reports any). `login_supported` is true when the wrapper is a wrapper-manager, or a
@@ -352,6 +354,8 @@ curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/retry
 ```
 
 Only `failed` and `cancelled` jobs can be retried: otherwise `409 job_not_retryable`.
+Only a `queued` or `running` job can be cancelled: a `completed` or `failed` one is
+`409 job_not_cancellable`, and a `cancelled` one answers `200` again.
 Finished tracks stay done; failed and cancelled ones run again. A job still finishing
 its previous run is `409 job_finalizing` (retry a moment later), one whose input is
 already queued or running again is `409 duplicate_active`, and a full queue is
@@ -564,7 +568,9 @@ curl -X POST http://localhost:18080/api/v1/config/reload
 ```
 
 `GET /api/v1/config` returns the runtime-mutable keys of the in-memory config and has no
-side effects; it does not read the file. Next to `config`, `persisted` says whether a
+side effects; it does not read the file. `catalog.media_user_token` is redacted in every
+config response: a set token reads `...` and its last four characters. A `PUT` whose value
+starts with `...` leaves the saved token as it is. Next to `config`, `persisted` says whether a
 `PUT` is written to the file. `POST /api/v1/config/reload` re-reads `configs/config.yaml`
 and applies its runtime keys, then answers like `GET`. When the file is unreadable or
 invalid, the previous config stays active and the answer is still `200`, with

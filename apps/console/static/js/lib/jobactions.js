@@ -63,6 +63,7 @@ export function actionReason(action, err) {
   if (code === 'job_not_found' || status === 404) return action === 'delete' ? 'already deleted' : 'no longer exists';
   if (code === 'job_active') return 'still running, finishing or running a hook';
   if (code === 'job_not_retryable') return 'only failed or cancelled jobs can be retried';
+  if (code === 'job_not_cancellable') return 'already finished';
   if (code === 'job_finalizing') return 'still finishing its last run, try again in a moment';
   if (code === 'duplicate_active') return 'another active job already downloads this link';
   if (code === 'queue_full') return 'the queue is full';

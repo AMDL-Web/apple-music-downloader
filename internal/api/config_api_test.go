@@ -118,6 +118,47 @@ func TestUpdateConfigRejectsRemovedMediaUserTokenPriority(t *testing.T) {
 	}
 }
 
+func TestConfigResponsesRedactTheMediaUserToken(t *testing.T) {
+	const token = "AgK7wxQe9ZtYv2LmNpRs4UoX1a2b"
+	cfg := config.Default()
+	cfg.Catalog.MediaUserToken = token
+	store := config.NewStore(cfg)
+	routes := (&Server{cfg: store}).Routes()
+	tokenIn := func(body string) string {
+		t.Helper()
+		var resp struct {
+			Config struct {
+				Catalog struct {
+					MediaUserToken string `json:"media_user_token"`
+				} `json:"catalog"`
+			} `json:"config"`
+		}
+		if err := json.Unmarshal([]byte(body), &resp); err != nil {
+			t.Fatalf("decode %s: %v", body, err)
+		}
+		if strings.Contains(body, token[:8]) {
+			t.Fatalf("response carries the token: %s", body)
+		}
+		return resp.Config.Catalog.MediaUserToken
+	}
+	get := requestJSON(t, routes, http.MethodGet, "/api/v1/config", "")
+	if got := tokenIn(get.Body.String()); got != "...1a2b" {
+		t.Fatalf("GET media_user_token = %q, want ...1a2b", got)
+	}
+	// Writing back what GET showed keeps the saved token.
+	put := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"catalog":{"media_user_token":"...1a2b","motion_artwork_enabled":false}}`)
+	if put.Code != http.StatusOK || tokenIn(put.Body.String()) != "...1a2b" {
+		t.Fatalf("PUT = %d %s", put.Code, put.Body.String())
+	}
+	if got := store.Get().Catalog.MediaUserToken; got != token {
+		t.Fatalf("saved token = %q after writing back the redacted form", got)
+	}
+	cleared := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"catalog":{"media_user_token":""}}`)
+	if cleared.Code != http.StatusOK || tokenIn(cleared.Body.String()) != "" || store.Get().Catalog.MediaUserToken != "" {
+		t.Fatalf("clearing the token: %d %s", cleared.Code, cleared.Body.String())
+	}
+}
+
 func TestUpdateConfigAppliesLoggingLevel(t *testing.T) {
 	cfg := config.Default()
 	cfg.Logging.Console = false
@@ -281,6 +322,8 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 		{name: "removed catalog rate", body: `{"catalog":{"requests_per_second":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "requests_per_second"},
 		{name: "removed logging format", body: `{"logging":{"format":"json"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "format"},
 		{name: "locked logging output", body: `{"logging":{"console":false}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "logging.console"},
+		{name: "list given a string", body: `{"download":{"quality_priority":"bogus"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.quality_priority must be a list, got a string"},
+		{name: "number given a string", body: `{"download":{"max_attempts":"abc"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.max_attempts must be a whole number, got a string"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

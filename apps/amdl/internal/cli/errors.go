@@ -47,9 +47,9 @@ func exitFor(code string, status int) int {
 	case "invalid_request", "invalid_json", "request_too_large", "invalid_overrides",
 		"config_key_not_mutable", "invalid_config", "no_urls_accepted", "usage_error":
 		return exitInput
-	case "route_not_found", "job_not_found", "login_not_found", "account_not_found":
+	case "route_not_found", "job_not_found", "login_not_found", "account_not_found", "catalog_not_found":
 		return exitNotFound
-	case "job_active", "job_not_retryable", "job_finalizing", "duplicate_active",
+	case "job_active", "job_not_retryable", "job_not_cancellable", "job_finalizing", "duplicate_active",
 		"already_logged_in", "login_pending", "method_not_allowed":
 		return exitConflict
 	case "upstream_error", "queue_full", "wrapper_unavailable", "feature_unavailable",

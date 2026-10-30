@@ -30,7 +30,7 @@ func TestAccountSaysWhyTheLocalWrapperCannotDecrypt(t *testing.T) {
 	if st := accountState(serving, ""); st.word != "Signed out" || !st.signIn {
 		t.Errorf("a serving guest with no account: %+v; want the sign-in", st)
 	}
-	serving.Status, serving.Regions = true, []string{"us"}
+	serving.LoggedIn, serving.Regions = true, []string{"us"}
 	if st := accountState(serving, ""); st.word != "Signed in" || st.problem != "" {
 		t.Errorf("a signed-in guest: %+v", st)
 	}

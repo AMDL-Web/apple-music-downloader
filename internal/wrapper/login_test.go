@@ -132,22 +132,22 @@ func TestStatusReadsBothWrapperFormats(t *testing.T) {
 		{
 			name: "wrapper-lite",
 			data: map[string]any{"regions": []string{"cn"}},
-			want: Status{Ready: true, Status: true, Regions: []string{"cn"}, Accounts: []string{}},
+			want: Status{Ready: true, LoggedIn: true, Regions: []string{"cn"}, Accounts: []string{}},
 		},
 		{
 			name: "wrapper-manager",
 			data: map[string]any{"regions": []string{"cn"}, "clientCount": 1, "ready": true},
-			want: Status{Ready: true, Status: true, Regions: []string{"cn"}, Accounts: []string{}, LoginSupported: true},
+			want: Status{Ready: true, LoggedIn: true, Regions: []string{"cn"}, Accounts: []string{}, LoginSupported: true},
 		},
 		{
 			name: "wrapper-manager with no account",
 			data: map[string]any{"regions": []string{}, "clientCount": 0, "ready": true},
-			want: Status{Ready: true, Status: false, Regions: []string{}, Accounts: []string{}, LoginSupported: true},
+			want: Status{Ready: true, LoggedIn: false, Regions: []string{}, Accounts: []string{}, LoginSupported: true},
 		},
 		{
 			name: "wrapper-manager still restoring",
 			data: map[string]any{"clientCount": 0, "ready": false},
-			want: Status{Ready: false, Status: false, Regions: []string{}, Accounts: []string{}, LoginSupported: true},
+			want: Status{Ready: false, LoggedIn: false, Regions: []string{}, Accounts: []string{}, LoginSupported: true},
 		},
 	}
 	for _, tt := range tests {

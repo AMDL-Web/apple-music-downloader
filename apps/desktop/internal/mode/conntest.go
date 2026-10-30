@@ -55,7 +55,7 @@ func TestServer(ctx context.Context, address string) []Check {
 	if err != nil {
 		return append(checks, Check{Text: "The server cannot reach its wrapper", Note: shortErr(err)})
 	}
-	return append(checks, accountCheck(ws.Ready, ws.Status, ws.Regions, ws.LoginSupported, time.Since(start)))
+	return append(checks, accountCheck(ws.Ready, ws.LoggedIn, ws.Regions, ws.LoginSupported, time.Since(start)))
 }
 
 // TestWrapper checks a wrapper address the standalone backend would use:
@@ -79,7 +79,7 @@ func TestWrapper(ctx context.Context, address string) []Check {
 	}
 	return []Check{
 		{OK: true, Text: "Reached the wrapper", Taken: taken},
-		accountCheck(st.Ready, st.Status, st.Regions, st.LoginSupported, 0),
+		accountCheck(st.Ready, st.LoggedIn, st.Regions, st.LoginSupported, 0),
 	}
 }
 

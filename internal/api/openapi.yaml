@@ -1103,6 +1103,14 @@ paths:
                     const: cancelled
         '404':
           $ref: '#/components/responses/JobNotFound'
+        '409':
+          description: >-
+            job_not_cancellable; the job already ended completed or failed. A
+            cancelled job answers 200 again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/StoreError'
   /api/v1/downloads/{job_id}/retry:
@@ -1417,7 +1425,7 @@ components:
         route_not_found, job_not_found, login_not_found, account_not_found,
         catalog_not_found (Apple has no resource with that id); 405
         method_not_allowed (with an Allow header); 409 job_active,
-        job_not_retryable, job_finalizing, duplicate_active, already_logged_in,
+        job_not_retryable, job_not_cancellable, job_finalizing, duplicate_active, already_logged_in,
         login_pending; 413 request_too_large; 422
         invalid_overrides, config_key_not_mutable, invalid_config,
         no_urls_accepted; 500 internal_error, store_error
@@ -1436,6 +1444,7 @@ components:
         - method_not_allowed
         - job_active
         - job_not_retryable
+        - job_not_cancellable
         - job_finalizing
         - duplicate_active
         - already_logged_in
@@ -1455,14 +1464,14 @@ components:
         - upstream_timeout
     WrapperStatus:
       type: object
-      required: [ready, status, regions, accounts, login_supported]
+      required: [ready, logged_in, regions, accounts, login_supported]
       properties:
         ready:
           type: boolean
           description: >-
             The wrapper answered; for a wrapper-manager, also that it has
             restored its accounts after a start.
-        status:
+        logged_in:
           type: boolean
           description: An account is logged in and serves at least one storefront.
         regions:
@@ -1634,7 +1643,7 @@ components:
                 enum: [downloads_dir, temp_dir]
               path:
                 type: string
-                description: The configured path.
+                description: The configured path, made absolute against the backend's working directory.
               free_bytes:
                 type: integer
                 format: int64
@@ -1648,11 +1657,16 @@ components:
                 type: string
         startup:
           type: object
-          required: [wrapper_address, listen, database_path, log_buffer_size, catalog_language, max_parallel_requests]
+          required: [config_path, wrapper_address, listen, database_path, log_buffer_size, catalog_language, max_parallel_requests]
           description: >-
             Configuration read only at startup (none of it is in RuntimeConfig),
             for a client to show as facts. It carries no credential.
           properties:
+            config_path:
+              type: string
+              description: >-
+                Absolute path of the config file PUT /config writes and startup keys
+                are edited in; "" when the backend keeps its config in memory only.
             wrapper_address:
               type: string
               description: >-
@@ -1663,7 +1677,7 @@ components:
               description: server.listen.
             database_path:
               type: string
-              description: database.path, as configured.
+              description: database.path, made absolute against the backend's working directory.
             log_buffer_size:
               type: integer
               description: logging.buffer_size; 0 keeps no log history.
@@ -1692,12 +1706,13 @@ components:
         tools:
           - {name: ffmpeg, available: true, path: /usr/bin/ffmpeg}
         storage:
-          - {name: downloads_dir, path: data/downloads, free_bytes: 512000000000, total_bytes: 1000000000000}
-          - {name: temp_dir, path: data/tmp, error: 'statfs data/tmp: no such file or directory'}
+          - {name: downloads_dir, path: /srv/amdl/data/downloads, free_bytes: 512000000000, total_bytes: 1000000000000}
+          - {name: temp_dir, path: /srv/amdl/data/tmp, error: 'statfs /srv/amdl/data/tmp: no such file or directory'}
         startup:
+          config_path: /srv/amdl/configs/config.yaml
           wrapper_address: http://127.0.0.1:12340
           listen: 127.0.0.1:18080
-          database_path: data/db/amdl.db
+          database_path: /srv/amdl/data/db/amdl.db
           log_buffer_size: 2000
           catalog_language: en-US
           max_parallel_requests: 16
@@ -2012,8 +2027,10 @@ components:
               description: >-
                 The media-user-token used for station downloads, private playlist
                 covers and library sync; no request can supply its own. It can be
-                changed through PUT and is written back to the configuration file;
-                GET returns the current value.
+                changed through PUT and is written back to the configuration file.
+                Responses never carry it: a set token reads "..." and its last four
+                characters, an unset one "". A PUT whose value starts with "..."
+                leaves the saved token unchanged.
             motion_artwork_enabled:
               type: boolean
               description: >-

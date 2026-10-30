@@ -35,6 +35,7 @@ type systemInfo struct {
 // systemStartup is the configuration that is read only at startup, so a client
 // can show it without offering to edit it. It carries no credential.
 type systemStartup struct {
+	ConfigPath          string `json:"config_path"`
 	WrapperAddress      string `json:"wrapper_address"`
 	Listen              string `json:"listen"`
 	DatabasePath        string `json:"database_path"`
@@ -105,15 +106,25 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 			directorySpace("temp_dir", cfg.Download.TempDir),
 		},
 		Startup: systemStartup{
+			ConfigPath:      s.configPath(),
 			WrapperAddress:  publicAddress(cfg.Wrapper.Address),
 			Listen:          cfg.Server.Listen,
-			DatabasePath:    cfg.Database.Path,
+			DatabasePath:    domain.AbsolutePath(cfg.Database.Path),
 			LogBufferSize:   cfg.Logging.BufferSize,
 			CatalogLanguage: cfg.Catalog.Language,
 			// A limit <= 0 runs as 1 (limits.NewSemaphore); report the one in effect.
 			MaxParallelRequests: max(1, cfg.Catalog.MaxParallelRequests),
 		},
 	})
+}
+
+// configPath is the absolute path of the config file this process reads and
+// writes, or "" when it keeps the config in memory only.
+func (s *Server) configPath() string {
+	if s.cfg == nil {
+		return ""
+	}
+	return domain.AbsolutePath(s.cfg.Path())
 }
 
 // publicAddress drops what could carry a credential from a configured URL: the
@@ -129,9 +140,10 @@ func publicAddress(address string) string {
 }
 
 // directorySpace reports the free and total bytes of the file system that
-// holds path, or why they are unknown.
+// holds path, or why they are unknown. The path is reported absolute, as the
+// backend resolves it.
 func directorySpace(name, path string) storageInfo {
-	info := storageInfo{Name: name, Path: path}
+	info := storageInfo{Name: name, Path: domain.AbsolutePath(path)}
 	free, total, err := diskSpace(path)
 	if err != nil {
 		info.Error = err.Error()

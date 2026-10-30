@@ -63,7 +63,7 @@ export function AccountPanel({ children }) {
           <p class="small">Its log: <code>${WRAPPER_LOGS}</code></p>
         </section>`
       : null}
-    ${w && canLogin && (accounts.length || w.status)
+    ${w && canLogin && (accounts.length || w.logged_in)
       ? html`<section class="account-block" aria-labelledby="account-list-title">
           <div class="account-block-head">
             <h3 class="section-title" id="account-list-title">Logged-in accounts</h3>
@@ -77,7 +77,7 @@ export function AccountPanel({ children }) {
                   </li>`,
                 )}
               </ul>`
-            : w.status
+            : w.logged_in
               ? html`<p class="small">An account is logged in. The session service does not say which one.</p>
                   <div class="form-actions">
                     <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout('')}>Log out…</${Button}>
@@ -88,7 +88,7 @@ export function AccountPanel({ children }) {
     ${!res
       ? html`<${CommandLineLogin} pending />`
       : canLogin
-        ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.status)} managed=${Boolean(managed)} off=${mode === 'stopped'} />`
+        ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.logged_in)} managed=${Boolean(managed)} off=${mode === 'stopped'} />`
         : html`<${CommandLineLogin} />`}
     ${logout !== null
       ? html`<${LogoutDialog}

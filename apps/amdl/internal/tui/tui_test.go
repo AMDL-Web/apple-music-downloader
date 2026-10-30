@@ -51,7 +51,7 @@ func sample(t *testing.T) *model {
 	st.rate.Add(time.Now(), 0.35)
 	m.jobs["job_a"] = st
 	m.jobs["job_b"] = &jobState{job: domain.Job{ID: "job_b", Type: "playlist", Status: domain.JobQueued, Title: "City Pop Essentials", CreatedAt: at(5)}}
-	m.wrapper = &client.WrapperStatus{Ready: true, Status: true, Regions: []string{"cn"}}
+	m.wrapper = &client.WrapperStatus{Ready: true, LoggedIn: true, Regions: []string{"cn"}}
 	m.height = 40
 	return m
 }

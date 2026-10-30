@@ -95,6 +95,8 @@ needs the API changes below before it works against 2.0.
 | Wrapper login password | trimmed | sent as typed; only an all-whitespace password is `400` | account screens |
 | Apple has no such id | `502` from `POST /quality` | `404 catalog_not_found` from `POST /quality`, `POST /lookup` and `GET /artists/{id}/albums`; other catalog failures stay `502 upstream_error` | quality and link-preview clients |
 | Quality of a song with no Enhanced HLS master | `502` | `200`, every quality `available: false` | quality clients |
+| `catalog.media_user_token` in config responses | the token in full on `GET /config`, `PUT /config` and `POST /config/reload` | redacted: `...` and its last four characters, `""` when unset; a `PUT` of a value starting with `...` keeps the saved token | scripts that read the token back from the API |
+| Cancel a finished job | `200 {"status":"cancelled"}` whatever the job's state | a `completed` or `failed` job is `409 job_not_cancellable`; a `cancelled` one is still `200` | scripts and clients that cancel |
 | Config `PUT` with an invalid file on disk | `500` | `422 invalid_config` | settings screens |
 | Logs with `logging.buffer_size: 0` | `GET /logs` an empty `200`; `GET /logs/stream` live records only | `503 feature_unavailable` on both | log viewers |
 | Stream cursor in snapshots | `last_event_id` on `GET /downloads` and `GET /downloads/{id}` | `event_cursor` | stream clients |
@@ -108,7 +110,8 @@ needs the API changes below before it works against 2.0.
 | Per-job stream already complete | `409` | `204 No Content` | stream clients |
 | Never-emitted event types | `codec_retry`, `codec_exhausted`, `codec_recovered` documented | removed from the docs; codec retries are `operation_*` with `phase` = codec | event handlers |
 | Wrapper status | `accounts_supported`, `accounts` omitted when empty, `regions` `null` when empty | `accounts_supported` removed; `accounts` and `regions` always arrays, and `accounts` stays empty because no 2.0 wrapper names its accounts; `login_supported` says whether the wrapper has a login (wrapper-manager v2 or a wrapper amdl runs), and `managed` describes a wrapper amdl runs | account screens |
-| Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `status`, `regions`, `accounts`, `login_supported` | account screens that showed the count |
+| Wrapper logged in | `status` on `GET /wrapper/status` (true when an account is logged in) | renamed `logged_in` | account screens, scripts that check the login |
+| Wrapper client count | `client_count` on `GET /wrapper/status` (wrapper-manager's count of connected clients) | removed; the response is `ready`, `logged_in`, `regions`, `accounts`, `login_supported` | account screens that showed the count |
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
 | Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
 | `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were startup keys, and changing one was a `422` with a plain-text body | `400 invalid_request` naming the unknown field, like any removed key | settings screens |

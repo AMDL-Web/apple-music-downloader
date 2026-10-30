@@ -83,9 +83,9 @@ func TestStatusReportsLoginThroughRegions(t *testing.T) {
 		regions any
 		want    Status
 	}{
-		{name: "logged in", regions: []string{"cn"}, want: Status{Ready: true, Status: true, Regions: []string{"cn"}, Accounts: []string{}}},
-		{name: "not logged in", regions: []string{}, want: Status{Ready: true, Status: false, Regions: []string{}, Accounts: []string{}}},
-		{name: "regions missing", regions: nil, want: Status{Ready: true, Status: false, Regions: []string{}, Accounts: []string{}}},
+		{name: "logged in", regions: []string{"cn"}, want: Status{Ready: true, LoggedIn: true, Regions: []string{"cn"}, Accounts: []string{}}},
+		{name: "not logged in", regions: []string{}, want: Status{Ready: true, LoggedIn: false, Regions: []string{}, Accounts: []string{}}},
+		{name: "regions missing", regions: nil, want: Status{Ready: true, LoggedIn: false, Regions: []string{}, Accounts: []string{}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

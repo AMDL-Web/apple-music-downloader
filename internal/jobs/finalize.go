@@ -15,6 +15,12 @@ import (
 	"amdl/internal/logging"
 )
 
+// ErrJobNotCancellable is returned by Cancel for a job that already ended
+// completed or failed: there is nothing left to stop. Cancelling a cancelled
+// job succeeds again.
+var ErrJobNotCancellable = errors.New("the job already finished; only a queued or running job can be cancelled")
+
+// Cancel stops a queued or running job.
 func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 	m.mu.Lock()
 	if cancel := m.cancels[jobID]; cancel != nil {
@@ -46,7 +52,10 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 	}
 	if job.Status.IsTerminal() {
 		m.mu.Unlock()
-		return nil
+		if job.Status == domain.JobCancelled {
+			return nil
+		}
+		return ErrJobNotCancellable
 	}
 	// From here on the cancel is decided, and the caller's context (an HTTP
 	// request) must not stop it half-way: items written cancelled with the job

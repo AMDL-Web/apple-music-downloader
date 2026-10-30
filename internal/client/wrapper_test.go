@@ -13,8 +13,8 @@ func TestWrapperProblem(t *testing.T) {
 		w         WrapperStatus
 		what, fix string
 	}{
-		{WrapperStatus{Ready: true, Status: true}, "", ""},
-		{WrapperStatus{Ready: true, Status: true, Managed: &ManagedWrapper{Mode: "serving"}}, "", ""},
+		{WrapperStatus{Ready: true, LoggedIn: true}, "", ""},
+		{WrapperStatus{Ready: true, LoggedIn: true, Managed: &ManagedWrapper{Mode: "serving"}}, "", ""},
 		{WrapperStatus{Ready: true}, "no Apple ID", "--login"},
 		{WrapperStatus{Ready: true, Managed: &ManagedWrapper{Mode: "serving"}}, "no Apple ID", "amdl wrapper login"},
 		{managed("starting", ""), "starting", "amdl wrapper status"},

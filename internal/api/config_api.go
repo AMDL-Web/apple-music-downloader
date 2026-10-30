@@ -35,12 +35,17 @@ func (s *Server) writeConfigView(w http.ResponseWriter, reloadErr error) {
 }
 
 // writeConfigResponse answers GET, PUT and POST /config/reload alike: the
-// ConfigResponse schema for cfg.
+// ConfigResponse schema for cfg, with catalog.media_user_token redacted.
 func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, reloadErr error) {
 	view, err := config.MutableView(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeInternalError, "render config: "+err.Error())
 		return
+	}
+	if catalog, ok := view["catalog"].(map[string]any); ok {
+		if _, ok := catalog["media_user_token"]; ok {
+			catalog["media_user_token"] = redactToken(cfg.Catalog.MediaUserToken)
+		}
 	}
 	resp := map[string]any{
 		"config":    view,
@@ -80,8 +85,15 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 		decoder := json.NewDecoder(bytes.NewReader(body))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&merged); err != nil {
-			reject = func(w http.ResponseWriter) { writeError(w, http.StatusBadRequest, jsonErrorCode(err), err.Error()) }
+			reject = func(w http.ResponseWriter) {
+				writeError(w, http.StatusBadRequest, jsonErrorCode(err), describeJSONError(err))
+			}
 			return config.Config{}, err
+		}
+		// A client that writes back the config it read sends the redacted
+		// token; that leaves the saved one as it is.
+		if strings.HasPrefix(merged.Catalog.MediaUserToken, redactedTokenPrefix) {
+			merged.Catalog.MediaUserToken = current.Catalog.MediaUserToken
 		}
 		if locked := config.RuntimeLockedChanges(current, merged); len(locked) > 0 {
 			err := errors.New("fields can only be changed in the config file and require a restart: " + strings.Join(locked, ", "))
@@ -114,6 +126,22 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	// logging level after a newer write.
 	s.applyLoggingConfig()
 	s.writeConfigResponse(w, updated, nil)
+}
+
+// redactedTokenPrefix starts the form a config response shows a set
+// media-user-token in: the prefix and the token's last four characters,
+// enough to tell two tokens apart without the credential reaching a client
+// or an agent's context.
+const redactedTokenPrefix = "..."
+
+func redactToken(token string) string {
+	if token == "" {
+		return ""
+	}
+	if len(token) < 16 {
+		return redactedTokenPrefix
+	}
+	return redactedTokenPrefix + token[len(token)-4:]
 }
 
 // isFileAccessError reports an error reading or writing the config file

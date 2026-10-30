@@ -119,7 +119,7 @@ test('library sync: Off, Needs token (its error not repeated), Error, Watching',
 });
 
 test('account: Ready with storefronts, a warning when the default is not served, Unreachable, simulate neutral', () => {
-  const wrapper = (over = {}) => ok({ ready: true, status: true, regions: ['cn', 'us'], accounts: ['a@example.com'], ...over });
+  const wrapper = (over = {}) => ok({ ready: true, logged_in: true, regions: ['cn', 'us'], accounts: ['a@example.com'], ...over });
   const view = (w, c = ctx(), sys = system()) => domainView('account', { wrapper: w, system: ok(sys) }, c);
   const ready = view(wrapper());
   assert.equal(ready.tag.label, 'Ready');
@@ -129,7 +129,7 @@ test('account: Ready with storefronts, a warning when the default is not served,
   const unserved = view(wrapper(), ctx(), system({ default_storefront: 'jp' }));
   assert.equal(unserved.role, 'warning');
   assert.equal(unserved.note.text, "Default storefront JP isn't served by this account");
-  assert.equal(view(wrapper({ ready: false, status: false, regions: [] })).tag.label, 'Not logged in');
+  assert.equal(view(wrapper({ ready: false, logged_in: false, regions: [] })).tag.label, 'Not logged in');
   const raw = 'rpc error: code = Unavailable desc = dial tcp 127.0.0.1:1: connect: connection refused';
   const down = view({ data: undefined, error: { status: 503, code: 'wrapper_unavailable', message: raw }, at: NOW, okAt: 0 });
   assert.equal(down.tag.label, 'Unreachable');
@@ -144,7 +144,7 @@ test('account: Ready with storefronts, a warning when the default is not served,
 
 test('account: a wrapper amdl runs says what it does instead of serving, never "No account"', () => {
   const managed = (mode, over = {}) =>
-    ok({ ready: false, status: false, regions: [], accounts: [], login_supported: true, managed: { mode, accel: 'tcg', accel_fallback: false, qemu: 'qemu-system-x86_64', guest: 'abc', login_residue: false, ...over } });
+    ok({ ready: false, logged_in: false, regions: [], accounts: [], login_supported: true, managed: { mode, accel: 'tcg', accel_fallback: false, qemu: 'qemu-system-x86_64', guest: 'abc', login_residue: false, ...over } });
   const view = (w) => domainView('account', { wrapper: w, system: ok(system()) }, ctx());
   const starting = view(managed('starting'));
   assert.equal(starting.tag.label, 'Starting');
@@ -212,7 +212,7 @@ test('no note, figure or summary says "0", "—" or nothing for an all-zero serv
   const zero = {
     system: ok(system({ jobs: { workers: 3, queue_depth: 0, queue_capacity: 256, recovery_backlog: 0 } })),
     health: ok({ status: 'ok' }),
-    wrapper: ok({ ready: true, status: true, regions: [], accounts: [] }),
+    wrapper: ok({ ready: true, logged_in: true, regions: [], accounts: [] }),
     librarySync: ok({ enabled: true, interval_minutes: 15, anchor_size: 0, last_submitted: 0, total_submitted: 0 }),
     hooks: ok({ enabled: true, entries: [] }),
     stats: ok({ totals: { tracks_completed: 0, bytes_written: 0, duration_ms: 0 }, daily: [], codecs: [], hooks: [] }),

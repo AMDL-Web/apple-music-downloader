@@ -123,15 +123,15 @@ test('linkIssue flags a storefront the wrapper does not serve, and only when the
 });
 
 test('servedRegions reads the wrapper status, or null when it cannot say', () => {
-  const ok = { data: { ready: true, status: true, regions: ['CN', 'us'] } };
+  const ok = { data: { ready: true, logged_in: true, regions: ['CN', 'us'] } };
   assert.deepEqual(servedRegions(ok), ['cn', 'us']);
   assert.equal(servedRegions(ok, true), null, 'simulate skips the backend check');
   assert.equal(servedRegions(undefined), null, 'not loaded');
   assert.equal(servedRegions({ error: { status: 0 } }), null, 'unreachable');
   assert.equal(servedRegions({ data: { ready: false, regions: ['cn'] } }), null);
-  assert.equal(servedRegions({ data: { ready: true, status: false, regions: ['cn'] } }), null);
-  assert.equal(servedRegions({ data: { ready: true, status: true, regions: [] } }), null);
-  assert.equal(servedRegions({ data: { ready: true, status: true } }), null);
+  assert.equal(servedRegions({ data: { ready: true, logged_in: false, regions: ['cn'] } }), null);
+  assert.equal(servedRegions({ data: { ready: true, logged_in: true, regions: [] } }), null);
+  assert.equal(servedRegions({ data: { ready: true, logged_in: true } }), null);
 });
 
 const job = (id, status, updated) => ({ id, status, updated_at: updated, input: IGOR, type: 'album' });

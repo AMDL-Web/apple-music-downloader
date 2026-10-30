@@ -71,6 +71,7 @@ func configSetCmd(*flag.FlagSet) func(e *env, args []string) error {
 			return usageErr("usage: amdl config set <key=value>... (values are YAML: true, 3, [alac, aac])")
 		}
 		patch := map[string]any{}
+		var keys []string
 		for _, a := range args {
 			key, val, ok := strings.Cut(a, "=")
 			if !ok || key == "" {
@@ -94,8 +95,25 @@ func configSetCmd(*flag.FlagSet) func(e *env, args []string) error {
 				node = next
 			}
 			node[parts[len(parts)-1]] = v
+			keys = append(keys, key)
 		}
-		return e.send(capability.Request{Method: http.MethodPut, Path: "/api/v1/config", Body: patch}, nil)
+		// The answer is the whole runtime config; echo only the keys set.
+		return e.send(capability.Request{Method: http.MethodPut, Path: "/api/v1/config", Body: patch}, func(raw []byte) error {
+			var resp struct {
+				Config    map[string]any `json:"config"`
+				Persisted bool           `json:"persisted"`
+			}
+			if err := json.Unmarshal(raw, &resp); err != nil {
+				return err
+			}
+			set := map[string]any{}
+			for _, key := range keys {
+				if v, ok := dig(resp.Config, key); ok {
+					set[key] = v
+				}
+			}
+			return e.out.result(map[string]any{"config": set, "persisted": resp.Persisted})
+		})
 	}
 }
 

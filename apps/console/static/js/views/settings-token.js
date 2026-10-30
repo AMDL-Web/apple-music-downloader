@@ -1,5 +1,6 @@
-// The media user token field's control. A saved token is never put in the
-// page: the row says "Token set · ends …a1b2" with Replace and Remove, and
+// The media user token field's control. The API answers a saved token
+// redacted ("..." and its last four characters), so the page never holds it:
+// the row says "Token set · ends …a1b2" with Replace and Remove, and
 // Replace opens an empty box for the new one. "Where do I find this?" opens
 // three steps under the field.
 
@@ -7,7 +8,7 @@ import { html, useState, useRef } from '../ui/preact.js';
 import { Button } from '../ui/components.js';
 import { usePopoverClose } from './settings-template.js';
 
-/** The last four characters of a token, for "ends …a1b2". */
+/** The last four characters of the redacted token, for "ends …a1b2". */
 export const tokenTail = (token) => String(token || '').slice(-4);
 
 function WhereToFind({ id }) {

@@ -31,12 +31,13 @@ const (
 	// 405
 	CodeMethodNotAllowed ErrorCode = "method_not_allowed"
 	// 409
-	CodeJobActive       ErrorCode = "job_active"
-	CodeJobNotRetryable ErrorCode = "job_not_retryable"
-	CodeJobFinalizing   ErrorCode = "job_finalizing"
-	CodeDuplicateActive ErrorCode = "duplicate_active"
-	CodeAlreadyLoggedIn ErrorCode = "already_logged_in"
-	CodeLoginPending    ErrorCode = "login_pending"
+	CodeJobActive         ErrorCode = "job_active"
+	CodeJobNotRetryable   ErrorCode = "job_not_retryable"
+	CodeJobNotCancellable ErrorCode = "job_not_cancellable"
+	CodeJobFinalizing     ErrorCode = "job_finalizing"
+	CodeDuplicateActive   ErrorCode = "duplicate_active"
+	CodeAlreadyLoggedIn   ErrorCode = "already_logged_in"
+	CodeLoginPending      ErrorCode = "login_pending"
 	// 413
 	CodeRequestTooLarge ErrorCode = "request_too_large"
 	// 422

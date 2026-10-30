@@ -142,6 +142,10 @@ func (s *Server) jobSnapshot(ctx context.Context, id string) (*domain.Job, error
 func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := s.manager.Cancel(r.Context(), id); err != nil {
+		if errors.Is(err, jobs.ErrJobNotCancellable) {
+			writeError(w, http.StatusConflict, CodeJobNotCancellable, err.Error())
+			return
+		}
 		writeJobLookupError(w, id, err)
 		return
 	}

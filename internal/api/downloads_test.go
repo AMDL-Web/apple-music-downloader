@@ -551,6 +551,34 @@ func TestRetryDownloadRequeuesCancelledJob(t *testing.T) {
 	}
 }
 
+func TestCancelOnlyStopsAJobThatHasNotEnded(t *testing.T) {
+	server := newTestServerWithManager(t)
+	ctx := context.Background()
+	for _, tt := range []struct {
+		status domain.JobStatus
+		code   int
+	}{
+		{domain.JobCompleted, http.StatusConflict},
+		{domain.JobFailed, http.StatusConflict},
+		{domain.JobCancelled, http.StatusOK},
+	} {
+		id := "job-" + string(tt.status)
+		job := domain.Job{ID: id, Input: "song|us|" + id, Type: "song", CanonicalKey: "song:us:" + id, Status: tt.status}
+		if err := server.store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+id+"/cancel", "")
+		if tt.code == http.StatusConflict {
+			assertErrorCode(t, recorder, http.StatusConflict, CodeJobNotCancellable)
+		} else if recorder.Code != tt.code {
+			t.Fatalf("cancel %s job = %d %s, want %d", tt.status, recorder.Code, recorder.Body.String(), tt.code)
+		}
+		if got, err := server.store.GetJob(ctx, id); err != nil || got.Status != tt.status {
+			t.Fatalf("job after cancel = %v (%v), want %s kept", got.Status, err, tt.status)
+		}
+	}
+}
+
 func TestRetryDownloadRejectsCompletedAndMissingJobs(t *testing.T) {
 	server := newTestServerWithManager(t)
 	ctx := context.Background()

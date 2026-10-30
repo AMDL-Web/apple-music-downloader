@@ -102,11 +102,11 @@ test('refreshKeys: de-duplicated in first-seen order', () => {
 });
 
 test('a wrapper amdl runs is not a config.yaml address', () => {
-  const managed = { status: true, managed: { mode: 'serving', accel: 'tcg' } };
+  const managed = { logged_in: true, managed: { mode: 'serving', accel: 'tcg' } };
   const [row] = factRows('account', full, false, managed).filter((r) => r.id === 'wrapper_address');
   assert.deepEqual(row.value, { text: 'This machine, QEMU (tcg)' });
   assert.equal(row.title, 'wrapper:20020');
   assert.equal(chipOf(row).label, 'Run by amdl');
-  assert.deepEqual(factRows('account', full, false, { status: true }).find((r) => r.id === 'wrapper_address').value, { text: 'wrapper:20020', mono: true });
+  assert.deepEqual(factRows('account', full, false, { logged_in: true }).find((r) => r.id === 'wrapper_address').value, { text: 'wrapper:20020', mono: true });
   assert.equal(factRows('account', full, true, managed).find((r) => r.id === 'wrapper_address').value.text, '');
 });

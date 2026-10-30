@@ -46,7 +46,8 @@ An unknown command fails with `usage_error` and `details.did_you_mean`.
 | `serve [--config] [--hooks] [--no-console]` | runs the backend in this process | |
 
 `download -` reads links from stdin, any number per line. `config set` takes dotted keys
-with YAML values (`download.quality_priority=[alac,aac]`). A password or two-step code
+with YAML values (`download.quality_priority=[alac,aac]`) and answers with those keys'
+new values and `persisted`. A password or two-step code
 never goes on the command line. In a terminal, `wrapper login` asks for the Apple ID
 when `--username` is missing, then for the password and, when Apple sends one, the
 two-step code, neither echoed. Elsewhere it needs `--username` and `--password-stdin`

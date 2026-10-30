@@ -27,7 +27,7 @@ func (a *App) accountSession(c *ui.Context, k *Tokens) {
 	l := &a.Store.Login
 	// A local wrapper that is not serving has no step here: the head says
 	// what it does and the command that fixes it.
-	if l.LoginID == "" && !st.signIn && !(w.Status && w.LoginSupported) && l.Err == "" {
+	if l.LoginID == "" && !st.signIn && !(w.LoggedIn && w.LoginSupported) && l.Err == "" {
 		return
 	}
 	card(c.Key("session"), k).Gap(12).Children(func() {
@@ -36,7 +36,7 @@ func (a *App) accountSession(c *ui.Context, k *Tokens) {
 			a.codeStep(c, k)
 		case st.signIn:
 			a.credentials(c, k, w.Managed != nil)
-		case w.Status && w.LoginSupported:
+		case w.LoggedIn && w.LoginSupported:
 			a.signedIn(c, k, w.Accounts)
 		}
 		if l.Err != "" {

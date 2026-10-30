@@ -81,7 +81,7 @@ export function linkIssue(entry, lookup = null, { hasToken = false, regions = nu
  */
 export function servedRegions(res, simulate = false) {
   const w = res && !res.error ? res.data : null;
-  if (simulate || !w || !w.ready || w.status === false) return null;
+  if (simulate || !w || !w.ready || w.logged_in === false) return null;
   const list = Array.isArray(w.regions) ? w.regions.filter((r) => typeof r === 'string' && r).map((r) => r.toLowerCase()) : [];
   return list.length ? list : null;
 }

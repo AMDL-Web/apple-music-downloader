@@ -25,9 +25,9 @@ func (w WrapperStatus) Problem() (what, fix string) {
 	switch {
 	case !w.Ready:
 		return "the wrapper is not ready", "it may still be starting: amdl wrapper status"
-	case !w.Status && w.Managed != nil:
+	case !w.LoggedIn && w.Managed != nil:
 		return "no Apple ID is signed in", "amdl wrapper login"
-	case !w.Status:
+	case !w.LoggedIn:
 		return "no Apple ID is signed in", "amdl wrapper login, or the wrapper's own --login"
 	}
 	return "", ""

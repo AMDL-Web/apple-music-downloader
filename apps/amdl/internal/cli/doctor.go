@@ -127,7 +127,7 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 			}
 		}
 	default:
-		c.Detail["wrapper_ready"], c.Detail["wrapper_logged_in"], c.Detail["regions"] = w.Ready, w.Status, w.Regions
+		c.Detail["wrapper_ready"], c.Detail["wrapper_logged_in"], c.Detail["regions"] = w.Ready, w.LoggedIn, w.Regions
 		if m := w.Managed; m != nil {
 			c.Detail["wrapper_managed"] = m
 			if m.LoginResidue {

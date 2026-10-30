@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
+	"strings"
 )
 
 // maxJSONBodyBytes bounds every JSON request body handled by this API. The
@@ -56,7 +58,59 @@ func writeJSONBodyError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, CodeInvalidJSON, "request body is empty")
 		return
 	}
-	writeError(w, http.StatusBadRequest, jsonErrorCode(err), err.Error())
+	writeError(w, http.StatusBadRequest, jsonErrorCode(err), describeJSONError(err))
+}
+
+// describeJSONError says what was wrong with a body that decoded into the
+// wrong type in the request's own terms ("download.max_attempts must be a
+// number, got a string") instead of naming Go types; other errors keep
+// their text.
+func describeJSONError(err error) string {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) || typeErr.Type == nil {
+		return err.Error()
+	}
+	field := typeErr.Field
+	if field == "" {
+		field = "the body"
+	}
+	return fmt.Sprintf("%s must be %s, got %s", field, jsonKind(typeErr.Type.Kind()), jsonValueKind(typeErr.Value))
+}
+
+func jsonKind(k reflect.Kind) string {
+	switch k {
+	case reflect.Slice, reflect.Array:
+		return "a list"
+	case reflect.Map, reflect.Struct:
+		return "an object"
+	case reflect.Bool:
+		return "true or false"
+	case reflect.String:
+		return "a string"
+	case reflect.Float32, reflect.Float64:
+		return "a number"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "a whole number"
+	}
+	return "a " + k.String()
+}
+
+// jsonValueKind names UnmarshalTypeError.Value, which is "string",
+// "number", "bool", "array", "object" or, for a number that does not fit,
+// "number <text>".
+func jsonValueKind(v string) string {
+	switch {
+	case v == "array":
+		return "a list"
+	case v == "object":
+		return "an object"
+	case v == "bool":
+		return "true or false"
+	case strings.HasPrefix(v, "number "):
+		return strings.TrimPrefix(v, "number ")
+	}
+	return "a " + v
 }
 
 // jsonErrorCode classifies a decode error: a body that is not well-formed JSON

@@ -10,7 +10,7 @@ import (
 
 func TestWrapperStatusEndpoint(t *testing.T) {
 	fake := &fakeWrapperService{statusResult: wrapper.Status{
-		Ready: true, Status: true, Regions: []string{"us"},
+		Ready: true, LoggedIn: true, Regions: []string{"us"},
 		Accounts: []string{"user@example.com"},
 	}}
 	server := &Server{wrapper: fake}
@@ -18,7 +18,7 @@ func TestWrapperStatusEndpoint(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	want := `{"ready":true,"status":true,"regions":["us"],"accounts":["user@example.com"],"login_supported":false}` + "\n"
+	want := `{"ready":true,"logged_in":true,"regions":["us"],"accounts":["user@example.com"],"login_supported":false}` + "\n"
 	if recorder.Body.String() != want {
 		t.Fatalf("body = %s, want %s", recorder.Body.String(), want)
 	}

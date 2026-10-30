@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -115,9 +116,15 @@ func TestSystemInfo(t *testing.T) {
 	if !equalCounts(got.RawPools, wantPools) {
 		t.Errorf("pools = %v, want %v", got.RawPools, wantPools)
 	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An in-memory store has no config file; a relative database path is
+	// reported against the working directory.
 	wantStartup := map[string]any{
-		"wrapper_address": "https://wrapper.example:8443/prefix", "listen": "0.0.0.0:19090",
-		"database_path": "data/test/amdl.db", "log_buffer_size": float64(321),
+		"config_path": "", "wrapper_address": "https://wrapper.example:8443/prefix", "listen": "0.0.0.0:19090",
+		"database_path": filepath.Join(wd, "data", "test", "amdl.db"), "log_buffer_size": float64(321),
 		"catalog_language": "ja-JP", "max_parallel_requests": float64(7),
 	}
 	if !reflect.DeepEqual(got.Startup, wantStartup) {
