@@ -137,6 +137,9 @@ func (c *Cache) Get(master string, px int) *ui.VideoPlayer {
 				p.Close() // dropped while it opened
 			default:
 				e.player = p
+				// The view may have left while it opened: the sweep stops it
+				// in time even if nothing asks again.
+				c.sweep(time.Now())
 			}
 		})
 	}()
