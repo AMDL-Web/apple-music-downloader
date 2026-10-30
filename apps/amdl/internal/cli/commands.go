@@ -59,6 +59,10 @@ var offline = map[string]bool{
 	"wrapper start": true, "wrapper stop": true, "wrapper logs": true, "service install": true, "service uninstall": true, "service start": true, "service stop": true, "service status": true,
 }
 
+// planned are the offline commands that still take --dry-run: they print what
+// they would register or remove instead of sending a request.
+var planned = map[string]bool{"service install": true, "service uninstall": true}
+
 func noFlags(run func(e *env, args []string) error) func(*flag.FlagSet) func(*env, []string) error {
 	return func(*flag.FlagSet) func(*env, []string) error { return run }
 }
@@ -74,7 +78,7 @@ func commands() []command {
 		cmd := command{Capability: c, noServer: offline[c.Command]}
 		if setup, ok := handwritten[c.Command]; ok {
 			cmd.setup = setup
-			cmd.dryRun = c.Safety != capability.Read && !cmd.noServer
+			cmd.dryRun = c.Safety != capability.Read && (!cmd.noServer || planned[c.Command])
 		} else {
 			cmd.setup = passthrough(c)
 			cmd.dryRun = c.Safety != capability.Read

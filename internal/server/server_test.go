@@ -41,6 +41,21 @@ func newRunEnv(t *testing.T, hooksYAML string) Options {
 	return files
 }
 
+func TestConsoleURL(t *testing.T) {
+	for addr, want := range map[string]string{
+		"127.0.0.1:52011": "http://127.0.0.1:52011/console/",
+		"[::]:18080":      "http://127.0.0.1:18080/console/",
+		"0.0.0.0:8080":    "http://127.0.0.1:8080/console/",
+		":8080":           "http://127.0.0.1:8080/console/",
+		"[::1]:9":         "http://[::1]:9/console/",
+		"nas.lan:80":      "http://nas.lan:80/console/",
+	} {
+		if got := consoleURL(addr); got != want {
+			t.Errorf("consoleURL(%s) = %s, want %s", addr, got, want)
+		}
+	}
+}
+
 func TestRunReturnsStartupErrors(t *testing.T) {
 	t.Run("config that does not load", func(t *testing.T) {
 		files := newRunEnv(t, "")

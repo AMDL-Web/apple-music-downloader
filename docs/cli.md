@@ -117,8 +117,11 @@ and prints the batch, whose results carry `existing_job_id`.
 - **Destructive commands** (`jobs delete`, `library sync reset`, `wrapper logout`,
   `download --overwrite`) ask `[y/N]` when stdin and stderr are a terminal and otherwise
   need `--yes`; without it they exit 10 before sending anything.
-- **`--dry-run`** on every command that changes something prints
+- **`--dry-run`** on every command that sends a request prints
   `{"method","url","body"}` and sends nothing; it needs no reachable server.
+  `service install` and `service uninstall` take it too and print their plan
+  (`{"dry_run":true,"action","manager","definition",…}`, with the command line, log and
+  config paths for `install`), writing and registering nothing.
 
 ## Which server
 
@@ -147,7 +150,9 @@ created from the built-in example. Trying it in simulate mode with no wrapper:
 [install.md](install.md#try-it-without-a-wrapper). `amdl serve --local` uses this machine's local files instead
 ([Running the backend in amdl](#running-the-backend-in-amdl)), on a free loopback port
 or `--listen`; with `--background` it logs to `logs/server.log` beside them and, on
-Windows, closes a console window it was given alone.
+Windows, closes a console window it was given alone. Either way the `amdl backend
+listening` log line carries `addr` and, unless `--no-console`, `console`, the URL to open
+(a wildcard address shows as `127.0.0.1`).
 
 ## MCP server
 
@@ -239,7 +244,9 @@ current `PATH`, since a service starts with a shorter one; run it again after mo
 to stop. `status` prints the manager's view and the running backend's PID, version, URL
 and log file. `stop` holds until the next login, and on Windows until `start`, where it
 ends the process outright and its jobs resume on the next start. `uninstall` removes
-the registration and leaves the data. A `systemd --user` unit stops at logout unless
+the registration and leaves the data. `stop` and `uninstall` with no service installed
+(or, for `stop`, already stopped) return at once with a `note`, and name the PID of a
+backend that `amdl serve` or the desktop app runs, which the service does not own. A `systemd --user` unit stops at logout unless
 lingering is on (`loginctl enable-linger`).
 
 ## Checking a setup

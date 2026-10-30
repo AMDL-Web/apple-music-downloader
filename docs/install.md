@@ -244,6 +244,7 @@ amdl service install --wrapper http://127.0.0.1:12340
 amdl service status
 ```
 
+`service install --dry-run` prints what it would register and writes nothing.
 `status` prints the URL of the web console and API; the command line, the MCP server and
 the terminal interface find the service without `--server`. The service, how it restarts
 and how to stop it: [cli.md](cli.md#background-service).

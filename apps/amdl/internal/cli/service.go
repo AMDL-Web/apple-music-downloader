@@ -28,14 +28,50 @@ type serviceStatus struct {
 	DataDir string         `json:"data_dir"`
 	Backend *local.Runtime `json:"backend"`
 	Running bool           `json:"running"`
+	// Note says why a stop or uninstall did nothing to the service.
+	Note string `json:"note,omitempty"`
 }
+
+// servicePlan is what service install and uninstall print under --dry-run.
+type servicePlan struct {
+	DryRun     bool     `json:"dry_run"`
+	Action     string   `json:"action"`
+	Manager    string   `json:"manager"`
+	Definition string   `json:"definition"`
+	Installed  bool     `json:"installed"`
+	Exe        string   `json:"exe,omitempty"`
+	Args       []string `json:"args,omitempty"`
+	Log        string   `json:"log,omitempty"`
+	Config     string   `json:"config,omitempty"`
+	Wrapper    string   `json:"wrapper,omitempty"`
+}
+
+// notManaged finishes a stop or uninstall that has no service to act on: it
+// reports the status at once, with the reason and, when a backend runs
+// that the service does not own, where to stop it.
+func (e *env) notManaged(st serviceStatus, why string) error {
+	st.Note = why
+	if st.Backend != nil {
+		st.Note += fmt.Sprintf("; the backend (pid %d) runs without it, so stop it where it was started, such as the terminal running amdl serve", st.Backend.PID)
+	}
+	return e.out.result(st)
+}
+
+// The OS service manager calls the commands make; tests replace them, since
+// the real ones act on the account running the tests.
+var (
+	serviceQuery     = service.Query
+	serviceInstall   = service.Install
+	serviceUninstall = service.Uninstall
+	serviceStop      = service.Stop
+)
 
 func currentStatus(ctx context.Context) (serviceStatus, error) {
 	dirs, err := local.DefaultDirs()
 	if err != nil {
 		return serviceStatus{}, err
 	}
-	st, err := service.Query()
+	st, err := serviceQuery()
 	if err != nil {
 		return serviceStatus{}, serviceErr(err)
 	}
@@ -118,7 +154,12 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 				Message: "ffmpeg (" + ffmpeg + ") is not installed or not on PATH; the backend needs it to write tracks",
 				Hint:    media.InstallHint() + ", then run amdl service install again"}
 		}
-		if err := b.WriteConfig(); errors.Is(err, local.ErrNoWrapper) {
+		if e.dry {
+			// WriteConfig is what fails without a wrapper; check that without writing.
+			if _, err := os.Stat(b.ConfigPath()); errors.Is(err, os.ErrNotExist) && b.Wrapper == "" {
+				return errNoWrapper()
+			}
+		} else if err := b.WriteConfig(); errors.Is(err, local.ErrNoWrapper) {
 			return errNoWrapper()
 		} else if err != nil {
 			return err
@@ -136,13 +177,22 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if u, err := user.Current(); err == nil {
 			spec.User = u.Username
 		}
+		if e.dry {
+			st, err := serviceQuery()
+			if err != nil {
+				return serviceErr(err)
+			}
+			return e.out.result(servicePlan{DryRun: true, Action: "install", Manager: st.Manager, Definition: st.Definition,
+				Installed: st.Installed, Exe: spec.Exe, Args: spec.Args, Log: spec.Log, Config: b.ConfigPath(),
+				Wrapper: local.WrapperURL(b.Wrapper)})
+		}
 		if err := os.MkdirAll(filepath.Dir(dirs.LogPath()), 0o755); err != nil {
 			return err
 		}
 		if _, ok := local.Find(e.ctx, dirs); ok {
 			e.note("another backend runs on these files; the service takes over when it stops")
 		}
-		if err := service.Install(spec); err != nil {
+		if err := serviceInstall(spec); err != nil {
 			return serviceErr(err)
 		}
 		return e.awaitRunning(true, serviceStatus{})
@@ -195,8 +245,23 @@ func serviceUninstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := service.Uninstall(); err != nil {
+		if e.dry {
+			return e.out.result(servicePlan{DryRun: true, Action: "uninstall", Manager: before.Manager,
+				Definition: before.Definition, Installed: before.Installed})
+		}
+		if !before.Installed && !before.Active {
+			return e.notManaged(before, "the service is not installed")
+		}
+		if err := serviceUninstall(); err != nil {
 			return serviceErr(err)
+		}
+		if !before.Active {
+			// Nothing of the service ran, so a backend that still answers is not its.
+			st, err := currentStatus(e.ctx)
+			if err != nil {
+				return err
+			}
+			return e.notManaged(st, "the service was not running")
 		}
 		return e.awaitRunning(false, before)
 	}
@@ -223,7 +288,14 @@ func serviceStopCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err != nil {
 			return err
 		}
-		if err := service.Stop(); err != nil {
+		if !before.Active {
+			why := "the service is already stopped"
+			if !before.Installed {
+				why = "the service is not installed"
+			}
+			return e.notManaged(before, why)
+		}
+		if err := serviceStop(); err != nil {
 			return serviceErr(err)
 		}
 		return e.awaitRunning(false, before)

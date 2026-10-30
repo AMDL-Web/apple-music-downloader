@@ -227,7 +227,11 @@ func Run(ctx context.Context, opts Options) (err error) {
 	background.Go(func() { libraryWatcher.Run(backgroundCtx) })
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.Serve(listener) }()
-	logger.Info("amdl backend listening", "addr", listener.Addr().String())
+	if opts.Console != nil {
+		logger.Info("amdl backend listening", "addr", listener.Addr().String(), "console", consoleURL(listener.Addr().String()))
+	} else {
+		logger.Info("amdl backend listening", "addr", listener.Addr().String())
+	}
 
 	var runErr error
 	select {
@@ -254,6 +258,19 @@ func Run(ctx context.Context, opts Options) (err error) {
 
 // closeLogged runs a deferred close and logs its error, which has no caller
 // left to return to.
+// consoleURL is where a browser on this machine opens the console of a
+// backend listening on addr; a wildcard address becomes the loopback one.
+func consoleURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://" + addr + "/console/"
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/console/"
+}
+
 func closeLogged(logger *slog.Logger, what string, closeFn func() error) {
 	if err := closeFn(); err != nil {
 		logger.Error(what, "error", err)
