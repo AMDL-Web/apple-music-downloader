@@ -273,10 +273,26 @@ export function legacyCatalogError(text) {
   return `Apple Music rejected the request (${code})`;
 }
 
+/** The message inside an error that is nothing but a JSON body, or ''. */
+function jsonMessage(text) {
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return '';
+  }
+  const pick = (v) => (typeof v === 'string' ? v : v && typeof v === 'object' ? v.message || v.detail || v.title || '' : '');
+  if (!body || typeof body !== 'object') return '';
+  const first = Array.isArray(body.errors) ? body.errors[0] : null;
+  const msg = pick(body.error) || pick(first) || pick(body);
+  return typeof msg === 'string' ? msg : '';
+}
+
 /**
  * One readable line from a job's error text: the first line, cut before an
- * embedded JSON body ("404 Not Found: {"errors":...}" -> "404 Not Found"), at
- * most 140 characters, with a stored legacy catalog error in plain words
+ * embedded JSON body ("404 Not Found: {"errors":...}" -> "404 Not Found"), or
+ * the message inside an error that is only a JSON body, at most 140
+ * characters, with a stored legacy catalog error in plain words
  * (legacyCatalogError). Clean one-line text passes through unchanged; the
  * full text stays available to the caller (a title attribute).
  */
@@ -284,6 +300,7 @@ export function errorSummary(error) {
   let text = String(error || '').split(/\r?\n/)[0];
   const brace = text.search(/[{[]/);
   if (brace > 0) text = text.slice(0, brace);
+  else if (brace === 0) text = jsonMessage(String(error).trim()) || text;
   text = text.replace(/[\s:;,]+$/, '').trim();
   const plain = legacyCatalogError(text);
   if (plain) return plain;

@@ -343,11 +343,15 @@ test('an unresolved job is shown by its link, not by a guessed title', () => {
   assert.equal(unresolvedHint({ status: 'cancelled' }), 'Cancelled before it resolved');
 });
 
-test('errorSummary keeps the first line and drops an embedded JSON body', () => {
+test('errorSummary keeps the first line, drops an embedded JSON body and reads a bare one', () => {
   assert.equal(errorSummary('Apple Music has no album 1 in storefront us (404)'), 'Apple Music has no album 1 in storefront us (404)');
   assert.equal(errorSummary('Apple Music has nothing at this link.'), 'Apple Music has nothing at this link.');
   assert.equal(errorSummary('first line\nsecond line'), 'first line');
-  assert.equal(errorSummary('{"error":"x"}'), '{"error":"x"}');
+  assert.equal(errorSummary('{"error":"x"}'), 'x');
+  assert.equal(errorSummary('{"error":{"code":"upstream_error","message":"Apple answered 503 Service Unavailable"}}'), 'Apple answered 503 Service Unavailable');
+  assert.equal(errorSummary('{"errors":[{"id":"Q","title":"Resource Not Found"}]}'), 'Resource Not Found');
+  assert.equal(errorSummary('{"code":1}'), '{"code":1}');
+  assert.equal(errorSummary('{not json'), '{not json');
   assert.equal(errorSummary(''), '');
   assert.equal(errorSummary(undefined), '');
   const long = errorSummary('x'.repeat(300));
