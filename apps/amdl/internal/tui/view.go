@@ -422,7 +422,7 @@ func (m *model) previewView(w int) string {
 			facts = append(facts, l.ReleaseDate[:4])
 		}
 		if l.TrackCount > 0 {
-			facts = append(facts, fmt.Sprintf("%d tracks", l.TrackCount))
+			facts = append(facts, trackCount(l.TrackCount))
 		}
 		if l.AppleDigitalMaster && w >= wideCols {
 			facts = append(facts, "Apple Digital Master")
@@ -492,7 +492,7 @@ func (m *model) resultsView(w int) string {
 				facts = append(facts, h.ReleaseDate[:4])
 			}
 			if h.TrackCount > 0 {
-				facts = append(facts, fmt.Sprintf("%d tracks", h.TrackCount))
+				facts = append(facts, trackCount(h.TrackCount))
 			}
 			if h.DurationMS > 0 {
 				facts = append(facts, format.Duration(time.Duration(h.DurationMS)*time.Millisecond))
@@ -599,6 +599,13 @@ func (m *model) status(w int) string {
 		return t.style(t.dim).Render(trunc("  "+left, w))
 	}
 	return pad(t.style(t.dim).Render("  "+left), w-lipgloss.Width(r)) + t.style(rc).Render(r)
+}
+
+func trackCount(n int) string {
+	if n == 1 {
+		return "1 track"
+	}
+	return fmt.Sprintf("%d tracks", n)
 }
 
 func pad(s string, w int) string {

@@ -221,3 +221,11 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+func TestTrackCountIsSingularForOne(t *testing.T) {
+	for n, want := range map[int]string{1: "1 track", 2: "2 tracks", 14: "14 tracks"} {
+		if got := trackCount(n); got != want {
+			t.Errorf("trackCount(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
