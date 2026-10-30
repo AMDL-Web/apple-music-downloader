@@ -1,25 +1,24 @@
-// Command amdl-desktop is the AMDL desktop app: a native MyGo window over an
-// amdl backend, either a remote one or one it runs in-process.
+// Command amdl-desktop is the AMDL desktop app: a native window over an amdl
+// backend, either a remote one or one it runs in-process.
 package main
 
 import (
+	"flag"
 	"log"
 
-	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
+	"amdl/apps/desktop/internal/app"
 )
 
 func main() {
-	mygo.App.SetName("AMDL")
-	mygo.App.WhenReady(func() {
-		mygo.NewWindow(mygo.WindowOptions{
-			Title:   "AMDL",
-			Width:   1280,
-			Height:  800,
-			Content: ui.View(func(c *ui.Context) { ui.Text(c, "AMDL") }),
-		})
-	})
-	if err := mygo.App.Run(); err != nil {
+	var opts app.Options
+	flag.StringVar(&opts.DataDir, "data", "", "keep settings and the embedded backend's files in this directory")
+	flag.StringVar(&opts.Remote, "remote", "", "use the amdl at this address, without saving it")
+	flag.StringVar(&opts.Wrapper, "wrapper", "", "run the backend here with this wrapper, without saving it")
+	flag.StringVar(&opts.Theme, "theme", "", "force light or dark")
+	flag.StringVar(&opts.Shots, "shots", "", "capture every screen into this directory, then quit")
+	flag.StringVar(&opts.Submit, "submit", "", "with -shots, download this link first")
+	flag.Parse()
+	if err := app.Run(opts); err != nil {
 		log.Fatal(err)
 	}
 }
