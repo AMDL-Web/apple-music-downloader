@@ -76,7 +76,9 @@ catalog:
   # (default_storefront) to complete pasted links that have no region.
   default_storefront: "cn"
   # string: Apple Music catalog language tag passed as the "l" query parameter, for example "en-US", "zh-Hans_CN", "ja-JP".
-  # It is also the language of lyrics translations (download.lyrics_extras, the .ttml sidecar).
+  # It is also the language of lyrics translations (download.lyrics_extras, the .ttml sidecar), of the genre tag,
+  # and of the album, song and artist names Apple returns, which go into tags and output paths: changing it on an
+  # existing library can make the "already downloaded" check miss and download albums again under the new names.
   language: "zh-Hans_CN"
   # integer: maximum Apple control-plane HTTP requests in flight across the whole process, including Catalog API,
   # web-player token discovery, Enhanced HLS manifests, and artwork. Positive values allow 1-64; values <=0 behave

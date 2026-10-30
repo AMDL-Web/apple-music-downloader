@@ -108,6 +108,11 @@ Every catalog read goes to `amp-api.music.apple.com` with a bearer token the bac
 scrapes from `music.apple.com`; `catalog.token_cache_ttl_hours` sets how long it is
 trusted. The backend holds no Apple developer key and never signs a token.
 
+`catalog.language` is the language Apple answers in: the genre tag, the album, song and
+artist names that go into tags and output paths, and lyrics translations. Set it before
+the first download; changing it later renames what new downloads write, so the
+"already downloaded" check misses files saved under the old names.
+
 The Enhanced HLS master playlist normally comes from the catalog response (`enhancedHls`).
 The web player's playlist can leave out a Hi-Res track's higher ALAC renditions that the
 wrapper's device manifest lists: an 88.2, 96 or 192 kHz stream may be missing while 48 kHz
