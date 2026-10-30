@@ -11,9 +11,27 @@
   color: var(--text-primary);
 }
 
-/* "5 results" beside the filter while it is set. */
+/* Until the counts arrive the toolbar is laid out but not drawn (QueuePage's hold). */
+.page-queue[data-held] > .toolbar {
+  visibility: hidden;
+}
+
+/* The head of the list, inside its card: "5 results" while the filter is
+   set, Retry all on the Failed and Cancelled tabs. */
+.queue-list-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: var(--control-h);
+  padding: var(--s-2) var(--card-pad-x);
+  border-bottom: var(--row-divider);
+}
+
+.queue-list-bar > .queue-retry-all {
+  margin-inline-start: auto;
+}
+
 .queue-count {
-  align-self: center;
   color: var(--text-secondary);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
@@ -108,8 +126,7 @@
   }
 
   /* The filter takes a row of its own, wide enough for its placeholder and
-     what is typed; the type, Retry all and Select share the row under it,
-     and the result count, when the filter is set, sits between the two. */
+     what is typed; the type and Select share the row under it. */
   .page-queue .toolbar-filters {
     display: contents;
   }
@@ -117,11 +134,6 @@
   .page-queue .search {
     flex: 1 1 100%;
     min-width: 0;
-  }
-
-  .page-queue .queue-count {
-    order: 1;
-    flex-basis: 100%;
   }
 
   .page-queue .queue-tools {

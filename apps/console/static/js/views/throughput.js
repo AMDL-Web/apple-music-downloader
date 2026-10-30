@@ -23,7 +23,7 @@ export function sparseSummary(totals) {
 
 export function ThroughputCard() {
   const app = useApp();
-  const poll = usePoll(() => getStats(STATS_DAYS), 60000, [app.epoch]);
+  const poll = usePoll(() => getStats(STATS_DAYS), 60000, [app.epoch], `stats-${STATS_DAYS}`);
   if (poll.error && poll.error.status === 404) {
     return html`<${Card} section="throughput" title="Throughput" labelId="throughput-title"><${Unavailable} what="Throughput history (GET /api/v1/stats)" /></${Card}>`;
   }

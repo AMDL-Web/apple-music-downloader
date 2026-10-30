@@ -391,11 +391,19 @@
 
 /* ---- States -------------------------------------------------------- */
 
+/* Placeholders fade in after --skel-delay, so a fast load shows the data
+   where they stood without a flash of grey first; they still hold the room. */
+.skel-badge {
+  animation: skel-in var(--dur-base) var(--ease-out) var(--skel-delay) both;
+}
+
 .skel {
   display: block;
   border-radius: var(--r-badge);
   background: var(--bg-hover);
-  animation: skel 1.2s ease-in-out infinite alternate;
+  animation:
+    skel-in var(--dur-base) var(--ease-out) var(--skel-delay) both,
+    skel 1.2s ease-in-out calc(var(--skel-delay) + var(--dur-base)) infinite alternate;
 }
 
 .skel-list {
@@ -472,6 +480,12 @@
 
 .skel-chart {
   height: 220px;
+}
+
+@keyframes skel-in {
+  from {
+    opacity: 0;
+  }
 }
 
 @keyframes skel {

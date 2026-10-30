@@ -284,6 +284,13 @@
   min-width: 0;
 }
 
+/* The status cell holds one badge: centered on the line, not on its own
+   baseline, which an icon (Queued) and a pulse (Running) put at different
+   heights, so the badge would jump as the job starts. */
+.job-status > :is(.badge, .status-text) {
+  vertical-align: middle;
+}
+
 .job-chevron {
   color: var(--text-secondary);
   display: flex;

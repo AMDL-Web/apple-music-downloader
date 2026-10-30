@@ -22,9 +22,9 @@ import { midTruncate, groupByDisk, diskRole } from '../lib/storage.js';
 
 export function SystemPage() {
   const app = useApp();
-  const sys = usePoll(getSystem, 30000, [app.epoch]);
-  const health = usePoll(() => Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks())]), 30000, [app.epoch]);
-  const stats = usePoll(() => getStats(14), 60000, [app.epoch]);
+  const sys = usePoll(getSystem, 30000, [app.epoch], 'system');
+  const health = usePoll(() => Promise.all([settle(getHealth()), settle(getWrapperStatus()), settle(getLibrarySync()), settle(getHooks())]), 30000, [app.epoch], 'system-health');
+  const stats = usePoll(() => getStats(14), 60000, [app.epoch], 'stats-14');
   const [h, w, ls, hk] = health.data || [];
   const entries = hk && !hk.error ? hk.data.entries || [] : [];
   // One flowing grid: pairs of cards, and a hooks table wide enough for its columns.
@@ -287,7 +287,7 @@ const CODEC_NAMES = { alac: 'ALAC', ec3: 'Dolby Atmos', ac3: 'Dolby Digital', aa
 /** A few runtime settings at a glance; Settings edits them. Folders, simulate and library sync show in Storage, Runtime and Library sync. */
 function ConfigCard() {
   const app = useApp();
-  const cfg = usePoll(getConfig, 0, [app.epoch]);
+  const cfg = usePoll(getConfig, 0, [app.epoch], 'config');
   const data = cfg.data;
   let body;
   if (cfg.error && !data) body = html`<${ErrorNote} title="Couldn't load the config" error=${cfg.error} onRetry=${cfg.reload} />`;

@@ -9,6 +9,7 @@ import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
 import { useApp, Card, Icon, Badge, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
 import { usePoll, useNow } from '../ui/hooks.js';
+import { cached, remember } from '../lib/cache.js';
 import { JobRow, applyFeedToList } from './queue.js';
 import { RecentSection } from './overview-recent.js';
 import { ThroughputCard } from './throughput.js';
@@ -19,10 +20,19 @@ import { ThroughputCard } from './throughput.js';
 // is the Logs page; System health is the status line and the System page.
 export function OverviewPage() {
   const app = useApp();
-  const health = usePoll(loadHealth, 30000, [app.epoch]);
-  return html`<div class="page page-overview">
+  const health = usePoll(loadHealth, 30000, [app.epoch], 'overview-health');
+  // Needs attention sits above everything and is known only after its read:
+  // the sections below wait unseen for that answer (or HOLD_MS), so the card
+  // never arrives late and pushes the page down.
+  const [held, setHeld] = useState(() => cached(ATTENTION_KEY) === undefined);
+  useEffect(() => {
+    if (!held) return undefined;
+    const t = setTimeout(() => setHeld(false), HOLD_MS);
+    return () => clearTimeout(t);
+  }, []);
+  return html`<div class="page page-overview" data-held=${held ? '' : undefined}>
     <${HealthStrip} poll=${health} />
-    <${Attention} />
+    <${Attention} onKnown=${() => setHeld(false)} />
     <${LiveQueue} />
     <${RecentSection} />
     <${KpiRow} />
@@ -41,10 +51,13 @@ const TOTAL_TILE = { key: 'total', label: 'Total', icon: 'list', role: 'neutral'
 function KpiRow() {
   const { counts, conn } = useApp();
   const stale = conn.state === 'offline';
+  // A feed that has not answered yet is loading; one that failed before its
+  // first snapshot has nothing to show, and a placeholder would pulse forever.
+  const down = stale || conn.state === 'reconnecting';
   const tile = (t, value) => html`<a key=${t.key} class="kpi" data-key=${t.key} data-role=${t.role} data-zero=${value === 0 ? '' : undefined} href=${t.href}>
     <span class="kpi-label">${t.label}</span>
     <span class="kpi-icon"><${Icon} name=${t.icon} /></span>
-    <span class="kpi-value">${counts ? (stale ? '—' : count(value)) : html`<${Skeleton} kind="kpi" />`}</span>
+    <span class="kpi-value">${counts && !stale ? count(value) : counts || down ? '—' : html`<${Skeleton} kind="kpi" />`}</span>
   </a>`;
   return html`<${Card} section="kpis" title="Jobs" labelId="kpis-title" note="All time">
     <div class="kpis">
@@ -151,10 +164,13 @@ const FAILED_FILTER = { statuses: ['failed'] };
  * retried or deleted job leaves through the feed, and the next one in line
  * comes from a fresh read.
  */
-function Attention() {
+const ATTENTION_KEY = 'overview-attention';
+const HOLD_MS = 400;
+
+function Attention({ onKnown }) {
   const app = useApp();
   const now = useNow();
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobs] = useState(() => cached(ATTENTION_KEY) || []);
   const [stamp, setStamp] = useState(0);
   const [busy, setBusy] = useState(null);
   const seq = useRef(0);
@@ -162,10 +178,15 @@ function Attention() {
     const mine = ++seq.current;
     listDownloads({ status: 'failed', sort: 'updated_at', order: 'desc', limit: ATTENTION_LIMIT }).then(
       (body) => {
-        if (mine === seq.current) setJobs(body.downloads);
+        if (mine !== seq.current) return;
+        remember(ATTENTION_KEY, body.downloads);
+        setJobs(body.downloads);
+        onKnown();
       },
       () => {
-        if (mine === seq.current) setJobs([]);
+        if (mine !== seq.current) return;
+        setJobs([]);
+        onKnown();
       },
     );
     return () => {

@@ -434,8 +434,10 @@
   background-image: repeating-linear-gradient(-45deg, var(--track) 0 4px, var(--border-subtle) 4px 8px);
 }
 
+/* As wide as "Resolving", so the bar does not change length when the
+   counts replace it. */
 .jprog-text {
-  min-width: 3.5em;
+  min-width: 4.75em;
   text-align: right;
   color: var(--text-secondary);
   font-size: var(--fs-12);

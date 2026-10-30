@@ -15,6 +15,7 @@ import { useDebounced } from '../ui/hooks.js';
 import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 import { JobRow, applyFeedToList } from './queue-row.js';
 import { useChipRow } from './queue-chips.js';
+import { cached, remember } from '../lib/cache.js';
 
 export { JobRow, applyFeedToList };
 
@@ -29,13 +30,20 @@ const TYPE_OPTIONS = [
   ['station', 'Stations'],
 ];
 
+const HOLD_MS = 400;
+
 export function QueuePage({ route }) {
   const app = useApp();
   const filters = queueFilters(route.params);
   const [qInput, setQInput] = useState(filters.q);
   const q = useDebounced(qInput, 300);
-  const [state, setState] = useState({ jobs: [], total: 0, loading: true, error: null, more: false });
-  const key = `${filters.tab}|${filters.type}|${filters.q}|${app.epoch}`;
+  const listKey = `queue|${filters.tab}|${filters.type}|${filters.q}`;
+  // A list seen before in this tab is drawn at once and read again behind it.
+  const [state, setState] = useState(() => {
+    const last = cached(listKey);
+    return last ? { jobs: last.jobs, total: last.total, loading: true, error: null, more: false } : { jobs: [], total: 0, loading: true, error: null, more: false };
+  });
+  const key = `${listKey}|${app.epoch}`;
   const seq = useRef(0);
   const known = useRef(new Map());
 
@@ -63,6 +71,15 @@ export function QueuePage({ route }) {
     if (app.counts.queued + app.counts.running === 0) setParams({ tab: 'all' });
   }, [implicitTab, haveCounts]);
   const waiting = implicitTab && !haveCounts && patient;
+  // The tabs carry the counts: on a cold load they wait unseen for them (or
+  // HOLD_MS) instead of widening when the numbers arrive.
+  const [held, setHeld] = useState(!haveCounts);
+  useEffect(() => {
+    if (haveCounts) setHeld(false);
+    if (!held || haveCounts) return undefined;
+    const t = setTimeout(() => setHeld(false), HOLD_MS);
+    return () => clearTimeout(t);
+  }, [haveCounts]);
 
   // The search box and the route's q follow each other. A q this page wrote
   // itself (ownQ) comes back through the route and must not reset a box the
@@ -83,11 +100,14 @@ export function QueuePage({ route }) {
 
   const load = (offset) => {
     const mine = ++seq.current;
-    if (offset === 0) setState((s) => ({ ...s, loading: true, error: null }));
+    const last = offset === 0 ? cached(listKey) : null;
+    if (last) setState((s) => ({ ...s, jobs: last.jobs, total: last.total, loading: true, error: null }));
+    else if (offset === 0) setState((s) => ({ ...s, loading: true, error: null }));
     else setState((s) => ({ ...s, more: true }));
     listDownloads(queueQuery(filters, offset, PAGE_SIZE)).then(
       (body) => {
         if (mine !== seq.current) return;
+        if (offset === 0) remember(listKey, { jobs: body.downloads, total: body.total });
         setState((s) => ({
           jobs: offset === 0 ? body.downloads : appendPage(s.jobs, body.downloads),
           total: body.total,
@@ -238,6 +258,27 @@ export function QueuePage({ route }) {
   // On a narrow phone the status tabs scroll sideways; the open one stays in view.
   useChipRow(`${filters.tab}|${haveCounts}`);
 
+  // The search's result count and Retry all head the list inside its card:
+  // in the toolbar they would change its width or its rows with every tab.
+  const showCount = filters.q && (!state.loading || state.total > 0);
+  const showRetryAll = (filters.tab === 'failed' || filters.tab === 'cancelled') && retryable.length > 0 && !selecting;
+  const listBar =
+    state.jobs.length > 0 && (showCount || showRetryAll)
+      ? html`<div class="queue-list-bar">
+          ${showCount ? html`<span class="queue-count" role="status">${count(state.total)} ${state.total === 1 ? 'result' : 'results'}</span>` : null}
+          ${showRetryAll
+            ? html`<${Button}
+                icon="rotate"
+                size="sm"
+                className="queue-retry-all"
+                aria-label=${`Retry all ${retryable.length} loaded ${filters.tab} jobs`}
+                disabled=${Boolean(bulk.run)}
+                onClick=${() => runAction('retry', retryable)}
+              >Retry all (${retryable.length})</${Button}>`
+            : null}
+        </div>`
+      : null;
+
   let body;
   if (waiting || (state.loading && state.jobs.length === 0)) body = html`<${SkeletonJobRows} n=${6} />`;
   else if (state.error && state.jobs.length === 0)
@@ -285,7 +326,7 @@ export function QueuePage({ route }) {
           </div>`
         : null}`;
 
-  return html`<div class="page page-queue" data-selecting=${selecting || bulk.run ? '' : undefined}>
+  return html`<div class="page page-queue" data-selecting=${selecting || bulk.run ? '' : undefined} data-held=${held ? '' : undefined}>
     <div class="toolbar">
       <${Segmented} label="Job status" options=${tabs} value=${filters.tab} onChange=${(tab) => setParams({ tab })} />
       <div class="toolbar-filters">
@@ -300,21 +341,11 @@ export function QueuePage({ route }) {
             onInput=${(e) => setQInput(e.currentTarget.value)}
           />
         </label>
-        ${filters.q && (!state.loading || state.total > 0) ? html`<span class="queue-count" role="status">${count(state.total)} ${state.total === 1 ? 'result' : 'results'}</span>` : null}
         <select class="select" aria-label="Job type" value=${filters.type} onChange=${(e) => setParams({ type: e.currentTarget.value })}>
           ${TYPE_OPTIONS.map(([v, l]) => html`<option key=${v} value=${v}>${l}</option>`)}
         </select>
       </div>
       ${html`<div class="queue-tools">
-            ${(filters.tab === 'failed' || filters.tab === 'cancelled') && retryable.length > 0
-              ? html`<${Button}
-                  icon="rotate"
-                  className="queue-retry-all"
-                  aria-label=${`Retry all ${retryable.length} loaded ${filters.tab} jobs`}
-                  disabled=${Boolean(bulk.run)}
-                  onClick=${() => runAction('retry', retryable)}
-                >Retry all (${retryable.length})</${Button}>`
-              : null}
             <${Button}
               icon="square-check"
               className="queue-select"
@@ -340,7 +371,7 @@ export function QueuePage({ route }) {
           onAction=${onAction}
         />`
       : null}
-    <div class="card card-flush" data-section="jobs"><div class="card-body">${body}</div></div>
+    <div class="card card-flush" data-section="jobs"><div class="card-body">${listBar}${body}</div></div>
     ${confirm
       ? html`<${BulkConfirm}
           action=${confirm.action}

@@ -1,5 +1,11 @@
 /* ---- Overview ------------------------------------------------------ */
 
+/* Until Needs attention has answered, the sections it would push down are
+   laid out but not drawn (OverviewPage's hold). */
+.page-overview[data-held] > :not(.health-strip, [data-section="attention"]) {
+  visibility: hidden;
+}
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(144px, 1fr));

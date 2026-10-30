@@ -25,7 +25,7 @@ function WrapperError({ error, step, role = 'danger' }) {
 
 export function AccountPanel({ children }) {
   const app = useApp();
-  const status = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch]);
+  const status = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch], 'wrapper-status');
   const res = status.data;
   // Login needs the session service; say why it cannot be used instead of failing late.
   const down = res && res.error ? wrapperUnreachable(res.error) : null;

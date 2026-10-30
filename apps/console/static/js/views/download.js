@@ -123,7 +123,7 @@ export function DownloadPage({ route }) {
 
   // The storefronts the wrapper serves, to flag a link before the submit
   // refuses it; null (flag nothing) while unknown or in simulate mode.
-  const wrapper = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch]);
+  const wrapper = usePoll(() => settle(getWrapperStatus()), 30000, [app.epoch], 'wrapper-status');
   const regions = servedRegions(wrapper.data, app.simulate);
 
   const { statusOf, issueOf, sendable: allowed, skipped, queue, priorOf, forgetPrior } = useLookups({
