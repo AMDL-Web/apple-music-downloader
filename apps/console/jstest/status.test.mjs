@@ -6,12 +6,6 @@ import {
   jobStatusView,
   itemStatusView,
   hookStatusView,
-  backendHealthView,
-  wrapperView,
-  summarizeError,
-  missingToolRows,
-  librarySyncView,
-  hooksView,
   logLevelView,
   connectionView,
   jobProgress,
@@ -25,6 +19,7 @@ import {
   progressLegend,
   CELL_MAX,
 } from '../static/js/lib/status.js';
+import { backendHealthView, wrapperView, summarizeError, missingToolRows, librarySyncView, hooksView } from '../static/js/lib/health.js';
 
 const ROLES = new Set(['info', 'success', 'danger', 'warning', 'neutral', 'skipped']);
 

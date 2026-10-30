@@ -151,7 +151,7 @@ export function newSearchHash(term = '') {
 /**
  * The section #/settings?section= names, or '' (the page's first section).
  * Section names are lowercase words joined by underscores; the settings page
- * owns the list (lib/settings.js SETTINGS_SECTIONS), which the command
+ * owns the list (lib/settings-sections.js SETTINGS_SECTIONS), which the command
  * palette also searches.
  */
 export function settingsSection(params = {}) {

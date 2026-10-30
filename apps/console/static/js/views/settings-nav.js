@@ -3,7 +3,7 @@
 // the sticky save bar.
 
 import { html } from '../ui/preact.js';
-import { SETTINGS_SECTIONS } from '../lib/settings.js';
+import { SETTINGS_SECTIONS } from '../lib/settings-sections.js';
 import { changesLabel } from '../lib/settings-draft.js';
 import { settingsHash } from '../lib/route.js';
 import { Icon, Button } from '../ui/components.js';

@@ -9,7 +9,7 @@ import { PREVIEW_KINDS, shortError } from './lookup.js';
 import { capitalized, sentence } from './format.js';
 import { sanitizeOverrides } from './overrides.js';
 import { settingsHash } from './route.js';
-import { summarizeError } from './status.js';
+import { summarizeError } from './health.js';
 
 /** Where Settings edits catalog.media_user_token, the only token a download uses. */
 export const TOKEN_SETTINGS_HASH = settingsHash('catalog', 'catalog.media_user_token');

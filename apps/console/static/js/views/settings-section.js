@@ -1,10 +1,11 @@
 // The open Settings section's body: its fields, and in Account and
 // Advanced the panels that are not config fields. Advanced is split into
-// groups under sub-headings (lib/settings.js SETTINGS_GROUPS); a ?section=
+// groups under sub-headings (lib/settings-sections.js SETTINGS_GROUPS); a ?section=
 // that names a group opens Advanced scrolled to it.
 
 import { html } from '../ui/preact.js';
-import { SETTINGS_GROUPS, sectionFields } from '../lib/settings.js';
+import { sectionFields } from '../lib/settings.js';
+import { SETTINGS_GROUPS } from '../lib/settings-sections.js';
 import { Notice, ErrorNote, SkeletonRows, Unavailable } from '../ui/components.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';

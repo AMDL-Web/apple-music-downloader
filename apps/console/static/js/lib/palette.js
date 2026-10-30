@@ -7,7 +7,8 @@
 import { buildHash, newDownloadHash, newSearchHash, settingsHash } from './route.js';
 import { searchTerm } from './search.js';
 import { extractLinks } from './links.js';
-import { SETTINGS_SECTIONS, SETTINGS_GROUPS, FIELDS, groupById } from './settings.js';
+import { FIELDS } from './settings.js';
+import { SETTINGS_SECTIONS, SETTINGS_GROUPS, groupById } from './settings-sections.js';
 import { jobTitle, jobSubtitle, typeLabel, dateTime } from './format.js';
 import { jobStatusView } from './status.js';
 

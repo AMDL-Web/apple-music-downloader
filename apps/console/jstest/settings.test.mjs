@@ -1,16 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  SETTINGS_SECTIONS,
-  FIELDS,
-  FIELD_KEYS,
-  NOT_EDITED,
-  BY_KEY,
-  SETTINGS_GROUPS,
-  sectionById,
-  groupById,
-  valueLabel,
-} from '../static/js/lib/settings.js';
+import { FIELDS, FIELD_KEYS, NOT_EDITED, BY_KEY, valueLabel } from '../static/js/lib/settings.js';
+import { SETTINGS_SECTIONS, SETTINGS_GROUPS, sectionById, groupById } from '../static/js/lib/settings-sections.js';
 import {
   flattenConfig,
   sameValue,

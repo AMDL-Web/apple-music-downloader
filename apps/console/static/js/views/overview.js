@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload, getHealth, getWrapperStatus, getLibrarySync, getHooks, getSystem, settle } from '../api.js';
 import { count, bytes, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
-import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/status.js';
+import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/health.js';
 import { diskRole, lowSpaceDisk } from '../lib/storage.js';
 import { buildHash } from '../lib/route.js';
 import { useApp, Card, Icon, Badge, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';

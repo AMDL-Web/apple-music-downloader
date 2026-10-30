@@ -10,12 +10,8 @@
 import { html, useState, useEffect, useMemo, useRef, useCallback } from '../ui/preact.js';
 import { useMedia } from '../ui/hooks.js';
 import { getConfig, putConfig } from '../api.js';
-import {
-  FIELD_KEYS,
-  sectionById,
-  groupById,
-  fieldByKey,
-} from '../lib/settings.js';
+import { FIELD_KEYS, fieldByKey } from '../lib/settings.js';
+import { sectionById, groupById } from '../lib/settings-sections.js';
 import {
   flattenConfig,
   changedKeys,

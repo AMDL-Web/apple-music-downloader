@@ -15,7 +15,7 @@ import {
 } from '../api.js';
 import { count, bytes, elapsed, absTime, relTime } from '../lib/format.js';
 import { settingsHash } from '../lib/route.js';
-import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/status.js';
+import { backendHealthView, wrapperView, librarySyncView, hooksView, missingToolRows } from '../lib/health.js';
 import { useApp, Card, Badge, StatusText, KV, LinkButton, ErrorNote, SkeletonKV, Unavailable, Notice, RelTime, HealthList, CopyButton } from '../ui/components.js';
 import { usePoll } from '../ui/hooks.js';
 import { midTruncate, groupByDisk, diskRole } from '../lib/storage.js';

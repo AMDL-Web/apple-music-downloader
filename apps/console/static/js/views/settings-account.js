@@ -8,7 +8,7 @@
 import { html, useState } from '../ui/preact.js';
 import { getWrapperStatus, loginWrapper, submitWrapperTwoStep, logoutWrapper, settle } from '../api.js';
 import { wrapperErrorText, wrapperUnreachable, unreachableLine } from '../lib/settings-account.js';
-import { wrapperView } from '../lib/status.js';
+import { wrapperView } from '../lib/health.js';
 import { useApp, Badge, Button, Icon, KV, Notice, SkeletonKV } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { usePoll } from '../ui/hooks.js';

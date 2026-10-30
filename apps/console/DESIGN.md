@@ -266,8 +266,8 @@ and motion covers.
 ## Components
 
 - **Badge**: icon (or the running pulse) + label on the role tint. Mappings
-  live in `lib/status.js` (`jobStatusView`, `itemStatusView`, `hookStatusView`,
-  health views), unit-tested. A completed job whose tracks were all on disk is
+  live in `lib/status.js` (`jobStatusView`, `itemStatusView`, `hookStatusView`)
+  and `lib/health.js` (health views), unit-tested. A completed job whose tracks were all on disk is
   "Already in library" (skipped role). An item with `attempt > 1` adds a
   warning "Retry n/m" badge.
 - **KPI tile**: label, value, meta, role icon; the tile links to its Queue tab.
