@@ -56,9 +56,46 @@ func (n NightlyLink) Fetch(ctx context.Context, p Pin, offset int64, w io.Writer
 	return err
 }
 
+// Phase names a step of installing a downloaded guest.
+type Phase string
+
+// The steps Install reports, in order.
+const (
+	Downloading Phase = "downloading"
+	Verifying   Phase = "verifying"
+	Unpacking   Phase = "unpacking"
+)
+
+// Progress is what Install and Download report: the step, and while
+// Downloading how many of Total bytes the file holds, counting a resumed
+// partial file.
+type Progress struct {
+	Phase       Phase
+	Done, Total int64
+}
+
+// countWriter reports the bytes written through it.
+type countWriter struct {
+	w      io.Writer
+	done   int64
+	total  int64
+	report func(Progress)
+}
+
+func (c *countWriter) Write(b []byte) (int, error) {
+	n, err := c.w.Write(b)
+	c.done += int64(n)
+	c.report(Progress{Downloading, c.done, c.total})
+	return n, err
+}
+
 // Download fetches p into path, resuming a partial file left there, and fails
-// unless the whole file has p's size and sha256.
-func Download(ctx context.Context, f Fetcher, p Pin, path string) error {
+// unless the whole file has p's size and sha256. report, when not nil, hears
+// of every written chunk and then of the checksum pass.
+func Download(ctx context.Context, f Fetcher, p Pin, path string, report func(Progress)) error {
+	if report == nil {
+		report = func(Progress) {}
+	}
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
@@ -74,10 +111,13 @@ func Download(ctx context.Context, f Fetcher, p Pin, path string) error {
 		}
 	}
 	if st.Size() < p.Size {
-		if err := f.Fetch(ctx, p, min(st.Size(), p.Size), file); err != nil {
+		have := min(st.Size(), p.Size)
+		report(Progress{Downloading, have, p.Size})
+		if err := f.Fetch(ctx, p, have, &countWriter{w: file, done: have, total: p.Size, report: report}); err != nil {
 			return err
 		}
 	}
+	report(Progress{Phase: Verifying, Done: p.Size, Total: p.Size})
 	return verify(file, p)
 }
 

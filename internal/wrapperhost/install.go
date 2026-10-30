@@ -16,14 +16,17 @@ import (
 
 // Install downloads p's qemu-assets artifact with f, verifies it and makes it
 // the installed guest. An account's data.img is kept; a first install seeds it
-// from the artifact's empty image.
-func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time) (Installed, error) {
+// from the artifact's empty image. report, when not nil, hears of each step.
+func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, report func(Progress)) (Installed, error) {
 	if err := h.prepare(); err != nil {
 		return Installed{}, err
 	}
 	zipPath := h.path("download-" + p.SHA256[:12] + ".zip")
-	if err := Download(ctx, f, p, zipPath); err != nil {
+	if err := Download(ctx, f, p, zipPath, report); err != nil {
 		return Installed{}, err
+	}
+	if report != nil {
+		report(Progress{Phase: Unpacking})
 	}
 	in, err := h.unpack(zipPath, Installed{ID: p.Commit[:min(12, len(p.Commit))], Commit: p.Commit,
 		ArtifactID: p.ArtifactID, SHA256: p.SHA256, Source: fmt.Sprintf("artifact %d", p.ArtifactID), At: now})

@@ -30,16 +30,17 @@ type managedView struct {
 	QEMU      string                 `json:"qemu,omitempty"`
 	Accel     string                 `json:"accel,omitempty"`
 	URL       string                 `json:"url,omitempty"`
-	Enabled   bool                   `json:"enabled"`
+	Enabled   *bool                  `json:"enabled,omitempty"`
 	State     *wrapperhost.State     `json:"state,omitempty"`
 	Log       string                 `json:"log"`
 	Next      string                 `json:"next,omitempty"`
 }
 
 func viewOf(h wrapperhost.Home) managedView {
-	v := managedView{Enabled: h.Enabled(), Log: h.LogPath()}
+	v := managedView{Log: h.LogPath()}
 	if in, err := h.Current(); err == nil {
-		v.Installed, v.URL = &in, in.URL()
+		on := h.Enabled() // meaningless without an installed guest, so absent then
+		v.Installed, v.URL, v.Enabled = &in, in.URL(), &on
 		v.QEMU = in.QEMU
 		if v.QEMU == "" {
 			v.QEMU, _ = wrapperhost.FindQEMU("", runtime.GOOS, exec.LookPath, exists) // empty when missing
@@ -115,9 +116,12 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 			if curErr == nil && cur.SHA256 == pin.SHA256 {
 				e.note("the wrapper guest from %s is already installed", pin.Commit[:12])
 			} else {
-				e.note("downloading the wrapper guest (%d MB, upstream commit %s, %s pin) and checking its sha256",
+				e.progressf("downloading the wrapper guest (%d MB, upstream commit %s, %s pin) and checking its sha256",
 					pin.Size>>20, pin.Commit[:12], source)
-				if _, err := h.Install(e.ctx, wrapperhost.NightlyLink{Client: &http.Client{}}, pin, time.Now()); err != nil {
+				rep := e.installReport()
+				_, err := h.Install(e.ctx, wrapperhost.NightlyLink{Client: &http.Client{}}, pin, time.Now(), rep.report)
+				rep.finish()
+				if err != nil {
 					return &cliError{Code: "wrapper_download_failed", exit: exitUnavailable, Message: err.Error(),
 						Hint: "run it again to resume, or download the qemu-assets artifact and run amdl wrapper import <zip>"}
 				}

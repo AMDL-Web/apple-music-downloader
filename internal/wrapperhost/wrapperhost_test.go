@@ -126,7 +126,7 @@ func TestDownloadResumesAndVerifies(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a.zip")
 	os.WriteFile(path, body[:1200], 0o600)
 	f := &fakeFetcher{body: body}
-	if err := Download(context.Background(), f, pinFor(body, "c"), path); err != nil {
+	if err := Download(context.Background(), f, pinFor(body, "c"), path, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.calls) != 1 || f.calls[0] != 1200 {
@@ -134,7 +134,7 @@ func TestDownloadResumesAndVerifies(t *testing.T) {
 	}
 	bad := pinFor(body, "c")
 	bad.SHA256 = strings.Repeat("0", 64)
-	if err := Download(context.Background(), f, bad, path); !errors.Is(err, ErrChecksum) {
+	if err := Download(context.Background(), f, bad, path, nil); !errors.Is(err, ErrChecksum) {
 		t.Errorf("mismatch: %v", err)
 	}
 	if st, _ := os.Stat(path); st.Size() != 0 {
@@ -142,11 +142,38 @@ func TestDownloadResumesAndVerifies(t *testing.T) {
 	}
 }
 
+func TestInstallReportsEachStep(t *testing.T) {
+	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
+	art := fakeArtifact(t, "", "empty image")
+	p := pinFor(art, "bde3335f47a30518")
+	// A partial file left by an earlier attempt: the count starts from it.
+	h.prepare()
+	os.WriteFile(h.path("download-"+p.SHA256[:12]+".zip"), art[:100], 0o600)
+	var got []Progress
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, p, time.Now(), func(pr Progress) { got = append(got, pr) }); err != nil {
+		t.Fatal(err)
+	}
+	want := []Progress{
+		{Downloading, 100, p.Size},
+		{Downloading, p.Size, p.Size},
+		{Verifying, p.Size, p.Size},
+		{Phase: Unpacking},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("reports = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("report %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
 func TestInstallKeepsTheAccount(t *testing.T) {
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
 	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
 	first := fakeArtifact(t, "", "empty image")
-	in, err := h.Install(context.Background(), &fakeFetcher{body: first}, pinFor(first, "bde3335f47a30518"), now)
+	in, err := h.Install(context.Background(), &fakeFetcher{body: first}, pinFor(first, "bde3335f47a30518"), now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +189,7 @@ func TestInstallKeepsTheAccount(t *testing.T) {
 	}
 	os.WriteFile(h.ImagePath(), []byte("logged-in tokens"), 0o600)
 	second := fakeArtifact(t, "qemu/", "another empty image")
-	up, err := h.Install(context.Background(), &fakeFetcher{body: second}, pinFor(second, "0123456789abcdef"), now)
+	up, err := h.Install(context.Background(), &fakeFetcher{body: second}, pinFor(second, "0123456789abcdef"), now, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

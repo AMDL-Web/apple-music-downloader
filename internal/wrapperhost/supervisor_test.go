@@ -151,7 +151,7 @@ func runFake(t *testing.T) (*Supervisor, Home, *syncBuffer) {
 	t.Setenv("AMDL_FAKE_QEMU", "1")
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
 	art := fakeArtifact(t, "", "empty image")
-	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), time.Now()); err != nil {
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
 	log := &syncBuffer{}

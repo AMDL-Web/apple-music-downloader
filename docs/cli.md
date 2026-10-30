@@ -261,6 +261,12 @@ local files and talk to no server. `wrapper status`, `login`, `2fa` and `logout`
 commands: with a managed wrapper the backend logs in through the guest, so they work as
 with a wrapper-manager, and they wait up to `internal/client#LoginWait`, longer than the backend spends on one (`internal/wrapperhost#LoginLimit`).
 
+`wrapper install` and `update` download the guest. Their progress goes to stderr, never
+stdout, which keeps only the final JSON: one line rewritten in place on a terminal, else
+a line at each 10% or every 15 seconds, then a line each for the sha256 check and the
+unpack. `--quiet` silences it. After `wrapper uninstall` the result omits `enabled`,
+which only describes an installed guest.
+
 ## Agent setup
 
 `amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
