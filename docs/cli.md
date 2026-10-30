@@ -191,3 +191,9 @@ can finish. The first start needs the wrapper's address, from `--wrapper` or
 `amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
 nothing: the `claude mcp add` command, a Codex `config.toml` entry, an `mcpServers` JSON
 entry, and a paragraph for `AGENTS.md` or `CLAUDE.md`.
+
+## Releases
+
+`make dist` cross-compiles `amdl` for Linux, macOS and Windows (`Makefile` lists the
+platforms) into one archive each plus `SHA256SUMS`; the release workflow attaches them
+to every GitHub release.
