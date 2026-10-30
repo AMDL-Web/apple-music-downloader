@@ -15,8 +15,12 @@ import (
 	"amdl/internal/domain"
 )
 
-// libraryTabs name the library's tabs, in store.LibraryKinds order.
-var libraryTabs = []string{"Albums", "Playlists", "Songs"}
+// libraryTabs name the library's tabs, and libraryNouns one item of each,
+// in store.LibraryKinds order.
+var (
+	libraryTabs  = []string{"Albums", "Playlists", "Songs"}
+	libraryNouns = []string{"album", "playlist", "song"}
+)
 
 // libraryMinTile is the narrowest a library tile gets before the grid
 // drops a column; libraryGap spaces the tiles across.
@@ -128,7 +132,9 @@ func (a *App) libraryHero(c *ui.Context, k *Tokens, dj domain.Job, d *client.Dow
 		card := ui.Row(c).Padding(22, 24).Gap(28).Radius(18).Clip().AlignItems(ui.End)
 		card.Background(card.AnimateColor("bg", bg, ui.Smooth)).Children(func() {
 			if pal.OK {
-				widgets.Backdrop{Light: pal.Bg.Mix(pal.Text1, 0.3), Deep: pal.Bg.Mix(ui.Hex("#05081f"), 0.55), Strength: 0.7, Height: 320}.Show(c)
+				// Shades close to the album's color keep its text colors
+				// readable across the whole card.
+				widgets.Backdrop{Light: pal.Bg.Mix(ui.RGB(255, 255, 255), 0.2), Deep: pal.Bg.Mix(ui.RGB(0, 0, 0), 0.15), Strength: 0.55, Height: 320}.Show(c)
 			}
 			cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 400), Placeholder: bg.Mix(k.Ink, 0.2), Size: 184, Radius: 12, Color: 1, Shadow: true}.Show(c)
 			if j.MotionArtworkURL != "" {
@@ -154,7 +160,7 @@ func (a *App) libraryHero(c *ui.Context, k *Tokens, dj domain.Job, d *client.Dow
 				ui.Text(c, strings.Join(facts, " · ")).FontSize(15).TextColor(t2).SingleLine().Ellipsis("…")
 				ui.Row(c).Gap(8).Margin(6, 0, 0, 0).Children(func() {
 					if a.Settings.Mode == mode.Standalone {
-						if dir := savedDir(j); dir != "" && artButton(c, revealLabel, t1, bg.Mix(ui.Hex("#05081f"), 0.4)).Clicked() {
+						if dir := savedDir(j); dir != "" && artButton(c, revealLabel, t1, Readable(bg, t1, k)).Clicked() {
 							a.Act.Reveal(dir)
 						}
 					}
@@ -179,24 +185,30 @@ func (a *App) libraryTile(c *ui.Context, k *Tokens, j domain.Job, size float32) 
 		a.OpenJob(j.ID)
 	}
 	t.Cursor(ui.CursorPointer).Children(func() {
-		frame := ui.Box(c).Size(size, size).Radius(10).Scale(1+0.03*lift, 1+0.03*lift)
-		if lift > 0.01 {
-			frame.Shadow(0, 18*lift, 40*lift, 0, ui.RGBA(0, 0, 0, 0.5*lift))
-		}
-		frame.Children(func() {
-			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: 10, Color: 1}.Show(c)
-			if lift > 0.01 {
-				ui.Box(c).Fill().Radius(10).Absolute().Top(0).Left(0).Border(2, k.Accent.Alpha(lift)).PassThrough()
-			}
-			if j.MotionArtworkURL != "" {
-				ui.Box(c).Size(20, 20).Radius(999).Background(ui.RGBA(10, 12, 20, 0.55)).Absolute().Right(7).Top(7).Center().Children(func() {
-					ui.Icon(c, icPlay).FontSize(9).TextColor(ui.Hex("#f2f3f8"))
-				})
-			}
-		})
-		ui.Text(c, sj.Name()).FontSize(12.5).FontWeight(600).SingleLine().Ellipsis("…")
-		ui.Text(c, sj.By()).FontSize(11.5).TextColor(k.Muted).SingleLine().Ellipsis("…").Margin(-4, 0, 0, 0)
+		ui.Column(c).Gap(7).MinWidth(0).Children(func() { a.tileFace(c, k, sj, pal, size, lift) })
 	})
+}
+
+// tileFace is a library tile's cover, title and artist, the cover lifted
+// by lift (0..1) while hovered.
+func (a *App) tileFace(c *ui.Context, k *Tokens, j *store.Job, pal Palette, size, lift float32) {
+	frame := ui.Box(c).Size(size, size).Radius(10).Scale(1+0.03*lift, 1+0.03*lift)
+	if lift > 0.01 {
+		frame.Shadow(0, 18*lift, 40*lift, 0, ui.RGBA(0, 0, 0, 0.5*lift))
+	}
+	frame.Children(func() {
+		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: 10, Color: 1}.Show(c)
+		if lift > 0.01 {
+			ui.Box(c).Fill().Radius(10).Absolute().Top(0).Left(0).Border(2, k.Accent.Alpha(lift)).PassThrough()
+		}
+		if j.MotionArtworkURL != "" {
+			ui.Box(c).Size(20, 20).Radius(999).Background(ui.RGBA(10, 12, 20, 0.55)).Absolute().Right(7).Top(7).Center().Children(func() {
+				ui.Icon(c, icPlay).FontSize(9).TextColor(ui.Hex("#f2f3f8"))
+			})
+		}
+	})
+	ui.Text(c, j.Name()).FontSize(12.5).FontWeight(600).SingleLine().Ellipsis("…")
+	ui.Text(c, j.By()).FontSize(11.5).TextColor(k.Muted).SingleLine().Ellipsis("…").Margin(-4, 0, 0, 0)
 }
 
 // libraryFooter ends the grid: more loading, a read that failed, or the
@@ -216,7 +228,7 @@ func (a *App) libraryFooter(c *ui.Context, k *Tokens, l *store.Library) {
 				a.Store.MoreLibrary()
 			}
 		default:
-			mono(c, fmt.Sprintf("%d %s", l.Total, strings.ToLower(libraryTabs[l.Kind])), 11).TextColor(k.Faint)
+			mono(c, plural(l.Total, libraryNouns[l.Kind]), 11).TextColor(k.Faint)
 		}
 	})
 }

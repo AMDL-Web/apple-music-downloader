@@ -78,9 +78,9 @@ func moleCard(c *ui.Context, k *Tokens, key string, span int, tile ui.Color, ic 
 	})
 }
 
-// cardFoot is a card's last line of detail.
+// cardFoot is a card's last lines of detail, two at most.
 func cardFoot(c *ui.Context, k *Tokens, s string) {
-	mono(c, s, 11.5).TextColor(k.Muted).Ellipsis("…")
+	ui.Text(c, s).Font(MonoFont).FontSize(11.5).FontWeight(500).LineHeight(1.45).TextColor(k.Muted).MaxLines(2).Ellipsis("…")
 }
 
 func (a *App) healthCard(c *ui.Context, k *Tokens, sv *store.Server) {
@@ -94,8 +94,11 @@ func (a *App) healthCard(c *ui.Context, k *Tokens, sv *store.Server) {
 		if sv.Health.DatabaseError != "" {
 			problems = append(problems, "database: "+sv.Health.DatabaseError)
 		}
-		if sv.Wrapper == nil || !sv.Wrapper.Ready {
+		switch {
+		case sv.Wrapper == nil || !sv.Wrapper.Ready:
 			problems = append(problems, "the wrapper is not ready")
+		case !sv.Wrapper.Status:
+			problems = append(problems, "no Apple Music account is signed in")
 		}
 		if sv.System != nil {
 			for _, t := range sv.System.Tools {
@@ -148,10 +151,18 @@ func planet(c *ui.Context, k *Tokens, glow ui.Color) {
 	if !k.Dark {
 		p.Border(1, k.Line)
 	}
+	// The light's reflection, high on the left.
+	p.Clip().Children(func() {
+		ui.Box(c).Size(34, 30).Radius(999).Background(ui.RGBA(255, 255, 255, 0.55)).Blur(9).Absolute().Left(16).Top(12)
+	})
 }
 
 func (a *App) workersCard(c *ui.Context, k *Tokens, sv *store.Server) {
-	moleCard(c, k, "workers", 1, k.TileQueue, icQueue, "Workers", ui.Color{}, nil, func() {
+	var chips []string
+	if sv.System != nil {
+		chips = []string{fmt.Sprintf("queue %d / %d", sv.System.Jobs.QueueDepth, sv.System.Jobs.QueueCapacity)}
+	}
+	moleCard(c, k, "workers", 1, k.TileQueue, icQueue, "Workers", ui.Color{}, chips, func() {
 		if sv.System == nil {
 			bigValue(c, k, "—", "", 34)
 			cardFoot(c, k, "The backend did not say")
@@ -165,7 +176,7 @@ func (a *App) workersCard(c *ui.Context, k *Tokens, sv *store.Server) {
 		}
 		bars(c, k, vals, 12, k.Accent)
 		p := sv.System.Pools
-		cardFoot(c, k, fmt.Sprintf("Queue %d/%d · pools %d download · %d decrypt", j.QueueDepth, j.QueueCapacity, p.Downloads, p.Decrypts))
+		cardFoot(c, k, fmt.Sprintf("Pools %d download · %d decrypt · %d wrapper", p.Downloads, p.Decrypts, p.WrapperRequests))
 	})
 }
 
@@ -245,13 +256,14 @@ func diskCard(c *ui.Context, k *Tokens, key, title string, st *client.Storage) {
 func meter(c *ui.Context, k *Tokens, used float64, h float32) {
 	used = min(max(used, 0), 1)
 	ui.Row(c).Height(h).Radius(h / 2).Background(k.Track).Clip().Children(func() {
+		// Rows do not stretch their children's height: each part sets it.
 		if used > 0 {
-			ui.Box(c).Grow(float32(used)).Radius(h / 2).LinearGradient(ui.LinearGradient{Angle: 90, Stops: []ui.GradientStop{
+			ui.Box(c).Grow(float32(used)).Height(h).Radius(h / 2).LinearGradient(ui.LinearGradient{Angle: 90, Stops: []ui.GradientStop{
 				{Color: ui.Hex("#8a6a3e"), At: 0}, {Color: ui.Hex("#e2c08a"), At: 1},
 			}})
 		}
 		if used < 1 {
-			ui.Box(c).Grow(float32(1 - used))
+			ui.Box(c).Grow(float32(1 - used)).Height(h)
 		}
 	})
 }
@@ -259,18 +271,19 @@ func meter(c *ui.Context, k *Tokens, used float64, h float32) {
 func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server) {
 	w := sv.Wrapper
 	var chips []string
-	if w != nil && len(w.Accounts) > 0 {
-		chips = []string{plural(len(w.Accounts), "account")}
+	if w != nil {
+		// Only wrapper-manager signs accounts in and out over the API.
+		chips = []string{map[bool]string{true: "wrapper-manager", false: "wrapper-lite"}[w.LoginSupported]}
 	}
 	moleCard(c, k, "account", 2, k.TileSettings, icPerson, "Apple Music account", ui.Color{}, chips, func() {
 		word, kind, state, ic := "Signed in", pillOK, "Ready", icCheck
 		switch {
 		case w == nil:
 			word, kind, state, ic = "Unreachable", pillBad, "No answer", icCross
-		case len(w.Accounts) == 0:
-			word, kind, state, ic = "Signed out", pillWarn, "No account", icWarn
 		case !w.Ready:
-			kind, state, ic = pillWarn, "Not ready", icWarn
+			word, kind, state, ic = "Starting", pillWait, "Not ready", nil
+		case !w.Status:
+			word, kind, state, ic = "Signed out", pillWarn, "No account", icWarn
 		}
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			display(c, word, 24).SingleLine()

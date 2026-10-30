@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
+	"image/png"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/client"
 	appui "amdl/apps/desktop/internal/ui"
@@ -25,6 +27,9 @@ func (a *App) captureScreens(dir string) {
 		mygo.App.Quit()
 		return
 	}
+	// The window keeps the size it last had; the shots compare with
+	// boards drawn at 1280×800.
+	a.post(func() { a.win.SetSize(1280, 800) })
 	loaded := make(chan bool, 1)
 	deadline := time.Now().Add(shotTimeout)
 	for time.Now().Before(deadline) {
@@ -42,19 +47,31 @@ func (a *App) captureScreens(dir string) {
 	shot := func(name string, setup func(), settle time.Duration) {
 		a.post(setup)
 		time.Sleep(settle)
-		png, err := a.win.CapturePage()
+		img, err := a.win.CapturePage()
 		if err != nil {
 			a.log.Error("capture", "shot", name, "error", err)
 			return
 		}
 		path := filepath.Join(dir, name+".png")
-		if err := os.WriteFile(path, png, 0o644); err != nil {
+		if err := os.WriteFile(path, img, 0o644); err != nil {
 			a.log.Error("capture", "shot", name, "error", err)
 			return
 		}
 		fmt.Println("wrote", path)
+		// The narrow window may not show what the wide view does, as the
+		// new download screen's large cover: a first render asks for its
+		// images, the second shows them.
+		wide := filepath.Join(dir, name+"-wide.png")
+		a.render(a.view.View, 1280, 800, wide)
+		time.Sleep(2500 * time.Millisecond)
+		a.render(a.view.View, 1280, 800, wide)
 	}
+	// The test album downloads in well under a minute: render the panel
+	// first, while it still runs.
+	a.render(a.view.Panel, appui.PanelWidth, 460, filepath.Join(dir, "09-panel-live.png"))
 	shot("01-queue", func() { a.view.Go(appui.ScreenQueue) }, 1500*time.Millisecond)
+	// The panel goes early, while the submitted album still downloads.
+	a.shotPanel(filepath.Join(dir, "09-panel.png"))
 	shot("02-detail", func() {
 		if j := a.store.Now(); j != nil {
 			a.view.OpenJob(j.ID)
@@ -71,7 +88,6 @@ func (a *App) captureScreens(dir string) {
 	}, 4*time.Second)
 	shot("07-library", func() { a.store.SetOmniText(""); a.view.Go(appui.ScreenLibrary) }, 4*time.Second)
 	shot("08-system", func() { a.view.Go(appui.ScreenSystem) }, 3*time.Second)
-	a.shotPanel(filepath.Join(dir, "09-panel.png"))
 	shot("04-light", func() { a.view.Theme = "light"; a.view.Go(appui.ScreenQueue) }, 2000*time.Millisecond)
 	shot("10-new-light", func() {
 		a.view.Go(appui.ScreenNew)
@@ -83,6 +99,30 @@ func (a *App) captureScreens(dir string) {
 	a.post(func() { a.win.SetSize(1280, 800) })
 	time.Sleep(500 * time.Millisecond)
 	mygo.App.Quit()
+}
+
+// render draws view at width×height without a window, as the boards are
+// drawn at 1280×800 on a display that may be smaller. The view's state is
+// the window's, so it shows the same data.
+func (a *App) render(view func(*ui.Context), width, height int, path string) {
+	done := make(chan error, 1)
+	a.post(func() {
+		tt := ui.NewTester(view, width, height)
+		tt.SetScale(2)
+		// The Tester's clock stands still: move it past the animations.
+		tt.Advance(2 * time.Second)
+		f, err := os.Create(path)
+		if err == nil {
+			err = png.Encode(f, tt.Image())
+			if cerr := f.Close(); err == nil {
+				err = cerr
+			}
+		}
+		done <- err
+	})
+	if err := <-done; err != nil {
+		a.log.Error("render", "path", path, "error", err)
+	}
 }
 
 // shotAlbum is the album the shots preview: the one test downloads may
@@ -103,9 +143,9 @@ func (a *App) shotPanel(path string) {
 		return
 	}
 	time.Sleep(2500 * time.Millisecond)
-	png, err := p.CapturePage()
+	img, err := p.CapturePage()
 	if err == nil {
-		err = os.WriteFile(path, png, 0o644)
+		err = os.WriteFile(path, img, 0o644)
 	}
 	if err != nil {
 		a.log.Error("capture", "shot", "panel", "error", err)

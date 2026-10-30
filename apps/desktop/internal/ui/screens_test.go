@@ -66,7 +66,7 @@ func TestSystemCardsReadTheServer(t *testing.T) {
 	sv.System.Jobs.Workers = 3
 	sv.System.Tools = []domain.Capability{{Name: "ffmpeg", Available: true}}
 	sv.System.Storage = []client.Storage{{Name: "downloads_dir", Path: "data/downloads", FreeBytes: 1_620_000_000_000, TotalBytes: 7_670_000_000_000}}
-	sv.Wrapper = &client.WrapperStatus{Ready: true, Accounts: []string{"someone@example.com"}, Regions: []string{"cn", "us"}}
+	sv.Wrapper = &client.WrapperStatus{Ready: true, Status: true, Accounts: []string{"someone@example.com"}, Regions: []string{"cn", "us"}}
 	tt := ui.NewTester(a.View, 1280, 800)
 	for _, want := range []string{"All good", "01339f0", "of 3 busy", "Downloads folder", "1.62", "TB free", "Signed in", "someone@example.com"} {
 		if !tt.HasText(want) {
