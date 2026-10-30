@@ -80,7 +80,7 @@ Two ways to run it, side by side:
 | | Binary | Docker |
 | --- | --- | --- |
 | Suits | A desktop or laptop (macOS, Linux, Windows), no Docker | A NAS or server, next to the wrapper |
-| Install | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh` (PowerShell: `irm …/install.ps1 \| iex`) | Copy [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
+| Install | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh` (PowerShell: see the guide) | Copy [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | Runs as | A service that starts at login: `amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | Install it yourself; `amdl doctor` prints the command | In the image |
 | Wrapper | Elsewhere, or locally through upstream's QEMU launcher | A compose service on the same host |

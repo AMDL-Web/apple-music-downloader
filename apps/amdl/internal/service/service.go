@@ -44,6 +44,9 @@ type State struct {
 	// Definition is the plist, the unit file or the task's name.
 	Definition string `json:"definition"`
 	Installed  bool   `json:"installed"`
+	// Active means the manager runs the service now and keeps it running:
+	// false after amdl service stop, true again after start.
+	Active bool `json:"active"`
 	// Status is the manager's own word for it, such as active or Running.
 	Status string `json:"status,omitempty"`
 }
@@ -203,6 +206,14 @@ func taskXML(s Spec, at time.Time) []byte {
 		out = append(out, byte(c), byte(c>>8))
 	}
 	return out
+}
+
+// disabled reports whether a task definition's settings, rather than one of
+// its triggers, carry <Enabled>false</Enabled>.
+func disabled(def string) bool {
+	_, settings, ok := strings.Cut(def, "<Settings>")
+	settings, _, _ = strings.Cut(settings, "</Settings>")
+	return ok && strings.Contains(settings, "<Enabled>false</Enabled>")
 }
 
 // winQuote quotes one argument the way Windows programs split a command line.

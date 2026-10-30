@@ -112,3 +112,15 @@ func TestTaskXML(t *testing.T) {
 		t.Errorf("action = %q %q", task.Command, task.Arguments)
 	}
 }
+
+func TestDisabled(t *testing.T) {
+	// schtasks /Query /XML after /Change /DISABLE: the triggers stay enabled.
+	def := "<Task><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>" +
+		"<Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><Enabled>false</Enabled></Settings></Task>"
+	if !disabled(def) || disabled(strings.Replace(def, "<Enabled>false", "<Enabled>true", 1)) {
+		t.Error("disabled misreads the settings")
+	}
+	if disabled("<Task><Triggers><TimeTrigger><Enabled>false</Enabled></TimeTrigger></Triggers><Settings></Settings></Task>") {
+		t.Error("a disabled trigger is not a disabled task")
+	}
+}

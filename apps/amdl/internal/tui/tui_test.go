@@ -173,6 +173,26 @@ func TestFinishedJobGoesToScrollbackOnce(t *testing.T) {
 	}
 }
 
+func TestRetriedJobFinishesAgain(t *testing.T) {
+	m := sample(t)
+	j := m.jobs["job_a"].job
+	j.Status = domain.JobFailed
+	m.onFeed(domain.DownloadFeedMessage{Type: "download_upserted", Job: &j})
+	// POST /downloads/{id}/retry puts the same job back in the queue.
+	j.Status = domain.JobQueued
+	m.onFeed(domain.DownloadFeedMessage{Type: "download_upserted", Job: &j})
+	if _, ok := m.jobs["job_a"]; !ok {
+		t.Fatal("a retried job is live again")
+	}
+	j.Status = domain.JobCompleted
+	if cmd := m.onFeed(domain.DownloadFeedMessage{Type: "download_upserted", Job: &j}); cmd == nil {
+		t.Error("the retry's finish prints its own line")
+	}
+	if _, ok := m.jobs["job_a"]; ok {
+		t.Error("the retried job's card stays after it finishes")
+	}
+}
+
 func TestQuitNeedsCtrlCTwice(t *testing.T) {
 	m := sample(t)
 	ctrlC := tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}

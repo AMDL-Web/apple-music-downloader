@@ -71,7 +71,7 @@ apps/desktop/internal 下，只归它用。
 | | 二进制 | Docker |
 | --- | --- | --- |
 | 适合 | 台式机或笔记本（macOS、Linux、Windows），不装 Docker | NAS 或服务器，和 wrapper 放在一起 |
-| 安装 | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh`（PowerShell：`irm …/install.ps1 \| iex`） | 复制 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
+| 安装 | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh`（PowerShell 见指南） | 复制 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | 运行方式 | 登录即启动的后台服务：`amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | 自己安装；`amdl doctor` 会给出安装命令 | 镜像自带 |
 | wrapper | 用别处的，或用上游的 QEMU 启动器在本机跑 | 同一台机器上的 compose 服务 |

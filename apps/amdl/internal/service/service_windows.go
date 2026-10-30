@@ -99,5 +99,9 @@ func Query() (State, error) {
 	if rec, err := csv.NewReader(strings.NewReader(strings.TrimSpace(out))).Read(); err == nil && len(rec) >= 3 {
 		st.Status = rec[2]
 	}
+	// Stop disables the task; the definition says so in any language.
+	if def, err := run("schtasks", "/Query", "/TN", Name, "/XML"); err == nil {
+		st.Active = !disabled(def)
+	}
 	return st, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,11 @@ func TestWriteConfig(t *testing.T) {
 	if cfg.Wrapper.Address != "http://nas:30020" || cfg.Download.DownloadsDir != filepath.Join(d.Music, "AMDL") ||
 		cfg.Database.Path != filepath.Join(d.ServerDir(), "db", "amdl.db") || !filepath.IsAbs(cfg.Download.TempDir) {
 		t.Errorf("first config = wrapper %q, downloads %q, db %q, temp %q", cfg.Wrapper.Address, cfg.Download.DownloadsDir, cfg.Database.Path, cfg.Download.TempDir)
+	}
+	// A new install numbers album tracks across discs, as the example does;
+	// {TrackNumber} restarts on every disc and collides.
+	if !strings.Contains(cfg.Download.AlbumPathFormat, "{SongNumber") || !strings.Contains(cfg.Download.ArtistPathFormat, "{SongNumber") {
+		t.Errorf("first config album/artist layout = %q, %q", cfg.Download.AlbumPathFormat, cfg.Download.ArtistPathFormat)
 	}
 	// A later start without settings keeps the file's.
 	if err := (Backend{Dirs: d}).WriteConfig(); err != nil {
