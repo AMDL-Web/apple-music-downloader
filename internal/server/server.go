@@ -144,6 +144,9 @@ func Run(ctx context.Context, opts Options) (err error) {
 
 	catalog := applemusic.NewCatalogClient(cfg.Catalog, logSystem.Logger.With("component", "catalog"))
 	toolChecker := media.NewToolChecker(cfg.Tools)
+	if err := toolChecker.Require(ctx); err != nil && !cfg.Simulate.Enabled {
+		logger.Warn("downloads fail until ffmpeg is installed", "error", err.Error())
+	}
 	downloader := media.NewDownloader(cfgStore, catalog, wrapperClient, toolChecker, logSystem.Logger.With("component", "media"))
 	qualityService := media.NewQualityService(downloader)
 	manager := jobs.NewManager(store, hub, downloader, cfg.Download.MaxRunningJobs, logSystem.Logger.With("component", "jobs"))

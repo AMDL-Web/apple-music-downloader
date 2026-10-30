@@ -14,6 +14,7 @@ import (
 	"amdl/apps/amdl/internal/service"
 	"amdl/internal/config"
 	"amdl/internal/local"
+	"amdl/internal/media"
 )
 
 // serviceStatus is what amdl service status and the other service commands
@@ -87,16 +88,16 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 		b := local.Backend{Dirs: dirs, Wrapper: or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS"))}
 		// A service starts with a short PATH (launchd's is /usr/bin:/bin:…),
 		// so ffmpeg is pinned to where this shell finds it.
-		ffmpeg := config.Default().Tools.FFmpeg
+		ffmpeg, simulate := config.Default().Tools.FFmpeg, false
 		if cfg, err := config.Load(b.ConfigPath()); err == nil {
-			ffmpeg = cfg.Tools.FFmpeg
+			ffmpeg, simulate = cfg.Tools.FFmpeg, cfg.Simulate.Enabled
 		}
-		if !filepath.IsAbs(ffmpeg) {
-			if p, err := exec.LookPath(ffmpeg); err == nil {
-				b.FFmpeg = p
-			} else {
-				e.note("%s is not on PATH; set tools.ffmpeg to its full path before downloading", ffmpeg)
-			}
+		if p, err := exec.LookPath(ffmpeg); err == nil {
+			b.FFmpeg = p
+		} else if !simulate {
+			return &cliError{Code: "ffmpeg_missing", exit: exitUnavailable,
+				Message: "ffmpeg (" + ffmpeg + ") is not installed or not on PATH; the backend needs it to write tracks",
+				Hint:    media.InstallHint() + ", then run amdl service install again"}
 		}
 		if err := b.WriteConfig(); errors.Is(err, local.ErrNoWrapper) {
 			return errNoWrapper()

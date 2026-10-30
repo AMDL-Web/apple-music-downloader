@@ -217,6 +217,16 @@ ends the process outright and its jobs resume on the next start. `uninstall` rem
 the registration and leaves the data. A `systemd --user` unit stops at logout unless
 lingering is on (`loginctl enable-linger`).
 
+## Checking a setup
+
+`amdl doctor` checks what downloading needs and never starts a backend: the server a
+command would use answers, has ffmpeg and a ready wrapper; and, when that server runs on
+this machine's local files, ffmpeg is installed here (with its version). It also reports
+the local data directory and service. Each failed check carries a hint, such as the
+command that installs ffmpeg with the package manager found; any required check failing
+exits 5 with `checks_failed`. `amdl service install` fails the same way, with
+`ffmpeg_missing`, before it registers anything ([install.md](install.md#ffmpeg)).
+
 ## Agent setup
 
 `amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
@@ -227,4 +237,5 @@ entry, and a paragraph for `AGENTS.md` or `CLAUDE.md`.
 
 `make dist` cross-compiles `amdl` for Linux, macOS and Windows (`Makefile` lists the
 platforms) into one archive each plus `SHA256SUMS`; the release workflow attaches them
-to every GitHub release.
+to every GitHub release with the Homebrew formula and Scoop manifest rendered for them
+(`deploy/packaging/README.md`). Installing from them: [install.md](install.md).
