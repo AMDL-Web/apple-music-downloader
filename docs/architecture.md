@@ -85,7 +85,8 @@ over HTTP (`wrapper.address`) to one of two upstream services, which look the sa
 which holds one logged-in account, or [wrapper-manager
 v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2), which runs one
 wrapper-lite per account behind a single port and forwards each request to an account
-whose storefront can serve it. What the backend asks for:
+whose storefront can serve it. A wrapper-lite can also be one amdl runs itself in a QEMU
+guest (`internal/wrapperhost`, the managed wrapper). What the backend asks for:
 
 - `/key`: for each FairPlay key URI, a white-box template (`ctx` and `state`). The client
   caches templates across jobs, and `internal/fairplay#Template` decrypts samples in

@@ -35,7 +35,9 @@ Server-Sent Events 接口，以及同一端口上的网页控制台。它以容�
 `apps/amdl` 构建出 `amdl`，一个面向 agent 和脚本的 API 客户端：每个结果都是 stdout 上的
 JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli search "<任务>"` 能找到对应
 的命令。`amdl mcp` 把同样的能力作为 MCP 工具提供；在终端里直接运行 `amdl` 会打开给人用的交互界面。没有单独部署服务器时，`amdl service install`
-会把后端作为登录即启动的后台服务跑在本机。详见 [docs/cli.md](docs/cli.md)。
+会把后端作为登录即启动的后台服务跑在本机，`amdl wrapper install` 再给它配一个自己的 wrapper：
+由后端在 QEMU 虚拟机里运行的上游 wrapper-lite（[docs/install.md](docs/install.md#a-wrapper-amdl-runs)）。
+详见 [docs/cli.md](docs/cli.md)。
 
 ### 官网
 
@@ -67,6 +69,7 @@ apps/desktop/internal 下，只归它用。
 - 一个 wrapper：保存 Apple Music 登录状态的上游服务。它跑在 Linux（x86_64 或 arm64）上，
   原生和 Docker 启动器需要 user namespace（`unshare -Ur true` 必须能成功）；没有它的主机，
   例如群晖 DSM，改用 wrapper-manager v2 的 QEMU 变体。见 [Wrapper](docs/deployment.md#the-wrapper)。
+  在 macOS、Windows 或 Linux 上用二进制安装时，也可以让 amdl 自己在 QEMU 里跑一个（`amdl wrapper install`）。
 - 带 Compose 的 Docker，或者 Go（版本见 [`go.mod`](go.mod)）加 `ffmpeg`。
 
 ## 快速开始
@@ -79,7 +82,7 @@ apps/desktop/internal 下，只归它用。
 | 安装 | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh`（PowerShell 见指南） | 复制 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | 运行方式 | 登录即启动的后台服务：`amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | 自己安装；`amdl doctor` 会给出安装命令 | 镜像自带 |
-| wrapper | 用别处的，或用上游的 QEMU 启动器在本机跑 | 同一台机器上的 compose 服务 |
+| wrapper | 用别处的，或让 amdl 在 QEMU 里跑一个：`amdl wrapper install` | 同一台机器上的 compose 服务 |
 | 指南 | [docs/install.md](docs/install.md) | 下文和 [docs/deployment.md](docs/deployment.md) |
 
 本节下面讲 Docker 方式。仓库里的 [`deploy/docker-compose.yml`](deploy/docker-compose.yml) 用 GHCR 上的预构建镜像运行 amdl，两种
@@ -250,11 +253,14 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 | [docs/deployment.md](docs/deployment.md) | Docker、wrapper、挂载目录、`PUID`/`PGID`、反向代理、发布与镜像标签 |
 | [docs/configuration.md](docs/configuration.md) | 配置文件、默认值、环境变量覆盖、运行时与启动配置项、重新加载 |
 | [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) | 从 1.x 起的每一处破坏性变更，附升级清单 |
+| [docs/install.md](docs/install.md) | 不用 Docker 安装 `amdl`：安装脚本、ffmpeg、amdl 自己运行的 wrapper、后台服务 |
+| [docs/cli.md](docs/cli.md) | `amdl` 命令行、JSON 输出与退出码、MCP 服务和终端界面 |
 | [docs/api.md](docs/api.md) | 每个接口的 curl 示例、作业覆盖参数、错误码、SSE 语义 |
 | [docs/architecture.md](docs/architecture.md) | 进程生命周期、包、API 约定、存储 |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | 阶段、重试、编码回退、并发、内存模式、歌词、输出路径 |
 | [docs/automation.md](docs/automation.md) | 作业钩子与资料库同步 |
 | [docs/benchmarks.md](docs/benchmarks.md) | 解密后处理与端到端的实测结果 |
+| [docs/references.md](docs/references.md) | 借鉴、改造或放弃的外部做法 |
 | [docs/README.md](docs/README.md) | `docs/` 下所有页面的索引 |
 
 以上文档均为英文。
@@ -278,6 +284,11 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 | 作业钩子发送什么？ | `internal/hooks#Dispatcher` |
 | 资料库同步如何挑选专辑？ | `internal/librarysync#Watcher` |
 | 网页控制台怎么提供？ | `apps/console#Handler` |
+| 有哪些命令和 MCP 工具？ | `internal/capability#All`、`apps/amdl/internal/cli#Run`、`apps/amdl/internal/mcpserver#New` |
+| 终端界面怎么工作？ | `apps/amdl/internal/tui#Run` |
+| 客户端怎么调用 API？ | `internal/client#Client` |
+| 客户端怎么在本机运行后端？ | `internal/local#Backend` |
+| amdl 怎么在 QEMU 里运行 wrapper？ | `internal/wrapperhost#Supervisor` |
 | 官网怎么构建？ | `apps/site/build.mjs#renderPage` |
 
 ## 开发

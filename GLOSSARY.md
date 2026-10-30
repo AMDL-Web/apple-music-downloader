@@ -21,7 +21,8 @@ wins when they disagree, so details are not copied here.
 | Term | Meaning | Source |
 | --- | --- | --- |
 | wrapper, wrapper-lite | The HTTP service that holds the Apple account session and serves device manifests, licenses, lyrics and per-key decryption templates; required for real downloads | `internal/wrapper#Client` |
-| wrapper-manager | Upstream v2 gateway in front of one wrapper-lite per account; the only wrapper with the login API behind the console's Account page (`login_supported`) | `internal/wrapper#Client.StartLogin` |
+| wrapper-manager | Upstream v2 gateway in front of one wrapper-lite per account; the only upstream wrapper with the login API behind the console's Account page (`login_supported`) | `internal/wrapper#Client.StartLogin` |
+| Managed wrapper | A wrapper-lite that amdl runs itself in a QEMU guest on the backend's machine (`amdl wrapper install`); it logs in by booting the guest with the account, and `GET /wrapper/status` describes it in `managed` | `internal/wrapperhost#Supervisor` |
 | Key template | The `ctx` and `state` tables wrapper-lite's `/key` returns for a FairPlay key URI; `internal/fairplay` decrypts samples with it, in-process | `internal/fairplay#Template` |
 | Job | One submitted link (song, album, playlist, artist or station) and its lifecycle | `internal/domain#Job` |
 | Item | One track inside a job | `internal/domain#JobItem` |

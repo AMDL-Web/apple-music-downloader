@@ -112,7 +112,7 @@ with the same install hint.
 
 The wrapper holds the Apple Music account session and serves what the backend needs to
 decrypt ([deployment.md](deployment.md#the-wrapper) describes it and wrapper-manager v2).
-amdl only needs its address. Three ways to get one:
+amdl only needs its address. Four ways to get one:
 
 - **A wrapper on another machine**, such as a NAS or a Linux server, run as in
   [deployment.md](deployment.md#the-wrapper). Pass its address to `--wrapper`. This is

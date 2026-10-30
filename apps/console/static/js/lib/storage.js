@@ -1,4 +1,4 @@
-// Display helpers for the System page's Storage card and the Overview status
+// Display helpers for the storage rows of Settings and the Overview status
 // line. Pure.
 
 const PATH_SHOWN = 48;

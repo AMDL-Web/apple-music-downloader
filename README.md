@@ -40,7 +40,9 @@ result is JSON on stdout, errors are JSON on stderr with an exit status per kind
 failure, and `amdl cli search "<task>"` finds the command for a task. `amdl mcp` serves the same
 capabilities as MCP tools, and `amdl` alone in a terminal opens an interactive interface
 for people. Without a server of its own, `amdl service install` runs the backend on this
-machine as a background service that starts at login. [docs/cli.md](docs/cli.md)
+machine as a background service that starts at login, and `amdl wrapper install` gives it
+a wrapper of its own: upstream's wrapper-lite in a QEMU guest that the backend runs
+([docs/install.md](docs/install.md#a-wrapper-amdl-runs)). [docs/cli.md](docs/cli.md)
 describes it all.
 
 ### Website
@@ -76,7 +78,8 @@ What the server needs:
 - A wrapper: the upstream service that holds your Apple Music login. It runs on Linux
   (x86_64 or arm64). The native and Docker launchers need user namespaces (`unshare -Ur true`
   must succeed); on a host without them, such as Synology DSM, use wrapper-manager v2's
-  QEMU variant. See [Wrapper](docs/deployment.md#the-wrapper).
+  QEMU variant. See [Wrapper](docs/deployment.md#the-wrapper). With the binary install
+  on macOS, Windows or Linux, amdl can run one itself in QEMU (`amdl wrapper install`).
 - Docker with Compose, or Go (version in [`go.mod`](go.mod)) and `ffmpeg`.
 
 ## Quick start
@@ -89,7 +92,7 @@ Two ways to run it, side by side:
 | Install | `curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh \| sh` (PowerShell: see the guide) | Copy [`deploy/docker-compose.yml`](deploy/docker-compose.yml) |
 | Runs as | A service that starts at login: `amdl service install --wrapper <url>` | `docker compose up -d` |
 | ffmpeg | Install it yourself; `amdl doctor` prints the command | In the image |
-| Wrapper | Elsewhere, or locally through upstream's QEMU launcher | A compose service on the same host |
+| Wrapper | Elsewhere, or one amdl runs in QEMU: `amdl wrapper install` | A compose service on the same host |
 | Guide | [docs/install.md](docs/install.md) | Below and [docs/deployment.md](docs/deployment.md) |
 
 The rest of this section is the Docker path. The repository's
@@ -279,11 +282,14 @@ Both are off by default. See [docs/automation.md](docs/automation.md).
 | [docs/deployment.md](docs/deployment.md) | Docker, the wrapper, mounts, `PUID`/`PGID`, reverse proxies, releases and image tags |
 | [docs/configuration.md](docs/configuration.md) | Config file, defaults, environment overrides, runtime vs startup keys, reload |
 | [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) | Every breaking change from 1.x, with an upgrade checklist |
+| [docs/install.md](docs/install.md) | The `amdl` binary without Docker: install scripts, ffmpeg, a wrapper amdl runs, the background service |
+| [docs/cli.md](docs/cli.md) | The `amdl` command line, its JSON output and exit statuses, the MCP server and the terminal interface |
 | [docs/api.md](docs/api.md) | Every endpoint with curl examples, job overrides, error codes, SSE semantics |
 | [docs/architecture.md](docs/architecture.md) | Process lifecycle, packages, API conventions, storage |
 | [docs/download-pipeline.md](docs/download-pipeline.md) | Stages, retries, codec fallback, concurrency, memory modes, lyrics, output paths |
 | [docs/automation.md](docs/automation.md) | Job hooks and library sync |
 | [docs/benchmarks.md](docs/benchmarks.md) | Measured post-decrypt and end-to-end results |
+| [docs/references.md](docs/references.md) | Outside practices adopted, adapted or declined |
 | [docs/README.md](docs/README.md) | Index of every page in `docs/` |
 
 ## Reading map
@@ -306,6 +312,11 @@ so it stays valid when files inside the package are split.
 | What do job hooks send? | `internal/hooks#Dispatcher` |
 | How does library sync pick albums? | `internal/librarysync#Watcher` |
 | How is the web console served? | `apps/console#Handler` |
+| Which commands and MCP tools exist? | `internal/capability#All`, `apps/amdl/internal/cli#Run`, `apps/amdl/internal/mcpserver#New` |
+| How does the terminal interface work? | `apps/amdl/internal/tui#Run` |
+| How do the clients call the API? | `internal/client#Client` |
+| How does a client run the backend on this machine? | `internal/local#Backend` |
+| How does amdl run a wrapper in QEMU? | `internal/wrapperhost#Supervisor` |
 | How is the website built? | `apps/site/build.mjs#renderPage` |
 
 ## Development
