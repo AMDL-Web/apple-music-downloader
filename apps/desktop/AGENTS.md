@@ -3,7 +3,8 @@
 The desktop app for macOS, Windows and Linux, drawn with MyGo's native UI
 (`github.com/egoist/mygo/ui`). It runs in one of two modes, both over the
 public HTTP and SSE API: a client of a remote amdl, or standalone, where
-this computer runs the backend and a remote wrapper holds the account.
+this computer runs the backend and the account is held by the wrapper
+`amdl wrapper install` put on this computer or by one on another machine.
 
 ## Rules
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"amdl/internal/local"
 )
@@ -41,5 +42,33 @@ func TestStandaloneAttachesOrRunsTheOneBackend(t *testing.T) {
 	}()
 	if u, ok := local.Find(context.Background(), d); !ok || u != own.Base {
 		t.Errorf("another client finds %q, %v; want %s", u, ok, own.Base)
+	}
+}
+
+func TestFollowsARestartingServiceBeforeTakingOver(t *testing.T) {
+	const url = "http://127.0.0.1:52011"
+	start := time.Date(2026, 10, 30, 21, 0, 0, 0, time.UTC)
+	var gone time.Time
+	if replaceShared(local.Runtime{URL: url}, true, url, &gone, start) {
+		t.Fatal("left a backend that answers")
+	}
+	// The service stops; launchd and systemd start it again 10 s later.
+	for _, after := range []time.Duration{0, 3 * time.Second, 12 * time.Second} {
+		if replaceShared(local.Runtime{}, false, url, &gone, start.Add(after)) {
+			t.Fatalf("took the data directory %s after the service stopped, inside its restart delay", after)
+		}
+	}
+	if replaceShared(local.Runtime{URL: url}, true, url, &gone, start.Add(13*time.Second)) || !gone.IsZero() {
+		t.Fatal("did not follow the service once it answered again")
+	}
+	// Stopped for good: after the grace the app runs the backend itself.
+	replaceShared(local.Runtime{}, false, url, &gone, start.Add(time.Minute))
+	if !replaceShared(local.Runtime{}, false, url, &gone, start.Add(time.Minute+takeoverGrace)) {
+		t.Fatal("never took over from a service that stays stopped")
+	}
+	// Another backend took its place: the app attaches at once.
+	gone = time.Time{}
+	if !replaceShared(local.Runtime{URL: "http://127.0.0.1:52012"}, true, url, &gone, start) {
+		t.Fatal("kept following a backend that was replaced")
 	}
 }

@@ -23,6 +23,13 @@ const busyWait = 30 * time.Second
 // sharedPoll is how often the app checks a backend another process runs.
 const sharedPoll = 3 * time.Second
 
+// takeoverGrace is how long the app waits, once the backend another process
+// ran stops answering, for one to take its place before it runs its own. It
+// outlasts a service's restart delay (RestartSec and ThrottleInterval in
+// apps/amdl/internal/service#unit and #plist), so a service that restarts
+// finds its data directory free rather than waiting for the app to quit.
+const takeoverGrace = 20 * time.Second
+
 // ownBackend is the backend this app runs, and the log file it writes.
 type ownBackend struct {
 	*local.Running
@@ -33,9 +40,12 @@ func (a *App) localDirs() local.Dirs {
 	return local.Dirs{Data: a.dirs.Data, Cache: a.dirs.Cache, Music: a.dirs.Music}
 }
 
-// localBackend is the backend standalone mode runs, from the settings.
+// localBackend is the backend standalone mode runs, from the settings. It
+// runs the wrapper amdl wrapper install installed, when there is one, in
+// place of WrapperAddress.
 func (a *App) localBackend() local.Backend {
-	b := local.Backend{Dirs: a.localDirs(), Wrapper: a.settings.WrapperAddress, DownloadsDir: a.dirs.Downloads(a.settings)}
+	b := local.Backend{Dirs: a.localDirs(), Wrapper: a.settings.WrapperAddress, DownloadsDir: a.dirs.Downloads(a.settings),
+		ManageWrapper: true}
 	if path, _, err := ffmpeg.Find(a.settings.FFmpeg, a.dirs.Resources); err == nil {
 		b.FFmpeg = path
 	} else {
@@ -129,9 +139,10 @@ func (a *App) useLocal(gen int, b local.Backend, own *ownBackend, shared local.R
 }
 
 // watchShared follows the backend another process runs. When it stops, the
-// app attaches to the one that takes its place, or runs its own, so the
-// queue carries on while the app is open.
+// app attaches to the one that takes its place, or after takeoverGrace runs
+// its own, so the queue carries on while the app is open.
 func (a *App) watchShared(gen int, b local.Backend, url string) {
+	var gone time.Time
 	for {
 		time.Sleep(sharedPoll)
 		current := make(chan bool, 1)
@@ -142,7 +153,7 @@ func (a *App) watchShared(gen int, b local.Backend, url string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		rt, ok := local.ReadRuntime(ctx, b.Dirs)
 		cancel()
-		if ok && rt.URL == url {
+		if !replaceShared(rt, ok, url, &gone, time.Now()) {
 			continue
 		}
 		own, shared, err := startOrAttach(b)
@@ -169,6 +180,23 @@ func (a *App) watchShared(gen int, b local.Backend, url string) {
 			return
 		}
 	}
+}
+
+// replaceShared reports whether watchShared stops following url after a read
+// of the runtime file (rt, ok) at now: at once when another backend took its
+// place, and after takeoverGrace when none answers. gone holds when url
+// stopped answering, zero while it answers.
+func replaceShared(rt local.Runtime, ok bool, url string, gone *time.Time, now time.Time) bool {
+	switch {
+	case ok && rt.URL == url:
+		*gone = time.Time{}
+		return false
+	case ok:
+		return true
+	case gone.IsZero():
+		*gone = now
+	}
+	return now.Sub(*gone) >= takeoverGrace
 }
 
 func (a *App) stopBackend(r *ownBackend) {

@@ -94,11 +94,8 @@ func (a *App) healthCard(c *ui.Context, k *Tokens, sv *store.Server) {
 		if sv.Health.DatabaseError != "" {
 			problems = append(problems, "database: "+sv.Health.DatabaseError)
 		}
-		switch {
-		case sv.Wrapper == nil || !sv.Wrapper.Ready:
-			problems = append(problems, "the wrapper is not ready")
-		case !sv.Wrapper.Status:
-			problems = append(problems, "no Apple Music account is signed in")
+		if p := accountState(sv.Wrapper, sv.WrapperErr).problem; p != "" {
+			problems = append(problems, p)
 		}
 		if sv.System != nil {
 			for _, t := range sv.System.Tools {
@@ -268,26 +265,85 @@ func meter(c *ui.Context, k *Tokens, used float64, h float32) {
 	})
 }
 
+// account is the Apple Music account's state in words: what the Account
+// card shows and what Health lists as a problem.
+type account struct {
+	word, state string
+	kind        pillKind
+	icon        *ui.SVG
+	// note is the next step, or what went wrong.
+	note string
+	// problem is Health's line; empty when downloads can decrypt.
+	problem string
+	// signIn means an account can log in through the API now.
+	signIn bool
+}
+
+// accountState reads the wrapper's status. A wrapper amdl runs on the
+// backend's machine says first whether its guest runs at all: while it boots,
+// logs in, is stopped or failed, the guest cannot answer and the status reads
+// not ready and signed out.
+func accountState(w *client.WrapperStatus, err string) account {
+	if w == nil {
+		return account{"Unreachable", "No answer", pillBad, icCross, err, "the wrapper does not answer", false}
+	}
+	if m := w.Managed; m != nil {
+		switch m.Mode {
+		case "starting":
+			return account{"Starting", "Booting", pillWait, nil, "The local wrapper boots in about 15 seconds", "the local wrapper is starting", false}
+		case "login":
+			return account{"Logging in", "Logging in", pillWait, nil, "The local wrapper restarts with the account; this takes about half a minute", "the local wrapper is logging in", false}
+		case "stopped":
+			return account{"Stopped", "Stopped", pillWarn, icWarn, "Start it with amdl wrapper start", "the local wrapper is stopped", false}
+		case "failed":
+			note := "See amdl wrapper logs"
+			if m.LastError != "" {
+				note = m.LastError + " · amdl wrapper logs"
+			}
+			return account{"Failed", "Failed", pillBad, icCross, note, "the local wrapper failed", false}
+		}
+	}
+	switch {
+	case !w.Ready:
+		return account{"Starting", "Not ready", pillWait, nil, "The wrapper answers but is not ready yet", "the wrapper is not ready", false}
+	case !w.Status:
+		note := "Log in on the wrapper's own machine"
+		if w.LoginSupported {
+			note = "Log in so downloads can be decrypted"
+		}
+		return account{"Signed out", "No account", pillWarn, icWarn, note, "no Apple Music account is signed in", w.LoginSupported}
+	}
+	note := "Signed in"
+	if len(w.Regions) > 0 {
+		note = "Storefronts " + strings.Join(w.Regions, ", ")
+	}
+	return account{"Signed in", "Ready", pillOK, icCheck, note, "", false}
+}
+
+// wrapperKind names the wrapper: one amdl runs here, or wrapper-manager or
+// wrapper-lite on another machine; only the first two log in over the API.
+func wrapperKind(w *client.WrapperStatus) string {
+	switch {
+	case w == nil:
+		return ""
+	case w.Managed != nil:
+		if w.Managed.AccelFallback || w.Managed.Accel == "tcg" {
+			return "local wrapper · emulated"
+		}
+		return "local wrapper"
+	case w.LoginSupported:
+		return "wrapper-manager"
+	}
+	return "wrapper-lite"
+}
+
 func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server) {
 	w := sv.Wrapper
-	var chips []string
-	if w != nil {
-		// Only wrapper-manager signs accounts in and out over the API.
-		chips = []string{map[bool]string{true: "wrapper-manager", false: "wrapper-lite"}[w.LoginSupported]}
-	}
-	moleCard(c, k, "account", 2, k.TileSettings, icPerson, "Apple Music account", ui.Color{}, chips, func() {
-		word, kind, state, ic := "Signed in", pillOK, "Ready", icCheck
-		switch {
-		case w == nil:
-			word, kind, state, ic = "Unreachable", pillBad, "No answer", icCross
-		case !w.Ready:
-			word, kind, state, ic = "Starting", pillWait, "Not ready", nil
-		case !w.Status:
-			word, kind, state, ic = "Signed out", pillWarn, "No account", icWarn
-		}
+	st := accountState(w, sv.WrapperErr)
+	moleCard(c, k, "account", 2, k.TileSettings, icPerson, "Apple Music account", ui.Color{}, []string{wrapperKind(w)}, func() {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			display(c, word, 24).SingleLine()
-			pill(c, k, kind, ic, state)
+			display(c, st.word, 24).SingleLine()
+			pill(c, k, st.kind, st.icon, st.state)
 		})
 		if w != nil && len(w.Accounts) > 0 {
 			ui.Row(c).Gap(8).Wrap().Children(func() {
@@ -299,14 +355,7 @@ func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server) {
 				}
 			})
 		}
-		switch {
-		case w == nil:
-			cardFoot(c, k, sv.WrapperErr)
-		case len(w.Regions) > 0:
-			cardFoot(c, k, "Storefronts "+strings.Join(w.Regions, ", ")+" · accounts are managed on the wrapper")
-		default:
-			cardFoot(c, k, "Accounts are managed on the wrapper")
-		}
+		cardFoot(c, k, st.note)
 	})
 }
 
