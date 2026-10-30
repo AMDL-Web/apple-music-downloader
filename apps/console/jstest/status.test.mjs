@@ -179,7 +179,11 @@ test('stage segments follow ItemProgress', () => {
   assert.equal(unverified[4].state, 'unverified');
   assert.deepEqual(unverified.filter((s) => s.key !== 'verify').map((s) => s.state), ['done', 'done', 'done', 'done', 'done', 'done']);
 
-  assert.deepEqual(states({ status: 'skipped_existing', progress: { resolved: true } }), ['done', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty']);
+  const skipped = stageSegments({ status: 'skipped_existing', progress: { resolved: true } });
+  assert.deepEqual(skipped.map((s) => s.state), Array(7).fill('skipped'), 'a track already on disk is finished, not stuck after resolve');
+  assert.ok(skipped.every((s) => s.fraction === 1));
+  assert.deepEqual(skipped.map((s) => s.weight), stageSegments({ status: 'queued' }).map((s) => s.weight));
+  assert.equal(stageText(skipped), 'Already on disk, nothing downloaded');
   assert.match(stageText(half), /Download: 45%/);
   assert.match(stageText(unverified), /Verify: not verified/);
 });

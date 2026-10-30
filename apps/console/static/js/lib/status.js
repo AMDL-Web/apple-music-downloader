@@ -312,6 +312,8 @@ export function progressLegend(job) {
 
 const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 
+const STAGE_LABELS = { resolve: 'Resolve', download: 'Download', decrypt: 'Decrypt', remux: 'Remux', verify: 'Verify', tag: 'Tag', save: 'Save' };
+
 /**
  * Each stage's share of a track's run time, which sets the width of its
  * segment: download is most of it, decrypt about half of that, and resolve
@@ -339,6 +341,11 @@ export function stageSegments(item) {
     return { key, label, state, fraction: v, weight: STAGE_WEIGHTS[key] };
   };
   const flag = (key, label, on) => ({ key, label, state: on ? 'done' : 'empty', fraction: on ? 1 : 0, weight: STAGE_WEIGHTS[key] });
+  // A track already on disk ran no stage, but it is finished: a full bar in
+  // the skipped state, which the skin draws in its quiet ink, not success.
+  if (status === 'skipped_existing') {
+    return Object.entries(STAGE_LABELS).map(([key, label]) => ({ key, label, state: 'skipped', fraction: 1, weight: STAGE_WEIGHTS[key] }));
+  }
   const verify = flag('verify', 'Verify', Boolean(p.verified));
   if (finished && !p.verified) verify.state = 'unverified';
   return [
@@ -354,6 +361,7 @@ export function stageSegments(item) {
 
 /** Accessible description of the stage segments, e.g. "Download 45%, decrypt not started". */
 export function stageText(segments) {
+  if (segments.length && segments.every((s) => s.state === 'skipped')) return 'Already on disk, nothing downloaded';
   return segments
     .map((s) => {
       if (s.state === 'unverified') return `${s.label}: not verified`;
