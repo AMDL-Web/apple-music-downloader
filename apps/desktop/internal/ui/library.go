@@ -130,12 +130,15 @@ func (a *App) libraryHero(c *ui.Context, k *Tokens, dj domain.Job, d *client.Dow
 	t1, t2, t3 := Readable(pal.Text1, bg, k), Readable(pal.Text2, bg, k), Readable(pal.Text3, bg, k)
 	ui.Column(c).Padding(14, 24, 8, 24).Children(func() {
 		card := ui.Row(c).Padding(22, 24).Gap(28).Radius(18).Clip().AlignItems(ui.End)
-		card.Background(card.AnimateColor("bg", bg, ui.Smooth)).Children(func() {
-			if pal.OK {
-				// Shades close to the album's color keep its text colors
-				// readable across the whole card.
-				widgets.Backdrop{Light: pal.Bg.Mix(ui.RGB(255, 255, 255), 0.2), Deep: pal.Bg.Mix(ui.RGB(0, 0, 0), 0.15), Strength: 0.55, Height: 320}.Show(c)
-			}
+		shown := card.AnimateColor("bg", bg, ui.Smooth)
+		// The light falls across the card in its own background: a layer of
+		// discs, being absolute, would paint over the cover and the text.
+		// Shades this close keep the album's text colors readable.
+		card.LinearGradient(ui.LinearGradient{Angle: 115, Stops: []ui.GradientStop{
+			{Color: shown.Mix(ui.RGB(255, 255, 255), 0.14), At: 0},
+			{Color: shown, At: 0.45},
+			{Color: shown.Mix(ui.RGB(0, 0, 0), 0.16), At: 1},
+		}}).Children(func() {
 			cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 400), Placeholder: bg.Mix(k.Ink, 0.2), Size: 184, Radius: 12, Color: 1, Shadow: true}.Show(c)
 			if j.MotionArtworkURL != "" {
 				cover.Children(func() { motionBadge(c, "MOTION") })
