@@ -51,7 +51,6 @@ const TILES = [
   { key: 'completed', label: 'Completed', icon: 'circle-check', role: 'success', href: buildHash('queue', { tab: 'all' }) },
   { key: 'failed', label: 'Failed', icon: 'circle-x', role: 'danger', href: buildHash('queue', { tab: 'failed' }) },
 ];
-const TOTAL_TILE = { key: 'total', label: 'Total', icon: 'list', role: 'neutral', href: buildHash('queue', { tab: 'all' }) };
 
 function KpiRow() {
   const { counts, conn } = useApp();
@@ -67,7 +66,6 @@ function KpiRow() {
   return html`<${Card} section="kpis" title="Jobs" labelId="kpis-title" note="All time">
     <div class="kpis">
       ${TILES.map((t) => tile(t, counts && counts[t.key]))}
-      ${tile(TOTAL_TILE, counts && counts.total)}
     </div>
   </${Card}>`;
 }
@@ -272,7 +270,7 @@ const STRIP_KEYS = ['health', 'wrapper', 'librarySync', 'system', 'config'];
  * One line under the page head that answers "is the server healthy?": a quiet
  * status when everything is fine, else a notice naming each Settings domain
  * that needs action (lib/domains.js attentionRows), each linking to its
- * section, and Details to the Settings board.
+ * section, and Status to the Settings board.
  * Nothing renders until every read has answered, so the line changes once.
  */
 function HealthStrip({ status }) {
@@ -281,7 +279,7 @@ function HealthStrip({ status }) {
   // Until then, an empty line holds the strip's place.
   if (STRIP_KEYS.some((k) => !status[k])) return html`<p class="health-strip" data-state="loading" aria-hidden="true">\u00a0</p>`;
   const bad = attentionRows(status, { now, counts: app.counts, conn: app.conn, simulate: app.simulate }, SETTINGS_SECTIONS);
-  const details = html`<a class="health-strip-link" href=${settingsHash()}>Details</a>`;
+  const details = html`<a class="health-strip-link" href=${settingsHash()}>Status</a>`;
   if (bad.length === 0) {
     return html`<p class="health-strip" data-state="ok" data-role="success">
       <${StatusText} view=${{ icon: 'circle-check', role: 'success', label: 'All systems healthy' }} />${details}

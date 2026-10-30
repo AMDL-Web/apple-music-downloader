@@ -173,7 +173,8 @@ const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
 export function pageSummary(page, counts, now = new Date()) {
   switch (page) {
     case 'overview':
-      return counts ? `${shortDate(now)} · ${plural(counts.total, 'job', 'jobs')}` : shortDate(now);
+      // The date alone: the Jobs card and the queue's tabs carry the counts.
+      return shortDate(now);
     case 'queue': {
       // Only what there is: a column of zeros says nothing the tabs don't.
       if (!counts) return '';

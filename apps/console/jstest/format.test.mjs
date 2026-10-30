@@ -246,8 +246,7 @@ test('finishedLine shows the finish date and the duration when both stamps exist
 test('pageSummary reads the feed counts per page', () => {
   const counts = { total: 16, running: 2, queued: 0, failed: 1, completed: 13, cancelled: 0 };
   const now = new Date('2026-10-29T00:57:00Z');
-  assert.equal(pageSummary('overview', counts, now), 'Oct 29 · 16 jobs');
-  assert.equal(pageSummary('overview', { ...counts, total: 1 }, now), 'Oct 29 · 1 job');
+  assert.equal(pageSummary('overview', counts, now), 'Oct 29', 'the counts are the Jobs card\'s');
   assert.equal(pageSummary('overview', null, now), 'Oct 29');
   assert.equal(pageSummary('queue', counts, now), '2 running · 1 failed');
   assert.equal(pageSummary('queue', { ...counts, running: 0, failed: 0 }, now), 'Nothing active');

@@ -267,25 +267,6 @@
     right: var(--s-3);
   }
 
-  .kpi[data-key="total"] {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    height: auto;
-    min-height: var(--touch);
-  }
-
-  .kpi[data-key="total"] .kpi-icon {
-    position: static;
-    order: -1;
-  }
-
-  .kpi[data-key="total"] .kpi-value {
-    font-size: var(--fs-14);
-    line-height: var(--lh-14);
-  }
-
   .job-row,
   .job-list-compact .job-row {
     grid-template-columns: 40px minmax(0, 1fr) auto;

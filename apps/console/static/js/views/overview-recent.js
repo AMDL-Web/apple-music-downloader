@@ -7,7 +7,7 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads } from '../api.js';
-import { count, jobTitle, jobSubtitle, artPalette, paletteStyle, typeLabel, jobFacts, artWidths } from '../lib/format.js';
+import { jobTitle, jobSubtitle, artPalette, paletteStyle, typeLabel, jobFacts, artWidths } from '../lib/format.js';
 import { uniqueByTarget } from '../lib/albums.js';
 import { buildHash } from '../lib/route.js';
 import { useApp, Card, Artwork, Empty, ErrorNote, LinkButton } from '../ui/components.js';
@@ -98,7 +98,6 @@ export function RecentSection() {
     section="recent"
     title="Recently completed"
     labelId="recent-title"
-    note=${completed === null ? ' ' : `${count(completed)} completed`}
     actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('queue', { tab: 'completed' })}>See all</${LinkButton}>`}
   >
     <div class="recent" ref=${ref} style=${{ '--cols': String(Math.max(1, cols)) }}>${body}</div>
