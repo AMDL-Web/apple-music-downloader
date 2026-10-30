@@ -44,7 +44,8 @@ tab bar's third tab under 640 px, `n` (and `g n`), the palette's "New
 download", and a global paste: pasting text that holds at least one
 music.apple.com link while focus is outside a text field and no overlay or
 dialog is open opens `#/new?url=<the links>` (on `#/new` the links join those
-already in `url`). Under 640 px the tab bar holds Overview, Queue, New and
+already in `url`; from another page they start a new download and replace
+the draft). Under 640 px the tab bar holds Overview, Queue, New and
 Settings, four equal tabs; Settings is also the current tab while Logs is
 shown.
 
@@ -540,7 +541,9 @@ and motion covers.
 - **New download** (views/download.js and its download-* parts; the logic is
   pure in `lib/links.js` `scanLinks`/`removeLink`, `lib/lookup.js`,
   `lib/submit-check.js`, `lib/submit.js` and `lib/overrides.js`): the text box is the source of the
-  links; `?url=` prefills it and the page writes its links back (replace), so a
+  links; `?url=` prefills it (`lib/links.js` `openingText`: links brought from
+another page replace the draft, a draft that holds them all, after a reload or
+Back, stays) and the page writes its links back (replace), so a
   reload and the global paste keep them, also after `n` or the sidebar opened
   a bare `#/new`. It takes focus one frame after the
   shell focuses the heading, with a fine pointer only. Each row shows the

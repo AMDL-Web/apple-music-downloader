@@ -217,6 +217,16 @@ export function removeLink(text, url) {
   return lines.join('\n');
 }
 
+/**
+ * The text box as New download opens: links brought from elsewhere (?url=)
+ * start a new download and replace the draft; a draft that already holds
+ * them all (a reload, Back) is kept as it is, notes included.
+ */
+export function openingText(draft, urls, fallback = '') {
+  const merged = mergeLinks(draft, urls, fallback);
+  return merged === draft ? draft : mergeLinks('', urls, fallback);
+}
+
 /** `text` with `urls` appended on new lines (normalized), skipping links it already holds. */
 export function mergeLinks(text, urls, fallback = '') {
   const have = new Set(scanLinks(text, fallback).map((e) => e.url));

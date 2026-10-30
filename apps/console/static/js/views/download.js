@@ -10,7 +10,7 @@
 
 import { html, useState, useEffect, useRef, useMemo, useCallback } from '../ui/preact.js';
 import { newDownloadUrls, buildHash } from '../lib/route.js';
-import { scanLinks, removeLink, mergeLinks } from '../lib/links.js';
+import { scanLinks, removeLink, openingText } from '../lib/links.js';
 import { handledUrls, resultRows, submitSummary } from '../lib/submit.js';
 import { downloadLabel, servedRegions } from '../lib/submit-check.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, probedQuality, dockQuality } from '../lib/overrides.js';
@@ -47,7 +47,7 @@ export function DownloadPage({ route }) {
   // A link without a storefront borrows another link's, else the server's
   // catalog.default_storefront (GET /system), '' until that has loaded.
   const storefront = app.defaultStorefront;
-  const [text, setText] = useState(() => mergeLinks(draft, incoming, storefront));
+  const [text, setText] = useState(() => openingText(draft, incoming, storefront));
   draft = text;
   const entries = useMemo(() => scanLinks(text, storefront), [text, storefront]);
   const settled = useDebounced(text, 350);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLink, extractLinks, scanLinks, removeLink, duplicateCount, pasteStorefront, mergeLinks, LINK_KINDS } from '../static/js/lib/links.js';
+import { parseLink, extractLinks, scanLinks, removeLink, duplicateCount, pasteStorefront, mergeLinks, openingText, LINK_KINDS } from '../static/js/lib/links.js';
 
 const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
 const MIDNIGHTS = 'https://music.apple.com/us/album/midnights/1650841512';
@@ -163,4 +163,12 @@ test('mergeLinks appends new links once, normalized', () => {
   assert.equal(mergeLinks('', [IGOR]), IGOR);
   assert.equal(mergeLinks(`${IGOR}\n`, [`${IGOR}?l=en`, MIDNIGHTS]), `${IGOR}\n${MIDNIGHTS}`);
   assert.equal(mergeLinks('notes', []), 'notes');
+});
+
+test('openingText: links brought in replace the draft, a draft holding them stays', () => {
+  const draft = `${IGOR}\nnotes`;
+  assert.equal(openingText(draft, [MIDNIGHTS]), MIDNIGHTS, 'a bookmarklet link starts a new download');
+  assert.equal(openingText(draft, [`${IGOR}?l=en`]), draft, 'a reload or Back keeps the notes');
+  assert.equal(openingText(draft, []), draft);
+  assert.equal(openingText('', [IGOR, MIDNIGHTS]), `${IGOR}\n${MIDNIGHTS}`);
 });
