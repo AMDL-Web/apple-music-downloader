@@ -99,6 +99,7 @@ func (a *App) captureScreens(dir string) {
 	shot("12-system-light", func() { a.view.Go(appui.ScreenSystem) }, 2500*time.Millisecond)
 	a.waitFinished(job)
 	shot("13-detail-done", func() { a.view.Theme = a.opts.Theme; a.view.OpenJob(job) }, 3*time.Second)
+	a.searchShots(shot)
 	time.Sleep(500 * time.Millisecond)
 	mygo.App.Quit()
 }

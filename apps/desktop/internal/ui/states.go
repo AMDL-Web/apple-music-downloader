@@ -98,15 +98,9 @@ func (a *App) startFailed(c *ui.Context, k *Tokens) {
 	})
 }
 
-// emptyQueue is the first launch, or a filter that matches nothing.
+// emptyQueue is the first launch, or a tab with nothing in it.
 func (a *App) emptyQueue(c *ui.Context, k *Tokens) {
-	s := a.Store
 	ui.Column(c).Grow(1).Center().Gap(14).Padding(24).Children(func() {
-		if q := s.Omni.Query(); q != "" {
-			display(c, "Nothing matches", 24)
-			ui.Text(c, fmt.Sprintf("No job here has “%s” in its title, artist or link.", q)).TextColor(k.Muted).TextAlign(ui.Center)
-			return
-		}
 		stack := ui.Box(c).Size(150, 110)
 		stack.Children(func() {
 			for i, x := range []float32{0, 32, 64} {

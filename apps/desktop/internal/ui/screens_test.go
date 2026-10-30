@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -81,6 +82,29 @@ func TestPanelWhenNothingRuns(t *testing.T) {
 	for _, want := range []string{"All done", "Today", "Server disk", "Open AMDL"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in %q", want, tt.Texts())
+		}
+	}
+}
+
+func TestSearchHitRowsSayWhatTheirTypeHas(t *testing.T) {
+	if got := qualityHints([]string{"atmos", "lossless", "hi-res-lossless", "lossy-stereo"}); strings.Join(got, ",") != "Hi-Res Lossless,Dolby Atmos" {
+		t.Errorf("hints %v", got)
+	}
+	if got := qualityHints([]string{"lossy-stereo"}); len(got) != 0 {
+		t.Errorf("lossy hints %v", got)
+	}
+	cases := []struct {
+		hit  client.SearchHit
+		want string
+	}{
+		{client.SearchHit{Type: "song", ArtistName: "Yorushika", AlbumName: "Elma", DurationMS: 245_000}, "Yorushika · Elma · 4:05"},
+		{client.SearchHit{Type: "album", ArtistName: "Yorushika", ReleaseDate: "2020-07-29", TrackCount: 1}, "Yorushika · 2020 · 1 track"},
+		{client.SearchHit{Type: "artist", Genre: "J-Pop"}, "J-Pop"},
+		{client.SearchHit{Type: "artist"}, "Artist"},
+	}
+	for _, c := range cases {
+		if got := strings.Join(hitFacts(c.hit), " · "); got != c.want {
+			t.Errorf("%s facts %q, want %q", c.hit.Type, got, c.want)
 		}
 	}
 }

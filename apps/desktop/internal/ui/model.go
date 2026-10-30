@@ -1,10 +1,12 @@
 // Package ui builds the desktop app's screens with MyGo's native UI, to the
 // design canvas: the queue with the album-lit "downloading now" hero, the job
-// detail, the new-download preview, the library, settings, system, the menu
+// detail, the new-download preview and catalog search, the library, settings, system, the menu
 // bar panel, and their empty, loading and error states, dark and light.
 package ui
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/artwork"
@@ -82,6 +84,14 @@ type App struct {
 	// preview shows.
 	linksTxt string
 	newSel   string
+	// searchSel is the HitKey of the hit the search acts on; searchReveal
+	// scrolls it into view once, after the keyboard moved it.
+	searchSel    string
+	searchReveal bool
+	// confirmAll is the artist whose "Download all" waits for its second
+	// click since confirmAt.
+	confirmAll string
+	confirmAt  time.Time
 	// libKind is the library's tab, an index of store.LibraryKinds.
 	libKind int
 	libList ui.ListState

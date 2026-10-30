@@ -72,6 +72,12 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.Screen == ScreenDetail && c.Shortcut(0, ui.KeyEscape) {
 		a.Go(ScreenQueue)
 	}
+	if a.Screen == ScreenNew {
+		if term, long := a.searchText(); term != "" && !long {
+			hits := a.Store.Search.ShownHits()
+			a.searchKeys(c, hits, a.chosenHit(hits))
+		}
+	}
 }
 
 // titleBar is the window's top strip: the one field for links and search,
@@ -99,8 +105,8 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, compact bool) {
 	})
 }
 
-// omniField is Downbit's one field: paste links to download, or type to
-// search the queue.
+// omniField is the one field: paste links to download, or type to search
+// Apple Music (the library, on its screen).
 func (a *App) omniField(c *ui.Context, k *Tokens) {
 	s := a.Store
 	focused := c.Focused(a.omni)
@@ -110,22 +116,32 @@ func (a *App) omniField(c *ui.Context, k *Tokens) {
 		box.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
 	}
 	box.Children(func() {
-		ic := icLink
+		ic, hint := icLink, "Paste a link, or search Apple Music"
 		if a.Screen == ScreenLibrary {
+			ic, hint = icSearch, "Search the library"
+		} else if term, _ := a.searchText(); term != "" {
 			ic = icSearch
 		}
 		ui.Icon(c, ic).FontSize(14).TextColor(k.Faint)
 		a.omniTxt = s.Omni.Text
 		in := ui.TextInputBase(c.Key("omni"), &a.omniTxt).Grow(1).Bind(&a.omni).FontSize(12.5).
-			Placeholder("Paste a link to download, or search").Label("Paste a link to download, or search")
+			Placeholder(hint).Label(hint)
 		if in.Changed() {
 			s.SetOmniText(a.omniTxt)
-			if len(s.Omni.Links) > 0 && a.Screen != ScreenNew {
+			// Links preview and words search on the new download screen;
+			// the library keeps its own search.
+			term, _ := a.searchText()
+			if (len(s.Omni.Links) > 0 || term != "" && a.Screen != ScreenLibrary) && a.Screen != ScreenNew {
 				a.Go(ScreenNew)
 			}
 		}
-		if in.Submitted() && len(s.Startable()) > 0 {
-			s.Submit()
+		if in.Submitted() {
+			switch term, _ := a.searchText(); {
+			case a.Screen == ScreenNew && term != "":
+				a.actOnHit()
+			case len(s.Startable()) > 0:
+				s.Submit()
+			}
 		}
 		ui.Row(c).PaddingX(5).PaddingY(1).Radius(4).Border(1, k.Line2).Children(func() {
 			mono(c, shortcutLabel, 10.5).TextColor(k.Muted)

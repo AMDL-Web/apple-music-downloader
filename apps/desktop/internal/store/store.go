@@ -55,6 +55,8 @@ type Store struct {
 
 	// Omni is the title bar's link and search field.
 	Omni Omnibox
+	// Search is the catalog search for the words in Omni.
+	Search Search
 	// Notice is the latest message for a toast, or zero.
 	Notice Notice
 	// Library is the finished downloads the library screen pages through.
@@ -89,6 +91,7 @@ func (s *Store) reset() {
 	s.Selection, s.DetailID = map[string]bool{}, ""
 	s.followers, s.notified = map[string]context.CancelFunc{}, map[string]domain.JobStatus{}
 	s.Omni.reset()
+	s.Search.reset()
 	s.Library, s.Server = Library{}, Server{}
 }
 

@@ -247,26 +247,37 @@ func (s *Store) Submit() {
 	}
 	o := &s.Omni
 	o.Submitting = true
-	c, ctx, overrides := s.client, s.ctx, o.Quality.overrides(o.Overwrite)
+	s.submit(urls, func(res domain.BatchSubmitResponse, err error) {
+		o.Submitting = false
+		o.Result = &res
+		switch {
+		case err != nil && res.Rejected == 0:
+			s.setNotice(err.Error(), true)
+		case res.Rejected == 0:
+			s.setNotice(plural(res.Accepted, "download")+" started", false)
+			o.Text, o.Links, o.Result = "", nil, nil
+		default:
+			s.setNotice(plural(res.Accepted, "download")+" started, "+plural(res.Rejected, "link")+" refused", res.Accepted == 0)
+		}
+	})
+}
+
+// submit starts urls with the screen's preset, adds the jobs it created and
+// hands the outcome to then on the UI thread.
+func (s *Store) submit(urls []string, then func(domain.BatchSubmitResponse, error)) {
+	c, ctx, overrides := s.client, s.ctx, s.Omni.Quality.overrides(s.Omni.Overwrite)
+	if c == nil {
+		return
+	}
 	go func() {
 		res, err := c.Submit(ctx, urls, overrides)
 		s.postIf(ctx, func() {
-			o.Submitting = false
-			o.Result = &res
 			for _, r := range res.Results {
 				if r.Job != nil {
 					s.upsert(*r.Job)
 				}
 			}
-			switch {
-			case err != nil && res.Rejected == 0:
-				s.setNotice(err.Error(), true)
-			case res.Rejected == 0:
-				s.setNotice(plural(res.Accepted, "download")+" started", false)
-				o.Text, o.Links, o.Result = "", nil, nil
-			default:
-				s.setNotice(plural(res.Accepted, "download")+" started, "+plural(res.Rejected, "link")+" refused", res.Accepted == 0)
-			}
+			then(res, err)
 		})
 	}()
 }

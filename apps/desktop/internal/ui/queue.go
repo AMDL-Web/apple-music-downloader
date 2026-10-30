@@ -107,7 +107,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 			ui.Text(c, "Newest first").FontSize(12).TextColor(k.Muted)
 		}
 	})
-	jobs := s.Filter(store.Tab(a.Tab), s.Omni.Query())
+	jobs := s.Filter(store.Tab(a.Tab), "")
 	if len(jobs) == 0 {
 		a.emptyQueue(c, k)
 		return

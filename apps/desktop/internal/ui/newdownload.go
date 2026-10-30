@@ -20,6 +20,11 @@ var qualityTabs = []store.Quality{store.QualityDefault, store.QualityHiRes, stor
 func (a *App) newDownload(c *ui.Context, k *Tokens, compact bool) {
 	s := a.Store
 	o := &s.Omni
+	if term, long := a.searchText(); term != "" || long {
+		a.searchScreen(c, k, compact, term, long)
+		return
+	}
+	s.WantSearch("")
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Padding(24, 28).Gap(14).Children(func() {
 			label(c, k, fmt.Sprintf("Links · %d found", len(o.Links)))
@@ -30,6 +35,11 @@ func (a *App) newDownload(c *ui.Context, k *Tokens, compact bool) {
 					Placeholder("Paste Apple Music links, one or many").Label("Links")
 				if in.Changed() {
 					s.SetOmniText(a.linksTxt)
+					// Words search: the box gives way to the results, and the
+					// typing carries on in the title bar's field.
+					if term, long := a.searchText(); term != "" || long {
+						a.FocusOmni()
+					}
 				}
 				if in.Focused() {
 					box.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
@@ -38,6 +48,7 @@ func (a *App) newDownload(c *ui.Context, k *Tokens, compact bool) {
 			if len(o.Links) == 0 {
 				ui.Column(c).Grow(1).Center().Gap(6).Children(func() {
 					ui.Text(c, "Album, playlist, song, artist and station links work.").TextColor(k.Muted)
+					ui.Text(c, "Or type words to search Apple Music.").TextColor(k.Muted)
 					ui.Text(c, "Music videos and live radio are not downloaded.").FontSize(12).TextColor(k.Faint)
 				})
 				return
@@ -49,29 +60,36 @@ func (a *App) newDownload(c *ui.Context, k *Tokens, compact bool) {
 					}
 				})
 			})
-			ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
-				sel := 0
-				for i, q := range qualityTabs {
-					if q == o.Quality {
-						sel = i
-					}
-				}
-				labels := []string{"Server settings"}
-				for _, q := range qualityTabs[1:] {
-					labels = append(labels, store.QualityLabels[q])
-				}
-				segmented(c, k, "quality", &sel, labels, nil)
-				o.Quality = qualityTabs[sel]
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					toggle(c, k, "overwrite", &o.Overwrite, "Overwrite existing files")
-					ui.Text(c, "Overwrite").FontSize(12.5)
-				})
-			})
+			a.qualityRow(c, k)
 			a.actionBar(c, k)
 		})
 		if !compact {
 			a.linkPreview(c, k)
 		}
+	})
+}
+
+// qualityRow picks the preset the next download applies, links and search
+// hits alike.
+func (a *App) qualityRow(c *ui.Context, k *Tokens) {
+	o := &a.Store.Omni
+	ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
+		sel := 0
+		for i, q := range qualityTabs {
+			if q == o.Quality {
+				sel = i
+			}
+		}
+		labels := []string{"Server settings"}
+		for _, q := range qualityTabs[1:] {
+			labels = append(labels, store.QualityLabels[q])
+		}
+		segmented(c, k, "quality", &sel, labels, nil)
+		o.Quality = qualityTabs[sel]
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			toggle(c, k, "overwrite", &o.Overwrite, "Overwrite existing files")
+			ui.Text(c, "Overwrite").FontSize(12.5)
+		})
 	})
 }
 
@@ -305,54 +323,94 @@ func firstNonEmptyStr(s ...string) string {
 // linkPreview shows the chosen link large, on its album's own color.
 func (a *App) linkPreview(c *ui.Context, k *Tokens) {
 	l := a.chosenLink()
-	pane := ui.Column(c).Width(400).Padding(28).Gap(14).Clip()
 	if l == nil || l.State != store.LinkReady {
-		pane.Background(k.Raise).Center().Children(func() {
-			ui.Icon(c, icLink).FontSize(28).TextColor(k.Faint)
-			ui.Text(c, "The album you paste shows here.").TextColor(k.Muted)
-		})
+		a.previewPane(c, k, nil, icLink, "The album you paste shows here.")
 		return
 	}
 	lk := l.Lookup
-	pal := ParsePalette(lk.ArtworkBgColor, lk.ArtworkTextColor1, lk.ArtworkTextColor2, lk.ArtworkTextColor3, lk.ArtworkTextColor4)
+	p := &preview{
+		Kind: lk.Type, Title: lk.Title, By: firstNonEmptyStr(lk.ArtistName, lk.CuratorName), ReleaseDate: lk.ReleaseDate, Genre: lk.Genre,
+		ArtworkURL: lk.ArtworkURL, Pal: ParsePalette(lk.ArtworkBgColor, lk.ArtworkTextColor1, lk.ArtworkTextColor2, lk.ArtworkTextColor3, lk.ArtworkTextColor4),
+		Note: refused(a.Store, l),
+	}
+	if lk.TrackCount > 0 {
+		p.Tags = append(p.Tags, plural(lk.TrackCount, "track"))
+	}
+	if lk.ContentRating == "explicit" {
+		p.Tags = append(p.Tags, "Explicit")
+	}
+	if lk.AppleDigitalMaster {
+		p.Tags = append(p.Tags, "Apple Digital Master")
+	}
+	if lk.NeedsMediaUserToken {
+		p.Tags = append(p.Tags, "Needs a media token")
+	}
+	a.previewPane(c, k, p, nil, "")
+}
+
+// preview is what the new download screen's right pane shows of a pasted
+// link or a search hit.
+type preview struct {
+	Kind, Title, By, ReleaseDate, Genre string
+	ArtworkURL                          string
+	Pal                                 Palette
+	// Round draws the cover as a circle, as an artist's.
+	Round bool
+	// Hi are quality hints in Hi-Res gold, Tags the other facts.
+	Hi, Tags []string
+	// Note is a line on its own: why a link was refused, or that a hit is
+	// already in the library.
+	Note string
+}
+
+// previewPane draws p large on its own colors, or, for nil, the empty pane
+// with ic and hint.
+func (a *App) previewPane(c *ui.Context, k *Tokens, p *preview, ic *ui.SVG, hint string) {
+	pane := ui.Column(c).Width(400).Padding(28).Gap(14).Clip()
+	if p == nil {
+		pane.Background(k.Raise).Center().Children(func() {
+			ui.Icon(c, ic).FontSize(28).TextColor(k.Faint)
+			ui.Text(c, hint).TextColor(k.Muted)
+		})
+		return
+	}
+	pal := p.Pal
 	bg := pane.AnimateColor("bg", pal.Bg, ui.Smooth)
 	if !pal.OK {
 		bg = k.Raise
 	}
 	t1, t2, t3 := Readable(pal.Text1, pal.Bg, k), Readable(pal.Text2, pal.Bg, k), Readable(pal.Text3, pal.Bg, k)
 	pane.Background(bg).Children(func() {
-		widgets.Cover{Image: a.Art.Get(lk.ArtworkURL, 700), Placeholder: pal.Bg.Mix(k.Ink, 0.2), Size: 344, Radius: 14, Color: 1, Shadow: true}.Show(c)
+		radius := float32(14)
+		if p.Round {
+			radius = 172
+		}
+		widgets.Cover{Image: a.Art.Get(p.ArtworkURL, 700), Placeholder: pal.Bg.Mix(k.Ink, 0.2), Size: 344, Radius: radius, Color: 1, Shadow: true}.Show(c)
 		var facts []string
-		if lk.Type != "" {
-			facts = append(facts, strings.ToUpper(lk.Type[:1])+lk.Type[1:])
+		if p.Kind != "" {
+			facts = append(facts, strings.ToUpper(p.Kind[:1])+p.Kind[1:])
 		}
-		if len(lk.ReleaseDate) >= 4 {
-			facts = append(facts, lk.ReleaseDate[:4])
+		if len(p.ReleaseDate) >= 4 {
+			facts = append(facts, p.ReleaseDate[:4])
 		}
-		if lk.Genre != "" {
-			facts = append(facts, lk.Genre)
+		if p.Genre != "" {
+			facts = append(facts, p.Genre)
 		}
 		label(c, k, strings.Join(facts, " · ")).TextColor(t3)
-		display(c, lk.Title, 40).TextColor(t1).MaxLines(2).Ellipsis("…")
-		if by := firstNonEmptyStr(lk.ArtistName, lk.CuratorName); by != "" {
-			ui.Text(c, by).FontSize(15).TextColor(t2)
+		display(c, p.Title, 40).TextColor(t1).MaxLines(2).Ellipsis("…")
+		if p.By != "" {
+			ui.Text(c, p.By).FontSize(15).TextColor(t2)
 		}
 		ui.Row(c).Gap(8).Wrap().Children(func() {
-			if lk.TrackCount > 0 {
-				tag(c, k, plural(lk.TrackCount, "track"), false, t2)
+			for _, h := range p.Hi {
+				tag(c, k, h, h == "Hi-Res Lossless", t2)
 			}
-			if lk.ContentRating == "explicit" {
-				tag(c, k, "Explicit", false, t2)
-			}
-			if lk.AppleDigitalMaster {
-				tag(c, k, "Apple Digital Master", false, t2)
-			}
-			if lk.NeedsMediaUserToken {
-				tag(c, k, "Needs a media token", false, t2)
+			for _, t := range p.Tags {
+				tag(c, k, t, false, t2)
 			}
 		})
-		if why := refused(a.Store, l); why != "" {
-			ui.Text(c, why).FontSize(12.5).TextColor(t1).Padding(8, 10).Radius(8).Background(ui.RGBA(0, 0, 0, 0.18))
+		if p.Note != "" {
+			ui.Text(c, p.Note).FontSize(12.5).TextColor(t1).Padding(8, 10).Radius(8).Background(ui.RGBA(0, 0, 0, 0.18))
 		}
 	})
 }

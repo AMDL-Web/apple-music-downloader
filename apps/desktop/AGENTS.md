@@ -27,6 +27,9 @@ wrapper.
   decorative layer goes before an absolute content layer, as the main
   window's view (`apps/desktop/internal/ui#App`) builds it, never into a
   card beside its content.
+- A shortcut that must work while the keyboard is in the title bar's field
+  is declared from the view's root (`apps/desktop/internal/ui#App` builds
+  them in `shortcuts`): one declared deeper only hears its own subtree.
 - ffmpeg and other console programs start through
   `internal/sysproc#NoConsole`, or each start flashes a console on Windows.
 

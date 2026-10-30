@@ -309,6 +309,7 @@ func (s *Store) remove(id string) {
 		return
 	}
 	delete(s.byID, id)
+	s.Search.gone[id] = true
 	delete(s.Selection, id)
 	delete(s.notified, id)
 	if cancel := s.followers[id]; cancel != nil {

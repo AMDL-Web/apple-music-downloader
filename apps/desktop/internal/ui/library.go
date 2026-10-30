@@ -54,16 +54,24 @@ func (a *App) library(c *ui.Context, k *Tokens, compact bool) {
 	}
 	switch {
 	case !l.Loaded && l.Err != "":
-		a.libraryMessage(c, k, icCross, "The library could not be read", l.Err, true)
+		a.libraryMessage(c, k, icCross, "The library could not be read", l.Err, func() {
+			if button(c, k, buttonPlain, "Try again", nil).Clicked() {
+				s.ReloadLibrary()
+			}
+		})
 		return
 	case !l.Loaded:
 		a.libraryLoading(c, k)
 		return
 	case len(l.Jobs) == 0 && l.Search != "":
-		a.libraryMessage(c, k, icSearch, "Nothing matches “"+l.Search+"”", "Search looks at titles, artists and links.", false)
+		a.libraryMessage(c, k, icSearch, "Nothing matches “"+l.Search+"”", "Search looks at titles, artists and links.", func() {
+			if button(c, k, buttonPlain, "Search Apple Music for “"+l.Search+"”", icSearch).Clicked() {
+				a.Go(ScreenNew)
+			}
+		})
 		return
 	case len(l.Jobs) == 0:
-		a.libraryMessage(c, k, icLibrary, "Nothing here yet", "Finished "+strings.ToLower(libraryTabs[l.Kind])+" show up here.", false)
+		a.libraryMessage(c, k, icLibrary, "Nothing here yet", "Finished "+strings.ToLower(libraryTabs[l.Kind])+" show up here.", nil)
 		return
 	}
 
@@ -260,13 +268,13 @@ func (a *App) libraryLoading(c *ui.Context, k *Tokens) {
 }
 
 // libraryMessage stands in for the grid when there is nothing to show.
-func (a *App) libraryMessage(c *ui.Context, k *Tokens, ic *ui.SVG, title, help string, retry bool) {
+func (a *App) libraryMessage(c *ui.Context, k *Tokens, ic *ui.SVG, title, help string, then func()) {
 	ui.Column(c).Grow(1).Center().Gap(8).Children(func() {
 		ui.Icon(c, ic).FontSize(26).TextColor(k.Faint)
 		ui.Text(c, title).FontSize(15).FontWeight(650)
 		ui.Text(c, help).FontSize(12.5).TextColor(k.Muted).MaxWidth(420)
-		if retry && button(c, k, buttonPlain, "Try again", nil).Clicked() {
-			a.Store.ReloadLibrary()
+		if then != nil {
+			then()
 		}
 	})
 }
