@@ -93,7 +93,8 @@
 
 /* Recently completed (views/overview-recent.js): the latest release as a
    banner in its album's colors, then a wall of the ones before it, two rows
-   of --cols tiles. Every line is one line, so a new completion changes
+   of --cols tiles. New download's search results reuse the wall and its
+   tiles (views/download-tiles.js). Every line is one line, so a new completion changes
    what the boxes show, not their size. */
 .recent {
   display: grid;

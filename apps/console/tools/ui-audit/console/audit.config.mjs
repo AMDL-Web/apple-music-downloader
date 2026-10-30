@@ -264,7 +264,7 @@ const SCENARIOS = [
       } },
       { id: 'drill-artist', title: 'opening an artist from the hits', ignoreFocus: true, expectContent: true, before: async (ctx) => {
         await ctx.page.locator('#new-input').fill('yorushika');
-      }, run: (ctx) => ctx.page.locator('.new-hit[data-kind=artist] .new-hit-open').first().click({ timeout: 3000 }) },
+      }, run: (ctx) => ctx.page.locator('.new-tile[data-kind=artist] .new-tile-open').first().click({ timeout: 3000 }) },
     ],
   },
   {

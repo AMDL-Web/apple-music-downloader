@@ -2063,15 +2063,26 @@
   line-height: var(--lh-13);
 }
 
-/* Search hits: the detected-link rows without the include box. Group
-   titles are quiet section labels; an artist's head carries a round cover
-   with the album-tinted shadow. */
-:root[data-skin="music"] .new-hits > li + li {
-  border-top: 0;
+/* Search hits: Albums and Artists sit on the page as Overview's wall (its
+   tile and shadow), Songs are the detected-link rows on a grouped surface,
+   hairlines from the text, no rule across columns. */
+:root[data-skin="music"] :is([data-section="hits-albums"], [data-section="hits-artists"]) > .card-body {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  overflow: visible;
 }
 
-:root[data-skin="music"] .new-hit {
-  padding: var(--s-3) var(--s-4) var(--s-3) var(--card-pad-x);
+:root[data-skin="music"] .new-tile-cover {
+  margin-bottom: var(--s-2);
+}
+
+:root[data-skin="music"] .new-tile-cover .art {
+  box-shadow: 0 14px 28px -16px var(--art-bg, transparent), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-hits > li + li {
+  border-top: 0;
 }
 
 :root[data-skin="music"] .new-hits > .new-hit + .new-hit::before {
@@ -2081,6 +2092,18 @@
   right: 0;
   left: calc(var(--card-pad-x) + 48px + var(--s-3));
   border-top: var(--row-divider);
+}
+
+@container (min-width: 600px) {
+  :root[data-skin="music"] [data-section="hits-songs"] .new-hits > .new-hit:nth-child(2)::before {
+    content: none;
+  }
+}
+
+@container (min-width: 960px) {
+  :root[data-skin="music"] [data-section="hits-songs"] .new-hits > .new-hit:nth-child(3)::before {
+    content: none;
+  }
 }
 
 :root[data-skin="music"] .new-hit-art {
@@ -2093,14 +2116,16 @@
   box-shadow: 0 10px 20px -12px var(--art-bg), 0 0 0 0.5px var(--border-subtle);
 }
 
-:root[data-skin="music"] .new-hit[data-kind="artist"] .new-hit-art,
 :root[data-skin="music"] .new-artist-art {
   border-radius: var(--r-full);
   corner-shape: round;
 }
 
-:root[data-skin="music"] .new-hit-title,
-:root[data-skin="music"] .new-hit-open {
+:root[data-skin="music"] .new-artist-head.has-palette .new-artist-art {
+  box-shadow: 0 18px 36px -18px var(--art-bg), 0 0 0 0.5px var(--border-subtle);
+}
+
+:root[data-skin="music"] .new-hit-title {
   font-size: var(--fs-15);
   line-height: var(--lh-15);
   font-weight: var(--w-semibold);
@@ -2115,31 +2140,23 @@
   font-weight: var(--w-semibold);
 }
 
-:root[data-skin="music"] .new-search-group-title {
-  padding-top: var(--s-4);
-  color: var(--text-primary);
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
-  font-weight: var(--w-semibold);
+:root[data-skin="music"] .new-hit-download {
+  color: var(--text-secondary);
 }
 
-:root[data-skin="music"] .new-search-group + .new-search-group {
-  border-top: 0;
+/* Download all: the large pill, as Download in the dock. */
+:root[data-skin="music"] .new-artist-all {
+  height: var(--btn-lg-h);
+  padding: 0 var(--s-5);
 }
 
-:root[data-skin="music"] .new-artist-name {
-  font-size: var(--fs-20);
-  line-height: var(--lh-20);
-  font-weight: var(--w-bold);
-}
-
-:root[data-skin="music"] .new-artist-head {
-  border-bottom: 0;
+:root[data-skin="music"] .new-hit-download:hover:not(:disabled) {
+  color: var(--accent-text);
 }
 
 @media (max-width: 639px) {
   :root[data-skin="music"] .new-hit {
-    padding: var(--s-3) var(--s-4);
+    padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4);
   }
 
   :root[data-skin="music"] .new-hits > .new-hit + .new-hit::before {

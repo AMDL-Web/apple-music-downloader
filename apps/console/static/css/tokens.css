@@ -87,6 +87,8 @@
   /* The circles inside it (the glyph, Clear). */
   --compose-in: calc(var(--compose-h) - 2 * var(--compose-pad));
   --dock-h: 64px;
+  /* New download's results run wider than the field, up to this. */
+  --stage-max: 1240px;
 
   /* Motion */
   --dur-fast: 120ms;

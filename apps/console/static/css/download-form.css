@@ -9,10 +9,16 @@
 /* ---- Layout -------------------------------------------------------- */
 
 /* The page runs at the content column's left edge like every page; the
-   field, its options and the cards under them stop at --compose-w. */
-.page-new > :is(.new-top, .card, .new-search-room, .new-dock-wrap) {
+   field, its options and the cards under them stop at --compose-w, the
+   search results at --stage-max. */
+.page-new > :is(.new-top, .card, .new-dock-wrap) {
   width: 100%;
   max-width: var(--compose-w);
+}
+
+.page-new > .new-search-room {
+  width: 100%;
+  max-width: var(--stage-max);
 }
 
 .new-hint {
@@ -97,8 +103,10 @@
   color: var(--text-primary);
 }
 
-/* A search on its way: the glyph breathes until the answer lands. */
-.new-compose[data-busy] .new-compose-icon[data-glyph="search"] {
+/* A search on its way: the glyph breathes until the answer lands. On the
+   icon, not its wrapper, so the wrapper's fade-in is never swapped out
+   (WebKit leaves a swapped-in animation at its first frame). */
+.new-compose[data-busy] .new-compose-icon[data-glyph="search"] > .icon {
   animation: compose-seek 1.2s var(--ease-out) infinite;
 }
 

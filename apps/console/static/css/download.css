@@ -583,10 +583,11 @@
     grid-column: 3 / -1;
   }
 
+  /* 12 px apart, so each 32 px button's 44 px target stays its own. */
   .new-link-actions {
     grid-column: 4;
     grid-row: 1;
-    gap: 0;
+    gap: var(--s-3);
   }
 
   .new-link .new-link-actions {
@@ -608,7 +609,7 @@
   .new-link-actions > .btn::after {
     content: "";
     position: absolute;
-    inset: calc((32px - var(--touch)) / 2) 0;
+    inset: calc((32px - var(--touch)) / 2);
   }
 
   /* Titles take two lines before they give way; the meta line wraps

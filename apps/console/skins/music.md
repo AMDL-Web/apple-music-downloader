@@ -263,12 +263,17 @@ base durations (120 ms color, 200 ms overlays).
   glyph. Download is the red pill, the only solid red on the page. The
   browser shortcut's code is
   an inset cell; the steps are 13 px secondary.
-  Search hits are the same rows without the include box, under 15 px
-  semibold group titles (Songs, Albums, Artists) with no rule between
-  groups; quality hints are the quiet filled tags; an artist has a round
-  cover and a chevron. An open artist heads its albums with a 64 px round
-  cover with the tinted shadow and a 20 px bold name, Back a ghost button
-  and Download all a filled pill.
+  Search hits sit in Overview's section language: titled sections with a
+  red Show more. Albums and Artists are its tile wall on the page (covers
+  with the `--art-bg` shadow, 14 px titles, 13 px secondary lines; artists
+  round and centred); an album's cover carries a frosted `--bg-chrome`
+  quality tag, a library or queue badge and a 36 px frosted Download circle
+  that turns red under the pointer. Songs are the link rows without the
+  include box on one grouped surface, in up to three columns with
+  hairlines from the text and none across columns, Download a secondary
+  glyph. An open artist heads its albums with a 120 px round cover with the
+  tinted shadow, the name in page-title type, Back a ghost button and
+  Download all the large pill.
 - **Qualities sheet**: per-slot summaries are 16 px `--bg-group` cells with a
   15 px semibold label; each track's formats are filled pills with the label
   in semibold; hairlines between tracks start at the title.

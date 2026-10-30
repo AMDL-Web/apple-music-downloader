@@ -83,7 +83,7 @@ test('a search asks for the first page and keeps the answer', async () => {
   net.calls[0].resolve(answer('Yorushika'));
   await settle();
   assert.equal(s.state().status, 'ready');
-  assert.deepEqual(shownHits(s.state().data).map(hitKey), ['song:1', 'album:10']);
+  assert.deepEqual(shownHits(s.state().data).map(hitKey), ['album:10', 'song:1'], 'albums come first, as the page shows them');
   assert.ok(changes >= 2);
 });
 
@@ -332,10 +332,10 @@ test('a submitted hit seeds its result row like a link preview', () => {
 test('the count line says what was found, or that nothing was', () => {
   assert.equal(searchCountLine({ term: 'x', status: 'loading' }), 'Searching…');
   const ready = (data) => ({ term: 'Yorushika', status: 'ready', data });
-  assert.equal(searchCountLine(ready(answer('Yorushika', [song('1'), song('2')]))), '2 songs and 1 album for “Yorushika”');
+  assert.equal(searchCountLine(ready(answer('Yorushika', [song('1'), song('2')]))), '1 album and 2 songs for “Yorushika”');
   assert.equal(
     searchCountLine(ready({ songs: { items: [song('1')] }, albums: { items: [album('1'), album('2')] }, artists: { items: [{ id: 'a', type: 'artist' }] } })),
-    '1 song, 2 albums and 1 artist for “Yorushika”',
+    '2 albums, 1 song and 1 artist for “Yorushika”',
   );
   assert.equal(searchCountLine(ready({ songs: { items: [] }, albums: { items: [] }, artists: { items: [] } })), 'Nothing found for “Yorushika”');
   assert.equal(searchCountLine({ term: '', status: 'idle' }), '');

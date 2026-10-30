@@ -10,8 +10,8 @@ import { releaseYear, trackLength, count } from './format.js';
 export const SEARCH_MAX_TERM = 200;
 /** Typing pauses this long before a search starts. */
 export const SEARCH_DEBOUNCE_MS = 300;
-/** Hits per group on the first page. */
-export const SEARCH_FIRST = 5;
+/** Hits per group on the first page: six fill one, two, three or six columns. */
+export const SEARCH_FIRST = 6;
 /** Hits per group a "Show more" adds. */
 export const SEARCH_MORE = 25;
 /** Albums per page of an artist. */
@@ -21,8 +21,8 @@ export const SEARCH_CACHE_MAX = 30;
 
 /** The result groups in the order they are shown, with their words. */
 export const SEARCH_GROUPS = [
-  { id: 'songs', label: 'Songs', one: 'song', many: 'songs' },
   { id: 'albums', label: 'Albums', one: 'album', many: 'albums' },
+  { id: 'songs', label: 'Songs', one: 'song', many: 'songs' },
   { id: 'artists', label: 'Artists', one: 'artist', many: 'artists' },
 ];
 
@@ -394,8 +394,8 @@ export function shownHits(data) {
 }
 
 /**
- * The count line while searching, announced: "Searching…", "5 songs, 5
- * albums and 1 artist for “Yorushika”", "Nothing found for “xyz”", the
+ * The count line while searching, announced: "Searching…", "6 albums, 6
+ * songs and 1 artist for “Yorushika”", "Nothing found for “xyz”", the
  * artist's album count in the artist view, '' otherwise.
  */
 export function searchCountLine(st, artist = null) {

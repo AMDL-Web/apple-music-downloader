@@ -1,37 +1,36 @@
 /*
- * The New download page's search results (views/download-search.js): the
- * groups, the hit rows, Show more, the notes and an artist's albums. A hit
- * row is a detected-link row (download-form.css .new-link) without the
- * include box. Linked after download.css, so its phone rules at the end are
- * its own. Base structure only; it reads tokens like every other base
- * stylesheet, and the skin restyles it.
+ * The New download page's search results (views/download-search.js,
+ * download-tiles.js): three titled sections (Albums and Artists as
+ * Overview's tile wall, Songs as rows on a grouped surface), Show more, the
+ * notes and an artist's albums. A song row is a detected-link row
+ * (download-form.css .new-link) without the include box. Linked after
+ * download.css, so its phone rules at the end are its own. Base structure
+ * only; it reads tokens like every other base stylesheet, and the skin
+ * restyles it.
  */
 
-.new-search {
-  display: flex;
-  flex-direction: column;
-}
-
-/* The card's room keeps the height the card reached during a search
-   (views/download-search.js), the card on top of it. */
+/* The room keeps the height the hits reached during a search
+   (views/download-search.js); the sections on top of it. The results run
+   wider than the compose column, up to --stage-max. */
 .new-search-room {
   display: flex;
   flex-direction: column;
 }
 
-/* ---- Groups -------------------------------------------------------- */
-
-.new-search-group + .new-search-group {
-  border-top: var(--row-divider);
+.new-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  container-type: inline-size;
 }
 
-.new-search-group-title {
-  margin: 0;
-  padding: var(--s-3) var(--card-pad-x) 0;
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  font-weight: var(--w-semibold);
+/* While a new term loads, the last hits stay where they are, quiet. */
+.new-search :is(.wall, .new-hits, .new-search-note) {
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.new-search[data-state="stale"] :is(.wall, .new-hits, .new-search-note) {
+  opacity: 0.55;
 }
 
 .new-hits {
@@ -44,38 +43,230 @@
   border-top: var(--row-divider);
 }
 
-/* While a new term loads, the last hits stay where they are, quiet. */
-.new-search .new-hits,
-.new-search .new-search-note {
-  transition: opacity var(--dur-fast) var(--ease-out);
+/* ---- Tile walls ---------------------------------------------------- */
+
+/* Six across (one answer's worth), three on a narrower page, two on a
+   phone page; Show more adds rows. */
+.new-wall {
+  --cols: 6;
+  list-style: none;
 }
 
-.new-search[data-state="stale"] :is(.new-hits, .new-search-note) {
-  opacity: 0.55;
+@container (max-width: 959px) {
+  .new-wall {
+    --cols: 3;
+  }
 }
 
-/* ---- Hit rows ------------------------------------------------------ */
+@container (max-width: 479px) {
+  .new-wall {
+    --cols: 2;
+  }
+
+  /* On a phone the sections are shelves that scroll sideways, edge to
+     edge; the padding keeps the covers' shadows out of the clip. */
+  .new-search-group .new-wall {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 42%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--main-x);
+    scrollbar-width: none;
+    margin: calc(-1 * var(--s-2)) calc(-1 * var(--main-x)) calc(-1 * var(--s-4));
+    padding: var(--s-2) var(--main-x) var(--s-4);
+  }
+
+  .new-search-group .new-wall > li {
+    scroll-snap-align: start;
+  }
+}
+
+.new-tile {
+  min-width: 0;
+}
+
+/* The cover carries what the tile says: its first quality bottom left,
+   Download bottom right, a library or queue badge top right. */
+.new-tile-cover {
+  position: relative;
+}
+
+.new-tile-cover > .art,
+.new-tile-job > .art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.new-tile-job {
+  display: block;
+  border-radius: var(--r-art);
+}
+
+/* In the queue already: listed, quiet, nothing to download. */
+.new-tile[data-prior="active"] .art {
+  opacity: 0.6;
+}
+
+.new-tile-chip,
+.new-tile-badge,
+.new-tile-go {
+  position: absolute;
+  border-radius: var(--r-full);
+  corner-shape: round;
+  background: var(--bg-chrome);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  color: var(--text-primary);
+}
+
+.new-tile-chip {
+  left: var(--s-2);
+  bottom: var(--s-2);
+  max-width: calc(100% - 36px - 3 * var(--s-2));
+  padding: 0 var(--s-2);
+  overflow: hidden;
+  font-size: var(--fs-11);
+  line-height: 22px;
+  font-weight: var(--w-semibold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.new-tile-badge {
+  top: var(--s-2);
+  right: var(--s-2);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+}
+
+.new-tile-badge[data-state="done"] {
+  color: var(--success-text);
+}
+
+/* Download: a 36 px glass circle (a 44 px target) that shows on hover or
+   focus with a mouse, always on a touch screen. */
+.new-tile-go {
+  right: var(--s-2);
+  bottom: var(--s-2);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  box-shadow: var(--shadow-thumb);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.new-tile-go::after {
+  content: "";
+  position: absolute;
+  inset: calc((36px - var(--touch)) / 2);
+}
+
+.new-tile:hover .new-tile-go,
+.new-tile-go:focus-visible,
+.new-tile-go[aria-busy] {
+  opacity: 1;
+}
+
+.new-tile-go:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.new-tile-go[aria-busy] {
+  cursor: progress;
+}
+
+@media (hover: none) {
+  .new-tile-go {
+    opacity: 1;
+  }
+}
+
+.new-tile-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.new-tile-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.new-tile-title > .new-link-explicit {
+  flex: none;
+}
+
+/* An artist: one button, a round cover over the name. */
+.new-tile-open {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.new-wall[data-kind="artist"] :is(.art, .art.skel) {
+  border-radius: var(--r-full);
+  corner-shape: round;
+}
+
+.new-wall[data-kind="artist"] :is(.wall-title, .wall-sub) {
+  text-align: center;
+}
+
+/* ---- Song rows ----------------------------------------------------- */
+
+/* One column of rows, two or three side by side on a wider page. */
+.new-search-group[data-section="hits-songs"] .new-hits {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 600px) {
+  .new-search-group[data-section="hits-songs"] .new-hits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .new-search-group[data-section="hits-songs"] .new-hits > li:nth-child(2) {
+    border-top: 0;
+  }
+}
+
+@container (min-width: 960px) {
+  .new-search-group[data-section="hits-songs"] .new-hits {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .new-search-group[data-section="hits-songs"] .new-hits > li:nth-child(3) {
+    border-top: 0;
+  }
+}
 
 .new-hit {
   position: relative;
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) auto;
-  grid-template-areas: "art main actions";
   align-items: center;
   gap: var(--s-3);
-  padding: var(--s-3) var(--card-pad-x);
-  /* The arrow keys scroll a row clear of the top bar and the sticky
-     submit bar. */
-  scroll-margin-block: calc(var(--topbar-h) + var(--s-4)) 160px;
-}
-
-.new-hit-art {
-  grid-area: art;
-}
-
-.new-hit[data-kind="artist"] .new-hit-art {
-  border-radius: var(--r-full);
-  corner-shape: round;
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--card-pad-x);
+  /* The arrow keys scroll a hit clear of the top bar. */
+  scroll-margin-block: calc(var(--topbar-h) + var(--s-4)) var(--s-10);
 }
 
 /* In the queue already: listed, quiet, nothing to download. */
@@ -84,7 +275,6 @@
 }
 
 .new-hit-main {
-  grid-area: main;
   display: flex;
   flex-direction: column;
   gap: var(--s-0_5);
@@ -121,7 +311,6 @@
   text-transform: none;
 }
 
-/* A tag is whole or gone: in a narrow row the second one goes, then both. */
 @container (max-width: 440px) {
   .new-hit-head > .chip + .chip {
     display: none;
@@ -148,59 +337,15 @@
   content: " · ";
 }
 
-.new-hit-actions {
-  grid-area: actions;
-  display: flex;
-  align-items: center;
-  gap: var(--s-1);
-}
-
-/* Wide enough for "Adding…", so the label never resizes the button. */
+/* Download: a round glyph button with a 44 px target around it. */
 .new-hit-download {
-  min-width: 7.5em;
-  justify-content: center;
+  position: relative;
 }
 
-.new-hit-chevron {
-  display: flex;
-  color: var(--text-secondary);
-}
-
-/* An artist row opens anywhere it is clicked: its title is a button
-   stretched over the row, which draws the focus ring. */
-.new-hit-open {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: var(--w-medium);
-  text-align: start;
-  cursor: pointer;
-}
-
-.new-hit-open::after {
+.new-hit-download::after {
   content: "";
   position: absolute;
-  inset: 0;
-}
-
-.new-hit-open:focus-visible {
-  outline: none;
-}
-
-.new-hit:has(.new-hit-open:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
-.new-hit[data-kind="artist"]:hover {
-  background: var(--bg-hover);
-}
-
-/* The library or queue note keeps its Open link above the stretched title. */
-.new-hit-prior {
-  position: relative;
+  inset: calc((var(--control-h-sm) - var(--touch)) / 2);
 }
 
 /* A skeleton row holds a real row's two lines. */
@@ -226,30 +371,21 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--s-2) var(--s-3);
-  padding: var(--s-1) var(--card-pad-x) var(--s-3);
 }
 
 .new-search-note {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2) var(--s-3);
+  align-items: flex-start;
+  gap: var(--s-2);
   margin: 0;
-  padding: var(--s-4) var(--card-pad-x);
   color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
 }
 
-.new-search-fail {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-}
-
-.new-search-fail > .icon {
-  margin-top: var(--s-0_5);
-  color: var(--danger-text);
+.new-search-note .icon {
+  flex: none;
+  margin-top: var(--s-1);
 }
 
 .new-search-fail-text {
@@ -257,47 +393,39 @@
 }
 
 .new-search-fail-text > strong {
-  color: var(--danger-text);
   font-weight: var(--w-semibold);
-}
-
-.new-search-retry {
-  grid-column: 2;
-  justify-self: start;
-}
-
-.new-search-empty {
-  flex-wrap: nowrap;
-  align-items: flex-start;
-}
-
-.new-search-empty .icon {
-  flex: none;
-  margin-top: var(--s-0_5);
 }
 
 /* ---- An artist's albums -------------------------------------------- */
 
+.new-artist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+/* Back over the head: a round cover, the name, Download all. */
 .new-artist-head {
   scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
   display: grid;
-  grid-template-columns: auto 64px minmax(0, 1fr) auto;
-  grid-template-areas: "back art main all";
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "back back back"
+    "art main all";
   align-items: center;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--card-pad-x);
-  border-bottom: var(--row-divider);
+  gap: var(--s-4) var(--s-6);
 }
 
 .new-artist-back {
   grid-area: back;
-  scroll-margin-top: calc(var(--topbar-h) + var(--s-4) + var(--s-3));
+  justify-self: start;
+  scroll-margin-top: calc(var(--topbar-h) + var(--s-4));
 }
 
 .new-artist-art {
   grid-area: art;
-  width: 64px;
-  height: 64px;
+  width: 120px;
+  height: 120px;
   border-radius: var(--r-full);
   corner-shape: round;
 }
@@ -306,16 +434,18 @@
   grid-area: main;
   display: flex;
   flex-direction: column;
-  gap: var(--s-0_5);
+  gap: var(--s-1);
   min-width: 0;
 }
 
 .new-artist-name {
   margin: 0;
   min-width: 0;
-  font-size: var(--fs-16);
-  line-height: var(--lh-16);
-  font-weight: var(--w-semibold);
+  font-family: var(--font-display);
+  font-size: var(--fs-page-title);
+  line-height: var(--lh-page-title);
+  font-weight: var(--w-title);
+  letter-spacing: var(--tracking-title);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -323,8 +453,8 @@
 
 .new-artist-sub {
   color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
 }
 
 .new-artist-all {
@@ -334,12 +464,11 @@
 /* ---- Phone --------------------------------------------------------- */
 
 @media (max-width: 639px) {
-  /* The title takes two lines before it gives way, the meta line wraps
-     between its facts, and Download keeps only its icon (a 32 px button
-     with a full target around it), as on a link row. */
+  /* The title takes two lines before it gives way, and the meta line wraps
+     between its facts, as on a link row. */
   .new-hit {
     column-gap: var(--s-2);
-    padding: var(--s-3) var(--s-4);
+    padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4);
   }
 
   .new-hit-title {
@@ -380,53 +509,24 @@
     text-align: center;
   }
 
-  .new-hit-download {
-    position: relative;
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
-    min-height: 32px;
-    padding: 0;
-  }
-
-  .new-hit-download::after {
-    content: "";
-    position: absolute;
-    inset: calc((32px - var(--touch)) / 2);
-  }
-
-  .new-hit-download > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .new-search-group-title,
-  .new-search-more,
-  .new-search-note {
-    padding-inline: var(--s-4);
-  }
-
   /* Back on its own line, then the artist, then Download all across. */
   .new-artist-head {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: 88px minmax(0, 1fr);
     grid-template-areas:
       "back back"
       "art main"
       "all all";
-    padding: var(--s-3) var(--s-4);
-  }
-
-  .new-artist-back {
-    justify-self: start;
+    gap: var(--s-3) var(--s-4);
   }
 
   .new-artist-art {
-    width: 56px;
-    height: 56px;
+    width: 88px;
+    height: 88px;
+  }
+
+  .new-artist-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .new-artist-all {

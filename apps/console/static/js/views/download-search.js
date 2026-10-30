@@ -1,11 +1,12 @@
 // New download: catalog search, for a text box that holds words and no link.
-// The card lists the hits grouped as Songs, Albums and Artists (a 48 px
-// cover, the title with E and quality tags, one meta line, a note when the
-// item is in the library or the queue, Download), each group with Show
-// more; an artist opens its albums in the same card with Back and Download
-// all. ArrowDown from the text box enters the list, the arrows move between
-// rows, Return downloads or opens, Escape leaves. While a new term loads,
-// the last hits stay (dimmed) and the card never shrinks during a search,
+// The hits come in three titled sections, each with Show more: Albums and
+// Artists as tile walls (download-tiles.js), Songs as rows on a grouped
+// surface (a 48 px cover, the title with E and quality tags, one meta
+// line, a note when the item is in the library or the queue, Download). An
+// artist opens its albums in their place with Back and Download all.
+// ArrowDown from the text box enters the hits, the arrows move between
+// them, Return downloads or opens, Escape leaves. While a new term loads,
+// the last hits stay (dimmed) and the room never shrinks during a search,
 // so nothing under it jumps as results come and go. The state is in
 // download-search-state.js, the logic pure in lib/search.js; the page
 // (download.js) submits what Download sends.
@@ -14,13 +15,14 @@ import { html, useState, useRef, useLayoutEffect } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths, shortDate } from '../lib/format.js';
 import { hitView, hitKey, shownHits, SEARCH_GROUPS, SEARCH_FIRST, SEARCH_MAX_TERM } from '../lib/search.js';
 import { shortError } from '../lib/lookup.js';
-import { Card, Button, Icon, Artwork, Skeleton } from '../ui/components.js';
+import { Card, Button, Icon, Artwork, Skeleton, Notice } from '../ui/components.js';
+import { AlbumTile, ArtistTile, SkeletonTiles } from './download-tiles.js';
 
 const HIT_ART = artWidths(48);
-const ARTIST_ART = artWidths(64);
+const ARTIST_ART = artWidths(120);
 
-// Skeleton rows per group while the first answer loads: a typical answer,
-// so the card is about its final height when the hits arrive.
+// Placeholders per group while the first answer loads: a typical answer,
+// so the page is about its final height when the hits arrive.
 const SKELETON_ROWS = { songs: SEARCH_FIRST, albums: SEARCH_FIRST, artists: 2 };
 
 /** The note for an earlier job, as on a link row: in the queue now, or in the library since when, with Open. */
@@ -34,15 +36,13 @@ function PriorNote({ prior, href }) {
 }
 
 /**
- * One hit. A song or album row's Download is its one focus stop
- * (data-hit-primary); an artist row's is its title, a button over the whole
- * row that opens the artist. A hit in the queue offers no Download.
+ * A song: a row on the Songs surface. Download is its one focus stop
+ * (data-hit-primary); a song in the queue offers none to press.
  */
 function HitRow({ hit, row }) {
   const v = hitView(hit);
   const palette = artPalette(hit);
   const prior = row.priorOf(hit);
-  const artist = hit.type === 'artist';
   const busy = row.busy.has(hit.url);
   const queued = prior && prior.state === 'active';
   const cls = ['new-hit', palette ? 'has-palette' : ''].filter(Boolean).join(' ');
@@ -51,9 +51,7 @@ function HitRow({ hit, row }) {
     <${Artwork} url=${hit.artwork_url} bg=${palette && palette.bg} px=${100} widths=${HIT_ART} sizes="48px" className="art-48 new-hit-art" />
     <div class="new-hit-main">
       <span class="new-hit-head">
-        ${artist
-          ? html`<button type="button" class="new-hit-title new-hit-open" data-hit-primary dir="auto" title=${`Show the albums of ${v.title}`} onClick=${() => row.onOpenArtist(hit)}>${v.title}</button>`
-          : html`<span class="new-hit-title" dir="auto" title=${v.title}>${v.title}</span>`}
+        <span class="new-hit-title" dir="auto" title=${v.title}>${v.title}</span>
         ${v.explicit ? html`<span class="new-link-explicit" title="Explicit" aria-label="Explicit">E</span>` : null}
         ${v.quality.map((q) => html`<span key=${q} class="chip new-hit-quality">${q}</span>`)}
       </span>
@@ -62,31 +60,28 @@ function HitRow({ hit, row }) {
       </span>
       ${prior ? html`<${PriorNote} prior=${prior} href=${row.jobHref(prior.job.id)} />` : null}
     </div>
-    <div class="new-hit-actions">
-      ${artist
-        ? html`<span class="new-hit-chevron" aria-hidden="true"><${Icon} name="chevron-right" /></span>`
-        : html`<${Button}
-            size="sm"
-            icon="download"
-            className="new-hit-download"
-            data-hit-primary
-            disabled=${busy || queued}
-            aria-busy=${busy ? 'true' : undefined}
-            aria-label=${queued ? `${v.title} is in the queue` : `Download ${v.title}`}
-            title=${queued ? 'Already in the queue' : prior ? 'In your library; tracks on disk are skipped unless Overwrite is on' : undefined}
-            onClick=${() => row.onDownload(hit)}
-          >${busy ? 'Adding…' : 'Download'}</${Button}>`}
-    </div>
+    <${Button}
+      size="sm"
+      variant="ghost"
+      icon="download"
+      className="new-hit-download"
+      data-hit-primary
+      disabled=${busy || queued}
+      aria-busy=${busy ? 'true' : undefined}
+      aria-label=${queued ? `${v.title} is in the queue` : `Download ${v.title}`}
+      title=${queued ? 'Already in the queue' : prior ? 'In your library; tracks on disk are skipped unless Overwrite is on' : 'Download'}
+      onClick=${() => row.onDownload(hit)}
+    />
   </li>`;
 }
 
 /** A failed read: what failed, the server's reason without the catalog prefix it repeats, Retry. */
 function FailNote({ what, error, onRetry }) {
   const why = shortError(String((error && error.message) || '').replace(/^read Apple Music catalog:\s*/i, ''));
-  return html`<div class="new-search-note new-search-fail" role="alert">
-    <${Icon} name="circle-x" size="sm" />
-    <span class="new-search-fail-text"><strong>${what}.</strong> ${why}</span>
-    <${Button} size="sm" icon="rotate" className="new-search-retry" onClick=${onRetry}>Retry</${Button}>
+  return html`<div class="new-search-fail" role="alert">
+    <${Notice} role="danger" icon="circle-x" action=${html`<${Button} size="sm" icon="rotate" className="new-search-retry" onClick=${onRetry}>Retry</${Button}>`}>
+      <span class="new-search-fail-text"><strong>${what}.</strong> ${why}</span>
+    </${Notice}>
   </div>`;
 }
 
@@ -100,13 +95,22 @@ function SkeletonHits({ n }) {
           <span class="new-hit-head"><span class="skel skel-lh new-hit-skel-title"></span></span>
           <span class="new-hit-sub"><span class="skel skel-lh skel-short"></span></span>
         </span>
-        <span class="new-hit-actions"></span>
       </li>`,
     )}
   </ul>`;
 }
 
-/** Show more for a group, its loading state, or its failure with Retry. */
+/** Show more in a section's head (red text, as Overview's actions), or its failure with Retry. */
+function MoreAction({ state, onMore }) {
+  if (state === 'error') {
+    return html`<span class="new-search-more-fail status-text" data-role="warning"><${Icon} name="triangle-alert" size="sm" /><span>Couldn't load more</span></span>
+      <${Button} variant="ghost" onClick=${onMore}>Retry</${Button}>`;
+  }
+  return html`<${Button} variant="ghost" className="new-search-more-btn" disabled=${state === 'loading'} aria-busy=${state === 'loading' ? 'true' : undefined} onClick=${onMore}
+    >${state === 'loading' ? 'Loading…' : 'Show more'}</${Button}>`;
+}
+
+/** Show more under an artist's albums, its loading state, or its failure with Retry. */
 function MoreRow({ state, label, onMore }) {
   if (state === 'error') {
     return html`<div class="new-search-more">
@@ -120,21 +124,36 @@ function MoreRow({ state, label, onMore }) {
   </div>`;
 }
 
-// Rows are keyed by position: a new term's hits take the rows the last
-// term's had, in place, instead of the old rows moving to new places.
+// Hits are keyed by position: a new term's hits take the places the last
+// term's had, in place, instead of the old ones moving to new places.
 function Groups({ data, loading, more, row, onMore }) {
   return SEARCH_GROUPS.map((g) => {
     const group = data && data[g.id];
     if (!loading && !(group && group.items.length)) return null;
-    return html`<section key=${g.id} class="new-search-group" data-group=${g.id} aria-labelledby=${`new-search-${g.id}`}>
-      <h3 class="new-search-group-title" id=${`new-search-${g.id}`}>${g.label}</h3>
-      ${loading
-        ? html`<${SkeletonHits} n=${SKELETON_ROWS[g.id]} />`
-        : html`<ul class="new-hits" aria-labelledby=${`new-search-${g.id}`}>
-            ${group.items.map((hit, i) => html`<${HitRow} key=${i} hit=${hit} row=${row} />`)}
-          </ul>`}
-      ${!loading && group.next_offset ? html`<${MoreRow} state=${more[g.id]} label=${`Show more ${g.many}`} onMore=${() => onMore(g.id)} />` : null}
-    </section>`;
+    const songs = g.id === 'songs';
+    const kind = g.id === 'artists' ? 'artist' : 'album';
+    const Tile = kind === 'artist' ? ArtistTile : AlbumTile;
+    const label = `new-search-${g.id}`;
+    let body;
+    if (loading) {
+      body = songs ? html`<${SkeletonHits} n=${SKELETON_ROWS[g.id]} />` : html`<${SkeletonTiles} n=${SKELETON_ROWS[g.id]} kind=${kind} />`;
+    } else if (songs) {
+      body = html`<ul class="new-hits" aria-labelledby=${label}>
+        ${group.items.map((hit, i) => html`<${HitRow} key=${i} hit=${hit} row=${row} />`)}
+      </ul>`;
+    } else {
+      body = html`<ul class="wall new-wall" data-kind=${kind} aria-labelledby=${label}>
+        ${group.items.map((hit, i) => html`<${Tile} key=${i} hit=${hit} row=${row} />`)}
+      </ul>`;
+    }
+    return html`<${Card}
+      key=${g.id}
+      section=${`hits-${g.id}`}
+      className=${songs ? 'card-flush new-search-group' : 'new-search-group'}
+      title=${g.label}
+      labelId=${label}
+      actions=${!loading && group.next_offset ? html`<${MoreAction} state=${more[g.id]} onMore=${() => onMore(g.id)} />` : null}
+    >${body}</${Card}>`;
   });
 }
 
@@ -146,10 +165,10 @@ function ArtistView({ artist, hit, row, onBack, onMore, onRetry, onDownloadAll }
     <div class=${palette ? 'new-artist-head has-palette' : 'new-artist-head'} style=${paletteStyle(palette)}>
       <${Button} variant="ghost" size="sm" icon="chevron-left" className="new-artist-back" data-hit-primary onClick=${onBack}>Results</${Button}>
       ${shown
-        ? html`<${Artwork} url=${shown.artwork_url} bg=${palette && palette.bg} px=${128} widths=${ARTIST_ART} sizes="64px" className="new-artist-art" />`
+        ? html`<${Artwork} url=${shown.artwork_url} bg=${palette && palette.bg} px=${240} widths=${ARTIST_ART} sizes="(max-width: 639px) 88px, 120px" className="new-artist-art" />`
         : html`<span class="art new-artist-art"><${Skeleton} kind="tile" /></span>`}
       <div class="new-artist-main">
-        ${name ? html`<h3 class="new-artist-name" dir="auto">${name}</h3>` : html`<span class="skel skel-lh new-hit-skel-title"></span>`}
+        ${name ? html`<h2 class="new-artist-name" dir="auto">${name}</h2>` : html`<span class="skel skel-lh new-hit-skel-title"></span>`}
         <span class="new-artist-sub" dir=${shown && shown.genre ? 'auto' : undefined}>${shown && shown.genre ? shown.genre : 'Artist'}</span>
       </div>
       <${Button} icon="download" className="new-artist-all" disabled=${!shown} onClick=${() => onDownloadAll(shown)}>Download all</${Button}>
@@ -157,12 +176,12 @@ function ArtistView({ artist, hit, row, onBack, onMore, onRetry, onDownloadAll }
     ${artist.status === 'error'
       ? html`<${FailNote} what="Couldn't load the albums" error=${artist.error} onRetry=${onRetry} />`
       : artist.status === 'ready'
-        ? html`<ul class="new-hits" aria-label=${`Albums by ${name}`}>
-            ${artist.albums.items.map((a) => html`<${HitRow} key=${hitKey(a)} hit=${a} row=${row} />`)}
+        ? html`<ul class="wall new-wall" data-kind="album" aria-label=${`Albums by ${name}`}>
+            ${artist.albums.items.map((a) => html`<${AlbumTile} key=${hitKey(a)} hit=${a} row=${row} />`)}
           </ul>
           ${artist.albums.items.length === 0 ? html`<p class="new-search-note">Apple Music lists no albums for this artist here.</p>` : null}
           ${artist.albums.next_offset ? html`<${MoreRow} state=${artist.more} label="Show more albums" onMore=${onMore} />` : null}`
-        : html`<${SkeletonHits} n=${6} />`}
+        : html`<${SkeletonTiles} n=${SEARCH_FIRST} kind="album" />`}
   </div>`;
 }
 
@@ -208,7 +227,7 @@ export function SearchCard({ s, term, tooLong, inputRef, openHit, focusArtist, r
     const lost = !document.activeElement || document.activeElement === document.body || body.current.contains(document.activeElement);
     const el = viewing
       ? focusArtist && body.current.querySelector('.new-artist-back')
-      : lost && prev.id && body.current.querySelector(`.new-hit[data-id="${prev.id}"] .new-hit-open`);
+      : lost && prev.id && body.current.querySelector(`.new-tile[data-id="${prev.id}"] .new-tile-open`);
     if (el) el.focus();
   });
 
@@ -266,16 +285,16 @@ export function SearchCard({ s, term, tooLong, inputRef, openHit, focusArtist, r
   }
 
   return html`<div class="new-search-room" ref=${room} style=${floor ? { minHeight: `${floor}px` } : undefined}>
-    <${Card} section="search" className="card-flush new-search-card" title="Search results" labelId="new-search-title">
-      <div
-        class="new-search"
-        ref=${body}
-        data-state=${viewing ? 'artist' : loading ? 'loading' : stale ? 'stale' : search.status}
-        aria-busy=${loading || stale ? 'true' : undefined}
-        onKeyDown=${onKeyDown}
-      >
-        ${content}
-      </div>
-    </${Card}>
+    <section
+      class="new-search"
+      ref=${body}
+      aria-labelledby="new-search-title"
+      data-state=${viewing ? 'artist' : loading ? 'loading' : stale ? 'stale' : search.status}
+      aria-busy=${loading || stale ? 'true' : undefined}
+      onKeyDown=${onKeyDown}
+    >
+      <h2 id="new-search-title" class="sr-only">Search results</h2>
+      ${content}
+    </section>
   </div>`;
 }
