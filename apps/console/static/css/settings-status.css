@@ -313,6 +313,10 @@
   grid-template-rows: var(--domain-title-h) 40px;
 }
 
+.settings-section[data-held] > .settings-section-body {
+  visibility: hidden;
+}
+
 .domain-head .domain-figure {
   align-items: center;
   height: 40px;

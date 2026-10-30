@@ -61,6 +61,8 @@ function artworkSummary(base) {
   return [cover, files.map((f) => String(f).toUpperCase()).join(' + ')].filter(Boolean).join(' · ');
 }
 
+const HOLD_MS = 400;
+
 export function SettingsPage({ route }) {
   const app = useApp();
   const asked = settingsSection(route.params);
@@ -329,6 +331,17 @@ export function SettingsPage({ route }) {
     if (changed.length) setLive(changed.map((s) => `${s.label}: ${views[s.id].tag ? views[s.id].tag.label : 'OK'}`).join('. '));
   });
 
+  // A head whose first answer is out keeps its rows; the answer may close
+  // two of them (data-compact), so the body is laid out but not drawn until
+  // it is in, or HOLD_MS, and never moves in sight.
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    setLate(false);
+    const t = setTimeout(() => setLate(true), HOLD_MS);
+    return () => clearTimeout(t);
+  }, [section.id]);
+  const held = !late && Boolean(views[section.id]) && views[section.id].state === 'loading';
+
   const form = { valueOf, dirtyKeys, errors, warnings, setValue, revert, showKeys };
   const refresh = REFRESH[section.id];
   const actions =
@@ -347,7 +360,7 @@ export function SettingsPage({ route }) {
   else if (boardView) main = html`<${SettingsBoard} views=${views} />`;
   else
     main = html`${phone ? html`<${SettingsBack} />` : null}
-      <section key=${section.id} class="card settings-section" data-domain=${section.id} aria-labelledby="settings-section-title">
+      <section key=${section.id} class="card settings-section" data-domain=${section.id} data-held=${held ? '' : undefined} aria-labelledby="settings-section-title">
         <${DomainHead} section=${section} view=${views[section.id] || null} actions=${actions} titleId="settings-section-title" />
         <div class="settings-section-body">
           <${SectionBody}
