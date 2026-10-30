@@ -29,7 +29,8 @@ not a test fix.
 - Media transfers have no `http.Client.Timeout`; transport timeouts and
   `mediaStallTimeout` bound them. Resume rules live once, in `rangeTransfer`.
 - ffmpeg is the only external command (`ToolChecker`); sample extraction, remuxing
-  and tagging stay in-process so a deployment has one less binary to lack.
+  and tagging stay in-process so a deployment has one less binary to lack. Every
+  `exec.Cmd` goes through `internal/sysproc#NoConsole` before it starts.
 - The download, decrypt and wrapper-request pools are process-wide and shared by
   every job-scoped `Downloader` clone; changes there run under `-race`.
 

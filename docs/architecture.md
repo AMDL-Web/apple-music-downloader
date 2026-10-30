@@ -69,6 +69,7 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/limits` | semaphores and the Apple request gate | |
 | `internal/ids` | random IDs (`job_<32 hex>`, `item_<32 hex>`) | |
 | `internal/buildinfo` | version, commit, build date (ldflags), process start time | |
+| `internal/sysproc` | how external commands start: no console window on Windows | |
 
 ### 2.1 The wrapper and decryption
 
