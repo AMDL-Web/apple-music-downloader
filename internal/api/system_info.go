@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"runtime"
 	"time"
 
@@ -28,6 +29,18 @@ type systemInfo struct {
 	Pools                systemPools         `json:"pools"`
 	Tools                []domain.Capability `json:"tools"`
 	Storage              []storageInfo       `json:"storage"`
+	Startup              systemStartup       `json:"startup"`
+}
+
+// systemStartup is the configuration that is read only at startup, so a client
+// can show it without offering to edit it. It carries no credential.
+type systemStartup struct {
+	WrapperAddress      string `json:"wrapper_address"`
+	Listen              string `json:"listen"`
+	DatabasePath        string `json:"database_path"`
+	LogBufferSize       int    `json:"log_buffer_size"`
+	CatalogLanguage     string `json:"catalog_language"`
+	MaxParallelRequests int    `json:"max_parallel_requests"`
 }
 
 type systemJobs struct {
@@ -91,7 +104,28 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 			directorySpace("downloads_dir", cfg.Download.DownloadsDir),
 			directorySpace("temp_dir", cfg.Download.TempDir),
 		},
+		Startup: systemStartup{
+			WrapperAddress:  publicAddress(cfg.Wrapper.Address),
+			Listen:          cfg.Server.Listen,
+			DatabasePath:    cfg.Database.Path,
+			LogBufferSize:   cfg.Logging.BufferSize,
+			CatalogLanguage: cfg.Catalog.Language,
+			// A limit <= 0 runs as 1 (limits.NewSemaphore); report the one in effect.
+			MaxParallelRequests: max(1, cfg.Catalog.MaxParallelRequests),
+		},
 	})
+}
+
+// publicAddress drops what could carry a credential from a configured URL: the
+// user info, the query and the fragment. An address that does not parse is
+// reported empty rather than echoed.
+func publicAddress(address string) string {
+	u, err := url.Parse(address)
+	if err != nil {
+		return ""
+	}
+	u.User, u.RawQuery, u.Fragment = nil, "", ""
+	return u.String()
 }
 
 // directorySpace reports the free and total bytes of the file system that

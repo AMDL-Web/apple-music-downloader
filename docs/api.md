@@ -104,6 +104,11 @@ Returns what is running and what it has to work with:
   `download.downloads_dir` and `download.temp_dir`, or an `error` when a directory
   cannot be inspected (it does not exist yet, or the platform is not Linux, macOS or
   FreeBSD).
+- `startup`: configuration read only at startup, for a client to show as read-only facts:
+  `wrapper_address` (`wrapper.address`, without user info, query or fragment),
+  `listen` (`server.listen`), `database_path` (`database.path`), `log_buffer_size`
+  (`logging.buffer_size`), `catalog_language` (`catalog.language`) and
+  `max_parallel_requests` (`catalog.max_parallel_requests`, or 1 when it is 0 or less).
 
 No secret is returned.
 

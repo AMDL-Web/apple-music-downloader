@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -34,6 +35,12 @@ func TestSystemInfo(t *testing.T) {
 	cfg.Download.DownloadsDir = t.TempDir()
 	cfg.Download.TempDir = filepath.Join(t.TempDir(), "missing")
 	cfg.Tools.FFmpeg = "amdl-test-tool-that-does-not-exist"
+	cfg.Wrapper.Address = "https://wrapper-user:wrapper-secret@wrapper.example:8443/prefix?token=wrapper-query-secret#frag"
+	cfg.Server.Listen = "0.0.0.0:19090"
+	cfg.Database.Path = "data/test/amdl.db"
+	cfg.Logging.BufferSize = 321
+	cfg.Catalog.Language = "ja-JP"
+	cfg.Catalog.MaxParallelRequests = 7
 
 	hub := events.NewHub()
 	// Never started, so the admitted job stays in the queue.
@@ -48,8 +55,10 @@ func TestSystemInfo(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
-	if strings.Contains(rec.Body.String(), "secret-media-user-token") {
-		t.Fatalf("body exposes the media-user-token: %s", rec.Body.String())
+	for _, secret := range []string{"secret-media-user-token", "wrapper-user", "wrapper-secret", "wrapper-query-secret", "frag"} {
+		if strings.Contains(rec.Body.String(), secret) {
+			t.Fatalf("body exposes %q: %s", secret, rec.Body.String())
+		}
 	}
 	var got struct {
 		Version              string         `json:"version"`
@@ -71,6 +80,7 @@ func TestSystemInfo(t *testing.T) {
 			Path      string `json:"path"`
 			Error     string `json:"error"`
 		} `json:"tools"`
+		Startup map[string]any `json:"startup"`
 		Storage []struct {
 			Name       string  `json:"name"`
 			Path       string  `json:"path"`
@@ -104,6 +114,14 @@ func TestSystemInfo(t *testing.T) {
 	wantPools := map[string]int{"downloads": 4, "decrypts": config.MaxParallelDecrypts, "wrapper_requests": config.MaxParallelWrapperRequests}
 	if !equalCounts(got.RawPools, wantPools) {
 		t.Errorf("pools = %v, want %v", got.RawPools, wantPools)
+	}
+	wantStartup := map[string]any{
+		"wrapper_address": "https://wrapper.example:8443/prefix", "listen": "0.0.0.0:19090",
+		"database_path": "data/test/amdl.db", "log_buffer_size": float64(321),
+		"catalog_language": "ja-JP", "max_parallel_requests": float64(7),
+	}
+	if !reflect.DeepEqual(got.Startup, wantStartup) {
+		t.Errorf("startup = %v, want %v", got.Startup, wantStartup)
 	}
 	if len(got.Tools) != 1 || got.Tools[0].Name != "ffmpeg" || got.Tools[0].Available || got.Tools[0].Error == "" {
 		t.Errorf("tools = %+v, want ffmpeg missing with an error", got.Tools)
@@ -147,6 +165,26 @@ func TestSystemInfoReportsEffectivePoolSizes(t *testing.T) {
 	}
 	if want := map[string]int{"downloads": 1, "decrypts": config.MaxParallelDecrypts, "wrapper_requests": config.MaxParallelWrapperRequests}; !equalCounts(body.Pools, want) {
 		t.Fatalf("pools = %v, want %v", body.Pools, want)
+	}
+}
+
+// A request limit <= 0 runs as 1, so startup.max_parallel_requests reports 1.
+func TestSystemInfoStartupReportsEffectiveRequestLimit(t *testing.T) {
+	server := newTestServerWithManager(t)
+	cfg := config.Default()
+	cfg.Catalog.MaxParallelRequests = 0
+	server.cfg = config.NewStore(cfg)
+	rec := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/system", "")
+	var body struct {
+		Startup struct {
+			MaxParallelRequests int `json:"max_parallel_requests"`
+		} `json:"startup"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil {
+		t.Fatalf("status %d, body %s", rec.Code, rec.Body.String())
+	}
+	if body.Startup.MaxParallelRequests != 1 {
+		t.Fatalf("max_parallel_requests = %d, want 1", body.Startup.MaxParallelRequests)
 	}
 }
 

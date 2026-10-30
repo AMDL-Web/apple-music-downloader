@@ -1489,7 +1489,7 @@ components:
           type: string
     SystemInfo:
       type: object
-      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, motion_artwork_enabled, default_storefront, jobs, pools, tools, storage]
+      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, motion_artwork_enabled, default_storefront, jobs, pools, tools, storage, startup]
       properties:
         version:
           type: string
@@ -1605,6 +1605,36 @@ components:
                 minimum: 0
               error:
                 type: string
+        startup:
+          type: object
+          required: [wrapper_address, listen, database_path, log_buffer_size, catalog_language, max_parallel_requests]
+          description: >-
+            Configuration read only at startup (none of it is in RuntimeConfig),
+            for a client to show as facts. It carries no credential.
+          properties:
+            wrapper_address:
+              type: string
+              description: >-
+                wrapper.address without user info, query or fragment, so an
+                address written with credentials is not echoed back.
+            listen:
+              type: string
+              description: server.listen.
+            database_path:
+              type: string
+              description: database.path, as configured.
+            log_buffer_size:
+              type: integer
+              description: logging.buffer_size; 0 keeps no log history.
+            catalog_language:
+              type: string
+              description: catalog.language.
+            max_parallel_requests:
+              type: integer
+              minimum: 1
+              description: >-
+                Size of the Apple request pool: catalog.max_parallel_requests, or 1
+                when that is 0 or less.
       example:
         version: v2.0.0
         commit: a6a6b46
@@ -1623,6 +1653,13 @@ components:
         storage:
           - {name: downloads_dir, path: data/downloads, free_bytes: 512000000000, total_bytes: 1000000000000}
           - {name: temp_dir, path: data/tmp, error: 'statfs data/tmp: no such file or directory'}
+        startup:
+          wrapper_address: http://127.0.0.1:12340
+          listen: 127.0.0.1:18080
+          database_path: data/db/amdl.db
+          log_buffer_size: 2000
+          catalog_language: en-US
+          max_parallel_requests: 16
     Stats:
       type: object
       required: [generated_at, days, totals, daily, codecs, hooks]
