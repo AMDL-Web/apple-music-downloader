@@ -24,9 +24,15 @@ type System struct {
 	level  slog.LevelVar
 }
 
-// New builds the logging system from cfg.
+// New builds the logging system from cfg, with the console output on stdout.
 func New(cfg config.LoggingConfig) (*System, error) {
 	return newSystem(cfg, os.Stdout)
+}
+
+// NewTo is New with the console output on w, for a process that embeds the
+// backend and keeps stdout for itself.
+func NewTo(cfg config.LoggingConfig, w io.Writer) (*System, error) {
+	return newSystem(cfg, w)
 }
 
 // newSystem is New with the console output as a parameter, for tests.

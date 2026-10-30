@@ -24,6 +24,7 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 		"wrapper login":  wrapperLoginCmd,
 		"cli search":     cliSearchCmd,
 		"cli commands":   cliCommandsCmd,
+		"cli setup":      cliSetupCmd,
 		"schema":         schemaCmd,
 		"context list":   noFlags(contextList),
 		"context add":    noFlags(contextAdd),
@@ -36,9 +37,9 @@ func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) erro
 	}
 }
 
-// local are the commands that never talk to a server.
-var local = map[string]bool{
-	"cli search": true, "cli commands": true, "schema": true, "context list": true,
+// offline are the commands that never talk to a server.
+var offline = map[string]bool{
+	"cli search": true, "cli commands": true, "cli setup": true, "schema": true, "context list": true,
 	"context add": true, "context use": true, "context remove": true, "serve": true, "version": true,
 }
 
@@ -54,7 +55,7 @@ func commands() []command {
 		if c.Command == "" {
 			continue
 		}
-		cmd := command{Capability: c, noServer: local[c.Command]}
+		cmd := command{Capability: c, noServer: offline[c.Command]}
 		if setup, ok := handwritten[c.Command]; ok {
 			cmd.setup = setup
 			cmd.dryRun = c.Safety != capability.Read && !cmd.noServer

@@ -19,6 +19,7 @@ import (
 
 	"amdl/internal/capability"
 	"amdl/internal/client"
+	"amdl/internal/local"
 )
 
 // IO is where a run reads and writes; Main uses the process's own.
@@ -33,15 +34,18 @@ type IO struct {
 // env is one command's run: its IO, the global flags and the server.
 type env struct {
 	IO
-	ctx    context.Context
-	out    *printer
-	server string
-	target string
-	quiet  bool
-	yes    bool
-	dry    bool
-	cmd    capability.Capability
-	c      *client.Client
+	ctx     context.Context
+	out     *printer
+	server  string
+	wrapper string
+	target  string
+	// running is the backend this run started for --server embedded.
+	running *local.Running
+	quiet   bool
+	yes     bool
+	dry     bool
+	cmd     capability.Capability
+	c       *client.Client
 }
 
 // command is one CLI command: setup declares its flags and returns the runner,
@@ -81,7 +85,8 @@ func Run(ctx context.Context, args []string, io IO) int {
 	fs := flag.NewFlagSet("amdl "+cmd.Command, flag.ContinueOnError)
 	fs.SetOutput(io.Stderr)
 	var fields string
-	fs.StringVar(&e.server, "server", "", "server URL, saved context name or embedded (default: $AMDL_URL, the current context, then http://127.0.0.1:18080)")
+	fs.StringVar(&e.server, "server", "", "server URL, saved context name or embedded (default: $AMDL_URL, the current context, this machine's backend, then http://127.0.0.1:18080)")
+	fs.StringVar(&e.wrapper, "wrapper", "", "with --server embedded: the wrapper address, needed on the first start")
 	fs.StringVar(&fields, "fields", "", "comma-separated keys to keep in each result")
 	fs.BoolVar(&e.quiet, "quiet", false, "write nothing to stderr but errors")
 	if cmd.Safety == capability.Destructive || cmd.Command == "download" {
@@ -113,7 +118,14 @@ func Run(ctx context.Context, args []string, io IO) int {
 		}
 		e.c = c
 	}
-	if err := runner(e, pos); err != nil {
+	err = runner(e, pos)
+	if e.running != nil {
+		e.note("stopping the embedded backend; unfinished jobs resume on its next start")
+		if serr := e.running.Stop(); serr != nil && err == nil {
+			err = serr
+		}
+	}
+	if err != nil {
 		if ctx.Err() != nil && errors.Is(err, context.Canceled) {
 			return exitInterrupted
 		}

@@ -127,6 +127,8 @@ var All = []Capability{
 		Summary:  "Find the commands for a task, offline; start here",
 		Examples: []string{`amdl cli search "retry the failed downloads"`}},
 	{Command: "cli commands", Safety: Read, Summary: "List every command and MCP tool with its safety level"},
+	{Command: "cli setup", Safety: Read, Summary: "Print the snippets that connect a coding agent to amdl: MCP config and an AGENTS.md note",
+		Examples: []string{"amdl cli setup --server nas"}},
 	{Command: "schema", Safety: Read, Args: []string{"command"},
 		Summary:  "Show a command's API request, parameters, output schema and exit codes",
 		Examples: []string{"amdl schema jobs list"}},

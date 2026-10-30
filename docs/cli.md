@@ -105,12 +105,14 @@ and prints the batch, whose results carry `existing_job_id`.
 
 The first of these that is set wins:
 
-1. `--server`, a URL or a saved context name.
+1. `--server`, a URL, a saved context name, or `embedded`.
 2. `AMDL_URL`, the same.
 3. The current context, saved by `amdl context add` or `amdl context use` in
    `cli.yaml` under the user config directory (`~/Library/Application Support/amdl` on
    macOS, `$XDG_CONFIG_HOME/amdl` or `~/.config/amdl` on Linux).
-4. `http://127.0.0.1:18080`, when its health check answers at once (`apps/amdl/internal/cli#probe`).
+4. The backend running on this machine for the desktop app or `--server embedded`, when
+   its runtime file names one that answers ([Running the backend in amdl](#running-the-backend-in-amdl)).
+5. `http://127.0.0.1:18080`, when its health check answers at once (`apps/amdl/internal/cli#probe`).
 
 Otherwise the command fails with `server_not_configured`.
 
@@ -170,3 +172,22 @@ redrawn.
   rows; short ones keep fewer cards (`apps/amdl/internal/tui#wideCols` and its siblings).
 - **Leaving** takes `ctrl+c` twice, or `ctrl+d` on an empty prompt. Downloads keep
   running on the server.
+
+## Running the backend in amdl
+
+`--server embedded` runs a command against a backend inside the amdl process, the way
+the desktop app's standalone mode does, with the same files (`internal/local#Dirs`):
+the config, database and runtime file under `AMDL/server` in the user config directory,
+scratch files in the user cache directory, downloads in `~/Music/AMDL` unless the config
+says otherwise. When a backend is already running there, such as the desktop app's, the
+command connects to it instead, and so does a command that names no server at all.
+Otherwise amdl starts one on a loopback port and stops it when the command ends;
+unfinished jobs resume on its next start, and a `download` waits for its jobs so they
+can finish. The first start needs the wrapper's address, from `--wrapper` or
+`AMDL_WRAPPER_ADDRESS`, and fails with `wrapper_not_configured` without it.
+
+## Agent setup
+
+`amdl cli setup [--server name]` prints what connects a coding agent to amdl, writing
+nothing: the `claude mcp add` command, a Codex `config.toml` entry, an `mcpServers` JSON
+entry, and a paragraph for `AGENTS.md` or `CLAUDE.md`.
