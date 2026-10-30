@@ -70,13 +70,24 @@ export function rowView(job, defaultStorefront = '') {
   };
 }
 
+const hasNumbers = (it) => it.bit_depth > 0 && it.sample_rate > 0;
+
+/**
+ * The chip texts of a track list's codecs. A track names its codec while it
+ * is still being matched and gets its bit depth and rate a moment later; until
+ * then it counts only if no other track carries that codec with numbers, so
+ * "ALAC" does not flash up as a second kind beside "ALAC 24/96".
+ */
+function chipLabels(items) {
+  const list = (items || []).filter((it) => it && it.codec);
+  const numbered = new Set(list.filter(hasNumbers).map((it) => it.codec));
+  return list.filter((it) => hasNumbers(it) || !numbered.has(it.codec)).map(codecLabel).filter(Boolean);
+}
+
 /** The most common codec chip text of a track list ("ALAC 24/44.1"), '' when none carries a codec. */
 export function albumCodec(items) {
   const n = new Map();
-  for (const it of items || []) {
-    const label = codecLabel(it);
-    if (label) n.set(label, (n.get(label) || 0) + 1);
-  }
+  for (const label of chipLabels(items)) n.set(label, (n.get(label) || 0) + 1);
   let best = '';
   let top = 0;
   for (const [label, k] of n) if (k > top) [best, top] = [label, k];
@@ -96,7 +107,7 @@ export function codecNote(items) {
 
 /** The distinct codec chips of a track list, in first-seen order. */
 export function codecKinds(items) {
-  return [...new Set((items || []).map(codecLabel).filter(Boolean))];
+  return [...new Set(chipLabels(items))];
 }
 
 /**

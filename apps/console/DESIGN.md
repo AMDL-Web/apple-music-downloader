@@ -8,9 +8,12 @@ wins and this page is fixed in the same change. Sources are listed in
 
 ## Principles
 
-1. **Show only what the API knows.** Track counts, never an aggregate pipeline
-   percentage (`ItemProgress` has none on purpose). Simulate mode is announced
-   by a "Simulate" tag in the top bar, whose title says what it means.
+1. **Show only what the API knows.** Lists show track counts. The API sends no
+   overall percentage (`ItemProgress` has none on purpose); the job drawer's
+   album bar computes one in the console from each track's stages, weighted as
+   the AMDL iOS app weights them (`lib/album-progress.js`), because the track
+   count alone stands still while a long track downloads. Simulate mode is
+   announced by a "Simulate" tag in the top bar, whose title says what it means.
 2. **Status is never color alone.** Every status has an icon (or glyph), a label
    and a color role; the skin may change the look of a role, never drop the label.
 3. **Artwork colors are data.** Apple's per-album palette reaches the page as
@@ -148,7 +151,7 @@ Stable class names and attributes the skin can style without touching JS:
 | Facts | `dl.facts` > `.fact[data-key][data-role]` > `dt.fact-label` + `dd.fact-value` (throughput totals `.tp-totals` with `tracks`, `tracks-failed`, `bytes`, `jobs`, `jobs-failed`, the failed rows only when non-zero and `data-role=danger`, hero facts `.hero-facts`) |
 | Recent strip | `a.strip-tile[.has-palette][.is-overflow]` > `.art`, `.strip-title`, `.strip-sub`; every completed album renders once (newest job of a link target), those past the whole-tile count carry `.is-overflow` |
 | Showcase | `a.hero.has-palette` (a banner at most 200 px tall, hidden under 640 px) > `.hero-art`, `.hero-text` (`.hero-kicker`, `.hero-title`, `.hero-artist`, `.hero-facts`); `ul.gallery` > `li[.is-latest][.is-new]` > `a.tile` > `.tile-art` (`.tile-motion` text chip "Motion cover"), `.tile-title`, `.tile-sub`; the `li.is-latest` is the banner's release, shown only under 640 px; one entry per link target |
-| Status strip, Activity, failure | Overview `p.health-strip[data-state=ok]` or `.health-strip.notice[data-state=problem][data-role=danger\|warning]` > `.health-strip-link`; drawer `details.drawer-section.drawer-details` (closed) > `.drawer-details-body` > `dl.drawer-times`, `.drawer-id` (`code` + Copy), `section.activity` > `ol.activity-list` > `li.activity-row[data-role]` (`.activity-time`, `.activity-label`, `.activity-msg`) and a Hooks `section`; failure notice with `details.notice-more` > `pre.notice-raw`; Files `section` > `.drawer-files` > `code.drawer-files-dir` + Copy, `p.drawer-files-note` (several folders only), `a.drawer-files-link`; tracks `ol.tracks` > `li.track[data-status][data-detail]` (`data-detail` on a track with stage meters and a status) > `.track-index`, `.track-main` (`.track-title`, `.track-artist` only when it differs from the album artist), `.track-codec` (only when it differs from the album's), `.track-len`, `.track-size` (the file's size; while a track downloads or decrypts, `.track-pct` with that stage's percentage), then `.track-stages` (`.stages` > `.stage[data-key][data-state=empty\|partial\|done\|indeterminate\|unverified\|skipped]`, each `--w` wide; a track already on disk is a full bar of `skipped`, which the skin draws in its quiet ink), `.track-status` (with `.track-note`, the status message on one line, its full text the tooltip), `.track-error` (a failed track's reason, its own line) for a detail track; Logs `.log-err`, `.attr-chip-job` > `.attr-chip-name`, `.filter-chip-name`, rows `[data-seq]` with the one tab stop |
+| Status strip, Activity, failure | Overview `p.health-strip[data-state=ok]` or `.health-strip.notice[data-state=problem][data-role=danger\|warning]` > `.health-strip-link`; drawer `details.drawer-section.drawer-details` (closed) > `.drawer-details-body` > `dl.drawer-times`, `.drawer-id` (`code` + Copy), `section.activity` > `ol.activity-list` > `li.activity-row[data-role]` (`.activity-time`, `.activity-label`, `.activity-msg`) and a Hooks `section`; failure notice with `details.notice-more` > `pre.notice-raw`; album bar `.abar-wrap` > `.abar[data-ticks][.is-indeterminate]` (`--n` cells) > `.abar-live` (`--w`) + `.abar-done` > `.abar-run[data-state][data-role]` (`--w`, one per run of an outcome), then `.abar-caption` > `.abar-count` + `.abar-pct`; Files `section` > `.drawer-files` > `code.drawer-files-dir` + Copy, `p.drawer-files-note` (several folders only), `a.drawer-files-link`; tracks `ol.tracks` > `li.track[data-status][data-detail]` (`data-detail` on a track with stage meters and a status) > `.track-index`, `.track-main` (`.track-title`, `.track-artist` only when it differs from the album artist), `.track-codec` (only when it differs from the album's), `.track-len`, `.track-size` (the file's size; while a track downloads or decrypts, `.track-pct` with that stage's percentage), then `.track-stages` (`.stages` > `.stage[data-key][data-state=empty\|partial\|done\|indeterminate\|unverified\|skipped]`, each `--w` wide; a track already on disk is a full bar of `skipped`, which the skin draws in its quiet ink), `.track-status` (with `.track-note`, the status message on one line, its full text the tooltip), `.track-error` (a failed track's reason, its own line) for a detail track; Logs `.log-err`, `.attr-chip-job` > `.attr-chip-name`, `.filter-chip-name`, rows `[data-seq]` with the one tab stop |
 | Needs attention | `section.card[data-section=attention]` > `ul.attention` > `li.attention-row[data-role=danger]` > `.attention-title` (`.attention-label` "Failed" with a circle-x icon, `a.attention-link` to the drawer, mono `.attention-input`, `.attention-time`), `.attention-detail` (`.attention-error`, clamped to two lines), Retry `.btn`; `p.live-idle` is the empty live queue; `p.tp-sparse` the short Throughput card |
 | Throughput | `.tp-totals` (Facts), `.tp-formats` > `.tp-formats-title`, `.formats-bar` > `.formats-seg[data-key]` (`--w` share, `--i` index), `ul.formats-list` > `li.formats-item[data-key]` (`--i`) > `.formats-swatch`, `.formats-label`, `.formats-count`; `.chart-xaxis` > one `span[data-day]` per day, `.is-first`, `.is-mid`, `.is-latest` on the three the base shows |
 | Logs | `.log-entry[data-level]` on log page rows (`.log-row`) > `.log-time`, `.log-level[data-role]`, `.log-comp`, `.log-msg` (`.log-err`, then up to three `key=value` pairs in `.log-attrs`); toolbar `button.level-chip[aria-pressed]` (a pressed one holds a check icon, an unpressed one the hollow `.log-dot`) and `button.wrap-switch[aria-pressed]` > `.wrap-switch-track` "Wrap lines" |
@@ -266,7 +269,15 @@ and motion covers.
   which closes the drawer. A job Apple has nothing at (a 404) makes Open in
   Apple Music the solid button and Retry secondary, and its header reads as its
   queue row does ("Link not found", the link under it, no type or region);
-  on a phone the actions fill their rows, Remove included. Tracks:
+  on a phone the actions fill their rows, Remove included. Under the Tracks
+  heading, the album bar, after the AMDL iOS app's summary bar: one bar whose
+  solid fill lights one cell per finished track, left to right in the order
+  the tracks finished (by `updated_at`) and in that track's outcome color, with
+  the overall stage-weighted progress as a translucent fill behind it; up to
+  24 tracks (`TICK_MAX`) gaps cut it into cells, above that it is drawn whole.
+  Under it, the finished count left and the percent right. It is drawn from
+  the first render (striped while resolving) and stays, full, when the job
+  completes, so nothing below it moves. Tracks:
   one 44 px line each (number, title, length, size); the artist shows when it
   differs from the album artist, a codec chip such as `ALAC 24/96` when it
   differs from the album's (`.track-legend` says once which codec most tracks carry and that the

@@ -318,16 +318,17 @@ const STAGE_LABELS = { resolve: 'Resolve', download: 'Download', decrypt: 'Decry
  * Each stage's share of a track's run time, which sets the width of its
  * segment: download is most of it, decrypt about half of that, and resolve
  * and the finishing steps a sliver each. The same shares the AMDL iOS app
- * gives the stages of ItemProgress. They add up to 1 and shape the bar only;
- * no overall percentage is shown.
+ * gives the stages of ItemProgress. They add up to 1: they size the stage
+ * segments, and the drawer's album bar weights its overall progress with them
+ * (lib/album-progress.js).
  */
 export const STAGE_WEIGHTS = Object.freeze({ resolve: 0.04, download: 0.56, decrypt: 0.26, remux: 0.06, verify: 0.03, tag: 0.03, save: 0.02 });
 
 /**
  * The seven pipeline stages of one item. Download and decrypt carry their
  * own fraction; the others are done/not done. Each carries its
- * STAGE_WEIGHTS share as `weight`. There is deliberately no overall
- * percentage (ItemProgress in the API).
+ * STAGE_WEIGHTS share as `weight`. The API carries no overall percentage
+ * (ItemProgress); lib/album-progress.js computes the drawer's.
  */
 export function stageSegments(item) {
   const p = (item && item.progress) || {};

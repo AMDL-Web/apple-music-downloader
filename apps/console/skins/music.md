@@ -213,8 +213,8 @@ base durations (120 ms color, 200 ms overlays).
 - **Drawer**: a floating 22 px sheet inset 8 px from the window (full screen on
   phones); the head is an album-colored card with a 112 px cover; times and
   action buttons are grouped cells, Remove (finished jobs) in red text and
-  glyph as the one destructive cell. The tracks head carries the per-track
-  cells; the extra track strip is hidden, since each row carries its status.
+  glyph as the one destructive cell. The album bar under the tracks head
+  takes the base drawing in the skin's 6 px capsule (`--bar-h`, `--r-bar`).
   Track stage fills are calm secondary ink and turn red only on a track that
   is still running.
 - **Showcase**: the latest album is a banner above the type switch, at most

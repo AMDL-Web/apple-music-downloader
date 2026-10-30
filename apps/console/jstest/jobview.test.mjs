@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isNotFound, activeFirst, rowView, albumCodec, codecNote, drawerSummary, trackView, stagePercent, trackNote, activityRows } from '../static/js/lib/jobview.js';
+import { isNotFound, activeFirst, rowView, albumCodec, codecKinds, codecNote, drawerSummary, trackView, stagePercent, trackNote, activityRows } from '../static/js/lib/jobview.js';
 
 const done = { id: 'a', status: 'completed', type: 'album', storefront: 'us', title: 'folklore', artist_name: 'Taylor Swift', total_items: 16, completed_items: 16 };
 
@@ -117,4 +117,20 @@ test('activityRows folds Gave up into the Failed that says the same', () => {
   assert.deepEqual(rows.map((r) => r.view.label), ['Queued', 'Failed']);
   const apart = activityRows([e(1, 'operation_exhausted', 'a'), e(2, 'job_failed', 'b')]);
   assert.deepEqual(apart.map((r) => r.view.label), ['Gave up', 'Failed'], 'different text stays');
+});
+
+test('a track named its codec but not yet its numbers is not a second kind', () => {
+  // item_progress names the codec while the track is matched; codec_selected
+  // adds bit depth and rate a moment later (recorded on a real album).
+  const set = [
+    { codec: 'alac', bit_depth: 24, sample_rate: 96000 },
+    { codec: 'alac' },
+    { codec: '' },
+  ];
+  assert.deepEqual(codecKinds(set), ['ALAC 24/96']);
+  assert.equal(albumCodec(set), 'ALAC 24/96');
+  assert.equal(drawerSummary(set), 'ALAC 24/96 · 3 tracks');
+  // With no numbered track the bare name stands, and other codecs still count.
+  assert.deepEqual(codecKinds([{ codec: 'alac' }]), ['ALAC']);
+  assert.deepEqual(codecKinds([...set, { codec: 'aac-lc' }, { codec: 'alac', bit_depth: 24, sample_rate: 48000 }]), ['ALAC 24/96', 'AAC-LC', 'ALAC 24/48']);
 });
