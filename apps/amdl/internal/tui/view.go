@@ -90,7 +90,7 @@ func (m *model) header() string {
 			h += t.style(t.dim).Render(" · wrapper ready (" + strings.Join(m.wrapper.Regions, ", ") + ")")
 		}
 	}
-	tip := t.style(t.dim).Render("  paste a link to download, type to search, / for commands, ? for keys")
+	tip := t.style(t.dim).Render("  paste a link, or type and press enter to search · / commands · ? keys")
 	return h + "\n" + tip
 }
 
@@ -541,7 +541,7 @@ func (m *model) helpView(w int) string {
 
 func (m *model) prompt(w int) string {
 	t := m.theme
-	ph := "paste a link, type to search, / for commands"
+	ph := "paste a link, or type and press enter to search"
 	if w < mediumCols {
 		ph = "link, search or /"
 	}
@@ -568,11 +568,7 @@ func (m *model) status(w int) string {
 			queued++
 		}
 	}
-	left := m.opts.Target
-	if i := strings.Index(left, " ("); i > 0 && w < wideCols {
-		left = left[:i]
-	}
-	left += fmt.Sprintf(" · %d running · %d queued", running, queued)
+	left := fmt.Sprintf("%d running · %d queued", running, queued)
 	switch m.conn.Phase {
 	case client.Offline:
 		left += " · offline, retrying"

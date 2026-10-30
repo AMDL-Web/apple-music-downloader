@@ -115,7 +115,7 @@
     "terminal": {
       "label": "Terminal",
       "name": "CLI · MCP · TUI",
-      "text": "`amdl` is one binary with three faces. Scripts and agents get JSON on stdout and an exit status for each kind of failure. `amdl mcp` serves the same commands as MCP tools. And `amdl` on its own opens an interactive interface: paste a link, or type to search.",
+      "text": "`amdl` is one binary with three faces. Scripts and agents get JSON on stdout and an exit status for each kind of failure. `amdl mcp` serves the same commands as MCP tools. And `amdl` on its own opens an interactive interface: paste a link, or type and press enter to search.",
       "points": [
         "Renders inline, so finished jobs stay in your terminal's scrollback.",
         "One card per running job, colored after its album artwork.",

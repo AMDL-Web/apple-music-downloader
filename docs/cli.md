@@ -186,8 +186,8 @@ answer, and one line per job when it finishes), and only the bottom of the scree
 redrawn.
 
 - **The prompt** takes a pasted Apple Music link (several at once download as a batch),
-  which shows a preview to confirm with Enter; plain text, which searches the catalog and
-  lists the hits (↑↓ to move, Space to select several, Tab to filter by type, → to open an
+  which shows a preview to confirm with Enter; plain text followed by Enter, which
+  searches the catalog (nothing is searched while typing) and lists the hits (↑↓ to move, Space to select several, Tab to filter by type, → to open an
   artist's albums, Enter to download); or a `/` command, listed as you type it (`/help`
   shows them all, `/login` signs the wrapper in without echoing the password).
 - **Above the prompt** sits one card per job in progress, up to three: its title, the
@@ -196,7 +196,7 @@ redrawn.
   `internal/progress#TickMax`) with the count and percent, and a seven-stage bar for each
   track in flight. The card takes its color from the album's artwork. `ctrl+o` shows every
   track, `ctrl+t` every job.
-- **Below the prompt** a status line names the server and counts the jobs.
+- **Below the prompt** a status line counts the jobs; the header names the server.
 - **Narrow terminals** drop the per-track status column, then the artist and the track
   rows; short ones keep fewer cards (`apps/amdl/internal/tui#wideCols` and its siblings).
 - **Leaving** takes `ctrl+c` twice, or `ctrl+d` on an empty prompt. Downloads keep

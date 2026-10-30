@@ -101,6 +101,33 @@ func TestSmallTerminalsDropDetail(t *testing.T) {
 	}
 }
 
+func TestBackendAddressShowsOnlyInTheHeader(t *testing.T) {
+	m := sample(t)
+	for _, w := range []int{46, 72, 100, 140} {
+		if s := m.status(w); strings.Contains(s, "192.168.3.5") || strings.Contains(s, "nas") {
+			t.Errorf("the footer at %d columns repeats the backend: %q", w, s)
+		}
+	}
+	if s := m.status(100); !strings.Contains(s, "1 running · 1 queued") {
+		t.Errorf("the footer keeps the job counts: %q", s)
+	}
+	if h := m.header(); !strings.Contains(h, "nas (http://192.168.3.5:18570)") {
+		t.Errorf("the header names the backend: %q", h)
+	}
+}
+
+func TestPromptSaysSearchNeedsEnter(t *testing.T) {
+	m := sample(t)
+	m.width = 100
+	m.prompt(100)
+	if ph := m.input.Placeholder; !strings.Contains(ph, "press enter to search") || strings.Contains(ph, "type to search") {
+		t.Errorf("placeholder %q promises search as you type", ph)
+	}
+	if h := m.header(); !strings.Contains(h, "press enter to search") || strings.Contains(h, "type to search") {
+		t.Errorf("tip %q promises search as you type", h)
+	}
+}
+
 func TestAlbumBarCells(t *testing.T) {
 	th := newTheme(true)
 	a := progress.Album{Total: 4, Lit: 1, Runs: []progress.Run{{Status: domain.ItemCompleted, Share: 0.25}}, Done: 0.25, Live: 0.5, Ticks: 4}
