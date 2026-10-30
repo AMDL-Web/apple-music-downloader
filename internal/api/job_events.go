@@ -110,35 +110,43 @@ func (s *Server) runJobEventStream(ctx context.Context, sink sseSink, jobID stri
 		}
 		return nil
 	}
-	drain := func() error {
+	// drain sends every stored event after lastID. complete is false when a
+	// store read failed: the stream stays open and the next wake or tick
+	// retries from the same cursor. err is a failed send, which ends it.
+	drain := func() (complete bool, err error) {
 		for {
-			events, err := s.store.ListEventsAfterLimit(ctx, jobID, lastID, streamEventPageSize)
+			read := s.store.ListEventsAfterLimit
+			if s.readEvents != nil {
+				read = s.readEvents
+			}
+			events, err := read(ctx, jobID, lastID, streamEventPageSize)
 			if err != nil {
-				// Keep the stream on a store read error; the next wake or
-				// tick retries from the same cursor.
-				return nil
+				return false, nil
 			}
 			if err := send(events); err != nil {
-				return err
+				return false, err
 			}
 			if len(events) < streamEventPageSize {
-				return nil
+				return true, nil
 			}
 		}
 	}
-	// done drains and reports whether the stream should end. A hook may record
-	// its terminal event after drain's read but before eventsExhausted sees
-	// the hook as no longer pending; that event is committed before Pending
-	// drops (hooks.Dispatcher.donePending), so one more drain delivers it.
+	// done drains and reports whether the stream should end: only after a
+	// complete drain, eventsExhausted, and another complete drain. A hook may
+	// record its terminal event after the first drain's read but before
+	// eventsExhausted sees the hook as no longer pending; that event is
+	// committed before Pending drops (hooks.Dispatcher.donePending), so the
+	// second drain delivers it. A failed read keeps the stream open.
 	done := func() bool {
-		if drain() != nil {
+		complete, err := drain()
+		if err != nil {
 			return true
 		}
-		if s.eventsExhausted(ctx, jobID) {
-			_ = drain()
-			return true
+		if !complete || !s.eventsExhausted(ctx, jobID) {
+			return false
 		}
-		return false
+		complete, err = drain()
+		return complete || err != nil
 	}
 
 	if send(backlog) != nil || done() {

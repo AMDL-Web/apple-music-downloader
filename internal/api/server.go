@@ -11,6 +11,7 @@ import (
 
 	"amdl/internal/config"
 	"amdl/internal/db"
+	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/jobs"
 	"amdl/internal/logging"
@@ -65,6 +66,9 @@ type Server struct {
 	// cache; nil means time.Now.
 	now        func() time.Time
 	statsCache statsCache
+	// readEvents reads a page of a job's events for the job event streams;
+	// nil reads the store. Tests make reads fail through it.
+	readEvents func(ctx context.Context, jobID string, afterID int64, limit int) ([]domain.Event, error)
 	// streams is cancelled by EndStreams; every SSE loop also watches it.
 	streams    context.Context
 	endStreams context.CancelFunc

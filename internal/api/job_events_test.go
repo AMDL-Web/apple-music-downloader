@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -336,5 +337,67 @@ func TestEventsExhaustedAfterJobDeletion(t *testing.T) {
 	}
 	if !server.eventsExhausted(context.Background(), "already-deleted") {
 		t.Fatal("eventsExhausted = false for a deleted job; an existing stream would never close")
+	}
+}
+
+// TestEventsKeepStreamingThroughAFailedRead guards a terminal job's stream
+// against a transient store error: a read that fails is not the end of the
+// replay, so the event stored meanwhile still goes out before the stream
+// closes.
+func TestEventsKeepStreamingThroughAFailedRead(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	hub := events.NewHub()
+	manager := jobs.NewManager(store, hub, stubProcessor{}, 1, slog.Default())
+	server := &Server{store: store, hub: hub, manager: manager}
+	ctx := context.Background()
+	job := domain.Job{ID: "flaky", Input: "song|us|1", Type: "song", Status: domain.JobCompleted}
+	if err := store.CreateJob(ctx, job); err != nil {
+		t.Fatal(err)
+	}
+	started, err := store.AddEvent(ctx, domain.Event{JobID: job.ID, Type: "job_started"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first two reads fail; during the first, the job's last event is
+	// stored, as a write racing the stream would be.
+	reads := 0
+	server.readEvents = func(ctx context.Context, jobID string, after int64, limit int) ([]domain.Event, error) {
+		reads++
+		switch reads {
+		case 1:
+			if _, err := store.AddEvent(ctx, domain.Event{JobID: job.ID, Type: "job_finished"}); err != nil {
+				t.Error(err)
+			}
+			return nil, errors.New("database is locked")
+		case 2:
+			return nil, errors.New("database is locked")
+		}
+		return store.ListEventsAfterLimit(ctx, jobID, after, limit)
+	}
+	redrain := make(chan time.Time, 4)
+	for range 4 {
+		redrain <- time.Now()
+	}
+	sink := &recordingSink{}
+	done := make(chan struct{})
+	go func() {
+		server.runJobEventStream(ctx, sink, job.ID, 0, []domain.Event{started}, make(chan struct{}), streamTicks{redrain: redrain})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream did not close after the store recovered")
+	}
+	var names []string
+	for _, f := range sink.frames {
+		names = append(names, f.name)
+	}
+	if strings.Join(names, ",") != "job_started,job_finished" {
+		t.Fatalf("sent %v; a failed read ended the stream before job_finished", names)
 	}
 }
