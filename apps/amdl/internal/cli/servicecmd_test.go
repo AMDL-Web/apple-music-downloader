@@ -144,6 +144,11 @@ func TestServiceInstallDryRunChangesNothing(t *testing.T) {
 		len(plan.Args) < 2 || plan.Args[0] != "serve" || plan.Args[1] != "--local" {
 		t.Errorf("plan = %+v", plan)
 	}
+	// The port is picked at install, so the plan names none that a real
+	// install would not use.
+	if plan.Console != "http://127.0.0.1:<port>/console/" || plan.Args[len(plan.Args)-1] != "127.0.0.1:<port>" || plan.Note == "" {
+		t.Errorf("plan names a port: console %q, args %v, note %q", plan.Console, plan.Args, plan.Note)
+	}
 	if len(*calls) != 0 {
 		t.Errorf("a dry run asked the manager for %v", *calls)
 	}

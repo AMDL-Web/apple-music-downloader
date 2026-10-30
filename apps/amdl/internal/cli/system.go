@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -42,17 +43,52 @@ func configGetCmd(*flag.FlagSet) func(e *env, args []string) error {
 		for _, key := range args {
 			v, ok := dig(resp.Config, key)
 			if !ok {
-				hint := "amdl config get lists the runtime keys; startup keys are under startup in amdl system get"
-				if key == "wrapper.address" {
-					hint = restartWithWrapper
-				}
-				return &cliError{Code: "config_key_not_found", exit: exitNotFound,
-					Message: key + " is not a runtime config key", Hint: hint}
+				return unknownConfigKey(key, resp.Config)
 			}
 			out[key] = v
 		}
 		return e.out.result(out)
 	}
+}
+
+// unknownConfigKey is the error for a key the runtime config does not have,
+// naming the closest runtime key when one is a likely misspelling.
+func unknownConfigKey(key string, cfg map[string]any) error {
+	hint := "amdl config get lists the runtime keys; startup keys are under startup in amdl system get"
+	if key == "wrapper.address" {
+		hint = restartWithWrapper
+	}
+	ce := &cliError{Code: "config_key_not_found", exit: exitNotFound,
+		Message: key + " is not a runtime config key", Hint: hint}
+	best, bestCost := "", 3 // more edits than this is not a misspelling
+	for _, k := range configKeys(cfg, "") {
+		if d := editDistance(key, k); d <= bestCost {
+			best, bestCost = k, d
+		}
+	}
+	if best != "" {
+		ce.Message += "; did you mean " + best + "?"
+		ce.Details = mustJSON(map[string]any{"did_you_mean": []string{best}})
+	}
+	return ce
+}
+
+// configKeys lists the dotted keys of cfg's leaves, in order.
+func configKeys(cfg map[string]any, prefix string) []string {
+	names := make([]string, 0, len(cfg))
+	for k := range cfg {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	var keys []string
+	for _, k := range names {
+		if sub, ok := cfg[k].(map[string]any); ok {
+			keys = append(keys, configKeys(sub, prefix+k+".")...)
+			continue
+		}
+		keys = append(keys, prefix+k)
+	}
+	return keys
 }
 
 func dig(m map[string]any, key string) (any, bool) {
@@ -100,6 +136,25 @@ func configSetCmd(*flag.FlagSet) func(e *env, args []string) error {
 			}
 			node[parts[len(parts)-1]] = v
 			keys = append(keys, key)
+		}
+		// The server refuses an unknown key with the decoder's "unknown
+		// field"; checking first names the whole key and its likely spelling.
+		if !e.dry {
+			raw, err := e.c.Call(e.ctx, http.MethodGet, "/api/v1/config", nil, nil)
+			if err != nil {
+				return err
+			}
+			var cur struct {
+				Config map[string]any `json:"config"`
+			}
+			if err := json.Unmarshal(raw, &cur); err != nil {
+				return err
+			}
+			for _, key := range keys {
+				if _, ok := dig(cur.Config, key); !ok {
+					return unknownConfigKey(key, cur.Config)
+				}
+			}
 		}
 		// The answer is the whole runtime config; echo only the keys set.
 		return e.send(capability.Request{Method: http.MethodPut, Path: "/api/v1/config", Body: patch}, func(raw []byte) error {

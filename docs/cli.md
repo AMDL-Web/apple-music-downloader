@@ -49,7 +49,9 @@ by meaning.
 | `context list\|add <name> <url>\|use <name>\|remove <name>`, `version` | local, `/system` | |
 | `serve [--config] [--hooks] [--no-console]` | runs the backend in this process | |
 
-`download -` reads links from stdin, any number per line. `config set` takes dotted keys
+`download -` reads links from stdin, any number per line. `config set` checks its keys
+against the runtime config first and refuses an unknown one as `config_key_not_found`,
+with the closest key in `details.did_you_mean`. It takes dotted keys
 with YAML values (`download.quality_priority=[alac,aac]`) and answers with those keys'
 new values and `persisted`. A password or two-step code
 never goes on the command line. In a terminal, `wrapper login` asks for the Apple ID
@@ -131,8 +133,9 @@ and prints the batch, whose results carry `existing_job_id`.
   `{"method","url","body"}` and sends nothing; it needs no reachable server.
   `service install` and `service uninstall` take it too and print their plan
   (`{"dry_run":true,"action","manager","definition",…}`, with the command line, log and
-  config paths and the console's URL for `install`, and a `note` when a backend already
-  runs on the local files), writing and registering nothing.
+  config paths for `install`, its console URL with `<port>` for the free port the real
+  install picks and keeps, and a `note` that also says when a backend already runs on
+  the local files), writing and registering nothing.
 
 ## Which server
 

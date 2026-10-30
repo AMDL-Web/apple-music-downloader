@@ -133,6 +133,33 @@ func TestConfigSetEchoesOnlyTheKeysSet(t *testing.T) {
 	}
 }
 
+func TestConfigSetOfAMisspelledKeyNamesTheKey(t *testing.T) {
+	var puts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			puts.Add(1)
+		}
+		fmt.Fprint(w, `{"config":{"simulate":{"enabled":false},"logging":{"level":"info"}},"persisted":true}`)
+	}))
+	defer srv.Close()
+	r := run(t, srv, "", "config", "set", "simulate.enable=true")
+	var e struct {
+		Error struct {
+			Code    string `json:"code"`
+			Details struct {
+				DidYouMean []string `json:"did_you_mean"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if r.code != exitNotFound || json.Unmarshal([]byte(r.stderr), &e) != nil || e.Error.Code != "config_key_not_found" ||
+		len(e.Error.Details.DidYouMean) != 1 || e.Error.Details.DidYouMean[0] != "simulate.enabled" {
+		t.Errorf("got %+v", r)
+	}
+	if puts.Load() != 0 {
+		t.Errorf("a misspelled key reached the server")
+	}
+}
+
 func TestDestructiveNeedsYesAndDryRunSendsNothing(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

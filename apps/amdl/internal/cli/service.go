@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -184,11 +185,16 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 			if err != nil {
 				return serviceErr(err)
 			}
+			// The port is picked at install, so the plan shows where it goes
+			// rather than a port the real install would not use.
+			args := slices.Clone(spec.Args)
+			args[len(args)-1] = "127.0.0.1:<port>"
 			plan := servicePlan{DryRun: true, Action: "install", Manager: st.Manager, Definition: st.Definition,
-				Installed: st.Installed, Exe: spec.Exe, Args: spec.Args, Log: spec.Log, Config: b.ConfigPath(),
-				Wrapper: local.WrapperURL(b.Wrapper), Console: "http://" + addr + "/console/"}
+				Installed: st.Installed, Exe: spec.Exe, Args: args, Log: spec.Log, Config: b.ConfigPath(),
+				Wrapper: local.WrapperURL(b.Wrapper), Console: "http://127.0.0.1:<port>/console/",
+				Note: "the port is a free one picked when the service is installed and kept from then on; amdl service status shows the console's URL"}
 			if rt, ok := local.ReadRuntime(e.ctx, dirs); ok {
-				plan.Note = fmt.Sprintf("a backend (pid %d) already runs on these files; the service waits until it stops", rt.PID)
+				plan.Note += fmt.Sprintf("; a backend (pid %d) already runs on these files, and the service waits until it stops", rt.PID)
 			}
 			return e.out.result(plan)
 		}
