@@ -11,7 +11,8 @@ import { count, bytes, elapsed, relTime, clockTime } from './format.js';
 import { formatShares } from './format-codec.js';
 import { summarizeError } from './health.js';
 import { groupByDisk, diskRole } from './storage.js';
-import { wrapperUnreachable, unreachableLine } from './settings-account.js';
+import { HOUR, pct, plural, savedConfig, frame, roleOf } from './domain-frame.js';
+import { account } from './domain-account.js';
 import { keysToLabels } from './settings-draft.js';
 import { firstChoiceShare, nextCheckFraction, nextCheckIn, workerCells, hourBuckets, peakHour, errorCountLabel, STATS_DAYS } from './sysdata.js';
 import { settingsHash } from './route.js';
@@ -33,116 +34,6 @@ import { settingsHash } from './route.js';
  * nothing to act on); `detail` is the short reason the Overview line adds;
  * `asOf` is when the shown values were read, set only while they are stale.
  */
-
-const HOUR = 60 * 60 * 1000;
-const pct = (x) => `${Math.round(x * 100)}%`;
-const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
-const notFound = (e) => Boolean(e && e.error && e.error.status === 404);
-
-const TAGS = {
-  unavailable: { icon: 'circle-help', role: 'neutral', label: 'Unavailable' },
-  missing: { icon: 'circle-minus', role: 'neutral', label: 'Not on this server' },
-};
-
-/** The saved config the store's snapshot holds: the token, the codec order, whether it is on disk. */
-function savedConfig(s) {
-  const res = s.config && s.config.data;
-  const c = (res && res.config) || null;
-  return {
-    known: Boolean(c),
-    tokenSet: c && c.catalog ? typeof c.catalog.media_user_token === 'string' && c.catalog.media_user_token !== '' : undefined,
-    priority: c && c.download && Array.isArray(c.download.quality_priority) ? c.download.quality_priority : undefined,
-    persisted: res ? res.persisted !== false : undefined,
-  };
-}
-
-/**
- * The common states of a domain read from one entry: loading before an
- * answer, missing on 404, failed with no data, else ok, stale (`asOf`)
- * when the last read failed or the feed is offline.
- */
-function frame(id, entry, ctx) {
-  if (!entry) return { id, state: 'loading', role: null, tag: null, figure: null, viz: null, note: null, detail: '', asOf: 0, summary: null };
-  if (notFound(entry)) return { id, state: 'missing', role: null, tag: TAGS.missing, figure: null, viz: null, note: null, detail: '', asOf: 0, summary: { text: 'Not on this server' } };
-  if (entry.data === undefined) {
-    const err = entry.error;
-    return {
-      id,
-      state: 'failed',
-      role: null,
-      tag: TAGS.unavailable,
-      figure: { value: "Couldn't read status", word: true },
-      viz: null,
-      note: err && err.message ? { text: summarizeError(err.message), title: err.message } : null,
-      detail: '',
-      asOf: 0,
-      summary: { text: "Couldn't read status" },
-    };
-  }
-  const stale = Boolean(entry.error) || (ctx.conn && ctx.conn.state === 'offline');
-  return { id, state: 'ok', role: null, tag: null, figure: null, viz: null, note: null, detail: '', asOf: stale ? entry.okAt : 0, summary: null };
-}
-
-const roleOf = (tagRole) => (tagRole === 'danger' || tagRole === 'warning' ? tagRole : null);
-
-// Account: the session service and the storefronts its account serves.
-function account(s, ctx) {
-  const w = s.wrapper;
-  const sys = s.system && s.system.data;
-  const storefront = sys && typeof sys.default_storefront === 'string' ? sys.default_storefront.toLowerCase() : '';
-  const down = w && w.error ? wrapperUnreachable(w.error) : null;
-  const d = w && !down && w.data ? w.data : null;
-  const regions = d && Array.isArray(d.regions) ? d.regions.filter((r) => typeof r === 'string' && r).map((r) => r.toLowerCase()) : [];
-  const chips = { kind: 'chips', items: regions.map((r) => ({ label: r.toUpperCase(), outlined: r === storefront })) };
-  const served = regions.length ? { value: regions.map((r) => r.toUpperCase()).join(' · '), unit: regions.length === 1 ? 'storefront' : 'storefronts' } : null;
-  // Simulate jobs never call the session service (internal/media simulatedMedia).
-  if (ctx.simulate && w) {
-    const note = storefront ? { text: `Default storefront ${storefront.toUpperCase()}` } : null;
-    return { ...frame('account', { data: {}, okAt: 0 }, ctx), asOf: 0, tag: { icon: 'circle-minus', role: 'neutral', label: 'Not used in simulate' }, figure: served || { value: 'Simulate', word: true }, viz: chips, note, summary: { text: 'Not used in simulate' } };
-  }
-  if (down) {
-    return {
-      ...frame('account', { data: {}, okAt: 0 }, ctx),
-      asOf: 0,
-      role: 'danger',
-      tag: { icon: 'circle-x', role: 'danger', label: 'Unreachable' },
-      figure: { value: 'Unreachable', word: true },
-      note: { text: summarizeError(down.detail) || unreachableLine(down), title: down.detail },
-      detail: summarizeError(down.detail) || '',
-      summary: { text: "Can't reach the session service", role: 'danger' },
-    };
-  }
-  const v = frame('account', w, ctx);
-  if (v.state !== 'ok') return v;
-  const ready = d.ready && d.status !== false;
-  if (!ready) {
-    return {
-      ...v,
-      role: 'warning',
-      tag: { icon: 'triangle-alert', role: 'warning', label: 'Not logged in' },
-      figure: { value: 'No account', word: true },
-      viz: chips,
-      note: { text: 'Log in so downloads can be decrypted', role: 'warning' },
-      summary: { text: 'Not logged in', role: 'warning' },
-    };
-  }
-  const unserved = storefront && regions.length > 0 && !regions.includes(storefront);
-  const note = storefront
-    ? unserved
-      ? { text: `Default storefront ${storefront.toUpperCase()} isn't served by this account`, role: 'warning' }
-      : { text: `Default storefront ${storefront.toUpperCase()}` }
-    : null;
-  return {
-    ...v,
-    role: unserved ? 'warning' : null,
-    tag: { icon: 'circle-check', role: 'success', label: 'Ready' },
-    figure: served || { value: 'Signed in', word: true },
-    viz: chips,
-    note,
-    detail: unserved ? note.text : '',
-    summary: { text: regions.length ? `Ready · ${regions.map((r) => r.toUpperCase()).join(' · ')}` : 'Ready', role: unserved ? 'warning' : undefined },
-  };
-}
 
 /** The formats bar: the top three formats and Other, each with its share. */
 function formatsViz(codecs) {
