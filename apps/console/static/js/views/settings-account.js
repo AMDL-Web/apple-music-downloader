@@ -2,13 +2,15 @@
 // Log out, and the login form with its two-step code step. A session service
 // without a login API (a bare wrapper-lite) gets the command-line steps
 // instead of the form. While the service cannot be reached, the server's
-// own text replaces all of it. `children` (the media user token field and
-// the fact rows) follows as the last block.
+// own text replaces all of it; a wrapper amdl runs that failed adds its
+// error, one that is stopped keeps its form disabled (a login needs it
+// running), and one whose guest disk may hold the last password says so.
+// `children` (the media user token field) follows as the last block.
 
 import { html, useState } from '../ui/preact.js';
 import { loginWrapper, submitWrapperTwoStep, logoutWrapper } from '../api.js';
-import { wrapperErrorText, wrapperUnreachable } from '../lib/settings-account.js';
-import { useApp, Button, Notice } from '../ui/components.js';
+import { wrapperErrorText, wrapperUnreachable, managedMode, WRAPPER_LOGS } from '../lib/settings-account.js';
+import { useApp, Button, Notice, Icon } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { useStatus, refreshStatus } from '../ui/system-status.js';
 
@@ -44,10 +46,22 @@ export function AccountPanel({ children }) {
   const w = res && !res.error ? res.data : null;
   const accounts = w && Array.isArray(w.accounts) ? w.accounts : [];
   const canLogin = !w || w.login_supported !== false;
+  const managed = w && w.managed ? w.managed : null;
+  const mode = managedMode(w);
+  const failure = mode === 'failed' ? managed.last_error || '' : null;
 
   return html`<div class="account">
+    ${managed && managed.login_residue
+      ? html`<p class="small account-residue"><${Icon} name="lock" size="sm" /><span>The guest's disk may still hold the last login's password until amdl clears it before the next start.</span></p>`
+      : null}
     ${res && res.error
       ? html`<section class="account-block" aria-label="Session service"><${WrapperError} error=${res.error} step="status" role="warning" /></section>`
+      : null}
+    ${failure !== null
+      ? html`<section class="account-block" aria-label="Session service">
+          ${failure ? html`<details class="account-error-details"><summary>Details from the server</summary><span class="mono small wrap-any account-error-detail">${failure}</span></details>` : null}
+          <p class="small">Its log: <code>${WRAPPER_LOGS}</code></p>
+        </section>`
       : null}
     ${w && canLogin && (accounts.length || w.status)
       ? html`<section class="account-block" aria-labelledby="account-list-title">
@@ -74,7 +88,7 @@ export function AccountPanel({ children }) {
     ${!res
       ? html`<${CommandLineLogin} pending />`
       : canLogin
-        ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.status)} managed=${Boolean(w && w.managed)} />`
+        ? html`<${LoginForm} onDone=${reload} again=${accounts.length > 0 || Boolean(w && w.status)} managed=${Boolean(managed)} off=${mode === 'stopped'} />`
         : html`<${CommandLineLogin} />`}
     ${logout !== null
       ? html`<${LogoutDialog}
@@ -184,7 +198,7 @@ function CommandLineSteps(id) {
  * when a code fails (the backend drops its copy then too, so the form starts
  * over from the password).
  */
-function LoginForm({ onDone, again, managed }) {
+function LoginForm({ onDone, again, managed, off }) {
   const app = useApp();
   const [step, setStep] = useState('credentials');
   const [username, setUsername] = useState('');
@@ -194,12 +208,14 @@ function LoginForm({ onDone, again, managed }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState(null);
   const [shown, setShown] = useState(false);
+  const [shortCode, setShortCode] = useState(false);
 
   const reset = () => {
     setShown(false);
     setStep('credentials');
     setPassword('');
     setCode('');
+    setShortCode(false);
     setLoginId('');
     setFailure(null);
   };
@@ -212,7 +228,7 @@ function LoginForm({ onDone, again, managed }) {
 
   const submitCredentials = async (e) => {
     e.preventDefault();
-    if (busy) return;
+    if (busy || off) return;
     setBusy(true);
     setFailure(null);
     try {
@@ -232,15 +248,21 @@ function LoginForm({ onDone, again, managed }) {
   const submitCode = async (e) => {
     e.preventDefault();
     if (busy) return;
+    // A code that is not six digits never reaches Apple, and the sign-in waits on.
+    if (!/^[0-9]{6}$/.test(code)) {
+      setShortCode(true);
+      return;
+    }
     setBusy(true);
     setFailure(null);
     try {
-      await submitWrapperTwoStep(loginId, code.trim());
+      await submitWrapperTwoStep(loginId, code);
       succeeded();
     } catch (err) {
-      // The backend ends the sign-in on any failed attempt except a second
-      // submit while one is being verified (409), so start over from the password.
-      if (err.status === 409) setFailure({ error: err, step: 'code' });
+      // The backend ends the sign-in on any failed attempt except a code it
+      // refuses to pass on (400) or a second submit while one is being
+      // verified (409), so otherwise start over from the password.
+      if (err.status === 400 || err.status === 409) setFailure({ error: err, step: 'code' });
       else {
         reset();
         setFailure({ error: err, step: 'code' });
@@ -253,7 +275,7 @@ function LoginForm({ onDone, again, managed }) {
   if (step === 'code') {
     return html`<form class="account-block login-form" data-step="code" aria-labelledby="login-title" onSubmit=${submitCode}>
       <h3 class="section-title" id="login-title">Two-step verification</h3>
-      <p class="small">Apple sent a code to the trusted devices of <span class="mono">${username.trim()}</span>. Enter it within a minute to finish logging in.</p>
+      <p class="small">Apple sent a code to the trusted devices of <span class="mono">${username.trim()}</span>. Enter it within ${managed ? 'a few minutes' : 'a minute'} to finish logging in.</p>
       <div class="form-row">
         <label class="field-label" for="login-code">Verification code</label>
         <input
@@ -263,12 +285,17 @@ function LoginForm({ onDone, again, managed }) {
           inputmode="numeric"
           autocomplete="one-time-code"
           spellcheck="false"
-          maxlength="8"
           required
+          aria-invalid=${shortCode ? 'true' : undefined}
+          aria-describedby=${shortCode ? 'login-code-error' : undefined}
           data-autofocus
           value=${code}
-          onInput=${(e) => setCode(e.currentTarget.value)}
+          onInput=${(e) => {
+            setCode(e.currentTarget.value.replace(/\D/g, '').slice(0, 6));
+            setShortCode(false);
+          }}
         />
+        ${shortCode ? html`<p class="field-error" id="login-code-error" role="alert">Enter the six-digit code.</p>` : null}
       </div>
       <${WrapperError} error=${failure && failure.error} step="code" />
       <div class="form-actions">
@@ -281,7 +308,7 @@ function LoginForm({ onDone, again, managed }) {
   return html`<form class="account-block login-form" data-step="credentials" aria-labelledby="login-title" onSubmit=${submitCredentials}>
     <h3 class="section-title" id="login-title">${!again ? 'Log in' : managed ? 'Replace the account' : 'Log in another account'}</h3>
     ${managed
-      ? html`<p class="muted small">This machine's session service keeps one account, so a login replaces it. amdl hands it the password in a file only you can read, deleted as it starts, and keeps no copy. Logging in restarts it and can take several minutes.</p>`
+      ? html`<p class="muted small">This machine's session service keeps one account, so a login replaces it; it restarts and can take several minutes. amdl passes the password in a file only you can read and deletes the file as the guest starts; the guest copies it to its disk, and amdl clears that copy before the guest starts again right after the login.</p>`
       : html`<p class="muted small">The session service keeps the login. This service holds the password in memory only while you enter a two-step code, and never stores it. Logging in can take up to two minutes.</p>`}
     <div class="form-row">
       <label class="field-label" for="login-user">Apple ID</label>
@@ -297,6 +324,7 @@ function LoginForm({ onDone, again, managed }) {
         aria-describedby="login-user-help"
         spellcheck="false"
         required
+        disabled=${off}
         value=${username}
         onInput=${(e) => setUsername(e.currentTarget.value)}
       />
@@ -313,6 +341,7 @@ function LoginForm({ onDone, again, managed }) {
           autocapitalize="off"
           spellcheck="false"
           required
+          disabled=${off}
           value=${password}
           onInput=${(e) => setPassword(e.currentTarget.value)}
         />
@@ -324,6 +353,7 @@ function LoginForm({ onDone, again, managed }) {
           aria-label=${shown ? 'Hide the password' : 'Show the password'}
           aria-pressed=${String(shown)}
           aria-controls="login-pass"
+          disabled=${off}
           onClick=${() => setShown((v) => !v)}
         />
       </span>
@@ -334,6 +364,7 @@ function LoginForm({ onDone, again, managed }) {
         type="submit"
         variant="primary"
         icon="key"
+        disabled=${off}
         aria-disabled=${busy ? 'true' : undefined}
       >${busy ? 'Logging in…' : 'Log in'}</${Button}>
     </div>

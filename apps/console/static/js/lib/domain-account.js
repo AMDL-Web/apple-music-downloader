@@ -1,8 +1,8 @@
 // Account's view for lib/domains.js: the session service and the storefronts
-// its account serves. Pure.
+// its account serves, or what a wrapper amdl runs does instead of serving. Pure.
 
 import { summarizeError } from './health.js';
-import { wrapperUnreachable, unreachableLine } from './settings-account.js';
+import { wrapperUnreachable, unreachableLine, managedMode, WRAPPER_START, WRAPPER_LOGS } from './settings-account.js';
 import { frame } from './domain-frame.js';
 
 // Account: the session service and the storefronts its account serves.
@@ -34,6 +34,8 @@ export function account(s, ctx) {
   }
   const v = frame('account', w, ctx);
   if (v.state !== 'ok') return v;
+  const mode = managedMode(d);
+  if (mode) return { ...v, ...managedView(mode, d.managed) };
   const ready = d.ready && d.status !== false;
   if (!ready) {
     return {
@@ -61,5 +63,38 @@ export function account(s, ctx) {
     note,
     detail: unserved ? note.text : '',
     summary: { text: regions.length ? `Ready · ${regions.map((r) => r.toUpperCase()).join(' · ')}` : 'Ready', role: unserved ? 'warning' : undefined },
+  };
+}
+
+/** Account while a wrapper amdl runs does not serve: what it is doing, never "No account". */
+function managedView(mode, m) {
+  if (mode === 'stopped') {
+    return {
+      role: 'warning',
+      tag: { icon: 'circle-minus', role: 'warning', label: 'Stopped' },
+      figure: { value: 'Stopped', word: true },
+      note: { text: `Start it with ${WRAPPER_START}`, role: 'warning' },
+      detail: `start it with ${WRAPPER_START}`,
+      summary: { text: 'Stopped', role: 'warning' },
+    };
+  }
+  if (mode === 'failed') {
+    const err = typeof m.last_error === 'string' ? m.last_error : '';
+    const line = summarizeError(err) || `See ${WRAPPER_LOGS}`;
+    return {
+      role: 'danger',
+      tag: { icon: 'circle-x', role: 'danger', label: 'Failed' },
+      figure: { value: 'Failed', word: true },
+      note: { text: line, role: 'danger', title: err || undefined },
+      detail: line,
+      summary: { text: 'Failed', role: 'danger' },
+    };
+  }
+  const login = mode === 'login';
+  return {
+    tag: { icon: login ? 'key' : 'circle-dashed', role: 'neutral', label: login ? 'Logging in' : 'Starting' },
+    figure: { value: login ? 'Logging in' : 'Starting', word: true },
+    note: { text: login ? 'Restarting with the new login' : 'Booting on this machine' },
+    summary: { text: login ? 'Logging in' : 'Starting' },
   };
 }

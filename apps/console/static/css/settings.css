@@ -269,7 +269,8 @@
 }
 
 .field-error,
-.field-warning {
+.field-warning,
+.account-residue {
   grid-column: 1 / -1;
   display: flex;
   align-items: flex-start;
@@ -279,9 +280,15 @@
 }
 
 .field-error .icon,
-.field-warning .icon {
+.field-warning .icon,
+.account-residue .icon {
   margin-top: var(--s-0_5);
   color: var(--role, var(--text-secondary));
+}
+
+.account-residue {
+  margin: 0;
+  color: var(--text-secondary);
 }
 
 .field-error {

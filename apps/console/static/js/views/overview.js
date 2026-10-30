@@ -21,18 +21,22 @@ import { ThroughputCard } from './throughput.js';
 // is the Logs page; server health is the status line and the Settings board.
 export function OverviewPage() {
   const status = useStatus(STRIP_KEYS);
-  // Needs attention sits above everything and is known only after its read:
-  // the sections below wait unseen for that answer (or HOLD_MS), so the card
-  // never arrives late and pushes the page down.
-  const [held, setHeld] = useState(() => cached(ATTENTION_KEY) === undefined);
+  // The status line and Needs attention sit above everything and are known
+  // only after their reads: what they would push down waits unseen for both
+  // answers (or HOLD_MS), so neither grows into a drawn page. While the line
+  // is unknown, Needs attention waits too ("strip").
+  const stripKnown = STRIP_KEYS.every((k) => status[k]);
+  const [attentionKnown, setAttentionKnown] = useState(() => cached(ATTENTION_KEY) !== undefined);
+  const [late, setLate] = useState(false);
   useEffect(() => {
-    if (!held) return undefined;
-    const t = setTimeout(() => setHeld(false), HOLD_MS);
+    if (attentionKnown && stripKnown) return undefined;
+    const t = setTimeout(() => setLate(true), HOLD_MS);
     return () => clearTimeout(t);
   }, []);
-  return html`<div class="page page-overview" data-held=${held ? '' : undefined}>
+  const held = late ? undefined : !stripKnown ? 'strip' : attentionKnown ? undefined : '';
+  return html`<div class="page page-overview" data-held=${held}>
     <${HealthStrip} status=${status} />
-    <${Attention} onKnown=${() => setHeld(false)} />
+    <${Attention} onKnown=${() => setAttentionKnown(true)} />
     <${LiveQueue} />
     <${RecentSection} />
     <${KpiRow} />

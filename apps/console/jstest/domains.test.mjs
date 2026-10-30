@@ -142,6 +142,30 @@ test('account: Ready with storefronts, a warning when the default is not served,
   assert.equal(sim.note.text, 'Default storefront US');
 });
 
+test('account: a wrapper amdl runs says what it does instead of serving, never "No account"', () => {
+  const managed = (mode, over = {}) =>
+    ok({ ready: false, status: false, regions: [], accounts: [], login_supported: true, managed: { mode, accel: 'tcg', accel_fallback: false, qemu: 'qemu-system-x86_64', guest: 'abc', login_residue: false, ...over } });
+  const view = (w) => domainView('account', { wrapper: w, system: ok(system()) }, ctx());
+  const starting = view(managed('starting'));
+  assert.equal(starting.tag.label, 'Starting');
+  assert.equal(starting.role, null, 'a boot is nothing to act on');
+  assert.equal(view(managed('login', { login_residue: true })).tag.label, 'Logging in');
+  const stopped = view(managed('stopped'));
+  assert.equal(stopped.role, 'warning');
+  assert.equal(stopped.note.text, 'Start it with amdl wrapper start');
+  const raw = 'qemu-system-x86_64: failed to initialize kvm: Permission denied';
+  const failed = view(managed('failed', { last_error: raw }));
+  assert.equal(failed.role, 'danger');
+  assert.equal(failed.note.title, raw);
+  assert.equal(view(managed('failed')).note.text, 'See amdl wrapper logs');
+  assert.equal(view(managed('serving')).tag.label, 'Not logged in', 'only a serving guest without an account has none');
+  assert.equal(view(managed('rebooting')).tag.label, 'Not logged in', 'an unknown mode reads as before');
+  const rows = (w) => attentionRows({ wrapper: w, system: ok(system()), health: ok({ status: 'ok' }) }, ctx(), SETTINGS_SECTIONS).map((r) => r.text);
+  assert.deepEqual(rows(managed('starting')), []);
+  assert.deepEqual(rows(managed('stopped')), ['stopped: start it with amdl wrapper start']);
+  assert.deepEqual(rows(managed('failed', { last_error: raw })), [`failed: ${raw}`]);
+});
+
 test('quality: the first-choice share leaves aac-lc out; no tracks is words', () => {
   const stats = (codecs) => ok({ totals: { tracks_completed: 10 }, daily: [], hooks: [], codecs });
   const v = domainView('quality', { stats: stats([{ codec: 'alac', bit_depth: 24, sample_rate: 96000, tracks: 9 }, { codec: 'aac-lc', bit_depth: 0, sample_rate: 0, tracks: 1 }]), config: config() }, ctx());

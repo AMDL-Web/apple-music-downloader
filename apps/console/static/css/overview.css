@@ -1,8 +1,9 @@
 /* ---- Overview ------------------------------------------------------ */
 
-/* Until Needs attention has answered, the sections it would push down are
-   laid out but not drawn (OverviewPage's hold). */
-.page-overview[data-held] > :not(.health-strip, [data-section="attention"]) {
+/* Until the status line and Needs attention have answered, the sections they
+   would push down are laid out but not drawn (OverviewPage's hold). */
+.page-overview[data-held] > :not(.health-strip, [data-section="attention"]),
+.page-overview[data-held="strip"] > [data-section="attention"] {
   visibility: hidden;
 }
 

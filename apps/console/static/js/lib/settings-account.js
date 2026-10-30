@@ -16,6 +16,23 @@ export function wrapperUnreachable(err) {
   return { address: m ? m[1] : '', detail: raw };
 }
 
+/** The commands that start a wrapper amdl runs and show its log. */
+export const WRAPPER_START = 'amdl wrapper start';
+export const WRAPPER_LOGS = 'amdl wrapper logs';
+
+const MANAGED_MODES = ['starting', 'login', 'stopped', 'failed'];
+
+/**
+ * What a wrapper amdl runs on this machine is doing instead of serving
+ * (`managed.mode` of GET /wrapper/status): starting, login, stopped or
+ * failed, else ''. Its guest answers no status then, so `ready` and `status`
+ * are false whether or not an account is logged in.
+ */
+export function managedMode(status) {
+  const m = status && status.managed;
+  return m && MANAGED_MODES.includes(m.mode) ? m.mode : '';
+}
+
 /** The Account section's one line while the session service cannot be reached. */
 export function unreachableLine(u) {
   return `Can't reach the session service${u.address ? ` at ${u.address}` : ''}.`;

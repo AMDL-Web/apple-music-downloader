@@ -26,6 +26,26 @@ const NEW_LINKS = [
   'https://example.com/not-apple',
 ];
 
+// A wrapper amdl runs in a QEMU guest (WrapperStatus.managed) in `mode`; the
+// guest answers no status unless it serves.
+const MANAGED_ERROR = 'guest did not reach its console within 2m0s: qemu-system-x86_64 exited: exit status 1';
+const managed = (mode, over = {}) => (w) =>
+  Object.assign(w.wrapper, {
+    ready: mode === 'serving',
+    status: mode === 'serving',
+    regions: mode === 'serving' ? ['cn'] : [],
+    accounts: [],
+    login_supported: true,
+    managed: { mode, accel: 'tcg', accel_fallback: false, qemu: '/usr/bin/qemu-system-x86_64', guest: 'import-d2c150c07e20', login_residue: false, ...(mode === 'failed' ? { last_error: MANAGED_ERROR } : {}), ...over },
+  });
+// Reaches the two-step code step of the login form.
+const toCodeStep = async (ctx) => {
+  await ctx.page.locator('#login-user').fill('someone@example.com');
+  await ctx.page.locator('#login-pass').fill('not-a-real-password');
+  await ctx.page.locator('.login-form .btn-primary').click();
+  await ctx.page.locator('#login-code').waitFor();
+};
+
 const drawer = (key, extra = {}) => ({ path: `#/queue/${jobId(key)}`, world: 'active', require: '.drawer', ...extra });
 
 /** Opens the palette from anywhere. */
@@ -77,6 +97,7 @@ const SCENARIOS = [
   { id: 'overview/slow', world: 'active', path: '#/', latency: 700 },
   { id: 'overview/offline', world: 'active', path: '#/', faults: { 'GET /api/v1/downloads': { status: 503, code: 'unavailable' }, 'GET /api/v1/downloads/events': { status: 503 }, 'GET /api/v1/stats': { status: 500 }, 'GET /api/v1/health': { status: 503 } } },
   { id: 'overview/degraded', world: 'active', path: '#/', mutate: (w) => Object.assign(w.wrapper, { ready: false, status: false, regions: [] }) && (w.storageFree = 2.1e9) },
+  { id: 'overview/wrapper-failed', world: 'active', path: '#/', mutate: managed('failed') },
   { id: 'boot/theme-stored-dark', world: 'active', path: '#/', themes: ['light'], storage: { 'amdl.console.theme': 'dark' }, noStates: true },
 
   // ---- Queue
@@ -271,6 +292,26 @@ const SCENARIOS = [
   { id: 'settings/list', world: 'active', path: '#/settings', widths: [375, 320] },
   { id: 'settings/section-phone', world: 'active', path: '#/settings?section=library_sync', widths: [375, 320] },
   { id: 'settings/account-login', world: 'active', path: '#/settings?section=account', mutate: (w) => Object.assign(w.wrapper, { login_supported: true, status: false, regions: [] }) },
+  ...['serving', 'starting', 'login', 'stopped', 'failed'].map((mode) => ({
+    id: `settings/account-managed-${mode}`,
+    world: 'active',
+    path: '#/settings?section=account',
+    mutate: managed(mode, mode === 'login' ? { login_residue: true } : {}),
+  })),
+  { id: 'settings/board-managed-failed', world: 'active', path: '#/settings', mutate: managed('failed') },
+  { id: 'settings/account-code', world: 'active', path: '#/settings?section=account', mutate: managed('serving'), noStates: true, setup: toCodeStep },
+  {
+    id: 'settings/account-code-short',
+    world: 'active',
+    path: '#/settings?section=account',
+    mutate: managed('serving'),
+    noStates: true,
+    setup: async (ctx) => {
+      await toCodeStep(ctx);
+      await ctx.page.locator('#login-code').fill('12345');
+      await ctx.page.locator('.login-form .btn-primary').click();
+    },
+  },
   { id: 'settings/load-error', world: 'active', path: '#/settings?section=quality', faults: { 'GET /api/v1/config': { status: 500, code: 'internal_error', message: 'config store unavailable' } } },
   {
     id: 'settings/dirty',
