@@ -434,6 +434,7 @@
   padding: var(--s-0_5) var(--s-1_5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-badge);
+  corner-shape: round;
   font-size: var(--fs-13);
   line-height: var(--lh-13);
   font-variant-numeric: tabular-nums;

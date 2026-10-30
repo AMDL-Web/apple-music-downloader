@@ -398,6 +398,7 @@
   height: 22px;
   padding: 0 var(--s-2);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--bg-fill);
   font-size: var(--fs-12);
   line-height: var(--lh-12);
@@ -411,6 +412,7 @@
   height: var(--bar-h, var(--s-2));
   overflow: hidden;
   border-radius: var(--r-bar, var(--r-full));
+  corner-shape: round;
   background: var(--track);
 }
 
@@ -456,6 +458,7 @@
   height: var(--bar-h, var(--s-2));
   overflow: hidden;
   border-radius: var(--r-bar, var(--r-full));
+  corner-shape: round;
   background: var(--track);
 }
 
@@ -492,7 +495,7 @@
   flex: none;
   width: 8px;
   height: 16px;
-  border-radius: 2px;
+  border-radius: var(--r-mark);
   background: var(--track);
 }
 
@@ -511,7 +514,7 @@
 
 .viz-bar {
   height: max(2px, calc(var(--v) * 100%));
-  border-radius: 1px;
+  border-radius: var(--r-mark);
   background: var(--chart-bar);
 }
 
@@ -617,6 +620,7 @@
   height: 22px;
   padding: 0 var(--s-2);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--bg-fill);
   color: var(--text-secondary);
   font-size: var(--fs-12);

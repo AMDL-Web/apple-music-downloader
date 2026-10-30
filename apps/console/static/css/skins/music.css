@@ -114,23 +114,33 @@
   --tracking-title: -0.02em;
   --tracking-eyebrow: 0.04em;
 
-  /* Shape */
+  /* Shape (DESIGN.md "Radii nest"): an element inside a rounded
+     surface takes the surface's radius minus the inset between them, so both
+     arcs share a centre; one radius per level, on the 4 px grid, never under
+     4. Pills and circles are round; every other corner is --corner. */
+  --corner: superellipse(1.25);
   --r-badge: 999px;
   --r-bar: 999px;
-  --r-control: 9px;
-  --r-control-inner: 7px;
-  --r-seg: 10px;
-  --r-seg-inner: 8px;
-  --r-card: 22px;
-  --r-live: 28px;
-  --r-art: 12px;
-  --r-art-sm: 8px;
-  --r-icon-tile: 8px;
-  --r-overlay: 18px;
-  /* Top corners of a phone bottom sheet. */
-  --r-sheet: 20px;
+  /* Keys, inline code, loading bars and a chart bar's top. */
+  --r-tag: 4px;
+  /* Fields, controls, artwork, inset lists, notices and icon tiles. */
+  --r-panel: 8px;
+  /* Cards, tiles, live cards, the drawer, dialogs and notices on the page:
+     the panel radius plus the card padding they hold it at (28, 24 on
+     phones). */
+  --r-card: calc(var(--r-panel) + var(--card-pad));
+  /* Floating panes whose items sit 8 px in: the palette and toasts. */
+  --r-float: calc(var(--r-panel) + var(--s-2));
+  /* Data marks (chart and meter bars, worker cells, the equalizer, a
+     checkbox's dash) keep their own small radius under the 4 px floor. */
+  --r-mark: 2px;
+  --r-control: var(--r-panel);
+  --r-control-inner: var(--r-tag);
+  --r-art: var(--r-panel);
+  --r-icon-tile: var(--r-panel);
+  --r-notice: var(--r-panel);
+  --r-overlay: var(--r-float);
   --r-drawer: 0;
-  --r-notice: 16px;
   --bar-h: 6px;
   --cell-h: 8px;
   --cell-gap: 3px;
@@ -261,15 +271,33 @@
 
 /* ---- Base ---------------------------------------------------------- */
 
+/* Continuous-curvature corners where the engine draws them; elsewhere the
+   same radii stay circular arcs. No specificity, so a pill's own
+   corner-shape: round wins, and outlines and shadows follow the shape. */
+@supports (corner-shape: superellipse(1.25)) {
+  :where(:root[data-skin="music"] *),
+  :where(:root[data-skin="music"] *)::before,
+  :where(:root[data-skin="music"] *)::after {
+    corner-shape: var(--corner);
+  }
+}
+
+/* A command on a line of its own is a panel, not an inline chip. */
+:root[data-skin="music"] .account-cmd {
+  border-radius: var(--r-panel);
+}
+
 :root[data-skin="music"] code {
-  border-radius: var(--r-icon-tile);
+  border-radius: var(--r-tag);
+  corner-shape: var(--corner);
   background: var(--bg-fill);
   /* Secondary text inherited from a note reads 4.15:1 on the fill. */
   color: var(--text-primary);
 }
 
 :root[data-skin="music"] kbd {
-  border-radius: 5px;
+  border-radius: var(--r-tag);
+  corner-shape: var(--corner);
   border-color: transparent;
   background: var(--bg-fill);
 }
@@ -300,6 +328,7 @@
   width: 34px;
   height: 34px;
   border-radius: var(--r-control);
+  corner-shape: var(--corner);
   background: linear-gradient(160deg, var(--brand-top), var(--brand));
   box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--brand) 70%, transparent);
 }
@@ -376,6 +405,7 @@
   height: 28px;
   padding: 0 var(--s-3);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--bg-surface);
   font-size: var(--fs-13);
   line-height: var(--lh-13);
@@ -457,11 +487,13 @@
 
 :root[data-skin="music"] .btn {
   border-radius: var(--r-full);
+  corner-shape: round;
   font-weight: var(--w-semibold);
 }
 
 :root[data-skin="music"] .btn-icon {
   border-radius: var(--r-full);
+  corner-shape: round;
 }
 
 :root[data-skin="music"] .btn-secondary {
@@ -545,12 +577,14 @@
 /* Segmented controls: a filled track with a raised thumb. */
 :root[data-skin="music"] .seg {
   border: 0;
-  border-radius: var(--r-seg);
+  border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--bg-fill);
 }
 
 :root[data-skin="music"] .seg-btn {
-  border-radius: var(--r-seg-inner);
+  border-radius: var(--r-full);
+  corner-shape: round;
   color: var(--text-primary);
   font-size: var(--fs-14);
   line-height: var(--lh-14);
@@ -604,6 +638,7 @@
   height: 22px;
   padding: 0 var(--s-2);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--danger-tint);
   color: var(--danger-text);
   font-weight: var(--w-semibold);
@@ -626,7 +661,8 @@
   inset: auto auto 0 0;
   width: 3px;
   height: 100%;
-  border-radius: 1px;
+  border-radius: var(--r-mark);
+  corner-shape: var(--corner);
   background: var(--role, var(--info));
   opacity: 1;
   transform-origin: bottom;
@@ -807,7 +843,7 @@
   height: 100%;
   min-height: 0;
   padding: var(--s-5);
-  border-radius: var(--r-live);
+  border-radius: var(--r-card);
   background: linear-gradient(
     140deg,
     var(--art-bg, var(--bg-surface)) 30%,
@@ -977,6 +1013,7 @@
   width: 14px;
   height: 6px;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--role, var(--track));
 }
 
@@ -1034,6 +1071,7 @@
   height: 22px;
   padding: 0 var(--s-2);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--danger-tint);
   color: var(--danger-text);
   font-size: var(--fs-13);
@@ -1089,7 +1127,7 @@
 /* The latest release: an album-colored card, like a running job's. */
 :root[data-skin="music"] .latest {
   grid-template-columns: 112px minmax(0, 1fr);
-  border-radius: var(--r-live);
+  border-radius: var(--r-card);
   background: linear-gradient(
     140deg,
     var(--art-bg, var(--card-bg)) 30%,
@@ -1275,7 +1313,8 @@
 }
 
 :root[data-skin="music"] .chart-bar {
-  border-radius: 4px 4px 1px 1px;
+  border-radius: var(--r-tag) var(--r-tag) var(--r-mark) var(--r-mark);
+  corner-shape: var(--corner);
 }
 
 /* ---- Log tail ------------------------------------------------------ */
@@ -1339,6 +1378,7 @@
   gap: 0;
   height: var(--bar-h);
   border-radius: var(--r-bar);
+  corner-shape: round;
   background: var(--track);
   overflow: hidden;
 }
@@ -1360,7 +1400,7 @@
 :root[data-skin="music"] [data-section="jobs"] .job-row > .art {
   width: 48px;
   height: 48px;
-  border-radius: var(--r-art-sm);
+  border-radius: var(--r-art);
   box-shadow: 0 0 0 0.5px var(--border-subtle);
 }
 
@@ -1447,7 +1487,8 @@
   min-height: 52px;
   padding: var(--s-1_5) var(--s-2) var(--s-1_5) var(--s-1);
   border: 0;
-  border-radius: var(--r-card);
+  border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--toast-bg);
   box-shadow: var(--shadow-float);
   backdrop-filter: saturate(180%) blur(24px);
@@ -1472,6 +1513,7 @@
 
 :root[data-skin="music"] .bulk-meter-fill {
   border-radius: var(--r-bar);
+  corner-shape: round;
 }
 
 /* Selection circles, as in an Apple list in edit mode: an outlined ring,
@@ -1485,6 +1527,7 @@
   height: var(--check-size);
   margin: 0;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--border-control);
   transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
@@ -1521,7 +1564,7 @@
   left: 6px;
   width: 10px;
   height: 2px;
-  border-radius: 1px;
+  border-radius: var(--r-mark);
   background: var(--on-role);
 }
 
@@ -1712,6 +1755,7 @@
 :root[data-skin="music"] .level-chip {
   border-color: transparent;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--border-control);
   color: var(--text-secondary);
@@ -1777,6 +1821,7 @@
 :root[data-skin="music"] .filter-chip {
   border-color: transparent;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--bg-fill);
 }
 
@@ -1879,7 +1924,7 @@
 }
 
 :root[data-skin="music"] .new-link-art {
-  border-radius: var(--r-art-sm);
+  border-radius: var(--r-art);
   box-shadow: 0 0 0 0.5px var(--border-subtle);
 }
 
@@ -1927,7 +1972,8 @@
   min-height: 22px;
   max-width: 100%;
   padding-block: var(--s-0_5);
-  border-radius: 11px;
+  border-radius: var(--r-full);
+  corner-shape: round;
 }
 
 /* Open is a quiet link in a quiet line; red stays with Download. */
@@ -1964,7 +2010,7 @@
 }
 
 :root[data-skin="music"] .new-hit-art {
-  border-radius: var(--r-art-sm);
+  border-radius: var(--r-art);
   box-shadow: 0 0 0 0.5px var(--border-subtle);
 }
 
@@ -1976,6 +2022,7 @@
 :root[data-skin="music"] .new-hit[data-kind="artist"] .new-hit-art,
 :root[data-skin="music"] .new-artist-art {
   border-radius: var(--r-full);
+  corner-shape: round;
 }
 
 :root[data-skin="music"] .new-hit-title,
@@ -2067,7 +2114,7 @@
 }
 
 :root[data-skin="music"] .new-results .job-row > .art {
-  border-radius: var(--r-art-sm);
+  border-radius: var(--r-art);
   box-shadow: 0 0 0 0.5px var(--border-subtle);
 }
 
@@ -2281,6 +2328,7 @@
   padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
   border: 0;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--toast-bg);
   backdrop-filter: saturate(180%) blur(24px);
 }
@@ -2350,7 +2398,7 @@
 }
 
 :root[data-skin="music"] .palette-list {
-  padding: var(--s-1_5);
+  padding: var(--s-2);
 }
 
 :root[data-skin="music"] .palette-group {
@@ -2414,7 +2462,7 @@
 :root[data-skin="music"] .toast {
   padding: calc(var(--s-2) + var(--s-0_5)) var(--s-2) calc(var(--s-2) + var(--s-0_5)) var(--s-4);
   border: 0;
-  border-radius: var(--r-notice);
+  border-radius: var(--r-float);
   background: var(--toast-bg);
   backdrop-filter: saturate(180%) blur(24px);
 }
@@ -2481,7 +2529,7 @@
 :root[data-skin="music"] [data-placement="bottom"] > [data-dialog] {
   width: 100%;
   padding-top: var(--s-6);
-  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  border-radius: var(--r-card) var(--r-card) 0 0;
 }
 
 :root[data-skin="music"] [data-placement="bottom"] .dialog-actions {
@@ -2660,7 +2708,8 @@
 }
 
 :root[data-skin="music"] .skel {
-  border-radius: var(--r-icon-tile);
+  border-radius: var(--r-tag);
+  corner-shape: var(--corner);
 }
 
 :root[data-skin="music"] .skel-tile {
@@ -2816,6 +2865,7 @@
      shadow, no word under it. */
   :root[data-skin="music"] .tab-new-mark {
     border-radius: var(--r-full);
+    corner-shape: round;
     box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent) 70%, transparent);
   }
 
@@ -2833,8 +2883,11 @@
     height: var(--touch);
   }
 
+  /* Its actions can wrap under the count here: the radius is its touch
+     pills' plus the padding, a capsule on one row and nested on two. */
   :root[data-skin="music"] .bulk-bar {
     padding: var(--s-2);
+    border-radius: calc(var(--touch) / 2 + var(--s-2));
   }
 
   :root[data-skin="music"] :where(.card:has(> .card-head)) > .card-head {
@@ -2853,7 +2906,6 @@
     grid-template-columns: 96px minmax(0, 1fr);
     column-gap: var(--s-4);
     padding: var(--s-4);
-    border-radius: var(--r-card);
   }
 
   :root[data-skin="music"] [data-section="live"] .job-row > .art {
@@ -2883,7 +2935,6 @@
     grid-template-columns: 88px minmax(0, 1fr);
     gap: var(--s-4);
     padding: var(--s-4);
-    border-radius: var(--r-card);
   }
 
   :root[data-skin="music"] .latest > .art {
@@ -3034,7 +3085,6 @@
   /* A floating sheet inset from the screen edge; no keyboard hints on touch. */
   :root[data-skin="music"] .palette {
     margin: var(--s-2);
-    border-radius: var(--r-notice);
   }
 
   :root[data-skin="music"] .palette-foot {

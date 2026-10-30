@@ -300,6 +300,7 @@
   height: calc(var(--v) * 100%);
   min-height: 2px;
   border-radius: var(--r-bar) var(--r-bar) 0 0;
+  corner-shape: round;
   background: var(--chart-bar);
   transition: opacity var(--dur-fast) var(--ease-out);
 }
@@ -354,6 +355,11 @@
 .health-strip[data-state="problem"] {
   flex-wrap: nowrap;
   align-items: flex-start;
+}
+
+/* The problem strip stands on the page beside the cards: their radius. */
+.health-strip.notice {
+  border-radius: var(--r-card);
 }
 
 /* Each item opens its Settings section; it reads as the notice's text. */

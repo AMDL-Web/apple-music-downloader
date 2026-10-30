@@ -82,6 +82,7 @@
   width: 8px;
   height: 8px;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--accent);
 }
 
@@ -316,6 +317,7 @@
 .field-changed {
   padding: 0 var(--s-1_5);
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--info-tint);
   color: var(--text-primary);
   font-size: var(--fs-11);
@@ -464,6 +466,7 @@
   margin: 0;
   border: 1px solid var(--border-control);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--track);
   cursor: pointer;
   transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
@@ -477,6 +480,7 @@
   width: 14px;
   height: 14px;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--text-secondary);
   transition: transform var(--dur-fast) var(--ease-out);
 }
@@ -658,6 +662,7 @@
   padding: var(--s-0_5) var(--s-2);
   border: 1px solid var(--border-control);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--bg-surface);
   color: var(--text-primary);
   font-family: var(--font-mono);

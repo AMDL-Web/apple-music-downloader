@@ -49,6 +49,7 @@
   width: var(--icon-nav);
   height: var(--icon-nav);
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--brand);
   color: var(--on-brand);
 }
@@ -227,6 +228,11 @@
 
 .banners:empty {
   display: none;
+}
+
+/* A notice standing on the page is a page-level surface: the card radius. */
+.banners > .notice {
+  border-radius: var(--r-card);
 }
 
 .main {

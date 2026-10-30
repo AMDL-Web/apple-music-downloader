@@ -90,6 +90,7 @@ code {
   font-size: var(--fs-12);
   padding: 0 var(--s-1);
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--bg-hover);
 }
 
@@ -100,6 +101,7 @@ kbd {
   padding: 0 var(--s-1);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--bg-canvas);
   color: var(--text-secondary);
 }
@@ -261,6 +263,7 @@ kbd {
   border: 2px solid var(--border-subtle);
   border-top-color: var(--text-secondary);
   border-radius: var(--r-full);
+  corner-shape: round;
   animation: boot-spin 900ms linear infinite;
 }
 

@@ -86,13 +86,22 @@ Neue, PingFang SC, then `--font-system`; mono is `ui-monospace`, SF Mono, Menlo.
 
 ## Shape
 
-Running cards and the banner 28 px (`--r-live`); surfaces, tiles, drawer sheet,
-dialogs and sheets, the selection bar 22 (`--r-card`); notices, toasts, drawer
-groups, quality slots and the More list 16 (`--r-notice`); palette 18;
-artwork, inset lists and the link text box 12, list
-covers 8; nav items and fields 9; segmented 10 / 8; buttons, badges, chips
-and level chips are pills, and so is the save bar (the card radius on
-phones, where it wraps). Large pills (Download N, dialog and save bar
+Radii nest as DESIGN.md's "Radii nest" says, in three levels. Cards, tiles,
+running cards, the banner, the drawer sheet, dialogs and the notices that
+stand on the page take `--r-card`, the
+panel radius plus the card padding (28 px, 24 under 640 px), and so does the
+top of a phone bottom sheet. What they hold takes `--r-panel`, 8 px: fields,
+nav and palette items, artwork and covers, inset lists, the link text box,
+notices, drawer groups, quality slots, the More list and icon tiles. Keys,
+inline code, loading bars and a chart bar's top take `--r-tag`, 4 px. The
+palette and toasts float with `--r-float`, 16 px, since their items sit
+8 px in. Buttons, badges, chips, level chips, the segmented control and its
+thumb, the selection bar and the save bar are pills; on phones, where its
+actions can wrap under the count, the selection bar's radius is its 44 px
+pills' plus its 8 px padding (30), still a capsule on one row. Data marks keep
+`--r-mark`, 2 px. Every other corner is `--corner`, `superellipse(1.25)`
+where the browser draws `corner-shape` (Chrome and Edge 139+); Safari and
+Firefox draw the same radii as circular arcs. Large pills (Download N, dialog and save bar
 buttons) are 36 px (`--btn-lg-h`, 44 on phones). The switch
 is 44 x 26 with a 20 px thumb; selection circles are 22 px
 (`--check-size`). Progress cells are 8 px capsules with
@@ -118,7 +127,7 @@ base durations (120 ms color, 200 ms overlays).
 
 - **Shell**: brand mark is a 34 px red gradient tile; "Console" group label via
   `.nav::before`; nav glyphs in secondary ink (the current one primary); the
-  current item is a filled 9 px pill. The top
+  current item is filled, with the panel radius. The top
   bar is the frosted canvas with, in simulate mode, a neutral "Simulate" tag;
   the live dot alone while connected ("Reconnecting in 3 s" or "Offline" in
   a surface pill otherwise; on phones without the fill, the word still next
@@ -137,7 +146,7 @@ base durations (120 ms color, 200 ms overlays).
   labels' line; More turns red like any current tab
   while Settings is shown or its sheet is open.
 - **More sheet** (phones): the frosted sheet holds an inset grouped list on
-  `--bg-group` (16 px radius, 48 px rows, 16 px labels), secondary glyphs as
+  `--bg-group` (panel radius, 48 px rows, 16 px labels), secondary glyphs as
   in the sidebar, hairlines from the label, the current page in semibold with
   "Current" and the chevron in secondary.
 - **Page head**: title with its summary line beneath (15 px secondary; only
@@ -228,7 +237,7 @@ base durations (120 ms color, 200 ms overlays).
   level chip then shows a check; off is outlined in both themes, and an off
   level chip hollows its dot. Wrap lines is the Apple switch with its label.
   Filled attribute chips, a grouped log surface.
-- **New download**: the link text box is a 12 px inset cell. Detected links
+- **New download**: the link text box is an inset cell with the panel radius. Detected links
   are Queue-style rows: 48 px covers (8 px radius) with an `--art-bg` shadow,
   hairlines from the text, a 15 px semibold title with a gray E mark and
   Apple Digital Master (and a storefront that is not the default) as quiet
@@ -258,20 +267,20 @@ base durations (120 ms color, 200 ms overlays).
   the codec ranking. Panel actions
   in a block head (Refresh) and the token's Replace are red text, and so are an account's Log out and the token's Remove. The save bar is a frosted floating
   capsule with the float shadow: the count in 15 px semibold, where in 14 px
-  secondary, Discard red text and Save a red pill, both 36 px; on phones it
-  wraps to two lines with the card radius.
+  secondary, Discard red text and Save a red pill, both 36 px; on phones the
+  count may take two lines and the bar stays a capsule.
 - **Dialogs**: sheets take the card radius. A confirm is an Apple alert: a
   centered 20 px bold title and 14 px consequence, then Cancel and the
   confirm button as two equal 36 px pills; a destructive one is red text,
   not a red fill. Three choices share one row, 520 px wide. On phones every
-  bottom sheet takes a 20 px top radius (`--r-sheet`) and 24 px above its
+  bottom sheet takes the card radius on its top corners and 24 px above its
   content for the grabber.
 - **Palette and toasts**: frosted raised surface, secondary item glyphs, 20 px input
   with no focus rule (the caret shows focus; the 1 px divider stays). On phones
-  the palette is inset 8 px with the 16 px radius and drops the key hints;
+  the palette is inset 8 px from the screen edge and drops the key hints;
   on touch its rows are 44 px and Cancel is red 16 px text. The shortcut
   sheet's keys and context words are secondary, what they do primary.
-- **Notices**: 16 px radius role tint, 18 px icon; a link inside a warning or
+- **Notices**: role tint with the panel radius (the card radius on the page), 18 px icon; a link inside a warning or
   failure notice is underlined in the role's text color.
 - **Buttons**: only the primary action is a red fill; it darkens on hover
   and darker still, at 98 % scale, while pressed. Disabled it turns gray
@@ -279,7 +288,7 @@ base durations (120 ms color, 200 ms overlays).
   buttons (`.btn-danger`: Delete, Discard, Cancel job, Log out) are red text
   with the danger tint on hover.
 - **Empty / loading / error**: base structure; skeletons follow the radii
-  (12 for tiles, 28 for the hero).
+  (the panel radius for tiles, the card radius for the hero).
 
 ## Do
 

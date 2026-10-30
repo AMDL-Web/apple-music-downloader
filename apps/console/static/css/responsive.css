@@ -70,6 +70,7 @@
     right: 0;
     padding: 0 var(--s-1);
     border-radius: var(--r-badge);
+    corner-shape: round;
     background: var(--info-tint);
     color: var(--text-primary);
     font-size: var(--fs-11);
@@ -199,6 +200,7 @@
     width: 24px;
     height: 2px;
     border-radius: var(--r-badge);
+    corner-shape: round;
     background: var(--ink);
   }
 

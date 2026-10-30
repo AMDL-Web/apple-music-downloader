@@ -270,6 +270,7 @@
   width: 16px;
   height: 16px;
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--text-secondary);
   color: var(--bg-canvas);
   font-size: var(--fs-13);

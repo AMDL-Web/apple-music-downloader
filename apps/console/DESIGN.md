@@ -145,7 +145,7 @@ example every role's `-text`, though the base reads only `--danger-text` and
 | Status roles | `--info`, `--success`, `--danger`, `--warning`, `--neutral`, `--skipped`, each with `-tint` and `-text` |
 | Data | `--track` (empty bars and cells), `--chart-bar`, `--chart-grid`, `--scrim` |
 | Type | `--font-sans`, `--font-display`, `--font-mono`, `--fs-body`/`--lh-body`, `--tracking-body`, `--fs-page-title`/`--lh-page-title`, `--fs-card-title`/`--lh-card-title`, `--fs-kpi`/`--lh-kpi`, `--fs-hero-title`/`--lh-hero-title`, `--w-display`, `--w-title`, `--tracking-display`, `--tracking-title` |
-| Shape | `--r-badge`, `--r-bar`, `--r-control`, `--r-control-inner`, `--r-card`, `--r-art`, `--r-overlay`, `--r-drawer`, `--r-notice`, `--bar-h`, `--cell-h`, `--cell-gap` |
+| Shape | `--r-badge`, `--r-bar`, `--r-control`, `--r-control-inner`, `--r-card`, `--r-art`, `--r-overlay`, `--r-drawer`, `--r-notice`, `--r-icon-tile`, `--r-mark` (data marks), `--bar-h`, `--cell-h`, `--cell-gap` |
 | Cards | `--card-bg`, `--card-border` (shorthand), `--card-shadow`, `--card-pad`, `--card-pad-x` (flush rows), `--card-gap` |
 | Layout | `--page-gap`, `--grid-gap` |
 | Elevation | `--shadow-art` (covers), `--shadow-float` (drawer, palette, toasts) |
@@ -201,7 +201,7 @@ plays, and any failure leaves the still.
 **Hover and focus shapes.** A row or cell on a card's surface (Queue rows,
 Jobs cells) fills its whole box on hover and draws its focus ring inside
 (`outline-offset: -2px`); the ones at the card's corners take the card's
-radius, so neither is cut square by the corner. A free-standing item (the
+radius and corner shape, so neither is cut square by the corner. A free-standing item (the
 sidebar and Settings navigation) is its own rounded highlight. A tile on the
 page surface (the Recently completed wall) gets no fill: its title underlines.
 
@@ -245,6 +245,25 @@ chips stay 20 px drawn and get an invisible 44 px hit area inside a row that is
 phone the Queue's Select button is icon-only beside the filters, and the
 selection bar keeps its actions on the select-all row. Radii and
 shadows are skin tokens.
+
+**Radii nest.** A rounded element inside a rounded surface takes the
+surface's radius minus the inset between them (r = R − p), so the two arcs
+share a centre. Levels run from the outside in: cards, tiles, dialogs and the
+notices that stand on the page (the connection banners, the Overview's
+problem strip); the fields, controls, artwork, inset lists and notices they
+hold; the chips, keys and segments inside those. Every element of a level shares one radius, radii
+and the insets between nested shapes sit on the 4 px grid, and no radius is
+under 4 px except data marks (chart and meter bars, worker cells, the
+equalizer, a checkbox's dash), which keep `--r-mark`. A skin writes a
+surface's radius as a `calc()` of its content's radius and padding, so the
+two never drift apart. Pills and circles (`--r-full`, `--r-badge`, `--r-bar`)
+stay round: each such `border-radius` declaration carries `corner-shape:
+round`, and a rule that turns a pill into a rounded box sets `corner-shape`
+back. Every other corner is the skin's `--corner`, which a skin may make a
+continuous-curvature superellipse where the browser draws `corner-shape`
+(Chrome and Edge 139+); elsewhere the same radii are circular arcs. Outlines,
+box shadows (inset ones too) and overflow clipping follow the corner shape,
+so focus rings, hover fills and clipped children keep their box's outline.
 
 Loading placeholders (`.skel`, `.skel-badge`) hold the room of what they
 stand for but stay transparent for `--skel-delay` and then fade in, so an

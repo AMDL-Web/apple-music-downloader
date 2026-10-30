@@ -18,6 +18,7 @@
   height: 6px;
   flex: none;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--role, var(--neutral));
 }
 
@@ -126,6 +127,7 @@
   height: 20px;
   border: 1px solid var(--border-control);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--track);
   transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
 }
@@ -138,6 +140,7 @@
   width: 14px;
   height: 14px;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--text-secondary);
   transition: transform var(--dur-fast) var(--ease-out);
 }
@@ -208,6 +211,7 @@
   height: 20px;
   border: 0;
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -330,6 +334,7 @@
   padding: 0 var(--s-1_5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--bg-surface);
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -382,6 +387,7 @@
   padding: 0 var(--s-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--bg-raised);
   box-shadow: var(--shadow-float);
   color: var(--text-primary);

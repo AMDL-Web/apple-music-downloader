@@ -75,6 +75,7 @@
 
 .new-hit[data-kind="artist"] .new-hit-art {
   border-radius: var(--r-full);
+  corner-shape: round;
 }
 
 /* In the queue already: listed, quiet, nothing to download. */
@@ -298,6 +299,7 @@
   width: 64px;
   height: 64px;
   border-radius: var(--r-full);
+  corner-shape: round;
 }
 
 .new-artist-main {

@@ -250,6 +250,7 @@
   max-width: 100%;
   padding: 0 var(--s-1_5);
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--role-tint, var(--neutral-tint));
   color: var(--text-primary);
   font-size: var(--fs-12);
@@ -288,6 +289,7 @@
   height: 8px;
   margin: 0 var(--s-0_5);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--role, var(--info));
   flex: none;
 }
@@ -297,6 +299,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  corner-shape: inherit;
   background: inherit;
   animation: pulse 1.6s var(--ease-out) infinite;
 }
@@ -328,6 +331,7 @@
   padding: 0 var(--s-1_5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-badge);
+  corner-shape: round;
   font-size: var(--fs-11);
   line-height: var(--lh-11);
   font-weight: var(--w-medium);
@@ -352,6 +356,7 @@
   width: 8px;
   height: 8px;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--role);
 }
 
@@ -374,6 +379,7 @@
   height: 22px;
   padding: 0 var(--s-2);
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--neutral-tint);
   color: var(--text-primary);
   font-size: var(--fs-12);
@@ -399,6 +405,7 @@
   min-width: 48px;
   height: var(--bar-h);
   border-radius: var(--r-bar);
+  corner-shape: round;
   background: var(--track);
   overflow: hidden;
 }
@@ -421,6 +428,7 @@
 .pcell {
   min-width: 0;
   border-radius: var(--r-bar);
+  corner-shape: round;
   background: var(--role, var(--track));
 }
 
@@ -485,6 +493,7 @@
   position: relative;
   height: var(--bar-h);
   border-radius: var(--r-bar);
+  corner-shape: round;
   background: var(--track);
   overflow: hidden;
 }
@@ -517,6 +526,7 @@
   display: block;
   height: var(--bar-h);
   border-radius: var(--r-bar);
+  corner-shape: round;
   background: var(--track);
   overflow: hidden;
 }

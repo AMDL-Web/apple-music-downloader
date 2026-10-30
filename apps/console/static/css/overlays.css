@@ -246,6 +246,7 @@
   width: 36px;
   height: 4px;
   border-radius: var(--r-full);
+  corner-shape: round;
   background: var(--border-control);
 }
 
@@ -412,6 +413,7 @@
 .skel {
   display: block;
   border-radius: var(--r-badge);
+  corner-shape: round;
   background: var(--bg-hover);
   animation:
     skel-in var(--dur-base) var(--ease-out) var(--skel-delay) both,

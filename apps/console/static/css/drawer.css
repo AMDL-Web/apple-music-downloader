@@ -214,6 +214,7 @@
   position: relative;
   height: var(--bar-h);
   border-radius: var(--r-bar);
+  corner-shape: round;
   background: var(--track);
   overflow: hidden;
 }
