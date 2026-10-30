@@ -321,6 +321,23 @@
     display: none;
   }
 
+  /* Selecting, the checkbox leads the row and the cover gives its room to
+     the title, the status and the reason. */
+  .job-list.is-selecting .job-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "main status"
+      "prog prog";
+  }
+
+  .job-list.is-selecting .job-row[data-progress="off"] {
+    grid-template-areas: "main status";
+  }
+
+  .job-list.is-selecting .job-row > .art {
+    display: none;
+  }
+
   .job-updated,
   .job-chevron {
     display: none;
@@ -394,7 +411,7 @@
   }
 
   .log-view {
-    height: max(320px, calc(100dvh - 340px));
+    max-height: max(320px, calc(100dvh - 340px));
   }
 
   .log-line {

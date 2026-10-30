@@ -222,8 +222,9 @@
   position: relative;
 }
 
+/* The card hugs a short list (or its empty message) and scrolls past the window's height. */
 .log-view {
-  height: max(320px, calc(100dvh - 280px));
+  max-height: max(320px, calc(100dvh - 280px));
   overflow: auto;
   padding: var(--s-1) 0;
   font-family: var(--font-mono);
