@@ -82,7 +82,8 @@ func TestJobsWatchTimeoutOnARunningJob(t *testing.T) {
 	if r.code != exitWaitTimeout || errorCode(t, r.stderr) != "wait_timeout" || json.Unmarshal([]byte(r.stdout), &one) != nil {
 		t.Fatalf("got %+v", r)
 	}
-	if r := run(t, srv, "", "jobs", "watch", "--timeout", "1s"); r.code != exitInput {
+	// The feed without a job id ends normally when its --timeout runs out.
+	if r := run(t, srv, "", "jobs", "watch", "--timeout", "300ms"); r.code != 0 || r.stderr != "" {
 		t.Errorf("--timeout without a job id: %+v", r)
 	}
 }

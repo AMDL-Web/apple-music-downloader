@@ -120,7 +120,7 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 			if err != nil {
 				return e.waitErr(err, id, d, finals)
 			}
-			s := waitSummary(d)
+			s := summary(d)
 			if *watch {
 				if err := e.out.line(map[string]any{"type": "job_snapshot", "job": s}); err != nil {
 					return err
@@ -190,16 +190,6 @@ type watchOpts struct {
 	// stopAtTerminal returns once the job is finished instead of waiting for
 	// its post-download hooks.
 	stopAtTerminal bool
-}
-
-// waitSummary is the summary of a job a wait found finished, marked when its
-// post-download hooks are still running.
-func waitSummary(d client.DownloadDetail) map[string]any {
-	s := summary(d)
-	if client.Terminal(d.Job.Status) && d.HooksRunning() {
-		s["hooks_running"] = true
-	}
-	return s
 }
 
 // follow follows one job until it is finished and returns its final detail. It
@@ -317,7 +307,7 @@ func jobsWaitCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		if err != nil {
 			return e.waitErr(err, args[0], d, nil)
 		}
-		if err := e.out.result(waitSummary(d)); err != nil {
+		if err := e.out.result(summary(d)); err != nil {
 			return err
 		}
 		if d.Job.Status != domain.JobCompleted {
@@ -331,7 +321,7 @@ func jobsWaitCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 func jobsWatchCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	types := fs.String("types", "", "comma-separated event types to print, such as item_completed,item_failed (default all)")
 	interval := fs.Duration("progress-interval", 2*time.Second, "least time between two item_progress lines of one track; 0 prints all")
-	timeout := fs.Duration("timeout", 0, "with a job id, stop watching after this long, as a duration such as 90s, 20m or 2h (default 0: no limit)")
+	timeout := fs.Duration("timeout", 0, "stop watching after this long, as a duration such as 90s, 20m or 2h (default 0: no limit)")
 	return func(e *env, args []string) error {
 		o := watchOpts{interval: *interval}
 		if *types != "" {
@@ -342,10 +332,7 @@ func jobsWatchCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		}
 		switch len(args) {
 		case 0:
-			if *timeout > 0 {
-				return usageErr("--timeout needs a job id: amdl jobs watch <job_id> --timeout 20m")
-			}
-			return e.watchFeed(o)
+			return e.watchFeed(o, *timeout)
 		case 1:
 		default:
 			return usageErr("usage: amdl jobs watch [<job_id>]")
@@ -364,10 +351,11 @@ func jobsWatchCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	}
 }
 
-// watchFeed prints the overview feed's messages until interrupted.
-func (e *env) watchFeed(o watchOpts) error {
+// watchFeed prints the overview feed's messages until interrupted, or for
+// timeout when it is positive; running out of time is a normal end.
+func (e *env) watchFeed(o watchOpts, timeout time.Duration) error {
 	var lineErr error
-	ctx, cancel := context.WithCancel(e.ctx)
+	ctx, cancel := withOptionalTimeout(e.ctx, timeout)
 	defer cancel()
 	e.c.FollowFeed(ctx, client.FeedHandlers{
 		Message: func(m domain.DownloadFeedMessage) {
@@ -394,6 +382,14 @@ func (e *env) watchFeed(o watchOpts) error {
 	return e.ctx.Err()
 }
 
+// withOptionalTimeout bounds ctx by timeout when it is positive.
+func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+	return context.WithCancel(ctx)
+}
+
 func libraryListCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	kind := fs.String("kind", "", "album, playlist, song, station or artist (default all)")
 	q := fs.String("q", "", "text to find in the title, artist or link")
@@ -418,6 +414,7 @@ func libraryListCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 func logsTailCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	op := capability.Lookup("streamLogs")
 	values := specFlags(fs, op, nil)
+	timeout := fs.Duration("timeout", 0, "stop after this long, as a duration such as 90s, 20m or 2h (default 0: no limit)")
 	return func(e *env, args []string) error {
 		if len(args) > 0 {
 			return usageErr("usage: amdl logs tail [--job-id id] [--level error]")
@@ -430,14 +427,19 @@ func logsTailCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		if len(req.Query) > 0 {
 			path += "?" + req.Query.Encode()
 		}
+		ctx, cancel := withOptionalTimeout(e.ctx, *timeout)
+		defer cancel()
 		var lineErr error
-		_, err = e.c.Stream(e.ctx, path, "", func() { e.note("live") }, func(ev client.Event) {
+		_, err = e.c.Stream(ctx, path, "", func() { e.note("live") }, func(ev client.Event) {
 			if lineErr == nil {
 				lineErr = e.out.line(json.RawMessage(ev.Data))
 			}
 		})
 		if lineErr != nil {
 			return lineErr
+		}
+		if e.ctx.Err() == nil && ctx.Err() != nil {
+			return nil // the --timeout ran out
 		}
 		return err
 	}

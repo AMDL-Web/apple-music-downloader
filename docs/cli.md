@@ -84,14 +84,15 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
 ## Waiting
 
 - `download --wait` and `jobs wait` return as soon as the job is finished, without waiting for
-  its post-download hooks, and add `hooks_running: true` to the result while any still run.
+  its post-download hooks. A finished job's summary, here and in `jobs get`, carries
+  `hooks_running: true` while any still run.
 - `download --watch` and `jobs watch <job_id>` keep streaming until the hooks have ended too.
 - A finished job never ends in `wait_timeout`, and `--timeout 0` (or a negative value) looks
   once: a finished job gives its normal result and exit status, a running one `wait_timeout`.
 - `--timeout` takes a duration such as `90s`, `20m` or `2h`; it defaults to `2h` for
   `jobs wait` and for `download --wait|--watch` (all its jobs together), and to no limit for
-  `jobs watch <job_id>`.
-- `logs tail` and `jobs watch` without an id have no timeout and run until interrupted.
+  `jobs watch` and `logs tail`, which otherwise run until interrupted. When it runs out,
+  `jobs watch` without an id and `logs tail` end normally.
 - A timed-out wait prints the job it was waiting for before the error: an object for one job,
   an array for several.
 

@@ -27,7 +27,9 @@ type Track struct {
 
 // Summary is the default view of a job: the Job without its cover palettes,
 // plus its album bar and one short entry per track, about half the size of the
-// full detail.
+// full detail. hooks_running is set while a finished job's post-download
+// hooks still run. A track's quality is what it was saved in, so a track
+// that did not finish has none: its codec is only the one it tried.
 func Summary(d client.DownloadDetail) map[string]any {
 	out := jobMap(d.Job)
 	for k := range out {
@@ -35,13 +37,19 @@ func Summary(d client.DownloadDetail) map[string]any {
 			delete(out, k)
 		}
 	}
+	if client.Terminal(d.Job.Status) && d.HooksRunning() {
+		out["hooks_running"] = true
+	}
 	tracks := make([]Track, 0, len(d.Items))
 	for _, it := range d.Items {
-		tracks = append(tracks, Track{
+		t := Track{
 			Index: it.Index, Title: it.Title, Status: string(it.Status),
-			Quality:  format.Quality(it.Codec, it.BitDepth, it.SampleRate, it.Bitrate),
 			FileSize: it.FileSize, OutputPath: it.OutputPath, Error: it.Error,
-		})
+		}
+		if it.Finished() {
+			t.Quality = format.Quality(it.Codec, it.BitDepth, it.SampleRate, it.Bitrate)
+		}
+		tracks = append(tracks, t)
 	}
 	out["album_progress"] = progress.AlbumProgress(d.Job.Status, d.Items)
 	out["tracks"] = tracks
