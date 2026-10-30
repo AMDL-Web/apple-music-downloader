@@ -107,6 +107,15 @@ func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBacke
 		}
 		set(domain.ItemSaving, out.labels.verified, markVerified)
 	}
+	// AAC variants name no sample rate in the master playlist, so the staged
+	// file's own header fills it. The output path is built from the manifest
+	// before this point and is not touched. A file that cannot be read just
+	// leaves the rate unreported.
+	if out.item.SampleRate == 0 {
+		if rate, err := backend.sampleRate(out.staged); err == nil {
+			out.item.SampleRate = rate
+		}
+	}
 	if err := backend.mkdirAll(filepath.Dir(out.outPath)); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}

@@ -152,8 +152,9 @@ func (p *MP4Processor) decryptWidevineToFlatFile(
 	}, afterInput)
 }
 
-// aacLCBandwidth is the bitrate of every AAC-LC WebPlayback asset; it sizes
-// the simulated transfer. aacLCQualityLabel is its {Quality} value.
+// aacLCBandwidth is the bitrate of every AAC-LC WebPlayback asset, whose media
+// playlist declares none: it sizes the simulated transfer and is the item's
+// reported bitrate.
 const aacLCBandwidth = 256000
 
 // aacLCDownload is the AAC-LC fetch phase's result: the key to decrypt with and
@@ -174,8 +175,9 @@ func (d *Downloader) fetchAACLCMedia(ctx context.Context, job domain.Job, item *
 	if err != nil {
 		return aacLCDownload{}, err
 	}
+	d.setItemQuality(ctx, reporter, item, 0, 0, aacLCBandwidth)
 	_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventCodecSelected, Phase: "aac-lc", Payload: domain.MarshalEventPayload(*item, map[string]any{
-		"codec_id": "aac-lc", "attempt": item.Attempt, "max_attempts": item.MaxAttempts,
+		"codec_id": "aac-lc", "bitrate": aacLCBandwidth, "attempt": item.Attempt, "max_attempts": item.MaxAttempts,
 	})})
 
 	set(domain.ItemWaitingDownload, "waiting for download slot", nil)

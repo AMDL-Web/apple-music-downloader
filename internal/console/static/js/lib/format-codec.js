@@ -43,16 +43,23 @@ export function codecMeaning(item) {
  * @returns {{key: string, label: string, tracks: number, share: number}[]}
  */
 export function formatShares(codecs, max = 4) {
-  const rows = (Array.isArray(codecs) ? codecs : []).filter((c) => c && c.tracks > 0);
-  const total = rows.reduce((n, c) => n + c.tracks, 0);
+  const counted = (Array.isArray(codecs) ? codecs : []).filter((c) => c && c.tracks > 0);
+  const total = counted.reduce((n, c) => n + c.tracks, 0);
   if (total === 0) return [];
+  // /stats groups by sample rate too, but a lossy track's chip carries none:
+  // AAC tracks with different rates (or none, from before the rate was read)
+  // would otherwise show as several bars all labelled "AAC".
+  const byKey = new Map();
+  for (const c of counted) {
+    const label = codecLabel(c) || 'Unknown';
+    const key = c.bit_depth > 0 ? [c.codec, c.bit_depth, c.sample_rate].filter((v) => v).join('-') : c.codec || 'unknown';
+    const row = byKey.get(key);
+    if (row) row.tracks += c.tracks;
+    else byKey.set(key, { key, label, tracks: c.tracks });
+  }
+  const rows = [...byKey.values()].sort((a, b) => b.tracks - a.tracks);
   const head = rows.length > max ? rows.slice(0, max - 1) : rows;
-  const out = head.map((c) => ({
-    key: [c.codec, c.bit_depth, c.sample_rate].filter((v) => v).join('-') || 'unknown',
-    label: codecLabel(c) || 'Unknown',
-    tracks: c.tracks,
-    share: c.tracks / total,
-  }));
+  const out = head.map((r) => ({ ...r, share: r.tracks / total }));
   if (rows.length > max) {
     const tracks = rows.slice(max - 1).reduce((n, c) => n + c.tracks, 0);
     out.push({ key: 'other', label: 'Other', tracks, share: tracks / total });

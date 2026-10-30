@@ -91,6 +91,9 @@ func TestFetchAACLCMediaCodecSelectedCarriesRESTItemSnapshot(t *testing.T) {
 		if raw["codec_id"] != "aac-lc" || raw["attempt"] != float64(2) || raw["max_attempts"] != float64(5) {
 			t.Fatalf("codec_selected payload = %+v, want codec_id/attempt/max_attempts merged in", raw)
 		}
+		if raw["bitrate"] != float64(aacLCBandwidth) || snapshot.Bitrate != aacLCBandwidth {
+			t.Fatalf("codec_selected bitrate = %v (snapshot %d), want %d", raw["bitrate"], snapshot.Bitrate, aacLCBandwidth)
+		}
 	}
 	if !found {
 		t.Fatal("missing codec_selected event for real AAC-LC download path")

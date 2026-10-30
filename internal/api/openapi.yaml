@@ -2629,16 +2629,18 @@ components:
           type: integer
           description: >-
             Sample rate in Hz of the codec currently being attempted (e.g.
-            96000). 0/absent for aac-lc (no per-track manifest to read it
-            from) and before the codec's quality has been resolved.
+            96000). Taken from the HLS manifest; when the manifest names none
+            (AAC variants, aac-lc) it is read from the finished file just
+            before the track is tagged, so it stays 0/absent until then, and
+            for good if the file declares none.
         bitrate:
           type: integer
           description: >-
             Bitrate in bits per second of the codec currently being
-            attempted; for lossless codecs this is the HLS variant's
-            advertised average bandwidth, not a true constant bitrate.
-            0/absent for aac-lc (no per-track manifest to read it from) and
-            before the codec's quality has been resolved.
+            attempted: the HLS variant's advertised average bandwidth, not a
+            true constant bitrate, and 256000 for aac-lc, whose media
+            playlist declares none. 0/absent before the codec's quality has
+            been resolved.
         file_size:
           type: integer
           format: int64

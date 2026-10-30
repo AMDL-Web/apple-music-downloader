@@ -286,6 +286,13 @@ test('formatShares turns the stats codec mix into shares and folds the tail', ()
     3,
   );
   assert.deepEqual(many.map((f) => [f.key, f.tracks]), [['alac-24-96000', 4], ['alac-24-48000', 3], ['other', 3]]);
+  const aac = formatShares([
+    { codec: 'alac', bit_depth: 24, sample_rate: 96000, tracks: 5 },
+    { codec: 'aac', bit_depth: 0, sample_rate: 0, tracks: 3 },
+    { codec: 'aac', bit_depth: 0, sample_rate: 44100, tracks: 4 },
+    { codec: 'aac', bit_depth: 0, sample_rate: 48000, tracks: 1 },
+  ]);
+  assert.deepEqual(aac.map((f) => [f.key, f.label, f.tracks]), [['aac', 'AAC', 8], ['alac-24-96000', 'ALAC 24/96', 5]], 'AAC at any rate is one bar');
   assert.deepEqual(formatShares([]), []);
   assert.deepEqual(formatShares(undefined), []);
   assert.deepEqual(formatShares([{ codec: 'alac', tracks: 0 }]), []);

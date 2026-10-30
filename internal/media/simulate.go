@@ -94,6 +94,10 @@ func (simulatedMedia) verify(ctx context.Context, _ stagedFile) error {
 	return simulatePause(ctx, simulatedVerifyPause)
 }
 
+// sampleRate has no file to read: a simulated AAC item keeps the rate its
+// manifest named, if any.
+func (simulatedMedia) sampleRate(stagedFile) (int, error) { return 0, nil }
+
 func (simulatedMedia) repairALAC(context.Context, stagedFile, func(int)) error {
 	// verify never fails here, so the pipeline never asks.
 	return errors.New("simulated media has nothing to repair")

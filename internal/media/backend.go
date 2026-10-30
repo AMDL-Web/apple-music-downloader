@@ -46,6 +46,9 @@ type mediaBackend interface {
 	decrypt(ctx context.Context, req decryptRequest, hooks decryptHooks) error
 	// verify decodes the staged file completely; nil means it plays cleanly.
 	verify(ctx context.Context, staged stagedFile) error
+	// sampleRate reads the sample rate in Hz the staged file declares, for an
+	// item whose manifest named none.
+	sampleRate(staged stagedFile) (int, error)
 	// repairALAC patches malformed ALAC packet terminators in the staged file
 	// in place. patched is called with the count before the file is rewritten.
 	repairALAC(ctx context.Context, staged stagedFile, patched func(int)) error
@@ -286,6 +289,10 @@ func (m realMedia) decryptAACLC(ctx context.Context, req decryptRequest, hooks d
 
 func (m realMedia) verify(ctx context.Context, staged stagedFile) error {
 	return m.d.mp4.checkIntegrityFile(ctx, staged.path)
+}
+
+func (m realMedia) sampleRate(staged stagedFile) (int, error) {
+	return readSampleRate(staged.path)
 }
 
 // repairALAC reads the file back, patches malformed ALAC packet terminators
