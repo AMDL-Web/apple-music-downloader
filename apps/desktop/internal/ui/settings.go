@@ -185,7 +185,7 @@ func fieldBox(c *ui.Context, k *Tokens, key string, value *string, placeholder s
 			in.FontSize(13)
 		}
 	})
-	if in.FocusVisible() {
+	if in.Focused() {
 		focusRing(box, radiusControl)
 	}
 	return box, in

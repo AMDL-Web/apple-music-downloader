@@ -32,8 +32,9 @@ this computer runs the backend and the account is held by the wrapper
   corners are macOS only, by choice: MyGo turns them on there alone (the
   continuousCorners constant in its ui/paint.go), and Windows and Linux keep
   their platform's circular arcs.
-- Focus shows as MyGo's own ring, for keyboard focus only: no accent border
-  or glow on focus. A box whose focused element is a part of it, as a
+- Focus shows as MyGo's own ring, no accent border or glow: on a text field
+  whenever it has the focus, as macOS's text fields, on other controls for
+  keyboard focus only. A box whose focused element is a part of it, as a
   field's input, rings itself with `focusRing`.
 - Scroll containers go through `scrollArea` (or `scrollState` where one
   cannot): MyGo draws thumbs at all times over the content, so the app hides

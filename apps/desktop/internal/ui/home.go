@@ -137,7 +137,7 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 				in.Height(fieldHeight - 2*padField).PaddingY(10).FontSize(22).FontWeight(500).LineHeight(1.27)
 			}
 			in.OnTextKey(a.fieldKey).FocusRing(false)
-			ring = in.FocusVisible()
+			ring = in.Focused()
 			if a.focusField {
 				a.focusField = false
 				a.field.Focus(c)
