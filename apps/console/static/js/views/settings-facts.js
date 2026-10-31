@@ -7,7 +7,7 @@ import { html } from '../ui/preact.js';
 import { factRows, chipOf } from '../lib/facts.js';
 import { Icon } from '../ui/components.js';
 
-function Chip({ chip }) {
+function FactChip({ chip }) {
   return html`<span class="fact-chip" title=${chip.title}>${chip.icon ? html`<${Icon} name=${chip.icon} size="sm" />` : null}<span>${chip.label}</span></span>`;
 }
 
@@ -32,7 +32,7 @@ export function FactRows({ section, system, pending, showKeys, wrapper, extra = 
           ${r.value.role === 'danger' || r.value.role === 'warning' ? html`<${Icon} name=${r.value.role === 'danger' ? 'circle-x' : 'triangle-alert'} size="sm" />` : null}
           ${r.value.text !== '' ? html`<span class=${r.value.mono ? 'fact-row-text-value mono wrap-any' : 'fact-row-text-value'} title=${r.title || undefined}>${r.value.text}</span>` : null}
           ${r.action || null}
-          ${r.chipView ? html`<${Chip} chip=${r.chipView} />` : null}
+          ${r.chipView ? html`<${FactChip} chip=${r.chipView} />` : null}
         </dd>
       </div>`,
     )}

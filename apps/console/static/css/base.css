@@ -185,10 +185,6 @@ kbd {
   text-underline-offset: 2px;
 }
 
-.text-warning {
-  color: var(--warning-text);
-}
-
 [data-role="info"] {
   --role: var(--info);
   --role-tint: var(--info-tint);

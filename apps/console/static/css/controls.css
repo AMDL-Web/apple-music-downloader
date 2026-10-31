@@ -228,12 +228,6 @@
   margin-left: auto;
 }
 
-.toolbar-note {
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
 .load-more {
   display: flex;
   justify-content: center;
@@ -553,12 +547,5 @@
   background: var(--role);
   transform-origin: left center;
   transform: scaleX(var(--v));
-}
-
-.meter-inline {
-  display: inline-grid;
-  grid-template-columns: 96px auto;
-  align-items: center;
-  gap: var(--s-2);
 }
 

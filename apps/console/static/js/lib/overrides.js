@@ -9,6 +9,7 @@
 
 import { fieldByKey } from './settings.js';
 import { qualityOverview } from './lookup.js';
+import { sameValue } from './settings-draft.js';
 
 // Labels and value lists come from the Settings fields of the same keys
 // (lib/settings.js FIELDS), so both pages use one vocabulary.
@@ -77,13 +78,6 @@ export function optionDefaults(download) {
     if (Array.isArray(out[key])) out[key] = out[key].slice();
   }
   return out;
-}
-
-const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-
-function sameValue(a, b) {
-  if (Array.isArray(a) && Array.isArray(b)) return sameList(a, b);
-  return a === b;
 }
 
 /**

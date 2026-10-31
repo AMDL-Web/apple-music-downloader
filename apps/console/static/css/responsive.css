@@ -480,10 +480,6 @@
   .palette {
     max-height: calc(100dvh - var(--s-4));
   }
-
-  .meter-inline {
-    grid-template-columns: 64px auto;
-  }
 }
 
 /* Touch. A coarse pointer gets the phone's 44px targets at any width, so a
