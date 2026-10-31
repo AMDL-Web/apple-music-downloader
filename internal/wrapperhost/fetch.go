@@ -23,7 +23,13 @@ type Fetcher interface {
 // Actions artifacts without a GitHub sign-in (GitHub's own artifact URL
 // answers 401 to anonymous requests). The URL names the artifact by id, so it
 // cannot drift to a newer build; the sha256 check guards the bytes.
-type NightlyLink struct{ Client *http.Client }
+type NightlyLink struct {
+	Client *http.Client
+	// Base replaces "https://nightly.link"; tests point it at a local server.
+	Base string
+	// Conns is how many ranges Download fetches at once; 0 means defaultConns.
+	Conns int
+}
 
 // fetchTimeout bounds one download attempt; a slow link resumes on the next.
 const fetchTimeout = 30 * time.Minute
@@ -32,7 +38,7 @@ const fetchTimeout = 30 * time.Minute
 func (n NightlyLink) Fetch(ctx context.Context, p Pin, offset int64, w io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	url := fmt.Sprintf("https://nightly.link/WorldObservationLog/wrapper/actions/artifacts/%d.zip", p.ArtifactID)
+	url := n.artifactURL(p)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -89,13 +95,34 @@ func (c *countWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Download fetches p into path, resuming a partial file left there, and fails
-// unless the whole file has p's size and sha256. report, when not nil, hears
-// of every written chunk and then of the checksum pass.
+// Download fetches p into path and fails unless the whole file has p's size
+// and sha256. A RangeFetcher is asked for several ranges at once, resuming
+// from the parts a canceled or failed attempt left in path+".parts"; any other
+// Fetcher, or a server that ignores Range, streams into path, resuming a
+// partial file left there. report, when not nil, hears of every written chunk
+// (never from two goroutines at once) and then of the checksum pass.
 func Download(ctx context.Context, f Fetcher, p Pin, path string, report func(Progress)) error {
 	if report == nil {
 		report = func(Progress) {}
 	}
+	ranged, err := downloadRanges(ctx, f, p, path, report)
+	if err != nil {
+		return err
+	}
+	if !ranged {
+		if err := downloadStream(ctx, f, p, path, report); err != nil {
+			return err
+		}
+	}
+	report(Progress{Phase: Verifying, Done: p.Size, Total: p.Size})
+	err = verify(path, p)
+	if err == nil || errors.Is(err, ErrChecksum) {
+		_ = os.RemoveAll(path + ".parts") // whole, or bad and not worth resuming
+	}
+	return err
+}
+
+func downloadStream(ctx context.Context, f Fetcher, p Pin, path string, report func(Progress)) error {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
@@ -105,26 +132,28 @@ func Download(ctx context.Context, f Fetcher, p Pin, path string, report func(Pr
 	if err != nil {
 		return err
 	}
-	if st.Size() > p.Size {
+	have := st.Size()
+	if have > p.Size {
 		if err := file.Truncate(0); err != nil {
 			return err
 		}
+		have = 0
 	}
-	if st.Size() < p.Size {
-		have := min(st.Size(), p.Size)
+	if have < p.Size {
 		report(Progress{Downloading, have, p.Size})
 		if err := f.Fetch(ctx, p, have, &countWriter{w: file, done: have, total: p.Size, report: report}); err != nil {
 			return err
 		}
 	}
-	report(Progress{Phase: Verifying, Done: p.Size, Total: p.Size})
-	return verify(file, p)
+	return nil
 }
 
-func verify(file *os.File, p Pin) error {
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
+func verify(path string, p Pin) error {
+	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
 		return err
 	}
+	defer file.Close()
 	h := sha256.New()
 	n, err := io.Copy(h, file)
 	if err != nil {
