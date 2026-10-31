@@ -255,7 +255,7 @@ func (a *App) codecRow(c *ui.Context, k *Tokens, f *configField, box ui.Element,
 			x, y, _ := row.PointerPosition()
 			d.press, d.grabX, d.grabY = v, x, y
 		}
-	} else if d.item == "" {
+	} else if d.press == v && d.item == "" {
 		d.press = ""
 	}
 	switch dragging := row.Dragging(); {
