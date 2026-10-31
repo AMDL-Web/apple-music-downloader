@@ -266,7 +266,9 @@ func (a *App) albumActions(c *ui.Context, k *Tokens, hc heroColors) {
 	s := a.Store
 	h := s.Search.Album.Hit
 	mark, job := s.HitMark(h)
-	starting := s.Search.Starting[store.HitKey(h)]
+	// A start that answers within a frame keeps the buttons as they were.
+	since, starting := s.Search.Starting[store.HitKey(h)]
+	wait := waited(c, starting, since)
 	// The detail shows only a job the feed holds.
 	showJob := func() {
 		if s.Job(job) == nil {
@@ -297,14 +299,14 @@ func (a *App) albumActions(c *ui.Context, k *Tokens, hc heroColors) {
 			if s.Omni.Overwrite {
 				again = "Download again: replaces the files on disk"
 			}
-			if buttonOff(c, k, buttonPlain, "Download again", icDown, starting).Height(34).Label(again).Clicked() && !starting {
+			if buttonOff(c, k, buttonPlain, "Download again", icDown, wait).Height(34).Label(again).Clicked() && !starting {
 				s.SubmitHit(h)
 			}
 			showJob()
 		})
 	default:
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Wrap().Children(func() {
-			if buttonOff(c, k, buttonPrimary, "Download", icDown, starting).Height(34).PaddingX(16).
+			if buttonOff(c, k, buttonPrimary, "Download", icDown, wait).Height(34).PaddingX(16).
 				Label("Download "+h.Name).Clicked() && !starting {
 				s.SubmitHit(h)
 			}
@@ -375,11 +377,12 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 	// A job just started has not listed its tracks yet: they wait with it.
 	queued := albumMark == store.MarkActive && item == nil && mark == store.MarkNone
 	th := store.TrackHit(t)
-	starting := s.Search.Starting[store.HitKey(th)]
+	since, starting := s.Search.Starting[store.HitKey(th)]
+	wait := waited(c, starting, since)
 	row := ui.Row(c.Key(t.ID)).Height(trackHeight).PaddingX(12).Gap(14).Radius(radiusControl).AlignItems(ui.Center)
 	// Only a row that downloads lights under the pointer.
 	pointed := row.Hovered()
-	if pointed && mark == store.MarkNone && !starting && !queued {
+	if pointed && mark == store.MarkNone && !wait && !queued {
 		row.Background(k.Fg.Alpha(0.055))
 	}
 	row.Children(func() {
@@ -412,7 +415,7 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 				ui.Icon(c, icClock).FontSize(15).TextColor(k.Faint).Tooltip("Waiting")
 			case mark == store.MarkActive:
 				ui.Icon(c, icDown).FontSize(15).TextColor(k.Accent).Tooltip("Downloading")
-			case starting:
+			case wait:
 				ui.Text(c, "…").FontSize(13).FontWeight(700).TextColor(k.Muted)
 			default:
 				a.trackDownload(c, k, th, pointed)

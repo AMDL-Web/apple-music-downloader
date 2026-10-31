@@ -31,6 +31,22 @@ type settingsForm struct {
 // waiting state.
 const statusDelay = 250 * time.Millisecond
 
+// waited reports whether the request that is on its way (active) left at
+// since at least statusDelay ago: only then does the screen show its waiting
+// state, grey a control or dim the last results. Until then it asks for the
+// frame that shows them, so a quick answer shows its result alone.
+func waited(c *ui.Context, active bool, since time.Time) bool {
+	if !active {
+		return false
+	}
+	d := c.Now().Sub(since)
+	if d >= statusDelay {
+		return true
+	}
+	c.After(statusDelay - d)
+	return false
+}
+
 // settingsPage is a page of Settings' navigation.
 type settingsPage struct {
 	id, label string

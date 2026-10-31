@@ -65,8 +65,9 @@ type Search struct {
 	Artist ArtistPages
 	// Album is the album the album screen shows, opened from a hit.
 	Album AlbumPage
-	// Starting holds the hits whose download is being submitted, by HitKey.
-	Starting map[string]bool
+	// Starting holds the hits whose download is being submitted, by HitKey,
+	// with when each left.
+	Starting map[string]time.Time
 
 	want  string
 	gen   int
@@ -95,7 +96,7 @@ func (s *Search) reset() {
 		cache:    newLRU[client.SearchResult](searchCacheMax),
 		sent:     map[string]string{},
 		gone:     map[string]bool{},
-		Starting: map[string]bool{},
+		Starting: map[string]time.Time{},
 	}
 	s.Artist.cache = newLRU[client.ArtistAlbums](searchCacheMax)
 	s.Album = newAlbumPage()
@@ -409,10 +410,10 @@ func (s *Store) HitMark(h client.SearchHit) (MarkState, string) {
 func (s *Store) SubmitHit(h client.SearchHit) {
 	key := HitKey(h)
 	q := &s.Search
-	if q.Starting[key] {
+	if _, on := q.Starting[key]; on {
 		return
 	}
-	q.Starting[key] = true
+	q.Starting[key] = s.now()
 	s.submit([]string{h.URL}, func(res domain.BatchSubmitResponse, err error) {
 		delete(q.Starting, key)
 		for _, r := range res.Results {

@@ -31,6 +31,8 @@ func (a *App) View(c *ui.Context) {
 	k := a.tokens(c)
 	applyTheme(c, k)
 	a.shortcuts(c)
+	a.set.login.settle(a.Store.Login.Busy)
+	a.su.login.settle(a.Store.Login.Busy)
 	w, _ := c.Size()
 	a.followWidth(w)
 	// The setup screen has the window to itself; the sidebar keeps the

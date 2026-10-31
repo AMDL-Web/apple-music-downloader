@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"time"
 
 	"amdl/internal/client"
 )
@@ -16,7 +17,12 @@ type Login struct {
 	// Busy is set while a request is on its way: a local wrapper's steps
 	// each take up to a few minutes.
 	Busy bool
+	// Since is when the request left, for a screen that shows it only once
+	// it is slow.
+	Since time.Time
 	// Err is why the last step failed, and Code the backend's error code.
+	// They stay while the next step runs, until its answer replaces them,
+	// so an answer that comes within a frame moves nothing.
 	Err, Code string
 }
 
@@ -49,7 +55,7 @@ func (s *Store) loginStep(path string, body any) {
 	if s.client == nil || s.Login.Busy {
 		return
 	}
-	s.Login.Busy, s.Login.Err, s.Login.Code = true, "", ""
+	s.Login.Busy, s.Login.Since = true, s.now()
 	c, ctx := s.client.WithTimeout(client.LoginWait), s.ctx
 	go func() {
 		var ans loginAnswer
@@ -59,7 +65,7 @@ func (s *Store) loginStep(path string, body any) {
 		}
 		s.postIf(ctx, func() {
 			l := &s.Login
-			l.Busy = false
+			l.Busy, l.Err, l.Code = false, "", ""
 			switch {
 			case err != nil:
 				l.Err, l.Code = Reason(err), client.ErrorCode(err)
@@ -85,12 +91,12 @@ func (s *Store) Logout(user string) {
 	if s.client == nil || s.Login.Busy {
 		return
 	}
-	s.Login.Busy, s.Login.Err, s.Login.Code = true, "", ""
+	s.Login.Busy, s.Login.Since = true, s.now()
 	c, ctx := s.client.WithTimeout(client.LoginWait), s.ctx
 	go func() {
 		_, err := c.Call(ctx, http.MethodPost, "/api/v1/wrapper/logout", nil, map[string]string{"username": user})
 		s.postIf(ctx, func() {
-			s.Login.Busy = false
+			s.Login.Busy, s.Login.Err, s.Login.Code = false, "", ""
 			if err != nil {
 				s.Login.Err, s.Login.Code = Reason(err), client.ErrorCode(err)
 				return

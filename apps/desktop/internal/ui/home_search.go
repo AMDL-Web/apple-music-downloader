@@ -232,7 +232,9 @@ func (a *App) downloadAll(c *ui.Context, k *Tokens, ar *store.ArtistPages) {
 		pill(c, k, pillRun, icDown, "In the queue")
 		return
 	}
-	if s.Search.Starting[store.HitKey(ar.Artist)] {
+	// A start that answers within a frame keeps the button as it was.
+	since, starting := s.Search.Starting[store.HitKey(ar.Artist)]
+	if waited(c, starting, since) {
 		pill(c, k, pillWait, nil, "Starting…")
 		return
 	}
@@ -244,7 +246,7 @@ func (a *App) downloadAll(c *ui.Context, k *Tokens, ar *store.ArtistPages) {
 	}
 	if button(c, k, kind, text, icDown).Height(34).Label("Download every album of the artist").Clicked() {
 		if armed {
-			a.confirmAll = ""
+			// The button stays armed until the answer replaces it.
 			s.SubmitHit(ar.Artist)
 		} else {
 			a.confirmAll, a.confirmAt = ar.ID, c.Now()

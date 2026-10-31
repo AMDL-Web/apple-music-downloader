@@ -20,22 +20,26 @@ import (
 type fakeActions struct {
 	applied    *mode.Settings
 	reconnects int
+	// wrapperDone is the answer a test of a wrapper address waits for.
+	wrapperDone func([]mode.Check)
 }
 
-func (f *fakeActions) ApplySettings(s mode.Settings)          { f.applied = &s }
-func (f *fakeActions) TestServer(string, func([]mode.Check))  {}
-func (f *fakeActions) TestWrapper(string, func([]mode.Check)) {}
-func (f *fakeActions) Reveal(string)                          {}
-func (f *fakeActions) CopyText(string)                        {}
-func (f *fakeActions) ChooseFolder(string, func(string))      {}
-func (f *fakeActions) ShowWindow()                            {}
-func (f *fakeActions) FitPanel(float32)                       {}
-func (f *fakeActions) Starting() bool                         { return false }
-func (f *fakeActions) StartErr() string                       { return "" }
-func (f *fakeActions) Shared() string                         { return "" }
-func (f *fakeActions) Reconnect()                             { f.reconnects++ }
-func (f *fakeActions) ChooseFile(string, func(string))        {}
-func (f *fakeActions) OpenURL(string)                         {}
+func (f *fakeActions) ApplySettings(s mode.Settings)         { f.applied = &s }
+func (f *fakeActions) TestServer(string, func([]mode.Check)) {}
+func (f *fakeActions) TestWrapper(_ string, done func([]mode.Check)) {
+	f.wrapperDone = done
+}
+func (f *fakeActions) Reveal(string)                     {}
+func (f *fakeActions) CopyText(string)                   {}
+func (f *fakeActions) ChooseFolder(string, func(string)) {}
+func (f *fakeActions) ShowWindow()                       {}
+func (f *fakeActions) FitPanel(float32)                  {}
+func (f *fakeActions) Starting() bool                    { return false }
+func (f *fakeActions) StartErr() string                  { return "" }
+func (f *fakeActions) Shared() string                    { return "" }
+func (f *fakeActions) Reconnect()                        { f.reconnects++ }
+func (f *fakeActions) ChooseFile(string, func(string))   {}
+func (f *fakeActions) OpenURL(string)                    {}
 
 func newTestApp(s mode.Settings) (*App, *fakeActions) {
 	post := func(fn func()) { fn() }
@@ -106,9 +110,9 @@ var setupNow = time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
 // fakeSetup is a Setup on a Mac with Homebrew and nothing else: ffmpeg and
 // QEMU missing with runnable installs, no guest. Nothing it runs reaches
 // this computer: Exec records the command and Pin fails.
-func fakeSetup(post func(func())) (*setup.Setup, *[][]string) {
+func fakeSetup(post func(func()), opts ...func(*setup.Deps)) (*setup.Setup, *[][]string) {
 	var ran [][]string
-	s := setup.New(post, setup.Deps{
+	deps := setup.Deps{
 		GOOS:     "darwin",
 		LookPath: func(string) (string, error) { return "", errors.New("not found") },
 		Exists:   func(p string) bool { return p == "/opt/homebrew/bin/brew" },
@@ -124,8 +128,11 @@ func fakeSetup(post func(func())) (*setup.Setup, *[][]string) {
 		// A fixed clock: a check looks again only after Recheck, so a test
 		// sets the state it shows.
 		Now: func() time.Time { return setupNow },
-	})
-	return s, &ran
+	}
+	for _, o := range opts {
+		o(&deps)
+	}
+	return setup.New(post, deps), &ran
 }
 
 // Where the window shows its material, the sidebar shows it: nothing in

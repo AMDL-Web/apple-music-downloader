@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"amdl/apps/desktop/internal/ffmpeg"
+	"amdl/internal/buildinfo"
 	"amdl/internal/wrapperhost"
 )
 
@@ -72,7 +73,10 @@ type Deps struct {
 	Fetcher wrapperhost.Fetcher
 	// Exec runs args to the end, writing what it prints to out.
 	Exec func(ctx context.Context, args []string, out func(string)) error
-	Now  func() time.Time
+	// Diagnose tests the amdl at address, as TestServer asks; nil tests it
+	// over the network with Diagnose.
+	Diagnose func(ctx context.Context, address string) Server
+	Now      func() time.Time
 }
 
 // Setup is the state of this computer's requirements and of what installs
@@ -86,10 +90,14 @@ type Setup struct {
 	Guest  Guest
 	// Run is the package manager command running or last run, or nil.
 	Run *Run
-	// Server is the last test of a remote amdl.
-	Server Server
+	// Server is the last finished test of a remote amdl; it stays while
+	// the next one runs, until its answer replaces it. Testing is the
+	// address under test, or "".
+	Server  Server
+	Testing string
 
 	checked time.Time
+	testGen int
 }
 
 // New returns a Setup that hands background results to post, which runs a
@@ -97,6 +105,11 @@ type Setup struct {
 func New(post func(func()), deps Deps) *Setup {
 	if deps.Now == nil {
 		deps.Now = time.Now
+	}
+	if deps.Diagnose == nil {
+		deps.Diagnose = func(ctx context.Context, address string) Server {
+			return Diagnose(ctx, address, buildinfo.Get().Version)
+		}
 	}
 	return &Setup{post: post, deps: deps}
 }

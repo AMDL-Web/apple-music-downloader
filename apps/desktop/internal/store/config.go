@@ -25,10 +25,12 @@ type Config struct {
 	// backend's reason for each key whose last change it refused.
 	Saving map[string]bool
 	Failed map[string]string
-	// Reloading is set while the backend reads its config.yaml again, and
-	// ReloadErr says why that file could not be used.
-	Reloading bool
-	ReloadErr string
+	// Reloading is set while the backend reads its config.yaml again, from
+	// ReloadSince; ReloadErr says why that file could not be used, and stays
+	// until the next reload answers.
+	Reloading   bool
+	ReloadSince time.Time
+	ReloadErr   string
 
 	reading bool
 	// tried is when the last read started: after a failed one the next
@@ -140,7 +142,7 @@ func (s *Store) ReloadConfig() {
 	if s.client == nil || cf.Reloading {
 		return
 	}
-	cf.Reloading, cf.ReloadErr = true, ""
+	cf.Reloading, cf.ReloadSince = true, s.now()
 	c, ctx := s.client, s.ctx
 	go func() {
 		var ans configAnswer
@@ -149,7 +151,7 @@ func (s *Store) ReloadConfig() {
 			err = json.Unmarshal(raw, &ans)
 		}
 		s.postIf(ctx, func() {
-			cf.Reloading = false
+			cf.Reloading, cf.ReloadErr = false, ""
 			switch {
 			case err != nil:
 				cf.ReloadErr = Reason(err)

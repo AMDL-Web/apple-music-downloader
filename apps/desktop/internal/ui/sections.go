@@ -245,11 +245,12 @@ func (a *App) configFile(c *ui.Context, k *Tokens) {
 				}
 				ui.Text(c, saved).FontSize(11.5).TextColor(k.Faint)
 			})
+			wait := waited(c, cf.Reloading, cf.ReloadSince)
 			text := "Reload"
-			if cf.Reloading {
+			if wait {
 				text = "Reloading…"
 			}
-			if buttonOff(c, k, buttonPlain, text, nil, cf.Reloading).Clicked() {
+			if buttonOff(c, k, buttonPlain, text, nil, wait).Clicked() && !cf.Reloading {
 				a.Store.ReloadConfig()
 			}
 		})

@@ -15,11 +15,11 @@ import (
 
 // setupApp is the setup screen for m, its Setup's posts queued for the test
 // to run as the UI thread would.
-func setupApp(t *testing.T, s mode.Settings, m mode.Kind) (*App, *fakeActions, *ui.Tester, func(), *[][]string) {
+func setupApp(t *testing.T, s mode.Settings, m mode.Kind, opts ...func(*setup.Deps)) (*App, *fakeActions, *ui.Tester, func(), *[][]string) {
 	t.Helper()
 	a, act := newTestApp(s)
 	q := make(chan func(), 256)
-	su, ran := fakeSetup(func(fn func()) { q <- fn })
+	su, ran := fakeSetup(func(fn func()) { q <- fn }, opts...)
 	a.Setup = su
 	a.OpenSetup(m)
 	tt := ui.NewTester(a.View, 1280, 800)

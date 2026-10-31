@@ -171,10 +171,7 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 // last test of it.
 func (a *App) wrapperAddressRow(c *ui.Context, k *Tokens) setup.State {
 	f := &a.su
-	slow := f.wrapperTesting && c.Now().Sub(f.wrapperFrom) >= statusDelay
-	if f.wrapperTesting && !slow {
-		c.After(statusDelay - c.Now().Sub(f.wrapperFrom))
-	}
+	slow := waited(c, f.wrapperTesting, f.wrapperFrom)
 	st, status := setup.Missing, "Not tested"
 	switch {
 	case slow:
@@ -209,10 +206,12 @@ func (a *App) wrapperAddressRow(c *ui.Context, k *Tokens) setup.State {
 	return st
 }
 
-// wrapperReached reports whether the last test reached the typed wrapper.
+// wrapperReached reports whether the last test reached the typed wrapper. A
+// test running again leaves it as it was, as the row does, so Start does not
+// grey for one that answers within a frame.
 func (a *App) wrapperReached() bool {
 	f := &a.su
-	return !f.wrapperTesting && len(f.wrapperChecks) > 0 && f.wrapperChecks[0].OK && f.wrapperTested == f.wrapperAddr
+	return len(f.wrapperChecks) > 0 && f.wrapperChecks[0].OK && f.wrapperTested == f.wrapperAddr
 }
 
 // accountRow is the Apple ID the wrapper has signed in, and the sign-in
@@ -246,7 +245,7 @@ func (a *App) accountRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 	switch {
 	case l.LoginID != "":
 		st, status = setup.Working, "Code sent to your devices"
-	case l.Busy:
+	case waited(c, l.Busy, l.Since):
 		st, status = setup.Working, "Signing in"
 	}
 	setupRow(c, k, "account", st, title, status, false, nil, func() {
@@ -265,19 +264,20 @@ func (a *App) accountRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 func (a *App) setupCredentials(c *ui.Context, k *Tokens) {
 	f := &a.su.login
 	l := &a.Store.Login
+	wait := waited(c, l.Busy, l.Since)
 	ui.Row(c).Gap(8).Children(func() {
-		user := field(c, k, "setup-apple-id", &f.user, "Apple ID", false).Disabled(l.Busy)
+		user := field(c, k, "setup-apple-id", &f.user, "Apple ID", false).Disabled(wait)
 		box, pass := fieldBox(c, k, "setup-password", &f.pass, "Password", false)
-		pass.Password().Disabled(l.Busy)
+		pass.Password().Disabled(wait)
 		box.Grow(1)
-		ready := f.user != "" && f.pass != "" && !l.Busy
+		filled := f.user != "" && f.pass != ""
 		text := "Log in"
-		if l.Busy {
+		if wait {
 			text = "Logging in…"
 		}
-		if (buttonOff(c, k, buttonPrimary, text, nil, !ready).Height(32).Clicked() || pass.Submitted() || user.Submitted()) && ready {
+		if (buttonOff(c, k, buttonPrimary, text, nil, !filled || wait).Height(32).Clicked() || pass.Submitted() || user.Submitted()) && filled && !l.Busy {
 			a.Store.StartLogin(f.user, f.pass)
-			f.pass = ""
+			f.sent = true
 		}
 	})
 }
@@ -285,20 +285,21 @@ func (a *App) setupCredentials(c *ui.Context, k *Tokens) {
 func (a *App) setupCode(c *ui.Context, k *Tokens) {
 	f := &a.su.login
 	l := &a.Store.Login
+	wait := waited(c, l.Busy, l.Since)
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		box, in := fieldBox(c, k, "setup-code", &f.code, "6-digit code", true)
 		box.Grow(0).Width(160)
-		in.Disabled(l.Busy)
+		in.Disabled(wait)
 		text := "Verify"
-		if l.Busy {
+		if wait {
 			text = "Verifying…"
 		}
-		ready := sixDigits(f.code) && !l.Busy
-		if (buttonOff(c, k, buttonPrimary, text, nil, !ready).Height(32).Clicked() || in.Submitted()) && ready {
+		ready := sixDigits(f.code)
+		if (buttonOff(c, k, buttonPrimary, text, nil, !ready || wait).Height(32).Clicked() || in.Submitted()) && ready && !l.Busy {
 			a.Store.SubmitCode(f.code)
-			f.code = ""
+			f.sent = true
 		}
-		if buttonOff(c, k, buttonGhost, "Start over", nil, l.Busy).Height(32).Clicked() {
+		if buttonOff(c, k, buttonGhost, "Start over", nil, wait).Height(32).Clicked() && !l.Busy {
 			a.Store.CancelLogin()
 			f.code = ""
 		}

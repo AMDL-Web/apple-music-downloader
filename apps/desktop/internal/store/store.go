@@ -99,6 +99,11 @@ func (s *Store) reset() {
 	s.Server, s.Config, s.Login = Server{}, Config{}, Login{}
 }
 
+// SetClock replaces the clock the store stamps requests with, which a test
+// of a screen sets to its tester's, so that "how long has it waited" means
+// the same to both.
+func (s *Store) SetClock(now func() time.Time) { s.now = now }
+
 // SetNotifier sets who hears about finished jobs.
 func (s *Store) SetNotifier(n Notifier) { s.notifier = n }
 

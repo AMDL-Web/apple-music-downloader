@@ -19,6 +19,10 @@ import (
 // setupWidth is the setup column's width.
 const setupWidth = 600
 
+// statusLine is the height of a row's one-line status, whichever face it is
+// in.
+const statusLine = 17
+
 // setupForm is what the setup screen holds between frames.
 type setupForm struct {
 	// first is set on the first launch, which has nowhere to go back to;
@@ -36,6 +40,8 @@ type setupForm struct {
 	wrapperTesting bool
 	wrapperTested  string
 	wrapperFrom    time.Time
+	// serverFrom is when the test of serverAddr that is running began.
+	serverFrom time.Time
 	// consent names the tool whose install command shows with Run.
 	consent string
 	// bootSince is when the guest was first seen starting, for the time
@@ -179,13 +185,14 @@ func setupRow(c *ui.Context, k *Tokens, key string, st setup.State, title, statu
 				ui.Text(c, title).FontSize(13.5).FontWeight(600).SingleLine()
 				if status != "" {
 					s := ui.Text(c, status).FontSize(12).TextColor(k.Faint).LineHeight(1.4)
-					// A failure's reason is read whole; the other states
-					// keep to their line.
-					if st != setup.Failed {
-						s.SingleLine().Ellipsis("…")
-					}
 					if mono {
 						s.Font(MonoFont).FontSize(11.5)
+					}
+					// A failure's reason is read whole; the other states
+					// keep to one line of one height, in either face, so a
+					// row that changes state does not move the rows below.
+					if st != setup.Failed {
+						s.SingleLine().Ellipsis("…").Height(statusLine)
 					}
 				}
 			})

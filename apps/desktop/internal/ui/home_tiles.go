@@ -125,13 +125,15 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	s := a.Store
 	hk := store.HitKey(h)
 	mark, _ := s.HitMark(h)
-	starting := s.Search.Starting[hk]
+	startedAt, starting := s.Search.Starting[hk]
+	// The glyph changes only when the start is slow, as a pill's does.
+	wait := waited(c, starting, startedAt)
 	b := ui.ButtonBase(c.Key("control")).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().
 		Absolute().Right(8).Bottom(8)
 	pointed := b.Hovered()
 	ic, fg := icDown, k.Fg
 	switch {
-	case starting:
+	case wait:
 		b.Material(glass.Glass{}).Label("Starting the download of " + h.Name)
 		ic = nil
 	case mark == store.MarkActive:
@@ -147,9 +149,9 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	}
 	// Only the download button waits for the pointer; a mark stays.
 	op := float32(1)
-	if mark == store.MarkNone && !starting {
+	if mark == store.MarkNone {
 		show := float32(0)
-		if shown {
+		if shown || starting {
 			show = 1
 		}
 		op = b.AnimateWith("shown", show, 120*time.Millisecond, ui.EaseOut)
@@ -213,6 +215,7 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 			ui.Text(c, strings.Join(hitFacts(h), " · ")).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
 		})
 		mark, job := s.HitMark(h)
+		startedAt, startingOn := s.Search.Starting[hk]
 		switch {
 		case mark == store.MarkDone:
 			if markButton(c, k, "In library", pillOK, icCheck).Clicked() {
@@ -222,7 +225,7 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 			if markButton(c, k, "In the queue", pillRun, icDown).Clicked() {
 				a.OpenJob(job)
 			}
-		case s.Search.Starting[hk]:
+		case waited(c, startingOn, startedAt):
 			pill(c, k, pillWait, nil, "Starting…")
 		default:
 			dl := ui.ButtonBase(c.Key("download")).Size(32, 32).Radius(radiusFull).Center().Background(k.Raise2).Label("Download " + h.Name)

@@ -38,19 +38,20 @@ on another machine.
   keyboard focus only. A box whose focused element is a part of it, as a
   field's input, rings itself with `focusRing`.
 - A button that can be disabled is built with `buttonOff`, not `button`
-  then `Disabled`: MyGo reports hover and press until the element is
-  disabled, so the hover fill would show on a disabled button.
+  then `Disabled`: MyGo reports hover until the element is disabled.
 - Scroll containers go through `scrollArea` (or `scrollState` where one
   cannot): MyGo draws thumbs at all times over the content, so the app hides
   them at rest where the desktop does, keeps lists clear of them and fades a
   cut last line.
-- A drawing that moves at its own rate (`Painter.AnimationFrameRate`, as a
-  stage bar's stripes) holds still while a list scrolls (`App.scrolling`,
-  `widgets.StageBar` Still): MyGo paces the whole window to that rate, and
-  on macOS the display too, so the list would scroll at 30 frames a second.
-- A waiting state (Saving…, Testing…) shows only after `statusDelay`, and
-  earlier results stay until new ones replace them: a quick answer must not
-  flash or move the layout.
+- A drawing with its own rate (`Painter.AnimationFrameRate`, as a stage
+  bar's stripes) holds still while a list scrolls (`App.scrolling`,
+  `widgets.StageBar` Still): MyGo paces the window, and on macOS the
+  display, to that rate, so the list would scroll at 30 frames a second.
+- A quick answer must not flash or move the layout: waiting words, greyed
+  controls and dimmed results wait for `apps/desktop/internal/ui#waited`
+  (`statusDelay`), not a store's busy flag; earlier results, typed fields
+  and errors stay until the answer. Each async action is tested with
+  `apps/desktop/internal/ui/flicker_test.go#noFlash`.
 - No cgo: every target cross-compiles with `CGO_ENABLED=0`.
 - MyGo paints absolute children above in-flow ones, in build order: a
   decorative layer goes before an absolute content layer, as the main
@@ -80,6 +81,5 @@ Screens: build the app and run it with `-shots <dir>` (and `-remote` or
 with `Window.CapturePage`, renders playing motion covers without a window
 (`*-motion-N.png`), and quits. The window shows stills where the desktop asks
 for less motion; the renders do not. CapturePage draws no window material,
-so a shot run gives the sidebar its solid ground
-(`apps/desktop/internal/app#App.opaque`); the material over the desktop
-shows only in a screenshot of the screen.
+so shots give the sidebar its solid ground
+(`apps/desktop/internal/app#App.opaque`).

@@ -192,3 +192,17 @@ func TestAFailedConfigReadWaitsBeforeTheNext(t *testing.T) {
 		t.Errorf("%d reads of /config; want one, then one more after ServerEvery", f.reads)
 	}
 }
+
+func TestLoginKeepsTheLastErrorUntilTheNextAnswer(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{}}
+	s, settle := live(t, f)
+	s.Login = Login{Err: "wrong", Code: "authentication_failed"}
+	s.StartLogin("someone@example.com", "not-a-real-password")
+	if !s.Login.Busy || s.Login.Err != "wrong" || s.Login.Since.IsZero() {
+		t.Fatalf("while the step runs %+v; want the last error kept and the start noted", s.Login)
+	}
+	settle(func() bool { return !s.Login.Busy })
+	if s.Login.LoginID != "l-1" || s.Login.Err != "" || s.Login.Code != "" {
+		t.Errorf("after the answer %+v; want the code step with the error gone", s.Login)
+	}
+}

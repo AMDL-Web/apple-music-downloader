@@ -24,8 +24,10 @@ type Omnibox struct {
 	Quality Quality
 	// Overwrite replaces files already on disk.
 	Overwrite bool
-	// Submitting is set while a submit is under way.
-	Submitting bool
+	// Submitting is set while a submit is under way, and SubmitSince is
+	// when it left.
+	Submitting  bool
+	SubmitSince time.Time
 	// Result is the outcome of the last submit, or nil.
 	Result *domain.BatchSubmitResponse
 
@@ -246,7 +248,7 @@ func (s *Store) Submit() {
 		urls[i] = l.URL
 	}
 	o := &s.Omni
-	o.Submitting = true
+	o.Submitting, o.SubmitSince = true, s.now()
 	s.submit(urls, func(res domain.BatchSubmitResponse, err error) {
 		o.Submitting = false
 		o.Result = &res

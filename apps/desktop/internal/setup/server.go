@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"amdl/internal/buildinfo"
 	"amdl/internal/client"
 	"amdl/internal/format"
 )
@@ -21,7 +20,8 @@ type Line struct {
 }
 
 // Server is what a test found about a remote amdl, each part Unchecked when
-// an earlier one failed. Anything not Ready there is fixed on that server.
+// an earlier one failed. State is Ready when the server answered as an amdl,
+// else Failed. Anything not Ready there is fixed on that server.
 type Server struct {
 	Address string
 	State   State
@@ -39,16 +39,20 @@ const serverTimeout = 15 * time.Second
 // nearly full: about one lossless album in high resolution.
 const lowSpace = 2 << 30
 
-// TestServer tests the amdl at address off the UI thread.
+// TestServer tests the amdl at address off the UI thread. Server keeps the
+// last finished test until the answer replaces it, so a screen that shows it
+// does not drop its rows for a test that answers within a frame.
 func (s *Setup) TestServer(address string) {
-	s.Server = Server{Address: address, State: Checking}
+	s.testGen++
+	gen := s.testGen
+	s.Testing = address
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), serverTimeout)
 		defer cancel()
-		got := Diagnose(ctx, address, buildinfo.Get().Version)
+		got := s.deps.Diagnose(ctx, address)
 		s.post(func() {
-			if s.Server.Address == address && s.Server.State == Checking {
-				s.Server = got
+			if s.testGen == gen {
+				s.Server, s.Testing = got, ""
 			}
 		})
 	}()

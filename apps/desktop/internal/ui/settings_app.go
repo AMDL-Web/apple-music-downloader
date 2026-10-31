@@ -67,10 +67,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	local := here && a.Store.Server.Wrapper != nil && a.Store.Server.Wrapper.Managed != nil
 	// A test that answers quickly shows no Testing…, no grey button and no
 	// dimmed results: they would only flash.
-	slow := f.testing && c.Now().Sub(f.testFrom) >= statusDelay
-	if f.testing && !slow {
-		c.After(statusDelay - c.Now().Sub(f.testFrom))
-	}
+	slow := waited(c, f.testing, f.testFrom)
 	card(c, k).Gap(14).Children(func() {
 		addr, name, help := &d.RemoteURL, "Server address", "The address of the amdl backend, as the web console opens it."
 		if d.Mode == mode.Standalone {

@@ -93,3 +93,32 @@ func TestCompatible(t *testing.T) {
 		}
 	}
 }
+
+func TestTestServerKeepsTheLastResultUntilTheAnswer(t *testing.T) {
+	gate := make(chan struct{})
+	queue := make(chan func(), 4)
+	s := New(func(fn func()) { queue <- fn }, Deps{Diagnose: func(_ context.Context, address string) Server {
+		<-gate
+		return Server{Address: address, State: Ready, Reach: Line{Ready, "amdl 2.0.0"}}
+	}})
+	s.Server = Server{Address: "http://nas:18570", State: Failed, Reach: Line{Failed, "No answer"}}
+	s.TestServer("http://nas:18570")
+	if s.Testing != "http://nas:18570" || s.Server.Reach.Text != "No answer" {
+		t.Fatalf("while testing: Testing %q, Server %+v; want the last result kept", s.Testing, s.Server)
+	}
+	close(gate)
+	(<-queue)()
+	if s.Testing != "" || s.Server.Reach.Text != "amdl 2.0.0" {
+		t.Errorf("after the answer: Testing %q, Server %+v", s.Testing, s.Server)
+	}
+	// A test of another address replaces the first, whose answer is dropped.
+	gate = make(chan struct{})
+	s.TestServer("http://a:1")
+	s.TestServer("http://b:2")
+	close(gate)
+	(<-queue)()
+	(<-queue)()
+	if s.Server.Address != "http://b:2" {
+		t.Errorf("the answer of %q replaced the newer test's", s.Server.Address)
+	}
+}

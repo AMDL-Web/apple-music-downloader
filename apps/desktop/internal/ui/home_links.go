@@ -225,10 +225,13 @@ func (a *App) dock(c *ui.Context, k *Tokens, width float32) {
 			if n := len(start); n > 0 {
 				text = "Download " + summaryNoun(kinds, n)
 			}
-			if s.Omni.Submitting {
+			// A submit that answers within a frame shows no Starting… and no
+			// dimmed button.
+			wait := waited(c, s.Omni.Submitting, s.Omni.SubmitSince)
+			if wait {
 				text = "Starting…"
 			}
-			ready := len(start) > 0 && !s.Omni.Submitting
+			ready := len(start) > 0 && !wait
 			// A minimum width keeps the button's edge still as its words change.
 			b := ui.ButtonBase(c.Key("go")).Height(dockHeight - 2*dockPad).MinWidth(180).PaddingX(20).Gap(10).Radius(radiusFull).
 				AlignItems(ui.Center).Justify(ui.Center).Background(k.Pill).Disabled(!ready).Label(text)
@@ -237,7 +240,7 @@ func (a *App) dock(c *ui.Context, k *Tokens, width float32) {
 			} else if b.Hovered() {
 				b.Opacity(0.92)
 			}
-			if b.Clicked() {
+			if b.Clicked() && !s.Omni.Submitting {
 				s.Submit()
 			}
 			b.Cursor(ui.CursorPointer).Children(func() {
