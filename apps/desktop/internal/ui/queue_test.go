@@ -32,15 +32,29 @@ func demoApp(t *testing.T) (*App, func(until func() bool)) {
 	t.Cleanup(a.Store.Close)
 	return a, func(until func() bool) {
 		t.Helper()
-		deadline := time.After(10 * time.Second)
+		// The race detector on a busy runner slows everything several
+		// times over.
+		deadline := time.After(30 * time.Second)
 		// An until that builds a frame may be what sends the request it
 		// waits on, so it runs again even when nothing arrives.
-		tick := time.NewTicker(20 * time.Millisecond)
+		tick := time.NewTicker(50 * time.Millisecond)
 		defer tick.Stop()
 		for !until() {
 			select {
 			case fn := <-queue:
 				fn()
+				// Everything that arrived meanwhile goes first: an until
+				// that builds a frame takes most of a second under the race
+				// detector, and the answer waited on queues behind every
+				// cover that loads.
+				for more := true; more; {
+					select {
+					case fn := <-queue:
+						fn()
+					default:
+						more = false
+					}
+				}
 			case <-tick.C:
 			case <-deadline:
 				t.Fatal("the demo backend's answer never arrived")
