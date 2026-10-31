@@ -254,7 +254,7 @@ func (a *App) nowCard(c *ui.Context, k *Tokens) {
 				line += " · " + format.Rate(sp)
 			}
 			mono(c, line, 10.5).TextColor(k.Muted).Margin(0, 0, 4, 0)
-			widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Height: 3, Running: true}.Show(c, "now-bar")
+			widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Height: 3, Running: true, Still: a.scrolling(c)}.Show(c, "now-bar")
 		})
 	})
 }

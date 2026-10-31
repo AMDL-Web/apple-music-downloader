@@ -27,7 +27,10 @@ type StageBar struct {
 	// Running draws moving stripes over the segment being worked on;
 	// Indeterminate fills it with them when it has no fraction yet.
 	Running, Indeterminate bool
-	Height, Gap            float32
+	// Still holds the stripes in place, as the desktop's reduced motion
+	// does: moving, they pace the window to 30 frames a second.
+	Still       bool
+	Height, Gap float32
 }
 
 // stageAnimation eases segment fills, so a retry that sends a track back to
@@ -50,7 +53,7 @@ func (b StageBar) Show(c *ui.Context, key any) ui.Element {
 		fill[i] = el.AnimateTo(i, float32(v), stageAnimation)
 	}
 	current := b.Stages.Current()
-	reduce := c.Preferences().ReduceMotion
+	reduce := b.Still || c.Preferences().ReduceMotion
 	el.Draw(func(p *ui.Painter, r ui.Rect) {
 		avail := r.W - gap*float32(progress.StageCount-1)
 		x := r.X

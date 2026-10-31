@@ -55,6 +55,11 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 		master, _ := latestMotion(j)
 		pal = latestPalette(j, moving && a.motionShown(c, master))
 	}
+	paletteBackdrop(c, k, pal)
+}
+
+// paletteBackdrop lights the top of the main column with pal.
+func paletteBackdrop(c *ui.Context, k *Tokens, pal Palette) {
 	if !pal.OK {
 		return
 	}
@@ -179,7 +184,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 				}
 			})
 			ui.Column(c).MaxWidth(600).Gap(6).Margin(6, 0, 0, 0).Children(func() {
-				widgets.StageBar{Stages: j.Stages, Color: hc.accent, Track: k.Track, Height: 10, Gap: 3, Running: true}.Show(c, "hero-bar")
+				widgets.StageBar{Stages: j.Stages, Color: hc.accent, Track: k.Track, Height: 10, Gap: 3, Running: true, Still: a.scrolling(c)}.Show(c, "hero-bar")
 				ui.Row(c).Children(func() {
 					mono(c, a.heroProgressText(j), 11.5).TextColor(hc.meta)
 					ui.Spacer(c)
@@ -269,12 +274,13 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		row.InsetShadow(3, 0, 0, 0, accent)
 	}
 	if row.Clicked() {
-		s.Select(j.ID, row.ClickModifiers()&ui.Cmd != 0)
+		if row.ClickModifiers()&ui.Cmd != 0 {
+			s.Select(j.ID, true)
+		} else {
+			a.OpenJob(j.ID)
+		}
 	}
-	if row.DoubleClicked() {
-		a.OpenJob(j.ID)
-	}
-	row.Menu(func(m *ui.Menu) { a.jobMenu(m, j) })
+	row.ContextMenu(func(m *ui.Menu) { a.jobMenu(m, j) })
 	row.Children(func() {
 		color, dim := float32(0), float32(0.2)
 		switch j.Status {
@@ -291,7 +297,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 			ui.Text(c, rowSubtitle(j)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
 		})
 		ui.Column(c).Width(220).Gap(6).Children(func() {
-			bar := widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Running: running,
+			bar := widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Running: running, Still: a.scrolling(c),
 				Failed: j.Status == domain.JobFailed, Bad: k.Bad, Finished: j.Status == domain.JobCompleted, Done: k.Fg.Alpha(0.85)}
 			bar.Show(c, "bar")
 			ui.Row(c).Children(func() {

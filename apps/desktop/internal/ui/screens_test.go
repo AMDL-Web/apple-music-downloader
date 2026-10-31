@@ -66,11 +66,23 @@ func TestQueueShowsTheLatestDownloadUntilOneRuns(t *testing.T) {
 			t.Errorf("no %q in %q", want, tt.Texts())
 		}
 	}
+	sortY := func() float32 {
+		r, ok := tt.Find("Newest first")
+		if !ok {
+			t.Fatalf("no sort control in %q", tt.Texts())
+		}
+		return r.Y
+	}
+	before := sortY()
 	if err := tt.Click("All 12 in Done →"); err != nil {
 		t.Fatal(err)
 	}
 	if store.Tab(a.Tab) != store.TabDone {
 		t.Errorf("the wall's link shows tab %d, want Done", a.Tab)
+	}
+	tt.Frame()
+	if after := sortY(); after != before {
+		t.Errorf("the list moved from %v to %v as the wall's link hid", before, after)
 	}
 	a.Tab = int(store.TabActive)
 	tt.Frame()
@@ -87,6 +99,54 @@ func TestQueueShowsTheLatestDownloadUntilOneRuns(t *testing.T) {
 	}
 	if !tt.HasText("Newest Album") || !tt.HasText("Older Album") {
 		t.Errorf("the covers left with a download running: %q", tt.Texts())
+	}
+}
+
+func TestQueueRowOpensOnAClickAndKeepsItsMenuForTheRightButton(t *testing.T) {
+	// Seeded through the store's snapshot, as the feed does: the detail
+	// screen looks the job up by id and returns to the queue without it.
+	// The finished album takes the latest-download hero, so the failed
+	// job's row is the only place its label appears.
+	setup := func() (*App, *ui.Tester, ui.Rect) {
+		a, _ := newTestApp(remoteSettings())
+		a.Screen = ScreenQueue
+		now := time.Now()
+		done := now.Add(-time.Minute)
+		a.Store.ApplySnapshot(client.DownloadList{
+			StatusCounts: domain.JobStatusCounts{Completed: 1, Failed: 1, Total: 2},
+			Downloads: []domain.Job{
+				{ID: "h", Type: "album", Status: domain.JobCompleted, Title: "Hero Album", ArtistName: "Artist h", TotalItems: 5, CreatedAt: now.Add(-time.Hour), FinishedAt: &done},
+				{ID: "f", Type: "album", Status: domain.JobFailed, Title: "Broken Album", ArtistName: "Artist f", TotalItems: 5, CreatedAt: now},
+			},
+		})
+		a.Tab = int(store.TabFailed)
+		tt := ui.NewTester(a.View, 1280, 800)
+		r, ok := tt.Find("Artist f · Album")
+		if !ok {
+			t.Fatalf("no row in %q", tt.Texts())
+		}
+		return a, tt, r
+	}
+
+	a, tt, r := setup()
+	tt.RightClickAt(r.X+r.W/2, r.Y+r.H/2)
+	if menu := tt.Menu(); len(menu) == 0 || menu[0] != "Show details" {
+		t.Errorf("a right click shows the menu %q, want the job's", menu)
+	}
+	if a.Screen != ScreenQueue {
+		t.Errorf("a right click left the queue for screen %v", a.Screen)
+	}
+
+	a, tt, r = setup()
+	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	if menu := tt.Menu(); menu != nil {
+		t.Errorf("a click shows the menu %q", menu)
+	}
+	if a.Screen != ScreenDetail || a.Store.DetailID != "f" {
+		t.Errorf("a click shows screen %v with job %q, want the job's detail", a.Screen, a.Store.DetailID)
+	}
+	if !tt.HasText("Broken Album") {
+		t.Errorf("the detail shows %q", tt.Texts())
 	}
 }
 

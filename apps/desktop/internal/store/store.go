@@ -120,7 +120,7 @@ func (s *Store) Connect(c *client.Client) {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	ctx := s.ctx
 	go c.FollowFeed(ctx, client.FeedHandlers{
-		Snapshot: func(l client.DownloadList) { s.postIf(ctx, func() { s.applySnapshot(l) }) },
+		Snapshot: func(l client.DownloadList) { s.postIf(ctx, func() { s.ApplySnapshot(l) }) },
 		Message:  func(m domain.DownloadFeedMessage) { s.postIf(ctx, func() { s.applyMessage(m) }) },
 		State:    func(st client.ConnState) { s.postIf(ctx, func() { s.setConn(st) }) },
 	})

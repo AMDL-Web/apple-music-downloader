@@ -44,6 +44,10 @@ on another machine.
   cannot): MyGo draws thumbs at all times over the content, so the app hides
   them at rest where the desktop does, keeps lists clear of them and fades a
   cut last line.
+- A drawing that moves at its own rate (`Painter.AnimationFrameRate`, as a
+  stage bar's stripes) holds still while a list scrolls (`App.scrolling`,
+  `widgets.StageBar` Still): MyGo paces the whole window to that rate, and
+  on macOS the display too, so the list would scroll at 30 frames a second.
 - A waiting state (Saving…, Testing…) shows only after `statusDelay`, and
   earlier results stay until new ones replace them: a quick answer must not
   flash or move the layout.

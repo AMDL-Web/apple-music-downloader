@@ -151,8 +151,13 @@ func (a *App) recentWall(c *ui.Context, k *Tokens, finished []*store.Job, hero *
 			if hero != nil {
 				shown++
 			}
-			if done := a.Store.Count(store.TabDone); done > shown && store.Tab(a.Tab) != store.TabDone {
+			if done := a.Store.Count(store.TabDone); done > shown {
 				more := ui.ButtonBase(c.Key("wall-all")).Label("Show every finished download")
+				// On the Done tab the link keeps its room, so the row's height
+				// does not change with the tab.
+				if store.Tab(a.Tab) == store.TabDone {
+					more.Invisible()
+				}
 				col := k.Muted
 				if more.Hovered() {
 					col = k.Fg

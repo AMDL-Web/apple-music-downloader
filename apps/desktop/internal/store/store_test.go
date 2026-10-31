@@ -29,7 +29,7 @@ func at(min int) time.Time { return time.Date(2026, 10, 30, 10, min, 0, 0, time.
 func TestSnapshotAndFeedKeepBackendOrder(t *testing.T) {
 	s, _ := newTestStore(t)
 	// A batch submitted together shares created_at and lists in submission order.
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
 		{ID: "b1", CreatedAt: at(5)}, {ID: "b2", CreatedAt: at(5)}, {ID: "old", CreatedAt: at(1), Status: domain.JobCompleted},
 	}, StatusCounts: domain.JobStatusCounts{Completed: 1, Queued: 2, Total: 3}})
 	s.applyMessage(domain.DownloadFeedMessage{Type: "download_upserted", Job: &domain.Job{ID: "new", CreatedAt: at(9), Status: domain.JobQueued},
@@ -52,7 +52,7 @@ func TestSnapshotAndFeedKeepBackendOrder(t *testing.T) {
 
 func TestNotifiesOnlyRunsSeenUnfinished(t *testing.T) {
 	s, rec := newTestStore(t)
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
 		{ID: "done-before", Status: domain.JobCompleted}, {ID: "run", Status: domain.JobRunning},
 	}})
 	upsert := func(id string, st domain.JobStatus) {
@@ -82,7 +82,7 @@ func mustJSON(v any) json.RawMessage {
 
 func TestEventsOlderThanSnapshotOnlyLog(t *testing.T) {
 	s, _ := newTestStore(t)
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning, TotalItems: 1}}})
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning, TotalItems: 1}}})
 	s.applyDetail("j", client.DownloadDetail{
 		Job:         domain.Job{ID: "j", Status: domain.JobRunning, TotalItems: 1},
 		Items:       []domain.JobItem{{ID: "i", Index: 1, Status: domain.ItemDecrypting, Progress: domain.ItemProgress{Resolved: true, Download: 1, Decrypt: 0.5}}},
@@ -107,7 +107,7 @@ func TestEventsOlderThanSnapshotOnlyLog(t *testing.T) {
 func TestNowIsTheLatestStartedRunningJob(t *testing.T) {
 	s, _ := newTestStore(t)
 	early, late := at(1), at(7)
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
 		{ID: "a", Status: domain.JobRunning, StartedAt: &early, CreatedAt: at(9)},
 		{ID: "b", Status: domain.JobRunning, StartedAt: &late, CreatedAt: at(0)},
 		{ID: "c", Status: domain.JobQueued, CreatedAt: at(10)},
@@ -121,7 +121,7 @@ func TestSummaryCountsToday(t *testing.T) {
 	s, _ := newTestStore(t)
 	s.now = func() time.Time { return at(30) }
 	yesterday, today := at(30).Add(-24*time.Hour), at(2)
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
 		{ID: "r", Status: domain.JobRunning, TotalItems: 4, CompletedItems: 1, SkippedItems: 1},
 		{ID: "f1", Status: domain.JobFailed, FinishedAt: &today},
 		{ID: "f0", Status: domain.JobFailed, FinishedAt: &yesterday},
@@ -143,7 +143,7 @@ func TestFindLinksAndRunningMatch(t *testing.T) {
 		t.Fatalf("links %q", links)
 	}
 	s, _ := newTestStore(t)
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
 		{ID: "j", Status: domain.JobRunning, Input: "https://music.apple.com/cn/album/x/1858184006?i=1858184010"},
 	}})
 	l := &Link{State: LinkReady, Lookup: client.Lookup{Type: "album", ID: "1858184006"}}
@@ -169,7 +169,7 @@ func TestQualityOverrides(t *testing.T) {
 func TestItemEventsRecountTracks(t *testing.T) {
 	s, _ := newTestStore(t)
 	stale := domain.Job{ID: "j", Status: domain.JobRunning, TotalItems: 2}
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{stale}})
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{stale}})
 	s.applyDetail("j", client.DownloadDetail{
 		Job:         stale,
 		Items:       []domain.JobItem{{ID: "a", Index: 1, Status: domain.ItemDownloading}, {ID: "b", Index: 2, Status: domain.ItemDownloading}},

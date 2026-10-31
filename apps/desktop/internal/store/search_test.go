@@ -168,7 +168,7 @@ func TestHitMarkFollowsTheLiveJob(t *testing.T) {
 	if m, id := s.HitMark(h); m != MarkDone || id != "j" {
 		t.Fatalf("prior job: mark %v %q", m, id)
 	}
-	s.applySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning}}})
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning}}})
 	if m, _ := s.HitMark(h); m != MarkActive {
 		t.Errorf("live job running: mark %v", m)
 	}

@@ -204,7 +204,9 @@ func (j *Job) recount() {
 	}
 }
 
-func (s *Store) applySnapshot(l client.DownloadList) {
+// ApplySnapshot replaces the job list with l, as the feed's first message
+// does; tests use it to seed the store.
+func (s *Store) ApplySnapshot(l client.DownloadList) {
 	s.Loaded = true
 	s.Counts = l.StatusCounts
 	keep := map[string]*Job{}
