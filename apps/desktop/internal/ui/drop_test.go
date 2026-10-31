@@ -12,6 +12,9 @@ import (
 
 func TestADroppedLinkDownloadsAsAHitDoes(t *testing.T) {
 	a, run := demoApp(t)
+	// The feed's first snapshot replaces the list (store.Store.ApplySnapshot),
+	// so a job started before it lands could drop out of it for a moment.
+	run(func() bool { return a.Store.Loaded })
 	// An album the demo has no download of.
 	link := "https://music.apple.com/us/album/salt-static/920004"
 	a.dropLinks(time.Now(), transfer.TextData("Listen: "+link+" — so good"))
