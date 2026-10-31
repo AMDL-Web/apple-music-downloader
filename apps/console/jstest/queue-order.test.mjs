@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { orderable, upNext, arrange, placeQueued, moveBody, stepIndex, queuePlace } from '../static/js/lib/queue-order.js';
+import { orderable, upNext, arrange, placeQueued, moveBody, keyMove, queuePlace } from '../static/js/lib/queue-order.js';
 
 const at = (m) => `2026-11-01T10:${String(m).padStart(2, '0')}:00Z`;
 const q = (id, order, m = 0) => ({ id, status: 'queued', queue_order: order, updated_at: at(m) });
@@ -8,8 +8,8 @@ const r = (id, started, m = 0) => ({ id, status: 'running', started_at: at(start
 const done = (id, status = 'completed') => ({ id, status, updated_at: at(0) });
 const ids = (jobs) => jobs.map((j) => j.id);
 
-test('orderable: Active with no search and no type', () => {
-  assert.ok(!orderable({ tab: 'all', q: '', type: '' }), 'All keeps the newest-first order');
+test('orderable: All and Active with no search and no type', () => {
+  assert.ok(orderable({ tab: 'all', q: '', type: '' }));
   assert.ok(orderable({ tab: 'active', q: '', type: '' }));
   assert.ok(!orderable({ tab: 'completed', q: '', type: '' }));
   assert.ok(!orderable({ tab: 'active', q: 'blonde', type: '' }));
@@ -63,11 +63,21 @@ test('moveBody: to first at the top, else after the job above', () => {
   assert.equal(moveBody(['a'], 'x'), null);
 });
 
-test('stepIndex and queuePlace', () => {
-  assert.equal(stepIndex(['a', 'b', 'c'], 'a', -1), null);
-  assert.equal(stepIndex(['a', 'b', 'c'], 'a', 1), 1);
-  assert.equal(stepIndex(['a', 'b', 'c'], 'c', 1), null);
-  assert.equal(stepIndex(['a', 'b', 'c'], 'x', 1), null);
+test('keyMove: Up before the job above, Down after the one below, Home first, End last', () => {
+  const q3 = ['a', 'b', 'c'];
+  assert.deepEqual(keyMove(q3, 'b', 'ArrowUp'), { index: 0, body: { before: 'a' } });
+  assert.deepEqual(keyMove(q3, 'b', 'ArrowDown'), { index: 2, body: { after: 'c' } });
+  assert.deepEqual(keyMove(q3, 'c', 'Home'), { index: 0, body: { to: 'first' } });
+  assert.deepEqual(keyMove(q3, 'a', 'End'), { index: 2, body: { to: 'last' } });
+  assert.equal(keyMove(q3, 'a', 'ArrowUp'), null);
+  assert.equal(keyMove(q3, 'a', 'Home'), null);
+  assert.equal(keyMove(q3, 'c', 'ArrowDown'), null);
+  assert.equal(keyMove(q3, 'c', 'End'), null);
+  assert.equal(keyMove(q3, 'x', 'Home'), null);
+  assert.equal(keyMove(q3, 'b', 'Enter'), null);
+});
+
+test('queuePlace', () => {
   assert.deepEqual(queuePlace(['a', 'b'], 'a'), { first: true, last: false });
   assert.deepEqual(queuePlace(['a'], 'a'), { first: true, last: true });
   assert.deepEqual(queuePlace(['a'], 'x'), {});

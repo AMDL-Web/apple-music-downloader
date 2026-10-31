@@ -126,8 +126,10 @@ export function queueMatchFilter(filters) {
 
 /**
  * GET /api/v1/downloads query for a queue view. Active jobs read oldest
- * first, which approximates execution order; finished ones by when they
- * finished, newest first; All in the server's order, newest first.
+ * first; finished ones by when they finished, newest first; All in the
+ * server's order, newest first. All and Active draw their running and queued
+ * jobs on top in run order (lib/queue-order.js arrange), and with no search
+ * or type read them on their own too (views/queue-order.js useUpNext).
  */
 export function queueQuery(filters, offset = 0, limit = 50) {
   const query = { limit, offset };

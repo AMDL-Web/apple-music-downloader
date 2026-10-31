@@ -6,7 +6,7 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { count } from '../lib/format.js';
-import { activeFirst, isNotFound } from '../lib/jobview.js';
+import { isNotFound } from '../lib/jobview.js';
 import { buildHash, queueFilters, rememberQueue } from '../lib/route.js';
 import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
 import { actionPlan, jobAllows } from '../lib/jobactions.js';
@@ -41,10 +41,13 @@ export function QueuePage({ route }) {
   const q = useDebounced(qInput, 300);
   const listKey = `queue|${filters.tab}|${filters.type}|${filters.q}`;
   const key = `${listKey}|${app.epoch}`;
-  // Active with no filter shows the queue in run order, to reorder.
+  // All and Active group the rows by status, the queue in run order; with no
+  // search or type every running and queued job is read on its own, and the
+  // queue can be reordered.
+  const grouped = filters.tab === 'all' || filters.tab === 'active';
   const ordered = orderable(filters);
   const slide = useRef(null);
-  const upnext = useUpNext(app, ordered, key, () => slide.current && slide.current());
+  const upnext = useUpNext(app, ordered, grouped, key, () => slide.current && slide.current());
   const listRef = useRef(null);
 
   const setParams = (patch) => {
@@ -93,20 +96,21 @@ export function QueuePage({ route }) {
   const [confirm, setConfirm] = useState(null);
   const { state, load, known } = useQueueList(app, filters, listKey, key, (id) => setSelected((s) => toggleId(s, id, false)));
   const bulk = useBulkRun(app);
-  for (const j of [...state.jobs, ...upnext.queue]) {
+  for (const j of [...state.jobs, ...upnext.running, ...upnext.queue]) {
     const old = known.current.get(j.id);
     if (!old || Date.parse(j.updated_at) >= Date.parse(old.updated_at)) known.current.set(j.id, j);
   }
-  // The rows as shown, which is the order Shift-click ranges follow: on
-  // Active running jobs first, then queued ones (in run order with no
-  // filter, a held row at its slot). All keeps the server's order, newest
-  // first, as the desktop app does: grouped by status, a job that starts or
-  // finishes would jump the length of the list there.
-  const arranged = ordered ? arrange(state.jobs, upnext.queue) : filters.tab === 'active' ? activeFirst(state.jobs) : state.jobs;
+  // The rows as shown, which is the order Shift-click ranges follow: on All
+  // and Active the running jobs first by start (one that starts lands where
+  // it was), then the queued ones in run order (a held row at its slot), then
+  // the rest as the server lists them, newest first. A job that changes
+  // group slides there (useUpNext's beforeChange, FLIP), so nothing jumps.
+  const arranged = grouped ? arrange(state.jobs, ordered ? [...upnext.running, ...upnext.queue] : []) : state.jobs;
+  upnext.seeJobs(arranged);
   const order = useQueueDrag({ app, rows: arranged, list: listRef, on: ordered && !selecting && !bulk.run, upnext });
   slide.current = order.beforeFeed;
   const rows = ordered ? inQueueOrder(arranged, order.ids) : arranged;
-  const left = Math.max(0, state.total - (ordered ? rows.length : state.jobs.length));
+  const left = Math.max(0, state.total - (grouped ? rows.length : state.jobs.length));
   // A job that finishes leaves Active at once; its toast (Open) says where it went.
   useWatchShown(app, filters.tab === 'active' ? state.jobs.map((j) => j.id) : []);
   const jobsRef = useRef(rows);
@@ -247,7 +251,11 @@ export function QueuePage({ route }) {
           const action = selecting ? undefined : retry ? 'retry' : 'menu';
           const sortable = order.draggable && job.status === 'queued';
           // In run order every row slides when the feed reorders it (a start).
-          const drag = sortable ? { ...order.sort.row(job.id), 'data-sortable': '', onKeyDown: (e) => order.keyDown(e, job) } : ordered ? { 'data-sort-flip': job.id } : {};
+          const drag = sortable
+            ? { ...order.sort.row(job.id), 'data-sortable': '', 'aria-keyshortcuts': 'Alt+ArrowUp Alt+ArrowDown Alt+Home Alt+End', onKeyDown: (e) => order.keyDown(e, job) }
+            : grouped
+              ? { 'data-sort-flip': job.id }
+              : {};
           return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined} data-action=${action} ...${drag}>
             ${selecting
               ? html`<label class="job-check">

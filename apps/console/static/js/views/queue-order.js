@@ -1,81 +1,96 @@
-// The Queue's run order: the queued jobs read on their own in run order
-// (so the whole queue shows, past the pages loaded), kept live from the
-// feed, and reordered by dragging a queued row (ui/sortable.js; a grip over
-// the cover for a mouse, a long-press on touch), by Alt+Up and Alt+Down on a
-// focused one, or by its menu's Move to top and Move to bottom. A move is
+// The Queue's run order: the running and queued jobs read on their own (so
+// all of them show on top, past the pages loaded), kept live from the feed,
+// and the queue reordered by dragging a queued row (ui/sortable.js; a grip
+// over the cover for a mouse, a long-press on touch), by Alt+Up, Alt+Down,
+// Alt+Home and Alt+End on a focused one, or by its menu's Move to top and
+// Move to bottom. A move is
 // drawn at once and sent as POST /downloads/{id}/move; a refusal puts the
 // row back and says why, and a 409 reads the queue again.
 
 import { html, useState, useEffect, useRef, useLayoutEffect } from '../ui/preact.js';
 import { listDownloads, moveDownload } from '../api.js';
 import { upsertJob, removeJob } from '../lib/store.js';
-import { upNext, placeQueued, moveBody, stepIndex, queuePlace } from '../lib/queue-order.js';
+import { upNext, placeQueued, moveBody, keyMove, queuePlace } from '../lib/queue-order.js';
 import { actionError } from '../lib/jobactions.js';
 import { jobTitle } from '../lib/format.js';
 import { useSortable } from '../ui/sortable.js';
 import { Icon } from '../ui/components.js';
 
-// The most queued jobs read at once (the API's page limit).
-const QUEUE_LIMIT = 200;
+// The most queued or running jobs read at once (the API's page limit).
+const LIMIT = 200;
 const QUEUED = { statuses: ['queued'] };
+const RUNNING = { statuses: ['running'] };
+
+const applyBatch = (list, batch, filter) => {
+  let next = list;
+  for (const m of batch) {
+    if (m.type === 'download_deleted') next = removeJob(next, m.job_id);
+    else if (m.type === 'download_upserted' && m.job) next = upsertJob(next, m.job, filter, { append: true });
+  }
+  return next;
+};
 
 /**
- * The queued jobs, read with GET /downloads?status=queued&sort=queue_order
- * while `on`, and kept live from the feed: { queue, setQueue, reload }.
- * beforeChange() runs before a feed batch that changes the queue is drawn,
- * so the rows can slide to their new places.
+ * The jobs a grouped view draws on top whatever page they are on: the queued
+ * ones (GET /downloads?status=queued&sort=queue_order) and the running ones,
+ * read while `read` and kept live from the feed: { queue, running, setQueue,
+ * reload }. While `grouped`, beforeChange() runs before every feed batch
+ * that changes a job's status or place is drawn, so the rows slide there
+ * (a start, a finish, a move, the burst of a renumbering) instead of jumping.
  */
-export function useUpNext(app, on, key, beforeChange) {
-  const [queue, setQueue] = useState([]);
+export function useUpNext(app, read, grouped, key, beforeChange) {
+  const [lists, setLists] = useState({ queue: [], running: [] });
   const seq = useRef(0);
   const before = useRef(beforeChange);
   before.current = beforeChange;
   const reload = () => {
     const mine = ++seq.current;
-    if (!on) {
-      setQueue([]);
+    if (!read) {
+      setLists({ queue: [], running: [] });
       return;
     }
-    listDownloads({ status: 'queued', sort: 'queue_order', order: 'asc', limit: QUEUE_LIMIT }).then(
-      (body) => {
-        if (mine === seq.current) setQueue(body.downloads);
+    Promise.all([
+      listDownloads({ status: 'queued', sort: 'queue_order', order: 'asc', limit: LIMIT }),
+      listDownloads({ status: 'running', sort: 'created_at', order: 'asc', limit: LIMIT }),
+    ]).then(
+      ([queued, running]) => {
+        if (mine === seq.current) setLists({ queue: queued.downloads, running: running.downloads });
       },
       () => {
-        // The page's own list still shows the queued jobs it read.
+        // The page's own list still shows the jobs it read.
       },
     );
   };
-  useEffect(reload, [on, key]);
-  const queueRef = useRef(queue);
-  queueRef.current = queue;
+  useEffect(reload, [read, key]);
+  const held = useRef(lists);
+  held.current = lists;
   const statuses = useRef(new Map());
-  for (const j of queue) statuses.current.set(j.id, j.status);
   useEffect(() => {
-    if (!on) return undefined;
+    if (!grouped) return undefined;
     return app.subscribeFeed((batch) => {
-      // A batch that changes a job's status or place slides the rows there.
       const seen = statuses.current;
+      const order = new Map(held.current.queue.map((j) => [j.id, j.queue_order]));
       const moves = batch.some(
         (m) =>
           m.type === 'download_deleted' ||
-          (m.job && (seen.get(m.job.id) !== m.job.status || (m.job.status === 'queued' && queueRef.current.some((j) => j.id === m.job.id && j.queue_order !== m.job.queue_order)))),
+          (m.job && ((seen.has(m.job.id) && seen.get(m.job.id) !== m.job.status) || (m.job.status === 'queued' && order.has(m.job.id) && order.get(m.job.id) !== m.job.queue_order) || !seen.has(m.job.id))),
       );
       for (const m of batch) if (m.job) seen.set(m.job.id, m.job.status);
       if (moves && before.current) before.current();
-      const held = new Set(queueRef.current.map((j) => j.id));
-      const touches = batch.some((m) => (m.job && (held.has(m.job.id) || m.job.status === 'queued')) || (m.type === 'download_deleted' && held.has(m.job_id)));
-      if (!touches) return;
-      setQueue((q) => {
-        let next = q;
-        for (const m of batch) {
-          if (m.type === 'download_deleted') next = removeJob(next, m.job_id);
-          else if (m.type === 'download_upserted' && m.job) next = upsertJob(next, m.job, QUEUED, { append: true });
-        }
-        return next;
+      if (!read) return;
+      setLists((l) => {
+        const queue = applyBatch(l.queue, batch, QUEUED);
+        const running = applyBatch(l.running, batch, RUNNING);
+        return queue === l.queue && running === l.running ? l : { queue, running };
       });
     });
-  }, [on, key]);
-  return { queue, setQueue, reload };
+  }, [read, grouped, key]);
+  // Statuses already drawn, so a first sighting in the feed is not a change.
+  const seeJobs = (jobs) => {
+    for (const j of jobs) if (!statuses.current.has(j.id)) statuses.current.set(j.id, j.status);
+  };
+  const setQueue = (fn) => setLists((l) => ({ ...l, queue: fn(l.queue) }));
+  return { queue: lists.queue, running: lists.running, setQueue, reload, seeJobs };
 }
 
 /**
@@ -145,17 +160,15 @@ export function useQueueDrag({ app, rows, list, on, upnext }) {
   });
 
   const keyDown = (e, job) => {
-    if (!draggable || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    if (!draggable || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
     if (sort.drag) return;
-    const to = stepIndex(ids, job.id, e.key === 'ArrowUp' ? -1 : 1);
-    if (to == null) return;
-    const after = ids.filter((x) => x !== job.id);
-    after.splice(to, 0, job.id);
+    const step = keyMove(ids, job.id, e.key);
+    if (!step) return;
     sort.animate();
     refocus.current = job.id;
-    send(job.id, to, moveBody(after, job.id));
+    send(job.id, step.index, step.body);
   };
 
   const moveTo = (job, where) => {

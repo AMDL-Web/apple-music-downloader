@@ -355,6 +355,7 @@ export default {
           if (sc.mutate) sc.mutate(w);
         },
         tick: (n) => s.tick(n),
+        world: () => s.world,
         log: (e) => s.world.addLog(e),
         submit: (urls) => fetch(`${s.origin}/api/v1/downloads`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls }) }).then((r) => r.json()),
       },

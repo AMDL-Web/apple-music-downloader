@@ -13,12 +13,11 @@ const time = (v) => {
 const order = (job) => (typeof job.queue_order === 'number' ? job.queue_order : Infinity);
 
 /**
- * Whether a Queue view shows the queue in run order and lets it be
- * reordered: Active with no search and no type. All keeps the server's
- * newest-first order, so a job that starts or finishes moves no row there.
+ * Whether a Queue view reads every running and queued job on its own and
+ * lets the queue be reordered: All and Active with no search and no type.
  */
 export function orderable(filters) {
-  return Boolean(filters) && filters.tab === 'active' && !filters.q && !filters.type;
+  return Boolean(filters) && (filters.tab === 'all' || filters.tab === 'active') && !filters.q && !filters.type;
 }
 
 /** Sorts a copy of `jobs` by `key`, ties kept in their order. */
@@ -100,12 +99,22 @@ export function moveBody(ids, id) {
   return i === 0 ? { to: 'first' } : { after: ids[i - 1] };
 }
 
-/** Where Alt+Up (dir -1) or Alt+Down (dir 1) takes `id` in `ids`, or null at an end. */
-export function stepIndex(ids, id, dir) {
+/**
+ * What a key on a focused queued row does to `id` in `ids` (the queue in run
+ * order): { index, body } (its place after the move and the move request),
+ * or null when the key does not move it. Alt+Up goes before the job above,
+ * Alt+Down after the job below, Alt+Home first and Alt+End last; the caller
+ * checks Alt.
+ */
+export function keyMove(ids, id, key) {
   const i = ids.indexOf(id);
+  const last = ids.length - 1;
   if (i < 0) return null;
-  const to = i + (dir < 0 ? -1 : 1);
-  return to < 0 || to >= ids.length ? null : to;
+  if (key === 'ArrowUp') return i === 0 ? null : { index: i - 1, body: { before: ids[i - 1] } };
+  if (key === 'ArrowDown') return i === last ? null : { index: i + 1, body: { after: ids[i + 1] } };
+  if (key === 'Home') return i === 0 ? null : { index: 0, body: { to: 'first' } };
+  if (key === 'End') return i === last ? null : { index: last, body: { to: 'last' } };
+  return null;
 }
 
 /** Where a queued job stands: {first, last} by its place in `ids`, or {} when it is not there. */
