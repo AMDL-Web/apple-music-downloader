@@ -71,6 +71,8 @@ type App struct {
 	// menuSet is set once the menu bar is installed, with the sidebar's
 	// state its item names in menuSidebar (syncMenu).
 	menuSet, menuSidebar bool
+	// appearance is the theme source last handed to MyGo (syncAppearance).
+	appearance mygo.ThemeSource
 }
 
 // Run runs the app until it quits.
@@ -121,6 +123,9 @@ func (a *App) ready() {
 			pin, _, err := wrapperhost.CurrentPin(ctx, &http.Client{}, time.Now())
 			return pin, err
 		}))
+	a.view.Opaque = a.opaque()
+	a.appearance = appearanceOf(a.view)
+	mygo.Theme.SetSource(a.appearance)
 	a.findFFmpeg()
 	if a.settings.Mode == "" {
 		a.view.OpenSetup("")
@@ -136,13 +141,18 @@ func (a *App) ready() {
 		StateKey:        "main",
 		TitleBarStyle:   mygo.TitleBarHidden,
 		Vibrancy:        vibrancy(),
-		BackgroundColor: "#111219",
+		BackgroundColor: "light-dark(#f6f7fa, #111219)",
 		Content: ui.View(func(c *ui.Context) {
 			a.view.View(c)
+			a.syncAppearance()
 			a.syncMenu()
 		}),
 	})
 	keepOnScreen(a.win)
+	mygo.Theme.OnUpdated(func() {
+		opaque := a.opaque()
+		a.post(func() { a.view.Opaque = opaque })
+	})
 	a.shell = shell.New(shell.Options{
 		Open:      a.showWindow,
 		OpenJob:   func(id string) { a.showWindow(); a.view.OpenJob(id) },
@@ -194,13 +204,51 @@ func (a *App) findFFmpeg() {
 	a.view.Motion.SetFFmpeg(p)
 }
 
-// vibrancy is the sidebar's system material on macOS. Elsewhere the design's
-// own solid sidebar reads better than Mica tinted by the desktop.
+// vibrancy is the window's material, which shows through the sidebar (as
+// MyGo 云音乐's): the sidebar material on macOS, which blurs the desktop
+// behind the window, and Mica, the closest backdrop, on Windows 11 22H2
+// and later (windowsMaterial). Older Windows and Linux have none, and the
+// sidebar draws its own ground there (ui.Context.Vibrancy).
 func vibrancy() mygo.Vibrancy {
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" || windowsMaterial() {
 		return mygo.VibrancySidebar
 	}
 	return mygo.VibrancyNone
+}
+
+// opaque reports whether the sidebar draws its own ground over the
+// window's material: the desktop asks for opaque surfaces, or the run
+// captures screens, which Window.CapturePage renders without the material.
+func (a *App) opaque() bool {
+	return a.opts.Shots != "" || mygo.Theme.Preferences().ReduceTransparency
+}
+
+// syncAppearance has the window's own appearance, which its material and
+// window controls take, follow the theme the view shows (appearanceOf)
+// once a frame changed it. Without it a light theme would sit on a dark
+// material where the system is dark. The call goes through the main loop,
+// not inside the frame.
+func (a *App) syncAppearance() {
+	if src := appearanceOf(a.view); src != a.appearance {
+		a.appearance = src
+		go mygo.Theme.SetSource(src)
+	}
+}
+
+// appearanceOf is the appearance v shows: the screenshots' or the
+// settings' choice, else the system's.
+func appearanceOf(v *appui.App) mygo.ThemeSource {
+	theme := v.Theme
+	if theme == "" {
+		theme = v.Settings.Theme
+	}
+	switch theme {
+	case "light":
+		return mygo.ThemeLight
+	case "dark":
+		return mygo.ThemeDark
+	}
+	return mygo.ThemeSystem
 }
 
 // post runs fn on the UI thread, then refreshes what the shell shows, and

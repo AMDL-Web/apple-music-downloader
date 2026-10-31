@@ -79,4 +79,7 @@ Screens: build the app and run it with `-shots <dir>` (and `-remote` or
 `-wrapper`, `-data <dir>`), which captures every screen in a 1280×800 window
 with `Window.CapturePage`, renders playing motion covers without a window
 (`*-motion-N.png`), and quits. The window shows stills where the desktop asks
-for less motion; the renders do not.
+for less motion; the renders do not. CapturePage draws no window material,
+so a shot run gives the sidebar its solid ground
+(`apps/desktop/internal/app#App.opaque`); the material over the desktop
+shows only in a screenshot of the screen.

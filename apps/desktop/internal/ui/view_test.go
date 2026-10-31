@@ -127,3 +127,28 @@ func fakeSetup(post func(func())) (*setup.Setup, *[][]string) {
 	})
 	return s, &ran
 }
+
+// Where the window shows its material, the sidebar shows it: nothing in
+// the view, the root included, paints over it, while the content stays
+// opaque. Reduce Transparency (Opaque) gives the sidebar its own ground.
+func TestSidebarShowsTheMaterial(t *testing.T) {
+	a, _ := newTestApp(mode.Settings{Mode: mode.Remote, RemoteURL: "http://nas:18570"})
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetVibrancy(true)
+	tt.Frame()
+	img := tt.Image()
+	b := img.Bounds()
+	side := img.RGBAAt(b.Dx()*100/1280, b.Dy()*700/800)
+	page := img.RGBAAt(b.Dx()*900/1280, b.Dy()*700/800)
+	if side.A != 0 {
+		t.Errorf("the sidebar covers the material: %v", side)
+	}
+	if page.A != 255 {
+		t.Errorf("the content shows the material: %v", page)
+	}
+	a.Opaque = true
+	tt.Frame()
+	if side := tt.Image().RGBAAt(b.Dx()*100/1280, b.Dy()*700/800); side.A != 255 {
+		t.Errorf("with Reduce Transparency the sidebar is not opaque: %v", side)
+	}
+}

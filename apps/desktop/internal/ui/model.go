@@ -89,6 +89,10 @@ type App struct {
 	// NoMotion shows stills in place of motion covers, for a render of the
 	// view beside its window.
 	NoMotion bool
+	// Opaque is set while the desktop asks for opaque surfaces (Reduce
+	// Transparency, Windows's transparency effects off): the sidebar draws
+	// its own ground over the window's material.
+	Opaque bool
 
 	Screen Screen
 	// trail holds the screens Back returns to, the last one on top: the

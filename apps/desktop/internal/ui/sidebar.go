@@ -17,15 +17,20 @@ import (
 // with colored tiles and live readings, and the job downloading now at its
 // foot. It is w wide as it slides open or closed; its content keeps its
 // width meanwhile, clipped, so nothing in it reflows.
+//
+// Where the window shows its material (vib), the sidebar paints no ground
+// of its own, as MyGo 云音乐's: the system's sidebar material, which
+// follows the appearance and blurs the desktop behind the window, is the
+// ground, and what sits on it fills with neutral washes (Wash, Track)
+// that darken or lighten it rather than cover it. Secondary text is Muted,
+// not Faint, to read over the material's darkest and lightest.
 func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool, w float32) {
 	if w < 0.5 {
 		return
 	}
 	ui.Column(c.Key("sidebar")).Width(w).Clip().Children(func() {
 		col := ui.Column(c).Width(sidebarWidth).Grow(1).Padding(0, 10, 12, 10).Gap(14).BorderWidth(0, 1, 0, 0).BorderColor(k.Line)
-		if vib {
-			col.Background(k.Glass)
-		} else {
+		if !vib || a.Opaque {
 			col.Background(k.Ground.Mix(k.Raise, 0.55))
 		}
 		col.Children(func() {
@@ -36,7 +41,7 @@ func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool, w float32) {
 			ui.Column(c).Gap(2).Children(func() {
 				a.navItem(c, k, ScreenHome, icHome, k.TileHome, "Home", "", ui.Color{})
 				a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(0)), ui.Color{})
-				ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Faint).Padding(8, 10, 4, 10)
+				ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Muted).Padding(8, 10, 4, 10)
 				reading, col := a.systemReading(k)
 				a.navItem(c, k, ScreenSettings, icSettings, k.TileSettings, "Settings", reading, col)
 			})
@@ -163,11 +168,13 @@ func (a *App) systemReading(k *Tokens) (string, ui.Color) {
 func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, tile ui.Color, name, reading string, readingColor ui.Color) {
 	on := a.navScreen() == s
 	item := ui.ButtonBase(c.Key(name)).Height(30).PaddingX(10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label(name)
+	// Under the pointer a row takes the faint wash, selected the stronger
+	// one, so the two never look alike.
+	rest, hover := ui.Transparent, k.Wash
 	if on {
-		item.Background(k.AccentSoft)
-	} else if item.Hovered() {
-		item.Background(k.Track)
+		rest, hover = k.Track, k.Track
 	}
+	item.Background(sideFill(item, k, rest, hover))
 	if item.Clicked() {
 		a.Go(s)
 	}
@@ -198,7 +205,8 @@ func (a *App) modeCard(c *ui.Context, k *Tokens) {
 		dot, ring = k.Warn, k.WarnSoft
 	}
 	card := ui.ButtonBase(c.Key("mode")).Padding(8, 10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).
-		Background(k.Raise2).Border(1, k.Line).Label("Connection settings")
+		Label("Connection settings")
+	card.Background(sideFill(card, k, k.Wash, k.Track))
 	if card.Clicked() {
 		a.Go(ScreenSettings)
 	}
@@ -206,7 +214,7 @@ func (a *App) modeCard(c *ui.Context, k *Tokens) {
 		ui.Box(c).Size(8, 8).Radius(radiusFull).Background(dot).Shadow(0, 0, 0, 3, ring)
 		ui.Column(c).Gap(1).Shrink(1).MinWidth(0).Children(func() {
 			ui.Text(c, title).FontSize(12.5).FontWeight(600).SingleLine()
-			mono(c, sub, 11).TextColor(k.Faint).Ellipsis("…")
+			mono(c, sub, 11).TextColor(k.Muted).Ellipsis("…")
 		})
 	})
 }
@@ -241,7 +249,8 @@ func (a *App) nowCard(c *ui.Context, k *Tokens) {
 	}
 	pal := jobPalette(j, false)
 	accent := AccentFor(pal, k)
-	card := ui.ButtonBase(c.Key("now")).Padding(8).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Background(k.Raise2).Label("Downloading now")
+	card := ui.ButtonBase(c.Key("now")).Padding(8).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label("Downloading now")
+	card.Background(sideFill(card, k, k.Wash, k.Track))
 	if card.Clicked() {
 		a.OpenJob(j.ID)
 	}
@@ -257,4 +266,17 @@ func (a *App) nowCard(c *ui.Context, k *Tokens) {
 			widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Height: 3, Running: true, Still: a.scrolling(c)}.Show(c, "now-bar")
 		})
 	})
+}
+
+// sideFill is the fill of a row or a card in the sidebar: rest, hover
+// under the pointer and a stronger wash while pressed, each a translucent
+// neutral that reads over the window's material.
+func sideFill(b ui.Element, k *Tokens, rest, hover ui.Color) ui.Color {
+	switch {
+	case b.Pressed():
+		return k.Track.Mix(k.Fg, 0.08)
+	case b.Hovered():
+		return hover
+	}
+	return rest
 }

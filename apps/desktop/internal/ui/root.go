@@ -43,11 +43,6 @@ func (a *App) View(c *ui.Context) {
 	}
 	a.compact = w-target < compactContent
 	vib := c.Vibrancy()
-	if vib {
-		c.Root().Background(ui.Transparent)
-	} else {
-		c.Root().Background(k.Ground)
-	}
 	root := ui.Box(c).Fill()
 	// The sidebar's width as it slides; the page takes the rest.
 	side := root.AnimateWith("sidebar", target, sidebarSlide, ui.EaseOut)
@@ -90,6 +85,13 @@ func (a *App) View(c *ui.Context) {
 	})
 	a.toast(c, k)
 	a.scrollbars(c, k)
+	// Last: SetTheme, which scrollbars calls, gives the root the theme's
+	// ground, which would cover the window's material under the sidebar.
+	if vib {
+		c.Root().Background(ui.Transparent)
+	} else {
+		c.Root().Background(k.Ground)
+	}
 }
 
 // shortcuts are the window's keys: Cmd+1 home, Cmd+2 the queue, Cmd+,
