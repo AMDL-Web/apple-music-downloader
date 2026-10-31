@@ -12,9 +12,9 @@ wins and this page is fixed in the same change. Sources are listed in
    running job has nothing finished yet, its overall progress: the API sends
    it as `Job.progress` (`internal/progress#Overall`), the mean of each
    track's stage-weighted progress. The job drawer's album bar computes the
-   same from the items it has (`lib/album-progress.js`), weighted as the AMDL
-   iOS app weights them, because the track count alone stands still while a
-   long track downloads. Simulate mode is
+   same from the items it has (`lib/album-progress.js`), each stage weighted by
+   its measured share of a track's time (the weights in `lib/status.js`),
+   because the track count alone stands still while a long track downloads. Simulate mode is
    announced by a "Simulate" tag in the top bar, whose title says what it means.
 2. **Status is never color alone.** Every status has an icon (or glyph), a label
    and a color role; the skin may change the look of a role, never drop the label.

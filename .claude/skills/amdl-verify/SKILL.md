@@ -56,14 +56,12 @@ the `go run` child listening.
 When `apps/console` changed: with `make dev` running, open
 `http://127.0.0.1:18080/console/` at desktop width and 375 px, light and dark. The
 changed view renders, the browser console has no errors, and a submitted job
-updates live. A view whose height changes with its state also gets a run of
-`apps/console/tools/ui-audit` (its README has the command); read the layout-shift
-and flicker findings. Attach a screenshot per width and theme.
+updates live. Attach a screenshot per width and theme.
 
 Before showing console work to the maintainer, run
-[apps/console/tools/ui-audit](../../../apps/console/tools/ui-audit/README.md) and
-look at the screenshots yourself, for every page and state, not only the one you
-changed. Fix what it finds in this order: layout that jumps during an action,
+[apps/console/tools/ui-audit](../../../apps/console/tools/ui-audit/README.md),
+read its layout-shift and flicker findings, and look at the screenshots yourself,
+for every page and state, not only the one you changed. Fix what it finds in this order: layout that jumps during an action,
 misalignment, then polish. Also look for zero-value or empty rows that add height,
 hover shapes that do not match their container's corners, flicker and cramped rows.
 A person's flaw report about one screen is a prompt to check the same flaw on every
