@@ -127,7 +127,8 @@ INSERT INTO jobs(id,input,type,storefront,title,artwork_url,artist_name,canonica
 	('j-cancelled','https://music.apple.com/us/song/d/4','song','us','','','','song:us:4',0,'','cancelled',0,0,0,'cancelled','2024-07-12T11:00:00.000000000Z','2024-07-12T11:00:30.000000000Z'),
 	('j-retried','https://music.apple.com/us/song/e/5','song','us','Song E','','','song:us:5',0,'','completed',1,1,0,'','2024-07-10T12:00:00.000000000Z','2024-07-10T12:00:02Z'),
 	('j-refailed','https://music.apple.com/us/song/g/7','song','us','','','','song:us:7',0,'','failed',0,0,0,'failed again','2024-07-14T13:00:00.000000000Z','2024-07-14T13:00:05.5Z'),
-	('j-corrupt','https://music.apple.com/us/song/f/6','song','us','','','','song:us:6',1,'{broken','completed',0,0,0,'','2024-07-13T00:00:00.000000000Z','2024-07-13T00:00:00.000000000Z');
+	('j-corrupt','https://music.apple.com/us/song/f/6','song','us','','','','song:us:6',1,'{broken','completed',0,0,0,'','2024-07-13T00:00:00.000000000Z','2024-07-13T00:00:00.000000000Z'),
+	('j-queued-early','https://music.apple.com/us/song/h/8','song','us','','','','song:us:8',0,'','queued',0,0,0,'','2024-07-12T08:30:00Z','2024-07-12T08:30:00Z');
 
 INSERT INTO job_items(id,job_id,adam_id,kind,idx,title,artist,album,duration_ms,has_lyrics,lyrics_status,status,download_progress,decrypt_progress,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved,codec,bit_depth,sample_rate,bitrate,file_size,output_path,error,created_at,updated_at) VALUES
 	('i-done-1','j-done','11','song',1,'One','Artist A','Album A',180000,1,'fetched','completed',1,1,1,1,1,1,1,'alac',24,96000,0,40000000,'/music/Artist A/Album A/01 One.m4a','','2024-07-10T12:00:01Z','2024-07-10T12:02:00.5Z'),

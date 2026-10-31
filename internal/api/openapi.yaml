@@ -1182,10 +1182,13 @@ paths:
           description: >-
             Sort field; default created_at. Jobs that tie on it (a batch submitted
             together shares one created_at) list in submission order, whatever the
-            order parameter says.
+            order parameter says. queue_order lists the queued jobs in run order
+            (with order=asc, the job that starts next comes first) ahead of every
+            other job, which follow in submission order; combine it with
+            status=queued to page through the queue.
           schema:
             type: string
-            enum: [created_at, updated_at]
+            enum: [created_at, updated_at, queue_order]
             default: created_at
         - name: order
           in: query
@@ -1288,11 +1291,17 @@ paths:
         jobs at the moment the message was generated; in a delete message the
         deleted job has already been subtracted.
         Only "milestone" events that affect how the list is displayed trigger a
-        push (created/recovered/started/input resolved/animated cover
-        resolved/song completed, skipped or failed/terminal state/deleted);
+        push (created/recovered/started/moved in the queue/input
+        resolved/animated cover resolved/song completed, skipped or
+        failed/terminal state/deleted);
         per-track progress events are not pushed. Instead, every 2 seconds the
         feed sends a download_upserted for each running job whose progress has
         moved since it was last sent, with the event_id already reached.
+        A move (POST /downloads/{job_id}/move) pushes a download_upserted for
+        the moved job with its new queue_order; queued jobs sort by queue_order,
+        so a client re-sorts and needs nothing else. When the queue had to be
+        renumbered, every job whose queue_order changed gets its own
+        download_upserted.
         The animated cover is the only kind of change that can still arrive after a
         job reaches a terminal state: it is resolved out of band, and by then the
         per-job event stream has usually closed, so only this endpoint delivers it.
@@ -1443,6 +1452,66 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/StoreError'
+  /api/v1/downloads/{job_id}/move:
+    post:
+      tags: [Downloads]
+      summary: Move a queued download job in the run order
+      description: |
+        Changes which queued job starts next. When a worker frees up it starts
+        the queued job with the lowest queue_order; this places the job before
+        or after another queued job, or first or last. Set exactly one of
+        before, after and to. Only queued jobs have a place in the run order:
+        running and finished jobs cannot be moved or used as the anchor.
+        Naming the job itself, or a place it already has, changes nothing.
+        A move records a job_moved event (an overview milestone) for the moved
+        job, so the overview feed pushes its new queue_order. Usually only the
+        moved job's queue_order changes; when no value is left between its new
+        neighbors the queue is renumbered and every job whose value changed
+        gets its own job_moved.
+      operationId: moveDownload
+      parameters:
+        - $ref: '#/components/parameters/JobID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveRequest'
+      responses:
+        '200':
+          description: The job's place in the run order; job is its snapshot with the new queue_order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [job]
+                properties:
+                  job:
+                    $ref: '#/components/schemas/Job'
+        '400':
+          description: >-
+            invalid_json: the body cannot be parsed; invalid_request: it has
+            unknown fields, sets none or more than one of before, after and to,
+            or to is not first or last.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/JobNotFound'
+        '409':
+          description: >-
+            job_not_queued: the job is not queued (it started or finished), or
+            the job named in before or after is not queued or no longer exists;
+            the message names it. Refetch the queue and try again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/JSONBodyTooLarge'
+        '500':
+          $ref: '#/components/responses/StoreError'
   /api/v1/downloads/{job_id}/events:
     get:
       tags: [Downloads]
@@ -1453,7 +1522,7 @@ paths:
         /downloads/{job_id}). Each SSE event is named after its EventType, its id
         is the event id, and its data is an Event object, whose payload is a JSON
         object. The payload of job lifecycle events
-        (job_queued/job_recovered/job_retried/job_started/resolved_input/job_finished/job_failed/job_cancelled)
+        (job_queued/job_recovered/job_retried/job_started/job_moved/resolved_input/job_finished/job_failed/job_cancelled)
         contains the same public fields as the REST `Job`; the payload of track
         status events contains the same public fields as the REST `JobItem` and
         keeps the event's own specific fields (e.g. download_attempts,
@@ -1738,8 +1807,8 @@ components:
         route_not_found, job_not_found, login_not_found, account_not_found,
         catalog_not_found (Apple has no resource with that id), hook_not_found; 405
         method_not_allowed (with an Allow header); 409 job_active,
-        job_not_retryable, job_not_cancellable, job_finalizing, duplicate_active, already_logged_in,
-        login_pending, hook_read_only; 413 request_too_large; 422
+        job_not_retryable, job_not_cancellable, job_finalizing, job_not_queued,
+        duplicate_active, already_logged_in, login_pending, hook_read_only; 413 request_too_large; 422
         invalid_overrides, config_key_not_mutable, invalid_config, invalid_hook,
         invalid_hooks_file, no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 501 login_unsupported; 502 upstream_error; 503 queue_full,
@@ -1761,6 +1830,7 @@ components:
         - job_not_retryable
         - job_not_cancellable
         - job_finalizing
+        - job_not_queued
         - duplicate_active
         - already_logged_in
         - login_pending
@@ -2418,6 +2488,23 @@ components:
           const: logged_out
         username:
           type: string
+    MoveRequest:
+      type: object
+      description: >-
+        Where a queued job goes in the run order. Set exactly one property.
+      properties:
+        before:
+          type: string
+          description: Id of a queued job; the moved job starts right before it.
+        after:
+          type: string
+          description: Id of a queued job; the moved job starts right after it.
+        to:
+          type: string
+          enum: [first, last]
+          description: first starts the job next; last puts it behind every queued job.
+      example:
+        before: job_8f3c2a
     DownloadRequest:
       type: object
       required: [urls]
@@ -3511,6 +3598,17 @@ components:
         status:
           type: string
           enum: [queued, running, completed, failed, cancelled]
+        queue_order:
+          type: integer
+          format: int64
+          description: >-
+            The job's place in the run order, present only while status is
+            queued: when a worker frees up it starts the queued job with the
+            lowest value. Sort queued jobs ascending by it to show the queue in
+            run order. Values are sparse and only their order means anything; a
+            new or retried job goes behind every other, POST
+            /downloads/{job_id}/move changes it, and a job recovered after a
+            restart that was running goes ahead of the queued ones.
         total_items:
           type: integer
           minimum: 0
@@ -3888,9 +3986,10 @@ components:
         GET /downloads/{job_id}/events. Retries inside a codec attempt are
         operation_retry / operation_exhausted / operation_recovered with the codec
         as phase. Only job_queued, job_recovered, job_retried, job_started,
-        resolved_input, motion_artwork_resolved, item_completed, item_skipped,
-        item_failed, job_finished, job_failed, job_cancelled and job_deleted
-        reach the overview feed. Clients should ignore types they do not know.
+        job_moved, resolved_input, motion_artwork_resolved, item_completed,
+        item_skipped, item_failed, job_finished, job_failed, job_cancelled and
+        job_deleted reach the overview feed. job_moved records a queued job's
+        new queue_order (its payload is the Job). Clients should ignore types they do not know.
       enum:
         - job_queued
         - job_started
@@ -3899,6 +3998,7 @@ components:
         - job_finished
         - job_failed
         - job_cancelled
+        - job_moved
         - job_deleted
         - resolved_input
         - motion_artwork_resolved

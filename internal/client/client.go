@@ -371,6 +371,17 @@ func (c *Client) Delete(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/api/v1/downloads/"+url.PathEscape(id), nil, nil, nil)
 }
 
+// Move places a queued job elsewhere in the run order with POST
+// /api/v1/downloads/{id}/move and returns the job with its new queue_order. A
+// job or anchor that is not queued answers job_not_queued.
+func (c *Client) Move(ctx context.Context, id string, req domain.MoveRequest) (domain.Job, error) {
+	var res struct {
+		Job domain.Job `json:"job"`
+	}
+	err := c.do(ctx, http.MethodPost, "/api/v1/downloads/"+url.PathEscape(id)+"/move", nil, req, &res, http.StatusOK)
+	return res.Job, err
+}
+
 // Retry re-enqueues a failed or cancelled job.
 func (c *Client) Retry(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodPost, "/api/v1/downloads/"+url.PathEscape(id)+"/retry", nil, nil, nil)

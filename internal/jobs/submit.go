@@ -64,9 +64,10 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 		candidates = append(candidates, candidate{index: i, url: url, key: key, valid: validated})
 	}
 
-	// Serialize capacity check, dedup lookup, persistence and enqueue with
-	// Retry. Recovered jobs use their separate, unbounded startup backlog, so a
-	// free admission-queue slot cannot disappear while this lock is held.
+	// Serialize the dedup lookup with Retry and other submits. Each admission
+	// below (capacity check, insert, job_queued, wait-list entry) also holds
+	// m.mu, so a worker cannot claim the job before its job_queued event and
+	// hook, and a free slot cannot disappear half-way.
 	m.submitMu.Lock()
 	defer m.submitMu.Unlock()
 
@@ -86,44 +87,15 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 			results[c.index] = duplicateActiveResult(c.url, existing.ID)
 			continue
 		}
-		if len(m.queue) >= cap(m.queue) {
+		job, result, admitted := m.admit(ctx, c.url, c.valid, c.key, overrides, now)
+		results[c.index] = result
+		if result.Status == domain.SubmitQueueFull {
 			queueFull = true
-			results[c.index] = queueFullResult(c.url)
-			continue
 		}
-
-		job := domain.Job{
-			ID: ids.NewID("job"), Input: c.url, Type: c.valid.Type, Storefront: c.valid.Storefront, CanonicalKey: c.key,
-			Overrides: overrides, Status: domain.JobQueued, CreatedAt: now, UpdatedAt: now,
+		if admitted {
+			m.wake.broadcast()
+			logging.FromContext(ctx, m.logger).Info("job queued", "job_id", job.ID, "job_type", job.Type, "storefront", job.Storefront)
 		}
-		if err := m.store.CreateJob(ctx, job); err != nil {
-			if errors.Is(err, db.ErrDuplicateActive) {
-				results[c.index] = duplicateActiveResult(c.url, "")
-				continue
-			}
-			results[c.index] = storeFailure(c.url, "create job", err)
-			continue
-		}
-		// Best-effort once the row is committed, like job_retried in Retry:
-		// the job must still be enqueued, or it would sit queued until restart.
-		message := "job queued"
-		if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobQueued, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
-			logging.FromContext(ctx, m.logger).Error("record job_queued event", "job_id", job.ID, "error", err)
-		}
-		// Fire creation hooks before enqueuing, so the job_queued hook is
-		// dispatched before a worker can claim the job and reach a terminal
-		// hook. The hook event name matches the job_queued domain event emitted
-		// just above, so the two stay semantically aligned. There are no items
-		// yet — they are resolved during processing — so the payload carries an
-		// empty item list. Dispatch is non-blocking, so calling it while
-		// holding submitMu is safe. Ordering between the job_queued hook and a
-		// later terminal hook is best-effort only: both are independent async
-		// deliveries, so a fast job's terminal webhook may still arrive first.
-		m.hooks.Dispatch(string(domain.EventJobQueued), job, nil)
-		m.queue <- job.ID
-		logging.FromContext(ctx, m.logger).Info("job queued", "job_id", job.ID, "job_type", job.Type, "storefront", job.Storefront)
-		accepted := job
-		results[c.index] = domain.SubmitResult{URL: c.url, Status: domain.SubmitAccepted, Job: &accepted}
 	}
 
 	resp := domain.BatchSubmitResponse{Results: results}
@@ -137,15 +109,62 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 	return resp
 }
 
+// admit creates one queued job at the end of the run order, records its
+// job_queued event, fires the job_queued hook and adds it to the wait list,
+// all under m.mu. Caller holds submitMu and has checked dedup.
+func (m *Manager) admit(ctx context.Context, url string, valid ValidationResult, key string, overrides *config.DownloadOverrides, now time.Time) (domain.Job, domain.SubmitResult, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.waiting.admitted() >= m.capacity {
+		return domain.Job{}, queueFullResult(url), false
+	}
+	order, err := m.store.NextQueueOrder(ctx)
+	if err != nil {
+		return domain.Job{}, storeFailure(url, "read queue order", err), false
+	}
+	job := domain.Job{
+		ID: ids.NewID("job"), Input: url, Type: valid.Type, Storefront: valid.Storefront, CanonicalKey: key,
+		Overrides: overrides, Status: domain.JobQueued, QueueOrder: &order, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := m.store.CreateJob(ctx, job); err != nil {
+		if errors.Is(err, db.ErrDuplicateActive) {
+			return domain.Job{}, duplicateActiveResult(url, ""), false
+		}
+		return domain.Job{}, storeFailure(url, "create job", err), false
+	}
+	// Best-effort once the row is committed, like job_retried in Retry: the
+	// job must still join the wait list, or it would sit queued until restart.
+	message := "job queued"
+	if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobQueued, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
+		logging.FromContext(ctx, m.logger).Error("record job_queued event", "job_id", job.ID, "error", err)
+	}
+	// Fire creation hooks while still holding m.mu, so the job_queued hook is
+	// dispatched before a worker can claim the job and reach a terminal hook.
+	// The hook event name matches the job_queued domain event emitted just
+	// above, so the two stay semantically aligned. There are no items yet —
+	// they are resolved during processing — so the payload carries an empty
+	// item list. Dispatch is non-blocking and takes only the dispatcher's own
+	// lock, so calling it under m.mu is safe. Ordering between the job_queued
+	// hook and a later terminal hook is best-effort only: both are independent
+	// async deliveries, so a fast job's terminal webhook may still arrive
+	// first.
+	m.hooks.Dispatch(string(domain.EventJobQueued), job, nil)
+	m.waiting.add(job.ID, false)
+	accepted := job
+	return job, domain.SubmitResult{URL: url, Status: domain.SubmitAccepted, Job: &accepted}, true
+}
+
 // Retry re-queues a failed or cancelled job so only its unfinished tracks run
 // again: completed/skipped items keep their state (ProcessJob reuses those rows
 // and never downloads them again), while every other item (failed or
 // cancelled) is reset to queued and re-processed under its original item id.
 //
-// Locking: submitMu serializes the capacity check + enqueue with SubmitBatch
-// and closes the race with a concurrent submit of the same canonical key (the
-// dedup lookup below and SubmitBatch's both run under it). m.mu, nested inside,
-// serializes the status flip with Delete and a worker's startup claim, so the
+// The retried job goes to the end of the run order.
+//
+// Locking: submitMu closes the race with a concurrent submit of the same
+// canonical key (the dedup lookup below and SubmitBatch's both run under it).
+// m.mu, nested inside, serializes the capacity check, the status flip and the
+// wait-list entry with admission, Delete, Move and a worker's claim, so the
 // job cannot be deleted between the status read and the requeue.
 func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	m.submitMu.Lock()
@@ -181,8 +200,12 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	} else if found {
 		return db.ErrDuplicateActive
 	}
-	if len(m.queue) >= cap(m.queue) {
+	if m.waiting.admitted() >= m.capacity {
 		return ErrQueueFull
+	}
+	order, err := m.store.NextQueueOrder(ctx)
+	if err != nil {
+		return err
 	}
 
 	// Reset unfinished items before the job becomes claimable, so a worker
@@ -206,19 +229,25 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	job.StartedAt = nil
 	job.FinishedAt = nil
 	job.UpdatedAt = now
+	job.QueueOrder = &order
+	// The order first: the status write below makes the job claimable.
+	if err := m.store.SetQueueOrder(ctx, jobID, order); err != nil {
+		return err
+	}
 	if err := m.store.UpdateJob(ctx, job); err != nil {
 		return err
 	}
-	// The job row already says queued, so the enqueue below must happen even
-	// if recording the event fails — otherwise the job would be stranded in
-	// queued with no worker ever picking it up (and further retries refused),
-	// until a restart's RecoverUnfinished. Mirrors SubmitBatch, which also
-	// treats the job_queued event as best-effort once the row is committed.
+	m.waiting.add(jobID, false)
+	delete(m.unclaimable, jobID)
+	m.wake.broadcast()
+	// The job row already says queued and workers may claim it, so a failed
+	// event below is only logged. Mirrors SubmitBatch, which also treats the
+	// job_queued event as best-effort once the row is committed. A worker's
+	// claim waits for m.mu, so job_started cannot precede job_retried.
 	message := "job re-queued to retry unfinished tracks"
 	if err := m.Event(ctx, domain.Event{JobID: jobID, Type: domain.EventJobRetried, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
 		m.logger.Error("record job_retried event", "job_id", jobID, "error", err)
 	}
-	m.queue <- jobID
 	logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", jobID)
 	return nil
 }

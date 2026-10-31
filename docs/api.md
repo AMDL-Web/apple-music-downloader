@@ -34,7 +34,7 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 401 | `authentication_failed` |
 | 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `catalog_not_found`, `hook_not_found` |
 | 405 | `method_not_allowed`, with an `Allow` header |
-| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending`, `hook_read_only` |
+| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_finalizing`, `job_not_queued`, `duplicate_active`, `already_logged_in`, `login_pending`, `hook_read_only` |
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `invalid_hook`, `invalid_hooks_file`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
@@ -97,7 +97,8 @@ Returns what is running and what it has to work with:
   web console, completes them with this value. Search, artist albums and the album page default to it.
 - `jobs`: `workers` (`download.max_running_jobs` at startup), `active`, `queue_depth` of
   `queue_capacity` (a full queue rejects submissions with `queue_full`), and
-  `recovery_backlog`, the jobs resumed at startup that still wait for a worker.
+  `recovery_backlog`, the jobs resumed at startup that still wait for a worker (they do
+  not take queue slots and run in queue order like any other job).
 - `pools`: the startup sizes of the download, decrypt and wrapper-request pools.
 - `tools`: each external command (`ffmpeg`) with `available` and its resolved `path`, or
   the lookup `error`.
@@ -324,7 +325,7 @@ A token also unlocks private-playlist artwork: the public catalog has no cover f
 private playlist, so with a token the backend reads it from the library copy as the user.
 Without one the playlist still downloads, just without its cover.
 
-### Query, cancel, retry, delete
+### Query, cancel, retry, move, delete
 
 ```bash
 curl http://localhost:18080/api/v1/downloads/{job_id}
@@ -341,8 +342,10 @@ curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,ca
 ```
 
 Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `q` (substring of
-the title, artist name or input), `sort` (`created_at` | `updated_at`), `order`
-(`asc` | `desc`); other parameters are ignored. Jobs that tie on the sort field, such as a batch submitted in one request,
+the title, artist name or input), `sort` (`created_at` | `updated_at` | `queue_order`), `order`
+(`asc` | `desc`); other parameters are ignored. `sort=queue_order` lists the queued jobs in
+run order (with `order=asc`, the next to start first) ahead of every other job; combine it
+with `status=queued` to page through the queue. Jobs that tie on the sort field, such as a batch submitted in one request,
 list in submission order whichever `order` is asked for, so a batch reads in paste order.
 Multi-value parameters accept repeated keys or comma-separated values. The response adds `status_counts` (for the same
 filter), `total`, `limit`, `offset` and the global `event_cursor`.
@@ -358,6 +361,10 @@ event payloads leave it out. `started_at` is set
 when a worker first starts the current run and kept across restarts; a retry starts a
 new run and clears it. `finished_at` is set when the job reaches a terminal status and
 cleared by a retry. Both are RFC 3339 and absent until set. Forcing an overwrite is `overrides.force_overwrite`.
+A queued job carries `queue_order`, its place in the run order: when a worker frees up it
+starts the queued job with the lowest value, so a client sorts the queue ascending by it.
+The values are sparse and only their order means anything; running and finished jobs omit
+the field.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/cancel
@@ -373,7 +380,21 @@ Only a `queued` or `running` job can be cancelled: a `completed` or `failed` one
 Finished tracks stay done; failed and cancelled ones run again. A job still finishing
 its previous run is `409 job_finalizing` (retry a moment later), one whose input is
 already queued or running again is `409 duplicate_active`, and a full queue is
-`503 queue_full`.
+`503 queue_full`. A retried job goes to the end of the queue.
+
+```bash
+curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/move -d '{"before":"<job_id>"}'
+```
+
+Changes which queued job starts next. The body sets exactly one of `before` or `after`
+(another queued job's id) and `to` (`first` or `last`); anything else is
+`400 invalid_request`. The answer is `200 {job}`, the job with its new `queue_order`. A job
+that is not queued, or an anchor that is not, is `409 job_not_queued` (the message names
+it). A new job, a retried one and a moved one change only their own `queue_order`, so the
+overview feed's `download_upserted` for the moved job is all a client needs to re-sort;
+when no value is left between the new neighbors, the server renumbers the queue and
+records a `job_moved` for every job whose value changed. After a restart, the jobs that
+were running go ahead of the queued ones, which keep their order.
 
 ```bash
 curl -X DELETE http://localhost:18080/api/v1/downloads/{job_id}
@@ -402,6 +423,8 @@ downloads page without subscribing to each job. Messages are named `download_ups
 (data: `{type, job, event_id, status_counts}`, the job's current snapshot) and
 `download_deleted` (`{type, job_id, event_id, status_counts}`); `status_counts` is global.
 `event_id` is also the SSE id and only moves forward; a resent message is idempotent.
+A move in the queue is a milestone too: queued jobs sort by `queue_order`, so a client
+re-sorts on the upsert.
 Progress has no milestone, so every 2 seconds (`internal/api#feedProgressInterval`) the
 feed also sends `download_upserted` for each running job whose `progress` moved since it
 last sent it, with the `event_id` already reached. The feed never ends on its own. It is the only stream that delivers a motion artwork resolved
@@ -418,7 +441,7 @@ Event types (the `EventType` enum in the spec; Go constants in `internal/domain`
 
 | | |
 | --- | --- |
-| Job lifecycle | `job_queued`, `job_started`, `job_retried`, `job_recovered`, `job_finished`, `job_failed`, `job_cancelled`, `job_deleted` |
+| Job lifecycle | `job_queued`, `job_started`, `job_retried`, `job_recovered`, `job_moved` (new `queue_order`), `job_finished`, `job_failed`, `job_cancelled`, `job_deleted` |
 | Resolution | `resolved_input`, `motion_artwork_resolved` |
 | Item progress | `item_progress` (its `phase` is the item status), `item_completed`, `item_failed`, `item_skipped`, `item_overwrite` |
 | Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired` |

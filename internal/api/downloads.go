@@ -208,6 +208,45 @@ func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
 }
 
+// moveDownload places a queued job elsewhere in the run order: before or
+// after another queued job, or first or last. Exactly one of before, after
+// and to is set.
+func (s *Server) moveDownload(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req domain.MoveRequest
+	if !decodeJSONBody(w, r, &req, true) {
+		return
+	}
+	set := 0
+	for _, field := range []string{req.Before, req.After, req.To} {
+		if field != "" {
+			set++
+		}
+	}
+	if set != 1 {
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, "set exactly one of before, after and to")
+		return
+	}
+	if req.To != "" && req.To != db.EdgeFirst && req.To != db.EdgeLast {
+		writeError(w, http.StatusBadRequest, CodeInvalidRequest, fmt.Sprintf("to must be %s or %s", db.EdgeFirst, db.EdgeLast))
+		return
+	}
+	job, err := s.manager.Move(r.Context(), id, db.Placement{Before: req.Before, After: req.After, Edge: req.To})
+	if err != nil {
+		if errors.Is(err, db.ErrJobNotQueued) {
+			writeError(w, http.StatusConflict, CodeJobNotQueued, err.Error()+"; only queued jobs have a place in the run order")
+			return
+		}
+		writeJobLookupError(w, id, err)
+		return
+	}
+	jobs := []domain.Job{job}
+	if err := s.fillProgress(r.Context(), jobs); err != nil {
+		jobs[0].Progress = nil
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job": jobs[0]})
+}
+
 func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	// Read the event cursor before the job/items snapshot below. If an event

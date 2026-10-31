@@ -31,8 +31,8 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	}
 	defer store.Close()
 	ctx := context.Background()
-	if got := userVersion(t, store.db); got != 3 {
-		t.Fatalf("user_version = %d, want 3", got)
+	if got := userVersion(t, store.db); got != 4 {
+		t.Fatalf("user_version = %d, want 4", got)
 	}
 	after := dumpAll(t, store.db)
 
@@ -43,7 +43,7 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 			t.Errorf("jobs.%s still exists after migration", gone)
 		}
 	}
-	for _, added := range []string{"started_at", "finished_at"} {
+	for _, added := range []string{"started_at", "finished_at", "queue_order"} {
 		if !jobCols[added] {
 			t.Errorf("jobs.%s missing after migration", added)
 		}
@@ -51,10 +51,46 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	if !columnsOf(t, store.db, "job_items")["download_bytes"] {
 		t.Error("job_items.download_bytes missing after migration")
 	}
-	for _, index := range []string{"idx_jobs_active_key", "idx_job_items_job_id", "idx_job_events_job_id_id", "idx_job_events_type_created"} {
+	for _, index := range []string{"idx_jobs_active_key", "idx_job_items_job_id", "idx_job_events_job_id_id", "idx_job_events_type_created", "idx_jobs_queued_order"} {
 		if !indexExists(t, store.db, index) {
 			t.Errorf("index %s missing after migration", index)
 		}
+	}
+
+	// queue_order follows (created_at, rowid): j-queued-early was inserted
+	// after j-queued but created before it, so it runs first, and every row
+	// has a distinct value.
+	queueOrder := map[string]int64{}
+	orderRows, err := store.db.Query(`SELECT id, queue_order FROM jobs`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for orderRows.Next() {
+		var id string
+		var order int64
+		if err := orderRows.Scan(&id, &order); err != nil {
+			t.Fatal(err)
+		}
+		queueOrder[id] = order
+	}
+	if err := orderRows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	seenOrder := map[int64]string{}
+	for id, order := range queueOrder {
+		if order <= 0 {
+			t.Errorf("%s.queue_order = %d, want a positive value", id, order)
+		}
+		if other, dup := seenOrder[order]; dup {
+			t.Errorf("%s and %s share queue_order %d", id, other, order)
+		}
+		seenOrder[order] = id
+	}
+	if queueOrder["j-queued-early"] >= queueOrder["j-queued"] || queueOrder["j-running"] >= queueOrder["j-queued"] {
+		t.Errorf("queue_order = %v, want j-running and j-queued-early (earlier created_at) before j-queued", queueOrder)
+	}
+	if queued, err := store.QueuedJobIDs(ctx); err != nil || len(queued) != 2 || queued[0] != "j-queued-early" || queued[1] != "j-queued" {
+		t.Errorf("queued run order = %v (%v), want [j-queued-early j-queued]", queued, err)
 	}
 
 	// Every row of user data survived with its values. overrides changes only
@@ -95,9 +131,10 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 		"j-queued":    {"", ""},
 		"j-cancelled": {"", "2024-07-12T11:00:30Z"},
 		// A retried job's started_at is its latest run's first job_started.
-		"j-retried":  {"2024-07-10T12:00:01.5Z", "2024-07-10T12:00:02Z"},
-		"j-refailed": {"2024-07-14T13:00:05.2Z", "2024-07-14T13:00:05.5Z"},
-		"j-corrupt":  {"", "2024-07-13T00:00:00Z"},
+		"j-retried":      {"2024-07-10T12:00:01.5Z", "2024-07-10T12:00:02Z"},
+		"j-refailed":     {"2024-07-14T13:00:05.2Z", "2024-07-14T13:00:05.5Z"},
+		"j-corrupt":      {"", "2024-07-13T00:00:00Z"},
+		"j-queued-early": {"", ""},
 	}
 	for id, want := range wantTiming {
 		var started, finished sql.NullString
@@ -241,14 +278,14 @@ func TestOpenCreatesLatestSchemaInFreshDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if got := userVersion(t, store.db); got != 3 || got != latestSchemaVersion() {
-		t.Fatalf("fresh user_version = %d, want 3 (latest %d)", got, latestSchemaVersion())
+	if got := userVersion(t, store.db); got != 4 || got != latestSchemaVersion() {
+		t.Fatalf("fresh user_version = %d, want 4 (latest %d)", got, latestSchemaVersion())
 	}
 	jobCols := columnsOf(t, store.db, "jobs")
-	if jobCols["force"] || jobCols["done_items"] || jobCols["failed_items"] || !jobCols["started_at"] || !jobCols["finished_at"] {
+	if jobCols["force"] || jobCols["done_items"] || jobCols["failed_items"] || !jobCols["started_at"] || !jobCols["finished_at"] || !jobCols["queue_order"] {
 		t.Fatalf("fresh jobs columns = %v", jobCols)
 	}
-	for _, index := range []string{"idx_jobs_active_key", "idx_job_items_job_id", "idx_job_events_job_id_id", "idx_job_events_type_created"} {
+	for _, index := range []string{"idx_jobs_active_key", "idx_job_items_job_id", "idx_job_events_job_id_id", "idx_job_events_type_created", "idx_jobs_queued_order"} {
 		if !indexExists(t, store.db, index) {
 			t.Errorf("fresh database lacks index %s", index)
 		}

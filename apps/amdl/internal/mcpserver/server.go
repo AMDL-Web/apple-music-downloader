@@ -245,7 +245,7 @@ func tool(c capability.Capability) *mcp.Tool {
 var openWorld = map[string]bool{"search_catalog": true, "list_artist_albums": true, "get_album": true, "lookup_link": true, "probe_quality": true}
 
 // idempotent are the changing tools that a repeat leaves as the first call did.
-var idempotent = map[string]bool{"start_download": true, "cancel_job": true, "delete_job": true}
+var idempotent = map[string]bool{"start_download": true, "cancel_job": true, "delete_job": true, "move_job": true}
 
 // alsoDestructive are changing tools marked destructive although their CLI
 // command needs no --yes: set_config replaces settings and cancel_job throws

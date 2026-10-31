@@ -13,6 +13,15 @@ type DownloadRequest struct {
 	Overrides *config.DownloadOverrides `json:"overrides,omitempty"`
 }
 
+// MoveRequest is the body of POST /api/v1/downloads/{job_id}/move: where the
+// queued job goes in the run order. Exactly one field is set. Before and
+// After name another queued job; To is "first" or "last".
+type MoveRequest struct {
+	Before string `json:"before,omitempty"`
+	After  string `json:"after,omitempty"`
+	To     string `json:"to,omitempty"`
+}
+
 // SubmitStatus is the coarse outcome of one URL in a batch submit.
 type SubmitStatus string
 

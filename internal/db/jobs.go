@@ -26,17 +26,22 @@ func encodeOverrides(o *config.DownloadOverrides) (string, error) {
 }
 
 // CreateJob inserts a new job row. Its item counters are not stored; reads
-// derive them from job_items. ErrDuplicateActive reports a canonical_key that
+// derive them from job_items. A nil QueueOrder puts the job at the end of the
+// run order (NextQueueOrder). ErrDuplicateActive reports a canonical_key that
 // another queued or running job already holds.
 func (s *Store) CreateJob(ctx context.Context, job domain.Job) error {
 	overrides, err := encodeOverrides(job.Overrides)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO jobs(id,input,type,storefront,title,artwork_url,artist_name,artist_url,curator_name,release_date,genre,artwork_bg_color,artwork_text_color1,artwork_text_color2,artwork_text_color3,artwork_text_color4,canonical_key,overrides,status,total_items,error,started_at,finished_at,created_at,updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, job.ID, job.Input, job.Type, job.Storefront, job.Title, job.ArtworkURL, job.ArtistName, job.ArtistURL, job.CuratorName, job.ReleaseDate, job.Genre,
+	var queueOrder any
+	if job.QueueOrder != nil {
+		queueOrder = *job.QueueOrder
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO jobs(id,input,type,storefront,title,artwork_url,artist_name,artist_url,curator_name,release_date,genre,artwork_bg_color,artwork_text_color1,artwork_text_color2,artwork_text_color3,artwork_text_color4,canonical_key,overrides,status,total_items,error,started_at,finished_at,created_at,updated_at,queue_order)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?,(`+nextQueueOrderSelect+`)))`, job.ID, job.Input, job.Type, job.Storefront, job.Title, job.ArtworkURL, job.ArtistName, job.ArtistURL, job.CuratorName, job.ReleaseDate, job.Genre,
 		job.ArtworkBgColor, job.ArtworkTextColor1, job.ArtworkTextColor2, job.ArtworkTextColor3, job.ArtworkTextColor4, job.CanonicalKey, overrides, string(job.Status), job.TotalItems,
-		job.Error, formatOptionalTime(job.StartedAt), formatOptionalTime(job.FinishedAt), formatTime(job.CreatedAt), formatTime(job.UpdatedAt))
+		job.Error, formatOptionalTime(job.StartedAt), formatOptionalTime(job.FinishedAt), formatTime(job.CreatedAt), formatTime(job.UpdatedAt), queueOrder)
 	if err != nil && isUniqueConstraintErr(err) {
 		return ErrDuplicateActive
 	}
@@ -51,7 +56,7 @@ const jobColumns = `j.id, j.input, j.type, j.storefront, j.title, j.artwork_url,
 	j.motion_artwork_url, j.motion_artwork_tall_url,
 	j.motion_artwork_bg_color, j.motion_artwork_text_color1, j.motion_artwork_text_color2, j.motion_artwork_text_color3, j.motion_artwork_text_color4,
 	j.motion_artwork_tall_bg_color, j.motion_artwork_tall_text_color1, j.motion_artwork_tall_text_color2, j.motion_artwork_tall_text_color3, j.motion_artwork_tall_text_color4,
-	j.canonical_key, j.overrides, j.status, j.total_items,
+	j.canonical_key, j.overrides, j.status, j.queue_order, j.total_items,
 	(SELECT COUNT(*) FROM job_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemCompleted) + `'),
 	(SELECT COUNT(*) FROM job_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemSkipped) + `'),
 	(SELECT COUNT(*) FROM job_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemFailed) + `'),
@@ -96,8 +101,10 @@ func updateFinalJob(ctx context.Context, x execer, job domain.Job) error {
 }
 
 // UpdateJob writes a job's mutable columns from job, including started_at and
-// finished_at. It leaves overrides and the animated-cover columns alone (see
-// FinalizeJob and SetJobMotionArtwork); the item counters are not stored.
+// finished_at. It leaves overrides, the animated-cover columns and
+// queue_order alone (see FinalizeJob, SetJobMotionArtwork and SetQueueOrder):
+// a running pipeline writes the Job it holds through here, and that struct's
+// queue_order is stale. The item counters are not stored.
 func (s *Store) UpdateJob(ctx context.Context, job domain.Job) error {
 	return updateJob(ctx, s.db, job)
 }
@@ -147,15 +154,19 @@ type JobListFilter struct {
 	Statuses []domain.JobStatus
 	Types    []string
 	Query    string
-	Sort     string // created_at (default) or updated_at
+	Sort     string // created_at (default), updated_at or queue_order
 	Order    string // desc (default) or asc
 }
 
 const (
 	JobListSortCreatedAt = "created_at"
 	JobListSortUpdatedAt = "updated_at"
-	JobListOrderAsc      = "asc"
-	JobListOrderDesc     = "desc"
+	// JobListSortQueueOrder lists the queued jobs in run order (asc: next to
+	// run first) ahead of every other job; the others follow in insertion
+	// order.
+	JobListSortQueueOrder = "queue_order"
+	JobListOrderAsc       = "asc"
+	JobListOrderDesc      = "desc"
 )
 
 // Normalize clamps pagination and fills default sort/order. ListJobs calls
@@ -169,7 +180,7 @@ func (f *JobListFilter) Normalize() {
 		f.Offset = 0
 	}
 	switch f.Sort {
-	case JobListSortUpdatedAt:
+	case JobListSortUpdatedAt, JobListSortQueueOrder:
 	default:
 		f.Sort = JobListSortCreatedAt
 	}
@@ -227,13 +238,19 @@ func (s *Store) ListJobs(ctx context.Context, filter JobListFilter) ([]domain.Jo
 		return nil, 0, err
 	}
 
-	orderCol := "j.created_at"
-	if filter.Sort == JobListSortUpdatedAt {
-		orderCol = "j.updated_at"
-	}
 	orderDir := "DESC"
 	if filter.Order == JobListOrderAsc {
 		orderDir = "ASC"
+	}
+	orderBy := "j.created_at " + orderDir
+	switch filter.Sort {
+	case JobListSortUpdatedAt:
+		orderBy = "j.updated_at " + orderDir
+	case JobListSortQueueOrder:
+		// Only a queued job's queue_order orders anything; the others keep
+		// their last value, so they follow the queue in insertion order.
+		orderBy = "CASE WHEN j.status = '" + string(domain.JobQueued) + "' THEN 0 ELSE 1 END, " +
+			"CASE WHEN j.status = '" + string(domain.JobQueued) + "' THEN j.queue_order END " + orderDir
 	}
 	listArgs := append(args, filter.Limit, filter.Offset)
 	// Jobs submitted together share created_at (and often updated_at), and job
@@ -243,7 +260,7 @@ func (s *Store) ListJobs(ctx context.Context, filter JobListFilter) ([]domain.Jo
 	// submitted or updated between two page requests still shifts the offsets,
 	// as with any offset paging. rowid is stable here because the store never
 	// runs VACUUM and jobs is not WITHOUT ROWID.
-	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j`+where+` ORDER BY `+orderCol+` `+orderDir+`, j.rowid ASC LIMIT ? OFFSET ?`,
+	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j`+where+` ORDER BY `+orderBy+`, j.rowid ASC LIMIT ? OFFSET ?`,
 		listArgs...)
 	if err != nil {
 		return nil, 0, err
@@ -333,11 +350,13 @@ func (s *Store) DeleteJob(ctx context.Context, id string) (domain.Event, error) 
 	return tombstone, nil
 }
 
-// ListRecoverableJobs returns the queued and running jobs, oldest first: the
-// work a previous process left unfinished.
+// ListRecoverableJobs returns the work a previous process left unfinished:
+// the running jobs, then the queued ones, each in run order (queue_order,
+// then insertion).
 func (s *Store) ListRecoverableJobs(ctx context.Context) ([]domain.Job, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.status IN (?,?) ORDER BY j.created_at ASC`,
-		string(domain.JobQueued), string(domain.JobRunning))
+	rows, err := s.db.QueryContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.status IN (?,?)
+		ORDER BY CASE WHEN j.status = ? THEN 0 ELSE 1 END, j.queue_order ASC, j.rowid ASC`,
+		string(domain.JobQueued), string(domain.JobRunning), string(domain.JobRunning))
 	if err != nil {
 		return nil, err
 	}
@@ -362,12 +381,13 @@ func scanJob(row jobScanner) (domain.Job, error) {
 	var job domain.Job
 	var overrides, status, created, updated string
 	var started, finished sql.NullString
+	var queueOrder int64
 	err := row.Scan(&job.ID, &job.Input, &job.Type, &job.Storefront, &job.Title, &job.ArtworkURL, &job.ArtistName, &job.ArtistURL, &job.CuratorName, &job.ReleaseDate, &job.Genre,
 		&job.ArtworkBgColor, &job.ArtworkTextColor1, &job.ArtworkTextColor2, &job.ArtworkTextColor3, &job.ArtworkTextColor4,
 		&job.MotionArtworkURL, &job.MotionArtworkTallURL,
 		&job.MotionArtworkBgColor, &job.MotionArtworkTextColor1, &job.MotionArtworkTextColor2, &job.MotionArtworkTextColor3, &job.MotionArtworkTextColor4,
 		&job.MotionArtworkTallBgColor, &job.MotionArtworkTallTextColor1, &job.MotionArtworkTallTextColor2, &job.MotionArtworkTallTextColor3, &job.MotionArtworkTallTextColor4,
-		&job.CanonicalKey, &overrides, &status, &job.TotalItems,
+		&job.CanonicalKey, &overrides, &status, &queueOrder, &job.TotalItems,
 		&job.CompletedItems, &job.SkippedItems, &job.FailedItems, &job.CancelledItems,
 		&job.Error, &started, &finished, &created, &updated)
 	if err == nil && overrides != "" {
@@ -384,6 +404,7 @@ func scanJob(row jobScanner) (domain.Job, error) {
 		}
 	}
 	job.Status = domain.JobStatus(status)
+	job.QueueOrder = &queueOrder
 	job.StartedAt = parseOptionalTime(started)
 	job.FinishedAt = parseOptionalTime(finished)
 	job.CreatedAt = parseTime(created)

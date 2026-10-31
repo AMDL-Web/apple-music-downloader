@@ -6,6 +6,8 @@ import (
 	"errors"
 	"image/png"
 	"net/http"
+	"slices"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -314,4 +316,93 @@ func TestSettingsAndSignInChangeOnlyMemory(t *testing.T) {
 	if w, _ := c.WrapperStatus(ctx); !w.LoggedIn {
 		t.Error("not signed in after the code")
 	}
+}
+
+// queuedInOrder lists the demo's queued jobs by queue_order.
+func queuedInOrder(t *testing.T, c *client.Client) []domain.Job {
+	t.Helper()
+	l, err := c.Downloads(context.Background(), client.ListQuery{Limit: client.SnapshotLimit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []domain.Job
+	for _, j := range l.Downloads {
+		if j.Status == domain.JobQueued {
+			if j.QueueOrder == nil {
+				t.Fatalf("queued job %s has no queue_order", j.ID)
+			}
+			out = append(out, j)
+		}
+	}
+	sort.Slice(out, func(x, y int) bool { return *out[x].QueueOrder < *out[y].QueueOrder })
+	return out
+}
+
+func TestMoveChangesWhichJobStartsNext(t *testing.T) {
+	b, c, clk := newDemo(t)
+	ctx := context.Background()
+	for _, a := range []*album{albums[3], albums[4], albums[1]} {
+		if res, err := c.Submit(ctx, []string{a.url()}, nil); err != nil || res.Accepted != 1 {
+			t.Fatalf("submit %s: %+v, %v", a.title, res, err)
+		}
+	}
+	queue := queuedInOrder(t, c)
+	if len(queue) != 4 {
+		t.Fatalf("queue = %d jobs, want the seeded one and three new", len(queue))
+	}
+	last := queue[3]
+	moved, err := c.Move(ctx, last.ID, domain.MoveRequest{To: "first"})
+	if err != nil || moved.ID != last.ID || moved.QueueOrder == nil || *moved.QueueOrder >= *queue[0].QueueOrder {
+		t.Fatalf("move to first = %+v, %v", moved, err)
+	}
+	if _, err := c.Move(ctx, queue[0].ID, domain.MoveRequest{After: queue[2].ID}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{last.ID, queue[1].ID, queue[2].ID, queue[0].ID}
+	var got []string
+	for _, j := range queuedInOrder(t, c) {
+		got = append(got, j.ID)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("queue after moves = %v, want %v", got, want)
+	}
+
+	var apiErr *client.APIError
+	l, _ := c.Downloads(ctx, client.ListQuery{})
+	for _, j := range l.Downloads {
+		if j.Status == domain.JobRunning {
+			if _, err := c.Move(ctx, j.ID, domain.MoveRequest{To: "last"}); !errors.As(err, &apiErr) || apiErr.Code != "job_not_queued" {
+				t.Errorf("moving a running job: %v", err)
+			}
+			break
+		}
+	}
+	if _, err := c.Move(ctx, last.ID, domain.MoveRequest{To: "middle"}); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+		t.Errorf("to middle: %v", err)
+	}
+
+	// The next job to start is the moved one.
+	for range 2000 {
+		run(b, clk, Tick)
+		if d, _ := c.Download(ctx, last.ID); d.Job.Status != domain.JobQueued {
+			break
+		}
+	}
+	for _, j := range queuedInOrder(t, c) {
+		if j.ID == last.ID {
+			t.Fatal("the moved job never started")
+		}
+	}
+	if d, _ := c.Download(ctx, queue[1].ID); d.Job.Status != domain.JobQueued && d.Job.StartedAt.Before(*mustStarted(t, c, last.ID)) {
+		t.Errorf("%s started before the job moved ahead of it", queue[1].ID)
+	}
+}
+
+func mustStarted(t *testing.T, c *client.Client, id string) *time.Time {
+	t.Helper()
+	d, err := c.Download(context.Background(), id)
+	if err != nil || d.Job.StartedAt == nil {
+		t.Fatalf("job %s: %+v, %v", id, d.Job, err)
+	}
+	return d.Job.StartedAt
 }

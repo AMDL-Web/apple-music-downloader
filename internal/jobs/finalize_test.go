@@ -331,9 +331,8 @@ func TestCancelQueuedJobDispatchesCancelledHookAndNeverRuns(t *testing.T) {
 	dispatcher := hooks.NewDispatcher(hooksCfg, manager.Event, slog.Default())
 	manager.SetHooks(dispatcher)
 
-	// Deliberately do not call manager.Start(ctx): the submitted job stays in
-	// the in-memory queue channel, never dequeued, so Cancel() must take the
-	// "not yet running" path.
+	// Deliberately do not call manager.Start(ctx): no worker claims the
+	// submitted job, so Cancel() must take the "not yet running" path.
 	ctx := context.Background()
 	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
 	if resp.Accepted != 1 {
@@ -367,9 +366,14 @@ func TestCancelQueuedJobDispatchesCancelledHookAndNeverRuns(t *testing.T) {
 		t.Fatalf("event = %q, want job_cancelled", lastEvent)
 	}
 
-	// Simulate a worker eventually dequeuing this already-cancelled job: it
-	// must not resurrect the job into JobRunning or invoke the processor.
-	manager.run(ctx, jobID)
+	// A worker that looks for work afterwards must not resurrect the job into
+	// JobRunning or invoke the processor.
+	if claim, ok, err := manager.claimNext(ctx); err != nil || ok {
+		t.Fatalf("claimNext after the cancel = (%+v, %v, %v), want nothing to claim", claim.job, ok, err)
+	}
+	if isWaiting(manager, jobID) {
+		t.Fatal("the cancelled job is still on the wait list")
+	}
 	got, err = store.GetJob(ctx, jobID)
 	if err != nil {
 		t.Fatal(err)

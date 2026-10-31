@@ -84,6 +84,8 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 		// it) now say cancelled, but hook dispatch below still reads the
 		// job's rows. Delete must not remove them in that window.
 		m.finalizing[jobID] = true
+		m.waiting.remove(jobID)
+		delete(m.unclaimable, jobID)
 	}
 	m.mu.Unlock()
 
@@ -142,47 +144,11 @@ func (m *Manager) Delete(ctx context.Context, jobID string) error {
 	return nil
 }
 
-func (m *Manager) run(parent context.Context, jobID string) {
-	ctx, cancel := context.WithCancel(parent)
-
-	// Claim the job atomically under m.mu: read its current status, and only
-	// if it is still startable, mark it running and register the cancel func.
-	// Cancel() takes the same lock for its queued-cancel transition, so the
-	// two cannot interleave — either we mark running first (and a concurrent
-	// Cancel then finds the cancel func and cancels our context) or Cancel
-	// marks cancelled first (and we observe the terminal status here and bail).
-	m.mu.Lock()
-	job, err := m.store.GetJob(parent, jobID)
-	if err != nil {
-		m.mu.Unlock()
-		cancel()
-		m.logClaimFailure(parent, jobID, "load job", err)
-		return
-	}
-	if job.Status != domain.JobQueued {
-		// A stale delivery. A job cancelled while queued keeps its id in the
-		// worker channel, and a retry enqueues it again, so one job can be
-		// delivered twice: Cancel() already finalized it (its terminal hook was
-		// dispatched, do not resurrect it), or another worker already claimed it
-		// and the row says running. Either way this delivery has nothing to run.
-		m.mu.Unlock()
-		cancel()
-		return
-	}
-	job.Status = domain.JobRunning
-	job.UpdatedAt = time.Now().UTC()
-	if job.StartedAt == nil {
-		startedAt := job.UpdatedAt
-		job.StartedAt = &startedAt
-	}
-	if err := m.store.UpdateJob(ctx, job); err != nil {
-		m.mu.Unlock()
-		cancel()
-		m.logClaimFailure(parent, jobID, "mark job running", err)
-		return
-	}
-	m.cancels[jobID] = cancel
-	m.mu.Unlock()
+// run processes a job claimNext marked running under ctx, whose cancel func
+// claimNext registered in m.cancels, and finalizes it. A concurrent Cancel
+// finds that func and cancels ctx; run then finalizes the job cancelled.
+func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, job domain.Job) {
+	jobID := job.ID
 	started := time.Now()
 	jobLogger := m.logger.With("job_id", job.ID, "job_type", job.Type, "storefront", job.Storefront)
 	ctx = logging.NewContext(ctx, jobLogger)
@@ -222,7 +188,7 @@ func (m *Manager) run(parent context.Context, jobID string) {
 		jobLogger.Warn("record job_started event", "error", err)
 	}
 
-	err = m.processRecovered(ctx, job, jobLogger)
+	err := m.processRecovered(ctx, job, jobLogger)
 	panicked := errors.Is(err, errProcessorPanic)
 	if !panicked && errors.Is(context.Cause(ctx), ErrShutdown) {
 		// Interrupted, not finished: the row stays running with its items,

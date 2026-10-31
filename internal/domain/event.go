@@ -21,6 +21,10 @@ const (
 	EventJobFinished  EventType = "job_finished"
 	EventJobFailed    EventType = "job_failed"
 	EventJobCancelled EventType = "job_cancelled"
+	// EventJobMoved records a queued job's new place in the run order; its
+	// payload's queue_order is the new value. A move records it for the moved
+	// job, and a renumbering of the queue for every job whose value changed.
+	EventJobMoved EventType = "job_moved"
 	// EventJobDeleted is the tombstone Store.DeleteJob persists in the same
 	// transaction that removes the job and its other events, so the overview
 	// feed replays a deletion from a cursor like any other milestone.
@@ -72,7 +76,7 @@ const (
 // same set; a test in internal/api compares them.
 var EventTypes = []EventType{
 	EventJobQueued, EventJobStarted, EventJobRetried, EventJobRecovered,
-	EventJobFinished, EventJobFailed, EventJobCancelled, EventJobDeleted,
+	EventJobFinished, EventJobFailed, EventJobCancelled, EventJobMoved, EventJobDeleted,
 	EventResolvedInput, EventMotionArtworkResolved, EventStandaloneCoverFailed,
 	EventItemProgress, EventItemCompleted, EventItemFailed, EventItemSkipped, EventItemOverwrite,
 	EventCodecSelected, EventCodecFallback, EventCodecFailed, EventALACRepaired,
@@ -180,8 +184,9 @@ func SummarizeHooks(events []Event, stillRunning bool) []HookState {
 }
 
 // OverviewMilestones are the event types that change how a job appears in the
-// GET /downloads list: its existence, status, resolved title and total_items,
-// item counters, or the artwork it is drawn with. The overview feed wakes on
+// GET /downloads list: its existence, status, place in the run order,
+// resolved title and total_items, item counters, or the artwork it is drawn
+// with. The overview feed wakes on
 // and replays only these, never the per-item detail events (item_progress,
 // codec_selected, retries, ...). Store.ListMilestoneEventsAfterLimit builds its
 // SQL filter from this slice and IsOverviewMilestone tests the same set.
@@ -194,6 +199,7 @@ var OverviewMilestones = []EventType{
 	EventJobRecovered,
 	EventJobRetried,
 	EventJobStarted,
+	EventJobMoved,
 	EventResolvedInput,
 	EventMotionArtworkResolved,
 	EventItemCompleted,

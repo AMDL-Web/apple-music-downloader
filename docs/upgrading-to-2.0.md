@@ -335,7 +335,10 @@ The first start applies migrations in one transaction each:
 - adds `job_items.download_bytes` (0 for every existing row), the bytes of encrypted
   media an item's current attempt has received. A database that has run this
   migration is refused by an older build, so a release candidate from before it cannot
-  open the file again.
+  open the file again;
+- adds `jobs.queue_order`, numbering every existing job in `created_at` order so queued
+  jobs keep running in the order they were submitted. A build from before this migration
+  refuses the file too; back up `amdl.db` before trying one.
 
 No migration rewrites `jobs.overrides`: a row that still holds a `media_user_token`,
 `hooks` or another removed field is read with it ignored, and the job's next terminal

@@ -104,7 +104,7 @@ func TestSummarizeHooksEmpty(t *testing.T) {
 
 func TestIsOverviewMilestone(t *testing.T) {
 	milestones := []EventType{
-		"job_queued", "job_recovered", "job_retried", "job_started", "resolved_input", "motion_artwork_resolved",
+		"job_queued", "job_recovered", "job_retried", "job_started", "job_moved", "resolved_input", "motion_artwork_resolved",
 		"item_completed", "item_skipped", "item_failed",
 		"job_finished", "job_failed", "job_cancelled", "job_deleted",
 	}
@@ -188,5 +188,34 @@ func TestJobJSONCountersAndTiming(t *testing.T) {
 		if _, ok := got[gone]; ok {
 			t.Errorf("job JSON has %q, want it absent: %s", gone, raw)
 		}
+	}
+}
+
+func TestJobJSONCarriesQueueOrderOnlyWhileQueued(t *testing.T) {
+	order := int64(3 << 20)
+	for status, want := range map[JobStatus]bool{JobQueued: true, JobRunning: false, JobCompleted: false, JobFailed: false, JobCancelled: false} {
+		raw, err := json.Marshal(Job{ID: "job_1", Status: status, QueueOrder: &order})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatal(err)
+		}
+		if _, has := got["queue_order"]; has != want {
+			t.Errorf("%s job JSON %s: queue_order present = %v, want %v", status, raw, has, want)
+		}
+		var back Job
+		if err := json.Unmarshal(raw, &back); err != nil {
+			t.Fatal(err)
+		}
+		if want && (back.QueueOrder == nil || *back.QueueOrder != order) {
+			t.Errorf("decoded %s job queue_order = %v, want %d", status, back.QueueOrder, order)
+		}
+	}
+	// A pointer marshals through the same method.
+	raw, err := json.Marshal(&Job{ID: "job_2", Status: JobRunning, QueueOrder: &order})
+	if err != nil || strings.Contains(string(raw), "queue_order") {
+		t.Fatalf("*Job JSON = %s (%v), want no queue_order for a running job", raw, err)
 	}
 }

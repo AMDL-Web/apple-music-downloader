@@ -78,14 +78,17 @@ func TestRecoverUnfinishedRequeuesQueuedAndRunningJobs(t *testing.T) {
 	if gotCompleted.Status != domain.JobCompleted {
 		t.Fatalf("completed job status = %s, want %s", gotCompleted.Status, domain.JobCompleted)
 	}
-	manager.recoveryMu.Lock()
-	recoveryQueue := append([]string(nil), manager.recoveryQueue...)
-	manager.recoveryMu.Unlock()
-	if len(recoveryQueue) != 2 {
-		t.Fatalf("recovery queue length = %d, want 2", len(recoveryQueue))
+	if stats := manager.QueueStats(); stats.RecoveryBacklog != 2 || stats.QueueDepth != 0 {
+		t.Fatalf("QueueStats() = %+v, want two recovered jobs and an empty admission queue", stats)
 	}
-	if first, second := recoveryQueue[0], recoveryQueue[1]; first != queued.ID || second != running.ID {
-		t.Fatalf("queued ids = [%s, %s], want [%s, %s]", first, second, queued.ID, running.ID)
+	// The interrupted job was ahead of every queued one when it started, so
+	// it resumes first.
+	order, err := store.QueuedJobIDs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 2 || order[0] != running.ID || order[1] != queued.ID {
+		t.Fatalf("run order after recovery = %v, want [%s %s]", order, running.ID, queued.ID)
 	}
 	events, err := store.ListEventsAfterLimit(ctx, running.ID, 0, 0)
 	if err != nil {
@@ -221,14 +224,8 @@ func TestRecoverUnfinishedHandlesMoreThanQueueCapacityWithoutLoss(t *testing.T) 
 	if recovered != backlog {
 		t.Fatalf("recovered = %d, want %d", recovered, backlog)
 	}
-	manager.recoveryMu.Lock()
-	queued := len(manager.recoveryQueue)
-	manager.recoveryMu.Unlock()
-	if queued != backlog {
-		t.Fatalf("recovery queue length = %d, want %d", queued, backlog)
-	}
-	if len(manager.queue) != 0 {
-		t.Fatalf("submission queue length = %d, want 0", len(manager.queue))
+	if stats := manager.QueueStats(); stats.RecoveryBacklog != backlog || stats.QueueDepth != 0 {
+		t.Fatalf("QueueStats() = %+v, want %d recovered jobs outside the admission queue", stats, backlog)
 	}
 
 	manager.Start(context.Background())

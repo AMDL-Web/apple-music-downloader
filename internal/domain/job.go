@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"amdl/internal/config"
@@ -36,6 +37,17 @@ type JobStatusCounts struct {
 	Failed    int `json:"failed"`
 	Cancelled int `json:"cancelled"`
 	Total     int `json:"total"`
+}
+
+// MarshalJSON omits queue_order unless the job is queued: a running or
+// finished job keeps its last value in the store, but it orders nothing.
+func (j Job) MarshalJSON() ([]byte, error) {
+	type plain Job
+	out := plain(j)
+	if j.Status != JobQueued {
+		out.QueueOrder = nil
+	}
+	return json.Marshal(out)
 }
 
 // MotionArtwork is one album's animated covers plus the palette belonging to
@@ -125,6 +137,15 @@ type Job struct {
 	// (including retries and post-restart requeues).
 	Overrides *config.DownloadOverrides `json:"overrides,omitempty"`
 	Status    JobStatus                 `json:"status"`
+	// QueueOrder is the job's place in the run order of queued jobs: a
+	// worker that frees up starts the queued job with the lowest value next
+	// (ties, which only rows written by hand can have, go by insertion).
+	// Values are sparse and only their order means anything: a new or
+	// retried job gets a value past every existing one, and a move changes
+	// the moved job's value alone, except when no integer is left between its
+	// new neighbors and the store renumbers the queue. The store fills it on
+	// every read; JSON carries it only while Status is queued (MarshalJSON).
+	QueueOrder *int64 `json:"queue_order,omitempty"`
 	// TotalItems is stored when the input resolves. The four item counters
 	// are disjoint, never stored, and filled from job_items by every store
 	// read: CompletedItems were written by this job, SkippedItems were already

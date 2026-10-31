@@ -99,7 +99,7 @@ func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T)
 
 func TestSubmitBatchQueueFullMarksRemainingWithoutRollback(t *testing.T) {
 	manager := newTestManager(t)
-	manager.queue = make(chan string, 1)
+	manager.capacity = 1
 	ctx := context.Background()
 
 	resp := manager.SubmitBatch(ctx, []string{"song|us|1", "song|us|2", "song|us|3"}, nil)
@@ -278,7 +278,7 @@ func TestRetryRequeuesFailedJobAndResetsOnlyUnfinishedItems(t *testing.T) {
 		reset.RetryKind != "" || reset.Attempt != 0 || reset.MaxAttempts != 0 || reset.StatusMessage != "" {
 		t.Fatalf("failed item was not reset to queued: %+v", reset)
 	}
-	if len(manager.queue) != 1 || <-manager.queue != job.ID {
+	if !isWaiting(manager, job.ID) || manager.QueueStats().QueueDepth != 1 {
 		t.Fatal("retry did not enqueue the job")
 	}
 	events, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
@@ -344,7 +344,7 @@ func TestRetryRequeuesCancelledJob(t *testing.T) {
 	if got.CompletedItems != 1 || got.CancelledItems != 0 || got.FailedItems != 0 {
 		t.Fatalf("counters after retry = completed %d cancelled %d failed %d, want 1/0/0", got.CompletedItems, got.CancelledItems, got.FailedItems)
 	}
-	if len(manager.queue) != 1 || <-manager.queue != job.ID {
+	if !isWaiting(manager, job.ID) || manager.QueueStats().QueueDepth != 1 {
 		t.Fatal("retry did not enqueue the job")
 	}
 	evs, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
@@ -408,8 +408,8 @@ func TestRetryRefusesActiveCompletedMissingAndDuplicateJobs(t *testing.T) {
 	if err := manager.Retry(ctx, failed.ID); !errors.Is(err, db.ErrDuplicateActive) {
 		t.Fatalf("Retry(failed job with active duplicate) = %v, want ErrDuplicateActive", err)
 	}
-	if len(manager.queue) != 0 {
-		t.Fatalf("queue length = %d, want 0 after refused retries", len(manager.queue))
+	if depth := manager.QueueStats().QueueDepth; depth != 0 {
+		t.Fatalf("queue depth = %d, want 0 after refused retries", depth)
 	}
 }
 
@@ -453,7 +453,7 @@ func TestRetryRefusesWhilePreviousRunIsFinalizing(t *testing.T) {
 	if err := manager.Retry(ctx, job.ID); err != nil {
 		t.Fatalf("Retry(after finalize finished) = %v, want success", err)
 	}
-	if len(manager.queue) != 1 || <-manager.queue != job.ID {
+	if !isWaiting(manager, job.ID) {
 		t.Fatal("retry after finalize did not enqueue the job")
 	}
 }
@@ -475,10 +475,8 @@ func (p *holdProcessor) ProcessJob(ctx context.Context, job domain.Job, _ Report
 	return nil
 }
 
-// A job cancelled while queued leaves its id in the worker channel (a channel
-// cannot drop an element), and Retry enqueues it a second time. The two stale
-// deliveries must not run the job twice: whichever worker claims it first wins
-// and the other finds it already running.
+// A job cancelled while queued and retried is one queued job again: two idle
+// workers must not both run it.
 func TestRetryOfQueuedCancelledJobRunsItOnce(t *testing.T) {
 	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
 	if err != nil {
@@ -489,7 +487,6 @@ func TestRetryOfQueuedCancelledJobRunsItOnce(t *testing.T) {
 	manager := NewManager(store, events.NewHub(), processor, 2, slog.Default())
 	ctx := context.Background()
 
-	// No workers yet: the submitted id stays buffered in manager.queue.
 	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
@@ -501,29 +498,22 @@ func TestRetryOfQueuedCancelledJobRunsItOnce(t *testing.T) {
 	if err := manager.Retry(ctx, jobID); err != nil {
 		t.Fatal(err)
 	}
-	if len(manager.queue) != 2 {
-		t.Fatalf("queue holds %d entries, want the stale and the retried id", len(manager.queue))
-	}
 
-	// Two workers each take one delivery. The first claims the job; the second
-	// must return without processing it.
-	first, second := <-manager.queue, <-manager.queue
-	firstDone, secondDone := make(chan struct{}), make(chan struct{})
-	go func() { defer close(firstDone); manager.run(ctx, first) }()
+	manager.Start(ctx)
 	select {
 	case <-processor.entered:
 	case <-time.After(2 * time.Second):
-		t.Fatal("the first delivery did not start the job")
+		t.Fatal("no worker started the retried job")
 	}
-	go func() { defer close(secondDone); manager.run(ctx, second) }()
 	select {
-	case <-secondDone:
 	case id := <-processor.entered:
 		t.Errorf("job %s entered ProcessJob a second time while it was already running", id)
-	case <-time.After(2 * time.Second):
-		t.Error("the second delivery neither returned nor started the job")
+	case <-time.After(300 * time.Millisecond):
 	}
 	close(processor.release)
-	<-firstDone
-	<-secondDone
+	shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := manager.Shutdown(shutdownCtx); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -153,6 +153,32 @@ describe('fake API', () => {
     assert.equal(failed.failed_items, 0);
   });
 
+  test('move changes which queued job starts next', async () => {
+    const api = fresh();
+    const queued = () => [...api.jobs.values()].filter((j) => j.status === 'queued').sort((a, b) => a.queue_order - b.queue_order);
+    for (const a of albums.slice(3, 5)) assert.equal((await call(api, 'POST', '../api/v1/downloads', { urls: [a.url] })).status, 202);
+    const before = queued();
+    assert.ok(before.length >= 3, 'the seed and the submits queue at least three jobs');
+    const last = before[before.length - 1];
+    const res = await call(api, 'POST', `../api/v1/downloads/${last.id}/move`, { to: 'first' });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).job.id, last.id);
+    assert.deepEqual(queued().map((j) => j.id), [last.id, ...before.slice(0, -1).map((j) => j.id)]);
+    const listed = await (await call(api, 'GET', '../api/v1/downloads?status=queued&sort=queue_order&order=asc')).json();
+    assert.deepEqual(listed.downloads.map((j) => j.id), queued().map((j) => j.id));
+    assert.equal((await call(api, 'POST', `../api/v1/downloads/${before[0].id}/move`, { after: last.id })).status, 200);
+    assert.equal((await call(api, 'POST', `../api/v1/downloads/${last.id}/move`, { to: 'middle' })).status, 400);
+    const running = [...api.jobs.values()].find((j) => j.status === 'running');
+    const refused = await call(api, 'POST', `../api/v1/downloads/${running.id}/move`, { to: 'first' });
+    assert.equal(refused.status, 409);
+    assert.equal((await refused.json()).error.code, 'job_not_queued');
+    assert.equal(running.queue_order, undefined);
+    // The next free slot takes the moved job.
+    for (let i = 0; i < 2000 && last.status === 'queued'; i++) api.tick();
+    assert.notEqual(last.status, 'queued');
+    assert.ok(before.slice(1, -1).every((j) => j.status === 'queued' || Date.parse(j.started_at) >= Date.parse(last.started_at)));
+  });
+
   test("a finished job's stream replays its history, then answers 204", async () => {
     const api = fresh();
     const done = [...api.jobs.values()].find((j) => j.status === 'completed');

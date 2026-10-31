@@ -227,7 +227,7 @@ is the API's only browser client: responses carry no CORS headers.
 
 | | |
 | --- | --- |
-| **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
+| **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` · `POST /downloads/{id}/move` |
 | **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed (SSE) |
 | **Lookup** | `POST /lookup`: preview a link's title, artist and cover without creating a job |
 | **Search** | `GET /search`: search the catalog for songs, albums, playlists and artists · `GET /artists/{id}/albums`: an artist's albums, page by page · `GET /albums/{id}`: an album's songs |

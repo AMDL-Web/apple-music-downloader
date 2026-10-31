@@ -51,3 +51,11 @@ func newTestManager(t *testing.T) *Manager {
 	t.Cleanup(func() { store.Close() })
 	return NewManager(store, events.NewHub(), keyedProcessor{}, 1, slog.Default())
 }
+
+// isWaiting reports whether jobID is on m's wait list.
+func isWaiting(m *Manager, jobID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.waiting.ids[jobID]
+	return ok
+}

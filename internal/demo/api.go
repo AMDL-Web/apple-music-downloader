@@ -75,6 +75,7 @@ func (b *Backend) handler() http.Handler {
 		b.retry(j, now)
 		return nil
 	}))
+	m.HandleFunc("POST /api/v1/downloads/{id}/move", b.moveJob)
 	m.HandleFunc("DELETE /api/v1/downloads/{id}", b.remove)
 	m.HandleFunc("POST /api/v1/lookup", b.lookup)
 	m.HandleFunc("GET /api/v1/search", b.search)
@@ -245,6 +246,41 @@ func (b *Backend) act(fn func(*job, time.Time) error) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, j.snapshot())
 	}
+}
+
+// moveJob answers POST /downloads/{id}/move with {job}, refusing what the
+// real route refuses.
+func (b *Backend) moveJob(w http.ResponseWriter, r *http.Request) {
+	var req domain.MoveRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "the body is not a move request: "+err.Error())
+		return
+	}
+	set := 0
+	for _, f := range []string{req.Before, req.After, req.To} {
+		if f != "" {
+			set++
+		}
+	}
+	if set != 1 || (req.To != "" && req.To != "first" && req.To != "last") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "set exactly one of before, after and to (first or last)")
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	j := b.job(r.PathValue("id"))
+	if j == nil {
+		writeError(w, http.StatusNotFound, "job_not_found", "no such job")
+		return
+	}
+	if err := b.move(j, req, b.now()); err != nil {
+		e := err.(*apiError)
+		writeError(w, e.status, e.code, e.message)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]domain.Job{"job": j.snapshot()})
 }
 
 // remove deletes a finished job, as DELETE /downloads/{id} does: one that

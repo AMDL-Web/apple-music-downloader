@@ -76,7 +76,7 @@ A failing exec hook records the last 4 KiB of its stderr in its `hook_failed` ev
 
 The JSON payload — the webhook body unless `body` replaces it, and written to an
 exec hook's stdin — looks like this. The `job` counters are the API's (see
-[api.md](api.md#query-cancel-retry-delete)); `title` and `artist_name` are present once the
+[api.md](api.md#query-cancel-retry-move-delete)); `title` and `artist_name` are present once the
 link has resolved (never for `job_queued`), `error` only when the job has one, `started_at`
 and `finished_at` only once set, and `output_path` is absolute:
 

@@ -180,6 +180,7 @@ func (s *Server) routes() []route {
 		{http.MethodDelete, "/api/v1/downloads/{id}", h(s.deleteDownload)},
 		{http.MethodPost, "/api/v1/downloads/{id}/cancel", h(s.cancelDownload)},
 		{http.MethodPost, "/api/v1/downloads/{id}/retry", h(s.retryDownload)},
+		{http.MethodPost, "/api/v1/downloads/{id}/move", h(s.moveDownload)},
 		{http.MethodGet, "/api/v1/downloads/{id}/events", h(s.jobEvents)},
 	}
 	if s.console == nil {

@@ -42,10 +42,12 @@ type Backend struct {
 	now func() time.Time
 	rt  http.RoundTripper
 
-	mu        sync.Mutex
-	seq       int64
-	jobs      []*job // newest first
-	nextJob   int
+	mu      sync.Mutex
+	seq     int64
+	jobs    []*job // newest first
+	nextJob int
+	// lastOrder is the highest queue_order handed out.
+	lastOrder int64
 	config    map[string]any
 	signedIn  bool
 	sinceFeed time.Duration
@@ -133,7 +135,7 @@ func (b *Backend) newJob(a *album, one *song, t time.Time) *job {
 		ID: fmt.Sprintf("demo-%04d", b.nextJob), Input: a.url(), Type: "album", Storefront: "us",
 		Title: a.title, ArtworkURL: a.artwork(), ArtistName: a.artist.name, ArtistURL: a.artist.url(),
 		ReleaseDate: a.releaseDate(), Genre: a.artist.genre, ArtworkBgColor: a.bg, ArtworkTextColor1: a.fg,
-		ArtworkTextColor2: "ffffff", Status: domain.JobQueued, CreatedAt: t, UpdatedAt: t,
+		ArtworkTextColor2: "ffffff", Status: domain.JobQueued, QueueOrder: b.nextOrder(), CreatedAt: t, UpdatedAt: t,
 	}
 	indexes := make([]int, len(a.tracks))
 	for i := range indexes {
@@ -227,8 +229,9 @@ func (b *Backend) startWaiting(now time.Time) {
 			waiting = append(waiting, j)
 		}
 	}
-	// The oldest waiting job goes first.
-	for i := len(waiting) - 1; i >= 0 && running < maxRunning; i-- {
+	// The first in the run order goes first.
+	sortByQueueOrder(waiting)
+	for i := 0; i < len(waiting) && running < maxRunning; i++ {
 		j := waiting[i]
 		j.Status, j.StartedAt, j.UpdatedAt = domain.JobRunning, ptr(now), now
 		b.emit(j, domain.EventJobStarted, "", j.snapshot(), now)
@@ -460,9 +463,116 @@ func (b *Backend) retry(j *job, now time.Time) {
 		j.ran[i] = 0
 	}
 	j.Status, j.Error, j.StartedAt, j.FinishedAt, j.UpdatedAt = domain.JobQueued, "", nil, nil, now
+	j.QueueOrder = b.nextOrder()
 	// The demo's catalog serves every song a second time round.
 	b.emit(j, domain.EventJobRetried, "", j.snapshot(), now)
 	b.feed(j)
+}
+
+// nextOrder is a queue_order behind every job's, the place of a new or
+// retried job.
+func (b *Backend) nextOrder() *int64 {
+	b.lastOrder += queueOrderGap
+	return ptr(b.lastOrder)
+}
+
+// queueOrderGap spaces queue_order values as the real store does.
+const queueOrderGap = int64(1) << 20
+
+func sortByQueueOrder(jobs []*job) {
+	sort.SliceStable(jobs, func(x, y int) bool { return *jobs[x].QueueOrder < *jobs[y].QueueOrder })
+}
+
+// move places the queued job j before or after another queued job, or first
+// or last, as POST /downloads/{id}/move does: only j's queue_order changes,
+// unless no value is left between its new neighbors and the queue is
+// renumbered. Every job whose value changed gets job_moved and a feed
+// upsert, j last.
+func (b *Backend) move(j *job, req domain.MoveRequest, now time.Time) error {
+	if j.Status != domain.JobQueued {
+		return &apiError{http.StatusConflict, "job_not_queued", "job " + j.ID + " is not queued"}
+	}
+	var rest []*job
+	from := -1
+	for _, x := range b.jobs {
+		if x.Status == domain.JobQueued {
+			rest = append(rest, x)
+		}
+	}
+	sortByQueueOrder(rest)
+	for i, x := range rest {
+		if x == j {
+			from = i
+		}
+	}
+	rest = append(rest[:from:from], rest[from+1:]...)
+	to := len(rest)
+	switch {
+	case req.Before != "" || req.After != "":
+		anchor := req.Before + req.After
+		at := -1
+		for i, x := range rest {
+			if x.ID == anchor {
+				at = i
+			}
+		}
+		switch {
+		case anchor == j.ID:
+			at = from
+			if req.After != "" {
+				at--
+			}
+		case at < 0:
+			return &apiError{http.StatusConflict, "job_not_queued", "job " + anchor + " is not queued"}
+		}
+		to = at
+		if req.After != "" {
+			to++
+		}
+	case req.To == "first":
+		to = 0
+	}
+	if to == from {
+		return nil
+	}
+	changed := map[*job]int64{}
+	switch {
+	case len(rest) == 0:
+	case to == 0:
+		changed[j] = *rest[0].QueueOrder - queueOrderGap
+	case to == len(rest):
+		changed[j] = *rest[len(rest)-1].QueueOrder + queueOrderGap
+	case *rest[to].QueueOrder-*rest[to-1].QueueOrder >= 2:
+		changed[j] = *rest[to-1].QueueOrder + (*rest[to].QueueOrder-*rest[to-1].QueueOrder)/2
+	default:
+		order := append(append(append([]*job{}, rest[:to]...), j), rest[to:]...)
+		for i, x := range order {
+			if next := int64(i+1) * queueOrderGap; next != *x.QueueOrder {
+				changed[x] = next
+			}
+		}
+	}
+	var others []*job
+	for x := range changed {
+		if x != j {
+			others = append(others, x)
+		}
+	}
+	sortByQueueOrder(others)
+	if _, ok := changed[j]; ok {
+		others = append(others, j)
+	}
+	for _, x := range others {
+		x.QueueOrder = ptr(changed[x])
+	}
+	for _, x := range others {
+		b.emit(x, domain.EventJobMoved, "", x.snapshot(), now)
+		b.feed(x)
+	}
+	if *j.QueueOrder > b.lastOrder {
+		b.lastOrder = *j.QueueOrder
+	}
+	return nil
 }
 
 // priorJob is the newest job holding the album or song id, for a search

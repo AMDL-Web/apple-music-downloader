@@ -196,6 +196,11 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   interrupted run) that happens in one write before the terminal one, so the terminal
   event and hook count them. A shutdown leaves items as they are so recovery can resume
   them.
+- Queued jobs start in run order: a worker that frees up claims the queued job with the
+  lowest `queue_order` (`internal/jobs#Manager.claimNext`). A new or retried job goes
+  last, `POST /downloads/{id}/move` changes a queued job's place
+  (`internal/db#Store.MoveQueuedJob`), and recovery puts the jobs a restart interrupted
+  ahead of the queued ones.
 - A panic while processing a job fails that job with `internal error: panic: <value>`
   (retryable); the stack is logged and the worker keeps running.
 - `GET /downloads` and `GET /downloads/{id}` return `event_cursor`: pass it as
@@ -295,6 +300,8 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   `job_events(type, created_at)` and deletes `item_progress` events of terminal jobs.
 - Migration 3 adds `job_items.download_bytes`, the bytes of encrypted media the current
   attempt has received (`progress.download_bytes` in the API).
+- Migration 4 adds `jobs.queue_order`, the run order of queued jobs, backfilled in
+  `created_at` order, and a partial index on it for queued jobs.
 - Migrations preserve every row of user data (jobs, items, milestone events,
   library-sync anchor). A test builds a database from the frozen 1.x schema SQL, inserts
   rows, migrates, and asserts every row survived and migration 1 changed nothing on a

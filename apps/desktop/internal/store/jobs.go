@@ -10,7 +10,8 @@ import (
 	"amdl/internal/progress"
 )
 
-// Job is one download as the app knows it.
+// Job is one download as the app knows it. It promotes domain.Job's
+// MarshalJSON, so json.Marshal of a Job writes only the domain.Job fields.
 type Job struct {
 	domain.Job
 	// Items are the job's tracks, by index, once the app has followed it;

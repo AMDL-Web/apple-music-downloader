@@ -36,6 +36,7 @@ const (
 	CodeJobNotRetryable   ErrorCode = "job_not_retryable"
 	CodeJobNotCancellable ErrorCode = "job_not_cancellable"
 	CodeJobFinalizing     ErrorCode = "job_finalizing"
+	CodeJobNotQueued      ErrorCode = "job_not_queued"
 	CodeDuplicateActive   ErrorCode = "duplicate_active"
 	CodeAlreadyLoggedIn   ErrorCode = "already_logged_in"
 	CodeLoginPending      ErrorCode = "login_pending"

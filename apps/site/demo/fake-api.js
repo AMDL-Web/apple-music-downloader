@@ -92,7 +92,9 @@ function stageFields(stage, frac, key) {
 const STAGE_ORDER = ['queued', 'resolving', 'waiting_download', 'downloading', 'waiting_decrypt', 'decrypting', 'remuxing', 'tagging', 'saving', 'completed'];
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 const DONE = new Set(['completed', 'failed', 'cancelled', 'skipped_existing']);
-const MILESTONES = new Set(['job_queued', 'job_started', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'job_retried', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
+const MILESTONES = new Set(['job_queued', 'job_started', 'job_moved', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'job_retried', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
+// The spacing of queue_order values, as the real store hands them out.
+const QUEUE_GAP = 2 ** 20;
 const MAX_RUNNING = 3;
 const DECRYPT_ERROR = 'decrypt: wrapper closed the connection while a sample was in flight; 3 attempts used';
 
@@ -175,6 +177,10 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   let nextEvent = 1000;
   let nextLog = 1;
   let submitted = 0;
+  let lastOrder = 0;
+  // A queue_order behind every job's: the place of a new or retried job.
+  const nextOrder = () => (lastOrder += QUEUE_GAP);
+  const queuedInOrder = () => [...jobs.values()].filter((j) => j.status === 'queued').sort((a, b) => a.queue_order - b.queue_order);
 
   const withProgress = (job) => ({ ...job, progress: progress(job.status, items.get(job.id) || []).percent / 100 });
 
@@ -304,6 +310,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       created_at: iso(created),
       updated_at: iso(finished || started || created),
     };
+    if (status === 'queued') job.queue_order = nextOrder();
     if (started) job.started_at = iso(started);
     if (finished) job.finished_at = iso(finished);
     if (rest.error) job.error = rest.error;
@@ -370,17 +377,19 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   /** Advances every running or queued job one step; returns how many things moved. */
   function tick() {
     let moved = 0;
+    // A free slot takes the first queued job in run order.
+    const started = new Set();
+    for (const job of queuedInOrder()) {
+      if ([...jobs.values()].filter((j) => j.status === 'running').length >= MAX_RUNNING) break;
+      Object.assign(job, { status: 'running', started_at: iso(Date.now()), updated_at: iso(Date.now()) });
+      delete job.queue_order;
+      addEvent({ job_id: job.id, type: 'job_started', message: 'job started', payload: { ...job } });
+      addLog('info', 'job started', { component: 'jobs', job_id: job.id });
+      started.add(job);
+      moved++;
+    }
     for (const job of [...jobs.values()]) {
-      if (job.status === 'queued') {
-        if ([...jobs.values()].filter((j) => j.status === 'running').length < MAX_RUNNING) {
-          Object.assign(job, { status: 'running', started_at: iso(Date.now()), updated_at: iso(Date.now()) });
-          addEvent({ job_id: job.id, type: 'job_started', message: 'job started', payload: { ...job } });
-          addLog('info', 'job started', { component: 'jobs', job_id: job.id });
-          moved++;
-        }
-        continue;
-      }
-      if (job.status !== 'running') continue;
+      if (job.status !== 'running' || started.has(job)) continue;
       if (!job.title) {
         const link = parseLink(job.input);
         const src = (link && find(link.id)) || albumFor(job.id);
@@ -511,12 +520,56 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         (!types.length || types.includes(j.type)) &&
         (!term || `${j.title || ''}\n${j.input}\n${j.artist_name || ''}`.toLowerCase().includes(term)),
     );
-    const sort = ['created_at', 'updated_at', 'finished_at'].includes(q.get('sort')) ? q.get('sort') : 'created_at';
     const dir = q.get('order') === 'asc' ? 1 : -1;
+    if (q.get('sort') === 'queue_order') {
+      // The queue in run order, then every other job in submission order.
+      const rank = (j) => (j.status === 'queued' ? 0 : 1);
+      return out.sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? dir * (a.queue_order - b.queue_order) : Date.parse(a.created_at) - Date.parse(b.created_at)));
+    }
+    const sort = ['created_at', 'updated_at', 'finished_at'].includes(q.get('sort')) ? q.get('sort') : 'created_at';
     return out.sort((a, b) => dir * ((Date.parse(a[sort]) || 0) - (Date.parse(b[sort]) || 0)) || dir * a.id.localeCompare(b.id));
   }
 
-  function jobRoute(method, id, action, q, signal) {
+  /**
+   * Places a queued job before or after another, or first or last, as the
+   * real move does: only its queue_order changes, unless no value is left
+   * between its new neighbors and the queue is renumbered. Each job whose
+   * value changed gets job_moved, the moved one last.
+   */
+  function move(job, body) {
+    const fields = ['before', 'after', 'to'].filter((k) => typeof body[k] === 'string' && body[k] !== '');
+    const unknown = Object.keys(body).filter((k) => !['before', 'after', 'to'].includes(k));
+    if (fields.length !== 1 || unknown.length || (body.to && body.to !== 'first' && body.to !== 'last')) {
+      return apiError(400, 'invalid_request', 'set exactly one of before, after and to (first or last)');
+    }
+    if (job.status !== 'queued') return apiError(409, 'job_not_queued', `job ${job.id} is not queued`);
+    const queue = queuedInOrder();
+    const from = queue.indexOf(job);
+    const rest = queue.filter((j) => j !== job);
+    let to = rest.length;
+    const anchorId = body.before || body.after;
+    if (anchorId) {
+      let at = rest.findIndex((j) => j.id === anchorId);
+      if (anchorId === job.id) at = body.after ? from - 1 : from;
+      else if (at < 0) return apiError(409, 'job_not_queued', `job ${anchorId} is not queued`);
+      to = body.after ? at + 1 : at;
+    } else if (body.to === 'first') to = 0;
+    if (to !== from && rest.length) {
+      const changed = new Map();
+      if (to === 0) changed.set(job, rest[0].queue_order - QUEUE_GAP);
+      else if (to === rest.length) changed.set(job, rest[rest.length - 1].queue_order + QUEUE_GAP);
+      else if (rest[to].queue_order - rest[to - 1].queue_order >= 2) changed.set(job, rest[to - 1].queue_order + Math.floor((rest[to].queue_order - rest[to - 1].queue_order) / 2));
+      else [...rest.slice(0, to), job, ...rest.slice(to)].forEach((j, i) => (i + 1) * QUEUE_GAP !== j.queue_order && changed.set(j, (i + 1) * QUEUE_GAP));
+      const order = [...changed.keys()].filter((j) => j !== job).sort((a, b) => a.queue_order - b.queue_order);
+      if (changed.has(job)) order.push(job);
+      for (const j of order) j.queue_order = changed.get(j);
+      lastOrder = Math.max(lastOrder, job.queue_order);
+      for (const j of order) addEvent({ job_id: j.id, type: 'job_moved', message: j === job ? 'job moved in the queue' : 'queue renumbered', payload: { ...j } });
+    }
+    return json(200, { job: withProgress(job) });
+  }
+
+  function jobRoute(method, id, action, q, signal, body) {
     const job = jobs.get(id);
     if (!job) return apiError(404, 'not_found', 'job not found');
     const list = items.get(id) || [];
@@ -531,6 +584,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     if (action === 'cancel' && method === 'POST') {
       if (TERMINAL.has(job.status)) return apiError(409, 'job_finished', 'job has already finished');
       Object.assign(job, { status: 'cancelled', finished_at: iso(Date.now()), updated_at: iso(Date.now()) });
+      delete job.queue_order;
       for (const it of list) if (!DONE.has(it.status)) Object.assign(it, stageFields('cancelled', 0));
       recount(job);
       addEvent({ job_id: id, type: 'job_cancelled', message: 'job cancelled', payload: { ...job } });
@@ -538,7 +592,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     }
     if (action === 'retry' && method === 'POST') {
       if (!TERMINAL.has(job.status)) return apiError(409, 'job_active', 'job is still active');
-      Object.assign(job, { status: 'queued', updated_at: iso(Date.now()) });
+      Object.assign(job, { status: 'queued', queue_order: nextOrder(), updated_at: iso(Date.now()) });
       delete job.error;
       delete job.finished_at;
       for (const it of list) {
@@ -550,6 +604,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       addEvent({ job_id: id, type: 'job_retried', message: 'job retried', payload: { ...job } });
       return json(202, withProgress(job));
     }
+    if (action === 'move' && method === 'POST') return move(job, body);
     if (action === 'events' && method === 'GET') {
       const after = Number(q.get('cursor')) || 0;
       const backlog = events.filter((e) => e.job_id === id && e.id > after);
@@ -759,8 +814,8 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     if (at < 0) return apiError(404, 'not_found', 'not found');
     const path = url.pathname.slice(at);
     const q = url.searchParams;
-    const job = path.match(/^\/api\/v1\/downloads\/(job_[0-9a-f]+)(?:\/(cancel|retry|events))?$/);
-    if (job) return jobRoute(method, job[1], job[2], q, req.signal);
+    const job = path.match(/^\/api\/v1\/downloads\/(job_[0-9a-f]+)(?:\/(cancel|retry|move|events))?$/);
+    if (job) return jobRoute(method, job[1], job[2], q, req.signal, job[2] === 'move' ? await readBody(req) : undefined);
     const artist = path.match(/^\/api\/v1\/artists\/([^/]+)\/albums$/);
     if (artist && method === 'GET') return artistAlbums(decodeURIComponent(artist[1]), q);
     if (/^\/api\/v1\/wrapper\/(login|logout|login\/[^/]+\/2fa)$/.test(path) && method === 'POST') {

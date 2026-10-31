@@ -39,7 +39,7 @@ by meaning.
 | `jobs get <job_id> [--view summary\|full]` | `GET /downloads/{job_id}` | read |
 | `jobs watch [<job_id>] [--types] [--progress-interval] [--timeout]` | the job's event stream, or the overview feed | read |
 | `jobs wait <job_id> [--timeout]` | the job's event stream | read |
-| `jobs cancel <job_id>`, `jobs retry <job_id>` | `POST …/cancel`, `…/retry` | write |
+| `jobs cancel <job_id>`, `jobs retry <job_id>`, `jobs move <job_id>` | `POST …/cancel`, `…/retry`, `…/move` | write |
 | `jobs delete <job_id>` | `DELETE /downloads/{job_id}` | destructive |
 | `library list [--kind] [--q] [--limit] [--offset]` | `GET /downloads?status=completed` | read |
 | `library sync get`, `library sync reset` | `/library-sync`, `…/reset` | read, destructive |

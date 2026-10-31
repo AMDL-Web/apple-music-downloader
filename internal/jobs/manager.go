@@ -6,10 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"amdl/internal/db"
-	"amdl/internal/domain"
 	"amdl/internal/events"
 	"amdl/internal/hooks"
 )
@@ -27,7 +25,6 @@ type Manager struct {
 	store     *db.Store
 	hub       *events.Hub
 	processor Processor
-	queue     chan string
 	logger    *slog.Logger
 	mu        sync.Mutex
 	submitMu  sync.Mutex
@@ -39,19 +36,25 @@ type Manager struct {
 	// refuses jobs present in either map.
 	finalizing map[string]bool
 	workers    int
-	hooks      *hooks.Dispatcher
+	// capacity is how many submitted or retried jobs may wait for a worker
+	// (queueCapacity; tests lower it).
+	capacity int
+	hooks    *hooks.Dispatcher
 	// active counts jobs currently in ProcessJob. It gates the post-job memory
 	// scavenge so only the last-finishing job of a busy burst triggers it (see
 	// run).
 	active atomic.Int32
 
-	// recoveryQueue is separate from queue so an arbitrary number of jobs can
-	// be recovered at startup without weakening the fixed 256-slot admission
-	// limit for new submissions. Workers drain recoveryQueue before waiting for
-	// newly submitted work.
-	recoveryMu    sync.Mutex
-	recoveryQueue []string
-	recoveryReady chan struct{}
+	// waiting is the set of queued jobs, guarded by mu. The store holds their
+	// run order; this set counts them for admission and QueueStats.
+	waiting waitList
+	// unclaimable holds queued jobs a worker failed to load or mark running,
+	// guarded by mu. Workers pass over them until Cancel or Retry, or the next
+	// start, so one bad row cannot stall the queue behind it. Such a job stays
+	// queued and keeps its place in waiting (and its admission slot).
+	unclaimable map[string]bool
+	// wake tells idle workers that a job may have become claimable.
+	wake signal
 
 	// lifecycle makes worker shutdown observable. In particular, callers must
 	// not close the store or processor dependencies until Shutdown/Wait says
@@ -68,9 +71,9 @@ func NewManager(store *db.Store, hub *events.Hub, processor Processor, workers i
 		workers = 1
 	}
 	return &Manager{
-		store: store, hub: hub, processor: processor, queue: make(chan string, 256),
+		store: store, hub: hub, processor: processor,
 		logger: logger, cancels: map[string]context.CancelFunc{}, finalizing: map[string]bool{}, workers: workers,
-		recoveryReady: make(chan struct{}, 1), workerDone: make(chan struct{}),
+		capacity: queueCapacity, unclaimable: map[string]bool{}, workerDone: make(chan struct{}),
 	}
 }
 
@@ -186,91 +189,4 @@ func (m *Manager) Wait(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-}
-
-func (m *Manager) RecoverUnfinished(ctx context.Context) (int, error) {
-	jobs, err := m.store.ListRecoverableJobs(ctx)
-	if err != nil {
-		return 0, err
-	}
-	m.submitMu.Lock()
-	defer m.submitMu.Unlock()
-	now := time.Now().UTC()
-	recovered := 0
-	for _, job := range jobs {
-		if job.Status == domain.JobRunning {
-			job.Status = domain.JobQueued
-			job.Error = ""
-			job.UpdatedAt = now
-			if err := m.store.UpdateJob(ctx, job); err != nil {
-				return 0, err
-			}
-		}
-		message := "job recovered after backend restart"
-		if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobRecovered, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
-			// The row has already been restored to a claimable queued state.
-			// Enqueue it before returning so a partial recovery never strands
-			// the jobs successfully processed earlier in this pass.
-			m.enqueueRecovered(job.ID)
-			return recovered + 1, err
-		}
-		m.enqueueRecovered(job.ID)
-		recovered++
-	}
-	return recovered, nil
-}
-
-func (m *Manager) enqueueRecovered(jobID string) {
-	m.recoveryMu.Lock()
-	m.recoveryQueue = append(m.recoveryQueue, jobID)
-	m.recoveryMu.Unlock()
-	select {
-	case m.recoveryReady <- struct{}{}:
-	default:
-	}
-}
-
-func (m *Manager) worker(ctx context.Context, index int) {
-	defer m.workerWG.Done()
-	for {
-		if ctx.Err() != nil {
-			return
-		}
-		if id, ok := m.popRecovered(); ok {
-			// Do not start another job after shutdown won the race with the
-			// recovery dequeue. It remains queued in the database and will be
-			// recovered again on the next start.
-			if ctx.Err() != nil {
-				return
-			}
-			m.run(ctx, id)
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case id := <-m.queue:
-			if ctx.Err() != nil {
-				return
-			}
-			m.run(ctx, id)
-		case <-m.recoveryReady:
-		}
-	}
-}
-
-func (m *Manager) popRecovered() (string, bool) {
-	m.recoveryMu.Lock()
-	defer m.recoveryMu.Unlock()
-	if len(m.recoveryQueue) == 0 {
-		return "", false
-	}
-	id := m.recoveryQueue[0]
-	m.recoveryQueue[0] = ""
-	if len(m.recoveryQueue) == 1 {
-		m.recoveryQueue = nil
-	} else {
-		m.recoveryQueue = m.recoveryQueue[1:]
-	}
-	return id, true
 }

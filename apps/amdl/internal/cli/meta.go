@@ -147,6 +147,7 @@ var synonyms = map[string]string{
 	"download": "get fetch save grab rip add queue", "search": "find look query catalog song album artist",
 	"jobs": "job download downloads queue task tasks", "list": "show all failed running recent",
 	"delete": "remove rm clear", "cancel": "stop abort", "retry": "again rerun restart failed",
+	"move": "reorder order priority next first last front back up down drag",
 	"wait": "until finish done block", "watch": "follow events stream progress live",
 	"lookup": "preview info metadata link", "quality": "codec bitrate lossless alac atmos hires",
 	"logs": "log error errors debug", "config": "setting settings option options", "wrapper": "login account apple id signin",

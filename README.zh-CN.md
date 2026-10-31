@@ -199,7 +199,7 @@ CORS 头。
 
 | | |
 | --- | --- |
-| **下载** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` |
+| **下载** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` · `POST /downloads/{id}/move` |
 | **事件** | `GET /downloads/{id}/events` 单个作业 · `GET /downloads/events` 总览流（SSE） |
 | **链接预览** | `POST /lookup`：不建作业，预览链接的标题、艺人和封面 |
 | **搜索** | `GET /search`：在曲库里搜歌曲、专辑、歌单和艺人 · `GET /artists/{id}/albums`：分页列出艺人的专辑 · `GET /albums/{id}`：专辑的歌曲列表 |

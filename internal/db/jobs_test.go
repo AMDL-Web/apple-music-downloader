@@ -389,7 +389,7 @@ func TestCreateJobEnforcesActiveKeyUniqueness(t *testing.T) {
 	}
 }
 
-func TestListRecoverableJobsOnlyReturnsQueuedAndRunning(t *testing.T) {
+func TestListRecoverableJobsListsRunningThenQueuedInRunOrder(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -417,8 +417,9 @@ func TestListRecoverableJobsOnlyReturnsQueuedAndRunning(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d recoverable jobs, want 2: %+v", len(got), got)
 	}
-	if got[0].ID != "queued" || got[1].ID != "running" {
-		t.Fatalf("recoverable job order/ids = [%s, %s], want [queued, running]", got[0].ID, got[1].ID)
+	// The running job was ahead of every queued one when it started.
+	if got[0].ID != "running" || got[1].ID != "queued" {
+		t.Fatalf("recoverable job order/ids = [%s, %s], want [running, queued]", got[0].ID, got[1].ID)
 	}
 }
 

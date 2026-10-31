@@ -58,8 +58,10 @@ func parseJobListFilter(r *http.Request) (db.JobListFilter, error) {
 		filter.Types = append(filter.Types, t)
 	}
 
-	if filter.Sort != "" && filter.Sort != db.JobListSortCreatedAt && filter.Sort != db.JobListSortUpdatedAt {
-		return filter, fmt.Errorf("sort must be created_at or updated_at")
+	switch filter.Sort {
+	case "", db.JobListSortCreatedAt, db.JobListSortUpdatedAt, db.JobListSortQueueOrder:
+	default:
+		return filter, fmt.Errorf("sort must be created_at, updated_at or queue_order")
 	}
 	if filter.Order != "" && filter.Order != db.JobListOrderAsc && filter.Order != db.JobListOrderDesc {
 		return filter, fmt.Errorf("order must be asc or desc")
