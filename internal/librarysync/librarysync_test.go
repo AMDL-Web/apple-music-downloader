@@ -1,15 +1,19 @@
 package librarysync
 
 import (
-	"amdl/internal/applemusic"
-	"amdl/internal/config"
-	"amdl/internal/domain"
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"amdl/internal/applemusic"
+	"amdl/internal/config"
+	"amdl/internal/domain"
+	"amdl/internal/usertoken"
 )
 
 // fakeLibrary serves a fixed newest-first song list, counting requests so tests
@@ -17,6 +21,7 @@ import (
 type fakeLibrary struct {
 	songs     []applemusic.LibrarySong
 	pageCalls int
+	lastToken string
 	catalog   map[string]string // library album id -> catalog URL; missing = no counterpart
 	failURL   map[string]bool
 	// clientErrorURL fails these lookups with a non-retryable client error.
@@ -31,6 +36,7 @@ func (f *fakeLibrary) LibrarySongsNewestFirst(_ context.Context, token string, o
 		return nil, false, fmt.Errorf("missing token")
 	}
 	f.pageCalls++
+	f.lastToken = token
 	if offset >= len(f.songs) {
 		return nil, false, nil
 	}
@@ -131,7 +137,7 @@ func newWatcher(t *testing.T, lib *fakeLibrary, store *fakeStore, jobs *fakeSubm
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	return New(config.NewStore(cfg), lib, store, jobs, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return New(config.NewStore(cfg), nil, lib, store, jobs, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 // A first pass records where the library stands and submits nothing: whatever
@@ -274,8 +280,48 @@ func TestIdleWithoutMediaUserToken(t *testing.T) {
 	if lib.pageCalls != 0 {
 		t.Fatalf("made %d Apple requests without a token, want 0", lib.pageCalls)
 	}
-	if status := w.Status(); status.LastError == "" {
-		t.Fatal("status should explain why the watcher is idle")
+	if status := w.Status(); status.LastError != IdleNoToken {
+		t.Fatalf("last_error = %q, want %q", status.LastError, IdleNoToken)
+	}
+}
+
+// The wrapper's token is enough: a pass runs with it while the config has
+// none, and it is the token the library is read with.
+func TestWrapperTokenRunsWithoutConfigToken(t *testing.T) {
+	songs, catalog := library(80, nil)
+	lib := &fakeLibrary{songs: songs, catalog: catalog}
+	cfg := config.Default()
+	cfg.LibrarySync.Enabled = true
+	wrapperToken := strings.Repeat("W", 200)
+	tokens := usertoken.New(func() (string, error) { return wrapperToken, nil })
+	w := New(config.NewStore(cfg), tokens, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w.RunOnce(context.Background())
+
+	if lib.pageCalls == 0 {
+		t.Fatal("the watcher stayed idle although the wrapper has a token")
+	}
+	if lib.lastToken != wrapperToken {
+		t.Fatalf("library read with a %d-byte token, want the wrapper's", len(lib.lastToken))
+	}
+	if status := w.Status(); status.LastError != "" {
+		t.Fatalf("last_error = %q, want none", status.LastError)
+	}
+}
+
+// With neither token the watcher idles with the message naming both sources,
+// even when a wrapper reader is wired.
+func TestIdleWhenNeitherSourceHasAToken(t *testing.T) {
+	lib := &fakeLibrary{}
+	cfg := config.Default()
+	cfg.LibrarySync.Enabled = true
+	tokens := usertoken.New(func() (string, error) { return "", nil })
+	w := New(config.NewStore(cfg), tokens, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w.RunOnce(context.Background())
+	if lib.pageCalls != 0 {
+		t.Fatalf("made %d Apple requests without a token, want 0", lib.pageCalls)
+	}
+	if status := w.Status(); status.LastError != IdleNoToken {
+		t.Fatalf("last_error = %q, want %q", status.LastError, IdleNoToken)
 	}
 }
 
@@ -412,7 +458,7 @@ func TestRunReturnsAfterCancelAndInFlightPass(t *testing.T) {
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
 	cfg.Catalog.MediaUserToken = "token"
-	w := New(config.NewStore(cfg), lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := New(config.NewStore(cfg), nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -436,4 +482,40 @@ func TestRunReturnsAfterCancelAndInFlightPass(t *testing.T) {
 	default:
 		t.Fatal("Run returned while a pass was still in flight")
 	}
+}
+
+// A tick without a token does not start the interval: once a wrapper login
+// supplies one, the first pass runs on the next tick, not 15 minutes later.
+func TestRunPassesOnceATokenAppears(t *testing.T) {
+	lib := &blockingLibrary{entered: make(chan struct{}), exited: make(chan struct{})}
+	cfg := config.Default()
+	cfg.LibrarySync.Enabled = true
+	var loggedIn atomic.Bool
+	tokens := usertoken.New(func() (string, error) {
+		if loggedIn.Load() {
+			return strings.Repeat("W", 200), nil
+		}
+		return "", nil
+	})
+	w := New(config.NewStore(cfg), tokens, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		w.run(ctx, time.Millisecond)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	if status := w.Status(); status.LastError != IdleNoToken {
+		t.Fatalf("last_error = %q before the login, want %q", status.LastError, IdleNoToken)
+	}
+	loggedIn.Store(true)
+	select {
+	case <-lib.entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no pass within 3 s of the token appearing")
+	}
+	cancel()
+	<-done
 }

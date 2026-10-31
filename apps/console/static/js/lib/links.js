@@ -63,7 +63,8 @@ function toUrl(raw) {
  *   kind stays 'album': the backend downloads that song or the whole album
  *   depending on the runtime catalog.album_track_url_mode ("song" by default).
  * - private: a user playlist (id starts with "pl.u-"), whose cover the
- *   backend reads with catalog.media_user_token.
+ *   backend reads with the media user token (the wrapper's, else
+ *   catalog.media_user_token).
  */
 export function parseLink(input, opts = {}) {
   if (typeof input !== 'string') return null;

@@ -13,6 +13,7 @@ import { newDownloadUrls, buildHash } from '../lib/route.js';
 import { scanLinks, removeLink } from '../lib/links.js';
 import { handledUrls, resultRows, submitSummary } from '../lib/submit.js';
 import { downloadLabel, servedRegions } from '../lib/submit-check.js';
+import { tokenState } from '../lib/user-token.js';
 import { optionDefaults, presetOverrides, presetValues, qualityText, linkQuality, dockQuality } from '../lib/overrides.js';
 import { isPicked } from '../lib/lookup.js';
 import { searchTerm, searchCountLine, shownHits, SEARCH_DEBOUNCE_MS } from '../lib/search.js';
@@ -91,8 +92,6 @@ export function DownloadPage({ route }) {
   const download = cfg.data && cfg.data.config ? cfg.data.config.download : null;
   const trackMode = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.album_track_url_mode || '' : null;
   const defaults = useMemo(() => (download ? optionDefaults(download) : null), [JSON.stringify(download)]);
-  // Whether Settings holds a media-user-token; null until the config loads.
-  const serverToken = cfg.data && cfg.data.config && cfg.data.config.catalog ? Boolean(cfg.data.config.catalog.media_user_token) : null;
 
   // The quality preset and the Overwrite switch (null: as Settings has it).
   const [choice, setChoiceState] = useState(chosen);
@@ -120,11 +119,14 @@ export function DownloadPage({ route }) {
   // refuses it; null (flag nothing) while unknown or in simulate mode.
   const { wrapper } = useStatus(['wrapper']);
   const regions = servedRegions(wrapper, app.simulate);
+  // The media-user-token a download would use: the wrapper's, else Settings'.
+  const savedToken = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.media_user_token || '' : undefined;
+  const token = tokenState(savedToken, wrapper);
 
   const { statusOf, issueOf, sendable: allowed, skipped, queue, priorOf, forgetPrior } = useLookups({
     settled,
     entries,
-    serverToken,
+    token,
     regions,
     trackMode,
     epoch: app.epoch,

@@ -8,13 +8,14 @@ import { capitalized } from './format.js';
 import { settingsHash } from './route.js';
 import { CODES } from './submit.js';
 
-/** Where Settings edits catalog.media_user_token, the only token a download uses. */
+/** Where Settings edits catalog.media_user_token, the token a download uses when the wrapper's cannot be read. */
 export const TOKEN_SETTINGS_HASH = settingsHash('account', 'catalog.media_user_token');
 
 /**
  * Why a scanned link (lib/links.js scanLinks entry) cannot be downloaded or
  * needs attention, or null when it is fine. `lookup` is its preview status
- * (lib/lookup.js), `hasToken` whether Settings holds a media-user-token,
+ * (lib/lookup.js), `hasToken` whether the backend has a media-user-token, the
+ * wrapper's or Settings' (lib/user-token.js),
  * `regions` the storefronts the wrapper's account serves (servedRegions;
  * null when unknown, which flags nothing). Returns {code, role, blocking, message, title?, href?, action?}; a blocking
  * issue keeps the link out of the submission, `title` holds a long server

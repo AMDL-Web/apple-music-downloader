@@ -224,16 +224,17 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 只有一个文件 `configs/config.yaml`，第一次启动时由
 [`configs/config.example.yaml`](configs/config.example.yaml) 生成。示例文件的注释写明了每个配置项
 的可选值、单位和默认值。运行时配置项通过 `PUT /api/v1/config`（控制台的 Settings 页面）修改，
-这会重写整个文件并丢掉注释；启动配置项要重启才生效。`AMDL_SERVER_LISTEN`、`AMDL_WRAPPER_ADDRESS`
-和 `AMDL_DATABASE_PATH` 可以覆盖对应的配置项。下载电台需要在 `catalog.media_user_token` 里填上你的
-订阅令牌。详见 [docs/configuration.md](docs/configuration.md)（英文）。
+这会重写整个文件并丢掉注释；启动配置项要重启才生效。`AMDL_SERVER_LISTEN`、`AMDL_WRAPPER_ADDRESS`、
+`AMDL_WRAPPER_DATA_DIR` 和 `AMDL_DATABASE_PATH` 可以覆盖对应的配置项。下载电台需要订阅令牌：后端自己运行
+wrapper，或 `wrapper.data_dir` 指向 wrapper 的文件时，直接从 wrapper 读取；否则用
+`catalog.media_user_token` 里填的。详见 [docs/configuration.md](docs/configuration.md)（英文）。
 
 ## 自动化
 
 - **作业钩子**（[`configs/hooks.yaml`](configs/hooks.yaml)）在作业入队或结束时调用 webhook 或
   运行命令，比如刷新媒体服务器。
-- **资料库同步**监视你的 Apple Music 资料库，你每加一首歌，就下载它所在的专辑。需要
-  `catalog.media_user_token`。
+- **资料库同步**监视你的 Apple Music 资料库，你每加一首歌，就下载它所在的专辑。需要订阅令牌：
+  wrapper 的，或 `catalog.media_user_token`。
 
 两者默认都关闭。见 [docs/automation.md](docs/automation.md)（英文）。
 

@@ -115,7 +115,7 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), lookupTimeout)
 	defer cancel()
-	resp, err := s.previewLink(ctx, parsed, strings.TrimSpace(cfg.Catalog.MediaUserToken))
+	resp, err := s.previewLink(ctx, parsed, s.tokens.Token(cfg).Value)
 	switch {
 	case err == nil:
 		resp.lookupLinkFields = link

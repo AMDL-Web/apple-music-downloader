@@ -10,6 +10,7 @@ import { SETTINGS_GROUPS } from '../lib/settings-sections.js';
 import { bytes, absTime } from '../lib/format.js';
 import { groupByDisk } from '../lib/storage.js';
 import { settingsHash } from '../lib/route.js';
+import { tokenState } from '../lib/user-token.js';
 import { Notice, ErrorNote, SkeletonRows, Unavailable, Button, CopyButton, Icon } from '../ui/components.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
@@ -23,9 +24,9 @@ export const groupDomId = (id) => `settings-group-${id}`;
 /**
  * `form` carries the page state every field needs: valueOf, dirtyKeys,
  * errors, warnings, setValue, revert, showKeys. `after` maps a key to a
- * line under its row.
+ * line under its row, `extra` to more props for its control.
  */
-function FieldRows({ fields, form, after = {} }) {
+function FieldRows({ fields, form, after = {}, extra = {} }) {
   if (fields.length === 0) return null;
   return html`<div class="field-list">
     ${fields.map(
@@ -39,6 +40,7 @@ function FieldRows({ fields, form, after = {} }) {
         showKeys=${form.showKeys}
         disabled=${fieldDisabled(f.key, form.valueOf)}
         after=${after[f.key]}
+        extra=${extra[f.key]}
         onChange=${(v) => form.setValue(f.key, v)}
         onRevert=${() => form.revert(f.key)}
       />`,
@@ -113,15 +115,16 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
         ? html`<${Unavailable} what="Runtime configuration (GET /api/v1/config)" />`
         : html`<${ErrorNote} title="Couldn't load the settings" error=${cfg.error} onRetry=${onRetry} />`;
   else if (!cfg.loaded && fields.length) rows = html`<${SkeletonRows} n=${Math.min(fields.length, 6)} kind="line" />`;
-  const fieldRows = (list, after) => rows || html`<${FieldRows} fields=${list} form=${form} after=${after} />`;
+  const fieldRows = (list, after, extra) => rows || html`<${FieldRows} fields=${list} form=${form} after=${after} extra=${extra} />`;
 
   switch (section.id) {
     case 'account': {
-      const syncWaits = cfg.loaded && cfg.base['library_sync.enabled'] === true && !cfg.base['catalog.media_user_token'];
+      const token = tokenState(cfg.loaded ? cfg.base['catalog.media_user_token'] || '' : undefined, st.wrapper);
+      const syncWaits = cfg.loaded && cfg.base['library_sync.enabled'] === true && token.known && !token.present;
       return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${st.wrapper && st.wrapper.data} />
         <${AccountPanel}>
           <section class="account-block" aria-label="Media user token">
-            ${fieldRows(fields)}
+            ${fieldRows(fields, undefined, { 'catalog.media_user_token': { wrapperToken: token.wrapperToken } })}
             ${syncWaits
               ? html`<p class="field-warning settings-token-wait" data-role="warning">
                   <${Icon} name="triangle-alert" size="sm" /><span>Library sync is waiting for this token. <a class="link" href=${settingsHash('library_sync')}>Library sync</a></span>

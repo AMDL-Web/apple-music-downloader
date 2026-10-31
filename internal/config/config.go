@@ -29,9 +29,10 @@ type Config struct {
 // flipping Enabled or changing the interval takes effect without a restart, and
 // disabling it stops the polling rather than merely dropping the results.
 //
-// It needs catalog.media_user_token: a personal library is not readable with
-// the web-player token alone. With that empty the watcher stays idle and says so
-// once per config change instead of failing every tick.
+// It needs a media-user-token, the wrapper's or catalog.media_user_token
+// (internal/usertoken): a personal library is not readable with the
+// web-player token alone. With neither the watcher stays idle and says so
+// once per change instead of failing every tick.
 type LibrarySyncConfig struct {
 	Enabled         bool `yaml:"enabled" json:"enabled"`
 	IntervalMinutes int  `yaml:"interval_minutes" json:"interval_minutes"`
@@ -68,11 +69,14 @@ type LoggingConfig struct {
 }
 
 // WrapperConfig is the wrapper-lite connection. Address is an http:// or
-// https:// URL; https uses TLS 1.2+ and verifies the certificate.
+// https:// URL; https uses TLS 1.2+ and verifies the certificate. DataDir is
+// the wrapper's data directory as amdl sees it, where internal/usertoken reads
+// the account's media-user-token; empty means amdl cannot read it.
 type WrapperConfig struct {
 	Address             string `yaml:"address" json:"address"`
 	TimeoutSeconds      int    `yaml:"timeout_seconds" json:"timeout_seconds"`
 	LoginTimeoutSeconds int    `yaml:"login_timeout_seconds" json:"login_timeout_seconds"`
+	DataDir             string `yaml:"data_dir" json:"data_dir"`
 }
 
 // LoginTimeout bounds a wrapper login including its 2FA step; values <= 0 fall

@@ -14,8 +14,9 @@
 #   - or edit ./configs/config.yaml directly, then apply runtime fields with
 #     POST /api/v1/config/reload (the console's "Reload from file") and startup
 #     fields with docker compose restart.
-# Only the listen address, the wrapper address and the database path can also
-# be set through the environment (below); they win over config.yaml.
+# Only the listen address, the wrapper address, the wrapper's data directory and
+# the database path can also be set through the environment (below); they win
+# over config.yaml.
 #
 # Stopping or restarting is safe mid-download: running jobs stay running in
 # the database and resume on the next start.
@@ -64,7 +65,8 @@ services:
       # name is all that is needed.
       # TZ: "Asia/Shanghai"
       # The backend reads AMDL_SERVER_LISTEN, AMDL_WRAPPER_ADDRESS,
-      # AMDL_DATABASE_PATH, AMDL_CONFIG and AMDL_HOOKS_CONFIG; every other
+      # AMDL_WRAPPER_DATA_DIR, AMDL_DATABASE_PATH, AMDL_CONFIG and
+      # AMDL_HOOKS_CONFIG; every other
       # setting belongs in config.yaml, and any other AMDL_* variable is
       # ignored with a warning at startup.
       # Wrapper URL (overrides wrapper.address): a wrapper-manager v2 or a bare
@@ -81,6 +83,13 @@ services:
       #     "http://wrapper-lite:12340" and uncomment the wrapper-lite service
       #     below instead.
       AMDL_WRAPPER_ADDRESS: "http://host.docker.internal:12340"
+      # The wrapper's data directory inside this container (overrides
+      # wrapper.data_dir): the backend then uses the media-user-token the
+      # wrapper keeps there instead of one pasted into Settings. Uncomment it
+      # with the matching read-only mount under volumes below:
+      #   - option A (wrapper-manager): "/app/data/wrapper-manager/wrapper/rootfs/data"
+      #   - option B (wrapper-lite): "/app/data/wrapper"
+      # AMDL_WRAPPER_DATA_DIR: "/app/data/wrapper"
       # API listen address (overrides server.listen). Inside the container it
       # must listen on a non-loopback address; the entrypoint defaults to
       # :18080. When changing the port, adjust the ports mapping above to match;
@@ -100,6 +109,10 @@ services:
       - ./data/downloads:/app/data/downloads
       # The temp directory data/tmp stays inside the container and needs no
       # mount.
+      # The wrapper's data, read-only, for AMDL_WRAPPER_DATA_DIR above: option
+      # A's volume or option B's directory.
+      # - wrapper-data:/app/data/wrapper-manager:ro
+      # - ./data/wrapper:/app/data/wrapper:ro
 
   # Wrapper, option A (recommended): wrapper-manager v2, which supervises
   # wrapper-lite accounts behind one HTTP port and lets you log in from the

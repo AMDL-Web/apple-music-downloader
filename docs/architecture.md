@@ -65,6 +65,7 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/config` | config file, env overrides, validation, runtime store | |
 | `internal/hooks` | webhook/exec hook execution | |
 | `internal/librarysync` | the library watcher | |
+| `internal/usertoken` | which media-user-token the backend uses: the wrapper's `MUSIC_TOKEN` when it can read one, else `catalog.media_user_token` | log or return the token |
 | `internal/logging` | slog setup, in-memory ring buffer, log subscriptions | |
 | `internal/limits` | semaphores and the Apple request gate | |
 | `internal/ids` | random IDs (`job_<32 hex>`, `item_<32 hex>`) | |

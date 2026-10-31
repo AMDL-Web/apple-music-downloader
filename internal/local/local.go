@@ -341,7 +341,10 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Running{Base: "http://" + ln.Addr().String(), dirs: b.Dirs, lock: l, cancel: cancel, done: make(chan error, 1)}
+	var wrapperToken func() (string, error)
 	if host != nil {
+		// The supervisor's Home is the one wrapperHost built from these dirs.
+		wrapperToken = wrapperhost.Home{Dir: b.Dirs.WrapperDir()}.MusicToken
 		r.hostDone = make(chan struct{})
 		go func() {
 			defer close(r.hostDone)
@@ -350,12 +353,13 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	}
 	go func() {
 		r.done <- server.Run(ctx, server.Options{
-			ConfigPath:  b.ConfigPath(),
-			HooksPath:   filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
-			Listener:    ln,
-			LogOutput:   logOut,
-			Console:     b.Console,
-			WrapperHost: host,
+			ConfigPath:   b.ConfigPath(),
+			HooksPath:    filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
+			Listener:     ln,
+			LogOutput:    logOut,
+			Console:      b.Console,
+			WrapperHost:  host,
+			WrapperToken: wrapperToken,
 		})
 	}()
 	if err := r.waitHealthy(); err != nil {

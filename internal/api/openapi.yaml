@@ -534,7 +534,8 @@ paths:
         collections keep Apple Music's original order and repeated track occurrences.
         The i parameter on an album URL still follows the runtime
         catalog.album_track_url_mode; station resolution uses the runtime
-        catalog.media_user_token. Internally this reuses the download jobs' region
+        media-user-token (the wrapper's when amdl can read it, else
+        catalog.media_user_token). Internally this reuses the download jobs' region
         check, collection resolution, track metadata refresh, retries, concurrency
         scheduling, HLS source selection and codec/ALAC filtering rules. On the
         normal success path, each track occurrence reads its master playlist once
@@ -596,8 +597,9 @@ paths:
         absent). The animated-cover and Enhanced HLS reads are never made. The
         whole lookup is bounded by 15 seconds.
 
-        Only a private (pl.u-) playlist's cover uses a media-user-token, and only
-        the runtime catalog.media_user_token; the request cannot supply one. It is
+        Only a private (pl.u-) playlist's cover uses a media-user-token: the
+        wrapper's when amdl can read it (WrapperStatus.media_user_token), else the
+        runtime catalog.media_user_token; the request cannot supply one. It is
         never echoed.
 
         Once the link has parsed, every error carries it in details.link
@@ -946,7 +948,8 @@ paths:
         failure was an unexpected validator error, else 422 no_urls_accepted. The optional overrides field
         applies to the jobs created by this request and overrides the quality and
         force_overwrite keys of the runtime download configuration. The
-        media-user-token is always the runtime catalog.media_user_token, and every
+        media-user-token is the wrapper's when amdl can read it, else the runtime
+        catalog.media_user_token (never one from the request), and every
         enabled hooks.yaml entry that matches runs for every job.
       operationId: createDownload
       requestBody:
@@ -1466,7 +1469,7 @@ components:
         - upstream_timeout
     WrapperStatus:
       type: object
-      required: [ready, logged_in, regions, accounts, login_supported]
+      required: [ready, logged_in, regions, accounts, login_supported, media_user_token]
       properties:
         ready:
           type: boolean
@@ -1500,6 +1503,16 @@ components:
             session to find.
         managed:
           $ref: '#/components/schemas/ManagedWrapper'
+        media_user_token:
+          type: string
+          description: >-
+            The wrapper account's media-user-token as amdl reads it, masked like
+            catalog.media_user_token in GET /config: "..." and its last four
+            characters. "" when amdl cannot read one: it runs no wrapper and
+            wrapper.data_dir is unset, the file is missing or unreadable, or it
+            does not hold a token. While it is not "", downloads, lookups and
+            library sync use it instead of catalog.media_user_token.
+          example: "...a1b2"
     ManagedWrapper:
       type: object
       description: >-
@@ -1963,9 +1976,10 @@ components:
             which the server splits automatically; at most 100 URLs per request
             after splitting. Stations (station, shaped like
             .../station/.../ra.xxxx) are supported only for personalized/curated
-            stations that resolve to a track list, and require the runtime
-            catalog.media_user_token; live radio stations (Apple Music 1, etc.)
-            have no static track list and cannot be downloaded.
+            stations that resolve to a track list, and require a media-user-token
+            (the wrapper's, or the runtime catalog.media_user_token); live radio
+            stations (Apple Music 1, etc.) have no static track list and cannot
+            be downloaded.
           minItems: 1
           items:
             type: string
@@ -1986,9 +2000,10 @@ components:
         Per-job override layer for the quality and overwrite keys of the download
         section of the runtime configuration; each field maps one-to-one onto the
         download key of the same name. Every other setting (directories, path
-        templates, lyrics, covers, memory_mode, max_attempts, check_integrity, the
-        media-user-token and hook selection) comes from the runtime configuration
-        and hooks.yaml for every job. All fields are optional; on submission the
+        templates, lyrics, covers, memory_mode, max_attempts, check_integrity and
+        hook selection) comes from the runtime configuration and hooks.yaml for
+        every job, and the media-user-token is the wrapper's when amdl can read
+        it, else the runtime catalog.media_user_token. All fields are optional; on submission the
         full validation runs against "current runtime configuration + overrides",
         and an unknown field is rejected with 400 invalid_request naming it. Job
         rows stored before a field was removed are read with that field ignored.
@@ -2027,8 +2042,10 @@ components:
             media_user_token:
               type: string
               description: >-
-                The media-user-token used for station downloads, private playlist
-                covers and library sync; no request can supply its own. It can be
+                The media-user-token for station downloads, private playlist covers
+                and library sync while amdl cannot read the wrapper's own
+                (WrapperStatus.media_user_token is ""); while it can, this value
+                stays saved but is not used. No request can supply its own. It can be
                 changed through PUT and is written back to the configuration file.
                 Responses never carry it: a set token reads "..." and its last four
                 characters, an unset one "". A PUT whose value starts with "..."
@@ -2191,9 +2208,10 @@ components:
             Library monitor: polls the signed-in Apple Music library and submits
             the albums of newly added tracks as ordinary download jobs (sharing the
             same deduplication, validation and hooks as manual submissions).
-            Requires catalog.media_user_token — a personal library can be read only
-            with the subscription token; while that field is empty the monitor
-            idles, and last_error in GET /api/v1/library-sync shows the status.
+            Requires a media-user-token, the wrapper's or catalog.media_user_token
+            — a personal library can be read only with the subscription token;
+            while neither has one the monitor idles, and last_error in GET
+            /api/v1/library-sync shows the status.
           properties:
             enabled:
               type: boolean
@@ -2233,8 +2251,9 @@ components:
           type: string
           description: >-
             Failure reason of the most recent poll; absent on success. When the
-            monitor is enabled but catalog.media_user_token is empty, this explains
-            why it is idling.
+            monitor is enabled but amdl has no media-user-token (none from the
+            wrapper, and catalog.media_user_token empty), this explains why it is
+            idling.
         last_submitted:
           type: integer
           description: Number of albums enqueued in the most recent poll.
@@ -2547,7 +2566,8 @@ components:
               type: boolean
               description: >-
                 True for a station: its download reads the next-tracks feed,
-                which needs catalog.media_user_token. Absent for other types.
+                which needs a media-user-token (the wrapper's or
+                catalog.media_user_token). Absent for other types.
     SearchResponse:
       type: object
       required: [term, storefront]

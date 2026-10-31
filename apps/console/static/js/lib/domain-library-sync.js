@@ -6,11 +6,12 @@ import { pct, plural, savedConfig, frame, roleOf } from './domain-frame.js';
 import { keysToLabels } from './settings-draft.js';
 import { nextCheckFraction, nextCheckIn } from './sysdata.js';
 import { settingsHash } from './route.js';
+import { tokenState } from './user-token.js';
 
 /**
- * Library sync's state, shared with Overview: Off, Needs token (on, but the
- * saved media user token is empty), Error, or Watching. `tokenSet` undefined
- * (the config not read yet) counts as set.
+ * Library sync's state, shared with Overview: Off, Needs token (on, but
+ * neither the wrapper nor Settings has a media user token), Error, or
+ * Watching. `tokenSet` undefined (not known yet) counts as set.
  */
 export function librarySyncState(sync, tokenSet) {
   if (!sync.enabled) return { icon: 'circle-minus', role: 'neutral', label: 'Off' };
@@ -27,7 +28,12 @@ export function librarySync(s, ctx) {
   const v = frame('library_sync', e, ctx);
   if (v.state !== 'ok') return v;
   const sync = e.data;
-  const tag = librarySyncState(sync, savedConfig(s).tokenSet);
+  // Until the config and the wrapper status say whether there is a token, the
+  // view stays loading rather than show Needs token, or an idle watcher's
+  // last_error as an Error, for a moment.
+  const token = tokenState(savedConfig(s).token, s.wrapper);
+  if (!token.known) return frame('library_sync', undefined, ctx);
+  const tag = librarySyncState(sync, token.present);
   const anchor = sync.anchor_size || 0;
   const figure = anchor > 0 ? { value: count(anchor), unit: anchor === 1 ? 'track seen' : 'tracks seen' } : { value: 'Not anchored yet', word: true };
   const fraction = tag.label === 'Off' ? 0 : nextCheckFraction(sync, ctx.now);

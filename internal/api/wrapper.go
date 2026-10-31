@@ -19,13 +19,30 @@ type WrapperService interface {
 	Logout(context.Context, string) error
 }
 
+// wrapperStatusResponse is the WrapperStatus schema: the wrapper's own status
+// plus the media-user-token amdl reads from it, masked.
+type wrapperStatusResponse struct {
+	wrapper.Status
+	MediaUserToken string `json:"media_user_token"`
+}
+
 func (s *Server) wrapperStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := s.wrapper.Status(r.Context())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnavailable, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, status)
+	writeJSON(w, http.StatusOK, wrapperStatusResponse{Status: status, MediaUserToken: s.wrapperToken()})
+}
+
+// wrapperToken is the wrapper's media-user-token masked as GET /config masks
+// the configured one, or "" when amdl cannot read one.
+func (s *Server) wrapperToken() string {
+	v, err := s.tokens.Wrapper(s.currentConfig())
+	if err != nil {
+		return ""
+	}
+	return redactToken(v)
 }
 
 func (s *Server) wrapperLogin(w http.ResponseWriter, r *http.Request) {

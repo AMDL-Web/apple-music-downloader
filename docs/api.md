@@ -171,7 +171,8 @@ restart.
 curl http://localhost:18080/api/v1/wrapper/status
 ```
 
-Returns `ready`, `logged_in`, `regions`, `accounts` and `login_supported`. `logged_in` is true
+Returns `ready`, `logged_in`, `regions`, `accounts`, `login_supported` and
+`media_user_token`. `logged_in` is true
 when an account is logged in and serves a storefront. `accounts` lists the account
 identifiers the wrapper reports (`[]` when none; neither wrapper-lite nor wrapper-manager
 reports any). `login_supported` is true when the wrapper is a wrapper-manager, or a
@@ -179,6 +180,13 @@ wrapper amdl runs on this machine; the three routes below need one of them. The 
 does not contact the wrapper at startup, so it starts fine without a reachable wrapper,
 and this endpoint is how you verify connectivity; an unreachable wrapper is
 `503 wrapper_unavailable`.
+
+`media_user_token` is the wrapper account's media-user-token as the backend reads it from
+the wrapper's `MUSIC_TOKEN` file, masked like the configured token in `GET /config` (`...`
+and its last four characters), or `""` when it cannot read one. The backend reads it from a
+wrapper it runs itself, or from `wrapper.data_dir` ([configuration.md](configuration.md#the-media-user-token)).
+While it is not `""`, downloads, lookups and library sync use the wrapper's token, and
+`catalog.media_user_token` stays saved but unused.
 
 When amdl runs the wrapper itself (`amdl wrapper install`, [install.md](install.md#the-wrapper)),
 the response also carries `managed`: `mode` (`starting`, `serving`, `login`, `stopped` or
@@ -279,7 +287,7 @@ is `422 invalid_overrides`.
 
 Everything else comes from the runtime config for every job: directories, path templates,
 lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`, and the media-user-token
-(`catalog.media_user_token`). Every enabled hook in `hooks.yaml` whose `events` and
+(the wrapper's when the backend can read it, else `catalog.media_user_token`). Every enabled hook in `hooks.yaml` whose `events` and
 `job_types` match runs for every job. Any other field, at the top level (`force`,
 `media_user_token`) or inside `overrides` (`hooks`, `downloads_dir`, `media_user_token`,
 ...), is `400 invalid_request` naming the unknown field.
@@ -296,8 +304,9 @@ terminal write drops them.
 
 Station links (`https://music.apple.com/us/station/.../ra.xxxx`) are supported when they
 resolve to a track list — personalised and curated stations. They need an Apple Music
-subscription token in `catalog.media_user_token` (Settings in the console, or
-`PUT /api/v1/config`).
+subscription token: the wrapper's, when the backend can read it (`media_user_token` in
+`GET /api/v1/wrapper/status` is not `""`), else `catalog.media_user_token` (Settings in the
+console, or `PUT /api/v1/config`).
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads \
@@ -460,8 +469,9 @@ a song or album carries Apple's `audio_traits` as search hits do, and a station 
 album or playlist pages through its track list): never the animated-cover or Enhanced
 HLS reads, never a station's next-tracks feed, at most 15 seconds in all.
 
-The body is `{url}` only. A private playlist's cover is read with
-`catalog.media_user_token`; the token is never echoed.
+The body is `{url}` only. A private playlist's cover is read with the wrapper's
+media-user-token when the backend can read it, else `catalog.media_user_token`; the token is
+never echoed.
 
 | Case | Answer |
 | --- | --- |
@@ -565,8 +575,8 @@ transfer. Region validation requires the wrapper to be ready and the URL's
 storefront to be among the regions it reports.
 
 All link types return per-track `tracks`; a song returns one element, collections keep
-Apple Music's original order and duplicate track occurrences. Stations use the runtime
-`catalog.media_user_token`.
+Apple Music's original order and duplicate track occurrences. Stations use the wrapper's
+media-user-token when the backend can read it, else the runtime `catalog.media_user_token`.
 
 ## Config and hooks
 

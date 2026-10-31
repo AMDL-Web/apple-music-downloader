@@ -67,6 +67,9 @@ type WrapperStatus struct {
 	LoginSupported bool     `json:"login_supported"`
 	// Managed is set when the backend runs the wrapper on its machine.
 	Managed *ManagedWrapper `json:"managed,omitempty"`
+	// MediaUserToken is the wrapper's media-user-token masked, "" when the
+	// backend cannot read one.
+	MediaUserToken string `json:"media_user_token"`
 }
 
 // ManagedWrapper is the ManagedWrapper schema.

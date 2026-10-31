@@ -13,10 +13,11 @@
 # older {TrackNumber} layout (see those keys). Unknown keys fail startup; keys
 # removed in 2.0 are listed in docs/upgrading-to-2.0.md.
 #
-# Three keys can be overridden with an environment variable, which wins over
+# Four keys can be overridden with an environment variable, which wins over
 # this file on every load and is never written back: AMDL_SERVER_LISTEN
-# (server.listen), AMDL_WRAPPER_ADDRESS (wrapper.address) and
-# AMDL_DATABASE_PATH (database.path). AMDL_CONFIG (path of this file) and
+# (server.listen), AMDL_WRAPPER_ADDRESS (wrapper.address),
+# AMDL_WRAPPER_DATA_DIR (wrapper.data_dir) and AMDL_DATABASE_PATH
+# (database.path). AMDL_CONFIG (path of this file) and
 # AMDL_HOOKS_CONFIG (path of hooks.yaml) choose the files. Every other key is
 # set here only; any other AMDL_* variable is ignored with a startup warning.
 
@@ -67,6 +68,18 @@ wrapper:
   # minutes for each, so a longer value does not help them. A wrapper amdl runs itself ignores this key.
   # Values <= 0 fall back to 120 seconds. Requires a restart.
   login_timeout_seconds: 120
+  # string: the wrapper's data directory as this backend sees it, so the backend can read the Apple Music
+  # media-user-token the wrapper keeps in a file named MUSIC_TOKEN and refreshes itself; while it can, that token
+  # is used instead of catalog.media_user_token. Two layouts are read: a wrapper-lite base directory, read as
+  # <data_dir>/MUSIC_TOKEN (the ./data/wrapper bind mount of deploy/docker-compose.yml's wrapper-lite option), and
+  # a wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN, the newest file when there
+  # are several (<volume>/wrapper/rootfs/data in the wrapper-manager option). A container mounts that directory
+  # read-only and sets this key, or AMDL_WRAPPER_DATA_DIR, to the mount point. A relative path is resolved from the
+  # backend working directory. The file must be readable by the user the backend runs as; a missing directory or
+  # file means no wrapper token. Empty (the default) reads
+  # nothing. A backend that runs this machine's wrapper itself (amdl wrapper install) ignores this key and reads
+  # that wrapper's token directly. Requires a restart.
+  data_dir: ""
 
 catalog:
   # The following catalog client keys are startup-bound and require a restart.
@@ -94,11 +107,12 @@ catalog:
   # enum: song, album. song means album URLs containing ?i= are single-song tasks; album downloads the full album.
   album_track_url_mode: "song"
   # string: optional Apple Music subscription token (media-user-token); album, song and playlist downloads do not need it.
-  # Station downloads need it, private playlist covers and library sync use it, and it is the only token they use: a
-  # download or lookup request cannot supply its own.
-  # Runtime: a change applies to jobs and lookups that start afterwards. GET /api/v1/config returns it; protect this
-  # service at the deployment layer if the token is sensitive. Empty means none: stations fail and private playlists keep
-  # the catalog cover.
+  # Station downloads need one, and private playlist covers and library sync use one. This key is the fallback: while
+  # the backend can read the wrapper's own token (a wrapper it runs itself, or wrapper.data_dir), it uses that one and
+  # leaves this value saved but unused. A download or lookup request cannot supply its own token.
+  # Runtime: a change applies to jobs and lookups that start afterwards. GET /api/v1/config returns it masked, "..."
+  # and its last four characters; the full value is only in this file. Empty means none: without a wrapper token,
+  # stations fail and private playlists keep the catalog cover.
   media_user_token: ""
   # bool: true/false. Whether to look up Apple Music animated album covers (attributes.editorialVideo) and
   # expose them on jobs as motion_artwork_url / motion_artwork_tall_url plus each variant's palette.
@@ -356,9 +370,11 @@ library_sync:
   # is required. The polling loop re-reads them at the start of every round, so turning the
   # monitor off really stops polling rather than just discarding the results.
   #
-  # Requires catalog.media_user_token — a personal library can be read only with the
-  # subscription token; the web-player token alone is not enough. While that key is empty the
-  # monitor idles and warns once, instead of reporting an error every round.
+  # Requires a media-user-token — a personal library can be read only with the subscription
+  # token; the web-player token alone is not enough. The wrapper's is used when the backend can
+  # read it (a wrapper it runs itself, or wrapper.data_dir), else catalog.media_user_token. While
+  # neither has one the monitor idles and warns once, instead of reporting an error every round,
+  # and starts within a tick of one appearing.
   #
   # How it detects "new": Apple does not return when a library track was added (library-songs
   # has no dateAdded attribute, and a library album's dateAdded is when its first track was

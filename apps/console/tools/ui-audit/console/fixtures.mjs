@@ -271,7 +271,7 @@ export function emptyWorld(now = Date.now()) {
     events: [],
     logs: [],
     config: structuredClone(BASE_CONFIG.config),
-    wrapper: { ready: true, logged_in: true, regions: ['cn', 'us', 'jp'], accounts: [], login_supported: false },
+    wrapper: { ready: true, logged_in: true, regions: ['cn', 'us', 'jp'], accounts: [], login_supported: false, media_user_token: '' },
     hooks: { enabled: false, entries: [] },
     librarySync: { enabled: false, interval_minutes: 15, anchor_size: 0, last_submitted: 0, total_submitted: 0 },
     health: { status: 'ok' },

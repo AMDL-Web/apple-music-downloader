@@ -3,7 +3,6 @@ package media
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
@@ -47,10 +46,11 @@ type resolvedCollection struct {
 	ArtworkColors applemusic.ArtworkColors
 }
 
-// mediaUserToken returns catalog.media_user_token from the runtime snapshot
-// this job runs under; a submission cannot supply its own.
+// mediaUserToken returns the effective media-user-token (internal/usertoken):
+// the wrapper's when amdl can read it, else catalog.media_user_token from the
+// runtime snapshot this job runs under. A submission cannot supply its own.
 func (d *Downloader) mediaUserToken() string {
-	return strings.TrimSpace(d.cfg.Catalog.MediaUserToken)
+	return d.tokens.Token(d.cfg).Value
 }
 
 func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.ParsedURL) (resolvedCollection, error) {

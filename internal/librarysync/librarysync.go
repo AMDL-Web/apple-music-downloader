@@ -17,9 +17,6 @@
 package librarysync
 
 import (
-	"amdl/internal/applemusic"
-	"amdl/internal/config"
-	"amdl/internal/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -27,6 +24,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"amdl/internal/applemusic"
+	"amdl/internal/config"
+	"amdl/internal/domain"
+	"amdl/internal/usertoken"
 )
 
 const (
@@ -77,6 +79,7 @@ type Status struct {
 // enabling, disabling, and re-timing all take effect without a restart.
 type Watcher struct {
 	cfg     *config.Store
+	tokens  *usertoken.Provider
 	library Library
 	store   AnchorStore
 	jobs    Submitter
@@ -104,12 +107,18 @@ type Watcher struct {
 	clientErrorPasses map[string]int
 }
 
+// IdleNoToken is the watcher's last_error while neither the wrapper nor the
+// config has a media-user-token.
+const IdleNoToken = "no media-user-token: amdl cannot read one from the wrapper and catalog.media_user_token is empty; the library cannot be read without one"
+
 // pollTick is how often the poll loop checks whether a pass is due.
 const pollTick = 15 * time.Second
 
-// New builds a watcher over the live config. It does no I/O; Run runs it.
-func New(cfg *config.Store, library Library, store AnchorStore, jobs Submitter, logger *slog.Logger) *Watcher {
-	return &Watcher{cfg: cfg, library: library, store: store, jobs: jobs, logger: logger}
+// New builds a watcher over the live config. tokens picks the media-user-token
+// each pass reads with; nil uses catalog.media_user_token alone. It does no
+// I/O; Run runs it.
+func New(cfg *config.Store, tokens *usertoken.Provider, library Library, store AnchorStore, jobs Submitter, logger *slog.Logger) *Watcher {
+	return &Watcher{cfg: cfg, tokens: tokens, library: library, store: store, jobs: jobs, logger: logger}
 }
 
 // Run polls until ctx is cancelled and returns once the loop, including a pass
@@ -142,6 +151,12 @@ func (w *Watcher) run(ctx context.Context, tick time.Duration) {
 		if !lastRun.IsZero() && time.Since(lastRun) < cfg.Interval() {
 			continue
 		}
+		if w.tokens.Token(w.cfg.Get()).Value == "" {
+			// Look again next tick, not an interval later: a wrapper login
+			// supplies the token at any moment.
+			w.noteIdle(IdleNoToken)
+			continue
+		}
 		lastRun = time.Now()
 		w.RunOnce(ctx)
 	}
@@ -150,12 +165,11 @@ func (w *Watcher) run(ctx context.Context, tick time.Duration) {
 // RunOnce performs a single pass. Exported so the reset endpoint and tests can
 // drive it directly.
 func (w *Watcher) RunOnce(ctx context.Context) {
-	current := w.cfg.Get()
-	token := current.Catalog.MediaUserToken
+	token := w.tokens.Token(w.cfg.Get()).Value
 	if token == "" {
 		// Not an error worth repeating every tick: nothing is broken, the
 		// watcher simply has no credential that can read a personal library.
-		w.noteIdle("catalog.media_user_token is empty; the library cannot be read without it")
+		w.noteIdle(IdleNoToken)
 		return
 	}
 	w.noteIdle("")

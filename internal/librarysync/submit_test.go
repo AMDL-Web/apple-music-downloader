@@ -1,12 +1,13 @@
 package librarysync
 
 import (
-	"amdl/internal/domain"
 	"context"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	"amdl/internal/domain"
 )
 
 // clientError carries applemusic's NonRetryable marker, like a 4xx catalog

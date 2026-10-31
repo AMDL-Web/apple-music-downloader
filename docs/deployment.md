@@ -123,7 +123,7 @@ container must not listen on loopback) and `wrapper.address` becomes
 
 ## Environment variables
 
-The backend reads five `AMDL_*` variables (see
+The backend reads six `AMDL_*` variables (see
 [configuration.md](configuration.md#environment-overrides)); every other key is set in
 `config.yaml`, and any other `AMDL_*` variable is ignored with a startup warning.
 Container variables:
@@ -135,6 +135,7 @@ Container variables:
 | `TZ` | UTC | Container timezone (IANA name, e.g. `Asia/Shanghai`). Affects log timestamps and the local time exec hooks see. `tzdata` is in the image. |
 | `AMDL_SERVER_LISTEN` | `:18080` (entrypoint default) | Overrides `server.listen` on every start. The health check derives its port from this. |
 | `AMDL_WRAPPER_ADDRESS` | `http://host.docker.internal:12340` (entrypoint default) | Overrides `wrapper.address` on every start. |
+| `AMDL_WRAPPER_DATA_DIR` | `wrapper.data_dir` from `config.yaml` | Overrides `wrapper.data_dir` on every start: where the backend reads the wrapper's media-user-token ([The wrapper](#the-wrapper)). |
 | `AMDL_CONFIG` | `/app/configs/config.yaml` | Config file path (native backend support). |
 | `AMDL_HOOKS_CONFIG` | `/app/configs/hooks.yaml` | Hooks file path (native backend support). |
 | `AMDL_DATABASE_PATH` | `database.path` from `config.yaml` | Overrides `database.path` on every start. |
@@ -147,7 +148,7 @@ restart. Inside the container the listen and wrapper
 addresses always come from the environment. Remember that a `PUT` rewrites the whole file
 and drops comments.
 
-> **Breaking change**: 2.0 reads only the five variables above. The old names
+> **Breaking change**: 2.0 reads only the six `AMDL_*` variables above. The old names
 > `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR`, and the per-key overrides such as
 > `AMDL_SIMULATE_ENABLED`, are ignored with a warning; see
 > [Upgrading to 2.0](upgrading-to-2.0.md#config-and-environment).
@@ -274,6 +275,25 @@ which runs the manager inside a QEMU guest with its own kernel and needs `/dev/k
 - Outside Docker, set `wrapper.address` in `config.yaml` to the URL, `http://127.0.0.1:12340`
   by default. A bare `host:port` fails startup, and `https://` verifies the certificate
   against the system trust store.
+
+The backend uses the media-user-token the wrapper keeps for its account (`MUSIC_TOKEN`)
+when it can read the wrapper's files, so station downloads, private playlist covers and
+library sync need no token pasted into Settings
+([configuration.md](configuration.md#the-media-user-token)). With a compose service, mount
+its data into the backend read-only and point `AMDL_WRAPPER_DATA_DIR` at the mount; the
+compose file has both commented:
+
+- wrapper-manager: mount the `wrapper-data` volume at `/app/data/wrapper-manager:ro` and
+  set `AMDL_WRAPPER_DATA_DIR` to `/app/data/wrapper-manager/wrapper/rootfs/data`, where it
+  keeps `instances/<id>/MUSIC_TOKEN`.
+- wrapper-lite: mount `./data/wrapper` at `/app/data/wrapper:ro` and set
+  `AMDL_WRAPPER_DATA_DIR` to `/app/data/wrapper`.
+- wrapper-lite on the same host outside Docker: mount its base directory the same way
+  (`<launcher directory>/rootfs/<base directory>`). Natively, set `wrapper.data_dir` to it.
+
+The backend reads the file as the user it runs as (`PUID`), so the file must be readable
+by that user. `GET /api/v1/wrapper/status` shows the token it reads, masked, as
+`media_user_token`; `""` means it reads none and `catalog.media_user_token` applies.
 
 wrapper-lite's API has no authentication, upstream says so, and wrapper-manager's README
 documents none, so keep both ports off any network you do not trust, as with this

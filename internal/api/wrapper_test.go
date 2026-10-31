@@ -1,10 +1,16 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"amdl/internal/config"
+	"amdl/internal/usertoken"
 	"amdl/internal/wrapper"
 )
 
@@ -18,9 +24,54 @@ func TestWrapperStatusEndpoint(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	want := `{"ready":true,"logged_in":true,"regions":["us"],"accounts":["user@example.com"],"login_supported":false}` + "\n"
+	want := `{"ready":true,"logged_in":true,"regions":["us"],"accounts":["user@example.com"],"login_supported":false,"media_user_token":""}` + "\n"
 	if recorder.Body.String() != want {
 		t.Fatalf("body = %s, want %s", recorder.Body.String(), want)
+	}
+}
+
+// GET /wrapper/status carries the wrapper's token masked as GET /config masks
+// the configured one, never the value, and "" when amdl cannot read one.
+func TestWrapperStatusMasksWrapperToken(t *testing.T) {
+	token := strings.Repeat("A", 196) + "wxyz"
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, usertoken.FileName), []byte(token+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withDataDir := config.Default()
+	withDataDir.Wrapper.DataDir = dataDir
+	withDataDir.Catalog.MediaUserToken = strings.Repeat("C", 200)
+	for _, tt := range []struct {
+		name   string
+		cfg    config.Config
+		tokens *usertoken.Provider
+		want   string
+	}{
+		{"managed wrapper token", config.Default(), usertoken.New(func() (string, error) { return token, nil }), "...wxyz"},
+		{"data_dir token", withDataDir, usertoken.New(nil), "...wxyz"},
+		{"no wrapper token, config token only", withDataDir, usertoken.New(func() (string, error) { return "", nil }), ""},
+		{"unreadable wrapper file", config.Default(), usertoken.New(func() (string, error) { return "", errors.New("io") }), ""},
+		{"invalid wrapper file", config.Default(), usertoken.New(func() (string, error) { return "not a token", nil }), ""},
+		{"no provider", withDataDir, nil, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &Server{cfg: config.NewStore(tt.cfg), tokens: tt.tokens, wrapper: &fakeWrapperService{statusResult: wrapper.Status{Ready: true}}}
+			recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+			}
+			body := recorder.Body.String()
+			if strings.Contains(body, strings.Repeat("A", 16)) || strings.Contains(body, strings.Repeat("C", 16)) {
+				t.Fatal("the response carries a token value")
+			}
+			var got map[string]any
+			if err := json.Unmarshal(recorder.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if v, ok := got["media_user_token"]; !ok || v != tt.want {
+				t.Fatalf("media_user_token = %v (present %v), want %q", v, ok, tt.want)
+			}
+		})
 	}
 }
 

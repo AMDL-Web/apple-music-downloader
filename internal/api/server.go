@@ -15,10 +15,11 @@ import (
 	"amdl/internal/events"
 	"amdl/internal/jobs"
 	"amdl/internal/logging"
+	"amdl/internal/usertoken"
 )
 
 // Deps are the components the HTTP layer serves. Every field is required
-// except Logger, Logging and Console; New refuses a nil one, so no handler
+// except Logger, Logging, Tokens and Console; New refuses a nil one, so no handler
 // answers 503 for a missing dependency.
 type Deps struct {
 	// Config is the live runtime config shared with the download pipeline;
@@ -39,6 +40,10 @@ type Deps struct {
 	LibrarySync LibrarySyncService
 	// Catalog backs POST /lookup, GET /search and GET /artists/{id}/albums.
 	Catalog CatalogService
+	// Tokens picks the media-user-token for lookups and reports the
+	// wrapper's, masked, on GET /wrapper/status; nil means
+	// catalog.media_user_token alone.
+	Tokens *usertoken.Provider
 	// Console serves the web console under /console/ (apps/console), and GET /
 	// redirects to it. Nil leaves both routes out. The binary passes it in so
 	// this package does not import a product.
@@ -61,6 +66,7 @@ type Server struct {
 	quality     QualityService
 	librarySync LibrarySyncService
 	catalog     CatalogService
+	tokens      *usertoken.Provider
 	console     http.Handler
 	// now is the clock of GET /system uptime and the GET /stats window and
 	// cache; nil means time.Now.
@@ -98,7 +104,7 @@ func New(deps Deps) (*Server, error) {
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync,
-		catalog: deps.Catalog, console: deps.Console,
+		catalog: deps.Catalog, tokens: deps.Tokens, console: deps.Console,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())
 	// logging.buffer_size is a startup key, so the snapshot read here is the

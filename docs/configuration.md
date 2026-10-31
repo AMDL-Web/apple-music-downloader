@@ -58,7 +58,7 @@ Set these before first real use:
 
 ## Environment overrides
 
-Five environment variables exist, for what a container needs before it can read its own
+Six environment variables exist, for what a container needs before it can read its own
 config file:
 
 | Variable | Sets |
@@ -67,9 +67,10 @@ config file:
 | `AMDL_HOOKS_CONFIG` | Path of `hooks.yaml` (default `configs/hooks.yaml`) |
 | `AMDL_SERVER_LISTEN` | `server.listen` |
 | `AMDL_WRAPPER_ADDRESS` | `wrapper.address` |
+| `AMDL_WRAPPER_DATA_DIR` | `wrapper.data_dir` |
 | `AMDL_DATABASE_PATH` | `database.path` |
 
-- The three key overrides win over the file on every start and reload, and are never
+- The four key overrides win over the file on every start and reload, and are never
   written back. They are all startup keys, so `PUT /api/v1/config` never meets one.
 - Every other key is set in `config.yaml`. Any other `AMDL_*` variable is ignored, and
   startup logs one warning per variable naming it; releases before 2.0 accepted an
@@ -78,7 +79,7 @@ config file:
 ## Wrapper
 
 The `wrapper` section points the backend at the HTTP service that holds the Apple Music
-account session. All three keys are startup keys.
+account session. All four keys are startup keys.
 
 - `wrapper.address` is `http://host:port` or `https://host:port`, with an optional path
   prefix for a reverse proxy; the default is `http://127.0.0.1:12340`. A bare `host:port`
@@ -100,7 +101,35 @@ account session. All three keys are startup keys.
   Decryption runs in the backend and has no wrapper timeout.
 - `wrapper.login_timeout_seconds` (default 120) bounds one console login request to a
   wrapper-manager. A login that needs a two-step code takes two requests.
+- `wrapper.data_dir` (default empty) is the wrapper's data directory as the backend sees
+  it, so the backend can read the wrapper's media-user-token
+  ([The media-user-token](#the-media-user-token)).
 - Simulate mode (below) skips the wrapper status check, so jobs can be submitted without one.
+
+### The media-user-token
+
+Station downloads, private playlist covers and library sync need the Apple Music
+media-user-token of a subscribed account. The wrapper keeps its logged-in account's token
+in a file named `MUSIC_TOKEN` and refreshes it itself, so the backend uses that one
+whenever it can read it, and `catalog.media_user_token` only when it cannot:
+
+- A wrapper the backend runs itself (`amdl wrapper install`): read from the guest's disk,
+  with nothing to configure. `wrapper.data_dir` is ignored, and startup says so when it is
+  set.
+- Any other wrapper whose files the backend can see: set `wrapper.data_dir` (or
+  `AMDL_WRAPPER_DATA_DIR`) to the wrapper's data directory. A wrapper-lite base directory
+  holds `MUSIC_TOKEN` directly; a wrapper-manager's data directory holds one per account
+  under `instances/<id>/`, and the newest is read. In containers, mount that directory
+  read-only into the backend ([Deployment](deployment.md#the-wrapper)). The file must be
+  readable by the user the backend runs as.
+- A wrapper on another machine with no shared files: paste the token into
+  `catalog.media_user_token` (the console's Settings › Account).
+
+`GET /api/v1/wrapper/status` reports the token in use from the wrapper, masked, as
+`media_user_token` (`""` when there is none). A token typed into
+`catalog.media_user_token` is never overwritten or removed; it is simply not used while the
+wrapper has one. A token read from the wrapper is reused for 30 seconds; a missing file is
+looked for again on the next use, so a fresh login shows up within one request.
 
 ## Catalog tokens and the Hi-Res manifest
 

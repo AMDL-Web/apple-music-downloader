@@ -12,6 +12,7 @@ import (
 	"amdl/internal/config"
 	"amdl/internal/jobs"
 	"amdl/internal/limits"
+	"amdl/internal/usertoken"
 	"amdl/internal/wrapper"
 )
 
@@ -24,8 +25,11 @@ type Downloader struct {
 	// operation runs under (snapshot plus the job's overrides — see
 	// withConfig); it doubles as the fallback when store is nil in unit tests
 	// that build a Downloader literal around a fixed config.
-	store   *config.Store
-	cfg     config.Config
+	store *config.Store
+	cfg   config.Config
+	// tokens picks the media-user-token for playlists and stations; nil
+	// uses catalog.media_user_token alone.
+	tokens  *usertoken.Provider
 	catalog downloaderCatalog
 	wrapper downloaderWrapper
 	tools   *ToolChecker
@@ -77,10 +81,10 @@ type downloaderWrapper interface {
 
 // NewDownloader builds the process-wide Downloader. It creates the shared media
 // pools from the current config; changing their sizes needs a restart.
-func NewDownloader(store *config.Store, catalog *applemusic.CatalogClient, wrapperClient *wrapper.Client, tools *ToolChecker, logger *slog.Logger) *Downloader {
+func NewDownloader(store *config.Store, tokens *usertoken.Provider, catalog *applemusic.CatalogClient, wrapperClient *wrapper.Client, tools *ToolChecker, logger *slog.Logger) *Downloader {
 	cfg := store.Get()
 	return &Downloader{
-		store: store, cfg: cfg, catalog: catalog, wrapper: wrapperClient, tools: tools,
+		store: store, cfg: cfg, tokens: tokens, catalog: catalog, wrapper: wrapperClient, tools: tools,
 		http: newHTTPClient(), mp4: newMP4Processor(cfg), logger: logger,
 		downloadLimit:   limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
 		decryptLimit:    limits.NewSemaphore(config.MaxParallelDecrypts),

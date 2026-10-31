@@ -14,13 +14,17 @@ const TAGS = {
   missing: { icon: 'circle-minus', role: 'neutral', label: 'Not on this server' },
 };
 
-/** The saved config the store's snapshot holds: the token, the codec order, whether it is on disk. */
+/**
+ * The saved config the store's snapshot holds: the token (masked, undefined
+ * until known), the codec order, whether it is on disk.
+ */
 export function savedConfig(s) {
   const res = s.config && s.config.data;
   const c = (res && res.config) || null;
+  const token = c && c.catalog ? (typeof c.catalog.media_user_token === 'string' ? c.catalog.media_user_token : '') : undefined;
   return {
     known: Boolean(c),
-    tokenSet: c && c.catalog ? typeof c.catalog.media_user_token === 'string' && c.catalog.media_user_token !== '' : undefined,
+    token,
     priority: c && c.download && Array.isArray(c.download.quality_priority) ? c.download.quality_priority : undefined,
     persisted: res ? res.persisted !== false : undefined,
   };

@@ -29,6 +29,7 @@ import (
 	"amdl/internal/librarysync"
 	"amdl/internal/logging"
 	"amdl/internal/media"
+	"amdl/internal/usertoken"
 	"amdl/internal/wrapper"
 	"amdl/internal/wrapperhost"
 )
@@ -54,6 +55,10 @@ type Options struct {
 	// (internal/wrapperhost): the wrapper routes log in through it and
 	// wrapper status reports it. The caller points wrapper.address at it.
 	WrapperHost *wrapperhost.Supervisor
+	// WrapperToken reads the media-user-token of the wrapper this process
+	// runs (wrapperhost.Home.MusicToken), set together with WrapperHost; it
+	// takes the place of wrapper.data_dir (internal/usertoken).
+	WrapperToken func() (string, error)
 }
 
 // loggedError is an error Run has already written to the configured log.
@@ -110,6 +115,13 @@ func Run(ctx context.Context, opts Options) (err error) {
 		logger.Warn("environment variable is no longer read; set its key in config.yaml",
 			"variable", name, "see", config.UpgradeGuide)
 	}
+	if opts.WrapperToken != nil && cfg.Wrapper.DataDir != "" {
+		logger.Info("wrapper.data_dir ignored: this process runs its own wrapper and reads its token directly",
+			"data_dir", cfg.Wrapper.DataDir)
+	}
+	// One token provider serves downloads, lookups, wrapper status and library
+	// sync, so all of them use the same media-user-token.
+	tokens := usertoken.New(opts.WrapperToken)
 
 	hooksCfg, err := hooks.LoadConfig(opts.HooksPath)
 	if err != nil {
@@ -152,14 +164,14 @@ func Run(ctx context.Context, opts Options) (err error) {
 	if err := toolChecker.Require(ctx); err != nil && !cfg.Simulate.Enabled {
 		logger.Warn("downloads fail until ffmpeg is installed", "error", err.Error())
 	}
-	downloader := media.NewDownloader(cfgStore, catalog, wrapperClient, toolChecker, logSystem.Logger.With("component", "media"))
+	downloader := media.NewDownloader(cfgStore, tokens, catalog, wrapperClient, toolChecker, logSystem.Logger.With("component", "media"))
 	qualityService := media.NewQualityService(downloader)
 	manager := jobs.NewManager(store, hub, downloader, cfg.Download.MaxRunningJobs, logSystem.Logger.With("component", "jobs"))
 	hookDispatcher := hooks.NewDispatcher(hooksCfg, manager.Event, logSystem.Logger.With("component", "hooks"))
 	manager.SetHooks(hookDispatcher)
 	// The library watcher submits through the same manager as the REST API, so
 	// anything it queues is an ordinary job (same dedup, same hooks).
-	libraryWatcher := librarysync.New(cfgStore, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
+	libraryWatcher := librarysync.New(cfgStore, tokens, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
 
 	listener := opts.Listener
 	if listener == nil {
@@ -187,7 +199,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
-		Catalog: catalog, Console: opts.Console,
+		Catalog: catalog, Tokens: tokens, Console: opts.Console,
 	})
 	if err != nil {
 		return fmt.Errorf("build api server: %w", err)

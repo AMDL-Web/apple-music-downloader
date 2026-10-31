@@ -251,8 +251,10 @@ One file, `configs/config.yaml`, created from
 [`configs/config.example.yaml`](configs/config.example.yaml) on first start. The example's
 comments document every key: allowed values, units and defaults. Runtime keys change
 through `PUT /api/v1/config` (the console's Settings page), which rewrites the file without
-its comments; startup keys need a restart. `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and
-`AMDL_DATABASE_PATH` override their keys. Radio stations need your subscription token in
+its comments; startup keys need a restart. `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`,
+`AMDL_WRAPPER_DATA_DIR` and `AMDL_DATABASE_PATH` override their keys. Radio stations need
+your subscription token: the backend reads it from the wrapper when it runs the wrapper
+itself or `wrapper.data_dir` points at the wrapper's files, and otherwise from
 `catalog.media_user_token`. Details: [docs/configuration.md](docs/configuration.md).
 
 ## Automation
@@ -260,7 +262,7 @@ its comments; startup keys need a restart. `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_A
 - **Job hooks** ([`configs/hooks.yaml`](configs/hooks.yaml)) call a webhook or run a
   command when a job is queued or ends, for example to refresh a media server.
 - **Library sync** watches your Apple Music library and downloads the album behind each
-  song you add. It needs `catalog.media_user_token`.
+  song you add. It needs a subscription token, the wrapper's or `catalog.media_user_token`.
 
 Both are off by default. See [docs/automation.md](docs/automation.md).
 

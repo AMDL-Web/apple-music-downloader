@@ -196,7 +196,7 @@ export function settingsHash(section = '', field = '') {
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
 // Every component tag the backend logs with; TestLogComponentsMatchBackend keeps
 // this list equal to the tags in the Go code.
-export const LOG_COMPONENTS = ['api', 'jobs', 'media', 'catalog', 'hooks', 'librarysync', 'http', 'limits', 'main'];
+export const LOG_COMPONENTS = ['api', 'jobs', 'media', 'catalog', 'hooks', 'librarysync', 'usertoken', 'http', 'limits', 'main'];
 
 /** Normalizes log route params. `level` is a comma list of exact levels. */
 export function logFilters(params = {}) {

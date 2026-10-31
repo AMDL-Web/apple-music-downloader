@@ -1,11 +1,12 @@
 package librarysync
 
 import (
-	"amdl/internal/applemusic"
-	"amdl/internal/domain"
 	"context"
 	"errors"
 	"fmt"
+
+	"amdl/internal/applemusic"
+	"amdl/internal/domain"
 )
 
 // maxClientErrorPasses is how many passes in a row one album's lookup may fail

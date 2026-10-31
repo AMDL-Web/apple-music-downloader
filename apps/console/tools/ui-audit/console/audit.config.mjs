@@ -334,6 +334,13 @@ const SCENARIOS = [
   { id: 'settings/list', world: 'active', path: '#/settings', widths: [375, 320] },
   { id: 'settings/section-phone', world: 'active', path: '#/settings?section=library_sync', widths: [375, 320] },
   { id: 'settings/account-login', world: 'active', path: '#/settings?section=account', mutate: (w) => Object.assign(w.wrapper, { login_supported: true, logged_in: false, regions: [] }) },
+  { id: 'settings/account-wrapper-token', world: 'active', path: '#/settings?section=account', mutate: (w) => Object.assign(w.wrapper, { media_user_token: '...a1b2' }) },
+  {
+    id: 'settings/account-wrapper-and-saved-token',
+    world: 'active',
+    path: '#/settings?section=account',
+    mutate: (w) => Object.assign(w.wrapper, { media_user_token: '...a1b2' }) && Object.assign(w.config.catalog, { media_user_token: '...wxyz' }),
+  },
   ...['serving', 'starting', 'login', 'stopped', 'failed'].map((mode) => ({
     id: `settings/account-managed-${mode}`,
     world: 'active',

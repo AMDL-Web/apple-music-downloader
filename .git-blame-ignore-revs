@@ -36,3 +36,7 @@ c234cf96ffbe40e1168ce69d8792cfdd6bc93454
 d1a2168ba6250a36401fedaa109edf0b9009beb6
 # refactor(wrapper): move the decrypt tests out of client_test.go (move-only)
 7b8ad1d4f21573b8238a642d5c84d4f471ea3f11
+# refactor(librarysync): split submission handling into submit.go (move-only)
+6f3693abe33b9102e62b6dc2ca3caecd0d1de8aa
+# refactor(console): move Library sync's domain view into domain-library-sync.js (move-only)
+887f0f2c8e6fe5961d03a09c7970a95895e7daf2

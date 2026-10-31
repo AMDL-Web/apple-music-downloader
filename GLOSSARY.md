@@ -10,7 +10,7 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | amp-api | `amp-api.music.apple.com`: Apple's undocumented web-player API, called with a scraped JWT and an `Origin` header; the only source of some fields | `internal/applemusic#CatalogClient.doWithWebAuth` |
 | Web-player JWT | The token scraped from music.apple.com's JS bundle that amp-api requires | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it | `configs/config.example.yaml#catalog.media_user_token` |
+| Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it. The wrapper's own (`MUSIC_TOKEN`) when the backend can read it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
 | Storefront | The country code in a link (`us`, `cn`) that selects Apple's regional catalog | `configs/config.example.yaml#catalog.default_storefront` |
 | enhancedHls | The amp-api-only HLS manifest that lists the lossless and spatial variants | `internal/applemusic#Song` |
 | editorialVideo, motion artwork | Animated album covers, amp-api only; absence is normal, never an error | `internal/applemusic#CatalogClient.MotionArtworkViaWebToken` |
@@ -47,7 +47,7 @@ wins when they disagree, so details are not copied here.
 | Event cursor | `event_cursor` in `GET /downloads` and `GET /downloads/{id}`: the event id a client resumes the matching stream from (`?cursor=` or `Last-Event-ID`) | `internal/api#Server.listDownloads` |
 | Error code | The stable `code` of an error response; clients switch on it, never on the message | `internal/api#ErrorCode` |
 | Runtime key, startup key | Config keys that apply through `PUT /api/v1/config` vs keys that need a restart | `internal/config#isRuntimeKey` |
-| Env override | `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and `AMDL_DATABASE_PATH`, which sit on top of the config file | `internal/config#envOverrides` |
+| Env override | `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_WRAPPER_DATA_DIR` and `AMDL_DATABASE_PATH`, which sit on top of the config file | `internal/config#envOverrides` |
 | Job overrides | The per-submission `overrides` object that overlays the quality and `force_overwrite` keys of the runtime config for one batch | `internal/config#DownloadOverrides` |
 | Job hook | A webhook or command fired on `job_queued` or a terminal job event | `internal/hooks#Dispatcher` |
 | Library sync | The poller that turns newly added library songs into album jobs | `internal/librarysync#Watcher` |

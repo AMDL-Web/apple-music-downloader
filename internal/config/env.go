@@ -5,18 +5,19 @@ import (
 	"strings"
 )
 
-// Five environment variables configure where the backend runs, so a container
+// Six environment variables configure where the backend runs, so a container
 // can set them without editing config.yaml: AMDL_CONFIG and AMDL_HOOKS_CONFIG
-// (the two file paths, read in main) and the three overrides in envOverrides.
+// (the two file paths, read in main) and the four overrides in envOverrides.
 // Every other key lives only in config.yaml. Overrides are applied on every
-// Load (startup and Store.Reload alike) and never written back; all three are
+// Load (startup and Store.Reload alike) and never written back; all four are
 // startup keys, so PUT /api/v1/config can never change one.
 
 // envOverrides maps each overriding variable to the field it replaces.
 var envOverrides = map[string]func(*Config, string){
-	"AMDL_SERVER_LISTEN":   func(c *Config, v string) { c.Server.Listen = v },
-	"AMDL_WRAPPER_ADDRESS": func(c *Config, v string) { c.Wrapper.Address = v },
-	"AMDL_DATABASE_PATH":   func(c *Config, v string) { c.Database.Path = v },
+	"AMDL_SERVER_LISTEN":    func(c *Config, v string) { c.Server.Listen = v },
+	"AMDL_WRAPPER_ADDRESS":  func(c *Config, v string) { c.Wrapper.Address = v },
+	"AMDL_WRAPPER_DATA_DIR": func(c *Config, v string) { c.Wrapper.DataDir = v },
+	"AMDL_DATABASE_PATH":    func(c *Config, v string) { c.Database.Path = v },
 }
 
 // envPaths are the variables main reads for the two file paths, and

@@ -751,6 +751,11 @@
   line-height: var(--lh-14);
 }
 
+/* A saved token the wrapper's own leaves unused. */
+.token-unused .token-state {
+  color: var(--text-secondary);
+}
+
 .token-actions {
   display: flex;
   gap: var(--s-2);

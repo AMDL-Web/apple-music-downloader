@@ -3,10 +3,12 @@ package media
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
+	"amdl/internal/usertoken"
 )
 
 func TestResolveCollectionArtistKeepsSharedSongInEveryAlbum(t *testing.T) {
@@ -91,6 +93,42 @@ func TestResolveCollectionStationUsesConfiguredToken(t *testing.T) {
 	}
 	if gotToken != "configured-token" {
 		t.Fatalf("token = %q, want trimmed configured token", gotToken)
+	}
+}
+
+// The wrapper's token beats the configured one, and an empty wrapper falls
+// back to it.
+func TestResolveCollectionStationPrefersWrapperToken(t *testing.T) {
+	wrapperToken := strings.Repeat("W", 200)
+	for _, tt := range []struct {
+		name    string
+		wrapper string
+		want    string
+	}{
+		{"wrapper has one", wrapperToken, wrapperToken},
+		{"wrapper has none", "", "configured-token"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotToken string
+			cfg := config.Default()
+			cfg.Catalog.MediaUserToken = "configured-token"
+			downloader := newTestDownloader(&Downloader{
+				cfg:    cfg,
+				tokens: usertoken.New(func() (string, error) { return tt.wrapper, nil }),
+				catalog: fakeDownloaderCatalog{
+					station:      applemusic.Collection{ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station"},
+					stationToken: &gotToken,
+				},
+			})
+			if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
+				Storefront: "us", Type: applemusic.TypeStation, ID: "ra.1",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if gotToken != tt.want {
+				t.Fatalf("token: got %d bytes, want %d", len(gotToken), len(tt.want))
+			}
+		})
 	}
 }
 

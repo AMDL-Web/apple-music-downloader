@@ -15,7 +15,7 @@ import { linkIssue, submittable } from '../lib/submit-check.js';
 // An album ?i= link previews as a song or the album depending on
 // catalog.album_track_url_mode, so those answers hold only for the mode
 // they were read under (LOOKUPS_MODE), and a private playlist's cover only
-// for whether Settings held a media-user-token then (LOOKUPS_TOKEN).
+// for the media-user-token in use then (LOOKUPS_TOKEN, tokenState's key).
 const LOOKUPS = new Map();
 let LOOKUPS_MODE = null;
 let LOOKUPS_TOKEN = null;
@@ -36,15 +36,15 @@ const isAlbumTrack = (url) => {
 /**
  * The page's link previews: the lookup queue, the status and issue of each
  * entry, the links the submit may send, and each link's earlier job.
- * `settled` is the debounced text, `entries` its scanned links, `serverToken`
- * (whether Settings holds a media-user-token, null until the config loads)
+ * `settled` is the debounced text, `entries` its scanned links, `token`
+ * the media-user-token a download would use (lib/user-token.js tokenState)
  * and `trackMode` the server's catalog config, `epoch` the shell's reconnect counter (a resync after an
  * outage looks failed previews and the history up again), `storefront` the
  * server's default storefront for links without one (see scanLinks),
  * `subscribeFeed` the shell's feed (app.subscribeFeed), `regions` the
  * storefronts the wrapper serves (null while unknown).
  */
-export function useLookups({ settled, entries, serverToken, regions, trackMode, epoch, storefront, subscribeFeed }) {
+export function useLookups({ settled, entries, token, regions, trackMode, epoch, storefront, subscribeFeed }) {
   // Previews: the first LOOKUP_LIMIT previewable links, 4 at a time.
   const [, setTick] = useState(0);
   const queue = useRef(null);
@@ -113,12 +113,13 @@ export function useLookups({ settled, entries, serverToken, regions, trackMode, 
     }
     LOOKUPS_MODE = trackMode;
   }, [trackMode]);
-  // A token set or cleared in Settings reads private playlists again.
+  // Another token in use (the wrapper's appears, one is set or cleared in
+  // Settings) reads private playlists again.
   useEffect(() => {
-    if (serverToken === null) return;
-    if (LOOKUPS_TOKEN !== null && LOOKUPS_TOKEN !== serverToken) queue.current.forget([...LOOKUPS.keys()].filter(isPrivate));
-    LOOKUPS_TOKEN = serverToken;
-  }, [serverToken]);
+    if (!token.known) return;
+    if (LOOKUPS_TOKEN !== null && LOOKUPS_TOKEN !== token.key) queue.current.forget([...LOOKUPS.keys()].filter(isPrivate));
+    LOOKUPS_TOKEN = token.key;
+  }, [token.known, token.key]);
   const previewSet = new Set(previewable(entries).slice(0, LOOKUP_LIMIT).map((e) => e.url));
   const skipped = Math.max(0, previewable(entries).length - LOOKUP_LIMIT);
   const statusOf = (url) => {
@@ -126,8 +127,8 @@ export function useLookups({ settled, entries, serverToken, regions, trackMode, 
     return s.state === 'idle' && previewSet.has(url) ? { state: 'queued' } : s;
   };
 
-  // Until the config has loaded nothing is flagged for a missing token.
-  const hasToken = serverToken !== false;
+  // Until the token is known nothing is flagged for a missing one.
+  const hasToken = !token.known || token.present;
   const issueOf = (e) => linkIssue(e, e.link && PREVIEW_KINDS.includes(e.link.kind) ? queue.current.status(e.url) : null, { hasToken, regions });
   const sendable = submittable(entries, issueOf);
   const flagged = entries.filter((e) => (issueOf(e) || {}).blocking).length;

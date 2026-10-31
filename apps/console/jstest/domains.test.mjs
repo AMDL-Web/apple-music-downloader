@@ -99,10 +99,11 @@ test('hooks: a failure in the last 24 h warns, never danger; 23 h 59 m vs 24 h',
 
 test('library sync: Off, Needs token (its error not repeated), Error, Watching', () => {
   const sync = (over = {}) => ok({ enabled: true, interval_minutes: 15, anchor_size: 412, last_submitted: 0, total_submitted: 37, last_poll_at: new Date(NOW - 6 * 60e3).toISOString(), ...over });
-  const view = (s, cfg = config()) => domainView('library_sync', { librarySync: s, config: cfg }, ctx());
+  const noWrapperToken = ok({ ready: true, logged_in: true, regions: ['us'], accounts: [], media_user_token: '' });
+  const view = (s, cfg = config(), wrapper = noWrapperToken) => domainView('library_sync', { librarySync: s, config: cfg, wrapper }, ctx());
   assert.equal(view(sync({ enabled: false })).tag.label, 'Off');
   assert.equal(view(sync({ enabled: false })).note, null, 'the figure already says what was recorded');
-  const needs = view(sync({ last_error: 'catalog.media_user_token is empty' }), config({ catalog: { media_user_token: '' } }));
+  const needs = view(sync({ last_error: 'no media-user-token' }), config({ catalog: { media_user_token: '' } }));
   assert.equal(needs.tag.label, 'Needs token');
   assert.equal(needs.role, 'warning');
   assert.equal(needs.note.text, 'Needs the media user token', 'the raw error is suppressed');
@@ -119,6 +120,21 @@ test('library sync: Off, Needs token (its error not repeated), Error, Watching',
   assert.equal(view(sync({ anchor_size: 0 })).figure.value, 'Not anchored yet');
   // Overview shares the state function; an unread config counts as a set token.
   assert.equal(librarySyncState({ enabled: true }, undefined).label, 'Watching');
+});
+
+test('library sync: the wrapper\'s token is enough, and the view waits for the wrapper status', () => {
+  const sync = ok({ enabled: true, interval_minutes: 15, anchor_size: 412, last_submitted: 0, total_submitted: 0, last_poll_at: new Date(NOW - 6 * 60e3).toISOString() });
+  const empty = config({ catalog: { media_user_token: '' } });
+  const label = (wrapper, cfg = empty) => domainView('library_sync', { librarySync: sync, config: cfg, wrapper }, ctx()).tag.label;
+  assert.equal(label(ok({ ready: true, media_user_token: '...a1b2' })), 'Watching', 'only the wrapper has a token');
+  assert.equal(label(ok({ ready: true, media_user_token: '' })), 'Needs token');
+  assert.equal(label(fail(503)), 'Needs token', 'an unreachable wrapper has no token to give');
+  assert.equal(label(undefined, config({ catalog: { media_user_token: '...wxyz' } })), 'Watching', 'a saved token before the wrapper status answers');
+  const idle = (wrapper) => domainView('library_sync', { librarySync: ok({ ...sync.data, last_error: 'no media-user-token' }), config: empty, wrapper }, ctx());
+  assert.equal(idle(undefined).state, 'loading', 'neither Needs token nor an Error while the wrapper status is pending');
+  assert.equal(idle(undefined).tag, null);
+  assert.equal(idle(ok({ ready: true, media_user_token: '...a1b2' })).tag.label, 'Error', 'with the wrapper token in use, last_error is a real failure');
+  assert.equal(label(ok({ ready: true, media_user_token: '' }), config({ catalog: { media_user_token: '...wxyz' } })), 'Watching');
 });
 
 test('account: Ready with storefronts, a warning when the default is not served, Unreachable, simulate neutral', () => {

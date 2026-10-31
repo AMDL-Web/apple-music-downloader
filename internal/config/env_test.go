@@ -13,6 +13,7 @@ func TestEnvOverrides(t *testing.T) {
 		"AMDL_SERVER_LISTEN=:19090",
 		"AMDL_WRAPPER_ADDRESS=http://wrapper:12340",
 		"AMDL_DATABASE_PATH=/srv/amdl/amdl.db",
+		"AMDL_WRAPPER_DATA_DIR=/wrapper-data",
 		"AMDL_CONFIG=/etc/amdl/config.yaml",
 		"AMDL_HOOKS_CONFIG=/etc/amdl/hooks.yaml",
 		"UNRELATED=1",
@@ -29,6 +30,9 @@ func TestEnvOverrides(t *testing.T) {
 	}
 	if cfg.Database.Path != "/srv/amdl/amdl.db" {
 		t.Fatalf("database path = %q, want env override", cfg.Database.Path)
+	}
+	if cfg.Wrapper.DataDir != "/wrapper-data" {
+		t.Fatalf("wrapper data dir = %q, want env override", cfg.Wrapper.DataDir)
 	}
 }
 
