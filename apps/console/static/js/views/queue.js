@@ -153,9 +153,11 @@ export function QueuePage({ route }) {
     const old = known.current.get(j.id);
     if (!old || Date.parse(j.updated_at) >= Date.parse(old.updated_at)) known.current.set(j.id, j);
   }
-  // The rows as shown (running jobs first, then queued ones, on Active and
-  // All), which is the order Shift-click ranges follow.
-  const rows = filters.tab === 'active' || filters.tab === 'all' ? activeFirst(state.jobs) : state.jobs;
+  // The rows as shown (running jobs first, then queued ones, on Active), which
+  // is the order Shift-click ranges follow. All keeps the server's order,
+  // newest first, as the desktop app does: grouped by status, a job that
+  // starts or finishes would jump the length of the list there.
+  const rows = filters.tab === 'active' ? activeFirst(state.jobs) : state.jobs;
   // A job that finishes leaves Active at once; its toast (Open) says where it went.
   useWatchShown(app, filters.tab === 'active' ? state.jobs.map((j) => j.id) : []);
   const jobsRef = useRef(rows);
