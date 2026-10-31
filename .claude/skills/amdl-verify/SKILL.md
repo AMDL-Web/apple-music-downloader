@@ -60,6 +60,15 @@ updates live. A view whose height changes with its state also gets a run of
 `apps/console/tools/ui-audit` (its README has the command); read the layout-shift
 and flicker findings. Attach a screenshot per width and theme.
 
+Before showing console work to the maintainer, run
+[apps/console/tools/ui-audit](../../../apps/console/tools/ui-audit/README.md) and
+look at the screenshots yourself, for every page and state, not only the one you
+changed. Fix what it finds in this order: layout that jumps during an action,
+misalignment, then polish. Also look for zero-value or empty rows that add height,
+hover shapes that do not match their container's corners, flicker and cramped rows.
+A person's flaw report about one screen is a prompt to check the same flaw on every
+screen. For a review you did not write, use a reviewer with a clean context.
+
 ## Report
 
 ```

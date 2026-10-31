@@ -32,7 +32,11 @@ link, then download, decrypt, remux and tag each track. Code map: the
   it in a move-only commit ([amdl-refactor](.claude/skills/amdl-refactor/SKILL.md)),
   or say there is no natural seam.
 - Every wait and every outbound call is bounded: `timeout` on shell waits, a context
-  deadline or client timeout in Go.
+  deadline or client timeout in Go. A step that runs longer than expected goes to the
+  background, and the report says what it is waiting on.
+- A change to something a person uses is done only after you used it end to end
+  yourself (for the console: start a download from the page and watch it finish). A
+  gap you find is fixed or named in the report.
 - Docs change in the commit that changes the behavior. `rg` the changed symbols,
   keys and rule words across `README.md`, `README.zh-CN.md`, `docs/`, the AGENTS.md
   files, `REVIEW.md`, `GLOSSARY.md`, `.claude/`, `internal/api/openapi.yaml`,
