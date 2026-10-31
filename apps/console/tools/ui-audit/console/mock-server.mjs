@@ -17,8 +17,9 @@ import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { albumProgress } from '../../../static/js/lib/album-progress.js';
-import { WORLDS, CATALOG, PLAYLISTS, CODECS, STAGE_ORDER, stageFields, downloadBytes, findAlbum, makeJob, iso } from './fixtures.mjs';
+import { WORLDS, CATALOG, stageFields, findAlbum, makeJob, iso } from './fixtures.mjs';
+import { TERMINAL, withProgress, statusCounts, list, advance, recount } from './mock-world.mjs';
+import { search, artistAlbums } from './mock-search.mjs';
 import { stats, system } from './fixtures-status.mjs';
 import { json, apiError, readBody, parseLink } from './mock-http.mjs';
 import { lookup, quality } from './mock-links.mjs';
@@ -46,30 +47,7 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json',
 };
 
-const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 const MILESTONES = new Set(['job_queued', 'job_started', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'job_retried', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
-
-/** A job as the API sends it: with progress, derived from its items like the server's internal/progress#Overall. */
-function withProgress(world, job) {
-  return { ...job, progress: albumProgress(job.status, world.items.get(job.id) || []).percent / 100 };
-}
-
-function statusCounts(world) {
-  const c = { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0, total: 0 };
-  for (const j of world.jobs.values()) {
-    c[j.status]++;
-    c.total++;
-  }
-  return c;
-}
-
-function list(v) {
-  if (!v) return [];
-  return String(v)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'active', staticDir = STATIC_DIR } = {}) {
   const csp = readCsp();
@@ -119,72 +97,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
   /** Advances every running or queued job one step; returns how many items moved. */
   function tick(steps = 1) {
     const w = state.world;
-    let moved = 0;
-    for (let s = 0; s < steps; s++) {
-      for (const job of [...w.jobs.values()]) {
-        if (job.status === 'queued') {
-          const running = [...w.jobs.values()].filter((j) => j.status === 'running').length;
-          if (running < 3) {
-            Object.assign(job, { status: 'running', started_at: iso(Date.now()), updated_at: iso(Date.now()) });
-            w.addEvent({ job_id: job.id, type: 'job_started', message: 'job started', payload: { ...job } });
-            moved++;
-          }
-          continue;
-        }
-        if (job.status !== 'running') continue;
-        const items = w.items.get(job.id);
-        if (!job.title) {
-          const a = CATALOG.albums[(job.id.charCodeAt(8) + 5) % CATALOG.albums.length];
-          const tmp = { now: Date.now(), jobs: new Map(), items: new Map(), addEvent: () => {} };
-          const fresh = makeJob(tmp, { key: `${job.id}:resolved`, id: job.id, album: a, status: 'running', tracks: 8, stages: () => 'queued' });
-          Object.assign(job, { ...fresh, input: job.input, created_at: job.created_at, started_at: job.started_at, updated_at: iso(Date.now()) });
-          w.items.set(job.id, tmp.items.get(job.id));
-          w.addEvent({ job_id: job.id, type: 'resolved_input', message: job.type, payload: { ...job } });
-          moved++;
-          continue;
-        }
-        let inFlight = items.filter((it) => !TERMINAL.has(it.status) && it.status !== 'skipped_existing' && it.status !== 'queued');
-        while (inFlight.length < 2) {
-          const next = items.find((it) => it.status === 'queued');
-          if (!next) break;
-          Object.assign(next, stageFields('resolving', 0), { updated_at: iso(Date.now()) });
-          w.addEvent({ job_id: job.id, item_id: next.id, type: 'item_progress', phase: 'resolving', message: next.status_message, payload: { ...next } });
-          inFlight = [...inFlight, next];
-          moved++;
-        }
-        for (const it of inFlight) {
-          const codecKey = it.codec === 'alac' ? `alac-${it.bit_depth}-${Math.floor(it.sample_rate / 1000)}` : it.codec || 'alac-24-48';
-          let stage = it.status;
-          let frac = stage === 'downloading' ? it.progress.download : stage === 'decrypting' ? it.progress.decrypt : 0;
-          if (stage === 'downloading' && frac < 1) frac = Math.min(1, Math.round((frac + 0.2) * 100) / 100);
-          else if (stage === 'decrypting' && frac < 1) frac = Math.min(1, frac + 0.5);
-          else {
-            stage = STAGE_ORDER[STAGE_ORDER.indexOf(stage) + 1] || 'completed';
-            frac = 0;
-            if (stage === 'downloading' && !it.codec) {
-              Object.assign(it, stageFields('waiting_download', 0, 'alac-24-48'));
-              w.addEvent({ job_id: job.id, item_id: it.id, type: 'codec_selected', phase: 'alac', payload: { ...it } });
-            }
-          }
-          Object.assign(it, stageFields(stage, frac, CODECS[codecKey] ? codecKey : 'alac-24-48'), { updated_at: iso(Date.now()) });
-          const size = Math.round((it.duration_ms / 1000) * ((it.bitrate || 1800000) / 8));
-          it.progress.download_bytes = downloadBytes(stage, frac, size);
-          if (stage === 'completed') {
-            it.file_size = size;
-            it.output_path = `/app/data/downloads/albums/${job.artist_name}/${job.title}/${String(it.index).padStart(2, '0')}. ${it.title}.m4a`;
-            w.addEvent({ job_id: job.id, item_id: it.id, type: 'item_completed', message: 'saved', payload: { ...it } });
-          } else {
-            w.addEvent({ job_id: job.id, item_id: it.id, type: 'item_progress', phase: it.status, message: it.status_message, payload: { ...it } });
-          }
-          moved++;
-        }
-        recount(job, items);
-        if (items.every((it) => TERMINAL.has(it.status) || it.status === 'skipped_existing')) {
-          Object.assign(job, { status: job.failed_items ? 'failed' : 'completed', finished_at: iso(Date.now()), updated_at: iso(Date.now()) });
-          w.addEvent({ job_id: job.id, type: job.status === 'failed' ? 'job_failed' : 'job_finished', message: 'job finished', payload: { ...job } });
-        } else job.updated_at = iso(Date.now());
-      }
-    }
+    const moved = advance(w, steps);
     // The feed pushes a running job again every 2 s while its progress moves,
     // between the milestones.
     const last = w.events.length ? w.events[w.events.length - 1].id : 0;
@@ -194,13 +107,6 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       for (const res of feeds) send(res, last, msg.type, msg);
     }
     return moved;
-  }
-
-  function recount(job, items) {
-    job.completed_items = items.filter((i) => i.status === 'completed').length;
-    job.skipped_items = items.filter((i) => i.status === 'skipped_existing').length;
-    job.failed_items = items.filter((i) => i.status === 'failed').length;
-    job.cancelled_items = items.filter((i) => i.status === 'cancelled').length;
   }
 
   async function serveStatic(req, res, path) {
@@ -327,7 +233,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       case 'POST /api/v1/quality':
         return quality(req, res);
       case 'GET /api/v1/search':
-        return search(res, q);
+        return search(state.world, res, q);
     }
     return apiError(res, 404, 'not_found', `no route ${req.method} ${path}`);
   }
@@ -407,59 +313,6 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     const out = { accepted, rejected: results.length - accepted, results };
     if (!accepted) return apiError(res, 422, 'no_urls_accepted', 'No URL was accepted.', out);
     return json(res, 202, out);
-  }
-
-  // A term's hits: the recorded ones first, then the rest of the catalog,
-  // so albums, songs and playlists run to several pages. Playlists come
-  // from the term's artists; a term with none of them ("beethoven") has
-  // none, and "zzzz" finds nothing at all.
-  function search(res, q) {
-    const term = (q.get('term') || '').toLowerCase().trim();
-    const types = list(q.get('types'));
-    const limit = Number(q.get('limit')) || 10;
-    const offset = Number(q.get('offset')) || 0;
-    const hit = Object.entries(CATALOG.searches).find(([k]) => k.includes(term) || term.includes(k)) || Object.entries(CATALOG.searches)[0];
-    const byId = (arr, ids) => ids.map((id) => arr.find((x) => x.id === id)).filter(Boolean);
-    const padded = (arr, ids) => {
-      const first = byId(arr, ids);
-      const seen = new Set(first.map((x) => x.id));
-      return [...first, ...arr.filter((x) => !seen.has(x.id))];
-    };
-    const artists = byId(CATALOG.artists, hit[1].artists);
-    const names = new Set(artists.map((a) => a.name));
-    const own = PLAYLISTS.filter((p) => [...names].some((n) => p.name.startsWith(`${n} `)));
-    const groups =
-      term === 'zzzz'
-        ? { songs: [], albums: [], playlists: [], artists: [] }
-        : {
-            songs: padded(CATALOG.songs, hit[1].songs),
-            albums: padded(CATALOG.albums, hit[1].albums),
-            playlists: own.length ? [...own, ...PLAYLISTS.filter((p) => !own.includes(p))] : [],
-            artists,
-          };
-    // prior_job as the server sets it: the newest active job of the hit's
-    // type and id, else the newest completed one.
-    const jobs = [...state.world.jobs.values()].sort((x, y) => y.created_at.localeCompare(x.created_at));
-    const withPrior = (h) => {
-      const mine = jobs.filter((j) => j.type === h.type && j.input.endsWith(`/${h.id}`));
-      const j = mine.find((x) => x.status === 'queued' || x.status === 'running') || mine.find((x) => x.status === 'completed');
-      return j ? { ...h, prior_job: { id: j.id, status: j.status, ...(j.finished_at ? { finished_at: j.finished_at } : {}) } } : h;
-    };
-    const out = { term: q.get('term'), storefront: 'cn' };
-    for (const [g, arr] of Object.entries(groups)) {
-      if (types.length && !types.includes(g)) continue;
-      out[g] = { items: arr.slice(offset, offset + limit).map(withPrior), ...(offset + limit < arr.length ? { next_offset: offset + limit } : {}) };
-    }
-    return json(res, 200, out);
-  }
-
-  function artistAlbums(res, id, q) {
-    const artist = CATALOG.artists.find((a) => a.id === id) || CATALOG.artists[0];
-    const albums = CATALOG.albums.filter((a) => a.artist_name === artist.name);
-    const offset = Number(q.get('offset')) || 0;
-    const limit = Number(q.get('limit')) || 25;
-    const page = albums.slice(offset, offset + limit);
-    return json(res, 200, { storefront: 'cn', artist, albums: { items: page, ...(offset + limit < albums.length ? { next_offset: offset + limit } : {}) } });
   }
 
   async function control(req, res, url) {

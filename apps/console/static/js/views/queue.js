@@ -5,25 +5,21 @@
 // (views/queue-select.js).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
-import { listDownloads } from '../api.js';
 import { count } from '../lib/format.js';
 import { activeFirst, isNotFound } from '../lib/jobview.js';
-import { appendPage } from '../lib/store.js';
-import { buildHash, queueFilters, queueQuery, queueMatchFilter, queueAppends, rememberQueue } from '../lib/route.js';
+import { buildHash, queueFilters, rememberQueue } from '../lib/route.js';
 import { toggleId, setIds, rangeIds, selectionState } from '../lib/selection.js';
 import { actionPlan, jobAllows } from '../lib/jobactions.js';
 import { useApp, Icon, Segmented, ErrorNote, SkeletonJobRows, Button } from '../ui/components.js';
 import { useDebounced, useWatchShown } from '../ui/hooks.js';
 import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 import { JobRow, applyFeedToList } from './queue-row.js';
+import { useQueueList } from './queue-list.js';
 import { useChipRow } from './queue-chips.js';
 import { QueueEmpty } from './queue-empty.js';
 import { JobMenu, runOne, jobName } from './queue-menu.js';
-import { cached, remember } from '../lib/cache.js';
 
 export { JobRow, applyFeedToList };
-
-const PAGE_SIZE = 50;
 
 const TYPE_OPTIONS = [
   ['', 'All types'],
@@ -42,14 +38,7 @@ export function QueuePage({ route }) {
   const [qInput, setQInput] = useState(filters.q);
   const q = useDebounced(qInput, 300);
   const listKey = `queue|${filters.tab}|${filters.type}|${filters.q}`;
-  // A list seen before in this tab is drawn at once and read again behind it.
-  const [state, setState] = useState(() => {
-    const last = cached(listKey);
-    return last ? { jobs: last.jobs, total: last.total, loading: true, error: null, more: false } : { jobs: [], total: 0, loading: true, error: null, more: false };
-  });
   const key = `${listKey}|${app.epoch}`;
-  const seq = useRef(0);
-  const known = useRef(new Map());
 
   const setParams = (patch) => {
     app.navigate(buildHash('queue', { ...route.params, ...patch }, route.jobId), { replace: true });
@@ -87,59 +76,6 @@ export function QueuePage({ route }) {
     if (filters.q !== qInput) setQInput(filters.q);
   }, [filters.q]);
 
-  const load = (offset) => {
-    const mine = ++seq.current;
-    const last = offset === 0 ? cached(listKey) : null;
-    if (last) setState((s) => ({ ...s, jobs: last.jobs, total: last.total, loading: true, error: null }));
-    else if (offset === 0) setState((s) => ({ ...s, loading: true, error: null }));
-    else setState((s) => ({ ...s, more: true }));
-    listDownloads(queueQuery(filters, offset, PAGE_SIZE)).then(
-      (body) => {
-        if (mine !== seq.current) return;
-        if (offset === 0) remember(listKey, { jobs: body.downloads, total: body.total });
-        setState((s) => ({
-          jobs: offset === 0 ? body.downloads : appendPage(s.jobs, body.downloads),
-          total: body.total,
-          loading: false,
-          error: null,
-          more: false,
-        }));
-      },
-      (error) => {
-        if (mine !== seq.current) return;
-        setState((s) => ({ ...s, loading: false, more: false, error }));
-      },
-    );
-  };
-
-  useEffect(() => {
-    load(0);
-  }, [key]);
-
-  useEffect(() => {
-    const filter = queueMatchFilter(filters);
-    const opts = { append: queueAppends(filters) };
-    // The snapshot's total moves with the rows the feed adds and removes
-    // (an estimate: a change to a job past the loaded pages is not seen).
-    return app.subscribeFeed((batch) => {
-      // Selected jobs the filters hide stay selected, so the registry of jobs
-      // follows the whole feed, not only the rows of this list.
-      for (const msg of batch) {
-        if (msg.type === 'download_deleted') {
-          known.current.delete(msg.job_id);
-          setSelected((s) => toggleId(s, msg.job_id, false));
-        } else if (msg.type === 'download_upserted' && msg.job) {
-          const old = known.current.get(msg.job.id);
-          if (!old || Date.parse(msg.job.updated_at) >= Date.parse(old.updated_at)) known.current.set(msg.job.id, msg.job);
-        }
-      }
-      setState((s) => {
-        const jobs = applyFeedToList(s.jobs, batch, filter, opts);
-        return jobs === s.jobs ? s : { ...s, jobs, total: Math.max(jobs.length, s.total + jobs.length - s.jobs.length) };
-      });
-    });
-  }, [key]);
-
   // Selection: a Set of ids. The jobs behind them come from `known`, the
   // latest version of every job seen, so a status change drops actions, a job
   // the feed deletes leaves the selection, and a search that hides a selected
@@ -148,6 +84,7 @@ export function QueuePage({ route }) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [confirm, setConfirm] = useState(null);
+  const { state, load, known } = useQueueList(app, filters, listKey, key, (id) => setSelected((s) => toggleId(s, id, false)));
   const bulk = useBulkRun(app);
   for (const j of state.jobs) {
     const old = known.current.get(j.id);
