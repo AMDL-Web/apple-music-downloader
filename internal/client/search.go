@@ -124,3 +124,55 @@ func (c *Client) ArtistAlbums(ctx context.Context, artistID string, q PageQuery)
 	err := c.do(ctx, http.MethodGet, "/api/v1/artists/"+url.PathEscape(artistID)+"/albums", q.values(), nil, &r)
 	return r, err
 }
+
+// Album is the AlbumResponse schema: an album's metadata, under the names and
+// meaning of the lookup fields, and its songs. URL submitted to POST
+// /api/v1/downloads downloads the whole album.
+type Album struct {
+	Storefront         string       `json:"storefront"`
+	ID                 string       `json:"id"`
+	URL                string       `json:"url"`
+	Title              string       `json:"title"`
+	ArtistName         string       `json:"artist_name,omitempty"`
+	ArtistURL          string       `json:"artist_url,omitempty"`
+	ArtworkURL         string       `json:"artwork_url,omitempty"`
+	ArtworkBgColor     string       `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1  string       `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2  string       `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3  string       `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4  string       `json:"artwork_text_color4,omitempty"`
+	ReleaseDate        string       `json:"release_date,omitempty"`
+	Genre              string       `json:"genre,omitempty"`
+	TrackCount         int          `json:"track_count"`
+	DiscCount          int          `json:"disc_count,omitempty"`
+	ContentRating      string       `json:"content_rating,omitempty"`
+	AppleDigitalMaster bool         `json:"apple_digital_master,omitempty"`
+	AudioTraits        []string     `json:"audio_traits,omitempty"`
+	Tracks             []AlbumTrack `json:"tracks"`
+}
+
+// AlbumTrack is the AlbumTrack schema: one song of an album, in the order
+// Album.Tracks lists them (disc, then track number). ID is the adam_id of the
+// job item that downloaded it; URL submitted to POST /api/v1/downloads
+// downloads that song alone.
+type AlbumTrack struct {
+	ID                 string   `json:"id"`
+	URL                string   `json:"url"`
+	DiscNumber         int      `json:"disc_number"`
+	TrackNumber        int      `json:"track_number"`
+	Name               string   `json:"name"`
+	ArtistName         string   `json:"artist_name,omitempty"`
+	DurationMS         int      `json:"duration_ms,omitempty"`
+	ContentRating      string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits        []string `json:"audio_traits,omitempty"`
+	HasLyrics          bool     `json:"has_lyrics,omitempty"`
+}
+
+// Album reads an album and its songs with GET /api/v1/albums/{id}. An empty
+// storefront is catalog.default_storefront.
+func (c *Client) Album(ctx context.Context, albumID, storefront string) (Album, error) {
+	var a Album
+	err := c.do(ctx, http.MethodGet, "/api/v1/albums/"+url.PathEscape(albumID), PageQuery{Storefront: storefront}.values(), nil, &a)
+	return a, err
+}

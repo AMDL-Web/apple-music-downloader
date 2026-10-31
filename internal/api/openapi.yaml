@@ -841,6 +841,107 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/albums/{album_id}:
+    get:
+      tags: [Search]
+      summary: Get an album and its songs
+      description: |
+        The album's metadata and its song list in disc and track order: the songs
+        an album download (POST /api/v1/downloads with the album's url) takes,
+        music videos excluded. The metadata fields have the names and meaning of
+        the LookupResponse fields of the same name. The whole list comes in one
+        answer, bounded by 15 seconds like POST /api/v1/lookup, which reads the
+        same album. A song's url submitted to POST /api/v1/downloads downloads
+        that song alone.
+
+        Nothing here says whether a song is on disk: where it lands depends on
+        the quality and codec a download picks. To mark the songs of an album a
+        job downloaded, read that job (GET /api/v1/downloads/{job_id}, from the
+        `prior_job` of the album's search hit) and match its items' `adam_id`
+        with the songs' `id`.
+      operationId: getAlbum
+      parameters:
+        - name: album_id
+          in: path
+          required: true
+          description: The album's Apple Music catalog id, the id of an album search hit.
+          schema:
+            type: string
+            pattern: '^[0-9]{1,20}$'
+        - $ref: '#/components/parameters/BrowseStorefront'
+      responses:
+        '200':
+          description: The album and its songs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlbumResponse'
+              examples:
+                album:
+                  value:
+                    storefront: cn
+                    id: '1783644603'
+                    url: 'https://music.apple.com/cn/album/1783644603'
+                    title: 迷跡波
+                    artist_name: 'MyGO!!!!!'
+                    artist_url: 'https://music.apple.com/cn/artist/mygo/1653702916'
+                    artwork_url: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/88/b2/f8/88b2f80a-6688-c72e-9ca6-c6066f30c0d8/198704278525_Cover.jpg/{w}x{h}bb.jpg'
+                    artwork_bg_color: '4e808e'
+                    artwork_text_color1: '030607'
+                    artwork_text_color2: '131313'
+                    artwork_text_color3: '121e22'
+                    artwork_text_color4: '1e282b'
+                    release_date: '2023-11-01'
+                    genre: 动画
+                    track_count: 13
+                    disc_count: 1
+                    apple_digital_master: true
+                    audio_traits: [hi-res-lossless, lossless, lossy-stereo]
+                    tracks:  # the first two of 13
+                      - id: '1783644604'
+                        url: 'https://music.apple.com/cn/song/%E8%BF%B7%E6%98%9F%E5%8F%AB/1783644604'
+                        disc_number: 1
+                        track_number: 1
+                        name: 迷星叫
+                        artist_name: 'MyGO!!!!!'
+                        duration_ms: 211373
+                        apple_digital_master: true
+                        audio_traits: [hi-res-lossless, lossless, lossy-stereo]
+                        has_lyrics: true
+                      - id: '1783644606'
+                        url: 'https://music.apple.com/cn/song/%E5%A3%B1%E9%9B%AB%E7%A9%BA/1783644606'
+                        disc_number: 1
+                        track_number: 2
+                        name: 壱雫空
+                        artist_name: 'MyGO!!!!!'
+                        duration_ms: 189587
+                        apple_digital_master: true
+                        audio_traits: [hi-res-lossless, lossless, lossy-stereo]
+                        has_lyrics: true
+        '400':
+          description: invalid_request; the album id is not digits, or storefront is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: catalog_not_found; Apple answered 404 for the album id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: upstream_error; the catalog read failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: upstream_timeout; the catalog did not answer within 15 seconds.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/downloads:
     get:
       tags: [Downloads]
@@ -2756,6 +2857,105 @@ components:
           $ref: '#/components/schemas/SearchArtist'
         albums:
           $ref: '#/components/schemas/SearchAlbumGroup'
+    AlbumResponse:
+      type: object
+      required: [storefront, id, url, title, track_count, tracks]
+      description: >-
+        An album's metadata and its songs. The metadata fields have the names and
+        meaning of the LookupResponse fields of the same name; each is absent when
+        the catalog has no value.
+      properties:
+        storefront:
+          type: string
+          description: The storefront read, lowercase.
+        id:
+          type: string
+          description: Apple Music catalog id.
+        url:
+          type: string
+          description: >-
+            A music.apple.com link that downloads the whole album when submitted:
+            Apple's page without its query, or one built from the id.
+        title:
+          type: string
+        artist_name: {type: string}
+        artist_url:
+          type: string
+          description: The artist's own music.apple.com page, when the catalog reports one.
+        artwork_url:
+          type: string
+          description: Artwork URL template with {w}x{h} placeholders, as on Job.
+        artwork_bg_color:
+          type: string
+          description: Background color of that artwork, hex without "#".
+        artwork_text_color1: {type: string}
+        artwork_text_color2: {type: string}
+        artwork_text_color3: {type: string}
+        artwork_text_color4: {type: string}
+        release_date:
+          type: string
+          description: YYYY-MM-DD.
+        genre:
+          type: string
+          description: First genreNames entry that is not the "Music" umbrella genre.
+        track_count:
+          type: integer
+          description: The number of entries in tracks, as on LookupResponse (music videos excluded).
+        disc_count:
+          type: integer
+          description: The highest disc_number among the songs; absent when the album has none.
+        content_rating:
+          type: string
+          enum: [explicit, clean]
+          description: Absent when unrated.
+        apple_digital_master:
+          type: boolean
+          description: True when the catalog marks the album isMasteredForItunes; absent otherwise.
+        audio_traits:
+          $ref: '#/components/schemas/AudioTraits'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlbumTrack'
+          description: The album's songs, sorted by disc_number, then track_number; empty when it has none.
+    AlbumTrack:
+      type: object
+      required: [id, url, disc_number, track_number, name]
+      description: >-
+        One song of an album. The metadata fields have the names and meaning of
+        the SearchSong fields of the same name; each is absent when the catalog
+        has no value.
+      properties:
+        id:
+          type: string
+          description: Apple Music catalog id of the song, the adam_id of its job item.
+        url:
+          type: string
+          description: A /song/ link that downloads exactly this song when submitted, as on a song search hit.
+        disc_number:
+          type: integer
+          minimum: 1
+          description: The disc the song is on; 1 when the catalog sends none.
+        track_number:
+          type: integer
+          description: The song's position on its disc; 0 when the catalog sends none.
+        name:
+          type: string
+        artist_name: {type: string}
+        duration_ms:
+          type: integer
+        content_rating:
+          type: string
+          enum: [explicit, clean]
+          description: Absent when unrated.
+        apple_digital_master:
+          type: boolean
+          description: True when the catalog marks the song isAppleDigitalMaster; absent otherwise.
+        audio_traits:
+          $ref: '#/components/schemas/AudioTraits'
+        has_lyrics:
+          type: boolean
+          description: True when the catalog reports lyrics for the song (regular or time-synced); absent otherwise.
     Job:
       type: object
       required: [id, input, type, status, total_items, completed_items, skipped_items, failed_items, cancelled_items, created_at, updated_at]

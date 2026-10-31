@@ -38,7 +38,8 @@ type Deps struct {
 	Wrapper     WrapperService
 	Quality     QualityService
 	LibrarySync LibrarySyncService
-	// Catalog backs POST /lookup, GET /search and GET /artists/{id}/albums.
+	// Catalog backs POST /lookup, GET /search, GET /artists/{id}/albums and
+	// GET /albums/{id}.
 	Catalog CatalogService
 	// Tokens picks the media-user-token for lookups and reports the
 	// wrapper's, masked, on GET /wrapper/status; nil means
@@ -159,6 +160,7 @@ func (s *Server) routes() []route {
 		{http.MethodPost, "/api/v1/lookup", h(s.lookupLink)},
 		{http.MethodGet, "/api/v1/search", h(s.search)},
 		{http.MethodGet, "/api/v1/artists/{artist_id}/albums", h(s.artistAlbums)},
+		{http.MethodGet, "/api/v1/albums/{album_id}", h(s.getAlbum)},
 		{http.MethodPost, "/api/v1/downloads", h(s.createDownload)},
 		{http.MethodGet, "/api/v1/downloads", h(s.listDownloads)},
 		// The literal "events" segment is more specific than "{id}", so the

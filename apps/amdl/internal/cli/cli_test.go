@@ -416,3 +416,16 @@ func TestSearchLeavesOutThePaletteUnlessAsked(t *testing.T) {
 		t.Errorf("search --artwork-colors: %+v", r)
 	}
 }
+
+func TestAlbumsGetReadsOneAlbum(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/albums/1783644603" || r.URL.Query().Get("storefront") != "cn" {
+			t.Errorf("request = %s", r.URL)
+		}
+		fmt.Fprint(w, `{"id":"1783644603","title":"T","artwork_bg_color":"eae7e3","tracks":[{"id":"1","name":"A"}]}`)
+	}))
+	defer srv.Close()
+	if r := run(t, srv, "", "albums", "get", "1783644603", "--storefront", "cn"); r.code != 0 || strings.Contains(r.stdout, "artwork_") || !strings.Contains(r.stdout, `"tracks"`) {
+		t.Errorf("albums get: %+v", r)
+	}
+}

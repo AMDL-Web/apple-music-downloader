@@ -132,8 +132,8 @@ func TestToolsComeFromTheCapabilityTable(t *testing.T) {
 			t.Errorf("%s readOnlyHint = %v", c.Tool, tl.Annotations.ReadOnlyHint)
 		}
 	}
-	if len(got) != 15 {
-		t.Errorf("%d tools, want 15", len(got))
+	if len(got) != 16 {
+		t.Errorf("%d tools, want 16", len(got))
 	}
 	if d := got["delete_job"].Annotations.DestructiveHint; d == nil || !*d {
 		t.Error("delete_job should be destructive")
@@ -451,5 +451,19 @@ func TestChangingToolsAreMarkedConservatively(t *testing.T) {
 		if c.Safety != capability.Read && (ann.DestructiveHint == nil || *ann.DestructiveHint != wantDestructive) {
 			t.Errorf("%s: destructiveHint %v, want %v", c.Tool, ann.DestructiveHint, wantDestructive)
 		}
+	}
+}
+
+func TestGetAlbumReadsOneAlbumAndDropsThePalette(t *testing.T) {
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/albums/1783644603" || r.URL.Query().Get("storefront") != "cn" {
+			t.Errorf("request = %s", r.URL)
+		}
+		fmt.Fprint(w, `{"storefront":"cn","id":"1783644603","title":"T","artwork_bg_color":"ffffff","track_count":1,
+			"tracks":[{"id":"1","url":"u","disc_number":1,"track_number":1,"name":"A"}]}`)
+	}))
+	out, isErr := s.call(t, "get_album", map[string]any{"album_id": "1783644603", "storefront": "cn"})
+	if _, has := out["artwork_bg_color"]; isErr || has || len(out["tracks"].([]any)) != 1 {
+		t.Errorf("get_album = %v", out)
 	}
 }

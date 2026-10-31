@@ -91,6 +91,10 @@ func TestBuild(t *testing.T) {
 	if _, err := op.Build(map[string]any{"artist_id": "1", "nope": "x"}); err == nil {
 		t.Error("an unknown value should fail")
 	}
+	album, err := Lookup("getAlbum").Build(map[string]any{"album_id": "1783644603", "storefront": "cn"})
+	if err != nil || album.Method != "GET" || album.Path != "/api/v1/albums/1783644603" || album.Query.Get("storefront") != "cn" {
+		t.Errorf("album request = %+v, %v", album, err)
+	}
 	lookup := Lookup("lookupLink")
 	req, err = lookup.Build(map[string]any{"url": "https://music.apple.com/us/album/x/1"})
 	if err != nil || req.Body["url"] != "https://music.apple.com/us/album/x/1" || req.Method != "POST" {

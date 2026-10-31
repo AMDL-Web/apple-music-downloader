@@ -127,7 +127,7 @@ needs the API changes below before it works against 2.0.
 | Media-user-token per request | `overrides.media_user_token` on `POST /downloads` and `media_user_token` on `POST /lookup` overlaid `catalog.media_user_token` (`""` cleared it) | removed (`400 invalid_request` naming the field); downloads and lookups use the backend's own token: the wrapper's when the backend can read it, else `catalog.media_user_token` | scripts that passed a token per request |
 | Job `overrides` in responses and events | could hold every field above; the token was redacted | holds only the five fields above | job detail clients |
 | Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | client generators that key on `info.version`; requests are unchanged |
-| New | | `GET /system` (with `default_storefront`; it reports no signing mode, because the backend signs no token), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search` and `GET /artists/{id}/albums` (catalog search and an artist's albums), web console at `/console/` (`/` redirects there) | none: additions only |
+| New | | `GET /system` (with `default_storefront`; it reports no signing mode, because the backend signs no token), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search`, `GET /artists/{id}/albums` and `GET /albums/{id}` (catalog search, an artist's albums and an album's songs), web console at `/console/` (`/` redirects there) | none: additions only |
 
 ## Config and environment
 

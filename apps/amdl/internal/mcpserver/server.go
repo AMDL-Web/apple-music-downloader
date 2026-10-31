@@ -37,7 +37,7 @@ var rules = []string{
 // instructions tell a model how the tools fit together: a short form of the
 // skill.
 var instructions = "amdl downloads music from Apple Music through an amdl server.\n" + rules[0] + "\n" +
-	"lookup_link previews a pasted link. get_status says whether the wrapper is signed in. " + rules[1] + "\n" +
+	"lookup_link previews a pasted link; get_album lists an album's songs. get_status says whether the wrapper is signed in. " + rules[1] + "\n" +
 	"A tool error carries a code and often a hint. " + rules[2]
 
 // New returns an MCP server whose tools call the amdl server behind c.
@@ -242,7 +242,7 @@ func tool(c capability.Capability) *mcp.Tool {
 
 // openWorld are the tools that read Apple's catalog rather than only the amdl
 // server's own state.
-var openWorld = map[string]bool{"search_catalog": true, "list_artist_albums": true, "lookup_link": true, "probe_quality": true}
+var openWorld = map[string]bool{"search_catalog": true, "list_artist_albums": true, "get_album": true, "lookup_link": true, "probe_quality": true}
 
 // idempotent are the changing tools that a repeat leaves as the first call did.
 var idempotent = map[string]bool{"start_download": true, "cancel_job": true, "delete_job": true}
@@ -306,7 +306,7 @@ var paramDescriptions = map[string]string{
 
 // paletteTools are the tools whose answer carries the artwork color palette of
 // each hit, which a model has no use for; paletteArg brings it back.
-var paletteTools = map[string]bool{"search_catalog": true, "list_artist_albums": true, "lookup_link": true}
+var paletteTools = map[string]bool{"search_catalog": true, "list_artist_albums": true, "get_album": true, "lookup_link": true}
 
 const paletteArg = "artwork_colors"
 

@@ -93,7 +93,7 @@ Returns what is running and what it has to work with:
 - `simulate` (`simulate.enabled`), `motion_artwork_enabled`,
   `default_storefront` (`catalog.default_storefront`, a startup key). The API refuses a
   link without a storefront in its path (`invalid_url`); a client that accepts such links, like the
-  web console, completes them with this value. Search and artist albums default to it.
+  web console, completes them with this value. Search, artist albums and the album page default to it.
 - `jobs`: `workers` (`download.max_running_jobs` at startup), `active`, `queue_depth` of
   `queue_capacity` (a full queue rejects submissions with `queue_full`), and
   `recovery_backlog`, the jobs resumed at startup that still wait for a worker.
@@ -551,6 +551,49 @@ carries the artist.
 | Apple answers 404 (an unknown artist id) | `404 catalog_not_found` |
 | The catalog read fails otherwise (an unknown storefront included) | `502 upstream_error` |
 | No answer within 10 seconds | `504 upstream_timeout` |
+
+### Album
+
+```bash
+curl 'http://localhost:18080/api/v1/albums/1783644603?storefront=cn'
+```
+
+```json
+{"storefront":"cn","id":"1783644603","url":"https://music.apple.com/cn/album/1783644603",
+ "title":"迷跡波","artist_name":"MyGO!!!!!","artist_url":"https://music.apple.com/cn/artist/mygo/1653702916",
+ "artwork_url":"https://is1-ssl.mzstatic.com/image/thumb/…/198704278525_Cover.jpg/{w}x{h}bb.jpg",
+ "artwork_bg_color":"4e808e","artwork_text_color1":"030607","artwork_text_color2":"131313",
+ "artwork_text_color3":"121e22","artwork_text_color4":"1e282b","release_date":"2023-11-01",
+ "genre":"动画","track_count":13,"disc_count":1,"apple_digital_master":true,
+ "audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
+ "tracks":[{"id":"1783644604","url":"https://music.apple.com/cn/song/%E8%BF%B7%E6%98%9F%E5%8F%AB/1783644604",
+   "disc_number":1,"track_number":1,"name":"迷星叫","artist_name":"MyGO!!!!!","duration_ms":211373,
+   "apple_digital_master":true,"audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
+   "has_lyrics":true}, …]}
+```
+
+Returns the album's metadata and `tracks`, its songs in disc and track order: the songs an
+album download takes, music videos excluded. The metadata fields have the names and meaning
+of the `POST /lookup` fields (`track_count` is the length of `tracks`, `disc_count` the
+highest `disc_number`), and `url` downloads the whole album when submitted to
+`POST /downloads`. A song has `id`, `url` (a `/song/` link that downloads that song alone),
+`disc_number` (1 when the catalog sends none), `track_number`, `name` and, when the catalog
+has them, `artist_name`, `duration_ms`, `content_rating`, `apple_digital_master`,
+`audio_traits` and `has_lyrics`. The whole list comes in one answer; there is no paging.
+`storefront` is a two-letter code, default `catalog.default_storefront`.
+
+The response does not say which songs are on disk: where a song lands depends on the
+quality and codec its download picks, and only a job records that. To mark the songs an
+album job downloaded, read the job (`GET /downloads/{job_id}`, the id from the album hit's
+`prior_job`) and match its items' `adam_id` with the songs' `id`; a song downloaded by a
+song job or another album's job is not found that way.
+
+| Case | Answer |
+| --- | --- |
+| An album id that is not digits, a bad `storefront` | `400 invalid_request` |
+| Apple answers 404 (an unknown album id, or one the storefront does not have) | `404 catalog_not_found` |
+| The catalog read fails otherwise | `502 upstream_error` |
+| No answer within 15 seconds | `504 upstream_timeout` |
 
 ## Quality probe
 

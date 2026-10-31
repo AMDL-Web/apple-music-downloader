@@ -13,10 +13,10 @@ import (
 )
 
 // CatalogService reads the Apple Music catalog metadata that POST /lookup
-// previews and GET /search and GET /artists/{id}/albums browse. Each method is
-// one light read (a song, album or playlist read pages through its tracks);
-// none reads motion artwork or Enhanced HLS. *applemusic.CatalogClient
-// implements it.
+// previews and GET /search, GET /artists/{id}/albums and GET /albums/{id}
+// browse. Each method is one light read (a song, album or playlist read pages
+// through its tracks); none reads motion artwork or Enhanced HLS.
+// *applemusic.CatalogClient implements it.
 type CatalogService interface {
 	SongMetadata(ctx context.Context, storefront, id string) (applemusic.Song, error)
 	Album(ctx context.Context, storefront, id string) (applemusic.Collection, error)

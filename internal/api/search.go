@@ -33,8 +33,8 @@ const (
 	searchMaxTermRunes       = 200
 )
 
-// catalogIDPattern is a catalog artist id: Apple's are all digits, and the id
-// goes into the upstream request path.
+// catalogIDPattern is a catalog artist or album id: Apple's are all digits,
+// and the id goes into the upstream request path.
 var catalogIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)
 
 // searchHit is the SearchSong, SearchAlbum and SearchArtist schemas: the fields

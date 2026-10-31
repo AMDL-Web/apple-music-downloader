@@ -16,7 +16,7 @@ Find music with search_catalog (or list_artist_albums for an artist hit), pass t
 
 On the command line:
 
-1. `amdl search "<terms>" --types albums,songs`, then `amdl artists albums <artist_id>` for an artist hit; `amdl lookup <url>` previews a pasted link.
+1. `amdl search "<terms>" --types albums,songs`, then `amdl artists albums <artist_id>` for an artist hit; `amdl albums get <album_id>` lists an album's songs, each with a `url` that downloads it alone; `amdl lookup <url>` previews a pasted link.
 2. `amdl download <url>...` starts jobs. A link already queued or running is rejected with `duplicate_active` and the `existing_job_id` to follow; one already downloaded starts a new job whose tracks on disk finish as `skipped_existing`.
 3. `amdl jobs wait <job_id> --timeout 30m` follows one; `amdl download <url> --wait` does both. Files land on the server's disk.
 

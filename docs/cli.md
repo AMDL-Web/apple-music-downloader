@@ -31,6 +31,7 @@ by meaning.
 | --- | --- | --- |
 | `search <term> [--types songs,albums,artists] [--storefront] [--limit] [--offset]` | `GET /search` | read |
 | `artists albums <artist_id> [--storefront] [--limit] [--offset]` | `GET /artists/{artist_id}/albums` | read |
+| `albums get <album_id> [--storefront]` | `GET /albums/{album_id}` | read |
 | `lookup <url>` | `POST /lookup` | read |
 | `quality <url>` | `POST /quality` | read |
 | `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--overwrite] [--wait\|--watch] [--timeout]` | `POST /downloads` | write; destructive with `--overwrite` |
@@ -69,9 +70,9 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
   API gives them; the backend's log lines use local time with its offset.
 - **`--fields a,b`** keeps only those keys: of the object itself when it has one of
   them, otherwise of each element of the arrays inside it (the jobs of a list, the hits of
-  each search group). `search`, `lookup` and `artists albums` leave out the artwork color
-  palette (`artwork_bg_color`, `artwork_text_color1` to `4`) unless `--artwork-colors` is
-  given.
+  each search group). `search`, `lookup`, `artists albums` and `albums get` leave out the
+  artwork color palette (`artwork_bg_color`, `artwork_text_color1` to `4`) unless
+  `--artwork-colors` is given.
   Every command takes it except `mcp`.
 - **`jobs get` prints a summary by default**: the job, `album_progress`
   (`total` tracks, how many have `finished`, and the overall `percent`) and one short entry per track
@@ -202,7 +203,7 @@ which are all queued or running already are not an error. `set_config`, like
   `accepted[].job_id` and `rejected[]`; links already queued or running come back
   rejected with `existing_job_id`. This shape is the MCP's own: the CLI's `download`
   prints the API's batch, whose jobs are `results[].job.id`. `search_catalog`,
-  `list_artist_albums` and `lookup_link` leave out the artwork color palette unless
+  `list_artist_albums`, `get_album` and `lookup_link` leave out the artwork color palette unless
   `artwork_colors` is true.
 - **`wait_for_job`** follows one job for at most `timeout_s` seconds
   (`apps/amdl/internal/mcpserver#maxWait`, default 120; a value outside 1 to 300 is an
