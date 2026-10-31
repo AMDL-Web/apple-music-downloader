@@ -2,102 +2,139 @@
 // the New download Custom… sheet for the codec order.
 
 import { html, useState, useRef, useLayoutEffect } from '../ui/preact.js';
-import { Button } from '../ui/components.js';
+import { Button, Icon } from '../ui/components.js';
+import { useSortable } from '../ui/sortable.js';
+import { splitUse, locate, placeItem, canonicalIndex, dropTarget, keyTarget, moveMessage } from '../lib/sortable.js';
 
 // A label such as "Dolby Atmos (E-AC-3)" wraps at its spaces, never inside "E-AC-3".
-const NB_HYPHEN = '\u2011';
+const NB_HYPHEN = '‑';
 
 /**
- * An ordered list of option values: move up, move down, remove (never below
- * `field.minItems`), and "+ <addLabel>…", a select whose choice is added at
- * once and lists only the options not yet listed, each with its hint. With
- * one item there is nothing to order, so rank and arrows hide. Changes are
- * announced in the editor's own polite region, and focus follows the row.
- * Props: field ({label, options, minItems, addLabel}), id (the group's
- * labelling prefix: `${id}-label`), value, described, onChange.
+ * Two lists of option values: In use, ordered (the value), and Not used,
+ * every other option in the options' order. A row is dragged within In use
+ * to reorder it, between the lists to use it or not (it lands at its own
+ * place in Not used), with ui/sortable.js; Alt+Up and Alt+Down move a
+ * focused row one place, across the lists at the ends; and each row has a
+ * button to the other list (Remove, Add). In use never drops below
+ * `field.minItems`. Changes are announced in the editor's own polite
+ * region, and focus stays on the moved row. Props: field ({label, options,
+ * minItems, addNoun}), id (the group's labelling prefix: `${id}-label`),
+ * value, described, onChange.
  */
 export function ListEditor({ field, id, value, described, onChange }) {
-  const items = Array.isArray(value) ? value : [];
   const [said, setSaid] = useState('');
   const refocus = useRef(null);
   const root = useRef(null);
+  const committed = splitUse(value, field.options);
+  const order = field.options.map((o) => o.value);
+  const min = field.minItems || 0;
+  const option = (v) => field.options.find((o) => o.value === v) || { label: v };
+  const label = (v) => option(v).label;
+  const locked = () => Boolean(root.current && root.current.closest('fieldset[disabled]'));
+  // The one codec in use when it must stay: nowhere to drag it.
+  const fixed = (v) => min > 0 && committed.used.length === 1 && committed.used[0] === v;
+
+  const commit = (v, to, lists) => {
+    const from = locate(committed, v);
+    const next = lists || placeItem(committed, v, to.list, to.index);
+    onChange(next.used);
+    setSaid(moveMessage(label(v), from, to, next));
+  };
+
+  const sort = useSortable({
+    container: root,
+    lists: committed,
+    canDrag: (v) => !locked() && !fixed(v),
+    resolve: ({ id: v, list, index, current }) => dropTarget({ lists: committed, order, min, id: v, list, index, current }),
+    onDrop: ({ id: v, to, lists, focused }) => {
+      if (focused) refocus.current = v;
+      commit(v, to, lists);
+    },
+  });
+
   // A layout effect: a passive one from an earlier render could run first and
   // focus the row before it moved, and the move then drops focus on the body.
   useLayoutEffect(() => {
     const want = refocus.current;
     refocus.current = null;
     if (!want || !root.current) return;
-    for (const sel of want) {
-      const el = root.current.querySelector(sel);
-      if (el && !el.disabled) {
-        el.focus();
-        return;
-      }
-    }
+    const el = root.current.querySelector(`[data-sort-id="${CSS.escape(want)}"]`);
+    if (el) el.focus({ preventScroll: true });
   });
-  const label = (v) => (field.options.find((o) => o.value === v) || { label: v }).label;
-  const remaining = field.options.filter((o) => !items.includes(o.value));
-  const min = field.minItems || 0;
-  const ordered = items.length > 1;
-  const move = (i, d) => {
-    const next = [...items];
-    const [x] = next.splice(i, 1);
-    next.splice(i + d, 0, x);
-    onChange(next);
-    // Keep focus on the moved row: the same arrow, or the other one at an end.
-    refocus.current = [`[data-item="${x}"] .${d < 0 ? 'list-up' : 'list-down'}`, `[data-item="${x}"] .${d < 0 ? 'list-down' : 'list-up'}`];
-    setSaid(`${label(x)} moved to position ${i + d + 1} of ${next.length}.`);
+
+  const go = (v, to) => {
+    if (!to || locked()) return;
+    sort.animate();
+    refocus.current = v;
+    commit(v, to);
   };
-  const remove = (i) => {
-    if (items.length <= min) return;
-    const x = items[i];
-    const next = items.filter((_, j) => j !== i);
-    onChange(next);
-    const neighbour = next[Math.min(i, next.length - 1)];
-    refocus.current = [neighbour ? `[data-item="${neighbour}"] .list-remove` : '', '.list-add select'].filter(Boolean);
-    setSaid(`${label(x)} removed.`);
+  const remove = (v) => {
+    if (committed.used.length <= min) return;
+    go(v, { list: 'unused', index: canonicalIndex(order, committed.unused, v) });
   };
-  const add = (v) => {
-    if (!v) return;
-    onChange([...items, v]);
-    refocus.current = [`[data-item="${v}"] .list-up`, `[data-item="${v}"] .list-remove`];
-    setSaid(`${label(v)} added at position ${items.length + 1}.`);
+  const add = (v) => go(v, { list: 'used', index: committed.used.length });
+  const onKey = (e, v) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (sort.drag) return;
+    go(v, keyTarget({ lists: committed, order, min, id: v, dir: e.key === 'ArrowUp' ? -1 : 1 }));
   };
-  const addLabel = field.addLabel || 'Add';
-  return html`<div class="list-editor" role="group" aria-labelledby=${`${id}-label`} aria-describedby=${described} data-ordered=${ordered ? '' : undefined} ref=${root}>
-    <ol class="list-items">
-      ${items.map((v, i) => {
-        const last = items.length <= min;
-        return html`<li key=${v} class="list-item" data-item=${v} title=${v}>
-          ${ordered ? html`<span class="list-rank num" aria-hidden="true">${i + 1}</span>` : null}
-          <span class="list-label">${label(v).replace(/-/g, NB_HYPHEN)}</span>
-          <span class="list-actions">
-            ${ordered
-              ? html`<${Button} variant="ghost" size="sm" icon="chevron-up" className="list-up" aria-label=${`Move ${label(v)} up`} disabled=${i === 0} onClick=${() => move(i, -1)} />
-                  <${Button} variant="ghost" size="sm" icon="chevron-down" className="list-down" aria-label=${`Move ${label(v)} down`} disabled=${i === items.length - 1} onClick=${() => move(i, 1)} />`
-              : null}
-            <${Button}
-              variant="ghost"
-              size="sm"
-              icon="x"
-              className="list-remove"
-              aria-label=${`Remove ${label(v)}`}
-              aria-disabled=${last ? 'true' : undefined}
-              title=${last ? `Add another ${field.addNoun || 'item'} first` : undefined}
-              onClick=${() => remove(i)}
-            />
-          </span>
-        </li>`;
-      })}
-    </ol>
-    ${remaining.length
-      ? html`<div class="list-add">
-          <select class="select" aria-label=${`${addLabel} to ${field.label}`} value="" onChange=${(e) => add(e.currentTarget.value)}>
-            <option value="">+ ${addLabel}…</option>
-            ${remaining.map((o) => html`<option key=${o.value} value=${o.value}>${o.hint ? `${o.label} — ${o.hint}` : o.label}</option>`)}
-          </select>
-        </div>`
-      : null}
+
+  const { used, unused } = sort.lists;
+  const noun = field.addNoun || 'item';
+  const row = (v, i, list) => {
+    const inUse = list === 'used';
+    const name = label(v);
+    const last = inUse && committed.used.length <= min && committed.used.includes(v);
+    const where = inUse ? `${name}, ${i + 1} of ${used.length}` : `${name}, not used`;
+    return html`<li
+      key=${v}
+      class="list-item"
+      data-item=${v}
+      title=${option(v).hint || v}
+      data-fixed=${fixed(v) ? '' : undefined}
+      tabindex="0"
+      aria-label=${where}
+      aria-roledescription="sortable item"
+      aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+      onKeyDown=${(e) => onKey(e, v)}
+      ...${sort.row(v)}
+    >
+      <span class="list-rank num" aria-hidden="true">${inUse ? i + 1 : ''}</span>
+      <span class="list-label" aria-hidden="true">${name.replace(/-/g, NB_HYPHEN)}</span>
+      ${inUse
+        ? html`<${Button}
+            variant="ghost"
+            size="sm"
+            icon="x"
+            className="list-remove"
+            aria-label=${`Stop using ${name}`}
+            aria-disabled=${last ? 'true' : undefined}
+            title=${last ? `Add another ${noun} first` : undefined}
+            onClick=${() => remove(v)}
+          />`
+        : html`<${Button} variant="ghost" size="sm" icon="plus" className="list-add" aria-label=${`Use ${name}`} onClick=${() => add(v)} />`}
+      <span class="list-grip" aria-hidden="true"><${Icon} name="grip" /></span>
+    </li>`;
+  };
+  // While a row is held the empty area keeps the height it had when the drag
+  // began, so the editor does not grow under the pointer.
+  const empty = unused.length === 0 && committed.unused.length === 0;
+  return html`<div class="list-editor" role="group" aria-labelledby=${`${id}-label`} aria-describedby=${described} data-sorting=${sort.drag ? '' : undefined} ref=${root}>
+    <div class="list-block" data-sort-list="used">
+      <span class="list-block-title" id=${`${id}-used`}>In use</span>
+      <ol class="list-items" data-sort-box="used" aria-labelledby=${`${id}-used`}>
+        ${used.map((v, i) => row(v, i, 'used'))}
+      </ol>
+    </div>
+    <div class="list-block" data-sort-list="unused">
+      <span class="list-block-title" id=${`${id}-unused`} data-sort-flip="unused-title">Not used</span>
+      <ol class="list-items" data-sort-box="unused" aria-labelledby=${`${id}-unused`} data-empty=${empty ? '' : undefined}>
+        ${unused.map((v, i) => row(v, i, 'unused'))}
+        ${empty ? html`<li key="empty" class="list-empty" aria-hidden="true"></li>` : null}
+      </ol>
+    </div>
     <span class="sr-only" role="status" aria-live="polite">${said}</span>
   </div>`;
 }

@@ -2345,7 +2345,7 @@
 
 /* The ordered list (codec priority) is an inset list like the one on New
    download; hairlines start at the label. */
-:root[data-skin="music"] .list-items {
+:root[data-skin="music"] .list-items::before {
   border: 0;
   border-radius: var(--r-art);
   background: var(--bg-inset);
@@ -2366,13 +2366,33 @@
   border-top: var(--row-divider);
 }
 
+:root[data-skin="music"] .list-item[data-sort-slot]::before,
+:root[data-skin="music"] .list-item[data-sort-slot] + .list-item::before {
+  border-top-color: transparent;
+}
+
+:root[data-skin="music"] .list-items[data-empty]::before {
+  border: 1px dashed var(--border-control);
+  background: transparent;
+}
+
+/* As tall as a row; a phone row is taller, as list-editor.css sets. */
+@media (min-width: 640px) {
+  :root[data-skin="music"] .list-empty {
+    min-height: 44px;
+  }
+}
+
 :root[data-skin="music"] .list-label {
   font-size: var(--fs-15);
   line-height: var(--lh-15);
 }
 
-:root[data-skin="music"] .list-add .select {
-  height: var(--control-h);
+/* A row (its focus ring), the lifted copy and the slot take the list's corners. */
+:root[data-skin="music"] .list-item,
+:root[data-skin="music"] .sortable-ghost > .list-item,
+:root[data-skin="music"] .list-item[data-sort-slot]::after {
+  border-radius: var(--r-art);
 }
 
 /* Touch screens keep fields at 16 px (responsive.css), above the sizes set here. */

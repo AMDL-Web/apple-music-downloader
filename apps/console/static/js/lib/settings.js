@@ -39,7 +39,6 @@ export const FIELDS = [
     help: 'Tried top to bottom · AAC always last',
     defaultValue: ['alac'],
     minItems: 1,
-    addLabel: 'Add codec',
     addNoun: 'codec',
     options: [
       { value: 'alac', label: 'ALAC (lossless)', hint: 'Apple Lossless, up to the limits below' },

@@ -284,8 +284,10 @@ base durations (120 ms color, 200 ms overlays).
   right edge, as do panel rules, the rules between Server's groups, fact
   rows, hooks, action blocks and the account rows. Labels are 15 px; the switch is an Apple toggle (white thumb with a
   soft shadow, red when on, the off track keeping its `--border-control`
-  outline, no On/Off word beside it). The ordered list is an inset list like
-  the codec ranking. Panel actions
+  outline, no On/Off word beside it). The codec list's two blocks are inset
+  lists under 12 px secondary labels; a held row lifts as an inset cell with
+  the list's corners and the float shadow over a dashed slot, and an empty
+  Not used is a dashed outline one row tall. Panel actions
   in a block head (Refresh) and the token's Replace are red text, and so are an account's Log out and the token's Remove. The save bar is a frosted floating
   capsule with the float shadow: the count in 15 px semibold, where in 14 px
   secondary, Discard red text and Save a red pill, both 36 px; on phones the

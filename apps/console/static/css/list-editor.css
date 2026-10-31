@@ -1,32 +1,75 @@
 /*
  * The ordered list editor (views/settings-list.js): Settings' codec priority
  * and the Custom quality sheet on New download. Linked after settings.css.
+ * Rows are dragged with ui/sortable.js; its shared rules are in controls.css.
  */
 
 .list-editor {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
+  gap: var(--s-3);
+}
+
+.list-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1_5);
+}
+
+.list-block-title {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-12);
 }
 
 .list-items {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* The box is drawn by ::before, so it can grow and shrink with the rows
+   while one is dragged in or out (ui/sortable.js sets the variables). */
+.list-items::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-control);
+  pointer-events: none;
+  transform: translateY(var(--sort-y, 0px)) scaleY(var(--sort-scale, 1));
+  transform-origin: top;
+  transition: transform var(--sort-dur, 0ms) var(--ease-out);
+}
+
+/* Every codec in use: Not used is a dashed area one row tall to drop on. */
+.list-items[data-empty]::before {
+  border-style: dashed;
+  border-color: var(--border-control);
+}
+
+.list-item,
+.list-empty {
+  min-height: 40px;
 }
 
 .list-item {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--s-2);
-  min-height: 40px;
-  padding: var(--s-1) var(--s-1) var(--s-1) var(--s-3);
+  padding: var(--s-1) var(--s-2) var(--s-1) var(--s-3);
   border-top: var(--row-divider);
+  border-radius: var(--r-control);
+  cursor: grab;
 }
 
 .list-item:first-child {
@@ -40,35 +83,97 @@
   text-align: center;
 }
 
+/* The lifted copy keeps the rank it had; where it lands has another. */
+.sortable-ghost .list-rank {
+  visibility: hidden;
+}
+
 .list-label {
   min-width: 0;
   font-size: var(--fs-14);
   line-height: var(--lh-14);
 }
 
-.list-actions {
+.list-grip {
   display: flex;
-  gap: var(--s-0_5);
+  color: var(--text-secondary);
 }
 
-.list-add {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
+/* The one codec in use with nothing to order it against: nothing to drag. */
+.list-item[data-fixed] {
+  cursor: default;
 }
 
-.list-editor[data-ordered] .list-item {
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+.list-item[data-fixed] .list-grip {
+  visibility: hidden;
 }
 
-.list-add .select {
-  flex: 1;
-  min-width: 0;
-  height: var(--control-h-sm);
+.list-editor[data-sorting],
+.list-editor[data-sorting] * {
+  cursor: grabbing;
+}
+
+/* The held row's place: a dashed slot as tall as the row. */
+.list-item[data-sort-slot] {
+  border-top-color: transparent;
+}
+
+.list-item[data-sort-slot] + .list-item {
+  border-top-color: transparent;
+}
+
+.list-item[data-sort-slot] > * {
+  visibility: hidden;
+}
+
+.list-item[data-sort-slot]::after {
+  content: "";
+  position: absolute;
+  inset: var(--s-1);
+  border: 1px dashed var(--border-control);
+  border-radius: var(--r-control);
+  animation: list-slot-in 180ms var(--ease-in) both;
+}
+
+/* ui/sortable.js restarts it each time the slot moves. */
+@keyframes list-slot-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The lifted copy (ui/sortable.js puts it on <body>). */
+.sortable-ghost > .list-item {
+  border-top: 0;
+  border-radius: var(--r-control);
+  background: var(--bg-inset);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.sortable-ghost[data-lifted] > .list-item {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-float);
 }
 
 @media (max-width: 639px) {
-  .list-add .select {
-    height: auto;
+  /* A row holds a 44 px button and its padding; the empty area matches it. */
+  .list-empty {
+    min-height: calc(var(--touch) + 2 * var(--s-1));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sortable-ghost > .list-item {
+    transition: none;
+  }
+
+  .sortable-ghost[data-lifted] > .list-item {
+    transform: none;
+  }
+
+  .list-item[data-sort-slot]::after {
+    animation: none;
   }
 }

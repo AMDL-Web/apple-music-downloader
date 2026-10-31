@@ -560,3 +560,13 @@
   transform: scaleX(var(--v));
 }
 
+/* ---- Sortable rows (ui/sortable.js) ---------------------------------- */
+
+/* A long-press picks a row up: it selects no text and opens no callout. */
+[data-sort-id],
+:root[data-sorting] body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
