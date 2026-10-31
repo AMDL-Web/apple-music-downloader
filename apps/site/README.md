@@ -102,7 +102,7 @@ and 5 are in the Cloudflare dashboard; the rest are commands, with
 1. **Describe the release.** One commit on `dev`: `build.mjs#REF` becomes `'main'`, and
    the hero eyebrow in both content files drops "in development" ("2.0 · Self-hosted ·
    Open source", "2.0 · 自托管 · 开源"). Check: `node --test apps/site/`, and
-   `rg -n "in development|开发中" apps/site/content` shows only the desktop badge.
+   `rg -n "in development|开发中" apps/site/content` finds nothing.
 2. **Enable Pages** with Actions as its source, and let `main` deploy to the
    `github-pages` environment (the repository's default branch is `dev`):
 

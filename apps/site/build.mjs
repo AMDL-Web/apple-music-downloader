@@ -311,7 +311,7 @@ ${tabs(d.label, [
     html: win(
       'desktop',
       'AMDL',
-      `<span class="badge">${esc(p.desktop.badge)}</span>`,
+      ctx.desktop ? full('../demo/desktop/') : '',
       shot(ctx, 'desktop', p.desktop.shot) +
         (ctx.desktop
           ? `<iframe data-src="../demo/desktop/" title="${esc(d.desktopFrame)}"></iframe><button class="win-start" type="button"><span>${esc(d.start)}${ICON.arrow}</span></button>`

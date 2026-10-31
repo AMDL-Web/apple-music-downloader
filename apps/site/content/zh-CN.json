@@ -139,11 +139,10 @@
     },
     "desktop": {
       "label": "桌面端",
-      "badge": "开发中",
       "name": "桌面应用",
-      "text": "用 MyGo 原生界面绘制的桌面应用，支持 macOS、Windows 和 Linux。它可以连你的服务端当客户端，也可以自己跑下载流水线、连接远程的 wrapper，和命令行共用同一个后端、同一份下载记录。目前还没有发布。",
-      "shot": "桌面应用在 Windows 上的开发版，正在曲库里搜索 Yorushika",
-      "caption": "Windows 上的开发版"
+      "text": "用 MyGo 原生界面绘制的桌面应用，支持 macOS、Windows 和 Linux。它可以连你的服务端当客户端，也可以自己跑下载流水线、连接远程的 wrapper，和命令行共用同一个后端、同一份下载记录。随 2.0 一起发布；安装包暂未签名，各系统第一次打开时会多问一次，见[桌面应用的安装说明]({blob}/docs/install.md#the-desktop-app)。",
+      "shot": "桌面应用在 Windows 上，正在曲库里搜索 Yorushika",
+      "caption": "Windows 上"
     }
   },
   "features": {

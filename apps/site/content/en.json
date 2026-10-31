@@ -139,11 +139,10 @@
     },
     "desktop": {
       "label": "Desktop",
-      "badge": "In development",
       "name": "Desktop app",
-      "text": "A native app for macOS, Windows and Linux, drawn with MyGo's native UI. It works as a client of your server, or runs the pipeline itself and talks to a remote wrapper, sharing one backend and one download history with the command line. It is not released yet.",
-      "shot": "A development build of the desktop app on Windows, searching the catalog for Yorushika",
-      "caption": "Development build on Windows"
+      "text": "A native app for macOS, Windows and Linux, drawn with MyGo's native UI. It works as a client of your server, or runs the pipeline itself and talks to a remote wrapper, sharing one backend and one download history with the command line. It ships with 2.0. The packages are not signed yet, so each system asks once before opening it: [installing the desktop app]({blob}/docs/install.md#the-desktop-app).",
+      "shot": "The desktop app on Windows, searching the catalog for Yorushika",
+      "caption": "On Windows"
     }
   },
   "features": {
