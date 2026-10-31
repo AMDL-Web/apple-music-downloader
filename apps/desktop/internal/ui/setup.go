@@ -62,6 +62,7 @@ func (a *App) OpenSetup(m mode.Kind) {
 	*f = setupForm{first: a.Settings.Mode == "", back: back, mode: m,
 		serverAddr: a.Settings.RemoteURL, wrapperAddr: a.Settings.WrapperAddress}
 	if a.Setup != nil {
+		a.Setup.ForgetServer()
 		a.Setup.Recheck()
 		a.Setup.Check(a.Settings.FFmpeg)
 		// A standalone mode without a guest here uses the wrapper it names.

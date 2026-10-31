@@ -130,7 +130,7 @@ func (a *App) emptyQueue(c *ui.Context, k *Tokens, quiet bool) {
 			return
 		}
 		display(c, "Nothing downloading", 24)
-		ui.Text(c, "Copy an album, playlist or song link from Apple Music and press "+shortcutLabel+", or paste it in the field above.").
+		ui.Text(c, "Copy an album, playlist or song link from Apple Music and press "+shortcutLabel+", or paste it on Home.").
 			FontSize(13).TextColor(k.Muted).TextAlign(ui.Center).MaxWidth(300)
 		if button(c, k, buttonPrimary, "New download", nil).Height(36).PaddingX(16).Clicked() {
 			a.FocusField()

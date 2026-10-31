@@ -40,6 +40,9 @@ func (a *App) toolRow(c *ui.Context, k *Tokens, name string, t setup.Tool, choos
 			status = "Canceled"
 		}
 		setupRow(c, k, name, setup.Failed, name, status, false, func() {
+			if choose != nil && button(c, k, buttonGhost, "Choose…", nil).Clicked() {
+				choose()
+			}
 			if button(c, k, buttonPlain, "Try again", nil).Clicked() {
 				s.Install(name, a.Settings.FFmpeg)
 			}
@@ -86,7 +89,12 @@ func (a *App) installHow(c *ui.Context, k *Tokens, name string, in setup.Install
 			a.Setup.Install(name, a.Settings.FFmpeg)
 		}
 	}
-	a.commandBox(c, k, in.Command, run)
+	if len(in.Args) == 0 && in.URL != "" {
+		// A sentence, not a command: nothing to copy into a terminal.
+		ui.Text(c, strings.ToUpper(in.Command[:1])+in.Command[1:]).FontSize(12.5).TextColor(k.Muted).LineHeight(1.5)
+	} else {
+		a.commandBox(c, k, in.Command, run)
+	}
 	if in.URL != "" {
 		ui.Row(c).Children(func() {
 			if button(c, k, buttonPlain, "Open "+siteOf(in.URL), nil).Clicked() {

@@ -58,6 +58,13 @@ func (s *Setup) TestServer(address string) {
 	}()
 }
 
+// ForgetServer drops the last test and any test still running, whose answer
+// then lands nowhere.
+func (s *Setup) ForgetServer() {
+	s.testGen++
+	s.Server, s.Testing = Server{}, ""
+}
+
 // Diagnose tests the amdl at address for a client of version mine.
 func Diagnose(ctx context.Context, address, mine string) Server {
 	sv := Server{Address: address, State: Failed}

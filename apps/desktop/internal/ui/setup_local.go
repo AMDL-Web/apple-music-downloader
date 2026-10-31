@@ -94,7 +94,7 @@ func (a *App) localApplied() bool {
 	if a.Settings.Mode != mode.Standalone {
 		return false
 	}
-	return !f.elsewhere || a.Settings.WrapperAddress == f.wrapperAddr
+	return !f.elsewhere || (a.Settings.WrapperAddress != "" && a.Settings.WrapperAddress == f.wrapperAddr)
 }
 
 // wrapperRow is the guest running under this computer's backend.

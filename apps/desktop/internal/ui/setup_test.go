@@ -198,3 +198,82 @@ func TestSettingsModeCardOpensSetup(t *testing.T) {
 		t.Errorf("after Close: screen %v, mode %q", a.Screen, a.Settings.Mode)
 	}
 }
+
+func TestRemoteRetestKeepsTheLastResultsUntilTheNewOnesLand(t *testing.T) {
+	a, _, tt, _, _ := setupApp(t, mode.DefaultSettings(), mode.Remote)
+	a.su.serverAddr = "http://nas:18570"
+	a.su.serverFrom = tt.Now()
+	a.Setup.Testing = "http://nas:18570"
+	a.Setup.Server = setup.Server{Address: "http://nas:18570", State: setup.Ready,
+		Reach:   setup.Line{State: setup.Ready, Text: "amdl 2.0.0 · 12 ms"},
+		Account: setup.Line{State: setup.Ready, Text: "someone@icloud.com"}}
+	tt.Frame()
+	if !tt.HasText("amdl 2.0.0 · 12 ms") || !tt.HasText("someone@icloud.com") || tt.HasText("Testing") {
+		t.Errorf("a retest that answers quickly: %q", tt.Texts())
+	}
+	tt.Advance(statusDelay + time.Millisecond)
+	tt.Frame()
+	if !tt.HasText("Testing") || !tt.HasText("someone@icloud.com") {
+		t.Errorf("a slow retest says Testing over the last results: %q", tt.Texts())
+	}
+
+	a.su.serverFrom = tt.Now()
+	a.Setup.Server = setup.Server{}
+	tt.Frame()
+	if tt.HasText("Testing") {
+		t.Errorf("a first test shows Testing at once: %q", tt.Texts())
+	}
+	tt.Advance(statusDelay + time.Millisecond)
+	tt.Frame()
+	if !tt.HasText("Testing") {
+		t.Errorf("a slow first test shows no Testing: %q", tt.Texts())
+	}
+}
+
+func TestOpeningSetupForgetsTheLastServerTest(t *testing.T) {
+	s := mode.DefaultSettings()
+	s.Mode, s.RemoteURL = mode.Remote, "http://nas:18570"
+	a, _, _, _, _ := setupApp(t, s, mode.Remote)
+	a.Setup.Server = setup.Server{Address: "http://nas:18570", State: setup.Ready, Reach: setup.Line{State: setup.Ready, Text: "amdl 2.0.0"}}
+	a.Setup.Testing = "http://nas:18570"
+	a.OpenSetup(mode.Remote)
+	if a.Setup.Server.Address != "" || a.Setup.Testing != "" {
+		t.Errorf("the last test survived opening: %+v", a.Setup.Server)
+	}
+}
+
+func TestAnotherMachineWithoutAnAddressIsNotApplied(t *testing.T) {
+	s := mode.DefaultSettings()
+	s.Mode = mode.Standalone
+	a, _, _, _, _ := setupApp(t, s, mode.Standalone)
+	a.su.elsewhere = true
+	if a.localApplied() {
+		t.Error("Another machine with no address counts as applied")
+	}
+	a.Settings.WrapperAddress, a.su.wrapperAddr = "http://wrapper:30020", "http://wrapper:30020"
+	if !a.localApplied() {
+		t.Error("the applied address does not count as applied")
+	}
+}
+
+func TestMissingHomebrewIsASentenceNotACommand(t *testing.T) {
+	a, _, tt, _, _ := setupApp(t, mode.DefaultSettings(), mode.Standalone)
+	a.Setup.FFmpeg = setup.Tool{State: setup.Missing, Install: setup.Install{
+		Command: "install Homebrew from https://brew.sh, then brew install ffmpeg", URL: "https://brew.sh"}}
+	tt.Frame()
+	if !tt.HasText("Install Homebrew from https://brew.sh, then brew install ffmpeg") || !tt.HasText("Open brew.sh") {
+		t.Fatalf("no sentence or no Open: %q", tt.Texts())
+	}
+	if tt.HasText("Copy") {
+		t.Errorf("a sentence offers Copy: %q", tt.Texts())
+	}
+}
+
+func TestAFailedInstallOffersChooseForFFmpeg(t *testing.T) {
+	a, _, tt, _, _ := setupApp(t, mode.DefaultSettings(), mode.Standalone)
+	a.Setup.Run = &setup.Run{Tool: "ffmpeg", State: setup.Failed, Err: "exit 1", Command: "brew install ffmpeg"}
+	tt.Frame()
+	if !tt.HasText("Try again") || !tt.HasText("Choose…") {
+		t.Errorf("failed ffmpeg install: %q", tt.Texts())
+	}
+}
