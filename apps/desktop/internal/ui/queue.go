@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -134,22 +135,72 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	a.recentWall(c, k, finished, latest, compact)
 	tabs := []string{"All", fmt.Sprintf("Active · %d", s.Count(store.TabActive)), fmt.Sprintf("Done · %d", s.Count(store.TabDone)),
 		fmt.Sprintf("Failed · %d", s.Count(store.TabFailed))}
+	tab := store.Tab(a.Tab)
+	jobs := s.Filter(tab, "")
+	// All and Active lead with Up next, in the order the jobs run; the
+	// finished ones follow, newest first.
+	var running, queued, earlier []*store.Job
+	if tab == store.TabAll || tab == store.TabActive {
+		for _, j := range jobs {
+			switch j.Status {
+			case domain.JobRunning:
+				running = append(running, j)
+			case domain.JobQueued:
+			default:
+				earlier = append(earlier, j)
+			}
+		}
+		queued = s.Queued()
+	} else {
+		earlier = jobs
+	}
+	upNext := len(running)+len(queued) > 0
 	ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground).Children(func() {
 		display(c, "Queue", 22).SingleLine()
 		segmented(c, k, "tabs", &a.Tab, tabs, map[int]ui.Color{int(store.TabFailed): k.Bad})
 		ui.Spacer(c)
-		if !compact {
+		if !compact && !upNext {
 			ui.Text(c, "Newest first").FontSize(12).TextColor(k.Muted)
 		}
 	})
-	jobs := s.Filter(store.Tab(a.Tab), "")
 	if len(jobs) == 0 {
 		a.emptyQueue(c, k, latest != nil)
 		return
 	}
-	ui.List(c.Key("queue"), &a.queue, len(jobs), func(i int) {
-		a.jobRow(c, k, jobs[i], compact)
-	}).Grow(1).Background(k.Ground).ItemKey(func(i int) any { return jobs[i].ID }).TrackScroll(a.scrollState(c, "queue"))
+	// The list's items: Up next as one, the heading of the rest, then the
+	// rest one by one.
+	head := 0
+	if upNext {
+		head = 1
+		if len(earlier) > 0 {
+			head = 2
+		}
+	}
+	list := ui.List(c.Key("queue"), &a.queue, head+len(earlier), func(i int) {
+		switch {
+		case i == 0 && upNext:
+			a.upNext(c, k, running, queued, compact)
+		case i == 1 && head == 2:
+			ui.Row(c).Padding(18, 18, 6, 18).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Earlier").FontSize(12).FontWeight(650).TextColor(k.Muted)
+				ui.Spacer(c)
+				if !compact {
+					ui.Text(c, "Newest first").FontSize(12).TextColor(k.Faint)
+				}
+			})
+		default:
+			a.jobRow(c, k, earlier[i-head], compact, nil)
+		}
+	}).Grow(1).Background(k.Ground).ItemKey(func(i int) any {
+		switch {
+		case i == 0 && upNext:
+			return "up-next"
+		case i == 1 && head == 2:
+			return "earlier"
+		}
+		return earlier[i-head].ID
+	}).TrackScroll(a.scrollState(c, "queue"))
+	a.settleQueueDrag(c, list)
 }
 
 // hero is the "downloading now" band: the cover, the album in big type, its
@@ -273,7 +324,7 @@ func motionBadge(c *ui.Context, text string) {
 
 // jobRow is one job of the queue: cover, names, stage bar with counts,
 // status pill, and a menu.
-func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
+func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place func(row ui.Element)) {
 	s := a.Store
 	pal := jobPalette(j, false)
 	accent := AccentFor(pal, k)
@@ -286,6 +337,9 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	}
 	if running {
 		row.InsetShadow(3, 0, 0, 0, accent)
+	}
+	if place != nil {
+		place(row)
 	}
 	if row.Clicked() {
 		if row.ClickModifiers()&ui.Cmd != 0 {
@@ -406,6 +460,15 @@ func (a *App) jobMenu(m *ui.Menu, j *store.Job) {
 	}
 	switch j.Status {
 	case domain.JobQueued, domain.JobRunning:
+		if q := a.Store.Queued(); j.Status == domain.JobQueued && len(q) > 1 {
+			at := slices.Index(q, j)
+			if at > 0 && m.Item("Run next").Chosen() {
+				a.Store.MoveJob(j.ID, 0)
+			}
+			if at < len(q)-1 && m.Item("Run last").Chosen() {
+				a.Store.MoveJob(j.ID, len(q)-1)
+			}
+		}
 		if m.Item("Cancel").Chosen() {
 			a.Store.Cancel(j.ID)
 		}

@@ -146,6 +146,8 @@ type App struct {
 	deleteOpen bool
 	// asking is the download whose sheet is up, or nil.
 	asking *downloadAsk
+	// qd is a queued job dragged through Up next.
+	qd queueDrag
 	// linkOver is set while links dragged from another app are over the
 	// window; dropping is the dropped link being looked up since
 	// dropSince.

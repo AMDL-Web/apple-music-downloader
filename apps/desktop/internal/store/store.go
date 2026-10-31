@@ -44,6 +44,9 @@ type Store struct {
 	// Jobs are newest first, as the backend lists them.
 	Jobs []*Job
 	byID map[string]*Job
+	// move is the queue move waiting for its answer, numbered by moveGen.
+	move    *queueMove
+	moveGen int
 	// Counts are the backend's status counts over all jobs, which can be
 	// more than Jobs holds.
 	Counts domain.JobStatusCounts
@@ -93,7 +96,7 @@ func New(post func(func()), notifier Notifier) *Store {
 
 func (s *Store) reset() {
 	s.Conn, s.ConnChanged, s.LastLive, s.Loaded = client.ConnState{Phase: client.Connecting}, s.now(), time.Time{}, false
-	s.Jobs, s.byID, s.Counts = nil, map[string]*Job{}, domain.JobStatusCounts{}
+	s.Jobs, s.byID, s.Counts, s.move = nil, map[string]*Job{}, domain.JobStatusCounts{}, nil
 	s.Selection, s.DetailID = map[string]bool{}, ""
 	s.followers, s.notified, s.tracksRead = map[string]context.CancelFunc{}, map[string]domain.JobStatus{}, map[string]bool{}
 	s.Omni.reset()
