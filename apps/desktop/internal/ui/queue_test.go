@@ -33,10 +33,15 @@ func demoApp(t *testing.T) (*App, func(until func() bool)) {
 	return a, func(until func() bool) {
 		t.Helper()
 		deadline := time.After(10 * time.Second)
+		// An until that builds a frame may be what sends the request it
+		// waits on, so it runs again even when nothing arrives.
+		tick := time.NewTicker(20 * time.Millisecond)
+		defer tick.Stop()
 		for !until() {
 			select {
 			case fn := <-queue:
 				fn()
+			case <-tick.C:
 			case <-deadline:
 				t.Fatal("the demo backend's answer never arrived")
 			}
