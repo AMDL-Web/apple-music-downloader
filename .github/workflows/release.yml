@@ -10,9 +10,10 @@ name: Release
 # Both paths run the CI gate (make check), use the hand-written release notes
 # or generate a changelog, create the tag and GitHub Release, then attach the
 # amdl binaries (make dist) with the Homebrew formula and Scoop manifest
-# rendered for them, copy those two into the tap and the bucket once that is
-# set up (deploy/packaging/README.md), and call docker-publish to build and
-# push the image (moving latest too). A version with a suffix such as -rc.1 is
+# rendered for them, attach the desktop app's packages (desktop.yml), copy the
+# formula and the manifest into the tap and the bucket once that is set up
+# (deploy/packaging/README.md), and call docker-publish to build and push the
+# image (moving latest too). A version with a suffix such as -rc.1 is
 # a prerelease: it moves no latest and skips the tap and the bucket.
 on:
   workflow_dispatch:
@@ -253,6 +254,18 @@ jobs:
           # the job fails.
           test "$(ls dist | wc -l)" -eq 8
           gh release upload "$VERSION" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  # Attach the desktop app's packages to the release and describe them in
+  # its notes.
+  desktop:
+    name: Attach the desktop app
+    needs: release
+    uses: ./.github/workflows/desktop.yml
+    permissions:
+      contents: write
+    with:
+      version: ${{ needs.release.outputs.version }}
+      upload: true
 
   # Copy the formula and the manifest into the tap and the bucket. Off until
   # the maintainer creates AMDL-Web/homebrew-tap and AMDL-Web/scoop-bucket,

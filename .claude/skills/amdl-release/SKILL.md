@@ -7,9 +7,10 @@ description: Cut an amdl release - confirm dev is green, write release notes at 
 
 Merging the `dev` → `main` PR runs `.github/workflows/release.yml`: it tags the
 merge commit, creates the GitHub Release, attaches the `amdl` binaries with the
-Homebrew formula and Scoop manifest rendered for them, and calls
-`.github/workflows/docker-publish.yml` to push the multi-arch image. The maintainer
-merges; agents prepare and check.
+Homebrew formula and Scoop manifest rendered for them, calls
+`.github/workflows/desktop.yml` to attach the desktop app's packages and describe
+them in the notes, and calls `.github/workflows/docker-publish.yml` to push the
+multi-arch image. The maintainer merges; agents prepare and check.
 
 ## 1. dev is ready
 
@@ -18,6 +19,9 @@ merges; agents prepare and check.
   `timeout 900 gh run watch $(gh run list --branch dev --workflow CI --limit 1 --json databaseId --jq '.[0].databaseId') --exit-status`.
 - CI's "Release files" job (`make dist-check`) is green: the release's binaries job
   runs only after the tag and the Release exist.
+- The desktop packages build: `gh workflow run desktop.yml --ref dev -f version=<version>`
+  rehearses them without uploading, and its run (`gh run list --workflow desktop.yml --limit 1`)
+  is green within `timeout 1800`.
 - `gh api repos/AMDL-Web/apple-music-downloader/code-scanning/alerts?state=open --jq length`
   is `0`; fix an alert or dismiss it with its reason.
 - The website describes the release: `apps/site/build.mjs#REF` is `main`, and the
@@ -61,10 +65,14 @@ maintainer for that release, never assumed from an earlier one.
 Bound each wait with `timeout 900`; on timeout record FAIL with the last state.
 
 - `gh run list --workflow release.yml --limit 1` shows success.
-- `gh release view <version>` shows the notes and eight assets: five archives,
-  `SHA256SUMS`, `amdl.rb` and `amdl.json`. When the binaries job failed after the
-  Release was created, attach them by hand from the tag:
+- `gh release view <version>` shows the notes and thirteen assets: five archives,
+  `SHA256SUMS`, `amdl.rb` and `amdl.json`, and the desktop app's two `.dmg`, the
+  `-setup-` `.exe`, the `.deb` and the Linux `.tar.gz`. The notes end with a
+  `## Desktop app` section. When the binaries job failed after the Release was
+  created, attach them by hand from the tag:
   `make dist VERSION=<version> && node deploy/packaging/render.mjs <version> dist/SHA256SUMS dist && gh release upload <version> dist/* --clobber`.
+  When the desktop job failed, `gh workflow run desktop.yml -f version=<version> -f upload=true`
+  builds the tag again and uploads.
 - The install command in the README and on the website installs the release (not
   for a prerelease, which never becomes the latest):
   `d=$(mktemp -d) && curl -fsSL https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/main/deploy/install/install.sh | sh -s -- --bin-dir "$d" && AMDL_URL=http://127.0.0.1:1 "$d/amdl" version --fields client`
@@ -98,9 +106,8 @@ wrapper pin. These steps are the maintainer's unless marked; record each in the 
   instead of republishing to Workers.
 - **NAS.** Redeploy the maintainer's own install on the new image name after the
   release (the `ssh-remote-ops` skill covers the host).
-- **Desktop app.** Not part of 2.0.0: the release workflow builds no desktop app. It
-  ships as a release of its own once a signing account is in place, and the v2.0.0
-  notes say so in one sentence.
+- **Desktop app.** It ships with 2.0.0, unsigned (ad hoc on macOS) until a signing
+  account exists; the section desktop.yml adds to the notes says how to open it.
 - **Homebrew and Scoop.** Not published for 2.0.0; they start with 2.0.1. For 2.0.0
   `PACKAGING_PUBLISH` stays unset, and the rendered `amdl.rb` and `amdl.json` are
   still attached to the Release. Before 2.0.1, set them up as

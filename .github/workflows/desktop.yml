@@ -1,0 +1,153 @@
+name: Desktop
+
+# Package the desktop app (make desktop): two macOS disk images, the Windows
+# installer, and the Linux archive and Debian package. They are not signed
+# (ad hoc on macOS) until there is a signing account. release.yml calls this
+# once the Release exists and the packages are uploaded to it, with a section
+# about opening them added to its notes. Run by hand with upload off, it
+# keeps them as the run's artifacts only: a rehearsal that needs no tag.
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      upload:
+        required: false
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp (e.g. v2.0.0-rc.3)'
+        required: true
+        type: string
+      upload:
+        description: 'Upload to the existing GitHub Release of that version, built from its tag'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # count is how many packages the row makes; files finds them.
+          - { name: macOS, os: macos-latest, platforms: 'darwin/arm64,darwin/amd64', files: '*/*.dmg', count: 2 }
+          - { name: Windows, os: ubuntu-latest, platforms: windows/amd64, files: '*/*-setup-*.exe', count: 1 }
+          - { name: Linux, os: ubuntu-latest, platforms: linux/amd64, files: '*/*.tar.gz */*.deb', count: 2 }
+    steps:
+      - name: Check the version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # The shape release.yml accepts.
+          if ! printf '%s' "$VERSION" | grep -qxE 'v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?'; then
+            echo "::error::Version \"$VERSION\" is not vX.Y.Z (an optional suffix like -rc.1 is allowed)."
+            exit 1
+          fi
+
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          # An upload builds the release's tag; a rehearsal the chosen branch.
+          ref: ${{ inputs.upload && inputs.version || github.ref }}
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # MyGo's CLI evaluates apps/desktop/mygo.config.ts with Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      - name: Install NSIS
+        if: matrix.name == 'Windows'
+        run: sudo apt-get update && sudo apt-get install -y nsis
+
+      - name: Package
+        env:
+          VERSION: ${{ inputs.version }}
+          PLATFORMS: ${{ matrix.platforms }}
+        run: make desktop VERSION="$VERSION" DESKTOP_PLATFORMS="$PLATFORMS"
+
+      - name: Collect the packages
+        working-directory: apps/desktop/build
+        env:
+          FILES: ${{ matrix.files }}
+          COUNT: ${{ matrix.count }}
+        run: |
+          mkdir ../packages
+          # FILES holds globs, expanded here on purpose.
+          # shellcheck disable=SC2086
+          for f in $FILES; do
+            if [ -f "$f" ]; then cp "$f" ../packages/; fi
+          done
+          ls -l ../packages
+          n=$(find ../packages -type f | wc -l)
+          if [ "$n" -ne "$COUNT" ]; then
+            echo "::error::$n packages, want $COUNT"
+            exit 1
+          fi
+
+      - name: Keep them with the run
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.name }}
+          path: apps/desktop/packages/*
+          if-no-files-found: error
+
+      - name: Upload to the release
+        if: inputs.upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh release upload "$VERSION" apps/desktop/packages/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  notes:
+    name: Describe the desktop packages in the release notes
+    needs: build
+    if: inputs.upload
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Add the section
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          # A rerun finds the section already there.
+          if grep -qx '## Desktop app' notes.md; then
+            echo "The notes already describe the desktop packages."
+            exit 0
+          fi
+          # The link follows the tag, whose install.md describes these packages.
+          sed "s|@VERSION@|$VERSION|" >> notes.md <<'EOF'
+
+          ## Desktop app
+
+          `amdl-desktop-*` are the desktop app for macOS (`.dmg`, Apple silicon `arm64` or Intel `amd64`), Windows (`-setup-*.exe`) and Linux (`.deb` or `.tar.gz`). They are not signed yet, so each system asks once:
+
+          - **macOS**: drag AMDL to Applications and open it. When macOS says it cannot check the app, open System Settings › Privacy & Security and choose Open Anyway, or run `xattr -dr com.apple.quarantine /Applications/AMDL.app`.
+          - **Windows**: when SmartScreen stops the installer, choose More info › Run anyway.
+
+          [docs/install.md](https://github.com/AMDL-Web/apple-music-downloader/blob/@VERSION@/docs/install.md#the-desktop-app) has the details.
+          EOF
+          gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --notes-file notes.md

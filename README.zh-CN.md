@@ -50,8 +50,9 @@ JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli se
 的原生界面绘制。它可以作为远程服务端的客户端运行，也可以作为单机后端，在进程内跑下载流水线、连接
 wrapper：可以是这台电脑上的那个（应用的设置引导会像 `amdl wrapper install` 一样连同 QEMU 和 ffmpeg 一起装好），也可以是别的机器上的。单机模式通过 `internal/local` 在本机回环端口上运行后端；如果这台电脑上已有后端在跑（比如
 `amdl service`），就直接使用它，所以应用和命令行共用一个后端、一份下载记录；应用自己的包放在
-apps/desktop/internal 下，只归它用。`make desktop-web` 把同一个应用编译给浏览器，作为演示版，数据来自
-内存里的虚构后端。
+apps/desktop/internal 下，只归它用。每个版本都附带它的 macOS、Windows 和 Linux 安装包，目前未签名
+（[docs/install.md](docs/install.md#the-desktop-app)）；`make desktop-web` 把同一个应用编译给浏览器，
+作为演示版，数据来自内存里的虚构后端。
 
 ## 仓库结构
 

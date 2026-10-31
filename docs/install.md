@@ -87,6 +87,38 @@ the [releases](https://github.com/AMDL-Web/apple-music-downloader/releases), che
 archive with `sha256sum -c SHA256SUMS --ignore-missing` (`shasum -a 256` on macOS,
 `Get-FileHash` on Windows), and put `amdl` from it on your `PATH`.
 
+## The desktop app
+
+Each release also attaches the desktop app (`apps/desktop`), named after the release's
+version; a prerelease's Debian package writes its suffix after a `~`, as
+`2.0.0~rc.3`:
+
+| System | File | Install |
+| --- | --- | --- |
+| macOS, Apple silicon or Intel | `amdl-desktop-<version>-arm64.dmg` or `-amd64.dmg` | Open the disk image and drag AMDL to Applications |
+| Windows | `amdl-desktop-setup-<version>-amd64.exe` | Run it: it installs for the current user in `%LOCALAPPDATA%\Programs\AMDL Desktop`, apart from the command line's `Programs\amdl` |
+| Debian, Ubuntu | `amdl-desktop_<version>_amd64.deb` | `sudo apt install ./amdl-desktop_<version>_amd64.deb`, which brings GTK 3 |
+| Other Linux | `amdl-desktop-<version>-linux-amd64.tar.gz` | Unpack it and run `amdl-desktop`; it needs GTK 3 |
+
+The packages are not signed yet, so each system stops the first launch once:
+
+- **macOS** says it cannot check AMDL for malicious software. Open System Settings ›
+  Privacy & Security, choose Open Anyway beside the line about AMDL, and confirm. Or
+  clear the quarantine flag the browser set, before or after that first try:
+  `xattr -dr com.apple.quarantine /Applications/AMDL.app`.
+- **Windows** SmartScreen says it protected the PC: choose More info, then Run anyway.
+
+On its first launch the app asks where downloads run: a server on your network, or this
+computer, whose setup screen checks and installs what that needs (see
+[A wrapper amdl runs](#a-wrapper-amdl-runs)). The packages carry neither ffmpeg nor
+QEMU. The app keeps its settings beside the backend's files ([Where files go](#where-files-go)),
+which uninstalling the app leaves in place.
+
+`make desktop` builds the packages from a clone, for this machine or the
+`DESKTOP_PLATFORMS` given, into `apps/desktop/build/`. It needs Node.js, which MyGo's
+CLI reads `apps/desktop/mygo.config.ts` with; disk images are made on macOS only, and the
+Windows installer where NSIS is installed.
+
 ## ffmpeg
 
 The backend runs ffmpeg for every track; simulate mode is the one exception. `amdl doctor`

@@ -24,7 +24,7 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker dist dist-check desktop-web
+.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker dist dist-check desktop desktop-web
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
@@ -112,9 +112,15 @@ dist-check: ## Build and render the release files as a release does, for a made-
 	@node deploy/packaging/render.mjs v0.0.0-ci dist/SHA256SUMS dist
 	@n=$$(ls dist | wc -l); if [ $$n -ne $(DIST_FILES) ]; then echo "dist-check: $$n files in dist/, want $(DIST_FILES)"; ls dist; exit 1; fi
 
-# MyGo's CLI (the go.mod tool) builds the desktop app as
-# apps/desktop/mygo.config.ts describes it, which needs Node.js to read.
+# The desktop app's targets, as GOOS/GOARCH pairs or web. MyGo's CLI (the
+# go.mod tool) reads apps/desktop/mygo.config.ts, which needs Node.js, and
+# writes apps/desktop/build/<os>-<arch>/. Disk images need macOS and the
+# Windows installer NSIS; elsewhere the CLI skips them with a note.
+DESKTOP_PLATFORMS ?= $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)
 DESKTOP_MYGO = cd apps/desktop && DESKTOP_VERSION=$(patsubst v%,%,$(VERSION)) MYGO_LDFLAGS="$(LDFLAGS)" $(GO) tool mygo build
+
+desktop: ## Package the desktop app for DESKTOP_PLATFORMS (default: this machine) into apps/desktop/build/
+	$(DESKTOP_MYGO) -platform $(DESKTOP_PLATFORMS)
 
 desktop-web: ## Build the desktop app's browser demo into apps/desktop/build/web/
 	$(DESKTOP_MYGO) -platform web
