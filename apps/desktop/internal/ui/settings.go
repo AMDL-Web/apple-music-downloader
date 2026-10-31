@@ -40,6 +40,7 @@ type settingsForm struct {
 	tested   string
 	edit     fieldEdit
 	login    loginForm
+	order    orderDrag
 }
 
 // statusDelay is how long a request runs before the screen says it is under

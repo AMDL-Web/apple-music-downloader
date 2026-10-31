@@ -73,8 +73,12 @@ func valueText(v any) string {
 	return fmt.Sprint(v)
 }
 
-// strs is a list value as strings.
+// strs is a list value as strings: as the server sends it, or as a change
+// waiting for its answer holds it.
 func strs(v any) []string {
+	if l, ok := v.([]string); ok {
+		return l
+	}
 	l, _ := v.([]any)
 	out := make([]string, 0, len(l))
 	for _, x := range l {
@@ -175,7 +179,7 @@ func (a *App) fieldControl(c *ui.Context, k *Tokens, f *configField, off bool) {
 	case fieldToken:
 		a.tokenField(c, k, f, valueText(v))
 	case fieldList:
-		a.listField(c, k, f, strs(v))
+		a.orderField(c, k, f, strs(v))
 	case fieldSet:
 		a.setField(c, k, f, strs(v), off)
 	}
