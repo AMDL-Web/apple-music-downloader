@@ -46,6 +46,9 @@ func (a *App) View(c *ui.Context) {
 	a.compact = w-target < compactContent
 	vib := c.Vibrancy()
 	root := ui.Box(c).Fill()
+	if !inSetup {
+		a.linkTarget(c, root)
+	}
 	// The sidebar's width as it slides; the page takes the rest.
 	side := root.AnimateWith("sidebar", target, sidebarSlide, ui.EaseOut)
 	page := w - side
@@ -79,6 +82,11 @@ func (a *App) View(c *ui.Context) {
 						}
 					})
 				})
+				// Home's field is where links land there; elsewhere a card
+				// over the page shows it.
+				if a.linkOver && a.Screen != ScreenHome {
+					a.dropZone(c, k)
+				}
 			})
 		})
 		if !inSetup {
@@ -145,14 +153,18 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 // toast shows the store's latest notice for a few seconds.
 func (a *App) toast(c *ui.Context, k *Tokens) {
 	n := a.Store.Notice
-	if n.Text == "" {
-		return
+	ic, col := icCheck, k.OK
+	if n.Error {
+		ic, col = icCross, k.Bad
 	}
-	age := c.Now().Sub(n.At)
-	if age > 4*time.Second {
+	switch age := c.Now().Sub(n.At); {
+	case waited(c, a.dropping != "", a.dropSince):
+		n.Text, ic, col = "Looking up the link…", icLink, k.Accent
+	case n.Text == "" || age > 4*time.Second:
 		return
+	default:
+		c.After(4*time.Second - age)
 	}
-	c.After(4*time.Second - age)
 	// Over home's dock, the toast rises above it.
 	bottom := float32(24)
 	if a.dockShown() {
@@ -162,10 +174,6 @@ func (a *App) toast(c *ui.Context, k *Tokens) {
 		ui.Row(c).Attach(ui.AnchorBottom, ui.AnchorBottom).Bottom(bottom).
 			PaddingX(14).PaddingY(9).Gap(8).Radius(radiusFull).AlignItems(ui.Center).
 			Background(k.Pill).Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.35)).Children(func() {
-			ic, col := icCheck, k.OK
-			if n.Error {
-				ic, col = icCross, k.Bad
-			}
 			ui.Icon(c, ic).FontSize(13).TextColor(col.Mix(k.PillInk, 0.2))
 			ui.Text(c, n.Text).FontSize(12.5).FontWeight(600).TextColor(k.PillInk)
 		})

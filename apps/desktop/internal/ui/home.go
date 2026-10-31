@@ -103,14 +103,26 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		height = min(max(float32(2*padField+20+lines*fieldLine), fieldHeight), fieldMaxHeight)
 	}
 	lift := ui.Box(c).Width(width).Radius(radiusCard)
-	shade := ui.RGBA(0, 0, 0, 0.32)
+	shade, deep := ui.RGBA(0, 0, 0, 0.32), ui.RGBA(0, 0, 0, 0.45)
 	if !k.Dark {
-		shade = ui.RGBA(20, 22, 34, 0.12)
+		shade, deep = ui.RGBA(20, 22, 34, 0.12), ui.RGBA(20, 22, 34, 0.18)
 	}
-	lift.Shadow(0, 14, 36, -12, shade)
+	// Links dragged over the window land here: the field rises to them.
+	over := a.linkOver
+	if over {
+		lift.Shadow(0, 22, 48, -10, deep)
+		lift.AnimatePose(ui.Pose{Y: -3, Scale: 1.01}, ui.Snappy)
+	} else {
+		lift.Shadow(0, 14, 36, -12, shade)
+		lift.AnimatePose(ui.Pose{}, ui.Snappy)
+	}
 	lift.Children(func() {
-		box := ui.Row(c).FillWidth().Height(height).Padding(padField).Gap(12).Radius(radiusCard).
-			Background(k.Raise).Border(1, k.Line2)
+		box := ui.Row(c).FillWidth().Height(height).Padding(padField).Gap(12).Radius(radiusCard).Background(k.Raise)
+		if over {
+			box.Border(1.5, k.Accent).BorderStyle(ui.BorderDashed)
+		} else {
+			box.Border(1, k.Line2)
+		}
 		if dense {
 			box.AlignItems(ui.Start)
 		} else {
@@ -119,7 +131,7 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		ring := false
 		box.Children(func() {
 			ic, col := icSearch, k.Muted
-			if len(o.Links) > 0 {
+			if len(o.Links) > 0 || over {
 				ic, col = icLink, k.Accent
 			}
 			well := float32(fieldHeight - 2*padField)
@@ -127,8 +139,12 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 				ui.Icon(c, ic).FontSize(20).TextColor(col)
 			})
 			a.fieldTxt = o.Text
+			hint := "Paste links or search Apple Music"
+			if over {
+				hint = "Drop to download"
+			}
 			in := ui.TextAreaBase(c.Key("field"), &a.fieldTxt).Grow(1).Shrink(1).MinWidth(0).Bind(&a.field).
-				Placeholder("Paste links or search Apple Music").Label("Paste links or search Apple Music")
+				Placeholder(hint).Label("Paste links or search Apple Music")
 			if dense {
 				in.FillHeight().PaddingY(10).Font(MonoFont).FontSize(13).LineHeight(1.6)
 			} else {

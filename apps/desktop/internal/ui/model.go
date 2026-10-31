@@ -146,6 +146,12 @@ type App struct {
 	deleteOpen bool
 	// asking is the download whose sheet is up, or nil.
 	asking *downloadAsk
+	// linkOver is set while links dragged from another app are over the
+	// window; dropping is the dropped link being looked up since
+	// dropSince.
+	linkOver  bool
+	dropping  string
+	dropSince time.Time
 	// hookAsk is the hook sheet that is up, or nil.
 	hookAsk *hookSheet
 	// nowShown is the job the sidebar's now card shows, kept while the

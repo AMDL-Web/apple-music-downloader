@@ -175,6 +175,47 @@ func parseLink(u string) (typ, id string, ok bool) {
 	return m[1], m[2], true
 }
 
+// LookupOne previews url apart from the field, as a link dropped on the
+// window, and hands the preview to then on the UI thread; a failure is the
+// notice.
+func (s *Store) LookupOne(url string, then func(client.Lookup)) {
+	c, ctx := s.client, s.ctx
+	if c == nil {
+		return
+	}
+	go func() {
+		res, err := c.Lookup(ctx, url)
+		s.postIf(ctx, func() {
+			if err != nil {
+				s.setNotice(err.Error(), true)
+				return
+			}
+			then(res)
+		})
+	}()
+}
+
+// PriorJobFor is the job in the list that downloads what a preview names:
+// a queued or running one, else a completed one; nil for none. It stands
+// in for a search hit's prior_job, which a preview does not carry.
+func (s *Store) PriorJobFor(l client.Lookup) *client.PriorJob {
+	var done *client.PriorJob
+	for _, j := range s.Jobs {
+		if t, id, ok := parseLink(j.Input); !ok || t != l.Type || id != l.ID {
+			continue
+		}
+		switch j.Status {
+		case domain.JobQueued, domain.JobRunning:
+			return &client.PriorJob{ID: j.ID, Status: j.Status}
+		case domain.JobCompleted:
+			if done == nil {
+				done = &client.PriorJob{ID: j.ID, Status: j.Status, FinishedAt: j.FinishedAt}
+			}
+		}
+	}
+	return done
+}
+
 // Startable returns the links a submit would start: previewed, supported
 // and not already running.
 func (s *Store) Startable() []*Link {
