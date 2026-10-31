@@ -119,7 +119,8 @@ whenever it can read it, and `catalog.media_user_token` only when it cannot:
 - Any other wrapper whose files the backend can see: set `wrapper.data_dir` (or
   `AMDL_WRAPPER_DATA_DIR`) to the wrapper's data directory. A wrapper-lite base directory
   holds `MUSIC_TOKEN` directly; a wrapper-manager's data directory holds one per account
-  under `instances/<id>/`, and the newest is read. In containers, mount that directory
+  under `instances/<id>/`. amdl 2.0 supports one wrapper account, a wrapper-manager's
+  included; with several, the newest token is read. In containers, mount that directory
   read-only into the backend ([Deployment](deployment.md#the-wrapper)). The file must be
   readable by the user the backend runs as.
 - A wrapper on another machine with no shared files: paste the token into
@@ -128,8 +129,8 @@ whenever it can read it, and `catalog.media_user_token` only when it cannot:
 `GET /api/v1/wrapper/status` reports the token in use from the wrapper, masked, as
 `media_user_token` (`""` when there is none). A token typed into
 `catalog.media_user_token` is never overwritten or removed; it is simply not used while the
-wrapper has one. A token read from the wrapper is reused for 30 seconds; a missing file is
-looked for again on the next use, so a fresh login shows up within one request.
+wrapper has one. The wrapper's file is read afresh on every use, so a login or a refreshed
+token takes effect with the next request.
 
 ## Catalog tokens and the Hi-Res manifest
 

@@ -116,7 +116,7 @@ services:
 
   # Wrapper, option A (recommended): wrapper-manager v2, which supervises
   # wrapper-lite accounts behind one HTTP port and lets you log in from the
-  # console. Upstream publishes no image, so compose builds it from the v2
+  # console; amdl 2.0 supports one account in it. Upstream publishes no image, so compose builds it from the v2
   # branch (Go and Docker are all it needs); first start also downloads the
   # wrapper-lite payload from nightly.link. wrapper-lite-rootless needs user
   # namespaces and chroot, which Docker blocks by default, hence privileged

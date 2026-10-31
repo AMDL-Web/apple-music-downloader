@@ -103,7 +103,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-func TestInvalidWrapperTokenIsAnErrorAndNotCached(t *testing.T) {
+func TestInvalidWrapperTokenIsAnError(t *testing.T) {
 	var calls int
 	val := "short"
 	p := New(func() (string, error) { calls++; return val, nil })
@@ -115,38 +115,29 @@ func TestInvalidWrapperTokenIsAnErrorAndNotCached(t *testing.T) {
 		t.Fatalf("after a valid write Wrapper = %d bytes, %v", len(v), err)
 	}
 	if calls != 2 {
-		t.Fatalf("reads = %d, want 2 (an invalid read is not cached)", calls)
+		t.Fatalf("reads = %d, want 2", calls)
 	}
 }
 
-func TestCacheThirtySeconds(t *testing.T) {
+// Every use reads the file afresh: a refreshed token is used at once.
+func TestReadsEveryTime(t *testing.T) {
 	var calls int
 	val := wrapperTok
-	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
 	p := New(func() (string, error) { calls++; return val, nil })
-	p.now = func() time.Time { return now }
 	cfg := config.Default()
-
-	if v, _ := p.Wrapper(cfg); v != wrapperTok || calls != 1 {
-		t.Fatalf("first read: %d bytes, %d calls", len(v), calls)
+	if v, _ := p.Wrapper(cfg); v != wrapperTok {
+		t.Fatal("first read")
 	}
-	val = strings.Repeat("N", 200)
-	now = now.Add(29 * time.Second)
-	if v, _ := p.Wrapper(cfg); v != wrapperTok || calls != 1 {
-		t.Fatalf("within 30 s: got a fresh read (%d calls) or another value", calls)
-	}
-	now = now.Add(time.Second)
+	val = strings.Repeat("N", 200) // the wrapper refreshes its token
 	if v, _ := p.Wrapper(cfg); v != val || calls != 2 {
-		t.Fatalf("after 30 s: %d calls, want a fresh read of the new value", calls)
+		t.Fatalf("second read: %d calls, want a fresh read of the new token", calls)
 	}
 }
 
-func TestMissIsNotCached(t *testing.T) {
+func TestTokenAppearsRightAfterAMiss(t *testing.T) {
 	var calls int
 	val := ""
 	p := New(func() (string, error) { calls++; return val, nil })
-	now := time.Now()
-	p.now = func() time.Time { return now }
 	if v, err := p.Wrapper(config.Default()); v != "" || err != nil {
 		t.Fatalf("no token: %d bytes, %v", len(v), err)
 	}
@@ -244,7 +235,7 @@ func TestDataDirIgnoredWhenManaged(t *testing.T) {
 	}
 }
 
-func TestCacheIsPerSource(t *testing.T) {
+func TestEachDataDirReadsItsOwn(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
 	tokA, tokB := strings.Repeat("A", 200), strings.Repeat("B", 200)
 	writeFile(t, filepath.Join(a, FileName), tokA, time.Time{})
@@ -254,6 +245,6 @@ func TestCacheIsPerSource(t *testing.T) {
 		t.Fatal("first data_dir")
 	}
 	if v, _ := p.Wrapper(cfgWith("", b)); v != tokB {
-		t.Fatal("a second data_dir got the first one's cached token")
+		t.Fatal("a second data_dir got the first one's token")
 	}
 }

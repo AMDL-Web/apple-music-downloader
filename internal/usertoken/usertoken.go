@@ -1,16 +1,17 @@
 // Package usertoken decides which Apple Music media-user-token the backend
 // uses. The wrapper keeps its account's token in a file named MUSIC_TOKEN and
 // refreshes it on its own; when amdl can read that file, it uses it, and
-// catalog.media_user_token is the fallback for a wrapper it cannot read.
+// catalog.media_user_token is the fallback for a wrapper it cannot read. One
+// wrapper account is supported, a wrapper-manager's included.
 //
-// Where the wrapper's token is read, in order:
+// Where the wrapper's token is read, afresh on every use:
 //
 //   - amdl runs the wrapper (internal/wrapperhost): the managed reader passed
 //     to New, which reads the guest's disk image. wrapper.data_dir is ignored.
 //   - wrapper.data_dir is set: <data_dir>/MUSIC_TOKEN, the layout of a
 //     wrapper-lite base directory; when that file is missing,
-//     <data_dir>/instances/*/MUSIC_TOKEN, a wrapper-manager's layout, newest
-//     modification time first.
+//     <data_dir>/instances/*/MUSIC_TOKEN, a wrapper-manager's layout, whose
+//     one account is used, the newest token if there are several.
 //   - otherwise there is no wrapper token.
 //
 // The value is never logged, and never written to the config.
@@ -58,10 +59,6 @@ const (
 	// maxRead bounds a read of the file, surrounding whitespace included; a
 	// longer file is not a token.
 	maxRead = 2 * maxLen
-	// cacheTTL is how long a token read from one source is reused. The
-	// wrapper refreshes its file every 30 minutes and older tokens keep
-	// working, so a short reuse costs nothing and spares the reads.
-	cacheTTL = 30 * time.Second
 )
 
 // ErrInvalid means the wrapper's file does not hold a media-user-token. The
@@ -73,17 +70,9 @@ var ErrInvalid = errors.New("not a media-user-token")
 // concurrent use.
 type Provider struct {
 	managed func() (string, error)
-	// now is the cache clock; nil means time.Now.
-	now func() time.Time
 
 	mu      sync.Mutex
-	cache   map[string]cached
 	lastErr string
-}
-
-type cached struct {
-	value string
-	at    time.Time
 }
 
 // New returns a Provider. managed reads the token of a wrapper amdl runs
@@ -109,10 +98,11 @@ func (p *Provider) Token(cfg config.Config) Token {
 	return Token{}
 }
 
-// Wrapper returns the wrapper's token alone, validated: "" with a nil error
-// when there is no wrapper token to read, an error when the file cannot be
-// read or is not a token. A valid token is reused for 30 seconds per source;
-// a miss or an error is not, so a fresh login shows up on the next call.
+// Wrapper returns the wrapper's token alone, validated and read afresh: ""
+// with a nil error when there is no wrapper token to read, an error when the
+// file cannot be read or is not a token. A read is one small file, or a few
+// blocks of the managed guest's disk, so nothing is cached and a login or a
+// refresh shows up on the next call.
 func (p *Provider) Wrapper(cfg config.Config) (string, error) {
 	if p == nil {
 		return "", nil
@@ -121,14 +111,6 @@ func (p *Provider) Wrapper(cfg config.Config) (string, error) {
 	if read == nil {
 		return "", nil
 	}
-	now := p.clock()
-	p.mu.Lock()
-	if c, ok := p.cache[key]; ok && now.Sub(c.at) < cacheTTL && !now.Before(c.at) {
-		p.mu.Unlock()
-		return c.value, nil
-	}
-	p.mu.Unlock()
-
 	raw, err := read()
 	if err != nil {
 		return "", err
@@ -140,12 +122,6 @@ func (p *Provider) Wrapper(cfg config.Config) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", key, err)
 	}
-	p.mu.Lock()
-	if p.cache == nil {
-		p.cache = map[string]cached{}
-	}
-	p.cache[key] = cached{value: v, at: now}
-	p.mu.Unlock()
 	return v, nil
 }
 
@@ -159,13 +135,6 @@ func (p *Provider) source(cfg config.Config) (key string, read func() (string, e
 		return "wrapper.data_dir " + dir, func() (string, error) { return readDataDir(dir) }
 	}
 	return "", nil
-}
-
-func (p *Provider) clock() time.Time {
-	if p.now != nil {
-		return p.now()
-	}
-	return time.Now()
 }
 
 // noteErr logs a wrapper token error when it differs from the last one, so a
@@ -208,8 +177,9 @@ func tokenByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9' || strings.IndexByte("+/=-_", c) >= 0
 }
 
-// readDataDir reads <dir>/MUSIC_TOKEN, or when that is missing the newest
-// <dir>/instances/*/MUSIC_TOKEN. A missing directory or file is no token.
+// readDataDir reads <dir>/MUSIC_TOKEN, or when that is missing the
+// <dir>/instances/*/MUSIC_TOKEN of a wrapper-manager's one account, the newest
+// if there are several. A missing directory or file is no token.
 func readDataDir(dir string) (string, error) {
 	raw, err := readLimited(filepath.Join(dir, FileName))
 	if err == nil || !errors.Is(err, fs.ErrNotExist) {

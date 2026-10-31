@@ -237,6 +237,9 @@ connection with `GET /api/v1/wrapper/status`.
 | wrapper-manager v2 (recommended) | [wrapper-manager `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
 | wrapper-lite | [wrapper `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
+amdl 2.0 supports one wrapper account with either option: log one account into
+wrapper-manager. Accounts in several storefronts are not supported yet.
+
 Run natively or in upstream's Docker image, both use `wrapper-lite-rootless`, which needs
 user namespaces and `chroot` on a Linux host (x86_64 or arm64): `unshare -Ur true` must
 succeed there. Docker blocks them by default, so the wrapper-manager service runs

@@ -72,8 +72,9 @@ wrapper:
   # media-user-token the wrapper keeps in a file named MUSIC_TOKEN and refreshes itself; while it can, that token
   # is used instead of catalog.media_user_token. Two layouts are read: a wrapper-lite base directory, read as
   # <data_dir>/MUSIC_TOKEN (the ./data/wrapper bind mount of deploy/docker-compose.yml's wrapper-lite option), and
-  # a wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN, the newest file when there
-  # are several (<volume>/wrapper/rootfs/data in the wrapper-manager option). A container mounts that directory
+  # a wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN (<volume>/wrapper/rootfs/data
+  # in the wrapper-manager option). One wrapper account is supported, a wrapper-manager's included; with several,
+  # the newest file is read. The file is read afresh on every use. A container mounts that directory
   # read-only and sets this key, or AMDL_WRAPPER_DATA_DIR, to the mount point. A relative path is resolved from the
   # backend working directory. The file must be readable by the user the backend runs as; a missing directory or
   # file means no wrapper token. Empty (the default) reads
