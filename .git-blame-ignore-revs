@@ -52,3 +52,5 @@ e80b7e3d1a9e7af8e6f511fbc599216cea703533
 4d91665861b73299ee134659a67db868eddc5310
 # refactor(console): split the ui-audit mock, its fixtures and scenarios, and the hooks styles (move-only)
 e7aa7d702eba5a12efb61feaaeaaac6447836292
+# refactor(console): move the list editor's rules to list-editor.css (move-only)
+f98c6308b0be115bf7b44bf3dcc75a07026d04b8
