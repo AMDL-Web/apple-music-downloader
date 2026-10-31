@@ -160,3 +160,33 @@ func TestAccountSectionOffersTheLoginOnlyWhereItWorks(t *testing.T) {
 		t.Errorf("a refused login: %q", tt.Texts())
 	}
 }
+
+func TestTokenFieldNamesTheWrappersToken(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	a.GoSettings("account")
+	sv := &a.Store.Server
+	sv.Read = time.Now()
+	sv.Wrapper = &client.WrapperStatus{Ready: true, LoggedIn: true}
+	a.Store.Config.Values = map[string]any{"catalog": map[string]any{"media_user_token": "...wxyz"}}
+	tt := ui.NewTester(a.View, 1280, 800)
+	if !tt.HasText("Replace") || tt.HasText("From the wrapper") {
+		t.Fatalf("without the wrapper's token the saved one should be replaceable: %q", tt.Texts())
+	}
+
+	sv.Wrapper.MediaUserToken = "...abcd"
+	tt.Frame()
+	for _, want := range []string{"From the wrapper", "…abcd", "Saved token · ends", "…wxyz", "· not used", "Remove"} {
+		if !tt.HasText(want) {
+			t.Errorf("no %q: %q", want, tt.Texts())
+		}
+	}
+	if tt.HasText("Replace") || tt.HasText("Paste the token") {
+		t.Errorf("the wrapper's token in use still offers a typed one: %q", tt.Texts())
+	}
+
+	a.Store.Config.Values = map[string]any{"catalog": map[string]any{"media_user_token": ""}}
+	tt.Frame()
+	if !tt.HasText("…abcd") || tt.HasText("Saved token · ends") || tt.HasText("Remove") {
+		t.Errorf("with no saved token only the wrapper's should show: %q", tt.Texts())
+	}
+}

@@ -347,8 +347,14 @@ func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string) 
 }
 
 // tokenField keeps a secret out of sight: it says whether one is set and
-// takes a new one in a masked box.
+// takes a new one in a masked box. While the backend reads the wrapper's own
+// token, which it uses first, the field names that one instead and offers
+// only to remove a saved one.
 func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string) {
+	if w := a.Store.Server.Wrapper; w != nil && w.MediaUserToken != "" {
+		a.wrapperToken(c, k, f, w.MediaUserToken, saved)
+		return
+	}
 	e := &a.set.edit
 	draft, replacing := e.text[f.key]
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -378,6 +384,41 @@ func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string)
 			delete(e.text, f.key)
 		}
 	})
+}
+
+// wrapperToken is the token field while the wrapper's token is in use: its
+// last characters, and a saved token it leaves unused with Remove. Both
+// arrive masked, "..." and the last four characters.
+func (a *App) wrapperToken(c *ui.Context, k *Tokens, f *configField, token, saved string) {
+	// The parts of one phrase sit a space apart.
+	const space = 4
+	ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
+		pill(c, k, pillOK, icLock, "From the wrapper")
+		ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "ends").FontSize(12.5).TextColor(k.Muted)
+			mono(c, "…"+tokenTail(token), 12.5).TextColor(k.Muted)
+		})
+	})
+	if saved == "" {
+		return
+	}
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "Saved token · ends").FontSize(12.5).TextColor(k.Faint)
+			mono(c, "…"+tokenTail(saved), 12.5).TextColor(k.Faint)
+			ui.Text(c, "· not used").FontSize(12.5).TextColor(k.Faint)
+		})
+		ui.Spacer(c)
+		if button(c, k, buttonGhost, "Remove", nil).Height(32).Clicked() {
+			delete(a.set.edit.text, f.key)
+			a.Store.SetConfig(f.key, "")
+		}
+	})
+}
+
+// tokenTail is the last four characters of a masked token, for "ends …a1b2".
+func tokenTail(token string) string {
+	return token[max(0, len(token)-4):]
 }
 
 // listField orders a list of options; each change applies at once.
