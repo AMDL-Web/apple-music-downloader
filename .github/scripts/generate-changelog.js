@@ -40,28 +40,7 @@ const IGNORE_PREFIXES = /^(?:build|style|debug)\s*(?:\([^)]*\))*!?:\s*/;
 // type, optional (scope), optional "!" marking a breaking change.
 const CONVENTIONAL_PREFIX = /^(?<prefix>\w+)(?:\([\w\-]+\))?(?<breaking>!)?:\s*/;
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  let tagName = null;
-  let latest = null;
-  let withHash = false;
-  let withCommitizen = false;
-  let outputOnly = false;
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--tag' || arg === '-t') {
-      tagName = args[++i];
-    } else if (arg === '--base' || arg === '--latest' || arg === '-b') {
-      latest = args[++i];
-    } else if (arg === '-wh' || arg === '--with-hash') {
-      withHash = true;
-    } else if (arg === '-wc' || arg === '--with-commitizen') {
-      withCommitizen = true;
-    } else if (arg === '--output-only') {
-      outputOnly = true;
-    } else if (arg === '--help' || arg === '-h') {
-      console.log(`
+const USAGE = `
 Usage: node generate-changelog.js [options]
 
 Options:
@@ -71,12 +50,45 @@ Options:
   -wc, --with-commitizen         keep the Conventional Commits prefix
   --output-only                  print the changelog only (for CI)
   -h, --help                     show this help
-      `);
-      process.exit(0);
+`;
+
+class UsageError extends Error {}
+
+// An unknown flag or a flag without its value is an error, never a silent
+// default: a mistyped --tag would otherwise write the notes for another range.
+function parseArgs(args) {
+  let tagName = null;
+  let latest = null;
+  let withHash = false;
+  let withCommitizen = false;
+  let outputOnly = false;
+  let help = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const value = () => {
+      const v = args[++i];
+      if (v === undefined || v.startsWith('-')) throw new UsageError(`${arg} needs a value`);
+      return v;
+    };
+    if (arg === '--tag' || arg === '-t') {
+      tagName = value();
+    } else if (arg === '--base' || arg === '--latest' || arg === '-b') {
+      latest = value();
+    } else if (arg === '-wh' || arg === '--with-hash') {
+      withHash = true;
+    } else if (arg === '-wc' || arg === '--with-commitizen') {
+      withCommitizen = true;
+    } else if (arg === '--output-only') {
+      outputOnly = true;
+    } else if (arg === '--help' || arg === '-h') {
+      help = true;
+    } else {
+      throw new UsageError(`unknown argument: ${arg}`);
     }
   }
 
-  return { tagName, latest, withHash, withCommitizen, outputOnly };
+  return { tagName, latest, withHash, withCommitizen, outputOnly, help };
 }
 
 function callCommand(command) {
@@ -353,7 +365,19 @@ function writeToFile(content, append = false) {
 }
 
 function main() {
-  const { tagName, latest, withHash, withCommitizen, outputOnly } = parseArgs();
+  let options;
+  try {
+    options = parseArgs(process.argv.slice(2));
+  } catch (e) {
+    if (!(e instanceof UsageError)) throw e;
+    console.error(`${e.message}\n${USAGE}`);
+    process.exit(2);
+  }
+  if (options.help) {
+    console.log(USAGE);
+    return;
+  }
+  const { tagName, latest, withHash, withCommitizen, outputOnly } = options;
 
   const resolvedLatest = latest || getLatestTag();
   const resolvedTagName = tagName || getCurrentTag();
@@ -394,7 +418,9 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) main();
 
 export {
+  UsageError,
   classifyCommits,
+  parseArgs,
   parseCategory,
   formatAuthor,
   formatAuthors,

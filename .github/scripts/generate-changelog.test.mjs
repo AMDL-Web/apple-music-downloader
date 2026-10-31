@@ -8,6 +8,8 @@ import {
   parseCoAuthors,
   parseCategory,
   parseGitLog,
+  parseArgs,
+  UsageError,
 } from './generate-changelog.js';
 
 test('parseCategory keeps a breaking build commit and drops a plain one', () => {
@@ -89,4 +91,21 @@ test('Claude co-authors are credited as @claude whatever the model name', () => 
     { author: 'Claude Opus 5.5', email: 'noreply@anthropic.com' },
     { author: 'Claude', email: 'noreply@anthropic.com' },
   ]), '@claude');
+});
+
+test('parseArgs reads the flags the release workflow passes', () => {
+  assert.deepEqual(parseArgs(['--tag', 'v2.0.0', '--with-hash', '--base', 'v1.9.0', '--output-only']), {
+    tagName: 'v2.0.0',
+    latest: 'v1.9.0',
+    withHash: true,
+    withCommitizen: false,
+    outputOnly: true,
+    help: false,
+  });
+});
+
+test('parseArgs rejects an unknown flag or a flag without a value', () => {
+  for (const args of [['--taq', 'v2.0.0'], ['--tag'], ['-b'], ['--tag', '--with-hash'], ['v2.0.0']]) {
+    assert.throws(() => parseArgs(args), UsageError, args.join(' '));
+  }
 });
