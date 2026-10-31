@@ -106,3 +106,40 @@ func canonicalOutputPath(path string) (string, error) {
 		current = parent
 	}
 }
+
+// outputLease holds the process-wide lock on one codec attempt's output path.
+// Once the concrete path is known it is kept through the existence/force
+// check, retries, sidecar writes and the final commit, so one job's force or
+// cleanup path never deletes another job's in-flight or newly committed output.
+type outputLease struct {
+	key    string
+	unlock func()
+}
+
+// acquire takes the lock for path, keeping a lock already held on the same
+// canonical path and releasing one held on a different path.
+func (l *outputLease) acquire(ctx context.Context, path string) error {
+	key, err := canonicalOutputPath(path)
+	if err != nil {
+		return fmt.Errorf("canonicalize output path: %w", err)
+	}
+	if l.unlock != nil && key == l.key {
+		return nil
+	}
+	l.release()
+	unlock, err := processOutputLocks.acquireContext(ctx, path)
+	if err != nil {
+		return err
+	}
+	l.key, l.unlock = key, unlock
+	return nil
+}
+
+func (l *outputLease) release() {
+	if l.unlock != nil {
+		l.unlock()
+		l.unlock, l.key = nil, ""
+	}
+}
+
+func (l *outputLease) held() bool { return l.unlock != nil }
