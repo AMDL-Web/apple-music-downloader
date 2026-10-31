@@ -62,9 +62,8 @@ export function SettingsNav({ section, dirty, invalid, views }) {
  * Under 640 px, #/settings without a section: every section as a row of a
  * grouped list (icon, label, its live one-line summary, mark, chevron),
  * each opening as its own view. Logs, whose summary counts errors, opens the
- * Logs page instead (its errors when there are some): the phone's way there,
- * the sidebar's foot on a wider screen; the Logs page's head links back to
- * its settings. `summaries` holds each row's {text, role?}; a row without
+ * Logs page instead (its errors when there are some), where the Logs tab opens
+ * it unfiltered; the Logs page's head links back to its settings. `summaries` holds each row's {text, role?}; a row without
  * one yet keeps the line's room.
  */
 export function SettingsList({ dirty, invalid, views, summaries }) {

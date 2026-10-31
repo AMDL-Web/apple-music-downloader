@@ -164,7 +164,7 @@
     bottom: 0;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
     border-top: var(--chrome-border);
@@ -204,9 +204,8 @@
     background: var(--ink);
   }
 
-  /* New download, the third of four tabs, is the primary action: one large
-     mark with no label. The whole tab stays the hit target. There is no
-     fifth page to put it in the middle: Logs stays out of the bar. */
+  /* New download, the middle of five equal tabs, is the primary action: one
+     large mark with no label. The whole tab stays the hit target. */
   .tab-new-mark {
     display: grid;
     place-items: center;

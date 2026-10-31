@@ -15,7 +15,7 @@ export const NAV = [
   { page: 'queue', label: 'Queue', icon: 'list', key: 'q' },
   // g y opened System, which Settings now holds.
   { page: 'settings', label: 'Settings', icon: 'settings', key: ',', alias: 'y' },
-  // Seldom opened: a quieter item at the foot of the sidebar; on a phone, reached from Settings.
+  // Seldom opened: a quieter item at the foot of the sidebar; on a phone, the last tab.
   { page: 'logs', label: 'Logs', icon: 'file-text', key: 'l', secondary: true },
 ];
 
@@ -62,12 +62,12 @@ export function Sidebar({ route, counts }) {
 const navItem = (page) => NAV.find((n) => n.page === page);
 
 /**
- * The phone tab bar: Overview, Queue, New download (primary) and Settings.
- * Logs, opened seldom, is reached from Settings, so Settings is the current
- * tab on it too.
+ * The phone tab bar: five equal tabs, Overview, Queue, New download (primary),
+ * Settings and Logs, so New download is the middle one. Each tab is current
+ * only on its own page.
  */
 export function TabBar({ route }) {
-  const current = (page) => (route.page === page || (page === 'settings' && route.page === 'logs') ? 'page' : undefined);
+  const current = (page) => (route.page === page ? 'page' : undefined);
   const tab = (n) => html`<a key=${n.page} class="tab" data-page=${n.page} href=${n.page === 'queue' ? queueHash() : buildHash(n.page)} aria-current=${current(n.page)}>
     <${Icon} name=${n.icon} size="nav" />
     <span class="tab-label">${n.label}</span>
@@ -79,6 +79,7 @@ export function TabBar({ route }) {
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
     </a>
     ${tab(navItem('settings'))}
+    ${tab(navItem('logs'))}
   </nav>`;
 }
 
