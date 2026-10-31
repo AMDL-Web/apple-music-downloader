@@ -71,14 +71,13 @@ type pick struct {
 }
 
 type results struct {
-	term    string
-	filter  int // index into filters
-	items   []pick
-	cursor  int
-	artist  *client.SearchHit
-	back    *results
-	loading bool
-	err     string
+	term   string
+	filter int // index into filters
+	items  []pick
+	cursor int
+	artist *client.SearchHit
+	back   *results
+	err    string
 }
 
 var filters = []string{"all", "album", "song", "artist"}

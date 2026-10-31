@@ -559,7 +559,7 @@ func TestListJobsFilterPaginationAndSort(t *testing.T) {
 		t.Fatalf("q=omega (an artist name) = ids=%v total=%d, want [j3]", idsOf(listed), total)
 	}
 
-	listed, total, err = store.ListJobs(ctx, JobListFilter{Query: "%", Limit: 50})
+	_, total, err = store.ListJobs(ctx, JobListFilter{Query: "%", Limit: 50})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -131,6 +131,9 @@ func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, erro
 // URL is the wrapper address of the managed guest.
 func (s *Supervisor) URL() string { return s.in.URL() }
 
+// MusicToken reads the media-user-token from the managed account disk.
+func (s *Supervisor) MusicToken() (string, error) { return s.home.MusicToken() }
+
 func (s *Supervisor) poke() {
 	select {
 	case s.wake <- struct{}{}:

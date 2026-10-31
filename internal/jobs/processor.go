@@ -52,6 +52,10 @@ func (e *RequestError) SubmitError() *domain.SubmitError {
 	return out
 }
 
+// Reporter is how a Processor records a job's progress. Writes of intermediate
+// progress and events are best effort: a processor may discard their errors
+// with `_ =`, because an unfinished item is reset on resume. Only an item's
+// terminal state is retried and logged (internal/media#persistTerminal).
 type Reporter interface {
 	SetJob(ctx context.Context, job *domain.Job) error
 	// SetJobMotionArtwork persists only the animated-cover columns. Separate

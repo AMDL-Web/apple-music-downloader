@@ -343,8 +343,7 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	r := &Running{Base: "http://" + ln.Addr().String(), dirs: b.Dirs, lock: l, cancel: cancel, done: make(chan error, 1)}
 	var wrapperToken func() (string, error)
 	if host != nil {
-		// The supervisor's Home is the one wrapperHost built from these dirs.
-		wrapperToken = wrapperhost.Home{Dir: b.Dirs.WrapperDir()}.MusicToken
+		wrapperToken = host.MusicToken
 		r.hostDone = make(chan struct{})
 		go func() {
 			defer close(r.hostDone)

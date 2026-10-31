@@ -113,8 +113,7 @@ atmos/media.m3u8
 }
 
 type fakeQualityCatalog struct {
-	song             applemusic.Song
-	wrapperM3U8Calls *int
+	song applemusic.Song
 }
 
 func (f fakeQualityCatalog) Song(context.Context, string, string) (applemusic.Song, error) {
