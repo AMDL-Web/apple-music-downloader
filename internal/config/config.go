@@ -185,8 +185,11 @@ const (
 const (
 	// MaxParallelWrapperRequests bounds wrapper lyrics, web playback and
 	// license requests across all jobs. /key and /m3u8 have their own, smaller
-	// bound in internal/wrapper.
-	MaxParallelWrapperRequests = 24
+	// bound in internal/wrapper. It is small because wrapper-lite answers on
+	// 8 threads that every open connection holds (see
+	// internal/wrapper#connectionLimit); one lyrics request takes about a
+	// second, so 4 still fetch an album's lyrics in a few seconds.
+	MaxParallelWrapperRequests = 4
 	// CatalogRequestsPerSecond and CatalogRequestBurst are the token bucket
 	// shared by authenticated Catalog API and amp-api requests.
 	CatalogRequestsPerSecond = 10

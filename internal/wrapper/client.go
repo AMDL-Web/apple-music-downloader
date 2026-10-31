@@ -77,6 +77,21 @@ const playbackWaitTimeouts = 10
 // errPlaybackWait is a /key or /m3u8 that gave up waiting for its permits.
 var errPlaybackWait = errors.New("no playback slot became free")
 
+// connectionLimit bounds the connections the client keeps to the wrapper.
+// wrapper-lite serves HTTP on 8 threads and keeps each thread on its
+// connection until that connection has been idle for 30 seconds, so a request
+// sent on a ninth connection is not even read until one of them times out,
+// and by then a request with the default 30-second timeout has failed. The
+// data and playback permits plus one /status call fit inside the limit, so a
+// permitted request never waits for a connection, and one thread stays free
+// for another client of the same wrapper.
+const connectionLimit = config.MaxParallelWrapperRequests + playbackRequestLimit + 1
+
+// idleConnectionTimeout closes a connection idle this long, well before
+// wrapper-lite's own 30 seconds, so a thread it holds goes back to the wrapper
+// soon after a burst of requests ends.
+const idleConnectionTimeout = 5 * time.Second
+
 type LoginResult struct {
 	Status  string `json:"status"`
 	LoginID string `json:"login_id,omitempty"`
@@ -201,7 +216,9 @@ func NewClient(cfg config.WrapperConfig, options ...ClientOption) (*Client, erro
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	transport.MaxIdleConnsPerHost = config.MaxParallelWrapperRequests + playbackRequestLimit
+	transport.MaxConnsPerHost = connectionLimit
+	transport.MaxIdleConnsPerHost = connectionLimit
+	transport.IdleConnTimeout = idleConnectionTimeout
 	life, shutdown := context.WithCancel(context.Background())
 	c := &Client{
 		base:          base,
@@ -248,8 +265,8 @@ func (c *Client) call(ctx context.Context, method, endpoint string, query url.Va
 }
 
 // callWithin is call with an explicit bound.
-func (c *Client) callWithin(ctx context.Context, timeout time.Duration, method, endpoint string, query url.Values, body any) (json.RawMessage, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+func (c *Client) callWithin(parent context.Context, timeout time.Duration, method, endpoint string, query url.Values, body any) (json.RawMessage, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	target := c.base.JoinPath(endpoint)
 	target.RawQuery = query.Encode()
@@ -270,7 +287,7 @@ func (c *Client) callWithin(ctx context.Context, timeout time.Duration, method, 
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("wrapper %s: %w", endpoint, err)
+		return nil, requestError(parent, endpoint, timeout, err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxReplyBytes))
@@ -286,6 +303,35 @@ func (c *Client) callWithin(ctx context.Context, timeout time.Duration, method, 
 	}
 	return env.Data, nil
 }
+
+// requestError is a request that got no reply, worded for an item message.
+// The *url.Error from http.Client repeats the method, URL and query, which
+// tell a reader nothing the endpoint does not, so only its cause is kept,
+// still wrapped for errors.Is; a request that ran out its own timeout says so
+// in words.
+func requestError(parent context.Context, endpoint string, timeout time.Duration, err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		err = urlErr.Err
+	}
+	if parent.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+		return &timeoutError{endpoint: endpoint, after: timeout, err: err}
+	}
+	return fmt.Errorf("wrapper %s: %w", endpoint, err)
+}
+
+// timeoutError is a wrapper request that got no reply within its timeout.
+type timeoutError struct {
+	endpoint string
+	after    time.Duration
+	err      error
+}
+
+func (e *timeoutError) Error() string {
+	return fmt.Sprintf("wrapper %s: no reply within %s", e.endpoint, e.after)
+}
+
+func (e *timeoutError) Unwrap() error { return e.err }
 
 func snippet(raw []byte) string {
 	const n = 200

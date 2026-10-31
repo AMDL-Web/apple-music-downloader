@@ -244,7 +244,7 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
    "started_at": "2026-10-28T12:00:05Z", "uptime_seconds": 3600,
    "simulate": false, "motion_artwork_enabled": true,
    "jobs": {"workers": 3, "active": 1, "queue_depth": 0, "queue_capacity": 256, "recovery_backlog": 0},
-   "pools": {"downloads": 16, "decrypts": 32, "wrapper_requests": 24},
+   "pools": {"downloads": 16, "decrypts": 32, "wrapper_requests": 4},
    "tools": [{"name": "ffmpeg", "available": true, "path": "/usr/bin/ffmpeg"}],
    "storage": [{"name": "downloads_dir", "path": "data/downloads", "free_bytes": 1, "total_bytes": 2},
                {"name": "temp_dir", "path": "data/tmp", "error": "statfs data/tmp: no such file or directory"}]}

@@ -114,12 +114,20 @@ fixed sizes in `internal/config` (`MaxParallelDecrypts`, `MaxParallelWrapperRequ
 waiting 10 wrapper request timeouts for its permits (`playbackWaitTimeouts`), however
 often higher-priority requests overtake it.
 
+The wrapper pools are small because of how wrapper-lite serves HTTP: a fixed set of
+threads, each held by one connection until that connection has been idle for 30 seconds.
+A request sent on a connection beyond them is not read until one idles out, which takes
+as long as the default request timeout. The client therefore keeps no more connections
+than the wrapper permits plus one `/status` call (`internal/wrapper#connectionLimit`),
+which leaves a thread for another client, and closes an idle one after a few seconds
+(`internal/wrapper#idleConnectionTimeout`).
+
 | Pool | Size | Bounds |
 | --- | ---: | --- |
 | `download.max_running_jobs` | 3 (default) | Worker slots — concurrently running jobs |
 | `download.max_parallel_downloads` | 16 (default) | Encrypted media transfers in flight |
 | Decrypts | CPUs (`GOMAXPROCS`) | Tracks in the decrypt stage, and the goroutines decrypting their samples |
-| Wrapper requests | 24 | Wrapper lyrics, web playback and license requests |
+| Wrapper requests | 4 | Wrapper lyrics, web playback and license requests |
 | Wrapper playback requests | 2 | Wrapper `/key` and `/m3u8`, which wrapper-lite answers one at a time |
 | Wrapper manifest requests | 1 | Wrapper `/m3u8` holding or waiting for a playback permit, so `/m3u8` never holds both |
 | `catalog.max_parallel_requests` | 16 (default) | Apple control-plane HTTP: Catalog API, web token, HLS manifests, artwork |
