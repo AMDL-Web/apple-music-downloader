@@ -375,7 +375,7 @@ func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string)
 		if in.Changed() {
 			e.text[f.key] = draft
 		}
-		save := button(c, k, buttonPrimary, "Save", nil).Height(32).Disabled(draft == "")
+		save := buttonOff(c, k, buttonPrimary, "Save", nil, draft == "").Height(32)
 		if (save.Clicked() || in.Submitted()) && draft != "" {
 			delete(e.text, f.key)
 			a.Store.SetConfig(f.key, draft)
@@ -390,29 +390,32 @@ func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string)
 // last characters, and a saved token it leaves unused with Remove. Both
 // arrive masked, "..." and the last four characters.
 func (a *App) wrapperToken(c *ui.Context, k *Tokens, f *configField, token, saved string) {
-	// The parts of one phrase sit a space apart.
+	// The parts of one phrase sit a space apart, and the two lines of the
+	// field close together.
 	const space = 4
-	ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
-		pill(c, k, pillOK, icLock, "From the wrapper")
-		ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "ends").FontSize(12.5).TextColor(k.Muted)
-			mono(c, "…"+tokenTail(token), 12.5).TextColor(k.Muted)
+	ui.Column(c).Children(func() {
+		ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
+			pill(c, k, pillOK, icLock, "From the wrapper")
+			ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "ends").FontSize(12.5).TextColor(k.Muted)
+				mono(c, "…"+tokenTail(token), 12.5).TextColor(k.Muted)
+			})
 		})
-	})
-	if saved == "" {
-		return
-	}
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Saved token · ends").FontSize(12.5).TextColor(k.Faint)
-			mono(c, "…"+tokenTail(saved), 12.5).TextColor(k.Faint)
-			ui.Text(c, "· not used").FontSize(12.5).TextColor(k.Faint)
-		})
-		ui.Spacer(c)
-		if button(c, k, buttonGhost, "Remove", nil).Height(32).Clicked() {
-			delete(a.set.edit.text, f.key)
-			a.Store.SetConfig(f.key, "")
+		if saved == "" {
+			return
 		}
+		ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Saved token · ends").FontSize(12.5).TextColor(k.Faint)
+				mono(c, "…"+tokenTail(saved), 12.5).TextColor(k.Faint)
+				ui.Text(c, "· not used").FontSize(12.5).TextColor(k.Faint)
+			})
+			ui.Spacer(c)
+			if button(c, k, buttonGhost, "Remove", nil).Height(32).Clicked() {
+				delete(a.set.edit.text, f.key)
+				a.Store.SetConfig(f.key, "")
+			}
+		})
 	})
 }
 

@@ -110,14 +110,31 @@ const (
 // button is the design's button; it returns the base, whose Clicked reports
 // a press.
 func button(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SVG) ui.Element {
-	b := ui.ButtonBase(c).Height(30).PaddingX(12).Gap(6).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Center)
+	return buttonOff(c, k, kind, text, ic, false)
+}
+
+// buttonOff is button, disabled when off. A button disabled after it is
+// built still reports the hover and press it styles itself by, so a button
+// that can be disabled is built with this.
+func buttonOff(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SVG, off bool) ui.Element {
+	b := ui.ButtonBase(c).Disabled(off).Height(30).PaddingX(12).Gap(6).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Center)
 	fg := k.Fg
 	switch kind {
 	case buttonPrimary:
 		b.Background(k.Accent)
 		fg = k.AccentInk
 	case buttonGhost:
+		// No fill at rest, so the fill is the only sign of a hover or a
+		// press, as the sidebar's toggle has it.
 		fg = k.Muted
+		switch {
+		case b.Pressed():
+			b.Background(k.Track.Mix(k.Fg, 0.08))
+			fg = k.Fg
+		case b.Hovered():
+			b.Background(k.Track)
+			fg = k.Fg
+		}
 	case buttonPill:
 		b.Height(44).PaddingX(34).Radius(radiusFull).Background(k.Pill)
 		fg = k.PillInk

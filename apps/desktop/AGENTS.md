@@ -36,6 +36,9 @@ this computer runs the backend and the account is held by the wrapper
   whenever it has the focus, as macOS's text fields, on other controls for
   keyboard focus only. A box whose focused element is a part of it, as a
   field's input, rings itself with `focusRing`.
+- A button that can be disabled is built with `buttonOff`, not `button`
+  then `Disabled`: MyGo reports hover and press until the element is
+  disabled, so the hover fill would show on a disabled button.
 - Scroll containers go through `scrollArea` (or `scrollState` where one
   cannot): MyGo draws thumbs at all times over the content, so the app hides
   them at rest where the desktop does, keeps lists clear of them and fades a

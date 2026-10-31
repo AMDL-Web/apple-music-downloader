@@ -249,7 +249,7 @@ func (a *App) configFile(c *ui.Context, k *Tokens) {
 			if cf.Reloading {
 				text = "Reloading…"
 			}
-			if button(c, k, buttonPlain, text, nil).Disabled(cf.Reloading).Clicked() {
+			if buttonOff(c, k, buttonPlain, text, nil, cf.Reloading).Clicked() {
 				a.Store.ReloadConfig()
 			}
 		})

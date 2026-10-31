@@ -81,7 +81,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				if in.Changed() {
 					f.checks = nil
 				}
-				if button(c, k, buttonPlain, "Test connection", nil).Disabled(slow || *addr == "").Clicked() && !f.testing {
+				if buttonOff(c, k, buttonPlain, "Test connection", nil, slow || *addr == "").Clicked() && !f.testing {
 					a.runTest(*addr, c.Now())
 				}
 				if slow {
@@ -113,7 +113,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	}
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 		changed := d.Mode != a.Settings.Mode || d.RemoteURL != a.Settings.RemoteURL || d.WrapperAddress != a.Settings.WrapperAddress || d.FFmpeg != a.Settings.FFmpeg
-		if button(c, k, buttonPrimary, "Apply", nil).Disabled(!changed).Clicked() {
+		if buttonOff(c, k, buttonPrimary, "Apply", nil, !changed).Clicked() {
 			next := a.Settings
 			next.Mode, next.RemoteURL, next.WrapperAddress, next.FFmpeg = d.Mode, d.RemoteURL, d.WrapperAddress, d.FFmpeg
 			a.Act.ApplySettings(next)

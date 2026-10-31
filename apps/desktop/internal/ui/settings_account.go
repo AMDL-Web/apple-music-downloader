@@ -60,7 +60,7 @@ func (a *App) credentials(c *ui.Context, k *Tokens, local bool) {
 		if l.Busy {
 			text = "Logging in…"
 		}
-		if (button(c, k, buttonPrimary, text, nil).Height(32).Disabled(!ready).Clicked() || pass.Submitted() || user.Submitted()) && ready {
+		if (buttonOff(c, k, buttonPrimary, text, nil, !ready).Height(32).Clicked() || pass.Submitted() || user.Submitted()) && ready {
 			a.Store.StartLogin(f.user, f.pass)
 			f.pass = ""
 		}
@@ -83,11 +83,11 @@ func (a *App) codeStep(c *ui.Context, k *Tokens) {
 			text = "Verifying…"
 		}
 		ready := sixDigits(f.code) && !l.Busy
-		if (button(c, k, buttonPrimary, text, nil).Height(32).Disabled(!ready).Clicked() || in.Submitted()) && ready {
+		if (buttonOff(c, k, buttonPrimary, text, nil, !ready).Height(32).Clicked() || in.Submitted()) && ready {
 			a.Store.SubmitCode(f.code)
 			f.code = ""
 		}
-		if button(c, k, buttonGhost, "Start over", nil).Height(32).Disabled(l.Busy).Clicked() {
+		if buttonOff(c, k, buttonGhost, "Start over", nil, l.Busy).Height(32).Clicked() {
 			a.Store.CancelLogin()
 			f.code = ""
 		}
@@ -100,7 +100,7 @@ func (a *App) signedIn(c *ui.Context, k *Tokens, accounts []string) {
 	if len(accounts) == 0 {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "An account is logged in.").FontSize(13).Grow(1)
-			if button(c, k, buttonPlain, "Log out…", nil).Disabled(l.Busy).Clicked() {
+			if buttonOff(c, k, buttonPlain, "Log out…", nil, l.Busy).Clicked() {
 				f.logout, f.logoutOpen = "", true
 			}
 		})
@@ -111,7 +111,7 @@ func (a *App) signedIn(c *ui.Context, k *Tokens, accounts []string) {
 			ui.Row(c.Key(acc)).Height(40).Gap(10).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, icPerson).FontSize(13).TextColor(k.Faint)
 				mono(c, acc, 12.5).Grow(1)
-				if button(c, k, buttonPlain, "Log out…", nil).Disabled(l.Busy).Clicked() {
+				if buttonOff(c, k, buttonPlain, "Log out…", nil, l.Busy).Clicked() {
 					f.logout, f.logoutOpen = acc, true
 				}
 			})
@@ -143,7 +143,7 @@ func (a *App) logoutDialog(c *ui.Context, k *Tokens) {
 			if button(c, k, buttonPlain, "Cancel", nil).Clicked() {
 				f.logoutOpen = false
 			}
-			ok := button(c, k, buttonPrimary, "Log out", nil).Disabled(f.logout == "")
+			ok := buttonOff(c, k, buttonPrimary, "Log out", nil, f.logout == "")
 			ok.Background(k.Bad)
 			if ok.Clicked() && f.logout != "" {
 				a.Store.Logout(f.logout)
