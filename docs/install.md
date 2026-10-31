@@ -90,8 +90,9 @@ archive with `sha256sum -c SHA256SUMS --ignore-missing` (`shasum -a 256` on macO
 ## The desktop app
 
 Each release also attaches the desktop app (`apps/desktop`), named after the release's
-version; a prerelease's Debian package writes its suffix after a `~`, as
-`2.0.0~rc.3`:
+version. A prerelease's Debian package is versioned with its suffix after a `~`, as
+`2.0.0~rc.4`, and GitHub shows that `~` as a `.` in the file's name,
+`amdl-desktop_2.0.0.rc.4_amd64.deb`; install the file by the name you downloaded:
 
 | System | File | Install |
 | --- | --- | --- |
