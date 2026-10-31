@@ -499,6 +499,13 @@
   white-space: nowrap;
 }
 
+/* Wide enough for the job's track count, so a count turning from 9 to 10
+   moves neither the keys after it nor the speed. */
+.jprog-key-n {
+  min-width: calc(var(--digits, 1) * 1ch);
+  text-align: right;
+}
+
 /* Each segment grows by its stage's share (--w, lib/status.js STAGE_WEIGHTS);
    the short stages keep a visible minimum on a narrow bar. */
 .stages {

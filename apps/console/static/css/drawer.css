@@ -114,6 +114,7 @@
 
 /* Its size grows while the job runs; on one line, the head keeps its height. */
 .drawer-summary {
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -265,6 +266,7 @@
 /* The count leads and the speed follows it on the same line, so the percent
    keeps its place as the numbers change; the speed gives way first. */
 .abar-count {
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

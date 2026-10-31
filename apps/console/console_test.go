@@ -538,7 +538,8 @@ var (
 	// Custom properties set per element from JS style objects or by the
 	// role mapping, a job row without progress, the Queue's trailing slot
 	// and a status head's title row in the base CSS itself, not by a skin;
-	// --sort-* are a list box's resize, set by ui/sortable.js.
+	// --sort-* are a list box's resize, set by ui/sortable.js; --digits is
+	// a progress legend's count width, set by JobProgress.
 	runtimeVars = map[string]bool{
 		"--art-bg": true, "--art-t1": true, "--art-t2": true, "--art-t3": true,
 		"--w": true, "--f": true, "--v": true, "--n": true, "--swatch": true,
@@ -546,6 +547,7 @@ var (
 		"--save-x": true, "--save-w": true, "--domain-title-h": true,
 		"--hook-more-w": true, "--hook-controls-w": true,
 		"--sort-y": true, "--sort-scale": true, "--sort-dur": true,
+		"--digits": true,
 	}
 )
 

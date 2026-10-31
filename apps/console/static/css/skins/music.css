@@ -970,6 +970,11 @@
   gap: var(--s-3);
 }
 
+/* Resolving, a job's bar is as tall as the cells that replace it. */
+:root[data-skin="music"] [data-section="live"] .pbar {
+  height: var(--cell-h);
+}
+
 :root[data-skin="music"] [data-section="live"] .jprog-text {
   font-weight: var(--w-semibold);
 }

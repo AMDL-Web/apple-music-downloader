@@ -60,7 +60,7 @@ export function JobProgress({ job }) {
   const text = [
     html`<span key="text" class="jprog-text">${p.text}</span>`,
     legend
-      ? html`<span key="legend" class="jprog-legend" aria-hidden="true">
+      ? html`<span key="legend" class="jprog-legend" aria-hidden="true" style=${{ '--digits': String(String(p.total).length) }}>
           ${legend.map(
             (k) => html`<span key=${k.state} class="jprog-key" data-state=${k.state} data-role=${k.role || undefined} data-zero=${k.n === 0 ? '' : undefined}>
               <span class="jprog-key-n">${k.n}</span> <span class="jprog-key-label">${k.label}</span>
