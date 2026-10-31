@@ -29,8 +29,8 @@ type Settings struct {
 	RemoteURL string `json:"remote_url,omitempty"`
 	// WrapperAddress is the wrapper the standalone backend decrypts with.
 	WrapperAddress string `json:"wrapper_address,omitempty"`
-	// FFmpeg overrides the ffmpeg the standalone backend runs; empty means
-	// the one shipped with the app, else the one on PATH.
+	// FFmpeg overrides the ffmpeg the standalone backend and the motion
+	// covers run; empty means the one ffmpeg.Find picks.
 	FFmpeg string `json:"ffmpeg,omitempty"`
 	// KeepAwake keeps the computer from idle sleep while downloads run.
 	KeepAwake bool `json:"keep_awake"`
