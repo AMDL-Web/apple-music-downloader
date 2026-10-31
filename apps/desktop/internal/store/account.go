@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"time"
 
 	"amdl/internal/client"
 )
@@ -76,7 +75,7 @@ func (s *Store) loginStep(path string, body any) {
 				*l = Login{}
 				s.setNotice("Signed in to Apple Music", false)
 			}
-			s.Server.Read = time.Time{}
+			s.refreshServer()
 		})
 	}()
 }
@@ -97,7 +96,7 @@ func (s *Store) Logout(user string) {
 				return
 			}
 			s.setNotice("Signed out of Apple Music", false)
-			s.Server.Read = time.Time{}
+			s.refreshServer()
 		})
 	}()
 }

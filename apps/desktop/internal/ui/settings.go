@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/egoist/mygo/ui"
+	"time"
 
 	"amdl/apps/desktop/internal/mode"
 )
@@ -17,11 +18,18 @@ type settingsForm struct {
 	draft   mode.Settings
 	theme   int
 	testing bool
-	checks  []mode.Check
-	tested  string
-	edit    fieldEdit
-	login   loginForm
+	// testFrom is when the running test started.
+	testFrom time.Time
+	checks   []mode.Check
+	tested   string
+	edit     fieldEdit
+	login    loginForm
 }
+
+// statusDelay is how long a request runs before the screen says it is under
+// way: one that answers sooner shows its answer alone, with no flash of the
+// waiting state.
+const statusDelay = 250 * time.Millisecond
 
 // settingsPage is a page of Settings' navigation.
 type settingsPage struct {
@@ -72,7 +80,7 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 		ui.Text(c, "Settings").FontSize(15).FontWeight(600)
 	})
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-		ui.Scroll(c.Key("settings-nav")).Width(196).BorderWidth(0, 1, 0, 0).BorderColor(k.Line).Children(func() {
+		ui.Scroll(c.Key("settings-nav")).Width(196).BorderWidth(0, 1, 0, 0).BorderColor(k.Line).TrackScroll(a.scrollState(c, "settings-nav")).Children(func() {
 			ui.Column(c).Padding(10, 10, 16, 10).Gap(2).Children(func() {
 				for g, group := range settingsNav {
 					if g > 0 {
@@ -87,7 +95,7 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 				}
 			})
 		})
-		ui.Scroll(c.Key("settings-" + f.page)).Grow(1).Children(func() {
+		a.scrollArea(c, "settings-"+f.page, k.Ground, 0, func() {
 			ui.Column(c).Padding(20, 28, 28, 28).Gap(18).MaxWidth(860).Children(func() {
 				switch f.page {
 				case "":
@@ -102,7 +110,7 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 					a.backendSection(c, k, f.page)
 				}
 			})
-		})
+		}).Grow(1)
 	})
 	a.confirmDialog(c, k)
 }
@@ -170,15 +178,15 @@ func (a *App) consoleURL() string {
 func fieldBox(c *ui.Context, k *Tokens, key string, value *string, placeholder string, monoFace bool) (box, in ui.Element) {
 	box = ui.Row(c).Grow(1).Height(32).PaddingX(10).Radius(radiusControl).AlignItems(ui.Center).Background(k.Raise2).Border(1, k.Line2)
 	box.Children(func() {
-		in = ui.TextInputBase(c.Key(key), value).Grow(1).Placeholder(placeholder).Label(placeholder)
+		in = ui.TextInputBase(c.Key(key), value).Grow(1).Placeholder(placeholder).Label(placeholder).FocusRing(false)
 		if monoFace {
 			in.Font(MonoFont).FontSize(12)
 		} else {
 			in.FontSize(13)
 		}
 	})
-	if in.Focused() {
-		box.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
+	if in.FocusVisible() {
+		focusRing(box, radiusControl)
 	}
 	return box, in
 }

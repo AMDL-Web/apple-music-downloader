@@ -82,8 +82,7 @@ func (a *App) Panel(c *ui.Context) {
 		ui.Row(c).Gap(8).Margin(2, 0, 0, 0).Children(func() {
 			if button(c, k, buttonPlain, "Paste link "+shortcutLabel, nil).Grow(1).Clicked() {
 				a.Act.ShowWindow()
-				a.Go(ScreenNew)
-				a.FocusOmni()
+				a.FocusField()
 			}
 			b := ui.ButtonBase(c.Key("open")).Grow(1).Height(30).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Center).Background(k.Pill)
 			if b.Clicked() {

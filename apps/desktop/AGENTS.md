@@ -32,14 +32,26 @@ this computer runs the backend and the account is held by the wrapper
   corners are macOS only, by choice: MyGo turns them on there alone (the
   continuousCorners constant in its ui/paint.go), and Windows and Linux keep
   their platform's circular arcs.
+- Focus shows as MyGo's own ring, for keyboard focus only: no accent border
+  or glow on focus. A box whose focused element is a part of it, as a
+  field's input, rings itself with `focusRing`.
+- Scroll containers go through `scrollArea` (or `scrollState` where one
+  cannot): MyGo draws thumbs at all times over the content, so the app hides
+  them at rest where the desktop does, keeps lists clear of them and fades a
+  cut last line.
+- A waiting state (Saving…, Testing…) shows only after `statusDelay`, and
+  earlier results stay until new ones replace them: a quick answer must not
+  flash or move the layout.
 - No cgo: every target cross-compiles with `CGO_ENABLED=0`.
 - MyGo paints absolute children above in-flow ones, in build order: a
   decorative layer goes before an absolute content layer, as the main
   window's view (`apps/desktop/internal/ui#App`) builds it, never into a
   card beside its content.
-- A shortcut that must work while the keyboard is in the title bar's field
-  is declared from the view's root (`apps/desktop/internal/ui#App` builds
-  them in `shortcuts`): one declared deeper only hears its own subtree.
+- A shortcut that must work while the keyboard is in home's field is
+  declared from the view's root (`apps/desktop/internal/ui#App` builds them
+  in `shortcuts`): one declared deeper only hears its own subtree. Keys the
+  field edits with, Return and the arrows, reach the field first, so it
+  takes them itself with OnTextKey (`fieldKey`).
 - ffmpeg and other console programs start through
   `internal/sysproc#NoConsole`, or each start flashes a console on Windows.
 

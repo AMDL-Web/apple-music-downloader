@@ -38,6 +38,8 @@ type Settings struct {
 	Notify bool `json:"notify"`
 	// Theme is "system", "light" or "dark".
 	Theme string `json:"theme,omitempty"`
+	// HideSidebar keeps the main window's sidebar closed.
+	HideSidebar bool `json:"hide_sidebar,omitempty"`
 }
 
 // DefaultSettings are a first launch's settings.

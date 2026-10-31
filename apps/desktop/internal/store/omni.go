@@ -12,7 +12,7 @@ import (
 	"amdl/internal/domain"
 )
 
-// Omnibox is the title bar's one field: pasted Apple Music links become
+// Omnibox is home's one field: pasted Apple Music links become
 // downloads to preview and start, anything else searches the list.
 type Omnibox struct {
 	// Text is what the field holds.
@@ -190,7 +190,7 @@ func (s *Store) Startable() []*Link {
 	return out
 }
 
-// Quality is a preset of the new download screen.
+// Quality is a preset of home's quality chip.
 type Quality int
 
 // Quality presets.

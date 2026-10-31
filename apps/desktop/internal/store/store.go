@@ -53,7 +53,7 @@ type Store struct {
 	// DetailID is the job the detail screen shows, or "".
 	DetailID string
 
-	// Omni is the title bar's link and search field.
+	// Omni is home's link and search field.
 	Omni Omnibox
 	// Search is the catalog search for the words in Omni.
 	Search Search

@@ -12,9 +12,19 @@ import (
 // shortcutLabel names the field's shortcut as the platform writes it.
 var shortcutLabel = map[bool]string{true: "⌘L", false: "Ctrl L"}[runtime.GOOS == "darwin"]
 
-// compactWidth is the window width below which the sidebar folds into an
-// icon rail and the title bar's field into a button (the 820×560 board).
-const compactWidth = 1000
+// The main window's columns, in DIPs.
+const (
+	// sidebarWidth is the sidebar's width.
+	sidebarWidth = 232
+	// compactContent is the page width below which the pages use their
+	// compact layout (the 820×560 board with the sidebar open).
+	compactContent = 768
+	// sidebarFits is the narrowest window the sidebar stays open in by
+	// itself; a narrower one closes it until the user opens it there.
+	sidebarFits = sidebarWidth + compactContent
+	// sidebarSlide is how long the sidebar takes to open or close.
+	sidebarSlide = 200 * time.Millisecond
+)
 
 // View builds the main window.
 func (a *App) View(c *ui.Context) {
@@ -22,122 +32,95 @@ func (a *App) View(c *ui.Context) {
 	applyTheme(c, k)
 	a.shortcuts(c)
 	w, _ := c.Size()
-	compact := w < compactWidth
+	a.followWidth(w)
+	shown := a.SidebarShown()
+	target := float32(0)
+	if shown {
+		target = sidebarWidth
+	}
+	a.compact = w-target < compactContent
 	vib := c.Vibrancy()
 	if vib {
 		c.Root().Background(ui.Transparent)
 	} else {
 		c.Root().Background(k.Ground)
 	}
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		if compact {
-			a.rail(c, k, vib)
-		} else {
-			a.sidebar(c, k, vib)
-		}
-		main := ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Background(k.Ground).Clip()
-		main.Children(func() {
-			// Absolute children paint above the flow, in the order they are
-			// built, so the content is a layer of its own over the backdrop.
-			a.backdrop(c, k)
-			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
-				a.titleBar(c, k, compact)
-				ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-					switch a.Screen {
-					case ScreenSettings:
-						a.settings(c, k)
-					case ScreenDetail:
-						a.detail(c, k)
-					case ScreenNew:
-						a.newDownload(c, k, compact)
-					default:
-						a.queueScreen(c, k, compact)
-					}
+	root := ui.Box(c).Fill()
+	// The sidebar's width as it slides; the page takes the rest.
+	side := root.AnimateWith("sidebar", target, sidebarSlide, ui.EaseOut)
+	page := w - side
+	root.Children(func() {
+		ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
+			a.sidebar(c, k, vib, side)
+			main := ui.Box(c).Grow(1).Shrink(1).MinWidth(0).Background(k.Ground).Clip()
+			main.Children(func() {
+				// Absolute children paint above the flow, in the order they
+				// are built, so the content is a layer of its own over the
+				// backdrop.
+				a.backdrop(c, k)
+				ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
+					a.titleBar(c, k, shown)
+					ui.Column(c).Grow(1).MinHeight(0).Children(func() {
+						switch a.Screen {
+						case ScreenSettings:
+							a.settings(c, k)
+						case ScreenDetail:
+							a.detail(c, k)
+						case ScreenQueue:
+							a.queueScreen(c, k, a.compact)
+						default:
+							a.home(c, k, page)
+						}
+					})
 				})
 			})
 		})
+		a.sidebarToggle(c, k)
 	})
 	a.toast(c, k)
+	a.scrollbars(c, k)
 }
 
+// shortcuts are the window's keys: Cmd+1 home, Cmd+2 the queue, Cmd+,
+// settings, Cmd+L home's field from any screen, and the sidebar's, which
+// the View menu holds on macOS (sidebarKey).
 func (a *App) shortcuts(c *ui.Context) {
-	c.OnShortcut(ui.Cmd, ui.KeyL, a.FocusOmni)
-	c.OnShortcut(ui.Cmd, ui.Key1, func() { a.Go(ScreenQueue) })
-	c.OnShortcut(ui.Cmd, ui.KeyComma, func() { a.Go(ScreenSettings) })
-	if a.Screen == ScreenDetail && c.Shortcut(0, ui.KeyEscape) {
-		a.Go(ScreenQueue)
+	if runtime.GOOS != "darwin" {
+		c.OnShortcut(sidebarMods, ui.KeyS, a.ToggleSidebar)
 	}
-	if a.Screen == ScreenNew {
-		if term, long := a.searchText(); term != "" && !long {
-			hits := a.Store.Search.ShownHits()
-			a.searchKeys(c, hits, a.chosenHit(hits))
+	c.OnShortcut(ui.Cmd, ui.KeyL, a.FocusField)
+	c.OnShortcut(ui.Cmd, ui.Key1, func() { a.Go(ScreenHome) })
+	c.OnShortcut(ui.Cmd, ui.Key2, func() { a.Go(ScreenQueue) })
+	c.OnShortcut(ui.Cmd, ui.KeyComma, func() { a.Go(ScreenSettings) })
+	switch a.Screen {
+	case ScreenDetail:
+		if c.Shortcut(0, ui.KeyEscape) {
+			a.Go(ScreenQueue)
 		}
+	case ScreenHome:
+		a.homeKeys(c)
 	}
 }
 
-// titleBar is the window's top strip: the one field for links and search,
-// clear of the window controls, dragging the window.
-func (a *App) titleBar(c *ui.Context, k *Tokens, compact bool) {
+// titleBar is the content's top strip, which drags the window, clear of
+// the window controls; with the sidebar closed it keeps the traffic lights
+// and the sidebar button (sidebarToggle) on the content's own ground.
+func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 	bar := c.TitleBar()
 	right := float32(18)
 	if bar.Right > 0 {
 		right = bar.Right + 8
 	}
-	ui.Row(c).Height(max(52, bar.Height)).PaddingStart(18).PaddingEnd(right).Gap(10).AlignItems(ui.Center).DragWindow().Children(func() {
+	left := float32(18)
+	if !sidebar {
+		left = toggleRight(bar) + 10
+	}
+	ui.Row(c).Height(max(52, bar.Height)).PaddingStart(left).PaddingEnd(right).Gap(10).AlignItems(ui.Center).DragWindow().Children(func() {
 		if a.Screen == ScreenDetail {
 			if button(c, k, buttonGhost, "Queue", icBack).Clicked() {
 				a.Go(ScreenQueue)
 			}
 		}
-		if compact {
-			ui.Spacer(c)
-			if button(c, k, buttonPlain, shortcutLabel, icLink).Label("Paste a link or search").Clicked() {
-				a.Go(ScreenNew)
-			}
-			return
-		}
-		ui.Row(c).Grow(1).Justify(ui.Center).Children(func() { a.omniField(c, k) })
-	})
-}
-
-// omniField is the one field: paste links to download, or type to search
-// Apple Music.
-func (a *App) omniField(c *ui.Context, k *Tokens) {
-	s := a.Store
-	focused := c.Focused(a.omni)
-	box := ui.Row(c).Grow(1).MaxWidth(500).Height(30).PaddingX(10).Gap(8).Radius(radiusControl).AlignItems(ui.Center).
-		Background(k.Raise2).Border(1, k.Line)
-	if focused {
-		box.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
-	}
-	box.Children(func() {
-		ic, hint := icLink, "Paste a link, or search Apple Music"
-		if term, _ := a.searchText(); term != "" {
-			ic = icSearch
-		}
-		ui.Icon(c, ic).FontSize(14).TextColor(k.Faint)
-		a.omniTxt = s.Omni.Text
-		in := ui.TextInputBase(c.Key("omni"), &a.omniTxt).Grow(1).Bind(&a.omni).FontSize(12.5).
-			Placeholder(hint).Label(hint)
-		if in.Changed() {
-			s.SetOmniText(a.omniTxt)
-			// Links preview and words search on the new download screen.
-			term, _ := a.searchText()
-			if (len(s.Omni.Links) > 0 || term != "") && a.Screen != ScreenNew {
-				a.Go(ScreenNew)
-			}
-		}
-		if in.Submitted() {
-			switch term, _ := a.searchText(); {
-			case a.Screen == ScreenNew && term != "":
-				a.actOnHit()
-			case len(s.Startable()) > 0:
-				s.Submit()
-			}
-		}
-		ui.Row(c).PaddingX(5).PaddingY(1).Radius(radiusInner).Border(1, k.Line2).Children(func() {
-			mono(c, shortcutLabel, 10.5).TextColor(k.Muted)
-		})
 	})
 }
 
@@ -152,8 +135,13 @@ func (a *App) toast(c *ui.Context, k *Tokens) {
 		return
 	}
 	c.After(4*time.Second - age)
+	// Over home's dock, the toast rises above it.
+	bottom := float32(24)
+	if a.dockShown() {
+		bottom = dockBottom + dockHeight + 12
+	}
 	ui.Overlay(c, func() {
-		ui.Row(c).Attach(ui.AnchorBottom, ui.AnchorBottom).Bottom(24).
+		ui.Row(c).Attach(ui.AnchorBottom, ui.AnchorBottom).Bottom(bottom).
 			PaddingX(14).PaddingY(9).Gap(8).Radius(radiusFull).AlignItems(ui.Center).
 			Background(k.Pill).Shadow(0, 12, 32, 0, ui.RGBA(0, 0, 0, 0.35)).Children(func() {
 			ic, col := icCheck, k.OK

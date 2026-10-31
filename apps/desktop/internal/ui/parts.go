@@ -165,8 +165,14 @@ func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []str
 				seg.Background(k.Pill).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.25))
 				fg, weight = k.PillInk, 600
 			}
+			// Each segment keeps the width of its bold label, so choosing one
+			// moves neither the others nor the track's edge.
 			seg.Cursor(ui.CursorPointer).Children(func() {
-				ui.Text(c, l).FontSize(12).FontWeight(weight).TextColor(fg).SingleLine()
+				ui.Box(c).Children(func() {
+					ui.Text(c, l).FontSize(12).FontWeight(600).SingleLine().Invisible()
+					ui.Text(c, l).FontSize(12).FontWeight(weight).TextColor(fg).SingleLine().TextAlign(ui.Center).
+						Absolute().Top(0).Left(0).Right(0)
+				})
 			})
 		}
 	})
@@ -175,16 +181,25 @@ func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []str
 // toggle is a switch in the design's look.
 func toggle(c *ui.Context, k *Tokens, key string, on *bool, name string) ui.Element {
 	sw := ui.SwitchBase(c.Key(key), on).Width(34).Height(20).Radius(radiusFull).Label(name)
+	// The track's color moves with the knob, on the same curve.
+	track := k.Track
 	if *on {
-		sw.Background(k.Accent)
-	} else {
-		sw.Background(k.Track)
+		track = k.Accent
 	}
+	sw.Background(sw.AnimateColor("track", track, ui.Snappy))
 	x := sw.AnimateTo("knob", map[bool]float32{true: 16, false: 2}[*on], ui.Snappy)
 	sw.Cursor(ui.CursorPointer).Children(func() {
 		ui.Box(c).Size(16, 16).Radius(radiusFull).Background(ui.RGB(255, 255, 255)).Absolute().Top(2).Left(x)
 	})
 	return sw
+}
+
+// focusRing draws the platform's focus ring, MyGo's own, around el rounded
+// by radius: for a box whose focused element is a part of it, as a field's
+// input, and for the result the arrow keys chose while the field keeps the
+// keyboard. Like MyGo's, it shows only for focus from the keyboard.
+func focusRing(el ui.Element, radius float32) {
+	el.DrawOver(func(p *ui.Painter, r ui.Rect) { p.FocusRing(r, [4]float32{radius, radius, radius, radius}) })
 }
 
 // card is the Mole card: large radius, no border.

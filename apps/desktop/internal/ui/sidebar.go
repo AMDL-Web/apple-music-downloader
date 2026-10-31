@@ -12,34 +12,124 @@ import (
 	"amdl/internal/format"
 )
 
-// sidebar is the window's left column (Pulse, MyGo 云音乐): the connection,
-// the sections with colored tiles and live readings, and the job downloading
-// now at its foot.
-func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool) {
-	side := ui.Column(c).Width(232).Padding(12, 10).Gap(14).BorderWidth(0, 1, 0, 0).BorderColor(k.Line)
-	if vib {
-		side.Background(k.Glass)
-	} else {
-		side.Background(k.Ground.Mix(k.Raise, 0.55))
+// sidebar is the window's left column (Pulse, MyGo 云音乐): the traffic
+// lights and the sidebar button over its top, the connection, the sections
+// with colored tiles and live readings, and the job downloading now at its
+// foot. It is w wide as it slides open or closed; its content keeps its
+// width meanwhile, clipped, so nothing in it reflows.
+func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool, w float32) {
+	if w < 0.5 {
+		return
 	}
-	side.Children(func() {
-		// Room for the traffic lights, which the window draws over the
-		// sidebar on macOS.
-		if bar := c.TitleBar(); bar.Left > 0 {
-			ui.Box(c).Height(max(bar.Height-12, 18)).DragWindow()
+	ui.Column(c.Key("sidebar")).Width(w).Clip().Children(func() {
+		col := ui.Column(c).Width(sidebarWidth).Grow(1).Padding(0, 10, 12, 10).Gap(14).BorderWidth(0, 1, 0, 0).BorderColor(k.Line)
+		if vib {
+			col.Background(k.Glass)
 		} else {
-			ui.Box(c).Height(6)
+			col.Background(k.Ground.Mix(k.Raise, 0.55))
 		}
-		a.modeCard(c, k)
-		ui.Column(c).Gap(2).Children(func() {
-			a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(0)), ui.Color{})
-			ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Faint).Padding(8, 10, 4, 10)
-			reading, col := a.systemReading(k)
-			a.navItem(c, k, ScreenSettings, icSettings, k.TileSettings, "Settings", reading, col)
+		col.Children(func() {
+			// The band of the traffic lights and the sidebar button
+			// (sidebarToggle), which drags the window.
+			ui.Box(c).Height(controlsBand(c.TitleBar())).Margin(0, -10, -6, -10).DragWindow()
+			a.modeCard(c, k)
+			ui.Column(c).Gap(2).Children(func() {
+				a.navItem(c, k, ScreenHome, icHome, k.TileHome, "Home", "", ui.Color{})
+				a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(0)), ui.Color{})
+				ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Faint).Padding(8, 10, 4, 10)
+				reading, col := a.systemReading(k)
+				a.navItem(c, k, ScreenSettings, icSettings, k.TileSettings, "Settings", reading, col)
+			})
+			ui.Spacer(c)
+			a.nowCard(c, k)
 		})
-		ui.Spacer(c)
-		a.nowCard(c, k)
 	})
+}
+
+// sidebarMods with S open and close the sidebar where no View menu holds
+// the key: Ctrl+Shift+S. On macOS the menu's Control-Command-S does.
+var sidebarMods = ui.Ctrl | ui.Shift
+
+// controlsBand is the height of the band the window controls sit in, and
+// the sidebar button beside them: the title bar's band, or the content
+// title bar's height where the controls hide (full screen) or draw none.
+func controlsBand(bar ui.TitleBar) float32 {
+	if bar.Height > 0 {
+		return bar.Height
+	}
+	return 52
+}
+
+// toggleRight is where the sidebar button ends, from the window's left:
+// beside the traffic lights, or in from the edge where there are none.
+func toggleRight(bar ui.TitleBar) float32 {
+	return toggleLeft(bar) + toggleSize
+}
+
+func toggleLeft(bar ui.TitleBar) float32 {
+	if bar.Left > 0 {
+		return bar.Left + 4
+	}
+	return 12
+}
+
+// toggleSize is the sidebar button's side.
+const toggleSize = 28
+
+// sidebarToggle is the sidebar button. It floats over the window's top-left
+// corner beside the traffic lights, so it stays put while the sidebar
+// opens and closes under it, as the system apps' does.
+func (a *App) sidebarToggle(c *ui.Context, k *Tokens) {
+	bar := c.TitleBar()
+	label := "Hide the sidebar"
+	if !a.SidebarShown() {
+		label = "Show the sidebar"
+	}
+	top := (controlsBand(bar) - toggleSize) / 2
+	b := ui.ButtonBase(c.Key("sidebar-toggle")).Size(toggleSize, toggleSize).Radius(radiusControl).Center().
+		Absolute().Left(toggleLeft(bar)).Top(top).Label(label).Tooltip(label)
+	switch {
+	case b.Pressed():
+		b.Background(k.Track.Mix(k.Fg, 0.08))
+	case b.Hovered():
+		b.Background(k.Track)
+	}
+	if b.Clicked() {
+		a.ToggleSidebar()
+	}
+	b.Cursor(ui.CursorPointer).Children(func() { ui.Icon(c, icSidebar).FontSize(18).TextColor(k.Muted) })
+}
+
+// followWidth keeps the window's width, and lets the sidebar close by
+// itself as the window narrows past sidebarFits: an opening the user asked
+// for in a narrow window lasts until the window is wide again.
+func (a *App) followWidth(w float32) {
+	a.winW = w
+	if w >= sidebarFits {
+		a.openNarrow = false
+	}
+}
+
+// SidebarShown reports whether the sidebar is open: as the user last left
+// it, unless the window is too narrow for it and the user has not opened it
+// there.
+func (a *App) SidebarShown() bool {
+	if a.Settings.HideSidebar {
+		return false
+	}
+	return a.winW >= sidebarFits || a.openNarrow
+}
+
+// ToggleSidebar opens or closes the sidebar, and keeps the choice for the
+// next launch.
+func (a *App) ToggleSidebar() {
+	if a.SidebarShown() {
+		a.Settings.HideSidebar, a.openNarrow = true, false
+	} else {
+		a.Settings.HideSidebar = false
+		a.openNarrow = a.winW < sidebarFits
+	}
+	a.Act.ApplySettings(a.Settings)
 }
 
 func countText(n int) string {
@@ -71,7 +161,7 @@ func (a *App) systemReading(k *Tokens) (string, ui.Color) {
 }
 
 func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, tile ui.Color, name, reading string, readingColor ui.Color) {
-	on := a.Screen == s || (s == ScreenQueue && (a.Screen == ScreenDetail || a.Screen == ScreenNew))
+	on := a.Screen == s || (s == ScreenQueue && a.Screen == ScreenDetail)
 	item := ui.ButtonBase(c.Key(name)).Height(30).PaddingX(10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label(name)
 	if on {
 		item.Background(k.AccentSoft)
@@ -167,41 +257,4 @@ func (a *App) nowCard(c *ui.Context, k *Tokens) {
 			widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Height: 3, Running: true}.Show(c, "now-bar")
 		})
 	})
-}
-
-// rail is the sidebar folded into icons, below compactWidth.
-func (a *App) rail(c *ui.Context, k *Tokens, vib bool) {
-	r := ui.Column(c).Width(60).PaddingY(12).Gap(6).AlignItems(ui.Center).BorderWidth(0, 1, 0, 0).BorderColor(k.Line)
-	if vib {
-		r.Background(k.Glass)
-	} else {
-		r.Background(k.Ground.Mix(k.Raise, 0.55))
-	}
-	r.Children(func() {
-		if bar := c.TitleBar(); bar.Left > 0 {
-			ui.Box(c).Height(bar.Height).DragWindow()
-		}
-		for _, it := range []struct {
-			s    Screen
-			ic   *ui.SVG
-			name string
-		}{{ScreenQueue, icQueue, "Queue"}, {ScreenNew, icPlus, "New download"}} {
-			a.railItem(c, k, it.s, it.ic, it.name)
-		}
-		ui.Spacer(c)
-		a.railItem(c, k, ScreenSettings, icSettings, "Settings")
-	})
-}
-
-func (a *App) railItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, name string) {
-	b := ui.ButtonBase(c.Key("rail-"+name)).Size(38, 34).Radius(radiusControl).Center().Label(name)
-	col := k.Muted
-	if a.Screen == s {
-		b.Background(k.AccentSoft)
-		col = k.Accent
-	}
-	if b.Clicked() {
-		a.Go(s)
-	}
-	b.Cursor(ui.CursorPointer).Tooltip(name).Children(func() { ui.Icon(c, ic).FontSize(17).TextColor(col) })
 }

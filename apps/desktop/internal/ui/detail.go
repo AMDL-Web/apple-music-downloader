@@ -104,7 +104,7 @@ func (a *App) detail(c *ui.Context, k *Tokens) {
 			}
 		})
 	})
-	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Background(k.Ink.Alpha(0.72)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Children(func() {
+	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Background(k.Ink.Alpha(detailInk)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Children(func() {
 		a.trackList(c, k, j, hc.accent)
 		a.activity(c, k, j)
 	})
@@ -181,11 +181,11 @@ func (a *App) trackList(c *ui.Context, k *Tokens, j *store.Job, accent ui.Color)
 			ui.Text(c, "Tracks appear once the link resolves.").TextColor(k.Muted).Padding(12, 4)
 			return
 		}
-		ui.Scroll(c.Key("tracks")).Grow(1).Children(func() {
+		a.scrollArea(c, "tracks", detailGround(k), scrollGutter, func() {
 			for i := range j.Items {
 				a.trackRow(c, k, &j.Items[i], accent)
 			}
-		})
+		}).Grow(1)
 	})
 }
 
@@ -258,7 +258,7 @@ func trackState(c *ui.Context, k *Tokens, it *domain.JobItem) {
 func (a *App) activity(c *ui.Context, k *Tokens, j *store.Job) {
 	ui.Column(c).Width(280).Padding(16, 20).Gap(4).BorderWidth(0, 0, 0, 1).BorderColor(k.Line).Children(func() {
 		label(c, k, "Activity").Margin(0, 0, 6, 0)
-		ui.Scroll(c.Key("activity")).Grow(1).Children(func() {
+		a.scrollArea(c, "activity", detailGround(k), scrollGutter, func() {
 			if len(j.Activity) == 0 {
 				ui.Text(c, "Nothing yet.").FontSize(12).TextColor(k.Muted)
 			}
@@ -275,7 +275,7 @@ func (a *App) activity(c *ui.Context, k *Tokens, j *store.Job) {
 					ui.Text(c, ev.Text).FontSize(12).TextColor(col).Grow(1).Shrink(1)
 				})
 			}
-		})
+		}).Grow(1)
 		if dir := savedDir(j); dir != "" {
 			ui.Column(c).Gap(4).Padding(10, 0, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Children(func() {
 				label(c, k, "Saved to")
@@ -295,3 +295,9 @@ var revealLabel = func() string {
 	}
 	return "Show in folder"
 }()
+
+// detailInk is how much of the ink the detail's lower half lays over the
+// ground, and detailGround the color that makes, which its lists fade into.
+const detailInk = 0.72
+
+func detailGround(k *Tokens) ui.Color { return k.Ground.Mix(k.Ink, detailInk) }

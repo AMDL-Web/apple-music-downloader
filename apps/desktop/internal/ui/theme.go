@@ -30,7 +30,7 @@ type Tokens struct {
 	// dark, ink on light.
 	Pill, PillInk ui.Color
 	// Tile colors are the sidebar's icon squares.
-	TileQueue, TileLibrary, TileSystem, TileSettings, TileDisk ui.Color
+	TileHome, TileQueue, TileLibrary, TileSystem, TileSettings, TileDisk ui.Color
 }
 
 func rgba(hex string, a float32) ui.Color { return ui.Hex(hex).Alpha(a) }
@@ -47,7 +47,7 @@ var DarkTokens = Tokens{
 	Skip:  ui.Hex("#bf5af2"),
 	Glass: rgba("#181a24", .62), Track: rgba("#eceef8", .10),
 	Pill: ui.Hex("#f4f5fa"), PillInk: ui.Hex("#12131a"),
-	TileQueue: ui.Hex("#4f7cff"), TileLibrary: ui.Hex("#e0507a"), TileSystem: ui.Hex("#2fb36f"),
+	TileHome: ui.Hex("#f2445e"), TileQueue: ui.Hex("#4f7cff"), TileLibrary: ui.Hex("#e0507a"), TileSystem: ui.Hex("#2fb36f"),
 	TileSettings: ui.Hex("#8a8f9e"), TileDisk: ui.Hex("#c08a3e"),
 }
 
@@ -62,7 +62,7 @@ var LightTokens = Tokens{
 	Skip:  ui.Hex("#8944ab"),
 	Glass: rgba("#fafbfd", .70), Track: rgba("#141622", .10),
 	Pill: ui.Hex("#161822"), PillInk: ui.Hex("#ffffff"),
-	TileQueue: ui.Hex("#4f7cff"), TileLibrary: ui.Hex("#e0507a"), TileSystem: ui.Hex("#2fb36f"),
+	TileHome: ui.Hex("#f2445e"), TileQueue: ui.Hex("#4f7cff"), TileLibrary: ui.Hex("#e0507a"), TileSystem: ui.Hex("#2fb36f"),
 	TileSettings: ui.Hex("#8a8f9e"), TileDisk: ui.Hex("#c08a3e"),
 }
 
@@ -93,7 +93,18 @@ const (
 	radiusInner = radiusControl - padControl
 	// radiusMenu rounds a menu's panel, whose rows are controls.
 	radiusMenu = radiusControl + padControl
-	// radiusCover rounds a hero's cover: a picture, not a box.
+	// padField is the room inside home's field, rounded as a card, around
+	// its icon well and its clear button.
+	padField = 8
+	// radiusWell rounds the field's icon well.
+	radiusWell = radiusCard - padField
+	// padTile is the room inside the card of a song or a link around its
+	// cover, which is rounded as a control.
+	padTile = 8
+	// radiusTile rounds those cards.
+	radiusTile = radiusControl + padTile
+	// radiusCover rounds a hero's cover and a result's tile: a picture, not
+	// a box.
 	radiusCover = 16
 	radiusFull  = 999
 )

@@ -122,7 +122,14 @@ func TestSetConfigSendsOneKeyAndKeepsTheOldValueWhenRefused(t *testing.T) {
 	if v := s.Config.Value("download.cover_size"); v != "3000x3000" {
 		t.Errorf("while it saves the field shows %v; want the new value", v)
 	}
+	read := time.Now().Add(-time.Second)
+	s.Server.Read = read
 	settle(func() bool { return !s.Config.Saving["download.cover_size"] })
+	// The server's state reads again at once, and the last read stays on
+	// screen meanwhile: cards that show it do not drop out for a frame.
+	if !s.Server.Read.Equal(read) || !s.Server.stale {
+		t.Errorf("after a saved change: read %v (was %v), stale %v", s.Server.Read, read, s.Server.stale)
+	}
 	if got := f.body(0); got != `{"download":{"cover_size":"3000x3000"}}` {
 		t.Errorf("PUT body %s; want the one key, which the backend merges", got)
 	}

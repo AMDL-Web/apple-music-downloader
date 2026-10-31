@@ -57,14 +57,57 @@ func TestFirstLaunchChoosesAMode(t *testing.T) {
 
 func TestQueueWaitsForTheFirstList(t *testing.T) {
 	a, _ := newTestApp(mode.Settings{Mode: mode.Remote, RemoteURL: "http://nas:18570"})
+	a.Screen = ScreenQueue
 	tt := ui.NewTester(a.View, 1280, 800)
 	if !tt.HasText("Connecting…") || !tt.HasText("nas:18570") {
 		t.Fatalf("texts %q", tt.Texts())
 	}
-	// The compact window folds the sidebar into a rail.
+	// A window too narrow for the sidebar closes it.
 	tt.SetSize(820, 560)
+	tt.Advance(sidebarSlide)
 	tt.Frame()
 	if tt.HasText("nas:18570") {
-		t.Error("the compact window still shows the sidebar's connection card")
+		t.Error("the narrow window still shows the sidebar's connection card")
+	}
+}
+
+func TestSidebarFollowsTheUserThenTheWidth(t *testing.T) {
+	a, act := newTestApp(remoteSettings())
+	tt := ui.NewTester(a.View, 1280, 800)
+	if !a.SidebarShown() {
+		t.Fatal("a wide window opens with the sidebar closed")
+	}
+	if err := tt.Click("Hide the sidebar"); err != nil {
+		t.Fatal(err)
+	}
+	if a.SidebarShown() || act.applied == nil || !act.applied.HideSidebar {
+		t.Fatalf("after hiding: shown %v, saved %+v", a.SidebarShown(), act.applied)
+	}
+	tt.Advance(sidebarSlide)
+	tt.Frame()
+	if err := tt.Click("Show the sidebar"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.SidebarShown() || act.applied.HideSidebar {
+		t.Fatalf("after showing: shown %v, saved %+v", a.SidebarShown(), act.applied)
+	}
+	// Narrowed, the window closes it; opened there, it stays until the
+	// window is wide again, which keeps the user's choice.
+	tt.SetSize(820, 560)
+	tt.Frame()
+	if a.SidebarShown() {
+		t.Fatal("the narrow window kept the sidebar")
+	}
+	a.ToggleSidebar()
+	tt.Frame()
+	if !a.SidebarShown() || act.applied.HideSidebar {
+		t.Fatalf("opened in the narrow window: shown %v, saved %+v", a.SidebarShown(), act.applied)
+	}
+	tt.SetSize(1280, 800)
+	tt.Frame()
+	tt.SetSize(820, 560)
+	tt.Frame()
+	if a.SidebarShown() {
+		t.Error("narrowed again, the window kept the sidebar the user opened in the last narrow spell")
 	}
 }

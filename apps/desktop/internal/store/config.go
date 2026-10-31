@@ -35,8 +35,18 @@ type Config struct {
 	// waits ServerEvery, as the server's state does.
 	tried time.Time
 	// pending holds the values on their way, which Value shows until the
-	// backend answers.
+	// backend answers, and sent when each left.
 	pending map[string]any
+	sent    map[string]time.Time
+}
+
+// SavingFor is how long key's change has been on its way, and whether one
+// is.
+func (cf *Config) SavingFor(key string, now time.Time) (time.Duration, bool) {
+	if !cf.Saving[key] {
+		return 0, false
+	}
+	return now.Sub(cf.sent[key]), true
 }
 
 // configAnswer is the ConfigResponse schema.
@@ -97,9 +107,9 @@ func (s *Store) SetConfig(key string, v any) {
 		return
 	}
 	if cf.Saving == nil {
-		cf.Saving, cf.Failed, cf.pending = map[string]bool{}, map[string]string{}, map[string]any{}
+		cf.Saving, cf.Failed, cf.pending, cf.sent = map[string]bool{}, map[string]string{}, map[string]any{}, map[string]time.Time{}
 	}
-	cf.Saving[key], cf.pending[key] = true, v
+	cf.Saving[key], cf.pending[key], cf.sent[key] = true, v, s.now()
 	delete(cf.Failed, key)
 	c, ctx := s.client, s.ctx
 	go func() {
@@ -111,6 +121,7 @@ func (s *Store) SetConfig(key string, v any) {
 		s.postIf(ctx, func() {
 			delete(cf.Saving, key)
 			delete(cf.pending, key)
+			delete(cf.sent, key)
 			if err != nil {
 				cf.Failed[key] = Reason(err)
 				return
@@ -118,7 +129,7 @@ func (s *Store) SetConfig(key string, v any) {
 			cf.Values, cf.Persisted = ans.Config, ans.Persisted
 			// Folders and switches show in the server's state, such as
 			// the free space of a new downloads folder.
-			s.Server.Read = time.Time{}
+			s.refreshServer()
 		})
 	}()
 }
@@ -146,7 +157,7 @@ func (s *Store) ReloadConfig() {
 				cf.ReloadErr = ans.ReloadError
 			default:
 				cf.Values, cf.Persisted = ans.Config, ans.Persisted
-				s.Server.Read = time.Time{}
+				s.refreshServer()
 			}
 		})
 	}()
@@ -167,7 +178,7 @@ func (s *Store) ResetLibrarySync() {
 				return
 			}
 			s.setNotice("Library sync starts over from now", false)
-			s.Server.Read = time.Time{}
+			s.refreshServer()
 		})
 	}()
 }

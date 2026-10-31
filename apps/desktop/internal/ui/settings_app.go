@@ -26,7 +26,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 					AlignItems(ui.Start).Justify(ui.Start).Label(title)
 				card.Column()
 				if on {
-					card.Border(1, k.Accent).Shadow(0, 0, 0, 3, k.AccentSoft)
+					card.Border(1, k.Accent)
 				}
 				if card.Clicked() {
 					d.Mode, f.checks = m, nil
@@ -60,6 +60,12 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		})
 	}
 	local := here && a.Store.Server.Wrapper != nil && a.Store.Server.Wrapper.Managed != nil
+	// A test that answers quickly shows no Testing…, no grey button and no
+	// dimmed results: they would only flash.
+	slow := f.testing && c.Now().Sub(f.testFrom) >= statusDelay
+	if f.testing && !slow {
+		c.After(statusDelay - c.Now().Sub(f.testFrom))
+	}
 	card(c, k).Gap(14).Children(func() {
 		addr, name, help := &d.RemoteURL, "Server address", "The address of the amdl backend, as the web console opens it."
 		if d.Mode == mode.Standalone {
@@ -75,16 +81,23 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				if in.Changed() {
 					f.checks = nil
 				}
-				if button(c, k, buttonPlain, "Test connection", nil).Disabled(f.testing || *addr == "").Clicked() {
-					a.runTest(*addr)
+				if button(c, k, buttonPlain, "Test connection", nil).Disabled(slow || *addr == "").Clicked() && !f.testing {
+					a.runTest(*addr, c.Now())
+				}
+				if slow {
+					pill(c, k, pillWait, nil, "Testing…")
 				}
 			})
 			ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)
 		})
-		if f.testing {
-			pill(c, k, pillWait, nil, "Testing…")
-		} else if len(f.checks) > 0 {
-			a.checkList(c, k, f.checks)
+		// The last results stay, dimmed, until the new ones replace them,
+		// so the card keeps its height.
+		if len(f.checks) > 0 {
+			list := ui.Column(c)
+			if slow {
+				list.Opacity(0.5)
+			}
+			list.Children(func() { a.checkList(c, k, f.checks) })
 		}
 	})
 	if d.Mode == mode.Standalone {
@@ -120,9 +133,9 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	}
 }
 
-func (a *App) runTest(addr string) {
+func (a *App) runTest(addr string, now time.Time) {
 	f := &a.set
-	f.testing, f.checks, f.tested = true, nil, addr
+	f.testing, f.tested, f.testFrom = true, addr, now
 	done := func(checks []mode.Check) {
 		if f.tested == addr {
 			f.testing, f.checks = false, checks

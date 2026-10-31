@@ -91,8 +91,8 @@ func (a *App) captureScreens(dir string) {
 	// A lookup only reads the catalog; the music video shows the row of a
 	// link that cannot download.
 	shot("06-new", func() {
-		a.view.Go(appui.ScreenNew)
-		a.store.SetOmniText(shotAlbum + "\nhttps://music.apple.com/cn/music-video/clip/1")
+		a.view.Go(appui.ScreenHome)
+		a.store.SetOmniText(shotAlbum + "\nhttps://music.apple.com/cn/album/halo-ep/1818784232\nhttps://music.apple.com/cn/music-video/clip/1")
 	}, 4*time.Second)
 	shot("08-status", func() { a.store.SetOmniText(""); a.view.GoSettings("") }, 3*time.Second)
 	for _, page := range []string{"account", "quality", "files", "lyrics_artwork", "jobs", "library_sync", "hooks", "logging", "server"} {
@@ -100,7 +100,7 @@ func (a *App) captureScreens(dir string) {
 	}
 	shot("10-new-light", func() {
 		a.view.Theme = "light"
-		a.view.Go(appui.ScreenNew)
+		a.view.Go(appui.ScreenHome)
 		a.store.SetOmniText(shotAlbum)
 	}, 3*time.Second)
 	shot("12-status-light", func() { a.view.GoSettings("") }, 2500*time.Millisecond)

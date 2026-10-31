@@ -24,7 +24,7 @@ const (
 )
 
 // SearchGroups are the result groups in the order they are shown.
-var SearchGroups = []string{"songs", "albums", "artists"}
+var SearchGroups = []string{"albums", "songs", "artists"}
 
 // SearchStatus is how far a search or an artist's first page has come.
 type SearchStatus int
@@ -47,8 +47,8 @@ const (
 	PageFailed
 )
 
-// Search is the catalog search the new download screen shows for words in
-// the title bar's field, and the artist opened from it.
+// Search is the catalog search home shows for words in its field, and the
+// artist opened from it.
 type Search struct {
 	// Term is the words searched; "" when idle.
 	Term   string

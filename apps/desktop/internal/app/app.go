@@ -63,6 +63,9 @@ type App struct {
 	// settings changed again is stopped instead of used.
 	gen      int
 	quitting bool
+	// menuSet is set once the menu bar is installed, with the sidebar's
+	// state its item names in menuSidebar (syncMenu).
+	menuSet, menuSidebar bool
 }
 
 // Run runs the app until it quits.
@@ -107,9 +110,12 @@ func (a *App) ready() {
 	a.store = store.New(a.post, nil)
 	a.view = &appui.App{Store: a.store, Art: artwork.New(a.post), Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme}
 	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
+	a.view.ScrollbarsAlways = scrollbarsAlways()
 	a.findFFmpeg()
 	if a.settings.Mode == "" {
 		a.view.Screen = appui.ScreenSettings
+	} else {
+		a.view.FocusField()
 	}
 	a.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:           "AMDL",
@@ -121,7 +127,10 @@ func (a *App) ready() {
 		TitleBarStyle:   mygo.TitleBarHidden,
 		Vibrancy:        vibrancy(),
 		BackgroundColor: "#111219",
-		Content:         ui.View(a.view.View),
+		Content: ui.View(func(c *ui.Context) {
+			a.view.View(c)
+			a.syncMenu()
+		}),
 	})
 	keepOnScreen(a.win)
 	a.shell = shell.New(shell.Options{

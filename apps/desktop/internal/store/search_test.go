@@ -123,11 +123,11 @@ func TestSearchMoreAppendsToOneGroup(t *testing.T) {
 		t.Fatalf("more state %v", q.More["songs"])
 	}
 	s.applyMore(q.gen, "t", "songs", nil, errors.New("boom"))
-	if q.More["songs"] != PageFailed || ids(q.ShownHits()) != "1,a" {
+	if q.More["songs"] != PageFailed || ids(q.ShownHits()) != "a,1" {
 		t.Fatalf("a failed page: state %v hits %s", q.More["songs"], ids(q.ShownHits()))
 	}
 	s.applyMore(q.gen, "t", "songs", group(0, hit("song", "1"), hit("song", "2")), nil)
-	if ids(q.ShownHits()) != "1,2,a" || q.Result.Songs.NextOffset != 0 {
+	if ids(q.ShownHits()) != "a,1,2" || q.Result.Songs.NextOffset != 0 {
 		t.Errorf("hits %s next %d", ids(q.ShownHits()), q.Result.Songs.NextOffset)
 	}
 	if r, _ := q.cache.get("t"); ids(r.Songs.Items) != "1,2" {

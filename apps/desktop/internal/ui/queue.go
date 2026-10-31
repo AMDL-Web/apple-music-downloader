@@ -34,13 +34,18 @@ func (a *App) heroJob() *store.Job {
 
 // backdrop lights the top of the main column with the hero's palette.
 func (a *App) backdrop(c *ui.Context, k *Tokens) {
+	if a.Screen == ScreenHome {
+		if pal := a.homePalette(); pal.OK {
+			homeBackdrop(c, k, pal)
+			return
+		}
+	}
 	j := a.heroJob()
 	if j == nil {
 		return
 	}
 	// A narrow window's queue hero shows the still cover.
-	w, _ := c.Size()
-	moving := a.Screen != ScreenQueue || w >= compactWidth
+	moving := a.Screen != ScreenQueue || !a.compact
 	pal := jobPalette(j, moving && a.motionShown(c, j.MotionArtworkURL))
 	if a.Screen == ScreenQueue && j.Status == domain.JobCompleted {
 		master, _ := latestMotion(j)
@@ -134,7 +139,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	}
 	ui.List(c.Key("queue"), &a.queue, len(jobs), func(i int) {
 		a.jobRow(c, k, jobs[i], compact)
-	}).Grow(1).Background(k.Ground).ItemKey(func(i int) any { return jobs[i].ID })
+	}).Grow(1).Background(k.Ground).ItemKey(func(i int) any { return jobs[i].ID }).TrackScroll(a.scrollState(c, "queue"))
 }
 
 // hero is the "downloading now" band: the cover, the album in big type, its

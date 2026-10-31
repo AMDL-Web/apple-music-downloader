@@ -47,17 +47,24 @@ type Server struct {
 	Active []int
 
 	reading bool
+	// stale asks for a read before ServerEvery is up, after a change the
+	// state shows; the last read stays on screen meanwhile.
+	stale bool
 }
+
+// refreshServer reads the server's state again on the next WatchServer,
+// keeping the last read on screen until the new one lands.
+func (s *Store) refreshServer() { s.Server.stale = true }
 
 // WatchServer reads the server's state when the last read is older than
 // ServerEvery. Views that show it call it every frame and redraw after
 // ServerEvery, so it reads only while one of them is on screen.
 func (s *Store) WatchServer() {
 	sv := &s.Server
-	if s.client == nil || sv.reading || s.now().Sub(sv.Read) < ServerEvery {
+	if s.client == nil || sv.reading || (!sv.stale && s.now().Sub(sv.Read) < ServerEvery) {
 		return
 	}
-	sv.reading = true
+	sv.reading, sv.stale = true, false
 	c, ctx := s.client, s.ctx
 	go func() {
 		var next Server
@@ -109,7 +116,8 @@ func (s *Store) WatchServer() {
 		})
 		wg.Wait()
 		s.postIf(ctx, func() {
-			next.Read, next.Active = s.now(), sv.Active
+			// A change made while this read ran asks for one more.
+			next.Read, next.Active, next.stale = s.now(), sv.Active, sv.stale
 			if next.System != nil {
 				next.Active = append(next.Active, next.System.Jobs.Active)
 				if len(next.Active) > activeSamples {

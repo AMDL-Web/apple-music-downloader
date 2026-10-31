@@ -19,9 +19,9 @@ func remoteSettings() mode.Settings {
 	return s
 }
 
-func TestNewDownloadSaysWhatWillStart(t *testing.T) {
+func TestHomeSaysWhatWillStart(t *testing.T) {
 	a, _ := newTestApp(remoteSettings())
-	a.Screen = ScreenNew
+	a.Screen = ScreenHome
 	s := a.Store
 	s.SetOmniText("https://music.apple.com/cn/album/x/1858184006 https://music.apple.com/cn/music-video/y/1")
 	if len(s.Omni.Links) != 2 {
@@ -32,7 +32,7 @@ func TestNewDownloadSaysWhatWillStart(t *testing.T) {
 	album.Lookup = client.Lookup{Type: "album", ID: "1858184006", Title: "Test Album", ArtistName: "Some Artist", TrackCount: 5, Storefront: "cn"}
 	video.State = store.LinkUnsupported
 	tt := ui.NewTester(a.View, 1280, 800)
-	for _, want := range []string{"LINKS · 2 FOUND", "Test Album", "Ready", "Not supported", "1 album · 5 tracks", "1 not supported", "Download 1 album"} {
+	for _, want := range []string{"Test Album", "Ready", "Not supported", "1 album · 5 tracks", "1 not supported", "Download 1 album"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in %q", want, tt.Texts())
 		}
@@ -41,6 +41,7 @@ func TestNewDownloadSaysWhatWillStart(t *testing.T) {
 
 func TestQueueShowsTheLatestDownloadUntilOneRuns(t *testing.T) {
 	a, _ := newTestApp(remoteSettings())
+	a.Screen = ScreenQueue
 	s := a.Store
 	now := time.Now()
 	job := func(id, title string, status domain.JobStatus, created time.Time, finished *time.Time) *store.Job {
@@ -135,18 +136,27 @@ func TestSearchHitRowsSayWhatTheirTypeHas(t *testing.T) {
 	if got := qualityHints([]string{"lossy-stereo"}); len(got) != 0 {
 		t.Errorf("lossy hints %v", got)
 	}
+	if got := shortHints([]string{"atmos", "hi-res-lossless"}, 200); got != "Hi-Res · Atmos" {
+		t.Errorf("a wide tile's chip %q", got)
+	}
+	if got := shortHints([]string{"atmos", "hi-res-lossless"}, 160); got != "Hi-Res" {
+		t.Errorf("a narrow tile's chip %q", got)
+	}
+	song := client.SearchHit{Type: "song", ArtistName: "Yorushika", AlbumName: "Elma", DurationMS: 245_000}
+	if got := strings.Join(hitFacts(song), " · "); got != "Yorushika · Elma · 4:05" {
+		t.Errorf("song facts %q", got)
+	}
 	cases := []struct {
 		hit  client.SearchHit
 		want string
 	}{
-		{client.SearchHit{Type: "song", ArtistName: "Yorushika", AlbumName: "Elma", DurationMS: 245_000}, "Yorushika · Elma · 4:05"},
-		{client.SearchHit{Type: "album", ArtistName: "Yorushika", ReleaseDate: "2020-07-29", TrackCount: 1}, "Yorushika · 2020 · 1 track"},
+		{client.SearchHit{Type: "album", ArtistName: "Yorushika", ReleaseDate: "2020-07-29", TrackCount: 1}, "Yorushika · 2020"},
 		{client.SearchHit{Type: "artist", Genre: "J-Pop"}, "J-Pop"},
-		{client.SearchHit{Type: "artist"}, "Artist"},
+		{client.SearchHit{Type: "artist"}, ""},
 	}
 	for _, c := range cases {
-		if got := strings.Join(hitFacts(c.hit), " · "); got != c.want {
-			t.Errorf("%s facts %q, want %q", c.hit.Type, got, c.want)
+		if got := strings.Join(tileFacts(c.hit), " · "); got != c.want {
+			t.Errorf("%s tile facts %q, want %q", c.hit.Type, got, c.want)
 		}
 	}
 }

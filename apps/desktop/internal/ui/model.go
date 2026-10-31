@@ -1,7 +1,8 @@
 // Package ui builds the desktop app's screens with MyGo's native UI, to the
-// design canvas: the queue with the album-lit "downloading now" hero, the job
-// detail, the new-download preview and catalog search, settings, system, the
-// menu bar panel, and their empty, loading and error states, dark and light.
+// design canvas: home with its one field for links and catalog search, the
+// queue with the album-lit "downloading now" hero, the job detail, settings,
+// system, the menu bar panel, and their empty, loading and error states, dark
+// and light.
 package ui
 
 import (
@@ -18,12 +19,12 @@ import (
 // Screen is a page of the main window.
 type Screen int
 
-// Screens.
+// Screens. Home, the zero Screen, is the one the window opens on.
 const (
-	ScreenQueue Screen = iota
+	ScreenHome Screen = iota
+	ScreenQueue
 	ScreenSettings
 	ScreenDetail
-	ScreenNew
 )
 
 // Actions are what the screens ask of the app around them.
@@ -78,14 +79,33 @@ type App struct {
 	// Tab is the queue's filter.
 	Tab int
 
-	queue   ui.ListState
-	omni    ui.Handle
-	omniTxt string
-	set     settingsForm
-	// linksTxt is the new download screen's field, and newSel the link its
-	// preview shows.
-	linksTxt string
-	newSel   string
+	// winW is the window's width as last built; compact is set while the
+	// page is narrower than compactContent. openNarrow is set while the
+	// user keeps the sidebar open in a window too narrow for it.
+	winW       float32
+	compact    bool
+	openNarrow bool
+
+	// ScrollbarsAlways shows the scroll thumbs at all times, as the desktop
+	// does where its setting says so; otherwise they show while a list
+	// moves (scrollbars).
+	ScrollbarsAlways bool
+	// scrolls are the places of the scroll containers by key, scrollSeen
+	// where each was last built, and scrolledAt when one last moved.
+	scrolls    map[string]*ui.ScrollState
+	scrollSeen map[string]float32
+	scrolledAt time.Time
+
+	queue ui.ListState
+	// field is home's field, and fieldTxt its text, which follows the
+	// store's Omni.Text.
+	field    ui.Handle
+	fieldTxt string
+	// focusField asks home to put the keyboard in its field as it builds
+	// it, in the view that does: a render beside the window binds the
+	// field too, which an unaddressed Handle.Focus refuses.
+	focusField bool
+	set        settingsForm
 	// searchSel is the HitKey of the hit the search acts on; searchReveal
 	// scrolls it into view once, after the keyboard moved it.
 	searchSel    string
@@ -117,12 +137,16 @@ func (a *App) tokens(c *ui.Context) *Tokens {
 	return &LightTokens
 }
 
-// Go switches the main window to a screen.
+// Go switches the main window to a screen. Home puts the keyboard in its
+// field.
 func (a *App) Go(s Screen) {
 	if s != ScreenDetail {
 		a.Store.CloseDetail()
 	}
 	a.Screen = s
+	if s == ScreenHome {
+		a.focusField = true
+	}
 }
 
 // OpenJob shows a job's detail.
@@ -131,8 +155,8 @@ func (a *App) OpenJob(id string) {
 	a.Screen = ScreenDetail
 }
 
-// FocusOmni puts the keyboard in the title bar's field.
-func (a *App) FocusOmni() { a.omni.Focus() }
+// FocusField shows home and puts the keyboard in its field.
+func (a *App) FocusField() { a.Go(ScreenHome) }
 
 // PanelClosed forgets the tray panel's size, so the next one fits again.
 func (a *App) PanelClosed() { a.panelH = 0 }

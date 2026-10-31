@@ -177,16 +177,18 @@ func (a *App) facts(c *ui.Context, k *Tokens, id string) {
 	ui.Column(c.Key("facts")).Padding(4, padCard).Radius(radiusCard).Background(k.Raise).Dividers(1, k.Line).Children(func() {
 		for _, f := range fs {
 			ui.Row(c.Key(f.label)).Height(40).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, f.label).FontSize(13).FontWeight(500).Grow(1).Shrink(0).SingleLine()
-				v := ui.Text(c, f.value).FontSize(12.5).TextColor(k.Muted).Shrink(1).SingleLine().Ellipsis("…")
+				// The value takes the room the label leaves, so a long path
+				// shortens instead of pushing the label out.
+				ui.Text(c, f.label).FontSize(13).FontWeight(500).Shrink(0).SingleLine()
+				v := ui.Text(c, f.value).FontSize(12.5).TextColor(k.Muted).Grow(1).Basis(0).MinWidth(0).TextAlign(ui.End).SingleLine().Ellipsis("…")
 				if f.mono {
 					v.Font(MonoFont).FontSize(11.5)
 				}
 				switch f.from {
 				case fromBuild:
-					chip(c, k, "Built in", ui.Color{})
+					chip(c, k, "Built in", ui.Color{}).Shrink(0)
 				case fromConfig:
-					ui.Row(c).Gap(4).AlignItems(ui.Center).Tooltip("Set in config.yaml; restart to change").Children(func() {
+					ui.Row(c).Shrink(0).Gap(4).AlignItems(ui.Center).Tooltip("Set in config.yaml; restart to change").Children(func() {
 						ui.Icon(c, icLock).FontSize(11).TextColor(k.Faint)
 						mono(c, "config.yaml", 10.5).TextColor(k.Faint)
 					})

@@ -115,8 +115,14 @@ func (a *App) fieldRow(c *ui.Context, k *Tokens, f *configField) {
 			ui.Column(c).Grow(1).Shrink(1).Gap(3).Children(func() {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, f.label).FontSize(13).FontWeight(600)
-					if cf.Saving[f.key] {
-						ui.Text(c, "Saving…").FontSize(11.5).TextColor(k.Faint)
+					// A save that lands quickly shows nothing: the word would
+					// only flash.
+					if since, ok := cf.SavingFor(f.key, c.Now()); ok {
+						if since >= statusDelay {
+							ui.Text(c, "Saving…").FontSize(11.5).TextColor(k.Faint)
+						} else {
+							c.After(statusDelay - since)
+						}
 					}
 				})
 				ui.Text(c, f.help).FontSize(11.5).TextColor(k.Faint).LineHeight(1.45)
@@ -233,7 +239,7 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 		sel := ui.SelectBase(c.Key(f.key), &cur)
 		trigger := sel.Trigger.Width(220).Height(32).PaddingX(10).Gap(8).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2).
 			AlignItems(ui.Center).Justify(ui.SpaceBetween).Label(f.label).Disabled(off)
-		if sel.Open() || trigger.Focused() {
+		if sel.Open() {
 			trigger.Border(1, k.Accent)
 		}
 		trigger.Cursor(ui.CursorPointer).Children(func() {

@@ -15,13 +15,13 @@ import (
 func (a *App) searchShots(shot func(name string, setup func(), settle time.Duration)) {
 	search := func(term string) func() {
 		return func() {
-			a.view.Go(appui.ScreenNew)
+			a.view.Go(appui.ScreenHome)
 			a.store.SetOmniText(term)
 		}
 	}
 	shot("14-search", search("Yorushika"), 6*time.Second)
-	// The keyboard stays in the title bar's field; a render of the same
-	// view takes the keys, as the window would.
+	// A render of the same view takes the keys, as the window does once
+	// the keyboard has left the field.
 	shot("15-search-keys", func() { a.keys(ui.KeyDown, ui.KeyDown, ui.KeyDown) }, 3*time.Second)
 	shot("16-search-artist", func() { a.keys(ui.KeyEnd, ui.KeyEnter) }, 6*time.Second)
 	shot("17-search-back", func() { a.keys(ui.KeyEscape) }, 2*time.Second)
@@ -53,7 +53,15 @@ func (a *App) searchShots(shot func(name string, setup func(), settle time.Durat
 	shot("24-search-none", search("zqxjvw kqqp xxyz"), 6*time.Second)
 	shot("25-search-light", func() { a.view.Theme = "light"; search("Yorushika")() }, 3*time.Second)
 	shot("26-search-compact", func() { a.view.Theme = a.opts.Theme; a.win.SetContentSize(820, 560) }, 3*time.Second)
-	a.post(func() { a.win.SetContentSize(1280, 800); a.store.SetOmniText("") })
+	a.post(func() { a.win.SetContentSize(1280, 800) })
+	// Home with nothing typed: the field waits at the page's optical center.
+	shot("27-home-empty", func() { a.view.Theme = a.opts.Theme; a.store.SetOmniText(""); a.view.Go(appui.ScreenHome) }, 2*time.Second)
+	shot("28-home-empty-light", func() { a.view.Theme = "light" }, 2*time.Second)
+	shot("29-home-empty-compact", func() { a.view.Theme = a.opts.Theme; a.win.SetContentSize(820, 560) }, 2500*time.Millisecond)
+	// The sidebar closed: the traffic lights and its button over the page.
+	shot("30-sidebar-hidden", func() { a.win.SetContentSize(1280, 800); a.view.ToggleSidebar() }, 2*time.Second)
+	shot("31-sidebar-hidden-light", func() { a.view.Theme = "light"; a.store.SetOmniText("Yorushika") }, 5*time.Second)
+	a.post(func() { a.view.Theme = a.opts.Theme; a.store.SetOmniText(""); a.view.ToggleSidebar() })
 }
 
 // shotAlbumID is shotAlbum's catalog id.
