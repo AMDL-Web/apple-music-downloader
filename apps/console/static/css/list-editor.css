@@ -1,0 +1,74 @@
+/*
+ * The ordered list editor (views/settings-list.js): Settings' codec priority
+ * and the Custom quality sheet on New download. Linked after settings.css.
+ */
+
+.list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.list-items {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-control);
+}
+
+.list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 40px;
+  padding: var(--s-1) var(--s-1) var(--s-1) var(--s-3);
+  border-top: var(--row-divider);
+}
+
+.list-item:first-child {
+  border-top: 0;
+}
+
+.list-rank {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  text-align: center;
+}
+
+.list-label {
+  min-width: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+}
+
+.list-actions {
+  display: flex;
+  gap: var(--s-0_5);
+}
+
+.list-add {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.list-editor[data-ordered] .list-item {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+}
+
+.list-add .select {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-h-sm);
+}
+
+@media (max-width: 639px) {
+  .list-add .select {
+    height: auto;
+  }
+}
