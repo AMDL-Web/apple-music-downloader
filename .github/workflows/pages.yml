@@ -1,14 +1,16 @@
 name: Pages
 
-# Build the website from main and publish it on GitHub Pages at its custom
-# domain. main changes only through the release PR, so this first runs on
-# release day; apps/site/README.md#release-day has the steps around it.
+# Build the website from main, with the desktop app's browser demo, and
+# publish it on GitHub Pages at its custom domain. main changes only through
+# the release PR, so this first runs on release day;
+# apps/site/README.md#release-day has the steps around it.
 
 on:
   push:
     branches: [main]
     paths:
       - apps/site/**
+      - apps/desktop/**
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -29,6 +31,12 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -39,8 +47,11 @@ jobs:
       - name: Check the site describes main
         run: node --input-type=module -e "import { REF } from './apps/site/build.mjs'; if (REF !== 'main') { console.error('apps/site/build.mjs#REF is ' + REF + ', not main'); process.exit(1); }"
 
+      - name: Build the desktop demo
+        run: make desktop-web
+
       - name: Build
-        run: node apps/site/build.mjs --base https://amdl.lyjw.me/ --out _site
+        run: node apps/site/build.mjs --base https://amdl.lyjw.me/ --out _site --desktop apps/desktop/build/web
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

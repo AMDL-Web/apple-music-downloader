@@ -81,7 +81,8 @@ The site is Cloudflare Workers static assets, deployed by hand with the maintain
 Cloudflare login. Build with the domain from `wrangler.jsonc` as `--base`, then deploy:
 
 ```bash
-node apps/site/build.mjs --base https://amdl.lyjw.me/
+make desktop-web
+node apps/site/build.mjs --base https://amdl.lyjw.me/ --desktop apps/desktop/build/web
 npx wrangler deploy --config apps/site/wrangler.jsonc
 ```
 
@@ -89,8 +90,9 @@ Links into the repository, the install scripts and the Compose file come from th
 branch in `build.mjs#REF`, so it names the branch the published page describes.
 
 At the 2.0 release the site moves to GitHub Pages, built from `main` by
-`.github/workflows/pages.yml`: it runs on a push to `main` that touches the site, or by
-hand, and refuses to deploy a build whose `REF` is not `main`.
+`.github/workflows/pages.yml`: it runs on a push to `main` that touches the site or the
+desktop app, or by hand, builds the desktop demo with `make desktop-web` first, and refuses
+to deploy a build whose `REF` is not `main`.
 
 ## Release day
 
