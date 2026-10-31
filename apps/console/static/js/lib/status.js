@@ -233,15 +233,16 @@ const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 const STAGE_LABELS = { resolve: 'Resolve', download: 'Download', decrypt: 'Decrypt', remux: 'Remux', verify: 'Verify', tag: 'Tag', save: 'Save' };
 
 /**
- * Each stage's share of a track's run time, which sets the width of its
- * segment: download is most of it, decrypt about half of that, and resolve
- * and the finishing steps a sliver each. The same shares the AMDL iOS app
- * gives the stages of ItemProgress. They add up to 1: they size the stage
- * segments, and the drawer's album bar weights its overall progress with them
- * (lib/album-progress.js). The Go clients use the same values
- * (internal/progress#Weights); TestWeightsMatchConsole there keeps them equal.
+ * Each stage's share of a track's wall time, which sets the width of its
+ * segment: the measured shares of a typical ALAC track on a home connection.
+ * Download dominates and depends on the network; resolve and decrypt take
+ * about a tenth each and the finishing steps a sliver. They add up to 1: they
+ * size the stage segments, and the drawer's album bar weights its overall
+ * progress with them (lib/album-progress.js). The Go clients use the same
+ * values (internal/progress#Weights); TestWeightsMatchConsole there keeps them
+ * equal.
  */
-export const STAGE_WEIGHTS = Object.freeze({ resolve: 0.04, download: 0.56, decrypt: 0.26, remux: 0.06, verify: 0.03, tag: 0.03, save: 0.02 });
+export const STAGE_WEIGHTS = Object.freeze({ resolve: 0.09, download: 0.77, decrypt: 0.09, remux: 0.01, verify: 0.02, tag: 0.01, save: 0.01 });
 
 /**
  * The seven pipeline stages of one item. Download and decrypt carry their

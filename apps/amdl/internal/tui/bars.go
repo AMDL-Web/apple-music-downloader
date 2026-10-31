@@ -47,7 +47,7 @@ func stageWidths(w int) [progress.StageCount]int {
 	}
 	left := max(2, w-small)
 	dl, dc := progress.Weights[progress.StageDownload], progress.Weights[progress.StageDecrypt]
-	out[progress.StageDownload] = int(math.Round(float64(left) * dl / (dl + dc)))
+	out[progress.StageDownload] = min(left-1, int(math.Round(float64(left)*dl/(dl+dc))))
 	out[progress.StageDecrypt] = left - out[progress.StageDownload]
 	return out
 }

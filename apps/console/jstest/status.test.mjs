@@ -152,15 +152,14 @@ test('stage segments are weighted by their share of a track run', () => {
   const segs = stageSegments({ status: 'decrypting', progress: { resolved: true, download: 1, decrypt: 0.3 } });
   assert.deepEqual(
     segs.map((s) => [s.key, s.weight]),
-    [['resolve', 0.04], ['download', 0.56], ['decrypt', 0.26], ['remux', 0.06], ['verify', 0.03], ['tag', 0.03], ['save', 0.02]],
+    [['resolve', 0.09], ['download', 0.77], ['decrypt', 0.09], ['remux', 0.01], ['verify', 0.02], ['tag', 0.01], ['save', 0.01]],
   );
   const total = Object.values(STAGE_WEIGHTS).reduce((a, w) => a + w, 0);
   assert.ok(Math.abs(total - 1) < 1e-9, `weights add up to ${total}`);
   assert.deepEqual(Object.keys(STAGE_WEIGHTS), segs.map((s) => s.key), 'one weight per stage, in pipeline order');
-  const [download, decrypt] = [STAGE_WEIGHTS.download, STAGE_WEIGHTS.decrypt];
   for (const [k, w] of Object.entries(STAGE_WEIGHTS)) {
-    if (k !== 'download') assert.ok(download > w, `download outweighs ${k}`);
-    if (k !== 'download' && k !== 'decrypt') assert.ok(decrypt > w, `decrypt outweighs ${k}`);
+    if (k !== 'download') assert.ok(STAGE_WEIGHTS.download > w, `download outweighs ${k}`);
+    if (!['download', 'resolve', 'decrypt'].includes(k)) assert.ok(STAGE_WEIGHTS.decrypt > w, `decrypt outweighs ${k}`);
   }
   assert.ok(Object.isFrozen(STAGE_WEIGHTS));
 });

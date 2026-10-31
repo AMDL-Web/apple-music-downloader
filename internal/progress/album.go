@@ -46,7 +46,7 @@ type Album struct {
 }
 
 // ItemFraction is one track's progress in [0,1] under Weights, from its flags
-// and meters alone (the iOS app's ItemProgress.fraction). Completed and
+// and meters alone. Completed and
 // already-on-disk tracks count as 1; a failed or cancelled track stays where it
 // stopped.
 func ItemFraction(it domain.JobItem) float64 {

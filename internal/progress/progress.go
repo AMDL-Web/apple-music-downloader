@@ -28,11 +28,14 @@ const (
 	StageCount
 )
 
-// Weights are each stage's share of a track's wall time, summing to 1. The web
-// console keeps the same values as STAGE_WEIGHTS in
+// Weights are each stage's share of a track's wall time, summing to 1. They
+// are the measured shares of a typical ALAC track on a home connection:
+// download dominates and depends on the network, so it takes more of the bar
+// on a slow link and less on a fast one, and the remaining stages are a
+// sliver each. The web console keeps the same values as STAGE_WEIGHTS in
 // apps/console/static/js/lib/status.js; TestWeightsMatchConsole holds them
 // together.
-var Weights = [StageCount]float64{0.04, 0.56, 0.26, 0.06, 0.03, 0.03, 0.02}
+var Weights = [StageCount]float64{0.09, 0.77, 0.09, 0.01, 0.02, 0.01, 0.01}
 
 // Stages is how far each stage has come, each in [0,1].
 type Stages [StageCount]float64

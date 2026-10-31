@@ -71,18 +71,18 @@ func TestItemFraction(t *testing.T) {
 		ItemFraction(item(1, domain.ItemQueued, domain.ItemProgress{})) != 0 {
 		t.Error("finished tracks count whole, a queued one as nothing")
 	}
-	near(t, ItemFraction(item(1, domain.ItemDownloading, domain.ItemProgress{Resolved: true, Download: 0.5})), 0.04+0.28)
-	near(t, ItemFraction(item(1, domain.ItemTagging, domain.ItemProgress{Resolved: true, Download: 1, Decrypt: 1, Remuxed: true})), 0.92)
+	near(t, ItemFraction(item(1, domain.ItemDownloading, domain.ItemProgress{Resolved: true, Download: 0.5})), Weights[StageResolve]+Weights[StageDownload]*0.5)
+	near(t, ItemFraction(item(1, domain.ItemTagging, domain.ItemProgress{Resolved: true, Download: 1, Decrypt: 1, Remuxed: true})), Weights[StageResolve]+Weights[StageDownload]+Weights[StageDecrypt]+Weights[StageRemux])
 	// Saved ends the pipeline even with integrity checks off.
 	near(t, ItemFraction(item(1, domain.ItemSaving, domain.ItemProgress{Resolved: true, Download: 1, Decrypt: 1, Remuxed: true, Tagged: true, Saved: true})), 1)
-	near(t, ItemFraction(item(1, domain.ItemFailed, domain.ItemProgress{Resolved: true, Download: 0.25})), 0.04+0.14)
+	near(t, ItemFraction(item(1, domain.ItemFailed, domain.ItemProgress{Resolved: true, Download: 0.25})), Weights[StageResolve]+Weights[StageDownload]*0.25)
 }
 
 func TestAlbumPercent(t *testing.T) {
 	half := domain.ItemProgress{Resolved: true, Download: 1}
 	p := AlbumProgress(domain.JobRunning, []domain.JobItem{item(1, domain.ItemCompleted, domain.ItemProgress{}), item(2, domain.ItemDownloading, half)})
-	if p.Percent != 80 {
-		t.Errorf("percent = %d, want 80", p.Percent)
+	if want := int(math.Round((1 + Weights[StageResolve] + Weights[StageDownload]) / 2 * 100)); p.Percent != want {
+		t.Errorf("percent = %d, want %d", p.Percent, want)
 	}
 	full := domain.ItemProgress{Resolved: true, Download: 1, Decrypt: 1, Remuxed: true, Verified: true, Tagged: true}
 	many := make([]domain.JobItem, 200)
@@ -180,7 +180,7 @@ func TestAlbumSingleTrack(t *testing.T) {
 	if len(p.Runs) != 1 {
 		t.Fatalf("runs = %+v", p.Runs)
 	}
-	near(t, p.Done, 0.32)
+	near(t, p.Done, Weights[StageResolve]+Weights[StageDownload]*0.5)
 	near(t, p.Live, p.Done)
 	f := AlbumProgress(domain.JobFailed, []domain.JobItem{item(1, domain.ItemFailed, domain.ItemProgress{})})
 	if len(f.Runs) != 1 || f.Runs[0].Status != domain.ItemFailed || f.Runs[0].Share != 1 {
@@ -195,7 +195,7 @@ func TestItemStagesCountsPassedStages(t *testing.T) {
 	if s.Current() != StageTag {
 		t.Errorf("current = %v, want tag", s.Current())
 	}
-	near(t, s.Weighted(), 0.95)
+	near(t, s.Weighted(), Weights[StageResolve]+Weights[StageDownload]+Weights[StageDecrypt]+Weights[StageRemux]+Weights[StageVerify])
 }
 
 func TestRateRemaining(t *testing.T) {

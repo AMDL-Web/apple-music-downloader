@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { albumProgress, itemFraction, TICK_MAX } from '../static/js/lib/album-progress.js';
+import { STAGE_WEIGHTS as W } from '../static/js/lib/status.js';
 
 const at = (s) => `2026-10-30T10:00:${String(s).padStart(2, '0')}Z`;
 const item = (index, status, extra = {}) => ({ index, status, progress: {}, updated_at: at(0), ...extra });
@@ -10,18 +11,18 @@ test('itemFraction weights the stages and counts a finished track whole', () => 
   assert.equal(itemFraction(item(1, 'completed')), 1);
   assert.equal(itemFraction(item(1, 'skipped_existing')), 1);
   assert.equal(itemFraction(item(1, 'queued')), 0);
-  near(itemFraction(item(1, 'downloading', { progress: { resolved: true, download: 0.5 } })), 0.04 + 0.28);
-  near(itemFraction(item(1, 'tagging', { progress: { resolved: true, download: 1, decrypt: 1, remuxed: true } })), 0.92);
+  near(itemFraction(item(1, 'downloading', { progress: { resolved: true, download: 0.5 } })), W.resolve + W.download * 0.5);
+  near(itemFraction(item(1, 'tagging', { progress: { resolved: true, download: 1, decrypt: 1, remuxed: true } })), W.resolve + W.download + W.decrypt + W.remux);
   // Saved ends the pipeline even when integrity checks are off (verified false).
   assert.equal(itemFraction(item(1, 'saving', { progress: { resolved: true, download: 1, decrypt: 1, remuxed: true, tagged: true, saved: true } })), 1);
   // A failed track stays where it stopped.
-  near(itemFraction(item(1, 'failed', { progress: { resolved: true, download: 0.25 } })), 0.04 + 0.14);
+  near(itemFraction(item(1, 'failed', { progress: { resolved: true, download: 0.25 } })), W.resolve + W.download * 0.25);
 });
 
 test('the overall percent is the stage-weighted mean, below 100 while a track works', () => {
   const half = { resolved: true, download: 1, decrypt: 0 };
   const p = albumProgress('running', [item(1, 'completed'), item(2, 'downloading', { progress: half })]);
-  assert.equal(p.percent, Math.round(((1 + 0.6) / 2) * 100));
+  assert.equal(p.percent, Math.round(((1 + W.resolve + W.download) / 2) * 100));
   const many = Array.from({ length: 200 }, (_, i) => item(i + 1, i ? 'completed' : 'tagging', { progress: { resolved: true, download: 1, decrypt: 1, remuxed: true, verified: true, tagged: true } }));
   assert.equal(albumProgress('running', many).percent, 99);
   assert.equal(albumProgress('completed', [item(1, 'completed'), item(2, 'skipped_existing')]).percent, 100);
@@ -73,7 +74,7 @@ test('a single track is not segmented: the solid fill is its own progress', () =
   const p = albumProgress('running', [item(1, 'downloading', { progress: { resolved: true, download: 0.5 } })]);
   assert.equal(p.runs.length, 1);
   assert.equal(p.runs[0].role, 'info');
-  near(p.done, 0.32);
+  near(p.done, W.resolve + W.download * 0.5);
   assert.equal(p.live, p.done);
   assert.deepEqual(albumProgress('failed', [item(1, 'failed')]).runs.map((r) => [r.role, r.share]), [['danger', 1]]);
 });

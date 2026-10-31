@@ -19,9 +19,9 @@ const OUTCOME_RANK = { completed: 0, skipped_existing: 1, failed: 2, cancelled: 
 const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 
 /**
- * One track's progress, 0..1, weighted by STAGE_WEIGHTS (iOS
- * `ItemProgress.fraction`). Completed and already-on-disk tracks count as 1;
- * a failed or cancelled track stays where it stopped.
+ * One track's progress, 0..1, weighted by STAGE_WEIGHTS. Completed and
+ * already-on-disk tracks count as 1; a failed or cancelled track stays where it
+ * stopped.
  */
 export function itemFraction(item) {
   const status = item && item.status;

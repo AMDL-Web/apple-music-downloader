@@ -159,6 +159,21 @@ func TestStageBarWidth(t *testing.T) {
 	}
 }
 
+func TestStageWidthsKeepEveryStage(t *testing.T) {
+	for w := 7; w <= 80; w++ {
+		sum := 0
+		for i, cw := range stageWidths(w) {
+			if cw < 1 {
+				t.Errorf("width %d: stage %d is %d cells", w, i, cw)
+			}
+			sum += cw
+		}
+		if sum != w {
+			t.Errorf("width %d: stages add up to %d", w, sum)
+		}
+	}
+}
+
 func TestAccentKeepsContrast(t *testing.T) {
 	for _, dark := range []bool{true, false} {
 		th := newTheme(dark)
