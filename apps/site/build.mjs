@@ -3,9 +3,10 @@
 // with static/site.css and static/site.js inlined, into a directory that any
 // static host can serve at its root or under a subpath.
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import { serve } from './serve.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -451,29 +452,6 @@ export function build({ out, base = '' }) {
   fs.writeFileSync(path.join(out, 'index.html'), renderRoot(base));
   pages.push('index.html');
   return pages;
-}
-
-const TYPES = { '.html': 'text/html; charset=utf-8', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png' };
-
-function serve(root, port) {
-  http
-    .createServer((req, res) => {
-      const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-      let file = path.join(root, path.normalize(rel));
-      if (!file.startsWith(root)) {
-        res.writeHead(403).end();
-        return;
-      }
-      if (rel.endsWith('/')) file = path.join(file, 'index.html');
-      fs.readFile(file, (err, body) => {
-        if (err) {
-          res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
-          return;
-        }
-        res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream' }).end(body);
-      });
-    })
-    .listen(port, '127.0.0.1', () => console.log(`serving ${root} on http://127.0.0.1:${port}/`));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

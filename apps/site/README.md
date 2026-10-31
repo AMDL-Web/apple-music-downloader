@@ -16,6 +16,7 @@ nothing from another host.
 | `build.mjs` | The template and the build: renders `content/<lang>.json` into a page, inlines `static/site.css` and `static/site.js`, copies the images |
 | `content/` | The page text, one file per language with the same keys. Strings may use `` `code` ``, `**strong**` and `[text](href)`; an href may start with `{repo}` or `{blob}` |
 | `static/` | Stylesheet, script, favicon, Open Graph card, the hero animation (`hero.html`), the terminal capture (`tui.html`), the CLI and MCP samples, and the screenshots in `img/` |
+| `serve.mjs` | The preview server behind `--serve` |
 | `build.test.mjs` | Content parity, links and anchors, local-only resources, image sizes, arguments |
 | `wrangler.jsonc` | The Cloudflare Workers project that serves `dist/` at the site's domain |
 
