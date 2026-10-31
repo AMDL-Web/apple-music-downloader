@@ -294,7 +294,8 @@ export function renderPage(c, ctx) {
 </section>`;
 
   // The live demos: the console with made-up data, and the desktop app's web
-  // build when there is one (a screenshot until then), each in a window.
+  // build when there is one, each in a window. The desktop app is a few
+  // megabytes of wasm: its screenshot shows until the visitor starts it.
   const d = c.demo;
   const win = (kind, title, extra, body) =>
     `<div class="window win-${kind}"><div class="win-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="win-title">${title}</span>${extra}</div><div class="win-body">${body}</div></div>`;
@@ -307,9 +308,15 @@ ${tabs(d.label, [
   {
     id: 'demo-desktop',
     label: d.tabs.desktop,
-    html: ctx.desktop
-      ? win('desktop', 'AMDL', full('../demo/desktop/'), live('../demo/desktop/', d.desktopFrame))
-      : win('desktop', 'AMDL', `<span class="badge">${esc(p.desktop.badge)}</span>`, shot(ctx, 'desktop', p.desktop.shot)),
+    html: win(
+      'desktop',
+      'AMDL',
+      `<span class="badge">${esc(p.desktop.badge)}</span>`,
+      shot(ctx, 'desktop', p.desktop.shot) +
+        (ctx.desktop
+          ? `<iframe data-src="../demo/desktop/" title="${esc(d.desktopFrame)}"></iframe><button class="win-start" type="button"><span>${esc(d.start)}${ICON.arrow}</span></button>`
+          : ''),
+    ),
   },
 ])}
 <p class="demo-note">${inline(d.note)}</p>

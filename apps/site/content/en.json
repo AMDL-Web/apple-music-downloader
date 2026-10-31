@@ -37,6 +37,7 @@
     "address": "localhost:18080/console/",
     "fullScreen": "Full screen",
     "open": "Open the live demo",
+    "start": "Start the live demo",
     "consoleFrame": "The AMDL web console, running on made-up data",
     "desktopFrame": "The AMDL desktop app, running on made-up data",
     "note": "Made-up albums and covers. It runs only in your browser: nothing is downloaded or sent."

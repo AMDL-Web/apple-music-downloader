@@ -284,6 +284,20 @@ h1 span { display: block; color: var(--muted); }
 .win-body iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
 .win-body .shot { height: 100%; border: 0; border-radius: 0; box-shadow: none; object-fit: cover; object-position: left top; }
 .win-open { display: none; }
+/* The desktop app needs 820 px: below that its window keeps the screenshot. */
+.win-desktop .win-body { container-type: inline-size; }
+.win-desktop .win-body iframe { position: absolute; inset: 0; display: none; }
+.win-start { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; border: 0; background: linear-gradient(transparent, var(--scrim)); cursor: pointer; }
+.win-start span { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 10px; background: var(--btn-bg); color: var(--btn-fg); font-size: 15px; font-weight: 550; }
+.win-start svg { width: 16px; height: 16px; transition: transform 0.2s; }
+.win-start:hover svg { transform: translateX(2px); }
+.win-start:focus-visible { outline: none; }
+.win-start:focus-visible span { outline: 2px solid var(--accent); outline-offset: 2px; }
+@container (min-width: 820px) {
+  .win-start { display: flex; }
+  .win-desktop .is-live iframe { display: block; }
+  .win-desktop .is-live .win-start { display: none; }
+}
 .demo-note { margin: 0; padding: 20px var(--pad) 28px; color: var(--muted); font-size: 14px; line-height: 1.6; text-align: center; }
 
 /* Sections */

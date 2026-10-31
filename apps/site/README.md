@@ -66,9 +66,12 @@ for the desktop app.
 - `demo.test.mjs` checks that every `/api/v1` call in `apps/console/static/js/api.js`
   gets an answer, so a new console call needs a handler in `fake-api.js`. Nothing checks
   that a response keeps its shape: click through the demo after changing one.
-- The desktop tab shows the `desktop` screenshot until the build gets the desktop app's
-  web build with `--desktop <dir>` (a directory with its `index.html`), which it copies to
-  `demo/desktop/` and embeds the same way.
+- The desktop tab shows the `desktop` screenshot. Given the desktop app's web build with
+  `--desktop <dir>` (a directory with its `index.html`), the build copies it to
+  `demo/desktop/`, and a button over the screenshot starts it in the window: it is several
+  megabytes of wasm, so it loads only then, and only where the window is at least 820 px
+  wide, the app's minimum. The page passes its theme in as `data-mygo-theme`. Workers
+  serves files up to 25 MiB, which the `.wasm` must stay under.
 - Up to 720 px wide the console window is a scaled-down live view; a tap opens
   `demo/console/` full screen, where the console lays itself out for the screen.
 

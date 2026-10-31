@@ -61,7 +61,7 @@
   // Live demos: on a narrow screen the window draws a 1280 px wide app scaled
   // to fit (site.css), and an app off screen is told so, which stops its jobs
   // moving.
-  for (const frame of document.querySelectorAll('.win-body iframe')) {
+  for (const frame of document.querySelectorAll('.win-console iframe')) {
     const body = frame.parentElement;
     new ResizeObserver(() => body.style.setProperty('--demo-scale', String(body.clientWidth / 1280))).observe(body);
     let offscreen = true;
@@ -71,5 +71,26 @@
       tell();
     }).observe(frame);
     frame.addEventListener('load', tell);
+  }
+
+  // The desktop app's web build loads when the visitor starts it, and wears
+  // the site's theme through MyGo's data-mygo-theme.
+  const dark = matchMedia('(prefers-color-scheme: dark)');
+  for (const start of document.querySelectorAll('.win-start')) {
+    const body = start.parentElement;
+    const frame = body.querySelector('iframe');
+    const theme = () => {
+      try {
+        frame.contentDocument.documentElement.dataset.mygoTheme = root.getAttribute('data-theme') || (dark.matches ? 'dark' : 'light');
+      } catch {}
+    };
+    start.addEventListener('click', () => {
+      frame.addEventListener('load', theme);
+      frame.src = frame.dataset.src;
+      body.classList.add('is-live');
+      frame.focus();
+    });
+    new MutationObserver(theme).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    dark.addEventListener('change', theme);
   }
 })();

@@ -109,7 +109,7 @@ describe('desktop demo', () => {
       fs.writeFileSync(path.join(web, 'index.html'), '<!doctype html><title>AMDL</title>');
       build({ out, desktop: parseArgs(['--desktop', web]).desktop });
       assert.ok(fs.existsSync(path.join(out, 'demo', 'desktop', 'index.html')));
-      assert.match(fs.readFileSync(path.join(out, 'en', 'index.html'), 'utf8'), /<iframe src="\.\.\/demo\/desktop\/"/);
+      assert.match(fs.readFileSync(path.join(out, 'en', 'index.html'), 'utf8'), /<iframe data-src="\.\.\/demo\/desktop\/"/);
     } finally {
       fs.rmSync(web, { recursive: true, force: true });
       fs.rmSync(out, { recursive: true, force: true });

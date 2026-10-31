@@ -37,6 +37,7 @@
     "address": "localhost:18080/console/",
     "fullScreen": "全屏",
     "open": "打开在线演示",
+    "start": "启动在线演示",
     "consoleFrame": "AMDL Web 控制台，用的是虚构数据",
     "desktopFrame": "AMDL 桌面应用，用的是虚构数据",
     "note": "专辑和封面都是虚构的。演示只在你的浏览器里运行，不下载也不发送任何东西。"
