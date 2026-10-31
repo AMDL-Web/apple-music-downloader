@@ -12,7 +12,9 @@ export function translateY(el) {
   return t && t !== 'none' ? new DOMMatrixReadOnly(t).m42 : 0;
 }
 
-const flipKey = (el) => (el.dataset.sortId != null ? `r:${el.dataset.sortId}` : `f:${el.dataset.sortFlip}`);
+// A row keeps its key when it stops being sortable (a queued job that starts):
+// data-sort-flip on the other rows uses the same ids.
+const flipKey = (el) => (el.dataset.sortId != null ? el.dataset.sortId : el.dataset.sortFlip);
 
 const flipEls = (c) => Array.from(c.querySelectorAll('[data-sort-id], [data-sort-flip]'));
 
@@ -47,15 +49,26 @@ export function measure(c) {
     const list = el.closest('[data-sort-list]');
     return { id: el.dataset.sortId, list: list && list.dataset.sortList, top: r.top - translateY(el) - top, height: r.height };
   });
-  const blocks = Array.from(c.querySelectorAll('[data-sort-list]')).map((el) => {
+  // The container may be the one list itself.
+  const lists = c.matches('[data-sort-list]') ? [c] : Array.from(c.querySelectorAll('[data-sort-list]'));
+  const blocks = lists.map((el) => {
     const r = el.getBoundingClientRect();
     return { id: el.dataset.sortList, top: r.top - top, bottom: r.bottom - top };
   });
   return { rows, blocks };
 }
 
-/** A copy of row `el` (drawn at `r`), fixed on <body>, not focusable and hidden from assistive tech. */
-export function makeGhost(el, r) {
+// What a copied ancestor keeps: its classes, attributes and custom
+// properties, so the row's rules and variables still apply, but no box of its own.
+const BARE = { display: 'block', position: 'static', margin: '0', padding: '0', border: '0', width: '100%', height: '100%', minHeight: '0', maxWidth: 'none', background: 'none', boxShadow: 'none', overflow: 'visible', transform: 'none' };
+
+/**
+ * A copy of row `el` (drawn at `r`), fixed on <body>, not focusable and
+ * hidden from assistive tech. With `scope` (a selector), the row's ancestors
+ * up to the nearest one matching it are copied around it without their
+ * content or boxes, so rules written for the row in its page still draw it.
+ */
+export function makeGhost(el, r, scope) {
   const ghost = document.createElement('div');
   ghost.className = 'sortable-ghost';
   ghost.setAttribute('aria-hidden', 'true');
@@ -77,7 +90,18 @@ export function makeGhost(el, r) {
     zIndex: '200',
     pointerEvents: 'none',
   });
-  ghost.appendChild(clone);
+  let inner = clone;
+  const top = scope ? el.parentElement && el.parentElement.closest(scope) : null;
+  for (let n = el.parentElement; top && n && n !== top.parentElement; n = n.parentElement) {
+    const shell = n.cloneNode(false);
+    shell.removeAttribute('id');
+    shell.removeAttribute('aria-label');
+    shell.removeAttribute('data-sort-list');
+    Object.assign(shell.style, BARE);
+    shell.appendChild(inner);
+    inner = shell;
+  }
+  ghost.appendChild(inner);
   document.body.appendChild(ghost);
   return ghost;
 }

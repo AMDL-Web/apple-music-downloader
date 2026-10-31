@@ -1,5 +1,6 @@
 // A Queue row's "…" menu (items from lib/jobactions.js rowMenu): Show
-// details opens the drawer, Cancel and Retry act at once, Copy link copies
+// details opens the drawer, Move to top and Move to bottom reorder a queued
+// job (views/queue-order.js), Cancel and Retry act at once, Copy link copies
 // the job's link, and Delete… asks first. One job's action runs alone, so
 // the selection bar (a bulk run) stays out of it.
 
@@ -38,9 +39,11 @@ export async function runOne(app, action, job) {
  * The "…" button of a Queue row and its menu; `href` opens the job's drawer.
  * onLeaving(id) runs as an action that may take the row out of the list
  * starts (a confirmed delete, a cancel, a retry), while the row is still
- * there: the Queue finds the row focus moves to if it leaves.
+ * there: the Queue finds the row focus moves to if it leaves. A queued job
+ * adds Move to top and Move to bottom, which call onMove('top'|'bottom');
+ * `place` ({first, last}, when known) leaves out the one that would not move it.
  */
-export function JobMenu({ job, href, onLeaving }) {
+export function JobMenu({ job, href, onLeaving, place, onMove }) {
   const app = useApp();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,6 +52,7 @@ export function JobMenu({ job, href, onLeaving }) {
     if (id === 'details') app.navigate(href);
     else if (id === 'copy') copyText(app, job.input);
     else if (id === 'delete') setAsking(true);
+    else if (id === 'top' || id === 'bottom') onMove(id);
     else {
       onLeaving(job.id);
       runOne(app, id, job);
@@ -69,7 +73,7 @@ export function JobMenu({ job, href, onLeaving }) {
       label=${`Actions for ${name}`}
       title="More actions"
       heading=${name}
-      items=${rowMenu(job)}
+      items=${rowMenu(job, place)}
       onChoose=${choose}
     />`,
     asking

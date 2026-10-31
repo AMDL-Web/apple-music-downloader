@@ -2393,6 +2393,13 @@
   line-height: var(--lh-15);
 }
 
+/* The Queue's grip covers the 48 px cover with its corners. */
+:root[data-skin="music"] .job-grip {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-art);
+}
+
 /* A row (its focus ring), the lifted copy and the slot take the list's corners. */
 :root[data-skin="music"] .list-item,
 :root[data-skin="music"] .sortable-ghost > .list-item,

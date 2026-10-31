@@ -5,15 +5,28 @@
 // every function returns new arrays and leaves its input alone.
 
 /**
- * The insertion index of a dragged row among the other rows of a list: how
- * many of their midpoints lie above `y`. The midpoints are layout positions
- * with the dragged row's slot where it is drawn, so after a swap the pointer
- * has crossed exactly one midpoint and the answer does not flip back.
+ * Where a held row of height `size` goes among the other rows of a list,
+ * given its centre `y`: the place whose slot centre is nearest, so it moves
+ * on as soon as it is nearer the next place and comes back the same way.
+ * `rows` are the others' [{ top, height }] in order, laid out as if the held
+ * row were not there (collapsed: see collapse()). The answer does not depend
+ * on where the slot is drawn, so it never flips back and forth.
  */
-export function insertionIndex(mids, y) {
+export function slotIndex(rows, size, y) {
   let n = 0;
-  for (const m of mids) if (m < y) n++;
+  for (const r of rows) if (r.top + (size + r.height) / 2 < y) n++;
   return n;
+}
+
+/**
+ * The other rows of a list laid out without the held row: `rows` as drawn
+ * ([{ top, height }], the slot left out) and the slot's top and height when
+ * it is drawn in this list (null otherwise); rows below the slot move up by
+ * its height.
+ */
+export function collapse(rows, slot) {
+  if (!slot) return rows;
+  return rows.map((r) => (r.top > slot.top ? { ...r, top: r.top - slot.height } : r));
 }
 
 /**

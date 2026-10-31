@@ -131,6 +131,8 @@ export const listDownloads = (query) => request('GET', '/api/v1/downloads', quer
 export const getDownload = (id) => request('GET', `/api/v1/downloads/${encodeURIComponent(id)}`);
 export const cancelDownload = (id) => request('POST', `/api/v1/downloads/${encodeURIComponent(id)}/cancel`);
 export const retryDownload = (id) => request('POST', `/api/v1/downloads/${encodeURIComponent(id)}/retry`);
+/** Moves a queued job in the run order: body {before} or {after} (a queued job's id) or {to: 'first'|'last'}. */
+export const moveDownload = (id, body) => request('POST', `/api/v1/downloads/${encodeURIComponent(id)}/move`, undefined, { body });
 export const listLogs = (query) => request('GET', '/api/v1/logs', query);
 
 /**

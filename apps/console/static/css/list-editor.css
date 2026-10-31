@@ -132,14 +132,7 @@
   inset: var(--s-1);
   border: 1px dashed var(--border-control);
   border-radius: var(--r-control);
-  animation: list-slot-in 180ms var(--ease-in) both;
-}
-
-/* ui/sortable.js restarts it each time the slot moves. */
-@keyframes list-slot-in {
-  from {
-    opacity: 0;
-  }
+  animation: sort-slot-in 180ms var(--ease-in) both;
 }
 
 /* The lifted copy (ui/sortable.js puts it on <body>). */

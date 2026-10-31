@@ -203,3 +203,88 @@
     padding-bottom: calc(var(--control-h) + var(--s-6));
   }
 }
+
+/* ---- Reordering the queue (views/queue-order.js) ------------------- */
+
+/* The grip over a queued row's cover, for a mouse: shown while the row is
+   hovered or holds focus, never on a touch screen (a long-press drags). */
+.job-grip {
+  position: absolute;
+  top: 50%;
+  left: var(--card-pad-x);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-control);
+  background: var(--bg-chrome);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  color: var(--text-primary);
+  cursor: grab;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.job-item[data-sortable]:hover .job-grip,
+.job-item[data-sortable]:focus-within .job-grip {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .job-grip {
+    display: none;
+  }
+}
+
+/* The held row's place: a dashed slot as tall as the row. */
+.job-list > .job-item[data-sort-slot],
+.job-list > .job-item[data-sort-slot]:hover {
+  background: transparent;
+}
+
+.job-item[data-sort-slot] > * {
+  visibility: hidden;
+}
+
+.job-item[data-sort-slot]::after {
+  content: "";
+  position: absolute;
+  inset: var(--s-1) var(--s-2);
+  border: 1px dashed var(--border-control);
+  border-radius: var(--r-control);
+  animation: sort-slot-in 180ms var(--ease-in) both;
+}
+
+/* The lifted copy (on <body>). */
+.sortable-ghost .job-item {
+  border-radius: var(--r-control);
+  background: var(--bg-surface);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.sortable-ghost[data-lifted] .job-item {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-float);
+}
+
+.sortable-ghost .job-grip {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .job-item[data-sort-slot]::after,
+  .sortable-ghost .job-item {
+    animation: none;
+    transition: none;
+  }
+
+  .sortable-ghost[data-lifted] .job-item {
+    transform: none;
+  }
+}

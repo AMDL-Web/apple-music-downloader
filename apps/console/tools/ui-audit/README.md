@@ -55,7 +55,11 @@ node apps/console/tools/ui-audit/console/mock-server.mjs --port 18571 --world ma
 
 Its hooks routes answer from the same in-memory hooks.yaml as the website's demo
 (`apps/site/demo/fake-hooks.js`), and `GET /__mock/hook-writes` lists every hooks write
-it received, to compare request bodies.
+it received, to compare request bodies. Queued jobs carry `queue_order` and
+start in that order; `POST /api/v1/downloads/{id}/move` reorders them as the
+server does (`console/mock-world.mjs`), `GET /__mock/moves` lists every move body
+it received, and a world's `queued: N` option (a scenario's `worldOpts`) adds a
+long queue to reorder.
 
 WebKit runs on a Linux host with Playwright's WebKit installed: copy the
 repository there and run the same command with `--engine webkit`.

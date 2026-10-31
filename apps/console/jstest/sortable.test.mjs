@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  insertionIndex,
+  slotIndex,
+  collapse,
   listAt,
   locate,
   placeItem,
@@ -16,40 +17,80 @@ import {
 const ORDER = ['alac', 'ec3', 'ac3', 'aac', 'aac-binaural', 'aac-downmix'];
 const OPTIONS = ORDER.map((value) => ({ value, label: value.toUpperCase() }));
 
-test('insertionIndex counts the midpoints above the pointer', () => {
-  assert.equal(insertionIndex([], 10), 0);
-  assert.equal(insertionIndex([22, 66, 110], 0), 0);
-  assert.equal(insertionIndex([22, 66, 110], 50), 1);
-  assert.equal(insertionIndex([22, 66, 110], 500), 3);
+test('slotIndex picks the place whose slot centre is nearest', () => {
+  const rows = [
+    { top: 0, height: 44 },
+    { top: 44, height: 44 },
+    { top: 88, height: 44 },
+  ];
+  // Slot centres for a 44 px row: 22, 66, 110, 154; the borders lie half-way.
+  assert.equal(slotIndex([], 44, 10), 0);
+  assert.equal(slotIndex(rows, 44, 0), 0);
+  assert.equal(slotIndex(rows, 44, 43), 0);
+  assert.equal(slotIndex(rows, 44, 45), 1);
+  assert.equal(slotIndex(rows, 44, 131), 2);
+  assert.equal(slotIndex(rows, 44, 133), 3);
+  assert.equal(slotIndex(rows, 44, 999), 3);
 });
 
-// The midpoints of the other rows as drawn with the dragged row's slot at
-// `slot`: rows of varying heights, the slot as tall as the dragged row.
-function drawnMids(heights, dragged, slot) {
-  const others = heights.filter((_, i) => i !== dragged);
-  const mids = [];
+test('collapse lays the other rows out without the slot', () => {
+  const drawn = [
+    { top: 0, height: 44 },
+    { top: 88, height: 44 },
+  ];
+  assert.deepEqual(collapse(drawn, { top: 44, height: 44 }), [
+    { top: 0, height: 44 },
+    { top: 44, height: 44 },
+  ]);
+  assert.equal(collapse(drawn, null), drawn);
+});
+
+// The other rows as drawn with the held row's slot at `slot`: rows of
+// varying heights, the slot as tall as the held row. Returns them and the slot.
+function drawn(heights, held, slot) {
+  const others = heights.filter((_, i) => i !== held);
+  const rows = [];
   let y = 0;
+  let at = null;
   others.forEach((h, i) => {
-    if (i === slot) y += heights[dragged];
-    mids.push(y + h / 2);
+    if (i === slot) {
+      at = { top: y, height: heights[held] };
+      y += heights[held];
+    }
+    rows.push({ top: y, height: h });
     y += h;
   });
-  return mids;
+  if (at === null) at = { top: y, height: heights[held] };
+  return { rows, slot: at };
 }
 
-test('insertionIndex does not flip back after a swap, whatever the row heights', () => {
+test('slotIndex does not depend on where the slot is drawn, whatever the row heights', () => {
   const heights = [44, 96, 44, 140, 60, 44];
-  for (let dragged = 0; dragged < heights.length; dragged++) {
-    const total = heights.reduce((a, b) => a + b, 0);
-    for (let slot = 0; slot < heights.length; slot++) {
-      for (let y = 0; y <= total; y += 3) {
-        const next = insertionIndex(drawnMids(heights, dragged, slot), y);
-        // Drawn again with the slot where the pointer sent it, the same pointer keeps it there.
-        const again = insertionIndex(drawnMids(heights, dragged, next), y);
-        assert.equal(again, next, `dragged ${dragged}, slot ${slot}, y ${y}`);
+  const total = heights.reduce((a, b) => a + b, 0);
+  for (let held = 0; held < heights.length; held++) {
+    for (let y = -20; y <= total + 20; y += 3) {
+      const answers = new Set();
+      for (let slot = 0; slot < heights.length; slot++) {
+        const d = drawn(heights, held, slot);
+        answers.add(slotIndex(collapse(d.rows, d.slot), heights[held], y));
       }
+      assert.equal(answers.size, 1, `held ${held}, y ${y}: ${[...answers]}`);
     }
   }
+});
+
+test('slotIndex moves a held row on once it is nearer the next place', () => {
+  // Five 68 px rows; the first is held and moved down: its centre at 34 + d.
+  const heights = [68, 68, 68, 68, 68];
+  const at = (centre) => {
+    const d = drawn(heights, 0, 0);
+    return slotIndex(collapse(d.rows, d.slot), 68, centre);
+  };
+  assert.equal(at(34), 0);
+  assert.equal(at(34 + 33), 0);
+  assert.equal(at(34 + 35), 1);
+  assert.equal(at(34 + 3 * 68 - 30), 3);
+  assert.equal(at(34 + 4 * 68), 4);
 });
 
 test('listAt picks the block under the pointer, else the nearest edge', () => {

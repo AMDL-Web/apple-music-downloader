@@ -61,6 +61,7 @@ describe('fake API', () => {
       'POST /api/v1/quality': { url: albums[0].url },
       'PUT /api/v1/config': { logging: { level: 'debug' } },
       'PUT /api/v1/hooks': { enabled: true },
+      'POST /api/v1/downloads/${encodeURIComponent(id)}/move': { to: 'first' },
     };
     for (const [method, raw] of calls) {
       const route = raw.replace(/\/(\w+)\/\$\{[^}]+\}/g, (_, seg) => `/${seg}/${ids[seg]}`);

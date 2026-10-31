@@ -15,6 +15,7 @@ const WORDS = {
   retry: { verb: 'Retry', ing: 'Retrying', did: 'Queued', after: ' again', fail: 'retry' },
   cancel: { verb: 'Cancel', ing: 'Cancelling', did: 'Cancelled', after: '', fail: 'cancel' },
   delete: { verb: 'Delete', ing: 'Deleting', did: 'Deleted', after: '', fail: 'delete' },
+  move: { verb: 'Move', ing: 'Moving', did: 'Moved', after: '', fail: 'move' },
 };
 
 const jobs = (n) => (n === 1 ? '1 job' : `${n} jobs`);
@@ -34,17 +35,23 @@ export function jobAllows(job, action) {
   }
 }
 
-const MENU_LABELS = { details: 'Show details', retry: 'Retry', cancel: 'Cancel', copy: 'Copy link', delete: 'Delete…' };
+const MENU_LABELS = { details: 'Show details', top: 'Move to top', bottom: 'Move to bottom', retry: 'Retry', cancel: 'Cancel', copy: 'Copy link', delete: 'Delete…' };
 
 /**
- * A Queue row's menu, as the desktop app draws it: Show details; Cancel
- * (queued, running) or Retry (failed, cancelled); then Copy link (the job's
- * input), and for a finished job Delete… after a separator of its own. A job
- * under way can only be cancelled; a link Apple has nothing at (a 404) gets no
+ * A Queue row's menu, as the desktop app draws it: Show details; for a
+ * queued job Move to top and Move to bottom (`place` {first, last}, when
+ * known, leaves out the one that would not move it); Cancel (queued,
+ * running) or Retry (failed, cancelled); then Copy link (the job's input),
+ * and for a finished job Delete… after a separator of its own. A job under
+ * way can only be cancelled; a link Apple has nothing at (a 404) gets no
  * Retry, as in the lists. Entries are {id, label} or {separator: true}.
  */
-export function rowMenu(job) {
+export function rowMenu(job, place = {}) {
   const ids = ['details'];
+  if (job && job.status === 'queued') {
+    if (!place.first) ids.push('top');
+    if (!place.last) ids.push('bottom');
+  }
   if (jobAllows(job, 'cancel')) ids.push('cancel');
   else if (jobAllows(job, 'retry') && !isNotFound(job.error)) ids.push('retry');
   if (job && job.input) ids.push('-', 'copy');
@@ -84,6 +91,7 @@ export function actionReason(action, err) {
   if (code === 'job_not_retryable') return 'only failed or cancelled jobs can be retried';
   if (code === 'job_not_cancellable') return 'already finished';
   if (code === 'job_finalizing') return 'still finishing its last run, try again in a moment';
+  if (code === 'job_not_queued') return 'it or the job beside it is no longer queued';
   if (code === 'duplicate_active') return 'another active job already downloads this link';
   if (code === 'queue_full') return 'the queue is full';
   const message = stripStop(err && err.message);

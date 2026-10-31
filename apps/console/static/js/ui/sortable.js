@@ -19,14 +19,27 @@
 // with the rows sliding in or out (a transform: no layout runs per frame).
 
 import { useState, useRef, useLayoutEffect, useEffect } from './preact.js';
-import { insertionIndex, listAt, locate, placeItem, samePlace } from '../lib/sortable.js';
+import { slotIndex, collapse, listAt, locate, placeItem, samePlace } from '../lib/sortable.js';
 import { MOVE_MS, EASE, reducedMotion, translateY, snapshot, measure, makeGhost, playFlip, resetFlip } from './sortable-flip.js';
 
 const MOUSE_SLOP = 4;
 const TOUCH_SLOP = 8;
 const LONG_PRESS_MS = 300;
+// Auto-scroll: the band at a scroller's edge that scrolls it, and the most it
+// scrolls in a frame (at the very edge).
+const EDGE = 48;
+const EDGE_SPEED = 16;
 // Presses that never start a drag: the row's own controls.
 const IGNORE = 'button, input, select, textarea, [data-sort-ignore]';
+
+// The element that scrolls `el`: its nearest scrolling ancestor, else the page.
+function scrollerOf(el) {
+  for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+    const o = getComputedStyle(n).overflowY;
+    if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return document.scrollingElement;
+}
 
 /**
  * Options: container (a ref to the element holding the lists), lists
@@ -35,7 +48,14 @@ const IGNORE = 'button, input, select, textarea, [data-sort-ignore]';
  * the place the pointer is over), onDrop({ id, from, to, lists }) (lists: the
  * order after the drop; not called when the item ends where it started),
  * handle (a selector a mouse press must start in; touch long-press works
- * anywhere on the row).
+ * anywhere on the row), clamp ('container', the default, or 'rows': the held
+ * copy stays between the first and the last sortable row), autoScroll
+ * (true, or a function returning { top, bottom }: the px of fixed bars
+ * over the page's top and bottom edges; a press within 48 px of the
+ * scroller's edge scrolls it), rowOf(id) (where a row whose item left the
+ * lists while held is drawn now: the copy glides there, else it just goes),
+ * ghostScope (a selector: the held copy keeps the row's ancestors up to the
+ * nearest one matching it, without their boxes, so page-scoped rules apply).
  *
  * Returns { drag, lists, row, animate }: drag is null or { id, from, to,
  * height } while a row is held; lists is the order to draw (the held row at
@@ -74,14 +94,23 @@ export function useSortable(options) {
     a.y = y;
     const c = box();
     const cr = c.getBoundingClientRect();
-    const top = Math.max(cr.top, Math.min(y - a.grab, cr.bottom - a.height));
-    a.ghost.style.transform = `translate3d(0, ${top - a.top0}px, 0)`;
     if (!s.layout) return;
-    const center = top + a.height / 2 - cr.top;
+    let lo = cr.top;
+    let hi = cr.bottom;
+    if (opt.current.clamp === 'rows' && s.layout.rows.length) {
+      lo = cr.top + Math.min(...s.layout.rows.map((r) => r.top));
+      hi = cr.top + Math.max(...s.layout.rows.map((r) => r.top + r.height));
+    }
+    const top = Math.max(lo, Math.min(y - a.grab, hi - a.height));
+    a.ghost.style.transform = `translate3d(0, ${top - a.top0}px, 0)`;
+    // The places are judged by where the copy would be unclamped, so the
+    // first and last places are reached at the clamp.
+    const center = y - a.grab + a.height / 2 - cr.top;
     const list = listAt(s.layout.blocks, center);
     if (list == null) return;
-    const mids = s.layout.rows.filter((r) => r.list === list && r.id !== a.id).map((r) => r.top + r.height / 2);
-    const index = insertionIndex(mids, center);
+    const slot = s.layout.rows.find((r) => r.id === a.id && r.list === list);
+    const others = s.layout.rows.filter((r) => r.list === list && r.id !== a.id);
+    const index = slotIndex(collapse(others, slot || null), a.height, center);
     const resolve = opt.current.resolve;
     const to = resolve ? resolve({ id: a.id, from: a.from, list, index, current: a.to }) : { list, index };
     if (!to || samePlace(to, a.to)) return;
@@ -99,13 +128,13 @@ export function useSortable(options) {
       return;
     }
     const r = el.getBoundingClientRect();
-    const ghost = makeGhost(el, r);
+    const ghost = makeGhost(el, r, opt.current.ghostScope);
     requestAnimationFrame(() => {
       if (ghost.isConnected && !s.settle) ghost.dataset.lifted = '';
     });
     c.style.minHeight = `${c.getBoundingClientRect().height}px`;
     const focused = c.contains(document.activeElement);
-    s.active = { id: press.id, from, to: from, height: r.height, grab: y - r.top, top0: r.top, left0: r.left, y, ghost, focused };
+    s.active = { id: press.id, from, to: from, height: r.height, grab: press.y - r.top, top0: r.top, left0: r.left, y, ghost, focused };
     s.layout = measure(box());
     if (press.timer) clearTimeout(press.timer);
     press.timer = null;
@@ -121,6 +150,30 @@ export function useSortable(options) {
     listen(window, 'scroll', onScroll, true);
     show(s.active);
     move(y);
+    if (opt.current.autoScroll) edgeScroll(s.active, scrollerOf(c));
+  };
+
+  // While a row is held near the scroller's edge, scroll it a little each
+  // frame, faster nearer the edge; the scroll listener moves the copy.
+  const edgeScroll = (a, scroller) => {
+    const page = scroller === document.scrollingElement;
+    const step = () => {
+      if (s.active !== a || s.settle || s.done) return;
+      const auto = opt.current.autoScroll;
+      const inset = page && typeof auto === 'function' ? auto() : { top: 0, bottom: 0 };
+      const r = page ? { top: 0, bottom: window.innerHeight } : scroller.getBoundingClientRect();
+      const top = r.top + (inset.top || 0);
+      const bottom = r.bottom - (inset.bottom || 0);
+      let dy = 0;
+      if (a.y < top + EDGE) dy = -EDGE_SPEED * Math.min(1, (top + EDGE - a.y) / EDGE);
+      else if (a.y > bottom - EDGE) dy = EDGE_SPEED * Math.min(1, (a.y - bottom + EDGE) / EDGE);
+      if (dy) {
+        if (page) window.scrollBy(0, dy);
+        else scroller.scrollTop += dy;
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   };
 
   // Ends a drag: draws the held row where it lands (its start, when cancelled),
@@ -129,7 +182,7 @@ export function useSortable(options) {
     const a = s.active;
     if (!a || s.settle || s.done) return;
     release();
-    if (!commit && !samePlace(a.to, a.from)) {
+    if (!commit && !a.gone && !samePlace(a.to, a.from)) {
       a.to = a.from;
       s.snap = snapshot(box());
     }
@@ -150,7 +203,8 @@ export function useSortable(options) {
       if (moved) opt.current.onDrop({ id: a.id, from: a.from, to: a.to, lists: placeItem(opt.current.lists, a.id, a.to.list, a.to.index), focused: a.focused });
       setDrag(null);
     };
-    const slot = box().querySelector(`[data-sort-id="${CSS.escape(a.id)}"]`);
+    const home = a.gone && opt.current.rowOf ? opt.current.rowOf(a.id) : null;
+    const slot = a.gone ? home : box().querySelector(`[data-sort-id="${CSS.escape(a.id)}"]`);
     if (!slot || reducedMotion()) {
       finish();
       return;
@@ -299,6 +353,11 @@ export function useSortable(options) {
     }
     if (snap) playFlip(c, snap);
     if (s.active) s.layout = measure(box());
+    // The held item left the lists (a queued job started): the drag ends.
+    if (s.active && !s.settle && !s.done && !locate(opt.current.lists, s.active.id)) {
+      s.active.gone = true;
+      end(false);
+    }
     if (s.settle && !s.settle.started) {
       s.settle.started = true;
       glide();
@@ -323,7 +382,7 @@ export function useSortable(options) {
     };
   }, []);
 
-  const lists = drag ? placeItem(options.lists, drag.id, drag.to.list, drag.to.index) : options.lists;
+  const lists = drag && locate(options.lists, drag.id) ? placeItem(options.lists, drag.id, drag.to.list, drag.to.index) : options.lists;
   const row = (id) => {
     const slot = drag && drag.id === id;
     return {

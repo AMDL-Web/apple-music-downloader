@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { startMockServer } from './mock-server.mjs';
 import { jobId, JOB_KEYS, CATALOG, LOSSY_ALBUM } from './fixtures.mjs';
 import { SETTINGS_SCENARIOS, managed } from './scenarios-settings.mjs';
+import { QUEUE_SCENARIOS } from './scenarios-queue.mjs';
 
 const root = fileURLToPath(new URL('../../../../../', import.meta.url));
 const css = join(root, 'apps/console/static/css');
@@ -122,6 +123,8 @@ const SCENARIOS = [
       { id: 'close-drawer', title: 'close the drawer with Esc', ignoreFocus: true, run: (ctx) => ctx.page.keyboard.press('Escape') },
     ],
   },
+
+  ...QUEUE_SCENARIOS,
 
   // ---- Job drawer
   { id: 'drawer/queued', ...drawer(JOB_KEYS.queued) },

@@ -10,7 +10,8 @@
 // opens it for a look by hand; POST /__mock/{world,tick,fault} steer it. A
 // fault or latency keyed `GET /api/v1/search?offset` hits only the later
 // pages of a search group shown alone. GET /__mock/hook-writes lists the
-// hooks writes it received.
+// hooks writes it received and GET /__mock/moves the queue moves; a
+// world's opts.queued adds that many queued jobs.
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -18,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WORLDS, CATALOG, stageFields, findAlbum, makeJob, iso } from './fixtures.mjs';
-import { TERMINAL, withProgress, statusCounts, list, advance, recount } from './mock-world.mjs';
+import { TERMINAL, withProgress, statusCounts, list, advance, recount, seedQueue, nextOrder, moveJob } from './mock-world.mjs';
 import { search, artistAlbums } from './mock-search.mjs';
 import { stats, system } from './fixtures-status.mjs';
 import { json, apiError, readBody, parseLink } from './mock-http.mjs';
@@ -47,7 +48,7 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json',
 };
 
-const MILESTONES = new Set(['job_queued', 'job_started', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'job_retried', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
+const MILESTONES = new Set(['job_queued', 'job_started', 'job_moved', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'job_retried', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
 
 export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'active', staticDir = STATIC_DIR } = {}) {
   const csp = readCsp();
@@ -67,6 +68,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     if (!make) throw new Error(`unknown world ${name}`);
     const w = make(Date.now());
     Object.assign(w, opts);
+    seedQueue(w, opts.queued || 0);
     w.onEvent = (ev) => {
       for (const res of jobStreams.get(ev.job_id) || []) send(res, ev.id, ev.type, ev);
       if (MILESTONES.has(ev.type)) {
@@ -142,6 +144,11 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     });
     const sort = q.get('sort') || 'created_at';
     const dir = q.get('order') === 'asc' ? 1 : -1;
+    if (sort === 'queue_order') {
+      // The queue in run order, then every other job in submission order.
+      const rank = (j) => (j.status === 'queued' ? 0 : 1);
+      return out.sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? dir * (a.queue_order - b.queue_order) : Date.parse(a.created_at) - Date.parse(b.created_at)));
+    }
     out.sort((a, b) => dir * (Date.parse(a[sort]) - Date.parse(b[sort])) || dir * a.id.localeCompare(b.id));
     return out;
   }
@@ -161,7 +168,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       if (fault.hang) return;
       return apiError(res, fault.status || 500, fault.code || 'internal_error', fault.message || 'Injected failure', fault.details);
     }
-    const m = path.match(/^\/api\/v1\/downloads\/(job_[0-9a-f]+)(\/(cancel|retry|events))?$/);
+    const m = path.match(/^\/api\/v1\/downloads\/(job_[0-9a-f]+)(\/(cancel|retry|events|move))?$/);
     if (m) return jobRoute(req, res, m[1], m[3], q);
     if (path === '/api/v1/hooks' || path.startsWith('/api/v1/hooks/')) {
       // hooks.yaml as the server keeps it (fake-hooks.js); the world's
@@ -265,19 +272,24 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
     }
     if (action === 'cancel') {
       Object.assign(job, { status: 'cancelled', finished_at: iso(Date.now()), updated_at: iso(Date.now()) });
+      delete job.queue_order;
       for (const it of w.items.get(id) || []) if (!TERMINAL.has(it.status) && it.status !== 'skipped_existing') Object.assign(it, stageFields('cancelled', 0));
       recount(job, w.items.get(id) || []);
       w.addEvent({ job_id: id, type: 'job_cancelled', message: 'job cancelled', payload: { ...job } });
       return json(res, 200, job);
     }
     if (action === 'retry') {
-      Object.assign(job, { status: 'queued', updated_at: iso(Date.now()) });
+      Object.assign(job, { status: 'queued', queue_order: nextOrder(w), updated_at: iso(Date.now()) });
       delete job.error;
       delete job.finished_at;
       for (const it of w.items.get(id) || []) if (it.status === 'failed' || it.status === 'cancelled') Object.assign(it, stageFields('queued', 0));
       recount(job, w.items.get(id) || []);
       w.addEvent({ job_id: id, type: 'job_retried', message: 'job retried', payload: { ...job } });
       return json(res, 202, job);
+    }
+    if (action === 'move' && req.method === 'POST') {
+      const out = moveJob(w, job, await readBody(req));
+      return out.error ? apiError(res, out.status, ...out.error) : json(res, out.status, out.body);
     }
     if (action === 'events') {
       sse(res);
@@ -306,6 +318,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       }
       const a = findAlbum(link.id) || CATALOG.albums[0];
       const job = makeJob({ ...w, addEvent: () => {} }, { key: `submit:${u}:${w.events.length}`, album: a, status: 'queued', tracks: a.track_count || 8, createdAgo: 0, input: u });
+      job.queue_order = nextOrder(w);
       w.addEvent({ job_id: job.id, type: 'job_queued', message: 'job queued', payload: { ...job } });
       results.push({ url: u, status: 'accepted', job });
       accepted++;
@@ -321,6 +334,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       setWorld(body.name || 'active', body.opts || {});
       return json(res, 200, { ok: true, cursor: state.world.cursor });
     }
+    if (url.pathname === '/__mock/moves') return json(res, 200, state.world.moves || []);
     if (url.pathname === '/__mock/hook-writes') return json(res, 200, state.world.hookStore ? state.world.hookStore.writes : []);
     if (url.pathname === '/__mock/tick') return json(res, 200, { moved: tick(body.steps || 1) });
     if (url.pathname === '/__mock/fault') {

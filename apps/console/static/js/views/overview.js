@@ -3,6 +3,7 @@
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listDownloads, retryDownload } from '../api.js';
+import { arrange } from '../lib/queue-order.js';
 import { count, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
 import { attentionRows, attentionGroups, domainView } from '../lib/domains.js';
 import { isNotFound } from '../lib/jobview.js';
@@ -87,9 +88,14 @@ function LiveQueue({ loggedOut }) {
   const seq = useRef(0);
   const load = () => {
     const mine = ++seq.current;
-    return listDownloads({ status: 'running,queued', sort: 'created_at', order: 'asc', limit: LIVE_LIMIT }).then(
-      (body) => {
-        if (mine === seq.current) setState({ jobs: body.downloads, loading: false, error: null });
+    // Running jobs and the head of the queue, read apart so a long queue
+    // cannot crowd out what runs.
+    return Promise.all([
+      listDownloads({ status: 'running', sort: 'created_at', order: 'asc', limit: LIVE_LIMIT }),
+      listDownloads({ status: 'queued', sort: 'queue_order', order: 'asc', limit: LIVE_LIMIT }),
+    ]).then(
+      ([running, queued]) => {
+        if (mine === seq.current) setState({ jobs: [...running.downloads, ...queued.downloads], loading: false, error: null });
       },
       (error) => {
         if (mine === seq.current) setState((s) => ({ ...s, loading: false, error }));
@@ -111,7 +117,7 @@ function LiveQueue({ loggedOut }) {
             (m.type === 'download_deleted' && held.has(m.job_id)) ||
             (m.job && held.has(m.job.id) && !LIVE_FILTER.statuses.includes(m.job.status)),
         );
-        setState((s) => ({ ...s, jobs: applyFeedToList(s.jobs, batch, LIVE_FILTER, { append: true, limit: LIVE_LIMIT }) }));
+        setState((s) => ({ ...s, jobs: applyFeedToList(s.jobs, batch, LIVE_FILTER, { append: true }) }));
         // A job left the top 8; the next one in line is only in a fresh read.
         if (leaving) setStamp((n) => n + 1);
       }),
@@ -131,7 +137,7 @@ function LiveQueue({ loggedOut }) {
   else
     body = html`<${RatesContext.Provider} value=${rates}>
       <ul class="job-list job-list-compact" aria-label="Active jobs">
-        ${state.jobs.map((job) => html`<li key=${job.id}><${JobRow} job=${job} href=${buildHash('overview', {}, job.id)} /></li>`)}
+        ${arrange(state.jobs).slice(0, LIVE_LIMIT).map((job) => html`<li key=${job.id}><${JobRow} job=${job} href=${buildHash('overview', {}, job.id)} /></li>`)}
       </ul>
     </${RatesContext.Provider}>`;
   return html`<${Card}

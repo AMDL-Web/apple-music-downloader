@@ -115,7 +115,7 @@ test('bulkSummary says so when nothing went through', () => {
 test('a row menu offers what the status of its job allows, as in the desktop app', () => {
   const ids = (status, input = 'https://music.apple.com/us/album/x/1') =>
     rowMenu({ id: 'j', status, input }).map((it) => (it.separator ? '-' : it.id));
-  assert.deepEqual(ids('queued'), ['details', 'cancel', '-', 'copy']);
+  assert.deepEqual(ids('queued'), ['details', 'top', 'bottom', 'cancel', '-', 'copy']);
   assert.deepEqual(ids('running'), ['details', 'cancel', '-', 'copy'], 'a job under way can only be cancelled');
   assert.deepEqual(ids('completed'), ['details', '-', 'copy', '-', 'delete']);
   assert.deepEqual(ids('failed'), ['details', 'retry', '-', 'copy', '-', 'delete']);
@@ -125,4 +125,14 @@ test('a row menu offers what the status of its job allows, as in the desktop app
   assert.deepEqual(gone.map((it) => (it.separator ? '-' : it.id)), ['details', '-', 'copy', '-', 'delete'], 'a link Apple has nothing at gets no Retry');
   const labels = rowMenu({ id: 'j', status: 'failed', input: 'x' }).filter((it) => !it.separator).map((it) => it.label);
   assert.deepEqual(labels, ['Show details', 'Retry', 'Copy link', 'Delete…']);
+});
+
+test('a queued row offers only the moves that move it', () => {
+  const ids = (place) => rowMenu({ id: 'j', status: 'queued', input: 'x' }, place).map((it) => (it.separator ? '-' : it.id));
+  assert.deepEqual(ids({ first: true, last: false }), ['details', 'bottom', 'cancel', '-', 'copy']);
+  assert.deepEqual(ids({ first: false, last: true }), ['details', 'top', 'cancel', '-', 'copy']);
+  assert.deepEqual(ids({ first: true, last: true }), ['details', 'cancel', '-', 'copy'], 'alone in the queue');
+  const labels = rowMenu({ id: 'j', status: 'queued', input: 'x' }).filter((it) => !it.separator).map((it) => it.label);
+  assert.deepEqual(labels, ['Show details', 'Move to top', 'Move to bottom', 'Cancel', 'Copy link']);
+  assert.equal(actionError('move', { status: 409, code: 'job_not_queued' }), "Couldn't move this job: it or the job beside it is no longer queued.");
 });

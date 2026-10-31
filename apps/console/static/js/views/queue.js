@@ -15,6 +15,8 @@ import { useDebounced, useWatchShown } from '../ui/hooks.js';
 import { useBulkRun, SelectionBar, BulkConfirm } from './queue-select.js';
 import { JobRow, applyFeedToList } from './queue-row.js';
 import { useQueueList } from './queue-list.js';
+import { useUpNext, useQueueDrag, JobGrip } from './queue-order.js';
+import { orderable, arrange } from '../lib/queue-order.js';
 import { useChipRow } from './queue-chips.js';
 import { QueueEmpty } from './queue-empty.js';
 import { JobMenu, runOne, jobName } from './queue-menu.js';
@@ -39,6 +41,11 @@ export function QueuePage({ route }) {
   const q = useDebounced(qInput, 300);
   const listKey = `queue|${filters.tab}|${filters.type}|${filters.q}`;
   const key = `${listKey}|${app.epoch}`;
+  // Active with no filter shows the queue in run order, to reorder.
+  const ordered = orderable(filters);
+  const slide = useRef(null);
+  const upnext = useUpNext(app, ordered, key, () => slide.current && slide.current());
+  const listRef = useRef(null);
 
   const setParams = (patch) => {
     app.navigate(buildHash('queue', { ...route.params, ...patch }, route.jobId), { replace: true });
@@ -86,15 +93,20 @@ export function QueuePage({ route }) {
   const [confirm, setConfirm] = useState(null);
   const { state, load, known } = useQueueList(app, filters, listKey, key, (id) => setSelected((s) => toggleId(s, id, false)));
   const bulk = useBulkRun(app);
-  for (const j of state.jobs) {
+  for (const j of [...state.jobs, ...upnext.queue]) {
     const old = known.current.get(j.id);
     if (!old || Date.parse(j.updated_at) >= Date.parse(old.updated_at)) known.current.set(j.id, j);
   }
-  // The rows as shown (running jobs first, then queued ones, on Active), which
-  // is the order Shift-click ranges follow. All keeps the server's order,
-  // newest first, as the desktop app does: grouped by status, a job that
-  // starts or finishes would jump the length of the list there.
-  const rows = filters.tab === 'active' ? activeFirst(state.jobs) : state.jobs;
+  // The rows as shown, which is the order Shift-click ranges follow: on
+  // Active running jobs first, then queued ones (in run order with no
+  // filter, a held row at its slot). All keeps the server's order, newest
+  // first, as the desktop app does: grouped by status, a job that starts or
+  // finishes would jump the length of the list there.
+  const arranged = ordered ? arrange(state.jobs, upnext.queue) : filters.tab === 'active' ? activeFirst(state.jobs) : state.jobs;
+  const order = useQueueDrag({ app, rows: arranged, list: listRef, on: ordered && !selecting && !bulk.run, upnext });
+  slide.current = order.beforeFeed;
+  const rows = ordered ? inQueueOrder(arranged, order.ids) : arranged;
+  const left = Math.max(0, state.total - (ordered ? rows.length : state.jobs.length));
   // A job that finishes leaves Active at once; its toast (Open) says where it went.
   useWatchShown(app, filters.tab === 'active' ? state.jobs.map((j) => j.id) : []);
   const jobsRef = useRef(rows);
@@ -228,12 +240,15 @@ export function QueuePage({ route }) {
     body = html`<${ErrorNote} title="Couldn't load downloads" error=${state.error} onRetry=${() => load(0)} />`;
   else if (state.jobs.length === 0) body = html`<${QueueEmpty} filters=${filters} tabs=${tabs} onClear=${() => { setQInput(''); setParams({ q: '', type: '' }); }} onShowAll=${() => chooseTab('all')} />`;
   else
-    body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs">
+    body = html`<ul class=${selecting ? 'job-list is-selecting' : 'job-list'} aria-label="Jobs" ref=${listRef} data-sort-list=${ordered ? 'queue' : undefined}>
         ${rows.map((job) => {
           const on = selecting && selected.has(job.id);
           const retry = !selecting && job.status === 'failed' && !isNotFound(job.error);
           const action = selecting ? undefined : retry ? 'retry' : 'menu';
-          return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined} data-action=${action}>
+          const sortable = order.draggable && job.status === 'queued';
+          // In run order every row slides when the feed reorders it (a start).
+          const drag = sortable ? { ...order.sort.row(job.id), 'data-sortable': '', onKeyDown: (e) => order.keyDown(e, job) } : ordered ? { 'data-sort-flip': job.id } : {};
+          return html`<li key=${job.id} class="job-item" data-job-id=${job.id} data-selected=${on ? '' : undefined} data-action=${action} ...${drag}>
             ${selecting
               ? html`<label class="job-check">
                   <input
@@ -264,13 +279,14 @@ export function QueuePage({ route }) {
                   }}
                 >Retry</${Button}>`
               : null}
-            ${selecting ? null : html`<${JobMenu} job=${job} href=${rowHref(job)} onLeaving=${onLeaving} />`}
+            ${selecting ? null : html`<${JobMenu} job=${job} href=${rowHref(job)} onLeaving=${onLeaving} place=${order.place(job.id)} onMove=${(where) => order.moveTo(job, where)} />`}
+            ${sortable ? html`<${JobGrip} />` : null}
           </li>`;
         })}
       </ul>
-      ${state.jobs.length < state.total
+      ${left > 0
         ? html`<div class="load-more">
-            <${Button} onClick=${() => load(state.jobs.length)} disabled=${state.more}>${state.more ? 'Loading…' : `Load more (${state.total - state.jobs.length} left)`}</${Button}>
+            <${Button} onClick=${() => load(state.jobs.length)} disabled=${state.more}>${state.more ? 'Loading…' : `Load more (${left} left)`}</${Button}>
           </div>`
         : null}`;
 
@@ -320,6 +336,7 @@ export function QueuePage({ route }) {
         />`
       : null}
     <div class="card card-flush" data-section="jobs"><div class="card-body">${listBar}${body}</div></div>
+    <p class="sr-only" role="status" aria-live="polite">${order.said}</p>
     ${confirm
       ? html`<${BulkConfirm}
           action=${confirm.action}
@@ -336,6 +353,15 @@ export function QueuePage({ route }) {
         />`
       : null}
   </div>`;
+}
+
+/** `rows` with their queued jobs in the order of `ids` (a held row at its slot). */
+function inQueueOrder(rows, ids) {
+  const byId = new Map(rows.map((j) => [j.id, j]));
+  const queued = ids.map((id) => byId.get(id)).filter(Boolean);
+  const rest = rows.filter((j) => j.status !== 'queued');
+  const running = rest.filter((j) => j.status === 'running');
+  return [...running, ...queued, ...rest.filter((j) => j.status !== 'running')];
 }
 
 const RESCUE = ['.bulk-bar .bulk-action:not(:disabled)', '.bulk-check:not(:disabled)', '.queue-retry-all:not(:disabled)', '.queue-select', '.page-title'];
