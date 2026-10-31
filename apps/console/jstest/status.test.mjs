@@ -101,6 +101,10 @@ test('jobProgress counts tracks once one has finished', () => {
   const resolving = jobProgress({ status: 'running', total_items: 0 });
   assert.equal(resolving.indeterminate, true);
   assert.equal(resolving.text, 'Resolving');
+  const waiting = jobProgress({ status: 'queued', total_items: 0 });
+  assert.equal(waiting.indeterminate, false);
+  assert.equal(waiting.text, '');
+  assert.equal(waiting.aria, 'Not started');
 });
 
 test('a running job with nothing finished shows its overall progress', () => {

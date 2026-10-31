@@ -155,11 +155,14 @@ export function connectionView(state) {
  * The text is a count, except while a running job has nothing finished yet:
  * the count would stand still for the whole first track, so the job's overall
  * progress (Job.progress, from each track's stages) fills the track and the
- * text is its percentage.
+ * text is its percentage. A running job that has not read its tracks yet is
+ * Resolving; a queued one that has not either waits, with an empty bar and
+ * no text, as it is not resolving anything yet.
  */
 export function jobProgress(job) {
   const c = jobCounts(job);
-  const indeterminate = c.total === 0 && job && (job.status === 'running' || job.status === 'queued');
+  const indeterminate = c.total === 0 && Boolean(job) && job.status === 'running';
+  const waiting = c.total === 0 && Boolean(job) && job.status === 'queued';
   const working = Boolean(job) && job.status === 'running' && c.total > 0 && c.done === 0 && c.failed === 0 && c.cancelled === 0;
   const fraction = working ? clamp01(job.progress) : 0;
   const percent = Math.floor(fraction * 100);
@@ -173,8 +176,8 @@ export function jobProgress(job) {
     indeterminate,
     working,
     fraction,
-    text: indeterminate ? 'Resolving' : working ? `${percent}%` : `${c.done} / ${c.total}`,
-    aria: indeterminate ? 'Resolving tracks' : aria,
+    text: indeterminate ? 'Resolving' : waiting ? '' : working ? `${percent}%` : `${c.done} / ${c.total}`,
+    aria: indeterminate ? 'Resolving tracks' : waiting ? 'Not started' : aria,
   };
 }
 

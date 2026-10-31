@@ -319,7 +319,8 @@ so nothing outside it moves. Under reduced motion rows move at once.
   Values switch without count-up; "—" while disconnected.
 - **Job row**: cover, facts, title, artist/curator · type · storefront,
   progress, status badge, relative time, chevron. Indeterminate "Resolving"
-  while `total_items` is 0; a running job with nothing finished fills its track
+  while a running job's `total_items` is 0 (a queued one waits with an empty
+  bar and no text); a running job with nothing finished fills its track
   to `Job.progress` and reads its percentage instead of a "0 / 1" that never moves. A job without a title shows its link (`lib/format.js`
   `linkLabel`: the path without the shared music.apple.com host, cut in the
   middle so two links never read the same up to an ellipsis) muted, with a
