@@ -720,7 +720,7 @@ a reload or Back, stays) and the page writes its links back (replace), so a
   lossless, AAC, and Custom… (`lib/overrides.js` `PRESETS`; the closed menu shows
   only the name, the default's naming what it follows); Custom… opens a 420 px sheet (a bottom
   sheet under 640 px) with the Settings codec list editor, the fallback switch
-  and the ALAC limits (while ALAC is listed), Done and Use Settings; it opens
+  and the ALAC limits (greyed while ALAC is not listed, so the sheet keeps its height), Done and Use Settings; it opens
   with its heading focused and Escape returns focus to the menu. While Custom
   is active the menu names its codecs. A submit sends only what differs from
   `GET /config` `download` as `overrides` (`presetOverrides`;

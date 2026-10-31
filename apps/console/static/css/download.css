@@ -274,6 +274,10 @@
   width: 100%;
 }
 
+.new-custom-limits[data-off] .new-custom-field > span:first-child {
+  color: var(--text-disabled);
+}
+
 .new-custom-actions {
   justify-content: space-between;
 }

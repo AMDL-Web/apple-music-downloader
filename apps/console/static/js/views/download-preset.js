@@ -71,6 +71,8 @@ export function CustomSheet({ defaults, start, onDone, onFollow, onClose }) {
   const num = (e) => Number.parseInt(e.currentTarget.value, 10);
   const rate = fieldByKey('download.alac_max_sample_rate');
   const depth = fieldByKey('download.alac_max_bit_depth');
+  // The ALAC limits stay while ALAC is not listed, greyed, so the sheet keeps its height.
+  const alac = draft.quality_priority.includes('alac');
   return html`<${Dialog} name="custom" className="sheet sheet-custom" placement=${phone ? 'bottom' : 'center'} labelledBy="new-custom-title" onClose=${onClose}>
     <div class="sheet-head">
       <h2 id="new-custom-title" class="card-title" tabindex="-1" data-autofocus>Custom quality</h2>
@@ -90,22 +92,20 @@ export function CustomSheet({ defaults, start, onDone, onFollow, onClose }) {
         <span>Fall back to the next codec</span>
         <input type="checkbox" role="switch" class="field-switch" checked=${draft.codec_alternative} onChange=${(e) => set('codec_alternative', e.currentTarget.checked)} />
       </label>
-      ${draft.quality_priority.includes('alac')
-        ? html`<div class="new-custom-limits">
-            <label class="new-custom-field">
-              <span>${rate.label}</span>
-              <select class="select" value=${String(draft.alac_max_sample_rate)} onChange=${(e) => set('alac_max_sample_rate', num(e))}>
-                ${choices(SAMPLE_RATES, defaults.alac_max_sample_rate).map((v) => html`<option key=${v} value=${String(v)}>${rateLabel(v)}</option>`)}
-              </select>
-            </label>
-            <label class="new-custom-field">
-              <span>${depth.label}</span>
-              <select class="select" value=${String(draft.alac_max_bit_depth)} onChange=${(e) => set('alac_max_bit_depth', num(e))}>
-                ${choices(BIT_DEPTHS, defaults.alac_max_bit_depth).map((v) => html`<option key=${v} value=${String(v)}>${v}-bit</option>`)}
-              </select>
-            </label>
-          </div>`
-        : null}
+      <div class="new-custom-limits" data-off=${alac ? undefined : ''}>
+        <label class="new-custom-field">
+          <span>${rate.label}</span>
+          <select class="select" disabled=${!alac} value=${String(draft.alac_max_sample_rate)} onChange=${(e) => set('alac_max_sample_rate', num(e))}>
+            ${choices(SAMPLE_RATES, defaults.alac_max_sample_rate).map((v) => html`<option key=${v} value=${String(v)}>${rateLabel(v)}</option>`)}
+          </select>
+        </label>
+        <label class="new-custom-field">
+          <span>${depth.label}</span>
+          <select class="select" disabled=${!alac} value=${String(draft.alac_max_bit_depth)} onChange=${(e) => set('alac_max_bit_depth', num(e))}>
+            ${choices(BIT_DEPTHS, defaults.alac_max_bit_depth).map((v) => html`<option key=${v} value=${String(v)}>${v}-bit</option>`)}
+          </select>
+        </label>
+      </div>
     </div>
     <div class="dialog-actions new-custom-actions">
       <${Button} className="new-custom-follow" onClick=${onFollow}>Use Settings</${Button}>
