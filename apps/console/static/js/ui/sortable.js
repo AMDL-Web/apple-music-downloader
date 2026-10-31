@@ -20,24 +20,13 @@
 
 import { useState, useRef, useLayoutEffect, useEffect } from './preact.js';
 import { insertionIndex, listAt, locate, placeItem, samePlace } from '../lib/sortable.js';
+import { MOVE_MS, EASE, reducedMotion, translateY, snapshot, measure, makeGhost, playFlip, resetFlip } from './sortable-flip.js';
 
 const MOUSE_SLOP = 4;
 const TOUCH_SLOP = 8;
 const LONG_PRESS_MS = 300;
-// The rows' slide and the drop glide; --ease-out in tokens.css.
-const MOVE_MS = 180;
-const EASE = 'cubic-bezier(0.2, 0, 0, 1)';
 // Presses that never start a drag: the row's own controls.
 const IGNORE = 'button, input, select, textarea, [data-sort-ignore]';
-
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-function translateY(el) {
-  const t = getComputedStyle(el).transform;
-  return t && t !== 'none' ? new DOMMatrixReadOnly(t).m42 : 0;
-}
-
-const flipKey = (el) => (el.dataset.sortId != null ? `r:${el.dataset.sortId}` : `f:${el.dataset.sortFlip}`);
 
 /**
  * Options: container (a ref to the element holding the lists), lists
@@ -61,47 +50,6 @@ export function useSortable(options) {
   const s = useRef({ press: null, active: null, snap: null, layout: null, settle: null, done: null, off: [] }).current;
 
   const box = () => opt.current.container.current;
-  const flipEls = () => Array.from(box().querySelectorAll('[data-sort-id], [data-sort-flip]'));
-
-  // Where each moving element is drawn now, relative to the container.
-  const snapshot = () => {
-    const c = box();
-    if (!c || reducedMotion()) return null;
-    const top = c.getBoundingClientRect().top;
-    const map = new Map();
-    for (const el of flipEls()) map.set(flipKey(el), el.getBoundingClientRect().top - top);
-    // A box as drawn: its rect under its ::before's transform, which may be mid-way.
-    for (const el of box().querySelectorAll('[data-sort-box]')) {
-      const r = el.getBoundingClientRect();
-      const t = getComputedStyle(el, '::before').transform;
-      const m = t && t !== 'none' ? new DOMMatrixReadOnly(t) : null;
-      map.set(`b:${el.dataset.sortBox}`, { top: r.top + (m ? m.m42 : 0) - top, height: r.height * (m ? m.m22 : 1) });
-    }
-    return map;
-  };
-
-  // Sets a box's ::before transform (CSS reads --sort-y, --sort-scale, --sort-dur).
-  const boxTo = (el, y, scale, ms) => {
-    el.style.setProperty('--sort-dur', `${ms}ms`);
-    el.style.setProperty('--sort-y', `${y}px`);
-    el.style.setProperty('--sort-scale', String(scale));
-  };
-
-  // Layout positions (transforms taken out) of rows and lists, relative to the container.
-  const measure = () => {
-    const c = box();
-    const top = c.getBoundingClientRect().top;
-    const rows = Array.from(c.querySelectorAll('[data-sort-id]')).map((el) => {
-      const r = el.getBoundingClientRect();
-      const list = el.closest('[data-sort-list]');
-      return { id: el.dataset.sortId, list: list && list.dataset.sortList, top: r.top - translateY(el) - top, height: r.height };
-    });
-    const blocks = Array.from(c.querySelectorAll('[data-sort-list]')).map((el) => {
-      const r = el.getBoundingClientRect();
-      return { id: el.dataset.sortList, top: r.top - top, bottom: r.bottom - top };
-    });
-    return { rows, blocks };
-  };
 
   const listen = (target, type, fn, o) => {
     target.addEventListener(type, fn, o);
@@ -138,7 +86,7 @@ export function useSortable(options) {
     const to = resolve ? resolve({ id: a.id, from: a.from, list, index, current: a.to }) : { list, index };
     if (!to || samePlace(to, a.to)) return;
     a.to = to;
-    s.snap = snapshot();
+    s.snap = snapshot(box());
     show(a);
   };
 
@@ -151,36 +99,14 @@ export function useSortable(options) {
       return;
     }
     const r = el.getBoundingClientRect();
-    const ghost = document.createElement('div');
-    ghost.className = 'sortable-ghost';
-    ghost.setAttribute('aria-hidden', 'true');
-    const clone = el.cloneNode(true);
-    for (const n of [clone, ...clone.querySelectorAll('[id], [tabindex], [data-sort-id]')]) {
-      n.removeAttribute('id');
-      n.removeAttribute('tabindex');
-      n.removeAttribute('data-sort-id');
-    }
-    clone.inert = true;
-    Object.assign(clone.style, { width: '100%', height: '100%', margin: '0' });
-    Object.assign(ghost.style, {
-      position: 'fixed',
-      left: `${r.left}px`,
-      top: `${r.top}px`,
-      width: `${r.width}px`,
-      height: `${r.height}px`,
-      margin: '0',
-      zIndex: '200',
-      pointerEvents: 'none',
-    });
-    ghost.appendChild(clone);
-    document.body.appendChild(ghost);
+    const ghost = makeGhost(el, r);
     requestAnimationFrame(() => {
       if (ghost.isConnected && !s.settle) ghost.dataset.lifted = '';
     });
     c.style.minHeight = `${c.getBoundingClientRect().height}px`;
     const focused = c.contains(document.activeElement);
     s.active = { id: press.id, from, to: from, height: r.height, grab: y - r.top, top0: r.top, left0: r.left, y, ghost, focused };
-    s.layout = measure();
+    s.layout = measure(box());
     if (press.timer) clearTimeout(press.timer);
     press.timer = null;
     try {
@@ -205,7 +131,7 @@ export function useSortable(options) {
     release();
     if (!commit && !samePlace(a.to, a.from)) {
       a.to = a.from;
-      s.snap = snapshot();
+      s.snap = snapshot(box());
     }
     s.settle = { commit };
     show(a);
@@ -362,13 +288,7 @@ export function useSortable(options) {
     if (s.done) {
       const { ghost, id, focused } = s.done;
       s.done = null;
-      for (const el of flipEls()) {
-        el.style.transition = 'none';
-        el.style.transform = '';
-      }
-      for (const el of c.querySelectorAll('[data-sort-box]')) boxTo(el, 0, 1, 0);
-      void c.offsetHeight;
-      for (const el of flipEls()) el.style.transition = '';
+      resetFlip(c);
       ghost.remove();
       c.style.minHeight = '';
       // A row moved between lists is a new element; keep focus on it.
@@ -377,53 +297,8 @@ export function useSortable(options) {
         if (el) el.focus({ preventScroll: true });
       }
     }
-    if (snap) {
-      const top = c.getBoundingClientRect().top;
-      const els = flipEls();
-      for (const el of els) {
-        el.style.transition = 'none';
-        el.style.transform = '';
-      }
-      const moved = [];
-      let slot = null;
-      for (const el of els) {
-        // The slot is empty space: it appears where it lands, and its own
-        // CSS animation (restarted below) fades it in as the rows clear it.
-        if (el.hasAttribute('data-sort-slot')) {
-          slot = el;
-          continue;
-        }
-        const first = snap.get(flipKey(el));
-        if (first == null) continue;
-        const dy = first - (el.getBoundingClientRect().top - top);
-        if (Math.abs(dy) < 0.5) continue;
-        el.style.transform = `translateY(${dy}px)`;
-        moved.push(el);
-      }
-      // A list's box grows or shrinks with its rows instead of jumping.
-      const boxes = [];
-      for (const el of c.querySelectorAll('[data-sort-box]')) {
-        const first = snap.get(`b:${el.dataset.sortBox}`);
-        if (!first) continue;
-        const r = el.getBoundingClientRect();
-        if (r.height < 1) continue;
-        const dy = first.top - (r.top - top);
-        const scale = first.height / r.height;
-        boxTo(el, dy, scale, 0);
-        if (Math.abs(dy) >= 0.5 || Math.abs(first.height - r.height) >= 0.5) boxes.push(el);
-      }
-      void c.offsetHeight;
-      for (const el of els) el.style.transition = moved.includes(el) ? `transform ${MOVE_MS}ms ${EASE}` : '';
-      for (const el of moved) el.style.transform = '';
-      for (const el of boxes) boxTo(el, 0, 1, MOVE_MS);
-      if (slot && slot.getAnimations) {
-        for (const a of slot.getAnimations({ subtree: true })) {
-          a.cancel();
-          a.play();
-        }
-      }
-    }
-    if (s.active) s.layout = measure();
+    if (snap) playFlip(c, snap);
+    if (s.active) s.layout = measure(box());
     if (s.settle && !s.settle.started) {
       s.settle.started = true;
       glide();
@@ -460,7 +335,7 @@ export function useSortable(options) {
     };
   };
   const animate = () => {
-    s.snap = snapshot();
+    s.snap = snapshot(box());
   };
   return { drag, lists, row, animate };
 }
