@@ -179,9 +179,10 @@ func (a *App) OpenJob(id string) {
 	a.push(ScreenDetail)
 }
 
-// push shows s, which Back leaves for the screen shown now.
+// push shows s, which Back leaves for the screen shown now. Setup is left
+// behind: Back never returns to it.
 func (a *App) push(s Screen) {
-	if a.Screen != s {
+	if a.Screen != s && a.Screen != ScreenSetup {
 		a.trail = append(a.trail, a.Screen)
 	}
 	a.Screen = s

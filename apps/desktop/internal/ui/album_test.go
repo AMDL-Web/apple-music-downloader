@@ -157,6 +157,17 @@ func TestBackFromAJobReturnsWhereItOpened(t *testing.T) {
 	if a.Screen != ScreenHome {
 		t.Errorf("Back from a job opened in the search shows %v", a.Screen)
 	}
+	// A job opened from a notification while setup shows leaves setup
+	// behind: Back goes to the queue, which the sidebar lights.
+	a.OpenSetup("")
+	a.OpenJob("j")
+	if a.backLabel() != "Queue" || a.navScreen() != ScreenQueue {
+		t.Errorf("from setup, Back says %q and the sidebar lights %v", a.backLabel(), a.navScreen())
+	}
+	a.Back()
+	if a.Screen != ScreenQueue {
+		t.Errorf("Back from a job opened over setup shows %v", a.Screen)
+	}
 }
 
 func TestReturnOpensAnAlbum(t *testing.T) {
