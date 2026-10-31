@@ -13,6 +13,7 @@ import (
 	"amdl/apps/desktop/internal/artwork"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/motion"
+	"amdl/apps/desktop/internal/setup"
 	"amdl/apps/desktop/internal/store"
 )
 
@@ -25,6 +26,8 @@ const (
 	ScreenQueue
 	ScreenSettings
 	ScreenDetail
+	// ScreenSetup checks and installs what a mode needs (OpenSetup).
+	ScreenSetup
 )
 
 // Actions are what the screens ask of the app around them.
@@ -56,6 +59,15 @@ type Actions interface {
 	// as amdl service, which standalone mode uses instead of its own; "" when
 	// the app runs its own.
 	Shared() string
+	// Reconnect connects to the backend the settings name again, restarting
+	// the one standalone mode runs, so that it picks up a guest or a tool
+	// installed since it started.
+	Reconnect()
+	// ChooseFile asks for a file of this computer and hands it to done on
+	// the UI thread unless the user cancels.
+	ChooseFile(title string, done func(path string))
+	// OpenURL opens a web page in the browser.
+	OpenURL(url string)
 }
 
 // App is the main window's view and the state of its screens. Use it on the
@@ -68,6 +80,8 @@ type App struct {
 	Settings mode.Settings
 	Dirs     mode.Dirs
 	Act      Actions
+	// Setup checks and installs what standalone mode needs here.
+	Setup *setup.Setup
 	// Theme overrides the system appearance for screenshots: "light",
 	// "dark", or "" to follow the settings.
 	Theme string
@@ -106,6 +120,7 @@ type App struct {
 	// field too, which an unaddressed Handle.Focus refuses.
 	focusField bool
 	set        settingsForm
+	su         setupForm
 	// searchSel is the HitKey of the hit the search acts on; searchReveal
 	// scrolls it into view once, after the keyboard moved it.
 	searchSel    string

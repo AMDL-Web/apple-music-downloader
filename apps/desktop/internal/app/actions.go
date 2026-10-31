@@ -59,6 +59,30 @@ func (a *App) Starting() bool { return a.starting }
 // StartErr is why the backend could not be reached or started.
 func (a *App) StartErr() string { return a.startErr }
 
+// Reconnect connects again, restarting the backend standalone mode runs.
+func (a *App) Reconnect() { a.connect() }
+
+// OpenURL opens url in the browser.
+func (a *App) OpenURL(url string) {
+	if err := mygo.Shell.OpenExternal(url); err != nil {
+		a.log.Warn("open url", "url", url, "error", err)
+	}
+}
+
+// ChooseFile shows the system's file chooser off the UI thread.
+func (a *App) ChooseFile(title string, done func(string)) {
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: title})
+		if err != nil {
+			a.log.Warn("file chooser", "error", err)
+			return
+		}
+		if len(paths) > 0 {
+			a.post(func() { done(paths[0]) })
+		}
+	}()
+}
+
 // ChooseFolder shows the system's folder chooser off the UI thread.
 func (a *App) ChooseFolder(start string, done func(string)) {
 	go func() {

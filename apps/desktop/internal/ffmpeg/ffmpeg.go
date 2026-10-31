@@ -33,11 +33,13 @@ func (s Source) String() string {
 var ErrNotFound = errors.New("ffmpeg not found: none in the app's resources and none on PATH")
 
 // packageDirs are where package managers install ffmpeg (Homebrew on Apple
-// silicon and on Intel, MacPorts), tried after PATH: an app opened from
-// Finder gets launchd's PATH, /usr/bin:/bin:/usr/sbin:/sbin, which holds
-// none of them.
+// silicon and on Intel, MacPorts; winget's links), tried after PATH: an app
+// opened from Finder gets launchd's PATH, /usr/bin:/bin:/usr/sbin:/sbin,
+// which holds none of them, and a running app keeps the PATH it started
+// with after winget adds to it.
 var packageDirs = map[string][]string{
-	"darwin": {"/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"},
+	"darwin":  {"/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"},
+	"windows": {filepath.Join(os.Getenv("LOCALAPPDATA"), "Microsoft", "WinGet", "Links")},
 }[runtime.GOOS]
 
 // Find returns the ffmpeg to run: override when it is set, else the bundled

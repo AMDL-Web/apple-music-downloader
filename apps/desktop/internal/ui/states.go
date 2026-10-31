@@ -92,8 +92,8 @@ func (a *App) startFailed(c *ui.Context, k *Tokens) {
 	ui.Column(c).Margin(18).Padding(padCard).Gap(8).Radius(radiusCard).Background(k.BadSoft).Children(func() {
 		ui.Text(c, "The backend on this computer did not start").FontWeight(600).TextColor(k.Bad)
 		ui.Text(c, a.Act.StartErr()).FontSize(12.5).Font(MonoFont)
-		if button(c, k, buttonPlain, "Check settings", nil).AlignSelf(ui.Start).Clicked() {
-			a.GoSettings("connection")
+		if button(c, k, buttonPlain, "Check setup", nil).AlignSelf(ui.Start).Clicked() {
+			a.OpenSetup(a.Settings.Mode)
 		}
 	})
 }
@@ -147,12 +147,15 @@ func (a *App) unreachable(c *ui.Context, k *Tokens) bool {
 	case a.Act.StartErr() != "":
 		a.startFailed(c, k)
 	case s.Client() == nil:
-		ui.Column(c).Grow(1).Center().Children(func() {
+		ui.Column(c).Grow(1).Center().Gap(12).Children(func() {
 			text := "Not connected"
 			if a.Act.Starting() {
 				text = "Starting the backend…"
 			}
 			pill(c, k, pillWait, nil, text)
+			if a.Settings.Mode == "" && button(c, k, buttonPrimary, "Set up AMDL", nil).Clicked() {
+				a.OpenSetup("")
+			}
 		})
 	case s.Conn.Phase == client.Offline:
 		a.offlineBanner(c, k)

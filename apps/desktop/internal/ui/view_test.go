@@ -1,16 +1,26 @@
 package ui
 
 import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/artwork"
 	"amdl/apps/desktop/internal/mode"
+	"amdl/apps/desktop/internal/setup"
 	"amdl/apps/desktop/internal/store"
+	"amdl/internal/wrapperhost"
 )
 
-type fakeActions struct{ applied *mode.Settings }
+type fakeActions struct {
+	applied    *mode.Settings
+	reconnects int
+}
 
 func (f *fakeActions) ApplySettings(s mode.Settings)          { f.applied = &s }
 func (f *fakeActions) TestServer(string, func([]mode.Check))  {}
@@ -23,36 +33,15 @@ func (f *fakeActions) FitPanel(float32)                       {}
 func (f *fakeActions) Starting() bool                         { return false }
 func (f *fakeActions) StartErr() string                       { return "" }
 func (f *fakeActions) Shared() string                         { return "" }
+func (f *fakeActions) Reconnect()                             { f.reconnects++ }
+func (f *fakeActions) ChooseFile(string, func(string))        {}
+func (f *fakeActions) OpenURL(string)                         {}
 
 func newTestApp(s mode.Settings) (*App, *fakeActions) {
 	post := func(fn func()) { fn() }
 	act := &fakeActions{}
-	return &App{Store: store.New(post, nil), Art: artwork.New(post), Settings: s, Act: act, Theme: "dark"}, act
-}
-
-func TestFirstLaunchChoosesAMode(t *testing.T) {
-	a, act := newTestApp(mode.DefaultSettings())
-	a.Screen = ScreenSettings
-	tt := ui.NewTester(a.View, 1280, 800)
-	if !tt.HasText("WHERE DOWNLOADS RUN") || !tt.HasText("Not connected") {
-		t.Fatalf("texts %q", tt.Texts())
-	}
-	if err := tt.Click("A server on my network"); err != nil {
-		t.Fatal(err)
-	}
-	if !tt.HasText("Server address") {
-		t.Fatalf("no address field after choosing remote: %q", tt.Texts())
-	}
-	if err := tt.Click("http://192.168.3.5:18570"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Type("http://nas:18570")
-	if err := tt.Click("Apply"); err != nil {
-		t.Fatal(err)
-	}
-	if act.applied == nil || act.applied.Mode != mode.Remote || act.applied.RemoteURL != "http://nas:18570" {
-		t.Fatalf("applied %+v", act.applied)
-	}
+	su, _ := fakeSetup(post)
+	return &App{Store: store.New(post, nil), Art: artwork.New(post), Settings: s, Act: act, Theme: "dark", Setup: su}, act
 }
 
 func TestQueueWaitsForTheFirstList(t *testing.T) {
@@ -110,4 +99,31 @@ func TestSidebarFollowsTheUserThenTheWidth(t *testing.T) {
 	if a.SidebarShown() {
 		t.Error("narrowed again, the window kept the sidebar the user opened in the last narrow spell")
 	}
+}
+
+var setupNow = time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+
+// fakeSetup is a Setup on a Mac with Homebrew and nothing else: ffmpeg and
+// QEMU missing with runnable installs, no guest. Nothing it runs reaches
+// this computer: Exec records the command and Pin fails.
+func fakeSetup(post func(func())) (*setup.Setup, *[][]string) {
+	var ran [][]string
+	s := setup.New(post, setup.Deps{
+		GOOS:     "darwin",
+		LookPath: func(string) (string, error) { return "", errors.New("not found") },
+		Exists:   func(p string) bool { return p == "/opt/homebrew/bin/brew" },
+		FFmpeg:   func(string) (string, string, error) { return "", "", errors.New("ffmpeg not found") },
+		Home:     wrapperhost.Home{Dir: filepath.Join(os.TempDir(), "amdl-ui-test-no-wrapper")},
+		Pin: func(context.Context) (wrapperhost.Pin, error) {
+			return wrapperhost.Pin{}, errors.New("no download in tests")
+		},
+		Exec: func(_ context.Context, args []string, _ func(string)) error {
+			ran = append(ran, args)
+			return nil
+		},
+		// A fixed clock: a check looks again only after Recheck, so a test
+		// sets the state it shows.
+		Now: func() time.Time { return setupNow },
+	})
+	return s, &ran
 }

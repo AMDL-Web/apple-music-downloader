@@ -11,12 +11,16 @@ import (
 )
 
 // The app's own settings: where downloads run, and how the app looks and
-// tells. A switch applies at once; the connection applies with its button,
-// since applying it connects again.
+// tells. A switch applies at once; an address applies with its button,
+// since applying it connects again; the other mode opens the setup screen,
+// which checks what it needs before it applies.
 
 func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	f := &a.set
 	d := &f.draft
+	if d.Mode != a.Settings.Mode {
+		d.Mode, f.checks = a.Settings.Mode, nil
+	}
 	ui.Column(c).Gap(10).Children(func() {
 		label(c, k, "Where downloads run")
 		ui.Row(c).Gap(14).Children(func() {
@@ -28,8 +32,8 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				if on {
 					card.Border(1, k.Accent)
 				}
-				if card.Clicked() {
-					d.Mode, f.checks = m, nil
+				if card.Clicked() && !on {
+					a.OpenSetup(m)
 				}
 				col := k.Muted
 				if on {
@@ -48,6 +52,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	if d.Mode == "" {
 		return
 	}
+	actionRow(c, k, "Setup checks", "Check setup…", func() { a.OpenSetup(a.Settings.Mode) })
 	here := d.Mode == mode.Standalone && a.Settings.Mode == mode.Standalone
 	if shared := a.Act.Shared(); shared != "" && here {
 		ui.Row(c).Padding(10, 14).Gap(10).Radius(radiusControl).Background(k.AccentSoft).AlignItems(ui.Start).Children(func() {
@@ -71,7 +76,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		if d.Mode == mode.Standalone {
 			addr, name, help = &d.WrapperAddress, "Wrapper address", "The wrapper-lite or wrapper-manager on your NAS. It has no password, so only open its port to this computer."
 			if local {
-				help = "Not used: this computer runs its own wrapper, installed with amdl wrapper install."
+				help = "Not used: this computer runs its own wrapper."
 			}
 		}
 		ui.Column(c).Gap(6).Children(func() {
@@ -108,14 +113,14 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				placeholder = fmt.Sprintf("%s · %s", src, p)
 			}
 			field(c, k, "ffmpeg", &d.FFmpeg, placeholder, true)
-			ui.Text(c, "Leave empty for the one shipped with the app.").FontSize(11.5).TextColor(k.Faint)
+			ui.Text(c, "Leave empty to use the one found here.").FontSize(11.5).TextColor(k.Faint)
 		})
 	}
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-		changed := d.Mode != a.Settings.Mode || d.RemoteURL != a.Settings.RemoteURL || d.WrapperAddress != a.Settings.WrapperAddress || d.FFmpeg != a.Settings.FFmpeg
+		changed := d.RemoteURL != a.Settings.RemoteURL || d.WrapperAddress != a.Settings.WrapperAddress || d.FFmpeg != a.Settings.FFmpeg
 		if buttonOff(c, k, buttonPrimary, "Apply", nil, !changed).Clicked() {
 			next := a.Settings
-			next.Mode, next.RemoteURL, next.WrapperAddress, next.FFmpeg = d.Mode, d.RemoteURL, d.WrapperAddress, d.FFmpeg
+			next.RemoteURL, next.WrapperAddress, next.FFmpeg = d.RemoteURL, d.WrapperAddress, d.FFmpeg
 			a.Act.ApplySettings(next)
 		}
 		if changed {

@@ -29,6 +29,9 @@ func (a *App) captureScreens(dir string) {
 		mygo.App.Quit()
 		return
 	}
+	if err := renderSetupShots(dir, a.dirs); err != nil {
+		a.log.Error("setup shots", "error", err)
+	}
 	// The window keeps the size it last had; the shots compare with
 	// boards drawn at 1280×800.
 	a.post(func() { a.win.SetContentSize(1280, 800) })

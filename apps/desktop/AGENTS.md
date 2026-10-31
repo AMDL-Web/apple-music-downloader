@@ -4,7 +4,8 @@ The desktop app for macOS, Windows and Linux, drawn with MyGo's native UI
 (`github.com/egoist/mygo/ui`). It runs in one of two modes, both over the
 public HTTP and SSE API: a client of a remote amdl, or standalone, where
 this computer runs the backend and the account is held by the wrapper
-`amdl wrapper install` put on this computer or by one on another machine.
+the setup screen (or `amdl wrapper install`) put on this computer or by one
+on another machine.
 
 ## Rules
 
@@ -56,6 +57,10 @@ this computer runs the backend and the account is held by the wrapper
   in `shortcuts`): one declared deeper only hears its own subtree. Keys the
   field edits with, Return and the arrows, reach the field first, so it
   takes them itself with OnTextKey (`fieldKey`).
+- The setup screen runs a package manager (Homebrew or winget, never one
+  needing sudo) only from Run, under the exact command it shows. Tests and
+  shots give `apps/desktop/internal/setup#Deps` fakes: nothing installs or
+  downloads.
 - ffmpeg and other console programs start through
   `internal/sysproc#NoConsole`, or each start flashes a console on Windows.
 

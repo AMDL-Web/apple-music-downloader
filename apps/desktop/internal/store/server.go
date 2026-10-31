@@ -59,9 +59,13 @@ func (s *Store) refreshServer() { s.Server.stale = true }
 // WatchServer reads the server's state when the last read is older than
 // ServerEvery. Views that show it call it every frame and redraw after
 // ServerEvery, so it reads only while one of them is on screen.
-func (s *Store) WatchServer() {
+func (s *Store) WatchServer() { s.WatchServerWithin(ServerEvery) }
+
+// WatchServerWithin is WatchServer for a view that follows a change, such as
+// a booting wrapper, and reads when the last read is older than every.
+func (s *Store) WatchServerWithin(every time.Duration) {
 	sv := &s.Server
-	if s.client == nil || sv.reading || (!sv.stale && s.now().Sub(sv.Read) < ServerEvery) {
+	if s.client == nil || sv.reading || (!sv.stale && s.now().Sub(sv.Read) < every) {
 		return
 	}
 	sv.reading, sv.stale = true, false

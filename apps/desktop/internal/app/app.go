@@ -4,10 +4,13 @@
 package app
 
 import (
+	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -16,11 +19,13 @@ import (
 	"amdl/apps/desktop/internal/ffmpeg"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/motion"
+	"amdl/apps/desktop/internal/setup"
 	"amdl/apps/desktop/internal/shell"
 	"amdl/apps/desktop/internal/store"
 	appui "amdl/apps/desktop/internal/ui"
 	"amdl/internal/client"
 	"amdl/internal/local"
+	"amdl/internal/wrapperhost"
 )
 
 // Options are the command line's choices. The flags exist for development
@@ -111,9 +116,14 @@ func (a *App) ready() {
 	a.view = &appui.App{Store: a.store, Art: artwork.New(a.post), Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme}
 	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
 	a.view.ScrollbarsAlways = scrollbarsAlways()
+	a.view.Setup = setup.New(a.post, setup.SystemDeps(dirs.Resources, wrapperhost.Home{Dir: a.localDirs().WrapperDir()},
+		wrapperhost.NightlyLink{Client: &http.Client{}}, func(ctx context.Context) (wrapperhost.Pin, error) {
+			pin, _, err := wrapperhost.CurrentPin(ctx, &http.Client{}, time.Now())
+			return pin, err
+		}))
 	a.findFFmpeg()
 	if a.settings.Mode == "" {
-		a.view.Screen = appui.ScreenSettings
+		a.view.OpenSetup("")
 	} else {
 		a.view.FocusField()
 	}

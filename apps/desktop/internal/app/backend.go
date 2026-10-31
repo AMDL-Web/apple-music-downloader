@@ -41,9 +41,9 @@ func (a *App) localDirs() local.Dirs {
 }
 
 // localBackend is the backend standalone mode runs, from the settings. It
-// runs the wrapper amdl wrapper install installed, when there is one, in
-// place of WrapperAddress. The downloads folder is config.yaml's, which
-// Settings changes through the API.
+// runs the wrapper the setup screen or amdl wrapper install installed, when
+// there is one, in place of WrapperAddress. The downloads folder is
+// config.yaml's, which Settings changes through the API.
 func (a *App) localBackend() local.Backend {
 	b := local.Backend{Dirs: a.localDirs(), Wrapper: a.settings.WrapperAddress, ManageWrapper: true}
 	if path, _, err := ffmpeg.Find(a.settings.FFmpeg, a.dirs.Resources); err == nil {

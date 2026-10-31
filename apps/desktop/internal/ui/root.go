@@ -33,7 +33,10 @@ func (a *App) View(c *ui.Context) {
 	a.shortcuts(c)
 	w, _ := c.Size()
 	a.followWidth(w)
-	shown := a.SidebarShown()
+	// The setup screen has the window to itself; the sidebar keeps the
+	// user's choice for the screens after it.
+	inSetup := a.Screen == ScreenSetup
+	shown := a.SidebarShown() && !inSetup
 	target := float32(0)
 	if shown {
 		target = sidebarWidth
@@ -59,6 +62,10 @@ func (a *App) View(c *ui.Context) {
 				// backdrop.
 				a.backdrop(c, k)
 				ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
+					if inSetup {
+						a.setupScreen(c, k)
+						return
+					}
 					a.titleBar(c, k, shown)
 					ui.Column(c).Grow(1).MinHeight(0).Children(func() {
 						switch a.Screen {
@@ -75,7 +82,9 @@ func (a *App) View(c *ui.Context) {
 				})
 			})
 		})
-		a.sidebarToggle(c, k)
+		if !inSetup {
+			a.sidebarToggle(c, k)
+		}
 	})
 	a.toast(c, k)
 	a.scrollbars(c, k)

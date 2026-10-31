@@ -204,6 +204,11 @@ yourself and run `amdl wrapper import <zip|dir>`, which also accepts one of
 upstream's `wrapper-lite-qemu` packages. Nothing upstream builds is shipped with amdl:
 the guest holds Apple's Android libraries.
 
+The desktop app's setup screen does the same in standalone mode, row by row: it shows
+the QEMU or ffmpeg package command and runs it after Run (it only shows a command that
+needs `sudo`), downloads and checks the guest with progress and Cancel, starts the
+backend and takes the Apple ID and two-step code.
+
 The backend runs the guest whenever it runs on the local files with this machine's
 wrapper installed (the service, `amdl serve --local` and the desktop app; not a
 per-command `--server embedded`), points `wrapper.address` at it, restarts it after a
