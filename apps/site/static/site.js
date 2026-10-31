@@ -57,4 +57,19 @@
     list.hidden = false;
     select(tabs[0]);
   }
+
+  // Live demos: on a narrow screen the window draws a 1280 px wide app scaled
+  // to fit (site.css), and an app off screen is told so, which stops its jobs
+  // moving.
+  for (const frame of document.querySelectorAll('.win-body iframe')) {
+    const body = frame.parentElement;
+    new ResizeObserver(() => body.style.setProperty('--demo-scale', String(body.clientWidth / 1280))).observe(body);
+    let offscreen = true;
+    const tell = () => frame.contentWindow?.postMessage({ amdlDemoOffscreen: offscreen }, location.origin);
+    new IntersectionObserver(([entry]) => {
+      offscreen = !entry.isIntersecting;
+      tell();
+    }).observe(frame);
+    frame.addEventListener('load', tell);
+  }
 })();

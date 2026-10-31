@@ -23,6 +23,9 @@ per language. How to build, preview and add screenshots: [README.md](README.md).
   `opacity`, and stops on `prefers-reduced-motion`.
 - Theme follows `prefers-color-scheme` unless `data-theme` is set on `<html>`, and every
   color is a custom property on `:root` in `static/site.css`, defined for both themes.
+- The live demo runs `apps/console/static` unchanged; `demo/` adds only the fake backend.
+  Its names and covers are made up and it reaches no other host. `demo.test.mjs` checks
+  both, and that every `/api/v1` call in the console's `api.js` gets an answer.
 
 ## Verify
 
@@ -31,4 +34,5 @@ node --test apps/site/
 node apps/site/build.mjs --serve 8080
 ```
 
-Then check both languages at 375, 768 and 1440 px, in light and dark.
+Then check both languages at 375, 768 and 1440 px, in light and dark, and click through
+the demo: Queue, a job, New download with a search, Settings.

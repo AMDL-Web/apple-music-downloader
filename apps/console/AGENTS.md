@@ -25,6 +25,9 @@ Settings coverage.
   axes, and a skin changes only its own CSS file and spec page.
 - Modules in `static/js/lib/` are pure (no DOM at import, no vendor import) so
   `node --test` covers them.
+- The website runs this directory as its live demo (`apps/site/demo/`): a new call in
+  `static/js/api.js`, or a changed response the console reads, also changes
+  `apps/site/demo/fake-api.js`.
 - A tab holds the overview feed plus at most one secondary stream
   (`claimSecondary` in `static/js/lib/stream.js`), and the feed opens from the
   snapshot's `event_cursor`.

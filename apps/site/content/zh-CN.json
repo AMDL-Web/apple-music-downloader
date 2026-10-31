@@ -28,6 +28,19 @@
     "lead": "贴一个单曲、专辑、歌单、艺人或电台链接，或者直接搜索曲库。AMDL 把每首曲目下载、解密、重新封装、写好标签，存成完整的 `.m4a`：ALAC 最高 24 bit/192 kHz，也可以是杜比全景声或 AAC。",
     "cta": "开始使用"
   },
+  "demo": {
+    "label": "在线演示",
+    "tabs": {
+      "console": "Web 控制台",
+      "desktop": "桌面应用"
+    },
+    "address": "localhost:18080/console/",
+    "fullScreen": "全屏",
+    "open": "打开在线演示",
+    "consoleFrame": "AMDL Web 控制台，用的是虚构数据",
+    "desktopFrame": "AMDL 桌面应用，用的是虚构数据",
+    "note": "专辑和封面都是虚构的。演示只在你的浏览器里运行，不下载也不发送任何东西。"
+  },
   "stats": [
     {
       "value": "192",

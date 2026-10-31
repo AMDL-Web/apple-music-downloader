@@ -16,8 +16,10 @@ nothing from another host.
 | `build.mjs` | The template and the build: renders `content/<lang>.json` into a page, inlines `static/site.css` and `static/site.js`, copies the images |
 | `content/` | The page text, one file per language with the same keys. Strings may use `` `code` ``, `**strong**` and `[text](href)`; an href may start with `{repo}` or `{blob}` |
 | `static/` | Stylesheet, script, favicon, Open Graph card, the hero animation (`hero.html`), the terminal capture (`tui.html`), the CLI and MCP samples, and the screenshots in `img/` |
+| `demo/` | The live console demo: the fake backend (`fake-api.js`), its made-up catalog, the module that installs it (`boot.js`), and `bundle.mjs`, which puts the demo into the build |
 | `serve.mjs` | The preview server behind `--serve` |
 | `build.test.mjs` | Content parity, links and anchors, local-only resources, image sizes, arguments |
+| `demo.test.mjs` | The fake backend answers every console call, stays on its own origin, and runs jobs to the end |
 | `wrangler.jsonc` | The Cloudflare Workers project that serves `dist/` at the site's domain |
 
 ## Build and preview
@@ -46,6 +48,29 @@ node --test apps/site/
 ```
 
 runs the tests; `make node-test` includes them.
+
+## Live demo
+
+Under the hero, a window runs the real web console on made-up data, with a second tab
+for the desktop app.
+
+- The build copies `apps/console/static` to `demo/console/` and loads `demo/boot.js` in
+  front of the console's `main.js`. boot.js replaces `fetch`: calls under `/api/v1`, the
+  event and log streams included, go to `demo/fake-api.js`, which keeps the jobs in memory
+  and moves the running ones on a timer (`demo/boot.js#TICK_MS`) while the window is on
+  screen; the console's own files load as usual; any other host fails like a network
+  error, and the page's Content-Security-Policy allows only its own origin. Links out of
+  the demo do nothing.
+- Artists, albums, playlists and covers come from `demo/catalog.js`: made up, with each
+  cover drawn as an SVG color field.
+- `demo.test.mjs` checks that every `/api/v1` call in `apps/console/static/js/api.js`
+  gets an answer, so a new console call needs a handler in `fake-api.js`. Nothing checks
+  that a response keeps its shape: click through the demo after changing one.
+- The desktop tab shows the `desktop` screenshot until the build gets the desktop app's
+  web build with `--desktop <dir>` (a directory with its `index.html`), which it copies to
+  `demo/desktop/` and embeds the same way.
+- Up to 720 px wide the console window is a scaled-down live view; a tap opens
+  `demo/console/` full screen, where the console lays itself out for the screen.
 
 ## Publishing
 

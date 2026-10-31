@@ -36,7 +36,8 @@ Route, request or response:
   `assertErrorCode`);
 - [docs/api.md](../../../docs/api.md) and the API table in `README.md` and
   `README.zh-CN.md`;
-- `apps/console` when it calls the route or reads the field;
+- `apps/console` when it calls the route or reads the field, and then the website
+  demo's fake backend, `apps/site/demo/fake-api.js`;
 - an `internal/capability` entry for a new operation (a test fails without it),
   and `internal/client` when a Go client (CLI, MCP server, TUI, desktop app)
   calls the route or reads the field.

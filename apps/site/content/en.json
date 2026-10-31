@@ -28,6 +28,19 @@
     "lead": "Paste a song, album, playlist, artist or station link, or search the catalog. AMDL downloads, decrypts, remuxes and tags every track into a finished `.m4a`: ALAC up to 24-bit/192 kHz, Dolby Atmos or AAC.",
     "cta": "Get started"
   },
+  "demo": {
+    "label": "Live demo",
+    "tabs": {
+      "console": "Web console",
+      "desktop": "Desktop app"
+    },
+    "address": "localhost:18080/console/",
+    "fullScreen": "Full screen",
+    "open": "Open the live demo",
+    "consoleFrame": "The AMDL web console, running on made-up data",
+    "desktopFrame": "The AMDL desktop app, running on made-up data",
+    "note": "Made-up albums and covers. It runs only in your browser: nothing is downloaded or sent."
+  },
   "stats": [
     {
       "value": "192",

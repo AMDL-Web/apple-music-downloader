@@ -32,6 +32,7 @@ describe('arguments', () => {
     ['a non-http --base', ['--base', 'ftp://example.org/']],
     ['a --serve that is not a port', ['--serve', 'abc']],
     ['a --serve out of range', ['--serve', '70000']],
+    ['a --desktop without an index.html', ['--desktop', fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-desktop-'))]],
   ]) {
     test(`rejects ${name}`, () => assert.throws(() => parseArgs(argv), UsageError));
   }
@@ -100,6 +101,22 @@ describe('images', () => {
   });
 });
 
+describe('desktop demo', () => {
+  test('a desktop build given with --desktop is embedded', () => {
+    const web = fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-desktop-'));
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'amdl-site-'));
+    try {
+      fs.writeFileSync(path.join(web, 'index.html'), '<!doctype html><title>AMDL</title>');
+      build({ out, desktop: parseArgs(['--desktop', web]).desktop });
+      assert.ok(fs.existsSync(path.join(out, 'demo', 'desktop', 'index.html')));
+      assert.match(fs.readFileSync(path.join(out, 'en', 'index.html'), 'utf8'), /<iframe src="\.\.\/demo\/desktop\/"/);
+    } finally {
+      fs.rmSync(web, { recursive: true, force: true });
+      fs.rmSync(out, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('built site', () => {
   let out;
   let pages;
@@ -109,6 +126,14 @@ describe('built site', () => {
     pages = Object.fromEntries([...LANGS.map((l) => `${l.code}/index.html`), 'index.html'].map((p) => [p, fs.readFileSync(path.join(out, p), 'utf8')]));
   });
   after(() => fs.rmSync(out, { recursive: true, force: true }));
+
+  test('without a desktop build, the desktop demo is a screenshot', () => {
+    for (const lang of LANGS) {
+      const html = pages[`${lang.code}/index.html`];
+      assert.match(html, /<iframe src="\.\.\/demo\/console\/"/);
+      assert.doesNotMatch(html, /demo\/desktop/);
+    }
+  });
 
   test('each language page declares its language and links the other', () => {
     for (const lang of LANGS) {

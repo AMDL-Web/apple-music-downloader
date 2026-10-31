@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { buildDemo } from './demo/bundle.mjs';
 import { serve } from './serve.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -26,20 +27,22 @@ export const LANGS = [
 const THEME_KEY = 'amdl-site-theme';
 const LANG_KEY = 'amdl-site-lang';
 
-const USAGE = `usage: node apps/site/build.mjs [--out <dir>] [--base <url>] [--serve <port>]
+const USAGE = `usage: node apps/site/build.mjs [--out <dir>] [--base <url>] [--desktop <dir>] [--serve <port>]
 
-  --out <dir>     where to write the site (default: apps/site/dist)
-  --base <url>    absolute URL the site is served from, such as https://example.org/;
-                  adds canonical, hreflang and Open Graph URLs
-  --serve <port>  after building, serve the output on 127.0.0.1:<port>`;
+  --out <dir>      where to write the site (default: apps/site/dist)
+  --base <url>     absolute URL the site is served from, such as https://example.org/;
+                   adds canonical, hreflang and Open Graph URLs
+  --desktop <dir>  the desktop app's web build (an index.html and its files), embedded
+                   as the live desktop demo; without it the page shows a screenshot
+  --serve <port>   after building, serve the output on 127.0.0.1:<port>`;
 
 export class UsageError extends Error {}
 
 export function parseArgs(argv) {
-  const opts = { out: path.join(here, 'dist'), base: '', serve: 0 };
+  const opts = { out: path.join(here, 'dist'), base: '', desktop: '', serve: 0 };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
-    if (!['--out', '--base', '--serve'].includes(flag)) throw new UsageError(`unknown argument: ${flag}`);
+    if (!['--out', '--base', '--desktop', '--serve'].includes(flag)) throw new UsageError(`unknown argument: ${flag}`);
     const value = argv[++i];
     if (value === undefined || value.startsWith('--')) throw new UsageError(`${flag} needs a value`);
     if (flag === '--out') opts.out = path.resolve(value);
@@ -52,6 +55,10 @@ export function parseArgs(argv) {
       }
       if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new UsageError(`--base must be http or https: ${value}`);
       opts.base = url.href.endsWith('/') ? url.href : `${url.href}/`;
+    }
+    if (flag === '--desktop') {
+      opts.desktop = path.resolve(value);
+      if (!fs.existsSync(path.join(opts.desktop, 'index.html'))) throw new UsageError(`--desktop has no index.html: ${value}`);
     }
     if (flag === '--serve') {
       const port = Number(value);
@@ -286,6 +293,28 @@ export function renderPage(c, ctx) {
 <div class="hero-art">${ctx.hero}</div>
 </section>`;
 
+  // The live demos: the console with made-up data, and the desktop app's web
+  // build when there is one (a screenshot until then), each in a window.
+  const d = c.demo;
+  const win = (kind, title, extra, body) =>
+    `<div class="window win-${kind}"><div class="win-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="win-title">${title}</span>${extra}</div><div class="win-body">${body}</div></div>`;
+  const live = (src, title) =>
+    `<iframe src="${src}" title="${esc(title)}" loading="lazy"></iframe><a class="win-open" href="${src}"><span>${esc(d.open)}${ICON.out}</span></a>`;
+  const full = (src) => `<a class="win-action" href="${src}">${esc(d.fullScreen)}${ICON.out}</a>`;
+  const demo = `<section class="demo" aria-label="${esc(d.label)}">
+${tabs(d.label, [
+  { id: 'demo-console', label: d.tabs.console, html: win('console', esc(d.address), full('../demo/console/'), live('../demo/console/', d.consoleFrame)) },
+  {
+    id: 'demo-desktop',
+    label: d.tabs.desktop,
+    html: ctx.desktop
+      ? win('desktop', 'AMDL', full('../demo/desktop/'), live('../demo/desktop/', d.desktopFrame))
+      : win('desktop', 'AMDL', `<span class="badge">${esc(p.desktop.badge)}</span>`, shot(ctx, 'desktop', p.desktop.shot)),
+  },
+])}
+<p class="demo-note">${inline(d.note)}</p>
+</section>`;
+
   const stats = `<dl class="stats">${c.stats
     .map((s) => `<div><dt>${esc(s.label)}</dt><dd>${esc(s.value)}${s.unit ? `<span>${esc(s.unit)}</span>` : ''}</dd></div>`)
     .join('')}</dl>`;
@@ -362,6 +391,7 @@ ${head.join('\n')}
 ${header}
 <main id="main">
 ${hero}
+${demo}
 ${stats}
 ${how}
 ${products}
@@ -417,7 +447,7 @@ export function loadContent(code) {
   return JSON.parse(fs.readFileSync(path.join(here, 'content', `${code}.json`), 'utf8'));
 }
 
-export function build({ out, base = '' }) {
+export function build({ out, base = '', desktop = '' }) {
   const staticDir = path.join(here, 'static');
   const read = (rel) => fs.readFileSync(path.join(staticDir, rel), 'utf8');
   const sizes = new Map();
@@ -434,12 +464,14 @@ export function build({ out, base = '' }) {
     mcp: read('mcp.txt').trimEnd().split('\n---\n').map((b) => b.split('\n')),
     image,
     base,
+    desktop: Boolean(desktop),
   };
 
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
   fs.cpSync(path.join(staticDir, 'img'), path.join(out, 'img'), { recursive: true });
   for (const file of ['favicon.svg', 'og.png']) fs.copyFileSync(path.join(staticDir, file), path.join(out, file));
+  buildDemo(out, { desktop });
 
   const pages = [];
   for (const lang of LANGS) {
