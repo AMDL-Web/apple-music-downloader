@@ -148,7 +148,7 @@ type ListQuery struct {
 	Status []domain.JobStatus
 	Types  []string
 	Search string
-	// Sort is created_at (the backend's default) or updated_at.
+	// Sort is created_at (the backend's default), updated_at or queue_order.
 	Sort string
 	// Ascending flips the default newest-first order.
 	Ascending bool

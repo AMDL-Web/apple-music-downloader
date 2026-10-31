@@ -73,8 +73,11 @@ func (m *model) onPriority(msg priorityMsg) tea.Cmd {
 	return nil
 }
 
-// priorityKey edits the order: ↑↓ the row, shift+↑↓ moves a quality that is
-// on, space turns one on or off, enter saves, esc leaves it as it was.
+// priorityKey edits the order: ↑↓ the row, home and end the first and last,
+// shift+↑↓ moves a quality that is
+// on one place, shift+home and shift+end to the first or last place of
+// those on, space turns one on or off, enter saves, esc leaves it as it
+// was.
 func (m *model) priorityKey(key string) (tea.Cmd, bool) {
 	p := m.priority
 	if m.input.Value() != "" {
@@ -87,6 +90,10 @@ func (m *model) priorityKey(key string) (tea.Cmd, bool) {
 		p.cursor = max(0, p.cursor-1)
 	case "down":
 		p.cursor = min(len(rows)-1, p.cursor+1)
+	case "home":
+		p.cursor = 0
+	case "end":
+		p.cursor = len(rows) - 1
 	case "shift+up", "shift+down":
 		to := p.cursor - 1
 		if key == "shift+down" {
@@ -94,6 +101,15 @@ func (m *model) priorityKey(key string) (tea.Cmd, bool) {
 		}
 		if p.cursor < len(p.on) && to >= 0 && to < len(p.on) {
 			p.on[p.cursor], p.on[to] = p.on[to], p.on[p.cursor]
+			p.cursor = to
+		}
+	case "shift+home", "shift+end":
+		if p.cursor < len(p.on) {
+			to := 0
+			if key == "shift+end" {
+				to = len(p.on) - 1
+			}
+			p.on = slices.Insert(slices.Delete(p.on, p.cursor, p.cursor+1), to, rows[p.cursor])
 			p.cursor = to
 		}
 	case "space":

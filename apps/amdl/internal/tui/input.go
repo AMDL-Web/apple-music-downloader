@@ -29,6 +29,7 @@ var slashes = []slash{
 	{"/retry", "<job>", "re-run a failed or cancelled job"},
 	{"/remove", "<job>", "delete a finished job's records (asks first)"},
 	{"/copy", "<job>", "copy a job's link"},
+	{"/queue", "", "reorder the jobs waiting to start"},
 	{"/library", "[text]", "list finished downloads"},
 	{"/logs", "[job]", "show recent warnings and errors"},
 	{"/system", "", "show the server's version, queue and free space"},
@@ -99,6 +100,10 @@ func (m *model) onKey(k tea.KeyPressMsg) tea.Cmd {
 		}
 	case panelPriority:
 		if cmd, ok := m.priorityKey(key); ok {
+			return cmd
+		}
+	case panelQueue:
+		if cmd, ok := m.queueKey(key); ok {
 			return cmd
 		}
 	case panelPreview:
@@ -201,7 +206,7 @@ func (m *model) closePanel() {
 	if m.panel == panelLogin {
 		m.endLogin()
 	}
-	m.panel, m.preview, m.links, m.res, m.ask, m.priority = panelNone, nil, nil, nil, nil, nil
+	m.panel, m.preview, m.links, m.res, m.ask, m.priority, m.queue = panelNone, nil, nil, nil, nil, nil, nil
 }
 
 // resultsKey handles the keys of the search list; ok is false for keys the
@@ -540,6 +545,8 @@ func (m *model) command(line string) tea.Cmd {
 		})
 	case "/quality":
 		return m.openPriority()
+	case "/queue":
+		return m.openQueue()
 	case "/config":
 		return m.do("config", func(ctx context.Context) (string, error) {
 			raw, err := m.c.Call(ctx, http.MethodGet, "/api/v1/config", nil, nil)

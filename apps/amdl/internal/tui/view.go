@@ -332,7 +332,9 @@ func (m *model) hints() []string {
 	case panelConfirm:
 		return []string{"y deletes", "n keeps"}
 	case panelPriority:
-		return []string{"enter saves", "space turns on/off", "shift+↑↓ moves", "esc cancels"}
+		return []string{"enter saves", "space turns on/off", "shift+↑↓ moves", "esc cancels", "shift+home/end first/last"}
+	case panelQueue:
+		return []string{"shift+↑↓ moves", "esc closes", "shift+home/end first/last"}
 	case panelAsk:
 		h := []string{"enter downloads", "←→ chooses", "esc goes back"}
 		if m.ask != nil && m.ask.codecs != nil && m.ask.again {
@@ -357,7 +359,11 @@ func (m *model) hints() []string {
 		return []string{"enter runs", "esc clears"}
 	}
 	if len(m.jobs) > 0 {
-		return []string{"? shortcuts", "ctrl+o tracks"}
+		h := []string{"? shortcuts", "ctrl+o tracks"}
+		if len(m.queuedIDs()) > 1 {
+			h = append(h, "/queue reorders")
+		}
+		return h
 	}
 	return []string{"? shortcuts", "/ commands"}
 }

@@ -65,8 +65,8 @@ func (m *model) cardTheme() theme {
 	return t
 }
 
-// cards draws the jobs in progress, in the order they appeared, in at most
-// room rows. A running card has a fixed number of track rows; when the cards
+// cards draws the jobs in progress, in the order the server runs them
+// (activeIDs), in at most room rows. A running card has a fixed number of track rows; when the cards
 // do not fit, the track rows go first, then the cards from the end.
 func (m *model) cards(w, room int) string {
 	ids := m.activeIDs()

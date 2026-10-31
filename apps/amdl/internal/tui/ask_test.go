@@ -177,6 +177,15 @@ func TestQualityPriorityIsEditedFromTheKeyboard(t *testing.T) {
 	if !slices.Equal(p.on, []string{"ec3", "alac"}) {
 		t.Errorf("a quality that is off moved: %v", p.on)
 	}
+	m.priorityKey("up")
+	m.priorityKey("shift+home")
+	if !slices.Equal(p.on, []string{"alac", "ec3"}) || p.cursor != 0 {
+		t.Errorf("shift+home: %v, cursor %d", p.on, p.cursor)
+	}
+	m.priorityKey("shift+end")
+	if !slices.Equal(p.on, []string{"ec3", "alac"}) || p.cursor != 1 {
+		t.Errorf("shift+end: %v, cursor %d", p.on, p.cursor)
+	}
 	for _, w := range []int{100, 40} {
 		out := stripANSI(m.priorityView(w, 10))
 		if !strings.Contains(out, "1  Dolby Atmos (E-AC-3)") || !strings.Contains(out, "2  ALAC (lossless)") {

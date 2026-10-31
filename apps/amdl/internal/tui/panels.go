@@ -58,6 +58,8 @@ func (m *model) panelView(w, room int) string {
 		return m.askView(w)
 	case panelPriority:
 		return m.priorityView(w, room)
+	case panelQueue:
+		return m.queueView(w, room)
 	}
 	return m.menuView(w, room)
 }
@@ -216,6 +218,7 @@ func (m *model) helpView(w int) string {
 		{"↑ ↓", "history; move in a list"},
 		{"tab", "complete; change the filter"},
 		{"space", "select in search"},
+		{"shift+↑ ↓", "move in /quality and /queue"},
 		{"ctrl+o", "all tracks of the first job"},
 		{"ctrl+t", "every job in progress"},
 		{"/", "commands"},

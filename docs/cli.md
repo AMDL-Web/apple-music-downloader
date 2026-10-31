@@ -240,8 +240,14 @@ screen is redrawn.
   echoing the password). Esc closes a panel, drops a search still in flight, or clears
   the prompt.
 - **`/quality`** lists the qualities of `download.quality_priority`, the ones on in the
-  order the server tries them, then the rest: shift+↑↓ moves one, Space turns one on or
-  off (one stays on; AAC-LC is always tried last and not listed), Enter saves.
+  order the server tries them, then the rest: shift+↑↓ moves one a place, shift+Home and
+  shift+End to the first or last place, Space turns one on or off (one stays on; AAC-LC
+  is always tried last and not listed), Enter saves.
+- **`/queue`** lists the queued jobs in the order the server starts them, with the same
+  keys: shift+↑↓ moves one a place, shift+Home and shift+End to the front or the back.
+  Each move goes to the server at once (`POST /downloads/{id}/move`), one at a time, and
+  the queue is read back after the last; when the server answers `job_not_queued`, a job
+  having started or ended meanwhile, the panel shows the server's order again.
 - **A download from search asks first** only where there is a choice, below the prompt:
   Lossless or Dolby Atmos where a hit has both and the server's
   `download.quality_priority` lists both (`internal/format#QualityChoices`; the one it
@@ -249,7 +255,9 @@ screen is redrawn.
   replace the files on disk. The answers go as the job's overrides. A pasted link
   downloads with the server's settings.
 - **Above the prompt** sits one card per job in progress, up to three, in the order the
-  jobs appeared: its title and session number, the album bar of
+  server runs them: the running jobs in the order they started, then the queue in its
+  order, so the job that starts next keeps its place. A card holds its title and session
+  number, the album bar of
   `internal/progress#AlbumProgress` (finished tracks in the order they finished, the
   rest of the progress dashed, one cell per track up to `internal/progress#TickMax`)
   with the count, percent, time left and average speed (`internal/progress#AvgSpeed`),

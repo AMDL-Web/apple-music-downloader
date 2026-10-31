@@ -94,6 +94,7 @@ const (
 	panelHelp
 	panelAsk
 	panelPriority
+	panelQueue
 )
 
 type pick struct {
@@ -168,6 +169,8 @@ type model struct {
 	printed  map[string]bool
 	num      map[string]int // the session's number for each job, from 1
 	nums     int
+	started  map[string]int // the order jobs were first seen out of the queue, from 1
+	starts   int
 	expanded bool
 	showAll  bool
 
@@ -178,6 +181,8 @@ type model struct {
 	res      *results
 	ask      *ask
 	priority *priorityEdit
+	queue    *queueEdit
+	moves    queueMoves
 	confirm  struct{ prompt, id string }
 	loginSt  struct{ step, username, password, loginID string }
 	quitHint time.Time
@@ -199,7 +204,7 @@ func newModel(ctx context.Context, cancel context.CancelFunc, opts Options) *mod
 	in.Focus()
 	m := &model{ctx: ctx, cancel: cancel, c: opts.Client, opts: opts, bus: &bus{},
 		width: 100, height: 30, now: time.Now, profile: colorprofile.TrueColor, theme: newTheme(true, nil), input: in, headerWait: true,
-		jobs: map[string]*jobState{}, printed: map[string]bool{}, num: map[string]int{}, titles: map[string]string{}}
+		jobs: map[string]*jobState{}, printed: map[string]bool{}, num: map[string]int{}, started: map[string]int{}, titles: map[string]string{}}
 	m.restyleInput()
 	return m
 }
@@ -347,6 +352,10 @@ func (m *model) update(msg tea.Msg) tea.Cmd {
 		return m.onChoices(msg)
 	case priorityMsg:
 		return m.onPriority(msg)
+	case movedMsg:
+		return m.onMoved(msg)
+	case queueReadMsg:
+		return m.onQueueRead(msg)
 	case albumsMsg:
 		if msg.gen != m.reqGen {
 			return nil
@@ -550,6 +559,7 @@ func (m *model) onFeed(f domain.DownloadFeedMessage) tea.Cmd {
 	} else {
 		st.job.Status, st.job.Title, st.job.TotalItems = j.Status, j.Title, j.TotalItems
 		st.job.ArtistName, st.job.ArtworkBgColor = j.ArtistName, j.ArtworkBgColor
+		st.job.QueueOrder, st.job.StartedAt = j.QueueOrder, j.StartedAt
 	}
 	return m.followMore()
 }
@@ -577,15 +587,39 @@ func (m *model) followMore() tea.Cmd {
 	return nil
 }
 
-// activeIDs orders the jobs in progress by their session number, so a card
-// keeps its place from the moment it appears until it ends.
+// activeIDs orders the jobs in progress as the server runs them: the
+// running ones in the order this session first saw them out of the queue,
+// then the queue (queuedIDs). The job a worker starts next is the queue's
+// first, so it becomes the last running card without moving.
 func (m *model) activeIDs() []string {
-	ids := make([]string, 0, len(m.jobs))
-	for id := range m.jobs {
-		ids = append(ids, id)
+	var ids, fresh []string
+	for id, st := range m.jobs {
+		switch {
+		case st.job.Status == domain.JobQueued:
+			delete(m.started, id)
+		case m.started[id] == 0:
+			fresh = append(fresh, id)
+		default:
+			ids = append(ids, id)
+		}
 	}
-	sort.Slice(ids, func(i, k int) bool { return m.num[ids[i]] < m.num[ids[k]] })
-	return ids
+	sort.Slice(fresh, func(i, k int) bool {
+		x, y := m.jobs[fresh[i]].job.StartedAt, m.jobs[fresh[k]].job.StartedAt
+		switch {
+		case x != nil && y != nil && !x.Equal(*y):
+			return x.Before(*y)
+		case (x == nil) != (y == nil):
+			return x != nil
+		}
+		return m.num[fresh[i]] < m.num[fresh[k]]
+	})
+	for _, id := range fresh {
+		m.starts++
+		m.started[id] = m.starts
+	}
+	ids = append(ids, fresh...)
+	sort.Slice(ids, func(i, k int) bool { return m.started[ids[i]] < m.started[ids[k]] })
+	return append(ids, m.queuedIDs()...)
 }
 
 func (m *model) onSearch(msg searchMsg) tea.Cmd {
