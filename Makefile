@@ -24,7 +24,7 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker dist dist-check
+.PHONY: help build run dev fmt fmt-check vet test race vuln node-test check temaridiff docker dist dist-check desktop-web
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
@@ -60,8 +60,9 @@ fmt-check: ## Fail if any Go file is not gofmt-formatted
 		exit 1; \
 	fi
 
-vet: ## go vet every package
+vet: ## go vet every package, and the desktop app's browser build
 	$(GO) vet ./...
+	GOOS=js GOARCH=wasm $(GO) vet ./apps/desktop/...
 
 test: ## Run the test suite
 	$(GO) test ./...
@@ -110,3 +111,10 @@ dist-check: ## Build and render the release files as a release does, for a made-
 	@$(MAKE) --no-print-directory dist VERSION=v0.0.0-ci
 	@node deploy/packaging/render.mjs v0.0.0-ci dist/SHA256SUMS dist
 	@n=$$(ls dist | wc -l); if [ $$n -ne $(DIST_FILES) ]; then echo "dist-check: $$n files in dist/, want $(DIST_FILES)"; ls dist; exit 1; fi
+
+# MyGo's CLI (the go.mod tool) builds the desktop app as
+# apps/desktop/mygo.config.ts describes it, which needs Node.js to read.
+DESKTOP_MYGO = cd apps/desktop && DESKTOP_VERSION=$(patsubst v%,%,$(VERSION)) MYGO_LDFLAGS="$(LDFLAGS)" $(GO) tool mygo build
+
+desktop-web: ## Build the desktop app's browser demo into apps/desktop/build/web/
+	$(DESKTOP_MYGO) -platform web

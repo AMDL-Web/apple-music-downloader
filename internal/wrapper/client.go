@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"amdl/internal/config"
@@ -490,4 +491,14 @@ func (c *Client) License(ctx context.Context, adamID, challenge, uri string) (st
 		err = fmt.Errorf("%w: wrapper /license reply has no license", ErrWrapperResponse)
 	}
 	return body.License, err
+}
+
+// NormalizeAddress completes a wrapper address typed by a person: a scheme
+// defaults to http, and a trailing slash is dropped.
+func NormalizeAddress(s string) string {
+	s = strings.TrimRight(strings.TrimSpace(s), "/")
+	if s != "" && !strings.Contains(s, "://") {
+		s = "http://" + s
+	}
+	return s
 }

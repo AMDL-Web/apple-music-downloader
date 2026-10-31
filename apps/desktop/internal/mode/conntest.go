@@ -8,7 +8,6 @@ import (
 
 	"amdl/internal/client"
 	"amdl/internal/config"
-	"amdl/internal/local"
 	"amdl/internal/wrapper"
 )
 
@@ -23,16 +22,12 @@ type Check struct {
 // testTimeout bounds a whole connection test.
 const testTimeout = 15 * time.Second
 
-// TestServer checks an amdl address: that it answers, its version, and
+// TestServer checks the amdl c reaches: that it answers, its version, and
 // whether its wrapper has an account signed in. It stops at the first check
 // that fails.
-func TestServer(ctx context.Context, address string) []Check {
+func TestServer(ctx context.Context, c *client.Client) []Check {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
-	c, err := client.New(address)
-	if err != nil {
-		return []Check{{Text: err.Error()}}
-	}
 	var checks []Check
 	start := time.Now()
 	h, err := c.Health(ctx)
@@ -64,7 +59,7 @@ func TestWrapper(ctx context.Context, address string) []Check {
 	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 	cfg := config.Default().Wrapper
-	cfg.Address = local.WrapperURL(address)
+	cfg.Address = wrapper.NormalizeAddress(address)
 	cfg.TimeoutSeconds = 10
 	w, err := wrapper.NewClient(cfg)
 	if err != nil {

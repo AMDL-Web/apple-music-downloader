@@ -25,10 +25,16 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		label(c, k, "Where downloads run")
 		ui.Row(c).Gap(14).Children(func() {
 			modeCard := func(m mode.Kind, ic *ui.SVG, title, body string) {
-				on := d.Mode == m
-				card := ui.ButtonBase(c.Key(string(m))).Grow(1).Basis(0).Padding(padCard).Gap(8).Radius(radiusCard).Border(1, k.Line2).Background(k.Raise).
+				on, off := d.Mode == m, a.Demo && m == mode.Standalone
+				if off {
+					body = demoNoLocal
+				}
+				card := ui.ButtonBase(c.Key(string(m))).Disabled(off).Grow(1).Basis(0).Padding(padCard).Gap(8).Radius(radiusCard).Border(1, k.Line2).Background(k.Raise).
 					AlignItems(ui.Start).Justify(ui.Start).Label(title)
 				card.Column()
+				if off {
+					card.Opacity(0.5)
+				}
 				if on {
 					card.Border(1, k.Accent)
 				}
@@ -39,7 +45,10 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				if on {
 					col = k.Accent
 				}
-				card.Cursor(ui.CursorPointer).Children(func() {
+				if !off {
+					card.Cursor(ui.CursorPointer)
+				}
+				card.Children(func() {
 					ui.Icon(c, ic).FontSize(22).TextColor(col)
 					ui.Text(c, title).FontSize(14).FontWeight(650)
 					ui.Text(c, body).FontSize(12).TextColor(k.Muted).LineHeight(1.5)

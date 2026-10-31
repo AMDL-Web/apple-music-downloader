@@ -62,12 +62,26 @@ func New(base string) (*Client, error) {
 		IdleConnTimeout:       90 * time.Second,
 		ResponseHeaderTimeout: headerTimeout,
 	}
+	return newClient(origin, transport), nil
+}
+
+// NewWith returns a client for base whose requests go through rt instead of
+// the network, such as a backend served in the same process.
+func NewWith(base string, rt http.RoundTripper) (*Client, error) {
+	origin, err := NormalizeBase(base)
+	if err != nil {
+		return nil, err
+	}
+	return newClient(origin, rt), nil
+}
+
+func newClient(origin string, rt http.RoundTripper) *Client {
 	return &Client{
 		base:     origin,
-		api:      &http.Client{Transport: transport, Timeout: requestTimeout},
-		stream:   &http.Client{Transport: transport},
+		api:      &http.Client{Transport: rt, Timeout: requestTimeout},
+		stream:   &http.Client{Transport: rt},
 		Watchdog: 45 * time.Second,
-	}, nil
+	}
 }
 
 // NormalizeBase returns the origin of a backend address typed by a person:
@@ -152,10 +166,14 @@ const LoginWait = 10 * time.Minute
 // WithTimeout returns a client whose non-streaming calls wait up to d, for the
 // response headers too; c keeps its own bounds.
 func (c *Client) WithTimeout(d time.Duration) *Client {
-	t := c.api.Transport.(*http.Transport).Clone()
-	t.ResponseHeaderTimeout = d
+	rt := c.api.Transport
+	if t, ok := rt.(*http.Transport); ok {
+		t = t.Clone()
+		t.ResponseHeaderTimeout = d
+		rt = t
+	}
 	cp := *c
-	cp.api = &http.Client{Transport: t, Timeout: d}
+	cp.api = &http.Client{Transport: rt, Timeout: d}
 	return &cp
 }
 

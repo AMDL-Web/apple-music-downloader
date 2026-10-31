@@ -277,3 +277,29 @@ func TestAFailedInstallOffersChooseForFFmpeg(t *testing.T) {
 		t.Errorf("failed ffmpeg install: %q", tt.Texts())
 	}
 }
+
+func TestTheDemoOffersNoBackendOfThisComputer(t *testing.T) {
+	s := mode.DefaultSettings()
+	s.Mode, s.RemoteURL = mode.Remote, "http://demo"
+	a, act := newTestApp(s)
+	a.Demo = true
+	a.GoSettings("connection")
+	tt := ui.NewTester(a.View, 1280, 800)
+	if !tt.HasText("Not in the demo") {
+		t.Fatalf("settings: %q", tt.Texts())
+	}
+	if err := tt.Click("This computer"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Screen != ScreenSettings || act.applied != nil {
+		t.Fatalf("the card opened %v, applied %+v", a.Screen, act.applied)
+	}
+	a.OpenSetup(mode.Remote)
+	tt.Frame()
+	if err := tt.Click("This computer"); err != nil {
+		t.Fatal(err)
+	}
+	if a.su.mode != mode.Remote || !tt.HasText("Not in the demo") {
+		t.Errorf("setup: mode %q, texts %q", a.su.mode, tt.Texts())
+	}
+}

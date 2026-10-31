@@ -1,11 +1,9 @@
 # apps/desktop
 
 The desktop app for macOS, Windows and Linux, drawn with MyGo's native UI
-(`github.com/egoist/mygo/ui`). It runs in one of two modes, both over the
-public HTTP and SSE API: a client of a remote amdl, or standalone, where
-this computer runs the backend and the account is held by the wrapper
-the setup screen (or `amdl wrapper install`) put on this computer or by one
-on another machine.
+(`github.com/egoist/mygo/ui`), over the public HTTP and SSE API in both
+modes: a client of a remote amdl, or standalone, where this computer runs
+the backend with a wrapper here or on another machine.
 
 ## Rules
 
@@ -30,9 +28,8 @@ on another machine.
   (`apps/desktop/internal/ui#radiusCard` and the constants after it), never
   a number: a box inside another takes the outer radius less the room
   between them, so both corners share a center. Continuous (squircle)
-  corners are macOS only, by choice: MyGo turns them on there alone (the
-  continuousCorners constant in its ui/paint.go), and Windows and Linux keep
-  their platform's circular arcs.
+  corners are macOS only, by choice: MyGo turns them on there alone
+  (continuousCorners in its ui/paint.go).
 - Focus shows as MyGo's own ring, no accent border or glow: on a text field
   whenever it has the focus, as macOS's text fields, on other controls for
   keyboard focus only. A box whose focused element is a part of it, as a
@@ -68,16 +65,19 @@ on another machine.
   downloads.
 - ffmpeg and other console programs start through
   `internal/sysproc#NoConsole`, or each start flashes a console on Windows.
+- The browser build (`make desktop-web`) is the demo, on the in-memory
+  backend of `apps/desktop/internal/demo`: what runs this computer's
+  backend stays in `!js` files, and a new client call gets a route there.
 
 ## Verify
 
 ```bash
 go test ./apps/desktop/...
-GOOS=windows go vet ./apps/desktop/... && GOOS=darwin go vet ./apps/desktop/... && GOOS=linux go vet ./apps/desktop/...
+for os in windows darwin linux js; do GOOS=$os GOARCH=$([ $os = js ] && echo wasm || echo amd64) go vet ./apps/desktop/...; done
 ```
 
-Screens: build the app and run it with `-shots <dir>` (and `-remote` or
-`-wrapper`, `-data <dir>`), which captures every screen in a 1280×800 window
+Screens: build the app and run it with `-shots <dir>` (and `-demo`,
+`-remote` or `-wrapper`, `-data <dir>`), which captures every screen in a 1280×800 window
 with `Window.CapturePage`, renders playing motion covers without a window
 (`*-motion-N.png`), and quits. The window shows stills where the desktop asks
 for less motion; the renders do not. CapturePage draws no window material,

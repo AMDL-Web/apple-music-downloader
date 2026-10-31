@@ -16,6 +16,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/artwork"
+	"amdl/apps/desktop/internal/demo"
 	"amdl/apps/desktop/internal/ffmpeg"
 	"amdl/apps/desktop/internal/mode"
 	"amdl/apps/desktop/internal/motion"
@@ -23,8 +24,8 @@ import (
 	"amdl/apps/desktop/internal/shell"
 	"amdl/apps/desktop/internal/store"
 	appui "amdl/apps/desktop/internal/ui"
+	"amdl/internal/buildinfo"
 	"amdl/internal/client"
-	"amdl/internal/local"
 	"amdl/internal/wrapperhost"
 )
 
@@ -42,6 +43,9 @@ type Options struct {
 	Shots string
 	// Submit downloads this link once the list loads, before the shots.
 	Submit string
+	// Demo runs the app on a made-up backend in memory (package demo), as
+	// the browser build always does: it reads and writes no files.
+	Demo bool
 }
 
 // App is the running desktop app. Its fields belong to the UI thread.
@@ -58,10 +62,10 @@ type App struct {
 	shell *shell.Shell
 	view  *appui.App
 
-	// backend is the backend this app runs in standalone mode, and shared
-	// the one another program on this computer runs that it uses instead.
-	backend  *ownBackend
-	shared   local.Runtime
+	// standaloneBackend is the backend standalone mode runs or uses.
+	standaloneBackend
+	// demo is the backend the demo runs on, or nil.
+	demo     *demo.Backend
 	starting bool
 	startErr string
 	// gen counts connections, so a backend that finishes starting after the
@@ -93,43 +97,49 @@ func Run(opts Options) error {
 }
 
 func (a *App) ready() {
-	dirs, err := mode.AppDirs()
-	if err != nil {
+	if err := a.load(); err != nil {
 		mygo.Dialog.Error("AMDL cannot start", err.Error())
 		mygo.App.Quit()
 		return
 	}
-	a.dirs = dirs
 	if err := appui.RegisterFonts(); err != nil {
 		// The system's monospace face stands in; the app still works.
 		a.log.Warn("embedded fonts unreadable", "error", err)
 	}
-	if a.settings, err = mode.LoadSettings(dirs.Data); err != nil {
-		a.log.Warn("settings unreadable; starting from the defaults", "error", err)
-	}
-	switch {
-	case a.opts.Remote != "":
-		a.settings.Mode, a.settings.RemoteURL = mode.Remote, a.opts.Remote
-	case a.opts.Wrapper != "":
-		a.settings.Mode, a.settings.WrapperAddress = mode.Standalone, a.opts.Wrapper
-	}
+	dirs := a.dirs
 
 	a.store = store.New(a.post, nil)
-	a.view = &appui.App{Store: a.store, Art: artwork.New(a.post), Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme}
+	art := artwork.New(a.post)
+	if a.demo != nil {
+		art = artwork.NewWith(a.post, a.demo.Transport())
+	}
+	a.view = &appui.App{Store: a.store, Art: art, Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme, Demo: a.demo != nil}
 	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
 	a.view.ScrollbarsAlways = scrollbarsAlways()
-	a.view.Setup = setup.New(a.post, setup.SystemDeps(dirs.Resources, wrapperhost.Home{Dir: a.localDirs().WrapperDir()},
+	deps := setup.SystemDeps(dirs.Resources, wrapperhost.Home{Dir: a.wrapperDir()},
 		wrapperhost.NightlyLink{Client: &http.Client{}}, func(ctx context.Context) (wrapperhost.Pin, error) {
 			pin, _, err := wrapperhost.CurrentPin(ctx, &http.Client{}, time.Now())
 			return pin, err
-		}))
+		})
+	deps.Diagnose = func(ctx context.Context, address string) setup.Server {
+		c, err := a.newClient(address)
+		if err != nil {
+			return setup.Server{Address: address, State: setup.Failed, Reach: setup.Line{State: setup.Failed, Text: err.Error()}}
+		}
+		return setup.DiagnoseClient(ctx, c, address, buildinfo.Get().Version)
+	}
+	a.view.Setup = setup.New(a.post, deps)
 	a.view.Opaque = a.opaque()
 	a.appearance = appearanceOf(a.view)
 	mygo.Theme.SetSource(a.appearance)
 	a.findFFmpeg()
-	if a.settings.Mode == "" {
+	switch {
+	case a.settings.Mode == "":
 		a.view.OpenSetup("")
-	} else {
+	case a.demo != nil:
+		// The demo opens where its jobs move.
+		a.view.Go(appui.ScreenQueue)
+	default:
 		a.view.FocusField()
 	}
 	a.win = mygo.NewWindow(mygo.WindowOptions{
@@ -174,6 +184,43 @@ func (a *App) ready() {
 	if a.opts.Shots != "" {
 		go a.captureScreens(a.opts.Shots)
 	}
+}
+
+// load reads the app's directories and settings, with the command line's
+// choices over the settings. The demo has neither: it starts on its own
+// backend and keeps its settings in memory.
+func (a *App) load() error {
+	if a.opts.Demo {
+		a.demo = demo.New(time.Now)
+		a.demo.Start(context.Background())
+		a.settings = mode.DefaultSettings()
+		a.settings.Mode, a.settings.RemoteURL = mode.Remote, demo.Address
+		return nil
+	}
+	dirs, err := mode.AppDirs()
+	if err != nil {
+		return err
+	}
+	a.dirs = dirs
+	if a.settings, err = mode.LoadSettings(dirs.Data); err != nil {
+		a.log.Warn("settings unreadable; starting from the defaults", "error", err)
+	}
+	switch {
+	case a.opts.Remote != "":
+		a.settings.Mode, a.settings.RemoteURL = mode.Remote, a.opts.Remote
+	case a.opts.Wrapper != "":
+		a.settings.Mode, a.settings.WrapperAddress = mode.Standalone, a.opts.Wrapper
+	}
+	return nil
+}
+
+// newClient is a client of the backend at address: in the demo, the demo's
+// backend, whatever the address.
+func (a *App) newClient(address string) (*client.Client, error) {
+	if a.demo != nil {
+		return client.NewWith(address, a.demo.Transport())
+	}
+	return client.New(address)
 }
 
 // keepOnScreen moves w inside the work area of the display nearest it.
@@ -305,14 +352,14 @@ func (a *App) connect() {
 	gen := a.gen
 	a.startErr = ""
 	old := a.backend
-	a.backend, a.shared = nil, local.Runtime{}
+	a.standaloneBackend = standaloneBackend{}
 	a.store.Connect(nil)
 	switch a.settings.Mode {
 	case mode.Remote:
 		if old != nil {
 			go a.stopBackend(old)
 		}
-		c, err := client.New(a.settings.RemoteURL)
+		c, err := a.newClient(a.settings.RemoteURL)
 		if err != nil {
 			a.startErr = err.Error()
 			return

@@ -9,6 +9,8 @@ data/
 # make build output.
 /bin/
 /dist/
+# make desktop and make desktop-web output.
+/apps/desktop/build/
 # node apps/site/build.mjs output.
 /apps/site/dist/
 # wrangler's cache from deploying the site.

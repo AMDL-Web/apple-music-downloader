@@ -19,6 +19,9 @@ import (
 // setupWidth is the setup column's width.
 const setupWidth = 600
 
+// demoNoLocal is why the demo offers no backend of this computer.
+const demoNoLocal = "Not in the demo"
+
 // statusLine is the height of a row's one-line status, whichever face it is
 // in.
 const statusLine = 17
@@ -130,10 +133,13 @@ func (a *App) setupModes(c *ui.Context, k *Tokens) {
 		}
 		ui.Row(c).Gap(14).Children(func() {
 			card := func(m mode.Kind, ic *ui.SVG, title string) {
-				on := f.mode == m
-				b := ui.ButtonBase(c.Key("mode-"+string(m))).Grow(1).Basis(0).Height(64).PaddingX(18).Gap(12).
+				on, off := f.mode == m, a.Demo && m == mode.Standalone
+				b := ui.ButtonBase(c.Key("mode-"+string(m))).Disabled(off).Grow(1).Basis(0).Height(64).PaddingX(18).Gap(12).
 					Radius(radiusCard).Border(1, k.Line2).Background(k.Raise).AlignItems(ui.Center).Label(title)
 				col := k.Muted
+				if off {
+					b.Opacity(0.5)
+				}
 				if on {
 					b.Border(1, k.Accent)
 					col = k.Accent
@@ -146,9 +152,17 @@ func (a *App) setupModes(c *ui.Context, k *Tokens) {
 						a.Setup.Recheck()
 					}
 				}
-				b.Cursor(ui.CursorPointer).Children(func() {
+				if !off {
+					b.Cursor(ui.CursorPointer)
+				}
+				b.Children(func() {
 					ui.Icon(c, ic).FontSize(20).TextColor(col)
-					ui.Text(c, title).FontSize(14).FontWeight(650).Grow(1).SingleLine()
+					ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+						ui.Text(c, title).FontSize(14).FontWeight(650).SingleLine()
+						if off {
+							ui.Text(c, demoNoLocal).FontSize(12).TextColor(k.Muted).SingleLine()
+						}
+					})
 					if on {
 						ui.Box(c).Size(20, 20).Radius(radiusFull).Background(k.Accent).Center().Children(func() {
 							ui.Icon(c, icCheck).FontSize(12).TextColor(k.AccentInk)

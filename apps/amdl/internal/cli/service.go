@@ -18,6 +18,7 @@ import (
 	"amdl/internal/config"
 	"amdl/internal/local"
 	"amdl/internal/media"
+	"amdl/internal/wrapper"
 	"amdl/internal/wrapperhost"
 )
 
@@ -191,7 +192,7 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 			args[len(args)-1] = "127.0.0.1:<port>"
 			plan := servicePlan{DryRun: true, Action: "install", Manager: st.Manager, Definition: st.Definition,
 				Installed: st.Installed, Exe: spec.Exe, Args: args, Log: spec.Log, Config: b.ConfigPath(),
-				Wrapper: local.WrapperURL(b.Wrapper), Console: "http://127.0.0.1:<port>/console/",
+				Wrapper: wrapper.NormalizeAddress(b.Wrapper), Console: "http://127.0.0.1:<port>/console/",
 				Note: "the port is a free one picked when the service is installed and kept from then on; amdl service status shows the console's URL"}
 			if rt, ok := local.ReadRuntime(e.ctx, dirs); ok {
 				plan.Note += fmt.Sprintf("; a backend (pid %d) already runs on these files, and the service waits until it stops", rt.PID)

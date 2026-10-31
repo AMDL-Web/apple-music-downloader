@@ -38,11 +38,17 @@ type entry struct {
 // New returns a cache that hands decoded covers to the UI thread with post,
 // which redraws.
 func New(post func(func())) *Cache {
+	// Covers come from Apple's CDN on the internet, so they go through the
+	// system's proxy settings as a browser's requests would.
+	return NewWith(post, netproxy.Transport())
+}
+
+// NewWith is New with covers fetched through rt, such as the demo's
+// backend.
+func NewWith(post func(func()), rt http.RoundTripper) *Cache {
 	return &Cache{
-		post: post,
-		// Covers come from Apple's CDN on the internet, so they go through
-		// the system's proxy settings as a browser's requests would.
-		http:    &http.Client{Transport: netproxy.Transport(), Timeout: 30 * time.Second},
+		post:    post,
+		http:    &http.Client{Transport: rt, Timeout: 30 * time.Second},
 		slots:   make(chan struct{}, 6),
 		entries: map[string]*entry{},
 	}

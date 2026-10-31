@@ -1,3 +1,5 @@
+//go:build !js
+
 package app
 
 import (
@@ -8,7 +10,6 @@ import (
 	"time"
 
 	"amdl/apps/desktop/internal/ffmpeg"
-	"amdl/internal/client"
 	"amdl/internal/local"
 )
 
@@ -30,6 +31,14 @@ const sharedPoll = 3 * time.Second
 // finds its data directory free rather than waiting for the app to quit.
 const takeoverGrace = 20 * time.Second
 
+// standaloneBackend is what standalone mode follows: backend, the one this app
+// runs, or shared, the one another program on this computer runs that it
+// uses instead.
+type standaloneBackend struct {
+	backend *ownBackend
+	shared  local.Runtime
+}
+
 // ownBackend is the backend this app runs, and the log file it writes.
 type ownBackend struct {
 	*local.Running
@@ -39,6 +48,10 @@ type ownBackend struct {
 func (a *App) localDirs() local.Dirs {
 	return local.Dirs{Data: a.dirs.Data, Cache: a.dirs.Cache, Music: a.dirs.Music}
 }
+
+// wrapperDir is where the setup screen and amdl wrapper install put the
+// wrapper's guest.
+func (a *App) wrapperDir() string { return a.localDirs().WrapperDir() }
 
 // localBackend is the backend standalone mode runs, from the settings. It
 // runs the wrapper the setup screen or amdl wrapper install installed, when
@@ -127,7 +140,7 @@ func (a *App) useLocal(gen int, b local.Backend, own *ownBackend, shared local.R
 		a.shared = shared
 		a.log.Info("using this computer's running backend", "url", shared.URL, "pid", shared.PID, "version", shared.Version)
 	}
-	c, err := client.New(base)
+	c, err := a.newClient(base)
 	if err != nil {
 		a.startErr = err.Error()
 		return

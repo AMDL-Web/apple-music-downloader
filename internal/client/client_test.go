@@ -49,6 +49,33 @@ func TestWithTimeoutOutwaitsTheHeaderBound(t *testing.T) {
 	}
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestNewWithSendsThroughItsTransport(t *testing.T) {
+	var paths []string
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		paths = append(paths, r.Host+r.URL.Path)
+		rec := httptest.NewRecorder()
+		fmt.Fprint(rec, `{"status":"ok"}`)
+		return rec.Result(), nil
+	})
+	c, err := NewWith("demo", rt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// WithTimeout keeps a transport that is not an *http.Transport.
+	for _, c := range []*Client{c, c.WithTimeout(time.Minute)} {
+		if h, err := c.Health(context.Background()); err != nil || h.Status != "ok" {
+			t.Fatalf("health = %+v, %v", h, err)
+		}
+	}
+	if strings.Join(paths, " ") != "demo/api/v1/health demo/api/v1/health" {
+		t.Errorf("requests %q", paths)
+	}
+}
+
 func TestNormalizeBase(t *testing.T) {
 	for in, want := range map[string]string{
 		"192.168.3.5:18570":            "http://192.168.3.5:18570",

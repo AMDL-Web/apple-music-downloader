@@ -17,7 +17,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -26,6 +25,7 @@ import (
 	"amdl/internal/buildinfo"
 	"amdl/internal/config"
 	"amdl/internal/server"
+	"amdl/internal/wrapper"
 	"amdl/internal/wrapperhost"
 )
 
@@ -132,7 +132,7 @@ func (b Backend) WriteConfig() error {
 		cfg.Server.Listen = "127.0.0.1:0"
 	}
 	if b.Wrapper != "" {
-		cfg.Wrapper.Address = WrapperURL(b.Wrapper)
+		cfg.Wrapper.Address = wrapper.NormalizeAddress(b.Wrapper)
 	}
 	if b.FFmpeg != "" {
 		cfg.Tools.FFmpeg = b.FFmpeg
@@ -145,16 +145,6 @@ func (b Backend) WriteConfig() error {
 		return err
 	}
 	return writeAtomic(path, append([]byte(configHeader), out...), 0o600)
-}
-
-// WrapperURL completes a wrapper address typed by a person: a scheme defaults
-// to http.
-func WrapperURL(s string) string {
-	s = strings.TrimRight(strings.TrimSpace(s), "/")
-	if s != "" && !strings.Contains(s, "://") {
-		s = "http://" + s
-	}
-	return s
 }
 
 func writeAtomic(path string, data []byte, perm os.FileMode) error {
@@ -325,7 +315,7 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	}
 	host := b.wrapperHost()
 	if host != nil {
-		if b.Wrapper != "" && WrapperURL(b.Wrapper) != host.URL() {
+		if b.Wrapper != "" && wrapper.NormalizeAddress(b.Wrapper) != host.URL() {
 			fmt.Fprintf(logOut, "wrapper address %s ignored: this machine runs its own wrapper; amdl wrapper uninstall stops that and lets the address apply\n", b.Wrapper)
 		}
 		b.Wrapper = host.URL()

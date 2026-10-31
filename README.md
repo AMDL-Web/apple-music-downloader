@@ -51,7 +51,7 @@ describes it all.
 by a zero-dependency Node script. [apps/site/README.md](apps/site/README.md) explains how to
 build and preview it.
 
-### Desktop app (in development)
+### Desktop app
 
 `apps/desktop` is a native app for macOS, Windows and Linux, drawn with
 [MyGo](https://github.com/egoist/mygo)'s native UI. It runs either as a client of a remote
@@ -60,7 +60,8 @@ one on this computer, which the app's setup screen installs with QEMU and ffmpeg
 `amdl wrapper install` does, or one on another machine. Standalone mode runs the backend through `internal/local` on a loopback port, or
 uses the one this computer already runs, such as `amdl service`, so the app and the command
 line share one backend and one download history; the app's own packages sit under
-apps/desktop/internal, private to it.
+apps/desktop/internal, private to it. `make desktop-web` builds the same app for
+browsers: a demo on a made-up backend held in memory.
 
 ## Repository layout
 

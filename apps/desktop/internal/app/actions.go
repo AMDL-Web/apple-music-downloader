@@ -13,13 +13,15 @@ import (
 // The methods below implement ui.Actions.
 
 // ApplySettings saves the settings and connects again when where downloads
-// run changed.
+// run changed. The demo keeps them in memory.
 func (a *App) ApplySettings(s mode.Settings) {
 	prev := a.settings
 	a.settings = s
 	a.view.Settings = s
-	if err := mode.SaveSettings(a.dirs.Data, s); err != nil {
-		a.log.Error("settings not saved", "error", err)
+	if a.demo == nil {
+		if err := mode.SaveSettings(a.dirs.Data, s); err != nil {
+			a.log.Error("settings not saved", "error", err)
+		}
 	}
 	if s.FFmpeg != prev.FFmpeg {
 		a.findFFmpeg()
@@ -34,7 +36,12 @@ func (a *App) ApplySettings(s mode.Settings) {
 // TestServer tests a remote backend's address off the UI thread.
 func (a *App) TestServer(address string, done func([]mode.Check)) {
 	go func() {
-		checks := mode.TestServer(context.Background(), address)
+		var checks []mode.Check
+		if c, err := a.newClient(address); err != nil {
+			checks = []mode.Check{{Text: err.Error()}}
+		} else {
+			checks = mode.TestServer(context.Background(), c)
+		}
 		a.post(func() { done(checks) })
 	}()
 }

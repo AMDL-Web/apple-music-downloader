@@ -93,6 +93,9 @@ type App struct {
 	// Transparency, Windows's transparency effects off): the sidebar draws
 	// its own ground over the window's material.
 	Opaque bool
+	// Demo is set while the app runs the demo (package demo): there is no
+	// backend of this computer to offer.
+	Demo bool
 
 	Screen Screen
 	// trail holds the screens Back returns to, the last one on top: the

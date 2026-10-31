@@ -67,12 +67,16 @@ func (s *Setup) ForgetServer() {
 
 // Diagnose tests the amdl at address for a client of version mine.
 func Diagnose(ctx context.Context, address, mine string) Server {
-	sv := Server{Address: address, State: Failed}
 	c, err := client.New(address)
 	if err != nil {
-		sv.Reach = Line{Failed, err.Error()}
-		return sv
+		return Server{Address: address, State: Failed, Reach: Line{Failed, err.Error()}}
 	}
+	return DiagnoseClient(ctx, c, address, mine)
+}
+
+// DiagnoseClient is Diagnose through c, a client of the amdl at address.
+func DiagnoseClient(ctx context.Context, c *client.Client, address, mine string) Server {
+	sv := Server{Address: address, State: Failed}
 	start := time.Now()
 	if _, err := c.Health(ctx); err != nil {
 		sv.Reach = Line{Failed, "No answer · " + short(err)}
