@@ -2,13 +2,13 @@ package media
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
 
 	"amdl/internal/applemusic"
-	"amdl/internal/config"
 	"amdl/internal/domain"
 	"amdl/internal/wrapper"
 )
@@ -214,14 +214,13 @@ func TestFetchLyricsAsksForPlainTextOnceAfterAWordTimedMiss(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var syllables []bool
-			cfg := config.Default()
+			cfg := aacLCRunConfig(t)
 			cfg.Download.MaxAttempts = 3
 			cfg.Download.EmbedCover = false
-			cfg.Tools.FFmpeg = "amdl-test-missing-ffmpeg"
 			downloader := newTestDownloader(&Downloader{
 				cfg:     cfg,
 				catalog: fakeDownloaderCatalog{song: applemusic.Song{ID: "song-1", Name: "One", HasLyrics: true}},
-				wrapper: fakeDownloaderWrapper{lyricsFor: func(opts wrapper.LyricsRequestOptions) (string, error) {
+				wrapper: fakeDownloaderWrapper{webPlaybackErr: errStopAtWebPlayback, lyricsFor: func(opts wrapper.LyricsRequestOptions) (string, error) {
 					syllables = append(syllables, opts.Syllable)
 					if opts.Syllable || tc.plain == "" {
 						return "", notFound
@@ -232,9 +231,8 @@ func TestFetchLyricsAsksForPlainTextOnceAfterAWordTimedMiss(t *testing.T) {
 			})
 			reporter := &recordingReporter{}
 			item := domain.JobItem{ID: "item-1", JobID: "job-1", AdamID: "song-1"}
-			// The missing ffmpeg stops processTrack right after the lyrics phase.
-			if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); err == nil {
-				t.Fatal("expected the missing-ffmpeg error to stop processing after the lyrics phase")
+			if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); !errors.Is(err, errStopAtWebPlayback) {
+				t.Fatalf("processTrack = %v, want the fake webplayback to stop it after the lyrics phase", err)
 			}
 			if want := []bool{true, false}; !slices.Equal(syllables, want) {
 				t.Fatalf("requests by syllable = %v, want %v", syllables, want)

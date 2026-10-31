@@ -183,14 +183,14 @@ undocumented and can change without notice.
 
 <p align="center">
   <img src="./docs/assets/track-download.svg" width="100%"
-       alt="Statechart of one track: resolve, then per codec a fetch phase (choose a manifest, claim the output path, download) and a decrypt phase (decrypt, remux, verify, tag, save), falling back to the next codec when a phase runs out of attempts; ends completed, skipped_existing, failed or cancelled">
+       alt="Statechart of one track: resolve, then per codec a fetch phase (choose a manifest, claim the output path, fetch cover and lyrics once, download) and a decrypt phase (decrypt, remux, verify, tag, save), falling back to the next codec when a phase runs out of attempts; ends completed, skipped_existing, failed or cancelled">
 </p>
 
 **One track.** Each track is resolved, then downloaded and decrypted. Decrypted samples
 are piped straight into `ffmpeg` for the remux, so no plaintext copy of the whole track is
 written to disk; verifying and tagging happen in `download.temp_dir`, and only the
 finished file moves into `download.downloads_dir`. If that file already exists the track
-is skipped.
+is skipped before its cover and lyrics are fetched.
 
 **Codec fallback.** `download.quality_priority` lists the codecs to try in order. The
 download and decrypt phases of each codec have their own `download.max_attempts` budget,

@@ -181,7 +181,8 @@ comfortable. Full numbers in [benchmarks.md](benchmarks.md).
 
 ## Lyrics
 
-Each track with lyrics takes one wrapper request: `/lyrics` with `syllable=1`, which
+Each track with lyrics takes one wrapper request, sent by the first codec attempt whose
+output path is free, so a track already on disk takes none: `/lyrics` with `syllable=1`, which
 returns Apple's word-timed TTML with the translation in `catalog.language` (when Apple has
 one) and the romanization. wrapper-lite answers from its own account's storefront. A song
 with only plain-text lyrics has no such document, so a `404` asks once more with

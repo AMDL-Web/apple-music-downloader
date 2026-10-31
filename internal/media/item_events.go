@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"amdl/internal/domain"
@@ -69,12 +70,21 @@ func (d *Downloader) setRetryFailure(ctx context.Context, reporter jobs.Reporter
 
 // emitRetryEvent records one failed attempt of operation: operation_retry when
 // another attempt follows, operation_exhausted when none does. Retries inside
-// a codec attempt carry the codec as phase.
+// a codec attempt carry the codec as phase. It also logs the attempt, because
+// job events are deleted with their job.
 func (d *Downloader) emitRetryEvent(ctx context.Context, reporter jobs.Reporter, jobID string, item *domain.JobItem, operation, codec string, failure retryFailure) {
 	eventType := domain.EventOperationExhausted
+	level := slog.LevelWarn
 	if failure.WillRetry {
 		eventType = domain.EventOperationRetry
+		level = slog.LevelInfo
 	}
+	attrs := []any{"operation", operation, "codec", codec,
+		"attempt", failure.Attempt, "max_attempts", failure.MaxAttempts, "will_retry", failure.WillRetry, "error", failure.Err}
+	if item != nil {
+		attrs = append(attrs, "item_id", item.ID, "adam_id", item.AdamID)
+	}
+	logging.FromContext(ctx, d.logger).Log(ctx, level, "operation attempt failed", attrs...)
 	message := fmt.Sprintf("%s attempt %d/%d failed: %v", operation, failure.Attempt, failure.MaxAttempts, failure.Err)
 	fields := map[string]any{
 		"operation": operation, "codec": codec, "attempt": failure.Attempt, "max_attempts": failure.MaxAttempts,

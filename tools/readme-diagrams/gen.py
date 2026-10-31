@@ -130,10 +130,10 @@ def curve(x1, y1, x2, y2):
 def track():
     s = SVG(1020, 1600,
             "How amdl downloads one track",
-            "Statechart of one track: resolving metadata, cover and lyrics; then for each codec in "
+            "Statechart of one track: resolving metadata and standalone covers; then for each codec in "
             "download.quality_priority, followed by aac-lc when codec_alternative is on, a fetch phase "
             "(choose the web enhancedHls manifest, the wrapper's device manifest for Hi-Res ALAC when "
-            "alac_max_sample_rate is above 48 kHz or sets no ceiling, or webplayback for aac-lc; claim the output path; download the encrypted segments) "
+            "alac_max_sample_rate is above 48 kHz or sets no ceiling, or webplayback for aac-lc; claim the output path; fetch the embedded cover and lyrics, once per track; download the encrypted segments) "
             "and a decrypt phase (decrypt in-process with internal/fairplay, remux with ffmpeg, verify "
             "when check_integrity is on, tag, move into downloads_dir). Each phase has its own "
             "download.max_attempts budget; when one runs out the next codec is tried. End states: "
@@ -144,7 +144,7 @@ def track():
                            ("skipped / cancelled", "stopped")])
     MX = 560
     s.start_dot(MX, 172)
-    A = s.node(MX, 200, "Resolving metadata,\ncover and lyrics", "start")
+    A = s.node(MX, 200, "Resolving metadata,\nstandalone covers", "start")
     s.edge(f"M {MX} 178 L {MX} {A['top'] - 1}")
 
     # regions
@@ -167,7 +167,7 @@ def track():
         s.edge(curve(c['cx'], c['bottom'], x, D['top'] - 1))
 
     E = s.node(MX, 728, "Downloading the\nencrypted segments", "draw")
-    s.edge(curve(MX, D['bottom'], MX, E['top'] - 1), "path is free", (MX, 699))
+    s.edge(curve(MX, D['bottom'], MX, E['top'] - 1), "path is free:\ncover, lyrics once", (MX, 699))
 
     SK = s.node(925, 627, "skipped_existing", "stopped")
     s.edge(f"M {D['right']} {D['cy']} C 760 {D['cy']} 780 {SK['cy']} {SK['left'] - 1} {SK['cy']}",

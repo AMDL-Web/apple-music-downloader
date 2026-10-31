@@ -34,8 +34,11 @@ func (t trackTarget) coverDirs(cfg config.Config, song applemusic.Song) (albumDi
 	return standaloneCoverDirs(cfg, song, t.collectionType, t.collectionIndex, t.folderArtist, t.collectionName, t.collectionID)
 }
 
-// trackRun carries one track through the pipeline: metadata, covers, lyrics,
-// then each configured codec until one completes. It owns the item and every
+// trackRun carries one track through the pipeline: metadata and standalone
+// covers, then each configured codec until one completes. The embedded cover
+// and the lyrics are fetched once, by the first codec attempt whose output
+// path is free, so a track already on disk is skipped without asking for
+// either. It owns the item and every
 // status, message and event the item publishes; the media backend does the
 // I/O. A run ends with the item completed, skipped, failed or cancelled, except
 // on shutdown, which leaves the item as it is for recovery.
@@ -61,8 +64,10 @@ type trackRun struct {
 	lastProgress domain.ItemProgress
 
 	output outputLease
-	cover  []byte
-	lyrics trackLyrics
+	// enriched is set once cover and lyrics hold what enrich fetched.
+	enriched bool
+	cover    []byte
+	lyrics   trackLyrics
 }
 
 func (d *Downloader) newTrackRun(job domain.Job, item domain.JobItem, initial applemusic.Song, target trackTarget, metadata *trackMetadataResolver, reporter jobs.Reporter) *trackRun {
@@ -179,12 +184,6 @@ func (r *trackRun) process(ctx context.Context) error {
 		return err
 	}
 	r.saveStandaloneCovers(ctx)
-	if err := r.fetchCover(ctx); err != nil {
-		return err
-	}
-	if err := r.fetchLyrics(ctx); err != nil {
-		return err
-	}
 	if err := r.media.requireTools(ctx); err != nil {
 		return err
 	}
@@ -431,7 +430,8 @@ func (r *trackRun) runCodec(ctx context.Context, codecs []string, index int, las
 }
 
 // fetch is one attempt of a codec's fetch phase: pick the stream, take the
-// output lock, stop if the output already exists, then transfer.
+// output lock, stop if the output already exists, fetch the cover and lyrics
+// if no earlier attempt did, then transfer.
 func (r *trackRun) fetch(ctx context.Context, attempt *codecAttempt, n int, set publishStage) error {
 	d, item := r.d, &r.item
 	codecName := strings.ToUpper(attempt.codec)
@@ -444,6 +444,11 @@ func (r *trackRun) fetch(ctx context.Context, attempt *codecAttempt, n int, set 
 		attempt.outPath = r.target.outputPath(d.cfg, r.song, attempt.codec, aacLCQualityLabel)
 		if skip, err := r.claimOutput(ctx, attempt.outPath); skip || err != nil {
 			attempt.skipped = skip
+			return err
+		}
+		if err := r.enrich(ctx, func() {
+			d.setItemAttempt(ctx, r.reporter, item, "download", n, attempts, fmt.Sprintf("Downloading %s (%d/%d)", codecName, n, attempts))
+		}); err != nil {
 			return err
 		}
 		download, err := d.fetchAACLCMedia(ctx, r.job, item, r.song, r.reporter, set)
@@ -463,11 +468,36 @@ func (r *trackRun) fetch(ctx context.Context, attempt *codecAttempt, n int, set 
 		attempt.skipped = skip
 		return err
 	}
+	if err := r.enrich(ctx, func() {
+		d.setItemAttempt(ctx, r.reporter, item, "download", n, attempts, fmt.Sprintf("Downloading %s (%d/%d)", codecName, n, attempts))
+	}); err != nil {
+		return err
+	}
 	selected, err = d.downloadSelectedEnhancedMedia(ctx, selected, attempt.codec, r.job.ID, attempt.outPath, set)
 	if err != nil {
 		return err
 	}
 	attempt.enhanced = selected
+	return nil
+}
+
+// enrich fetches the embedded cover and the lyrics the first time it runs and
+// then calls resume, which puts the item's attempt fields back on the fetch
+// phase their retries overwrote. Neither fetch fails the track, so the error
+// is the job's cancellation, and a cancelled enrich runs again on the next
+// attempt.
+func (r *trackRun) enrich(ctx context.Context, resume func()) error {
+	if r.enriched {
+		return nil
+	}
+	if err := r.fetchCover(ctx); err != nil {
+		return err
+	}
+	if err := r.fetchLyrics(ctx); err != nil {
+		return err
+	}
+	r.enriched = true
+	resume()
 	return nil
 }
 

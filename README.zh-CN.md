@@ -163,12 +163,12 @@ wrapper 还提供歌词、AAC-LC 许可证，以及 Hi-Res ALAC 曲目的设备�
 
 <p align="center">
   <img src="./docs/assets/track-download.svg" width="100%"
-       alt="一首曲目的状态图：先解析，然后每个编码依次经过获取阶段（选清单、占用输出路径、下载）和解密阶段（解密、重封装、校验、打标签、保存），某阶段次数用完就换下一个编码；结局为 completed、skipped_existing、failed 或 cancelled">
+       alt="一首曲目的状态图：先解析，然后每个编码依次经过获取阶段（选清单、占用输出路径、取一次封面和歌词、下载）和解密阶段（解密、重封装、校验、打标签、保存），某阶段次数用完就换下一个编码；结局为 completed、skipped_existing、failed 或 cancelled">
 </p>
 
 **一首曲目。** 每首曲目先解析，再下载和解密。解密后的样本直接通过管道送进 `ffmpeg` 重封装，
 整首曲目的明文副本从不落盘；校验和打标签都在 `download.temp_dir` 里完成，只有成品文件才移进
-`download.downloads_dir`。如果那个文件已经存在，这首曲目会被跳过。
+`download.downloads_dir`。如果那个文件已经存在，这首曲目会被跳过，不再获取封面和歌词。
 
 **编码回退。** `download.quality_priority` 按顺序列出要尝试的编码。每个编码的下载阶段和解密
 阶段各有自己的 `download.max_attempts` 次数，两次尝试之间会退避等待。开启

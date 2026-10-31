@@ -74,6 +74,9 @@ type fakeDownloaderWrapper struct {
 	lyricsErr error
 	// lyricsFor, when set, answers Lyrics in place of lyrics and lyricsErr.
 	lyricsFor func(wrapper.LyricsRequestOptions) (string, error)
+	// webPlaybackErr fails WebPlayback, which stops an AAC-LC attempt right
+	// after it claimed its output path and fetched the cover and lyrics.
+	webPlaybackErr error
 }
 
 func (f fakeDownloaderWrapper) Status(context.Context) (wrapper.Status, error) {
@@ -92,7 +95,7 @@ func (f fakeDownloaderWrapper) Lyrics(_ context.Context, _ string, opts wrapper.
 }
 
 func (f fakeDownloaderWrapper) WebPlayback(context.Context, string) (string, error) {
-	return "", nil
+	return "", f.webPlaybackErr
 }
 
 func (f fakeDownloaderWrapper) NewDecryptSession(context.Context, string) (wrapper.DecryptSession, error) {

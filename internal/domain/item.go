@@ -28,10 +28,14 @@ const (
 // fetch, complementing JobItem.HasLyrics: HasLyrics is the catalog's claim
 // that lyrics exist, LyricsStatus is what actually happened when the backend
 // tried to get them. Cleared on retry (see ResetForRetry) because the next
-// attempt may succeed where this one failed. On finished items the value
-// intentionally keeps describing the download that produced the file, even
-// if a later re-resolve refreshes HasLyrics — the skew is meaningful (e.g.
-// HasLyrics=true with LyricsNone: the file predates lyrics availability).
+// attempt may succeed where this one failed. A skipped item normally stays
+// LyricsPending: a track already on disk is skipped before lyrics are fetched,
+// unless an earlier codec of the same track fetched them before a later
+// codec's output was found on disk.
+// On completed items the value intentionally keeps describing the download
+// that produced the file, even if a later re-resolve refreshes HasLyrics — the
+// skew is meaningful (e.g. HasLyrics=true with LyricsNone: the file predates
+// lyrics availability).
 type LyricsStatus string
 
 const (
