@@ -11,8 +11,8 @@ link, then download, decrypt, remux and tag each track. Code map: the
   `internal/server#Run`, which wires the core and serves REST and SSE under `/api/v1`
   with a SQLite store; its image is `deploy/server/`. The other commands are the
   agent-facing client (`docs/cli.md`).
-- `apps/console`: the web console, embedded into the server; the one client this
-  repository maintains today. Rules in `apps/console/AGENTS.md`.
+- `apps/console`: the web console, embedded into the server. Rules in
+  `apps/console/AGENTS.md`.
 - `apps/site`: the bilingual static website, built by a zero-dependency Node script. Rules
   in `apps/site/AGENTS.md`.
 - `apps/desktop`: the desktop app for macOS, Windows and Linux, drawn with MyGo's native
@@ -53,7 +53,7 @@ features, and don't report missing auth in a review.
 ## Contracts and breaking changes
 
 The HTTP API (`internal/api/openapi.yaml`), config keys, the DB schema, SSE event
-types and output paths are contracts that installs and the console depend on.
+types and output paths are contracts that installs and the clients in this repository depend on.
 
 - A breaking change needs a reason: it fixes a defect, removes duplication or makes
   a contract machine-checkable.
@@ -67,8 +67,9 @@ types and output paths are contracts that installs and the console depend on.
 - What changes together with each surface (spec, handler, docs, README table,
   console, config example, migration) is listed in
   [amdl-api-change](.claude/skills/amdl-api-change/SKILL.md).
-- The console changes in the same commit as an API it uses. The iOS app and amdl-web
-  are set aside and get no follow-ups.
+- The clients here change in the same commit as an API they use: the console, and
+  `internal/client` and `internal/capability` for the CLI, MCP server, TUI and
+  desktop app. The iOS app and amdl-web are set aside and get no follow-ups.
 
 ## Config
 
@@ -178,7 +179,7 @@ sit in front of it and adds the login API the console uses; a bare wrapper-lite 
 | `main` only through a PR | branch protection; guard hook on `git push` |
 | No `--admin` merge without approval | guard hook on `gh pr merge` (Claude Code only) |
 | Never commit config, keys or data | `.gitignore`; guard hook on `git add -f` |
-| No auth, breaking-change marking, console updated with the API, full config comments, row-preserving migrations, optional amp-api reads degrade | text and `REVIEW.md` |
+| No auth, breaking-change marking, clients updated with the API, full config comments, row-preserving migrations, optional amp-api reads degrade | text and `REVIEW.md` |
 
 The guard hook runs where Claude Code loads `.claude/settings.json`; other agents
 follow the text.

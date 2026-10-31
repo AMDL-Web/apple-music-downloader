@@ -73,8 +73,7 @@ config file:
 - The four key overrides win over the file on every start and reload, and are never
   written back. They are all startup keys, so `PUT /api/v1/config` never meets one.
 - Every other key is set in `config.yaml`. Any other `AMDL_*` variable is ignored, and
-  startup logs one warning per variable naming it; releases before 2.0 accepted an
-  override for every key, so move such a setting into the file.
+  startup logs one warning per variable naming it; move such a setting into the file.
 
 ## Wrapper
 

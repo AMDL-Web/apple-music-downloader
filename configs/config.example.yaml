@@ -120,8 +120,7 @@ catalog:
   # Default: true.
   # - true: after a job's input resolves, one extra amp-api request per album runs out of band, on a context
   #     detached from the job. It never blocks or fails a download; the fields appear a moment later via the
-  #     motion_artwork_resolved event. Requires a scraped music.apple.com web-player token — the public API
-  #     host never returns editorialVideo, whatever token it is given.
+  #     motion_artwork_resolved event. Requires a scraped music.apple.com web-player token.
   # - false: no lookup, no request, no token scrape. Jobs simply carry no motion artwork fields, which is
   #     indistinguishable to clients from an album that has no animated cover. Set this if nothing you use
   #     renders animated covers and you would rather not generate undocumented-endpoint traffic.
@@ -333,8 +332,8 @@ tools:
   # string path or command name: ffmpeg executable. Used to flatten the
   # remuxed MP4 and to run the optional integrity check. All MP4 box/atom
   # operations (sample extraction, re-encapsulation, metadata, cover art) are
-  # now handled in-process via the Go mp4ff/go-mp4tag libraries, so gpac,
-  # MP4Box and the Bento4 tools (mp4extract/mp4edit) are no longer required.
+  # handled in-process via the Go mp4ff/go-mp4tag libraries, so no other tool
+  # is required.
   # ffmpeg 8 or later is recommended: 7.0.2 wrote a 24-bit/96 kHz ALAC
   # track's duration without its last, partial frame (about 16 ms short),
   # with the same audio; amdl doctor says when the one found is older.

@@ -24,6 +24,10 @@ wins and this page is fixed in the same change. Sources are listed in
    designed, not inverted.
 5. **English UI copy**, `lang="en"`. Apple-provided text (titles, artists,
    genres) is shown as received with `dir="auto"`.
+6. **Say a fact once, and only what the maintainer acts on.** A fact appears
+   in one place on a screen. No explanatory sentence under a page title and no
+   text about what a card is for; a view holds data, state and actions. A
+   destructive action's confirmation keeps one sentence on its consequence.
 
 ## Information architecture
 

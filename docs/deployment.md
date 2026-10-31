@@ -148,11 +148,6 @@ restart. Inside the container the listen and wrapper
 addresses always come from the environment. Remember that a `PUT` rewrites the whole file
 and drops comments.
 
-> **Breaking change**: 2.0 reads only the six `AMDL_*` variables above. The old names
-> `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR`, and the per-key overrides such as
-> `AMDL_SIMULATE_ENABLED`, are ignored with a warning; see
-> [Upgrading to 2.0](upgrading-to-2.0.md#config-and-environment).
-
 To avoid running as root at all, use `docker run --user <uid>:<gid>` (or compose's
 `user:`). The entrypoint then skips the privilege drop and the ownership fixes, ignores
 `PUID`/`PGID`, and you are responsible for making the mounts writable by that user; the

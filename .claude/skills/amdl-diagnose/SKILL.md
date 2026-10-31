@@ -17,8 +17,9 @@ it.
   `GET /api/v1/downloads/{id}/events`; for a user's install, the `jobs`,
   `job_items` and `job_events` rows.
 - One request's access and job logs: `GET /api/v1/logs?request_id=<id>`.
-- Which Apple host answered; an empty `enhancedHls` or `editorialVideo` from the
-  public host is expected (root `AGENTS.md` "Two Apple hosts").
+- Which catalog read failed: a required read fails the job, an optional one
+  (motion artwork, album enrichment) degrades to "not available" (root
+  `AGENTS.md` "Apple catalog reads").
 - Captures stay in the session scratchpad until they are sanitized fixtures
   (`internal/applemusic/AGENTS.md`).
 

@@ -19,7 +19,8 @@ Report a change that breaks one of these when used as intended:
   names) without the maintainer's OK and an upgrade note.
 - A route, request or response change without the matching
   `internal/api/openapi.yaml`, [docs/api.md](docs/api.md) and README API table
-  update, or without the console change when `apps/console` uses it.
+  update, or without the client change when the console, `internal/client` or
+  `internal/capability` uses it.
 - A config key added or changed without its full comment in
   `configs/config.example.yaml`.
 - A migration that loses user data (jobs, items, milestone events, the library-sync

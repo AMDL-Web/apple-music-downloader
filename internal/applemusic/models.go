@@ -51,9 +51,7 @@ type Song struct {
 	// included artist resource's attributes.url. Empty when the catalog
 	// response carries no artist relationship.
 	ArtistURL string
-	// HiResLossless reports "hi-res-lossless" in attributes.audioTraits. Only
-	// amp-api returns audioTraits, so it is always false for a song read from
-	// the public host.
+	// HiResLossless reports "hi-res-lossless" in attributes.audioTraits.
 	HiResLossless bool
 	// AudioTraits is attributes.audioTraits as Apple sends it, for example
 	// "lossless", "hi-res-lossless", "atmos", "spatial", "lossy-stereo".
@@ -260,8 +258,7 @@ type songAttributes struct {
 	HasLyrics            bool              `json:"hasLyrics"`
 	Artwork              artwork           `json:"artwork"`
 	ExtendedAssetURLs    extendedAssetURLs `json:"extendedAssetUrls"`
-	// AudioTraits is amp-api only and comes without extend=. The public host
-	// documents a different, extended attribute, audioVariants, instead.
+	// AudioTraits is returned without extend=.
 	AudioTraits []string `json:"audioTraits"`
 	URL         string   `json:"url"`
 }

@@ -46,4 +46,7 @@ go vet ./apps/console/ && go test -race -count=1 ./apps/console/
 ```
 
 Then `make dev`, open `http://127.0.0.1:18080/console/`, and check the change at
-desktop width and 375 px, in light and dark.
+desktop width and 375 px, in light and dark. A view whose height changes with its
+state (loading, drawer, live queue, account panel) also gets a run of
+[tools/ui-audit](tools/ui-audit/README.md#run-it); read its layout-shift and
+flicker findings.

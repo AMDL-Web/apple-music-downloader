@@ -56,7 +56,9 @@ the `go run` child listening.
 When `apps/console` changed: with `make dev` running, open
 `http://127.0.0.1:18080/console/` at desktop width and 375 px, light and dark. The
 changed view renders, the browser console has no errors, and a submitted job
-updates live. Attach a screenshot per width and theme.
+updates live. A view whose height changes with its state also gets a run of
+`apps/console/tools/ui-audit` (its README has the command); read the layout-shift
+and flicker findings. Attach a screenshot per width and theme.
 
 ## Report
 

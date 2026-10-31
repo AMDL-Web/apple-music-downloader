@@ -36,7 +36,10 @@ Route, request or response:
   `assertErrorCode`);
 - [docs/api.md](../../../docs/api.md) and the API table in `README.md` and
   `README.zh-CN.md`;
-- `apps/console` when it calls the route or reads the field.
+- `apps/console` when it calls the route or reads the field;
+- an `internal/capability` entry for a new operation (a test fails without it),
+  and `internal/client` when a Go client (CLI, MCP server, TUI, desktop app)
+  calls the route or reads the field.
 
 Error code: the constant in `internal/api/errors.go`, the spec's `ErrorCode` enum
 and the table in docs/api.md. A per-URL submit code also goes in the spec's
@@ -65,11 +68,11 @@ Breaking change: a `!` commit title and a row in the upgrade guide in `docs/`.
 ## Verify
 
 ```bash
-go test ./internal/api/ ./internal/config/ ./internal/db/ ./apps/console/
+go test ./internal/api/ ./internal/config/ ./internal/db/ ./internal/client/ ./internal/capability/ ./apps/console/
 go test -count=1 ./tools/repocheck/
 ```
 
 Then `make dev` and exercise the change with curl, error cases included
 ([amdl-verify](../amdl-verify/SKILL.md)). Done when a live request returns exactly
 what the spec says. The report names the surface, compatible or breaking, and
-whether and where the console was updated.
+whether and where the clients were updated.
