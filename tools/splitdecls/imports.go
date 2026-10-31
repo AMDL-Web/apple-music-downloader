@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -133,9 +135,14 @@ func packageName(spec importSpec) string {
 	return name
 }
 
+// isStdlib reports whether p is in GOROOT. A dot-free first element is not
+// enough: this module's own path, amdl, has none.
 func isStdlib(p string) bool {
-	first, _, _ := strings.Cut(p, "/")
-	return !strings.Contains(first, ".")
+	if p == "C" {
+		return true
+	}
+	st, err := os.Stat(filepath.Join(build.Default.GOROOT, "src", filepath.FromSlash(p)))
+	return err == nil && st.IsDir()
 }
 
 // renderImports writes one import block, standard library first, then

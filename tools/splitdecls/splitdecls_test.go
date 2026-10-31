@@ -110,6 +110,16 @@ func TestCompareReportsEdits(t *testing.T) {
 	}
 }
 
+// This module's own imports go in the second group, as gofmt and goimports
+// leave them, although "amdl" has no dot.
+func TestRenderImportsGroupsModuleImportsApart(t *testing.T) {
+	got := renderImports([]importSpec{{path: "amdl/internal/config"}, {path: "strings"}, {path: "net/http"}, {path: "golang.org/x/sys/unix"}})
+	want := "import (\n\t\"net/http\"\n\t\"strings\"\n\n\t\"amdl/internal/config\"\n\t\"golang.org/x/sys/unix\"\n)\n\n"
+	if got != want {
+		t.Fatalf("renderImports =\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestMoveRejectsUnknownDeclaration(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "demo.go"), []byte(sourceFile), 0o644); err != nil {
