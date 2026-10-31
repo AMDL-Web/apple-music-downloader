@@ -175,8 +175,8 @@ func (a *App) searchKeys(c *ui.Context) {
 	})
 }
 
-// actOnHit is Return: the first press picks the first hit, then a song or
-// an album downloads and an artist opens.
+// actOnHit is Return: the first press picks the first hit, then an album
+// or an artist opens, as a click does, and a song downloads.
 func (a *App) actOnHit() {
 	s := a.Store
 	hits := s.Search.ShownHits()
@@ -187,8 +187,12 @@ func (a *App) actOnHit() {
 		}
 		return
 	}
-	if h.Type == "artist" {
+	switch h.Type {
+	case "artist":
 		a.openArtist(*h)
+		return
+	case "album":
+		a.OpenAlbum(*h)
 		return
 	}
 	if m, _ := s.HitMark(*h); m != store.MarkActive {

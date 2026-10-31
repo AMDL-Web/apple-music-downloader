@@ -26,6 +26,7 @@ const (
 	ScreenQueue
 	ScreenSettings
 	ScreenDetail
+	ScreenAlbum
 	// ScreenSetup checks and installs what a mode needs (OpenSetup).
 	ScreenSetup
 )
@@ -90,6 +91,9 @@ type App struct {
 	NoMotion bool
 
 	Screen Screen
+	// trail holds the screens Back returns to, the last one on top: the
+	// album screen and the detail push the one they were opened from.
+	trail []Screen
 	// Tab is the queue's filter.
 	Tab int
 
@@ -152,22 +156,81 @@ func (a *App) tokens(c *ui.Context) *Tokens {
 	return &LightTokens
 }
 
-// Go switches the main window to a screen. Home puts the keyboard in its
-// field.
+// Go switches the main window to a screen, forgetting where Back would
+// return. Home puts the keyboard in its field.
 func (a *App) Go(s Screen) {
 	if s != ScreenDetail {
 		a.Store.CloseDetail()
 	}
+	a.trail = nil
 	a.Screen = s
 	if s == ScreenHome {
 		a.focusField = true
 	}
 }
 
-// OpenJob shows a job's detail.
+// OpenJob shows a job's detail; Back returns to the screen it opened from.
 func (a *App) OpenJob(id string) {
 	a.Store.OpenDetail(id)
-	a.Screen = ScreenDetail
+	a.push(ScreenDetail)
+}
+
+// push shows s, which Back leaves for the screen shown now.
+func (a *App) push(s Screen) {
+	if a.Screen != s {
+		a.trail = append(a.trail, a.Screen)
+	}
+	a.Screen = s
+}
+
+// backTo is the screen Back returns to: the one the album screen or the
+// detail was opened from, else home for the album screen and the queue for
+// the detail.
+func (a *App) backTo() Screen {
+	if n := len(a.trail); n > 0 {
+		return a.trail[n-1]
+	}
+	if a.Screen == ScreenAlbum {
+		return ScreenHome
+	}
+	return ScreenQueue
+}
+
+// navScreen is the sidebar's screen for the one shown: the album screen and
+// the detail light the screen they were opened from.
+func (a *App) navScreen() Screen {
+	for i := len(a.trail) - 1; i >= 0; i-- {
+		if s := a.trail[i]; s != ScreenAlbum && s != ScreenDetail {
+			return s
+		}
+	}
+	switch a.Screen {
+	case ScreenAlbum:
+		return ScreenHome
+	case ScreenDetail:
+		return ScreenQueue
+	}
+	return a.Screen
+}
+
+// Back returns to the screen the album screen or the detail was opened
+// from: home keeps its words, results, artist and place, so the search
+// comes back as it was left, with the keyboard in its field.
+func (a *App) Back() {
+	to := a.backTo()
+	if n := len(a.trail); n > 0 {
+		a.trail = a.trail[:n-1]
+	}
+	if to != ScreenDetail {
+		a.Store.CloseDetail()
+	}
+	if to == ScreenHome {
+		if a.Screen == ScreenAlbum {
+			a.revealAlbum()
+		}
+		a.focusField = true
+	}
+	a.Screen = to
 }
 
 // FocusField shows home and puts the keyboard in its field.

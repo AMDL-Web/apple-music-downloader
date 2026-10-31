@@ -50,11 +50,10 @@ func (a *App) tileGrid(c *ui.Context, k *Tokens, key string, hits []client.Searc
 }
 
 // hitTile is an album's or an artist's tile: the cover large, its title and
-// one line of facts under it. An album's cover carries its best quality and
-// whether it is in the library or the queue, and shows its download button
-// while pointed at or chosen with the keys; an artist's opens its albums.
+// one line of facts under it. An album's cover opens its page and carries
+// its best quality and its one control, which downloads it or says it is in
+// the queue or the library (tileControl); an artist's opens its albums.
 func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, sel *client.SearchHit, size float32) {
-	s := a.Store
 	hk := store.HitKey(h)
 	on := sel != nil && store.HitKey(*sel) == hk
 	round := h.Type == "artist"
@@ -62,15 +61,11 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 	if round {
 		radius = radiusFull
 	}
-	mark, job := s.HitMark(h)
 	ui.Column(c.Key(key)).Width(size).Gap(10).Children(func() {
 		art := ui.Box(c.Key("art")).Size(size, size)
 		hover := art.Hovered()
 		art.Children(func() {
-			// An artist's cover opens its albums, and a cover in the library
-			// or the queue its download; another one waits for its button.
-			opens := round || mark != store.MarkNone
-			open := ui.ButtonBase(c.Key("open")).Size(size, size).Radius(radius).Label(h.Name).Disabled(!opens).
+			open := ui.ButtonBase(c.Key("open")).Size(size, size).Radius(radius).Label(h.Name).
 				Shadow(0, 12, 28, -14, ui.RGBA(0, 0, 0, 0.5))
 			if on {
 				focusRing(open, radius)
@@ -83,13 +78,10 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 				if round {
 					a.openArtist(h)
 				} else {
-					a.OpenJob(job)
+					a.OpenAlbum(h)
 				}
 			}
-			if opens {
-				open.Cursor(ui.CursorPointer)
-			}
-			open.Children(func() {
+			open.Cursor(ui.CursorPointer).Children(func() {
 				widgets.Cover{Image: a.Art.Get(h.ArtworkURL, int(2*size)), Placeholder: hitPalette(h).Bg, Size: size, Radius: radius, Color: 1}.Show(c)
 			})
 			if round {
@@ -101,33 +93,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 					ui.Text(c, hints).FontSize(11).FontWeight(650).TextColor(k.Fg).SingleLine()
 				})
 			}
-			switch mark {
-			case store.MarkDone:
-				tileBadge(c, k, icCheck, k.OK, ui.RGB(255, 255, 255), "In your library")
-			case store.MarkActive:
-				tileBadge(c, k, icDown, k.Accent, k.AccentInk, "In the queue")
-			}
-			if mark == store.MarkActive {
-				return
-			}
-			shown := float32(0)
-			if hover || on || s.Search.Starting[hk] {
-				shown = 1
-			}
-			dl := ui.ButtonBase(c.Key("download")).Size(34, 34).Radius(radiusFull).Center().Absolute().Right(8).Bottom(8).
-				Material(glass.Glass{Interactive: true}).Label("Download " + h.Name)
-			op := dl.AnimateWith("shown", shown, 120*time.Millisecond, ui.EaseOut)
-			dl.Opacity(op).Hidden(op < 0.01)
-			if dl.Clicked() && !s.Search.Starting[hk] {
-				s.SubmitHit(h)
-			}
-			dl.Cursor(ui.CursorPointer).Children(func() {
-				if s.Search.Starting[hk] {
-					ui.Text(c, "…").FontSize(13).FontWeight(700).TextColor(k.Fg)
-				} else {
-					ui.Icon(c, icDown).FontSize(15).TextColor(k.Fg)
-				}
-			})
+			a.tileControl(c, k, h, hover || on)
 		})
 		texts := ui.Column(c).Gap(3)
 		if round {
@@ -147,11 +113,61 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 	})
 }
 
-// tileBadge is the round mark in a tile's top corner.
-func tileBadge(c *ui.Context, k *Tokens, ic *ui.SVG, bg, fg ui.Color, what string) {
-	ui.Box(c).Size(24, 24).Radius(radiusFull).Absolute().Top(8).Right(8).Background(bg).Center().PassThrough().
-		Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3)).Tooltip(what).Children(func() {
-		ui.Icon(c, ic).FontSize(13).TextColor(fg)
+// tileControlSize is the round control in an album tile's corner.
+const tileControlSize = 32
+
+// tileControl is an album tile's one control, in its bottom corner: a
+// download button that shows while the tile is pointed at or chosen; the
+// queue's mark while a download of the album runs, which opens its page;
+// the library's check, which turns into a download button while pointed at,
+// to fetch the tracks missing from disk (those on disk are skipped).
+func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bool) {
+	s := a.Store
+	hk := store.HitKey(h)
+	mark, _ := s.HitMark(h)
+	starting := s.Search.Starting[hk]
+	b := ui.ButtonBase(c.Key("control")).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().
+		Absolute().Right(8).Bottom(8)
+	pointed := b.Hovered()
+	ic, fg := icDown, k.Fg
+	switch {
+	case starting:
+		b.Material(glass.Glass{}).Label("Starting the download of " + h.Name)
+		ic = nil
+	case mark == store.MarkActive:
+		b.Background(k.Accent).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3)).Label(h.Name + " is in the queue").Tooltip("In the queue")
+		fg = k.AccentInk
+	case mark == store.MarkDone && !pointed:
+		b.Background(k.OK).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3)).Label(h.Name + " is in your library: download again")
+		ic, fg = icCheck, ui.RGB(255, 255, 255)
+	case mark == store.MarkDone:
+		b.Material(glass.Glass{Interactive: true}).Label(h.Name + " is in your library: download again").Tooltip("Download again")
+	default:
+		b.Material(glass.Glass{Interactive: true}).Label("Download " + h.Name)
+	}
+	// Only the download button waits for the pointer; a mark stays.
+	op := float32(1)
+	if mark == store.MarkNone && !starting {
+		show := float32(0)
+		if shown {
+			show = 1
+		}
+		op = b.AnimateWith("shown", show, 120*time.Millisecond, ui.EaseOut)
+	}
+	b.Opacity(op).Hidden(op < 0.01)
+	if b.Clicked() && !starting {
+		if mark == store.MarkActive {
+			a.OpenAlbum(h)
+		} else {
+			s.SubmitHit(h)
+		}
+	}
+	b.Cursor(ui.CursorPointer).Children(func() {
+		if ic == nil {
+			ui.Text(c, "…").FontSize(13).FontWeight(700).TextColor(fg)
+			return
+		}
+		ui.Icon(c, ic).FontSize(15).TextColor(fg)
 	})
 }
 

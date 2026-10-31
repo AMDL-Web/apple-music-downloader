@@ -63,6 +63,8 @@ type Search struct {
 	More map[string]PageState
 	// Artist is the artist whose albums show instead of the hits.
 	Artist ArtistPages
+	// Album is the album the album screen shows, opened from a hit.
+	Album AlbumPage
 	// Starting holds the hits whose download is being submitted, by HitKey.
 	Starting map[string]bool
 
@@ -96,6 +98,7 @@ func (s *Search) reset() {
 		Starting: map[string]bool{},
 	}
 	s.Artist.cache = newLRU[client.ArtistAlbums](searchCacheMax)
+	s.Album = newAlbumPage()
 }
 
 // SearchTerm is what the field's text searches for: its words joined by
@@ -128,7 +131,7 @@ func (s *Store) WantSearch(term string) {
 	// A new term shows its own hits, not the artist opened from the last.
 	s.OpenArtist("")
 	if term == "" {
-		*q = Search{cache: q.cache, sent: q.sent, gone: q.gone, Starting: q.Starting, Artist: q.Artist, want: term, gen: q.gen}
+		*q = Search{cache: q.cache, sent: q.sent, gone: q.gone, Starting: q.Starting, Artist: q.Artist, Album: q.Album, want: term, gen: q.gen}
 		return
 	}
 	if r, ok := q.cache.get(term); ok {

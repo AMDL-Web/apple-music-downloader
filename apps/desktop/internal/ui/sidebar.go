@@ -161,7 +161,7 @@ func (a *App) systemReading(k *Tokens) (string, ui.Color) {
 }
 
 func (a *App) navItem(c *ui.Context, k *Tokens, s Screen, ic *ui.SVG, tile ui.Color, name, reading string, readingColor ui.Color) {
-	on := a.Screen == s || (s == ScreenQueue && a.Screen == ScreenDetail)
+	on := a.navScreen() == s
 	item := ui.ButtonBase(c.Key(name)).Height(30).PaddingX(10).Gap(10).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Start).Label(name)
 	if on {
 		item.Background(k.AccentSoft)

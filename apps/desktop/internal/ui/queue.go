@@ -34,6 +34,10 @@ func (a *App) heroJob() *store.Job {
 
 // backdrop lights the top of the main column with the hero's palette.
 func (a *App) backdrop(c *ui.Context, k *Tokens) {
+	if a.Screen == ScreenAlbum {
+		a.albumBackdrop(c, k)
+		return
+	}
 	if a.Screen == ScreenHome {
 		if pal := a.homePalette(); pal.OK {
 			homeBackdrop(c, k, pal)
