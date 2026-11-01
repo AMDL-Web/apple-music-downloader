@@ -240,11 +240,16 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	return h
 }
 
-// jobFigures are a download's figures under the title: what landed, how
-// fast, how long it has left or when it finished, and when it started.
-// How many tracks finished is the bar's to say.
+// jobFigures are a download's figures under the title: what landed, which
+// counts the bytes still arriving while it runs, how fast, how long it has
+// left or when it finished, and when it started. How many tracks finished
+// is the bar's to say.
 func jobFigures(c *ui.Context, k *Tokens, l heroLayout, j *store.Job, hc heroColors) {
-	if b := j.Bytes(); b > 0 {
+	b := j.Bytes()
+	if !j.Status.IsTerminal() {
+		b = j.Transferred()
+	}
+	if b > 0 {
 		num, unit, _ := strings.Cut(format.Bytes(b), " ")
 		heroStat(c, k, hc, l, "Size", num, " "+unit)
 	} else {
