@@ -94,7 +94,9 @@ func (s *Store) SetOmniText(text string) {
 	}
 	o.Text = text
 	o.Result = nil
-	o.Links = o.Links[:0]
+	// A new array: a view ranging over the links when one of its rows'
+	// remove buttons changes the text goes on over the links it began with.
+	o.Links = nil
 	var fresh []*Link
 	for _, u := range FindLinks(text) {
 		l := o.cache[u]

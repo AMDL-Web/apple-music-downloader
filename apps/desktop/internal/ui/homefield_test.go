@@ -147,3 +147,36 @@ func TestADoubleClickOnTheEdgeFitsTheField(t *testing.T) {
 		t.Errorf("after a double click the field is %v DIPs drawn, its bottom at %v, not %v", a.fieldDrawn, fieldBottom(t, tt), fits)
 	}
 }
+
+// A link's remove button, clicked while its rows build, takes that link out
+// and leaves each other row once, in its place.
+func TestRemovingALinkLeavesTheOthersOnce(t *testing.T) {
+	a, tt := fieldApp(t, pastedLinks)
+	first, rest := title(a.Store.Omni.Links[0]), []string{title(a.Store.Omni.Links[1]), title(a.Store.Omni.Links[2])}
+	func() {
+		// A row built twice has one key twice, on which a Tester panics.
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("removing the first link built a row twice: %v", r)
+			}
+		}()
+		if err := tt.Click("Remove " + first); err != nil {
+			t.Fatal(err)
+		}
+		tt.Advance(time.Second)
+	}()
+	if _, ok := tt.Find("Remove " + first); ok {
+		t.Errorf("the removed link's row still shows")
+	}
+	var last ui.Rect
+	for i, name := range rest {
+		r, ok := tt.Find("Remove " + name)
+		if !ok {
+			t.Fatalf("no row for %s in %q", name, tt.Texts())
+		}
+		if i > 0 && r.Y <= last.Y {
+			t.Errorf("row %s at %v, not under the one before at %v", name, r, last)
+		}
+		last = r
+	}
+}
