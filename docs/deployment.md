@@ -247,13 +247,37 @@ wrapper-manager v2's QEMU variant instead (upstream's section
 ["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/WorldObservationLog/wrapper-manager/tree/v2)),
 which runs the manager inside a QEMU guest with its own kernel and needs `/dev/kvm`:
 
-- In Docker, `--device /dev/kvm` was the only extra flag needed; no `privileged` and no
-  added capabilities.
+- The container needs access to `/dev/kvm` and nothing else: no `privileged` and no added
+  capabilities.
+- On DSM, `/dev/kvm` exists only after the Virtual Machine Manager package loads the kvm
+  modules, which can come after Container Manager starts containers at boot. A container
+  started with `--device /dev/kvm` then fails with `error gathering device information
+  while adding custom device "/dev/kvm": no such file or directory`, and Docker does not
+  retry it, so the wrapper stays down until someone starts it by hand. Grant the device by
+  number instead and create the node once the module is loaded:
+
+  ```yaml
+  wrapper-manager:
+    device_cgroup_rules:
+      - "c 10:232 rwm"
+    entrypoint:
+      - sh
+      - -c
+      - |
+        until [ -e /sys/class/misc/kvm/dev ]; do sleep 5; done
+        mm=$$(cat /sys/class/misc/kvm/dev)
+        [ -e /dev/kvm ] || mknod /dev/kvm c "$${mm%%:*}" "$${mm##*:}"
+        exec "$$@"
+      - sh
+    command: [wrapper-manager-qemu, --host, 0.0.0.0, --host-port, "8080"]
+  ```
+
 - Start the launcher with `--host 0.0.0.0` so the published port reaches it.
 - The QEMU in the container must have the `user` (slirp) network backend. DSM's own QEMU
   8.1.5 lacks it; Alpine's `qemu-system-x86_64` package has it.
-- A guest started this way answered `/status` with `ready: true` on a Synology DS923+
-  (DSM 7.3.2). Logging in an Apple account inside the guest is not verified.
+- On a Synology DS923+ (DSM 7.3.2), a guest started this way answered `/status` with
+  `ready: true`, kept its Apple account login when the container was recreated, and
+  served downloads.
 
 `deploy/docker-compose.yml` has both as commented services. To use one, uncomment it and set
 `AMDL_WRAPPER_ADDRESS` to its URL:
