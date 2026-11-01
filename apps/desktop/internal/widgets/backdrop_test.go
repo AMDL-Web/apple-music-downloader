@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -24,5 +25,33 @@ func TestTheMixedLightKeepsItsHue(t *testing.T) {
 	}
 	if got := premix(blue, pink, 1); got != pink {
 		t.Errorf("the mix ends at %v, not %v", got, pink)
+	}
+}
+
+// The light's slow gradients show no steps: across the deep disc's edge,
+// on a dark ground, no level holds for more than a few pixels, as levels
+// quantized without a dither hold for tens.
+func TestTheLightShowsNoSteps(t *testing.T) {
+	bg := ui.Hex("#3a4a8c")
+	b := Backdrop{Ground: ui.Hex("#111219"), Light: bg, Deep: bg.Mix(ui.Hex("#05081f"), 0.65), Strength: 0.55, Height: 420}
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Box(c).Fill().Background(b.Ground).Children(func() { b.Show(c) })
+	}, 900, 420)
+	tt.Advance(time.Second)
+	img := tt.Image()
+	for ch := range 3 {
+		longest, run, prev := 0, 0, -1
+		for x := 300; x < 880; x++ {
+			v := int(img.Pix[img.PixOffset(x, 40)+ch])
+			if v == prev {
+				run++
+			} else {
+				run = 1
+			}
+			longest, prev = max(longest, run), v
+		}
+		if longest > 8 {
+			t.Errorf("channel %d holds a level for %d pixels across the deep disc's edge", ch, longest)
+		}
 	}
 }

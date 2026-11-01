@@ -6,9 +6,12 @@ import (
 
 // Backdrop lights a screen with an album's palette: two large blurred
 // discs behind the content, as MyGo 云音乐's backdrop does with a cover's
-// main color. A change of album eases from one palette to the next, and a
-// screen with none (a transparent Light) eases the light out.
+// main color, drawn over the screen's ground (glow). A change of album
+// eases from one palette to the next, and a screen with none (a
+// transparent Light) eases the light out.
 type Backdrop struct {
+	// Ground is the screen's ground, opaque, which the discs light.
+	Ground ui.Color
 	// Light and Deep are the two discs' colors: the palette's background
 	// and a darker shade of it.
 	Light, Deep ui.Color
@@ -51,10 +54,8 @@ func (b Backdrop) Show(c *ui.Context) {
 	if light.A == 0 && deep.A == 0 {
 		return
 	}
-	layer.Cache().Children(func() {
-		ui.Box(c).Size(620, 620).Radius(999).Background(light).Blur(70).Absolute().Left(-120).Top(-260)
-		ui.Box(c).Size(520, 520).Radius(999).Background(deep).Blur(70).Absolute().Right(-140).Top(-160)
-	})
+	ground := b.Ground
+	layer.Cache().Draw(func(p *ui.Painter, r ui.Rect) { drawGlow(p, r, ground, light, deep) })
 }
 
 // discs are the two discs' colors, Strength applied.

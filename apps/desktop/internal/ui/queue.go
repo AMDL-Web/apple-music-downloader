@@ -79,7 +79,7 @@ func paletteBackdrop(k *Tokens, pal Palette, home bool) widgets.Backdrop {
 	case !k.Dark:
 		strength = 0.28
 	}
-	b := widgets.Backdrop{Strength: strength, Height: height}
+	b := widgets.Backdrop{Ground: k.Ground, Strength: strength, Height: height}
 	if pal.OK {
 		b.Light, b.Deep = pal.Bg, pal.Bg.Mix(ui.Hex("#05081f"), 0.65)
 	}
