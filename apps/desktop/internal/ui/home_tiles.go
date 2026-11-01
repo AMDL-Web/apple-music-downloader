@@ -108,7 +108,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 		}
 		texts.Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).MaxWidth(size).Children(func() {
-				ui.Text(c, h.Name).FontSize(13).FontWeight(600).SingleLine().Ellipsis("…").Shrink(1)
+				ui.Text(c, hitName(h)).FontSize(13).FontWeight(600).SingleLine().Ellipsis("…").Shrink(1)
 				if h.ContentRating == "explicit" {
 					explicitBadge(c, k)
 				}
@@ -280,16 +280,30 @@ func tileFacts(h client.SearchHit) []string {
 	if h.ArtistName != "" {
 		out = append(out, h.ArtistName)
 	}
+	if kind, _ := store.AlbumKind(h.Name); h.Type == "album" && kind != "Album" {
+		out = append(out, kind)
+	}
 	if len(h.ReleaseDate) >= 4 {
 		out = append(out, h.ReleaseDate[:4])
 	}
 	return out
 }
 
+// hitName is what a hit is called: an album's title without its kind's
+// suffix (store.AlbumKind), as everywhere else.
+func hitName(h client.SearchHit) string {
+	if h.Type == "album" {
+		_, name := store.AlbumKind(h.Name)
+		return name
+	}
+	return h.Name
+}
+
 // hitFacts is a song card's line of facts: its artist, album and length.
 func hitFacts(h client.SearchHit) []string {
 	var out []string
-	for _, v := range []string{h.ArtistName, h.AlbumName} {
+	_, album := store.AlbumKind(h.AlbumName)
+	for _, v := range []string{h.ArtistName, album} {
 		if v != "" {
 			out = append(out, v)
 		}

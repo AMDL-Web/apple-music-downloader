@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 
 	"amdl/internal/client"
@@ -54,12 +55,40 @@ const (
 // maxActivity bounds a job's activity log.
 const maxActivity = 60
 
-// Name is the job's title, or its link before the input resolves.
+// Name is the job's title, an album's without the " - EP" or " - Single"
+// Apple Music ends it with (Kind says that), or its link before the input
+// resolves.
 func (j *Job) Name() string {
-	if j.Title != "" {
-		return j.Title
+	switch {
+	case j.Title == "":
+		return j.Input
+	case j.Type == "album":
+		_, name := AlbumKind(j.Title)
+		return name
 	}
-	return j.Input
+	return j.Title
+}
+
+// Kind is the job's type as the app shows it: an album's EP, Single or
+// Album (AlbumKind), else the type, capitalized.
+func (j *Job) Kind() string {
+	if j.Type == "album" {
+		kind, _ := AlbumKind(j.Title)
+		return kind
+	}
+	return strings.ToUpper(j.Type[:min(1, len(j.Type))]) + j.Type[min(1, len(j.Type)):]
+}
+
+// AlbumKind is what Apple Music calls a collection by its title's suffix,
+// and the title without it, which is how the app shows an album's title
+// everywhere: the kind goes with the facts beside it.
+func AlbumKind(title string) (kind, name string) {
+	for _, k := range []string{"Single", "EP"} {
+		if n, ok := strings.CutSuffix(title, " - "+k); ok && n != "" {
+			return k, n
+		}
+	}
+	return "Album", title
 }
 
 // By is the job's artist, curator or, failing both, its type.

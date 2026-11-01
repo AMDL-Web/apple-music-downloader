@@ -343,15 +343,14 @@ func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, h
 		a.flySourceText(c, func() ui.Element {
 			return ui.Text(c, j.By()).FontSize(heroBy).TextColor(hc.meta).SingleLine().Shrink(1)
 		}, ui.Span{Text: j.By(), Size: heroBy}, from, partArtist, hc.meta)
-		tags := ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			if q := jobQuality(j); q != "" {
-				tag(c, k, q, isHiRes(q), hc.meta)
+				a.flySourceTag(tag(c, k, q, isHiRes(q), hc.meta), from, q, isHiRes(q), hc.meta)
 			}
 			if j.TotalItems > 0 {
 				tag(c, k, plural(j.TotalItems, "track"), false, hc.meta)
 			}
 		})
-		a.flySource(tags, from, partTags, "", 0)
 	})
 }
 
@@ -477,10 +476,9 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 }
 
 func rowSubtitle(j *store.Job) string {
-	kind := strings.ToUpper(j.Type[:min(1, len(j.Type))]) + j.Type[min(1, len(j.Type)):]
 	parts := []string{j.By()}
 	if j.By() != j.Type {
-		parts = append(parts, kind)
+		parts = append(parts, j.Kind())
 	}
 	if j.Status == domain.JobCompleted && j.FinishedAt != nil {
 		parts = append(parts, "finished "+format.Clock(*j.FinishedAt))

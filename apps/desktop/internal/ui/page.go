@@ -194,7 +194,7 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	ui.Box(c).Absolute().Top(0).Left(0).Right(0).Children(func() {
 		a.collectionHero(c, k, l, a.pageHead(c, k, l, p, j, pal, hc, video))
 	})
-	a.flightCopies(c)
+	a.flightCopies(c, k)
 }
 
 // pageHead is the album screen's head: the album's names once read, else
@@ -208,11 +208,10 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	var kind string
 	tracks := f.tracks
 	if album {
-		kind, h.title = albumKind(f.title)
+		kind, h.title = store.AlbumKind(f.title)
 		h.artist = f.artist
 	} else {
-		kind = strings.ToUpper(j.Type[:min(1, len(j.Type))]) + j.Type[min(1, len(j.Type)):]
-		h.title, h.artist = j.Name(), j.By()
+		kind, h.title, h.artist = j.Kind(), j.Name(), j.By()
 	}
 	if j != nil && (!album || tracks == 0) {
 		tracks = j.TotalItems
@@ -228,26 +227,33 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	h.cover = func(size float32) ui.Element {
 		return widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c).Label("Artwork")
 	}
-	h.tags = func() {
-		// What the download made of it, once known, stands for what the
-		// album offers.
-		var it *domain.JobItem
-		if j != nil {
-			it = firstWithCodec(j)
-		}
-		if it != nil {
-			tag(c, k, format.LongQuality(it.Codec, it.BitDepth, it.SampleRate), isHiRes(format.Quality(it.Codec, it.BitDepth, it.SampleRate, 0)), hc.meta)
-		} else {
-			for _, q := range qualityHints(f.traits) {
+	// What the download made of it, once known, stands for what the album
+	// offers.
+	var it *domain.JobItem
+	if j != nil {
+		it = firstWithCodec(j)
+	}
+	var hints []string
+	if it != nil {
+		h.quality, h.hi = format.LongQuality(it.Codec, it.BitDepth, it.SampleRate), isHiRes(format.Quality(it.Codec, it.BitDepth, it.SampleRate, 0))
+	} else if hints = qualityHints(f.traits); len(hints) > 0 {
+		h.quality, h.hi, hints = hints[0], hints[0] == "Hi-Res Lossless", hints[1:]
+	}
+	// A download the feed no longer holds put it in the library.
+	inLibrary := false
+	if album && j == nil {
+		mark, _ := s.HitMark(p.Hit)
+		inLibrary = mark == store.MarkDone
+	}
+	if len(hints) > 0 || f.explicit || inLibrary {
+		h.tags = func() {
+			for _, q := range hints {
 				tag(c, k, q, q == "Hi-Res Lossless", hc.meta)
 			}
-		}
-		if f.explicit {
-			explicitBadge(c, k)
-		}
-		// A download the feed no longer holds put it in the library.
-		if album && j == nil {
-			if mark, _ := s.HitMark(p.Hit); mark == store.MarkDone {
+			if f.explicit {
+				explicitBadge(c, k)
+			}
+			if inLibrary {
 				pill(c, k, pillOK, icCheck, "In your library")
 			}
 		}

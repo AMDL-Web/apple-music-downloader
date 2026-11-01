@@ -73,20 +73,35 @@ func pill(c *ui.Context, k *Tokens, kind pillKind, ic *ui.SVG, text string) ui.E
 // tag is the small outlined label of an audio fact; hi gives Hi-Res its
 // gold.
 func tag(c *ui.Context, k *Tokens, s string, hi bool, fg ui.Color) ui.Element {
-	el := ui.Row(c).Height(18).PaddingX(6).Radius(radiusInner).AlignItems(ui.Center)
+	gold := float32(0)
 	if hi {
-		el.LinearGradient(ui.LinearGradient{Stops: []ui.GradientStop{{Color: ui.Hex("#c9b27a"), At: 0}, {Color: ui.Hex("#e9d7a6"), At: 1}}, Angle: 90})
-		fg = ui.Hex("#2a2210")
-	} else {
-		if fg.A == 0 {
-			fg = k.Muted
-		}
-		el.Border(1, fg.Alpha(0.3))
+		gold = 1
 	}
-	el.Children(func() {
-		mono(c, s, 10).FontWeight(600).TextColor(fg)
-	})
+	el, ink := tagBox(c, k, gold, fg)
+	el.Children(func() { tagText(c, s, ink) })
 	return el
+}
+
+// tagBox is a tag's box, outlined in fg (Muted for none), gilt as gold
+// says, from 0 to 1, as the album page's flight turns one tag into
+// another; ink is the color its text takes.
+func tagBox(c *ui.Context, k *Tokens, gold float32, fg ui.Color) (el ui.Element, ink ui.Color) {
+	el = ui.Row(c).Height(18).PaddingX(6).Radius(radiusInner).AlignItems(ui.Center)
+	if fg.A == 0 {
+		fg = k.Muted
+	}
+	if gold > 0 {
+		el.LinearGradient(ui.LinearGradient{Stops: []ui.GradientStop{{Color: ui.Hex("#c9b27a").Alpha(gold), At: 0}, {Color: ui.Hex("#e9d7a6").Alpha(gold), At: 1}}, Angle: 90})
+	}
+	if gold < 1 {
+		el.Border(1, fg.Alpha(0.3*(1-gold)))
+	}
+	return el, fg.Mix(ui.Hex("#2a2210"), gold)
+}
+
+// tagText is what a tag says, in ink.
+func tagText(c *ui.Context, s string, ink ui.Color) ui.Element {
+	return mono(c, s, 10).FontWeight(600).TextColor(ink)
 }
 
 // chip is the Mole card's small tag at the right of a heading.

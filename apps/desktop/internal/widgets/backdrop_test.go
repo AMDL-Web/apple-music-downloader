@@ -28,9 +28,9 @@ func TestTheMixedLightKeepsItsHue(t *testing.T) {
 	}
 }
 
-// The light's slow gradients show no steps: across the deep disc's edge,
-// on a dark ground, no level holds for more than a few pixels, as levels
-// quantized without a dither hold for tens.
+// The light's slow gradients show no steps: across the deep disc's edge
+// and down the light under it, on a dark ground, no level holds for more
+// than a few pixels, as levels quantized without a dither hold for tens.
 func TestTheLightShowsNoSteps(t *testing.T) {
 	bg := ui.Hex("#3a4a8c")
 	b := Backdrop{Ground: ui.Hex("#111219"), Light: bg, Deep: bg.Mix(ui.Hex("#05081f"), 0.65), Strength: 0.55, Height: 420}
@@ -39,19 +39,25 @@ func TestTheLightShowsNoSteps(t *testing.T) {
 	}, 900, 420)
 	tt.Advance(time.Second)
 	img := tt.Image()
-	for ch := range 3 {
-		longest, run, prev := 0, 0, -1
-		for x := 300; x < 880; x++ {
-			v := int(img.Pix[img.PixOffset(x, 40)+ch])
-			if v == prev {
-				run++
-			} else {
-				run = 1
+	for _, line := range []struct {
+		name           string
+		x0, y0, dx, dy int
+		n              int
+	}{{"across the deep disc's edge", 300, 40, 1, 0, 580}, {"down the light", 880, 20, 0, 1, 380}} {
+		for ch := range 3 {
+			longest, run, prev := 0, 0, -1
+			for i := range line.n {
+				v := int(img.Pix[img.PixOffset(line.x0+i*line.dx, line.y0+i*line.dy)+ch])
+				if v == prev {
+					run++
+				} else {
+					run = 1
+				}
+				longest, prev = max(longest, run), v
 			}
-			longest, prev = max(longest, run), v
-		}
-		if longest > 8 {
-			t.Errorf("channel %d holds a level for %d pixels across the deep disc's edge", ch, longest)
+			if longest > 4 {
+				t.Errorf("channel %d holds a level for %d pixels %s", ch, longest, line.name)
+			}
 		}
 	}
 }

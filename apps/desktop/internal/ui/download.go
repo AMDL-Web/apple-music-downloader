@@ -95,7 +95,7 @@ func (a *App) downloadSheet(c *ui.Context, k *Tokens) {
 	ui.DialogBase(c.Key("download"), &d.open, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.45))
 		panel.Width(420).Padding(padCard).Gap(16).Radius(radiusCard).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
-		ui.Text(c, "Download “"+clip(d.hit.Name, 44)+"”").FontSize(15).FontWeight(650).MaxLines(2).Ellipsis("…")
+		ui.Text(c, "Download “"+clip(hitName(d.hit), 44)+"”").FontSize(15).FontWeight(650).MaxLines(2).Ellipsis("…")
 		if d.codecs != nil {
 			ui.Column(c).Gap(8).Children(func() {
 				label(c, k, "Quality")

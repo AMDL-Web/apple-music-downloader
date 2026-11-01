@@ -66,12 +66,15 @@ func (l heroLayout) titleSize(c *ui.Context, title string) float32 {
 
 // heroSpec is what one page puts in the head: the cover drawn at the
 // layout's side, the label over the title, the title, the artists, the
-// tags after them and what the page says under them (band). Its buttons
-// are in the title bar (pageActions).
+// tags after them, the quality's first, gilt when hi, and the rest from
+// tags, and what the page says under them (band). Its buttons are in the
+// title bar (pageActions).
 type heroSpec struct {
 	cover         func(size float32) ui.Element
 	kicker, title string
 	artist        string
+	quality       string
+	hi            bool
 	tags, band    func()
 	colors        heroColors
 }
@@ -79,9 +82,9 @@ type heroSpec struct {
 // collectionHero is the head of the album screen: the cover, then the
 // label, title and artists at the cover's top and the page's band at its
 // bottom, the column as tall as the cover whatever the title
-// (heroLayout.titleSize). The cover, label and tags fly in from what the
-// page opened from (flyPage), the title and artists morph (flyText), the
-// band rises in.
+// (heroLayout.titleSize). The cover and label fly in from what the page
+// opened from (flyPage), the title and artists morph (flyText), and the
+// quality tag as one box (flyTags); the band rises in.
 func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec) {
 	hc := h.colors
 	ui.Row(c).Padding(l.top, heroPad, heroBottom, heroPad).Gap(l.gap).AlignItems(ui.Start).Children(func() {
@@ -96,8 +99,20 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 						ink := hc.title.Mix(hc.meta, 0.4)
 						a.flyText(c, ui.Text(c, h.artist).FontSize(heroArtist).TextColor(ink).SingleLine().Ellipsis("…").Shrink(1), partArtist, ui.Span{Text: h.artist, Size: heroArtist}, ink, l.width)
 					}
-					if h.tags != nil {
-						a.flyPage(ui.Row(c).Gap(10).AlignItems(ui.Center).Children(h.tags), partTags, "", 0)
+					if h.quality != "" || h.tags != nil {
+						var quality ui.Element
+						row := ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+							if h.quality != "" {
+								quality = tag(c, k, h.quality, h.hi, hc.meta)
+							}
+							if h.tags != nil {
+								rest := ui.Row(c).Gap(10).AlignItems(ui.Center).Children(h.tags)
+								if a.tagFlies() {
+									a.flyFade(rest)
+								}
+							}
+						})
+						a.flyTags(row, quality, h.quality, h.hi, hc.meta)
 					}
 				})
 			})

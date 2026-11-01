@@ -58,7 +58,7 @@ const (
 	partKicker
 	partTitle
 	partArtist
-	partTags
+	partTag
 	flightParts
 )
 
@@ -82,8 +82,9 @@ const (
 
 // flightSrc is a part of the element the page opened from: its box in the
 // window as the frame before showed it, what it says, and its font size,
-// or a cover's corner radius; a text's color, its widest line, and build,
-// which builds it again (flightCopies).
+// or a cover's corner radius; a text's or a tag's color, a text's widest
+// line, and build, which builds it again (flightCopies); whether a tag is
+// gilt.
 type flightSrc struct {
 	box   ui.Rect
 	text  string
@@ -91,6 +92,7 @@ type flightSrc struct {
 	color ui.Color
 	ink   float32
 	build func() ui.Element
+	hi    bool
 	ok    bool
 }
 
@@ -100,6 +102,15 @@ type flightText struct {
 	box   ui.Rect
 	size  float32
 	color ui.Color
+}
+
+// flightTag is where the page's quality tag is laid out, what it says,
+// whether it is gilt, and its color.
+type flightTag struct {
+	box  ui.Rect
+	text string
+	hi   bool
+	fg   ui.Color
 }
 
 // flight is the album page's way in and out.
@@ -137,6 +148,9 @@ type flight struct {
 	// copy in its match's.
 	texts [flightParts]flightText
 	own   [flightParts]bool
+	// tag is the page's quality tag, as this frame lays it out, when it
+	// morphs.
+	tag flightTag
 	// closeDetail is set while Back waits for the page to leave before it
 	// closes the page's download, which the page shows until it is gone.
 	closeDetail bool
@@ -166,7 +180,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		target = 1
 	}
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
-	f.src, f.texts, f.edgeOK = [flightParts]flightSrc{}, [flightParts]flightText{}, false
+	f.src, f.texts, f.tag, f.edgeOK = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, false
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.
 	f.next = ""
@@ -290,6 +304,52 @@ func (a *App) flySourceText(c *ui.Context, build func() ui.Element, span ui.Span
 	return el
 }
 
+// flySourceTag marks el, the quality tag of the element from on the screen
+// under the page, saying text, gilt when hi, in fg: the page's flies from
+// it as one box (flyTags).
+func (a *App) flySourceTag(el ui.Element, from, text string, hi bool, fg ui.Color) {
+	a.flySource(el, from, partTag, text, 0)
+	if src := &a.fly.src[partTag]; src.ok {
+		src.color, src.hi = fg, hi
+	}
+}
+
+// tagFlies reports whether the album page's quality tag flies, as one box,
+// from its match under the page in this frame (flyTags).
+func (a *App) tagFlies() bool {
+	f := &a.fly
+	return f.moving && !f.still && f.src[partTag].ok
+}
+
+// flyTags shows the album page's row of tags as this frame of a flight has
+// it: its first, quality, which says text, gilt when hi, in fg, morphs from
+// its match under the page as one box, which flightCopies draws, its text
+// changing inside it, and the rest of the row moves with it; with no
+// match, the row rises.
+func (a *App) flyTags(row, quality ui.Element, text string, hi bool, fg ui.Color) {
+	f := &a.fly
+	if !f.moving {
+		return
+	}
+	src := f.src[partTag]
+	dst := ui.Rect{}
+	if text != "" {
+		dst = quality.LayoutBounds()
+	}
+	if dst.W > 0 {
+		f.matched = true
+	}
+	if !a.tagFlies() || dst.W <= 0 || src.box.W <= 0 {
+		a.flyRise(row)
+		return
+	}
+	f.paired[partTag] = morphs
+	f.tag = flightTag{box: dst, text: text, hi: hi, fg: fg}
+	quality.Invisible()
+	t := f.travel()
+	row.Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y)
+}
+
 // travel is how far what moves in a flight has gone, from 0 (where the
 // screen under the page shows it) to 1 (where the page does): it moves
 // only once that screen is gone (crossover), so that nothing moves beside
@@ -316,7 +376,7 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	p := unpaired
 	if src.ok && dst.W > 0 && src.box.W > 0 && !f.still {
 		p = flies
-		if part == partKicker || part == partTags || text != src.text {
+		if part == partKicker || text != src.text {
 			p = crosses
 		}
 	}
@@ -386,9 +446,11 @@ func (a *App) flyText(c *ui.Context, el ui.Element, part flightPart, span ui.Spa
 // flightCopies builds over the album page the copy of each text of it
 // that morphs and shows in its match's lines (flyText): its match built
 // again where it is, as wide, then moved and scaled towards the page's
-// text, its color turning to the page's. Where it has not moved, it is
-// the match itself, drawn as the match is.
-func (a *App) flightCopies(c *ui.Context) {
+// text, its color turning to the page's; and the quality tag's box as it
+// morphs (flyTags), from its match's place, size, gilt and color to the
+// page's, the one's text fading out in it as the other's fades in. Where
+// they have not moved, they are their matches, drawn as those are.
+func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 	f := &a.fly
 	if !f.moving {
 		return
@@ -396,8 +458,32 @@ func (a *App) flightCopies(c *ui.Context) {
 	over := ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough()
 	o, t := over.LayoutBounds(), f.travel()
 	over.Children(func() {
+		if f.paired[partTag] == morphs {
+			src, dst := f.src[partTag], f.tag
+			gilt := func(hi bool) float32 {
+				if hi {
+					return 1
+				}
+				return 0
+			}
+			box, ink := tagBox(c.Key(partTag), k, lerp(gilt(src.hi), gilt(dst.hi), t), src.color.Mix(dst.fg, t))
+			box.Absolute().Left(lerp(src.box.X, dst.box.X, t) - o.X).Top(lerp(src.box.Y, dst.box.Y, t) - o.Y).
+				Width(lerp(src.box.W, dst.box.W, t)).Clip()
+			box.Children(func() {
+				for i, s := range []string{src.text, dst.text} {
+					op := 1 - unit((t-0.2)/0.4)
+					if i == 1 {
+						op = unit((t - 0.4) / 0.4)
+					}
+					// As wide as the wider tag, so that the box cuts the
+					// text rather than the text ending in an ellipsis.
+					ui.Row(c.Key(i)).Absolute().Left(6).Top(0).Bottom(0).Width(max(src.box.W, dst.box.W)).AlignItems(ui.Center).Opacity(op).
+						Children(func() { tagText(c, s, ink).SingleLine() })
+				}
+			})
+		}
 		for part, src := range f.src {
-			if f.paired[part] != morphs || f.own[part] {
+			if f.paired[part] != morphs || f.own[part] || src.build == nil {
 				continue
 			}
 			dst := f.texts[part]

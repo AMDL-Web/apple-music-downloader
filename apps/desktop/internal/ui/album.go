@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -171,17 +170,6 @@ func albumOf(p *store.AlbumPage) albumFacts {
 	}
 	f.title = firstNonEmptyStr(f.title, "Album")
 	return f
-}
-
-// albumKind is what Apple Music calls a collection by its title's suffix,
-// and the title without it: the label above the title says it once.
-func albumKind(title string) (kind, name string) {
-	for _, k := range []string{"Single", "EP"} {
-		if n, ok := strings.CutSuffix(title, " - "+k); ok && n != "" {
-			return k, n
-		}
-	}
-	return "Album", title
 }
 
 // heroStat is one figure of the head's band: its name over its value,

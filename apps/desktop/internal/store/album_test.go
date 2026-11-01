@@ -75,3 +75,20 @@ func TestTrackMarksFollowTheAlbumJobAndTheSongs(t *testing.T) {
 		t.Errorf("song job: mark %v", got)
 	}
 }
+
+// An album's title shows without the kind Apple Music ends it with, which
+// shows as its kind instead; another type keeps its title.
+func TestAnAlbumJobSaysItsKindApart(t *testing.T) {
+	for _, c := range []struct{ typ, title, name, kind string }{
+		{"album", "月に向かって撃て - EP", "月に向かって撃て", "EP"},
+		{"album", "Halo - Single", "Halo", "Single"},
+		{"album", "Elma", "Elma", "Album"},
+		{"song", "Halo - Single", "Halo - Single", "Song"},
+		{"playlist", "Chill", "Chill", "Playlist"},
+	} {
+		j := &Job{Job: domain.Job{Type: c.typ, Title: c.title}}
+		if j.Name() != c.name || j.Kind() != c.kind {
+			t.Errorf("%s %q: name %q kind %q, want %q %q", c.typ, c.title, j.Name(), j.Kind(), c.name, c.kind)
+		}
+	}
+}

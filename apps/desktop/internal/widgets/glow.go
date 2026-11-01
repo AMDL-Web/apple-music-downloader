@@ -47,8 +47,9 @@ func Fragment(dst vec4, pos vec2) vec4 {
 	c := Ground.rgb
 	c = mix(c, Light.rgb, Light.a*cover(pos, LightDisc))
 	c = mix(c, Deep.rgb, Deep.a*cover(pos, DeepDisc))
-	// Two samples make a triangular dither of up to a level either way.
-	n := noise(dst.xy) + noise(dst.xy+vec2(113, 71)) - 1
+	// A dither of up to a level either way, spread evenly: neighbours
+	// across and down differ the most, so no level holds for long.
+	n := 2*noise(dst.xy) - 1
 	return vec4(c+n/255, 1)
 }
 `)

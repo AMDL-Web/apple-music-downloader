@@ -135,12 +135,16 @@ func linkText(l *store.Link) (title, meta string) {
 	if by := firstNonEmptyStr(lk.ArtistName, lk.CuratorName); by != "" {
 		parts = append(parts, by)
 	}
-	parts = append(parts, lk.Type)
+	title, kind := lk.Title, lk.Type
+	if kind == "album" {
+		kind, title = store.AlbumKind(title)
+	}
+	parts = append(parts, kind)
 	if lk.TrackCount > 0 {
 		parts = append(parts, plural(lk.TrackCount, "track"))
 	}
 	parts = append(parts, lk.Storefront)
-	return lk.Title, strings.Join(parts, " · ")
+	return title, strings.Join(parts, " · ")
 }
 
 // refused is the backend's reason for not starting l in the last submit,

@@ -176,10 +176,10 @@ func TestReturnOpensAnAlbum(t *testing.T) {
 }
 
 func TestAlbumKindAndClip(t *testing.T) {
-	if k, n := albumKind("Halo - EP"); k != "EP" || n != "Halo" {
+	if k, n := store.AlbumKind("Halo - EP"); k != "EP" || n != "Halo" {
 		t.Errorf("Halo - EP: %q %q", k, n)
 	}
-	if k, _ := albumKind("Elma"); k != "Album" || !strings.HasPrefix(clip("Yorushika and many friends of theirs", 10), "Yorushika") {
+	if k, _ := store.AlbumKind("Elma"); k != "Album" || !strings.HasPrefix(clip("Yorushika and many friends of theirs", 10), "Yorushika") {
 		t.Error("Elma is an album, and clip keeps its start")
 	}
 }
