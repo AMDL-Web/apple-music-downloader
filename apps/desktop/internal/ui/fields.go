@@ -114,7 +114,7 @@ var configFields = []configField{
 	{key: "download.max_attempts", section: "jobs", kind: fieldNumber, label: "Tries per file",
 		min: 1, max: 10},
 	{key: "download.progress_event_interval_ms", section: "jobs", kind: fieldNumber, label: "Progress updates every",
-		help: "0 updates each percent.", min: 0, max: 10000, unit: "ms"},
+		help: "0: one update per percent.", min: 0, max: 10000, unit: "ms"},
 	{key: "download.check_integrity", section: "jobs", kind: fieldSwitch, label: "Check file integrity",
 		help: "Also repairs known ALAC issues."},
 	{key: "download.integrity_mode", section: "jobs", kind: fieldSelect, label: "Integrity check",

@@ -226,7 +226,7 @@ export const FIELDS = [
     section: 'jobs',
     type: 'number',
     label: 'Progress updates every',
-    help: '0 updates each percent (0-10000).',
+    help: '0: one update per percent (0-10000).',
     defaultValue: 500,
     min: 0,
     max: 10000,
