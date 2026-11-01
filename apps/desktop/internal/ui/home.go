@@ -156,8 +156,12 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		}
 		ring := false
 		// fits is how tall the text area was, as its text wrapped, in the
-		// frame before.
-		fits := float32(0)
+		// frame before; textY is the room above and below it.
+		fits, textY := float32(0), float32(10)
+		// A click in the field's room around its text puts the caret in.
+		if box.Clicked() {
+			a.field.Focus(c)
+		}
 		box.Children(func() {
 			ic, col := icSearch, k.Muted
 			if len(o.Links) > 0 || over {
@@ -172,13 +176,16 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 			if over {
 				hint = "Drop to download"
 			}
+			// The room above and below the text is margin: padding would
+			// scroll with it, and a scrolled field show a cut line against
+			// its border.
 			in := ui.TextAreaBase(c.Key("field"), &a.fieldTxt).Grow(1).Shrink(1).MinWidth(0).Bind(&a.field).
 				Placeholder(hint).Label("Paste links or search Apple Music").
-				PaddingY(10).FontSize(22).FontWeight(500).LineHeight(1.27)
+				MarginY(textY).FontSize(22).FontWeight(500).LineHeight(1.27)
 			// Laid out at its whole height at once, the text shows as the
 			// field opens to it, and neither scrolls nor moves meanwhile.
 			if drawn > 0 {
-				in.Height(drawn - 2*padField)
+				in.Height(drawn - 2*padField - 2*textY)
 			} else {
 				in.Lines(1, fieldMaxLines)
 			}
@@ -213,7 +220,7 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		})
 		target := drawn
 		if target == 0 {
-			target = min(max(fits+2*padField, fieldHeight), tallest)
+			target = min(max(fits+2*padField+2*textY, fieldHeight), tallest)
 		}
 		if dragging {
 			box.Jump("height", target)

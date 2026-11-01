@@ -180,3 +180,22 @@ func TestRemovingALinkLeavesTheOthersOnce(t *testing.T) {
 		last = r
 	}
 }
+
+// A click in the room between the field's border and its text puts the
+// caret in the text.
+func TestAClickAroundTheFieldsTextFocusesIt(t *testing.T) {
+	a, tt := fieldApp(t, pastedLinks)
+	if err := tt.Click(title(a.Store.Omni.Links[0])); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	if active, _ := tt.TextInputActive(); active {
+		t.Fatalf("a click on a link's row left the keyboard in the field")
+	}
+	in, _ := tt.Find("Paste links or search Apple Music")
+	tt.ClickAt(in.X+in.W/2, in.Y-6)
+	tt.Advance(time.Second)
+	if active, _ := tt.TextInputActive(); !active {
+		t.Errorf("a click above the field's text at %v left the keyboard out of it", in)
+	}
+}
