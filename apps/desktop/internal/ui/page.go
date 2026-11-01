@@ -178,19 +178,23 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	a.flyPanel(lower, k)
 	accent := hc.accent
 	lower.Children(func() {
-		a.panelEdge(c, detailGround(k))
-		a.pageTracks(c, k, j, accent, stageWidth(page))
-		if j != nil {
-			activity := float32(280)
-			if page < 1000 {
-				activity = 240
+		rows := ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Stretch)
+		a.flyFade(rows)
+		rows.Children(func() {
+			a.pageTracks(c, k, j, accent, stageWidth(page))
+			if j != nil {
+				activity := float32(280)
+				if page < 1000 {
+					activity = 240
+				}
+				a.activity(c, k, j, activity)
 			}
-			a.activity(c, k, j, activity)
-		}
+		})
 	})
 	ui.Box(c).Absolute().Top(0).Left(0).Right(0).Children(func() {
 		a.collectionHero(c, k, l, a.pageHead(c, k, l, p, j, pal, hc, video))
 	})
+	a.flightCopies(c)
 }
 
 // pageHead is the album screen's head: the album's names once read, else

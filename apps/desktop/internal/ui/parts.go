@@ -23,6 +23,11 @@ func display(c *ui.Context, s string, size float32) ui.Element {
 	return ui.Text(c, s).FontSize(size).FontWeight(800).LetterSpacing(-0.02 * size).LineHeight(1.05)
 }
 
+// displaySpan is s set as display sets it, to measure.
+func displaySpan(s string, size float32) ui.Span {
+	return ui.Span{Text: s, Size: size, Weight: 800, LetterSpacing: -0.02 * size}
+}
+
 // bigValue is a big number with its small unit after it, on one baseline.
 func bigValue(c *ui.Context, k *Tokens, value, unit string, size float32) ui.Element {
 	return ui.Row(c).AlignItems(ui.Baseline).Gap(3).Children(func() {

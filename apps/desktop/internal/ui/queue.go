@@ -32,28 +32,44 @@ func (a *App) heroJob() *store.Job {
 
 // backdrop lights the top of the main column with the palette of what the
 // screen shows: the album page's, home's link or first result, the queue
-// hero's. A screen without one eases the light out.
+// hero's. A screen without one eases the light out. While the album page
+// comes in or goes out, the light turns with it, from the screen under it
+// to the page's, over the whole column at once.
 func (a *App) backdrop(c *ui.Context, k *Tokens) {
-	var pal Palette
-	switch a.Screen {
+	b := paletteBackdrop(k, a.screenPalette(c, a.Screen), a.Screen == ScreenHome)
+	if f := &a.fly; f.moving {
+		under := a.Screen
+		if under == ScreenAlbum {
+			under = f.under
+		}
+		from := paletteBackdrop(k, a.screenPalette(c, under), under == ScreenHome)
+		b = paletteBackdrop(k, a.screenPalette(c, ScreenAlbum), false)
+		b.From, b.Mix = &from, f.q
+	}
+	b.Show(c)
+}
+
+// screenPalette is the palette of what s shows, if any.
+func (a *App) screenPalette(c *ui.Context, s Screen) Palette {
+	switch s {
 	case ScreenAlbum:
-		pal = a.pagePalette(c)
+		return a.pagePalette(c)
 	case ScreenHome:
-		pal = a.homePalette()
+		return a.homePalette()
 	case ScreenQueue:
 		if j := a.heroJob(); j != nil {
 			// A narrow window's queue hero shows the still cover.
-			pal = jobPalette(j, !a.compact && a.motionShown(c, j.MotionArtworkURL))
+			return jobPalette(j, !a.compact && a.motionShown(c, j.MotionArtworkURL))
 		}
 	}
-	paletteBackdrop(c, k, pal, a.Screen == ScreenHome)
+	return Palette{}
 }
 
 // paletteBackdrop lights the top of the main column with pal, or eases the
 // light out without one. Home's band reaches past the discs' blur, so the
 // light fades out above the results instead of ending in a line; the
 // queue's and the album page's end under their opaque lists.
-func paletteBackdrop(c *ui.Context, k *Tokens, pal Palette, home bool) {
+func paletteBackdrop(k *Tokens, pal Palette, home bool) widgets.Backdrop {
 	strength, height := float32(0.55), float32(420)
 	switch {
 	case home && k.Dark:
@@ -67,7 +83,7 @@ func paletteBackdrop(c *ui.Context, k *Tokens, pal Palette, home bool) {
 	if pal.OK {
 		b.Light, b.Deep = pal.Bg, pal.Bg.Mix(ui.Hex("#05081f"), 0.65)
 	}
-	b.Show(c)
+	return b
 }
 
 // heroColors are the text colors over a hero lit by pal.
@@ -316,15 +332,17 @@ func (a *App) heroInk(c *ui.Context, pal Palette, k *Tokens) heroColors {
 func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, hc heroColors, compact bool) {
 	from := heroFrom(j)
 	a.flySource(label(c, k, kicker).TextColor(hc.label), from, partKicker, "", 0)
-	size := float32(heroTitle)
-	title := display(c, j.Name(), size).TextColor(hc.title).MaxLines(2).Ellipsis("…")
+	size, lines := float32(heroTitle), 2
 	if compact {
-		size = heroTitleCompact
-		title.FontSize(size).LetterSpacing(-0.02 * size).MaxLines(1)
+		size, lines = heroTitleCompact, 1
 	}
-	a.flySource(title, from, partTitle, j.Name(), size)
+	a.flySourceText(c, func() ui.Element {
+		return display(c, j.Name(), size).TextColor(hc.title).MaxLines(lines).Ellipsis("…")
+	}, displaySpan(j.Name(), size), from, partTitle, hc.title)
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-		a.flySource(ui.Text(c, j.By()).FontSize(heroBy).TextColor(hc.meta).SingleLine().Shrink(1), from, partArtist, j.By(), heroBy)
+		a.flySourceText(c, func() ui.Element {
+			return ui.Text(c, j.By()).FontSize(heroBy).TextColor(hc.meta).SingleLine().Shrink(1)
+		}, ui.Span{Text: j.By(), Size: heroBy}, from, partArtist, hc.meta)
 		tags := ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 			if q := jobQuality(j); q != "" {
 				tag(c, k, q, isHiRes(q), hc.meta)

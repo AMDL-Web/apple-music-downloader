@@ -57,13 +57,14 @@ func dist(a, b ui.Rect) float64 {
 	return math.Hypot(float64(a.X-b.X), float64(a.Y-b.Y)) + math.Abs(float64(a.W-b.W))
 }
 
-// smooth fails when one frame moves the cover more than a seventh of the
-// way, which a jump or a restart would.
+// smooth fails when one frame moves the cover more than a fifth of the
+// way, which a jump or a restart would; going out, the cover goes all the
+// way in about ten frames, while the screen under the page is still gone.
 func smooth(t *testing.T, boxes []ui.Rect, from, to ui.Rect) {
 	t.Helper()
 	whole := dist(from, to)
 	for i := 1; i < len(boxes); i++ {
-		if d := dist(boxes[i-1], boxes[i]); d > whole/7+0.5 {
+		if d := dist(boxes[i-1], boxes[i]); d > whole/5+0.5 {
 			t.Errorf("frame %d moved the cover %.1f of %.1f: %v -> %v", i, d, whole, boxes[i-1], boxes[i])
 		}
 	}
@@ -113,6 +114,52 @@ func TestTheHeroCoverFliesToThePageAndBack(t *testing.T) {
 	smooth(t, out, to, from)
 	if _, ok := tt.Find("Artwork"); ok || a.Store.Detail() != nil {
 		t.Errorf("the page is still built, or its download still open, once it went out")
+	}
+}
+
+// The cover sets off only once the queue is gone, and lands before the
+// queue comes back: it never slides beside what stands still.
+func TestNothingMovesBesideTheQueue(t *testing.T) {
+	a, tt, j := flightApp(t)
+	from, ok := tt.Find("Open " + j.Name())
+	if !ok {
+		t.Fatalf("no hero cover in %q", tt.Texts())
+	}
+	type frame struct {
+		q   float32
+		box ui.Rect
+	}
+	run := func() []frame {
+		var fs []frame
+		for range 60 {
+			tt.Advance(refresh)
+			if r, ok := tt.Find("Artwork"); ok {
+				fs = append(fs, frame{a.fly.q, r})
+			}
+			if !a.fly.moving {
+				break
+			}
+		}
+		return fs
+	}
+	if err := tt.Click("Open " + j.Name()); err != nil {
+		t.Fatal(err)
+	}
+	for i, f := range run() {
+		if f.q < crossover && dist(f.box, from) > 1 {
+			t.Errorf("coming in, frame %d (q %.3f): the cover is at %v, not the hero's %v, while the queue shows", i, f.q, f.box, from)
+		}
+	}
+	tt.Key(0, ui.KeyEscape)
+	out := run()
+	if len(out) == 0 {
+		t.Fatal("no frame of the page going out")
+	}
+	last := out[len(out)-1].box
+	for i, f := range out {
+		if f.q < crossover && dist(f.box, last) > 0.5 {
+			t.Errorf("going out, frame %d (q %.3f): the cover is at %v, still on its way to %v, while the queue shows", i, f.q, f.box, last)
+		}
 	}
 }
 

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -10,8 +11,12 @@ import (
 // out over it: while it moves both are built, the page above. The cover of
 // what was clicked, and from the queue's hero its label, title, artist and
 // tags too, fly from where that screen shows them to their places on the
-// page (shared elements); the rest of the page fades in as it rises a
-// little, and the screen under it fades out. Everything follows one value,
+// page (shared elements), a text as one copy of itself that changes size
+// and place; the screen under it fades out, then the rest of the page fades
+// in as it rises a little, and what moves moves only then (travel), so
+// that nothing moves beside what stands still. The page's lower panel slides
+// from the top of the list under it, and the light behind both turns from
+// the one screen's to the other's (backdrop). Everything follows one value,
 // q, from 0 (the screen under) to 1 (the page), on a spring, which Back
 // turns round from wherever it is. While the desktop asks for less motion,
 // q is a short fade, and nothing flies.
@@ -27,16 +32,19 @@ const (
 	flightFade = 150 * time.Millisecond
 	// flightRise is how far what only the page has rises as it comes in.
 	flightRise = 16
-	// underGone is the q by which the screen under the page has faded out,
-	// and panelShown the q by which the page's opaque lower panel has faded
-	// in over that screen's lists, so the two lists hardly mix.
-	underGone  = 0.5
-	panelShown = 0.2
-	// panelFeather is how tall the soft top of the lower panel is while it
-	// moves, so that its edge never cuts across what it passes; its line
-	// shows as it lands, from panelLined.
-	panelFeather = 28
-	panelLined   = 0.85
+	// crossover is the q by which the screen under the page has faded out
+	// and the page's opaque lower panel faded in, empty, over that screen's
+	// list; the rest of the page fades in only from there (flyFade, a part
+	// that crosses), so that nothing of the two screens shows at once but
+	// what flies.
+	crossover = 0.2
+	// panelLined is the q from which the lower panel's top line shows, as
+	// it lands.
+	panelLined = 0.85
+	// textSwap is how far from its end of the way a text that morphs
+	// changes from its match's lines to the page's, or back: late, where
+	// the two nearly coincide, and while it still moves.
+	textSwap = 0.12
 )
 
 // flightKey is q's key on the window's root.
@@ -62,19 +70,36 @@ const (
 	unpaired pairing = iota
 	// flies from its match, which hides meanwhile.
 	flies
-	// crosses from its match, which says something else or wraps
-	// otherwise: it fades in as it moves while its match fades out.
+	// morphs from its match, the same text in another size, place or lines,
+	// which hides meanwhile: one copy of it changes from the one to the
+	// other, in the lines of the side it left until near the other
+	// (textSwap).
+	morphs
+	// crosses from its match, which says something else: it fades in as it
+	// moves, once its match has faded out.
 	crosses
 )
 
 // flightSrc is a part of the element the page opened from: its box in the
 // window as the frame before showed it, what it says, and its font size,
-// or a cover's corner radius.
+// or a cover's corner radius; a text's color, its widest line, and build,
+// which builds it again (flightCopies).
 type flightSrc struct {
-	box  ui.Rect
-	text string
-	size float32
-	ok   bool
+	box   ui.Rect
+	text  string
+	size  float32
+	color ui.Color
+	ink   float32
+	build func() ui.Element
+	ok    bool
+}
+
+// flightText is where a text of the page that morphs is laid out, its
+// font size and color.
+type flightText struct {
+	box   ui.Rect
+	size  float32
+	color ui.Color
 }
 
 // flight is the album page's way in and out.
@@ -107,6 +132,11 @@ type flight struct {
 	// showed in the frame before, which tells its match whether to hide.
 	src             [flightParts]flightSrc
 	paired, pairWas [flightParts]pairing
+	// texts are the page's texts that morph, as this frame lays them out;
+	// own tells whether each shows in the page's lines, rather than as a
+	// copy in its match's.
+	texts [flightParts]flightText
+	own   [flightParts]bool
 	// closeDetail is set while Back waits for the page to leave before it
 	// closes the page's download, which the page shows until it is gone.
 	closeDetail bool
@@ -136,7 +166,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		target = 1
 	}
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
-	f.src, f.edgeOK = [flightParts]flightSrc{}, false
+	f.src, f.texts, f.edgeOK = [flightParts]flightSrc{}, [flightParts]flightText{}, false
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.
 	f.next = ""
@@ -164,6 +194,12 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		f.fadeFrom, f.fadeTo = target, target
 	}
 	f.moving = f.q != target || f.q > 0 && f.q < 1 || inPage && !f.ready
+	if !f.moving {
+		// A text that morphs sets off in the lines of the side it leaves.
+		for i := range f.own {
+			f.own[i] = f.q == 1
+		}
+	}
 	if !f.moving && f.q == 0 {
 		f.ready = false
 		if f.closeDetail {
@@ -192,7 +228,7 @@ func (a *App) screens(c *ui.Context, k *Tokens, page float32) {
 	if under != ScreenAlbum && (!inPage || f.moving) {
 		l := layer(under)
 		if f.moving {
-			l.Opacity(1 - unit(f.q/underGone))
+			l.Opacity(1 - unit(f.q/crossover))
 		}
 		l.Children(func() { a.screen(c, k, under, page) })
 	}
@@ -228,16 +264,39 @@ func (a *App) screen(c *ui.Context, k *Tokens, s Screen, page float32) {
 
 // flySource marks el as part of the element from on the screen under the
 // page: while the page moves, the page's part flies from it, and it hides
-// as long as that part flies.
+// as long as that part flies or morphs.
 func (a *App) flySource(el ui.Element, from string, part flightPart, text string, size float32) {
 	f := &a.fly
 	if !f.moving || f.still || from == "" || from != f.from {
 		return
 	}
 	f.src[part] = flightSrc{box: el.Bounds(), text: text, size: size, ok: true}
-	if f.pairWas[part] == flies {
+	if p := f.pairWas[part]; p == flies || p == morphs {
 		el.Invisible()
 	}
+}
+
+// flySourceText builds a text of the element from on the screen under the
+// page with build, set as span and in color, and marks it as flySource
+// does: build also builds the copy of it that morphs into the page's
+// (flightCopies).
+func (a *App) flySourceText(c *ui.Context, build func() ui.Element, span ui.Span, from string, part flightPart, color ui.Color) ui.Element {
+	el := build()
+	a.flySource(el, from, part, span.Text, span.Size)
+	if src := &a.fly.src[part]; src.ok {
+		src.build, src.color = build, color
+		src.ink, _ = c.MeasureText(src.box.W, span)
+	}
+	return el
+}
+
+// travel is how far what moves in a flight has gone, from 0 (where the
+// screen under the page shows it) to 1 (where the page does): it moves
+// only once that screen is gone (crossover), so that nothing moves beside
+// what stands still, and sets off and comes to rest smoothly.
+func (f *flight) travel() float32 {
+	x := unit((f.q - crossover) / (1 - crossover))
+	return x * x * (3 - 2*x)
 }
 
 // flyPage shows el, a part of the album page, as this frame of a flight
@@ -255,36 +314,108 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 		f.matched = true
 	}
 	p := unpaired
-	if src.ok && dst.W > 0 && src.box.W > 0 {
+	if src.ok && dst.W > 0 && src.box.W > 0 && !f.still {
 		p = flies
-		if part == partKicker || part == partTags || text != src.text || part == partTitle && wrapsApart(src, dst, size) {
+		if part == partKicker || part == partTags || text != src.text {
 			p = crosses
 		}
-	}
-	if f.still {
-		p = unpaired
 	}
 	f.paired[part] = p
 	if p == unpaired {
 		a.flyRise(el)
 		return
 	}
-	q := f.q
+	t := f.travel()
 	s := float32(1)
 	switch part {
 	case partCover:
-		s = lerp(src.box.W, dst.W, q) / dst.W
+		s = lerp(src.box.W, dst.W, t) / dst.W
 	case partTitle, partArtist:
-		s = lerp(src.size/size, 1, q)
+		s = lerp(src.size/size, 1, t)
 	}
-	x, y := lerp(src.box.X, dst.X, q)-dst.X, lerp(src.box.Y, dst.Y, q)-dst.Y
-	el.TransformOrigin(0, 0).Scale(s, s).Translate(x, y)
+	el.TransformOrigin(0, 0).Scale(s, s).Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y)
 	if part == partCover && s > 0 {
-		el.Radius(lerp(src.size, size, q) / s)
+		el.Radius(lerp(src.size, size, t) / s)
 	}
 	if p == crosses {
-		el.Opacity(unit((q - 0.15) / 0.5))
+		el.Opacity(unit((f.q - crossover) / 0.45))
 	}
+}
+
+// flyText shows el, a text of the album page set as span in color, at
+// most room wide, as this frame of a flight has it: when its match under
+// the page says the same, or begins the same, it morphs, shown here in its
+// own lines and as a copy of its match before (flightCopies); otherwise as
+// flyPage shows a part.
+func (a *App) flyText(c *ui.Context, el ui.Element, part flightPart, span ui.Span, color ui.Color, room float32) {
+	f := &a.fly
+	if !f.moving {
+		return
+	}
+	text, size := span.Text, span.Size
+	dst, src := el.LayoutBounds(), f.src[part]
+	if f.still || !src.ok || src.build == nil || dst.W <= 0 || src.box.W <= 0 || !sameText(src.text, text) {
+		a.flyPage(el, part, text, size)
+		return
+	}
+	f.matched = true
+	f.paired[part] = morphs
+	f.texts[part] = flightText{box: dst, size: size, color: color}
+	t := f.travel()
+	in := a.Screen == ScreenAlbum
+	// The lines it left grow with it: past the page's room, it takes the
+	// lines it goes to sooner.
+	x := lerp(src.box.X, dst.X, t)
+	w := src.ink * lerp(1, size/src.size, t)
+	if f.own[part] {
+		ink, _ := c.MeasureText(dst.W, span)
+		w = ink * lerp(src.size/size, 1, t)
+	}
+	if over := x+w > dst.X+room+0.5; in && (over || t >= 1-textSwap) || !in && (over || t <= textSwap) {
+		f.own[part] = in
+	}
+	if !f.own[part] {
+		el.Invisible()
+		return
+	}
+	s := lerp(src.size/size, 1, t)
+	el.TransformOrigin(0, 0).Scale(s, s).Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y).
+		TextColor(src.color.Mix(color, t))
+}
+
+// flightCopies builds over the album page the copy of each text of it
+// that morphs and shows in its match's lines (flyText): its match built
+// again where it is, as wide, then moved and scaled towards the page's
+// text, its color turning to the page's. Where it has not moved, it is
+// the match itself, drawn as the match is.
+func (a *App) flightCopies(c *ui.Context) {
+	f := &a.fly
+	if !f.moving {
+		return
+	}
+	over := ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough()
+	o, t := over.LayoutBounds(), f.travel()
+	over.Children(func() {
+		for part, src := range f.src {
+			if f.paired[part] != morphs || f.own[part] {
+				continue
+			}
+			dst := f.texts[part]
+			ui.Box(c.Key(flightPart(part))).Absolute().Top(0).Left(0).Children(func() {
+				el := src.build().Absolute().Left(src.box.X - o.X).Top(src.box.Y - o.Y).Width(src.box.W).TextColor(src.color.Mix(dst.color, t))
+				if t > 0 {
+					s := lerp(1, dst.size/src.size, t)
+					el.TransformOrigin(0, 0).Scale(s, s).Translate(t*(dst.box.X-src.box.X), t*(dst.box.Y-src.box.Y))
+				}
+			})
+		}
+	})
+}
+
+// sameText reports whether a text of the page and its match say the same,
+// or one begins with the other, as a title with its " - Single" does.
+func sameText(a, b string) bool {
+	return a != "" && b != "" && (strings.HasPrefix(a, b) || strings.HasPrefix(b, a))
 }
 
 // flyRise shows el, a part only the album page has, as this frame of a
@@ -294,7 +425,7 @@ func (a *App) flyRise(el ui.Element) {
 	if a.fly.moving {
 		a.flyFade(el)
 		if !a.fly.still {
-			el.Translate(0, flightRise*(1-a.fly.q))
+			el.Translate(0, flightRise*(1-a.fly.travel()))
 		}
 	}
 }
@@ -308,50 +439,35 @@ func (a *App) flyEdge(el ui.Element) {
 }
 
 // flyPanel shows the album page's opaque lower panel as this frame of a
-// flight has it: its top flies from the top of the list under the page
-// (flyEdge), or, with none, rises a little; it turns opaque early, over
-// that list, and its edge is soft (panelEdge) until it lands.
+// flight has it: its top, a sharp edge, flies from the top of the list
+// under the page (flyEdge), or, with none, rises with the page; it turns
+// opaque early, over that list, before its rows show, and its ground turns
+// from the screens' to its own, so that it does not show as a layer of its
+// own while it fades.
 func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	f := &a.fly
 	if !f.moving {
 		return
 	}
-	el.Opacity(unit(f.q / panelShown)).BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
+	el.Background(k.Ground.Mix(detailGround(k), f.q)).Opacity(unit(f.q / crossover)).
+		BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
 	if f.still {
 		return
 	}
-	y := flightRise * (1 - f.q)
+	t := f.travel()
+	y := flightRise * (1 - t)
 	if dst := el.LayoutBounds(); f.edgeOK && dst.H > 0 {
-		y = lerp(f.edge, dst.Y, f.q) - dst.Y
+		y = lerp(f.edge, dst.Y, t) - dst.Y
 	}
 	el.Translate(0, y)
 }
 
-// panelEdge is the soft top of the album page's lower panel while it
-// moves, ground on ground: built first among the panel's children.
-func (a *App) panelEdge(c *ui.Context, ground ui.Color) {
-	f := &a.fly
-	if !f.moving || f.still {
-		return
-	}
-	ui.Box(c).Absolute().Top(-panelFeather).Left(0).Right(0).Height(panelFeather).PassThrough().
-		Gradient(ground.Alpha(0), ground, 180).Opacity(1 - unit((f.q-panelLined)/(1-panelLined)))
-}
-
-// flyFade fades el in with the album page, in place.
+// flyFade fades el in with the album page, in place, once the screen under
+// it is gone.
 func (a *App) flyFade(el ui.Element) {
 	if a.fly.moving {
-		el.Opacity(unit((a.fly.q - 0.2) / 0.8))
+		el.Opacity(unit((a.fly.q - crossover) / (1 - crossover)))
 	}
-}
-
-// wrapsApart reports whether a title shows on more lines than its match,
-// or fewer: then it crosses rather than flies, as one wrapped otherwise
-// would change shape at once. Both are display text, whose lines are
-// LineHeight 1.05 of the size.
-func wrapsApart(src flightSrc, dst ui.Rect, size float32) bool {
-	lines := func(h, size float32) int { return int(h/(size*1.05) + 0.5) }
-	return lines(src.box.H, src.size) != lines(dst.H, size)
 }
 
 func lerp(a, b, k float32) float32 { return a + (b-a)*k }

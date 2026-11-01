@@ -58,7 +58,7 @@ func (l heroLayout) titleFor(title string) float32 {
 // two; the cover and the figures stay.
 func (l heroLayout) titleSize(c *ui.Context, title string) float32 {
 	s := l.titleFor(title)
-	if w, _ := c.MeasureText(0, ui.Span{Text: title, Size: s, Weight: 800, LetterSpacing: -0.02 * s}); w <= l.width {
+	if w, _ := c.MeasureText(0, displaySpan(title, s)); w <= l.width {
 		return s
 	}
 	return min(s, l.title2)
@@ -79,8 +79,9 @@ type heroSpec struct {
 // collectionHero is the head of the album screen: the cover, then the
 // label, title and artists at the cover's top and the page's band at its
 // bottom, the column as tall as the cover whatever the title
-// (heroLayout.titleSize). The cover, label, title, artists and tags fly
-// in from what the page opened from (flyPage), the band rises in.
+// (heroLayout.titleSize). The cover, label and tags fly in from what the
+// page opened from (flyPage), the title and artists morph (flyText), the
+// band rises in.
 func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec) {
 	hc := h.colors
 	ui.Row(c).Padding(l.top, heroPad, heroBottom, heroPad).Gap(l.gap).AlignItems(ui.Start).Children(func() {
@@ -89,16 +90,11 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 			ui.Column(c).Gap(12).Children(func() {
 				a.flyPage(label(c, k, h.kicker).TextColor(hc.label), partKicker, h.kicker, 11)
 				size := l.titleSize(c, h.title)
-				a.flyPage(display(c, h.title, size).TextColor(hc.title).MaxLines(2).Ellipsis("…"), partTitle, h.title, size)
+				a.flyText(c, display(c, h.title, size).TextColor(hc.title).MaxLines(2).Ellipsis("…"), partTitle, displaySpan(h.title, size), hc.title, l.width)
 				ui.Row(c).Gap(10).AlignItems(ui.Center).Wrap().Children(func() {
 					if h.artist != "" {
-						// In the queue hero's colors as it flies from there.
-						mix := float32(0.4)
-						if a.fly.moving {
-							mix = 1 - 0.6*a.fly.q
-						}
-						artist := ui.Text(c, h.artist).FontSize(heroArtist).TextColor(hc.title.Mix(hc.meta, mix)).SingleLine().Ellipsis("…").Shrink(1)
-						a.flyPage(artist, partArtist, h.artist, heroArtist)
+						ink := hc.title.Mix(hc.meta, 0.4)
+						a.flyText(c, ui.Text(c, h.artist).FontSize(heroArtist).TextColor(ink).SingleLine().Ellipsis("…").Shrink(1), partArtist, ui.Span{Text: h.artist, Size: heroArtist}, ink, l.width)
 					}
 					if h.tags != nil {
 						a.flyPage(ui.Row(c).Gap(10).AlignItems(ui.Center).Children(h.tags), partTags, "", 0)
