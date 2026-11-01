@@ -60,3 +60,7 @@ f98c6308b0be115bf7b44bf3dcc75a07026d04b8
 ff59d2435492f86824ad192e8f7338198000c72d
 # refactor(console): move the sortable rows' motion to sortable-flip.js (move-only)
 9a94570c5494e63fb2d0161268e16917cdaff550
+# refactor(desktop): move the ordered list field out of fieldview.go (move-only)
+bb616d1d519b9aad40cc20ca6ab7b121aa21aed5
+# refactor(hooks): move the hook presets to internal/hookpreset (move-only)
+0ac68bbe489eb12df105116303336151112b67ba
