@@ -144,7 +144,7 @@ func (p *MP4Processor) streamDecryptToWriter(
 		return fmt.Errorf("encode init segment: %w", err)
 	}
 
-	fragCount := 0
+	fragCount, keyFallbacks, unkeyedDesc := 0, 0, 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -171,7 +171,11 @@ func (p *MP4Processor) streamDecryptToWriter(
 		}
 		keyIndex := max(0, descIndex-1)
 		if keyIndex >= len(keys) {
+			// No key for this sample description: the first key is the only
+			// guess, and the wrong one decrypts to garbage without an error.
 			keyIndex = 0
+			keyFallbacks++
+			unkeyedDesc = descIndex
 		}
 		key := ""
 		if len(keys) > 0 {
@@ -199,6 +203,10 @@ func (p *MP4Processor) streamDecryptToWriter(
 	}
 	if fragCount == 0 {
 		return errors.New("no fragments extracted from media")
+	}
+	if keyFallbacks > 0 && len(keys) > 0 {
+		logging.FromContext(ctx, nil).Warn("fragments name a sample description the stream has no key for; decrypted them with the first key",
+			"fragments", keyFallbacks, "of", fragCount, "sample_description", unkeyedDesc, "keys", len(keys))
 	}
 	if err := bw.Flush(); err != nil {
 		return err
