@@ -64,8 +64,9 @@ func (m simulatedMedia) fetch(ctx context.Context, req fetchRequest, progress tr
 
 func (simulatedMedia) discardCheckpoint(string, string) {}
 
-// discardOutput forgets a simulated commit; a real file stays where it is.
-func (m simulatedMedia) discardOutput(outPath string) { m.outputs.remove(outPath) }
+// discardOutput has no staging files to sweep, and a simulated commit stays
+// recorded until the next one replaces it, as a real file would.
+func (simulatedMedia) discardOutput(string) {}
 
 func (m simulatedMedia) statOutput(outPath string) (int64, bool) {
 	if size, ok := m.outputs.stat(outPath); ok {
@@ -135,6 +136,10 @@ func (simulatedMedia) repairALAC(context.Context, stagedFile, func(int)) error {
 func (simulatedMedia) mkdirAll(string) error { return nil }
 
 func (simulatedMedia) writeFile(string, []byte) error { return nil }
+
+func (simulatedMedia) stageFile(string, []byte) (func() error, func(), error) {
+	return func() error { return nil }, func() {}, nil
+}
 
 func (simulatedMedia) tag(ctx context.Context, _ stagedFile, _ applemusic.Song, _ string, _ []byte) error {
 	return simulatePause(ctx, simulatedTagPause)

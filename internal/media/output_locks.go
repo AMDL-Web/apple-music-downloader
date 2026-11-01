@@ -82,8 +82,9 @@ func canonicalOutputPath(path string) (string, error) {
 	abs = filepath.Clean(abs)
 	// Resolve directory aliases, but deliberately do not follow a symlink at
 	// the final filename. Finalization replaces that directory entry; following
-	// it would make the lock key change as soon as force cleanup removed the
-	// symlink, allowing another writer to bypass the existing waiter queue.
+	// it would make the lock key change as soon as a replacing commit swapped
+	// the symlink for a file, allowing another writer to bypass the existing
+	// waiter queue.
 	name := filepath.Base(abs)
 	current := filepath.Dir(abs)
 	var missing []string
@@ -109,8 +110,9 @@ func canonicalOutputPath(path string) (string, error) {
 
 // outputLease holds the process-wide lock on one codec attempt's output path.
 // Once the concrete path is known it is kept through the existence/force
-// check, retries, sidecar writes and the final commit, so one job's force or
-// cleanup path never deletes another job's in-flight or newly committed output.
+// check, retries, sidecar writes and the final commit, so one job's forced
+// replacement or cleanup never touches another job's in-flight or newly
+// committed output.
 type outputLease struct {
 	key    string
 	unlock func()

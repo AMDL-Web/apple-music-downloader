@@ -35,7 +35,11 @@ publication and failure-cleanup semantics.
 
 Lyrics sidecars and standalone covers are written through a temp file in the same
 folder and a rename, so an interrupted write never leaves a truncated file behind. That
-matters for covers in particular: a cover already on disk is never fetched again.
+matters for covers in particular: a cover already on disk is never fetched again. A
+track's sidecars are renamed into place right after its audio file, so one that is
+replaced under `force_overwrite` keeps its old audio and sidecars until the new copy is
+complete: a forced download that fails leaves them as they were, and a failed attempt
+removes only its own `.part` staging files, never a finished track.
 
 ### Cancel and shutdown
 
@@ -273,7 +277,7 @@ and codec fallback. Only the backend's work is pretended: transfers and decrypti
 paced by a speed drawn from `simulate.min_speed_kbps`..`max_speed_kbps`, the AAC-LC
 WebPlayback asset, cover art and lyrics are stand-ins, and nothing is written, deleted
 or run (no ffmpeg, no wrapper). An output that already exists on disk is still reported
-as skipped, and `force_overwrite` never deletes it in simulate mode. A track a simulated
+as skipped, and simulate mode never deletes or replaces a real file. A track a simulated
 job finished counts as on disk too, for later jobs and the library state, until the
 backend restarts.
 

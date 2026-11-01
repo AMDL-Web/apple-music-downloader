@@ -40,7 +40,7 @@ func TestHandleExistingOutputHonorsForceOverwriteConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("global force_overwrite redownloads", func(t *testing.T) {
+	t.Run("global force_overwrite redownloads and keeps the old file until it is replaced", func(t *testing.T) {
 		forcedCfg := cfg
 		forcedCfg.Download.ForceOverwrite = true
 		d := newTestDownloader(&Downloader{cfg: forcedCfg})
@@ -51,8 +51,8 @@ func TestHandleExistingOutputHonorsForceOverwriteConfig(t *testing.T) {
 		if err != nil || skip {
 			t.Fatalf("skip = %v, err = %v, want overwrite without error", skip, err)
 		}
-		if _, statErr := os.Stat(outPath); !os.IsNotExist(statErr) {
-			t.Fatalf("stale output was not removed: %v", statErr)
+		if got, readErr := os.ReadFile(outPath); readErr != nil || string(got) != "existing" {
+			t.Fatalf("old output = %q (err %v), want it kept until the new copy replaces it", got, readErr)
 		}
 		var found bool
 		for _, ev := range reporter.events {
@@ -91,21 +91,5 @@ func TestExistingOutputIsRecordedAbsolute(t *testing.T) {
 	// next start may run from another directory.
 	if !filepath.IsAbs(item.OutputPath) || filepath.Base(item.OutputPath) != "track.m4a" {
 		t.Fatalf("OutputPath = %q, want the file's absolute path", item.OutputPath)
-	}
-}
-
-func TestCleanupFailedOutputRemovesPartFile(t *testing.T) {
-	dir := t.TempDir()
-	outPath := filepath.Join(dir, "song.m4a")
-	for _, path := range []string{outPath, outPath + partSuffix, filepath.Join(dir, "song.lrc"), filepath.Join(dir, "song.ttml")} {
-		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
-			t.Fatalf("write %s: %v", path, err)
-		}
-	}
-	cleanupFailedOutput(outPath)
-	for _, path := range []string{outPath, outPath + partSuffix, filepath.Join(dir, "song.lrc"), filepath.Join(dir, "song.ttml")} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("%s still exists after cleanupFailedOutput", path)
-		}
 	}
 }

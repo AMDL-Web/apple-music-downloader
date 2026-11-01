@@ -368,6 +368,10 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
   seconds, and `force_overwrite` downloads it again. Rows a 1.x database holds several
   of for one link stay as they are; only the newest is reused. `/stats` totals count
   each job's items, so they follow its latest run.
+- `force_overwrite` no longer deletes first. 1.x removed the existing file and its lyrics
+  sidecars before downloading, so a download that failed left nothing; 2.0 downloads into
+  a temporary file and renames it over the old track once it is complete, then the
+  sidecars. A forced download that fails leaves the old files as they were.
 - Duplicate detection ignores the destination folder now that a submission cannot pick
   one: the same album, song or playlist is one download. A job from before the upgrade
   keeps its old key, so while it is queued or running (also after a retry of a failed

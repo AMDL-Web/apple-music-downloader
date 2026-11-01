@@ -34,8 +34,10 @@ type mediaBackend interface {
 	// discardCheckpoint drops a resumable transfer for outPath that is no
 	// longer needed because the output already exists.
 	discardCheckpoint(jobID, outPath string)
-	// discardOutput removes outPath, its staged parts and its lyrics sidecars:
-	// before a forced overwrite and after a failed attempt.
+	// discardOutput removes the staging files an earlier attempt left for
+	// outPath and its lyrics sidecars, before a forced overwrite and after a
+	// failed attempt. It never removes outPath or a sidecar: the file a forced
+	// download replaces stays until the new copy is committed over it.
 	discardOutput(outPath string)
 	// statOutput reports whether a finished track is at outPath, and its size.
 	// A file there is complete (finalizeToOutput), so this is the one test of
@@ -68,8 +70,12 @@ type mediaBackend interface {
 	// in place. patched is called with the count before the file is rewritten.
 	repairALAC(ctx context.Context, staged stagedFile, patched func(int)) error
 	mkdirAll(dir string) error
-	// writeFile writes a sidecar or standalone cover atomically.
+	// writeFile writes a standalone cover atomically.
 	writeFile(path string, data []byte) error
+	// stageFile writes a sidecar to a temp file beside path. install renames it
+	// onto path, replacing a file there; discard removes it unrenamed. path is
+	// untouched until install.
+	stageFile(path string, data []byte) (install func() error, discard func(), err error)
 	// tag writes metadata, lyrics and cover art into the staged file.
 	tag(ctx context.Context, staged stagedFile, song applemusic.Song, lyrics string, cover []byte) error
 	// commit moves the staged file to outPath and returns its final size; see
@@ -356,6 +362,10 @@ func (m realMedia) repairALAC(_ context.Context, staged stagedFile, patched func
 func (m realMedia) mkdirAll(dir string) error { return os.MkdirAll(dir, 0o755) }
 
 func (m realMedia) writeFile(path string, data []byte) error { return writeFileAtomic(path, data) }
+
+func (m realMedia) stageFile(path string, data []byte) (func() error, func(), error) {
+	return stageFileAtomic(path, data)
+}
 
 func (m realMedia) tag(ctx context.Context, staged stagedFile, song applemusic.Song, lyrics string, cover []byte) error {
 	return m.d.mp4.writeMetadata(ctx, staged.path, song, lyrics, cover)
