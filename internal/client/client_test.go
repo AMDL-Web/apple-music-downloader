@@ -153,12 +153,16 @@ func TestStreamWatchdog(t *testing.T) {
 }
 
 // feedServer serves a snapshot and then one feed connection per element of
-// conns; each connection writes its messages and closes.
+// conns; each connection writes its messages and closes. Its list's cursor is
+// the newest event it sent, from 10, until it replaces its database after
+// the replaceAfter-th connection: then it lists no jobs at cursor 0.
 type feedServer struct {
-	mu      sync.Mutex
-	conns   [][]domain.DownloadFeedMessage
-	cursors []string
-	lists   int
+	mu           sync.Mutex
+	conns        [][]domain.DownloadFeedMessage
+	cursors      []string
+	newest       int64
+	replaceAfter int
+	served       int
 }
 
 func (s *feedServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -166,11 +170,11 @@ func (s *feedServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	switch r.URL.Path {
 	case "/api/v1/downloads":
-		s.lists++
-		_ = json.NewEncoder(w).Encode(DownloadList{
-			Downloads:   []domain.Job{{ID: "a", Status: domain.JobRunning}},
-			EventCursor: 10,
-		})
+		l := DownloadList{Downloads: []domain.Job{{ID: "a", Status: domain.JobRunning}}, EventCursor: max(s.newest, 10)}
+		if s.replaceAfter > 0 && s.served >= s.replaceAfter {
+			l = DownloadList{Downloads: []domain.Job{}, EventCursor: s.newest}
+		}
+		_ = json.NewEncoder(w).Encode(l)
 	case "/api/v1/downloads/events":
 		s.cursors = append(s.cursors, r.URL.Query().Get("cursor"))
 		if len(s.conns) == 0 {
@@ -183,6 +187,10 @@ func (s *feedServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, m := range msgs {
 			raw, _ := json.Marshal(m)
 			fmt.Fprintf(w, "id: %d\ndata: %s\n\n", m.EventID, raw)
+			s.newest = max(s.newest, m.EventID)
+		}
+		if s.served++; s.served == s.replaceAfter {
+			s.newest = 0
 		}
 	}
 }
@@ -214,6 +222,37 @@ func TestFollowFeedResumesFromLastEvent(t *testing.T) {
 	// 10 from the snapshot, then each reconnect resumes after the last
 	// message delivered; the rejected third cursor forces a new snapshot.
 	if want := "[10 11 12]"; fmt.Sprint(srv.cursors[:3]) != want {
+		t.Errorf("cursors %v, want %s", srv.cursors, want)
+	}
+}
+
+// A backend whose newest event is older than the feed's cursor, as one whose
+// database was replaced while the stream was down, is followed from a new
+// snapshot: its events would reach a stream resumed at the old cursor only
+// once they passed it.
+func TestFollowFeedStartsOverWhenTheBackendHasFewerEvents(t *testing.T) {
+	srv := &feedServer{replaceAfter: 1, conns: [][]domain.DownloadFeedMessage{
+		{{Type: "download_upserted", EventID: 11, Job: &domain.Job{ID: "a", Status: domain.JobCompleted}}},
+		{{Type: "download_upserted", EventID: 1, Job: &domain.Job{ID: "b", Status: domain.JobQueued}}},
+	}}
+	c := newTestClient(t, srv)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var lists []int
+	c.FollowFeed(ctx, FeedHandlers{
+		Snapshot: func(l DownloadList) { lists = append(lists, len(l.Downloads)) },
+		Message: func(m domain.DownloadFeedMessage) {
+			if m.EventID == 1 {
+				cancel()
+			}
+		},
+	})
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if want := "[1 0]"; fmt.Sprint(lists) != want {
+		t.Errorf("snapshots of %v jobs, want %s", lists, want)
+	}
+	if want := "[10 0]"; fmt.Sprint(srv.cursors) != want {
 		t.Errorf("cursors %v, want %s", srv.cursors, want)
 	}
 }

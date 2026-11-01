@@ -65,7 +65,11 @@ tail. They share these rules:
   `400 invalid_request`. The stream replays everything after the cursor, then goes live.
 - **Seeding.** `GET /downloads` and `GET /downloads/{id}` return `event_cursor`, read
   before the snapshot, so resuming from it never skips an event. Never open the overview
-  feed without a cursor: that replays the whole retained milestone history.
+  feed without a cursor: that replays the whole retained milestone history. Event ids
+  only grow in one database, and a cursor past the newest event is accepted and stays
+  silent until new ids pass it; a backend whose `event_cursor` is below a client's
+  cursor runs on another database, so a reconnecting client compares the two and
+  starts over from a snapshot (`internal/client#Client.FollowFeed`).
 - **Keepalive.** Every stream sends a `: keepalive` comment every 15 seconds and the
   `X-Accel-Buffering: no` header, so proxies neither buffer nor time out an idle stream.
 

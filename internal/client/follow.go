@@ -51,34 +51,52 @@ const SnapshotLimit = 200
 // FollowFeed keeps a job list current until ctx ends: it reads a snapshot of
 // GET /api/v1/downloads, then follows GET /api/v1/downloads/events from the
 // snapshot's cursor. When the stream breaks it resumes from the last event it
-// delivered, which replays what happened meanwhile; only an answer that
-// rejects the cursor makes it read a new snapshot.
+// delivered, which replays what happened meanwhile. It reads a new snapshot
+// instead when an answer rejects the cursor, or when the backend's newest
+// event is older than the cursor, as once its database was replaced: event
+// ids only grow in one database, and the new one's would reach the stream
+// only after passing the old cursor.
 func (c *Client) FollowFeed(ctx context.Context, h FeedHandlers) {
 	retry := c.newRetry()
 	var cursor int64
-	haveSnapshot := false
+	// resumed is set once a stream ran since the snapshot.
+	haveSnapshot, resumed := false, false
 	state := func(s ConnState) {
 		if h.State != nil {
 			h.State(s)
 		}
 	}
+	offline := func(err error) {
+		wait := retry.next()
+		state(ConnState{Phase: Offline, Err: err, RetryAt: time.Now().Add(wait)})
+		sleep(ctx, wait)
+	}
 	state(ConnState{Phase: Connecting})
 	for ctx.Err() == nil {
+		if haveSnapshot && resumed {
+			head, err := c.Downloads(ctx, ListQuery{Limit: 1})
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				offline(err)
+				continue
+			}
+			haveSnapshot = head.EventCursor >= cursor
+		}
 		if !haveSnapshot {
 			list, err := c.Downloads(ctx, ListQuery{Limit: SnapshotLimit})
 			if err != nil {
 				if ctx.Err() != nil {
 					return
 				}
-				wait := retry.next()
-				state(ConnState{Phase: Offline, Err: err, RetryAt: time.Now().Add(wait)})
-				sleep(ctx, wait)
+				offline(err)
 				continue
 			}
 			if h.Snapshot != nil {
 				h.Snapshot(list)
 			}
-			cursor, haveSnapshot = list.EventCursor, true
+			cursor, haveSnapshot, resumed = list.EventCursor, true, false
 		}
 		opened := time.Time{}
 		res, err := c.Stream(ctx, "/api/v1/downloads/events", strconv.FormatInt(cursor, 10),
@@ -101,14 +119,13 @@ func (c *Client) FollowFeed(ctx context.Context, h FeedHandlers) {
 		if ctx.Err() != nil {
 			return
 		}
+		resumed = true
 		switch {
 		case res.Status >= 400 && res.Status < 500:
 			haveSnapshot = false
 			state(ConnState{Phase: Connecting, Err: err})
 		case res.Status == 0:
-			wait := retry.next()
-			state(ConnState{Phase: Offline, Err: err, RetryAt: time.Now().Add(wait)})
-			sleep(ctx, wait)
+			offline(err)
 		default:
 			// The stream was open and ended: the server shut down, or the
 			// watchdog fired. A stream that lasted a while resets the backoff.
