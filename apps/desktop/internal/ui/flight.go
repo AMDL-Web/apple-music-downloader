@@ -208,6 +208,13 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		f.fadeFrom, f.fadeTo = target, target
 	}
 	f.moving = f.q != target || f.q > 0 && f.q < 1 || inPage && !f.ready
+	if inPage && !f.ready {
+		// The page's parts match in a frame and q reads it in the next:
+		// without asking for those, the page waits hidden, and the screen
+		// under it deaf to the pointer, until something else draws, as
+		// nothing does for an album opened again from what is cached.
+		c.AnimationFrame()
+	}
 	if !f.moving {
 		// A text that morphs sets off in the lines of the side it leaves.
 		for i := range f.own {
