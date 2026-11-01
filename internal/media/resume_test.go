@@ -1,10 +1,12 @@
 package media
 
 import (
+	"bytes"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 )
@@ -68,5 +70,65 @@ func TestConcurrentCheckpointsShareTheJobsDirectory(t *testing.T) {
 	}
 	if first != nil {
 		t.Fatalf("%d of %d checkpoint opens failed, first: %v", failed, rounds, first)
+	}
+}
+
+// writeTestCheckpoint leaves a checkpoint of size bytes whose metadata says
+// synced of them were fsynced, as a crash would leave a partly written one.
+func writeTestCheckpoint(t *testing.T, size, synced int64) (string, string, string) {
+	t.Helper()
+	uri := "https://example.com/track.mp4"
+	path, metadataPath := mustResumePaths(t, t.TempDir(), testResumeOwner, "track.m4a")
+	if err := os.WriteFile(path, bytes.Repeat([]byte{7}, int(size)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeResumeMetadata(metadataPath, resumeMetadata{
+		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(uri), ETag: `"v1"`, Total: 4 * size, Synced: synced,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return path, metadataPath, uri
+}
+
+// Bytes past the synced length may be pages a power loss never wrote: the
+// resume starts at the synced length and the file is cut back to it.
+func TestCheckpointResumesFromItsSyncedBytesOnly(t *testing.T) {
+	path, metadataPath, uri := writeTestCheckpoint(t, 1000, 600)
+	offset, _ := loadResumeCheckpoint(path, metadataPath, uri)
+	if offset != 600 {
+		t.Fatalf("offset = %d, want the 600 synced bytes", offset)
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() != 600 {
+		t.Fatalf("checkpoint after load: %v, err %v; want it cut back to 600 bytes", info, err)
+	}
+}
+
+// A checkpoint with nothing synced holds no byte a resume may trust.
+func TestCheckpointWithNothingSyncedRestarts(t *testing.T) {
+	path, metadataPath, uri := writeTestCheckpoint(t, 1000, 0)
+	if offset, _ := loadResumeCheckpoint(path, metadataPath, uri); offset != 0 {
+		t.Fatalf("offset = %d, want a restart", offset)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("checkpoint still present after a restart: %v", err)
+	}
+}
+
+// The sink fsyncs once enough bytes have piled up and again on close, and
+// reports the length after each sync.
+func TestFileSinkReportsEachSync(t *testing.T) {
+	path, _ := mustResumePaths(t, t.TempDir(), testResumeOwner, "track.m4a")
+	var reported []int64
+	sink := &fileSink{path: path, syncEvery: 1024, onSynced: func(n int64) { reported = append(reported, n) }}
+	for range 3 {
+		if _, err := sink.Write(make([]byte, 1000)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sink.close(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(reported, []int64{2000, 3000}) {
+		t.Fatalf("synced lengths %v, want 2000 (past 1024 unsynced) and 3000 (close)", reported)
 	}
 }

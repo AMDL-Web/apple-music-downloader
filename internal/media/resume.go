@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const resumeMetadataVersion = 1
+const resumeMetadataVersion = 2
 
 type resumeMetadata struct {
 	Version      int    `json:"version"`
@@ -20,6 +20,9 @@ type resumeMetadata struct {
 	LastModified string `json:"last_modified,omitempty"`
 	Total        int64  `json:"total,omitempty"`
 	Complete     bool   `json:"complete,omitempty"`
+	// Synced is how many leading bytes of the checkpoint were fsynced before
+	// this metadata was written; a resume trusts no byte past it.
+	Synced int64 `json:"synced,omitempty"`
 }
 
 func resumableDownloadPaths(dir, owner, resumeKey string) (string, string) {
@@ -77,6 +80,17 @@ func loadResumeCheckpoint(path, metadataPath, uri string) (int64, resumeMetadata
 	if metadata.Total > 0 && info.Size() == metadata.Total && !metadata.Complete {
 		cleanupResumableDownload(path)
 		return 0, resumeMetadata{}
+	}
+	// After a power loss or kernel crash the file can keep a length whose last
+	// pages were never written, and a resume would append the rest after them,
+	// leaving damage in the middle of the track. Cut the file back to the
+	// synced bytes and fetch the remainder again.
+	if info.Size() > metadata.Synced {
+		if metadata.Synced <= 0 || os.Truncate(path, metadata.Synced) != nil {
+			cleanupResumableDownload(path)
+			return 0, resumeMetadata{}
+		}
+		return metadata.Synced, metadata
 	}
 	return info.Size(), metadata
 }

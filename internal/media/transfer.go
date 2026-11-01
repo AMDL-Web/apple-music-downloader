@@ -172,12 +172,13 @@ func downloadToFile(ctx context.Context, client *http.Client, uri, dir, owner, r
 func downloadToCheckpoint(ctx context.Context, client *http.Client, uri, dir, owner, resumeKey string, stall time.Duration, onProgress transferProgress) (string, error) {
 	path, metadataPath := resumableDownloadPaths(dir, owner, resumeKey)
 	offset, metadata := loadResumeCheckpoint(path, metadataPath, uri)
-	sink := &fileSink{path: path, n: offset}
+	sink := &fileSink{path: path, n: offset, syncEvery: checkpointSyncBytes}
 	defer sink.close()
-	checkpoint := func(meta resumeMetadata, complete bool) resumeMetadata {
+	checkpoint := func(meta resumeMetadata, synced int64, complete bool) resumeMetadata {
 		return resumeMetadata{
 			Version: resumeMetadataVersion, SourceHash: sourceFingerprint(uri),
 			ETag: meta.ETag, LastModified: meta.LastModified, Total: meta.Total, Complete: complete,
+			Synced: synced,
 		}
 	}
 	transfer := &rangeTransfer{
@@ -185,12 +186,18 @@ func downloadToCheckpoint(ctx context.Context, client *http.Client, uri, dir, ow
 		requireComplete: true, onProgress: onProgress,
 		// Total is written before the body so progress survives interruption;
 		// the complete marker only after the media has been synced and closed.
+		// The bytes held at this point are the synced ones loadResumeCheckpoint
+		// kept, or none.
 		beforeBody: func(meta resumeMetadata) error {
 			if err := sink.open(); err != nil {
 				return err
 			}
-			return writeResumeMetadata(metadataPath, checkpoint(meta, false))
+			return writeResumeMetadata(metadataPath, checkpoint(meta, sink.Len(), false))
 		},
+	}
+	sink.onSynced = func(synced int64) {
+		// A lost update only makes a later resume trust fewer bytes.
+		_ = writeResumeMetadata(metadataPath, checkpoint(transfer.meta, synced, false))
 	}
 	// One restart is enough: it happens only when a stale or invalid Range
 	// response says to discard the checkpoint and issue a clean GET.
@@ -209,7 +216,7 @@ func downloadToCheckpoint(ctx context.Context, client *http.Client, uri, dir, ow
 		if closeErr != nil {
 			return "", closeErr
 		}
-		done := checkpoint(transfer.meta, true)
+		done := checkpoint(transfer.meta, sink.Len(), true)
 		if done.Total <= 0 {
 			done.Total = sink.Len()
 		}
@@ -450,12 +457,27 @@ func (s *memorySink) reserve(total int64) {
 	}
 }
 
+// checkpointSyncBytes is how many bytes a checkpoint download appends between
+// fsyncs. Only synced bytes survive a crash as resumable, so this bounds what
+// a crash or kill makes the next attempt fetch again.
+const checkpointSyncBytes = 16 << 20
+
 // fileSink is the on-disk checkpoint. It opens lazily, appending to the bytes
 // already there or truncating when there are none.
 type fileSink struct {
 	path string
 	f    *os.File
 	n    int64
+	// syncEvery fsyncs the file once this many bytes were appended since the
+	// last sync; zero syncs only on close.
+	syncEvery int64
+	unsynced  int64
+	// syncFailed stops reporting syncs once one failed: Linux reports a
+	// writeback error to one fsync only, so a later fsync can succeed while
+	// the pages it covered were lost.
+	syncFailed bool
+	// onSynced reports the file's length after each successful fsync.
+	onSynced func(int64)
 }
 
 func (s *fileSink) open() error {
@@ -485,13 +507,28 @@ func (s *fileSink) Write(p []byte) (int, error) {
 	}
 	n, err := s.f.Write(p)
 	s.n += int64(n)
+	s.unsynced += int64(n)
+	if err == nil && s.syncEvery > 0 && s.unsynced >= s.syncEvery {
+		if err = s.f.Sync(); err == nil {
+			s.synced()
+		} else {
+			s.syncFailed = true
+		}
+	}
 	return n, err
+}
+
+func (s *fileSink) synced() {
+	s.unsynced = 0
+	if s.onSynced != nil && !s.syncFailed {
+		s.onSynced(s.n)
+	}
 }
 
 func (s *fileSink) Len() int64 { return s.n }
 
 func (s *fileSink) Truncate() error {
-	s.n = 0
+	s.n, s.unsynced = 0, 0
 	if s.f == nil {
 		return nil
 	}
@@ -504,7 +541,7 @@ func (s *fileSink) discard() {
 		_ = s.f.Close()
 		s.f = nil
 	}
-	s.n = 0
+	s.n, s.unsynced = 0, 0
 	cleanupResumableDownload(s.path)
 }
 
@@ -520,6 +557,9 @@ func (s *fileSink) close() error {
 	closeErr := f.Close()
 	if syncErr != nil {
 		return syncErr
+	}
+	if closeErr == nil {
+		s.synced()
 	}
 	return closeErr
 }

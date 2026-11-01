@@ -120,7 +120,7 @@ func TestDownloadToFileTruncatesWhenServerIgnoresRange(t *testing.T) {
 		_, _ = w.Write(payload) // 200 means Range/If-Range was not usable.
 	}))
 	defer server.Close()
-	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"v1"`, Total: int64(len(payload))}); err != nil {
+	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"v1"`, Total: int64(len(payload)), Synced: int64(len(oldPrefix))}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -162,7 +162,7 @@ func TestDownloadToFileRejectsMismatchedPartialContent(t *testing.T) {
 		_, _ = w.Write(payload)
 	}))
 	defer server.Close()
-	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"old"`, Total: int64(len(payload))}); err != nil {
+	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"old"`, Total: int64(len(payload)), Synced: int64(len(partial))}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,6 +196,7 @@ func TestDownloadToFileRestartsWhenSourceChanged(t *testing.T) {
 	// even with a matching validator the checkpoint must be discarded.
 	if err := writeResumeMetadata(metadataPath, resumeMetadata{
 		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL + "/other-variant"), ETag: `"variant"`, Total: int64(len(payload)),
+		Synced: int64(len("bytes from the previous variant")),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +233,7 @@ func TestDownloadToFileAcceptsCompleteCheckpointOn416(t *testing.T) {
 		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 	}))
 	defer server.Close()
-	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"complete"`, Complete: true}); err != nil {
+	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"complete"`, Complete: true, Synced: int64(len(payload))}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -269,7 +270,7 @@ func TestDownloadToFileValidatesCompletedCheckpointWith416(t *testing.T) {
 	}))
 	defer server.Close()
 	if err := writeResumeMetadata(metadataPath, resumeMetadata{
-		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"complete"`, Total: int64(len(payload)), Complete: true,
+		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"complete"`, Total: int64(len(payload)), Complete: true, Synced: int64(len(payload)),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +319,7 @@ func TestDownloadToFileRestartsCompletedCheckpointWhenETagChanged(t *testing.T) 
 	}))
 	defer server.Close()
 	if err := writeResumeMetadata(metadataPath, resumeMetadata{
-		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"old"`, Total: int64(len(oldPayload)), Complete: true,
+		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"old"`, Total: int64(len(oldPayload)), Complete: true, Synced: int64(len(oldPayload)),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -351,6 +352,7 @@ func TestDownloadToFileRestartsFullLengthCheckpointWithoutCompleteMarker(t *test
 	defer server.Close()
 	if err := writeResumeMetadata(metadataPath, resumeMetadata{
 		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"same"`, Total: int64(len(payload)), Complete: false,
+		Synced: int64(len(payload)),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +386,7 @@ func TestDownloadToFileRestartsWhen416TotalDoesNotMatch(t *testing.T) {
 		_, _ = w.Write(payload)
 	}))
 	defer server.Close()
-	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"old"`}); err != nil {
+	if err := writeResumeMetadata(metadataPath, resumeMetadata{Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"old"`, Synced: int64(len("oversized stale partial data"))}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -417,6 +419,7 @@ func TestDownloadToFileRestartsWithoutValidator(t *testing.T) {
 	// validator alone must still force a full restart.
 	if err := writeResumeMetadata(metadataPath, resumeMetadata{
 		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), Total: int64(len(payload)),
+		Synced: int64(len("old-prefix")),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +460,7 @@ func TestDownloadToFileRejectsInconsistentContentRangeLength(t *testing.T) {
 	}))
 	defer server.Close()
 	if err := writeResumeMetadata(metadataPath, resumeMetadata{
-		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"track"`, Total: int64(len(payload)),
+		Version: resumeMetadataVersion, SourceHash: sourceFingerprint(server.URL), ETag: `"track"`, Total: int64(len(payload)), Synced: int64(len(partial)),
 	}); err != nil {
 		t.Fatal(err)
 	}
