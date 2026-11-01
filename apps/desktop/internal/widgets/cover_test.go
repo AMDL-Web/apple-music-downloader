@@ -39,9 +39,11 @@ func TestTheMotionCoverFadesOut(t *testing.T) {
 		t.Fatalf("the playing cover shows red %d, not its video", r)
 	}
 	video = nil
-	tt.Advance(time.Second / 60)
+	// The Tester does not hear of the change; the frame that shows it is
+	// built here, rather than whenever the player next asks for one.
+	tt.Frame()
 	if r := redness(); r < 200 {
-		t.Errorf("a frame after the video went, the cover shows red %d: it left at once", r)
+		t.Errorf("the frame the video went in, the cover shows red %d: it left at once", r)
 	}
 	tt.Advance(time.Second)
 	if r := redness(); r > 5 {
