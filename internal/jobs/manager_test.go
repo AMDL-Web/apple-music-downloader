@@ -237,10 +237,22 @@ func TestRecoverUnfinishedHandlesMoreThanQueueCapacityWithoutLoss(t *testing.T) 
 		}
 	}
 	close(processor.release)
-	select {
-	case <-processor.done:
-	case <-time.After(10 * time.Second):
-		t.Fatalf("processed %d/%d recovered jobs", processor.calls.Load(), backlog)
+	// The race detector on a slow runner took 12.6 s for the 300 jobs, so the
+	// wait fails on a stall (no job finished for 10 s), not on total time.
+	progress, stalledSince := processor.calls.Load(), time.Now()
+	for giveUp := time.Now().Add(time.Minute); ; {
+		select {
+		case <-processor.done:
+		case <-time.After(100 * time.Millisecond):
+			if n := processor.calls.Load(); n != progress {
+				progress, stalledSince = n, time.Now()
+			}
+			if time.Since(stalledSince) > 10*time.Second || time.Now().After(giveUp) {
+				t.Fatalf("processed %d/%d recovered jobs", processor.calls.Load(), backlog)
+			}
+			continue
+		}
+		break
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
