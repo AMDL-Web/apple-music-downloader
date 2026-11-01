@@ -85,6 +85,13 @@ func TestTheFieldsEdgeDragsItsHeight(t *testing.T) {
 	e, _ := tt.Find("Field height")
 	x, y := e.X+e.W/2, e.Y+e.H/2
 	start := fieldBottom(t, tt)
+	// A click that does not move leaves it fitting its text.
+	tt.Press(x, y)
+	tt.Release(x, y)
+	tt.Advance(time.Second)
+	if a.fieldDrawn != 0 {
+		t.Fatalf("a click on the edge set the field to %v DIPs", a.fieldDrawn)
+	}
 	tt.Press(x, y)
 	for i := 1; i <= 20; i++ {
 		tt.Move(x, y+float32(5*i))
@@ -109,5 +116,34 @@ func TestTheFieldsEdgeDragsItsHeight(t *testing.T) {
 	tt.Advance(time.Second)
 	if a.fieldDrawn != 0 {
 		t.Errorf("an emptied field kept its dragged height %v", a.fieldDrawn)
+	}
+}
+
+// A double click on the dragged field's edge fits it to its text again.
+func TestADoubleClickOnTheEdgeFitsTheField(t *testing.T) {
+	a, tt := fieldApp(t, pastedLinks)
+	fits := fieldBottom(t, tt)
+	e, _ := tt.Find("Field height")
+	x, y := e.X+e.W/2, e.Y+e.H/2
+	tt.Press(x, y)
+	for i := 1; i <= 10; i++ {
+		tt.Move(x, y+float32(10*i))
+		tt.Advance(refresh)
+	}
+	tt.Release(x, y+100)
+	tt.Advance(time.Second)
+	if fieldBottom(t, tt) <= fits+50 {
+		t.Fatalf("the drag left the field's bottom at %v from %v", fieldBottom(t, tt), fits)
+	}
+	e, _ = tt.Find("Field height")
+	x, y = e.X+e.W/2, e.Y+e.H/2
+	for range 2 {
+		tt.Press(x, y)
+		tt.Release(x, y)
+		tt.Advance(50 * time.Millisecond)
+	}
+	tt.Advance(time.Second)
+	if a.fieldDrawn != 0 || fieldBottom(t, tt) != fits {
+		t.Errorf("after a double click the field is %v DIPs drawn, its bottom at %v, not %v", a.fieldDrawn, fieldBottom(t, tt), fits)
 	}
 }

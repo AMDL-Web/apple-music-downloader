@@ -124,12 +124,16 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		dragging := false
 		if o.Text != "" {
 			edge = ui.Box(c.Key("edge")).Absolute().Left(0).Right(0).Bottom(-4).Height(10).Cursor(ui.CursorResizeNS).Label("Field height")
+			// Dragged holds from the press on; only a move sets a height, so
+			// a click, or a double click's first, leaves the field fitting.
 			if _, dy, ok := edge.Dragged(); ok {
 				dragging = true
-				if a.fieldDrawn == 0 {
-					a.fieldDrawn = lift.Bounds().H
+				if dy != 0 {
+					if a.fieldDrawn == 0 {
+						a.fieldDrawn = lift.Bounds().H
+					}
+					a.fieldDrawn = min(max(a.fieldDrawn+dy, fieldHeight), tallest)
 				}
-				a.fieldDrawn = min(max(a.fieldDrawn+dy, fieldHeight), tallest)
 			}
 			if edge.DoubleClicked() {
 				a.fieldDrawn = 0
