@@ -16,11 +16,9 @@ import (
 )
 
 // heroJob is the job whose palette lights the queue: the one downloading
-// now, else the one that finished last.
+// now, else the one that finished last. The album page asks for it too,
+// while it flies in over the queue, for the light it turns from.
 func (a *App) heroJob() *store.Job {
-	if a.Screen != ScreenQueue {
-		return nil
-	}
 	if j := a.Store.Now(); j != nil {
 		return j
 	}

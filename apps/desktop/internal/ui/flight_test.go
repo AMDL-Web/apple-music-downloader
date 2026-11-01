@@ -163,6 +163,57 @@ func TestNothingMovesBesideTheQueue(t *testing.T) {
 	}
 }
 
+// The light turns from the queue's to the page's: no frame on the way in or
+// out lies outside the two ends, as the bare ground would, darker than
+// both in the dark theme and lighter in the light one.
+func TestTheLightTurnsWithoutADip(t *testing.T) {
+	for _, theme := range []string{"dark", "light"} {
+		a, tt, j := flightApp(t)
+		a.Theme = theme
+		// The light eases to the theme's first.
+		tt.Advance(time.Second)
+		// A band of the column's top that both screens leave empty, in
+		// pixels at the Tester's half scale.
+		lum := func() float64 {
+			img := tt.Image()
+			sum, n := 0.0, 0.0
+			for y := 12; y < 30; y++ {
+				for x := 300; x < 500; x++ {
+					o := img.PixOffset(x, y)
+					sum += 0.2126*float64(img.Pix[o]) + 0.7152*float64(img.Pix[o+1]) + 0.0722*float64(img.Pix[o+2])
+					n++
+				}
+			}
+			return sum / n
+		}
+		// way measures from before go, which builds the way's first frame.
+		way := func(name string, goes func()) {
+			from := lum()
+			goes()
+			seen := []float64{lum()}
+			for range 60 {
+				tt.Advance(refresh)
+				seen = append(seen, lum())
+				if !a.fly.moving {
+					break
+				}
+			}
+			to := seen[len(seen)-1]
+			for i, l := range seen {
+				if l < min(from, to)-1 || l > max(from, to)+1 {
+					t.Errorf("%s, %s: frame %d is %.1f bright, outside the ends, %.1f and %.1f", theme, name, i, l, from, to)
+				}
+			}
+		}
+		way("in", func() {
+			if err := tt.Click("Open " + j.Name()); err != nil {
+				t.Fatal(err)
+			}
+		})
+		way("out", func() { tt.Key(0, ui.KeyEscape) })
+	}
+}
+
 func TestBackOnTheWayInTurnsTheCoverRound(t *testing.T) {
 	a, tt, j := flightApp(t)
 	from, _ := tt.Find("Open " + j.Name())
