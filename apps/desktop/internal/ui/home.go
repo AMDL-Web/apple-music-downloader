@@ -121,14 +121,17 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		// it from where it shows; a double click fits it to its text again,
 		// as a column's edge in a Finder list fits its column.
 		var edge ui.Element
-		dragging := false
+		// dragging is set while the edge is pressed, moved while it moves,
+		// which the field follows at once.
+		dragging, moved := false, false
 		if o.Text != "" {
 			edge = ui.Box(c.Key("edge")).Absolute().Left(0).Right(0).Bottom(-4).Height(10).Cursor(ui.CursorResizeNS).Label("Field height")
 			// Dragged holds from the press on; only a move sets a height, so
-			// a click, or a double click's first, leaves the field fitting.
+			// a click, or a double click's first, leaves the field fitting,
+			// and its second fits it as the field moves elsewhere.
 			if _, dy, ok := edge.Dragged(); ok {
-				dragging = true
-				if dy != 0 {
+				dragging, moved = true, dy != 0
+				if moved {
 					if a.fieldDrawn == 0 {
 						a.fieldDrawn = lift.Bounds().H
 					}
@@ -222,7 +225,7 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		if target == 0 {
 			target = min(max(fits+2*padField+2*textY, fieldHeight), tallest)
 		}
-		if dragging {
+		if moved {
 			box.Jump("height", target)
 		}
 		box.Height(box.AnimateTo("height", target, ui.Snappy))

@@ -135,15 +135,21 @@ func TestADoubleClickOnTheEdgeFitsTheField(t *testing.T) {
 	if fieldBottom(t, tt) <= fits+50 {
 		t.Fatalf("the drag left the field's bottom at %v from %v", fieldBottom(t, tt), fits)
 	}
+	drawn := fieldBottom(t, tt)
 	e, _ = tt.Find("Field height")
 	x, y = e.X+e.W/2, e.Y+e.H/2
-	for range 2 {
-		tt.Press(x, y)
-		tt.Release(x, y)
-		tt.Advance(50 * time.Millisecond)
+	tt.Press(x, y)
+	tt.Release(x, y)
+	tt.Advance(50 * time.Millisecond)
+	tt.Press(x, y)
+	tt.Release(x, y)
+	// It glides there, as when the field empties, not in one frame.
+	tt.Advance(refresh)
+	if got := fieldBottom(t, tt); got <= fits+4 || got >= drawn {
+		t.Errorf("a frame after the double click the field's bottom is at %v, not between %v and %v", got, fits, drawn)
 	}
 	tt.Advance(time.Second)
-	if a.fieldDrawn != 0 || fieldBottom(t, tt) != fits {
+	if d := fieldBottom(t, tt) - fits; a.fieldDrawn != 0 || d < -0.5 || d > 0.5 {
 		t.Errorf("after a double click the field is %v DIPs drawn, its bottom at %v, not %v", a.fieldDrawn, fieldBottom(t, tt), fits)
 	}
 }
