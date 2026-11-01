@@ -121,11 +121,28 @@ func (s tokenStore) save(st storedToken) error {
 	return nil
 }
 
-// drop removes the stored copy; a missing one is not an error.
+// drop removes the stored copy and any temporary file a crashed save left;
+// a missing one is not an error.
 func (s tokenStore) drop() error {
 	err := os.Remove(s.path())
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		err = nil
 	}
-	return err
+	return errors.Join(err, s.sweep())
+}
+
+// sweep removes temporary files a save left behind when the process died
+// between creating and renaming one: they hold a token too.
+func (s tokenStore) sweep() error {
+	left, err := filepath.Glob(filepath.Join(s.dir, StoreFileName+".*.tmp"))
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, name := range left {
+		if err := os.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }

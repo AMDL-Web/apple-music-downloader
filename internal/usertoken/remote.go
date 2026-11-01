@@ -68,6 +68,9 @@ type remote struct {
 	stored string // loaded from Dir at start, until the wrapper answers
 	state  int
 	fails  int
+	// saveFailing is set while the stored copy cannot be written, so that is
+	// logged once rather than on every refresh.
+	saveFailing bool
 }
 
 func newRemote(e Endpoint) *remote {
@@ -90,6 +93,9 @@ func newRemote(e Endpoint) *remote {
 		backoffMin:       backoffMin,
 		backoffMax:       backoffMax,
 		nudgeSpacing:     nudgeSpacing,
+	}
+	if err := r.store.sweep(); err != nil {
+		logger.Warn("could not remove a leftover temporary copy of the wrapper's token", "dir", e.Dir, "error", err.Error())
 	}
 	v, err := r.store.load(e.Address)
 	if err != nil {
@@ -196,10 +202,15 @@ func (r *remote) gotToken(v string, reply wrapper.TokenReply) time.Duration {
 	if reply.NextRefreshAt <= 0 {
 		next = time.Time{}
 	}
-	if err := r.store.save(storedToken{
+	err := r.store.save(storedToken{
 		Address: r.address, Region: reply.Region, MusicToken: v,
 		RefreshedAt: reply.RefreshedAt, NextRefreshAt: reply.NextRefreshAt, FetchedAt: now.Unix(),
-	}); err != nil {
+	})
+	r.mu.Lock()
+	wasFailing := r.saveFailing
+	r.saveFailing = err != nil
+	r.mu.Unlock()
+	if err != nil && !wasFailing {
 		r.logger.Warn("could not store a copy of the wrapper's token; it is used from memory", "dir", r.store.dir, "error", err.Error())
 	}
 	wait := r.afterToken(now, next)

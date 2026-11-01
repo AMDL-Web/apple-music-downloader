@@ -403,3 +403,43 @@ func TestRealClientAgainstAWrapper(t *testing.T) {
 	}
 	assertNoToken(t, &logs, endpointTok)
 }
+
+func TestLeftoverTempCopyIsRemoved(t *testing.T) {
+	dir := t.TempDir()
+	left := filepath.Join(dir, StoreFileName+".123.tmp")
+	if err := os.WriteFile(left, []byte(endpointTok), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var logs lockedBuffer
+	w := &fakeWrapper{}
+	w.set(fakeReply{err: errors.New("connection refused")})
+	endpointProvider(t, w.fetch, dir, testAddress, &logs)
+	if _, err := os.Stat(left); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a crashed save's temporary copy survived a start: %v", err)
+	}
+}
+
+func TestUnwritableStoreWarnsOnce(t *testing.T) {
+	// A regular file where the store directory should be: every save fails.
+	dir := filepath.Join(t.TempDir(), StoreDirName)
+	if err := os.WriteFile(dir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var logs lockedBuffer
+	w := &fakeWrapper{}
+	w.set(ok(endpointTok, 0))
+	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
+	runLoop(t, p)
+	waitFor(t, "the /token token", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper}))
+	for i := int32(2); i <= 3; i++ {
+		p.RefreshSoon()
+		waitFor(t, "another fetch", func() bool { return w.calls.Load() >= i })
+	}
+	waitFor(t, "the third answer's log line", func() bool {
+		return strings.Count(logs.String(), "using the wrapper's token from GET /token") >= 3
+	})
+	if c := strings.Count(logs.String(), "could not store a copy"); c != 1 {
+		t.Fatalf("the unwritable store was logged %d times over 3 answers, want once:\n%s", c, logs.String())
+	}
+	assertNoToken(t, &logs, endpointTok)
+}

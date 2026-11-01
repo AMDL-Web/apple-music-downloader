@@ -389,8 +389,8 @@ library_sync:
   #
   # Requires a media-user-token — a personal library can be read only with the subscription
   # token; the web-player token alone is not enough. The wrapper's is used when the backend has
-  # it (a wrapper it runs itself, the wrapper's GET /token, or wrapper.data_dir), else
-  # catalog.media_user_token. While
+  # it (a wrapper it runs itself, the wrapper's GET /token, wrapper.data_dir, or its stored copy
+  # of an earlier GET /token answer), else catalog.media_user_token. While
   # neither has one the monitor idles and warns once, instead of reporting an error every round,
   # and starts within a tick of one appearing.
   #
