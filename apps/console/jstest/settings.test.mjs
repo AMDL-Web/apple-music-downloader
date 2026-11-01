@@ -92,8 +92,8 @@ test('retired section ids and fields open the section that holds them now', () =
 
 test('every runtime key belongs to exactly one of the nine sections, and the board leaves out Lyrics & artwork', () => {
   const counts = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, FIELDS.filter((f) => f.section === s.id).length]));
-  assert.deepEqual(counts, { account: 1, quality: 5, files: 8, lyrics_artwork: 11, jobs: 4, library_sync: 2, hooks: 0, logging: 2, server: 3 });
-  assert.equal(FIELDS.length, 36);
+  assert.deepEqual(counts, { account: 1, quality: 5, files: 8, lyrics_artwork: 11, jobs: 5, library_sync: 2, hooks: 0, logging: 2, server: 3 });
+  assert.equal(FIELDS.length, 37);
   assert.deepEqual(BOARD_SECTIONS.map((s) => s.id), ['account', 'quality', 'files', 'jobs', 'library_sync', 'hooks', 'logging', 'server']);
   assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['simulate', 'server'], ['config_file', 'server']]);
   assert.equal(SETTINGS_SECTIONS.findIndex((s) => s.split), 5, 'the nav splits before Library sync');
@@ -108,6 +108,8 @@ test('dependent fields are disabled, never hidden, while what they need is off',
   assert.equal(fieldDisabled('download.lyrics_extras', at({ 'download.embed_lyrics': true, 'download.lyrics_files': [] })), false);
   assert.equal(fieldDisabled('simulate.max_speed_kbps', at({ 'simulate.enabled': false })), true);
   assert.equal(fieldDisabled('simulate.max_speed_kbps', at({ 'simulate.enabled': true })), false);
+  assert.equal(fieldDisabled('download.integrity_mode', at({ 'download.check_integrity': false })), true);
+  assert.equal(fieldDisabled('download.integrity_mode', at({ 'download.check_integrity': true })), false);
   assert.equal(fieldDisabled('download.cover_size', at({})), false, 'a field without a rule is never disabled');
 });
 

@@ -2541,8 +2541,8 @@ components:
         Per-job override layer for the quality and overwrite keys of the download
         section of the runtime configuration; each field maps one-to-one onto the
         download key of the same name. Every other setting (directories, path
-        templates, lyrics, covers, memory_mode, max_attempts, check_integrity and
-        hook selection) comes from the runtime configuration and hooks.yaml for
+        templates, lyrics, covers, memory_mode, max_attempts, check_integrity,
+        integrity_mode and hook selection) comes from the runtime configuration and hooks.yaml for
         every job, and the media-user-token is the wrapper's when amdl can read
         it, else the runtime catalog.media_user_token. All fields are optional; on submission the
         full validation runs against "current runtime configuration + overrides",
@@ -2723,6 +2723,15 @@ components:
                 Bits, a ceiling; 0 or less sets none. Apple Music serves 16- and 24-bit
                 ALAC.
             check_integrity: {type: boolean}
+            integrity_mode:
+              type: string
+              enum: [full, quick]
+              description: >-
+                How check_integrity checks a track; ignored when it is false. full
+                (default) decodes the whole track with ffmpeg. quick checks that every
+                sample lies inside the file's media data, that every ALAC packet parses
+                and ends cleanly, and decodes only the first and last 5 seconds; damage
+                confined to the middle of an AAC or Dolby track passes it.
             force_overwrite:
               type: boolean
               description: >-

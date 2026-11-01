@@ -405,7 +405,7 @@ func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default())}
 	for _, field := range []string{
 		"embedd_lyrics", "media_user_token", "hooks", "downloads_dir", "temp_dir", "song_path_format",
-		"embed_lyrics", "lyrics_extras", "cover_size", "save_album_cover", "max_attempts", "memory_mode", "check_integrity",
+		"embed_lyrics", "lyrics_extras", "cover_size", "save_album_cover", "max_attempts", "memory_mode", "check_integrity", "integrity_mode",
 		"max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads", "max_parallel_wrapper_requests", "max_parallel_downloads", "max_parallel_decrypts",
 	} {
 		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",

@@ -100,6 +100,9 @@ func (a *App) fieldOff(f *configField) bool {
 	case "simulate.min_speed_kbps", "simulate.max_speed_kbps":
 		on, _ := cf.Value("simulate.enabled").(bool)
 		return !on
+	case "download.integrity_mode":
+		on, _ := cf.Value("download.check_integrity").(bool)
+		return !on
 	}
 	return false
 }

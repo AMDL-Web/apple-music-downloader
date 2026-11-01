@@ -127,6 +127,11 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("download.memory_mode must be low or high")
 	}
+	switch c.Download.IntegrityMode {
+	case IntegrityModeFull, IntegrityModeQuick:
+	default:
+		return fmt.Errorf("download.integrity_mode must be full or quick")
+	}
 	if !coverSizePattern.MatchString(c.Download.CoverSize) {
 		return fmt.Errorf("download.cover_size must be {width}x{height} in pixels, for example 5000x5000")
 	}

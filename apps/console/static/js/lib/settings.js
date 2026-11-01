@@ -241,6 +241,17 @@ export const FIELDS = [
     defaultValue: true,
   },
   {
+    key: 'download.integrity_mode',
+    section: 'jobs',
+    type: 'select',
+    label: 'Integrity check',
+    defaultValue: 'full',
+    options: [
+      { value: 'full', label: 'Full', hint: 'Decodes the whole track' },
+      { value: 'quick', label: 'Quick', hint: 'A quarter to a third of the CPU; misses damage mid-track in AAC and Dolby' },
+    ],
+  },
+  {
     key: 'catalog.motion_artwork_enabled',
     section: 'lyrics_artwork',
     type: 'switch',
@@ -317,6 +328,7 @@ const REQUIRES = {
   'download.lyrics_extras': (v) => v('download.embed_lyrics') === true || has(v('download.lyrics_files'), 'lrc'),
   'simulate.min_speed_kbps': (v) => v('simulate.enabled') === true,
   'simulate.max_speed_kbps': (v) => v('simulate.enabled') === true,
+  'download.integrity_mode': (v) => v('download.check_integrity') === true,
 };
 
 /** Whether the field of `key` takes no input under the values `valueOf` gives (the draft over the base). */

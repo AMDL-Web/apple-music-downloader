@@ -34,6 +34,7 @@ const SERVER = {
   embed_cover: true,
   embed_lyrics: true,
   force_overwrite: false,
+  integrity_mode: 'full',
   lyrics_extras: [],
   lyrics_files: [],
   lyrics_timing: 'line',

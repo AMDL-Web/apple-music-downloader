@@ -117,6 +117,8 @@ var configFields = []configField{
 		help: "0 updates each percent.", min: 0, max: 10000, unit: "ms"},
 	{key: "download.check_integrity", section: "jobs", kind: fieldSwitch, label: "Check file integrity",
 		help: "Also repairs known ALAC issues."},
+	{key: "download.integrity_mode", section: "jobs", kind: fieldSelect, label: "Integrity check",
+		help: "Quick checks every ALAC packet and decodes only the ends.", options: []option{{"full", "Full"}, {"quick", "Quick"}}},
 
 	{key: "library_sync.enabled", section: "library_sync", kind: fieldSwitch, label: "Watch my library",
 		help: "Needs the media user token."},

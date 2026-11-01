@@ -10,10 +10,10 @@ package config
 // (TestDownloadOverridesCoverRuntimeDownloadKeys). Every other runtime
 // download key is deliberately absent and comes only from the runtime config
 // (overrideExclusions): directories, path templates, lyrics, covers,
-// memory_mode, max_attempts and check_integrity are install settings that
-// Settings changes for every job, and progress_event_interval_ms shapes the
-// event stream every subscriber of a job shares. max_running_jobs and the
-// max_parallel_* pools are startup keys that size process-wide pools.
+// memory_mode, max_attempts, check_integrity and integrity_mode are install
+// settings that Settings changes for every job, and progress_event_interval_ms
+// shapes the event stream every subscriber of a job shares. max_running_jobs
+// and the max_parallel_* pools are startup keys that size process-wide pools.
 //
 // QualityPriority is *[]string rather than []string so an explicit empty list
 // survives the JSON round trip through the jobs table; Validate then rejects

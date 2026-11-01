@@ -90,6 +90,26 @@ and cover art are all handled in-process by the Go `mp4ff` and `go-mp4tag` libra
   `status_message`, where `attempt` is the 1-based try number within the current
   `retry_kind` phase.
 
+## Integrity check
+
+`download.check_integrity` turns the check on or off; `download.integrity_mode` picks how
+it checks (`internal/media#MP4Processor.checkIntegrityQuick`). What it guards against, and
+where in a file each sits:
+
+- A malformed ALAC packet terminator: a single packet, anywhere in the track. An ALAC
+  track that fails either mode gets one repair attempt (`alac_repaired` event) and is
+  checked again.
+- Garbage from the first frame on, such as a stale fragment data offset that makes the
+  flatten read past the media data.
+- A file cut short: samples past the end of its media data, or a box past the end of the
+  file.
+
+`full` (default) decodes the whole track with ffmpeg. `quick` checks every sample's
+position against the mdat boxes, parses every ALAC packet in Go down to its END element
+(what ffmpeg's decoder requires), and decodes only the first and last 5 seconds with
+ffmpeg. On a 24-bit/96 kHz ALAC track it costs a quarter to a third of the CPU of `full`;
+damage confined to the middle of an AAC or Dolby track passes it.
+
 ## Transfers
 
 Encrypted media transfers have no whole-request deadline, because a 24-bit/192 kHz

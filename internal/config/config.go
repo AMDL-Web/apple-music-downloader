@@ -160,6 +160,7 @@ type DownloadConfig struct {
 	ALACMaxSampleRate       int      `yaml:"alac_max_sample_rate" json:"alac_max_sample_rate"`
 	ALACMaxBitDepth         int      `yaml:"alac_max_bit_depth" json:"alac_max_bit_depth"`
 	CheckIntegrity          bool     `yaml:"check_integrity" json:"check_integrity"`
+	IntegrityMode           string   `yaml:"integrity_mode" json:"integrity_mode"`
 	ForceOverwrite          bool     `yaml:"force_overwrite" json:"force_overwrite"`
 }
 
@@ -167,6 +168,11 @@ type DownloadConfig struct {
 const (
 	MemoryModeLow  = "low"
 	MemoryModeHigh = "high"
+
+	// IntegrityModeFull and IntegrityModeQuick are the download.integrity_mode
+	// values.
+	IntegrityModeFull  = "full"
+	IntegrityModeQuick = "quick"
 
 	// These limits bound process-wide concurrency and retry fan-out while
 	// remaining comfortably above normal deployments.
@@ -256,6 +262,7 @@ func Default() Config {
 			EmbedCover: true, SaveAlbumCover: true, SaveArtistCover: true, SavePlaylistCover: true,
 			EmbedLyrics: true, LyricsFiles: []string{}, LyricsTiming: "line", LyricsExtras: []string{},
 			ALACMaxSampleRate: 192000, ALACMaxBitDepth: 24, CheckIntegrity: true,
+			IntegrityMode: IntegrityModeFull,
 		},
 		Tools:    ToolsConfig{FFmpeg: "ffmpeg"},
 		Simulate: SimulateConfig{Enabled: false, MinSpeedKBps: 512, MaxSpeedKBps: 4096},

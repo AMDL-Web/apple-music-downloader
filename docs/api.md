@@ -288,7 +288,7 @@ is `422 invalid_overrides`.
 | `force_overwrite` | Overwrite existing output files and their lyrics sidecars instead of skipping |
 
 Everything else comes from the runtime config for every job: directories, path templates,
-lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`, and the media-user-token
+lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`, `integrity_mode`, and the media-user-token
 (the wrapper's when the backend can read it, else `catalog.media_user_token`). Every enabled hook in `hooks.yaml` whose `events` and
 `job_types` match runs for every job. Any other field, at the top level (`force`,
 `media_user_token`) or inside `overrides` (`hooks`, `downloads_dir`, `media_user_token`,

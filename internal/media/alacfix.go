@@ -4,8 +4,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/bits"
 )
 
+// alacBitReader reads big-endian bit fields of up to 32 bits. It loads a
+// 64-bit window per call instead of looping over single bits: the integrity
+// check's quick mode walks every bit of every ALAC packet with it.
 type alacBitReader struct {
 	buf []byte
 	pos int
@@ -21,27 +25,40 @@ func (r *alacBitReader) left() int {
 	return len(r.buf)*8 - r.pos
 }
 
+// window returns the next bits left-aligned in a uint64, at least 57 of them
+// valid; bits past the end of buf read as zero.
+func (r *alacBitReader) window() uint64 {
+	i := r.pos >> 3
+	var v uint64
+	if i+8 <= len(r.buf) {
+		v = binary.BigEndian.Uint64(r.buf[i:])
+	} else {
+		for j := 0; j < 8; j++ {
+			v <<= 8
+			if i+j < len(r.buf) {
+				v |= uint64(r.buf[i+j])
+			}
+		}
+	}
+	return v << uint(r.pos&7)
+}
+
 func (r *alacBitReader) read(n int) (uint32, error) {
-	if n == 0 {
-		return 0, nil
+	out, err := r.show(n)
+	if err == nil {
+		r.pos += n
 	}
-	if n < 0 || r.pos+n > len(r.buf)*8 {
-		return 0, errALACBitEOF
-	}
-	var out uint32
-	for i := 0; i < n; i++ {
-		bp := r.pos + i
-		out = (out << 1) | uint32((r.buf[bp/8]>>uint(7-(bp&7)))&1)
-	}
-	r.pos += n
-	return out, nil
+	return out, err
 }
 
 func (r *alacBitReader) show(n int) (uint32, error) {
-	saved := r.pos
-	out, err := r.read(n)
-	r.pos = saved
-	return out, err
+	if n == 0 {
+		return 0, nil
+	}
+	if n < 0 || n > 32 || r.pos+n > len(r.buf)*8 {
+		return 0, errALACBitEOF
+	}
+	return uint32(r.window() >> uint(64-n)), nil
 }
 
 func (r *alacBitReader) skip(n int) error {
@@ -61,19 +78,6 @@ func (r *alacBitReader) readSigned(n int) (int32, error) {
 		return int32(out) - int32(1<<uint(n)), nil
 	}
 	return int32(out), nil
-}
-
-func (r *alacBitReader) unary09() (uint32, error) {
-	for count := uint32(0); count < 9; count++ {
-		bit, err := r.read(1)
-		if err != nil {
-			return 0, err
-		}
-		if bit == 0 {
-			return count, nil
-		}
-	}
-	return 9, nil
 }
 
 type alacRepairParams struct {
@@ -118,18 +122,8 @@ func repairALACTerminators(song []byte) ([]byte, int, error) {
 			}
 			packet := repaired[loc.offset : loc.offset+int64(loc.size)]
 			bodyEnd := findALACBodyEndBit(packet, &track.params)
-			if bodyEnd < 0 || bodyEnd == loc.size*8 {
+			if bodyEnd < 0 || bodyEnd == loc.size*8 || alacEndTagAt(packet, bodyEnd) {
 				continue
-			}
-			reader := newALACBitReader(packet)
-			if err := reader.skip(bodyEnd); err != nil {
-				continue
-			}
-			if reader.left() >= 3 {
-				tag, err := reader.show(3)
-				if err == nil && tag == 7 {
-					continue
-				}
 			}
 			if patchALACTerminator(repaired, loc.offset, loc.size, bodyEnd) {
 				patched++
@@ -137,6 +131,17 @@ func repairALACTerminators(song []byte) ([]byte, int, error) {
 		}
 	}
 	return repaired, patched, nil
+}
+
+// alacEndTagAt reports whether an END element (tag 7) starts at bit bodyEnd
+// of packet.
+func alacEndTagAt(packet []byte, bodyEnd int) bool {
+	reader := newALACBitReader(packet)
+	if err := reader.skip(bodyEnd); err != nil || reader.left() < 3 {
+		return false
+	}
+	tag, err := reader.show(3)
+	return err == nil && tag == 7
 }
 
 func findALACBodyEndBit(packet []byte, params *alacRepairParams) int {
@@ -221,7 +226,7 @@ func scanALACElement(reader *alacBitReader, params *alacRepairParams) (int, bool
 	if _, err := reader.read(8); err != nil {
 		return 0, false, err
 	}
-	riceHistoryMultipliers := make([]uint32, channels)
+	var riceHistoryMultipliers [2]uint32
 	for channel := 0; channel < channels; channel++ {
 		if _, err := reader.read(4); err != nil {
 			return 0, false, err
@@ -317,41 +322,48 @@ func skipALACRice(reader *alacBitReader, samples, bps int, riceHistoryMultiplier
 	return nil
 }
 
+// decodeALACScalar reads one rice-coded value: a unary prefix of up to nine
+// ones, then k suffix bits, or bps raw bits after nine ones. The prefix and
+// suffix come from a single window load, since this runs once per sample.
 func decodeALACScalar(reader *alacBitReader, k int, bps int) (uint32, error) {
-	x, err := reader.unary09()
-	if err != nil {
-		return 0, err
-	}
-	if x > 8 {
+	w := reader.window()
+	left := reader.left()
+	ones := bits.LeadingZeros64(^w)
+	if ones > 8 {
+		if left < 9 {
+			return 0, errALACBitEOF
+		}
+		reader.pos += 9
 		return reader.read(bps)
 	}
-	if k != 1 {
-		extraBits, err := reader.show(k)
-		if err != nil {
-			return 0, err
-		}
-		x = (x << uint(k)) - x
-		if extraBits > 1 {
-			x += extraBits - 1
-			if err := reader.skip(k); err != nil {
-				return 0, err
-			}
-		} else {
-			if err := reader.skip(k - 1); err != nil {
-				return 0, err
-			}
-		}
+	prefix := ones + 1
+	if prefix > left {
+		return 0, errALACBitEOF
+	}
+	x := uint32(ones)
+	if k == 1 {
+		reader.pos += prefix
+		return x, nil
+	}
+	if k < 1 || k > 32 || prefix+k > left {
+		return 0, errALACBitEOF
+	}
+	suffix := uint32((w << uint(prefix)) >> uint(64-k))
+	x = (x << uint(k)) - x
+	if suffix > 1 {
+		x += suffix - 1
+		reader.pos += prefix + k
+	} else {
+		reader.pos += prefix + k - 1
 	}
 	return x, nil
 }
 
 func alacLog2(x uint32) int {
-	result := 0
-	for x > 1 {
-		x >>= 1
-		result++
+	if x == 0 {
+		return 0
 	}
-	return result
+	return bits.Len32(x) - 1
 }
 
 func patchALACTerminator(data []byte, offset int64, size int, bodyEndBit int) bool {
@@ -378,11 +390,44 @@ func patchALACTerminator(data []byte, offset int64, size int, bodyEndBit int) bo
 }
 
 func findALACRepairTracks(data []byte) ([]alacTrackData, error) {
+	sound, err := findSoundTracks(data)
+	if err != nil {
+		return nil, err
+	}
+	var tracks []alacTrackData
+	for _, track := range sound {
+		if track.format != "alac" {
+			continue
+		}
+		params, err := extractALACRepairParams(data, track.entry)
+		if err != nil {
+			return nil, err
+		}
+		locs, err := readALACPacketLocations(data, track.stbl)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, alacTrackData{params: params, locs: locs})
+	}
+	return tracks, nil
+}
+
+// soundTrack is one audio trak of an MP4: its sample table and its first
+// sample entry, whose four-character type names the codec (alac, mp4a, ec-3).
+type soundTrack struct {
+	format string
+	stbl   mp4Atom
+	entry  mp4Atom
+}
+
+// findSoundTracks lists the audio traks in data, which must hold the moov box;
+// a trak whose boxes cannot be read is left out.
+func findSoundTracks(data []byte) ([]soundTrack, error) {
 	moov, ok := findMP4Child(data, 0, len(data), "moov")
 	if !ok {
 		return nil, errors.New("no moov atom in MP4/M4A")
 	}
-	var tracks []alacTrackData
+	var tracks []soundTrack
 	for _, trak := range findMP4Children(data, moov.bodyOff, moov.endOff, "trak") {
 		mdia, ok := findMP4Child(data, trak.bodyOff, trak.endOff, "mdia")
 		if !ok {
@@ -413,19 +458,11 @@ func findALACRepairTracks(data []byte) ([]alacTrackData, error) {
 		if entrySize < 8 || entryStart+entrySize > stsd.endOff {
 			continue
 		}
-		if string(data[entryStart+4:entryStart+8]) != "alac" {
-			continue
-		}
-		sampleEntry := mp4Atom{bodyOff: entryStart + 8, endOff: entryStart + entrySize}
-		params, err := extractALACRepairParams(data, sampleEntry)
-		if err != nil {
-			return nil, err
-		}
-		locs, err := readALACPacketLocations(data, stbl)
-		if err != nil {
-			return nil, err
-		}
-		tracks = append(tracks, alacTrackData{params: params, locs: locs})
+		tracks = append(tracks, soundTrack{
+			format: string(data[entryStart+4 : entryStart+8]),
+			stbl:   stbl,
+			entry:  mp4Atom{bodyOff: entryStart + 8, endOff: entryStart + entrySize},
+		})
 	}
 	return tracks, nil
 }
