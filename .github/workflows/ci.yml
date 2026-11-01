@@ -22,8 +22,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Build and test
+  unit:
+    name: Unit tests and checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -74,11 +74,11 @@ jobs:
       - name: Script tests
         run: make node-test
 
-  # The race detector is the slowest check, so it runs apart from the build and
-  # test job, split into two shards that run in parallel. The desktop ui package
-  # alone takes about as long as every other package together. The shards are cut
-  # from one `go list ./...` in the Makefile, so every package is in exactly one
-  # of them and a package added later cannot fall through.
+  # The race detector is the slowest check, so it runs apart from the unit job,
+  # split into two shards that run in parallel. The desktop ui package alone
+  # takes about as long as every other package together. The shards are cut from
+  # one `go list ./...` in the Makefile, so every package is in exactly one of
+  # them and a package added later cannot fall through.
   race:
     name: Race detector (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -104,13 +104,33 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # The media tests skip without ffmpeg, as in the build and test job.
+      # The media tests skip without ffmpeg, as in the unit job.
       - name: Install ffmpeg
         timeout-minutes: 5
         run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg
 
       - name: Race detector
         run: make ${{ matrix.target }}
+
+  # Branch protection on main requires a check named "Build and test". This job
+  # carries that name and fails unless the unit job and every race shard
+  # succeeded, so the required check covers every `make check` step, the race
+  # detector included, without a settings change. `if: always()` makes it run
+  # when a needed job failed or was cancelled: a job skipped because a
+  # dependency failed reports as passing to branch protection.
+  build-and-test:
+    name: Build and test
+    needs: [unit, race]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every needed job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null
 
   # make temaridiff checks internal/fairplay byte for byte against the upstream
   # Temari library it was translated from, and checks that rounds_gen.go is the

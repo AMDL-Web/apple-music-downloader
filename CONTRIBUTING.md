@@ -64,8 +64,9 @@ make check
 
 It runs, in order: `gofmt` check, build, vet, tests, the race detector, `govulncheck`
 and the Node script tests. CI runs the tests with a coverage summary (`make cover`)
-and the race detector as two parallel jobs (`make race-ui`, `make race-rest`). `make help` lists the narrower targets, and `make dev`
-starts the API in simulate mode on `127.0.0.1:18080`, which needs no wrapper.
+and the race detector as two parallel jobs (`make race-ui`, `make race-rest`).
+`make help` lists the narrower targets, and `make dev` starts the API in simulate mode
+on `127.0.0.1:18080`, which needs no wrapper.
 
 The API in `internal/api/openapi.yaml`, config keys, the DB schema and output paths
 are contracts. If your change touches one of them, read
