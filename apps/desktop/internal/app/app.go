@@ -395,6 +395,11 @@ func (a *App) quit() {
 	if a.store != nil {
 		a.store.Close()
 	}
+	if a.view != nil && a.view.Motion != nil {
+		// Stops the covers' ffmpegs, and the fetches under way, which
+		// would leave a part of a rendition behind.
+		a.view.Motion.SetFFmpeg("")
+	}
 	if a.shell != nil {
 		a.shell.Close()
 	}

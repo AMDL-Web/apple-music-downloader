@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/netproxy"
@@ -48,6 +49,12 @@ type Cache struct {
 	entries map[key]*entry
 	slots   chan struct{}
 	sweepAt bool
+	// stop ends the fetches and starts of the current ffmpeg's players,
+	// which loads counts: SetFFmpeg waits for them, so that nothing writes
+	// into dir or starts an ffmpeg once it returns.
+	ctx   context.Context
+	stop  context.CancelFunc
+	loads sync.WaitGroup
 
 	// now and decoder are time.Now and newDecoder but in tests.
 	now     func() time.Time
@@ -87,16 +94,22 @@ func New(post func(func()), dir string, log *slog.Logger) *Cache {
 			return d, nil
 		},
 	}
+	c.ctx, c.stop = context.WithCancel(context.Background())
 	go trimDir(dir, dirLimit)
 	return c
 }
 
-// SetFFmpeg sets the ffmpeg that decodes the covers; "" turns them off.
-// Players of another ffmpeg stop.
+// SetFFmpeg sets the ffmpeg that decodes the covers; "" turns them off,
+// as quitting does. Players of another ffmpeg stop, and the fetches and
+// starts under way for them stop too: once it returns, nothing writes into
+// the cache's directory until a cover is asked for again.
 func (c *Cache) SetFFmpeg(path string) {
 	if path == c.ffmpeg {
 		return
 	}
+	c.stop()
+	c.loads.Wait()
+	c.ctx, c.stop = context.WithCancel(context.Background())
 	c.ffmpeg = path
 	for k, e := range c.entries {
 		if e.player != nil {
@@ -137,19 +150,21 @@ func (c *Cache) Get(master string, px int) *ui.VideoPlayer {
 		return e.player
 	}
 	e.loading = true
-	ffmpeg := c.ffmpeg
+	ctx, ffmpeg := c.ctx, c.ffmpeg
+	c.loads.Add(1)
 	go func() {
-		c.slots <- struct{}{}
-		p, err := c.open(k, ffmpeg)
-		<-c.slots
+		p, err := c.load(ctx, k, ffmpeg)
 		c.post(func() {
 			e.loading = false
 			switch {
+			case c.entries[k] != e:
+				// Dropped while it opened, or stopped by SetFFmpeg.
+				if p != nil {
+					p.Close()
+				}
 			case err != nil:
 				e.failedAt = c.now()
 				c.log.Info("motion cover not played", "master", master, "error", err)
-			case c.entries[k] != e:
-				p.Close() // dropped while it opened
 			default:
 				e.player = p
 				// The view may have left while it opened: the sweep stops it
@@ -204,10 +219,29 @@ func (c *Cache) sweep(now time.Time) {
 	}
 }
 
+// load opens k's player in one of the slots unless ctx ends first, and is
+// done with the directory and the decoder once it returns.
+func (c *Cache) load(ctx context.Context, k key, ffmpeg string) (*ui.VideoPlayer, error) {
+	defer c.loads.Done()
+	select {
+	case c.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-c.slots }()
+	p, err := c.open(ctx, k, ffmpeg)
+	if err == nil && ctx.Err() != nil {
+		// Stopped as it started: nothing will show it.
+		p.Close()
+		return nil, ctx.Err()
+	}
+	return p, err
+}
+
 // open fetches the rendition for k when it is not cached yet and starts a
 // player of it.
-func (c *Cache) open(k key, ffmpeg string) (*ui.VideoPlayer, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+func (c *Cache) open(ctx context.Context, k key, ffmpeg string) (*ui.VideoPlayer, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	base, err := url.Parse(k.master)
 	if err != nil {

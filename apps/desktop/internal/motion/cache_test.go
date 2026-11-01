@@ -23,13 +23,16 @@ import (
 // hls serves motion covers as Apple's CDN does: a master playlist with one
 // square H.264 rendition, its media playlist of two byte ranges of one
 // file, and the file, which honors ranges. It counts the requests for each
-// path, and answers 404 for the covers in missing.
+// path, and answers 404 for the covers in missing. With stall set, a file
+// sends its first bytes, says so on stalled, and the rest only once stall
+// closes.
 type hls struct {
 	*httptest.Server
-	media   []byte
-	mu      sync.Mutex
-	hits    map[string]int
-	missing map[string]bool
+	media          []byte
+	mu             sync.Mutex
+	hits           map[string]int
+	missing        map[string]bool
+	stall, stalled chan struct{}
 }
 
 func newHLS(t *testing.T, media []byte) *hls {
@@ -39,12 +42,20 @@ func newHLS(t *testing.T, media []byte) *hls {
 		cover, kind, _ := strings.Cut(name, ".")
 		h.mu.Lock()
 		h.hits[name]++
-		missing := h.missing[cover]
+		missing, stall, stalled := h.missing[cover], h.stall, h.stalled
 		h.mu.Unlock()
 		n := len(h.media)
 		switch {
 		case missing:
 			http.NotFound(w, r)
+		case kind == "mp4" && stall != nil:
+			w.Write(h.media[:4])
+			w.(http.Flusher).Flush()
+			stalled <- struct{}{}
+			select {
+			case <-stall:
+			case <-r.Context().Done():
+			}
 		case kind == "master.m3u8":
 			fmt.Fprintf(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=900000,CODECS=\"avc1.64001f\",FRAME-RATE=30.000,RESOLUTION=768x768\n%s.video.m3u8\n", cover)
 		case kind == "video.m3u8":
@@ -211,6 +222,34 @@ func TestEveryViewOfACoverShowsOnePlayer(t *testing.T) {
 	}
 	if !f.Has(m) {
 		t.Errorf("Has says the cover plays nowhere")
+	}
+}
+
+// Covers turned off while one is fetched: the fetch stops, and once
+// SetFFmpeg returns nothing writes into the cache's directory, which may be
+// going away, as a test's is when it ends.
+func TestTurningCoversOffStopsAFetchUnderWay(t *testing.T) {
+	h, f := newHLS(t, fakeMedia), newFakes(t, false)
+	h.mu.Lock()
+	h.stall, h.stalled = make(chan struct{}), make(chan struct{}, 4)
+	h.mu.Unlock()
+	t.Cleanup(func() { close(h.stall) })
+	f.Get(h.master("a"), 512)
+	select {
+	case <-h.stalled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the cover was never fetched")
+	}
+	f.SetFFmpeg("")
+	des, err := os.ReadDir(f.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, de := range des {
+		t.Errorf("turned off, the cache still writes %s into its directory", de.Name())
+	}
+	if n := len(f.started()); n != 0 {
+		t.Errorf("turned off, the cache started %d decoders", n)
 	}
 }
 
