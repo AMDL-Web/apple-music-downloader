@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from './preact.js';
 import { listDownloads, feedStreamUrl, parseData } from '../api.js';
 import { applyFeedMessage, EMPTY_COUNTS } from '../lib/store.js';
-import { StreamClient, createCoalescer, backoffDelay, EPOCH_AFTER_MS } from '../lib/stream.js';
+import { StreamClient, createCoalescer, backoffDelay, isOlderCursor, EPOCH_AFTER_MS } from '../lib/stream.js';
 import { jobTitle, typeLabel, isUnresolved } from '../lib/format.js';
 import { rowView } from '../lib/jobview.js';
 import { isTerminal } from '../lib/status.js';
@@ -149,6 +149,17 @@ export function useFeed({ toast, route }) {
         (body) => setFeed((f) => ({ ...f, counts: { ...EMPTY_COUNTS, ...body.status_counts } })),
         () => {},
       );
+    // The backend's database was replaced: forget what belongs to the old one,
+    // read a fresh snapshot and stream from its cursor, and have every page
+    // refetch its lists.
+    const restart = () => {
+      client = null;
+      coalescer.cancel();
+      lastStatus.current.clear();
+      recentEnded.current.clear();
+      setEpoch((e) => e + 1);
+      boot();
+    };
     const boot = async () => {
       bootTimer = null;
       try {
@@ -166,7 +177,15 @@ export function useFeed({ toast, route }) {
             const msg = parseData(ev);
             if (msg) coalescer.push(msg);
           },
-          onState: (s) => setConn(s),
+          // stop() reports 'stopped', which only a restart (below) causes.
+          onState: (s) => {
+            if (s.state !== 'stopped') setConn(s);
+          },
+          // Before every resume: a backend that came back on another database
+          // (event ids start over) accepts the old cursor and stays silent, so
+          // start over from a snapshot instead (docs/api.md, Seeding).
+          verifyCursor: async (cursor) => !isOlderCursor(cursor, (await listDownloads({ limit: 1 })).event_cursor),
+          onStale: restart,
           // Live again after an outage: the feed replays what it missed from
           // the cursor. Only an outage of EPOCH_AFTER_MS or more (a restart,
           // not a proxy closing an idle stream) bumps the epoch, which tells

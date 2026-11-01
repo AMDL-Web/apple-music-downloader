@@ -69,7 +69,8 @@ tail. They share these rules:
   only grow in one database, and a cursor past the newest event is accepted and stays
   silent until new ids pass it; a backend whose `event_cursor` is below a client's
   cursor runs on another database, so a reconnecting client compares the two and
-  starts over from a snapshot (`internal/client#Client.FollowFeed`).
+  starts over from a snapshot (`internal/client#Client.FollowFeed`; the console does the
+  same through `verifyCursor` in `apps/console/static/js/lib/stream.js`).
 - **Keepalive.** Every stream sends a `: keepalive` comment every 15 seconds and the
   `X-Accel-Buffering: no` header, so proxies neither buffer nor time out an idle stream.
 

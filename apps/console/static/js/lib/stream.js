@@ -54,6 +54,18 @@ export function isNewerCursor(current, next) {
   return n > Number(current);
 }
 
+/**
+ * Whether the backend's newest cursor `head` is older than `current`: event ids
+ * only grow in one database, so a smaller one means it was replaced.
+ */
+export function isOlderCursor(current, head) {
+  if (current === null || current === undefined || current === '') return false;
+  if (head === null || head === undefined || head === '') return false;
+  const c = Number(current);
+  const h = Number(head);
+  return Number.isFinite(c) && Number.isFinite(h) && h < c;
+}
+
 /** Adds ?cursor= (when known) to a stream URL that may already carry a query. */
 export function withCursor(url, cursor) {
   if (cursor === null || cursor === undefined || cursor === '' || Number(cursor) <= 0) return url;
@@ -90,6 +102,13 @@ export class StreamClient {
    *   the cursor, but whatever else a page fetched meanwhile may have failed
    * @param {() => void} [opts.onResync] live again after an outage of at least
    *   resyncAfterMs, after onReconnect
+   * @param {(cursor: string|number) => Promise<boolean>} [opts.verifyCursor]
+   *   asked before every resume once a stream was live: false means the cursor
+   *   is from another database (the server accepts a too-new cursor and stays
+   *   silent), so the client stops and calls onStale instead of resuming; a
+   *   rejection counts as a failed connect
+   * @param {() => void} [opts.onStale] after verifyCursor said false; the
+   *   client is stopped and the caller starts over from a new snapshot
    */
   constructor(opts) {
     this.url = opts.url;
@@ -100,12 +119,15 @@ export class StreamClient {
     this.onClose = opts.onClose || (() => {});
     this.onReconnect = opts.onReconnect || (() => {});
     this.onResync = opts.onResync || (() => {});
+    this.verifyCursor = opts.verifyCursor || null;
+    this.onStale = opts.onStale || (() => {});
     this.env = { ...defaultEnv(), ...(opts.env || {}) };
     this.hiddenPauseMs = opts.hiddenPauseMs ?? 30000;
     this.idleTimeoutMs = opts.idleTimeoutMs ?? 45000;
     this.offlineAfterMs = opts.offlineAfterMs ?? 60000;
     this.resyncAfterMs = opts.resyncAfterMs ?? 300000;
     this.state = 'idle';
+    this.opened = false;
     this.attempt = 0;
     this.downSince = null;
     this.retryAt = null;
@@ -170,6 +192,21 @@ export class StreamClient {
     }
     this.retryAt = null;
     if (this.state !== 'reconnecting' && this.state !== 'offline') this.setState('connecting');
+    if (this.opened && this.verifyCursor && this.cursor !== null) {
+      let valid;
+      try {
+        valid = await this.verifyCursor(this.cursor);
+      } catch {
+        if (gen === this.generation) this.fail(false);
+        return;
+      }
+      if (gen !== this.generation) return;
+      if (!valid) {
+        this.stop();
+        this.onStale();
+        return;
+      }
+    }
     const controller = new AbortController();
     this.controller = controller;
     let res;
@@ -212,6 +249,7 @@ export class StreamClient {
     const wasDownSince = this.downSince;
     this.attempt = 0;
     this.downSince = null;
+    this.opened = true;
     this.setState('live');
     if (wasDownSince !== null) {
       this.onReconnect();

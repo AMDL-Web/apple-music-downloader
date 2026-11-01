@@ -30,7 +30,9 @@ Settings coverage.
   `apps/site/demo/fake-api.js`.
 - A tab holds the overview feed plus at most one secondary stream
   (`claimSecondary` in `static/js/lib/stream.js`), and the feed opens from the
-  snapshot's `event_cursor`.
+  snapshot's `event_cursor`. Before the feed resumes, it reads `event_cursor` again;
+  one below its own cursor means the backend's database was replaced, so the feed
+  starts over from a new snapshot and bumps the page epoch (`verifyCursor`).
 
 ## Vendored bundle
 

@@ -13,6 +13,7 @@ import {
   createCoalescer,
   EPOCH_AFTER_MS,
 } from '../static/js/lib/stream.js';
+import * as stream from '../static/js/lib/stream.js';
 
 const tick = () => new Promise((r) => setImmediate(r));
 async function settle(n = 6) {
@@ -431,4 +432,80 @@ test('the feed bumps the page epoch after a real outage, not after a closed stre
   assert.equal(client.state, 'live');
   assert.equal(bumps, 1, 'a restart makes the pages refetch');
   client.stop();
+});
+
+test('isOlderCursor: a backend head below the held cursor is another database', () => {
+  assert.equal(stream.isOlderCursor('105', 0), true);
+  assert.equal(stream.isOlderCursor(105, '7'), true);
+  assert.equal(stream.isOlderCursor('105', 105), false);
+  assert.equal(stream.isOlderCursor('105', 106), false);
+  assert.equal(stream.isOlderCursor(null, 3), false);
+  assert.equal(stream.isOlderCursor('105', null), false);
+  assert.equal(stream.isOlderCursor('105', undefined), false);
+  assert.equal(stream.isOlderCursor('x', 3), false);
+});
+
+test('a stream resumes only after its cursor checks out; a replaced database ends it as stale', async () => {
+  const env = fakeEnv();
+  const urls = [];
+  let open = null;
+  env.fetch = async (url, init) => {
+    urls.push(url);
+    open = liveBody(init.signal);
+    return new Response(open.body, { status: 200 });
+  };
+  const asked = [];
+  let head = 105;
+  let reject = false;
+  let stale = 0;
+  const states = [];
+  const client = new StreamClient({
+    url: 'http://h/api/v1/downloads/events',
+    cursor: 100,
+    env,
+    onEvent: () => {},
+    onState: (s) => states.push(s.state),
+    verifyCursor: async (cursor) => {
+      asked.push(cursor);
+      if (reject) throw new Error('backend down');
+      return !(Number(head) < Number(cursor));
+    },
+    onStale: () => stale++,
+  }).start();
+  await settle();
+  assert.deepEqual(asked, [], 'the first connect uses the snapshot cursor as is');
+  open.write('id: 105\nevent: download_upserted\ndata: {}\n\n');
+  await settle();
+
+  // Same database: the stream resumes from its cursor.
+  open.close();
+  await settle();
+  env.runNext();
+  await settle();
+  assert.deepEqual(asked, ['105']);
+  assert.equal(urls[1], 'http://h/api/v1/downloads/events?cursor=105');
+  assert.equal(client.state, 'live');
+
+  // The check fails (backend not up yet): a failed connect, retried, no stream opened.
+  open.close();
+  await settle();
+  reject = true;
+  env.runNext();
+  await settle();
+  assert.equal(urls.length, 2);
+  assert.equal(client.state, 'reconnecting');
+  assert.equal(stale, 0);
+
+  // The backend is back on an empty database: no stream at the old cursor.
+  reject = false;
+  head = 0;
+  env.advance(2000);
+  env.runNext();
+  await settle();
+  assert.deepEqual(asked, ['105', '105', '105']);
+  assert.equal(urls.length, 2, 'the old cursor is never sent to the new database');
+  assert.equal(stale, 1);
+  assert.equal(client.state, 'stopped');
+  assert.equal(env.timers.size, 0, 'a stopped client leaves no timers behind');
+  assert.ok(states.includes('reconnecting'));
 });

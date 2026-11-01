@@ -921,6 +921,9 @@ secondary stream from their snapshot cursor. Streams pause 30 s after the tab
 hides and resume from the stored cursor. When the feed is live again after
 any outage, or the browser fires `online`, `app.epoch` (AppContext) goes up:
 every page refetches what it loads, and a page showing a load error reloads.
+Before the feed resumes it reads `event_cursor` again: a value below its own
+cursor means the backend's database was replaced, so the feed starts over from
+a new snapshot and `app.epoch` goes up the same way.
 The status endpoints (health, system, wrapper status, library sync, hooks,
 stats, config) are read once for the whole tab (`lib/status-store.js`, bound
 in `ui/system-status.js`): a key is read while a page shows it, at most once
