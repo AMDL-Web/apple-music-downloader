@@ -201,6 +201,7 @@ func (m *model) submitted(msg submitMsg) string {
 			}
 			lines = append(lines, "queued "+t.bold().Render(name)+t.style(t.dim).Render(" "+m.ref(r.Job.ID)))
 		case r.ExistingJobID != "":
+			m.number(r.ExistingJobID) // so /cancel takes the number shown
 			lines = append(lines, t.style(t.dim).Render("already downloading "+m.ref(r.ExistingJobID)))
 		case r.Error != nil:
 			lines = append(lines, t.style(t.bad).Render(r.Error.Message))
@@ -209,6 +210,8 @@ func (m *model) submitted(msg submitMsg) string {
 	return t.style(t.dim).Render("  ⎿ ") + strings.Join(lines, "\n    ")
 }
 
+// jobTable lists jobs one a line. Each gets a session number, so the
+// commands take what the table shows.
 func (m *model) jobTable(jobs []domain.Job) string {
 	if len(jobs) == 0 {
 		return "none"
@@ -216,6 +219,7 @@ func (m *model) jobTable(jobs []domain.Job) string {
 	t := m.theme
 	nameW := 0
 	for _, j := range jobs {
+		m.number(j.ID)
 		nameW = max(nameW, lipgloss.Width(trunc(jobName(j), 40)))
 	}
 	var b strings.Builder
@@ -236,6 +240,9 @@ func (m *model) jobTable(jobs []domain.Job) string {
 			t.style(t.dim).Render(fmt.Sprintf("%-7s", m.ref(j.ID))) + " " +
 			t.style(t.fg).Render(pad(trunc(jobName(j), 40), nameW)) +
 			t.style(t.dim).Render(fmt.Sprintf("  %d/%d", j.CompletedItems+j.SkippedItems, j.TotalItems)))
+		if j.FailedItems > 0 {
+			b.WriteString(" " + t.style(t.bad).Render(fmt.Sprintf("✗%d", j.FailedItems)))
+		}
 	}
 	return b.String()
 }

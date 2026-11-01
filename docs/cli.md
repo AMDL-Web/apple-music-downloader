@@ -267,8 +267,9 @@ runs again only the tracks that did not finish (`POST /downloads/{id}/retry`).
   each. A queued job's card, and one still reading its tracklist, is one line; a running
   card keeps its height until the job ends (`apps/amdl/internal/tui#tracksPerCard`). The card takes its color from the album's
   artwork. `ctrl+o` shows every track, `ctrl+t` every job.
-- **Jobs have session numbers**, `#1`, `#2`, on their cards and finished lines, which
-  `/cancel`, `/retry`, `/remove`, `/copy` and `/logs` take, as well as the start of a job ID.
+- **Jobs have session numbers**, `#1`, `#2`, on their cards, finished lines and in
+  `/jobs` and `/library`, which `/cancel`, `/retry`, `/remove`, `/copy` and `/logs` take,
+  as well as the start of a job ID.
 - **Below the prompt** open the panels (the `/` menu, search hits, the preview, help),
   so opening one does not move the prompt, and under everything one status line: the
   connection, the job counts, and the keys of the moment that a person would not guess

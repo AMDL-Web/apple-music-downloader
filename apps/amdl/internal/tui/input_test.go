@@ -4,9 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"amdl/internal/client"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"amdl/internal/client"
+	"amdl/internal/domain"
 )
 
 func TestPanelsOpenBelowThePrompt(t *testing.T) {
@@ -191,5 +193,19 @@ func TestHintsLeaveOutTheObvious(t *testing.T) {
 	m.input.SetValue("igor")
 	if h := m.hints(); len(h) != 0 {
 		t.Errorf("typing: %v", h)
+	}
+}
+
+// /jobs lists jobs this session has not seen by session numbers too, so
+// /retry takes what it shows; a job with failed tracks counts them.
+func TestListedJobsTakeTheirNumbers(t *testing.T) {
+	m := sample(t)
+	old := domain.Job{ID: "job_0dcf5820011d64ff", Status: domain.JobFailed, Title: "Old Album", TotalItems: 12, CompletedItems: 4, FailedItems: 8}
+	out := stripANSI(m.jobTable([]domain.Job{old}))
+	if !strings.Contains(out, "#3") || !strings.Contains(out, "4/12 ✗8") {
+		t.Errorf("table %q", out)
+	}
+	if got := m.jobRef("3"); got != old.ID {
+		t.Errorf("jobRef(3) = %q, want the listed job", got)
 	}
 }
