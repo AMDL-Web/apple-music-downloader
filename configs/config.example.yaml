@@ -363,7 +363,8 @@ simulate:
   # download. Every API response, job/item status, progress breakdown, status message, and SSE event
   # matches a real download. The wrapper decryptor status/storefront check is skipped so jobs can be
   # submitted without a running wrapper; a Hi-Res track then keeps the web player's manifest, which can
-  # leave out its 88.2 kHz and higher ALAC renditions.
+  # leave out its 88.2 kHz and higher ALAC renditions. A track a simulated job finished counts as
+  # already downloaded for later jobs until the backend restarts.
   # false runs real downloads.
   enabled: false
   # integer KB/s (kilobytes per second): lower bound of the randomized simulated transfer speed.

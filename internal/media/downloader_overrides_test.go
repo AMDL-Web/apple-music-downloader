@@ -60,8 +60,9 @@ func TestProcessJobAppliesPerJobOverrides(t *testing.T) {
 		if err := downloader.ProcessJob(context.Background(), job, reporter); err != nil {
 			t.Fatalf("ProcessJob failed: %v", err)
 		}
-		if len(reporter.items) == 0 || reporter.items[len(reporter.items)-1].Status != domain.ItemCompleted {
-			t.Fatalf("job %s did not complete: %+v", id, reporter.items)
+		// The plain job finds the forced job's simulated commit and skips it.
+		if len(reporter.items) == 0 || !reporter.items[len(reporter.items)-1].Finished() {
+			t.Fatalf("job %s did not finish: %+v", id, reporter.items)
 		}
 		for _, ev := range reporter.events {
 			if ev.Type == domain.EventItemOverwrite {

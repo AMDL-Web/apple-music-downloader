@@ -50,6 +50,9 @@ type Downloader struct {
 	// deviceManifests is shared like the limiters above: a manifest one job
 	// asked the wrapper for serves every other job.
 	deviceManifests *deviceManifestCache
+	// simulatedOutputs is shared like the limiters above: what one simulated
+	// job committed counts as on disk for every later job.
+	simulatedOutputs *outputSet
 
 	// Per-job suppression for standalone cover paths that were already handled
 	// (written, unavailable, or exhausted). The state has its own mutex because
@@ -91,12 +94,13 @@ func NewDownloader(store *config.Store, tokens *usertoken.Provider, catalog *app
 	return &Downloader{
 		store: store, cfg: cfg, tokens: tokens, catalog: catalog, playback: catalog, wrapper: wrapperClient, tools: tools,
 		http: newHTTPClient(), mp4: newMP4Processor(cfg), logger: logger,
-		downloadLimit:   limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
-		decryptLimit:    limits.NewSemaphore(config.MaxParallelDecrypts),
-		inFlightLimit:   limits.NewSemaphore(cfg.Download.MaxParallelDownloads + config.MaxParallelDecrypts),
-		requestGate:     catalog.RequestGate(),
-		deviceManifests: newDeviceManifestCache(),
-		background:      &sync.WaitGroup{},
+		downloadLimit:    limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
+		decryptLimit:     limits.NewSemaphore(config.MaxParallelDecrypts),
+		inFlightLimit:    limits.NewSemaphore(cfg.Download.MaxParallelDownloads + config.MaxParallelDecrypts),
+		requestGate:      catalog.RequestGate(),
+		deviceManifests:  newDeviceManifestCache(),
+		simulatedOutputs: newOutputSet(),
+		background:       &sync.WaitGroup{},
 	}
 }
 

@@ -17,7 +17,8 @@ import (
 
 // newTestDownloader completes a Downloader literal with the process-wide
 // pieces NewDownloader creates: media pools sized from the literal's config, the
-// device manifest cache and the background-work tracker. Pools a test set itself are kept.
+// device manifest cache, the simulated output set and the background-work
+// tracker. Pools a test set itself are kept.
 func newTestDownloader(d *Downloader) *Downloader {
 	cfg := d.cfg
 	if d.store != nil {
@@ -37,6 +38,9 @@ func newTestDownloader(d *Downloader) *Downloader {
 	}
 	if d.deviceManifests == nil {
 		d.deviceManifests = newDeviceManifestCache()
+	}
+	if d.simulatedOutputs == nil {
+		d.simulatedOutputs = newOutputSet()
 	}
 	if d.mp4 == nil {
 		d.mp4 = newMP4Processor(cfg)
@@ -319,3 +323,7 @@ func (r *recordingReporter) Event(_ context.Context, ev domain.Event) error {
 }
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+// keepAll keeps every finished item, as syncJobItems did before it re-checked
+// them.
+func keepAll(domain.JobItem, int) bool { return true }

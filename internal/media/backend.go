@@ -37,6 +37,12 @@ type mediaBackend interface {
 	// discardOutput removes outPath, its staged parts and its lyrics sidecars:
 	// before a forced overwrite and after a failed attempt.
 	discardOutput(outPath string)
+	// statOutput reports whether a finished track is at outPath, and its size.
+	// A file there is complete (finalizeToOutput), so this is the one test of
+	// "already downloaded".
+	statOutput(outPath string) (size int64, ok bool)
+	// countOutputs counts the finished tracks (.m4a files) directly in dir.
+	countOutputs(dir string) int
 
 	// stage creates the scratch file a codec attempt flattens, verifies and
 	// tags before it is committed; cleanup removes whatever is left of it.
@@ -74,7 +80,7 @@ type mediaBackend interface {
 // backend picks the media backend for this Downloader's effective config.
 func (d *Downloader) backend() mediaBackend {
 	if d.cfg.Simulate.Enabled {
-		return simulatedMedia{cfg: d.cfg}
+		return simulatedMedia{cfg: d.cfg, outputs: d.simulatedOutputs}
 	}
 	return realMedia{d: d}
 }
@@ -237,6 +243,10 @@ func (m realMedia) discardCheckpoint(jobID, outPath string) {
 }
 
 func (m realMedia) discardOutput(outPath string) { cleanupFailedOutput(outPath) }
+
+func (realMedia) statOutput(outPath string) (int64, bool) { return statDiskOutput(outPath) }
+
+func (realMedia) countOutputs(dir string) int { return len(diskOutputNames(dir)) }
 
 func (m realMedia) stage(encryptedMedia) (stagedFile, func(), error) {
 	f, err := os.CreateTemp(m.cfg().Download.TempDir, "flat-*.m4a")

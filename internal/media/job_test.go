@@ -186,7 +186,7 @@ func TestSyncJobItemsReusesPreviousRowsAndSkipsFinishedTracks(t *testing.T) {
 		{ID: "song-3", Name: "Three"},
 	}
 
-	items, finished, err := syncJobItems(context.Background(), domain.Job{ID: "job-1"}, tracks, reporter)
+	items, finished, err := syncJobItems(context.Background(), domain.Job{ID: "job-1"}, tracks, reporter, keepAll)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +233,7 @@ func TestSyncJobItemsFirstRunCreatesAllItems(t *testing.T) {
 	reporter := &recordingReporter{}
 	tracks := []applemusic.Song{{ID: "song-1", Name: "One", HasLyrics: true}, {ID: "song-2", Name: "Two"}}
 
-	items, finished, err := syncJobItems(context.Background(), domain.Job{ID: "job-1"}, tracks, reporter)
+	items, finished, err := syncJobItems(context.Background(), domain.Job{ID: "job-1"}, tracks, reporter, keepAll)
 	if err != nil {
 		t.Fatal(err)
 	}

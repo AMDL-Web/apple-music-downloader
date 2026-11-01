@@ -207,7 +207,8 @@ submitted without a running wrapper. Catalog metadata and Enhanced HLS media sel
 still run for real, so titles, artwork and the reported bit depth / sample rate / bitrate
 are authentic and selection failures fall back through `quality_priority` exactly like a
 real download. Every API response, status, progress breakdown and SSE event matches a real
-job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`.
+job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`. A track
+a simulated job finished counts as on disk for later jobs until the backend restarts.
 
 Without a running wrapper a Hi-Res track keeps the catalog playlist, which may lack its
 88.2 kHz and higher ALAC renditions.

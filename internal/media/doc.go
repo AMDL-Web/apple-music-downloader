@@ -15,7 +15,8 @@
 // Invariants: every withConfig clone shares the download, decrypt and
 // in-flight semaphores, the request gate and the background-work group. A
 // track reaches its output path only through finalizeToOutput, so
-// handleExistingOutput may skip any file already there. The amp-api
+// skipTracksOnDisk and handleExistingOutput may skip any file already there,
+// and mediaBackend.statOutput is the one test of "on disk". The amp-api
 // motion-artwork lookup never fails a job. A failed job keeps its resume
 // checkpoints for Retry; completing, cancelling or deleting the job removes
 // them. A cancelled job ends every unfinished item cancelled; a job stopped by
