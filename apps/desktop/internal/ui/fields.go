@@ -48,44 +48,39 @@ type configField struct {
 	confirm bool
 }
 
-const olderLayout = " An install upgraded from an older version may use {TrackNumber:02d} instead."
-
 var configFields = []configField{
 	{key: "catalog.media_user_token", section: "account", kind: fieldToken, label: "Media user token",
 		help: "Optional: stations, private playlist covers, library sync."},
 
 	{key: "download.quality_priority", section: "quality", kind: fieldList, label: "Codec priority",
-		help: "Tried top to bottom · AAC always last", min: 1, options: []option{
+		help: "AAC is always tried last.", min: 1, options: []option{
 			{"alac", "ALAC (lossless)"}, {"ec3", "Dolby Atmos (E-AC-3)"}, {"ac3", "Dolby Digital (AC-3)"},
 			{"aac", "AAC (Enhanced HLS)"}, {"aac-binaural", "AAC binaural"}, {"aac-downmix", "AAC Dolby downmix"},
 		}},
-	{key: "download.codec_alternative", section: "quality", kind: fieldSwitch, label: "Fall back to the next codec",
-		help: "When a codec fails, try the next one in the list."},
+	{key: "download.codec_alternative", section: "quality", kind: fieldSwitch, label: "Fall back to the next codec"},
 	{key: "download.alac_max_sample_rate", section: "quality", kind: fieldSelect, label: "Highest ALAC sample rate",
-		help: "Higher-rate ALAC versions are skipped.", options: []option{
+		options: []option{
 			{44100.0, "44.1 kHz"}, {48000.0, "48 kHz"}, {88200.0, "88.2 kHz"}, {96000.0, "96 kHz"}, {176400.0, "176.4 kHz"}, {192000.0, "192 kHz"},
 		}},
 	{key: "download.alac_max_bit_depth", section: "quality", kind: fieldSelect, label: "Highest ALAC bit depth",
-		help: "Deeper ALAC versions are skipped.", options: []option{{16.0, "16-bit"}, {24.0, "24-bit"}}},
+		options: []option{{16.0, "16-bit"}, {24.0, "24-bit"}}},
 	{key: "catalog.album_track_url_mode", section: "quality", kind: fieldSelect, label: "When an album link points to one track",
-		help: "For example a link copied from a song on an album page.", options: []option{
+		options: []option{
 			{"song", "Download that track"}, {"album", "Download the whole album"},
 		}},
 
-	{key: "download.downloads_dir", section: "files", kind: fieldPath, confirm: true, label: "Downloads folder",
-		help: "Where finished tracks are saved."},
+	{key: "download.downloads_dir", section: "files", kind: fieldPath, confirm: true, label: "Downloads folder"},
 	{key: "download.temp_dir", section: "files", kind: fieldPath, label: "Temporary folder",
-		help: "Work space while a track is processed; on the downloads folder's disk is fastest."},
-	{key: "download.force_overwrite", section: "files", kind: fieldSwitch, label: "Overwrite existing files",
-		help: "Download tracks again even when they are already on disk."},
+		help: "Fastest on the downloads folder's disk."},
+	{key: "download.force_overwrite", section: "files", kind: fieldSwitch, label: "Overwrite existing files"},
 	{key: "download.album_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Albums",
-		help: "{SongNumber} keeps counting across discs." + olderLayout},
+		help: "{SongNumber} keeps counting across discs."},
 	{key: "download.song_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Songs",
 		help: "{SongNumber} is always 1; {TrackNumber} keeps the album position."},
 	{key: "download.playlist_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Playlists",
 		help: "{SongNumber} is the position in the playlist."},
 	{key: "download.artist_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Artists",
-		help: "{SongNumber} restarts at 1 for each album." + olderLayout},
+		help: "{SongNumber} restarts at 1 for each album."},
 	{key: "download.station_path_format", section: "files", group: "File names", kind: fieldTemplate, confirm: true, label: "Stations",
 		help: "{SongNumber} is the position in the station’s track list."},
 
@@ -96,36 +91,32 @@ var configFields = []configField{
 		}, custom: true, pattern: regexp.MustCompile(`^[1-9][0-9]*x[1-9][0-9]*$`),
 		hint: "Width x height in whole pixels, as 2000x2000"},
 	{key: "download.cover_format", section: "lyrics_artwork", kind: fieldSelect, label: "Cover format",
-		help: "The image type of covers.", options: []option{{"jpg", "JPEG (.jpg)"}, {"jpeg", "JPEG (.jpeg)"}, {"png", "PNG (.png)"}}},
-	{key: "download.embed_cover", section: "lyrics_artwork", kind: fieldSwitch, label: "Embed the cover in each track",
-		help: "Music players show it as the artwork."},
-	{key: "download.save_album_cover", section: "lyrics_artwork", kind: fieldSwitch, label: "Save an album cover file",
-		help: "Saved in the album’s folder."},
+		options: []option{{"jpg", "JPEG (.jpg)"}, {"jpeg", "JPEG (.jpeg)"}, {"png", "PNG (.png)"}}},
+	{key: "download.embed_cover", section: "lyrics_artwork", kind: fieldSwitch, label: "Embed the cover in each track"},
+	{key: "download.save_album_cover", section: "lyrics_artwork", kind: fieldSwitch, label: "Save an album cover file"},
 	{key: "download.save_artist_cover", section: "lyrics_artwork", kind: fieldSwitch, label: "Save an artist picture file",
-		help: "Saved in the artist’s folder, when the path has one."},
-	{key: "download.save_playlist_cover", section: "lyrics_artwork", kind: fieldSwitch, label: "Save a playlist cover file",
-		help: "Saved with playlist downloads."},
+		help: "Only when the path has an artist folder."},
+	{key: "download.save_playlist_cover", section: "lyrics_artwork", kind: fieldSwitch, label: "Save a playlist cover file"},
 	{key: "catalog.motion_artwork_enabled", section: "lyrics_artwork", kind: fieldSwitch, label: "Look up animated covers",
 		help: "One extra request per album; it never holds up a download."},
-	{key: "download.embed_lyrics", section: "lyrics_artwork", group: "Lyrics", kind: fieldSwitch, label: "Embed lyrics in each track",
-		help: "Synced LRC that music players show while the song plays."},
+	{key: "download.embed_lyrics", section: "lyrics_artwork", group: "Lyrics", kind: fieldSwitch, label: "Embed lyrics in each track"},
 	{key: "download.lyrics_files", section: "lyrics_artwork", group: "Lyrics", kind: fieldSet, label: "Lyrics files next to each track",
 		help:    "LRC suits most players; TTML keeps Apple’s word timing, translation and romanization.",
 		options: []option{{"lrc", "LRC"}, {"ttml", "TTML"}}},
 	{key: "download.lyrics_timing", section: "lyrics_artwork", group: "Lyrics", kind: fieldSelect, label: "Lyrics timing",
-		help: "How finely LRC lyrics follow the song.", options: []option{{"line", "Line by line"}, {"word", "Word by word"}}},
+		options: []option{{"line", "Line by line"}, {"word", "Word by word"}}},
 	{key: "download.lyrics_extras", section: "lyrics_artwork", group: "Lyrics", kind: fieldSet, label: "Extra lines in LRC",
-		help:    "Added under each LRC line when Apple has them; the translation is in the catalog language.",
+		help:    "The translation is in the catalog language.",
 		options: []option{{"translation", "Translation"}, {"pronunciation", "Romanization"}}},
 
 	{key: "download.memory_mode", section: "jobs", kind: fieldSelect, label: "Memory use",
 		help: "Faster with more RAM, or slower and lighter.", options: []option{{"low", "Low memory"}, {"high", "High memory"}}},
 	{key: "download.max_attempts", section: "jobs", kind: fieldNumber, label: "Tries per file",
-		help: "How many times each step is tried before the track fails.", min: 1, max: 10},
+		min: 1, max: 10},
 	{key: "download.progress_event_interval_ms", section: "jobs", kind: fieldNumber, label: "Progress updates every",
-		help: "Shorter is smoother, longer is lighter; 0 updates each percent.", min: 0, max: 10000, unit: "ms"},
+		help: "0 updates each percent.", min: 0, max: 10000, unit: "ms"},
 	{key: "download.check_integrity", section: "jobs", kind: fieldSwitch, label: "Check file integrity",
-		help: "Verify each finished file and repair known ALAC issues."},
+		help: "Also repairs known ALAC issues."},
 
 	{key: "library_sync.enabled", section: "library_sync", kind: fieldSwitch, label: "Watch my library",
 		help: "Needs the media user token."},
@@ -133,14 +124,12 @@ var configFields = []configField{
 		help: "A check is usually one Apple request.", min: 1, max: 1440, unit: "min"},
 
 	{key: "logging.level", section: "logging", kind: fieldSelect, label: "Log level",
-		help: "Messages below this level are dropped.", options: []option{
+		options: []option{
 			{"debug", "Debug"}, {"info", "Info"}, {"warn", "Warn"}, {"error", "Error"},
 		}},
-	{key: "logging.access_log", section: "logging", kind: fieldSwitch, label: "HTTP access log",
-		help: "One line per HTTP request."},
+	{key: "logging.access_log", section: "logging", kind: fieldSwitch, label: "HTTP access log"},
 
-	{key: "simulate.enabled", section: "server", group: "Simulate", kind: fieldSwitch, label: "Simulate mode",
-		help: "Jobs move through their steps at the simulated speeds below."},
+	{key: "simulate.enabled", section: "server", group: "Simulate", kind: fieldSwitch, label: "Simulate mode"},
 	{key: "simulate.min_speed_kbps", section: "server", group: "Simulate", kind: fieldNumber, label: "Slowest simulated speed",
 		help: "At least 1.", min: 1, unit: "KB/s"},
 	{key: "simulate.max_speed_kbps", section: "server", group: "Simulate", kind: fieldNumber, label: "Fastest simulated speed",

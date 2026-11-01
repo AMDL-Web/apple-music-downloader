@@ -86,7 +86,7 @@ func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 
 // recentWall is the downloads that finished before the hero's, newest
 // first, as one row of covers as wide as the screen. A cover opens its
-// detail, and its motion cover plays under the pointer.
+// page, and its motion cover plays under the pointer.
 func (a *App) recentWall(c *ui.Context, k *Tokens, finished []*store.Job, hero *store.Job, compact bool) {
 	// A download run again shows its cover once.
 	seen := map[string]bool{}
@@ -168,11 +168,6 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: jobPalette(j, false).Bg, Size: size, Radius: radiusControl, Color: 1, Video: video}.Show(c)
 			if lift > 0.01 {
 				ui.Box(c).Fill().Radius(radiusControl).Absolute().Top(0).Left(0).Border(2, k.Accent.Alpha(lift)).PassThrough()
-			}
-			if j.MotionArtworkURL != "" && video == nil {
-				ui.Box(c).Size(16, 16).Radius(radiusFull).Background(ui.RGBA(10, 12, 20, 0.55)).Absolute().Right(5).Top(5).Center().Children(func() {
-					ui.Icon(c, icPlay).FontSize(7).TextColor(ui.Hex("#f2f3f8"))
-				})
 			}
 		})
 	})

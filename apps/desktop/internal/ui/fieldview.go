@@ -104,8 +104,8 @@ func (a *App) fieldOff(f *configField) bool {
 	return false
 }
 
-// fieldRow is one field: its label and help on the left, the control on
-// the right, or under them for the wide ones.
+// fieldRow is one field: its label, and its help where it has one, on the
+// left, the control on the right, or under them for the wide ones.
 func (a *App) fieldRow(c *ui.Context, k *Tokens, f *configField) {
 	cf := &a.Store.Config
 	off := a.fieldOff(f)
@@ -129,7 +129,9 @@ func (a *App) fieldRow(c *ui.Context, k *Tokens, f *configField) {
 						}
 					}
 				})
-				ui.Text(c, f.help).FontSize(11.5).TextColor(k.Faint).LineHeight(1.45)
+				if f.help != "" {
+					ui.Text(c, f.help).FontSize(11.5).TextColor(k.Faint).LineHeight(1.45)
+				}
 			})
 			if !wide {
 				a.fieldControl(c, k, f, off)

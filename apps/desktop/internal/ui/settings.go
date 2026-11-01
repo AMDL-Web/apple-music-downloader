@@ -350,14 +350,17 @@ func field(c *ui.Context, k *Tokens, key string, value *string, placeholder stri
 	return in
 }
 
-// settingRow is a switch with its title and an explanation.
+// settingRow is a switch with its title and, where it has one, a fact the
+// title does not say.
 func settingRow(c *ui.Context, k *Tokens, key string, on *bool, title, help string) ui.Element {
 	var sw ui.Element
 	ui.Row(c).Gap(12).Padding(12, 16).Radius(radiusControl).Border(1, k.Line).AlignItems(ui.Center).Children(func() {
 		sw = toggle(c, k, key, on, title)
 		ui.Column(c).Grow(1).Gap(2).Children(func() {
 			ui.Text(c, title).FontSize(13).FontWeight(600)
-			ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)
+			if help != "" {
+				ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)
+			}
 		})
 	})
 	return sw

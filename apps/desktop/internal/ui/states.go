@@ -116,8 +116,6 @@ func (a *App) emptyQueue(c *ui.Context, k *Tokens, quiet bool) {
 				return
 			}
 			ui.Text(c, "Nothing downloading").FontSize(15).FontWeight(650)
-			ui.Text(c, "Paste a link or search Apple Music on Home ("+shortcutLabel+").").
-				FontSize(12.5).TextColor(k.Muted).TextAlign(ui.Center).MaxWidth(360)
 		})
 		return
 	}
@@ -138,8 +136,6 @@ func (a *App) emptyQueue(c *ui.Context, k *Tokens, quiet bool) {
 			return
 		}
 		display(c, "Nothing downloading", 24)
-		ui.Text(c, "Copy an album, playlist or song link from Apple Music and press "+shortcutLabel+", or paste it on Home.").
-			FontSize(13).TextColor(k.Muted).TextAlign(ui.Center).MaxWidth(300)
 		if button(c, k, buttonPrimary, "New download", nil).Height(36).PaddingX(16).Clicked() {
 			a.FocusField()
 		}

@@ -24,11 +24,8 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	ui.Column(c).Gap(10).Children(func() {
 		label(c, k, "Where downloads run")
 		ui.Row(c).Gap(14).Children(func() {
-			modeCard := func(m mode.Kind, ic *ui.SVG, title, body string) {
+			modeCard := func(m mode.Kind, ic *ui.SVG, title string) {
 				on, off := d.Mode == m, a.Demo && m == mode.Standalone
-				if off {
-					body = demoNoLocal
-				}
 				card := ui.ButtonBase(c.Key(string(m))).Disabled(off).Grow(1).Basis(0).Padding(padCard).Gap(8).Radius(radiusCard).Border(1, k.Line2).Background(k.Raise).
 					AlignItems(ui.Start).Justify(ui.Start).Label(title)
 				card.Column()
@@ -51,11 +48,13 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				card.Children(func() {
 					ui.Icon(c, ic).FontSize(22).TextColor(col)
 					ui.Text(c, title).FontSize(14).FontWeight(650)
-					ui.Text(c, body).FontSize(12).TextColor(k.Muted).LineHeight(1.5)
+					if off {
+						ui.Text(c, demoNoLocal).FontSize(12).TextColor(k.Muted)
+					}
 				})
 			}
-			modeCard(mode.Remote, icServer, "A server on my network", "Use the amdl running on your NAS. This computer only shows and controls it.")
-			modeCard(mode.Standalone, icLaptop, "This computer", "Download, decrypt and tag here, with a wrapper on this computer or another one.")
+			modeCard(mode.Remote, icServer, "A server on my network")
+			modeCard(mode.Standalone, icLaptop, "This computer")
 		})
 	})
 	if d.Mode == "" {
@@ -78,9 +77,9 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	// dimmed results: they would only flash.
 	slow := waited(c, f.testing, f.testFrom)
 	card(c, k).Gap(14).Children(func() {
-		addr, name, help := &d.RemoteURL, "Server address", "The address of the amdl backend, as the web console opens it."
+		addr, name, help := &d.RemoteURL, "Server address", "The web console's address."
 		if d.Mode == mode.Standalone {
-			addr, name, help = &d.WrapperAddress, "Wrapper address", "The wrapper-lite or wrapper-manager on your NAS. It has no password, so only open its port to this computer."
+			addr, name, help = &d.WrapperAddress, "Wrapper address", "It has no password, so open its port to this computer only."
 			if local {
 				help = "Not used: this computer runs its own wrapper."
 			}
@@ -204,14 +203,14 @@ func (a *App) appearanceSettings(c *ui.Context, k *Tokens) {
 		}
 	})
 	on := a.Settings.Notify
-	if settingRow(c, k, "notify", &on, "Notify when a download finishes or fails", "Shown by the system; packaged builds only on macOS.").Changed() {
+	if settingRow(c, k, "notify", &on, "Notify when a download finishes or fails", "On macOS, only in the packaged app.").Changed() {
 		next := a.Settings
 		next.Notify = on
 		a.set.draft.Notify = on
 		a.Act.ApplySettings(next)
 	}
 	skip := a.Settings.SkipExisting
-	if settingRow(c, k, "skip-existing", &skip, "Skip files already downloaded", "Downloading again then skips the tracks on disk without asking.").Changed() {
+	if settingRow(c, k, "skip-existing", &skip, "Skip files already downloaded", "").Changed() {
 		next := a.Settings
 		next.SkipExisting = skip
 		a.set.draft.SkipExisting = skip

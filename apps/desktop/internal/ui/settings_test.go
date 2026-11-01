@@ -75,20 +75,21 @@ func filesApp(t *testing.T) (*App, *ui.Tester) {
 	return a, ui.NewTester(a.View, 1280, 1600) // tall enough to show every field
 }
 
-// clickFieldOf clicks the wide input under the field whose help is help:
-// the input's own label repeats the field's, which comes first.
-func clickFieldOf(t *testing.T, tt *ui.Tester, help string) {
+// clickFieldOf clicks the wide input under the field's last line of text,
+// its label or its help: the input's own label repeats the field's, which
+// comes first.
+func clickFieldOf(t *testing.T, tt *ui.Tester, text string) {
 	t.Helper()
-	r, ok := tt.Find(help)
+	r, ok := tt.Find(text)
 	if !ok {
-		t.Fatalf("no field explains %q: %q", help, tt.Texts())
+		t.Fatalf("no field says %q: %q", text, tt.Texts())
 	}
 	tt.ClickAt(r.X+40, r.Y+r.H+10+16)
 }
 
 func TestFolderAndNameChangesAskFirst(t *testing.T) {
 	a, tt := filesApp(t)
-	clickFieldOf(t, tt, "Where finished tracks are saved.")
+	clickFieldOf(t, tt, "Downloads folder")
 	tt.Type("/new")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
@@ -118,7 +119,7 @@ func TestFolderAndNameChangesAskFirst(t *testing.T) {
 
 	// A fresh window, so the click lands where Find places the field.
 	_, tt = filesApp(t)
-	clickFieldOf(t, tt, "{SongNumber} keeps counting across discs."+olderLayout)
+	clickFieldOf(t, tt, "{SongNumber} keeps counting across discs.")
 	tt.Type(" ({ReleaseYear})")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
@@ -129,7 +130,7 @@ func TestFolderAndNameChangesAskFirst(t *testing.T) {
 
 func TestTemporaryFolderAppliesWithoutAsking(t *testing.T) {
 	_, tt := filesApp(t)
-	clickFieldOf(t, tt, "Work space while a track is processed; on the downloads folder's disk is fastest.")
+	clickFieldOf(t, tt, "Temporary folder")
 	tt.Type("/amdl")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()

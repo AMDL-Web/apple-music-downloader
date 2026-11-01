@@ -229,11 +229,9 @@ func (a *App) configFile(c *ui.Context, k *Tokens) {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			ui.Column(c).Grow(1).Shrink(1).Gap(3).Children(func() {
 				ui.Text(c, "Reload from file").FontSize(13).FontWeight(600)
-				saved := "Changes here are saved to config.yaml."
 				if !cf.Persisted {
-					saved = "This backend keeps no config.yaml: changes last until it restarts."
+					ui.Text(c, "This backend keeps no config.yaml: changes last until it restarts.").FontSize(11.5).TextColor(k.Faint)
 				}
-				ui.Text(c, saved).FontSize(11.5).TextColor(k.Faint)
 			})
 			wait := waited(c, cf.Reloading, cf.ReloadSince)
 			text := "Reload"

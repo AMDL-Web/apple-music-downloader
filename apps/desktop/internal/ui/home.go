@@ -76,7 +76,7 @@ func (a *App) home(c *ui.Context, k *Tokens, page float32) {
 					case len(s.Omni.Links) > 0:
 						a.linkCards(c, k, width)
 					case long:
-						searchMessage(c, k, icSearch, "Too long to search", fmt.Sprintf("Search looks at the first %d characters; shorten the words.", store.SearchMaxTerm))
+						searchMessage(c, k, icSearch, "Too long to search", fmt.Sprintf("Search looks at the first %d characters.", store.SearchMaxTerm))
 					default:
 						a.searchBody(c, k, width)
 					}

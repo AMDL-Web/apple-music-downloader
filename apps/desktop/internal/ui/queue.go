@@ -150,7 +150,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		display(c, "Queue", 22).SingleLine()
 		segmented(c, k, "tabs", &a.Tab, tabs, map[int]ui.Color{int(store.TabFailed): k.Bad})
 		ui.Spacer(c)
-		if !compact && !upNext {
+		if !compact && !upNext && len(jobs) > 0 {
 			ui.Text(c, "Newest first").FontSize(12).TextColor(k.Muted)
 		}
 	})
