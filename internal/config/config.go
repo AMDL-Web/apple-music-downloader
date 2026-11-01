@@ -186,9 +186,9 @@ const (
 const (
 	// MaxParallelWrapperRequests bounds wrapper lyrics, web playback and
 	// license requests across all jobs: the ones made while the backend has no
-	// usable media-user-token to send them to Apple itself. /key and /m3u8 have their own, smaller
-	// bound in internal/wrapper. It is small because wrapper-lite answers on
-	// 8 threads that every open connection holds (see
+	// usable media-user-token to send them to Apple itself. /key and /m3u8
+	// have their own, smaller bound in internal/wrapper. It is small because
+	// wrapper-lite answers on 8 threads that every open connection holds (see
 	// internal/wrapper#connectionLimit); one lyrics request takes about a
 	// second, so 4 still fetch an album's lyrics in a few seconds.
 	MaxParallelWrapperRequests = 4

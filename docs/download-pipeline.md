@@ -236,9 +236,10 @@ whose media-user-token it carries.
 - With a media-user-token ([Configuration](configuration.md#the-media-user-token)), the
   backend asks amp-api's `syllable-lyrics` itself, after reading the account's storefront
   from `/v1/me/storefront` once per token. Apple answers a song without lyrics and a
-  refused token with the same `404`, so a `404`, a `401` or `403`, or an unreadable
-  storefront hands the request to the wrapper as below; a `5xx`, `429` or timeout is
-  retried like any other required read (`download.max_attempts`).
+  refused token with the same `404`, so a `404`, a `401` or `403`, an answer with no
+  lyrics document, or an unreadable storefront hands the request to the wrapper as below;
+  a `5xx`, `429` or timeout is retried like any other required read
+  (`download.max_attempts`).
 - Otherwise the wrapper's `/lyrics` with `syllable=1`, which answers from its own account's
   storefront. A song with only plain-text lyrics has no such document there, so a `404`
   asks once more with `syllable=0`, which falls back to the plain text; a second `404` is
