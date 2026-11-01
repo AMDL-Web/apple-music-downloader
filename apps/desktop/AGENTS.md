@@ -7,8 +7,8 @@ the backend with a wrapper here or on another machine.
 
 ## Rules
 
-- The app reads the backend only through `internal/client`, in both modes,
-  so it never depends on more than the API contract; bars and numbers come
+- The app reads the backend only through `internal/client`, so it never
+  depends on more than the API contract; bars and numbers come
   from `internal/progress` and `internal/format`, shared with the other Go
   clients.
 - Standalone mode runs or finds the backend only through `internal/local`
@@ -24,20 +24,19 @@ the backend with a wrapper here or on another machine.
   `path/filepath` or show them as this computer's.
 - Colors come from `apps/desktop/internal/ui#Tokens`; an album's palette is
   used only after a contrast check (`ui#Readable`, `ui#AccentFor`).
-- The views' corner radii come from the levels beside the tokens
+- Corner radii come from the levels beside the tokens
   (`apps/desktop/internal/ui#radiusCard` and the constants after it), never
   a number: a box inside another takes the outer radius less the room
   between them, so both corners share a center. Continuous (squircle)
-  corners are macOS only, by choice: MyGo turns them on there alone
-  (continuousCorners in its ui/paint.go).
+  corners are macOS only, by choice (continuousCorners in MyGo's
+  ui/paint.go).
 - Focus shows as MyGo's own ring, no accent border or glow: on a text field
   whenever it has the focus, as macOS's text fields, on other controls for
   keyboard focus only. A box whose focused element is a part of it, as a
   field's input, rings itself with `focusRing`.
 - A button that can be disabled is built with `buttonOff`, not `button`
   then `Disabled`: MyGo reports hover until the element is disabled.
-- Scroll containers go through `scrollArea` (or `scrollState` where one
-  cannot): MyGo draws thumbs at all times over the content, so the app hides
+- Scroll containers go through `scrollArea` (or `scrollState`): MyGo draws thumbs at all times over the content, so the app hides
   them at rest where the desktop does, keeps lists clear of them and fades a
   cut last line.
 - A drawing with its own rate (`Painter.AnimationFrameRate`, as a stage
@@ -49,11 +48,13 @@ the backend with a wrapper here or on another machine.
   (`statusDelay`), not a store's busy flag; earlier results, typed fields
   and errors stay until the answer. Each async action is tested with
   `apps/desktop/internal/ui/flicker_test.go#noFlash`.
+- A control's size never depends on its state
+  (`apps/desktop/internal/ui/shift_test.go#holdsStill`).
 - No cgo: every target cross-compiles with `CGO_ENABLED=0`.
 - MyGo paints absolute children above in-flow ones, in build order: a
-  decorative layer goes before an absolute content layer, as the main
-  window's view (`apps/desktop/internal/ui#App`) builds it, never into a
-  card beside its content.
+  decorative layer goes before an absolute content layer, as
+  `apps/desktop/internal/ui#App` builds it, never into a card beside its
+  content.
 - A shortcut that must work while the keyboard is in home's field is
   declared from the view's root (`apps/desktop/internal/ui#App` builds them
   in `shortcuts`): one declared deeper only hears its own subtree. Keys the

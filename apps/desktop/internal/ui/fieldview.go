@@ -460,8 +460,11 @@ func (a *App) setField(c *ui.Context, k *Tokens, f *configField, items []string,
 				a.Store.SetConfig(f.key, next)
 			}
 			b.Cursor(ui.CursorPointer).Children(func() {
-				if on {
-					ui.Icon(c, icCheck).FontSize(12).TextColor(col)
+				// The check keeps its room when the option is off, so
+				// choosing one moves neither it nor the options beside it.
+				mark := ui.Icon(c, icCheck).FontSize(12).TextColor(col)
+				if !on {
+					mark.Invisible()
 				}
 				ui.Text(c, o.label).FontSize(12.5).FontWeight(600).TextColor(col)
 			})

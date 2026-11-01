@@ -117,6 +117,13 @@ func button(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SVG) 
 // built still reports the hover and press it styles itself by, so a button
 // that can be disabled is built with this.
 func buttonOff(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SVG, off bool) ui.Element {
+	return buttonRoom(c, k, kind, text, text, ic, off)
+}
+
+// buttonRoom is buttonOff for a button whose words change, "Log in" and
+// "Logging in…": it keeps the room of room, the widest of them, so the
+// words changing moves neither the button's edges nor what sits beside it.
+func buttonRoom(c *ui.Context, k *Tokens, kind buttonKind, text, room string, ic *ui.SVG, off bool) ui.Element {
 	b := ui.ButtonBase(c).Disabled(off).Height(30).PaddingX(12).Gap(6).Radius(radiusControl).AlignItems(ui.Center).Justify(ui.Center)
 	fg := k.Fg
 	switch kind {
@@ -159,7 +166,15 @@ func buttonOff(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SV
 			if kind == buttonPill {
 				size = 14
 			}
-			ui.Text(c, text).FontSize(size).FontWeight(w).TextColor(fg).SingleLine()
+			if room == text {
+				ui.Text(c, text).FontSize(size).FontWeight(w).TextColor(fg).SingleLine()
+				return
+			}
+			ui.Box(c).Children(func() {
+				ui.Text(c, room).FontSize(size).FontWeight(w).SingleLine().Invisible()
+				ui.Text(c, text).FontSize(size).FontWeight(w).TextColor(fg).SingleLine().TextAlign(ui.Center).
+					Absolute().Top(0).Left(0).Right(0)
+			})
 		}
 	})
 	return b
@@ -169,6 +184,14 @@ func buttonOff(c *ui.Context, k *Tokens, kind buttonKind, text string, ic *ui.SV
 // dark (ink on light), the others muted. colors may tint a segment's label,
 // as Failed in red.
 func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []string, colors map[int]ui.Color) {
+	segmentedRoom(c, k, key, selected, labels, labels, colors)
+}
+
+// segmentedRoom is segmented for labels that carry a number: each segment
+// keeps the room of its room label, the widest the label gets, in tabular
+// digits, so a count changing moves neither the other segments nor the
+// track's edge.
+func segmentedRoom(c *ui.Context, k *Tokens, key string, selected *int, labels, room []string, colors map[int]ui.Color) {
 	s := ui.SegmentedBase(c.Key(key), selected, len(labels))
 	s.Track.Padding(padControl).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line).Children(func() {
 		for i, l := range labels {
@@ -186,8 +209,8 @@ func segmented(c *ui.Context, k *Tokens, key string, selected *int, labels []str
 			// moves neither the others nor the track's edge.
 			seg.Cursor(ui.CursorPointer).Children(func() {
 				ui.Box(c).Children(func() {
-					ui.Text(c, l).FontSize(12).FontWeight(600).SingleLine().Invisible()
-					ui.Text(c, l).FontSize(12).FontWeight(weight).TextColor(fg).SingleLine().TextAlign(ui.Center).
+					ui.Text(c, room[i]).FontSize(12).FontWeight(600).FontFeatures("tnum").SingleLine().Invisible()
+					ui.Text(c, l).FontSize(12).FontWeight(weight).FontFeatures("tnum").TextColor(fg).SingleLine().TextAlign(ui.Center).
 						Absolute().Top(0).Left(0).Right(0)
 				})
 			})

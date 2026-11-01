@@ -126,6 +126,14 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	a.recentWall(c, k, finished, latest, compact)
 	tabs := []string{"All", fmt.Sprintf("Active · %d", s.Count(store.TabActive)), fmt.Sprintf("Done · %d", s.Count(store.TabDone)),
 		fmt.Sprintf("Failed · %d", s.Count(store.TabFailed))}
+	// Each count keeps the room of two digits, so a count going from 9 to 10
+	// moves no tab.
+	room := []string{"All", "Active · 00", "Done · 00", "Failed · 00"}
+	for i, t := range tabs {
+		if len(t) > len(room[i]) {
+			room[i] = t
+		}
+	}
 	tab := store.Tab(a.Tab)
 	jobs := s.Filter(tab, "")
 	// All and Active lead with Up next, in the order the jobs run; the
@@ -148,7 +156,7 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	upNext := len(running)+len(queued) > 0
 	ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground).Children(func() {
 		display(c, "Queue", 22).SingleLine()
-		segmented(c, k, "tabs", &a.Tab, tabs, map[int]ui.Color{int(store.TabFailed): k.Bad})
+		segmentedRoom(c, k, "tabs", &a.Tab, tabs, room, map[int]ui.Color{int(store.TabFailed): k.Bad})
 		ui.Spacer(c)
 		if !compact && !upNext && len(jobs) > 0 {
 			ui.Text(c, "Newest first").FontSize(12).TextColor(k.Muted)
@@ -238,9 +246,23 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 			return
 		}
 		ui.Column(c).AlignItems(ui.End).Gap(10).Children(func() {
-			ui.Row(c).AlignItems(ui.Baseline).Children(func() {
-				display(c, fmt.Sprint(j.Percent()), 64).LetterSpacing(-1.9).TextColor(hc.title).FontFeatures("tnum")
-				ui.Text(c, "%").FontSize(26).FontWeight(700).TextColor(hc.meta)
+			// The number keeps the room of three digits, so reaching 100
+			// takes nothing from the title beside it.
+			ui.Box(c).Children(func() {
+				percent := func(digits string, shown bool) {
+					row := ui.Row(c).AlignItems(ui.Baseline)
+					if !shown {
+						row.Invisible()
+					} else {
+						row.Absolute().Top(0).Right(0)
+					}
+					row.Children(func() {
+						display(c, digits, 64).LetterSpacing(-1.9).TextColor(hc.title).FontFeatures("tnum")
+						ui.Text(c, "%").FontSize(26).FontWeight(700).TextColor(hc.meta)
+					})
+				}
+				percent("100", false)
+				percent(fmt.Sprint(j.Percent()), true)
 			})
 			ui.Row(c).Gap(8).Children(func() {
 				if button(c, k, buttonOnArt, "Cancel", nil).Clicked() {

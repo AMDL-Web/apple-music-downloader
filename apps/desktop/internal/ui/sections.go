@@ -238,7 +238,7 @@ func (a *App) configFile(c *ui.Context, k *Tokens) {
 			if wait {
 				text = "Reloading…"
 			}
-			if buttonOff(c, k, buttonPlain, text, nil, wait).Clicked() && !cf.Reloading {
+			if buttonRoom(c, k, buttonPlain, text, "Reloading…", nil, wait).Clicked() && !cf.Reloading {
 				a.Store.ReloadConfig()
 			}
 		})

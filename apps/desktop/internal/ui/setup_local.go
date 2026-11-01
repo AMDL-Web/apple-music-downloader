@@ -275,7 +275,7 @@ func (a *App) setupCredentials(c *ui.Context, k *Tokens) {
 		if wait {
 			text = "Logging in…"
 		}
-		if (buttonOff(c, k, buttonPrimary, text, nil, !filled || wait).Height(32).Clicked() || pass.Submitted() || user.Submitted()) && filled && !l.Busy {
+		if (buttonRoom(c, k, buttonPrimary, text, "Logging in…", nil, !filled || wait).Height(32).Clicked() || pass.Submitted() || user.Submitted()) && filled && !l.Busy {
 			a.Store.StartLogin(f.user, f.pass)
 			f.sent = true
 		}
@@ -295,7 +295,7 @@ func (a *App) setupCode(c *ui.Context, k *Tokens) {
 			text = "Verifying…"
 		}
 		ready := sixDigits(f.code)
-		if (buttonOff(c, k, buttonPrimary, text, nil, !ready || wait).Height(32).Clicked() || in.Submitted()) && ready && !l.Busy {
+		if (buttonRoom(c, k, buttonPrimary, text, "Verifying…", nil, !ready || wait).Height(32).Clicked() || in.Submitted()) && ready && !l.Busy {
 			a.Store.SubmitCode(f.code)
 			f.sent = true
 		}

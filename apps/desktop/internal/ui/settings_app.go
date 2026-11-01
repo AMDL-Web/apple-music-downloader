@@ -91,11 +91,14 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 				if in.Changed() {
 					f.checks = nil
 				}
-				if buttonOff(c, k, buttonPlain, "Test connection", nil, slow || *addr == "").Clicked() && !f.testing {
-					a.runTest(*addr, c.Now())
-				}
+				// The button says it is testing in its own room, so the field
+				// beside it keeps its width.
+				text := "Test connection"
 				if slow {
-					pill(c, k, pillWait, nil, "Testing…")
+					text = "Testing…"
+				}
+				if buttonRoom(c, k, buttonPlain, text, "Test connection", nil, slow || *addr == "").Clicked() && !f.testing {
+					a.runTest(*addr, c.Now())
 				}
 			})
 			ui.Text(c, help).FontSize(11.5).TextColor(k.Faint)

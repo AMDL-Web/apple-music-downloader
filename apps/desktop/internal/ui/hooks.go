@@ -379,11 +379,12 @@ func (a *App) hookDialog(c *ui.Context, k *Tokens) {
 				return
 			}
 			verb := map[bool]string{true: "Add", false: "Save"}[d.editing == ""]
+			adding := map[bool]string{true: "Adding…", false: "Saving…"}[d.editing == ""]
 			slow := waited(c, d.busy, d.since)
 			if slow {
-				verb = map[bool]string{true: "Adding…", false: "Saving…"}[d.editing == ""]
+				verb = adding
 			}
-			if buttonOff(c, k, buttonPrimary, verb, nil, slow).Clicked() {
+			if buttonRoom(c, k, buttonPrimary, verb, adding, nil, slow).Clicked() {
 				a.saveHook(d)
 			}
 		})
@@ -510,7 +511,9 @@ func choiceChip(c *ui.Context, k *Tokens, key, text string, on bool) bool {
 	fg, weight := k.Fg, 500
 	switch {
 	case on:
-		b.Background(k.Pill)
+		// The border stays, in the fill's color: a chip's box is the same
+		// chosen or not, so the chips beside it do not move.
+		b.Background(k.Pill).Border(1, k.Pill)
 		fg, weight = k.PillInk, 600
 	case b.Hovered():
 		b.Background(k.Track).Border(1, k.Line2)
