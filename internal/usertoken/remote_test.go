@@ -126,6 +126,13 @@ func tokenIs(p *Provider, cfg config.Config, want Token) func() bool {
 	return func() bool { return p.Token(cfg) == want }
 }
 
+func storeGone(dir string) func() bool {
+	return func() bool {
+		_, err := os.Stat(filepath.Join(dir, StoreFileName))
+		return errors.Is(err, os.ErrNotExist)
+	}
+}
+
 func TestEndpointTokenIsUsedAndStoredPrivately(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), StoreDirName)
 	var logs lockedBuffer
@@ -218,15 +225,13 @@ func TestLoggedOutDropsTheStoredCopy(t *testing.T) {
 	}
 	runLoop(t, p)
 	waitFor(t, "the config fallback", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig}))
-	if _, err := os.Stat(filepath.Join(dir, StoreFileName)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stored copy still on disk after a 503: %v", err)
-	}
+	// The token stops being used first; the copy goes and the logout is
+	// logged right after.
+	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
+	waitFor(t, "the logout's log line", func() bool { return strings.Contains(logs.String(), "no logged-in account") })
 	again, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
 	if got := again.Token(cfgWith("", "")); got != (Token{}) {
 		t.Fatal("a restart brought the logged-out token back")
-	}
-	if !strings.Contains(logs.String(), "no logged-in account") {
-		t.Fatalf("no log line for the logout:\n%s", logs.String())
 	}
 	assertNoToken(t, &logs, endpointTok)
 }
@@ -398,9 +403,7 @@ func TestRealClientAgainstAWrapper(t *testing.T) {
 	waitFor(t, "the token over HTTP", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper}))
 	loggedIn.Store(false)
 	waitFor(t, "the logout", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig}))
-	if _, err := os.Stat(filepath.Join(dir, StoreFileName)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stored copy kept after a 503: %v", err)
-	}
+	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
 	assertNoToken(t, &logs, endpointTok)
 }
 

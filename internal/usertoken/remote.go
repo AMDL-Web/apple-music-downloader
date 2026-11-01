@@ -194,10 +194,11 @@ func (r *remote) fetchOnce(ctx context.Context) time.Duration {
 
 func (r *remote) gotToken(v string, reply wrapper.TokenReply) time.Duration {
 	now := r.now()
-	r.mu.Lock()
-	prev := r.state
-	r.live, r.stored, r.state, r.fails = v, "", stateOK, 0
-	r.mu.Unlock()
+	// Only this loop writes state, saveFailing and the store, so they are
+	// read without the lock here. The token is published last, after the
+	// copy is on disk and the answer logged, so whoever sees the new token
+	// also finds both.
+	prev, wasFailing := r.state, r.saveFailing
 	next := time.Unix(reply.NextRefreshAt, 0)
 	if reply.NextRefreshAt <= 0 {
 		next = time.Time{}
@@ -206,10 +207,6 @@ func (r *remote) gotToken(v string, reply wrapper.TokenReply) time.Duration {
 		Address: r.address, Region: reply.Region, MusicToken: v,
 		RefreshedAt: reply.RefreshedAt, NextRefreshAt: reply.NextRefreshAt, FetchedAt: now.Unix(),
 	})
-	r.mu.Lock()
-	wasFailing := r.saveFailing
-	r.saveFailing = err != nil
-	r.mu.Unlock()
 	if err != nil && !wasFailing {
 		r.logger.Warn("could not store a copy of the wrapper's token; it is used from memory", "dir", r.store.dir, "error", err.Error())
 	}
@@ -220,6 +217,9 @@ func (r *remote) gotToken(v string, reply wrapper.TokenReply) time.Duration {
 	}
 	r.logger.Log(context.Background(), level, "using the wrapper's token from GET /token",
 		"region", reply.Region, "next_refresh_at", unixTime(reply.NextRefreshAt), "next_fetch_in", wait.Round(time.Second).String())
+	r.mu.Lock()
+	r.live, r.stored, r.state, r.fails, r.saveFailing = v, "", stateOK, 0, err != nil
+	r.mu.Unlock()
 	return wait
 }
 
