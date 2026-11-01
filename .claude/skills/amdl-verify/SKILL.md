@@ -64,7 +64,8 @@ Limits:
 - Changes are listed with `--no-renames`, so a renamed file is a deletion plus an
   addition: the red run brings the old file back beside the new one, which in Go
   usually means duplicate declarations and `red-not-assertion`. `-keep` the old
-  path so it stays deleted, or report the verdict with that reason.
+  path so it stays deleted (a fix inside the renamed file then stays too, so the
+  proof covers only the other files), or report the verdict with that reason.
 
 ## Live API check
 
