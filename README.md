@@ -75,7 +75,7 @@ memory.
 | `deploy/` | The Compose file and, under `deploy/server/`, the server's Dockerfile and entrypoint. |
 | `configs/` | The example config and hooks template every install is seeded from. |
 | `docs/` | Reference docs and runbooks ([index](docs/README.md)). |
-| `tools/` | Repository tooling: doc checks, the file splitter, the Temari parity check, the README diagrams, the media replay proxy for benchmarks. |
+| `tools/` | Repository tooling: doc checks, the file splitter, the revert proof for regression tests, the Temari parity check, the README diagrams, the media replay proxy for benchmarks. |
 
 What the server needs:
 

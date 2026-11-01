@@ -61,7 +61,7 @@ fit a Go open-source backend with English docs.
 | Jobs holding secrets run default-branch code only | `.claude/rules/workflows.md` | adopted | |
 | Verify and diagnose skills | `.claude/skills/amdl-verify/SKILL.md`, `.claude/skills/amdl-diagnose/SKILL.md` | adapted | Loops use `go test`, httptest, `make dev` and saved Apple fixtures. |
 | Contract drift test derived from the real router | internal/api route/OpenAPI parity test | adopted | Lands separately in internal/api. |
-| Revert proof script | `.claude/skills/amdl-diagnose/SKILL.md` | adapted | A manual red-then-green step with a temporary commit, not a script. |
+| Revert proof script | `tools/revertproof`, `.claude/skills/amdl-verify/SKILL.md` | adapted | A Go tool reading `go test -json`; it also repeats the green run and runs it on one CPU to catch flaky tests. |
 | Verify Action with receipts, verifier and judge models | none | not adopting | Heavy for a repo where most work lands on `dev` directly. |
 | Merge-message generator and merge-method hook | none | not adopting | The release flow and DCO already define merges. |
 | Path-based PR tiers and labels | none | not adopting | Same reason. |

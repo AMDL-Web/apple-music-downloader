@@ -1,6 +1,6 @@
 ---
 name: amdl-diagnose
-description: Find and fix an amdl bug by reproducing it first - evidence from the job record, events and logs, one command that goes red on the reported symptom (go test -run, httptest against Server.Routes, make dev plus curl, a saved Apple response, a copy of the user's database, -race -count=N, git bisect run), then a fix with a regression test proven red then green. Use when told "X is broken", "this job fails", "SSE stops", "wrong file name", for a flaky or failing test, a crash, a slowdown, or an error from a deployed instance.
+description: Find and fix an amdl bug by reproducing it first - evidence from the job record, events and logs, one command that goes red on the reported symptom (go test -run, httptest against Server.Routes, make dev plus curl, a saved Apple response, a copy of the user's database, -race -count=N, git bisect run), then a fix with a regression test proven red then green by tools/revertproof. Use when told "X is broken", "this job fails", "SSE stops", "wrong file name", for a flaky or failing test, a crash, a slowdown, or an error from a deployed instance.
 ---
 
 # Diagnose a bug
@@ -54,9 +54,10 @@ time. Temporary logs carry a unique prefix such as `[DEBUG-7f3a]` so
 
 - Test at the public seam, called the way real callers call it, with expected
   values from independent facts.
-- Prove it guards the bug: commit the test alone (a temporary local commit, not a
-  stash), see it fail on an assertion (a build error does not count), add the fix,
-  see it pass, then squash before pushing.
+- Prove it guards the bug: after committing the fix and the test, the
+  [revert proof](../amdl-verify/SKILL.md#revert-proof) must say `proved`: red on an
+  assertion with the fix reverted (a build error does not count), green at HEAD in
+  every repeat.
 - If no seam reaches the bug, say so instead of writing a test that restates the
   implementation.
 - Rerun the original, unshrunk command.

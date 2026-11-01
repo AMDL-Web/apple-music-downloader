@@ -126,6 +126,7 @@ and console checks and the report format.
 | --- | --- |
 | Docs, AGENTS.md, rules, skills | `go test -count=1 ./tools/repocheck/` |
 | Go logic | the package's tests, then `make test` |
+| Bug fix with a regression test | `go run ./tools/revertproof -test <file>` after committing ([amdl-verify](.claude/skills/amdl-verify/SKILL.md#revert-proof)) |
 | Decryption (`internal/fairplay`, `tools/temaridiff`) | `go test ./internal/fairplay/` and `make temaridiff`, which `make check` does not run |
 | Concurrency (jobs, media pools, events, SSE) | `make race` |
 | API routes, schemas, SSE | `go test ./internal/api/` and a live check with `make dev` |
