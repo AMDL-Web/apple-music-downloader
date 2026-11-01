@@ -103,7 +103,7 @@ func newDetailTester(t *testing.T, w, h int) (*App, *store.Job, *ui.Tester) {
 	a, _ := newTestApp(remoteSettings())
 	a.Settings.HideSidebar = true
 	j := openFixture(a, detailFixture(time.Now()))
-	return a, j, ui.NewTester(detailView(a), w, h)
+	return a, j, stillTester(detailView(a), w, h)
 }
 
 func TestTrackStatesSayWhatRuns(t *testing.T) {
@@ -186,7 +186,8 @@ func absDiff(a, b uint8) int {
 
 func TestScrollingHoldsTheStripes(t *testing.T) {
 	_, j, tt := newDetailTester(t, 1280, 800)
-	tt.Advance(time.Second)
+	tt.SetPreferences(ui.Preferences{})
+	tt.Advance(100 * time.Millisecond)
 	if !tt.FramePending() {
 		t.Fatal("running stripes ask for no frames")
 	}

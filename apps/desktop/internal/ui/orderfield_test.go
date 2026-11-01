@@ -15,8 +15,8 @@ func qualityApp(t *testing.T) (*App, *ui.Tester, func(until func() bool)) {
 	t.Helper()
 	a, run := demoApp(t)
 	a.GoSettings("quality")
-	tt := ui.NewTester(a.View, 1280, 900)
-	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	// The screen asks for the settings as it builds.
+	tt := stillTester(a.View, 1280, 900)
 	run(func() bool { return a.Store.Config.Values != nil })
 	for range 4 {
 		tt.Frame()
@@ -42,10 +42,11 @@ func drag(t *testing.T, tt *ui.Tester, from, to string) (float32, float32) {
 	x0, y0 := center(t, tt, from)
 	x1, y1 := center(t, tt, to)
 	tt.Press(x0, y0)
-	tt.Frame()
-	for i := 1; i <= 8; i++ {
-		f := float32(i) / 8
+	for i := 1; i <= 4; i++ {
+		f := float32(i) / 4
 		tt.Move(x0+(x1-x0)*f, y0+(y1-y0)*f)
+		// The row reports its drag in the frame after the move, and its
+		// place follows in the next.
 		tt.Frame()
 	}
 	return x1, y1

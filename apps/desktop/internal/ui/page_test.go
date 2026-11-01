@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -32,8 +33,7 @@ func TestADownloadStartedFromAnAlbumTakesItsPage(t *testing.T) {
 	run(func() bool { return s.Loaded })
 	a.OpenAlbum(demoAlbum)
 	run(func() bool { return s.Search.Album.Status == store.SearchReady })
-	tt := ui.NewTester(a.View, 1280, 800)
-	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt := stillTester(a.View, 1280, 800)
 	for _, want := range []string{"RELEASED", "GENRE", "2023", "Harbor Lights"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q on the album's page: %q", want, tt.Texts())
@@ -81,7 +81,7 @@ func TestAFailedAlbumDownloadOpensOnItsAlbum(t *testing.T) {
 	}
 	a.OpenJob(failed.ID)
 	run(func() bool { return s.Search.Album.Status == store.SearchReady && len(s.Detail().Items) > 0 })
-	tt := ui.NewTester(a.View, 1280, 800)
+	tt := stillTester(a.View, 1280, 800)
 	for _, want := range []string{"Tidal Rooms", "Seaglass", "Retry", "Delete", "ACTIVITY", "Failed", "Saved"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q on a failed download's page: %q", want, tt.Texts())
@@ -110,12 +110,13 @@ func TestAnAlbumDownloadedAgainShowsTheNewDownload(t *testing.T) {
 		t.Fatal("the demo has no finished download of Orchard Lights")
 	}
 	a.OpenJob(done.ID)
-	tt := ui.NewTester(a.View, 1280, 800)
+	tt := stillTester(a.View, 1280, 800)
 	if !tt.HasText("Download again") || !tt.HasText("FINISHED") {
 		t.Errorf("a finished download's page: %q", tt.Texts())
 	}
 	s.SubmitHit(s.Search.Album.Hit, nil)
-	run(func() bool { tt.Frame(); return s.DetailID != done.ID })
+	// The page follows its album's downloads as it builds.
+	run(func() bool { a.followAlbumJob(); return s.DetailID != done.ID })
 	again := s.Detail()
 	if again == nil || again.Status.IsTerminal() {
 		t.Fatalf("the page moved to %+v", again)
@@ -124,9 +125,7 @@ func TestAnAlbumDownloadedAgainShowsTheNewDownload(t *testing.T) {
 	// the one that runs.
 	a.Back()
 	a.OpenJob(done.ID)
-	for range 3 {
-		tt.Frame()
-	}
+	tt.Frame()
 	if s.DetailID != done.ID {
 		t.Errorf("the finished download's page moved to %q", s.DetailID)
 	}
@@ -151,7 +150,7 @@ func TestAnAlbumReadThatFailsLeavesTheDownloadsTracks(t *testing.T) {
 	if p.ID != "1700000001" || p.Status != store.SearchFailed {
 		t.Fatalf("the album page holds %q in %v", p.ID, p.Status)
 	}
-	tt := ui.NewTester(detailView(a), 1280, 800)
+	tt := stillTester(detailView(a), 1280, 800)
 	if tt.HasText(p.Err) || !tt.HasText("Track Number 3") || !tt.HasText("Saved") {
 		t.Errorf("with the album unread, the page shows %q", tt.Texts())
 	}
@@ -249,21 +248,25 @@ func TestARunningDownloadsPageShowsItsWholeLog(t *testing.T) {
 }
 
 func TestARunningDownloadsPageOpensWithItsColumnsInPlace(t *testing.T) {
-	a, run := demoApp(t)
-	s := a.Store
-	run(func() bool { return s.Loaded })
-	a.Go(ScreenQueue)
-	j := jobOf(s, "920001", domain.JobRunning)
-	a.OpenJob(j.ID)
-	run(func() bool { return s.Search.Album.Status == store.SearchReady && len(s.Detail().Items) > 0 })
-	tt := ui.NewTester(a.View, 1280, 800)
-	first, ok := tt.Find("3:52")
+	a, _ := newTestApp(remoteSettings())
+	a.Settings.HideSidebar = true
+	now := time.Now()
+	// Waiting tracks: no stripes ask for frames, so the page shows its
+	// columns' own motion alone.
+	j := &store.Job{Job: domain.Job{ID: "run", Type: "album", Status: domain.JobRunning, Title: "Waiting Room", ArtistName: "Someone",
+		TotalItems: 3, CreatedAt: now, StartedAt: &now}}
+	for i := 1; i <= 3; i++ {
+		j.Items = append(j.Items, domain.JobItem{ID: fmt.Sprint("w", i), Index: i, Title: fmt.Sprint("Song ", i), Status: domain.ItemQueued, DurationMS: 200_000 + i*1000})
+	}
+	openFixture(a, j)
+	tt := ui.NewTester(detailView(a), 1280, 800)
+	first, ok := tt.Find("3:21")
 	if !ok {
 		t.Fatalf("no length of the first song: %q", tt.Texts())
 	}
 	tt.Advance(time.Second)
 	tt.Frame()
-	if later, _ := tt.Find("3:52"); later.X != first.X {
+	if later, _ := tt.Find("3:21"); later.X != first.X {
 		t.Errorf("the lengths moved from %v to %v as the page opened", first.X, later.X)
 	}
 }

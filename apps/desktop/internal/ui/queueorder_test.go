@@ -17,7 +17,7 @@ import (
 // queueApp is the queue over the demo backend with three jobs waiting: the
 // demo's own and two more of albums it has no active download of, behind
 // the two it runs.
-func queueApp(t *testing.T) (*App, *ui.Tester, func(until func() bool)) {
+func queueApp(t *testing.T) (*App, func(until func() bool)) {
 	t.Helper()
 	a, run := demoApp(t)
 	a.Screen = ScreenQueue
@@ -27,14 +27,15 @@ func queueApp(t *testing.T) (*App, *ui.Tester, func(until func() bool)) {
 	run(func() bool { return len(a.Store.Startable()) == 2 })
 	a.Store.Submit()
 	run(func() bool { return len(a.Store.Queued()) == 3 })
-	// Tall enough that no row sits by the list's foot, where a drag would
-	// scroll the list.
-	tt := ui.NewTester(a.View, 1280, 1400)
-	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
-	for range 3 {
-		tt.Frame()
-	}
-	return a, tt, run
+	return a, run
+}
+
+// queueTester shows a's queue in a window tall enough that no row of Up
+// next sits by the list's foot, where a drag would scroll the list; the
+// sidebar closed, the keyboard reaches the rows with fewer keys.
+func queueTester(a *App) *ui.Tester {
+	a.Settings.HideSidebar = true
+	return stillTester(a.View, 1100, 1100)
 }
 
 func queuedIDs(a *App) []string {
@@ -69,7 +70,8 @@ func backendQueue(t *testing.T, a *App) []string {
 }
 
 func TestAQueuedJobDragsToRunFirst(t *testing.T) {
-	a, tt, run := queueApp(t)
+	a, run := queueApp(t)
+	tt := queueTester(a)
 	q := a.Store.Queued()
 	before := queuedIDs(a)
 	last, first := q[2], q[0]
@@ -98,7 +100,8 @@ func TestAQueuedJobDragsToRunFirst(t *testing.T) {
 }
 
 func TestAQueueDragGivenUpMovesNothing(t *testing.T) {
-	a, tt, _ := queueApp(t)
+	a, _ := queueApp(t)
+	tt := queueTester(a)
 	q := a.Store.Queued()
 	before := queuedIDs(a)
 	drag(t, tt, q[0].Name(), q[2].Name())
@@ -116,7 +119,8 @@ func TestAQueueDragGivenUpMovesNothing(t *testing.T) {
 }
 
 func TestTheKeyboardAndMenuMoveAQueuedJob(t *testing.T) {
-	a, tt, run := queueApp(t)
+	a, run := queueApp(t)
+	tt := queueTester(a)
 	before := queuedIDs(a)
 	second := a.Store.Job(before[1]).Name()
 	for range 80 {
@@ -155,7 +159,7 @@ func TestTheKeyboardAndMenuMoveAQueuedJob(t *testing.T) {
 }
 
 func TestAMoveTheQueueOutranRollsBack(t *testing.T) {
-	a, _, run := queueApp(t)
+	a, run := queueApp(t)
 	before := queuedIDs(a)
 	// The app still thinks a job that started is waiting, first.
 	var started *store.Job

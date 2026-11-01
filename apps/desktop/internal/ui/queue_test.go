@@ -70,9 +70,7 @@ func TestTheRowMenuOpensOnAClickAndDeletesOnlyAFinishedJob(t *testing.T) {
 
 	// A job under way is cancelled from its menu, never deleted.
 	a.Tab = int(store.TabActive)
-	tt := ui.NewTester(a.View, 1280, 800)
-	// Still stripes let each click's frames settle.
-	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt := stillTester(a.View, 1280, 800)
 	cancels := strings.Count(strings.Join(tt.Texts(), "\n"), "Cancel")
 	if err := tt.Click("More actions"); err != nil {
 		t.Fatal(err)

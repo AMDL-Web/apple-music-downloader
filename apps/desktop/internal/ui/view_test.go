@@ -41,6 +41,24 @@ func (f *fakeActions) Reconnect()                        { f.reconnects++ }
 func (f *fakeActions) ChooseFile(string, func(string))   {}
 func (f *fakeActions) OpenURL(string)                    {}
 
+// stillTester is a Tester of view in a w×h window whose desktop asks for
+// less motion from the first frame on. A Tester renders each frame in
+// software, and a running stage bar's stripes ask for frames until 20 of
+// them ran; still, every input's frames settle at once, which keeps the
+// race detector's run of this package short.
+func stillTester(view func(*ui.Context), w, h int) *ui.Tester {
+	var shown func(*ui.Context)
+	tt := ui.NewTester(func(c *ui.Context) {
+		if shown != nil {
+			shown(c)
+		}
+	}, w, h)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	shown = view
+	tt.Frame()
+	return tt
+}
+
 func newTestApp(s mode.Settings) (*App, *fakeActions) {
 	post := func(fn func()) { fn() }
 	act := &fakeActions{}
