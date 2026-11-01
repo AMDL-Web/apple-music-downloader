@@ -14,10 +14,14 @@ import (
 // simulatedMedia is the simulate-mode backend. Catalog metadata and enhanced
 // media selection run for real before it is reached; everything it is asked to
 // do it only pretends, pacing transfers by a speed drawn from the configured
-// simulate range. It never touches the wrapper, ffmpeg or the disk (it only
-// reads whether an output already exists), so test mode needs neither a
-// decryptor nor ffmpeg, and never deletes a real download even under force.
-type simulatedMedia struct{ cfg config.Config }
+// simulate range. It never touches the wrapper, ffmpeg or the disk, so test
+// mode needs neither a decryptor nor ffmpeg, and never deletes a real download
+// even under force. It only reads the disk: a track counts as on disk when a
+// real file is there or when outputs records a simulated commit of it.
+type simulatedMedia struct {
+	cfg     config.Config
+	outputs *outputSet
+}
 
 // simulatedLyricsTTML stands in for Apple's lyrics document, so the
 // lyrics conversion and lyrics_status behave as in a real download.
@@ -60,7 +64,26 @@ func (m simulatedMedia) fetch(ctx context.Context, req fetchRequest, progress tr
 
 func (simulatedMedia) discardCheckpoint(string, string) {}
 
-func (simulatedMedia) discardOutput(string) {}
+// discardOutput forgets a simulated commit; a real file stays where it is.
+func (m simulatedMedia) discardOutput(outPath string) { m.outputs.remove(outPath) }
+
+func (m simulatedMedia) statOutput(outPath string) (int64, bool) {
+	if size, ok := m.outputs.stat(outPath); ok {
+		return size, true
+	}
+	return statDiskOutput(outPath)
+}
+
+func (m simulatedMedia) countOutputs(dir string) int {
+	names := diskOutputNames(dir)
+	if names == nil {
+		names = make(map[string]struct{})
+	}
+	for _, name := range m.outputs.names(dir) {
+		names[name] = struct{}{}
+	}
+	return len(names)
+}
 
 func (simulatedMedia) stage(media encryptedMedia) (stagedFile, func(), error) {
 	return stagedFile{size: media.size}, func() {}, nil
@@ -117,7 +140,8 @@ func (simulatedMedia) tag(ctx context.Context, _ stagedFile, _ applemusic.Song, 
 	return simulatePause(ctx, simulatedTagPause)
 }
 
-func (simulatedMedia) commit(staged stagedFile, _ string) (int64, error) {
+func (m simulatedMedia) commit(staged stagedFile, outPath string) (int64, error) {
+	m.outputs.add(outPath, staged.size)
 	return staged.size, nil
 }
 

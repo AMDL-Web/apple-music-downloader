@@ -25,10 +25,13 @@ not a test fix.
 
 ## Pipeline
 
-- `trackRun` owns statuses, messages, progress, retries and events; all I/O goes
-  through `mediaBackend`. Don't branch on `Simulate.Enabled` inside the pipeline:
-  give the backend a method, so simulate mode keeps walking the real lifecycle. The
-  simulated backend never writes, deletes or runs anything.
+- `trackRun` owns statuses, messages, progress, retries and events, except the
+  skip of a library track already on disk, which `skipTracksOnDisk` writes before
+  any track run starts; all I/O goes through `mediaBackend`, and "on disk" is only
+  ever `mediaBackend.statOutput`. Don't branch on `Simulate.Enabled` inside the
+  pipeline: give the backend a method, so simulate mode keeps walking the real
+  lifecycle. The simulated backend never writes, deletes or runs anything; what it
+  committed counts as on disk until a restart.
 - On shutdown (`isShutdown`), leave items and resume checkpoints as they are for
   recovery; only a user cancel writes terminal item states.
 - Media transfers have no `http.Client.Timeout`; transport timeouts and

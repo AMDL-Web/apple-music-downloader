@@ -273,7 +273,9 @@ and codec fallback. Only the backend's work is pretended: transfers and decrypti
 paced by a speed drawn from `simulate.min_speed_kbps`..`max_speed_kbps`, the AAC-LC
 WebPlayback asset, cover art and lyrics are stand-ins, and nothing is written, deleted
 or run (no ffmpeg, no wrapper). An output that already exists on disk is still reported
-as skipped, and `force_overwrite` never deletes it in simulate mode.
+as skipped, and `force_overwrite` never deletes it in simulate mode. A track a simulated
+job finished counts as on disk too, for later jobs and the library state, until the
+backend restarts.
 
 ## Output paths
 
@@ -294,6 +296,21 @@ A track has one library path whichever job type downloads it, and a file at that
 counts as downloaded: the track is skipped (`force_overwrite` replaces it), whatever
 quality it was saved in. So a song downloaded on its own is skipped when its album is
 downloaded later, and an artist download skips the tracks of albums already on disk.
+
+A job checks its library tracks before any of them starts
+(`internal/media#Downloader.skipTracksOnDisk`): a track already at its path is
+`skipped_existing` after one stat, with no per-track catalog read and no stream
+selection, so an album that is fully on disk finishes in seconds. The check at claim
+time stays, for a file another job commits meanwhile. Every run also re-checks the
+tracks an earlier run of the job finished (`internal/media#Downloader.keepFinished`):
+one stays finished only while its file is still at the path it recorded, that path is
+its current library path, and `force_overwrite` is off; otherwise it runs again.
+
+The library state of an album is answered from the same paths:
+`internal/media#Downloader.AlbumTracksOnDisk` stats each track of a track list (exact),
+and `internal/media#Downloader.AlbumFolderStates` counts the `.m4a` files in each album's
+folder against its summary's track count, with no catalog read (approximate, for album
+cards).
 
 The path comes from the track's placement: its album and its position in that album's
 track list (`internal/media#libraryTrackPath`).

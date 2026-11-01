@@ -28,21 +28,8 @@ func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Rep
 	// d.cfg is the job's effective config (runtime snapshot plus overrides),
 	// so overrides.force_overwrite already won over the global key here.
 	force := d.cfg.Download.ForceOverwrite
-	if fi, err := os.Stat(outPath); err == nil && !force {
-		backend.discardCheckpoint(job.ID, outPath)
-		item.Status = domain.ItemSkipped
-		// The breakdown is left as it stands: resolved is already true — the
-		// catalog lookup is what produced the path checked just above — and
-		// every later stage is still false, because none of them ran. Zeroing
-		// it here would erase a stage that genuinely happened.
-		item.FileSize = fi.Size()
-		item.RetryKind = ""
-		item.Attempt = 0
-		item.MaxAttempts = 0
-		item.StatusMessage = "File already exists; skipped"
-		d.persistTerminal(ctx, reporter, item, func() domain.Event {
-			return domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})}
-		})
+	if size, ok := backend.statOutput(outPath); ok && !force {
+		d.finishSkipped(ctx, backend, reporter, job, item, outPath, size)
 		return true, nil
 	}
 	if force {
@@ -50,6 +37,25 @@ func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Rep
 		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemOverwrite, Message: "force overwrite enabled", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "force overwrite enabled"})})
 	}
 	return false, nil
+}
+
+// finishSkipped finishes item as skipped_existing: the track is already at
+// outPath, size bytes. The progress breakdown gets resolved and nothing
+// later: the catalog resolve is what produced outPath, and no later stage
+// ran.
+func (d *Downloader) finishSkipped(ctx context.Context, backend mediaBackend, reporter jobs.Reporter, job domain.Job, item *domain.JobItem, outPath string, size int64) {
+	backend.discardCheckpoint(job.ID, outPath)
+	item.OutputPath = domain.AbsolutePath(outPath)
+	item.Status = domain.ItemSkipped
+	markResolved(&item.Progress)
+	item.FileSize = size
+	item.RetryKind = ""
+	item.Attempt = 0
+	item.MaxAttempts = 0
+	item.StatusMessage = "File already exists; skipped"
+	d.persistTerminal(ctx, reporter, item, func() domain.Event {
+		return domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})}
+	})
 }
 
 // outputLabels are the status messages and error prefixes of the finalize
@@ -231,11 +237,8 @@ func writeFileAtomic(path string, data []byte) error {
 // when it cannot be stat'd (the caller treats 0 as "unknown" and omits it from
 // the item's JSON), so a stat hiccup never fails an otherwise-complete download.
 func outputFileSize(path string) int64 {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return 0
-	}
-	return fi.Size()
+	size, _ := statDiskOutput(path)
+	return size
 }
 
 // partSuffix marks an output file that is still being written/tagged. The

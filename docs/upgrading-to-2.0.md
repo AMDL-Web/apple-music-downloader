@@ -338,6 +338,14 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 - Stopping the backend no longer cancels running jobs: they stay `running` and resume
   on the next start (`job_recovered`), keeping finished tracks and, while the temp
   directory survives, partial transfers.
+- Every run of a job (a retry, a recovery) re-checks the tracks an earlier run finished:
+  one stays `completed` or `skipped_existing` only while its file is still at the path
+  it recorded, that path is the track's current library path (songs, albums and
+  artists), and `force_overwrite` is off. Otherwise it runs again; 1.x kept every
+  finished track whatever happened to its file.
+- A song, album or artist track already at its library path is `skipped_existing`
+  before any per-track catalog read, so an album that is fully on disk finishes in
+  seconds.
 - Media transfers no longer have a 90 s whole-request timeout: a transfer fails only
   when no data arrives for 60 s, so a large Hi-Res track on a slow link finishes.
 - A song without an Enhanced HLS manifest falls back to the next codec at once instead

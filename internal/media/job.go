@@ -155,12 +155,16 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 	}
 	d.startMotionArtworkBackfill(ctx, job.ID, parsed, tracks, reporter)
 
-	items, finished, err := syncJobItems(ctx, job, tracks, reporter)
+	targets := d.trackTargets(parsed, resolved)
+	backend := d.backend()
+	items, finished, err := syncJobItems(ctx, job, tracks, reporter, d.keepFinished(backend, targets))
 	if err != nil {
 		return err
 	}
+	if err := d.skipTracksOnDisk(ctx, backend, job, tracks, items, finished, targets, reporter); err != nil {
+		return err
+	}
 	metadata := newTrackMetadataResolver(d, parsed.Storefront)
-	targets := d.trackTargets(parsed, resolved)
 
 	log := logging.FromContext(ctx, d.logger)
 	return runTrackTasks(ctx, log, len(tracks), finished, false, func(trackCtx context.Context, i int) error {
@@ -196,6 +200,70 @@ func (d *Downloader) trackTargets(parsed applemusic.ParsedURL, resolved resolved
 		targets[i] = target
 	}
 	return targets
+}
+
+// keepFinished decides whether a track finished by an earlier run of the job
+// stays finished, re-checked on every run: never under force_overwrite, only
+// while its recorded output is still there, and for a library track only
+// while that output is the track's current library path, so a changed
+// download.library_path_format or a file from an older layout downloads again.
+func (d *Downloader) keepFinished(backend mediaBackend, targets []trackTarget) func(domain.JobItem, int) bool {
+	force := d.cfg.Download.ForceOverwrite
+	return func(prev domain.JobItem, i int) bool {
+		if force || prev.OutputPath == "" {
+			return false
+		}
+		if path := targets[i].libraryPath; path != "" && prev.OutputPath != domain.AbsolutePath(path) {
+			return false
+		}
+		_, ok := backend.statOutput(prev.OutputPath)
+		return ok
+	}
+}
+
+// skipTracksOnDisk finishes every unfinished library track whose file is
+// already at its library path as skipped_existing, before any track run
+// starts. So a track on disk costs one stat: no per-track catalog read, no
+// stream selection. The pipeline's own check (handleExistingOutput) stays, for
+// a file another job commits meanwhile. The standalone covers of each album it
+// skipped are still ensured, as a track run would have before its skip.
+func (d *Downloader) skipTracksOnDisk(ctx context.Context, backend mediaBackend, job domain.Job, tracks []applemusic.Song, items []domain.JobItem, finished []bool, targets []trackTarget, reporter jobs.Reporter) error {
+	if d.cfg.Download.ForceOverwrite {
+		return nil
+	}
+	coverTrack := make(map[string]int)
+	var coverOrder []string
+	for i := range items {
+		path := targets[i].libraryPath
+		if finished[i] || path == "" {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if size, ok := backend.statOutput(path); ok {
+			d.finishSkipped(ctx, backend, reporter, job, &items[i], path, size)
+			finished[i] = true
+			if _, seen := coverTrack[targets[i].albumDir]; !seen {
+				coverTrack[targets[i].albumDir] = i
+				coverOrder = append(coverOrder, targets[i].albumDir)
+			}
+		}
+	}
+	if !d.cfg.Download.SaveAlbumCover && !d.cfg.Download.SaveArtistCover {
+		return nil
+	}
+	for _, albumDir := range coverOrder {
+		i := coverTrack[albumDir]
+		err := d.saveStandaloneCovers(ctx, tracks[i], targets[i].collectionType, targets[i].storefront, targets[i].albumDir, targets[i].artistDir)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil {
+			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: items[i].ID, Type: domain.EventStandaloneCoverFailed, Message: err.Error()})
+		}
+	}
+	return nil
 }
 
 // runTrackTasks starts every unfinished track without a per-job concurrency
@@ -260,15 +328,15 @@ func runTrackTasks(ctx context.Context, log *slog.Logger, total int, finished []
 
 // syncJobItems reconciles the resolved track list with the item rows a
 // previous run of this job may have left behind (a retry of a failed job, or
-// a requeue after a backend restart), instead of inserting duplicates. Items
-// that already finished (completed/skipped) keep their state and are flagged
-// in the returned finished slice so the caller excludes them from
-// downloading; everything else is reset to queued and re-processed under its
-// original item id. Rows whose track no longer appears in the resolved
+// a requeue after a backend restart), instead of inserting duplicates. An
+// item that already finished (completed/skipped) and that keep accepts keeps
+// its state and is flagged in the returned finished slice so the caller
+// excludes it from downloading; everything else is reset to queued and
+// re-processed under its original item id. Rows whose track no longer appears in the resolved
 // collection (e.g. a playlist edited between runs) are removed so the
 // progress counters stay consistent with total_items. Tracks never seen
 // before get a fresh item row, as on a first run.
-func syncJobItems(ctx context.Context, job domain.Job, tracks []applemusic.Song, reporter jobs.Reporter) ([]domain.JobItem, []bool, error) {
+func syncJobItems(ctx context.Context, job domain.Job, tracks []applemusic.Song, reporter jobs.Reporter, keep func(prev domain.JobItem, i int) bool) ([]domain.JobItem, []bool, error) {
 	previous, err := reporter.ListItems(ctx, job.ID)
 	if err != nil {
 		return nil, nil, err
@@ -298,7 +366,7 @@ func syncJobItems(ctx context.Context, job domain.Job, tracks []applemusic.Song,
 			// catalog value instead of exposing a stale flag until the per-track
 			// metadata refresh — which finished items never reach.
 			prev.HasLyrics = track.HasLyrics
-			if prev.Finished() {
+			if prev.Finished() && keep(prev, i) {
 				finished[i] = true
 			} else {
 				prev.ResetForRetry()

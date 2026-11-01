@@ -1442,9 +1442,11 @@ paths:
       description: |
         Re-enqueues a job in the failed or cancelled terminal state; only unfinished
         tracks are actually retried: items that already completed (completed) or were
-        skipped (skipped_existing) keep their state and are not downloaded again; the
-        remaining items (failed, cancelled, etc.) are reset to queued and reprocessed
-        under their original item ids, with the job's overrides unchanged.
+        skipped (skipped_existing) keep their state while their file is still at the
+        output_path they recorded (for a song, album or artist track, its current
+        library path) and force_overwrite is off; the remaining items (failed,
+        cancelled, a finished one whose file is gone, etc.) are reset to queued and
+        reprocessed under their original item ids, with the job's overrides unchanged.
         Re-enqueueing records and pushes a job_retried event (an overview milestone
         event, which drives the GET /downloads overview feed).
       operationId: retryDownload

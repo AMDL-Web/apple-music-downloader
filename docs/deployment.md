@@ -82,7 +82,7 @@ another port in the file fails the check; publish another host port with the com
 `docker compose stop`, `restart` and `up -d` after an image update are safe while jobs
 run. On SIGTERM the backend stops taking requests, ends open event streams, and stops
 its workers without cancelling their jobs: those stay `running` in the database and
-resume on the next start (`job_recovered`), skipping tracks that already finished.
+resume on the next start (`job_recovered`), skipping tracks whose files are already there.
 Partial transfers resume too while the container's `data/tmp` survives (a restart keeps
 it; recreating the container starts those tracks over). Each shutdown step is bounded,
 about 105 s in the worst case, so the container needs more than Docker's default 10 s:
