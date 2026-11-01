@@ -23,7 +23,9 @@ func (a *App) searchText() (term string, tooLong bool) {
 
 // searchBody is home's answer to words: the first of the catalog's albums,
 // songs, playlists and artists, or one group of them page after page, or
-// one artist's albums, or the state that stands for them.
+// one artist's albums, or the state that stands for them. A group shown
+// alone with no hits answers inside its tab, never as the whole search, so
+// the tabs stay to leave it by; "Nothing found" is for every group empty.
 func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 	s := a.Store
 	q := &s.Search
@@ -40,7 +42,7 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 			searchFailed(c, k, q.Err, s.RetrySearch)
 		case q.Result == nil:
 			skeletonGroups(c, k, width)
-		case len(q.ShownHits()) == 0:
+		case store.NoHits(q.Result):
 			searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "Try fewer words, or the name as Apple Music writes it.")
 		case q.Focus != "":
 			a.focusedGroup(c, k, sel, width)
@@ -102,7 +104,7 @@ func (a *App) focusedGroup(c *ui.Context, k *Tokens, sel *client.SearchHit, widt
 		if hg != nil && hg.NextOffset > 0 {
 			skeletonTiles(c, k, width, 5)
 		} else {
-			searchMessage(c, k, icSearch, "No "+g+" for “"+q.Term+"”", "")
+			searchMessage(c, k, icSearch, "No "+g+" for “"+q.Term+"”", "Try another tab, or fewer words.")
 		}
 	} else {
 		a.groupGrid(c, k, g, hg.Items, sel, width)

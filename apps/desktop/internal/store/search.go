@@ -64,7 +64,8 @@ type Search struct {
 	// More is a group's next page while it loads or after it failed.
 	More map[string]PageState
 	// Focus is the group shown alone, page after page, or "" for the first
-	// hits of every group. It stays as the words change.
+	// hits of every group. It stays as the words change, and clearing the
+	// field drops it.
 	Focus string
 	// Artist is the artist whose albums show instead of the hits.
 	Artist ArtistPages
@@ -137,7 +138,7 @@ func (s *Store) WantSearch(term string) {
 	// A new term shows its own hits, not the artist opened from the last.
 	s.OpenArtist("")
 	if term == "" {
-		*q = Search{cache: q.cache, sent: q.sent, gone: q.gone, Starting: q.Starting, Artist: q.Artist, Album: q.Album, Focus: q.Focus, want: term, gen: q.gen}
+		*q = Search{cache: q.cache, sent: q.sent, gone: q.gone, Starting: q.Starting, Artist: q.Artist, Album: q.Album, want: term, gen: q.gen}
 		return
 	}
 	if r, ok := q.cache.get(term); ok {
@@ -261,6 +262,19 @@ func hitGroup(r *client.SearchResult, group string) *client.HitGroup {
 
 // HitGroup is r's group of that name, or nil.
 func HitGroup(r *client.SearchResult, group string) *client.HitGroup { return hitGroup(r, group) }
+
+// NoHits is whether r is an answer with no hit in any group.
+func NoHits(r *client.SearchResult) bool {
+	if r == nil {
+		return false
+	}
+	for _, g := range SearchGroups {
+		if hg := hitGroup(r, g); hg != nil && len(hg.Items) > 0 {
+			return false
+		}
+	}
+	return true
+}
 
 // FocusGroup shows group alone, its pages following as they are read;
 // "" shows every group again.
