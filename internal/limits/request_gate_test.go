@@ -156,6 +156,50 @@ func TestRequestGateDoWith429RetryClosesAndPenalizes(t *testing.T) {
 	}
 }
 
+// The first attempt drains a request body, so a POST retried after a 429 must
+// carry the whole body again, and a body that cannot be rewound returns the
+// 429 rather than an empty retry.
+func TestRequestGateDoWith429RetryResendsTheBody(t *testing.T) {
+	t.Parallel()
+	const payload = `{"salableAdamId":"1"}`
+	var lengths []int
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		raw, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		lengths = append(lengths, len(raw))
+		status := http.StatusOK
+		if len(lengths) == 1 {
+			status = http.StatusTooManyRequests
+		}
+		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("ok"))}, nil
+	})}
+	noDelay := func(http.Header) time.Duration { return 0 }
+
+	req, _ := http.NewRequest(http.MethodPost, "https://example.test/play", strings.NewReader(payload))
+	resp, err := NewRequestGate(1, 1000, 1000).DoWith429Retry(context.Background(), client, req, false, noDelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if !slices.Equal(lengths, []int{len(payload), len(payload)}) || resp.StatusCode != http.StatusOK {
+		t.Fatalf("body lengths/status = %v/%d, want [%d %d]/200", lengths, resp.StatusCode, len(payload), len(payload))
+	}
+
+	lengths = nil
+	req, _ = http.NewRequest(http.MethodPost, "https://example.test/play", strings.NewReader(payload))
+	req.GetBody = nil
+	resp, err = NewRequestGate(1, 1000, 1000).DoWith429Retry(context.Background(), client, req, false, noDelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if !slices.Equal(lengths, []int{len(payload)}) || resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("without GetBody: body lengths/status = %v/%d, want [%d]/429", lengths, resp.StatusCode, len(payload))
+	}
+}
+
 func cooldownRemaining(g *RequestGate) time.Duration {
 	g.cooldownMu.Lock()
 	defer g.cooldownMu.Unlock()

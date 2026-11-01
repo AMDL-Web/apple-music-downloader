@@ -108,7 +108,10 @@ func (g *RequestGate) Do(ctx context.Context, client *http.Client, req *http.Req
 // DoWith429Retry behaves like Do, but a 429 penalizes every caller through
 // the shared cooldown and is retried once. The first response body is closed
 // before waiting so it cannot retain a concurrency permit or transport
-// connection. retryDelay is injectable for callers' deterministic tests.
+// connection. The first attempt consumes a request body, so the retry sends a
+// fresh one from req.GetBody; a request with a body and no GetBody gets the
+// 429 back instead of a retry with an empty body. retryDelay is injectable for
+// callers' deterministic tests.
 func (g *RequestGate) DoWith429Retry(ctx context.Context, client *http.Client, req *http.Request, rateLimited bool, retryDelay func(http.Header) time.Duration) (*http.Response, error) {
 	if retryDelay == nil {
 		retryDelay = DefaultRetryDelay
@@ -125,10 +128,34 @@ func (g *RequestGate) DoWith429Retry(ctx context.Context, client *http.Client, r
 		if attempt == 1 {
 			return resp, nil
 		}
+		next, ok := rewound(req)
+		if !ok {
+			return resp, nil
+		}
 		if resp.Body != nil {
 			_ = resp.Body.Close()
 		}
+		req = next
 	}
+}
+
+// rewound returns req ready to be sent again: req itself when it has no body,
+// otherwise a clone with a fresh body from GetBody. It reports false when the
+// body cannot be produced again.
+func rewound(req *http.Request) (*http.Request, bool) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return req, true
+	}
+	if req.GetBody == nil {
+		return nil, false
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, false
+	}
+	next := req.Clone(req.Context())
+	next.Body = body
+	return next, true
 }
 
 // DefaultRetryDelay parses Retry-After as either delta-seconds or an HTTP

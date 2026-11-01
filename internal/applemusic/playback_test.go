@@ -144,6 +144,32 @@ func TestWebPlaybackErrors(t *testing.T) {
 	}
 }
 
+// A 429 is retried once through the request gate, and the retry must carry
+// the whole JSON body again: Apple would read an empty one as a bad request.
+func TestWebPlaybackRetriesA429WithTheBody(t *testing.T) {
+	calls := 0
+	client, _, bodies := playbackClient(t, func(*http.Request) *http.Response {
+		calls++
+		if calls == 1 {
+			return jsonResponse(http.StatusTooManyRequests, `{}`)
+		}
+		return jsonResponse(http.StatusOK, `{"songList":[{"hls-playlist-url":"https://aod.itunes.apple.com/p.m3u8"}]}`)
+	})
+	client.retryDelay = func(http.Header) time.Duration { return 0 }
+	got, err := client.WebPlayback(context.Background(), testUserToken, "1")
+	if err != nil || got != "https://aod.itunes.apple.com/p.m3u8" {
+		t.Fatalf("WebPlayback = (%q, %v)", got, err)
+	}
+	if len(*bodies) != 2 {
+		t.Fatalf("requests = %d, want 2", len(*bodies))
+	}
+	for i, body := range *bodies {
+		if body["salableAdamId"] != "1" {
+			t.Fatalf("request %d body = %v, want salableAdamId 1", i+1, body)
+		}
+	}
+}
+
 func TestLicenseRequestShape(t *testing.T) {
 	client, reqs, bodies := playbackClient(t, func(*http.Request) *http.Response {
 		return jsonResponse(http.StatusOK, `{"status":0,"license":"bGljZW5zZQ==","renew-after":86400}`)
