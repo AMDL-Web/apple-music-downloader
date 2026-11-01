@@ -405,7 +405,11 @@ func TestRealClientAgainstAWrapper(t *testing.T) {
 }
 
 func TestLeftoverTempCopyIsRemoved(t *testing.T) {
-	dir := t.TempDir()
+	// Glob metacharacters in the path must not hide the leftover.
+	dir := filepath.Join(t.TempDir(), "data[1]")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	left := filepath.Join(dir, StoreFileName+".123.tmp")
 	if err := os.WriteFile(left, []byte(endpointTok), 0o600); err != nil {
 		t.Fatal(err)

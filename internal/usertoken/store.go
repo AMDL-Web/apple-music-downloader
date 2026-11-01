@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -134,13 +135,22 @@ func (s tokenStore) drop() error {
 // sweep removes temporary files a save left behind when the process died
 // between creating and renaming one: they hold a token too.
 func (s tokenStore) sweep() error {
-	left, err := filepath.Glob(filepath.Join(s.dir, StoreFileName+".*.tmp"))
+	// Listed rather than globbed: the directory's own path may hold glob
+	// metacharacters.
+	entries, err := os.ReadDir(s.dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 	var errs []error
-	for _, name := range left {
-		if err := os.Remove(name); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, StoreFileName+".") || !strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			errs = append(errs, err)
 		}
 	}
