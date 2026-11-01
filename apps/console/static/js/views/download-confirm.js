@@ -15,7 +15,7 @@ export function ArtistConfirm({ confirm, onClose }) {
     }}
     onCancel=${onClose}
   >
-    <p>An artist link queues the artist's whole discography as one job: every album, often hundreds of tracks or more. You can cancel it from the queue.</p>
+    <p>An artist link queues the artist's whole discography as one job: every album, often hundreds of tracks or more.</p>
     ${confirm.names.length > 1 ? html`<p dir="auto">${confirm.names.join(', ')}</p>` : null}
   </${ConfirmDialog}>`;
 }

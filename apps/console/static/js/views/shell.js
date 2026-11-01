@@ -36,7 +36,6 @@ export function Sidebar({ route, counts }) {
       <span class="brand-mark" aria-hidden="true"><${Icon} name="music" /></span>
       <span class="brand-text">
         <span class="brand-name">AMDL</span>
-        <span class="brand-sub">Apple Music Downloader</span>
       </span>
     </div>
     <a

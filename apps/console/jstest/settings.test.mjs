@@ -51,9 +51,10 @@ test('sections and fields: every field names a section, keys are unique dotted l
   for (const f of FIELDS) {
     assert.ok(ids.has(f.section), `${f.key} names an unknown section`);
     assert.match(f.key, /^[a-z_]+\.[a-z0-9_]+$/);
-    assert.ok(f.label && f.help, `${f.key} has a label and help`);
-    assert.ok(!/Default:/.test(f.help), `${f.key}: the default lives in defaultValue, not the help`);
-    assert.ok(!/[.;] .*[.;] /.test(f.help), `${f.key}: the help is one short line`);
+    assert.ok(f.label, `${f.key} has a label`);
+    const help = f.help || '';
+    assert.ok(!/Default:/.test(help), `${f.key}: the default lives in defaultValue, not the help`);
+    assert.ok(!/[.;] .*[.;] /.test(help), `${f.key}: the help is one short line`);
     assert.equal(Boolean(f.group), f.key.startsWith('simulate.'), `${f.key}: only Server's simulate fields name a group`);
     if (f.group) assert.equal(groupById(f.group).section, f.section, `${f.key} names a group of another section`);
     if (f.type === 'select' || f.type === 'list' || f.type === 'set') assert.ok(f.options.length > 0, `${f.key} has options`);

@@ -71,7 +71,7 @@ export function QualitySheet({ url, title, tracks: expected, onProbed, onClose }
     ${state.loading
       ? html`<div class="quality-wait" role="status">
           <span class="pulse" data-role="info" aria-hidden="true"></span>
-          <span>${expected > 1 ? `Reading the master playlist of each of ${count(expected)} tracks.` : "Reading the track's master playlist."} ${expected > 30 ? 'This can take a minute.' : ''}</span>
+          <span>${expected > 1 ? `Reading the master playlist of each of ${count(expected)} tracks.` : "Reading the track's master playlist."}</span>
           <${Button} size="sm" className="quality-cancel" onClick=${onClose}>Cancel</${Button}>
         </div>`
       : null}

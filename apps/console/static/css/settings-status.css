@@ -662,12 +662,6 @@
   line-height: var(--lh-14);
 }
 
-.settings-footnote {
-  color: var(--text-secondary);
-  font-size: var(--fs-12);
-  line-height: var(--lh-12);
-}
-
 .settings-panel[data-panel="config-file"] {
   display: flex;
   flex-direction: column;

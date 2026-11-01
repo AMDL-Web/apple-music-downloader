@@ -132,8 +132,7 @@ base durations (120 ms color, 200 ms overlays).
 
 ## Components
 
-- **Shell**: brand mark is a 34 px red gradient tile; "Console" group label via
-  `.nav::before`; nav glyphs in secondary ink (the current one primary); the
+- **Shell**: brand mark is a 34 px red gradient tile beside the bare name; nav glyphs in secondary ink (the current one primary); the
   current item is filled, with the panel radius. Logs at the sidebar's foot
   has a secondary, regular-weight label until it is the current page. The top
   bar is the frosted canvas with, in simulate mode, a neutral "Simulate" tag;
@@ -146,7 +145,7 @@ base durations (120 ms color, 200 ms overlays).
   primary ink on `--bg-fill` for the same reason. The icon rail (640-1023) shows the active count as a
   neutral `--bg-fill` badge.
 - **New download entry points**: in the sidebar a red pill as tall as a nav
-  row (36 px, 15 px semibold) above the "Console" label, a slightly darker
+  row (36 px, 15 px semibold) above the nav, a slightly darker
   fill (`--accent-hover`, no ring) while New download is open; on the rail a
   40 px red disc. Under 640
   px the third tab's mark is a 48 x 30 red capsule with a soft red shadow

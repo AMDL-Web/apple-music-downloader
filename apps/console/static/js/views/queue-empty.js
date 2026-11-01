@@ -8,14 +8,14 @@ const startAction = () => html`<${LinkButton} variant="primary" size="sm" icon="
 
 export function QueueEmpty({ filters, tabs, onClear, onShowAll }) {
   if (filters.q || filters.type) {
-    // The search covers the current tab only; say so, and which tab.
+    // The search covers the current tab only; the title names it.
     const tab = tabs.find((t) => t.value === filters.tab);
     const inTab = filters.tab !== 'all' && tab ? ` on the ${tab.label} tab` : '';
     return html`<${Empty}
       icon="search"
       title=${`No jobs match these filters${inTab}`}
       action=${html`<${Button} size="sm" onClick=${onClear}>Clear filters</${Button}>`}
-    >${filters.tab !== 'all' ? 'Other tabs may match; All searches every job.' : null}</${Empty}>`;
+    />`;
   }
   if (filters.tab === 'failed') return html`<${Empty} icon="circle-check" title="No failed jobs" />`;
   if (filters.tab === 'completed') return html`<${Empty} icon="list" title="No completed jobs yet" />`;

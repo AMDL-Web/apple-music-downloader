@@ -21,7 +21,7 @@ const GROUPED = new Set(['list', 'set']);
 /**
  * .field[data-key][data-type][data-wide][data-changed][data-invalid]
  * > .field-text (.field-label, .field-changed + Undo or .field-reset,
- * .field-help with a select's chosen .field-option-hint, then with `showKeys` .field-default and .field-key) +
+ * .field-help (when the field has help, or a select's chosen option a .field-option-hint), then with `showKeys` .field-default and .field-key) +
  * .field-control, then .field-error, .field-warning. A saved value that
  * differs from the default offers "Reset to default", which is an edit like
  * any other (Undo takes it back). A `disabled` field keeps its row and value
@@ -32,12 +32,13 @@ const GROUPED = new Set(['list', 'set']);
 export function SettingsField({ field, value, changed, error, warning, showKeys, disabled, after, extra, onChange, onRevert }) {
   const id = fieldId(field.key);
   const hasDefault = field.defaultValue !== undefined;
-  const described = [`${id}-help`, showKeys && hasDefault ? `${id}-default` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
+  // The chosen option's note joins the help line, so the control column stays a bare control.
+  const picked = field.type === 'select' ? field.options.find((o) => o.value === value) : null;
+  const hint = picked && picked.hint ? picked.hint : '';
+  const described = [field.help || hint ? `${id}-help` : '', showKeys && hasDefault ? `${id}-default` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
   const ctl = { ...extra, field, id, value, invalid: Boolean(error), described, onChange };
   const grouped = GROUPED.has(field.type);
   const resettable = !changed && hasDefault && value !== undefined && field.type !== 'token' && !sameValue(value, field.defaultValue);
-  // The chosen option's note joins the help line, so the control column stays a bare control.
-  const picked = field.type === 'select' ? field.options.find((o) => o.value === value) : null;
   return html`<div
     class="field"
     data-key=${field.key}
@@ -66,7 +67,9 @@ export function SettingsField({ field, value, changed, error, warning, showKeys,
             >Reset to default</button>`
           : null}
       </div>
-      <p class="field-help" id=${`${id}-help`}>${field.help}${picked && picked.hint ? html` <span class="field-option-hint">${picked.hint}</span>` : null}</p>
+      ${field.help || hint
+        ? html`<p class="field-help" id=${`${id}-help`}>${field.help}${field.help && hint ? ' ' : ''}${hint ? html`<span class="field-option-hint">${hint}</span>` : null}</p>`
+        : null}
       ${showKeys && hasDefault
         ? html`<p class="field-default" id=${`${id}-default`}>Default: <code class="field-default-value">${valueLabel(field, field.defaultValue)}</code>${field.defaultNote ? html`. ${field.defaultNote}` : null}</p>`
         : null}

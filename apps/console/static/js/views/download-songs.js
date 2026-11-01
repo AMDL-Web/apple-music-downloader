@@ -56,7 +56,7 @@ export function HitRow({ hit, row }) {
       aria-disabled=${busy || queued ? 'true' : undefined}
       aria-busy=${busy ? 'true' : undefined}
       aria-label=${queued ? `${v.title} is in the queue` : `Download ${v.title}`}
-      title=${queued ? 'Already in the queue' : prior ? 'In your library; tracks on disk are skipped unless Overwrite is on' : 'Download'}
+      title=${queued ? 'Already in the queue' : prior ? 'In your library' : 'Download'}
       onClick=${() => busy || queued || row.onDownload(hit)}
     />
   </li>`;

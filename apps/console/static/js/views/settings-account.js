@@ -74,7 +74,7 @@ export function AccountPanel({ children }) {
                 )}
               </ul>`
             : w.logged_in
-              ? html`<p class="small">An account is logged in. The session service does not say which one.</p>
+              ? html`<p class="small">An account is logged in.</p>
                   ${canLogin
                     ? html`<div class="form-actions">
                         <${Button} variant="secondary" size="sm" className="account-logout" onClick=${() => setLogout('')}>Log out…</${Button}>
@@ -179,7 +179,7 @@ function CommandLineLogin({ pending }) {
   if (pending) {
     return html`<div class="account-block holds-room" aria-hidden="true">
       <h3 class="section-title">Logged-in accounts</h3>
-      <p class="small">An account is logged in. The session service does not say which one.</p>
+      <p class="small">An account is logged in.</p>
     </div>`;
   }
   return html`<section class="account-block" aria-labelledby="login-title">
@@ -314,7 +314,6 @@ function LoginForm({ onDone, again, managed, off }) {
     <p class="muted small">${managed ? 'A login replaces the current account and takes several minutes.' : 'Logging in can take up to two minutes.'}</p>
     <div class="form-row">
       <label class="field-label" for="login-user">Apple ID</label>
-      <p class="field-help" id="login-user-help">The email address or phone number you sign in to Apple Music with.</p>
       <input
         id="login-user"
         class="field-input"
@@ -323,7 +322,6 @@ function LoginForm({ onDone, again, managed, off }) {
         inputmode="email"
         autocomplete="username"
         autocapitalize="off"
-        aria-describedby="login-user-help"
         spellcheck="false"
         required
         disabled=${off}

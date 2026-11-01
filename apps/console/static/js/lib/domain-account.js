@@ -47,7 +47,6 @@ export function account(s, ctx) {
       tag: { icon: 'triangle-alert', role: 'warning', label: 'Not logged in' },
       figure: { value: 'No account', word: true },
       viz: chips,
-      note: { text: 'Log in so downloads can be decrypted', role: 'warning' },
       summary: { text: 'Not logged in', role: 'warning' },
     };
   }

@@ -140,8 +140,7 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
       const storage = sys && Array.isArray(sys.storage) ? sys.storage : null;
       const after = Object.fromEntries(Object.keys(STORAGE_NAMES).map((k) => [k, html`<${FolderStatus} fieldKey=${k} storage=${storage} />`]));
       return html`<${Notice} role="warning" icon="triangle-alert">
-          Changing a folder or a template changes where new downloads are saved. Tracks already saved under the old names are
-          not recognized as downloaded, so they download again.
+          After a folder or template change, tracks saved under the old names download again.
         </${Notice}>
         ${fieldRows(fields, after, undefined, { 'download.force_overwrite': html`<${SkipExistingField} key="local-skip" />` })}`;
     }

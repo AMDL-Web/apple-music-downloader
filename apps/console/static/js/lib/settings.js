@@ -15,7 +15,8 @@ const OLDER_LAYOUT_NOTE = 'An install upgraded from an older version may still u
 /**
  * One field per editable key. type: switch | select | number | text | path |
  * template | token | list (ordered, from options) | set (unordered, from
- * options). A `custom` select also takes any other value through a text box. `help` is one short line about the effect; `defaultValue` is the
+ * options). A `custom` select also takes any other value through a text box. `help`, when there is one, is one short line with what the label and
+ * control don't show (a range, a dependency, a behavior that isn't the obvious one); `defaultValue` is the
  * value a key missing from the file takes (configs/config.example.yaml), shown
  * with the key on demand and used by Reset to default. Fields under a
  * section's sub-heading name their `group`. select options may carry a hint, added to the help line while chosen.
@@ -54,7 +55,6 @@ export const FIELDS = [
     section: 'quality',
     type: 'switch',
     label: 'Fall back to the next codec',
-    help: 'When a codec fails, try the next one in the list.',
     defaultValue: true,
   },
   {
@@ -90,7 +90,6 @@ export const FIELDS = [
     section: 'quality',
     type: 'select',
     label: 'When an album link points to one track',
-    help: 'For example a link copied from a song on an album page.',
     defaultValue: 'song',
     options: [
       { value: 'song', label: 'Download that track' },
@@ -103,7 +102,7 @@ export const FIELDS = [
     section: 'files',
     type: 'path',
     label: 'Downloads folder',
-    help: 'Where finished tracks are saved. A relative path starts at the backend’s folder.',
+    help: 'A relative path starts at the backend’s folder.',
     defaultValue: 'data/downloads',
   },
   {
@@ -111,7 +110,6 @@ export const FIELDS = [
     section: 'files',
     type: 'path',
     label: 'Temporary folder',
-    help: 'Work space while a track is processed; on the same disk as the downloads folder is fastest.',
     defaultValue: 'data/tmp',
   },
   {
@@ -119,7 +117,6 @@ export const FIELDS = [
     section: 'files',
     type: 'switch',
     label: 'Overwrite existing files',
-    help: 'Download tracks again even when they are already on disk.',
     defaultValue: false,
   },
   { key: 'download.album_path_format', section: 'files', type: 'template', label: 'Albums', help: '{SongNumber} keeps counting across discs.', defaultValue: 'albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
@@ -154,7 +151,6 @@ export const FIELDS = [
     section: 'lyrics_artwork',
     type: 'select',
     label: 'Cover format',
-    help: 'The image type of covers.',
     defaultValue: 'jpg',
     options: [
       { value: 'jpg', label: 'JPEG (.jpg)' },
@@ -162,11 +158,11 @@ export const FIELDS = [
       { value: 'png', label: 'PNG (.png)' },
     ],
   },
-  { key: 'download.embed_cover', section: 'lyrics_artwork', type: 'switch', label: 'Embed the cover in each track', help: 'Music players show it as the artwork.', defaultValue: true },
-  { key: 'download.save_album_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save an album cover file', help: 'Saved in the album’s folder.', defaultValue: true },
+  { key: 'download.embed_cover', section: 'lyrics_artwork', type: 'switch', label: 'Embed the cover in each track', defaultValue: true },
+  { key: 'download.save_album_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save an album cover file', defaultValue: true },
   { key: 'download.save_artist_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save an artist picture file', help: 'Saved in the artist’s folder, when the path has one.', defaultValue: true },
-  { key: 'download.save_playlist_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save a playlist cover file', help: 'Saved with playlist downloads.', defaultValue: true },
-  { key: 'download.embed_lyrics', section: 'lyrics_artwork', type: 'switch', label: 'Embed lyrics in each track', help: 'Synced LRC that music players show while the song plays.', defaultValue: true },
+  { key: 'download.save_playlist_cover', section: 'lyrics_artwork', type: 'switch', label: 'Save a playlist cover file', defaultValue: true },
+  { key: 'download.embed_lyrics', section: 'lyrics_artwork', type: 'switch', label: 'Embed lyrics in each track', defaultValue: true },
   {
     key: 'download.lyrics_files',
     section: 'lyrics_artwork',
@@ -184,11 +180,11 @@ export const FIELDS = [
     section: 'lyrics_artwork',
     type: 'select',
     label: 'Lyrics timing',
-    help: 'How finely LRC lyrics follow the song.',
+    help: 'Word by word is Enhanced LRC; songs Apple doesn’t time word by word stay line by line.',
     defaultValue: 'line',
     options: [
       { value: 'line', label: 'Line by line' },
-      { value: 'word', label: 'Word by word', hint: 'Enhanced LRC. Songs Apple doesn’t time word by word stay line by line.' },
+      { value: 'word', label: 'Word by word' },
     ],
   },
   {
@@ -209,7 +205,7 @@ export const FIELDS = [
     section: 'jobs',
     type: 'number',
     label: 'Tries per file',
-    help: 'How many times each step is tried before the track fails (1-10).',
+    help: 'For each step of a track (1-10).',
     defaultValue: 3,
     min: 1,
     max: 10,
@@ -219,7 +215,6 @@ export const FIELDS = [
     section: 'jobs',
     type: 'select',
     label: 'Memory use',
-    help: 'Faster with more RAM, or slower and lighter.',
     defaultValue: 'low',
     options: [
       { value: 'low', label: 'Low memory', hint: 'Streams each track to disk: little RAM, more temporary files.' },
@@ -231,7 +226,7 @@ export const FIELDS = [
     section: 'jobs',
     type: 'number',
     label: 'Progress updates every',
-    help: 'Shorter is smoother, longer is lighter; 0 updates each percent (0-10000).',
+    help: '0 updates each percent (0-10000).',
     defaultValue: 500,
     min: 0,
     max: 10000,
@@ -242,7 +237,7 @@ export const FIELDS = [
     section: 'jobs',
     type: 'switch',
     label: 'Check file integrity',
-    help: 'Verify each finished file and repair known ALAC issues.',
+    help: 'Also repairs known ALAC issues.',
     defaultValue: true,
   },
   {
@@ -279,7 +274,6 @@ export const FIELDS = [
     section: 'logging',
     type: 'select',
     label: 'Log level',
-    help: 'Messages below this level are dropped.',
     defaultValue: 'info',
     options: [
       { value: 'debug', label: 'Debug' },
@@ -288,7 +282,7 @@ export const FIELDS = [
       { value: 'error', label: 'Error' },
     ],
   },
-  { key: 'logging.access_log', section: 'logging', type: 'switch', label: 'HTTP access log', help: 'One line per HTTP request.', defaultValue: false },
+  { key: 'logging.access_log', section: 'logging', type: 'switch', label: 'HTTP access log', defaultValue: false },
   // Server › Simulate
   {
     key: 'simulate.enabled',
@@ -296,7 +290,6 @@ export const FIELDS = [
     group: 'simulate',
     type: 'switch',
     label: 'Simulate mode',
-    help: 'Jobs move through their steps at the simulated speeds below.',
     defaultValue: false,
   },
   { key: 'simulate.min_speed_kbps', section: 'server', group: 'simulate', type: 'number', label: 'Slowest simulated speed', help: 'At least 1.', defaultValue: 512, min: 1, unit: 'KB/s' },

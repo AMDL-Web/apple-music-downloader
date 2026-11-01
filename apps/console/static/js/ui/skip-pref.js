@@ -27,7 +27,7 @@ export function SkipExistingField() {
   return html`<div class="field" data-key="local.skip_existing" data-type="switch">
     <div class="field-text">
       <div class="field-label-row"><label class="field-label" for=${id}>Always skip files already downloaded</label></div>
-      <p class="field-help" id=${`${id}-help`}>This browser: a download skips tracks already on disk instead of asking.</p>
+      <p class="field-help" id=${`${id}-help`}>Saved in this browser only.</p>
     </div>
     <div class="field-control">
       <input

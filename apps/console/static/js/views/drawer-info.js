@@ -31,7 +31,7 @@ let downloadsDir; // the configured downloads folder, read once per page load; n
  * tracks were written to (from the items' `output_path`; an album or a song),
  * or, when they went to several folders (a playlist, an artist), the downloads
  * folder from GET /config with a count of the folders under it. A link to
- * Settings > Files & naming, where the name templates are set, follows.
+ * Settings > Storage & files, where the name templates are set, follows.
  */
 export function FilesSection({ items }) {
   const folders = outputFolders(items);
@@ -62,7 +62,7 @@ export function FilesSection({ items }) {
         : html`<span class="muted">The downloads folder</span>`}
     </div>
     ${folders.length > 1 ? html`<p class="drawer-files-note muted small">Spread over ${count(folders.length)} folders.</p>` : null}
-    <a class="drawer-files-link" href=${settingsHash('files')}>Files & naming</a>
+    <a class="drawer-files-link" href=${settingsHash('files')}>Storage & files</a>
   </section>`;
 }
 

@@ -122,7 +122,6 @@ export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloade
       : reloadError
         ? html`<${ReloadError} key=${tries} message=${reloadError} announce=${tries > 0} />`
         : null}
-    <p class="settings-footnote">Also read at startup from configs/config.yaml: log outputs, session service timeouts, token cache.</p>
   </div>`;
 }
 

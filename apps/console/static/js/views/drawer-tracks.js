@@ -57,7 +57,7 @@ export function AlbumProgress({ job, items }) {
     </div>
     <div class="abar-caption num" aria-hidden="true">
       <span class="abar-count">${resolving ? 'Resolving' : `${short ? p.onDisk : p.lit} / ${p.total}`}${speed ? html`<span class="abar-rate" title=${speed}>${speed}</span>` : null}</span>
-      <span class="abar-pct">${resolving || short || p.total === 1 ? '' : `${p.percent}%`}</span>
+      <span class="abar-pct">${resolving || short || p.total === 1 || job.status === 'queued' ? '' : `${p.percent}%`}</span>
     </div>
   </div>`;
 }

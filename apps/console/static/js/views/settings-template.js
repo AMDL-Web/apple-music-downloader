@@ -38,7 +38,6 @@ export function usePopoverClose(open, root, opener, close) {
 }
 
 const DESCRIBED = new Map(TEMPLATE_VARIABLES);
-const CHIP_HINT = 'Pick a variable to insert it at the cursor.';
 
 export function TemplateControl({ field, id, value, invalid, described, onChange }) {
   const [open, setOpen] = useState(false);
@@ -132,7 +131,7 @@ export function TemplateControl({ field, id, value, invalid, described, onChange
           </div>
           <div class="template-popover-foot">
             <p class="template-var-desc" id=${`${id}-var-desc`}>
-              ${active ? html`<span class="mono">{${active}}</span>: ${DESCRIBED.get(active)}.` : CHIP_HINT}
+              ${active ? html`<span class="mono">{${active}}</span>: ${DESCRIBED.get(active)}.` : '\u00a0'}
             </p>
             <${Button} variant="secondary" size="sm" className="template-vars-done" onClick=${done}>Done</${Button}>
           </div>

@@ -104,8 +104,8 @@ export function SelectionBar({ jobs, selected, count, shown, plan, selecting, ru
       >${v.label(k)}</${Button}>`;
     });
   let hint = null;
-  if (selecting && !run && actions.length === 0) {
-    hint = html`<span class=${n === 0 ? 'bulk-hint is-intro' : 'bulk-hint'}>${n === 0 ? 'Select jobs to retry, cancel or remove them.' : 'No action applies to these jobs.'}</span>`;
+  if (selecting && !run && actions.length === 0 && n > 0) {
+    hint = html`<span class="bulk-hint">No action applies to these jobs.</span>`;
   }
   return html`<div class="bulk-bar" data-state=${run ? 'run' : 'select'} role="group" aria-label="Selection">
     ${selecting

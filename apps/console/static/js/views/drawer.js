@@ -132,7 +132,7 @@ export function JobDrawer({ jobId, onClose }) {
       <div class="drawer-scroll">
         ${missing
           ? html`<h2 id="drawer-title" class="sr-only">Download not found</h2>
-              <${Empty} icon="circle-slash" title="No download with this id">It may have been deleted, or the link may have a typo.</${Empty}>`
+              <${Empty} icon="circle-slash" title="No download with this id" />`
           : deleted
           ? html`<h2 id="drawer-title" class="sr-only">Job deleted</h2><${Empty} icon="circle-slash" title="This job was deleted" />`
           : !job && error

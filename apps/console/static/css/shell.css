@@ -70,14 +70,6 @@
   font-weight: var(--w-title);
 }
 
-/* Skin opt-in. */
-.brand-sub {
-  display: none;
-  color: var(--text-secondary);
-  font-size: var(--fs-11);
-  line-height: var(--lh-11);
-}
-
 .nav {
   list-style: none;
   margin: 0;

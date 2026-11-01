@@ -114,7 +114,7 @@ function Latest({ job }) {
       ${job.motion_artwork_url ? html`<${MotionCover} job=${job} size=${112} />` : null}
     </${Artwork}>
     <span class="latest-text">
-      <span class="latest-kicker">Latest · ${typeLabel(job.type)}</span>
+      <span class="latest-kicker">${typeLabel(job.type)}</span>
       <span class="latest-title" dir="auto" title=${jobTitle(job)}>${jobTitle(job)}</span>
       <span class="latest-artist" dir="auto">${jobSubtitle(job) || ' '}</span>
       <span class="latest-facts" title=${facts}>${facts || ' '}</span>
