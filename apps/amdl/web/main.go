@@ -95,4 +95,7 @@ func main() {
 	}()
 	_, _ = p.Run() // the page offers a new session either way
 	js.Global().Call("amdlExit")
+	// Returning would end the program while the runtime still has a timer
+	// set in JS, which throws "Go program has already exited" when it fires.
+	select {}
 }
