@@ -135,7 +135,7 @@ func TestQuickIntegrityRejectsADamagedSampleTable(t *testing.T) {
 		{"stco missing", func(d []byte) { copy(d[f.atom(t, "stco", 0):], "free") }, "alac sample table: stco/co64 atom missing"},
 		{"stsz lists no samples", func(d []byte) { put32(d, f.atom(t, "stsz", 0)+12, 0) }, "lists 0 samples"},
 		{"chunks place no samples", func(d []byte) { put32(d, f.atom(t, "stco", 0)+8, 0) }, "its chunks place 0"},
-		{"stsz count beyond its table", func(d []byte) { put32(d, f.atom(t, "stsz", 0)+12, uint32(len(f.locs)*50)) }, "sample table"},
+		{"stsz count beyond its table", func(d []byte) { put32(d, f.atom(t, "stsz", 0)+12, uint32(len(f.locs)*50)) }, "stsz sample table truncated"},
 		{"ALAC config missing", func(d []byte) { copy(d[f.atom(t, "alac", 1):], "free") }, "missing ALAC config atom"},
 	}
 	for _, tc := range cases {
@@ -155,6 +155,8 @@ func TestQuickIntegrityRejectsADamagedSampleTable(t *testing.T) {
 func TestQuickIntegrityWalksTopLevelBoxes(t *testing.T) {
 	f := loadQuickFixture(t, quickTestALACOf(t, 2))
 	p := quickTestProcessor()
+	// Every case below relies on moov being the last top-level box of the
+	// fixture: boxes are appended after it, and cutting at moov.start drops it.
 	large := func(typ string, payload int) []byte {
 		b := boxHeader(typ, 1)
 		b = binary.BigEndian.AppendUint64(b, uint64(16+payload))
@@ -207,7 +209,7 @@ func TestQuickIntegrityReportsAMissingFile(t *testing.T) {
 	}
 }
 
-// A packet whose first element tag is not one ALAC defines cannot be parsed.
+// A packet whose first element tag the packet scan does not support cannot be parsed.
 // It sits away from the ends, so only the packet scan sees it, and the error
 // says which packet.
 func TestQuickIntegrityRejectsAnUnparsableALACPacket(t *testing.T) {
