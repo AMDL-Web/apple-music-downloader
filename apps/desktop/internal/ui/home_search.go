@@ -43,7 +43,7 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 		case q.Result == nil:
 			skeletonGroups(c, k, width)
 		case store.NoHits(q.Result):
-			searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "Try fewer words, or the name as Apple Music writes it.")
+			searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "")
 		case q.Focus != "":
 			a.focusedGroup(c, k, sel, width)
 		default:
@@ -104,7 +104,7 @@ func (a *App) focusedGroup(c *ui.Context, k *Tokens, sel *client.SearchHit, widt
 		if hg != nil && hg.NextOffset > 0 {
 			skeletonTiles(c, k, width, 5)
 		} else {
-			searchMessage(c, k, icSearch, "No "+g+" for “"+q.Term+"”", "Try another tab, or fewer words.")
+			searchMessage(c, k, icSearch, "No "+g+" for “"+q.Term+"”", "")
 		}
 	} else {
 		a.groupGrid(c, k, g, hg.Items, sel, width)
@@ -207,7 +207,7 @@ func (a *App) artistView(c *ui.Context, k *Tokens, sel *client.SearchHit, width 
 		return
 	}
 	if len(ar.Albums.Items) == 0 {
-		searchMessage(c, k, icLibrary, "No albums", "Apple Music lists no albums for this artist here.")
+		searchMessage(c, k, icLibrary, "No albums", "")
 		return
 	}
 	ui.Column(c).Gap(14).Children(func() {
@@ -376,7 +376,9 @@ func searchMessage(c *ui.Context, k *Tokens, ic *ui.SVG, title, help string) {
 	ui.Column(c).Height(260).Center().Gap(8).Children(func() {
 		ui.Icon(c, ic).FontSize(26).TextColor(k.Faint)
 		ui.Text(c, title).FontSize(15).FontWeight(650).TextAlign(ui.Center)
-		ui.Text(c, help).FontSize(12.5).TextColor(k.Muted).MaxWidth(420).TextAlign(ui.Center)
+		if help != "" {
+			ui.Text(c, help).FontSize(12.5).TextColor(k.Muted).MaxWidth(420).TextAlign(ui.Center)
+		}
 	})
 }
 
