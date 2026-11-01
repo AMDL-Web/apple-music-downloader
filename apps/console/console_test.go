@@ -431,6 +431,21 @@ func TestIndexHasNoInlineCode(t *testing.T) {
 	}
 }
 
+// TestSegmentedKeepsItsWidthWhenPressed guards the cause of buttons that moved
+// their neighbors: the pressed segment is semibold, so every label carries its
+// semibold self hidden in the same grid cell, and pressing one changes no width.
+// It was measured in Chrome as 1.6 px of shift on the queue tabs.
+func TestSegmentedKeepsItsWidthWhenPressed(t *testing.T) {
+	if js := readStatic(t, "js/ui/components.js"); !strings.Contains(js, `class="seg-label" data-label=${o.label}`) {
+		t.Errorf("Segmented labels do not carry data-label, so the semibold width is not reserved")
+	}
+	css := readStatic(t, "css/controls.css")
+	rule := regexp.MustCompile(`(?s)\.seg-label::after\s*\{[^}]*content:\s*attr\(data-label\);[^}]*font-weight:\s*var\(--w-semibold\);[^}]*\}`)
+	if !rule.MatchString(css) || !regexp.MustCompile(`\.seg-label\s*\{\s*display:\s*inline-grid;`).MatchString(css) {
+		t.Errorf("css/controls.css does not reserve the semibold width of a segment label")
+	}
+}
+
 var (
 	specPath    = regexp.MustCompile(`(?m)^  (/api/[^\s:]+):\s*$`)
 	clientPath  = regexp.MustCompile(`/api/v1/(?:[A-Za-z0-9_\-./]|\$\{[^}]*\})*`)

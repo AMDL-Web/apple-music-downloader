@@ -265,7 +265,7 @@ export function Segmented({ label, options, value, onChange, size }) {
         onClick=${() => onChange(o.value)}
       >
         ${o.icon ? html`<${Icon} name=${o.icon} />` : null}
-        ${o.iconOnly ? null : html`<span>${o.label}</span>`}
+        ${o.iconOnly ? null : html`<span class="seg-label" data-label=${o.label}>${o.label}</span>`}
         ${o.count !== undefined ? html`<span class="seg-count">${o.count}</span>` : null}
       </button>`,
     )}

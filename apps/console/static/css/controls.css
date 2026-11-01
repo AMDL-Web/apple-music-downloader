@@ -128,6 +128,21 @@
   color: var(--text-primary);
 }
 
+/* The pressed button is semibold in the skin; every label keeps the width of
+   its semibold self, so pressing one moves no button. */
+.seg-label {
+  display: inline-grid;
+  text-align: center;
+}
+
+.seg-label::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--w-semibold);
+}
+
 .seg-count {
   font-size: var(--fs-12);
   line-height: var(--lh-12);
