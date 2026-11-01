@@ -19,7 +19,7 @@ import (
 // decryptor nor ffmpeg, and never deletes a real download even under force.
 type simulatedMedia struct{ cfg config.Config }
 
-// simulatedLyricsTTML stands in for the wrapper's lyrics document, so the
+// simulatedLyricsTTML stands in for Apple's lyrics document, so the
 // lyrics conversion and lyrics_status behave as in a real download.
 const simulatedLyricsTTML = `<tt><body><div><p begin="00:00.000">Simulated lyrics</p></div></body></tt>`
 

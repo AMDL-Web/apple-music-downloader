@@ -171,14 +171,15 @@ read [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) before you upgrade.
 
 <p align="center">
   <img src="./docs/assets/architecture.svg" width="100%"
-       alt="Architecture: the web console calls amdl's REST and SSE API; amdl keeps jobs in SQLite, runs each track through its pipeline and writes files to downloads_dir; the wrapper supplies key templates, manifests, lyrics and licenses; Apple's amp-api serves the catalog and its CDN the encrypted segments">
+       alt="Architecture: the web console calls amdl's REST and SSE API; amdl keeps jobs in SQLite, runs each track through its pipeline and writes files to downloads_dir; the wrapper supplies key templates and the Hi-Res manifest, and lyrics and licenses when amdl has no media-user-token; Apple's amp-api serves the catalog and lyrics, its play hosts the AAC-LC playlist and license, and its CDN the encrypted segments">
 </p>
 
 **The wrapper.** amdl holds no Apple account and no keys. For each FairPlay key it asks
 the wrapper for a white-box template (`/key`) and decrypts the samples itself, in-process,
 with `internal/fairplay`, a pure-Go translation of
-[Temari](https://github.com/WorldObservationLog/Temari). The wrapper also serves lyrics,
-the AAC-LC license, and the device manifest for Hi-Res ALAC tracks. amdl starts without
+[Temari](https://github.com/WorldObservationLog/Temari). The wrapper also serves the
+device manifest for Hi-Res ALAC tracks; lyrics and the AAC-LC license come from Apple
+directly when amdl can read a media-user-token, and from the wrapper otherwise. amdl starts without
 a wrapper; `GET /api/v1/wrapper/status` and the console's Settings page say whether it is
 reachable and logged in.
 

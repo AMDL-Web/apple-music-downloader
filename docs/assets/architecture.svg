@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 1045" width="1040" height="1045" role="img" aria-labelledby="t d">
 <title id="t">amdl architecture</title>
-<desc id="d">The web console calls amdl's /api/v1 REST and SSE API. Inside amdl, the HTTP API feeds the job queue, which stores jobs, items and events in SQLite, fires job hooks, and runs each track through the media pipeline; the pipeline decrypts samples in-process with internal/fairplay and writes tagged files to downloads_dir. A wrapper, wrapper-manager v2 (recommended, console login) in front of wrapper-lite or a bare wrapper-lite, supplies white-box key templates, the device manifest for Hi-Res ALAC, lyrics and the AAC-LC license. Apple's amp-api serves the catalog with a token scraped from music.apple.com, and Apple's media CDN serves the encrypted segments.</desc>
+<desc id="d">The web console calls amdl's /api/v1 REST and SSE API. Inside amdl, the HTTP API feeds the job queue, which stores jobs, items and events in SQLite, fires job hooks, and runs each track through the media pipeline; the pipeline decrypts samples in-process with internal/fairplay and writes tagged files to downloads_dir. A wrapper, wrapper-manager v2 (recommended, console login) in front of wrapper-lite or a bare wrapper-lite, supplies white-box key templates and the device manifest for Hi-Res ALAC, and lyrics and the AAC-LC license when amdl has no media-user-token. Apple's amp-api serves the catalog and lyrics and its play hosts the AAC-LC playlist and license, with a token scraped from music.apple.com, and Apple's media CDN serves the encrypted segments.</desc>
 <defs>
 <pattern id="minor" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#7fb0e6" stroke-opacity="0.13" stroke-width="0.6"/></pattern>
 <pattern id="major" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#minor)"/><path d="M 100 0 L 0 0 0 100" fill="none" stroke="#9cc3ee" stroke-opacity="0.26" stroke-width="1"/></pattern>
@@ -112,18 +112,20 @@
 <text x="572" y="557.2" text-anchor="middle" font-size="11">key template</text>
 <rect x="99.0" y="902.0" width="112" height="20" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
 <text x="155" y="916.2" text-anchor="middle" font-size="11">one per account</text>
-<rect x="180.0" y="691.0" width="220" height="62" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
-<text x="290" y="705.2" text-anchor="middle" font-size="11">/key: white-box key template</text>
-<text x="290" y="719.2" text-anchor="middle" font-size="11">/m3u8: device manifest</text>
-<text x="290" y="733.2" text-anchor="middle" font-size="11">(Hi-Res ALAC only)</text>
-<text x="290" y="747.2" text-anchor="middle" font-size="11">/lyrics, /webplayback, /license</text>
+<rect x="180.0" y="684.0" width="220" height="76" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="290" y="698.2" text-anchor="middle" font-size="11">/key: white-box key template</text>
+<text x="290" y="712.2" text-anchor="middle" font-size="11">/m3u8: device manifest</text>
+<text x="290" y="726.2" text-anchor="middle" font-size="11">(Hi-Res ALAC only)</text>
+<text x="290" y="740.2" text-anchor="middle" font-size="11">no media-user-token:</text>
+<text x="290" y="754.2" text-anchor="middle" font-size="11">/lyrics, /webplayback, /license</text>
 <rect x="12.5" y="705.0" width="99" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
 <text x="62" y="719.2" text-anchor="middle" font-size="11">console login</text>
 <text x="62" y="733.2" text-anchor="middle" font-size="11">POST /login</text>
-<rect x="583.5" y="698.0" width="213" height="48" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
-<text x="690" y="712.2" text-anchor="middle" font-size="11">catalog: metadata, enhancedHls</text>
-<text x="690" y="726.2" text-anchor="middle" font-size="11">token scraped from</text>
-<text x="690" y="740.2" text-anchor="middle" font-size="11">music.apple.com</text>
+<rect x="603.5" y="691.0" width="173" height="62" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
+<text x="690" y="705.2" text-anchor="middle" font-size="11">catalog, lyrics; play.*:</text>
+<text x="690" y="719.2" text-anchor="middle" font-size="11">AAC-LC playlist, license</text>
+<text x="690" y="733.2" text-anchor="middle" font-size="11">token scraped from</text>
+<text x="690" y="747.2" text-anchor="middle" font-size="11">music.apple.com</text>
 <rect x="856.0" y="705.0" width="72" height="34" rx="2" fill="#0c2f57" stroke="#b9d3f2" stroke-opacity="0.75" stroke-width="0.8"/>
 <text x="892" y="719.2" text-anchor="middle" font-size="11">encrypted</text>
 <text x="892" y="733.2" text-anchor="middle" font-size="11">segments</text>

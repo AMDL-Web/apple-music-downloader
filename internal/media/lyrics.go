@@ -20,8 +20,8 @@ const appleLyricsNamespace = "http://music.apple.com/lyric-ttml-internal"
 
 // trackLyrics is one track's lyrics in the forms its outputs take: lrc for
 // the tag and the .lrc sidecar, ttml for the .ttml sidecar. ttml is empty
-// when the wrapper only had plain text, which it sends either as a bare
-// string or as a TTML document with itunes:timing="None".
+// when Apple only had plain text, which comes either as a bare string or as
+// a TTML document with itunes:timing="None".
 type trackLyrics struct {
 	lrc  string
 	ttml string
@@ -50,11 +50,11 @@ func isLyricsNotFound(err error) bool {
 	return errors.As(err, &reply) && reply.Code == http.StatusNotFound
 }
 
-// fetchLyricsDocument asks the wrapper for the word-timed document, which
-// also carries line timing, the translation and the romanization. A song
-// without synced lyrics has no such document, and only the line-timed
-// request (syllable=0) falls back to Apple's plain text, so a miss asks once
-// more that way.
+// fetchLyricsDocument asks for the word-timed document, which also carries
+// line timing, the translation and the romanization (realMedia.lyrics: from
+// Apple directly or from the wrapper). A song without synced lyrics has no
+// such document at the wrapper, and only its line-timed request (syllable=0)
+// falls back to Apple's plain text, so a wrapper miss asks once more that way.
 func fetchLyricsDocument(ctx context.Context, media mediaBackend, songID string, cfg config.Config) (string, error) {
 	doc, err := media.lyrics(ctx, songID, lyricsRequest(cfg, true))
 	if isLyricsNotFound(err) {
@@ -147,7 +147,7 @@ func untimedTTML(root *lyricNode) bool {
 	return strings.EqualFold(attr(root, "itunes:timing", "timing"), "none")
 }
 
-// lyricsLRC renders the wrapper's lyrics document as LRC. Each line is
+// lyricsLRC renders the lyrics document as LRC. Each line is
 // stamped with its start; with word set, a line that has per-word times
 // becomes enhanced LRC instead. extras ("translation", "pronunciation") add
 // the line's translation and romanization (Apple's transliteration) under it

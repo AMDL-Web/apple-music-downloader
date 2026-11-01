@@ -2,7 +2,9 @@
 // account session. wrapper-lite serves device manifests, lyrics, web playback
 // manifests and Widevine licenses over HTTP, and for each FairPlay key URI a
 // white-box key template that this package runs in-process to decrypt media
-// samples.
+// samples. internal/media asks it for lyrics, web playback manifests and
+// licenses only when it cannot make those requests itself
+// (internal/media#playbackClient).
 package wrapper
 
 import (

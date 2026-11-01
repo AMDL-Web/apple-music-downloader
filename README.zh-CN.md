@@ -151,13 +151,14 @@ go run ./apps/amdl serve
 
 <p align="center">
   <img src="./docs/assets/architecture.svg" width="100%"
-       alt="架构：网页控制台调用 amdl 的 REST 与 SSE 接口；amdl 把作业存进 SQLite，让每首曲目走流水线，把文件写进 downloads_dir；wrapper 提供密钥模板、清单、歌词和许可证；Apple 的 amp-api 提供曲库数据，其 CDN 提供加密分片">
+       alt="架构：网页控制台调用 amdl 的 REST 与 SSE 接口；amdl 把作业存进 SQLite，让每首曲目走流水线，把文件写进 downloads_dir；wrapper 提供密钥模板和 Hi-Res 清单，amdl 没有 media-user-token 时也提供歌词和许可证；Apple 的 amp-api 提供曲库数据和歌词，其 play 主机提供 AAC-LC 播放列表和许可证，其 CDN 提供加密分片">
 </p>
 
 **wrapper。** amdl 自己不持有 Apple 账号，也没有密钥。对每个 FairPlay 密钥，它向 wrapper
 要一份白盒模板（`/key`），然后在本进程内用 `internal/fairplay` 自己解密样本；
 `internal/fairplay` 是 [Temari](https://github.com/WorldObservationLog/Temari) 的纯 Go 翻译。
-wrapper 还提供歌词、AAC-LC 许可证，以及 Hi-Res ALAC 曲目的设备清单。没有 wrapper 时 amdl
+wrapper 还提供 Hi-Res ALAC 曲目的设备清单；歌词和 AAC-LC 许可证在 amdl 读得到 media-user-token
+时直接向 Apple 请求，读不到时才由 wrapper 提供。没有 wrapper 时 amdl
 也能启动；`GET /api/v1/wrapper/status` 和控制台的 Settings 页面会显示它是否可达、是否已登录。
 
 **Apple 曲库。** 所有曲库读取都发往 `amp-api.music.apple.com`，用的是从 `music.apple.com`

@@ -226,8 +226,9 @@ needs the API changes below before it works against 2.0.
   `[lrc]`, with `ttml` it is `[ttml]`, `false` is `[]`; both can be written now), and
   `download.lyrics_type` became `download.lyrics_timing` (`lyrics` is `line`,
   `syllable-lyrics` is `word`). The old keys are rejected at startup. `lyrics_extras`
-  keeps its values and now shapes LRC only. Lyrics come from the wrapper account's
-  storefront, whatever the job's, with the translation in `catalog.language`.
+  keeps its values and now shapes LRC only. Lyrics come from the storefront of the
+  account whose media-user-token fetches them (the wrapper's), whatever the job's, with
+  the translation in `catalog.language`.
 
 ## Image and source tree
 
@@ -256,6 +257,7 @@ the Compose service name stay as they were.
 | Where the wrapper runs | whatever your wrapper-manager deployment needed | `wrapper-lite-rootless`, which both wrapper-lite's Docker image and wrapper-manager v2 run, needs user namespaces and `chroot`: `unshare -Ur true` must succeed on the wrapper host, and a Docker container needs `privileged: true` or a seccomp profile that allows them. A host without them uses wrapper-manager v2's QEMU variant, which needs `/dev/kvm` ([deployment guide](deployment.md#the-wrapper)), or, without Docker, a QEMU guest the `amdl` binary runs ([Install](install.md#a-wrapper-amdl-runs)) | wrapper hosts, Compose files |
 | Logging in from the console | `POST /wrapper/login`, `/login/{login_id}/2fa` and `/logout` went to the fork's gRPC login | they work when `wrapper.address` is a wrapper-manager v2, whose `POST /login` and `POST /logout` the backend forwards to, and with a wrapper amdl runs, which logs in by booting its guest; against a bare wrapper-lite they are `501 login_unsupported` and the console's Account page shows the wrapper's `--login` command instead. `GET /wrapper/status` reports which one it is in `login_supported` | the console's Account page, scripts that log in through the API |
 | A wrapper amdl runs | none | `amdl wrapper install` downloads upstream's guest and the backend runs it in QEMU on its own machine, with `wrapper.address` pointing at it (`amdl serve --local`, `amdl service install`, the desktop app); see [Install](install.md#a-wrapper-amdl-runs) | new: binary installs without Docker |
+| Lyrics, AAC-LC playlist and license | from the wrapper | from Apple, sent by the backend with the media-user-token it reads ([The media-user-token](configuration.md#the-media-user-token)); from the wrapper when it has none or Apple refuses it | none: outputs are the same |
 | Wrapper requests | gRPC calls, with `download.max_parallel_wrapper_requests` bounding them | HTTP; 4 lyrics, web playback and license requests and 2 `/key` and `/m3u8` requests at a time, fixed in the code | `config.yaml` files that set `download.max_parallel_wrapper_requests`, which is rejected (see [Config and environment](#config-and-environment)) |
 
 ## Hooks
@@ -333,7 +335,8 @@ last two only templates that use `{SongNumber}` or `{TrackCount}`:
   because of one. Before retrying such a job, check that the same link is not already
   queued or running.
 
-- Lyrics are rebuilt on wrapper-lite's `/lyrics`. A `.ttml` sidecar is always Apple's
+- Lyrics are rebuilt on Apple's `syllable-lyrics` document, which the backend fetches itself
+  with the media-user-token, or through wrapper-lite's `/lyrics` without one. A `.ttml` sidecar is always Apple's
   word-timed document with the translation and romanization in its head (1.x saved the
   line-timed one unless `lyrics_type` was `syllable-lyrics`). LRC output changes for the
   same song: background vocals are no longer dropped from word-timed lines, a

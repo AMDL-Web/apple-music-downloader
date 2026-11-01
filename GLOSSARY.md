@@ -10,7 +10,7 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | amp-api | `amp-api.music.apple.com`: Apple's undocumented web-player API, called with a scraped JWT and an `Origin` header; the only source of some fields | `internal/applemusic#CatalogClient.doWithWebAuth` |
 | Web-player JWT | The token scraped from music.apple.com's JS bundle that amp-api requires | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it. The wrapper's own (`MUSIC_TOKEN`) when the backend can read it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
+| Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it, and with it the backend fetches lyrics and the AAC-LC playlist and license from Apple itself. The wrapper's own (`MUSIC_TOKEN`) when the backend can read it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
 | Storefront | The country code in a link (`us`, `cn`) that selects Apple's regional catalog | `configs/config.example.yaml#catalog.default_storefront` |
 | enhancedHls | The amp-api-only HLS manifest that lists the lossless and spatial variants | `internal/applemusic#Song` |
 | editorialVideo, motion artwork | Animated album covers, amp-api only; absence is normal, never an error | `internal/applemusic#CatalogClient.MotionArtworkViaWebToken` |
@@ -20,7 +20,7 @@ wins when they disagree, so details are not copied here.
 
 | Term | Meaning | Source |
 | --- | --- | --- |
-| wrapper, wrapper-lite | The HTTP service that holds the Apple account session and serves device manifests, licenses, lyrics and per-key decryption templates; required for real downloads | `internal/wrapper#Client` |
+| wrapper, wrapper-lite | The HTTP service that holds the Apple account session and serves device manifests and per-key decryption templates, and lyrics and AAC-LC licenses when the backend has no media-user-token to ask Apple itself; required for real downloads | `internal/wrapper#Client` |
 | wrapper-manager | Upstream v2 gateway in front of one wrapper-lite per account; the only upstream wrapper with the login API behind the console's Account page (`login_supported`) | `internal/wrapper#Client.StartLogin` |
 | Managed wrapper | A wrapper-lite that amdl runs itself in a QEMU guest on the backend's machine (`amdl wrapper install`); it logs in by booting the guest with the account, and `GET /wrapper/status` describes it in `managed` | `internal/wrapperhost#Supervisor` |
 | Key template | The `ctx` and `state` tables wrapper-lite's `/key` returns for a FairPlay key URI; `internal/fairplay` decrypts samples with it, in-process | `internal/fairplay#Template` |

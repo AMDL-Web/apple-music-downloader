@@ -191,7 +191,17 @@ func (m realMedia) coverArt(ctx context.Context, urls []string, format, size str
 	return m.d.fetchCover(ctx, urls, format, size)
 }
 
+// lyrics answers the word-timed request in process when it can. Apple's
+// syllable-lyrics answer is the document wrapper-lite returns for syllable=1,
+// or the plain text it returns for the syllable=0 retry, so that retry
+// (fetchLyricsDocument) only follows a wrapper 404 and always goes to the
+// wrapper.
 func (m realMedia) lyrics(ctx context.Context, songID string, opts wrapper.LyricsRequestOptions) (string, error) {
+	if opts.Syllable {
+		if doc, handled, err := m.d.lyricsInProcess(ctx, songID, opts.Language); handled {
+			return doc, err
+		}
+	}
 	return m.d.wrapper.Lyrics(ctx, songID, opts)
 }
 
@@ -200,7 +210,7 @@ func (m realMedia) requireTools(ctx context.Context) error {
 }
 
 func (m realMedia) resolveAACLC(ctx context.Context, songID string) (aacLCMedia, error) {
-	playlistURL, err := m.d.wrapper.WebPlayback(ctx, songID)
+	playlistURL, err := m.d.webPlaybackURL(ctx, songID)
 	if err != nil {
 		return aacLCMedia{}, fmt.Errorf("request AAC-LC WebPlayback: %w", err)
 	}
@@ -285,7 +295,7 @@ func (m realMedia) decryptAACLC(ctx context.Context, req decryptRequest, hooks d
 	if err != nil {
 		return err
 	}
-	license, err := m.d.wrapper.License(ctx, req.songID, base64.StdEncoding.EncodeToString(challenge), req.aacLC.KeyURI)
+	license, err := m.d.aacLCLicense(ctx, req.songID, base64.StdEncoding.EncodeToString(challenge), req.aacLC.KeyURI)
 	if err != nil {
 		return fmt.Errorf("request AAC-LC license: %w", err)
 	}
@@ -348,10 +358,10 @@ func (m realMedia) commit(staged stagedFile, outPath string) (int64, error) {
 	return outputFileSize(outPath), nil
 }
 
-// lyricsRequest builds the wrapper's lyrics options: the translation comes in
-// the catalog language, and the romanization script stays wrapper-lite's
-// default, which already picks the right one per lyrics language. wrapper-lite
-// answers from its own account's storefront, whatever the job's.
+// lyricsRequest builds the lyrics options: the translation comes in the
+// catalog language, and the romanization script stays wrapper-lite's default
+// (en-Latn, which applemusic.CatalogClient.SongLyrics sends too). Lyrics come
+// from the token account's storefront, whatever the job's.
 func lyricsRequest(cfg config.Config, syllable bool) wrapper.LyricsRequestOptions {
 	return wrapper.LyricsRequestOptions{Language: cfg.Catalog.Language, Syllable: syllable}
 }

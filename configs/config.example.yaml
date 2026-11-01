@@ -123,7 +123,8 @@ catalog:
   # enum: song, album. song means album URLs containing ?i= are single-song tasks; album downloads the full album.
   album_track_url_mode: "song"
   # string: optional Apple Music subscription token (media-user-token); album, song and playlist downloads do not need it.
-  # Station downloads need one, and private playlist covers and library sync use one. This key is the fallback: while
+  # Station downloads need one, and private playlist covers and library sync use one; with one, lyrics and the AAC-LC
+  # playlist and license are requested from Apple by the backend instead of the wrapper. This key is the fallback: while
   # the backend can read the wrapper's own token (a wrapper it runs itself, or wrapper.data_dir), it uses that one and
   # leaves this value saved but unused. A download or lookup request cannot supply its own token.
   # Runtime: a change applies to jobs and lookups that start afterwards. GET /api/v1/config returns it masked, "..."

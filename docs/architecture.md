@@ -104,7 +104,12 @@ guest (`internal/wrapperhost`, the managed wrapper). What the backend asks for:
 - `/m3u8`: the device master playlist, asked for only by a Hi-Res Lossless track whose
   ALAC may exceed 48 kHz, because the web player's playlist can omit the higher
   renditions; every other master playlist comes from the catalog response.
-- `/lyrics`, `/webplayback` (the AAC-LC fallback) and `/license` (Widevine), 24 at a time.
+- `/lyrics`, `/webplayback` (the AAC-LC fallback) and `/license` (Widevine), 4 at a time,
+  only when the backend cannot send them to Apple itself: it has no media-user-token
+  ([The media-user-token](configuration.md#the-media-user-token)), or Apple refused the one
+  it read. With a token, lyrics come from amp-api and the AAC-LC playlist and license from
+  the web player's `play.music.apple.com` and `play.itunes.apple.com`
+  (`internal/media#playbackClient`).
 - `/status`: connectivity, the storefront regions served, and for a wrapper-manager
   `clientCount` and `ready`, whose presence is how the backend tells the two apart.
 

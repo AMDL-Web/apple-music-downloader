@@ -69,7 +69,11 @@ and cover art are all handled in-process by the Go `mp4ff` and `go-mp4tag` libra
 - `download.quality_priority` — the ordered Enhanced HLS fallback chain. Supported:
   `alac`, `aac`, `aac-binaural`, `aac-downmix`, `ec3`, `ac3`.
 - `aac-lc` never needs listing. With codec fallback enabled it is appended automatically
-  as the final WebPlayback floor.
+  as the final WebPlayback floor. Its playlist and Widevine license come from the web
+  player's `play.music.apple.com` (`webPlayback`) and `play.itunes.apple.com`
+  (`acquireWebPlaybackLicense`), asked by the backend with the media-user-token, or from
+  the wrapper's `/webplayback` and `/license` when it has none or Apple refuses it
+  (`failureType`, `401`, `403`). Other failures follow the attempt budget below.
 - `download.codec_alternative` — whether to continue down the chain after a codec's
   retries are exhausted. Off means only the first codec is tried.
 - `download.max_attempts` — maximum total attempts (including the first) for metadata,
@@ -156,11 +160,11 @@ which leaves a thread for another client, and closes an idle one after a few sec
 | `download.max_running_jobs` | 3 (default) | Worker slots — concurrently running jobs |
 | `download.max_parallel_downloads` | 16 (default) | Encrypted media transfers in flight |
 | Decrypts | CPUs (`GOMAXPROCS`) | Tracks in the decrypt stage, and the goroutines decrypting their samples |
-| Wrapper requests | 4 | Wrapper lyrics, web playback and license requests |
+| Wrapper requests | 4 | Wrapper lyrics, web playback and license requests, sent only without a usable media-user-token |
 | Wrapper playback requests | 2 | Wrapper `/key` and `/m3u8`, which wrapper-lite answers one at a time |
 | Wrapper manifest requests | 1 | Wrapper `/m3u8`, and `/key` fetched ahead of need, holding or waiting for a playback permit, so they never hold both |
-| `catalog.max_parallel_requests` | 16 (default) | Apple control-plane HTTP: Catalog API, web token, HLS manifests, artwork |
-| Catalog rate | 10 per second | Sustained authenticated Catalog / amp-api rate |
+| `catalog.max_parallel_requests` | 16 (default) | Apple control-plane HTTP: Catalog API, web token, HLS manifests, artwork, web playback and licenses |
+| Catalog rate | 10 per second | Sustained authenticated amp-api and `play.*` rate |
 | Catalog burst | 16 | Token-bucket burst for the same traffic |
 
 Decryption runs in the backend: wrapper-lite's `/key` returns a white-box template per
@@ -223,12 +227,23 @@ behind it.
 
 ## Lyrics
 
-Each track with lyrics takes one wrapper request, sent by the first codec attempt whose
-output path is free, so a track already on disk takes none: `/lyrics` with `syllable=1`, which
-returns Apple's word-timed TTML with the translation in `catalog.language` (when Apple has
-one) and the romanization. wrapper-lite answers from its own account's storefront. A song
-with only plain-text lyrics has no such document, so a `404` asks once more with
-`syllable=0`, which falls back to the plain text; a second `404` is final and not retried.
+Each track with lyrics takes one request, sent by the first codec attempt whose output
+path is free, so a track already on disk takes none. It asks for Apple's word-timed TTML
+with the translation in `catalog.language` (when Apple has one) and the romanization, or
+Apple's plain text when that is all there is, always from the storefront of the account
+whose media-user-token it carries.
+
+- With a media-user-token ([Configuration](configuration.md#the-media-user-token)), the
+  backend asks amp-api's `syllable-lyrics` itself, after reading the account's storefront
+  from `/v1/me/storefront` once per token. Apple answers a song without lyrics and a
+  refused token with the same `404`, so a `404`, a `401` or `403`, or an unreadable
+  storefront hands the request to the wrapper as below; a `5xx`, `429` or timeout is
+  retried like any other required read (`download.max_attempts`).
+- Otherwise the wrapper's `/lyrics` with `syllable=1`, which answers from its own account's
+  storefront. A song with only plain-text lyrics has no such document there, so a `404`
+  asks once more with `syllable=0`, which falls back to the plain text; a second `404` is
+  final and not retried.
+
 Everything else is derived from that one document:
 
 - `download.embed_lyrics` — write LRC into the MP4 tag.

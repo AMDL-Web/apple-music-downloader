@@ -2,21 +2,24 @@ package applemusic
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"amdl/internal/config"
 	"amdl/internal/limits"
 )
 
-// CatalogClient reads Apple Music catalog, artwork and library metadata. One
-// client is shared process-wide; it owns the Apple request gate and both token
-// caches.
+// CatalogClient reads Apple Music catalog, artwork and library metadata, and
+// asks the web player's playback hosts for AAC-LC playlists and licenses. One
+// client is shared process-wide; it owns the Apple request gate and the token
+// cache.
 type CatalogClient struct {
 	cfg    config.CatalogConfig
 	http   *http.Client
@@ -26,8 +29,14 @@ type CatalogClient struct {
 	// verified without sleeping through the production fallback delay.
 	retryDelay func(http.Header) time.Duration
 	// webToken is the scraped music.apple.com web-player JWT that authorizes
-	// every request, amp-api being the only host this client talks to.
+	// every request.
 	webToken tokenCache
+
+	// accountMu guards the AccountStorefront answer for the token whose
+	// SHA-256 is accountKey.
+	accountMu         sync.Mutex
+	accountKey        [sha256.Size]byte
+	accountStorefront string
 }
 
 // NewCatalogClient builds the client. It does no I/O; run RunTokenRefresher for

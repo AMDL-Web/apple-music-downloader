@@ -221,9 +221,10 @@ def architecture():
             "track through the media pipeline; the pipeline decrypts samples in-process with "
             "internal/fairplay and writes tagged files to downloads_dir. A wrapper, wrapper-manager v2 "
             "(recommended, console login) in front of wrapper-lite or a bare wrapper-lite, supplies "
-            "white-box key templates, the device manifest for Hi-Res ALAC, lyrics and the AAC-LC "
-            "license. Apple's amp-api serves the catalog with a token scraped from music.apple.com, and "
-            "Apple's media CDN serves the encrypted segments.")
+            "white-box key templates and the device manifest for Hi-Res ALAC, and lyrics and the AAC-LC "
+            "license when amdl has no media-user-token. Apple's amp-api serves the catalog and lyrics "
+            "and its play hosts the AAC-LC playlist and license, with a token scraped from "
+            "music.apple.com, and Apple's media CDN serves the encrypted segments.")
     s.heading = "amdl and what it talks to"
     s.legend(30, 60, 980, [("client", "start"), ("amdl", "check"), ("on disk", "wrote"),
                            ("wrapper", "draw"), ("Apple", "publish"), ("alternative", "stopped")])
@@ -261,12 +262,12 @@ def architecture():
     # wrapper -> pipeline, login -> wrapper-manager
     s.edge(f"M 300 770 C 300 700 470 690 470 640 L 470 {MED['bottom'] + 1}",
            "/key: white-box key template\n/m3u8: device manifest\n(Hi-Res ALAC only)\n"
-           "/lyrics, /webplayback, /license", (290, 722))
+           "no media-user-token:\n/lyrics, /webplayback, /license", (290, 722))
     s.edge(f"M {API['left']} {API['cy']} C 70 {API['cy']} 62 {API['cy'] + 12} 62 {API['cy'] + 40} "
            f"L 62 790 C 62 810 80 816 95 {WM['top'] - 1}",
            "console login\nPOST /login", (62, 722))
     s.edge(f"M 670 {AMP['top']} C 670 740 705 720 705 690 L 705 575 C 705 540 620 545 620 {MED['bottom'] + 1}",
-           "catalog: metadata, enhancedHls\ntoken scraped from\nmusic.apple.com", (690, 722))
+           "catalog, lyrics; play.*:\nAAC-LC playlist, license\ntoken scraped from\nmusic.apple.com", (690, 722))
     s.edge(f"M 880 {CDN['top']} C 880 560 760 {MED['cy']} {MED['right'] + 1} {MED['cy']}",
            "encrypted\nsegments", (892, 722))
     return s.render()

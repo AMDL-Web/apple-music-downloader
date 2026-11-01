@@ -99,6 +99,15 @@ two kinds (`internal/applemusic/AGENTS.md`):
   Each degrades to "not available" and never fails a job. A song with no usable web or
   device manifest falls back to the next codec.
 
+With a media-user-token (`internal/usertoken`), the backend also asks Apple for what
+wrapper-lite would otherwise fetch with it: lyrics (amp-api `syllable-lyrics`, from the
+token account's storefront), and AAC-LC's playlist and Widevine license from the web
+player's playback hosts `play.music.apple.com` (`webPlayback`) and `play.itunes.apple.com`
+(`acquireWebPlaybackLicense`), with the same scraped JWT. These are required like the reads
+above. Without a token, or when Apple refuses it, they go to the wrapper as before
+(`internal/media#playbackClient`); `/key`, `/m3u8`, the token itself and login stay with
+the wrapper.
+
 ## Data safety
 
 - A schema change is a new migration that keeps every existing row

@@ -130,9 +130,12 @@ account session. `wrapper.data_dir` is a runtime key; the other three apply afte
 ### The media-user-token
 
 Station downloads, private playlist covers and library sync need the Apple Music
-media-user-token of a subscribed account. The wrapper keeps its logged-in account's token
-in a file named `MUSIC_TOKEN` and refreshes it itself, so the backend uses that one
-whenever it can read it, and `catalog.media_user_token` only when it cannot:
+media-user-token of a subscribed account. With one, the backend also fetches lyrics and the
+AAC-LC playlist and license from Apple itself rather than through the wrapper
+([Download pipeline](download-pipeline.md#lyrics)); without one, the wrapper does that.
+The wrapper keeps its logged-in account's token in a file named `MUSIC_TOKEN` and
+refreshes it itself, so the backend uses that one whenever it can read it, and
+`catalog.media_user_token` only when it cannot:
 
 - A wrapper the backend runs itself (`amdl wrapper install`): read from the guest's disk,
   with nothing to configure. `wrapper.data_dir` is ignored, and startup says so when it is

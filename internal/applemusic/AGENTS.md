@@ -1,11 +1,15 @@
 # internal/applemusic
 
-Apple Music link parsing and catalog reads, all on amp-api. The token cache and the
-request path are in the package comment (`go doc ./internal/applemusic`); root
+Apple Music link parsing and catalog reads, all on amp-api, plus the web player's two
+playback requests on `play.music.apple.com` and `play.itunes.apple.com`. The token cache
+and the request path are in the package comment (`go doc ./internal/applemusic`); root
 `AGENTS.md` "Apple catalog reads" lists which reads are required and which degrade.
 
 - A required read (the link's resource, a track's song metadata) returns its error,
   a `catalogRequestError` for a non-2xx answer, so the caller's retries decide.
+- `WebPlayback`, `License` and `SongLyrics` carry the media-user-token and are required:
+  their errors go back as they are, and `IsUserTokenRejected` marks the ones (401, 403, a
+  `play.*` `failureType`) after which internal/media asks the wrapper instead.
 - A new optional read follows `MotionArtworkViaWebToken` or `libraryArtworkURL`: a
   failure, timeout or unexpected shape means "not available" to the caller, with a
   test for that path. `Song` treats its album enrichment the same way.
@@ -14,7 +18,8 @@ request path are in the package comment (`go doc ./internal/applemusic`); root
   (https://developer.apple.com/documentation/applemusicapi.md). A field that exists
   only on amp-api has no documentation, so the PR carries a captured response as
   evidence.
-- Strip `Authorization`, `Media-User-Token`, cookies and the scraped JWT from any
+- Strip `Authorization`, `Media-User-Token`, `X-Apple-Music-User-Token`, Widevine
+  challenges and licenses, cookies and the scraped JWT from any
   captured request or response before it becomes a fixture or a log line.
 
 ## Verify

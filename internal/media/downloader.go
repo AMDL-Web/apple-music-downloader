@@ -27,16 +27,20 @@ type Downloader struct {
 	// that build a Downloader literal around a fixed config.
 	store *config.Store
 	cfg   config.Config
-	// tokens picks the media-user-token for playlists and stations; nil
-	// uses catalog.media_user_token alone.
+	// tokens picks the media-user-token for playlists, stations and the
+	// in-process playback requests; nil uses catalog.media_user_token alone.
 	tokens  *usertoken.Provider
 	catalog downloaderCatalog
-	wrapper downloaderWrapper
-	tools   *ToolChecker
-	http    *http.Client
-	mp4     *MP4Processor
-	covers  *coverCache
-	logger  *slog.Logger
+	// playback sends lyrics, WebPlayback and license requests to Apple
+	// itself when there is a media-user-token (see playbackClient); nil
+	// leaves all of them to the wrapper.
+	playback playbackClient
+	wrapper  downloaderWrapper
+	tools    *ToolChecker
+	http     *http.Client
+	mp4      *MP4Processor
+	covers   *coverCache
+	logger   *slog.Logger
 	// These limiters are created once by NewDownloader and deliberately remain
 	// shared by every shallow withConfig clone, so limits apply across jobs.
 	downloadLimit *limits.Semaphore
@@ -86,7 +90,7 @@ type downloaderWrapper interface {
 func NewDownloader(store *config.Store, tokens *usertoken.Provider, catalog *applemusic.CatalogClient, wrapperClient *wrapper.Client, tools *ToolChecker, logger *slog.Logger) *Downloader {
 	cfg := store.Get()
 	return &Downloader{
-		store: store, cfg: cfg, tokens: tokens, catalog: catalog, wrapper: wrapperClient, tools: tools,
+		store: store, cfg: cfg, tokens: tokens, catalog: catalog, playback: catalog, wrapper: wrapperClient, tools: tools,
 		http: newHTTPClient(), mp4: newMP4Processor(cfg), logger: logger,
 		downloadLimit:   limits.NewSemaphore(cfg.Download.MaxParallelDownloads),
 		decryptLimit:    limits.NewSemaphore(config.MaxParallelDecrypts),

@@ -1,8 +1,10 @@
 package applemusic
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"time"
@@ -100,14 +102,19 @@ func (c *CatalogClient) refreshExpiringWebToken(ctx context.Context) {
 	}
 }
 
-// appleRequest is an authorized Apple request as doWithAuth rebuilds it for
-// its retry. Every caller sends no body.
+// appleRequest is an authorized Apple request as doWithWebAuth rebuilds it
+// for its retry.
 type appleRequest struct {
 	method string
 	url    string
-	// mediaUserToken, when set, is sent as Media-User-Token for reads that
-	// need the user's subscription identity.
-	mediaUserToken string
+	// body, when set, is sent as JSON. It stays bytes so the retry can send it
+	// again.
+	body []byte
+	// mediaUserToken, when set, is sent in userTokenHeader (Media-User-Token
+	// when that is empty) for requests that need the user's subscription
+	// identity.
+	mediaUserToken  string
+	userTokenHeader string
 }
 
 // doWithWebAuth sends r with the scraped web-player JWT and the Origin header
@@ -116,13 +123,24 @@ type appleRequest struct {
 // second 401 included, goes back to the caller as-is.
 func (c *CatalogClient) doWithWebAuth(ctx context.Context, r appleRequest) (*http.Response, error) {
 	send := func(token string) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, r.method, r.url, nil)
+		var body io.Reader
+		if r.body != nil {
+			body = bytes.NewReader(r.body)
+		}
+		req, err := http.NewRequestWithContext(ctx, r.method, r.url, body)
 		if err != nil {
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		if r.body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		if r.mediaUserToken != "" {
-			req.Header.Set("Media-User-Token", r.mediaUserToken)
+			header := r.userTokenHeader
+			if header == "" {
+				header = "Media-User-Token"
+			}
+			req.Header.Set(header, r.mediaUserToken)
 		}
 		req.Header.Set("Origin", "https://music.apple.com")
 		req.Header.Set("User-Agent", "Mozilla/5.0")
