@@ -240,19 +240,24 @@ wrapper-manager. Accounts in several storefronts are not supported yet.
 
 The wrapper-lite that amdl points to is AMDL-Web's fork of
 [upstream's `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite)
-with one patch. Upstream keeps the FairPlay decrypt context of every `/key`; after
+with three changes. Upstream keeps the FairPlay decrypt context of every `/key`; after
 1024 of them in one process every `/key` fails
 (`KDCanProcessCKC status: -42786` in the wrapper's log, `wrapper /key: code 500` in
 amdl's) until the wrapper restarts. The fork frees each context once its template is
-copied. The managed wrapper and both compose wrapper services run the fork.
+copied. It also fetches the persistent key once per `/key` instead of twice, which
+halves the time a `/key` takes, and adds `GET /token`, which returns the account's
+music token: whoever reaches the wrapper's port can read it. The managed wrapper and
+both compose wrapper services run the fork.
 
 wrapper-manager is AMDL-Web's fork of [upstream's `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2),
-changed only to download the fork's wrapper-lite. It records where its installed
-payload came from and, on start, replaces one installed by upstream's wrapper-manager,
-keeping the accounts; an existing `wrapper-data` volume or QEMU `data.img` switches on
-the first start of the fork's build. If that download fails, it keeps the old payload
-and tries again on the next start. Neither upstream nor the fork builds a native arm64
-wrapper-lite, so on arm64 wrapper-manager runs only as its QEMU variant.
+changed to download the fork's wrapper-lite and to forward its `GET /token`. It
+records where its installed payload came from and, on start, replaces one installed by
+upstream's wrapper-manager, keeping the accounts; an existing `wrapper-data` volume or
+QEMU `data.img` switches on the first start of the fork's build. If that download
+fails, it keeps the old payload and tries again on the next start. It does not pick up
+a newer build of the fork by itself: start it once with `-update-wrapper` to replace
+the payload. Neither upstream nor the fork builds a native arm64 wrapper-lite, so on
+arm64 wrapper-manager runs only as its QEMU variant.
 
 Run natively or in upstream's Docker image, both use `wrapper-lite-rootless`, which needs
 user namespaces and `chroot` on a Linux host: `unshare -Ur true` must

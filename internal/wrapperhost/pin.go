@@ -11,9 +11,10 @@ import (
 )
 
 // GuestRepo is the GitHub repository whose build-lite artifacts hold the
-// guest: AMDL-Web's fork of WorldObservationLog/wrapper. Its lite branch
-// carries a patch that frees each FairPlay decrypt context after /key; upstream
-// leaks them and stops serving keys after 1024 per start.
+// guest: AMDL-Web's fork of WorldObservationLog/wrapper. Its lite branch frees
+// each FairPlay decrypt context after /key (upstream leaks them and stops
+// serving keys after 1024 per start) and fetches the persistent key once per
+// /key instead of twice.
 const GuestRepo = "AMDL-Web/wrapper"
 
 // Pin names one qemu-assets artifact of GuestRepo's build-lite workflow and
@@ -28,16 +29,16 @@ type Pin struct {
 	Expires    time.Time `json:"expires_at"`
 }
 
-// Builtin is the pin this binary was released with: run 41328721176 of
-// build-lite on GuestRepo's lite at 582abf6. Its sha256 is the artifact's
+// Builtin is the pin this binary was released with: run 41349452725 of
+// build-lite on GuestRepo's lite at 34e9b57. Its sha256 is the artifact's
 // digest from the GitHub API, which matched the bytes nightly.link served for it.
 var Builtin = Pin{
-	Commit:     "582abf6e1a2e9dcc0497f183138111bbc7dadd45",
-	RunID:      41328721176,
-	ArtifactID: 13092436409,
-	SHA256:     "5892e22d14381849f620400b2fa4d505e44c58d45d6b890f49f3305798fb5ad8",
-	Size:       64461982,
-	Expires:    time.Date(2027, 1, 30, 16, 54, 41, 0, time.UTC),
+	Commit:     "34e9b5796c0db25daa541694ae2b23c2501f89a3",
+	RunID:      41349452725,
+	ArtifactID: 13100636411,
+	SHA256:     "f5099cdc14a66a2cbde84605ff5c86eb616c58cd8b6fe2c29814fe1464e6a199",
+	Size:       64474799,
+	Expires:    time.Date(2027, 1, 30, 20, 57, 10, 0, time.UTC),
 }
 
 // ManifestURL serves the current pin as JSON, kept on its own branch so that
