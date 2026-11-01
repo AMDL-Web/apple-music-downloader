@@ -26,7 +26,9 @@ func queueApp(t *testing.T) (*App, func(until func() bool)) {
 	a.Store.SetOmniText("https://music.apple.com/us/album/salt-static/920004\nhttps://music.apple.com/us/album/tidal-rooms/920002")
 	run(func() bool { return len(a.Store.Startable()) == 2 })
 	a.Store.Submit()
-	run(func() bool { return len(a.Store.Queued()) == 3 })
+	// The feed can list the new jobs before the submit's own answer comes;
+	// that answer's notice, landing later, would cover a test's own.
+	run(func() bool { return len(a.Store.Queued()) == 3 && a.Store.Notice.Text == "2 downloads started" })
 	return a, run
 }
 
