@@ -251,10 +251,12 @@ console's Account page, the terminal interface's `/login`, or `amdl wrapper logi
 secrets redacted, and `amdl wrapper stop` / `start` turn it off and on.
 
 While the guest is installed, a `--wrapper` address given to that backend is ignored,
-with a line in its log, and `amdl config set wrapper.address=...` is refused. To use
-another wrapper instead, run `amdl wrapper uninstall`, then
-`amdl config set wrapper.address=<address>` and `amdl system restart` (or
-`amdl service install --wrapper <address>`).
+with a line in its log, and `amdl config set wrapper.address=...` is refused. That
+lasts until the backend's process starts again, which `amdl system restart` does not
+do. To use another wrapper instead, run `amdl wrapper uninstall`, then
+`amdl service install --wrapper <address>`; or restart the service (or reopen the
+desktop app), then `amdl config set wrapper.address=<address>` and
+`amdl system restart`.
 
 | Host | Acceleration |
 | --- | --- |

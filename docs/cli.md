@@ -371,8 +371,10 @@ says what is left to do.
 While the guest is installed, `--wrapper` does not apply to a backend that runs on the
 local files: it logs that the address is ignored and keeps using the guest, and the API
 refuses to change `wrapper.address` (`config_key_not_mutable`, reason `managed_wrapper`).
-To use another wrapper, run `amdl wrapper uninstall`, then
-`amdl config set wrapper.address=<address>` and `amdl system restart`. `amdl system get`
+The refusal lasts until the backend's process starts again; `amdl system restart` keeps
+the process, so it does not lift it. To use another wrapper, run `amdl wrapper uninstall`,
+then `amdl service install --wrapper <address>`; or restart the service (or reopen the
+desktop app), then `amdl config set wrapper.address=<address>` and `amdl system restart`. `amdl system get`
 shows the address in use as `startup.wrapper_address`, and every hint about the
 wrapper's address says the same.
 

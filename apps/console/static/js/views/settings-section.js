@@ -125,8 +125,13 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
       const token = tokenState(cfg.loaded ? cfg.base['catalog.media_user_token'] || '' : undefined, st.wrapper);
       const syncWaits = cfg.loaded && cfg.base['library_sync.enabled'] === true && token.known && !token.present;
       const tokenField = fields.filter((f) => f.key === 'catalog.media_user_token');
-      return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${st.wrapper && st.wrapper.data} />
-        ${fieldRows(fields.filter((f) => f.key !== 'catalog.media_user_token'))}
+      const wrapper = st.wrapper && st.wrapper.data;
+      // While amdl runs the wrapper itself, its fact row (factRows) stands in
+      // for the wrapper.address field, which the API refuses to change.
+      const managed = !sysPending && Boolean(wrapper && wrapper.managed);
+      const shown = fields.filter((f) => f.key !== 'catalog.media_user_token' && !(managed && f.key === 'wrapper.address'));
+      return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${wrapper} />
+        ${fieldRows(shown)}
         <${AccountPanel}>
           <section class="account-block" aria-label="Media user token">
             ${fieldRows(tokenField, undefined, { 'catalog.media_user_token': { wrapperToken: token.wrapperToken } })}

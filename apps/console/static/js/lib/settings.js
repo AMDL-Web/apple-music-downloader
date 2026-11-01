@@ -49,7 +49,6 @@ export const FIELDS = [
     section: 'account',
     type: 'path',
     label: 'Session service data folder',
-    help: 'Where its token is read; empty reads none.',
     defaultValue: '',
   },
   {
@@ -57,7 +56,6 @@ export const FIELDS = [
     section: 'account',
     type: 'select',
     label: 'Default storefront',
-    help: 'For search and links without a region.',
     defaultValue: 'cn',
     options: [
       { value: 'cn', label: 'China (CN)' },
@@ -360,9 +358,9 @@ export const FIELDS = [
   { key: 'logging.console', section: 'logging', type: 'switch', label: 'Log to stdout', help: RESTART, defaultValue: true, restart: true },
   { key: 'logging.buffer_size', section: 'logging', type: 'number', label: 'Log history', help: `0 keeps none. ${RESTART}`, defaultValue: 2000, min: 0, max: 100000, unit: 'lines', restart: true },
   // Server › Session service
-  { key: 'wrapper.timeout_seconds', section: 'server', group: 'wrapper', type: 'number', label: 'Session service timeout', help: `Per request. ${RESTART}`, defaultValue: 30, min: 1, unit: 's', restart: true },
-  { key: 'wrapper.login_timeout_seconds', section: 'server', group: 'wrapper', type: 'number', label: 'Sign-in timeout', help: `Per sign-in request. ${RESTART}`, defaultValue: 120, min: 1, unit: 's', restart: true },
-  { key: 'catalog.token_cache_ttl_hours', section: 'server', group: 'wrapper', type: 'number', label: 'Web token lifetime', help: `Refreshed halfway through. ${RESTART}`, defaultValue: 12, min: 1, unit: 'h', restart: true },
+  { key: 'wrapper.timeout_seconds', section: 'server', group: 'wrapper', type: 'number', label: 'Session service timeout', help: RESTART, defaultValue: 30, min: 1, unit: 's', restart: true },
+  { key: 'wrapper.login_timeout_seconds', section: 'server', group: 'wrapper', type: 'number', label: 'Sign-in timeout', help: RESTART, defaultValue: 120, min: 1, unit: 's', restart: true },
+  { key: 'catalog.token_cache_ttl_hours', section: 'server', group: 'wrapper', type: 'number', label: 'Web token lifetime', help: RESTART, defaultValue: 12, min: 1, unit: 'h', restart: true },
   // Server › Simulate
   {
     key: 'simulate.enabled',

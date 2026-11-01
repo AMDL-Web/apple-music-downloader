@@ -126,7 +126,7 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 			return config.Config{}, err
 		}
 		if s.wrapperManaged && merged.Wrapper.Address != current.Wrapper.Address {
-			err := errors.New("wrapper.address is set by the wrapper this machine runs; amdl wrapper uninstall stops that and lets an address apply")
+			err := errors.New("wrapper.address is set by the wrapper this machine runs; after amdl wrapper uninstall, an address can be set once the backend's process starts again")
 			reject = func(w http.ResponseWriter) {
 				writeErrorDetails(w, http.StatusUnprocessableEntity, CodeConfigKeyNotMutable, err.Error(),
 					map[string]any{"keys": []string{"wrapper.address"}, "reason": "managed_wrapper"})

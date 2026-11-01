@@ -182,7 +182,7 @@ func wrapperUninstallCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		if *purge {
 			v.Next = "to remove amdl as well: amdl service uninstall, then delete the amdl binary"
 		} else {
-			v.Next = "the account's disk is kept for a later amdl wrapper install; until then the backend needs a wrapper elsewhere: " + restartWithWrapper
+			v.Next = "the account's disk is kept for a later amdl wrapper install; until then the backend needs a wrapper elsewhere: " + otherWrapper
 		}
 		return e.out.result(v)
 	}

@@ -317,7 +317,7 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 	host := b.wrapperHost()
 	if host != nil {
 		if b.Wrapper != "" && wrapper.NormalizeAddress(b.Wrapper) != host.URL() {
-			fmt.Fprintf(logOut, "wrapper address %s ignored: this machine runs its own wrapper; amdl wrapper uninstall stops that and lets the address apply\n", b.Wrapper)
+			fmt.Fprintf(logOut, "wrapper address %s ignored: this machine runs its own wrapper; after amdl wrapper uninstall, the address applies once this process starts again\n", b.Wrapper)
 		}
 		b.Wrapper = host.URL()
 	}

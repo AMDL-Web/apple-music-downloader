@@ -163,6 +163,29 @@ func TestAccountSectionOffersTheLoginOnlyWhereItWorks(t *testing.T) {
 	}
 }
 
+// While this computer runs its own wrapper, the backend refuses a change to
+// wrapper.address, so its field is dimmed and takes no input.
+func TestWrapperAddressIsOffWhileThisComputerRunsTheWrapper(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	var f *configField
+	for i := range configFields {
+		if configFields[i].key == "wrapper.address" {
+			f = &configFields[i]
+		}
+	}
+	if f == nil {
+		t.Fatal("no wrapper.address field")
+	}
+	a.Store.Server.Wrapper = &client.WrapperStatus{Ready: true}
+	if a.fieldOff(f) {
+		t.Error("another machine's wrapper: the address should be editable")
+	}
+	a.Store.Server.Wrapper.Managed = &client.ManagedWrapper{Mode: "serving", Accel: "kvm"}
+	if !a.fieldOff(f) {
+		t.Error("this computer's wrapper: the address should be off")
+	}
+}
+
 func TestTokenFieldNamesTheWrappersToken(t *testing.T) {
 	a, _ := newTestApp(remoteSettings())
 	a.GoSettings("account")

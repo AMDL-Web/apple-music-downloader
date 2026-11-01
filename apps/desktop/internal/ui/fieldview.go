@@ -103,6 +103,10 @@ func (a *App) fieldOff(f *configField) bool {
 	case "download.integrity_mode":
 		on, _ := cf.Value("download.check_integrity").(bool)
 		return !on
+	case "wrapper.address":
+		// This computer's wrapper sets it, and the backend refuses a change.
+		w := a.Store.Server.Wrapper
+		return w != nil && w.Managed != nil
 	}
 	return false
 }
@@ -180,7 +184,7 @@ func (a *App) fieldControl(c *ui.Context, k *Tokens, f *configField, off bool) {
 			}
 		})
 	case fieldPath, fieldTemplate, fieldText:
-		a.pathField(c, k, f, valueText(v))
+		a.pathField(c, k, f, valueText(v), off)
 	case fieldToken:
 		a.tokenField(c, k, f, valueText(v))
 	case fieldList:
@@ -311,10 +315,10 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 // shows Apply and Revert while it differs from the saved value; the others
 // apply on Return or when the field loses the keyboard. In standalone mode
 // the folders are this computer's, so a folder chooser helps.
-func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string) {
+func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string, off bool) {
 	e := &a.set.edit
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		a.textField(c, k, f, saved, 0, false, func(s string) {
+		a.textField(c, k, f, saved, 0, off, func(s string) {
 			if f.confirm {
 				a.confirmField(f, s)
 				return
@@ -323,7 +327,7 @@ func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string) 
 		})
 		draft, edited := e.text[f.key]
 		if f.kind == fieldPath && a.Settings.Mode == mode.Standalone {
-			if button(c, k, buttonPlain, "Choose…", nil).Height(32).Clicked() {
+			if buttonOff(c, k, buttonPlain, "Choose…", nil, off).Height(32).Clicked() {
 				start := saved
 				if edited {
 					start = draft

@@ -48,6 +48,12 @@ func usageErr(format string, a ...any) error {
 const restartWithWrapper = "amdl system get shows the address in use as startup.wrapper_address; to change it, " +
 	"run amdl config set wrapper.address=<url> (or change it in the console's Settings), then amdl system restart"
 
+// otherWrapper is how a backend that ran this machine's wrapper takes another
+// one after amdl wrapper uninstall: the running process keeps refusing
+// wrapper.address, and amdl system restart keeps the process.
+const otherWrapper = "amdl service install --wrapper <url>; or restart the service (or reopen the desktop app), " +
+	"then amdl config set wrapper.address=<url> and amdl system restart"
+
 // exitFor maps an API error code to its exit status.
 func exitFor(code string, status int) int {
 	switch code {
@@ -100,7 +106,7 @@ func asCLIError(err error) *cliError {
 		case "config_key_not_mutable":
 			ce.Hint = "a file-only key: edit the file at startup.config_path (amdl system get), then amdl system restart"
 			if strings.Contains(string(api.Details), "managed_wrapper") {
-				ce.Hint = "this machine runs its own wrapper, which sets wrapper.address; amdl wrapper uninstall lets another address apply"
+				ce.Hint = "this machine runs its own wrapper, which sets wrapper.address; to use another, run amdl wrapper uninstall, then " + otherWrapper
 			}
 		case "wrapper_unavailable":
 			ce.Hint = "the backend cannot reach its wrapper; start the wrapper, or point the backend at another: " + restartWithWrapper

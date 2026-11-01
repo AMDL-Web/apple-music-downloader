@@ -2005,7 +2005,7 @@ components:
         default_storefront:
           type: string
           description: >-
-            catalog.default_storefront, a startup key (not in RuntimeConfig). The
+            catalog.default_storefront, a runtime key, as it runs. The
             API itself refuses a link without a storefront in its path (a
             submit result with invalid_url); a client that accepts such links, as
             the web console does, completes them with this value.
