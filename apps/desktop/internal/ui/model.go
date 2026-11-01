@@ -137,6 +137,9 @@ type App struct {
 	// store's Omni.Text.
 	field    ui.Handle
 	fieldTxt string
+	// fieldDrawn is the height the field was dragged to, in DIPs, which it
+	// keeps whatever its text until it empties; 0 while it fits its text.
+	fieldDrawn float32
 	// focusField asks home to put the keyboard in its field as it builds
 	// it, in the view that does: a render beside the window binds the
 	// field too, which an unaddressed Handle.Focus refuses.

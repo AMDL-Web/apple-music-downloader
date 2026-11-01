@@ -20,20 +20,13 @@ const (
 	dockPad = 8
 )
 
-// linkCards preview the pasted links before they start: one card per link
-// with its catalog cover and facts and whether it can start.
+// linkCards preview the pasted links before they start: one row per link,
+// as wide as the field above them, with its catalog cover and facts and
+// whether it can start.
 func (a *App) linkCards(c *ui.Context, k *Tokens, width float32) {
-	const gap = 12
-	// Two columns only where each card keeps room for its title beside its
-	// status.
-	cols := 2
-	if width < 820 {
-		cols = 1
-	}
-	cw := (width - gap*float32(cols-1)) / float32(cols)
-	ui.Row(c).Width(width).Wrap().Gap(gap).Children(func() {
+	ui.Column(c).Width(width).Gap(12).Children(func() {
 		for _, l := range a.Store.Omni.Links {
-			a.linkCard(c, k, l, cw)
+			a.linkCard(c, k, l, width)
 		}
 	})
 }
