@@ -6,7 +6,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -53,76 +52,6 @@ func buildEncryptedFixture(t *testing.T, plain []byte, key, iv []byte, kid mp4.U
 	ipd, err := mp4.InitProtect(file.Init, key, iv, "cenc", kid, nil)
 	if err != nil {
 		t.Fatalf("InitProtect: %v", err)
-	}
-	return encryptAndEncode(t, file, key, iv, ipd)
-}
-
-// buildALACEncryptedFixture mirrors buildEncryptedFixture but for ALAC.
-// mp4ff has no registered box decoder for a bare "alac" sample entry (only
-// the CENC-wrapped "enca" form is registered, since real Apple Music content
-// is always DRM-wrapped at rest), so ffmpeg's plain "alac"-named stsd entry
-// decodes as an opaque mp4.UnknownBox and mp4.InitProtect's type switch
-// (which requires *mp4.AudioSampleEntryBox) rejects it. To model what real
-// Apple ALAC content actually looks like on the wire -- an "enca" sample
-// entry wrapping sinf/tenc plus the original "alac" decoder-config atom as
-// an opaque child -- this rebuilds the sample entry by hand from the raw
-// bytes of ffmpeg's unencrypted "alac" box.
-func buildALACEncryptedFixture(t *testing.T, plain []byte, key, iv []byte, kid mp4.UUID) encryptedFixture {
-	t.Helper()
-	file, err := mp4.DecodeFile(bytes.NewReader(plain))
-	if err != nil {
-		t.Fatalf("decode plain fixture: %v", err)
-	}
-	if file.Init == nil || file.Init.Moov == nil {
-		t.Fatalf("plain fixture missing init segment")
-	}
-	stsd := file.Init.Moov.Trak.Mdia.Minf.Stbl.Stsd
-	if len(stsd.Children) == 0 {
-		t.Fatalf("plain ALAC fixture has empty stsd")
-	}
-	orig, ok := stsd.Children[0].(*mp4.UnknownBox)
-	if !ok {
-		t.Fatalf("plain ALAC stsd entry decoded as %T, want *mp4.UnknownBox (mp4ff added alac support upstream? update this test)", stsd.Children[0])
-	}
-	body := orig.Payload()
-	// ISO/IEC 14496-12 8.5.2/12.2.3: 6 reserved + 2 data_reference_index +
-	// 8 reserved + 2 channelcount + 2 samplesize + 2 pre_defined + 2
-	// reserved + 4 samplerate (16.16 fixed point) = 28 bytes, followed by
-	// the nested "alac" decoder-config atom.
-	if len(body) < 28 {
-		t.Fatalf("ALAC sample entry body too short: %d bytes", len(body))
-	}
-	channelCount := binary.BigEndian.Uint16(body[16:18])
-	sampleSize := binary.BigEndian.Uint16(body[18:20])
-	sampleRate := uint16(binary.BigEndian.Uint32(body[24:28]) >> 16)
-	configAtom := body[28:]
-	if len(configAtom) < 8 || string(configAtom[4:8]) != "alac" {
-		t.Fatalf("expected nested alac config atom, got %q", configAtom[4:8])
-	}
-	configBox := mp4.CreateUnknownBox("alac", uint64(len(configAtom)), configAtom[8:])
-
-	enca := mp4.CreateAudioSampleEntryBox("enca", channelCount, sampleSize, sampleRate, configBox)
-	tenc := &mp4.TencBox{Version: 0, DefaultIsProtected: 1, DefaultPerSampleIVSize: 16, DefaultKID: kid}
-	schi := &mp4.SchiBox{}
-	schi.AddChild(tenc)
-	sinf := &mp4.SinfBox{}
-	sinf.AddChild(&mp4.FrmaBox{DataFormat: "alac"})
-	sinf.AddChild(&mp4.SchmBox{SchemeType: "cenc", SchemeVersion: 65536})
-	sinf.AddChild(schi)
-	enca.AddChild(sinf)
-
-	stsd.Children[0] = enca
-	stsd.Enca = enca
-
-	// mp4ff used to let a caller assemble InitProtectData by hand (Tenc, Trex,
-	// Scheme, plus a ProtFunc returning no subsample patterns for full-sample
-	// audio encryption). Those fields are unexported now, so read the data back
-	// out of the init segment this function just protected by hand instead --
-	// which is exactly what ExtractInitProtectData is for. InitProtect is still
-	// not usable here: it would add a second sinf/tenc on top of the one above.
-	ipd, err := mp4.ExtractInitProtectData(file.Init)
-	if err != nil {
-		t.Fatalf("ExtractInitProtectData: %v", err)
 	}
 	return encryptAndEncode(t, file, key, iv, ipd)
 }
@@ -195,16 +124,15 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 		codec        string
 		encoder      string
 		movflags     string
-		alac         bool
 		duration     string
 		fragDuration string // forces multiple moof/mdat fragments per file, like a multi-fragment HLS segment
 	}{
 		{name: "aac", codec: "aac", encoder: "aac", movflags: "frag_keyframe+empty_moov+default_base_moof", duration: "2"},
-		{name: "alac", codec: "alac", encoder: "alac", movflags: "frag_keyframe+empty_moov+default_base_moof", alac: true, duration: "2"},
+		{name: "alac", codec: "alac", encoder: "alac", movflags: "frag_keyframe+empty_moov+default_base_moof", duration: "2"},
 		{name: "ec3", codec: "ec3", encoder: "eac3", movflags: "frag_keyframe+empty_moov+default_base_moof+delay_moov", duration: "2"},
 		{name: "ac3", codec: "ac3", encoder: "ac3", movflags: "frag_keyframe+empty_moov+default_base_moof+delay_moov", duration: "2"},
 		{name: "aac-multifrag", codec: "aac", encoder: "aac", movflags: "frag_keyframe+empty_moov+default_base_moof", duration: "5", fragDuration: "1000000"},
-		{name: "alac-multifrag", codec: "alac", encoder: "alac", movflags: "frag_keyframe+empty_moov+default_base_moof", alac: true, duration: "5", fragDuration: "1000000"},
+		{name: "alac-multifrag", codec: "alac", encoder: "alac", movflags: "frag_keyframe+empty_moov+default_base_moof", duration: "5", fragDuration: "1000000"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -228,12 +156,7 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			var fixture encryptedFixture
-			if tc.alac {
-				fixture = buildALACEncryptedFixture(t, plain, key, iv, kid)
-			} else {
-				fixture = buildEncryptedFixture(t, plain, key, iv, kid)
-			}
+			fixture := buildEncryptedFixture(t, plain, key, iv, kid)
 
 			cfg := config.Config{}
 			cfg.Download.TempDir = tmp
