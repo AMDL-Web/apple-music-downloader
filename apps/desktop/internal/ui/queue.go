@@ -176,7 +176,10 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		earlier = jobs
 	}
 	upNext := len(running)+len(queued) > 0
-	ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground).Children(func() {
+	top := ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground)
+	// The list's top, which the album page's lower panel flies from.
+	a.flyEdge(top)
+	top.Children(func() {
 		display(c, "Queue", 22).SingleLine()
 		segmentedRoom(c, k, "tabs", &a.Tab, tabs, room, map[int]ui.Color{int(store.TabFailed): k.Bad})
 		ui.Spacer(c)

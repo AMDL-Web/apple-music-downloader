@@ -169,12 +169,16 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	if in {
 		hc = hc.eased(c)
 	}
-	a.collectionHero(c, k, l, a.pageHead(c, k, l, p, j, pal, hc, video))
+	// The head is as tall whatever its title (collectionHero), so the lower
+	// panel is placed under it, and built first: absolute layers paint in
+	// the order they are built, and the head's parts fly over the panel.
 	// Opaque, so the backdrop, which lights the head, ends under it.
-	lower := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Background(detailGround(k)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line)
-	a.flyPanel(lower)
+	lower := ui.Row(c).Absolute().Top(l.height()).Left(0).Right(0).Bottom(0).AlignItems(ui.Stretch).
+		Background(detailGround(k)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Label("Tracks")
+	a.flyPanel(lower, k)
 	accent := hc.accent
 	lower.Children(func() {
+		a.panelEdge(c, detailGround(k))
 		a.pageTracks(c, k, j, accent, stageWidth(page))
 		if j != nil {
 			activity := float32(280)
@@ -183,6 +187,9 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 			}
 			a.activity(c, k, j, activity)
 		}
+	})
+	ui.Box(c).Absolute().Top(0).Left(0).Right(0).Children(func() {
+		a.collectionHero(c, k, l, a.pageHead(c, k, l, p, j, pal, hc, video))
 	})
 }
 
@@ -242,7 +249,7 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 		}
 	}
 	h.band = func() {
-		ui.Row(c).Gap(12).MaxWidth(620).Margin(8, 0, 0, 0).Children(func() {
+		ui.Row(c).Gap(12).MaxWidth(heroBand).Children(func() {
 			if j != nil {
 				jobFigures(c, k, l, j, hc)
 			} else {
@@ -250,14 +257,16 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 			}
 		})
 		if j != nil {
-			ui.Column(c).FillWidth().MaxWidth(620).Margin(6, 0, 0, 0).Children(func() {
+			ui.Column(c).FillWidth().MaxWidth(heroBand).Children(func() {
 				albumProgress(c, k, j, "album", 8, hc.title, hc.title.Alpha(0.16), hc.accent, hc.meta, 12)
 			})
 		}
 	}
-	h.actions = func() { a.pageActions(c, k, p, j, hc) }
 	return h
 }
+
+// heroBand is the widest the head's figures and bar run, in a wide window.
+const heroBand = 900
 
 // jobFigures are a download's figures under the title: what landed, which
 // counts the bytes still arriving while it runs, how fast, how long it has
@@ -308,18 +317,20 @@ func albumFigures(c *ui.Context, k *Tokens, l heroLayout, f albumFacts, hc heroC
 	}
 }
 
-// pageActions are what the page's state lets be done, at the head's end: a
-// download of the album; or, once a download holds it, its folder, cancel
-// or retry, a download again once it is in the library, and delete once it
-// ended.
-func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store.Job, hc heroColors) {
+// pageActions are what the page's state lets be done, at the title bar's
+// end, as a toolbar's: a download of the album; or, once a download holds
+// it, its folder, cancel or retry, a download again once it is in the
+// library, and delete once it ended. They act only while live: the page
+// going out shows them as they were.
+func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store.Job, hc heroColors, live bool) {
 	s := a.Store
 	h := p.Hit
+	clicked := func(b ui.Element) bool { return b.Clicked() && live }
 	// A start that answers within a frame keeps the buttons as they were.
 	since, starting := s.Search.Starting[store.HitKey(h)]
 	wait := p.ID != "" && waited(c, starting, since)
 	again := func() {
-		if buttonOff(c, k, buttonOnArt, "Download again", nil, wait).Label("Download "+h.Name+" again").Clicked() && !starting {
+		if clicked(buttonOff(c, k, buttonOnArt, "Download again", nil, wait).Label("Download "+h.Name+" again")) && !starting {
 			a.download(h)
 		}
 	}
@@ -333,22 +344,22 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 		case wait:
 			pill(c, k, pillWait, nil, "Starting…")
 		default:
-			if artButton(c, "Download", hc.title, hc.ink).Label("Download "+h.Name).Clicked() && !starting {
+			if clicked(artButton(c, "Download", hc.title, hc.ink).Label("Download "+h.Name)) && !starting {
 				a.download(h)
 			}
 		}
 		return
 	}
-	if dir := a.revealDir(j); dir != "" && button(c, k, buttonOnArt, revealLabel, nil).Clicked() {
+	if dir := a.revealDir(j); dir != "" && clicked(button(c, k, buttonOnArt, revealLabel, nil)) {
 		a.Act.Reveal(dir)
 	}
 	switch j.Status {
 	case domain.JobQueued, domain.JobRunning:
-		if button(c, k, buttonOnArt, "Cancel", nil).Clicked() {
+		if clicked(button(c, k, buttonOnArt, "Cancel", nil)) {
 			s.Cancel(j.ID)
 		}
 	case domain.JobFailed, domain.JobCancelled:
-		if button(c, k, buttonOnArt, "Retry", nil).Clicked() {
+		if clicked(button(c, k, buttonOnArt, "Retry", nil)) {
 			s.Retry(j.ID)
 		}
 	case domain.JobCompleted:
@@ -356,7 +367,22 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 			again()
 		}
 	}
-	if j.Status.IsTerminal() && button(c, k, buttonOnArt, "Delete", nil).Label("Delete this download").Clicked() {
+	if j.Status.IsTerminal() && clicked(button(c, k, buttonOnArt, "Delete", nil).Label("Delete this download")) {
 		a.askDelete(j)
 	}
+}
+
+// titleActions are the album page's buttons in the title bar, while the
+// page shows.
+func (a *App) titleActions(c *ui.Context, k *Tokens, live bool) {
+	s := a.Store
+	p, j := &s.Search.Album, s.Detail()
+	if p.ID == "" && j == nil {
+		return
+	}
+	hc := heroColorsFor(a.pagePalette(c), k)
+	if live {
+		hc = hc.eased(c)
+	}
+	a.pageActions(c, k, p, j, hc, live)
 }

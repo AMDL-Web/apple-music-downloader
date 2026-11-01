@@ -130,7 +130,8 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 		left = toggleRight(bar) + 10
 	}
 	ui.Row(c).Height(max(52, bar.Height)).PaddingStart(left).PaddingEnd(right).Gap(10).AlignItems(ui.Center).DragWindow().Children(func() {
-		// Back comes and goes with the page, naming where it went.
+		// Back and the page's buttons come and go with the page, Back
+		// naming where it went.
 		in := a.Screen == ScreenAlbum
 		if in {
 			a.fly.back = a.backLabel()
@@ -142,6 +143,10 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 		if b.Clicked() && in {
 			a.Back()
 		}
+		ui.Spacer(c)
+		acts := ui.Row(c).Gap(8).AlignItems(ui.Center)
+		a.flyFade(acts)
+		acts.Children(func() { a.titleActions(c, k, in) })
 	})
 }
 

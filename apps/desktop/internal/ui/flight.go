@@ -32,6 +32,11 @@ const (
 	// in over that screen's lists, so the two lists hardly mix.
 	underGone  = 0.5
 	panelShown = 0.2
+	// panelFeather is how tall the soft top of the lower panel is while it
+	// moves, so that its edge never cuts across what it passes; its line
+	// shows as it lands, from panelLined.
+	panelFeather = 28
+	panelLined   = 0.85
 )
 
 // flightKey is q's key on the window's root.
@@ -107,6 +112,10 @@ type flight struct {
 	closeDetail bool
 	// back is what the title bar's Back button says, kept as it goes out.
 	back string
+	// edge is the top in the window of the list under the page, as this
+	// frame builds it, when edgeOK: the lower panel's top flies from it.
+	edge   float32
+	edgeOK bool
 }
 
 // openingFrom names the element the next OpenAlbum or OpenJob opens from,
@@ -127,7 +136,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		target = 1
 	}
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
-	f.src = [flightParts]flightSrc{}
+	f.src, f.edgeOK = [flightParts]flightSrc{}, false
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.
 	f.next = ""
@@ -290,16 +299,43 @@ func (a *App) flyRise(el ui.Element) {
 	}
 }
 
-// flyPanel shows the album page's opaque lower panel as this frame of a
-// flight has it: rising into place, and opaque early on, over the lists of
-// the screen under it.
-func (a *App) flyPanel(el ui.Element) {
-	if a.fly.moving {
-		el.Opacity(unit(a.fly.q / panelShown))
-		if !a.fly.still {
-			el.Translate(0, flightRise*(1-a.fly.q))
-		}
+// flyEdge marks el, the top of the list of the screen under the page,
+// which the page's lower panel flies from and back to.
+func (a *App) flyEdge(el ui.Element) {
+	if f := &a.fly; f.moving && !f.still {
+		f.edge, f.edgeOK = el.Bounds().Y, true
 	}
+}
+
+// flyPanel shows the album page's opaque lower panel as this frame of a
+// flight has it: its top flies from the top of the list under the page
+// (flyEdge), or, with none, rises a little; it turns opaque early, over
+// that list, and its edge is soft (panelEdge) until it lands.
+func (a *App) flyPanel(el ui.Element, k *Tokens) {
+	f := &a.fly
+	if !f.moving {
+		return
+	}
+	el.Opacity(unit(f.q / panelShown)).BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
+	if f.still {
+		return
+	}
+	y := flightRise * (1 - f.q)
+	if dst := el.LayoutBounds(); f.edgeOK && dst.H > 0 {
+		y = lerp(f.edge, dst.Y, f.q) - dst.Y
+	}
+	el.Translate(0, y)
+}
+
+// panelEdge is the soft top of the album page's lower panel while it
+// moves, ground on ground: built first among the panel's children.
+func (a *App) panelEdge(c *ui.Context, ground ui.Color) {
+	f := &a.fly
+	if !f.moving || f.still {
+		return
+	}
+	ui.Box(c).Absolute().Top(-panelFeather).Left(0).Right(0).Height(panelFeather).PassThrough().
+		Gradient(ground.Alpha(0), ground, 180).Opacity(1 - unit((f.q-panelLined)/(1-panelLined)))
 }
 
 // flyFade fades el in with the album page, in place.
