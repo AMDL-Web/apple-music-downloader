@@ -8,6 +8,8 @@
 data/
 # make build output.
 /bin/
+# make cover output.
+/coverage.out
 /dist/
 # make desktop and make desktop-web output.
 /apps/desktop/build/

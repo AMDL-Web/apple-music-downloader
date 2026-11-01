@@ -3,7 +3,9 @@ name: CI
 # Build, test and scan every push to main and dev (agents push to dev directly)
 # and every pull request. Setup steps install the toolchain README.md lists
 # (Go, Node.js, ffmpeg); each check step then calls one Makefile target, so
-# `make check` locally runs exactly what this workflow runs.
+# `make check` locally runs what this workflow runs (here `make cover` stands for
+# `make test`, and the race detector runs as two shards, `make race-ui` and
+# `make race-rest`, which together are `make race`).
 
 on:
   push:
@@ -61,17 +63,54 @@ jobs:
       - name: Terminal interface browser build
         run: make tui-web
 
+      # The same packages as `make test`, plus a statement-coverage summary on the
+      # run page. It is display only: no threshold, and it never fails a run.
       - name: Test
-        run: make test
-
-      - name: Race detector
-        run: make race
+        run: make cover
 
       - name: Vulnerability scan
         run: make vuln
 
       - name: Script tests
         run: make node-test
+
+  # The race detector is the slowest check, so it runs apart from the build and
+  # test job, split into two shards that run in parallel. The desktop ui package
+  # alone takes about as long as every other package together. The shards are cut
+  # from one `go list ./...` in the Makefile, so every package is in exactly one
+  # of them and a package added later cannot fall through.
+  race:
+    name: Race detector (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # Keep the other shard running so one run shows every failing shard.
+      fail-fast: false
+      matrix:
+        include:
+          - name: desktop ui
+            target: race-ui
+          - name: rest
+            target: race-rest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The media tests skip without ffmpeg, as in the build and test job.
+      - name: Install ffmpeg
+        timeout-minutes: 5
+        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg
+
+      - name: Race detector
+        run: make ${{ matrix.target }}
 
   # make temaridiff checks internal/fairplay byte for byte against the upstream
   # Temari library it was translated from, and checks that rounds_gen.go is the

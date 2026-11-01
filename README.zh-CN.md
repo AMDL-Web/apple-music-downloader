@@ -302,6 +302,8 @@ wrapper，或 `wrapper.data_dir` 指向 wrapper 的文件时，直接从 wrapper
 | --- | --- |
 | `make check` | CI 门禁：gofmt 检查、构建、vet、测试、竞态检测、`govulncheck`、Node 脚本测试 |
 | `make test`、`make race` | 测试套件，不带或带竞态检测 |
+| `make cover` | 带覆盖率文件（`coverage.out`）的测试套件，并打印汇总；CI 把汇总显示在运行页上 |
+| `make race-ui`、`make race-rest` | 拆成两份的竞态检测，与 CI 一致：桌面端 ui 包，以及其余所有包 |
 | `make dev` | 以模拟模式在 `127.0.0.1:18080` 启动 API，配置和数据库是 `data/dev/` 下的临时文件 |
 | `make docker` | 在本地构建容器镜像 |
 | `node apps/site/build.mjs --serve 8080` | 构建官网，并在 `127.0.0.1:8080` 上预览 |
