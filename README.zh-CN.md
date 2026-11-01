@@ -68,8 +68,8 @@ apps/desktop/internal 下，只归它用。每个版本都附带它的 macOS、W
 服务端需要准备：
 
 - Apple Music 订阅。
-- 一个 wrapper：保存 Apple Music 登录状态的上游服务。它跑在 Linux（x86_64 或 arm64）上，
-  原生和 Docker 启动器需要 user namespace（`unshare -Ur true` 必须能成功）；没有它的主机，
+- 一个 wrapper：保存 Apple Music 登录状态的上游服务。原生和 Docker 启动器跑在 Linux x86_64 上，
+  需要 user namespace（`unshare -Ur true` 必须能成功）；arm64 或没有 user namespace 的主机，
   例如群晖 DSM，改用 wrapper-manager v2 的 QEMU 变体。见 [Wrapper](docs/deployment.md#the-wrapper)。
   在 macOS、Windows 或 Linux 上用二进制安装时，也可以让 amdl 自己在 QEMU 里跑一个（`amdl wrapper install`）。
 - 带 Compose 的 Docker，或者 Go（版本见 [`go.mod`](go.mod)）加 `ffmpeg`。

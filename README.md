@@ -80,10 +80,10 @@ memory.
 What the server needs:
 
 - An Apple Music subscription.
-- A wrapper: the upstream service that holds your Apple Music login. It runs on Linux
-  (x86_64 or arm64). The native and Docker launchers need user namespaces (`unshare -Ur true`
-  must succeed); on a host without them, such as Synology DSM, use wrapper-manager v2's
-  QEMU variant. See [Wrapper](docs/deployment.md#the-wrapper). With the binary install
+- A wrapper: the upstream service that holds your Apple Music login. Its native and Docker
+  launchers run on Linux x86_64 and need user namespaces (`unshare -Ur true` must succeed);
+  on arm64 or a host without them, such as Synology DSM, use wrapper-manager v2's QEMU
+  variant. See [Wrapper](docs/deployment.md#the-wrapper). With the binary install
   on macOS, Windows or Linux, amdl can run one itself in QEMU (`amdl wrapper install`).
 - Docker with Compose, or Go (version in [`go.mod`](go.mod)) and `ffmpeg`.
 
