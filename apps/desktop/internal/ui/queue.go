@@ -227,34 +227,21 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 // hero is the "downloading now" band: the cover, the album in big type, its
 // stage bar and the percent, all in the album's colors.
 func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
-	size := float32(196)
+	size := float32(heroCover)
 	var video *ui.VideoPlayer
 	if compact {
-		size = 88
+		size = heroCoverCompact
 	} else {
 		video = a.motionPlayer(c, j.MotionArtworkURL, size)
 	}
 	pal := jobPalette(j, video != nil)
-	hc := heroColorsFor(pal, k).eased(c)
+	hc := a.heroInk(c, pal, k)
 	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.End).Children(func() {
-		a.heroCover(c, j, func() {
-			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
+		a.heroCover(c, j, func() ui.Element {
+			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		})
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
-			label(c, k, "Downloading now").TextColor(hc.label)
-			title := display(c, j.Name(), 42).TextColor(hc.title).MaxLines(2).Ellipsis("…")
-			if compact {
-				title.FontSize(24).LetterSpacing(-0.48).MaxLines(1)
-			}
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, j.By()).FontSize(15).TextColor(hc.meta).SingleLine().Shrink(1)
-				if q := jobQuality(j); q != "" {
-					tag(c, k, q, isHiRes(q), hc.meta)
-				}
-				if j.TotalItems > 0 {
-					tag(c, k, plural(j.TotalItems, "track"), false, hc.meta)
-				}
-			})
+			a.heroNames(c, k, j, "Downloading now", hc, compact)
 			ui.Column(c).MaxWidth(600).Gap(6).Margin(6, 0, 0, 0).Children(func() {
 				widgets.StageBar{Stages: j.Stages, Color: hc.accent, Track: k.Track, Height: 10, Gap: 3, Running: true, Still: a.scrolling(c)}.Show(c, "hero-bar")
 				ui.Row(c).Children(func() {
@@ -291,10 +278,59 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 					a.Store.Cancel(j.ID)
 				}
 				if artButton(c, "Details", hc.title, hc.ink).Clicked() {
+					a.openingFrom(heroFrom(j))
 					a.OpenJob(j.ID)
 				}
 			})
 		})
+	})
+}
+
+// The queue hero's cover and title, each at its size in a narrow window.
+const (
+	heroCover, heroCoverCompact = 196, 88
+	heroTitle, heroTitleCompact = 42, 24
+	heroBy                      = 15
+)
+
+// heroFrom names the queue hero showing j, which the album page opens from
+// (openingFrom).
+func heroFrom(j *store.Job) string { return "hero:" + j.ID }
+
+// heroInk is the queue hero's text colors over pal, easing from the last
+// palette while the queue is the screen shown, not the one the album page
+// moves over.
+func (a *App) heroInk(c *ui.Context, pal Palette, k *Tokens) heroColors {
+	hc := heroColorsFor(pal, k)
+	if a.Screen == ScreenQueue {
+		hc = hc.eased(c)
+	}
+	return hc
+}
+
+// heroNames are the queue hero's label, title, artists and tags, which fly
+// to the album page's as it opens from the hero (flySource).
+func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, hc heroColors, compact bool) {
+	from := heroFrom(j)
+	a.flySource(label(c, k, kicker).TextColor(hc.label), from, partKicker, "", 0)
+	size := float32(heroTitle)
+	title := display(c, j.Name(), size).TextColor(hc.title).MaxLines(2).Ellipsis("…")
+	if compact {
+		size = heroTitleCompact
+		title.FontSize(size).LetterSpacing(-0.02 * size).MaxLines(1)
+	}
+	a.flySource(title, from, partTitle, j.Name(), size)
+	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		a.flySource(ui.Text(c, j.By()).FontSize(heroBy).TextColor(hc.meta).SingleLine().Shrink(1), from, partArtist, j.By(), heroBy)
+		tags := ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			if q := jobQuality(j); q != "" {
+				tag(c, k, q, isHiRes(q), hc.meta)
+			}
+			if j.TotalItems > 0 {
+				tag(c, k, plural(j.TotalItems, "track"), false, hc.meta)
+			}
+		})
+		a.flySource(tags, from, partTags, "", 0)
 	})
 }
 
@@ -333,14 +369,18 @@ func (a *App) heroRateText(c *ui.Context, j *store.Job) string {
 }
 
 // heroCover makes a hero's cover open the job's detail, as its Details
-// button does, lifting a little under the pointer.
-func (a *App) heroCover(c *ui.Context, j *store.Job, show func()) {
+// button does, lifting a little under the pointer; the cover flies to the
+// album page's.
+func (a *App) heroCover(c *ui.Context, j *store.Job, show func() ui.Element) {
 	b := ui.ButtonBase(c.Key("hero-cover")).Label("Open " + j.Name())
 	lift := b.AnimateTo("lift", map[bool]float32{true: 1, false: 0}[b.Hovered()], ui.Snappy)
 	if b.Clicked() {
+		a.openingFrom(heroFrom(j))
 		a.OpenJob(j.ID)
 	}
-	b.Cursor(ui.CursorPointer).Scale(1+0.02*lift, 1+0.02*lift).Children(show)
+	b.Cursor(ui.CursorPointer).Scale(1+0.02*lift, 1+0.02*lift).Children(func() {
+		a.flySource(show(), heroFrom(j), partCover, "", radiusCover)
+	})
 }
 
 // jobRow is one job of the queue: cover, names, stage bar with counts,
@@ -366,6 +406,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 		if row.ClickModifiers()&ui.Cmd != 0 {
 			s.Select(j.ID, true)
 		} else {
+			a.openingFrom("row:" + j.ID)
 			a.OpenJob(j.ID)
 		}
 	}
@@ -380,7 +421,8 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 		case domain.JobFailed, domain.JobCancelled:
 			dim = 0.3
 		}
-		widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 88), Placeholder: pal.Bg, Size: 44, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 88), Placeholder: pal.Bg, Size: 44, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
+		a.flySource(cover, "row:"+j.ID, partCover, "", radiusInner)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(13.5).FontWeight(600).Ellipsis("…").SingleLine()
 			ui.Text(c, rowSubtitle(j)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()

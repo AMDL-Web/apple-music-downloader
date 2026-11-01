@@ -50,6 +50,12 @@ func (a *App) OpenJob(id string) {
 // pair opens at the top of its songs, and a download of the album that
 // starts later takes the page (followAlbumJob).
 func (a *App) openPage(album, job string) {
+	f := &a.fly
+	f.from, f.next, f.closeDetail = f.next, "", false
+	if a.Screen != ScreenAlbum {
+		// Setup leaves the window to the page at once.
+		f.under, f.instant = a.Screen, a.Screen == ScreenSetup
+	}
 	if key := album + "\x00" + job; key != a.pageKey {
 		a.pageKey = key
 		if st := a.scrolls["album"]; st != nil {
@@ -138,23 +144,37 @@ func (a *App) pagePalette(c *ui.Context) Palette {
 // lower panel lists the songs, with the download's activity beside them.
 func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	s := a.Store
-	a.followAlbumJob()
+	// Going out, the page shows what it showed.
+	in := a.Screen == ScreenAlbum
+	if in {
+		a.followAlbumJob()
+	}
 	p, j := &s.Search.Album, s.Detail()
 	if p.ID == "" && j == nil {
-		a.Back()
+		if in {
+			a.Back()
+		}
 		return
 	}
 	s.WatchConfig()
 	l := pageHero(c, page)
 	var video *ui.VideoPlayer
 	if j != nil {
-		video = a.motionPlayer(c, j.MotionArtworkURL, l.cover)
+		// At least the queue hero's size, so that the motion cover flying
+		// between them plays on in the same player.
+		video = a.motionPlayer(c, j.MotionArtworkURL, max(l.cover, heroCover))
 	}
 	pal := a.pagePalette(c)
-	a.collectionHero(c, k, l, a.pageHead(c, k, l, p, j, pal, video))
-	accent := heroColorsFor(pal, k).eased(c).accent
+	hc := heroColorsFor(pal, k)
+	if in {
+		hc = hc.eased(c)
+	}
+	a.collectionHero(c, k, l, a.pageHead(c, k, l, p, j, pal, hc, video))
 	// Opaque, so the backdrop, which lights the head, ends under it.
-	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Background(detailGround(k)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Children(func() {
+	lower := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Background(detailGround(k)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line)
+	a.flyPanel(lower)
+	accent := hc.accent
+	lower.Children(func() {
 		a.pageTracks(c, k, j, accent, stageWidth(page))
 		if j != nil {
 			activity := float32(280)
@@ -169,9 +189,8 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 // pageHead is the album screen's head: the album's names once read, else
 // what the download holds; the download's cover, which stays while the
 // album is read under another address of the same picture.
-func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPage, j *store.Job, pal Palette, video *ui.VideoPlayer) heroSpec {
+func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPage, j *store.Job, pal Palette, hc heroColors, video *ui.VideoPlayer) heroSpec {
 	s := a.Store
-	hc := heroColorsFor(pal, k).eased(c)
 	album := p.ID != ""
 	f := albumOf(p)
 	h := heroSpec{colors: hc}
@@ -195,8 +214,8 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 	if j != nil && j.ArtworkURL != "" {
 		artwork = j.ArtworkURL
 	}
-	h.cover = func(size float32) {
-		widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
+	h.cover = func(size float32) ui.Element {
+		return widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c).Label("Artwork")
 	}
 	h.tags = func() {
 		// What the download made of it, once known, stands for what the

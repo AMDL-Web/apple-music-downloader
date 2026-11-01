@@ -52,6 +52,7 @@ func (a *App) View(c *ui.Context) {
 	// The sidebar's width as it slides; the page takes the rest.
 	side := root.AnimateWith("sidebar", target, sidebarSlide, ui.EaseOut)
 	page := w - side
+	a.flightQ(c, root)
 	root.Children(func() {
 		ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 			a.sidebar(c, k, vib, side)
@@ -67,18 +68,7 @@ func (a *App) View(c *ui.Context) {
 						return
 					}
 					a.titleBar(c, k, shown)
-					ui.Column(c).Grow(1).MinHeight(0).Children(func() {
-						switch a.Screen {
-						case ScreenSettings:
-							a.settings(c, k)
-						case ScreenAlbum:
-							a.albumScreen(c, k, page)
-						case ScreenQueue:
-							a.queueScreen(c, k, a.compact)
-						default:
-							a.home(c, k, page)
-						}
-					})
+					ui.Box(c).Grow(1).MinHeight(0).Children(func() { a.screens(c, k, page) })
 				})
 				// Home's field is where links land there; elsewhere a card
 				// over the page shows it.
@@ -140,10 +130,17 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 		left = toggleRight(bar) + 10
 	}
 	ui.Row(c).Height(max(52, bar.Height)).PaddingStart(left).PaddingEnd(right).Gap(10).AlignItems(ui.Center).DragWindow().Children(func() {
-		if a.Screen == ScreenAlbum {
-			if button(c, k, buttonGhost, a.backLabel(), icBack).Clicked() {
-				a.Back()
-			}
+		// Back comes and goes with the page, naming where it went.
+		in := a.Screen == ScreenAlbum
+		if in {
+			a.fly.back = a.backLabel()
+		} else if !a.fly.moving {
+			return
+		}
+		b := button(c, k, buttonGhost, a.fly.back, icBack)
+		a.flyFade(b)
+		if b.Clicked() && in {
+			a.Back()
 		}
 	})
 }

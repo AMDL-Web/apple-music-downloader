@@ -80,11 +80,14 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 				case "artist":
 					a.openArtist(h)
 				case "album":
+					a.openingFrom("hit:" + hk)
 					a.OpenAlbum(h)
 				default:
+					a.openingFrom("hit:" + hk)
 					a.openOrDownload(h)
 				}
 			}
+			a.flySource(open, "hit:"+hk, partCover, "", radius)
 			open.Cursor(ui.CursorPointer).Children(func() {
 				widgets.Cover{Image: a.Art.Get(h.ArtworkURL, int(2*size)), Placeholder: hitPalette(h).Bg, Size: size, Radius: radius, Color: 1}.Show(c)
 			})
@@ -164,6 +167,7 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	if b.Clicked() && !starting {
 		switch {
 		case mark == store.MarkActive && h.Type == "album":
+			a.openingFrom("hit:" + hk)
 			a.OpenAlbum(h)
 		case mark == store.MarkActive:
 			a.openOrDownload(h)
@@ -211,7 +215,8 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 		}
 	}
 	card.Children(func() {
-		widgets.Cover{Image: a.Art.Get(h.ArtworkURL, 96), Placeholder: hitPalette(h).Bg, Size: songHeight - 2*padTile, Radius: radiusControl, Color: 1}.Show(c)
+		cover := widgets.Cover{Image: a.Art.Get(h.ArtworkURL, 96), Placeholder: hitPalette(h).Bg, Size: songHeight - 2*padTile, Radius: radiusControl, Color: 1}.Show(c)
+		a.flySource(cover, "song:"+hk, partCover, "", radiusControl)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, h.Name).FontSize(13).FontWeight(600).Ellipsis("…").SingleLine().Shrink(1)
@@ -226,10 +231,12 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 		switch {
 		case mark == store.MarkDone:
 			if markButton(c, k, "In library", pillOK, icCheck).Clicked() {
+				a.openingFrom("song:" + hk)
 				a.OpenJob(job)
 			}
 		case mark == store.MarkActive:
 			if markButton(c, k, "In the queue", pillRun, icDown).Clicked() {
+				a.openingFrom("song:" + hk)
 				a.OpenJob(job)
 			}
 		case waited(c, startingOn, startedAt):

@@ -296,6 +296,7 @@ func (a *App) actOnHit() {
 		a.openArtist(*h)
 		return
 	case "album":
+		a.openingFrom("hit:" + store.HitKey(*h))
 		a.OpenAlbum(*h)
 		return
 	}

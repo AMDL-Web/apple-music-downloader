@@ -118,7 +118,8 @@ func (a *App) ready() {
 	if a.demo != nil {
 		art = artwork.NewWith(a.post, a.demo.Transport())
 	}
-	a.view = &appui.App{Store: a.store, Art: art, Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme, Demo: a.demo != nil}
+	// Shots capture each screen as it settles, not on its way in.
+	a.view = &appui.App{Store: a.store, Art: art, Settings: a.settings, Dirs: dirs, Act: a, Theme: a.opts.Theme, Demo: a.demo != nil, PageMotion: a.opts.Shots == ""}
 	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
 	a.view.ScrollbarsAlways = scrollbarsAlways()
 	deps := setup.SystemDeps(dirs.Resources, wrapperhost.Home{Dir: a.wrapperDir()},

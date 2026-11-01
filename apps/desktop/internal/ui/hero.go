@@ -27,6 +27,9 @@ func pageHero(c *ui.Context, page float32) heroLayout {
 // "Download again" or "Reveal in Finder".
 const heroActions = 136
 
+// heroArtist is the size of the head's artists.
+const heroArtist = 17
+
 // titleFor is the title's size: smaller as a title runs longer, so most fit
 // two lines.
 func (l heroLayout) titleFor(title string) float32 {
@@ -44,7 +47,7 @@ func (l heroLayout) titleFor(title string) float32 {
 // tags after them, what the page says under them (band) and its buttons
 // at the end (actions).
 type heroSpec struct {
-	cover         func(size float32)
+	cover         func(size float32) ui.Element
 	kicker, title string
 	artist        string
 	tags, band    func()
@@ -53,31 +56,43 @@ type heroSpec struct {
 }
 
 // collectionHero is the head of the album screen: the cover, then the
-// label, title, artists and the page's band, then its buttons, bottoms
-// aligned.
+// label, title and artists at the cover's top and the page's band at its
+// bottom, then its buttons at the bottom. A title on more lines than the
+// room beside the cover takes makes the head taller below the cover,
+// never above it. The cover, label, title, artists and tags fly in from
+// what the page opened from (flyPage), the rest rises in.
 func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec) {
 	hc := h.colors
-	ui.Row(c).Padding(l.top, 32, 22, 32).Gap(l.gap).AlignItems(ui.End).Children(func() {
-		h.cover(l.cover)
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(12).Children(func() {
-			label(c, k, h.kicker).TextColor(hc.label)
-			display(c, h.title, l.titleFor(h.title)).TextColor(hc.title).MaxLines(2).Ellipsis("…")
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Wrap().Children(func() {
-				if h.artist != "" {
-					ui.Text(c, h.artist).FontSize(17).TextColor(hc.title.Mix(hc.meta, 0.4)).SingleLine().Ellipsis("…").Shrink(1)
-				}
-				if h.tags != nil {
-					h.tags()
-				}
+	ui.Row(c).Padding(l.top, 32, 22, 32).Gap(l.gap).AlignItems(ui.Start).Children(func() {
+		a.flyPage(h.cover(l.cover), partCover, "", radiusCover)
+		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).MinHeight(l.cover).Gap(12).Justify(ui.SpaceBetween).Children(func() {
+			ui.Column(c).Gap(12).Children(func() {
+				a.flyPage(label(c, k, h.kicker).TextColor(hc.label), partKicker, h.kicker, 11)
+				size := l.titleFor(h.title)
+				a.flyPage(display(c, h.title, size).TextColor(hc.title).MaxLines(2).Ellipsis("…"), partTitle, h.title, size)
+				ui.Row(c).Gap(10).AlignItems(ui.Center).Wrap().Children(func() {
+					if h.artist != "" {
+						// In the queue hero's colors as it flies from there.
+						mix := float32(0.4)
+						if a.fly.moving {
+							mix = 1 - 0.6*a.fly.q
+						}
+						artist := ui.Text(c, h.artist).FontSize(heroArtist).TextColor(hc.title.Mix(hc.meta, mix)).SingleLine().Ellipsis("…").Shrink(1)
+						a.flyPage(artist, partArtist, h.artist, heroArtist)
+					}
+					if h.tags != nil {
+						a.flyPage(ui.Row(c).Gap(10).AlignItems(ui.Center).Children(h.tags), partTags, "", 0)
+					}
+				})
 			})
 			if h.band != nil {
-				h.band()
+				a.flyRise(ui.Column(c).Gap(12).Children(h.band))
 			}
 		})
 		if h.actions != nil {
 			// One width whatever the buttons, so the band beside them ends
 			// at the same place whatever the page's state.
-			ui.Column(c).MinWidth(heroActions).Gap(8).AlignItems(ui.End).Children(h.actions)
+			a.flyRise(ui.Column(c).MinWidth(heroActions).Gap(8).AlignItems(ui.End).AlignSelf(ui.End).Children(h.actions))
 		}
 	})
 }

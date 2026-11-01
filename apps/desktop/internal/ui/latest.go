@@ -21,38 +21,25 @@ const wallTile, wallCompact, wallGap = 64, 44, 12
 // motion cover, and how much landed where the percent would be.
 func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	a.Store.WantTracks(j)
-	size := float32(196)
+	size := float32(heroCover)
 	var video *ui.VideoPlayer
 	if compact {
-		size = 88
+		size = heroCoverCompact
 	} else {
 		video = a.motionPlayer(c, j.MotionArtworkURL, size)
 	}
 	pal := jobPalette(j, video != nil)
-	hc := heroColorsFor(pal, k).eased(c)
+	hc := a.heroInk(c, pal, k)
 	ui.Row(c).Padding(18, 28, 20, 28).Gap(28).AlignItems(ui.End).Children(func() {
-		a.heroCover(c, j, func() {
-			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
+		a.heroCover(c, j, func() ui.Element {
+			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		})
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
 			when := ""
 			if j.FinishedAt != nil {
 				when = " · finished " + dayClock(*j.FinishedAt, c.Now())
 			}
-			label(c, k, "Latest download"+when).TextColor(hc.label)
-			title := display(c, j.Name(), 42).TextColor(hc.title).MaxLines(2).Ellipsis("…")
-			if compact {
-				title.FontSize(24).LetterSpacing(-0.48).MaxLines(1)
-			}
-			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, j.By()).FontSize(15).TextColor(hc.meta).SingleLine().Shrink(1)
-				if q := jobQuality(j); q != "" {
-					tag(c, k, q, isHiRes(q), hc.meta)
-				}
-				if j.TotalItems > 0 {
-					tag(c, k, plural(j.TotalItems, "track"), false, hc.meta)
-				}
-			})
+			a.heroNames(c, k, j, "Latest download"+when, hc, compact)
 		})
 		if compact {
 			return
@@ -67,15 +54,17 @@ func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 			}
 			ui.Row(c).Gap(8).Children(func() {
 				dir := a.revealDir(j)
-				if dir == "" {
-					if artButton(c, "Details", hc.title, hc.ink).Clicked() {
+				details := func(b ui.Element) {
+					if b.Clicked() {
+						a.openingFrom(heroFrom(j))
 						a.OpenJob(j.ID)
 					}
+				}
+				if dir == "" {
+					details(artButton(c, "Details", hc.title, hc.ink))
 					return
 				}
-				if button(c, k, buttonOnArt, "Details", nil).Clicked() {
-					a.OpenJob(j.ID)
-				}
+				details(button(c, k, buttonOnArt, "Details", nil))
 				if artButton(c, revealLabel, hc.title, hc.ink).Clicked() {
 					a.Act.Reveal(dir)
 				}
@@ -153,6 +142,7 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 	hover := t.Hovered()
 	lift := t.AnimateTo("lift", map[bool]float32{true: 1, false: 0}[hover], ui.Snappy)
 	if t.Clicked() {
+		a.openingFrom("wall:" + j.ID)
 		a.OpenJob(j.ID)
 	}
 	var video *ui.VideoPlayer
@@ -161,6 +151,7 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 	}
 	t.Cursor(ui.CursorPointer).Tooltip(j.Name() + " — " + j.By()).Children(func() {
 		frame := ui.Box(c).Size(size, size).Radius(radiusControl).Scale(1+0.06*lift, 1+0.06*lift)
+		a.flySource(frame, "wall:"+j.ID, partCover, "", radiusControl)
 		if lift > 0.01 {
 			frame.Shadow(0, 10*lift, 24*lift, 0, ui.RGBA(0, 0, 0, 0.45*lift))
 		}

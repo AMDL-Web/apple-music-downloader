@@ -97,6 +97,10 @@ type App struct {
 	// Demo is set while the app runs the demo (package demo): there is no
 	// backend of this computer to offer.
 	Demo bool
+	// PageMotion moves the album page in and out over the screen it opens
+	// from (flight.go); without it the screens change at once, as tests
+	// need, whose clock stands still between Advances.
+	PageMotion bool
 
 	Screen Screen
 	// trail holds the screens Back returns to, the last one on top: the
@@ -106,6 +110,8 @@ type App struct {
 	// and albumSeen the album's download as it was then (followAlbumJob).
 	pageKey   string
 	albumSeen string
+	// fly is the album page's way in and out.
+	fly flight
 	// Tab is the queue's filter.
 	Tab int
 
@@ -193,6 +199,7 @@ func (a *App) Go(s Screen) {
 	if s != ScreenAlbum {
 		a.Store.CloseDetail()
 	}
+	a.fly.instant = true
 	a.trail = nil
 	a.Screen = s
 	if s == ScreenHome {
@@ -236,12 +243,18 @@ func (a *App) navScreen() Screen {
 // Back returns to the screen the album screen was opened from: home keeps
 // its words, results, artist and place, so the search comes back as it was
 // left, with the keyboard in its field; the queue keeps its tab and place.
+// The page goes out over it showing its download, which closes once the
+// page is gone.
 func (a *App) Back() {
 	to := a.backTo()
 	if n := len(a.trail); n > 0 {
 		a.trail = a.trail[:n-1]
 	}
-	a.Store.CloseDetail()
+	if a.PageMotion && a.Screen == ScreenAlbum {
+		a.fly.under, a.fly.closeDetail = to, true
+	} else {
+		a.Store.CloseDetail()
+	}
 	if to == ScreenHome {
 		if a.Screen == ScreenAlbum {
 			a.revealAlbum()

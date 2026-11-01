@@ -85,11 +85,16 @@ func (a *App) scrollbars(c *ui.Context, k *Tokens) {
 }
 
 // scrolling reports whether a list moved within scrollHold, and asks for a
-// frame for when that ends. Stage bars hold their stripes meanwhile
-// (widgets.StageBar's Still): MyGo paces the window to the 30 frames a second they ask for,
-// and on macOS has the display refresh that often, so a list scrolled past
-// them would move at 30 frames a second instead of the display's rate.
+// frame for when that ends, or whether the album page moves in or out.
+// Stage bars hold their stripes meanwhile (widgets.StageBar's Still): MyGo
+// paces the window to the 30 frames a second they ask for, and on macOS
+// has the display refresh that often, so a list scrolled past them, or a
+// page flying, would move at 30 frames a second instead of the display's
+// rate.
 func (a *App) scrolling(c *ui.Context) bool {
+	if a.fly.moving {
+		return true
+	}
 	since := c.Now().Sub(a.scrolledAt)
 	if a.scrolledAt.IsZero() || since >= scrollHold {
 		return false
