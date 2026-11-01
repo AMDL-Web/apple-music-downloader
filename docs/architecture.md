@@ -66,7 +66,7 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/hooks` | webhook/exec hook execution, and the API's writes of hooks.yaml | |
 | `internal/hookpreset` | the services a webhook can be built for and the request each documents | import other internal packages |
 | `internal/librarysync` | the library watcher | |
-| `internal/usertoken` | which media-user-token the backend uses: the wrapper's `MUSIC_TOKEN` when it can read one, else `catalog.media_user_token` | log or return the token |
+| `internal/usertoken` | which media-user-token the backend uses: the wrapper's, from its `GET /token` (kept current and stored by the backend) or its `MUSIC_TOKEN` file, else `catalog.media_user_token` | log or return the token |
 | `internal/logging` | slog setup, in-memory ring buffer, log subscriptions | |
 | `internal/limits` | semaphores and the Apple request gate | |
 | `internal/ids` | random IDs (`job_<32 hex>`, `item_<32 hex>`) | |

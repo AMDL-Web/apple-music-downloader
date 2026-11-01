@@ -204,10 +204,11 @@ does not contact the wrapper at startup, so it starts fine without a reachable w
 and this endpoint is how you verify connectivity; an unreachable wrapper is
 `503 wrapper_unavailable`.
 
-`media_user_token` is the wrapper account's media-user-token as the backend reads it from
-the wrapper's `MUSIC_TOKEN` file, masked like the configured token in `GET /config` (`...`
-and its last four characters), or `""` when it cannot read one. The backend reads it from a
-wrapper it runs itself, or from `wrapper.data_dir` ([configuration.md](configuration.md#the-media-user-token)).
+`media_user_token` is the wrapper account's media-user-token as the backend has it, masked
+like the configured token in `GET /config` (`...` and its last four characters), or `""`
+when it has none. The backend reads it from a wrapper it runs itself, from the wrapper's
+`GET /token`, from `wrapper.data_dir`, or from its own copy of an earlier `GET /token`
+answer, in that order ([configuration.md](configuration.md#the-media-user-token)).
 While it is not `""`, downloads, lookups and library sync use the wrapper's token, and
 `catalog.media_user_token` stays saved but unused.
 

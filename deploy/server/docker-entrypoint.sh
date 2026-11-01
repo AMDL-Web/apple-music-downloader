@@ -79,7 +79,8 @@ own_tree() {
 # must then be writable by that user beforehand).
 #
 # Only paths the backend creates are re-owned: the config directory itself and
-# its config files, the database directory and files, and the temp directory
+# its config files, the database directory and files, the token copy beside
+# them, and the temp directory
 # data/tmp. The downloads directory is never touched: it is usually a
 # bind-mounted music library, and it must already be writable by PUID:PGID.
 # The backend writes no log file, so there are no logs to re-own.
@@ -98,6 +99,9 @@ if [ "$(id -u)" = "0" ]; then
         *) own_path "$DB_DIR" ;;
     esac
     own_path "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm" "$DB_PATH-journal"
+    # The backend's copy of the wrapper's token (internal/usertoken#StoreDir),
+    # 0700 and 0600, so only its owner can replace it after a PUID change.
+    own_tree "$DB_DIR/usertoken"
     own_tree /app/data/tmp
 
     if [ -d "$DOWNLOADS_DIR" ] && ! su-exec "$PUID:$PGID" test -w "$DOWNLOADS_DIR"; then

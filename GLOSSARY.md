@@ -10,7 +10,7 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | amp-api | `amp-api.music.apple.com`: Apple's undocumented web-player API, called with a scraped JWT and an `Origin` header; the only source of some fields | `internal/applemusic#CatalogClient.doWithWebAuth` |
 | Web-player JWT | The token scraped from music.apple.com's JS bundle that amp-api requires | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it, and with it the backend fetches lyrics and the AAC-LC playlist and license from Apple itself. The wrapper's own (`MUSIC_TOKEN`) when the backend can read it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
+| Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it, and with it the backend fetches lyrics and the AAC-LC playlist and license from Apple itself. The wrapper's own (its `GET /token` or `MUSIC_TOKEN` file) when the backend can get it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
 | Storefront | The country code in a link (`us`, `cn`) that selects Apple's regional catalog | `configs/config.example.yaml#catalog.default_storefront` |
 | enhancedHls | The amp-api-only HLS manifest that lists the lossless and spatial variants | `internal/applemusic#Song` |
 | editorialVideo, motion artwork | Animated album covers, amp-api only; absence is normal, never an error | `internal/applemusic#CatalogClient.MotionArtworkViaWebToken` |

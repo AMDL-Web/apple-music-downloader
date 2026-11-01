@@ -91,9 +91,13 @@ func (d *Downloader) aacLCLicense(ctx context.Context, songID, challenge, keyURI
 	return d.wrapper.License(ctx, songID, challenge, keyURI)
 }
 
-// noteWrapperFallback logs an in-process request handed to the wrapper. err
-// comes from applemusic, whose messages never carry a token.
+// noteWrapperFallback logs an in-process request handed to the wrapper, and
+// when Apple refused the token asks the token provider to fetch the wrapper's
+// again. err comes from applemusic, whose messages never carry a token.
 func (d *Downloader) noteWrapperFallback(ctx context.Context, request, songID string, err error) {
+	if applemusic.IsUserTokenRejected(err) {
+		d.tokens.RefreshSoon()
+	}
 	logging.FromContext(ctx, d.logger).Info("in-process request not answered; asking the wrapper",
 		"request", request, "song_id", songID, "error", err)
 }

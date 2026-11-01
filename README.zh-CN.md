@@ -230,7 +230,8 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 `PUT /api/v1/config`（控制台和桌面应用的 Settings）修改，这会重写整个文件并丢掉注释；wrapper 地址这类
 重启生效的配置项在重启后生效，控制台的 Settings 页面可以直接发起重启（`POST /api/v1/system/restart`）。
 没有环境变量能覆盖配置项。下载电台需要订阅令牌：后端自己运行
-wrapper，或 `wrapper.data_dir` 指向 wrapper 的文件时，直接从 wrapper 读取；否则用
+wrapper、wrapper 提供 `GET /token`（amdl 维护的 wrapper-lite 分支），或 `wrapper.data_dir`
+指向 wrapper 的文件时，直接从 wrapper 取；否则用
 `catalog.media_user_token` 里填的。详见 [docs/configuration.md](docs/configuration.md)（英文）。
 
 ## 自动化

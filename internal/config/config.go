@@ -69,9 +69,10 @@ type LoggingConfig struct {
 }
 
 // WrapperConfig is the wrapper-lite connection. Address is an http:// or
-// https:// URL; https uses TLS 1.2+ and verifies the certificate. DataDir is
-// the wrapper's data directory as amdl sees it, where internal/usertoken reads
-// the account's media-user-token; empty means amdl cannot read it.
+// https:// URL; https uses TLS 1.2+ and verifies the certificate; amdl also
+// asks it for the account's media-user-token (GET /token). DataDir is the
+// wrapper's data directory as amdl sees it, where internal/usertoken reads that
+// token's file when GET /token gives none; empty means amdl does not read it.
 type WrapperConfig struct {
 	Address             string `yaml:"address" json:"address"`
 	TimeoutSeconds      int    `yaml:"timeout_seconds" json:"timeout_seconds"`

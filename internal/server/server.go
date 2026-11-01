@@ -185,6 +185,12 @@ func Run(ctx context.Context, opts Options) (err error) {
 		return fmt.Errorf("set up wrapper client: %w", err)
 	}
 	defer closeLogged(logger, "close wrapper client", wrapperClient.Close)
+	tokens.UseEndpoint(usertoken.Endpoint{
+		Fetch:   wrapperClient.MusicToken,
+		Dir:     usertoken.StoreDir(cfg.Database.Path),
+		Address: cfg.Wrapper.Address,
+		Logger:  logSystem.Logger.With("component", "usertoken"),
+	})
 
 	catalog := applemusic.NewCatalogClient(cfg.Catalog, logSystem.Logger.With("component", "catalog"))
 	toolChecker := media.NewToolChecker(cfg.Tools)
@@ -278,6 +284,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 	// the inline scrape.
 	background.Go(func() { catalog.RunTokenRefresher(backgroundCtx) })
 	background.Go(func() { libraryWatcher.Run(backgroundCtx) })
+	background.Go(func() { tokens.RunEndpoint(backgroundCtx) })
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.Serve(listener) }()
 	if opts.Console != nil {

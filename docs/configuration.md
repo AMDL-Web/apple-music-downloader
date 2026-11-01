@@ -133,28 +133,43 @@ Station downloads, private playlist covers and library sync need the Apple Music
 media-user-token of a subscribed account. With one, the backend also fetches lyrics and the
 AAC-LC playlist and license from Apple itself rather than through the wrapper
 ([Download pipeline](download-pipeline.md#lyrics)); without one, the wrapper does that.
-The wrapper keeps its logged-in account's token in a file named `MUSIC_TOKEN` and
-refreshes it itself, so the backend uses that one whenever it can read it, and
-`catalog.media_user_token` only when it cannot:
+The wrapper keeps its logged-in account's token, in memory and in a file named
+`MUSIC_TOKEN`, and refreshes it itself, so the backend uses that one whenever it can get
+it, and `catalog.media_user_token` only when it cannot. The first of these that has a token
+wins:
 
-- A wrapper the backend runs itself (`amdl wrapper install`): read from the guest's disk,
-  with nothing to configure. `wrapper.data_dir` is ignored, and startup says so when it is
-  set.
-- Any other wrapper whose files the backend can see: set `wrapper.data_dir` to the
-  wrapper's data directory. A wrapper-lite base directory
-  holds `MUSIC_TOKEN` directly; a wrapper-manager's data directory holds one per account
-  under `instances/<id>/`. amdl 2.0 supports one wrapper account, a wrapper-manager's
-  included; with several, the newest token is read. In containers, mount that directory
-  read-only into the backend ([Deployment](deployment.md#the-wrapper)). The file must be
-  readable by the user the backend runs as.
-- A wrapper on another machine with no shared files: paste the token into
-  `catalog.media_user_token` (the console's Settings › Account).
+1. A wrapper the backend runs itself (`amdl wrapper install`): read from the guest's disk,
+   with nothing to configure. Nothing below applies; `wrapper.data_dir` is ignored, and
+   startup says so when it is set.
+2. The wrapper's `GET /token`, which amdl's wrapper-lite fork serves at
+   `wrapper.address`, so it works for a wrapper on another machine or in another
+   container with nothing to configure. The backend asks at startup, again a few seconds
+   after the wrapper's own next refresh (`next_refresh_at`; at least one minute and at
+   most one hour apart), after a console login or logout, and when Apple refuses the token.
+   Upstream wrapper-lite, older fork builds and a wrapper-manager that does not forward the
+   route answer `404`; the backend then uses the sources below and asks again only every
+   30 minutes.
+3. A wrapper whose files the backend can see: set `wrapper.data_dir` to the wrapper's data
+   directory. A wrapper-lite base directory holds `MUSIC_TOKEN` directly; a
+   wrapper-manager's data directory holds one per account under `instances/<id>/`. amdl
+   2.0 supports one wrapper account, a wrapper-manager's included; with several, the
+   newest token is read. In containers, mount that directory read-only into the backend
+   ([Deployment](deployment.md#the-wrapper)). The file must be readable by the user the
+   backend runs as. It is read afresh on every use, so a login or a refreshed token takes
+   effect with the next request.
+4. The backend's own copy of the last token `GET /token` returned, kept in
+   `usertoken/wrapper-token.json` next to the database file (directory mode 0700, file
+   0600). It lets the backend work on while the wrapper restarts. It is replaced by every
+   new token, deleted when the wrapper answers that no account is logged in (`503`) or
+   that it has no `GET /token` (`404`), and not used once `wrapper.address` points at
+   another wrapper.
+5. `catalog.media_user_token`, for a wrapper whose token none of the above reaches: paste
+   the token there (the console's Settings › Account).
 
 `GET /api/v1/wrapper/status` reports the token in use from the wrapper, masked, as
 `media_user_token` (`""` when there is none). A token typed into
 `catalog.media_user_token` is never overwritten or removed; it is simply not used while the
-wrapper has one. The wrapper's file is read afresh on every use, so a login or a refreshed
-token takes effect with the next request.
+wrapper has one. The token is never logged.
 
 ## Catalog tokens and the Hi-Res manifest
 
