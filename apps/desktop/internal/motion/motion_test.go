@@ -2,11 +2,14 @@ package motion
 
 import (
 	"bytes"
+	"image"
 	"io"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 // appleMaster is part of the master playlist of the test album's square
@@ -104,6 +107,32 @@ func TestOutSizeKeepsTheShape(t *testing.T) {
 	// The tall cover's 664x886 rendition at 384 wide: 886/664*384 = 512.4.
 	if w, h := outSize(Variant{Width: 664, Height: 886}, 384); w != 384 || h != 512 {
 		t.Fatalf("outSize = %dx%d, want 384x512", w, h)
+	}
+}
+
+// still is a video of one frame.
+type still struct{}
+
+func (still) Next() (ui.VideoFrame, error) {
+	return ui.VideoFrame{Image: image.NewRGBA(image.Rect(0, 0, 2, 2))}, nil
+}
+
+func (still) Rewind() error { return nil }
+
+// A cover out of sight for half a minute, behind Settings or a hidden
+// window, comes back in the player it had, which went on from where it
+// stood, rather than in one starting over.
+func TestACoverOutOfSightForAWhileKeepsItsPlayer(t *testing.T) {
+	c := New(func(func()) {}, t.TempDir(), nil)
+	// Get starts no ffmpeg for a cover that has a player.
+	c.ffmpeg = "ffmpeg"
+	p, err := ui.NewVideoPlayer(still{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.entries[key{"master", bucket(512)}] = &entry{player: p, used: time.Now().Add(-30 * time.Second)}
+	if got := c.Get("master", 512); got != p {
+		t.Errorf("after 30 s out of sight, the cover has player %p, not its %p", got, p)
 	}
 }
 

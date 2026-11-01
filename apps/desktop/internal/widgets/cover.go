@@ -19,8 +19,8 @@ type Cover struct {
 	// Shadow drops the large soft shadow of a hero cover.
 	Shadow bool
 	// Video, when set, plays over the still: the motion cover, which fades
-	// in once its first frame is there. The still stays underneath as its
-	// poster.
+	// in once its first frame is there, and out, still playing, once Video
+	// is unset. The still stays underneath as its poster.
 	Video *ui.VideoPlayer
 }
 
@@ -31,6 +31,14 @@ func (cv Cover) Show(c *ui.Context) ui.Element {
 		box.Shadow(0, cv.Size/8, cv.Size/3, 0, ui.RGBA(0, 0, 0, 0.45))
 	}
 	video := box.AnimateTo("video", map[bool]float32{true: 1, false: 0}[cv.Video != nil], ui.Smooth)
+	// The player that showed last, which a fade out shows.
+	player := ui.Local(box, "player", func() *ui.VideoPlayer { return nil })
+	switch {
+	case cv.Video != nil:
+		*player = cv.Video
+	case video < 0.001:
+		*player = nil
+	}
 	box.InsetShadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.06))
 	color := min(max(cv.Color, 0), 1)
 	shown := box.AnimateTo("color", color, ui.Smooth)
@@ -44,8 +52,8 @@ func (cv Cover) Show(c *ui.Context) ui.Element {
 		if cv.Image != nil && shown > 0.001 {
 			ui.Image(c, cv.Image).Fill().Fit(ui.Cover).Opacity(shown).Absolute().Top(0).Left(0)
 		}
-		if cv.Video != nil {
-			ui.Video(c, cv.Video).Fill().Fit(ui.Cover).Opacity(video).Absolute().Top(0).Left(0)
+		if *player != nil {
+			ui.Video(c, *player).Fill().Fit(ui.Cover).Opacity(video).Absolute().Top(0).Left(0)
 		}
 	})
 	return box

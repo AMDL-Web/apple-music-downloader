@@ -251,7 +251,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	if compact {
 		size = heroCoverCompact
 	} else {
-		video = a.motionPlayer(c, j.MotionArtworkURL, size)
+		video = a.motionPlayer(c, j.MotionArtworkURL)
 	}
 	pal := jobPalette(j, video != nil)
 	hc := a.heroInk(c, pal, k)
@@ -390,9 +390,10 @@ func (a *App) heroRateText(c *ui.Context, j *store.Job) string {
 
 // heroCover makes a hero's cover open the job's detail, as its Details
 // button does, lifting a little under the pointer; the cover flies to the
-// album page's.
+// album page's. Another job's cover is another element, which takes
+// nothing over from this one, as its motion cover fading out.
 func (a *App) heroCover(c *ui.Context, j *store.Job, show func() ui.Element) {
-	b := ui.ButtonBase(c.Key("hero-cover")).Label("Open " + j.Name())
+	b := ui.ButtonBase(c.Key("hero-cover:" + j.ID)).Label("Open " + j.Name())
 	lift := b.AnimateTo("lift", map[bool]float32{true: 1, false: 0}[b.Hovered()], ui.Snappy)
 	if b.Clicked() {
 		a.openingFrom(heroFrom(j))

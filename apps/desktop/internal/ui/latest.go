@@ -26,7 +26,7 @@ func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	if compact {
 		size = heroCoverCompact
 	} else {
-		video = a.motionPlayer(c, j.MotionArtworkURL, size)
+		video = a.motionPlayer(c, j.MotionArtworkURL)
 	}
 	pal := jobPalette(j, video != nil)
 	hc := a.heroInk(c, pal, k)
@@ -136,7 +136,8 @@ func (a *App) recentWall(c *ui.Context, k *Tokens, finished []*store.Job, hero *
 func coverKey(j *store.Job) string { return j.Type + "\x00" + j.Name() + "\x00" + j.By() }
 
 // wallCover is one cover of the recent row, lifted and playing its motion
-// cover while hovered.
+// cover while hovered, and while the album page flies from or back to it,
+// so that the cover landing here goes on playing, then fades out.
 func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 	t := ui.ButtonBase(c.Key(j.ID)).Size(size, size).Label(j.Name())
 	hover := t.Hovered()
@@ -146,8 +147,8 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 		a.OpenJob(j.ID)
 	}
 	var video *ui.VideoPlayer
-	if hover {
-		video = a.motionPlayer(c, j.MotionArtworkURL, size)
+	if hover || (a.fly.moving && a.fly.from == "wall:"+j.ID) {
+		video = a.motionPlayer(c, j.MotionArtworkURL)
 	}
 	t.Cursor(ui.CursorPointer).Tooltip(j.Name() + " — " + j.By()).Children(func() {
 		frame := ui.Box(c).Size(size, size).Radius(radiusControl).Scale(1+0.06*lift, 1+0.06*lift)

@@ -160,9 +160,7 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	l := pageHero(c, page)
 	var video *ui.VideoPlayer
 	if j != nil {
-		// At least the queue hero's size, so that the motion cover flying
-		// between them plays on in the same player.
-		video = a.motionPlayer(c, j.MotionArtworkURL, max(l.cover, heroCover))
+		video = a.motionPlayer(c, j.MotionArtworkURL)
 	}
 	pal := a.pagePalette(c)
 	hc := heroColorsFor(pal, k)

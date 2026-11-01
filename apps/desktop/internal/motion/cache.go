@@ -21,8 +21,11 @@ import (
 )
 
 const (
-	// idleClose is how long a player nobody showed keeps its ffmpeg.
-	idleClose = 20 * time.Second
+	// idleClose is how long a player nobody showed keeps its ffmpeg,
+	// blocked on the pipe. The player holds its frame meanwhile, as
+	// ui.Video moves a video on only while it shows, so a cover shown
+	// again within it, back from Settings or a hidden window, plays on.
+	idleClose = 5 * time.Minute
 	// maxPlayers bounds the ffmpeg processes running at once.
 	maxPlayers = 3
 	// retryAfter is how long a cover that failed waits to be tried again.

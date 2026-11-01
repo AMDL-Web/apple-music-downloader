@@ -21,7 +21,7 @@ type heroLayout struct {
 // and bottom are the column's whatever the title.
 func pageHero(c *ui.Context, page float32) heroLayout {
 	_, height := c.Size()
-	l := heroLayout{cover: 248, title: 52, title2: 36, top: 26, gap: 32}
+	l := heroLayout{cover: pageCover, title: 52, title2: 36, top: 26, gap: 32}
 	if page < 960 || height < 700 {
 		l = heroLayout{cover: 216, title: 34, title2: 26, top: 12, gap: 24, compact: true}
 	}
@@ -30,8 +30,8 @@ func pageHero(c *ui.Context, page float32) heroLayout {
 }
 
 // heroPad is the room left and right of the head, and heroBottom under
-// it.
-const heroPad, heroBottom = 32, 22
+// it; pageCover is the head's cover at its largest.
+const heroPad, heroBottom, pageCover = 32, 22, 248
 
 // height is the head's: its column never runs taller than the cover
 // (titleSize).
