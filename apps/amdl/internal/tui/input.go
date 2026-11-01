@@ -22,12 +22,12 @@ import (
 type slash struct{ name, args, help string }
 
 var slashes = []slash{
-	{"/search", "<text>", "search the catalog (typing plain text does the same)"},
-	{"/download", "<link>…", "download links (pasting a link does the same)"},
+	{"/search", "<text>", "search the catalog"},
+	{"/download", "<link>…", "download links"},
 	{"/jobs", "", "list recent jobs"},
 	{"/cancel", "<job>", "cancel a queued or running job"},
 	{"/retry", "<job>", "re-run a failed or cancelled job"},
-	{"/remove", "<job>", "delete a finished job's records (asks first)"},
+	{"/remove", "<job>", "delete a finished job's records"},
 	{"/copy", "<job>", "copy a job's link"},
 	{"/queue", "", "reorder the jobs waiting to start"},
 	{"/library", "[text]", "list finished downloads"},
@@ -199,7 +199,7 @@ func (m *model) menuKey(key string, ms []slash) (tea.Cmd, bool) {
 
 func (m *model) quit() tea.Cmd {
 	m.cancel()
-	return tea.Sequence(tea.Println(m.theme.style(m.theme.dim).Render("  downloads keep running on the server")), tea.Quit)
+	return tea.Quit
 }
 
 func (m *model) closePanel() {

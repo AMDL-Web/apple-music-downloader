@@ -30,11 +30,14 @@ func TestPanelsOpenBelowThePrompt(t *testing.T) {
 	}
 }
 
-func TestPromptSaysSearchNeedsEnter(t *testing.T) {
+// Nothing is searched until Enter, so the prompt never says "type to search".
+func TestPromptDoesNotPromiseSearchAsYouType(t *testing.T) {
 	m := sample(t)
-	m.prompt(100)
-	if ph := m.input.Placeholder; !strings.Contains(ph, "press enter to search") || strings.Contains(ph, "type to search") {
-		t.Errorf("placeholder %q promises search as you type", ph)
+	for _, w := range []int{100, 46} {
+		m.prompt(w)
+		if ph := m.input.Placeholder; !strings.Contains(ph, "search") || strings.Contains(ph, "type to search") {
+			t.Errorf("%d columns: placeholder %q", w, ph)
+		}
 	}
 }
 
@@ -169,4 +172,24 @@ func TestCursorSitsInThePrompt(t *testing.T) {
 	check("no border", 30)
 	m.headerDone = false
 	check("banner still live", 100)
+}
+
+// The status line names only the keys a person would not guess: never esc,
+// and nothing while a line is typed.
+func TestHintsLeaveOutTheObvious(t *testing.T) {
+	m := sample(t)
+	withResults(m)
+	for p := panelNone; p <= panelQueue; p++ {
+		m.panel = p
+		for _, h := range m.hints() {
+			if strings.HasPrefix(h, "esc") {
+				t.Errorf("panel %v: %q", p, h)
+			}
+		}
+	}
+	m.panel = panelNone
+	m.input.SetValue("igor")
+	if h := m.hints(); len(h) != 0 {
+		t.Errorf("typing: %v", h)
+	}
 }

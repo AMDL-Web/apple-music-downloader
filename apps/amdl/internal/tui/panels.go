@@ -50,8 +50,11 @@ func (m *model) panelView(w, room int) string {
 	case panelConfirm:
 		return "  " + t.style(t.bad).Render(trunc(m.confirm.prompt, w-2))
 	case panelLogin:
-		what := map[string]string{"username": "your Apple ID", "password": "the password (not shown)", "code": "the two-step code from your device", "waiting": "signing in…"}[m.loginSt.step]
-		return "  " + t.style(t.dim).Render(trunc("sign in · "+what, w-2))
+		head := "sign in"
+		if what := map[string]string{"username": "Apple ID", "password": "password", "code": "two-step code"}[m.loginSt.step]; what != "" {
+			head += " · " + what
+		}
+		return "  " + t.style(t.dim).Render(trunc(head, w-2))
 	case panelHelp:
 		return m.helpView(w)
 	case panelAsk:
@@ -219,6 +222,8 @@ func (m *model) helpView(w int) string {
 		{"tab", "complete; change the filter"},
 		{"space", "select in search"},
 		{"shift+↑ ↓", "move in /quality and /queue"},
+		{"shift+home", "move to the first place"},
+		{"shift+end", "move to the last place"},
 		{"ctrl+o", "all tracks of the first job"},
 		{"ctrl+t", "every job in progress"},
 		{"/", "commands"},

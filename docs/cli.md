@@ -262,14 +262,15 @@ screen is redrawn.
   rest of the progress dashed, one cell per track up to `internal/progress#TickMax`)
   with the count, percent, time left and average speed (`internal/progress#AvgSpeed`),
   and three track rows with a seven-stage bar
-  each. A running card keeps its height until the job ends
-  (`apps/amdl/internal/tui#tracksPerCard`). The card takes its color from the album's
+  each. A queued job's card, and one still reading its tracklist, is one line; a running
+  card keeps its height until the job ends (`apps/amdl/internal/tui#tracksPerCard`). The card takes its color from the album's
   artwork. `ctrl+o` shows every track, `ctrl+t` every job.
 - **Jobs have session numbers**, `#1`, `#2`, on their cards and finished lines, which
   `/cancel`, `/retry`, `/remove`, `/copy` and `/logs` take, as well as the start of a job ID.
 - **Below the prompt** open the panels (the `/` menu, search hits, the preview, help),
   so opening one does not move the prompt, and under everything one status line: the
-  connection, the job counts, and the keys that matter at that moment.
+  connection, the job counts, and the keys of the moment that a person would not guess
+  (Esc and the arrows in a list go unsaid; `/help` lists every key).
 - **Widths**: past 120 columns the layout, and what goes into the scrollback, stays 120
   wide, wrapped by amdl rather than the terminal; narrow terminals drop the
   per-track status column, then the artist and the track rows, and below 40 columns

@@ -159,7 +159,7 @@ func (m *model) recent() string {
 		parts = append(parts, t.style(t.dim).Render(fmt.Sprintf("%d saved", c.Completed)))
 	}
 	if c.Failed > 0 {
-		parts = append(parts, t.style(t.bad).Render(fmt.Sprintf("%d failed", c.Failed))+t.style(t.dim).Render(" (/jobs)"))
+		parts = append(parts, t.style(t.bad).Render(fmt.Sprintf("%d failed", c.Failed)))
 	}
 	return strings.Join(parts, t.style(t.dim).Render(" · "))
 }

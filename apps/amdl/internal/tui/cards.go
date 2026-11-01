@@ -121,12 +121,8 @@ func (m *model) cards(w, room int) string {
 
 // cardHeight is the rows card draws for st with k track rows.
 func (m *model) cardHeight(st *jobState, k int) int {
-	j := st.job
-	if j.Status == domain.JobQueued {
+	if st.job.Status == domain.JobQueued || st.detail == nil || len(st.detail.Items) == 0 {
 		return 1
-	}
-	if st.detail == nil || len(st.detail.Items) == 0 {
-		return 2
 	}
 	return 2 + min(k, len(st.detail.Items))
 }
@@ -160,15 +156,11 @@ func (m *model) card(t theme, w int, id string, tracks int) string {
 	}
 	head += num
 	line := pad(head, w-lipgloss.Width(right)) + t.style(t.dim).Render(right)
-	if right == "queued" {
+	if right == "queued" || right == "resolving" {
 		return line
 	}
 	lines := []string{line}
 	a := m.album(st)
-	if right == "resolving" {
-		lines = append(lines, "  "+t.style(t.dim).Render("reading the tracklist…"))
-		return strings.Join(lines, "\n")
-	}
 	tail := ""
 	if w >= narrowCols {
 		tail = pad(format.Remaining(st.rate.Remaining()), etaWidth)

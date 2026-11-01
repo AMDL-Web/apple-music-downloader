@@ -245,10 +245,7 @@ func (m *model) jobTable(jobs []domain.Job) string {
 
 func (m *model) prompt(w int) string {
 	t := m.theme
-	ph := "paste a link, or type and press enter to search"
-	if w < mediumCols {
-		ph = "link, search or /"
-	}
+	ph := "link, search or /"
 	if m.panel == panelLogin {
 		ph = map[string]string{"username": "Apple ID", "password": "password", "code": "code"}[m.loginSt.step]
 	}
@@ -318,54 +315,56 @@ func (m *model) status(w int) string {
 	return pad(left, w-lipgloss.Width(right)-1) + t.style(t.dim).Render(right)
 }
 
-// hints are the keys of the moment, most useful first.
+// hints are the keys of the moment that a person would not guess, most
+// useful first: esc, ↑↓ in a list and enter on a typed line go without
+// saying, and the rest are in /help.
 func (m *model) hints() []string {
 	switch m.panel {
 	case panelResults:
-		h := []string{"enter downloads", "space selects", "esc closes"}
-		if m.res != nil && m.res.artist != nil {
+		h := []string{"enter downloads", "space selects"}
+		r := m.res
+		if r == nil {
+			return h
+		}
+		if r.artist != nil {
 			return append(h, "← back")
 		}
-		return append(h, "tab filters", "→ albums")
+		h = append(h, "tab filters")
+		if vis := r.visible(); r.cursor < len(vis) && r.items[vis[r.cursor]].hit.Type == "artist" {
+			h = append(h, "→ albums")
+		}
+		return h
 	case panelPreview:
-		return []string{"enter downloads", "esc dismisses"}
+		return []string{"enter downloads"}
 	case panelConfirm:
-		return []string{"y deletes", "n keeps"}
+		return []string{"y deletes"}
 	case panelPriority:
-		return []string{"enter saves", "space turns on/off", "shift+↑↓ moves", "esc cancels", "shift+home/end first/last"}
+		return []string{"enter saves", "space turns on/off", "shift+↑↓ moves"}
 	case panelQueue:
-		return []string{"shift+↑↓ moves", "esc closes", "shift+home/end first/last"}
+		return []string{"shift+↑↓ moves"}
 	case panelAsk:
-		h := []string{"enter downloads", "←→ chooses", "esc goes back"}
+		h := []string{"enter downloads", "←→ chooses"}
 		if m.ask != nil && m.ask.codecs != nil && m.ask.again {
 			h = append(h, "↑↓ question")
 		}
 		return h
-	case panelLogin:
-		return []string{"esc cancels"}
-	case panelHelp:
-		return []string{"esc closes"}
+	case panelLogin, panelHelp:
+		return nil
 	}
 	if len(m.menu()) > 0 {
-		return []string{"enter runs", "tab completes", "↑↓ choose"}
+		return []string{"tab completes"}
 	}
-	if v := strings.TrimSpace(m.input.Value()); v != "" {
-		if len(linksIn(v)) > 0 {
-			return []string{"enter previews", "esc clears"}
-		}
-		if !strings.HasPrefix(v, "/") {
-			return []string{"enter searches", "esc clears"}
-		}
-		return []string{"enter runs", "esc clears"}
+	if strings.TrimSpace(m.input.Value()) != "" {
+		return nil
 	}
+	h := []string{"? shortcuts"}
 	if len(m.jobs) > 0 {
-		h := []string{"? shortcuts", "ctrl+o tracks"}
-		if len(m.queuedIDs()) > 1 {
-			h = append(h, "/queue reorders")
-		}
-		return h
+		h = append(h, "ctrl+o tracks")
 	}
-	return []string{"? shortcuts", "/ commands"}
+	if len(m.queuedIDs()) > 1 {
+		h = append(h, "/queue reorders")
+	}
+	return h
 }
 
 func trackCount(n int) string {

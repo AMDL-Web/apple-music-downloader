@@ -212,3 +212,16 @@ func TestCardShowsTheAverageSpeed(t *testing.T) {
 		t.Errorf("60 columns keep the speed out:\n%s", out)
 	}
 }
+
+// A job that has not read its tracklist yet is one line, as a queued one is
+// (sample's job_b), until its tracks arrive.
+func TestAResolvingCardIsOneLine(t *testing.T) {
+	m := sample(t)
+	m.jobs["job_a"].detail = nil
+	if got := m.cardHeight(m.jobs["job_a"], tracksPerCard); got != 1 {
+		t.Errorf("height %d", got)
+	}
+	if out := stripANSI(m.cards(100, 20)); strings.Count(out, "\n") != 1 || !strings.Contains(out, "resolving") {
+		t.Errorf("cards:\n%s", out)
+	}
+}
