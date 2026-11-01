@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"strings"
 	"time"
 
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/mode"
@@ -141,6 +143,7 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 			})
 		}).Grow(1)
 		f.areaTop = area.Bounds().Y
+		a.restartBar(c, k, width)
 	})
 	a.followSections(c)
 	a.confirmDialog(c, k)
@@ -149,6 +152,42 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 // Settings' page, in DIPs: the navigation's width, the room either side of
 // the sections, and the widest they grow.
 const settingsNavWidth, settingsPad, settingsMaxWidth = 196, 28, 1160
+
+// restartBarWidth is the widest the restart bar grows; restartBarBottom
+// keeps it inside the 64 DIPs the sections leave below themselves.
+const restartBarWidth, restartBarHeight, restartBarBottom = 520, 44, 12
+
+// restartBar offers the restart that applies the saved keys waiting for one
+// (Config.PendingRestart), floating over the bottom of the sections, so its
+// coming and going moves nothing. A backend this app runs restarts by itself
+// (Store.AutoRestart) and offers none. The button keeps "Restarting…" until
+// the configuration read afterwards empties the list and the bar leaves.
+func (a *App) restartBar(c *ui.Context, k *Tokens, width float32) {
+	s := a.Store
+	cf := &s.Config
+	if len(cf.PendingRestart) == 0 || s.AutoRestart || s.Server.Read.IsZero() {
+		return
+	}
+	if cf.Restarting {
+		c.After(time.Second)
+	}
+	names := strings.Join(pendingLabels(cf.PendingRestart), ", ")
+	ui.Row(c.Key("restart-lane")).Absolute().Left(settingsNavWidth).Right(0).Bottom(restartBarBottom).Justify(ui.Center).PassThrough().Children(func() {
+		bar := ui.Row(c.Key("restart-bar")).Width(min(width, restartBarWidth)).Height(restartBarHeight).Padding(7).PaddingStart(16).Gap(12).
+			Radius(radiusFull).AlignItems(ui.Center).Material(glass.Glass{}).Border(1, k.Line)
+		bar.Shadow(0, 18, 40, -14, ui.RGBA(0, 0, 0, 0.4))
+		bar.Children(func() {
+			ui.Text(c, "Restart to apply "+names).FontSize(13).FontWeight(600).SingleLine().Ellipsis("…").Grow(1).Shrink(1).MinWidth(0)
+			text := "Restart"
+			if cf.Restarting {
+				text = "Restarting…"
+			}
+			if buttonRoom(c, k, buttonPrimary, text, "Restarting…", nil, cf.Restarting).Clicked() && !cf.Restarting {
+				s.RestartServer()
+			}
+		})
+	})
+}
 
 // settingsSections are Settings' sections, one after another in the
 // navigation's order: the status board, the backend's, then the app's. A

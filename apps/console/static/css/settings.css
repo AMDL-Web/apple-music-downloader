@@ -214,6 +214,38 @@
   margin-left: auto;
 }
 
+/* There when the page first draws (a restart still pending): no rise. */
+.save-bar[data-quiet] {
+  animation: none;
+}
+
+/* The restart offer keeps one row: the names give way, then the words. */
+.save-bar[data-state="restart"] {
+  flex-wrap: nowrap;
+}
+
+.save-bar[data-state="restart"] .save-bar-text {
+  flex: 1;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.save-bar[data-state="restart"] .save-bar-count,
+.save-bar[data-state="restart"] .save-bar-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-bar[data-state="restart"] .save-bar-count {
+  flex: 0 1 auto;
+}
+
+.save-bar[data-state="restart"] .save-bar-where {
+  flex: 0 1000 auto;
+  min-width: 0;
+}
+
 /* Keyboard focus and scrolled-to targets stop above the bar, not under it. */
 :root:has(.save-bar) {
   scroll-padding-bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
@@ -327,12 +359,24 @@
 
 .field-revert,
 .field-reset {
+  position: relative;
+  /* No phone .link padding and margin: the hit area is the ::before below,
+     and a wrapped link must not ride up into the label. */
+  margin: 0;
   padding: 0;
   border: 0;
   background: none;
   font-size: var(--fs-12);
   line-height: var(--lh-12);
   cursor: pointer;
+}
+
+/* A 44 px tall hit area around the one-word link; the row keeps its height. */
+.field-revert::before,
+.field-reset::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--lh-12) - var(--touch)) / 2) 0;
 }
 
 .field-help {
@@ -721,10 +765,6 @@
 
 .settings-error:focus {
   outline: none;
-}
-
-.settings-restart .notice {
-  align-items: center;
 }
 
 /* Both labels share one cell, so the button keeps the wider one's width. */

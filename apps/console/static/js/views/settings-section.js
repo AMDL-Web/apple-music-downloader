@@ -111,14 +111,24 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
   const fields = sectionFields(section.id);
   const sys = st.system && st.system.data;
   const sysPending = !st.system;
-  let rows = null;
+  let failed = null;
   if (cfg.error && !cfg.loaded)
-    rows =
+    failed =
       cfg.error.status === 404
         ? html`<${Unavailable} what="Runtime configuration (GET /api/v1/config)" />`
         : html`<${ErrorNote} title="Couldn't load the settings" error=${cfg.error} onRetry=${onRetry} />`;
-  else if (!cfg.loaded && fields.length) rows = html`<${SkeletonRows} n=${Math.min(fields.length, 6)} kind="line" />`;
-  const fieldRows = (list, after, extra, insert) => rows || html`<${FieldRows} fields=${list} form=${form} after=${after} extra=${extra} insert=${insert} />`;
+  // Until the configuration answers, each list of rows holds a skeleton line
+  // per field; a failed read says so once, in place of the first list.
+  let told = false;
+  const fieldRows = (list, after, extra, insert) => {
+    if (failed) {
+      if (told) return null;
+      told = true;
+      return failed;
+    }
+    if (!cfg.loaded) return list.length ? html`<${SkeletonRows} n=${Math.min(list.length, 6)} kind="line" />` : null;
+    return html`<${FieldRows} fields=${list} form=${form} after=${after} extra=${extra} insert=${insert} />`;
+  };
 
   switch (section.id) {
     case 'account': {

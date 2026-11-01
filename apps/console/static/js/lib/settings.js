@@ -13,7 +13,7 @@
 const OLDER_LAYOUT_NOTE = 'An install upgraded from an older version may still use {TrackNumber:02d} instead.';
 
 // The help of a key that applies when the server starts again (x-applies:
-// restart in openapi.yaml); the page's restart notice offers the restart.
+// restart in openapi.yaml); the page's save bar offers the restart.
 const RESTART = 'Applies after a restart.';
 
 /**
@@ -22,7 +22,7 @@ const RESTART = 'Applies after a restart.';
  * options). A `custom` select also takes any other value through a text box. `help`, when there is one, is one short line with what the label and
  * control don't show (a range, a dependency, a behavior that isn't the obvious one); `defaultValue` is the
  * value a key missing from the file takes (configs/config.example.yaml), shown
- * with the key on demand and used by Reset to default. Fields under a
+ * with the key on demand and used by Reset. Fields under a
  * section's sub-heading name their `group`. select options may carry a hint, added to the help line while chosen.
  */
 export const FIELDS = [

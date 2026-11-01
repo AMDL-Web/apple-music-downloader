@@ -21,6 +21,11 @@ type fakeBackend struct {
 	// old answers /config 404, as a backend older than the route.
 	old   bool
 	reads int
+	// pending is the answers' pending_restart; down is how many reads of
+	// /config fail after a restart request, as while the backend restarts.
+	pending   []string
+	down      int
+	restarted bool
 }
 
 // body is the i-th request body the backend read.
@@ -52,7 +57,15 @@ func (f *fakeBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		reply(http.StatusOK, map[string]any{"config": f.config, "persisted": true})
+		if f.restarted && f.down > 0 {
+			f.down--
+			fail(http.StatusServiceUnavailable, "unavailable", "restarting")
+			return
+		}
+		reply(http.StatusOK, map[string]any{"config": f.config, "persisted": true, "pending_restart": f.pending})
+	case "POST /api/v1/system/restart":
+		f.restarted, f.pending = true, nil
+		reply(http.StatusAccepted, map[string]string{"status": "restarting"})
 	case "PUT /api/v1/config":
 		f.bodies = append(f.bodies, string(body))
 		var patch map[string]map[string]any
@@ -190,6 +203,34 @@ func TestAFailedConfigReadWaitsBeforeTheNext(t *testing.T) {
 	defer f.mu.Unlock()
 	if f.reads != 2 {
 		t.Errorf("%d reads of /config; want one, then one more after ServerEvery", f.reads)
+	}
+}
+
+// A restart keeps the configuration on screen while the backend is down: the
+// reads that fail meanwhile set no Err and are retried, and the read that
+// answers clears PendingRestart and Restarting together.
+func TestRestartKeepsTheValuesUntilTheBackendAnswers(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{"download": {"max_running_jobs": 4}}, pending: []string{"download.max_running_jobs"}, down: 2}
+	s, settle := live(t, f)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	s.WatchConfig()
+	settle(func() bool { return s.Config.Values != nil })
+	if len(s.Config.PendingRestart) != 1 {
+		t.Fatalf("pending %q; want the one key", s.Config.PendingRestart)
+	}
+	s.RestartServer()
+	settle(func() bool { return s.Config.stale })
+	for i := 0; i < 3; i++ {
+		if s.Config.Values == nil || s.Config.Err != "" || !s.Config.Restarting {
+			t.Fatalf("read %d while restarting: values %v, err %q, restarting %v", i, s.Config.Values, s.Config.Err, s.Config.Restarting)
+		}
+		now = now.Add(restartPoll)
+		s.WatchConfig()
+		settle(func() bool { return !s.Config.reading })
+	}
+	if s.Config.Restarting || s.Config.stale || len(s.Config.PendingRestart) != 0 || s.Config.Values == nil {
+		t.Errorf("after the backend answered: restarting %v, stale %v, pending %q", s.Config.Restarting, s.Config.stale, s.Config.PendingRestart)
 	}
 }
 

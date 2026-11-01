@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -24,11 +23,6 @@ func (a *App) backendSection(c *ui.Context, k *Tokens, id string) {
 		a.hookList(c, k)
 	}
 	a.facts(c, k, id)
-	// A backend this app runs restarts by itself (Store.AutoRestart); another
-	// one offers the restart beside the keys that wait for it.
-	if waiting := pendingIn(s.Config.PendingRestart, id); len(waiting) > 0 && !s.AutoRestart {
-		actionRow(c, k, "Restart to apply "+strings.Join(waiting, ", "), "Restart", s.RestartServer)
-	}
 	a.sectionFields(c, k, id)
 	switch id {
 	case "library_sync":
@@ -46,15 +40,18 @@ func (a *App) backendSection(c *ui.Context, k *Tokens, id string) {
 	}
 }
 
-// pendingIn are the labels of the keys in pending whose field is in section.
-func pendingIn(pending []string, section string) []string {
-	var out []string
+// pendingLabels are the labels of the keys in pending, in its order; a key
+// with no field keeps its dotted name.
+func pendingLabels(pending []string) []string {
+	out := make([]string, 0, len(pending))
 	for _, key := range pending {
+		label := key
 		for i := range configFields {
-			if f := &configFields[i]; f.key == key && f.section == section {
-				out = append(out, f.label)
+			if configFields[i].key == key {
+				label = configFields[i].label
 			}
 		}
+		out = append(out, label)
 	}
 	return out
 }

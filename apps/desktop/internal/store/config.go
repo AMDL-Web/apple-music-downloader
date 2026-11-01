@@ -35,10 +35,16 @@ type Config struct {
 	// when it starts again (the response's pending_restart).
 	PendingRestart []string
 	// Restarting is set from a restart request until the configuration is
-	// read again.
+	// read again. Values stay on screen meanwhile, so nothing moves; the
+	// reads that fail while the backend is down are retried every
+	// restartPoll, for restartWithin, without an Err.
 	Restarting bool
 
 	reading bool
+	// stale asks WatchConfig for a read though Values are there, from
+	// restartSince.
+	stale        bool
+	restartSince time.Time
 	// tried is when the last read started: after a failed one the next
 	// waits ServerEvery, as the server's state does.
 	tried time.Time
@@ -79,12 +85,20 @@ func (c *Config) Value(key string) any {
 	return m[leaf]
 }
 
+// How often the configuration is read while a restart is under way, and for
+// how long, as the console waits for the server to come back.
+const (
+	restartPoll   = time.Second
+	restartWithin = 90 * time.Second
+)
+
 // WatchConfig reads the configuration when it has not been read on this
-// connection, or the last read failed.
+// connection, the last read failed, or a restart made it stale.
 func (s *Store) WatchConfig() {
 	cf := &s.Config
-	if s.client == nil || cf.reading || (cf.Values != nil && cf.Err == "") ||
-		(cf.Err != "" && s.now().Sub(cf.tried) < ServerEvery) {
+	if s.client == nil || cf.reading || (cf.Values != nil && cf.Err == "" && !cf.stale) ||
+		(cf.Err != "" && s.now().Sub(cf.tried) < ServerEvery) ||
+		(cf.stale && s.now().Sub(cf.tried) < restartPoll) {
 		return
 	}
 	cf.reading, cf.tried = true, s.now()
@@ -98,10 +112,14 @@ func (s *Store) WatchConfig() {
 		s.postIf(ctx, func() {
 			cf.reading = false
 			if err != nil {
-				cf.Err = Reason(err)
+				if cf.stale && s.now().Sub(cf.restartSince) < restartWithin {
+					return
+				}
+				cf.Err, cf.stale, cf.Restarting = Reason(err), false, false
 				return
 			}
 			cf.Values, cf.Persisted, cf.Err, cf.PendingRestart, cf.Restarting = ans.Config, ans.Persisted, "", ans.PendingRestart, false
+			cf.stale = false
 		})
 	}()
 }
@@ -194,8 +212,8 @@ func (s *Store) RestartServer() {
 				return
 			}
 			// WatchConfig reads again; until the backend answers, its reads
-			// fail and retry.
-			cf.Values = nil
+			// fail and retry, and the last Values stay on screen.
+			cf.stale, cf.restartSince = true, s.now()
 			s.refreshServer()
 		})
 	}()

@@ -48,7 +48,7 @@ While this machine runs its own wrapper (`amdl wrapper install`), the backend wr
 `GET /api/v1/config` returns runtime keys as they run and restart keys as saved;
 `pending_restart` in its answer, in the `PUT` answer and in `GET /api/v1/system` names the
 keys whose saved value differs from the running one, a hand edit of a file-only key
-included. `POST /api/v1/system/restart` (the console's restart notice, `amdl system
+included. `POST /api/v1/system/restart` (the console's save bar, `amdl system
 restart`) stops every component the way a shutdown does and starts again in the same
 process, on the same address, which applies them; the process start time stays, so
 `uptime_seconds` in `GET /api/v1/system` does not reset. No supervisor is needed: `amdl serve`,

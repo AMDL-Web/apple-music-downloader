@@ -3,7 +3,8 @@
 // body: the section list beside the status board (#/settings) or one open
 // section, its status head above its fields (on a phone, the list with live
 // summaries first and each section its own view with a way back), and a
-// fixed save bar while anything differs from the server. Save sends PUT
+// fixed save bar while anything differs from the server, which offers the
+// restart instead while saved keys wait for one. Save sends PUT
 // /api/v1/config with only the changed leaves (lib/settings-draft.js
 // buildPatch); leaving with unsaved changes asks first, inside the console
 // (the app's leave guard) and on unload. Status comes from the shared store
@@ -40,7 +41,7 @@ import { SettingsNav, SettingsList, SettingsBack, SaveBar } from './settings-nav
 import { DomainHead, RefreshButton } from './settings-head.js';
 import { SettingsBoard } from './settings-board.js';
 import { useShowKeys } from './settings-keys.js';
-import { RestartNotice } from './settings-restart.js';
+import { useRestart } from './settings-restart.js';
 
 const EMPTY = { loaded: false, error: null, base: {}, persisted: true, reloadError: '', pending: [] };
 const STATUS_KEYS = ['health', 'system', 'wrapper', 'librarySync', 'hooks', 'stats', 'logs', 'config'];
@@ -125,6 +126,18 @@ export function SettingsPage({ route }) {
     },
     [apply],
   );
+
+  // The restart applies what pending_restart names; the configuration read
+  // after it empties that list (whatever the draft holds: a restart changes
+  // no saved value) and the bar leaves in the same frame.
+  const restart = useRestart({
+    pending: cfg.pending,
+    toast: app.toast,
+    onRestarted: () => {
+      getConfig().then(apply, () => setLoadSeq((n) => n + 1));
+      invalidateStatus(STATUS_KEYS);
+    },
+  });
 
   // Load on mount, on Retry and after Discard, but never under unsaved
   // edits: Discard is the way to see the server's values again.
@@ -335,14 +348,20 @@ export function SettingsPage({ route }) {
 
   // A head whose first answer is out keeps its rows; the answer may close
   // two of them (data-compact), so the body is laid out but not drawn until
-  // it is in, or HOLD_MS, and never moves in sight.
+  // it is in, or HOLD_MS, and never moves in sight. The same holds for the
+  // configuration's first answer (the field rows), and on Account for
+  // /system and /wrapper/status, which decide whether the session service
+  // is a field or the "Run by amdl" fact row above the account panel.
   const [late, setLate] = useState(false);
   useEffect(() => {
     setLate(false);
     const t = setTimeout(() => setLate(true), HOLD_MS);
     return () => clearTimeout(t);
   }, [section.id]);
-  const held = !late && Boolean(views[section.id]) && views[section.id].state === 'loading';
+  const headLoading = Boolean(views[section.id]) && views[section.id].state === 'loading';
+  const cfgLoading = !cfg.loaded && !cfg.error;
+  const accountLoading = section.id === 'account' && (!st.system || !st.wrapper);
+  const held = !late && (headLoading || cfgLoading || accountLoading);
 
   const form = { valueOf, dirtyKeys, errors, warnings, setValue, revert, showKeys };
   const refresh = REFRESH[section.id];
@@ -397,19 +416,18 @@ export function SettingsPage({ route }) {
             </${Notice}>
           </div>`
         : null}
-      <${RestartNotice}
-        pending=${cfg.pending}
-        offline=${offline}
-        toast=${app.toast}
-        onRestarted=${() => {
-          setLoadSeq((n) => n + 1);
-          invalidateStatus(STATUS_KEYS);
-        }}
-      />
       ${main}
     </div>
-    ${dirty || saving
-      ? html`<${SaveBar} count=${dirtyKeys.length} sections=${dirtySections} saving=${saving} onDiscard=${askDiscard} onSave=${save} place=${place} />`
+    ${dirty || saving || cfg.pending.length > 0
+      ? html`<${SaveBar}
+          count=${dirtyKeys.length}
+          sections=${dirtySections}
+          saving=${saving}
+          onDiscard=${askDiscard}
+          onSave=${save}
+          place=${place}
+          restart=${dirty || saving ? null : { pending: cfg.pending, busy: restart.busy, offline, onRestart: restart.restart }}
+        />`
       : null}
     ${leaveTo
       ? html`<${ConfirmDialog}

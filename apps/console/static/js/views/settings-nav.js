@@ -1,9 +1,10 @@
 // The Settings page frame: the side list of sections (desktop), the phone's
-// list of sections with live summaries and its back link, and the save bar.
+// list of sections with live summaries and its back link, and the save bar
+// (which also offers the restart that applies saved keys).
 
-import { html } from '../ui/preact.js';
+import { html, useRef } from '../ui/preact.js';
 import { SETTINGS_SECTIONS } from '../lib/settings-sections.js';
-import { changesLabel } from '../lib/settings-draft.js';
+import { changesLabel, labelOf } from '../lib/settings-draft.js';
 import { settingsHash, buildHash } from '../lib/route.js';
 import { Icon, Button } from '../ui/components.js';
 
@@ -99,22 +100,53 @@ export function SettingsBack() {
 
 /**
  * The bar while anything differs from the server: the count and the
- * sections it is in (each a link), Discard and Save. Fixed and out of
- * flow: the page keeps its room, so it moves nothing when it comes.
+ * sections it is in (each a link), Discard and Save. With nothing unsaved
+ * and saved keys waiting for a restart (`restart`: {pending, busy, offline,
+ * onRestart}), the same bar offers the restart instead. Fixed and out of
+ * flow, one row at every width: the page keeps its room, so it moves
+ * nothing when it comes, changes or goes. A bar that is there when the
+ * page first draws (a restart still pending) does not rise in.
  * `place` is a style object with its --save-x and --save-w.
  */
-export function SaveBar({ count, sections, saving, onDiscard, onSave, place }) {
+export function SaveBar({ count, sections, saving, onDiscard, onSave, place, restart }) {
+  const quiet = useRef(Boolean(restart)).current;
+  if (restart) {
+    const names = restart.pending.map(labelOf).join(', ');
+    const off = restart.busy || restart.offline;
+    return html`<div class="save-bar" role="region" aria-label="Restart to apply" data-state="restart" data-quiet=${quiet ? '' : undefined} style=${place}>
+      <p class="save-bar-text" title=${names}>
+        <span class="save-bar-count">Restart to apply</span>
+        <span class="save-bar-where">${names}</span>
+      </p>
+      <div class="save-bar-actions">
+        <${Button}
+          key="restart"
+          variant="primary"
+          className="settings-restart-button"
+          aria-busy=${restart.busy ? 'true' : undefined}
+          aria-disabled=${off ? 'true' : undefined}
+          onClick=${off ? undefined : restart.onRestart}
+        >
+          <span class="settings-restart-label" data-shown=${restart.busy ? undefined : ''} aria-hidden=${restart.busy ? 'true' : undefined}>Restart</span>
+          <span class="settings-restart-label" data-shown=${restart.busy ? '' : undefined} aria-hidden=${restart.busy ? undefined : 'true'}>Restarting…</span>
+        </${Button}>
+      </div>
+    </div>`;
+  }
   const where = SETTINGS_SECTIONS.filter((s) => sections.has(s.id));
-  return html`<div class="save-bar" role="region" aria-label="Unsaved changes" data-state=${saving ? 'saving' : 'dirty'} style=${place}>
+  // "unsaved" is left out on a phone, where the count shares one row with two buttons.
+  const [head, tail] = changesLabel(count).split('unsaved ');
+  return html`<div class="save-bar" role="region" aria-label="Unsaved changes" data-state=${saving ? 'saving' : 'dirty'} data-quiet=${quiet ? '' : undefined} style=${place}>
     <p class="save-bar-text">
-      <span class="save-bar-count">${changesLabel(count)}</span>
+      <span class="save-bar-count">${head}<span class="save-bar-unsaved">unsaved </span>${tail}</span>
       <span class="save-bar-where">
         ${where.map((s, i) => html`${i ? ', ' : ''}<a key=${s.id} class="link" href=${settingsHash(s.id)}>${s.label}</a>`)}
       </span>
     </p>
     <div class="save-bar-actions">
-      <${Button} variant="ghost" className="save-bar-discard" onClick=${onDiscard} disabled=${saving}>Discard</${Button}>
+      <${Button} key="discard" variant="ghost" className="save-bar-discard" onClick=${onDiscard} disabled=${saving}>Discard</${Button}>
       <${Button}
+        key="save"
         variant="primary"
         icon="save"
         className="save-bar-save"

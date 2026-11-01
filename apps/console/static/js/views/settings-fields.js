@@ -23,7 +23,7 @@ const GROUPED = new Set(['list', 'set']);
  * > .field-text (.field-label, .field-changed + Undo or .field-reset,
  * .field-help (when the field has help, or a select's chosen option a .field-option-hint), then with `showKeys` .field-default and .field-key) +
  * .field-control, then .field-error, .field-warning. A saved value that
- * differs from the default offers "Reset to default", which is an edit like
+ * differs from the default offers Reset (to the default), which is an edit like
  * any other (Undo takes it back). A `disabled` field keeps its row and value
  * but takes no input (it applies only while another setting allows it);
  * `after` is a line under the row (a folder's free space); `extra` holds
@@ -64,7 +64,7 @@ export function SettingsField({ field, value, changed, error, warning, showKeys,
               title=${`Default: ${valueLabel(field, field.defaultValue)}`}
               aria-label=${`Reset ${field.label} to its default, ${valueLabel(field, field.defaultValue)}`}
               onClick=${() => onChange(Array.isArray(field.defaultValue) ? [...field.defaultValue] : field.defaultValue)}
-            >Reset to default</button>`
+            >Reset</button>`
           : null}
       </div>
       ${field.help || hint

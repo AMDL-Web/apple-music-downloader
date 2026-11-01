@@ -14,7 +14,7 @@ export function account(s, ctx) {
   const d = w && !down && w.data ? w.data : null;
   const regions = d && Array.isArray(d.regions) ? d.regions.filter((r) => typeof r === 'string' && r).map((r) => r.toLowerCase()) : [];
   // The head names the one storefront, or counts them and names each; the
-  // default storefront is the section's fact row.
+  // default storefront is the section's field.
   const one = regions.length === 1;
   const chips = { kind: 'chips', items: one ? [] : regions.map((r) => ({ label: r.toUpperCase() })) };
   const served = one ? { value: regions[0].toUpperCase(), unit: 'storefront' } : regions.length ? { value: String(regions.length), unit: 'storefronts' } : null;

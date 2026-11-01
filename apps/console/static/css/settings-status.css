@@ -752,6 +752,17 @@ fieldset.field-control {
 
   .save-bar-text {
     flex: 1;
+    overflow: hidden;
+  }
+
+  .save-bar-count {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .save-bar-unsaved {
+    display: none;
   }
 
   .save-bar-actions {
@@ -802,5 +813,13 @@ fieldset.field-control {
 @media (prefers-reduced-motion: reduce) {
   .domain-refresh[data-busy] .icon {
     animation: none;
+  }
+}
+
+/* Under 360 px "Unsaved" and Undo do not fit beside a long label; Undo
+   alone keeps the label row on one line, so an edit moves nothing. */
+@media (max-width: 359px) {
+  .field-changed {
+    display: none;
   }
 }

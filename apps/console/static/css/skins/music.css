@@ -2954,6 +2954,13 @@
     height: var(--touch);
   }
 
+  /* Under 360 px the pills give the count its room on the one row. */
+  @media (max-width: 359px) {
+    :root[data-skin="music"] .save-bar-actions .btn {
+      padding: 0 var(--s-3);
+    }
+  }
+
   /* Its actions can wrap under the count here: the radius is its touch
      pills' plus the padding, a capsule on one row and nested on two. */
   :root[data-skin="music"] .bulk-bar {
