@@ -93,7 +93,7 @@ wrapper 部署方式都以注释掉的服务写在里面。把它复制到一个
 
 ### 搭配 wrapper-manager v2（推荐）
 
-[wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2) 替你运行
+[wrapper-manager v2](https://github.com/AMDL-Web/wrapper-manager/tree/v2) 替你运行
 wrapper-lite，并且可以在控制台里登录。
 
 1. 在 `docker-compose.yml` 里取消注释 `wrapper-manager` 服务和文件末尾的 `volumes:` 块，并设置

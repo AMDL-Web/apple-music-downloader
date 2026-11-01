@@ -197,7 +197,7 @@ amdl only needs its address. Four ways to get one:
   [wrapper-lite README](https://github.com/AMDL-Web/wrapper/tree/lite#run-with-qemu-recommended)
   calls it the recommended way to run. wrapper-manager v2 has an equivalent,
   `wrapper-manager-qemu`
-  ([its README](https://github.com/WorldObservationLog/wrapper-manager/tree/v2#run-on-any-os-via-qemu-wrapper-manager-qemu)).
+  ([its README](https://github.com/AMDL-Web/wrapper-manager/tree/v2#run-on-any-os-via-qemu-wrapper-manager-qemu)).
 
 Notes on `wrapper-lite-qemu`, from its sources:
 

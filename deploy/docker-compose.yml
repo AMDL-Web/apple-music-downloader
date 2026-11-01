@@ -116,19 +116,19 @@ services:
 
   # Wrapper, option A (recommended): wrapper-manager v2, which supervises
   # wrapper-lite accounts behind one HTTP port and lets you log in from the
-  # console; amdl 2.0 supports one account in it. Upstream publishes no image, so compose builds it from the v2
-  # branch (Go and Docker are all it needs); first start also downloads the
-  # wrapper-lite payload from nightly.link: upstream's build, which fails every
-  # key after 1024 per start until restarted (docs/deployment.md, "The
-  # wrapper"). wrapper-lite-rootless needs user namespaces and chroot, which
-  # Docker blocks by default, hence privileged
-  # (a seccomp profile that allows unshare works too). Linux amd64 or arm64.
-  # Hosts without user namespaces: see docs/deployment.md, "The wrapper".
+  # console; amdl 2.0 supports one account in it. No image is published, so
+  # compose builds it from the v2 branch of AMDL-Web's fork (Go and Docker are
+  # all it needs), which installs AMDL-Web's wrapper-lite instead of upstream's
+  # (docs/deployment.md, "The wrapper"); first start downloads that payload from
+  # nightly.link. wrapper-lite-rootless needs user namespaces and chroot, which
+  # Docker blocks by default, hence privileged (a seccomp profile that allows
+  # unshare works too). Linux amd64 only. arm64 hosts and hosts without user
+  # namespaces: see docs/deployment.md, "The wrapper".
   # Uncomment, set AMDL_WRAPPER_ADDRESS above to "http://wrapper-manager:8080",
   # and add the wrapper-data volume at the bottom of this file. Then log in on
   # the console's Account page.
   # wrapper-manager:
-  #   build: https://github.com/WorldObservationLog/wrapper-manager.git#v2
+  #   build: https://github.com/AMDL-Web/wrapper-manager.git#v2
   #   image: wrapper-manager:latest
   #   container_name: wrapper-manager
   #   restart: unless-stopped
@@ -137,8 +137,7 @@ services:
   #   volumes:
   #     - wrapper-data:/root/data
 
-  # Wrapper, option B: a bare wrapper-lite, from AMDL-Web's fork, which lifts
-  # that limit. No image is published for it either; compose builds it from
+  # Wrapper, option B: a bare wrapper-lite, from AMDL-Web's fork. No image is published for it either; compose builds it from
   # the fork's lite branch, which downloads the Android NDK and takes a while.
   # It has no login API: put USERNAME and PASSWORD in a .env file next to this
   # one (never in this file) for the first start, which logs in; if Apple asks
