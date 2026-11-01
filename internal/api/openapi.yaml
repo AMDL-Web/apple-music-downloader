@@ -805,7 +805,7 @@ paths:
         whole lookup is bounded by 15 seconds.
 
         Only a private (pl.u-) playlist's cover uses a media-user-token: the
-        wrapper's when amdl can read it (WrapperStatus.media_user_token), else the
+        wrapper's when amdl has it (WrapperStatus.media_user_token), else the
         runtime catalog.media_user_token; the request cannot supply one. It is
         never echoed.
 
@@ -1923,12 +1923,15 @@ components:
         media_user_token:
           type: string
           description: >-
-            The wrapper account's media-user-token as amdl reads it, masked like
+            The wrapper account's media-user-token as amdl has it, masked like
             catalog.media_user_token in GET /config: "..." and its last four
-            characters. "" when amdl cannot read one: it runs no wrapper and
-            wrapper.data_dir is unset, the file is missing or unreadable, or it
-            does not hold a token. While it is not "", downloads, lookups and
-            library sync use it instead of catalog.media_user_token.
+            characters. amdl takes it from a wrapper it runs itself, else from
+            the wrapper's GET /token, else from wrapper.data_dir's MUSIC_TOKEN,
+            else from its own copy of an earlier GET /token answer. "" when
+            none has one: the wrapper has no GET /token or no logged-in account,
+            wrapper.data_dir is unset, its file is missing, unreadable or not a
+            token, and amdl keeps no copy. While it is not "", downloads,
+            lookups and library sync use it instead of catalog.media_user_token.
           example: "...a1b2"
     ManagedWrapper:
       type: object
@@ -2829,7 +2832,8 @@ components:
               type: string
               description: >-
                 The wrapper's data directory as this backend sees it, where it reads
-                the wrapper's MUSIC_TOKEN on every use; "" reads nothing.
+                the wrapper's MUSIC_TOKEN on every use while the wrapper's GET /token
+                gives none; "" reads nothing.
         simulate:
           type: object
           properties:

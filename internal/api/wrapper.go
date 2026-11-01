@@ -68,6 +68,8 @@ func (s *Server) wrapperLogin(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	if result.Status == wrapper.LoginStatusNeedsTwoStep {
 		status = http.StatusAccepted
+	} else {
+		s.tokens.RefreshSoon()
 	}
 	writeJSON(w, status, result)
 }
@@ -89,6 +91,7 @@ func (s *Server) wrapperTwoStep(w http.ResponseWriter, r *http.Request) {
 		writeWrapperError(w, err)
 		return
 	}
+	s.tokens.RefreshSoon()
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -108,6 +111,7 @@ func (s *Server) wrapperLogout(w http.ResponseWriter, r *http.Request) {
 		writeWrapperError(w, err)
 		return
 	}
+	s.tokens.RefreshSoon()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out", "username": req.Username})
 }
 

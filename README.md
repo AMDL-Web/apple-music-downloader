@@ -263,8 +263,9 @@ comments document every key: allowed values, units and defaults. Every key excep
 comments; restart keys, such as the wrapper address, apply after a restart, which the
 console starts from its Settings page (`POST /api/v1/system/restart`). No environment
 variable overrides a key. Radio stations need
-your subscription token: the backend reads it from the wrapper when it runs the wrapper
-itself or `wrapper.data_dir` points at the wrapper's files, and otherwise from
+your subscription token: the backend gets it from the wrapper when it runs the wrapper
+itself, when the wrapper serves `GET /token` (amdl's wrapper-lite fork) or when
+`wrapper.data_dir` points at the wrapper's files, and otherwise from
 `catalog.media_user_token`. Details: [docs/configuration.md](docs/configuration.md).
 
 ## Automation

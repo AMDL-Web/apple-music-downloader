@@ -35,7 +35,9 @@ server:
 database:
   # string: SQLite database file path. Relative paths are resolved from the backend working directory. In the
   # container image keep the default and move the data with the volume mapping instead: the entrypoint gives
-  # only the default path to the container's user. Set only in this file, not through the API; applies after a restart.
+  # only the default path to the container's user. The backend also keeps its copy of the wrapper's media-user-token
+  # (from the wrapper's GET /token) in usertoken/wrapper-token.json in this file's directory, mode 0600.
+  # Set only in this file, not through the API; applies after a restart.
   path: "data/db/amdl.db"
 
 logging:
@@ -83,7 +85,9 @@ wrapper:
   login_timeout_seconds: 120
   # string: the wrapper's data directory as this backend sees it, so the backend can read the Apple Music
   # media-user-token the wrapper keeps in a file named MUSIC_TOKEN and refreshes itself; while it can, that token
-  # is used instead of catalog.media_user_token. Two layouts are read: a wrapper-lite base directory, read as
+  # is used instead of catalog.media_user_token. A wrapper that serves GET /token at wrapper.address (amdl's
+  # wrapper-lite fork) hands its token over directly and needs no data_dir; while it gives one, this file is not
+  # read (docs/configuration.md, The media-user-token). Two layouts are read: a wrapper-lite base directory, read as
   # <data_dir>/MUSIC_TOKEN (the ./data/wrapper bind mount of deploy/docker-compose.yml's wrapper-lite option), and
   # a wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN (<volume>/wrapper/rootfs/data
   # in the wrapper-manager option). One wrapper account is supported, a wrapper-manager's included; with several,
@@ -125,7 +129,8 @@ catalog:
   # string: optional Apple Music subscription token (media-user-token); album, song and playlist downloads do not need it.
   # Station downloads need one, and private playlist covers and library sync use one; with one, lyrics and the AAC-LC
   # playlist and license are requested from Apple by the backend instead of the wrapper. This key is the fallback: while
-  # the backend can read the wrapper's own token (a wrapper it runs itself, or wrapper.data_dir), it uses that one and
+  # the backend has the wrapper's own token (a wrapper it runs itself, the wrapper's GET /token, wrapper.data_dir, or its
+  # stored copy of an earlier GET /token answer), it uses that one and
   # leaves this value saved but unused. A download or lookup request cannot supply its own token.
   # Runtime: a change applies to jobs and lookups that start afterwards. GET /api/v1/config returns it masked, "..."
   # and its last four characters; the full value is only in this file. Empty means none: without a wrapper token,
@@ -383,8 +388,9 @@ library_sync:
   # monitor off really stops polling rather than just discarding the results.
   #
   # Requires a media-user-token — a personal library can be read only with the subscription
-  # token; the web-player token alone is not enough. The wrapper's is used when the backend can
-  # read it (a wrapper it runs itself, or wrapper.data_dir), else catalog.media_user_token. While
+  # token; the web-player token alone is not enough. The wrapper's is used when the backend has
+  # it (a wrapper it runs itself, the wrapper's GET /token, or wrapper.data_dir), else
+  # catalog.media_user_token. While
   # neither has one the monitor idles and warns once, instead of reporting an error every round,
   # and starts within a tick of one appearing.
   #
