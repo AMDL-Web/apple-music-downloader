@@ -66,7 +66,7 @@ func detailView(a *App) func(c *ui.Context) {
 		c.Root().Background(k.Ground)
 		w, _ := c.Size()
 		ui.Box(c).Fill().Background(k.Ground).Clip().Children(func() {
-			paletteBackdrop(c, k, a.pagePalette(c))
+			paletteBackdrop(c, k, a.pagePalette(c), false)
 			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
 				ui.Row(c).Height(52)
 				ui.Column(c).Grow(1).MinHeight(0).Children(func() { a.albumScreen(c, k, w) })

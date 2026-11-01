@@ -9,7 +9,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/store"
-	"amdl/apps/desktop/internal/widgets"
 )
 
 // Home's layout, in DIPs.
@@ -255,15 +254,4 @@ func (a *App) homePalette() Palette {
 		}
 	}
 	return Palette{}
-}
-
-// homeBackdrop lights home's top with pal, as the queue's hero lights it
-// with the album downloading. Its band reaches past the discs' blur, so the
-// light fades out above the results instead of ending in a line.
-func homeBackdrop(c *ui.Context, k *Tokens, pal Palette) {
-	strength := float32(0.45)
-	if !k.Dark {
-		strength = 0.22
-	}
-	widgets.Backdrop{Light: pal.Bg, Deep: pal.Bg.Mix(ui.Hex("#05081f"), 0.65), Strength: strength, Height: 560}.Show(c)
 }

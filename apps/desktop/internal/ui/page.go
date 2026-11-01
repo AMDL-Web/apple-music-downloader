@@ -152,7 +152,7 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	}
 	pal := a.pagePalette(c)
 	a.collectionHero(c, k, l, a.pageHead(c, k, l, p, j, pal, video))
-	accent := heroColorsFor(pal, k).accent
+	accent := heroColorsFor(pal, k).eased(c).accent
 	// Opaque, so the backdrop, which lights the head, ends under it.
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Background(detailGround(k)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Children(func() {
 		a.pageTracks(c, k, j, accent, stageWidth(page))
@@ -171,7 +171,7 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 // album is read under another address of the same picture.
 func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPage, j *store.Job, pal Palette, video *ui.VideoPlayer) heroSpec {
 	s := a.Store
-	hc := heroColorsFor(pal, k)
+	hc := heroColorsFor(pal, k).eased(c)
 	album := p.ID != ""
 	f := albumOf(p)
 	h := heroSpec{colors: hc}

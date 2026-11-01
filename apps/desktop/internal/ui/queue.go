@@ -30,37 +30,44 @@ func (a *App) heroJob() *store.Job {
 	return nil
 }
 
-// backdrop lights the top of the main column with the hero's palette.
+// backdrop lights the top of the main column with the palette of what the
+// screen shows: the album page's, home's link or first result, the queue
+// hero's. A screen without one eases the light out.
 func (a *App) backdrop(c *ui.Context, k *Tokens) {
-	if a.Screen == ScreenAlbum {
-		paletteBackdrop(c, k, a.pagePalette(c))
-		return
-	}
-	if a.Screen == ScreenHome {
-		if pal := a.homePalette(); pal.OK {
-			homeBackdrop(c, k, pal)
-			return
+	var pal Palette
+	switch a.Screen {
+	case ScreenAlbum:
+		pal = a.pagePalette(c)
+	case ScreenHome:
+		pal = a.homePalette()
+	case ScreenQueue:
+		if j := a.heroJob(); j != nil {
+			// A narrow window's queue hero shows the still cover.
+			pal = jobPalette(j, !a.compact && a.motionShown(c, j.MotionArtworkURL))
 		}
 	}
-	j := a.heroJob()
-	if j == nil {
-		return
-	}
-	// A narrow window's queue hero shows the still cover.
-	pal := jobPalette(j, !a.compact && a.motionShown(c, j.MotionArtworkURL))
-	paletteBackdrop(c, k, pal)
+	paletteBackdrop(c, k, pal, a.Screen == ScreenHome)
 }
 
-// paletteBackdrop lights the top of the main column with pal.
-func paletteBackdrop(c *ui.Context, k *Tokens, pal Palette) {
-	if !pal.OK {
-		return
-	}
-	strength := float32(0.55)
-	if !k.Dark {
+// paletteBackdrop lights the top of the main column with pal, or eases the
+// light out without one. Home's band reaches past the discs' blur, so the
+// light fades out above the results instead of ending in a line; the
+// queue's and the album page's end under their opaque lists.
+func paletteBackdrop(c *ui.Context, k *Tokens, pal Palette, home bool) {
+	strength, height := float32(0.55), float32(420)
+	switch {
+	case home && k.Dark:
+		strength, height = 0.45, 560
+	case home:
+		strength, height = 0.22, 560
+	case !k.Dark:
 		strength = 0.28
 	}
-	widgets.Backdrop{Light: pal.Bg, Deep: pal.Bg.Mix(ui.Hex("#05081f"), 0.65), Strength: strength, Height: 420}.Show(c)
+	b := widgets.Backdrop{Strength: strength, Height: height}
+	if pal.OK {
+		b.Light, b.Deep = pal.Bg, pal.Bg.Mix(ui.Hex("#05081f"), 0.65)
+	}
+	b.Show(c)
 }
 
 // heroColors are the text colors over a hero lit by pal.
@@ -83,6 +90,21 @@ func heroColorsFor(pal Palette, k *Tokens) heroColors {
 		if deep := pal.Bg.Mix(ui.Hex("#05081f"), 0.6); Contrast(deep, h.title) >= 4.5 {
 			h.ink = deep
 		}
+	}
+	return h
+}
+
+// heroPart names one of a hero's colors as it eases (heroColors.eased).
+type heroPart int
+
+// eased eases h from the colors a hero showed before, as the backdrop eases
+// its light: the text follows a new palette, or the theme's colors without
+// one, rather than switching at once. The queue's hero and the album page's
+// head share them, as they share the album they open on.
+func (h heroColors) eased(c *ui.Context) heroColors {
+	r := c.Root()
+	for i, col := range []*ui.Color{&h.title, &h.meta, &h.label, &h.accent, &h.ink} {
+		*col = r.AnimateColor(heroPart(i), *col, ui.Smooth)
 	}
 	return h
 }
@@ -213,7 +235,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		video = a.motionPlayer(c, j.MotionArtworkURL, size)
 	}
 	pal := jobPalette(j, video != nil)
-	hc := heroColorsFor(pal, k)
+	hc := heroColorsFor(pal, k).eased(c)
 	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.End).Children(func() {
 		a.heroCover(c, j, func() {
 			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)

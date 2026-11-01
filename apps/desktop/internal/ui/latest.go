@@ -29,7 +29,7 @@ func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 		video = a.motionPlayer(c, j.MotionArtworkURL, size)
 	}
 	pal := jobPalette(j, video != nil)
-	hc := heroColorsFor(pal, k)
+	hc := heroColorsFor(pal, k).eased(c)
 	ui.Row(c).Padding(18, 28, 20, 28).Gap(28).AlignItems(ui.End).Children(func() {
 		a.heroCover(c, j, func() {
 			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)

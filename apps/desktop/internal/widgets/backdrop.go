@@ -6,7 +6,8 @@ import (
 
 // Backdrop lights a screen with an album's palette: two large blurred
 // discs behind the content, as MyGo 云音乐's backdrop does with a cover's
-// main color. A change of album eases from one palette to the next.
+// main color. A change of album eases from one palette to the next, and a
+// screen with none (a transparent Light) eases the light out.
 type Backdrop struct {
 	// Light and Deep are the two discs' colors: the palette's background
 	// and a darker shade of it.
@@ -19,12 +20,23 @@ type Backdrop struct {
 }
 
 // Show builds the backdrop as a layer under its parent's other children.
+// It is built on every frame, with or without a palette, so that its light
+// eases in and out rather than coming and going at once.
 func (b Backdrop) Show(c *ui.Context) {
-	layer := ui.Box(c.Key("backdrop")).Absolute().Top(0).Left(0).Right(0).Height(b.Height).PassThrough().ClipX()
-	light := layer.AnimateColor("light", b.Light, ui.Smooth)
-	deep := layer.AnimateColor("deep", b.Deep, ui.Smooth)
+	light, deep := ui.Transparent, ui.Transparent
+	if b.Light.A > 0 {
+		light, deep = b.Light.Alpha(b.Strength), b.Deep.Alpha(min(b.Strength*1.45, 1))
+	}
+	layer := ui.Box(c.Key("backdrop")).Absolute().Top(0).Left(0).Right(0).PassThrough().ClipX()
+	// Colors mix premultiplied, so a light fading out keeps its hue.
+	light = layer.AnimateColor("light", light, ui.Smooth)
+	deep = layer.AnimateColor("deep", deep, ui.Smooth)
+	layer.Height(layer.AnimateTo("height", b.Height, ui.Smooth))
+	if light.A == 0 && deep.A == 0 {
+		return
+	}
 	layer.Cache().Children(func() {
-		ui.Box(c).Size(620, 620).Radius(999).Background(light.Alpha(b.Strength)).Blur(70).Absolute().Left(-120).Top(-260)
-		ui.Box(c).Size(520, 520).Radius(999).Background(deep.Alpha(min(b.Strength*1.45, 1))).Blur(70).Absolute().Right(-140).Top(-160)
+		ui.Box(c).Size(620, 620).Radius(999).Background(light).Blur(70).Absolute().Left(-120).Top(-260)
+		ui.Box(c).Size(520, 520).Radius(999).Background(deep).Blur(70).Absolute().Right(-140).Top(-160)
 	})
 }
