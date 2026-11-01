@@ -109,7 +109,7 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 	}
 
 	resolved, _, err := retryValue(ctx, d.cfg.Download.MaxAttempts, retryBackoff, func(int) (resolvedCollection, error) {
-		return d.resolveCollection(ctx, parsed)
+		return d.resolveCollection(ctx, parsed, true)
 	}, func(failure retryFailure) {
 		d.emitRetryEvent(ctx, reporter, job.ID, nil, "resolve_tracks", "", failure)
 	})
@@ -154,23 +154,17 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 		return fmt.Errorf("no downloadable songs found")
 	}
 	d.startMotionArtworkBackfill(ctx, job.ID, parsed, tracks, reporter)
-	folderArtist := collectionFolderArtist(parsed.Type, tracks)
 
 	items, finished, err := syncJobItems(ctx, job, tracks, reporter)
 	if err != nil {
 		return err
 	}
 	metadata := newTrackMetadataResolver(d, parsed.Storefront)
-
-	indexes := collectionIndexes(d.cfg, parsed.Type, tracks)
+	targets := d.trackTargets(parsed, resolved)
 
 	log := logging.FromContext(ctx, d.logger)
 	return runTrackTasks(ctx, log, len(tracks), finished, false, func(trackCtx context.Context, i int) error {
-		target := trackTarget{
-			storefront: parsed.Storefront, collectionType: parsed.Type, collectionName: collectionName,
-			collectionID: collectionID, collectionIndex: indexes[i], folderArtist: folderArtist,
-		}
-		err := d.newTrackRun(job, items[i], tracks[i], target, metadata, reporter).run(trackCtx)
+		err := d.newTrackRun(job, items[i], tracks[i], targets[i], metadata, reporter).run(trackCtx)
 		if err != nil && trackCtx.Err() == nil {
 			attrs := []any{"item_id", items[i].ID, "adam_id", tracks[i].ID, "error", err}
 			if body := logging.UpstreamBody(err); body != "" {
@@ -180,6 +174,28 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 		}
 		return err
 	})
+}
+
+// trackTargets places each resolved track once, before any track runs. A
+// song, album or artist track takes its library path and cover folders from
+// its placement; a playlist or station track is numbered by its position in
+// the list and expands its template per codec attempt.
+func (d *Downloader) trackTargets(parsed applemusic.ParsedURL, resolved resolvedCollection) []trackTarget {
+	targets := make([]trackTarget, len(resolved.Tracks))
+	for i := range resolved.Tracks {
+		target := trackTarget{
+			storefront: parsed.Storefront, collectionType: parsed.Type, collectionName: resolved.Name,
+			collectionID: resolved.ID, collectionIndex: i + 1,
+		}
+		if inLibrary(parsed.Type) && i < len(resolved.Placements) {
+			placement := resolved.Placements[i]
+			target.collectionIndex = placement.Index
+			target.libraryPath = libraryTrackPath(d.cfg, placement)
+			target.albumDir, target.artistDir = libraryCoverDirs(d.cfg, placement.Album)
+		}
+		targets[i] = target
+	}
+	return targets
 }
 
 // runTrackTasks starts every unfinished track without a per-job concurrency

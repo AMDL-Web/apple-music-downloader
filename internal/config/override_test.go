@@ -143,9 +143,7 @@ var overrideExclusions = map[string]bool{
 	// Install settings that Settings changes for every job.
 	"download.max_attempts":         true,
 	"download.downloads_dir":        true,
-	"download.song_path_format":     true,
-	"download.album_path_format":    true,
-	"download.artist_path_format":   true,
+	"download.library_path_format":  true,
 	"download.playlist_path_format": true,
 	"download.station_path_format":  true,
 	"download.temp_dir":             true,

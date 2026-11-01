@@ -36,7 +36,6 @@ type collectionQualityCatalog struct {
 	resolveErr  error
 	metadataErr map[string]error
 
-	songCalls      []string
 	metadataCalls  []string
 	albumCalls     []string
 	playlistCalls  []string
@@ -44,16 +43,6 @@ type collectionQualityCatalog struct {
 	artistCalls    []string
 	playlistTokens []string
 	stationTokens  []string
-}
-
-func (f *collectionQualityCatalog) Song(_ context.Context, storefront, id string) (applemusic.Song, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.songCalls = append(f.songCalls, storefront+"/"+id)
-	if f.resolveErr != nil {
-		return applemusic.Song{}, f.resolveErr
-	}
-	return f.songs[id], nil
 }
 
 func (f *collectionQualityCatalog) SongMetadata(_ context.Context, storefront, id string) (applemusic.Song, error) {

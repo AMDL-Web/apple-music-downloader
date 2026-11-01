@@ -341,7 +341,8 @@ curl -X POST http://localhost:18080/api/v1/downloads \
 Live stations such as Apple Music 1 have no static track list and end with an explicit
 error. Station tracks come from Apple's rolling "next tracks" list, so one download
 captures whatever is offered at that moment rather than a fixed catalogue. Output goes to
-its own directory per `download.station_path_format`.
+its own directory per `download.station_path_format`, outside the library that songs,
+albums and artists share (`download.library_path_format`).
 
 A token also unlocks private-playlist artwork: the public catalog has no cover for a
 private playlist, so with a token the backend reads it from the library copy as the user.

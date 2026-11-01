@@ -306,7 +306,7 @@ func TestTerminalItemWriteIsRetriedOnce(t *testing.T) {
 	d := newTestDownloader(&Downloader{cfg: cfg})
 
 	err := d.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"},
-		applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}, "cn", applemusic.TypeSong, "", "", 1, "", reporter)
+		applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}, "cn", applemusic.TypeSong, "", "", 1, reporter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,7 @@ func TestTrackPanicFailsOnlyThatItem(t *testing.T) {
 	d := newTestDownloader(&Downloader{cfg: cfg, catalog: panickyCatalog{}})
 
 	err := d.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"},
-		applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter)
+		applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter)
 	if err == nil || !strings.Contains(err.Error(), "catalog exploded") {
 		t.Fatalf("error = %v, want the panic as the track's error", err)
 	}
@@ -372,7 +372,7 @@ func TestMissingEnhancedManifestFallsBackWithoutRetrying(t *testing.T) {
 
 	start := time.Now()
 	err := d.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"},
-		applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}, "cn", applemusic.TypeSong, "", "", 1, "", reporter)
+		applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}, "cn", applemusic.TypeSong, "", "", 1, reporter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +416,7 @@ func TestSimulatedAACLCRequestIsResolving(t *testing.T) {
 	reporter := &recordingReporter{}
 	d := newTestDownloader(&Downloader{cfg: cfg})
 	if err := d.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"},
-		applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}, "cn", applemusic.TypeSong, "", "", 1, "", reporter); err != nil {
+		applemusic.Song{ID: "song-1", Name: "Track", DurationInMillis: 1000}, "cn", applemusic.TypeSong, "", "", 1, reporter); err != nil {
 		t.Fatal(err)
 	}
 	for _, ev := range reporter.events {
@@ -513,7 +513,7 @@ func TestSimulatedTrackMatchesTheRealLifecycle(t *testing.T) {
 		})
 		reporter := &recordingReporter{}
 		if err := d.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"},
-			applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); err != nil {
+			applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
 			t.Fatalf("simulate=%v: %v", simulate, err)
 		}
 		final := reporter.items[len(reporter.items)-1]

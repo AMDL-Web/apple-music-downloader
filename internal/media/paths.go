@@ -52,10 +52,9 @@ func isDotOrSpace(r rune) bool { return r == '.' || unicode.IsSpace(r) }
 // outputPath expands the task type's path template into the final .m4a path.
 // The template is split on "/"; every segment is expanded and sanitized
 // independently, so template values can never introduce extra directories.
-// Directory segments use folderArtist (the collection's grouping artist) for
-// {ArtistName} so all tracks of a collection land in one folder; the filename
-// segment always uses the track's own metadata.
-func outputPath(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, collectionIndex int, folderArtist, playlistName, playlistID, codec, quality string) string {
+// A song, album or artist track the job placed in the library takes
+// libraryTrackPath instead (trackTarget.outputPath).
+func outputPath(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, collectionIndex int, playlistName, playlistID, codec, quality string) string {
 	ctx := pathTemplateContext{
 		song:            song,
 		collectionIndex: collectionIndex,
@@ -64,22 +63,11 @@ func outputPath(cfg config.Config, song applemusic.Song, collectionType applemus
 		codec:           codec,
 		quality:         quality,
 	}
-	folderCtx := ctx
-	if folderArtist != "" {
-		folderSong := song
-		folderSong.ArtistName = folderArtist
-		folderCtx.song = folderSong
-	}
-
 	segments := strings.Split(pathPattern(cfg, collectionType), "/")
 	parts := make([]string, 0, len(segments)+1)
 	parts = append(parts, cfg.Download.DownloadsDir)
 	for i, segment := range segments {
-		segCtx := folderCtx
-		if i == len(segments)-1 {
-			segCtx = ctx
-		}
-		name := safeName(formatPattern(segment, segCtx))
+		name := safeName(formatPattern(segment, ctx))
 		if i == len(segments)-1 {
 			name += ".m4a"
 		}
@@ -89,56 +77,7 @@ func outputPath(cfg config.Config, song applemusic.Song, collectionType applemus
 }
 
 func collectionFolderPath(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, name, id string) string {
-	return filepath.Dir(outputPath(cfg, song, collectionType, 1, "", name, id, "", ""))
-}
-
-// standaloneCoverDirs resolves where standalone album and artist covers live.
-// The path templates are free-form, so the directories are located by variable
-// reference instead of by counting levels: the album cover goes into the
-// deepest directory segment referencing the album ({AlbumName} or {AlbumId}),
-// falling back to the track's directory; the artist cover goes into the
-// deepest directory segment referencing the artist ({ArtistName},
-// {UrlArtistName}, {AlbumArtist}, or {ArtistId}), and artistDir is empty when
-// no segment does, in which case the artist cover is skipped.
-//
-// Segments expand with the same context as outputPath's directory segments so
-// covers land next to the audio files; codec and quality stay empty because
-// covers are saved once per collection, before any codec attempt.
-func standaloneCoverDirs(cfg config.Config, song applemusic.Song, collectionType applemusic.URLType, collectionIndex int, folderArtist, playlistName, playlistID string) (albumDir, artistDir string) {
-	ctx := pathTemplateContext{
-		song:            song,
-		collectionIndex: collectionIndex,
-		playlistName:    playlistName,
-		playlistID:      playlistID,
-	}
-	if folderArtist != "" {
-		folderSong := song
-		folderSong.ArtistName = folderArtist
-		ctx.song = folderSong
-	}
-
-	segments := strings.Split(pathPattern(cfg, collectionType), "/")
-	dirSegments := segments[:len(segments)-1]
-	albumIdx, artistIdx := len(dirSegments)-1, -1
-	for i, segment := range dirSegments {
-		if segmentReferences(segment, "AlbumName", "AlbumId") {
-			albumIdx = i
-		}
-		if segmentReferences(segment, "ArtistName", "UrlArtistName", "AlbumArtist", "ArtistId") {
-			artistIdx = i
-		}
-	}
-
-	parts := make([]string, 0, len(dirSegments)+1)
-	parts = append(parts, cfg.Download.DownloadsDir)
-	for _, segment := range dirSegments {
-		parts = append(parts, safeName(formatPattern(segment, ctx)))
-	}
-	albumDir = filepath.Join(parts[:albumIdx+2]...)
-	if artistIdx >= 0 {
-		artistDir = filepath.Join(parts[:artistIdx+2]...)
-	}
-	return albumDir, artistDir
+	return filepath.Dir(outputPath(cfg, song, collectionType, 1, name, id, "", ""))
 }
 
 func segmentReferences(segment string, names ...string) bool {
@@ -154,17 +93,19 @@ func segmentReferences(segment string, names ...string) bool {
 
 func pathPattern(cfg config.Config, collectionType applemusic.URLType) string {
 	switch collectionType {
-	case applemusic.TypeAlbum:
-		return cfg.Download.AlbumPathFormat
 	case applemusic.TypePlaylist:
 		return cfg.Download.PlaylistPathFormat
 	case applemusic.TypeStation:
 		return cfg.Download.StationPathFormat
-	case applemusic.TypeArtist:
-		return cfg.Download.ArtistPathFormat
 	default:
-		return cfg.Download.SongPathFormat
+		return cfg.Download.LibraryPathFormat
 	}
+}
+
+// inLibrary reports whether collectionType's tracks land in the library
+// (download.library_path_format) rather than in a collection's own folder.
+func inLibrary(collectionType applemusic.URLType) bool {
+	return collectionType != applemusic.TypePlaylist && collectionType != applemusic.TypeStation
 }
 
 func formatPattern(pattern string, ctx pathTemplateContext) string {

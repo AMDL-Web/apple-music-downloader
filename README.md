@@ -215,8 +215,11 @@ Process lifecycle and package boundaries: [docs/architecture.md](docs/architectu
 ## Where files land
 
 Finished files go under `download.downloads_dir` (`./data/downloads` with Compose). Songs,
-albums, artists, playlists and stations each have a path template there, built from
-variables such as `{ArtistName}`, `{AlbumName}` and `{SongName}`. Standalone covers and
+albums and artists share one library, `library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}.
+{SongName}` by default: a track lands at one path however it was downloaded, and a file
+already there is skipped. Playlists and stations each have their own folder. All three
+path templates are built from variables such as `{AlbumArtist}`, `{AlbumName}` and
+`{SongName}`. Standalone covers and
 `.lrc` / `.ttml` lyrics files can be saved next to the audio. The templates, their
 variables and the sidecar options are documented in
 [`configs/config.example.yaml`](configs/config.example.yaml) and

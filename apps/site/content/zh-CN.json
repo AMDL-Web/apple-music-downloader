@@ -177,7 +177,7 @@
       },
       {
         "title": "目录结构",
-        "text": "单曲、专辑、艺人、歌单和电台各有一套路径模板，用 `{ArtistName}`、`{AlbumName}` 这样的变量拼出来。",
+        "text": "单曲、专辑和艺人共用一个资料库，盘上已有的文件直接跳过；歌单和电台各有文件夹。布局由 `{AlbumArtist}`、`{AlbumName}` 这样的变量拼成的模板决定。",
         "doc": "docs/download-pipeline.md#output-paths"
       }
     ]

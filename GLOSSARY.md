@@ -35,7 +35,7 @@ wins when they disagree, so details are not copied here.
 | Checkpoint | The resumable on-disk copy of an Enhanced HLS track's encrypted media in `download.temp_dir`, read back fragment by fragment during decrypt | [docs/download-pipeline.md](docs/download-pipeline.md#encrypted-checkpoints) |
 | Simulate mode | Real catalog data and media selection, then the real pipeline over a pretend media backend: paced transfers, no disk writes, no wrapper or ffmpeg | `internal/media#simulatedMedia` |
 | Media backend | The I/O side of the per-track pipeline (transfers, wrapper, ffmpeg, disk); production and simulate mode differ only here | `internal/media#mediaBackend` |
-| Path template | The per-job-type format that decides where a finished track lands | `internal/media#outputPath` |
+| Path template | The format that decides where a finished track lands: one library template for songs, albums and artists, one each for playlists and stations | `internal/media#libraryTrackPath`, `internal/media#outputPath` |
 | Quality label | The `{Quality}` path value, such as `24-bit/96 kHz` or `256Kbps` | `internal/media#qualityLabel` |
 | Standalone cover | `cover.<ext>` or `artist.<ext>` written next to the audio | [docs/download-pipeline.md](docs/download-pipeline.md#standalone-covers) |
 

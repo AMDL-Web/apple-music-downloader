@@ -1,7 +1,9 @@
 package media
 
 import (
+	"context"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -101,15 +103,15 @@ func TestQualityLabelGolden(t *testing.T) {
 	}
 	cfg := config.Default()
 	cfg.Download.DownloadsDir = "downloads"
-	cfg.Download.SongPathFormat = "songs/{SongName} [{Quality}]"
+	cfg.Download.PlaylistPathFormat = "lists/{SongName} [{Quality}]"
 	song := applemusic.Song{Name: "Song"}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := qualityLabel(tt.info); got != tt.label {
 				t.Fatalf("qualityLabel() = %q, want %q", got, tt.label)
 			}
-			got := outputPath(cfg, song, applemusic.TypeSong, 1, "", "", "", "alac", qualityLabel(tt.info))
-			if want := filepath.Join("downloads", "songs", "Song ["+tt.onDisk+"].m4a"); got != want {
+			got := outputPath(cfg, song, applemusic.TypePlaylist, 1, "", "", "alac", qualityLabel(tt.info))
+			if want := filepath.Join("downloads", "lists", "Song ["+tt.onDisk+"].m4a"); got != want {
 				t.Fatalf("outputPath() = %q, want %q", got, want)
 			}
 		})
@@ -119,38 +121,124 @@ func TestQualityLabelGolden(t *testing.T) {
 	}
 }
 
-// The default template of every job type with one fixed track.
+// The default templates with one fixed track: the library template that
+// songs, albums and artists share, and the playlist and station templates.
 func TestDefaultTemplatePathsGolden(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.DownloadsDir = "downloads"
-	cfg.Download.SongPathFormat = "songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}"
-	cfg.Download.AlbumPathFormat = "albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"
-	cfg.Download.ArtistPathFormat = "artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"
+	cfg.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}"
 	cfg.Download.PlaylistPathFormat = "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}"
 	cfg.Download.StationPathFormat = "stations/{StationName}/{SongNumber:02d}. {SongName}"
 	song := applemusic.Song{
-		Name: "Hells: Bells?", ArtistName: "Guest", AlbumArtist: "AC/DC", AlbumName: "Back in Black.",
+		ID: "s7", Name: "Hells: Bells?", ArtistName: "Guest", AlbumArtist: "AC/DC", AlbumName: "Back in Black.",
 		TrackNumber: 2, DiscNumber: 1,
 	}
+	album := applemusic.Collection{ID: "a1", Name: "Back in Black.", Artist: "AC/DC", Tracks: make([]applemusic.Song, 10)}
+	album.Tracks[6] = song
+
+	library := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 7})
+	if want := filepath.Join("downloads", "library", "AC_DC", "Back in Black", "07. Hells_ Bells_.m4a"); library != want {
+		t.Fatalf("libraryTrackPath() = %q, want %q", library, want)
+	}
 	tests := []struct {
-		kind         applemusic.URLType
-		folderArtist string
-		collection   string
-		want         string
+		kind       applemusic.URLType
+		collection string
+		want       string
 	}{
-		{applemusic.TypeSong, "", "", filepath.Join("downloads", "songs", "Guest", "Back in Black", "02. Hells_ Bells_.m4a")},
-		{applemusic.TypeAlbum, "AC/DC", "", filepath.Join("downloads", "albums", "AC_DC", "Back in Black", "07. Hells_ Bells_.m4a")},
-		{applemusic.TypeArtist, "AC/DC", "", filepath.Join("downloads", "artists", "AC_DC", "Back in Black", "07. Hells_ Bells_.m4a")},
-		{applemusic.TypePlaylist, "", "Road: Trip", filepath.Join("downloads", "playlists", "Road_ Trip", "07. Hells_ Bells_.m4a")},
-		{applemusic.TypeStation, "", "Rock Radio", filepath.Join("downloads", "stations", "Rock Radio", "07. Hells_ Bells_.m4a")},
+		{applemusic.TypePlaylist, "Road: Trip", filepath.Join("downloads", "playlists", "Road_ Trip", "07. Hells_ Bells_.m4a")},
+		{applemusic.TypeStation, "Rock Radio", filepath.Join("downloads", "stations", "Rock Radio", "07. Hells_ Bells_.m4a")},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.kind), func(t *testing.T) {
-			got := outputPath(cfg, song, tt.kind, 7, tt.folderArtist, tt.collection, "id.1", "aac-lc", aacLCQualityLabel)
+			got := outputPath(cfg, song, tt.kind, 7, tt.collection, "id.1", "aac-lc", aacLCQualityLabel)
 			if got != tt.want {
 				t.Fatalf("outputPath() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// One song lands at one library path whether it is downloaded on its own,
+// with its album or with its artist: that shared path is what lets each of
+// them skip a track another one already wrote. Each case runs the job type's
+// own resolve and placement against the same catalog.
+func TestLibraryPathIsTheSameForSongAlbumAndArtistJobs(t *testing.T) {
+	cfg := config.Default()
+	cfg.Download.DownloadsDir = "downloads"
+	hells := applemusic.Song{ID: "s7", Name: "Hells: Bells?", ArtistName: "AC/DC", AlbumID: "a1", AlbumName: "Back in Black", TrackNumber: 1}
+	tracks := make([]applemusic.Song, 10)
+	for i := range tracks {
+		tracks[i] = applemusic.Song{ID: "other-" + string(rune('a'+i)), Name: "Other", AlbumID: "a1"}
+	}
+	tracks[6] = hells
+	album := applemusic.Collection{ID: "a1", Name: "Back in Black", Artist: "AC/DC", ReleaseDate: "1980-07-25", Tracks: tracks}
+	// The single song read names the track differently from the album's own
+	// track list (a refreshed title); the album's entry decides the path.
+	single := hells
+	single.Name = "Hells Bells (Remastered)"
+	single.TrackNumber = 7
+	catalog := fakeDownloaderCatalog{
+		song: single, album: album,
+		artistAlbums: applemusic.ArtistAlbums{ID: "ar1", Name: "AC/DC", Albums: []applemusic.Collection{album}},
+	}
+	d := newTestDownloader(&Downloader{cfg: cfg, catalog: catalog})
+	want := filepath.Join("downloads", "library", "AC_DC", "Back in Black", "07. Hells_ Bells_.m4a")
+	for _, parsed := range []applemusic.ParsedURL{
+		{Type: applemusic.TypeSong, Storefront: "us", ID: "s7"},
+		{Type: applemusic.TypeAlbum, Storefront: "us", ID: "a1"},
+		{Type: applemusic.TypeArtist, Storefront: "us", ID: "ar1"},
+	} {
+		resolved, err := d.resolveCollection(context.Background(), parsed, true)
+		if err != nil {
+			t.Fatalf("%s: %v", parsed.Type, err)
+		}
+		var got []string
+		for i, target := range d.trackTargets(parsed, resolved) {
+			if resolved.Tracks[i].ID == "s7" {
+				got = append(got, target.outputPath(cfg, resolved.Tracks[i], "alac", "24-bit/96 kHz"))
+			}
+		}
+		if len(got) != 1 || got[0] != want {
+			t.Fatalf("%s job places s7 at %q, want [%q]", parsed.Type, got, want)
+		}
+	}
+}
+
+// A multi-disc album numbers on across discs, and an artist's discography
+// files each album under its own album artist, so a compilation the artist
+// appears on does not land in the artist's folder.
+func TestLibraryPathsForMultiDiscAndCompilationAlbums(t *testing.T) {
+	cfg := config.Default()
+	cfg.Download.DownloadsDir = "downloads"
+	double := applemusic.Collection{ID: "a1", Name: "Double", Artist: "Band", Tracks: []applemusic.Song{
+		{ID: "d1t1", Name: "Intro", DiscNumber: 1, TrackNumber: 1},
+		{ID: "d1t2", Name: "Song", DiscNumber: 1, TrackNumber: 2},
+		{ID: "d2t1", Name: "Intro", DiscNumber: 2, TrackNumber: 1},
+	}}
+	compilation := applemusic.Collection{ID: "a2", Name: "Hits: 1980", Artist: "Various Artists", Tracks: []applemusic.Song{
+		{ID: "c1", Name: "Other Band Song", ArtistName: "Other Band"},
+		{ID: "c2", Name: "Band Song", ArtistName: "Band"},
+	}}
+	catalog := fakeDownloaderCatalog{artistAlbums: applemusic.ArtistAlbums{ID: "ar1", Name: "Band", Albums: []applemusic.Collection{double, compilation}}}
+	d := newTestDownloader(&Downloader{cfg: cfg, catalog: catalog})
+	parsed := applemusic.ParsedURL{Type: applemusic.TypeArtist, Storefront: "us", ID: "ar1"}
+	resolved, err := d.resolveCollection(context.Background(), parsed, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for i, target := range d.trackTargets(parsed, resolved) {
+		got = append(got, target.outputPath(cfg, resolved.Tracks[i], "", ""))
+	}
+	want := []string{
+		filepath.Join("downloads", "library", "Band", "Double", "01. Intro.m4a"),
+		filepath.Join("downloads", "library", "Band", "Double", "02. Song.m4a"),
+		filepath.Join("downloads", "library", "Band", "Double", "03. Intro.m4a"),
+		filepath.Join("downloads", "library", "Various Artists", "Hits_ 1980", "01. Other Band Song.m4a"),
+		filepath.Join("downloads", "library", "Various Artists", "Hits_ 1980", "02. Band Song.m4a"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("artist job paths =\n%q\nwant\n%q", got, want)
 	}
 }
 

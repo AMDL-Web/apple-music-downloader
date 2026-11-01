@@ -51,7 +51,7 @@ func (d *Downloader) savePlaylistCover(ctx context.Context, artworkURL, playlist
 }
 
 func (d *Downloader) saveStandaloneCovers(ctx context.Context, song applemusic.Song, collectionType applemusic.URLType, storefront, albumDir, artistDir string) error {
-	if collectionType == applemusic.TypePlaylist || collectionType == applemusic.TypeStation {
+	if !inLibrary(collectionType) {
 		return nil
 	}
 
@@ -69,13 +69,11 @@ func (d *Downloader) saveStandaloneCovers(ctx context.Context, song applemusic.S
 		}
 	}
 	if d.cfg.Download.SaveArtistCover && artistDir != "" {
+		// The artist folder is the album artist's ({AlbumArtist}), so its
+		// picture is too, whichever job type wrote the track.
 		if err := d.ensureStandaloneCover(ctx, filepath.Join(artistDir, "artist."+ext), func(ctx context.Context) (string, error) {
-			artistID := song.ArtistID
-			artworkURL := song.ArtistArtworkURL
-			if collectionType == applemusic.TypeAlbum {
-				artistID = firstNonEmpty(song.AlbumArtistID, artistID)
-				artworkURL = firstNonEmpty(song.AlbumArtistArtworkURL, artworkURL)
-			}
+			artistID := firstNonEmpty(song.AlbumArtistID, song.ArtistID)
+			artworkURL := firstNonEmpty(song.AlbumArtistArtworkURL, song.ArtistArtworkURL)
 			if artworkURL != "" {
 				return artworkURL, nil
 			}

@@ -11,10 +11,8 @@
 # effect after a restart.
 #
 # A key missing from config.yaml takes the value this example sets, which is
-# also the "Default" named in many comments below. The one exception: a config
-# without download.album_path_format or download.artist_path_format keeps the
-# older {TrackNumber} layout (see those keys). Unknown keys fail startup; keys
-# removed in 2.0 are listed in docs/upgrading-to-2.0.md.
+# also the "Default" named in many comments below. Unknown keys fail startup;
+# keys removed in 2.0 are listed in docs/upgrading-to-2.0.md.
 #
 # No environment variable sets a key. AMDL_CONFIG (path of this file) and
 # AMDL_HOOKS_CONFIG (path of hooks.yaml) choose the files; any other AMDL_*
@@ -204,53 +202,50 @@ download:
   progress_event_interval_ms: 500
   # string path: root download directory. Relative paths are resolved from the backend working directory.
   downloads_dir: "data/downloads"
-  # Per-task-type output path templates, relative to downloads_dir. Each is a single
-  # "/"-separated path template, non-empty; the last segment is the file name and gets
-  # the .m4a extension appended automatically. Every segment is sanitized independently,
-  # so template values cannot create extra directories. Absolute templates and ".."
-  # segments are rejected (they would only collapse into "_" folders): the path must
-  # stay relative to downloads_dir.
-  # Variables: {SongId}, {SongNumber}, {SongName}, {ArtistName}, {UrlArtistName}, {ArtistId},
-  # {AlbumName}, {AlbumId}, {AlbumArtist}, {ReleaseDate}, {ReleaseYear}, {UPC}, {Copyright},
-  # {RecordLabel}, {DiscNumber}, {DiscCount}, {TrackNumber}, {TrackCount}, {PlaylistName},
-  # {PlaylistId}, {StationName}, {StationId}, {Quality}, {Codec}, {Tag}. Numeric variables {SongNumber}, {DiscNumber},
-  # {DiscCount}, {TrackNumber}, and {TrackCount} also support :02d padding, for example
-  # {TrackNumber:02d}; it is the only spec, and other "{Variable:spec}" forms are
-  # rejected. Unknown variables are preserved literally.
-  # {UrlArtistName} is an alias of {ArtistName} and resolves exactly like it.
-  # {Tag} always expands to an empty string; it is accepted so templates that use it
-  # still parse, and contributes nothing to the path.
-  # In directory segments, {ArtistName} resolves to the collection's grouping artist
-  # (album artist when available) so all tracks of a collection share one folder; in the
-  # file-name segment it resolves to the track's own artist.
-  # {SongNumber} is the track's 1-based position within the collection it is downloaded
-  # as: the position in the playlist or station, and for album and artist tasks the
-  # position within that album, counting on across discs. {TrackNumber} is instead
-  # Apple's own number, which restarts at 1 on every disc — on a multi-disc album a
-  # file-name segment built from {TrackNumber} alone repeats 01, 02, ... once per disc,
-  # and two identically titled tracks on different discs then resolve to the same path,
-  # where the second is skipped as already downloaded. Pair it with {DiscNumber} (for
-  # example "{DiscNumber}-{TrackNumber:02d}. {SongName}") if you want Apple's numbering.
-  # {TrackCount} matches {TrackNumber}: it is the number of tracks on the track's own
-  # disc, not the whole release.
-  # string template: output path for single-song tasks. A single song is a collection of
-  # one, so {SongNumber} is always 1 here; use {TrackNumber} to keep the album position.
-  song_path_format: "songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}"
-  # An install upgrading from a version whose album and artist templates used
-  # {TrackNumber} keeps that layout: its config.yaml already carries the old value,
-  # and a config omitting the key falls back to the old value too, so nothing that
-  # has already been downloaded is stranded under a name the backend no longer
-  # produces. Switch by editing the key (or via PUT /api/v1/config).
-  # string template: output path for album tasks.
-  album_path_format: "albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"
-  # string template: output path for artist tasks (expanded album/song lists). {SongNumber}
-  # restarts at 1 for each of the artist's albums, matching the {AlbumName} folder.
-  artist_path_format: "artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"
-  # string template: output path for playlist tasks. {SongNumber} is the 1-based position in the playlist.
+  # Output path templates, relative to downloads_dir. Each is a single "/"-separated path
+  # template, non-empty; the last segment is the file name and gets the .m4a extension
+  # appended automatically. Every segment is sanitized independently, so template values
+  # cannot create extra directories. Absolute templates and ".." segments are rejected (they
+  # would only collapse into "_" folders): the path must stay relative to downloads_dir.
+  # Numeric variables {SongNumber}, {DiscNumber}, {DiscCount}, {TrackNumber} and {TrackCount}
+  # support :02d padding, for example {SongNumber:02d}; it is the only spec, and other
+  # "{Variable:spec}" forms are rejected. Unknown variables are preserved literally.
+  # {TrackNumber} is Apple's own number, which restarts at 1 on every disc; {TrackCount} is
+  # the number of tracks on the track's own disc, not the whole release.
+  #
+  # string template: where every song, album and artist download lands — the library. One
+  # template serves all three, so a song lands at the same file whether it was downloaded on
+  # its own, with its album or with its artist, and a file at that path counts as downloaded:
+  # the track is skipped (force_overwrite replaces it), whatever quality it was saved in.
+  # When the key is absent, the value below applies.
+  # Folder segments may use only literal text and the album's own values: {AlbumArtist},
+  # {AlbumName}, {AlbumId}, {ReleaseDate} (YYYY-MM-DD) and {ReleaseYear}, and at least one
+  # folder must name {AlbumName} or {AlbumId}, so one album is exactly one folder. Use
+  # {AlbumArtist}, not {ArtistName}: a track's artist can differ from its album's.
+  # The file name may use those and the track's values: {SongNumber}, {SongName}, {SongId},
+  # {ArtistName} (the track's artist; {UrlArtistName} is an alias), {ArtistId}, {DiscNumber},
+  # {DiscCount}, {TrackNumber}, {TrackCount}, {UPC}, {Copyright}, {RecordLabel}. It must
+  # contain {SongNumber}, or both {DiscNumber} and {TrackNumber}, so two tracks of an album
+  # never share a name. {Quality}, {Codec}, {Tag} and the playlist and station variables are
+  # rejected: whether a track is downloaded is decided before a codec is chosen.
+  # {SongNumber} is the track's 1-based position in its album's track list, counting on
+  # across discs; a single song takes its position from its album, which is read to place it.
+  # Names come from the album in catalog.language, so changing the language, Apple renaming
+  # an album or editing this template makes files at the old paths count as missing, and they
+  # download again. Runtime key: applies to jobs started after the change.
+  library_path_format: "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}"
+  # string template: output path for playlist tasks. A playlist keeps its own folder and is
+  # not part of the library. Variables: everything listed for library_path_format, without
+  # its folder and file-name restrictions, plus {PlaylistName}, {PlaylistId}, {Quality}
+  # (for example "24-bit_96 kHz" or "256Kbps"), {Codec} (for example "ALAC") and {Tag}
+  # (always empty, accepted so templates that use it still parse). {SongNumber} is the
+  # 1-based position in the playlist. In folder segments {ArtistName} is the track's artist.
+  # When the key is absent, the value below applies. Runtime key.
   playlist_path_format: "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}"
   # string template: output path for radio station (station/ra.xxxx) tasks. A station resolves to a
-  # rolling next-tracks list, so it gets its own folder. {StationName}/{StationId} carry the station's
-  # name/id; {SongNumber} is the 1-based position.
+  # rolling next-tracks list, so it gets its own folder outside the library. Variables as for
+  # playlist_path_format, with {StationName}/{StationId} for the station's name/id; {SongNumber}
+  # is the 1-based position. When the key is absent, the value below applies. Runtime key.
   station_path_format: "stations/{StationName}/{SongNumber:02d}. {SongName}"
   # string path: temporary media working directory. Relative paths are resolved from the backend working directory.
   # Default: data/tmp. All disk-backed per-track scratch and the flattened/verified/tagged file are

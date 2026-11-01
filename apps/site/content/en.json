@@ -177,7 +177,7 @@
       },
       {
         "title": "Your folder layout",
-        "text": "Path templates for songs, albums, artists, playlists and stations, built from variables such as `{ArtistName}` and `{AlbumName}`.",
+        "text": "One library for songs, albums and artists, where a file already on disk is skipped, plus folders for playlists and stations, laid out by templates built from variables such as `{AlbumArtist}` and `{AlbumName}`.",
         "doc": "docs/download-pipeline.md#output-paths"
       }
     ]

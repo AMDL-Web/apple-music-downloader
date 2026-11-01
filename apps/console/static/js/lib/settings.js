@@ -8,10 +8,6 @@
 // NOT_EDITED, or when a field names a key the API does not return. Help text
 // condenses the key's comment in configs/config.example.yaml.
 
-// An install upgraded from a version whose album and artist templates used
-// {TrackNumber} keeps that layout (configs/config.example.yaml explains).
-const OLDER_LAYOUT_NOTE = 'An install upgraded from an older version may still use {TrackNumber:02d} instead.';
-
 // The help of a key that applies when the server starts again (x-applies:
 // restart in openapi.yaml); the page's save bar offers the restart.
 const RESTART = 'Applies after a restart.';
@@ -177,10 +173,8 @@ export const FIELDS = [
     label: 'Overwrite existing files',
     defaultValue: false,
   },
-  { key: 'download.album_path_format', section: 'files', type: 'template', label: 'Albums', help: '{SongNumber} keeps counting across discs.', defaultValue: 'albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
-  { key: 'download.song_path_format', section: 'files', type: 'template', label: 'Songs', help: '{SongNumber} is always 1; {TrackNumber} keeps the album position.', defaultValue: 'songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}' },
+  { key: 'download.library_path_format', section: 'files', type: 'template', label: 'Library', help: 'Songs, albums and artists; a file already here counts as downloaded.', defaultValue: 'library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}' },
   { key: 'download.playlist_path_format', section: 'files', type: 'template', label: 'Playlists', help: '{SongNumber} is the position in the playlist.', defaultValue: 'playlists/{PlaylistName}/{SongNumber:02d}. {SongName}' },
-  { key: 'download.artist_path_format', section: 'files', type: 'template', label: 'Artists', help: '{SongNumber} restarts at 1 for each album.', defaultValue: 'artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}', defaultNote: OLDER_LAYOUT_NOTE },
   { key: 'download.station_path_format', section: 'files', type: 'template', label: 'Stations', help: '{SongNumber} is the position in the station’s track list.', defaultValue: 'stations/{StationName}/{SongNumber:02d}. {SongName}' },
   // Lyrics & artwork
   {

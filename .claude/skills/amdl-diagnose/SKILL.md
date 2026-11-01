@@ -18,7 +18,7 @@ it.
   `job_items` and `job_events` rows.
 - One request's access and job logs: `GET /api/v1/logs?request_id=<id>`.
 - Which catalog read failed: a required read fails the job, an optional one
-  (motion artwork, album enrichment) degrades to "not available" (root
+  (motion artwork, a playlist track's album enrichment) degrades to "not available" (root
   `AGENTS.md` "Apple catalog reads").
 - Captures stay in the session scratchpad until they are sanitized fixtures
   (`internal/applemusic/AGENTS.md`).

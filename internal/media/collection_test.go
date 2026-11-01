@@ -31,7 +31,7 @@ func TestResolveCollectionArtistKeepsSharedSongInEveryAlbum(t *testing.T) {
 
 	resolved, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
 		Storefront: "cn", Type: applemusic.TypeArtist, ID: "artist-1",
-	})
+	}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +40,9 @@ func TestResolveCollectionArtistKeepsSharedSongInEveryAlbum(t *testing.T) {
 	}
 	if resolved.Tracks[1].AlbumName != "First" || resolved.Tracks[2].AlbumName != "Second" {
 		t.Fatalf("shared song album contexts = %q/%q, want First/Second", resolved.Tracks[1].AlbumName, resolved.Tracks[2].AlbumName)
+	}
+	if got := resolved.Placements; len(got) != 4 || got[1].Album.ID != "album-1" || got[1].Index != 2 || got[2].Album.ID != "album-2" || got[2].Index != 1 {
+		t.Fatalf("placements = %+v, want each occurrence at its own album position", got)
 	}
 	if resolved.Name != "Artist" {
 		t.Fatalf("collection name = %q, want Artist", resolved.Name)
@@ -62,7 +65,7 @@ func TestResolveCollectionStationPassesTokenAndTracks(t *testing.T) {
 
 	resolved, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
 		Storefront: "us", Type: applemusic.TypeStation, ID: "ra.1",
-	})
+	}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +91,7 @@ func TestResolveCollectionStationUsesConfiguredToken(t *testing.T) {
 
 	if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
 		Storefront: "us", Type: applemusic.TypeStation, ID: "ra.1",
-	}); err != nil {
+	}, true); err != nil {
 		t.Fatal(err)
 	}
 	if gotToken != "configured-token" {
@@ -122,7 +125,7 @@ func TestResolveCollectionStationPrefersWrapperToken(t *testing.T) {
 			})
 			if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
 				Storefront: "us", Type: applemusic.TypeStation, ID: "ra.1",
-			}); err != nil {
+			}, true); err != nil {
 				t.Fatal(err)
 			}
 			if gotToken != tt.want {
@@ -139,7 +142,7 @@ func TestResolveCollectionStationPropagatesError(t *testing.T) {
 	})
 	if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
 		Storefront: "us", Type: applemusic.TypeStation, ID: "ra.live",
-	}); err == nil {
+	}, true); err == nil {
 		t.Fatal("expected station resolve error to propagate")
 	}
 }
@@ -180,7 +183,9 @@ func TestResolveCollectionPropagatesArtwork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: tt.catalog})
-			resolved, err := downloader.resolveCollection(context.Background(), tt.parsed)
+			// Without place: these songs have no album, and what is shown
+			// does not depend on placing them.
+			resolved, err := downloader.resolveCollection(context.Background(), tt.parsed, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -280,7 +285,9 @@ func TestResolveCollectionBackfillsDisplayMetadata(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			downloader := newTestDownloader(&Downloader{cfg: config.Default(), catalog: tt.catalog})
-			resolved, err := downloader.resolveCollection(context.Background(), tt.parsed)
+			// Without place: these songs have no album, and what is shown
+			// does not depend on placing them.
+			resolved, err := downloader.resolveCollection(context.Background(), tt.parsed, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -320,54 +327,55 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
-// TestCollectionIndexesRestartPerAlbumOnlyForArtists pins {SongNumber} for the
-// two collection shapes that share an album-shaped output template. Apple
-// orders an album's track relationship disc by disc, so album numbering runs on
-// unbroken across the disc boundary. An artist job concatenates every album's
-// tracks into one list while still writing into per-album folders, so its
-// numbering has to restart with each album.
-func TestCollectionIndexesRestartPerAlbumOnlyForArtists(t *testing.T) {
-	albumTracks := []applemusic.Song{
-		{ID: "song-1", AlbumID: "album-1", DiscNumber: 1, TrackNumber: 1},
-		{ID: "song-2", AlbumID: "album-1", DiscNumber: 1, TrackNumber: 2},
-		{ID: "song-3", AlbumID: "album-1", DiscNumber: 2, TrackNumber: 1},
+// A single song is placed at its position in its album's track list, which
+// the album read gives; with place, a song that cannot be placed fails the
+// resolve, and only a failed read is worth retrying.
+func TestResolveSongPlacesItInItsAlbum(t *testing.T) {
+	song := applemusic.Song{ID: "song-2", Name: "Two", AlbumID: "album-1", TrackNumber: 1, DiscNumber: 2}
+	album := applemusic.Collection{ID: "album-1", Name: "Album", Artist: "Album Artist", ArtistID: "artist-9", Tracks: []applemusic.Song{
+		{ID: "song-1", DiscNumber: 1, TrackNumber: 1}, {ID: "song-2", DiscNumber: 2, TrackNumber: 1},
+	}}
+	parsed := applemusic.ParsedURL{Storefront: "cn", Type: applemusic.TypeSong, ID: "song-2"}
+	resolve := func(catalog fakeDownloaderCatalog, place bool) (resolvedCollection, error) {
+		d := newTestDownloader(&Downloader{cfg: config.Default(), catalog: catalog})
+		return d.resolveCollection(context.Background(), parsed, place)
 	}
-	artistTracks := append(append([]applemusic.Song(nil), albumTracks...),
-		applemusic.Song{ID: "song-4", AlbumID: "album-2", DiscNumber: 1, TrackNumber: 1},
-		applemusic.Song{ID: "song-5", AlbumID: "album-2", DiscNumber: 1, TrackNumber: 2},
-	)
 
-	const groupedByAlbum = "artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}"
-	// A template naming neither the album nor its id drops the whole
-	// discography into one directory, where restarting the counter per album
-	// would give two albums the same name for an identically titled track.
-	const oneFlatFolder = "artists/{ArtistName}/{SongNumber:02d}. {SongName}"
+	resolved, err := resolve(fakeDownloaderCatalog{song: song, album: album}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolved.Placements) != 1 || resolved.Placements[0].Album.ID != "album-1" || resolved.Placements[0].Index != 2 {
+		t.Fatalf("placements = %+v, want album-1 position 2 (counting on across discs)", resolved.Placements)
+	}
+	if got := resolved.Tracks[0]; got.Name != "Two" || got.AlbumArtist != "Album Artist" || got.AlbumArtistID != "artist-9" {
+		t.Fatalf("track = %+v, want the song read enriched with its album", got)
+	}
 
-	tests := []struct {
-		name          string
-		kind          applemusic.URLType
-		artistPattern string
-		tracks        []applemusic.Song
-		want          []int
+	readErr := errors.New("album read timed out")
+	for _, tt := range []struct {
+		name      string
+		catalog   fakeDownloaderCatalog
+		want      string
+		retryable bool
 	}{
-		{"album counts on across discs", applemusic.TypeAlbum, groupedByAlbum, albumTracks, []int{1, 2, 3}},
-		{"playlist counts positions", applemusic.TypePlaylist, groupedByAlbum, albumTracks, []int{1, 2, 3}},
-		{"artist restarts per album", applemusic.TypeArtist, groupedByAlbum, artistTracks, []int{1, 2, 3, 1, 2}},
-		{"artist stays job-wide in one folder", applemusic.TypeArtist, oneFlatFolder, artistTracks, []int{1, 2, 3, 4, 5}},
-		{"artist restarts on album id alone", applemusic.TypeArtist, "artists/{ArtistName}/{AlbumId}/{SongNumber:02d}", artistTracks, []int{1, 2, 3, 1, 2}},
-	}
-	for _, tt := range tests {
+		{"no album", fakeDownloaderCatalog{song: applemusic.Song{ID: "song-2"}}, "has no album", false},
+		{"missing from the track list", fakeDownloaderCatalog{song: song, album: applemusic.Collection{ID: "album-1", Tracks: album.Tracks[:1]}}, "not in its album's track list", false},
+		{"album read fails", fakeDownloaderCatalog{song: song, albumErr: readErr}, "album read timed out", true},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := config.Default()
-			cfg.Download.ArtistPathFormat = tt.artistPattern
-			got := collectionIndexes(cfg, tt.kind, tt.tracks)
-			if len(got) != len(tt.want) {
-				t.Fatalf("collectionIndexes() = %v, want %v", got, tt.want)
+			_, err := resolve(tt.catalog, true)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("resolve error = %v, want it to mention %q", err, tt.want)
 			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Fatalf("collectionIndexes() = %v, want %v", got, tt.want)
-				}
+			if isNonRetryableError(err) == tt.retryable {
+				t.Fatalf("resolve error %v: non-retryable = %v, want %v", err, isNonRetryableError(err), !tt.retryable)
+			}
+			// A quality query does not place the song: the same catalog
+			// answers with the song alone.
+			resolved, err := resolve(tt.catalog, false)
+			if err != nil || len(resolved.Tracks) != 1 || resolved.Placements != nil {
+				t.Fatalf("resolve without place = %+v, %v; want the song and no placement", resolved, err)
 			}
 		})
 	}

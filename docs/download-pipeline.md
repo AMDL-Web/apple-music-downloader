@@ -277,56 +277,61 @@ as skipped, and `force_overwrite` never deletes it in simulate mode.
 
 ## Output paths
 
-One template per task type, resolved relative to `download.downloads_dir`. The last
-segment is the file name and gets `.m4a` appended. Every segment is sanitised
-independently, so a template value can never create extra directories. How a segment is
-cleaned (reserved characters, leading and trailing dots, the 240-byte cap) is in
-[Architecture](architecture.md#5-output-paths).
+Songs, albums and artists land in one library, laid out by `download.library_path_format`;
+playlists and stations each keep their own template. Every template is resolved relative
+to `download.downloads_dir`. The last segment is the file name and gets `.m4a` appended.
+Every segment is sanitised independently, so a template value can never create extra
+directories. How a segment is cleaned (reserved characters, leading and trailing dots, the
+240-byte cap) is in [Architecture](architecture.md#5-output-paths).
 
 | Key | Default |
 | --- | --- |
-| `download.song_path_format` | `songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}` |
-| `download.album_path_format` | `albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}` |
-| `download.artist_path_format` | `artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}` |
+| `download.library_path_format` | `library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}` |
 | `download.playlist_path_format` | `playlists/{PlaylistName}/{SongNumber:02d}. {SongName}` |
 | `download.station_path_format` | `stations/{StationName}/{SongNumber:02d}. {SongName}` |
 
-Artist jobs expand into that artist's albums and songs.
+A track has one library path whichever job type downloads it, and a file at that path
+counts as downloaded: the track is skipped (`force_overwrite` replaces it), whatever
+quality it was saved in. So a song downloaded on its own is skipped when its album is
+downloaded later, and an artist download skips the tracks of albums already on disk.
 
-`{SongNumber}` is the track's 1-based position within the collection it is downloaded as:
-its position in the playlist or station, and for album and artist jobs its position
-within that album — Apple orders an album's tracks disc by disc, so the numbering counts
-on across the disc boundary instead of restarting. `{TrackNumber}` is Apple's own number,
-which does restart at 1 on every disc, and `{TrackCount}` matches it: the number of
-tracks on that track's disc, not the whole release.
+The path comes from the track's placement: its album and its position in that album's
+track list (`internal/media#libraryTrackPath`).
 
-Those two defaults apply to a fresh install, whose `config.yaml` is a verbatim copy of
-`configs/config.example.yaml`. An install upgrading from a version that numbered album and
-artist paths by `{TrackNumber}` keeps that layout — its `config.yaml` already carries the
-old value, and a config omitting the key falls back to the old value as well, so nothing
-already downloaded is stranded under a name the backend no longer produces. Switch by
-editing the key or via `PUT /api/v1/config`.
+- Folder segments take only the album's own values (`{AlbumArtist}`, `{AlbumName}`,
+  `{AlbumId}`, `{ReleaseDate}`, `{ReleaseYear}`), and one of them must name `{AlbumName}`
+  or `{AlbumId}`, so one album is exactly one folder, known from an album summary alone.
+- The file name is expanded from the album's own entry for the track, with the album's
+  values, so a single song lands where its album's download puts it even when its own
+  song read names it differently.
+- `{SongNumber}` is the 1-based position in the album's track list. Apple orders an
+  album's tracks disc by disc, so the numbering counts on across the disc boundary instead
+  of restarting. The file name must contain `{SongNumber}`, or both `{DiscNumber}` and
+  `{TrackNumber}`: `{TrackNumber}` alone repeats `01, 02, …` once per disc, and two
+  identically titled tracks on different discs would share a path.
+- `{Quality}`, `{Codec}`, `{Tag}` and the playlist and station variables are rejected:
+  whether a track is downloaded is decided before a codec is chosen.
+- A single song job reads the song's album to find its position; that read is required,
+  and a song without an album, or missing from its album's track list, fails.
+- An artist job files each album under its own album artist, so a compilation the artist
+  appears on lands in the compilation's folder.
 
-That is why the album and artist defaults number by `{SongNumber}`. A file-name segment
-built from `{TrackNumber}` alone repeats `01, 02, …` once per disc on a multi-disc album,
-and two identically titled tracks on different discs — a deluxe edition whose bonus disc
-repeats the main disc's titles, say — then resolve to the same path, where the second is
-skipped as already downloaded. Pair it with `{DiscNumber}` (for example
-`{DiscNumber}-{TrackNumber:02d}. {SongName}`) to keep Apple's numbering instead.
+Names come from the album in `catalog.language`, so changing the language, Apple renaming
+an album or editing the template makes files at the old paths count as missing, and they
+download again.
 
-With defaults, an album track lands at:
+With defaults, a library track lands at:
 
 ```text
-data/downloads/albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}.m4a
+data/downloads/library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}.m4a
 ```
 
-The full variable list is in the `download` section of
-[`configs/config.example.yaml`](../configs/config.example.yaml). In directory segments
-`{ArtistName}` resolves to the collection's grouping artist (album artist when available)
-so all of an album's tracks share one folder; in the file-name segment it is the track's
-own artist. Numeric variables — `{SongNumber}`, `{DiscNumber}`, `{DiscCount}`,
-`{TrackNumber}`, `{TrackCount}` — support `:02d` padding. Unknown variables are preserved
-literally.
+In a playlist or station, `{SongNumber}` is the position in the list. The full variable
+list is in the `download` section of
+[`configs/config.example.yaml`](../configs/config.example.yaml). Numeric variables —
+`{SongNumber}`, `{DiscNumber}`, `{DiscCount}`, `{TrackNumber}`, `{TrackCount}` — support
+`:02d` padding. `{TrackCount}` is the number of tracks on that track's disc, not the whole
+release. Unknown variables are preserved literally.
 
 ### Standalone covers
 
@@ -334,10 +339,11 @@ literally.
 - `download.save_artist_cover: true` — `artist.jpg` (or `.png`) in the artist directory.
 - `download.save_playlist_cover: true` — `cover.jpg` (or `.png`) in the playlist directory.
 
-Cover destinations are located through the path template's variables: the album cover goes
-into the deepest directory segment referencing `{AlbumName}` or `{AlbumId}` (falling back
-to the directory holding the audio), and the artist cover into the deepest segment
-referencing `{ArtistName}`, `{UrlArtistName}`, `{AlbumArtist}` or `{ArtistId}` — if no
-directory segment references the artist, the artist cover is skipped. The extension follows
-`download.cover_format`. Playlists and stations are flat directories: they can hold their
-own cover, but no album or artist covers are written there.
+Cover destinations are located through the library template's folders
+(`internal/media#libraryCoverDirs`): the album cover goes into the deepest folder naming
+`{AlbumName}` or `{AlbumId}`, and the artist cover into the deepest folder naming
+`{AlbumArtist}` — if no folder names the album artist, the artist cover is skipped. Both
+are the album's: the album artwork, and the album artist's picture, whichever job type
+wrote the track. The extension follows `download.cover_format`. Playlists and stations are
+flat directories: they can hold their own cover, but no album or artist covers are written
+there.

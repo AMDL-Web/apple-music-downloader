@@ -56,7 +56,7 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `apps/console` | the embedded web console (static files + handler) | call anything but the public `/api/v1`; be imported by `internal/` |
 | `internal/jobs` | admission, queue, workers, terminal-state rules, hook dispatch trigger | know about HTTP |
 | `internal/media` | the per-track pipeline: select, fetch, decrypt, remux, tag, finalize; simulate backend | write job rows except through `jobs.Reporter` |
-| `internal/applemusic` | amp-api, the web-player token, catalog and library reads | fail a job because an optional read (motion artwork, album enrichment, a library cover) failed |
+| `internal/applemusic` | amp-api, the web-player token, catalog and library reads | fail a job because an optional read (motion artwork, a playlist track's album enrichment, a library cover) failed |
 | `internal/wrapper` | the wrapper HTTP client (status, manifests, licenses, lyrics, console login) and the decrypt sessions that run key templates through `internal/fairplay` | |
 | `internal/fairplay` | the pure-Go FairPlay sample decryptor, a translation of Temari v0.5.1 | import other internal packages |
 | `internal/db` | SQLite schema, versioned migrations, queries | contain business rules |
@@ -315,11 +315,16 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 
 ## 5. Output paths
 
-Path templates, `{Quality}` labels and lyrics sidecar names are unchanged from 1.x,
-because the "already downloaded" check compares paths and any change re-downloads whole
-libraries. Path segments are cleaned by `safeName`: reserved characters replaced,
-leading and trailing dots and spaces removed, each segment capped at 240 bytes on a
-rune boundary.
+Songs, albums and artists share one library layout, `download.library_path_format`:
+a track lands at one path whichever job type downloads it, and the "already downloaded"
+check compares that path, so a song downloaded on its own is skipped when its album
+comes, and an album already on disk is skipped inside an artist download. The path comes
+from the track's placement, its album and its position in the album's track list
+(`internal/media#libraryTrackPath`); folders take only album values, so one album is one
+folder. Playlists and stations keep their own templates and folders. Any change to how a
+path is built re-downloads whole libraries. Path segments are cleaned by `safeName`:
+reserved characters replaced, leading and trailing dots and spaces removed, each segment
+capped at 240 bytes on a rune boundary.
 
 ## 6. Hooks
 

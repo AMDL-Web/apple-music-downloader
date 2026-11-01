@@ -88,7 +88,7 @@ test('parallel and concurrency find where worker pools live, and template finds 
     assert.ok(paletteItems(q).some((it) => it.id === 'set-jobs'), `${q} finds Jobs, which shows the pools`);
   }
   const templates = paletteItems('template').filter((it) => it.field);
-  assert.ok(templates.length >= 5, 'every path template field answers to "template"');
+  assert.ok(templates.length >= 3, 'every path template field answers to "template"');
   assert.ok(templates.every((it) => it.field.endsWith('_path_format')));
   const retries = paletteItems('retries').find((it) => it.group === 'Settings');
   assert.equal(retries.field, 'download.max_attempts', 'the field is the first Settings result');

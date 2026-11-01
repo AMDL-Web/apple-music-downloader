@@ -2,18 +2,19 @@
 // configs/config.example.yaml documents, for the Settings page's Variables
 // popover, its unknown-variable warning and the example path under each
 // template. The example follows internal/media/paths.go (formatPattern,
-// templateValue, safeName, outputPath) rule for rule. Pure.
+// templateValue, safeName, outputPath) and internal/media/library.go
+// (libraryTrackPath) rule for rule. Pure.
 
 /** The template variables config.example.yaml documents, with what each holds. */
 export const TEMPLATE_VARIABLES = [
   ['SongName', 'Track title'],
-  ['SongNumber', '1-based position in the collection it is downloaded as; keeps counting across discs'],
+  ['SongNumber', '1-based position in the album (library) or the playlist or station; keeps counting across discs'],
   ['TrackNumber', 'Apple’s track number, restarting at 1 on every disc'],
   ['TrackCount', 'Tracks on the track’s own disc'],
   ['DiscNumber', 'Disc number'],
   ['DiscCount', 'Number of discs'],
   ['SongId', 'Apple song id'],
-  ['ArtistName', 'In folders the collection’s artist, in the file name the track’s artist'],
+  ['ArtistName', 'Track artist; library folders use AlbumArtist'],
   ['UrlArtistName', 'Same as ArtistName'],
   ['ArtistId', 'Apple artist id'],
   ['AlbumName', 'Album title'],
@@ -56,8 +57,8 @@ export function templateUnknownVars(template) {
   return out;
 }
 
-/** Which template a path_format key is: album, song, playlist, artist or station. */
-export const templateKind = (key) => (/download\.([a-z]+)_path_format/.exec(key) || [])[1] || 'album';
+/** Which template a path_format key is: library, playlist or station. */
+export const templateKind = (key) => (/download\.([a-z]+)_path_format/.exec(key) || [])[1] || 'library';
 
 // One sample track for the example under each template: track 1 of Blonde
 // (ids and UPC are placeholders).
@@ -95,10 +96,10 @@ const safeName = (v) => v.replace(/[/\\<>:"|?*]/g, '_').replace(/^[.\s]+|[.\s]+$
 
 /**
  * The relative path a template gives the sample track (".m4a" added), for
- * the line under the template field: "albums/Frank Ocean/Blonde/01.
+ * the line under the template field: "library/Frank Ocean/Blonde/01.
  * Nikes.m4a". Unknown variables stay as written, as on the server.
  */
-export function templateExample(template, kind = 'album') {
+export function templateExample(template, kind = 'library') {
   const values = { ...SAMPLE, SongNumber: '1', PlaylistName: '', PlaylistId: '', StationName: '', StationId: '', ...(COLLECTIONS[kind] || {}) };
   const segments = String(template || '').split('/');
   return segments

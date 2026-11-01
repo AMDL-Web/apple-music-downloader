@@ -186,8 +186,10 @@ wrapper 还提供 Hi-Res ALAC 曲目的设备清单；歌词和 AAC-LC 许可证
 
 ## 文件存放位置
 
-成品文件放在 `download.downloads_dir` 下（Compose 部署时是 `./data/downloads`）。单曲、专辑、
-艺人、歌单和电台各有一个路径模板，由 `{ArtistName}`、`{AlbumName}`、`{SongName}` 等变量组成。
+成品文件放在 `download.downloads_dir` 下（Compose 部署时是 `./data/downloads`）。单曲、专辑和
+艺人共用一个资料库，默认是 `library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}`：
+同一首歌不管怎么下载都落在同一个路径，那里已有文件就跳过。歌单和电台各有自己的文件夹。
+三个路径模板都由 `{AlbumArtist}`、`{AlbumName}`、`{SongName}` 等变量组成。
 独立封面和 `.lrc` / `.ttml` 歌词文件可以存到音频旁边。模板、可用变量和附属文件选项见
 [`configs/config.example.yaml`](configs/config.example.yaml) 与
 [docs/download-pipeline.md](docs/download-pipeline.md#output-paths)（英文）。

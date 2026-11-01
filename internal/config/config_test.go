@@ -316,13 +316,6 @@ func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
 
 const examplePath = "../../configs/config.example.yaml"
 
-// pathFormatsPredatingSongNumber are the only keys whose Default differs from
-// the example; TestExampleNumbersAlbumPathsByCollectionPosition explains why.
-var pathFormatsPredatingSongNumber = map[string]bool{
-	"download.album_path_format":  true,
-	"download.artist_path_format": true,
-}
-
 // A key missing from config.yaml must behave the way the example documents,
 // so every Default value equals the example's. The example is decoded onto a
 // zero Config, so a key the example lacks shows up as a mismatch too.
@@ -339,9 +332,6 @@ func TestDefaultMatchesExample(t *testing.T) {
 	}
 	defaults, documented := reflect.ValueOf(Default()), reflect.ValueOf(example)
 	for _, field := range configFields() {
-		if pathFormatsPredatingSongNumber[field.key] {
-			continue
-		}
 		got := defaults.FieldByIndex(field.index).Interface()
 		want := documented.FieldByIndex(field.index).Interface()
 		if !reflect.DeepEqual(got, want) {
@@ -429,8 +419,7 @@ func TestValidateReportsViolationsInKeyOrder(t *testing.T) {
 	cfg := Default()
 	cfg.Catalog.MaxParallelRequests = maxGlobalPoolLimit + 1
 	cfg.Logging.BufferSize = -1
-	cfg.Download.SongPathFormat = ""
-	cfg.Download.AlbumPathFormat = ""
+	cfg.Download.LibraryPathFormat = ""
 	cfg.Download.StationPathFormat = ""
 	for range 20 {
 		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "logging.buffer_size ") {
@@ -445,8 +434,8 @@ func TestValidateReportsViolationsInKeyOrder(t *testing.T) {
 	}
 	cfg.Catalog = Default().Catalog
 	for range 20 {
-		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "download.album_path_format ") {
-			t.Fatalf("Validate() = %v, want the download.album_path_format error every time", err)
+		if err := cfg.Validate(); err == nil || !strings.HasPrefix(err.Error(), "download.library_path_format ") {
+			t.Fatalf("Validate() = %v, want the download.library_path_format error every time", err)
 		}
 	}
 }

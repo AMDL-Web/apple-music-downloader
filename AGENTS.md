@@ -91,11 +91,13 @@ no developer token and never calls the documented `api.music.apple.com`. Reads a
 two kinds (`internal/applemusic/AGENTS.md`):
 
 - Required: the link's resource (song, album, playlist, station tracks, artist and its
-  albums) and each track's song metadata. A retryable error is tried up to
-  `download.max_attempts` times, a plain 4xx only once, and then the job or that track
-  fails; there is nothing to download without them.
-- Optional: `editorialVideo` motion artwork, the album read that enriches a song, a
-  private playlist's library cover, and the artist read for a standalone artist cover.
+  albums), a single song's album, read to place the song in the library, and each
+  track's song metadata. A retryable error is tried up to `download.max_attempts`
+  times, a plain 4xx only once, and then the job or that track fails; there is nothing
+  to download, or nowhere to put it, without them.
+- Optional: `editorialVideo` motion artwork, the album read that enriches a playlist or
+  station track, a private playlist's library cover, and the artist read for a
+  standalone artist cover.
   Each degrades to "not available" and never fails a job. A song with no usable web or
   device manifest falls back to the next codec.
 

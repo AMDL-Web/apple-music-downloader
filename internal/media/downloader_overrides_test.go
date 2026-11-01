@@ -46,10 +46,11 @@ func TestProcessJobAppliesPerJobOverrides(t *testing.T) {
 	cfg.Download.DownloadsDir = t.TempDir()
 	cfg.Download.MaxAttempts = 1
 
-	song := applemusic.Song{ID: "987654321", Name: "Track", ArtistName: "Artist", AlbumName: "Album", DurationInMillis: 1000}
+	song := applemusic.Song{ID: "987654321", Name: "Track", ArtistName: "Artist", AlbumID: "555", AlbumName: "Album", DurationInMillis: 1000}
+	album := applemusic.Collection{ID: "555", Name: "Album", Artist: "Artist", Tracks: []applemusic.Song{song}}
 	downloader := newTestDownloader(&Downloader{
 		store:   config.NewStore(cfg),
-		catalog: fakeDownloaderCatalog{song: song},
+		catalog: fakeDownloaderCatalog{song: song, album: album},
 	})
 
 	overwrote := func(t *testing.T, id string, overrides *config.DownloadOverrides) bool {
@@ -106,13 +107,14 @@ func TestProcessJobHonorsCanonicalKeyOverReparse(t *testing.T) {
 	cfg.Download.MaxAttempts = 1
 	cfg.Catalog.AlbumTrackURLMode = "album" // changed after the job was submitted
 
-	song := applemusic.Song{ID: "987654321", Name: "Track", ArtistName: "Artist", AlbumName: "Album", DurationInMillis: 1000}
+	song := applemusic.Song{ID: "987654321", Name: "Track", ArtistName: "Artist", AlbumID: "555", AlbumName: "Album", DurationInMillis: 1000}
 	downloader := newTestDownloader(&Downloader{
 		store: config.NewStore(cfg),
-		// Only the song fake is populated: if processJob re-parsed the input
-		// under the current "album" mode it would resolve via catalog.Album
-		// (empty) and fail with "no downloadable songs found".
-		catalog: fakeDownloaderCatalog{song: song},
+		// Only the song and its own album (555) are known: if processJob
+		// re-parsed the input under the current "album" mode it would resolve
+		// album 123456789 via catalog.Album (empty) and fail with "no
+		// downloadable songs found".
+		catalog: fakeDownloaderCatalog{song: song, album: applemusic.Collection{ID: "555", Name: "Album", Tracks: []applemusic.Song{song}}},
 	})
 	reporter := &recordingReporter{}
 	job := domain.Job{
