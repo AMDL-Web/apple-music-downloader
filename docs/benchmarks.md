@@ -2,11 +2,89 @@
 
 > Type: record
 >
-> Verified at a6a6b46 on 2026-08-10; snapshot, not maintained.
+> Verified at 72994e3 on 2026-11-01 (memory modes after in-process decryption) and at
+> a6a6b46 on 2026-08-10 (the other sections); snapshot, not maintained.
 
-Two measurements, both on the current implementation: a post-decrypt micro-benchmark that
-isolates the flatten/verify/tag path, and an end-to-end run over two real albums with the
-CDN taken out of the picture.
+Three measurements: the two memory modes end to end after 2.0 moved decryption into the
+backend, and from 2026-08 a post-decrypt micro-benchmark that isolates the
+flatten/verify/tag path and an end-to-end run with `wrapper-manager` decrypting.
+
+## Memory modes after in-process decryption
+
+Measured on 2026-11-01 at `72994e3`, where the backend decrypts in-process and sizes its
+decrypt pool to `GOMAXPROCS`.
+
+- The two albums of the 2026-08 run were recorded once through
+  [`tools/mediareplay`](../tools/mediareplay/main.go) and replayed into a fresh
+  `amdl serve` process with an empty queue for every unit. The wrapper stayed live:
+  wrapper-lite on rog, `wrapper-manager` on the NAS.
+- A unit counts only if every track was ALAC on its first attempt and no media came from
+  Apple. wrapper-lite stops serving keys after about 1024 per start, so the wrapper was
+  restarted between batches, and the units it failed were discarded and run again.
+- Matrix: four rounds per album, `max_parallel_downloads` 4 and 16, low and high in ABBA
+  order. The other scenarios ran one to three rounds at 16. They were the proxy capping
+  total bandwidth at 12 MB/s, both albums submitted together, `temp_dir` on a slow volume,
+  and a memory limit on the process with swap off.
+- Time runs from submission to the last job finishing. Anon is the peak of the cgroup's
+  anonymous memory (page cache excluded), sampled every 0.1 s on rog and 0.2 s on the NAS.
+  Temp is the peak size of `temp_dir`. Written is the process's block-device writes,
+  final files included. On rog's Windows volume these miss the 9p writes.
+- Per-track audio packet SHA-256 (`ffmpeg -map 0:a -c copy -f hash`) matched across both
+  modes and every counted unit on both hosts.
+
+Hosts:
+
+- **rog**: Ryzen 9 9900X in WSL2 with 24 threads, so 24 decrypt slots, and 15 GB. Temp
+  and downloads sit on WSL ext4.
+- **NAS**: Synology DS923+ with a Ryzen R1600 (2 cores, 4 threads) and 20 GB, in Docker,
+  so 4 decrypt slots. Temp sits on an NVMe volume and downloads on the HDD volume, as in
+  the test deployment there. Other services ran on the NAS throughout. Fate's time there
+  jumped between about 115 s and 150–215 s in both modes while its CPU time stayed at
+  140–145 s, so the NAS cannot separate the modes on Fate by less than about 30%.
+
+Medians, low / high, times in seconds and sizes in MiB:
+
+| Host | Scenario | Album | Pool | Runs | Time | Anon | Temp | Written |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| rog | matrix | 月姫 | 4 | 4 / 4 | 29.1 / 30.1 | 78 / 634 | 540 / 120 | 1,711 / 869 |
+| rog | matrix | 月姫 | 16 | 4 / 4 | 27.9 / 28.7 | 63 / 583 | 383 / 120 | 1,711 / 869 |
+| rog | matrix | Fate | 4 | 4 / 4 | 140.7 / 147.8 | 204 / 1,180 | 827 / 72 | 2,586 / 1,414 |
+| rog | matrix | Fate | 16 | 4 / 4 | 138.3 / 129.4 | 187 / 1,589 | 836 / 72 | 2,585 / 1,413 |
+| rog | 12 MB/s | 月姫 | 16 | 2 / 2 | 76.4 / 76.3 | 89 / 1,538 | 765 / 218 | 1,730 / 888 |
+| rog | 12 MB/s | Fate | 16 | 2 / 2 | 105.4 / 106.8 | 187 / 887 | 276 / 72 | 2,656 / 1,486 |
+| rog | both albums | both | 16 | 2 / 2 | 102.8 / 153.6 | 188 / 1,890 | 1,061 / 130 | 4,294 / 2,280 |
+| rog | temp on Windows volume (9p) | 月姫 | 16 | 3 / 3 | 25.1 / 25.0 | 71 / 874 | 684 / 224 | — |
+| rog | temp on Windows volume (9p) | Fate | 16 | 2 / 2 | 113.6 / 103.2 | 177 / 1,748 | 791 / 165 | — |
+| NAS | matrix | 月姫 | 4 | 4 / 4 | 42.6 / 42.5 | 168 / 1,264 | 1,105 / 382 | 2,594 / 1,744 |
+| NAS | matrix | 月姫 | 16 | 4 / 4 | 46.2 / 46.2 | 112 / 1,497 | 858 / 461 | 2,593 / 1,743 |
+| NAS | matrix | Fate | 4 | 4 / 4 | 117.0 / 122.4 | 193 / 506 | 261 / 73 | 3,909 / 2,722 |
+| NAS | matrix | Fate | 16 | 4 / 4 | 150.0 / 176.1 | 193 / 881 | 456 / 83 | 3,911 / 2,723 |
+| NAS | 12 MB/s | 月姫 | 16 | 1 / 1 | 93.9 / 96.1 | 167 / 1,580 | 996 / 446 | 2,612 / 1,763 |
+| NAS | both albums | both | 16 | 1 / 1 | 148.0 / 232.2 | 201 / 2,235 | 1,575 / 472 | 6,508 / 4,466 |
+| NAS | temp on the HDD volume | 月姫 | 16 | 2 / 2 | 42.6 / 37.8 | 176 / 1,432 | 1,154 / 484 | 2,590 / 1,740 |
+| NAS | temp on the HDD volume | Fate | 16 | 2 / 2 | 185.5 / 146.1 | 187 / 910 | 457 / 81 | 3,900 / 2,714 |
+
+Under a memory limit (NAS, pool 16), low finished every run in its usual time: 月姫 in
+45.9 s at 1 GiB and 39.9 s at 512 MiB, Fate in 117.2 s at 1 GiB and 146.5 s at 512 MiB.
+High ran out of memory and was killed on 月姫 at 1 GiB (both runs) and on both albums at
+512 MiB. It finished Fate at 1 GiB in 112.0 s.
+
+### Reading the numbers
+
+- With decryption in-process, high is no faster than low wherever the network or the CPU is
+  the limit. The two modes were within noise on the matrix, at 12 MB/s and with temp on
+  rog's Windows volume. With both albums submitted at once, high took about 50% longer on
+  both hosts at equal CPU time; the cause was not determined.
+- High was ahead only with temp on the NAS's HDD at unthrottled replay speed: 11% on 月姫
+  (37.8 s against 42.6 s, two runs each). The Fate difference there is inside that host's
+  noise.
+- High keeps every downloaded track that has not been decrypted yet as a whole buffer.
+  The pipeline allows `max_parallel_downloads` plus `GOMAXPROCS` of those in flight, so its
+  peak grows with the CPU count: 1.6 GiB of anonymous memory for Fate on rog, against
+  about 0.2 GiB for low on both hosts.
+- Low pays with one encrypted checkpoint per track on `temp_dir`. That costs temp peaks of
+  0.3–1.6 GiB and, per album, writing the album's encrypted size once more, about
+  0.85–1.2 GiB here.
 
 ## Post-decrypt disk path
 

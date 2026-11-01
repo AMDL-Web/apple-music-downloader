@@ -63,7 +63,7 @@ apps/desktop/internal 下，只归它用。每个版本都附带它的 macOS、W
 | `deploy/` | Compose 文件，以及 `deploy/server/` 下服务端的 Dockerfile 和入口脚本。 |
 | `configs/` | 每个安装据以生成配置的示例配置和钩子模板。 |
 | `docs/` | 参考文档和操作手册（[索引](docs/README.md)）。 |
-| `tools/` | 仓库工具：文档检查、文件拆分、Temari 一致性检查、README 配图生成。 |
+| `tools/` | 仓库工具：文档检查、文件拆分、Temari 一致性检查、README 配图生成、基准测试用的媒体重放代理。 |
 
 服务端需要准备：
 
