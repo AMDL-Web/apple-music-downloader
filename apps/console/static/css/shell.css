@@ -184,7 +184,9 @@
   outline: none;
 }
 
-/* Spans the bar with its items at the end, so a tag added on the left (Simulate) moves nothing. */
+/* Spans the bar with its items at the end, so a tag added on the left moves nothing.
+   The connection chip is the leftmost item and ends in its dot: its words
+   (Reconnecting in 3 s) grow into free space and move nothing, the dot included. */
 .topbar-right {
   display: flex;
   flex: 1;

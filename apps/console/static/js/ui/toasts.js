@@ -133,8 +133,33 @@ export function useOfflineToasts(conn, toasts, dismissToast, held) {
   }, [state, dismissToast, held]);
 }
 
+/**
+ * Toasts rise above the fixed save bar (CSS, `:has(.save-bar)`), so they never
+ * cover Save. The bar can close while a toast is still up (the restart
+ * finishing), and the stack would then drop by the bar's height in one frame:
+ * a stack that has seen the bar keeps `data-lifted` until it empties.
+ */
+function useKeepLift(ref, any) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    if (!any) {
+      el.removeAttribute('data-lifted');
+      return undefined;
+    }
+    const sync = () => {
+      if (document.querySelector('.save-bar')) el.setAttribute('data-lifted', '');
+    };
+    sync();
+    const watch = new MutationObserver(sync);
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  }, [ref, any]);
+}
+
 /** The stack of toasts; `toastsRef` is the element useToasts watches for hover and focus. */
 export function ToastStack({ toasts, toastsRef, dismissToast }) {
+  useKeepLift(toastsRef, toasts.length > 0);
   return html`
     <div class="toasts" role="status" aria-live="polite" ref=${toastsRef}>
       ${toasts.map(

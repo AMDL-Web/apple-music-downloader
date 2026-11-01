@@ -251,8 +251,11 @@
   scroll-padding-bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
 }
 
-/* While the save bar shows, toasts rise above it so they never cover Save. */
-:root:has(.save-bar) .toasts {
+/* While the save bar shows, toasts rise above it so they never cover Save.
+   A stack up when the bar goes keeps its height (data-lifted, ui/toasts.js)
+   until it empties, so no toast drops when the bar closes. */
+:root:has(.save-bar) .toasts,
+:root .toasts[data-lifted] {
   bottom: calc(var(--s-6) + var(--control-h) + var(--s-6) + var(--s-4));
 }
 
@@ -953,7 +956,8 @@
     scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--touch) + var(--lh-14) + var(--s-8) + var(--s-4));
   }
 
-  :root:has(.save-bar) .toasts {
+  :root:has(.save-bar) .toasts,
+:root .toasts[data-lifted] {
     bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--touch) + var(--lh-14) + var(--s-8) + var(--s-4));
   }
 

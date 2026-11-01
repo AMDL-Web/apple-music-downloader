@@ -328,8 +328,8 @@ export function App() {
       <div class="main-col">
         <header class="topbar">
           <div class="topbar-right">
-            ${simulate ? html`<${SimulateTag} />` : null}
             <${ConnectionIndicator} conn=${conn} onRetry=${() => retryRef.current()} />
+            ${simulate ? html`<${SimulateTag} />` : null}
             <button type="button" class="search-trigger" onClick=${() => setOverlay('palette')} aria-label="Search, paste a link or run a command" aria-keyshortcuts="Meta+K Control+K">
               <${Icon} name="search" />
               <span class="search-trigger-text">Search or paste a link…</span>

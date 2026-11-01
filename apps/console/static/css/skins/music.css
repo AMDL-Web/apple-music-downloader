@@ -433,7 +433,7 @@
 }
 
 :root[data-skin="music"] .conn:not([data-state="reconnecting"], [data-state="offline"]) {
-  padding: 0 var(--s-1_5);
+  padding: 0 var(--s-3) 0 var(--s-1_5);
   background: transparent;
 }
 
@@ -547,6 +547,14 @@
   opacity: 1;
   background: var(--disabled-bg);
   color: var(--disabled-text);
+}
+
+/* A restart under way is busy, not unavailable: the red fill stays, softer,
+   so the button reads as the same one still working. */
+:root[data-skin="music"] .btn-primary.settings-restart-button[aria-busy="true"] {
+  background: color-mix(in srgb, var(--accent) 68%, var(--bg-raised));
+  color: var(--on-accent);
+  cursor: progress;
 }
 
 /* Destructive actions (Delete, Discard, Cancel job, Log out) are red text,
@@ -2879,7 +2887,8 @@
     padding: 0 var(--s-2);
   }
 
-  :root[data-skin="music"] .conn {
+  :root[data-skin="music"] .conn,
+  :root[data-skin="music"] .conn:not([data-state="reconnecting"], [data-state="offline"]) {
     gap: var(--s-1_5);
     padding: 0 var(--s-2);
     background: transparent;

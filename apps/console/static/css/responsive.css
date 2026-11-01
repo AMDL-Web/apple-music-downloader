@@ -554,9 +554,10 @@
     align-content: center;
   }
 
+  /* The dot stays at the chip's end, so it does not move when the words come. */
   .conn {
     min-width: var(--touch);
-    justify-content: center;
+    justify-content: flex-end;
   }
 
   .search-trigger {

@@ -95,8 +95,8 @@ export function ConnectionIndicator({ conn, onRetry }) {
   // The number is the wait before the next attempt, so it says so.
   const label = conn.state === 'reconnecting' && secs ? `Reconnecting in ${secs} s` : view.label;
   return html`<span class="conn" data-role=${view.role} data-state=${conn.state} title=${conn.state === 'live' ? 'Live updates on' : `Live updates: ${label}`}>
-    <span class="conn-dot" aria-hidden="true"></span>
     <span class="conn-label">${label}</span>
+    <span class="conn-dot" aria-hidden="true"></span>
     ${conn.state === 'offline' && onRetry ? html`<${Button} size="sm" variant="ghost" onClick=${onRetry}>Retry</${Button}>` : null}
   </span>`;
 }

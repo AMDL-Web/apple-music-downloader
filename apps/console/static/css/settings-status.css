@@ -712,8 +712,10 @@ fieldset.field-control {
   width: var(--save-w, auto);
 }
 
-/* Toasts rise above the bar, so they never cover Save. */
-:root:has(.save-bar) .toasts {
+/* Toasts rise above the bar, so they never cover Save, and keep that height
+   until the stack empties (data-lifted) when the bar closes first. */
+:root:has(.save-bar) .toasts,
+:root .toasts[data-lifted] {
   bottom: calc(var(--btn-lg-h, var(--control-h)) + var(--s-6) + var(--s-4));
 }
 
@@ -779,7 +781,8 @@ fieldset.field-control {
     scroll-padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 52px + var(--s-6));
   }
 
-  :root:has(.save-bar) .toasts {
+  :root:has(.save-bar) .toasts,
+:root .toasts[data-lifted] {
     bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 52px + var(--s-4));
   }
 
