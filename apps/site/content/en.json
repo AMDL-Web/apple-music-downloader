@@ -218,15 +218,15 @@
         },
         {
           "title": "Turn on the wrapper",
-          "text": "In `docker-compose.yml`, uncomment the `wrapper-manager` service and the `volumes:` block at the end of the file, then set the wrapper address:"
+          "text": "In `docker-compose.yml`, uncomment the `wrapper-manager` service and the `volumes:` block at the end of the file."
         },
         {
           "title": "Start both",
           "text": "Compose builds wrapper-manager from its v2 branch, so the host needs internet access."
         },
         {
-          "title": "Sign in and download",
-          "text": "Open `http://localhost:18080/`, go to **Settings › Account** and sign in with your Apple ID. Paste a link into **New download**; finished files land in `./data/downloads`."
+          "title": "Point at the wrapper and sign in",
+          "text": "Open `http://localhost:18080/`, go to **Settings › Account**, set **Session service** to the address below, save and restart from the notice. Then sign in with your Apple ID and paste a link into **New download**; finished files land in `./data/downloads`."
         }
       ]
     },

@@ -16,40 +16,61 @@ const configExampleFileName = "config.example.yaml"
 // Detailed field documentation remains in config.example.yaml because YAML
 // marshaling does not preserve comments.
 const managedFileHeader = `# Managed by the amdl backend: PUT /api/v1/config rewrites this file and
-# does not preserve comments. Hand edits to runtime-mutable fields apply on
-# POST /api/v1/config/reload or the next PUT; startup-bound fields are
-# read only when the process starts. Complete field documentation lives in
+# does not preserve comments. Hand edits to runtime keys apply on
+# POST /api/v1/config/reload or the next PUT; the other keys are read only
+# when the backend starts. Complete field documentation lives in
 # config.example.yaml.
 `
 
-// EnsureFile creates configPath from example when it does not exist yet, and
-// reports whether it did. The example is written verbatim (comments included)
-// after it passes Load without AMDL_* overlays, so environment settings are
-// never baked into the file. Callers pass configs.Example.
-func EnsureFile(configPath string, example []byte) (created bool, err error) {
+// EnsureFile creates configPath from example when it does not exist yet,
+// with each seed's key set to its value; the rest of the example, comments
+// included, is written verbatim. When the file exists, the seeds do not
+// apply, except that a loopback server.listen is rewritten to a server.listen
+// seed that is not loopback (reconcileSeeds); Bootstrap reports that and the
+// seeds the file differs from. Callers pass configs.Example.
+func EnsureFile(configPath string, example []byte, seeds ...Seed) (Bootstrap, error) {
 	exists, err := fileExists(configPath)
-	if err != nil || exists {
-		return false, err
+	if err != nil {
+		return Bootstrap{}, err
 	}
-	if _, err := loadBytes(configExampleFileName, example, nil); err != nil {
-		return false, fmt.Errorf("config file %s does not exist and the example to create it from is invalid: %w", configPath, err)
+	if exists {
+		if len(seeds) == 0 {
+			return Bootstrap{}, nil
+		}
+		raw, err := os.ReadFile(configPath)
+		if err != nil {
+			return Bootstrap{}, err
+		}
+		out, b, err := reconcileSeeds(configPath, raw, seeds)
+		if err != nil || out == nil {
+			return b, err
+		}
+		return b, writeFileAtomic(configPath, out, 0o600)
+	}
+	if _, err := loadBytes(configExampleFileName, example); err != nil {
+		return Bootstrap{}, fmt.Errorf("config file %s does not exist and the example to create it from is invalid: %w", configPath, err)
+	}
+	content := example
+	if len(seeds) > 0 {
+		if content, err = applySeeds(configExampleFileName, example, seeds); err != nil {
+			return Bootstrap{}, err
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return false, err
+		return Bootstrap{}, err
 	}
-	if err := writeFileAtomic(configPath, example, 0o600); err != nil {
-		return false, err
+	if err := writeFileAtomic(configPath, content, 0o600); err != nil {
+		return Bootstrap{}, err
 	}
-	return true, nil
+	return Bootstrap{Created: true}, nil
 }
 
-// FromExample parses example as EnsureFile would write it, without AMDL_*
-// overlays: where a client that writes its own config.yaml starts, so a new
-// install gets the example's values (such as its {SongNumber} album layout)
-// rather than Default's, which keep older installs' layout. Callers pass
-// configs.Example.
+// FromExample parses example as EnsureFile would write it: where a client
+// that writes its own config.yaml starts, so a new install gets the
+// example's values (such as its {SongNumber} album layout) rather than
+// Default's, which keep older installs' layout. Callers pass configs.Example.
 func FromExample(example []byte) (Config, error) {
-	return loadBytes(configExampleFileName, example, nil)
+	return loadBytes(configExampleFileName, example)
 }
 
 // saveConfig writes the complete configuration to path, owner-only because
@@ -65,24 +86,23 @@ func saveConfig(path string, cfg Config) error {
 	return writeFileAtomic(path, append([]byte(managedFileHeader), out...), 0o600)
 }
 
-// saveRuntimeFields rewrites the combined file with cfg's runtime values while
-// retaining startup-bound values currently on disk. This prevents an API PUT
-// from undoing a valid config.yaml edit that is waiting for the next restart,
-// and keeps the AMDL_* overrides (all startup keys) out of the file. A missing
-// file is recreated from the defaults plus cfg's runtime values, the same
-// startup values a restart would bootstrap from the example.
-func saveRuntimeFields(path string, cfg Config) error {
+// saveEditableFields rewrites the combined file with cfg's runtime and
+// restart values while retaining the file-class values on disk, so an API PUT
+// never undoes a config.yaml edit of server.listen, database.path or
+// tools.ffmpeg that waits for the next restart. A missing file is recreated
+// from the defaults plus cfg's runtime and restart values.
+func saveEditableFields(path string, cfg Config) error {
 	disk := Default()
 	if exists, err := fileExists(path); err != nil {
 		return err
 	} else if exists {
-		loaded, err := load(path, nil)
+		loaded, err := Load(path)
 		if err != nil {
-			return fmt.Errorf("reload startup-bound config fields before save: %w", err)
+			return fmt.Errorf("reload file-only config fields before save: %w", err)
 		}
 		disk = loaded
 	}
-	copyRuntimeFields(&disk, cfg)
+	copyFields(&disk, cfg, isEditable)
 	return saveConfig(path, disk)
 }
 

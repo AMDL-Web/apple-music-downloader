@@ -86,11 +86,10 @@ RUN chmod 755 /usr/local/bin/docker-entrypoint.sh \
 
 EXPOSE 18080
 
-# The port follows AMDL_SERVER_LISTEN (the environment override of
-# server.listen, applied on every start, default :18080). To change the listen
-# port, change that environment variable; the health check derives its port
-# from it.
+# The entrypoint creates config.yaml with server.listen :18080; to publish
+# another host port, change the left side of the compose ports mapping. A
+# server.listen edited to another port fails this check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD p="${AMDL_SERVER_LISTEN:-:18080}"; wget -qO /dev/null "http://127.0.0.1:${p##*:}/api/v1/health" || exit 1
+    CMD wget -qO /dev/null "http://127.0.0.1:18080/api/v1/health" || exit 1
 
 ENTRYPOINT ["docker-entrypoint.sh"]

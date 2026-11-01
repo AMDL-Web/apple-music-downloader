@@ -65,6 +65,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemInfo'
+  /api/v1/system/restart:
+    post:
+      tags: [System]
+      summary: Stop the backend and start it again in the same process
+      description: >-
+        Answers 202, then stops every component the way a shutdown does (running
+        jobs are interrupted and resume after the start) and starts again from
+        configs/config.yaml, which applies the keys in pending_restart. No
+        supervisor is needed: amdl serve, the container and the desktop app restart
+        in place, on the same address. The API does not answer for the few seconds
+        the restart takes; poll GET /api/v1/health.
+      operationId: restartSystem
+      responses:
+        '202':
+          description: The restart is under way.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [restarting]
+                properties:
+                  restarting:
+                    type: boolean
+                    enum: [true]
+        '503':
+          description: >-
+            feature_unavailable: this backend runs inside a program that cannot
+            start it again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/stats:
     get:
       tags: [System]
@@ -180,25 +212,23 @@ paths:
   /api/v1/config:
     get:
       tags: [System]
-      summary: Read the current runtime configuration (mutable fields only)
+      summary: Read the configuration clients can change
       description: >-
-        Returns the runtime-mutable part of the effective configuration: the download
-        section (except max_running_jobs and max_parallel_downloads),
-        logging.level/access_log, the simulate section, the library_sync section, and
-        catalog.album_track_url_mode/media_user_token/motion_artwork_enabled.
-        Startup-only fields (server, database, the other logging fields, wrapper,
-        tools, the other catalog fields) are not returned — they cannot be changed
-        through this API; edit the startup configuration configs/config.yaml and
-        restart instead.
+        Returns every key except the three that change only in configs/config.yaml
+        (server.listen, database.path, tools.ffmpeg). Runtime keys are returned as
+        they run. Restart keys (marked x-applies: restart in RuntimeConfig:
+        logging.console and buffer_size, the wrapper connection, catalog.language,
+        token_cache_ttl_hours and max_parallel_requests, download.max_running_jobs
+        and max_parallel_downloads) are returned as saved in the file, which the
+        next start applies; pending_restart names the keys whose saved value
+        differs from the running one, a hand edit of a file-only key included.
 
-        GET is a pure read of the in-memory configuration and has no side effects:
-        it does not re-read configs/config.yaml. A hand edit of the file takes
-        effect through POST /api/v1/config/reload; startup-only fields
-        still require a restart.
+        GET has no side effects. A hand edit of a runtime key takes effect through
+        POST /api/v1/config/reload.
       operationId: getConfig
       responses:
         '200':
-          description: The current runtime-mutable configuration.
+          description: The configuration clients can change.
           content:
             application/json:
               schema:
@@ -207,26 +237,26 @@ paths:
           $ref: '#/components/responses/InternalError'
     put:
       tags: [System]
-      summary: Update the runtime configuration
+      summary: Update the configuration
       description: >-
-        The request body overrides the current runtime configuration with merge
-        semantics: omitted fields keep their current values, and fields that are
-        present (including whole sections) are replaced. The merged result must pass
-        the same full validation as the configuration file.
+        The request body overrides the saved configuration with merge semantics:
+        omitted fields keep their current values, and fields that are present
+        (including whole sections) are replaced. The merged result must pass the
+        same full validation a start runs, so a saved value always loads.
 
-        Only the fields returned by GET can be changed: the download section (except
-        max_running_jobs and max_parallel_downloads), logging.level/access_log, the
-        simulate section, the library_sync section, and
-        catalog.album_track_url_mode/media_user_token/motion_artwork_enabled.
-        Every other field is consumed only at process startup, and a request that
-        changes one is rejected with 422 config_key_not_mutable — edit the startup
-        configuration configs/config.yaml and restart instead. An unknown field is
-        400 invalid_request.
+        Only the fields returned by GET can be changed. A request that changes
+        server.listen, database.path or tools.ffmpeg is rejected with 422
+        config_key_not_mutable — edit configs/config.yaml and restart instead — and
+        so is one that changes wrapper.address while this process runs the wrapper
+        itself (details.reason managed_wrapper). An unknown field is 400
+        invalid_request.
 
-        Changes take effect immediately for new requests and newly started jobs
-        (running jobs keep the configuration snapshot taken when they started), and
-        the complete configuration, startup fields included, is written back to
-        configs/config.yaml, so it still applies after a restart. That file is
+        Runtime keys take effect immediately for new requests and newly started jobs
+        (running jobs keep the configuration snapshot taken when they started).
+        Restart keys are saved and take effect on the next start, such as POST
+        /api/v1/system/restart; the response's pending_restart names them. The
+        complete configuration is written back to configs/config.yaml, so it still
+        applies after a restart. That file is
         managed by the backend (rewritten in full on every PUT, comments are not
         kept); the fully commented field documentation is
         configs/config.example.yaml, which serves as the template for config.yaml
@@ -264,8 +294,10 @@ paths:
           $ref: '#/components/responses/JSONBodyTooLarge'
         '422':
           description: >-
-            config_key_not_mutable: the request changes a startup-only field
-            (details.keys lists them); invalid_config: the merged result fails configuration validation, or
+            config_key_not_mutable: the request changes a file-only field, or
+            wrapper.address while this process runs the wrapper (details.keys lists
+            them; details.reason is managed_wrapper for the latter); invalid_config:
+            the merged result fails configuration validation, or
             the config file on disk no longer validates.
           content:
             application/json:
@@ -278,9 +310,9 @@ paths:
       tags: [System]
       summary: Re-read the configuration file
       description: >-
-        Re-reads configs/config.yaml and applies its runtime-mutable fields; the
-        logging level takes effect at once. Startup-only fields keep their
-        in-memory values until a restart. The response has the shape of GET
+        Re-reads configs/config.yaml and applies its runtime fields; the
+        logging level takes effect at once. Restart and file-only fields keep their
+        running values until a restart (pending_restart). The response has the shape of GET
         /api/v1/config. When the file cannot be read or fails validation (for
         example while it is half-edited), the previous configuration stays in
         place and the response is still 200, with reload_error explaining why.
@@ -1796,7 +1828,9 @@ components:
               description: >-
                 Code-specific data. no_urls_accepted and store_error from POST
                 /downloads: the BatchSubmitResponse. config_key_not_mutable:
-                {"keys": [...]}, the rejected fields as dotted key names. Errors
+                {"keys": [...]}, the rejected fields as dotted key names, and
+                "reason": "managed_wrapper" when the wrapper this machine runs
+                sets wrapper.address. Errors
                 of POST /lookup after the link parsed: {"link": LookupLink}.
     ErrorCode:
       type: string
@@ -1937,7 +1971,7 @@ components:
           type: string
     SystemInfo:
       type: object
-      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, motion_artwork_enabled, default_storefront, jobs, pools, tools, storage, startup]
+      required: [version, commit, build_date, go_version, os, arch, started_at, uptime_seconds, simulate, motion_artwork_enabled, default_storefront, jobs, pools, tools, storage, startup, pending_restart]
       properties:
         version:
           type: string
@@ -2053,18 +2087,24 @@ components:
                 minimum: 0
               error:
                 type: string
+        pending_restart:
+          type: array
+          items:
+            type: string
+          description: Config keys saved with a value the next start applies (ConfigResponse.pending_restart).
         startup:
           type: object
           required: [config_path, wrapper_address, listen, database_path, log_buffer_size, catalog_language, max_parallel_requests]
           description: >-
-            Configuration read only at startup (none of it is in RuntimeConfig),
-            for a client to show as facts. It carries no credential.
+            Configuration this process read when it started, as it runs. A restart
+            key saved through PUT /config shows here only after the next start
+            (pending_restart). It carries no credential.
           properties:
             config_path:
               type: string
               description: >-
-                Absolute path of the config file PUT /config writes and startup keys
-                are edited in; "" when the backend keeps its config in memory only.
+                Absolute path of the config file PUT /config writes and the file-only
+                keys are edited in; "" when the backend keeps its config in memory only.
             wrapper_address:
               type: string
               description: >-
@@ -2114,6 +2154,7 @@ components:
           log_buffer_size: 2000
           catalog_language: en-US
           max_parallel_requests: 16
+        pending_restart: []
     Stats:
       type: object
       required: [generated_at, days, totals, daily, codecs, hooks]
@@ -2566,17 +2607,36 @@ components:
     RuntimeConfig:
       type: object
       description: >-
-        The runtime-mutable configuration subset (see the comments in
-        configs/config.example.yaml for field meanings, enum values and default
-        behavior). GET returns this shape; a PUT may submit only the fields to
-        change, and omitted fields keep their current values.
+        Every key except server.listen, database.path and tools.ffmpeg (see the
+        comments in configs/config.example.yaml for field meanings, enum values and
+        default behavior). Keys marked x-applies: restart are saved and take effect
+        on the next start; the others take effect at once. GET returns this shape;
+        a PUT may submit only the fields to change, and omitted fields keep their
+        current values.
       properties:
         catalog:
           type: object
-          description: >-
-            max_parallel_requests takes effect only at startup; it does not appear
-            here and cannot be changed.
           properties:
+            default_storefront:
+              type: string
+              description: >-
+                Two-letter storefront that search and the catalog routes use when a
+                request names none.
+            language:
+              type: string
+              x-applies: restart
+              description: >-
+                Catalog language tag. It goes into tags and output paths, so
+                changing it on an existing library can download albums again.
+            max_parallel_requests:
+              type: integer
+              maximum: 64
+              x-applies: restart
+              description: Apple requests in flight; values <= 0 behave as 1.
+            token_cache_ttl_hours:
+              type: integer
+              x-applies: restart
+              description: Validity window of the scraped web-player token; values <= 0 mean 12.
             album_track_url_mode:
               type: string
               enum: [song, album]
@@ -2605,10 +2665,17 @@ components:
                 Changes take effect for newly started jobs.
         download:
           type: object
-          description: >-
-            max_running_jobs and max_parallel_downloads take effect only at
-            startup; they do not appear here and cannot be changed.
           properties:
+            max_running_jobs:
+              type: integer
+              maximum: 32
+              x-applies: restart
+              description: Jobs running at once; values <= 0 behave as 1.
+            max_parallel_downloads:
+              type: integer
+              maximum: 64
+              x-applies: restart
+              description: Media transfers in flight across all jobs; values <= 0 behave as 1.
             quality_priority:
               type: array
               minItems: 1
@@ -2740,12 +2807,44 @@ components:
                 overridden per batch with overrides.force_overwrite in the request.
         logging:
           type: object
-          description: Only the log level and the HTTP access log switch are runtime-mutable; console and buffer_size require a restart.
           properties:
             level:
               type: string
               enum: [debug, info, warn, error]
             access_log: {type: boolean}
+            console:
+              type: boolean
+              x-applies: restart
+              description: Whether the backend writes its log to stdout.
+            buffer_size:
+              type: integer
+              minimum: 0
+              maximum: 100000
+              x-applies: restart
+              description: Log records kept in memory for GET /logs; 0 keeps none.
+        wrapper:
+          type: object
+          properties:
+            address:
+              type: string
+              x-applies: restart
+              description: >-
+                The wrapper's URL, http:// or https:// with a host. Rejected with
+                config_key_not_mutable (reason managed_wrapper) while this process
+                runs the wrapper itself.
+            timeout_seconds:
+              type: integer
+              x-applies: restart
+              description: Bound on one wrapper request; values <= 0 mean 30.
+            login_timeout_seconds:
+              type: integer
+              x-applies: restart
+              description: Bound on one console login request; values <= 0 mean 120.
+            data_dir:
+              type: string
+              description: >-
+                The wrapper's data directory as this backend sees it, where it reads
+                the wrapper's MUSIC_TOKEN on every use; "" reads nothing.
         simulate:
           type: object
           properties:
@@ -2821,10 +2920,19 @@ components:
           $ref: '#/components/schemas/LibrarySyncStatus'
     ConfigResponse:
       type: object
-      required: [config, persisted]
+      required: [config, persisted, pending_restart]
       properties:
         config:
           $ref: '#/components/schemas/RuntimeConfig'
+        pending_restart:
+          type: array
+          items:
+            type: string
+          description: >-
+            Dotted keys whose saved value differs from the one the process runs
+            with, applied by the next start (POST /api/v1/system/restart): restart
+            keys saved through PUT, and hand edits of restart or file-only keys.
+            Empty when nothing waits.
         persisted:
           type: boolean
           description: >-

@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestGetConfigReturnsOnlyMutableFields(t *testing.T) {
+func TestGetConfigReturnsEditableFields(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default())}
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/config", "")
 	if recorder.Code != http.StatusOK {
@@ -35,14 +35,14 @@ func TestGetConfigReturnsOnlyMutableFields(t *testing.T) {
 	if resp.Persisted {
 		t.Fatal("persisted = true, runtime config is never written back to disk")
 	}
-	for _, section := range []string{"catalog", "download", "logging", "simulate"} {
+	for _, section := range []string{"catalog", "download", "logging", "simulate", "wrapper"} {
 		if _, ok := resp.Config[section]; !ok {
 			t.Fatalf("config missing mutable section %q: %s", section, recorder.Body.String())
 		}
 	}
-	for _, section := range []string{"server", "database", "wrapper", "tools"} {
+	for _, section := range []string{"server", "database", "tools"} {
 		if _, ok := resp.Config[section]; ok {
-			t.Fatalf("config exposes startup-bound section %q: %s", section, recorder.Body.String())
+			t.Fatalf("config exposes file-only section %q: %s", section, recorder.Body.String())
 		}
 	}
 	var download map[string]any
@@ -50,8 +50,8 @@ func TestGetConfigReturnsOnlyMutableFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"max_running_jobs", "max_parallel_downloads"} {
-		if _, ok := download[key]; ok {
-			t.Fatalf("download section exposes startup-bound %s", key)
+		if _, ok := download[key]; !ok {
+			t.Fatalf("download section lacks the restart key %s", key)
 		}
 	}
 	if download["cover_format"] != "jpg" {
@@ -64,16 +64,16 @@ func TestGetConfigReturnsOnlyMutableFields(t *testing.T) {
 	if err := json.Unmarshal(resp.Config["catalog"], &catalog); err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog) != 3 || catalog["album_track_url_mode"] != "song" || catalog["media_user_token"] != "" ||
-		catalog["motion_artwork_enabled"] != true {
-		t.Fatalf("catalog section = %v, want album_track_url_mode/media_user_token/motion_artwork_enabled", catalog)
+	if len(catalog) != 7 || catalog["album_track_url_mode"] != "song" || catalog["media_user_token"] != "" ||
+		catalog["motion_artwork_enabled"] != true || catalog["language"] != "zh-Hans_CN" {
+		t.Fatalf("catalog section = %v, want every catalog key", catalog)
 	}
 	var logging map[string]any
 	if err := json.Unmarshal(resp.Config["logging"], &logging); err != nil {
 		t.Fatal(err)
 	}
-	if len(logging) != 2 || logging["level"] != "info" || logging["access_log"] != false {
-		t.Fatalf("logging section = %v, want only level/access_log", logging)
+	if len(logging) != 4 || logging["level"] != "info" || logging["access_log"] != false || logging["console"] != true {
+		t.Fatalf("logging section = %v, want every logging key", logging)
 	}
 }
 
@@ -86,9 +86,9 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	// The response echoes the mutable view only, never startup-bound sections.
-	if strings.Contains(recorder.Body.String(), `"server"`) || strings.Contains(recorder.Body.String(), `"max_running_jobs"`) || strings.Contains(recorder.Body.String(), `"max_parallel_downloads"`) || strings.Contains(recorder.Body.String(), `"max_parallel_requests"`) {
-		t.Fatalf("update response leaks startup-bound fields: %s", recorder.Body.String())
+	// The response echoes the editable view only, never the file-only keys.
+	if strings.Contains(recorder.Body.String(), `"server"`) || strings.Contains(recorder.Body.String(), `"ffmpeg"`) {
+		t.Fatalf("update response leaks file-only fields: %s", recorder.Body.String())
 	}
 
 	got := store.Get()
@@ -315,13 +315,14 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 		{name: "invalid memory mode", body: `{"download":{"memory_mode":"auto"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "memory_mode"},
 		{name: "malformed cover size", body: `{"download":{"cover_size":"big"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "download.cover_size"},
 		{name: "locked field", body: `{"server":{"listen":"0.0.0.0:1"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "server.listen"},
-		{name: "locked worker count", body: `{"download":{"max_running_jobs":99}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "download.max_running_jobs"},
-		{name: "locked download pool", body: `{"download":{"max_parallel_downloads":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "download.max_parallel_downloads"},
+		{name: "worker count over its limit", body: `{"download":{"max_running_jobs":99}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "max_running_jobs"},
+		{name: "locked database", body: `{"database":{"path":"/elsewhere.db"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "database.path"},
+		{name: "locked ffmpeg", body: `{"tools":{"ffmpeg":"/opt/ffmpeg"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "tools.ffmpeg"},
+		{name: "wrapper address without a scheme", body: `{"wrapper":{"address":"wrapper:12340"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "wrapper.address"},
 		{name: "removed decrypt pool", body: `{"download":{"max_parallel_decrypts":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_decrypts"},
-		{name: "locked catalog concurrency", body: `{"catalog":{"max_parallel_requests":8}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "catalog.max_parallel_requests"},
 		{name: "removed catalog rate", body: `{"catalog":{"requests_per_second":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "requests_per_second"},
 		{name: "removed logging format", body: `{"logging":{"format":"json"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "format"},
-		{name: "locked logging output", body: `{"logging":{"console":false}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "logging.console"},
+		{name: "no log output left", body: `{"logging":{"console":false,"buffer_size":0}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "logging"},
 		{name: "list given a string", body: `{"download":{"quality_priority":"bogus"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.quality_priority must be a list, got a string"},
 		{name: "number given a string", body: `{"download":{"max_attempts":"abc"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "download.max_attempts must be a whole number, got a string"},
 	}

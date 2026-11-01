@@ -47,37 +47,39 @@ test('no row yields an empty or dash text', () => {
       if (v) assert.ok(v.text && v.text !== '—', `${row.id}: ${v && v.text}`);
     }
   }
-  assert.equal(byId('max_running_jobs').read(zero).text, '0');
+  assert.equal(byId('decrypts').read(zero).text, '0');
+});
+
+// Keys the API can change are fields, not facts: only the built-in pools and
+// the three file-only keys are read-only rows (the wrapper row only while amdl
+// runs the wrapper).
+test('fact rows name only keys the API cannot change', () => {
+  const keys = FIXED_ROWS.map((r) => r.configKey).filter(Boolean);
+  assert.deepEqual(keys, ['wrapper.address', 'server.listen', 'database.path', 'tools.ffmpeg']);
 });
 
 test('values from a full system', () => {
-  assert.deepEqual(byId('default_storefront').read(full), { text: 'US' });
-  assert.deepEqual(byId('wrapper_address').read(full), { text: 'wrapper:20020', mono: true });
-  assert.deepEqual(byId('log_buffer_size').read(full), { text: '5,000 lines' });
+  assert.equal(byId('wrapper_address').read(full), null);
   assert.deepEqual(byId('ffmpeg').read(full), { text: '/usr/bin/ffmpeg', mono: true });
   assert.deepEqual(byId('decrypts').read(full), { text: '8' });
   assert.equal(byId('decrypts').title, 'One per CPU');
 });
 
 test('factRows keeps table order and drops null rows', () => {
-  assert.deepEqual(factRows('jobs', full).map((r) => r.id), ['max_running_jobs', 'max_parallel_downloads', 'max_parallel_requests', 'decrypts', 'wrapper_requests']);
+  assert.deepEqual(factRows('jobs', full).map((r) => r.id), ['decrypts', 'wrapper_requests']);
   assert.deepEqual(factRows('server', full).map((r) => r.id), ['listen', 'database_path', 'ffmpeg']);
-  assert.deepEqual(factRows('jobs', { jobs: { workers: 3 } }).map((r) => r.id), ['max_running_jobs']);
+  assert.deepEqual(factRows('jobs', { pools: { decrypts: 3 } }).map((r) => r.id), ['decrypts']);
   assert.deepEqual(factRows('jobs', undefined), []);
   assert.deepEqual(factRows('hooks', full)[0].value, { text: 'hooks.yaml', mono: true });
-  assert.equal(factRows('jobs', full)[0].value.text, '2');
+  assert.equal(factRows('jobs', full)[0].value.text, '8');
 });
 
 test('factRows while pending: every row of the section, each with an empty value', () => {
   assert.deepEqual(
     factRows('jobs', undefined, true).map((r) => [r.id, r.value.text]),
-    ['max_running_jobs', 'max_parallel_downloads', 'max_parallel_requests', 'decrypts', 'wrapper_requests'].map((id) => [id, '']),
+    ['decrypts', 'wrapper_requests'].map((id) => [id, '']),
   );
   assert.deepEqual(factRows('quality', undefined, true), []);
-});
-
-test('log buffer 0 reads Off with the warning role', () => {
-  assert.deepEqual(byId('log_buffer_size').read(zero), { text: 'Off', role: 'warning' });
 });
 
 test('ffmpeg missing is danger, neutral in simulate, plain Available without a path', () => {
@@ -107,6 +109,7 @@ test('a wrapper amdl runs is not a config.yaml address', () => {
   assert.deepEqual(row.value, { text: 'This machine, QEMU (tcg)' });
   assert.equal(row.title, 'wrapper:20020');
   assert.equal(chipOf(row).label, 'Run by amdl');
-  assert.deepEqual(factRows('account', full, false, { logged_in: true }).find((r) => r.id === 'wrapper_address').value, { text: 'wrapper:20020', mono: true });
-  assert.equal(factRows('account', full, true, managed).find((r) => r.id === 'wrapper_address').value.text, '');
+  // Otherwise the address is the wrapper.address field, and no row holds its place.
+  assert.equal(factRows('account', full, false, { logged_in: true }).find((r) => r.id === 'wrapper_address'), undefined);
+  assert.equal(factRows('account', full, true, managed).find((r) => r.id === 'wrapper_address'), undefined);
 });

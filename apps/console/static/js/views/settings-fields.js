@@ -14,7 +14,7 @@ import { TokenControl } from './settings-token.js';
 export const fieldId = (key) => `set-${key.replace(/[^a-z0-9]+/gi, '-')}`;
 
 // Types whose control takes the row's full width under the text.
-const WIDE = new Set(['list', 'path', 'template', 'token']);
+const WIDE = new Set(['list', 'path', 'template', 'token', 'text']);
 // Types labelled by a group (role=group + aria-labelledby) rather than <label for>.
 const GROUPED = new Set(['list', 'set']);
 
@@ -185,7 +185,7 @@ function NumberControl({ field, id, value, invalid, described, onChange }) {
 }
 
 function TextControl({ field, id, value, invalid, described, onChange }) {
-  const mono = field.type === 'path' || field.type === 'template';
+  const mono = field.type === 'path' || field.type === 'template' || field.type === 'text';
   return html`<input
     type="text"
     class=${mono ? 'field-input mono' : 'field-input'}

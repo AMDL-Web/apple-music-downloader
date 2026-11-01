@@ -30,10 +30,12 @@ type settingsForm struct {
 	glideTo float32
 	// draft holds the app's connection settings until Apply, since
 	// applying them connects again.
-	loaded  bool
-	draft   mode.Settings
-	theme   int
-	testing bool
+	loaded bool
+	draft  mode.Settings
+	// wrapperBase is the wrapper address the draft last took from wrapperNow.
+	wrapperBase string
+	theme       int
+	testing     bool
 	// testFrom is when the running test started.
 	testFrom time.Time
 	checks   []mode.Check

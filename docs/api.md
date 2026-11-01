@@ -92,7 +92,7 @@ Returns what is running and what it has to work with:
   from git, if it was built inside a checkout; `go run` leaves both empty.
 - `go_version`, `os`, `arch`, `started_at`, `uptime_seconds`.
 - `simulate` (`simulate.enabled`), `motion_artwork_enabled`,
-  `default_storefront` (`catalog.default_storefront`, a startup key). The API refuses a
+  `default_storefront` (`catalog.default_storefront`, a runtime key). The API refuses a
   link without a storefront in its path (`invalid_url`); a client that accepts such links, like the
   web console, completes them with this value. Search, artist albums and the album page default to it.
 - `jobs`: `workers` (`download.max_running_jobs` at startup), `active`, `queue_depth` of
@@ -106,13 +106,28 @@ Returns what is running and what it has to work with:
   holding `download.downloads_dir` and `download.temp_dir`, or an `error` when a directory
   cannot be inspected (it does not exist yet, or the platform is not Linux, macOS or
   FreeBSD).
-- `startup`: configuration read only at startup, for a client to show as read-only facts:
-  `config_path` (the absolute path of the config file a startup key is edited in, `""`
+- `startup`: the configuration this process read when it started, as it runs (a restart
+  key saved since then shows here after the next start):
+  `config_path` (the absolute path of the config file the file-only keys are edited in, `""`
   when the config is kept in memory only), `wrapper_address` (`wrapper.address`, without
   user info, query or fragment), `listen` (`server.listen`), `database_path`
   (`database.path`, absolute), `log_buffer_size`
   (`logging.buffer_size`), `catalog_language` (`catalog.language`) and
   `max_parallel_requests` (`catalog.max_parallel_requests`, or 1 when it is 0 or less).
+- `pending_restart`: the config keys saved with a value the next start applies, as in
+  the config answers below; `[]` when nothing waits.
+
+```bash
+curl -X POST http://localhost:18080/api/v1/system/restart
+```
+
+Answers `202` with `{"restarting": true}`, then stops every component the way a shutdown
+does and starts again in the same process, on the same address, from `config.yaml`: the
+keys in `pending_restart` apply. Running jobs are interrupted and resume after the
+start, as after any restart. The API does not answer for the few seconds this takes;
+poll `GET /api/v1/health`. `amdl serve`, the container and the desktop app restart in
+place; a program that embeds the backend without starting it again answers `503
+feature_unavailable`.
 
 No secret is returned.
 
@@ -658,8 +673,10 @@ curl http://localhost:18080/api/v1/config
 curl -X POST http://localhost:18080/api/v1/config/reload
 ```
 
-`GET /api/v1/config` returns the runtime-mutable keys of the in-memory config and has no
-side effects; it does not read the file. `catalog.media_user_token` is redacted in every
+`GET /api/v1/config` returns every key except the file-only `server.listen`,
+`database.path` and `tools.ffmpeg`, and has no side effects: runtime keys as they run,
+restart keys as saved in the file, and `pending_restart`, the keys whose saved value
+differs from the running one (a hand edit of a file-only key included). `catalog.media_user_token` is redacted in every
 config response: a set token reads `...` and its last four characters. A `PUT` whose value
 starts with `...` leaves the saved token as it is. Next to `config`, `persisted` says whether a
 `PUT` is written to the file. `POST /api/v1/config/reload` re-reads `configs/config.yaml`
@@ -667,10 +684,14 @@ and applies its runtime keys, then answers like `GET`. When the file is unreadab
 invalid, the previous config stays active and the answer is still `200`, with
 `reload_error` saying why.
 
-`PUT /api/v1/config` changes runtime-mutable keys only, but rewrites the entire file
-including startup keys — comments and custom formatting are not preserved. It re-reads the
-file first, so a hand edit made since the last reload is kept. Errors: `422
-config_key_not_mutable` (a startup key), listing the dotted key names in `details.keys`;
+`PUT /api/v1/config` changes every key `GET` returns and rewrites the entire file —
+comments and custom formatting are not preserved. Runtime keys apply at once; restart keys
+are saved, listed in the answer's `pending_restart`, and apply on the next start
+(`POST /api/v1/system/restart`). It validates the result as a start does, so a saved
+value always loads, and re-reads the file first, so a hand edit made since the last
+reload is kept. Errors: `422 config_key_not_mutable` (a file-only key, or
+`wrapper.address` while this machine runs its own wrapper, with `details.reason`
+`managed_wrapper`), listing the dotted key names in `details.keys`;
 `422 invalid_config` (the result fails validation, or the file on disk no longer
 validates); `400 invalid_request` for an unknown key. See [configuration.md](configuration.md).
 

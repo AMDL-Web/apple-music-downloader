@@ -11,11 +11,11 @@ import (
 	"amdl/internal/config"
 )
 
-// getConfig returns the runtime-changeable part of the in-memory config
-// snapshot (mutable download fields, logging level and access log, simulate,
-// library sync, and the runtime catalog keys). Startup-bound fields are
-// omitted: clients cannot change them through this API. It never reads the
-// file; POST /config/reload does.
+// getConfig returns the keys clients can change: the runtime keys as they
+// run, and the restart keys as saved in config.yaml, which apply on the next
+// start; pending_restart names the ones that differ from the running values.
+// The file-only keys (server.listen, database.path, tools.ffmpeg) are
+// omitted. A hand edit of a runtime key shows after POST /config/reload.
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 	s.writeConfigView(w, nil)
 }
@@ -31,11 +31,33 @@ func (s *Server) reloadConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeConfigView(w http.ResponseWriter, reloadErr error) {
-	s.writeConfigResponse(w, s.currentConfig(), reloadErr)
+	s.writeConfigResponse(w, s.savedConfig(), reloadErr)
+}
+
+// savedConfig is the live snapshot with the restart and file keys as saved
+// in config.yaml (config.Store.Saved).
+func (s *Server) savedConfig() config.Config {
+	if s.cfg == nil {
+		return config.Config{}
+	}
+	return s.cfg.Saved()
+}
+
+// pendingRestart names the keys whose saved value waits for a restart; never
+// nil, so it encodes as an array.
+func (s *Server) pendingRestart(saved config.Config) []string {
+	if s.cfg == nil {
+		return []string{}
+	}
+	if keys := s.cfg.PendingRestart(saved); keys != nil {
+		return keys
+	}
+	return []string{}
 }
 
 // writeConfigResponse answers GET, PUT and POST /config/reload alike: the
-// ConfigResponse schema for cfg, with catalog.media_user_token redacted.
+// ConfigResponse schema for cfg, the configuration as saved, with
+// catalog.media_user_token redacted.
 func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, reloadErr error) {
 	view, err := config.MutableView(cfg)
 	if err != nil {
@@ -48,8 +70,9 @@ func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, r
 		}
 	}
 	resp := map[string]any{
-		"config":    view,
-		"persisted": s.cfg != nil && s.cfg.Persistent(),
+		"config":          view,
+		"persisted":       s.cfg != nil && s.cfg.Persistent(),
+		"pending_restart": s.pendingRestart(cfg),
 	}
 	if reloadErr != nil {
 		resp["reload_error"] = reloadErr.Error()
@@ -57,15 +80,15 @@ func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, r
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// updateConfig merges the request body onto the current runtime config:
-// omitted fields keep their current values, present fields (including whole
-// sections) are replaced. The merged result must pass full config validation,
-// and fields consumed only at startup (server, database, logging outputs,
-// wrapper, tools, catalog client token and request limits, and process-wide
-// download worker/media pools) are rejected — changing them at runtime would
-// silently do nothing. Accepted changes apply to new requests and newly
-// started jobs immediately and are written back to the combined config file,
-// so they survive restarts.
+// updateConfig merges the request body onto the saved config: omitted fields
+// keep their current values, present fields (including whole sections) are
+// replaced. The merged result must pass full config validation, the same
+// Validate a start runs, so a saved value always loads. The file-only keys
+// (server.listen, database.path, tools.ffmpeg) are rejected, and so is
+// wrapper.address while this process runs the wrapper itself. Accepted
+// changes are written back to the combined config file; runtime keys apply to
+// new requests and newly started jobs at once, restart keys on the next start
+// (pending_restart in the response).
 func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	var body json.RawMessage
 	if !decodeJSONBody(w, r, &body, false) {
@@ -99,6 +122,14 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 			err := errors.New("fields can only be changed in the config file and require a restart: " + strings.Join(locked, ", "))
 			reject = func(w http.ResponseWriter) {
 				writeErrorDetails(w, http.StatusUnprocessableEntity, CodeConfigKeyNotMutable, err.Error(), map[string]any{"keys": locked})
+			}
+			return config.Config{}, err
+		}
+		if s.wrapperManaged && merged.Wrapper.Address != current.Wrapper.Address {
+			err := errors.New("wrapper.address is set by the wrapper this machine runs; amdl wrapper uninstall stops that and lets an address apply")
+			reject = func(w http.ResponseWriter) {
+				writeErrorDetails(w, http.StatusUnprocessableEntity, CodeConfigKeyNotMutable, err.Error(),
+					map[string]any{"keys": []string{"wrapper.address"}, "reason": "managed_wrapper"})
 			}
 			return config.Config{}, err
 		}

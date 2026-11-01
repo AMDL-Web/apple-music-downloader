@@ -218,15 +218,15 @@
         },
         {
           "title": "启用 wrapper",
-          "text": "在 `docker-compose.yml` 里取消注释 `wrapper-manager` 服务和文件末尾的 `volumes:` 块，再把 wrapper 地址改成："
+          "text": "在 `docker-compose.yml` 里取消注释 `wrapper-manager` 服务和文件末尾的 `volumes:` 块。"
         },
         {
           "title": "一起启动",
           "text": "Compose 会从 v2 分支构建 wrapper-manager，所以主机要能上网。"
         },
         {
-          "title": "登录，然后下载",
-          "text": "打开 `http://localhost:18080/`，进入 **Settings › Account**，用 Apple ID 登录。在 **New download** 里贴上链接，下好的文件在 `./data/downloads`。"
+          "title": "连上 wrapper，然后登录",
+          "text": "打开 `http://localhost:18080/`，进入 **Settings › Account**，把 **Session service** 改成下面的地址，保存后在提示里点重启。然后用 Apple ID 登录，在 **New download** 里贴上链接，下好的文件在 `./data/downloads`。"
         }
       ]
     },

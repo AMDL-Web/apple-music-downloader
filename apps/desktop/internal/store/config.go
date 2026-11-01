@@ -31,6 +31,12 @@ type Config struct {
 	Reloading   bool
 	ReloadSince time.Time
 	ReloadErr   string
+	// PendingRestart names the keys saved with a value the backend applies
+	// when it starts again (the response's pending_restart).
+	PendingRestart []string
+	// Restarting is set from a restart request until the configuration is
+	// read again.
+	Restarting bool
 
 	reading bool
 	// tried is when the last read started: after a failed one the next
@@ -53,9 +59,10 @@ func (cf *Config) SavingFor(key string, now time.Time) (time.Duration, bool) {
 
 // configAnswer is the ConfigResponse schema.
 type configAnswer struct {
-	Config      map[string]any `json:"config"`
-	Persisted   bool           `json:"persisted"`
-	ReloadError string         `json:"reload_error"`
+	Config         map[string]any `json:"config"`
+	Persisted      bool           `json:"persisted"`
+	ReloadError    string         `json:"reload_error"`
+	PendingRestart []string       `json:"pending_restart"`
 }
 
 // Value is key's value, such as "download.cover_size", or nil: the one on
@@ -94,7 +101,7 @@ func (s *Store) WatchConfig() {
 				cf.Err = Reason(err)
 				return
 			}
-			cf.Values, cf.Persisted, cf.Err = ans.Config, ans.Persisted, ""
+			cf.Values, cf.Persisted, cf.Err, cf.PendingRestart, cf.Restarting = ans.Config, ans.Persisted, "", ans.PendingRestart, false
 		})
 	}()
 }
@@ -128,10 +135,13 @@ func (s *Store) SetConfig(key string, v any) {
 				cf.Failed[key] = Reason(err)
 				return
 			}
-			cf.Values, cf.Persisted = ans.Config, ans.Persisted
+			cf.Values, cf.Persisted, cf.PendingRestart = ans.Config, ans.Persisted, ans.PendingRestart
 			// Folders and switches show in the server's state, such as
 			// the free space of a new downloads folder.
 			s.refreshServer()
+			if s.AutoRestart && len(ans.PendingRestart) > 0 {
+				s.RestartServer()
+			}
 		})
 	}()
 }
@@ -158,9 +168,35 @@ func (s *Store) ReloadConfig() {
 			case ans.ReloadError != "":
 				cf.ReloadErr = ans.ReloadError
 			default:
-				cf.Values, cf.Persisted = ans.Config, ans.Persisted
+				cf.Values, cf.Persisted, cf.PendingRestart = ans.Config, ans.Persisted, ans.PendingRestart
 				s.refreshServer()
 			}
+		})
+	}()
+}
+
+// RestartServer asks the backend to stop and start again in place (POST
+// /api/v1/system/restart), which applies PendingRestart. The configuration
+// is read again once the backend answers.
+func (s *Store) RestartServer() {
+	cf := &s.Config
+	if s.client == nil || cf.Restarting {
+		return
+	}
+	cf.Restarting = true
+	c, ctx := s.client, s.ctx
+	go func() {
+		_, err := c.Call(ctx, http.MethodPost, "/api/v1/system/restart", nil, nil)
+		s.postIf(ctx, func() {
+			if err != nil {
+				cf.Restarting = false
+				s.setNotice("The server did not restart: "+Reason(err), true)
+				return
+			}
+			// WatchConfig reads again; until the backend answers, its reads
+			// fail and retry.
+			cf.Values = nil
+			s.refreshServer()
 		})
 	}()
 }

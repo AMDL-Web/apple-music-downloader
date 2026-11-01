@@ -18,6 +18,8 @@ const (
 	fieldNumber
 	fieldPath
 	fieldTemplate
+	// fieldText is any other one-line text, such as an address.
+	fieldText
 	fieldToken
 	// fieldList is an ordered choice of options, at least one.
 	fieldList
@@ -48,9 +50,24 @@ type configField struct {
 	confirm bool
 }
 
+// restartHelp ends the help of a key that applies when the backend starts
+// again (x-applies: restart in the API contract).
+const restartHelp = "Applies after a restart."
+
 var configFields = []configField{
 	{key: "catalog.media_user_token", section: "account", kind: fieldToken, label: "Media user token",
 		help: "Optional: stations, private playlist covers, library sync."},
+	{key: "wrapper.address", section: "account", kind: fieldText, label: "Wrapper address",
+		help: restartHelp},
+	{key: "wrapper.data_dir", section: "account", kind: fieldPath, label: "Wrapper data folder",
+		help: "Where the backend reads the wrapper’s token; empty reads none."},
+	{key: "catalog.default_storefront", section: "account", kind: fieldSelect, label: "Default storefront",
+		options: []option{{"cn", "China (CN)"}, {"us", "United States (US)"}, {"jp", "Japan (JP)"}, {"gb", "United Kingdom (GB)"}, {"hk", "Hong Kong (HK)"}, {"tw", "Taiwan (TW)"}},
+		custom:  true, pattern: regexp.MustCompile(`^[a-z]{2}$`), hint: "Two lowercase letters, as de"},
+	{key: "catalog.language", section: "account", kind: fieldSelect, label: "Catalog language",
+		help:    "Names in tags and folders, so a change downloads albums again. " + restartHelp,
+		options: []option{{"zh-Hans_CN", "Chinese, Simplified"}, {"en-US", "English (US)"}, {"ja-JP", "Japanese"}, {"zh-Hant_TW", "Chinese, Traditional"}},
+		custom:  true, pattern: regexp.MustCompile(`^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$`), hint: "A language tag, as ko-KR"},
 
 	{key: "download.quality_priority", section: "quality", kind: fieldList, label: "Codec priority",
 		help: "AAC is always tried last.", min: 1, options: []option{
@@ -109,6 +126,12 @@ var configFields = []configField{
 		help:    "The translation is in the catalog language.",
 		options: []option{{"translation", "Translation"}, {"pronunciation", "Romanization"}}},
 
+	{key: "download.max_running_jobs", section: "jobs", kind: fieldNumber, label: "Jobs at once",
+		help: restartHelp, min: 1, max: 32},
+	{key: "download.max_parallel_downloads", section: "jobs", kind: fieldNumber, label: "Parallel track downloads",
+		help: restartHelp, min: 1, max: 64},
+	{key: "catalog.max_parallel_requests", section: "jobs", kind: fieldNumber, label: "Apple requests at once",
+		help: restartHelp, min: 1, max: 64},
 	{key: "download.memory_mode", section: "jobs", kind: fieldSelect, label: "Memory use",
 		help: "Faster with more RAM, or slower and lighter.", options: []option{{"low", "Low memory"}, {"high", "High memory"}}},
 	{key: "download.max_attempts", section: "jobs", kind: fieldNumber, label: "Tries per file",
@@ -130,6 +153,17 @@ var configFields = []configField{
 			{"debug", "Debug"}, {"info", "Info"}, {"warn", "Warn"}, {"error", "Error"},
 		}},
 	{key: "logging.access_log", section: "logging", kind: fieldSwitch, label: "HTTP access log"},
+	{key: "logging.console", section: "logging", kind: fieldSwitch, label: "Log to the terminal",
+		help: restartHelp},
+	{key: "logging.buffer_size", section: "logging", kind: fieldNumber, label: "Log entries kept",
+		help: "0 keeps none. " + restartHelp, min: 0, max: 100000},
+
+	{key: "wrapper.timeout_seconds", section: "server", group: "Wrapper", kind: fieldNumber, label: "Wrapper request timeout",
+		help: restartHelp, min: 1, unit: "s"},
+	{key: "wrapper.login_timeout_seconds", section: "server", group: "Wrapper", kind: fieldNumber, label: "Login request timeout",
+		help: restartHelp, min: 1, unit: "s"},
+	{key: "catalog.token_cache_ttl_hours", section: "server", group: "Wrapper", kind: fieldNumber, label: "Web token lifetime",
+		help: restartHelp, min: 1, unit: "h"},
 
 	{key: "simulate.enabled", section: "server", group: "Simulate", kind: fieldSwitch, label: "Simulate mode"},
 	{key: "simulate.min_speed_kbps", section: "server", group: "Simulate", kind: fieldNumber, label: "Slowest simulated speed",

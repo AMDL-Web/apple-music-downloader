@@ -96,10 +96,11 @@ type Backend struct {
 func (b Backend) ConfigPath() string { return filepath.Join(b.Dirs.ServerDir(), "config.yaml") }
 
 const configHeader = `# Written by the AMDL clients (the desktop app, amdl --server embedded) each
-# time they start the embedded backend: wrapper.address and tools.ffmpeg come
-# from their settings; the other keys are kept, and PUT /api/v1/config changes
-# them. The documentation of every key is configs/config.example.yaml in the
-# amdl repository.
+# time they start the embedded backend: tools.ffmpeg comes from their
+# settings, and wrapper.address from the first start, an explicit --wrapper or
+# the desktop app's Apply, or the wrapper this computer runs; the other keys
+# are kept, and PUT /api/v1/config changes them. The documentation of every
+# key is configs/config.example.yaml in the amdl repository.
 `
 
 // ErrNoWrapper means a first start was not told where the wrapper is.
@@ -340,17 +341,7 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 			host.Run(ctx)
 		}()
 	}
-	go func() {
-		r.done <- server.Run(ctx, server.Options{
-			ConfigPath:   b.ConfigPath(),
-			HooksPath:    filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
-			Listener:     ln,
-			LogOutput:    logOut,
-			Console:      b.Console,
-			WrapperHost:  host,
-			WrapperToken: wrapperToken,
-		})
-	}()
+	go func() { r.done <- b.run(ctx, ln, logOut, host, wrapperToken) }()
 	if err := r.waitHealthy(); err != nil {
 		_ = r.Stop() // the startup error is what matters
 		return nil, err
@@ -362,6 +353,34 @@ func (b Backend) launch(addr string, l *os.File) (*Running, error) {
 		return nil, err
 	}
 	return r, nil
+}
+
+// run serves the backend on ln until ctx ends. When POST
+// /api/v1/system/restart stops it, it listens again on the same address, so
+// Base and the runtime file stay right, and runs it again from config.yaml.
+// The managed wrapper keeps running across the restart.
+func (b Backend) run(ctx context.Context, ln net.Listener, logOut io.Writer, host *wrapperhost.Supervisor, wrapperToken func() (string, error)) error {
+	addr := ln.Addr().String()
+	for {
+		err := server.Run(ctx, server.Options{
+			ConfigPath:   b.ConfigPath(),
+			HooksPath:    filepath.Join(b.Dirs.ServerDir(), "hooks.yaml"),
+			Listener:     ln,
+			LogOutput:    logOut,
+			Console:      b.Console,
+			WrapperHost:  host,
+			WrapperToken: wrapperToken,
+		})
+		if !errors.Is(err, server.ErrRestart) {
+			return err
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+		if ln, err = net.Listen("tcp", addr); err != nil {
+			return fmt.Errorf("listen on %s again after a restart: %w", addr, err)
+		}
+	}
 }
 
 func (r *Running) waitHealthy() error {

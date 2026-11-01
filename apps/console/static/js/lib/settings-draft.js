@@ -81,7 +81,8 @@ export function fieldErrors(err, sentKeys = []) {
   const code = err && err.code;
   const listed = err && err.details && Array.isArray(err.details.keys) ? err.details.keys.map(parseLockedKey).filter(Boolean) : [];
   if (code === 'config_key_not_mutable' && listed.length) {
-    for (const key of listed) fields[key] = 'Only the config file can change this, followed by a restart.';
+    const managed = err.details.reason === 'managed_wrapper';
+    for (const key of listed) fields[key] = managed ? 'amdl runs this machine’s wrapper and sets this itself.' : 'Only the config file can change this, followed by a restart.';
   } else if (err && (err.status === 400 || err.status === 422)) {
     // A message may name a key the user did not touch (a related setting);
     // when it also names a key in the PUT, mark only those.

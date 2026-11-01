@@ -45,17 +45,19 @@ by meaning.
 | `library sync get`, `library sync reset` | `/library-sync`, `…/reset` | read, destructive |
 | `logs list [filters]`, `logs tail [filters]` | `GET /logs`, `/logs/stream` | read |
 | `system get`, `system health`, `system stats [--days]`, `hooks list` | `/system`, `/health`, `/stats`, `/hooks` | read |
+| `system restart` | `POST /system/restart` | write |
 | `hooks presets`, `hooks switch --enabled`, `hooks set <name> [--preset <id> --values <json>] [--url] [--events] [--headers <json>] [--body] ...`, `hooks test <name>`, `hooks delete <name>` | `GET /hooks/presets`, `PUT /hooks`, `PUT`/`DELETE /hooks/{name}`, `POST …/test` | read, write, write, write, destructive |
 | `config get [key...]`, `config set <key=value>...`, `config reload` | `GET`/`PUT /config`, `…/reload` | read, write, write |
 | `wrapper status`, `wrapper login [--username <id>] [--password-stdin]`, `wrapper 2fa <login_id>`, `wrapper logout --username <id>` | `/wrapper/*` | read, write, write, destructive |
 | `context list\|add <name> <url>\|use <name>\|remove <name>`, `version` | local, `/system` | |
-| `serve [--config] [--hooks] [--no-console]` | runs the backend in this process | |
+| `serve [--config] [--hooks] [--init key=value]... [--no-console]` | runs the backend in this process | |
 
 `download -` reads links from stdin, any number per line. `config set` checks its keys
 against the runtime config first and refuses an unknown one as `config_key_not_found`,
 with the closest key in `details.did_you_mean`. It takes dotted keys
 with YAML values (`download.quality_priority=[alac,aac]`) and answers with those keys'
-new values and `persisted`. A password or two-step code
+new values, `persisted` and `pending_restart` (the keys saved for the next start, which
+`amdl system restart` applies). A password or two-step code
 never goes on the command line. In a terminal, `wrapper login` asks for the Apple ID
 when `--username` is missing, then for the password and, when Apple sends one, the
 two-step code, neither echoed. Elsewhere it needs `--username` and `--password-stdin`
@@ -166,9 +168,11 @@ before it starts; the result is `{name, url, current, reachable}` plus a `hint` 
 `internal/server#Run`: `--config` (default `$AMDL_CONFIG`, else
 `configs/config.yaml`) and `--hooks` (default `$AMDL_HOOKS_CONFIG`, else
 `configs/hooks.yaml`), stopping on SIGINT or SIGTERM and ignoring SIGHUP. It listens
-on `server.listen` from the config, or on `AMDL_SERVER_LISTEN` when that is set
-([configuration.md](configuration.md#environment-overrides)); a missing config is
-created from the built-in example. Trying it in simulate mode with no wrapper:
+on `server.listen` from the config; a missing config is created from the built-in example,
+with each repeatable `--init key=value` written into it
+([configuration.md](configuration.md#environment-variables-and-first-values)). No
+environment variable sets a key. `POST /api/v1/system/restart` (`amdl system restart`)
+stops it and starts it again in the same process. Trying it in simulate mode with no wrapper:
 [install.md](install.md#try-it-without-a-wrapper). `amdl serve --local` uses this machine's local files instead
 ([Running the backend in amdl](#running-the-backend-in-amdl)), on a free loopback port
 or `--listen`; with `--background` it logs to `logs/server.log` beside them and, on
@@ -197,7 +201,7 @@ table, with the same codes as the CLI: `invalid_request` for a bad argument,
 `config_key_not_found` for an unknown key of `get_config`, and `no_urls_accepted` when
 `start_download` queues nothing (`details.rejected` says why per link), except that links
 which are all queued or running already are not an error. `set_config`, like
-`config set`, answers with the keys it set and `persisted`.
+`config set`, answers with the keys it set, `persisted` and `pending_restart`.
 
 - **From a search to a download takes two calls**: `search_catalog`, then
   `start_download` with the hits' `url` values. It answers at once with
@@ -302,8 +306,10 @@ says otherwise. When a backend is already running there, such as the desktop app
 command connects to it instead, and so does a command that names no server at all.
 Otherwise amdl starts one on a loopback port and stops it when the command ends;
 unfinished jobs resume on its next start, and a `download` waits for its jobs so they
-can finish. The first start needs the wrapper's address, from `--wrapper` or
-`AMDL_WRAPPER_ADDRESS`, and fails with `wrapper_not_configured` without it.
+can finish. The first start needs the wrapper's address, from `--wrapper`, and fails with
+`wrapper_not_configured` without it. Later starts keep the address in the config, which
+`amdl config set wrapper.address=...` and `amdl system restart` change; `--wrapper`
+writes a new one.
 
 Whichever process runs the backend holds `backend.lock` beside the database, and the
 OS releases it when that process exits. A second `--server embedded` finds it held and
@@ -362,13 +368,13 @@ unpack. `--quiet` silences it. After `wrapper uninstall` the result omits `enabl
 which only describes an installed guest, and `log` once `--purge` deleted it; `next`
 says what is left to do.
 
-While the guest is installed, `--wrapper` and `AMDL_WRAPPER_ADDRESS` do not apply to a
-backend that runs on the local files: it logs that the address is ignored and keeps
-using the guest. To use another wrapper, run `amdl wrapper uninstall`, then
-`amdl service install --wrapper <address>` (or restart `amdl serve --local` with
-`--wrapper`). `wrapper.address` cannot be changed through the API; `amdl system get`
-shows the one in use as `startup.wrapper_address`, and every hint about the wrapper's
-address says the same.
+While the guest is installed, `--wrapper` does not apply to a backend that runs on the
+local files: it logs that the address is ignored and keeps using the guest, and the API
+refuses to change `wrapper.address` (`config_key_not_mutable`, reason `managed_wrapper`).
+To use another wrapper, run `amdl wrapper uninstall`, then
+`amdl config set wrapper.address=<address>` and `amdl system restart`. `amdl system get`
+shows the address in use as `startup.wrapper_address`, and every hint about the
+wrapper's address says the same.
 
 ## Agent setup
 

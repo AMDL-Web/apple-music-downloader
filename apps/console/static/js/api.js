@@ -108,6 +108,8 @@ export const getSystem = () => request('GET', '/api/v1/system');
 export const getStats = (days = 14) => request('GET', '/api/v1/stats', { days });
 export const getConfig = () => request('GET', '/api/v1/config');
 export const reloadConfig = () => request('POST', '/api/v1/config/reload');
+/** Stops the server and starts it again in place (202); it does not answer until it is back up. */
+export const restartSystem = () => request('POST', '/api/v1/system/restart');
 export const getHooks = () => request('GET', '/api/v1/hooks');
 /** The services a webhook can be made from: {presets: [{id, name, kind, events, fields}]}; the backend builds each one's request. */
 export const getHookPresets = () => request('GET', '/api/v1/hooks/presets');

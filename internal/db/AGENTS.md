@@ -35,5 +35,5 @@ go test -race ./internal/db/ ./internal/jobs/
 ```
 
 For a migration, also start the binary once against a copy of a real database
-(never the original, via `AMDL_DATABASE_PATH`) and compare row counts before and
+(never the original: copy the config and point its `database.path` at the copy) and compare row counts before and
 after.

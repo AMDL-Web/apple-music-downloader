@@ -93,7 +93,9 @@ ends `completed`. Adapt it to the change:
   ids arrive.
 - Overview feed: `curl -sN $B/downloads/events` while submitting a job shows
   `download_upserted` frames.
-- Config: `PUT` a runtime key and read it back; a startup key is rejected.
+- Config: `PUT` a runtime key and read it back; `PUT` a restart key, see it in
+  `pending_restart`, `POST /api/v1/system/restart` and see it in `/system` once
+  `/health` answers; a file-only key (`server.listen`) is rejected.
 - Stats are cached for `internal/api#statsCacheTTL`.
 - A new route: valid and invalid input, compared with `internal/api/openapi.yaml`.
 

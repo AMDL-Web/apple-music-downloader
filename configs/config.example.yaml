@@ -1,11 +1,14 @@
-# Configuration example. The live config.yaml contains both startup-bound
-# and runtime-mutable keys. PUT /api/v1/config changes only runtime-mutable
-# keys while the backend runs and rewrites the live file (comments are
-# dropped there — this example is the documented reference). Hand edits to
-# runtime-mutable keys take effect on POST /api/v1/config/reload or the next
-# PUT (which re-reads the file before applying its change, so it never
-# overwrites them); an invalid file keeps the previous config running. Hand
-# edits to startup-bound keys take effect after a restart.
+# Configuration example. config.yaml is the one source of every setting:
+# PUT /api/v1/config (the web console's and the desktop app's Settings)
+# changes every key except server.listen, database.path and tools.ffmpeg, and
+# rewrites the live file (comments are dropped there — this example is the
+# documented reference). Runtime keys apply at once; restart keys are saved
+# and apply when the backend starts again, which POST /api/v1/system/restart
+# does in place (each key's comment says which). Hand edits to runtime keys
+# take effect on POST /api/v1/config/reload or the next PUT (which re-reads the
+# file before applying its change, so it never overwrites them); an invalid
+# file keeps the previous config running. Hand edits to the other keys take
+# effect after a restart.
 #
 # A key missing from config.yaml takes the value this example sets, which is
 # also the "Default" named in many comments below. The one exception: a config
@@ -13,27 +16,34 @@
 # older {TrackNumber} layout (see those keys). Unknown keys fail startup; keys
 # removed in 2.0 are listed in docs/upgrading-to-2.0.md.
 #
-# Four keys can be overridden with an environment variable, which wins over
-# this file on every load and is never written back: AMDL_SERVER_LISTEN
-# (server.listen), AMDL_WRAPPER_ADDRESS (wrapper.address),
-# AMDL_WRAPPER_DATA_DIR (wrapper.data_dir) and AMDL_DATABASE_PATH
-# (database.path). AMDL_CONFIG (path of this file) and
-# AMDL_HOOKS_CONFIG (path of hooks.yaml) choose the files. Every other key is
-# set here only; any other AMDL_* variable is ignored with a startup warning.
+# No environment variable sets a key. AMDL_CONFIG (path of this file) and
+# AMDL_HOOKS_CONFIG (path of hooks.yaml) choose the files; any other AMDL_*
+# variable, the AMDL_SERVER_LISTEN and AMDL_WRAPPER_ADDRESS of earlier
+# releases included, is ignored with a startup warning. An install type that
+# knows better first values passes them to amdl serve --init key=value, which
+# writes them only when it creates this file (the container image sets
+# server.listen and wrapper.address that way).
 
 server:
-  # string: API listen address in "host:port" form, for example "127.0.0.1:18080" or ":18080". Requires a restart.
+  # string: API listen address in "host:port" form, for example "127.0.0.1:18080" or ":18080". The default
+  # takes connections from this machine only, since the API has no authentication. The container image
+  # creates this file with ":18080" and rewrites a loopback address to it on every start, since a loopback
+  # address cannot be reached from outside a container; its health check probes port 18080.
+  # Set only in this file, not through the API; applies after a restart.
   listen: "127.0.0.1:18080"
 
 database:
-  # string: SQLite database file path. Relative paths are resolved from the backend working directory. Requires a restart.
+  # string: SQLite database file path. Relative paths are resolved from the backend working directory. In the
+  # container image keep the default and move the data with the volume mapping instead: the entrypoint gives
+  # only the default path to the container's user. Set only in this file, not through the API; applies after a restart.
   path: "data/db/amdl.db"
 
 logging:
   # enum: debug, info, warn, error. Records below this severity are discarded from every output.
   # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   level: "info"
-  # bool: true writes logs to stdout as text lines; false disables console output. Requires a restart.
+  # bool: true writes logs to stdout as text lines; false disables console output.
+  # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   # The backend writes no log file; collect stdout (docker logs) to keep logs beyond the buffer below.
   console: true
   # bool: true emits one structured record per completed HTTP request; false disables HTTP access records.
@@ -42,7 +52,8 @@ logging:
   access_log: false
   # integer records: number of recent structured records retained for GET /api/v1/logs and its SSE stream.
   # 0 disables in-memory retention, and both log APIs then answer 503 feature_unavailable; valid range: 0-100000.
-  # console: false with buffer_size: 0 is rejected, since no log would be kept anywhere. Requires a restart.
+  # console: false with buffer_size: 0 is rejected, since no log would be kept anywhere.
+  # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   buffer_size: 2000
 
 wrapper:
@@ -53,20 +64,22 @@ wrapper:
   # --local, the service or the desktop app) sets this key to that wrapper, which can log in too. The
   # scheme picks the transport: http is plaintext;
   # https uses TLS 1.2+ and verifies the certificate against the operating system trust store and the
-  # hostname. A bare "host:port" is rejected at startup. Requires a restart.
+  # hostname. A bare "host:port" is rejected at startup and by PUT, which validates like a start, so a saved
+  # address always loads. While this machine runs its own wrapper, PUT refuses to change it
+  # (config_key_not_mutable, reason managed_wrapper). Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   address: "http://127.0.0.1:12340"
   # integer seconds: timeout for one wrapper HTTP request. A failed key-template request (/key) is
   # retried up to 3 more times, 1, 2 and 4 seconds apart, each with this timeout. A /key or /m3u8 also
   # waits at most 10 times this for a free playback slot, not taken from its timeout; a /key that runs
   # out of that wait skips the retries above, and the track's own decrypt attempts (download.max_attempts)
   # still apply. Decryption itself runs in this process and has no wrapper timeout. Values <= 0 fall back
-  # to 30 seconds. Requires a restart.
+  # to 30 seconds. Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   timeout_seconds: 30
   # integer seconds: bound on one console login request, for a wrapper-manager (a bare wrapper-lite has
   # no login API and logs in from its own command line, --login). A login that needs a two-step code
   # takes two requests, each bounded by this. amdl's CLI, terminal interface and console wait up to 10
   # minutes for each, so a longer value does not help them. A wrapper amdl runs itself ignores this key.
-  # Values <= 0 fall back to 120 seconds. Requires a restart.
+  # Values <= 0 fall back to 120 seconds. Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   login_timeout_seconds: 120
   # string: the wrapper's data directory as this backend sees it, so the backend can read the Apple Music
   # media-user-token the wrapper keeps in a file named MUSIC_TOKEN and refreshes itself; while it can, that token
@@ -75,33 +88,35 @@ wrapper:
   # a wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN (<volume>/wrapper/rootfs/data
   # in the wrapper-manager option). One wrapper account is supported, a wrapper-manager's included; with several,
   # the newest file is read. The file is read afresh on every use. A container mounts that directory
-  # read-only and sets this key, or AMDL_WRAPPER_DATA_DIR, to the mount point. A relative path is resolved from the
+  # read-only and sets this key to the mount point. A relative path is resolved from the
   # backend working directory. The file must be readable by the user the backend runs as; a missing directory or
   # file means no wrapper token. Empty (the default) reads
   # nothing. A backend that runs this machine's wrapper itself (amdl wrapper install) ignores this key and reads
-  # that wrapper's token directly. Requires a restart.
+  # that wrapper's token directly. Runtime: the next token read uses a new value.
   data_dir: ""
 
 catalog:
-  # The following catalog client keys are startup-bound and require a restart.
   # string: default Apple Music storefront code, for example "us", "cn", "jp". GET /api/v1/search,
   # GET /api/v1/artists/{artist_id}/albums and GET /api/v1/albums/{album_id} use it when the request names no
   # storefront. Submissions never do: a link without a storefront in its path is refused with invalid_url. The web
   # console reads it from GET /api/v1/system (default_storefront) to complete pasted links that have no region.
+  # Runtime: the next request uses a new value.
   default_storefront: "cn"
   # string: Apple Music catalog language tag passed as the "l" query parameter, for example "en-US", "zh-Hans_CN", "ja-JP".
   # It is also the language of lyrics translations (download.lyrics_extras, the .ttml sidecar), of the genre tag,
   # and of the album, song and artist names Apple returns, which go into tags and output paths: changing it on an
   # existing library can make the "already downloaded" check miss and download albums again under the new names.
+  # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   language: "zh-Hans_CN"
   # integer: maximum Apple control-plane HTTP requests in flight across the whole process, including Catalog API,
   # web-player token discovery, Enhanced HLS manifests, and artwork. Positive values allow 1-64; values <=0 behave
   # as 1; values above 64 in this file are clamped to 64. Default: 16.
-  # This sizes a process-wide pool at startup; changing it requires a restart.
+  # This sizes a process-wide pool at startup. Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   max_parallel_requests: 16
   # integer hours: validity window for the bearer token the backend discovers on music.apple.com (the web player's
   # JWT, used for every catalog request). The cached token is proactively refreshed halfway through this window: for
   # example, 12 refreshes after 6 hours. Values <= 0 use a 12-hour window and refresh after 6 hours.
+  # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   token_cache_ttl_hours: 12
   # The following catalog behavior keys are runtime-mutable through PUT /api/v1/config
   # and config reload; no restart is required.
@@ -169,14 +184,15 @@ download:
   # decrypts in flight.
   # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   memory_mode: "low"
-  # The following worker and process-wide pool sizes are startup-bound and require a restart.
   # integer: maximum concurrently running jobs; sizes the worker pool built at startup.
   # Positive values allow 1-32; values <=0 behave as 1; values above 32 in this file are
   # clamped to 32 (the config API rejects them). Default: 3.
+  # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   max_running_jobs: 3
   # integer: maximum media transfers in flight across all jobs. Positive values allow 1-64; values <=0 behave as 1;
   # values above 64 in this file are clamped to 64. Default: 16.
-  # This sizes a process-wide pool at startup, cannot be overridden per job, and requires a restart to change.
+  # This sizes a process-wide pool at startup and cannot be overridden per job.
+  # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   # Upgrade note: this replaces the removed max_parallel_tracks key; old configs must be edited or startup fails.
   max_parallel_downloads: 16
   # The remaining download keys are runtime-mutable through PUT /api/v1/config
@@ -347,7 +363,7 @@ tools:
   # ffmpeg 8 or later is recommended: 7.0.2 wrote a 24-bit/96 kHz ALAC
   # track's duration without its last, partial frame (about 16 ms short),
   # with the same audio; amdl doctor says when the one found is older.
-  # Requires a restart.
+  # Set only in this file, not through the API; applies after a restart. The container image and the desktop app set it to the ffmpeg they ship or find.
   ffmpeg: "ffmpeg"
 
 simulate:

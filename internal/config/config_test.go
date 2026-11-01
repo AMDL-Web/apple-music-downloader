@@ -429,7 +429,7 @@ func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
 	if len(missing) > 0 || len(extra) > 0 {
 		t.Fatalf("config.example.yaml keys: missing=%v extra=%v", missing, extra)
 	}
-	if _, err := load(examplePath, nil); err != nil {
+	if _, err := Load(examplePath); err != nil {
 		t.Fatalf("config.example.yaml does not load: %v", err)
 	}
 }
@@ -440,7 +440,7 @@ func TestCommittedExampleDocumentsEveryConfigKey(t *testing.T) {
 // artist templates live; Default() keeps the older {TrackNumber} layout for
 // configs that omit the keys, and the two are meant to disagree here.
 func TestExampleNumbersAlbumPathsByCollectionPosition(t *testing.T) {
-	cfg, err := load(examplePath, nil)
+	cfg, err := Load(examplePath)
 	if err != nil {
 		t.Fatal(err)
 	}

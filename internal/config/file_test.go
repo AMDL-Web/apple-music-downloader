@@ -32,9 +32,9 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	example := "# retained until the first API rewrite\n" +
 		"server:\n  listen: \"127.0.0.1:19999\"\n" +
 		"download:\n  cover_format: \"png\"\n"
-	created, err := EnsureFile(path, []byte(example))
-	if err != nil || !created {
-		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
+	boot, err := EnsureFile(path, []byte(example))
+	if err != nil || !boot.Created {
+		t.Fatalf("bootstrap = (%+v, %v), want created", boot, err)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -46,7 +46,7 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("config permissions = %v, %v; want 0600", info.Mode().Perm(), err)
 	}
-	cfg, err := load(path, nil)
+	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,11 +58,11 @@ func TestEnsureFileBootstrapsFromCombinedExample(t *testing.T) {
 	if err := os.WriteFile(path, []byte("server:\n  listen: \"127.0.0.1:20000\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	created, err = EnsureFile(path, []byte(example))
-	if err != nil || created {
-		t.Fatalf("second bootstrap = (%v, %v), want no-op", created, err)
+	boot, err = EnsureFile(path, []byte(example))
+	if err != nil || boot.Created {
+		t.Fatalf("second bootstrap = (%+v, %v), want no-op", boot, err)
 	}
-	if cfg, err := load(path, nil); err != nil || cfg.Server.Listen != "127.0.0.1:20000" {
+	if cfg, err := Load(path); err != nil || cfg.Server.Listen != "127.0.0.1:20000" {
 		t.Fatalf("existing config overwritten: %+v, %v", cfg.Server, err)
 	}
 }
@@ -77,8 +77,8 @@ func TestEnsureFileIgnoresLegacyRuntimeFile(t *testing.T) {
 	if err := os.WriteFile(runtimePath, runtimeRaw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if created, err := EnsureFile(configPath, []byte("download:\n  cover_format: \"jpg\"\n")); err != nil || !created {
-		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
+	if boot, err := EnsureFile(configPath, []byte("download:\n  cover_format: \"jpg\"\n")); err != nil || !boot.Created {
+		t.Fatalf("bootstrap = (%+v, %v), want created", boot, err)
 	}
 	cfg, err := Load(configPath)
 	if err != nil || cfg.Download.CoverFormat != "jpg" {
@@ -115,7 +115,7 @@ func TestSaveConfigRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("saved config permissions = %v, %v; want 0600", info.Mode().Perm(), err)
 	}
-	loaded, err := load(path, nil)
+	loaded, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,9 @@ func TestSaveConfigUsesRandomAtomicTempFile(t *testing.T) {
 	}
 }
 
-func TestStoreUpdateAndSavePersistsOnlyRuntimeFields(t *testing.T) {
+// A save writes the runtime and restart fields; file-only fields keep their
+// value on disk, and only runtime fields reach the running snapshot.
+func TestStoreUpdateAndSaveKeepsFileOnlyFieldsOnDisk(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	disk := Default()
 	disk.Server.Listen = "127.0.0.1:19000"
@@ -168,10 +170,10 @@ func TestStoreUpdateAndSavePersistsOnlyRuntimeFields(t *testing.T) {
 	if _, err := store.UpdateAndSave(replace); err != nil {
 		t.Fatal(err)
 	}
-	if got := store.Get(); got.Server.Listen != "127.0.0.1:17000" || got.Download.EmbedLyrics {
-		t.Fatalf("in-memory snapshot not replaced: %+v", got)
+	if got := store.Get(); got.Server.Listen != "127.0.0.1:18080" || got.Download.EmbedLyrics {
+		t.Fatalf("snapshot = listen %q, embed_lyrics %v; want the running listen and the new runtime value", got.Server.Listen, got.Download.EmbedLyrics)
 	}
-	persisted, err := load(path, nil)
+	persisted, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +286,7 @@ func TestStoreUpdateAndSaveKeepsHandEditsMadeSinceLastReload(t *testing.T) {
 	if updated.Download.CoverFormat != "png" || updated.Download.EmbedCover || store.Get().Download.CoverFormat != "png" {
 		t.Fatalf("live config = %+v, want hand edit plus patch", store.Get().Download)
 	}
-	persisted, err := load(path, nil)
+	persisted, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +335,7 @@ func TestStoreUpdateAndSaveRecreatesMissingFile(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	persisted, err := load(path, nil)
+	persisted, err := Load(path)
 	if err != nil || persisted.Download.CoverFormat != "png" {
 		t.Fatalf("recreated file = %q, %v", persisted.Download.CoverFormat, err)
 	}
@@ -345,93 +347,6 @@ func TestStoreUpdateAndSaveRecreatesMissingFile(t *testing.T) {
 	}
 	if got := store.Get().Download.CoverFormat; got != "png" {
 		t.Fatalf("failed reload changed snapshot: %q", got)
-	}
-}
-
-func TestStoreSaveDoesNotPersistStartupEnvironmentOverride(t *testing.T) {
-	t.Setenv("AMDL_SERVER_LISTEN", "127.0.0.1:17777")
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	disk := Default()
-	disk.Server.Listen = "127.0.0.1:18888"
-	writeFullConfig(t, path, disk)
-	effective, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := NewFileStore(effective, path)
-	if _, err := store.UpdateAndSave(func(current Config) (Config, error) {
-		current.Download.EmbedCover = false
-		return current, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	persisted, err := load(path, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if persisted.Server.Listen != "127.0.0.1:18888" {
-		t.Fatalf("startup environment override was persisted: %q", persisted.Server.Listen)
-	}
-}
-
-// The reported defect: with AMDL_* overrides set, a PUT that only changed a
-// runtime key rewrote config.yaml with every env value. The file must keep
-// its own values so unsetting the variables restores file control.
-func TestStoreSaveDoesNotBakeEnvOverrides(t *testing.T) {
-	t.Setenv("AMDL_DATABASE_PATH", "/env/amdl.db")
-	t.Setenv("AMDL_WRAPPER_ADDRESS", "http://wrapper:12340")
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	writeFullConfig(t, path, Default())
-
-	effective, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := NewFileStore(effective, path)
-	if _, err := store.UpdateAndSave(func(current Config) (Config, error) {
-		current.Download.ProgressEventIntervalMS = 250
-		return current, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	persisted, err := load(path, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if persisted.Database.Path != Default().Database.Path || persisted.Wrapper.Address != Default().Wrapper.Address {
-		t.Fatalf("env overrides leaked into the file: %q / %q", persisted.Database.Path, persisted.Wrapper.Address)
-	}
-	if persisted.Download.ProgressEventIntervalMS != 250 {
-		t.Fatalf("requested change not persisted: %d", persisted.Download.ProgressEventIntervalMS)
-	}
-	if got := store.Get(); got.Database.Path != "/env/amdl.db" {
-		t.Fatalf("env override dropped from the live snapshot: %q", got.Database.Path)
-	}
-}
-
-// A missing file recreated by a save holds the defaults for startup keys,
-// never the environment values or other in-memory startup values.
-func TestStoreSaveToMissingFileDoesNotBakeEnvOverrides(t *testing.T) {
-	t.Setenv("AMDL_SERVER_LISTEN", "127.0.0.1:19090")
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	effective := Default()
-	effective.Server.Listen = "127.0.0.1:19090" // what Load yields with the variable set
-	store := NewFileStore(effective, path)
-	if _, err := store.UpdateAndSave(func(current Config) (Config, error) {
-		current.Download.EmbedCover = false
-		return current, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	persisted, err := load(path, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if persisted.Server.Listen != Default().Server.Listen {
-		t.Fatalf("recreated file baked the env override: %q", persisted.Server.Listen)
-	}
-	if persisted.Download.EmbedCover {
-		t.Fatal("requested change not persisted")
 	}
 }
 
@@ -475,7 +390,7 @@ func TestStoreConcurrentUpdatesMergeSerially(t *testing.T) {
 	if got.Download.CoverFormat != "png" || got.Download.EmbedCover {
 		t.Fatalf("concurrent update lost in memory: %+v", got.Download)
 	}
-	persisted, err := load(path, nil)
+	persisted, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,8 +420,8 @@ func TestStoreUpdateErrorLeavesSnapshotAndFileUntouched(t *testing.T) {
 // The embedded example is the shipped file and creates a config that loads.
 func TestEnsureFileFromEmbeddedExample(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "configs", "config.yaml")
-	if created, err := EnsureFile(path, configs.Example); err != nil || !created {
-		t.Fatalf("bootstrap = (%v, %v), want created", created, err)
+	if boot, err := EnsureFile(path, configs.Example); err != nil || !boot.Created {
+		t.Fatalf("bootstrap = (%+v, %v), want created", boot, err)
 	}
 	onDisk, err := os.ReadFile(examplePath)
 	if err != nil {

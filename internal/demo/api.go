@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 
 	"amdl/internal/buildinfo"
 	"amdl/internal/client"
+	"amdl/internal/config"
 	"amdl/internal/domain"
 )
 
@@ -26,6 +28,7 @@ func (b *Backend) handler() http.Handler {
 		writeJSON(w, http.StatusOK, client.Health{Status: "ok"})
 	})
 	m.HandleFunc("GET /api/v1/system", b.system)
+	m.HandleFunc("POST /api/v1/system/restart", b.restart)
 	m.HandleFunc("GET /api/v1/wrapper/status", b.wrapperStatus)
 	m.HandleFunc("POST /api/v1/wrapper/login", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "needs_2fa", "login_id": "demo-login"})
@@ -119,6 +122,9 @@ func (b *Backend) system(w http.ResponseWriter, r *http.Request) {
 	}
 	info.Jobs.Workers, info.Jobs.Active, info.Jobs.QueueDepth, info.Jobs.QueueCapacity = maxRunning, c.Running, c.Queued, 200
 	info.Pools.Downloads, info.Pools.Decrypts, info.Pools.WrapperRequests = 4, 2, 4
+	b.mu.Lock()
+	info.PendingRestart = b.pendingRestart()
+	b.mu.Unlock()
 	writeJSON(w, http.StatusOK, info)
 }
 
@@ -169,7 +175,27 @@ func (b *Backend) stats(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) getConfig(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"config": b.config, "persisted": true})
+	writeJSON(w, http.StatusOK, map[string]any{"config": b.config, "persisted": true, "pending_restart": b.pendingRestart()})
+}
+
+// pendingRestart lists the restart keys saved since the last restart, sorted.
+// The caller holds mu.
+func (b *Backend) pendingRestart() []string {
+	keys := []string{}
+	for k := range b.pending {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// restart is POST /system/restart: the demo has nothing to stop, so the
+// saved restart keys simply apply.
+func (b *Backend) restart(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	b.pending = map[string]bool{}
+	b.mu.Unlock()
+	writeJSON(w, http.StatusAccepted, map[string]any{"restarting": true})
 }
 
 // putConfig merges the body's sections into the configuration, as PUT
@@ -189,10 +215,13 @@ func (b *Backend) putConfig(w http.ResponseWriter, r *http.Request) {
 			b.config[section] = m
 		}
 		for k, v := range leaves {
+			if config.AppliesOnRestart(section+"."+k) && !reflect.DeepEqual(m[k], v) {
+				b.pending[section+"."+k] = true
+			}
 			m[k] = v
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"config": b.config, "persisted": true})
+	writeJSON(w, http.StatusOK, map[string]any{"config": b.config, "persisted": true, "pending_restart": b.pendingRestart()})
 }
 
 func (b *Backend) list(w http.ResponseWriter, r *http.Request) {

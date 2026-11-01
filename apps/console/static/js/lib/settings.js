@@ -12,6 +12,10 @@
 // {TrackNumber} keeps that layout (configs/config.example.yaml explains).
 const OLDER_LAYOUT_NOTE = 'An install upgraded from an older version may still use {TrackNumber:02d} instead.';
 
+// The help of a key that applies when the server starts again (x-applies:
+// restart in openapi.yaml); the page's restart notice offers the restart.
+const RESTART = 'Applies after a restart.';
+
 /**
  * One field per editable key. type: switch | select | number | text | path |
  * template | token | list (ordered, from options) | set (unordered, from
@@ -30,6 +34,62 @@ export const FIELDS = [
     label: 'Media user token',
     help: 'Optional: stations, private playlist covers, library sync.',
     defaultValue: '',
+  },
+  {
+    key: 'wrapper.address',
+    section: 'account',
+    type: 'text',
+    label: 'Session service',
+    help: RESTART,
+    defaultValue: 'http://127.0.0.1:12340',
+    restart: true,
+  },
+  {
+    key: 'wrapper.data_dir',
+    section: 'account',
+    type: 'path',
+    label: 'Session service data folder',
+    help: 'Where its token is read; empty reads none.',
+    defaultValue: '',
+  },
+  {
+    key: 'catalog.default_storefront',
+    section: 'account',
+    type: 'select',
+    label: 'Default storefront',
+    help: 'For search and links without a region.',
+    defaultValue: 'cn',
+    options: [
+      { value: 'cn', label: 'China (CN)' },
+      { value: 'us', label: 'United States (US)' },
+      { value: 'jp', label: 'Japan (JP)' },
+      { value: 'gb', label: 'United Kingdom (GB)' },
+      { value: 'hk', label: 'Hong Kong (HK)' },
+      { value: 'tw', label: 'Taiwan (TW)' },
+    ],
+    custom: true,
+    customPlaceholder: 'Two letters, as de',
+    pattern: '^[a-z]{2}$',
+    patternHint: 'Write the two-letter storefront code in lowercase, for example de.',
+  },
+  {
+    key: 'catalog.language',
+    section: 'account',
+    type: 'select',
+    label: 'Catalog language',
+    help: `Names in tags and folders, so a change downloads albums again. ${RESTART}`,
+    defaultValue: 'zh-Hans_CN',
+    restart: true,
+    options: [
+      { value: 'zh-Hans_CN', label: 'Chinese, Simplified' },
+      { value: 'zh-Hant_TW', label: 'Chinese, Traditional' },
+      { value: 'en-US', label: 'English (US)' },
+      { value: 'ja-JP', label: 'Japanese' },
+    ],
+    custom: true,
+    customPlaceholder: 'A language tag, as ko-KR',
+    pattern: '^[A-Za-z]{2,3}([-_][A-Za-z0-9]+)*$',
+    patternHint: 'Write a language tag, for example ko-KR.',
   },
   // Quality
   {
@@ -200,6 +260,9 @@ export const FIELDS = [
     ],
   },
   // Jobs
+  { key: 'download.max_running_jobs', section: 'jobs', type: 'number', label: 'Jobs at once', help: `1-32. ${RESTART}`, defaultValue: 3, min: 1, max: 32, restart: true },
+  { key: 'download.max_parallel_downloads', section: 'jobs', type: 'number', label: 'Parallel track downloads', help: `1-64. ${RESTART}`, defaultValue: 16, min: 1, max: 64, restart: true },
+  { key: 'catalog.max_parallel_requests', section: 'jobs', type: 'number', label: 'Apple Music requests at once', help: `1-64. ${RESTART}`, defaultValue: 16, min: 1, max: 64, restart: true },
   {
     key: 'download.max_attempts',
     section: 'jobs',
@@ -294,6 +357,12 @@ export const FIELDS = [
     ],
   },
   { key: 'logging.access_log', section: 'logging', type: 'switch', label: 'HTTP access log', defaultValue: false },
+  { key: 'logging.console', section: 'logging', type: 'switch', label: 'Log to stdout', help: RESTART, defaultValue: true, restart: true },
+  { key: 'logging.buffer_size', section: 'logging', type: 'number', label: 'Log history', help: `0 keeps none. ${RESTART}`, defaultValue: 2000, min: 0, max: 100000, unit: 'lines', restart: true },
+  // Server › Session service
+  { key: 'wrapper.timeout_seconds', section: 'server', group: 'wrapper', type: 'number', label: 'Session service timeout', help: `Per request. ${RESTART}`, defaultValue: 30, min: 1, unit: 's', restart: true },
+  { key: 'wrapper.login_timeout_seconds', section: 'server', group: 'wrapper', type: 'number', label: 'Sign-in timeout', help: `Per sign-in request. ${RESTART}`, defaultValue: 120, min: 1, unit: 's', restart: true },
+  { key: 'catalog.token_cache_ttl_hours', section: 'server', group: 'wrapper', type: 'number', label: 'Web token lifetime', help: `Refreshed halfway through. ${RESTART}`, defaultValue: 12, min: 1, unit: 'h', restart: true },
   // Server › Simulate
   {
     key: 'simulate.enabled',

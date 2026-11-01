@@ -174,9 +174,8 @@ func (e *env) embed() (target, error) {
 	if e.dry {
 		return target{URL: defaultURL, Name: "embedded"}, nil
 	}
-	wrapper := or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS"))
 	e.note("starting the backend in this process (%s)", dirs.ServerDir())
-	r, err := local.Backend{Dirs: dirs, Wrapper: wrapper}.Start()
+	r, err := local.Backend{Dirs: dirs, Wrapper: e.wrapper}.Start()
 	if errors.Is(err, local.ErrNoWrapper) {
 		return target{}, errNoWrapper()
 	}
@@ -209,7 +208,7 @@ func (e *env) embed() (target, error) {
 func errNoWrapper() error {
 	return &cliError{Code: "wrapper_not_configured", exit: exitInput,
 		Message: "the local backend has no config yet and no wrapper address",
-		Hint:    "pass --wrapper http://<host>:<port> (or set AMDL_WRAPPER_ADDRESS) once"}
+		Hint:    "pass --wrapper http://<host>:<port> once"}
 }
 
 // busyWait bounds how long embed waits for a backend another process starts.

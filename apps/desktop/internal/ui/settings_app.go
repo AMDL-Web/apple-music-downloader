@@ -21,6 +21,13 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 	if d.Mode != a.Settings.Mode {
 		d.Mode, f.checks = a.Settings.Mode, nil
 	}
+	// The draft follows the address in use until the user types another.
+	if now := a.wrapperNow(); f.wrapperBase != now {
+		if d.WrapperAddress == f.wrapperBase || d.WrapperAddress == a.Settings.WrapperAddress {
+			d.WrapperAddress = now
+		}
+		f.wrapperBase = now
+	}
 	ui.Column(c).Gap(10).Children(func() {
 		label(c, k, "Where downloads run")
 		ui.Row(c).Gap(14).Children(func() {
@@ -125,7 +132,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		})
 	}
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-		changed := d.RemoteURL != a.Settings.RemoteURL || d.WrapperAddress != a.Settings.WrapperAddress || d.FFmpeg != a.Settings.FFmpeg
+		changed := d.RemoteURL != a.Settings.RemoteURL || d.WrapperAddress != a.wrapperNow() || d.FFmpeg != a.Settings.FFmpeg
 		if buttonOff(c, k, buttonPrimary, "Apply", nil, !changed).Clicked() {
 			next := a.Settings
 			next.RemoteURL, next.WrapperAddress, next.FFmpeg = d.RemoteURL, d.WrapperAddress, d.FFmpeg
@@ -144,6 +151,21 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 			a.Act.ApplySettings(next)
 		}
 	}
+}
+
+// wrapperNow is the wrapper address standalone mode uses: the backend's saved
+// wrapper.address once it is read, which Settings and the console change,
+// else the app's own setting, which only seeds a first start and carries an
+// Apply. While this computer runs its own wrapper, config.yaml holds that
+// wrapper's address, and the setting is what applies after it is removed.
+func (a *App) wrapperNow() string {
+	managed := a.Store.Server.Wrapper != nil && a.Store.Server.Wrapper.Managed != nil
+	if a.Settings.Mode == mode.Standalone && !managed {
+		if v, ok := a.Store.Config.Value("wrapper.address").(string); ok && v != "" {
+			return v
+		}
+	}
+	return a.Settings.WrapperAddress
 }
 
 func (a *App) runTest(addr string, now time.Time) {

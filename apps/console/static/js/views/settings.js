@@ -40,8 +40,9 @@ import { SettingsNav, SettingsList, SettingsBack, SaveBar } from './settings-nav
 import { DomainHead, RefreshButton } from './settings-head.js';
 import { SettingsBoard } from './settings-board.js';
 import { useShowKeys } from './settings-keys.js';
+import { RestartNotice } from './settings-restart.js';
 
-const EMPTY = { loaded: false, error: null, base: {}, persisted: true, reloadError: '' };
+const EMPTY = { loaded: false, error: null, base: {}, persisted: true, reloadError: '', pending: [] };
 const STATUS_KEYS = ['health', 'system', 'wrapper', 'librarySync', 'hooks', 'stats', 'logs', 'config'];
 
 // The head actions that read a domain again (D18), by section, and the keys they read.
@@ -110,6 +111,7 @@ export function SettingsPage({ route }) {
       base: flattenConfig(res && res.config),
       persisted: !res || res.persisted !== false,
       reloadError: (res && res.reload_error) || '',
+      pending: (res && Array.isArray(res.pending_restart) && res.pending_restart) || [],
     });
   }, []);
 
@@ -395,6 +397,15 @@ export function SettingsPage({ route }) {
             </${Notice}>
           </div>`
         : null}
+      <${RestartNotice}
+        pending=${cfg.pending}
+        offline=${offline}
+        toast=${app.toast}
+        onRestarted=${() => {
+          setLoadSeq((n) => n + 1);
+          invalidateStatus(STATUS_KEYS);
+        }}
+      />
       ${main}
     </div>
     ${dirty || saving

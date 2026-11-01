@@ -55,6 +55,9 @@ type App struct {
 	log      *slog.Logger
 	dirs     mode.Dirs
 	settings mode.Settings
+	// wrapperApplied is set when Apply changed the wrapper address: the next
+	// start of this computer's backend writes it to config.yaml.
+	wrapperApplied bool
 
 	win *mygo.Window
 	// panel is the tray icon's open panel, or nil.
@@ -216,6 +219,7 @@ func (a *App) load() error {
 		a.settings.Mode, a.settings.RemoteURL = mode.Remote, a.opts.Remote
 	case a.opts.Wrapper != "":
 		a.settings.Mode, a.settings.WrapperAddress = mode.Standalone, a.opts.Wrapper
+		a.wrapperApplied = true
 	}
 	return nil
 }
@@ -362,6 +366,7 @@ func (a *App) connect() {
 	old := a.backend
 	a.standaloneBackend = standaloneBackend{}
 	a.store.Connect(nil)
+	a.store.AutoRestart = false
 	switch a.settings.Mode {
 	case mode.Remote:
 		if old != nil {

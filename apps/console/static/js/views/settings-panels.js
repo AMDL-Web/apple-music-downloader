@@ -61,9 +61,8 @@ export function SyncResetAction({ sync, disabled }) {
 
 /**
  * Where the settings live: whether PUT writes them to the file, the last
- * reload error, and "Reload from file" (POST /config/reload), then the one
- * line naming the startup settings no row shows. onReloaded gets the
- * ConfigResponse.
+ * reload error, and "Reload from file" (POST /config/reload). onReloaded
+ * gets the ConfigResponse.
  */
 export function ConfigFilePanel({ persisted, reloadError, dirty, base, onReloaded, disabled }) {
   const app = useApp();

@@ -99,7 +99,15 @@ const MAX_RUNNING = 3;
 const DECRYPT_ERROR = 'decrypt: wrapper closed the connection while a sample was in flight; 3 attempts used';
 
 const CONFIG = {
-  catalog: { album_track_url_mode: 'song', media_user_token: '', motion_artwork_enabled: false },
+  catalog: {
+    album_track_url_mode: 'song',
+    default_storefront: 'us',
+    language: 'en-US',
+    max_parallel_requests: 16,
+    media_user_token: '',
+    motion_artwork_enabled: false,
+    token_cache_ttl_hours: 12,
+  },
   download: {
     alac_max_bit_depth: 24,
     alac_max_sample_rate: 192000,
@@ -118,6 +126,8 @@ const CONFIG = {
     lyrics_files: [],
     lyrics_timing: 'line',
     max_attempts: 3,
+    max_parallel_downloads: 16,
+    max_running_jobs: 3,
     memory_mode: 'low',
     playlist_path_format: 'playlists/{PlaylistName}/{SongNumber:02d}. {SongName}',
     progress_event_interval_ms: 500,
@@ -130,9 +140,24 @@ const CONFIG = {
     temp_dir: 'data/tmp',
   },
   library_sync: { enabled: false, interval_minutes: 15 },
-  logging: { access_log: false, level: 'info' },
+  logging: { access_log: false, buffer_size: 2000, console: true, level: 'info' },
   simulate: { enabled: false, max_speed_kbps: 4096, min_speed_kbps: 512 },
+  wrapper: { address: 'http://wrapper:12340', data_dir: '', login_timeout_seconds: 120, timeout_seconds: 30 },
 };
+
+// The keys a PUT saves for the next start (x-applies: restart in openapi.yaml).
+const RESTART_KEYS = new Set([
+  'logging.console',
+  'logging.buffer_size',
+  'wrapper.address',
+  'wrapper.timeout_seconds',
+  'wrapper.login_timeout_seconds',
+  'catalog.language',
+  'catalog.max_parallel_requests',
+  'catalog.token_cache_ttl_hours',
+  'download.max_running_jobs',
+  'download.max_parallel_downloads',
+]);
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const apiError = (status, code, message, details) => json(status, { error: { code, message, ...(details ? { details } : {}) } });
@@ -164,6 +189,9 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   const jobStreams = new Map();
   const logStreams = new Set();
   const config = structuredClone(CONFIG);
+  // The restart keys saved since the last restart.
+  const pending = new Set();
+  const configBody = () => ({ config, persisted: true, pending_restart: [...pending].sort() });
   const librarySync = { enabled: false, interval_minutes: 15, anchor_size: 0, last_submitted: 0, total_submitted: 0 };
   const hooks = createHookStore({
     enabled: true,
@@ -790,6 +818,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         catalog_language: 'en-US',
         max_parallel_requests: 16,
       },
+      pending_restart: [...pending].sort(),
     });
   }
 
@@ -834,14 +863,21 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       case 'GET /api/v1/stats':
         return stats(q);
       case 'GET /api/v1/config':
-        return json(200, { config, persisted: true });
+        return json(200, configBody());
       case 'PUT /api/v1/config': {
         const body = await readBody(req);
-        for (const [sec, vals] of Object.entries(body)) if (config[sec] && vals && typeof vals === 'object') config[sec] = { ...config[sec], ...vals };
-        return json(200, { config, persisted: true });
+        for (const [sec, vals] of Object.entries(body)) {
+          if (!config[sec] || !vals || typeof vals !== 'object') continue;
+          for (const [k, v] of Object.entries(vals)) if (RESTART_KEYS.has(`${sec}.${k}`) && JSON.stringify(config[sec][k]) !== JSON.stringify(v)) pending.add(`${sec}.${k}`);
+          config[sec] = { ...config[sec], ...vals };
+        }
+        return json(200, configBody());
       }
       case 'POST /api/v1/config/reload':
-        return json(200, { config, persisted: true });
+        return json(200, configBody());
+      case 'POST /api/v1/system/restart':
+        pending.clear();
+        return json(202, { restarting: true });
       case 'GET /api/v1/library-sync':
         return json(200, librarySync);
       case 'POST /api/v1/library-sync/reset':

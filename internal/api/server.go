@@ -52,6 +52,14 @@ type Deps struct {
 	// Hooks writes hooks.yaml for the hook routes that change it; nil
 	// answers them 503 feature_unavailable.
 	Hooks HooksService
+	// WrapperManaged is set when this process runs the wrapper itself
+	// (internal/wrapperhost): the process writes wrapper.address, so PUT
+	// /config refuses to change it.
+	WrapperManaged bool
+	// Restart asks the process to stop and start again (POST
+	// /system/restart); it must not block. Nil answers that route 503
+	// feature_unavailable.
+	Restart func()
 }
 
 // Server holds the HTTP handlers; build it with New and serve Routes.
@@ -73,6 +81,9 @@ type Server struct {
 	tokens      *usertoken.Provider
 	console     http.Handler
 	hooks       HooksService
+	// wrapperManaged and restart are Deps.WrapperManaged and Deps.Restart.
+	wrapperManaged bool
+	restart        func()
 	// now is the clock of GET /system uptime and the GET /stats window and
 	// cache; nil means time.Now.
 	now        func() time.Time
@@ -110,6 +121,7 @@ func New(deps Deps) (*Server, error) {
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync,
 		catalog: deps.Catalog, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
+		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())
 	// logging.buffer_size is a startup key, so the snapshot read here is the
@@ -147,6 +159,7 @@ func (s *Server) routes() []route {
 	table := []route{
 		{http.MethodGet, "/api/v1/health", h(s.health)},
 		{http.MethodGet, "/api/v1/system", h(s.systemInfo)},
+		{http.MethodPost, "/api/v1/system/restart", h(s.restartSystem)},
 		{http.MethodGet, "/api/v1/stats", h(s.stats)},
 		{http.MethodGet, "/api/v1/logs", h(s.listLogs)},
 		{http.MethodGet, "/api/v1/logs/stream", h(s.streamLogs)},

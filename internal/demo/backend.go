@@ -49,6 +49,8 @@ type Backend struct {
 	// lastOrder is the highest queue_order handed out.
 	lastOrder int64
 	config    map[string]any
+	// pending are the restart keys PUT changed since the last restart.
+	pending   map[string]bool
 	signedIn  bool
 	sinceFeed time.Duration
 	feeds     map[chan domain.DownloadFeedMessage]bool
@@ -71,7 +73,7 @@ type job struct {
 // New returns a backend whose clock is now, with its jobs as they stand at
 // that moment: two running, one waiting, some finished, one failed.
 func New(now func() time.Time) *Backend {
-	b := &Backend{now: now, signedIn: true, feeds: map[chan domain.DownloadFeedMessage]bool{}, covers: map[string][]byte{}, hooks: demoHooks()}
+	b := &Backend{now: now, signedIn: true, pending: map[string]bool{}, feeds: map[chan domain.DownloadFeedMessage]bool{}, covers: map[string][]byte{}, hooks: demoHooks()}
 	view, err := config.MutableView(config.Default())
 	if err != nil {
 		panic("demo: the default config does not render: " + err.Error())

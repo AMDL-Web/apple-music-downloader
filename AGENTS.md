@@ -80,7 +80,7 @@ types and output paths are contracts that installs and the clients in this repos
 `configs/config.yaml` is generated: copied from `configs/config.example.yaml` on
 first start, then rewritten without comments by `PUT /api/v1/config`. The example
 is therefore the documentation. Each key's comment states allowed values, units,
-the behavior when the key is absent, whether it is a runtime or a startup key, and
+the behavior when the key is absent, whether it is a runtime, restart or file-only key, and
 any template variables or list options.
 
 ## Apple catalog reads

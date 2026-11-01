@@ -123,85 +123,6 @@ func TestOverridesEmptyListSurvivesJSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRuntimeLockedChanges(t *testing.T) {
-	base := Default()
-
-	if got := RuntimeLockedChanges(base, base); len(got) != 0 {
-		t.Fatalf("no-op change reported locked fields: %v", got)
-	}
-
-	updated := base
-	updated.Download.QualityPriority = []string{"aac"}
-	updated.Download.EmbedLyrics = false
-	updated.Simulate.Enabled = true
-	updated.Simulate.MinSpeedKBps = 10
-	updated.Catalog.AlbumTrackURLMode = "album"
-	updated.Catalog.MediaUserToken = "token"
-	updated.Logging.Level = "debug"
-	updated.Logging.AccessLog = false
-	if got := RuntimeLockedChanges(base, updated); len(got) != 0 {
-		t.Fatalf("runtime-updatable changes reported as locked: %v", got)
-	}
-
-	updated = base
-	updated.Server.Listen = "0.0.0.0:9999"
-	updated.Logging.Console = false
-	updated.Download.MaxRunningJobs = base.Download.MaxRunningJobs + 1
-	updated.Download.MaxParallelDownloads = base.Download.MaxParallelDownloads + 1
-	updated.Wrapper.Address = "http://10.0.0.1:12340"
-	updated.Catalog.MaxParallelRequests = base.Catalog.MaxParallelRequests + 1
-	got := RuntimeLockedChanges(base, updated)
-	// Keys surface in Config struct-field order because the locked set is
-	// derived from configFields.
-	want := []string{"server.listen", "logging.console", "wrapper.address", "catalog.max_parallel_requests", "download.max_running_jobs", "download.max_parallel_downloads"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("locked changes = %v, want %v", got, want)
-	}
-}
-
-func TestMutableViewOmitsStartupBoundFields(t *testing.T) {
-	view, err := MutableView(Default())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(view) != 5 {
-		t.Fatalf("view sections = %v, want catalog/download/library_sync/logging/simulate only", view)
-	}
-	librarySync, ok := view["library_sync"].(map[string]any)
-	if !ok {
-		t.Fatalf("library_sync section = %T, want map", view["library_sync"])
-	}
-	for _, key := range []string{"enabled", "interval_minutes"} {
-		if _, exists := librarySync[key]; !exists {
-			t.Fatalf("library_sync.%s missing from mutable view", key)
-		}
-	}
-	download, ok := view["download"].(map[string]any)
-	if !ok {
-		t.Fatalf("download section = %T, want map", view["download"])
-	}
-	for _, key := range []string{"max_running_jobs", "max_parallel_downloads"} {
-		if _, exists := download[key]; exists {
-			t.Fatalf("download section must not expose %s", key)
-		}
-	}
-	if download["cover_format"] != "jpg" {
-		t.Fatalf("download.cover_format = %v, want jpg", download["cover_format"])
-	}
-	if download["memory_mode"] != MemoryModeLow {
-		t.Fatalf("download.memory_mode = %v, want low", download["memory_mode"])
-	}
-	catalog, ok := view["catalog"].(map[string]any)
-	if !ok || len(catalog) != 3 || catalog["album_track_url_mode"] != "song" || catalog["media_user_token"] != "" ||
-		catalog["motion_artwork_enabled"] != true {
-		t.Fatalf("catalog section = %v, want album_track_url_mode/media_user_token/motion_artwork_enabled", view["catalog"])
-	}
-	logging, ok := view["logging"].(map[string]any)
-	if !ok || len(logging) != 2 || logging["level"] != "info" || logging["access_log"] != false {
-		t.Fatalf("logging section = %v, want only level/access_log", view["logging"])
-	}
-}
-
 func TestStoreGetSet(t *testing.T) {
 	store := NewStore(Default())
 	if got := store.Get(); got.Download.CoverFormat != "jpg" {
@@ -260,7 +181,7 @@ func TestDownloadOverridesCoverRuntimeDownloadKeys(t *testing.T) {
 	known := knownKeys()
 	for _, field := range configFields() {
 		section, leaf, _ := strings.Cut(field.key, ".")
-		if section != "download" || !isRuntimeKey(field.key) {
+		if section != "download" || !isRuntime(field.key) {
 			continue
 		}
 		if overrideExclusions[field.key] {
@@ -274,7 +195,7 @@ func TestDownloadOverridesCoverRuntimeDownloadKeys(t *testing.T) {
 		}
 	}
 	for name := range overrideFields {
-		if key := "download." + name; !known[key] || !isRuntimeKey(key) {
+		if key := "download." + name; !known[key] || !isRuntime(key) {
 			t.Errorf("DownloadOverrides field %q does not name a runtime download key", name)
 		}
 	}

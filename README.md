@@ -111,8 +111,7 @@ directory; the first start creates `configs/` and `data/` next to it.
 wrapper-lite for you and lets you log in from the console.
 
 1. In `docker-compose.yml`, uncomment the `wrapper-manager` service and the `volumes:`
-   block at the end of the file, and set
-   `AMDL_WRAPPER_ADDRESS: "http://wrapper-manager:8080"`.
+   block at the end of the file.
 2. Start both:
 
    ```bash
@@ -121,8 +120,9 @@ wrapper-lite for you and lets you log in from the console.
 
    Compose builds wrapper-manager from its `v2` branch, and its first start downloads the
    wrapper-lite payload, so the wrapper host needs internet access.
-3. Open `http://localhost:18080/`, go to **Settings › Account** and log in with your
-   Apple ID. If Apple asks for a two-step code, the console asks you for it.
+3. Open `http://localhost:18080/`, go to **Settings › Account**, set **Session service**
+   to `http://wrapper-manager:8080`, save, and restart from the notice that appears. Then
+   log in with your Apple ID. If Apple asks for a two-step code, the console asks you for it.
 4. Paste a link into **New download**. Finished files land in `./data/downloads`.
 
 ### With a bare wrapper-lite
@@ -130,12 +130,13 @@ wrapper-lite for you and lets you log in from the console.
 [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) serves one
 account and logs in from its own command line, not from the console.
 
-- **As a Compose service:** uncomment the `wrapper-lite` service, set
-  `AMDL_WRAPPER_ADDRESS: "http://wrapper-lite:12340"`, and put `USERNAME` and `PASSWORD`
-  in a `.env` file next to `docker-compose.yml` for the first start, which logs in. If
+- **As a Compose service:** uncomment the `wrapper-lite` service, set **Settings ›
+  Account › Session service** to `http://wrapper-lite:12340` and restart, and put
+  `USERNAME` and `PASSWORD` in a `.env` file next to `docker-compose.yml` for the first start, which logs in. If
   Apple asks for a two-step code, write it to `2fa.txt` in `./data/wrapper`. The image
   build downloads the Android NDK and takes a while.
-- **On the host:** keep the default `AMDL_WRAPPER_ADDRESS`, then log in once and serve
+- **On the host:** keep the session service the container starts with,
+  `http://host.docker.internal:12340`, then log in once and serve
   (upstream's commands):
 
   ```bash
@@ -235,7 +236,7 @@ is the API's only browser client: responses carry no CORS headers.
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
 | **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
-| **System** | `GET /health` · `GET /system` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
+| **System** | `GET /health` · `GET /system` · `POST /system/restart` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
 
 Submit an album and follow it:
 
@@ -254,10 +255,12 @@ Errors, stream resumption, job overrides and curl examples for every route:
 
 One file, `configs/config.yaml`, created from
 [`configs/config.example.yaml`](configs/config.example.yaml) on first start. The example's
-comments document every key: allowed values, units and defaults. Runtime keys change
-through `PUT /api/v1/config` (the console's Settings page), which rewrites the file without
-its comments; startup keys need a restart. `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`,
-`AMDL_WRAPPER_DATA_DIR` and `AMDL_DATABASE_PATH` override their keys. Radio stations need
+comments document every key: allowed values, units and defaults. Every key except
+`server.listen`, `database.path` and `tools.ffmpeg` changes through `PUT /api/v1/config`
+(the console's and the desktop app's Settings), which rewrites the file without its
+comments; restart keys, such as the wrapper address, apply after a restart, which the
+console starts from its Settings page (`POST /api/v1/system/restart`). No environment
+variable overrides a key. Radio stations need
 your subscription token: the backend reads it from the wrapper when it runs the wrapper
 itself or `wrapper.data_dir` points at the wrapper's files, and otherwise from
 `catalog.media_user_token`. Details: [docs/configuration.md](docs/configuration.md).
@@ -288,7 +291,7 @@ Both are off by default. See [docs/automation.md](docs/automation.md).
 | | |
 | --- | --- |
 | [docs/deployment.md](docs/deployment.md) | Docker, the wrapper, mounts, `PUID`/`PGID`, reverse proxies, releases and image tags |
-| [docs/configuration.md](docs/configuration.md) | Config file, defaults, environment overrides, runtime vs startup keys, reload |
+| [docs/configuration.md](docs/configuration.md) | Config file, defaults, runtime, restart and file-only keys, reload, restart |
 | [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) | Every breaking change from 1.x, with an upgrade checklist |
 | [docs/install.md](docs/install.md) | The `amdl` binary without Docker: install scripts, ffmpeg, a wrapper amdl runs, the background service |
 | [docs/cli.md](docs/cli.md) | The `amdl` command line, its JSON output and exit statuses, the MCP server and the terminal interface |

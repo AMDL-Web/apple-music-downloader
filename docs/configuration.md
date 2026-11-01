@@ -28,57 +28,78 @@ Unknown keys fail startup with an error naming each one; keys removed in 2.0 are
 per-job concurrency keys such as `download.max_parallel_tracks`, replaced by the
 process-wide pools in [download-pipeline.md](download-pipeline.md#concurrency).
 
-## Runtime vs startup keys
+## Runtime, restart and file-only keys
 
-`PUT /api/v1/config` may only change runtime-mutable keys, but it rewrites the whole file
-including startup keys, dropping all comments in the process.
+`config.yaml` is the one source of every setting. `PUT /api/v1/config` (the console's and
+the desktop app's Settings) changes every key except three, and rewrites the whole file,
+dropping all comments in the process. It validates the result the way a start does, so a
+value it saves always loads. `internal/config#classOf` sorts the keys:
 
 | | |
 | --- | --- |
-| **Startup** | `server.listen`, `database.path`, `wrapper.*`, `tools.ffmpeg`, `logging.console`, `logging.buffer_size`, `catalog.token_cache_ttl_hours`, and every pool size (`download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`) |
-| **Runtime** | `logging.level`, `logging.access_log`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.motion_artwork_enabled`, all remaining `download.*` keys, the whole `simulate` section and the whole `library_sync` section |
+| **Runtime** | `logging.level`, `logging.access_log`, `wrapper.data_dir`, `catalog.default_storefront`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.motion_artwork_enabled`, every `download.*` key except the two pools below, the whole `simulate` section and the whole `library_sync` section. A change applies at once, to new requests and newly started jobs. |
+| **Restart** | `wrapper.address`, `wrapper.timeout_seconds`, `wrapper.login_timeout_seconds`, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size`, and the pool sizes `download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`. `PUT` saves the value; it applies when the backend starts again, since components built at startup hold the old one. |
+| **File only** | `server.listen` (a wrong value cuts the console off), `database.path` (a new path looks like lost history) and `tools.ffmpeg` (set by the install that ships ffmpeg). `PUT` refuses them with `422 config_key_not_mutable`; edit the file and restart. |
+
+While this machine runs its own wrapper (`amdl wrapper install`), the backend writes
+`wrapper.address` itself and `PUT` refuses to change it (`config_key_not_mutable`,
+`details.reason` `managed_wrapper`).
+
+`GET /api/v1/config` returns runtime keys as they run and restart keys as saved;
+`pending_restart` in its answer, in the `PUT` answer and in `GET /api/v1/system` names the
+keys whose saved value differs from the running one, a hand edit of a file-only key
+included. `POST /api/v1/system/restart` (the console's restart notice, `amdl system
+restart`) stops every component the way a shutdown does and starts again in the same
+process, on the same address, which applies them. No supervisor is needed: `amdl serve`,
+the container and the desktop app all restart in place. The desktop app restarts the
+backend it runs by itself after such a save.
 
 Hand edits reach the running service like this:
 
 | Trigger | Effect |
 | --- | --- |
-| `GET /api/v1/config` | Returns the in-memory snapshot; never reads the file. |
+| `GET /api/v1/config` | Reads the restart and file-only keys from the file to report `pending_restart`; runtime keys come from the running snapshot. |
 | `POST /api/v1/config/reload` (the console's "Reload from file") | Re-reads the file and applies its runtime keys. If the file is unreadable or invalid, the previous snapshot stays live and the response reports the error as `reload_error`. |
-| `PUT /api/v1/config` | Re-reads the file under the same lock first, then applies the patch, so a hand edit made since the last reload is kept rather than overwritten. An invalid file fails the `PUT` and changes nothing. |
-| Restart | Applies startup keys. A reload or `PUT` never makes a startup-key edit live, and a `PUT` keeps the edited value on disk for the next start. |
+| `PUT /api/v1/config` | Re-reads the file under the same lock first, then applies the patch, so a hand edit made since the last reload, and a restart key waiting for a restart, are kept rather than overwritten. An invalid file fails the `PUT` and changes nothing. |
+| Restart | Applies restart and file-only keys. A reload or `PUT` never makes one live, and a `PUT` keeps the edited value on disk for the next start. |
 
 Set these before first real use:
 
-- `server.listen` — API listen address.
-- `wrapper.address` — the wrapper's URL ([Wrapper](#wrapper)).
-- `database.path` — SQLite file (default `data/db/amdl.db`).
+- `server.listen` — API listen address, in the file.
+- `wrapper.address` — the wrapper's URL ([Wrapper](#wrapper)), in Settings.
+- `database.path` — SQLite file (default `data/db/amdl.db`), in the file.
 - `download.downloads_dir` — where finished files go.
 - `logging.*` — level, stdout on or off, in-memory retention. There is no log file.
-- `tools.ffmpeg` — path or command name.
+- `tools.ffmpeg` — path or command name, in the file.
 
-## Environment overrides
+## Environment variables and first values
 
-Six environment variables exist, for what a container needs before it can read its own
-config file:
+No environment variable sets a key. Two choose the files:
 
 | Variable | Sets |
 | --- | --- |
 | `AMDL_CONFIG` | Path of `config.yaml` (default `configs/config.yaml`) |
-| `AMDL_HOOKS_CONFIG` | Path of `hooks.yaml` (default `configs/hooks.yaml`, git-ignored; `configs/hooks.example.yaml` is the commented template) |
-| `AMDL_SERVER_LISTEN` | `server.listen` |
-| `AMDL_WRAPPER_ADDRESS` | `wrapper.address` |
-| `AMDL_WRAPPER_DATA_DIR` | `wrapper.data_dir` |
-| `AMDL_DATABASE_PATH` | `database.path` |
+| `AMDL_HOOKS_CONFIG` | Path of `hooks.yaml` (default `configs/hooks.yaml`, not committed; `configs/hooks.example.yaml` is the commented template) |
 
-- The four key overrides win over the file on every start and reload, and are never
-  written back. They are all startup keys, so `PUT /api/v1/config` never meets one.
-- Every other key is set in `config.yaml`. Any other `AMDL_*` variable is ignored, and
-  startup logs one warning per variable naming it; move such a setting into the file.
+Any other `AMDL_*` variable is ignored, and startup logs one warning per variable naming
+it; that includes `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_WRAPPER_DATA_DIR` and
+`AMDL_DATABASE_PATH`, which earlier releases read. Move such a setting into the file or
+Settings.
+
+An install type that knows better first values than the example passes them to
+`amdl serve --init key=value` (repeatable): they are written into `config.yaml` only when
+`serve` creates it, keeping the example's comments, and validated first. The container
+image passes `server.listen=:18080` and `wrapper.address=http://host.docker.internal:12340`.
+Once the file exists it wins; startup logs each `--init` value the file differs from. The
+one exception: a `--init server.listen` that is not loopback rewrites a loopback
+`server.listen` in an existing file on every start, with a warning, since a loopback
+address cannot be reached from outside a container. Once rewritten, later starts change
+nothing.
 
 ## Wrapper
 
 The `wrapper` section points the backend at the HTTP service that holds the Apple Music
-account session. All four keys are startup keys.
+account session. `wrapper.data_dir` is a runtime key; the other three apply after a restart.
 
 - `wrapper.address` is `http://host:port` or `https://host:port`, with an optional path
   prefix for a reverse proxy; the default is `http://127.0.0.1:12340`. A bare `host:port`
@@ -115,8 +136,8 @@ whenever it can read it, and `catalog.media_user_token` only when it cannot:
 - A wrapper the backend runs itself (`amdl wrapper install`): read from the guest's disk,
   with nothing to configure. `wrapper.data_dir` is ignored, and startup says so when it is
   set.
-- Any other wrapper whose files the backend can see: set `wrapper.data_dir` (or
-  `AMDL_WRAPPER_DATA_DIR`) to the wrapper's data directory. A wrapper-lite base directory
+- Any other wrapper whose files the backend can see: set `wrapper.data_dir` to the
+  wrapper's data directory. A wrapper-lite base directory
   holds `MUSIC_TOKEN` directly; a wrapper-manager's data directory holds one per account
   under `instances/<id>/`. amdl 2.0 supports one wrapper account, a wrapper-manager's
   included; with several, the newest token is read. In containers, mount that directory

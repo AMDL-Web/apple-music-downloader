@@ -141,7 +141,7 @@ func serviceInstallCmd(*flag.FlagSet) func(e *env, args []string) error {
 		if err != nil {
 			return err
 		}
-		b := local.Backend{Dirs: dirs, Wrapper: or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS"))}
+		b := local.Backend{Dirs: dirs, Wrapper: e.wrapper}
 		if in, err := (wrapperhost.Home{Dir: dirs.WrapperDir()}).Current(); err == nil && b.Wrapper == "" {
 			b.Wrapper = in.URL() // the service runs the local wrapper
 		}

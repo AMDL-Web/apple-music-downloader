@@ -53,10 +53,11 @@ docs/api.md, and for hook events the allowed list in internal/hooks,
 `configs/hooks.example.yaml` and [docs/automation.md](../../../docs/automation.md).
 
 Config key: the struct field (yaml and json tags), `Default()`, `Config.Validate`,
-the full comment in `configs/config.example.yaml`, the runtime or startup
-classification (`internal/config/AGENTS.md`). A runtime key also gets its
-`RuntimeConfig` property in the spec and its Settings field in
-`apps/console/static/js/lib/settings.js`; a runtime `download.*` key gets a
+the full comment in `configs/config.example.yaml`, the runtime, restart or file-only
+classification (`internal/config/AGENTS.md`). A runtime or restart key also gets its
+`RuntimeConfig` property in the spec (`x-applies: restart` for a restart key) and its
+Settings field in `apps/console/static/js/lib/settings.js` and
+`apps/desktop/internal/ui/fields.go`; a runtime `download.*` key gets a
 job override or an exclusion. Concept changes go to
 [docs/configuration.md](../../../docs/configuration.md).
 

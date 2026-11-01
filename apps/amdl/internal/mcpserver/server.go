@@ -762,8 +762,9 @@ func (h handlers) setConfig(ctx context.Context, _ *mcp.CallToolRequest, args ma
 	// The answer is the whole runtime config; echo only the keys set, as the
 	// CLI does.
 	var resp struct {
-		Config    map[string]any `json:"config"`
-		Persisted bool           `json:"persisted"`
+		Config         map[string]any `json:"config"`
+		Persisted      bool           `json:"persisted"`
+		PendingRestart []string       `json:"pending_restart"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return nil, err
@@ -774,5 +775,13 @@ func (h handlers) setConfig(ctx context.Context, _ *mcp.CallToolRequest, args ma
 			set[key] = v
 		}
 	}
-	return map[string]any{"config": set, "persisted": resp.Persisted}, nil
+	return map[string]any{"config": set, "persisted": resp.Persisted, "pending_restart": orEmpty(resp.PendingRestart)}, nil
+}
+
+// orEmpty keeps a missing list an empty array in the answer.
+func orEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

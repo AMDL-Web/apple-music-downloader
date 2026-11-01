@@ -96,8 +96,7 @@ wrapper 部署方式都以注释掉的服务写在里面。把它复制到一个
 [wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2) 替你运行
 wrapper-lite，并且可以在控制台里登录。
 
-1. 在 `docker-compose.yml` 里取消注释 `wrapper-manager` 服务和文件末尾的 `volumes:` 块，并设置
-   `AMDL_WRAPPER_ADDRESS: "http://wrapper-manager:8080"`。
+1. 在 `docker-compose.yml` 里取消注释 `wrapper-manager` 服务和文件末尾的 `volumes:` 块。
 2. 两个一起启动：
 
    ```bash
@@ -106,7 +105,8 @@ wrapper-lite，并且可以在控制台里登录。
 
    Compose 会从 `v2` 分支构建 wrapper-manager，它第一次启动时会下载 wrapper-lite 的程序包，
    所以 wrapper 主机需要能上网。
-3. 打开 `http://localhost:18080/`，进入 **Settings › Account**，用 Apple ID 登录。Apple 要求
+3. 打开 `http://localhost:18080/`，进入 **Settings › Account**，把 **Session service** 改成
+   `http://wrapper-manager:8080`，保存后在出现的提示里重启。然后用 Apple ID 登录。Apple 要求
    两步验证码时，控制台会向你询问。
 4. 在 **New download** 里粘贴链接。下载完成的文件在 `./data/downloads`。
 
@@ -115,11 +115,11 @@ wrapper-lite，并且可以在控制台里登录。
 [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) 只服务一个账号，
 在它自己的命令行里登录，不能从控制台登录。
 
-- **作为 Compose 服务：** 取消注释 `wrapper-lite` 服务，设置
-  `AMDL_WRAPPER_ADDRESS: "http://wrapper-lite:12340"`，并在 `docker-compose.yml` 旁边的
+- **作为 Compose 服务：** 取消注释 `wrapper-lite` 服务，把 **Settings › Account › Session
+  service** 改成 `http://wrapper-lite:12340` 并重启，并在 `docker-compose.yml` 旁边的
   `.env` 文件里写上 `USERNAME` 和 `PASSWORD`，供第一次启动登录用。Apple 要求两步验证码时，
   把验证码写进 `./data/wrapper` 里的 `2fa.txt`。构建镜像要下载 Android NDK，比较慢。
-- **直接跑在主机上：** 保持默认的 `AMDL_WRAPPER_ADDRESS`，先登录一次，再启动服务（上游给出的命令）：
+- **直接跑在主机上：** 保持容器启动时的 session service `http://host.docker.internal:12340`，先登录一次，再启动服务（上游给出的命令）：
 
   ```bash
   ./wrapper-lite-rootless --login user:pass --code-from-file --base-dir /data
@@ -207,7 +207,7 @@ CORS 头。
 | **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
 | **资料库同步** | `GET /library-sync` · `POST /library-sync/reset` |
-| **系统** | `GET /health` · `GET /system` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
+| **系统** | `GET /health` · `GET /system` · `POST /system/restart` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
 
 提交一张专辑并跟踪进度：
 
@@ -225,9 +225,10 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 
 只有一个文件 `configs/config.yaml`，第一次启动时由
 [`configs/config.example.yaml`](configs/config.example.yaml) 生成。示例文件的注释写明了每个配置项
-的可选值、单位和默认值。运行时配置项通过 `PUT /api/v1/config`（控制台的 Settings 页面）修改，
-这会重写整个文件并丢掉注释；启动配置项要重启才生效。`AMDL_SERVER_LISTEN`、`AMDL_WRAPPER_ADDRESS`、
-`AMDL_WRAPPER_DATA_DIR` 和 `AMDL_DATABASE_PATH` 可以覆盖对应的配置项。下载电台需要订阅令牌：后端自己运行
+的可选值、单位和默认值。除 `server.listen`、`database.path` 和 `tools.ffmpeg` 外，每个配置项都能通过
+`PUT /api/v1/config`（控制台和桌面应用的 Settings）修改，这会重写整个文件并丢掉注释；wrapper 地址这类
+重启生效的配置项在重启后生效，控制台的 Settings 页面可以直接发起重启（`POST /api/v1/system/restart`）。
+没有环境变量能覆盖配置项。下载电台需要订阅令牌：后端自己运行
 wrapper，或 `wrapper.data_dir` 指向 wrapper 的文件时，直接从 wrapper 读取；否则用
 `catalog.media_user_token` 里填的。详见 [docs/configuration.md](docs/configuration.md)（英文）。
 
@@ -254,7 +255,7 @@ wrapper，或 `wrapper.data_dir` 指向 wrapper 的文件时，直接从 wrapper
 | | |
 | --- | --- |
 | [docs/deployment.md](docs/deployment.md) | Docker、wrapper、挂载目录、`PUID`/`PGID`、反向代理、发布与镜像标签 |
-| [docs/configuration.md](docs/configuration.md) | 配置文件、默认值、环境变量覆盖、运行时与启动配置项、重新加载 |
+| [docs/configuration.md](docs/configuration.md) | 配置文件、默认值、运行时/重启生效/仅限文件的配置项、重新加载、重启 |
 | [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) | 从 1.x 起的每一处破坏性变更，附升级清单 |
 | [docs/install.md](docs/install.md) | 不用 Docker 安装 `amdl`：安装脚本、ffmpeg、amdl 自己运行的 wrapper、后台服务 |
 | [docs/cli.md](docs/cli.md) | `amdl` 命令行、JSON 输出与退出码、MCP 服务和终端界面 |

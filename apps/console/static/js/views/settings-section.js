@@ -124,10 +124,12 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
     case 'account': {
       const token = tokenState(cfg.loaded ? cfg.base['catalog.media_user_token'] || '' : undefined, st.wrapper);
       const syncWaits = cfg.loaded && cfg.base['library_sync.enabled'] === true && token.known && !token.present;
+      const tokenField = fields.filter((f) => f.key === 'catalog.media_user_token');
       return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${st.wrapper && st.wrapper.data} />
+        ${fieldRows(fields.filter((f) => f.key !== 'catalog.media_user_token'))}
         <${AccountPanel}>
           <section class="account-block" aria-label="Media user token">
-            ${fieldRows(fields, undefined, { 'catalog.media_user_token': { wrapperToken: token.wrapperToken } })}
+            ${fieldRows(tokenField, undefined, { 'catalog.media_user_token': { wrapperToken: token.wrapperToken } })}
             ${syncWaits
               ? html`<p class="field-warning settings-token-wait" data-role="warning">
                   <${Icon} name="triangle-alert" size="sm" /><span>Library sync is waiting for this token. <a class="link" href=${settingsHash('library_sync')}>Library sync</a></span>

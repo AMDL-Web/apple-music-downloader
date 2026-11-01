@@ -28,6 +28,7 @@ export const BOARD_SECTIONS = SETTINGS_SECTIONS.filter((s) => s.board);
  * value, which opens its section scrolled to the group.
  */
 export const SETTINGS_GROUPS = [
+  { id: 'wrapper', section: 'server', label: 'Session service', icon: 'key' },
   { id: 'simulate', section: 'server', label: 'Simulate', icon: 'play' },
   { id: 'config_file', section: 'server', label: 'Configuration file', icon: 'braces' },
 ];

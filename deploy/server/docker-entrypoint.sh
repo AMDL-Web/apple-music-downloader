@@ -20,16 +20,18 @@ PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 
 # Container defaults: two of the repository defaults do not work inside a
-# container, so they are replaced on every start through two of the backend's
-# environment overrides:
+# container, so the backend writes container values into config.yaml when it
+# creates it (amdl serve --init); after that the file, which Settings edits,
+# is the one source:
 #   - server.listen   defaults to 127.0.0.1:18080, unreachable from outside
-#                     the container; changed to :18080
+#                     the container; :18080. A loopback value in an existing
+#                     file (an install from before 2.0, which set it through
+#                     an environment variable) is rewritten to :18080 on
+#                     every start, with a warning.
 #   - wrapper.address defaults to http://127.0.0.1:12340, which points at
-#                     the container itself; changed to the host
-# Environment variables take precedence over config.yaml and are not written
-# back to the file.
-export AMDL_SERVER_LISTEN="${AMDL_SERVER_LISTEN:-:18080}"
-export AMDL_WRAPPER_ADDRESS="${AMDL_WRAPPER_ADDRESS:-http://host.docker.internal:12340}"
+#                     the container itself; the host's port 12340.
+INIT_LISTEN=":18080"
+INIT_WRAPPER="http://host.docker.internal:12340"
 
 mkdir -p "$CONFIG_DIR"
 
@@ -83,11 +85,9 @@ own_tree() {
 # The backend writes no log file, so there are no logs to re-own.
 if [ "$(id -u)" = "0" ]; then
     DOWNLOADS_DIR=/app/data/downloads
-    DB_PATH="${AMDL_DATABASE_PATH:-data/db/amdl.db}"
-    case "$DB_PATH" in
-        /*) ;;
-        *) DB_PATH="/app/$DB_PATH" ;;
-    esac
+    # database.path keeps its default in the container; the volume mapping
+    # moves the data (configs/config.example.yaml says so).
+    DB_PATH=/app/data/db/amdl.db
     DB_DIR="$(dirname "$DB_PATH")"
 
     mkdir -p /app/data/tmp "$DB_DIR"
@@ -103,7 +103,7 @@ if [ "$(id -u)" = "0" ]; then
     if [ -d "$DOWNLOADS_DIR" ] && ! su-exec "$PUID:$PGID" test -w "$DOWNLOADS_DIR"; then
         echo "warning: $DOWNLOADS_DIR is not writable by $PUID:$PGID; give the host directory to that uid/gid (docs/deployment.md, Ownership)" >&2
     fi
-    exec su-exec "$PUID:$PGID" /app/amdl serve "$@"
+    exec su-exec "$PUID:$PGID" /app/amdl serve --init "server.listen=$INIT_LISTEN" --init "wrapper.address=$INIT_WRAPPER" "$@"
 fi
 
-exec /app/amdl serve "$@"
+exec /app/amdl serve --init "server.listen=$INIT_LISTEN" --init "wrapper.address=$INIT_WRAPPER" "$@"

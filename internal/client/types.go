@@ -46,6 +46,9 @@ type SystemInfo struct {
 	} `json:"pools"`
 	Tools   []domain.Capability `json:"tools"`
 	Storage []Storage           `json:"storage"`
+	// PendingRestart names the config keys saved with a value the next
+	// start applies.
+	PendingRestart []string `json:"pending_restart"`
 }
 
 // Storage is one entry of SystemInfo.storage: the free space of

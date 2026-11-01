@@ -61,40 +61,20 @@ services:
       # PUID: "1000"
       # PGID: "1000"
       # Time zone for log timestamps and for the local time seen by commands in
-      # exec hooks; default UTC. The image ships tzdata, so an IANA time zone
-      # name is all that is needed.
-      # TZ: "Asia/Shanghai"
-      # The backend reads AMDL_SERVER_LISTEN, AMDL_WRAPPER_ADDRESS,
-      # AMDL_WRAPPER_DATA_DIR, AMDL_DATABASE_PATH, AMDL_CONFIG and
-      # AMDL_HOOKS_CONFIG; every other
-      # setting belongs in config.yaml, and any other AMDL_* variable is
-      # ignored with a warning at startup.
-      # Wrapper URL (overrides wrapper.address): a wrapper-manager v2 or a bare
-      # wrapper-lite, both over HTTP. Only a wrapper-manager has the login API the
-      # console's Account page uses; against a bare wrapper-lite you log in on its
-      # own command line (--login).
-      #   - wrapper-lite runs on the host: keep http://host.docker.internal:12340
-      #     (also the entrypoint's container default, so leaving the variable
-      #     unset has the same effect);
-      #   - wrapper-manager is a compose service (recommended): change it to
-      #     "http://wrapper-manager:8080" and uncomment the wrapper-manager
-      #     service below;
-      #   - wrapper-lite is a compose service: change it to
-      #     "http://wrapper-lite:12340" and uncomment the wrapper-lite service
-      #     below instead.
-      AMDL_WRAPPER_ADDRESS: "http://host.docker.internal:12340"
-      # The wrapper's data directory inside this container (overrides
-      # wrapper.data_dir): the backend then uses the media-user-token the
-      # wrapper keeps there instead of one pasted into Settings. Uncomment it
-      # with the matching read-only mount under volumes below:
-      #   - option A (wrapper-manager): "/app/data/wrapper-manager/wrapper/rootfs/data"
-      #   - option B (wrapper-lite): "/app/data/wrapper"
-      # AMDL_WRAPPER_DATA_DIR: "/app/data/wrapper"
-      # API listen address (overrides server.listen). Inside the container it
-      # must listen on a non-loopback address; the entrypoint defaults to
-      # :18080. When changing the port, adjust the ports mapping above to match;
-      # the health check also derives its port from it.
-      # AMDL_SERVER_LISTEN: ":18080"
+      # exec hooks. The image ships tzdata, so an IANA time zone name such as
+      # "Asia/Shanghai" is all that is needed.
+      TZ: "UTC"
+      # No environment variable sets a key: every setting lives in config.yaml,
+      # which the console's Settings edits, and any other AMDL_* variable is
+      # ignored with a warning at startup. The backend creates config.yaml on
+      # first start with server.listen ":18080" and wrapper.address
+      # "http://host.docker.internal:12340", a wrapper-lite on the host. For a
+      # wrapper service below, set Settings > Account > Session service to its
+      # URL and restart from the notice there:
+      #   - wrapper-manager (recommended): "http://wrapper-manager:8080";
+      #   - wrapper-lite: "http://wrapper-lite:12340".
+      # Only a wrapper-manager has the login API the console's Account page uses;
+      # against a bare wrapper-lite you log in on its own command line (--login).
     extra_hosts:
       # Lets containers on Linux reach the host through host.docker.internal too.
       - "host.docker.internal:host-gateway"
@@ -108,9 +88,12 @@ services:
       # left side of the colon, for example /path/to/music:/app/data/downloads.
       - ./data/downloads:/app/data/downloads
       # The temp directory data/tmp stays inside the container and needs no
-      # mount.
-      # The wrapper's data, read-only, for AMDL_WRAPPER_DATA_DIR above: option
-      # A's volume or option B's directory.
+      # mount; with an NVMe drive, mount one there for faster scratch files.
+      # The wrapper's data, read-only, so the backend uses the media-user-token
+      # the wrapper keeps there: option A's volume or option B's directory.
+      # Then set Settings > Account > Session service data folder to
+      # "/app/data/wrapper-manager/wrapper/rootfs/data" (A) or
+      # "/app/data/wrapper" (B).
       # - wrapper-data:/app/data/wrapper-manager:ro
       # - ./data/wrapper:/app/data/wrapper:ro
 
@@ -122,9 +105,9 @@ services:
   # namespaces and chroot, which Docker blocks by default, hence privileged
   # (a seccomp profile that allows unshare works too). Linux amd64 or arm64.
   # Hosts without user namespaces: see docs/deployment.md, "The wrapper".
-  # Uncomment, set AMDL_WRAPPER_ADDRESS above to "http://wrapper-manager:8080",
-  # and add the wrapper-data volume at the bottom of this file. Then log in on
-  # the console's Account page.
+  # Uncomment, add the wrapper-data volume at the bottom of this file, set the
+  # session service to "http://wrapper-manager:8080" in Settings and restart.
+  # Then log in on the console's Account page.
   # wrapper-manager:
   #   build: https://github.com/WorldObservationLog/wrapper-manager.git#v2
   #   image: wrapper-manager:latest
@@ -140,8 +123,8 @@ services:
   # NDK and takes a while. It has no login API: put USERNAME and PASSWORD in a
   # .env file next to this one (never in this file) for the first start, which
   # logs in; if Apple asks for a 2FA code, write it to 2fa.txt in the mounted
-  # data directory. Uncomment, and set AMDL_WRAPPER_ADDRESS above to
-  # "http://wrapper-lite:12340".
+  # data directory. Uncomment, and set the session service to
+  # "http://wrapper-lite:12340" in Settings, then restart.
   # wrapper-lite:
   #   build: https://github.com/WorldObservationLog/wrapper.git#lite
   #   container_name: wrapper-lite

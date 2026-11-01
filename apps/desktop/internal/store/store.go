@@ -30,6 +30,9 @@ type Store struct {
 	client *client.Client
 	ctx    context.Context
 	cancel context.CancelFunc
+	// AutoRestart restarts the backend as soon as a saved key waits for a
+	// restart: set while the app runs the backend itself.
+	AutoRestart bool
 
 	// Conn is the job feed's connection, and ConnChanged when it last
 	// changed phase.

@@ -112,7 +112,7 @@ func (a *App) fieldOff(f *configField) bool {
 func (a *App) fieldRow(c *ui.Context, k *Tokens, f *configField) {
 	cf := &a.Store.Config
 	off := a.fieldOff(f)
-	wide := f.kind == fieldPath || f.kind == fieldTemplate || f.kind == fieldToken || f.kind == fieldList
+	wide := f.kind == fieldPath || f.kind == fieldTemplate || f.kind == fieldText || f.kind == fieldToken || f.kind == fieldList
 	row := ui.Column(c.Key(f.key)).Gap(10).PaddingY(12)
 	if off {
 		row.Opacity(0.45)
@@ -179,7 +179,7 @@ func (a *App) fieldControl(c *ui.Context, k *Tokens, f *configField, off bool) {
 				ui.Text(c, f.unit).FontSize(12).TextColor(k.Muted).Width(34)
 			}
 		})
-	case fieldPath, fieldTemplate:
+	case fieldPath, fieldTemplate, fieldText:
 		a.pathField(c, k, f, valueText(v))
 	case fieldToken:
 		a.tokenField(c, k, f, valueText(v))

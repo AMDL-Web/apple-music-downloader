@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"amdl/apps/desktop/internal/ffmpeg"
@@ -55,10 +56,17 @@ func (a *App) wrapperDir() string { return a.localDirs().WrapperDir() }
 
 // localBackend is the backend standalone mode runs, from the settings. It
 // runs the wrapper the setup screen or amdl wrapper install installed, when
-// there is one, in place of WrapperAddress. The downloads folder is
-// config.yaml's, which Settings changes through the API.
+// there is one, in place of WrapperAddress. config.yaml owns the wrapper
+// address: the setting is written there only on a first start and after
+// Apply changed it, so a change made in Settings or the console stays. The
+// downloads folder is config.yaml's too, which Settings changes through the
+// API.
 func (a *App) localBackend() local.Backend {
-	b := local.Backend{Dirs: a.localDirs(), Wrapper: a.settings.WrapperAddress, ManageWrapper: true}
+	b := local.Backend{Dirs: a.localDirs(), ManageWrapper: true}
+	if _, err := os.Stat(b.ConfigPath()); a.wrapperApplied || err != nil {
+		b.Wrapper = a.settings.WrapperAddress
+	}
+	a.wrapperApplied = false
 	if path, _, err := ffmpeg.Find(a.settings.FFmpeg, a.dirs.Resources); err == nil {
 		b.FFmpeg = path
 	} else {
@@ -146,6 +154,8 @@ func (a *App) useLocal(gen int, b local.Backend, own *ownBackend, shared local.R
 		return
 	}
 	a.store.Connect(c)
+	// A key saved for a restart applies at once on the backend this app runs.
+	a.store.AutoRestart = own != nil
 	if own == nil {
 		go a.watchShared(gen, b, shared.URL)
 	}

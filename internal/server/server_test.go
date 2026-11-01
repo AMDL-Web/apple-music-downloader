@@ -31,13 +31,11 @@ func newRunEnv(t *testing.T, hooksYAML string) Options {
 			t.Fatal(err)
 		}
 	}
-	seed := fmt.Sprintf("logging:\n  console: false\ndownload:\n  downloads_dir: %q\n  temp_dir: %q\nsimulate:\n  enabled: true\n",
-		filepath.Join(root, "downloads"), filepath.Join(root, "tmp"))
+	seed := fmt.Sprintf("server:\n  listen: \"127.0.0.1:0\"\ndatabase:\n  path: %q\nlogging:\n  console: false\ndownload:\n  downloads_dir: %q\n  temp_dir: %q\nsimulate:\n  enabled: true\n",
+		filepath.Join(root, "db", "amdl.db"), filepath.Join(root, "downloads"), filepath.Join(root, "tmp"))
 	if err := os.WriteFile(files.ConfigPath, []byte(seed), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AMDL_SERVER_LISTEN", "127.0.0.1:0")
-	t.Setenv("AMDL_DATABASE_PATH", filepath.Join(root, "db", "amdl.db"))
 	return files
 }
 
@@ -80,7 +78,7 @@ func TestRunReturnsStartupErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer busy.Close()
-		t.Setenv("AMDL_SERVER_LISTEN", busy.Addr().String())
+		setListen(t, files.ConfigPath, busy.Addr().String())
 		if err := Run(context.Background(), files); err == nil || !strings.Contains(err.Error(), "listen on") {
 			t.Fatalf("Run() = %v, want a listen error", err)
 		}
@@ -104,7 +102,7 @@ func TestRunStopsCleanlyWhenItsContextEnds(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("run did not return after its context ended")
 	}
-	store, err := db.Open(os.Getenv("AMDL_DATABASE_PATH"))
+	store, err := db.Open(filepath.Join(filepath.Dir(filepath.Dir(files.ConfigPath)), "db", "amdl.db"))
 	if err != nil {
 		t.Fatalf("reopen database: %v", err)
 	}

@@ -1,13 +1,16 @@
 # internal/config
 
-Config loading, validation and persistence. The runtime-key list, env overrides and
-the `Default()`-equals-example rule are in the package comment
+Config loading, validation and persistence. The key classes and the
+`Default()`-equals-example rule are in the package comment
 (`go doc ./internal/config`) and its tests. What a key's example comment must say
 is in root `AGENTS.md` "Config".
 
-- Classify every new key with `isRuntimeKey`. Environment overrides exist only for
-  startup keys, so `PUT /api/v1/config` never has to refuse a key the environment
-  would mask.
+- Classify every new key in `classOf`: runtime when every reader takes it from the
+  live snapshot, restart when a component built at startup captures it, file only
+  when a wrong value through the API would break the install. A key that falls to
+  the file class by default fails `TestFileClassIsTheThreeInstallKeys`.
+- No environment variable sets a key; a new install type seeds its first values
+  with `amdl serve --init` (`Seed`).
 - API writes go through `Store.UpdateAndSave`, which re-reads the file under its
   lock so a hand edit is not overwritten; `Store.Set` does not touch the file.
 - Unknown keys fail startup, so renaming or removing a key is a breaking change

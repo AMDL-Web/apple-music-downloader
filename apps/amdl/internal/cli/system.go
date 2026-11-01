@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -17,6 +18,7 @@ import (
 	"amdl/apps/console"
 	"amdl/internal/buildinfo"
 	"amdl/internal/capability"
+	"amdl/internal/config"
 	"amdl/internal/local"
 	"amdl/internal/server"
 	"amdl/internal/sysproc"
@@ -54,12 +56,9 @@ func configGetCmd(*flag.FlagSet) func(e *env, args []string) error {
 // unknownConfigKey is the error for a key the runtime config does not have,
 // naming the closest runtime key when one is a likely misspelling.
 func unknownConfigKey(key string, cfg map[string]any) error {
-	hint := "amdl config get lists the runtime keys; startup keys are under startup in amdl system get"
-	if key == "wrapper.address" {
-		hint = restartWithWrapper
-	}
+	hint := "amdl config get lists the keys it can change; server.listen, database.path and tools.ffmpeg are under startup in amdl system get and change only in the file"
 	ce := &cliError{Code: "config_key_not_found", exit: exitNotFound,
-		Message: key + " is not a runtime config key", Hint: hint}
+		Message: key + " is not a config key the API can change", Hint: hint}
 	best, bestCost := "", 3 // more edits than this is not a misspelling
 	for _, k := range configKeys(cfg, "") {
 		if d := editDistance(key, k); d <= bestCost {
@@ -159,8 +158,9 @@ func configSetCmd(*flag.FlagSet) func(e *env, args []string) error {
 		// The answer is the whole runtime config; echo only the keys set.
 		return e.send(capability.Request{Method: http.MethodPut, Path: "/api/v1/config", Body: patch}, func(raw []byte) error {
 			var resp struct {
-				Config    map[string]any `json:"config"`
-				Persisted bool           `json:"persisted"`
+				Config         map[string]any `json:"config"`
+				Persisted      bool           `json:"persisted"`
+				PendingRestart []string       `json:"pending_restart"`
 			}
 			if err := json.Unmarshal(raw, &resp); err != nil {
 				return err
@@ -171,7 +171,11 @@ func configSetCmd(*flag.FlagSet) func(e *env, args []string) error {
 					set[key] = v
 				}
 			}
-			return e.out.result(map[string]any{"config": set, "persisted": resp.Persisted})
+			pending := resp.PendingRestart
+			if pending == nil {
+				pending = []string{}
+			}
+			return e.out.result(map[string]any{"config": set, "persisted": resp.Persisted, "pending_restart": pending})
 		})
 	}
 }
@@ -210,24 +214,47 @@ func serveCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	onLocal := fs.Bool("local", false, "use this machine's local files, the desktop app's, instead of --config and --hooks")
 	background := fs.Bool("background", false, "with --local: log to the log file instead of the terminal, as amdl service runs it")
 	listen := fs.String("listen", "", "with --local: the loopback address to listen on (default a free port)")
+	var seeds []config.Seed
+	fs.Func("init", "key=value written into config.yaml when serve creates it; repeatable (a loopback server.listen in an existing file is also rewritten to a server.listen given here)", func(s string) error {
+		seed, err := config.ParseSeed(s)
+		if err == nil {
+			seeds = append(seeds, seed)
+		}
+		return err
+	})
 	return func(e *env, args []string) error {
 		if len(args) > 0 {
-			return usageErr("usage: amdl serve [--config path] [--hooks path] | amdl serve --local [--background] [--listen addr]")
+			return usageErr("usage: amdl serve [--config path] [--hooks path] [--init key=value]... | amdl serve --local [--background] [--listen addr]")
 		}
 		if *onLocal {
+			if len(seeds) > 0 {
+				return usageErr("--init goes without --local; the local backend writes its own config.yaml")
+			}
 			return serveLocal(e, *background, *listen, !*noConsole)
 		}
 		if *background || *listen != "" {
 			return usageErr("--background and --listen go with --local; elsewhere server.listen in the config sets the address")
 		}
 		opts := serveOptions(e.Getenv, *cfg, *hooks, !*noConsole)
-		if err := server.Run(e.ctx, opts); err != nil {
+		opts.Init = seeds
+		if err := runRestarting(e.ctx, opts); err != nil {
 			if !server.Logged(err) {
 				fmt.Fprintf(os.Stderr, "amdl backend failed: %v\n", err)
 			}
 			return &cliError{Code: "serve_failed", Message: err.Error(), exit: exitInternal}
 		}
 		return nil
+	}
+}
+
+// runRestarting runs the backend until ctx ends, starting it again each time
+// POST /api/v1/system/restart stops it (server.ErrRestart).
+func runRestarting(ctx context.Context, opts server.Options) error {
+	for {
+		err := server.Run(ctx, opts)
+		if !errors.Is(err, server.ErrRestart) || ctx.Err() != nil {
+			return err
+		}
 	}
 }
 
@@ -238,7 +265,7 @@ func serveLocal(e *env, background bool, listen string, withConsole bool) error 
 	if err != nil {
 		return err
 	}
-	b := local.Backend{Dirs: dirs, Wrapper: or(e.wrapper, e.Getenv("AMDL_WRAPPER_ADDRESS")), LogOutput: os.Stdout, ManageWrapper: true}
+	b := local.Backend{Dirs: dirs, Wrapper: e.wrapper, LogOutput: os.Stdout, ManageWrapper: true}
 	if withConsole {
 		b.Console = console.Handler()
 	}

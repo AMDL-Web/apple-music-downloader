@@ -15,24 +15,18 @@ import (
 // startup failure or warning about one of them tells the operator where to look.
 const UpgradeGuide = "docs/upgrading-to-2.0.md"
 
-// Load reads the combined config file, overlays the AMDL_* environment
-// overrides (env.go), clamps oversized limits, and validates the result.
+// Load reads the combined config file, clamps oversized limits, and
+// validates the result.
 func Load(path string) (Config, error) {
-	return load(path, os.Environ())
-}
-
-// load is Load with an explicit environment, so tests and bootstrapping can
-// read files without baking process overrides into them.
-func load(path string, environ []string) (Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return Default(), err
 	}
-	return loadBytes(path, raw, environ)
+	return loadBytes(path, raw)
 }
 
-// loadBytes is load for a file already read; path labels its errors.
-func loadBytes(path string, raw []byte, environ []string) (Config, error) {
+// loadBytes is Load for a file already read; path labels its errors.
+func loadBytes(path string, raw []byte) (Config, error) {
 	cfg := Default()
 	if unknown := unknownKeys(raw); len(unknown) > 0 {
 		return cfg, fmt.Errorf("%s: unknown config key(s) %s; removed keys and their replacements are listed in %s",
@@ -43,7 +37,6 @@ func loadBytes(path string, raw []byte, environ []string) (Config, error) {
 	if err := decoder.Decode(&cfg); err != nil {
 		return cfg, fmt.Errorf("decode %s: %w", path, err)
 	}
-	applyEnvOverrides(&cfg, environ)
 	// A file may hold values above the limits (hand edits, files written by an
 	// older backend); clamp them instead of refusing to boot. The runtime
 	// config API rejects the same values with an explicit error.

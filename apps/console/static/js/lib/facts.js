@@ -1,5 +1,6 @@
-// Read-only fact rows for the Settings sections: values fixed at startup that
-// GET /system reports, and which saved config keys make the stores refetch. Pure.
+// Read-only fact rows for the Settings sections: what GET /system reports that
+// the API cannot change (built-in pool sizes, the three keys set only in
+// config.yaml), and which saved config keys make the stores refetch. Pure.
 
 import { count } from './format.js';
 
@@ -13,23 +14,13 @@ function ffmpeg(system) {
   return { text: 'Missing', role: system.simulate === true ? 'neutral' : 'danger' };
 }
 
-function logBuffer(system) {
-  const n = system.startup && system.startup.log_buffer_size;
-  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
-  return n === 0 ? { text: 'Off', role: 'warning' } : { text: `${count(n)} lines` };
-}
-
 // { id, label, section, configKey?, chip: 'config' | 'builtin' | 'file' | 'managed', read(system) -> {text, mono?, role?} | null, title? }
 export const FIXED_ROWS = [
-  { id: 'default_storefront', label: 'Default storefront', section: 'account', configKey: 'catalog.default_storefront', chip: 'config', read: (s) => str(typeof s.default_storefront === 'string' ? s.default_storefront.toUpperCase() : null) },
-  { id: 'catalog_language', label: 'Catalog language', section: 'account', configKey: 'catalog.language', chip: 'config', read: (s) => str(s.startup && s.startup.catalog_language) },
-  { id: 'wrapper_address', label: 'Session service', section: 'account', configKey: 'wrapper.address', chip: 'config', read: (s) => str(s.startup && s.startup.wrapper_address, true) },
-  { id: 'max_running_jobs', label: 'Jobs at once', section: 'jobs', configKey: 'download.max_running_jobs', chip: 'config', read: (s) => num(s.jobs && s.jobs.workers) },
-  { id: 'max_parallel_downloads', label: 'Parallel track downloads', section: 'jobs', configKey: 'download.max_parallel_downloads', chip: 'config', read: (s) => num(s.pools && s.pools.downloads) },
-  { id: 'max_parallel_requests', label: 'Apple Music requests at once', section: 'jobs', configKey: 'catalog.max_parallel_requests', chip: 'config', read: (s) => num(s.startup && s.startup.max_parallel_requests) },
+  // Shown only while amdl runs the wrapper itself (managedWrapperRow); the
+  // address is otherwise the wrapper.address field.
+  { id: 'wrapper_address', label: 'Session service', section: 'account', configKey: 'wrapper.address', chip: 'managed', read: () => null },
   { id: 'decrypts', label: 'Decrypt slots', section: 'jobs', chip: 'builtin', title: 'One per CPU', read: (s) => num(s.pools && s.pools.decrypts) },
   { id: 'wrapper_requests', label: 'Session-service requests', section: 'jobs', chip: 'builtin', read: (s) => num(s.pools && s.pools.wrapper_requests) },
-  { id: 'log_buffer_size', label: 'Log history', section: 'logging', configKey: 'logging.buffer_size', chip: 'config', read: logBuffer },
   { id: 'listen', label: 'Listen address', section: 'server', configKey: 'server.listen', chip: 'config', read: (s) => str(s.startup && s.startup.listen, true) },
   { id: 'database_path', label: 'Database', section: 'server', configKey: 'database.path', chip: 'config', read: (s) => str(s.startup && s.startup.database_path, true) },
   { id: 'ffmpeg', label: 'ffmpeg', section: 'server', configKey: 'tools.ffmpeg', chip: 'config', read: ffmpeg },
@@ -56,8 +47,8 @@ export function factRows(section, system, pending = false, wrapper = null) {
   const out = [];
   for (const row of FIXED_ROWS) {
     if (row.section !== section) continue;
-    if (row.id === 'wrapper_address' && !pending && wrapper && wrapper.managed) {
-      out.push(managedWrapperRow(row, system, wrapper.managed));
+    if (row.id === 'wrapper_address') {
+      if (!pending && wrapper && wrapper.managed) out.push(managedWrapperRow(row, system, wrapper.managed));
       continue;
     }
     const value = pending ? { text: '' } : row.read(system);
@@ -82,6 +73,7 @@ export const REFRESH_ON_SAVE = [
   ['library_sync.', ['librarySync']],
   ['catalog.media_user_token', ['librarySync']],
   ['catalog.motion_artwork_enabled', ['system']],
+  ['catalog.default_storefront', ['system']],
   ['download.downloads_dir', ['system']],
   ['download.temp_dir', ['system']],
 ];

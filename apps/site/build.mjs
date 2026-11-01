@@ -134,9 +134,9 @@ const CODE = {
     ],
     docker: [
       [{ lines: ['$ mkdir amdl && cd amdl', '$ mkdir -p data/downloads && chown 1000:1000 data/downloads', `$ curl -fsSLO ${RAW}/deploy/docker-compose.yml`] }],
-      [{ lines: ['AMDL_WRAPPER_ADDRESS: "http://wrapper-manager:8080"'] }],
-      [{ lines: ['$ docker compose up -d'] }],
       [],
+      [{ lines: ['$ docker compose up -d'] }],
+      [{ lines: ['http://wrapper-manager:8080'] }],
     ],
   },
 };

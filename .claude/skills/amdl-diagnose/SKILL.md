@@ -38,7 +38,7 @@ first:
 4. A saved Apple response replayed as a fixture, as the internal/applemusic tests
    do.
 5. State bugs: a copy of the user's SQLite file under `data/` (never the original),
-   with `AMDL_DATABASE_PATH` pointing at it.
+   with `database.path` in a copied config pointing at it.
 6. Concurrency: `go test -race -count=200 -run 'TestX' ./internal/<pkg>/`, with
    time, seeds and pool sizes pinned.
 7. "It used to work": `git bisect run <command>` between a good tag and

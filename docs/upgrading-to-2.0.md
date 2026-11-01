@@ -15,11 +15,12 @@ needs the API changes below before it works against 2.0.
 2. If you still have `configs/runtime.yaml`, start 1.x once so it merges the file, or
    copy its keys into `config.yaml` by hand: 2.0 leaves the file alone and never reads
    it.
-3. Move every `AMDL_*` variable except `AMDL_CONFIG`, `AMDL_HOOKS_CONFIG`,
-   `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_WRAPPER_DATA_DIR` and
-   `AMDL_DATABASE_PATH` into
+3. Move every `AMDL_*` variable except `AMDL_CONFIG` and `AMDL_HOOKS_CONFIG` into
    `config.yaml` (for example `AMDL_SIMULATE_ENABLED=true` becomes `enabled: true` under
-   `simulate:`), then unset it: 2.0 ignores the rest and logs a warning naming each one.
+   `simulate:`), then unset it: 2.0 sets no key from the environment and logs a warning
+   naming each variable. That includes `AMDL_WRAPPER_ADDRESS`, `AMDL_WRAPPER_DATA_DIR`,
+   `AMDL_DATABASE_PATH` and `AMDL_SERVER_LISTEN`; the container needs no
+   `server.listen` in the file (see [Config and environment](#config-and-environment)).
 4. Remove the keys listed as removed under [Config and environment](#config-and-environment)
    from `config.yaml` if present, and the removed keys under [Hooks](#hooks) from
    `hooks.yaml` (`timeout_seconds` and `max_concurrent` at the top level,
@@ -35,8 +36,9 @@ needs the API changes below before it works against 2.0.
    which fronts wrapper-lite over HTTP and has the login API the console's Account page
    uses, or a bare
    [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite), logged in
-   with its own `--login`. Set `wrapper.address` (or `AMDL_WRAPPER_ADDRESS`) to its URL,
-   such as `http://wrapper-manager:8080` or `http://127.0.0.1:12340`. Without Docker, the
+   with its own `--login`. Set `wrapper.address` to its URL in `config.yaml`, or after the
+   first start in the console's Settings › Account › Session service (then restart from
+   its notice), such as `http://wrapper-manager:8080` or `http://127.0.0.1:12340`. Without Docker, the
    `amdl` binary can also run wrapper-lite itself in a QEMU guest on the backend's machine
    (`amdl wrapper install`, [Install](install.md#a-wrapper-amdl-runs)), which sets
    `wrapper.address` for you and has a login of its own. 2.0 no longer speaks the fork's
@@ -64,11 +66,12 @@ needs the API changes below before it works against 2.0.
 4. In the Compose file:
    - add the wrapper service (wrapper-manager v2 or wrapper-lite) from
      [`deploy/docker-compose.yml`](../deploy/docker-compose.yml), or keep a wrapper on the host;
-   - set `AMDL_WRAPPER_ADDRESS` to its URL, for example `http://wrapper-manager:8080`
-     (a `host:port` value fails startup);
+   - remove `AMDL_WRAPPER_ADDRESS` and set `wrapper.address` instead: in `config.yaml`
+     before the start, or in Settings › Account › Session service after it, for example
+     `http://wrapper-manager:8080` (a `host:port` value fails startup);
    - drop the `./data/logs` mount and any `.p8` key mount;
    - keep `stop_grace_period: 2m`;
-   - remove every other `AMDL_*` variable except the six 2.0 reads;
+   - remove every other `AMDL_*` variable except `AMDL_CONFIG` and `AMDL_HOOKS_CONFIG`;
    - make sure the host downloads directory is writable by `PUID:PGID`: the 2.0
      entrypoint re-owns only the backend's own state and no longer changes the
      downloads directory's owner ([Deployment](deployment.md#ownership));
@@ -127,17 +130,31 @@ needs the API changes below before it works against 2.0.
 | Media-user-token per request | `overrides.media_user_token` on `POST /downloads` and `media_user_token` on `POST /lookup` overlaid `catalog.media_user_token` (`""` cleared it) | removed (`400 invalid_request` naming the field); downloads and lookups use the backend's own token: the wrapper's when the backend can read it, else `catalog.media_user_token` | scripts that passed a token per request |
 | Job `overrides` in responses and events | could hold every field above; the token was redacted | holds only the five fields above | job detail clients |
 | Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | client generators that key on `info.version`; requests are unchanged |
-| New | | `GET /system` (with `default_storefront`; it reports no signing mode, because the backend signs no token), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search`, `GET /artists/{id}/albums` and `GET /albums/{id}` (catalog search, an artist's albums and an album's songs), web console at `/console/` (`/` redirects there) | none: additions only |
+| `PUT /config` keys | runtime keys only; every other key `422 config_key_not_mutable` | every key except `server.listen`, `database.path` and `tools.ffmpeg`. Restart keys (`wrapper.address`, the wrapper timeouts, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size` and the three pool sizes) are saved, listed in the answer's `pending_restart` and applied by the next start; `catalog.default_storefront` and `wrapper.data_dir` apply at once. `wrapper.address` is refused (`config_key_not_mutable`, `details.reason` `managed_wrapper`) while amdl runs the wrapper itself | clients that relied on the 422 for those keys |
+| `GET /config` | the runtime keys | also the restart keys, as saved in the file, and a `pending_restart` array | clients that walk every key of `config` |
+| New | | `GET /system` (with `default_storefront` and `pending_restart`; it reports no signing mode, because the backend signs no token), `POST /system/restart` (stops and starts the backend in the same process), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search`, `GET /artists/{id}/albums` and `GET /albums/{id}` (catalog search, an artist's albums and an album's songs), web console at `/console/` (`/` redirects there) | none: additions only |
 
 ## Config and environment
 
-- Environment overrides: 1.x read `AMDL_<SECTION>_<KEY>` for every key. 2.0 reads six
-  variables: `AMDL_CONFIG`, `AMDL_HOOKS_CONFIG` and the overrides `AMDL_SERVER_LISTEN`,
-  `AMDL_WRAPPER_ADDRESS`, `AMDL_WRAPPER_DATA_DIR`, `AMDL_DATABASE_PATH`. Every other `AMDL_*` variable, such as
-  `AMDL_SIMULATE_ENABLED`, `AMDL_DOWNLOAD_DOWNLOADS_DIR` or `AMDL_LOGGING_LEVEL`, is
-  ignored, and startup logs one warning per variable; set the key in `config.yaml`
-  instead. That covers the removed `AMDL_RUNTIME_CONFIG` (a leftover `runtime.yaml` is
-  ignored), `AMDL_LISTEN` and `AMDL_WRAPPER_ADDR`.
+- Environment overrides: 1.x read `AMDL_<SECTION>_<KEY>` for every key. 2.0 sets no key
+  from the environment and reads two variables, `AMDL_CONFIG` and `AMDL_HOOKS_CONFIG`, the
+  file paths. Every other `AMDL_*` variable, such as `AMDL_SIMULATE_ENABLED`,
+  `AMDL_DOWNLOAD_DOWNLOADS_DIR`, `AMDL_LOGGING_LEVEL`, `AMDL_SERVER_LISTEN` or
+  `AMDL_WRAPPER_ADDRESS`, is ignored, and startup logs one warning per variable; set the
+  key in `config.yaml` or the console's Settings instead. That covers the removed
+  `AMDL_RUNTIME_CONFIG` (a leftover `runtime.yaml` is ignored), `AMDL_LISTEN` and
+  `AMDL_WRAPPER_ADDR`.
+- The container image no longer sets `server.listen` and `wrapper.address` from the
+  environment on every start. It writes `server.listen: ":18080"` and
+  `wrapper.address: "http://host.docker.internal:12340"` into a `config.yaml` it creates
+  (`amdl serve --init`), and rewrites a loopback `server.listen` in an existing file to
+  `:18080` on every start, with a warning, so an upgraded container stays reachable. Its
+  health check probes port 18080. An existing file keeps its `wrapper.address`, often the
+  example's `http://127.0.0.1:12340`, which points at the container itself: after the
+  first start set Settings › Account › Session service to the wrapper's URL and restart
+  from the notice there.
+- The CLI's `serve --local`, `service install` and `--server embedded` no longer fall back
+  to `AMDL_WRAPPER_ADDRESS` for the first start's wrapper address: pass `--wrapper`.
 - SIGHUP no longer reloads the config file; the backend ignores it. Use
   `POST /config/reload` (the console's "Reload from file") after a hand edit;
   `docker compose kill -s SIGHUP amdl-backend` no longer does anything.
@@ -175,7 +192,7 @@ needs the API changes below before it works against 2.0.
   | Key | 1.x default | 2.0 default |
   | --- | --- | --- |
   | `wrapper.address` | `127.0.0.1:8080` | `http://127.0.0.1:12340` |
-  | `AMDL_WRAPPER_ADDRESS` in the image, when Compose does not set it | `host.docker.internal:8080` | `http://host.docker.internal:12340` |
+  | Wrapper address of the image | `host.docker.internal:8080`, from `AMDL_WRAPPER_ADDRESS` | `http://host.docker.internal:12340`, written into a new `config.yaml` |
   | `catalog.default_storefront` | `us` | `cn` |
   | `catalog.language` | `en-US` | `zh-Hans_CN` |
   | `download.quality_priority` | `[alac, aac]` | `[alac]` |
@@ -226,7 +243,7 @@ the Compose service name stay as they were.
 | Area | 1.x | 2.0 | Affects |
 | --- | --- | --- | --- |
 | Wrapper service | the wrapper-manager fork over gRPC; it decrypted samples | wrapper-lite over HTTP; it returns a key template per key URI and the backend decrypts | deployments |
-| `wrapper.address` | gRPC `host:port` | wrapper URL (wrapper-lite or wrapper-manager v2), `http://host:port` or `https://host:port`; anything else, in the file or in `AMDL_WRAPPER_ADDRESS`, fails startup | `config.yaml`, Compose files |
+| `wrapper.address` | gRPC `host:port` | wrapper URL (wrapper-lite or wrapper-manager v2), `http://host:port` or `https://host:port`; anything else fails startup in the file and `422 invalid_config` in a `PUT /config` | `config.yaml`, Compose files |
 | `wrapper.insecure` | `true` for plaintext gRPC, `false` for TLS | rejected in the file; the URL scheme picks plaintext (`http`) or TLS 1.2+ (`https`) | `config.yaml` |
 | `wrapper.timeout_seconds` | bound on a unary RPC and on each decrypt-fragment wait | bound on one wrapper HTTP request; decryption has no wrapper timeout | `config.yaml` |
 | Where the wrapper runs | whatever your wrapper-manager deployment needed | `wrapper-lite-rootless`, which both wrapper-lite's Docker image and wrapper-manager v2 run, needs user namespaces and `chroot`: `unshare -Ur true` must succeed on the wrapper host, and a Docker container needs `privileged: true` or a seccomp profile that allows them. A host without them uses wrapper-manager v2's QEMU variant, which needs `/dev/kvm` ([deployment guide](deployment.md#the-wrapper)), or, without Docker, a QEMU guest the `amdl` binary runs ([Install](install.md#a-wrapper-amdl-runs)) | wrapper hosts, Compose files |

@@ -1,4 +1,4 @@
-// Read-only rows of a Settings section: values fixed at startup
+// Read-only rows of a Settings section: values the API cannot change
 // (lib/facts.js FIXED_ROWS, read from GET /system) and a few more facts the
 // section shows, laid out on the field grid so values end where controls
 // end. A chip says what fixes the value; facts never enter the draft.

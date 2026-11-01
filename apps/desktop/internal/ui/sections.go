@@ -24,6 +24,11 @@ func (a *App) backendSection(c *ui.Context, k *Tokens, id string) {
 		a.hookList(c, k)
 	}
 	a.facts(c, k, id)
+	// A backend this app runs restarts by itself (Store.AutoRestart); another
+	// one offers the restart beside the keys that wait for it.
+	if waiting := pendingIn(s.Config.PendingRestart, id); len(waiting) > 0 && !s.AutoRestart {
+		actionRow(c, k, "Restart to apply "+strings.Join(waiting, ", "), "Restart", s.RestartServer)
+	}
 	a.sectionFields(c, k, id)
 	switch id {
 	case "library_sync":
@@ -39,6 +44,19 @@ func (a *App) backendSection(c *ui.Context, k *Tokens, id string) {
 	case "server":
 		a.configFile(c, k)
 	}
+}
+
+// pendingIn are the labels of the keys in pending whose field is in section.
+func pendingIn(pending []string, section string) []string {
+	var out []string
+	for _, key := range pending {
+		for i := range configFields {
+			if f := &configFields[i]; f.key == key && f.section == section {
+				out = append(out, f.label)
+			}
+		}
+	}
+	return out
 }
 
 // sectionFields are the section's fields: those of no group first, then a
@@ -126,20 +144,10 @@ func (a *App) facts(c *ui.Context, k *Tokens, id string) {
 		}
 	}
 	switch id {
-	case "account":
-		if sys != nil {
-			add(fact{label: "Default storefront", value: strings.ToUpper(sys.DefaultStorefront)})
-		}
 	case "jobs":
 		if sys != nil {
-			add(fact{label: "Jobs at once", value: fmt.Sprint(sys.Jobs.Workers)})
-			add(fact{label: "Parallel track downloads", value: fmt.Sprint(sys.Pools.Downloads)})
 			add(fact{label: "Decrypt slots", value: fmt.Sprint(sys.Pools.Decrypts), from: fromBuild})
 			add(fact{label: "Wrapper requests at once", value: fmt.Sprint(sys.Pools.WrapperRequests), from: fromBuild})
-		}
-	case "logging":
-		if st != nil {
-			add(fact{label: "Log entries kept", value: fmt.Sprint(st.LogBufferSize)})
 		}
 	case "server":
 		if sys != nil {
@@ -156,9 +164,6 @@ func (a *App) facts(c *ui.Context, k *Tokens, id string) {
 		if st != nil {
 			add(fact{label: "Listen address", value: st.Listen, mono: true})
 			add(fact{label: "Database", value: st.DatabasePath, mono: true})
-			add(fact{label: "Wrapper address", value: st.WrapperAddress, mono: true})
-			add(fact{label: "Catalog language", value: st.CatalogLanguage})
-			add(fact{label: "Apple requests at once", value: fmt.Sprint(st.MaxParallelRequests)})
 		}
 	}
 	if len(fs) == 0 {

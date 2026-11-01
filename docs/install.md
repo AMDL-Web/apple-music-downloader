@@ -170,10 +170,10 @@ amdl config set simulate.enabled=true
 amdl download <album or song link> --wait
 ```
 
-For another port, start it with `AMDL_SERVER_LISTEN=127.0.0.1:18081 amdl serve` and
-set `AMDL_URL` to match. In PowerShell, set each variable on a line of its own, such as
+For another port, start it once with `amdl serve --init server.listen=127.0.0.1:18081`
+(it applies when `serve` creates the config) and set `AMDL_URL` to match. In PowerShell, set each variable on a line of its own, such as
 `$env:AMDL_URL = 'http://127.0.0.1:18080'`. `serve --listen` works with `--local` only;
-a plain `amdl serve` listens on `server.listen` from its config or `AMDL_SERVER_LISTEN`.
+a plain `amdl serve` listens on `server.listen` from its config.
 Change other settings with `amdl config set` too. Stop it with Ctrl-C and delete the
 directory when done.
 
@@ -250,11 +250,11 @@ console's Account page, the terminal interface's `/login`, or `amdl wrapper logi
 `amdl wrapper status` shows its `managed` state, `amdl wrapper logs` its console with
 secrets redacted, and `amdl wrapper stop` / `start` turn it off and on.
 
-While the guest is installed, a `--wrapper` address (or `AMDL_WRAPPER_ADDRESS`) given to
-that backend is ignored, with a line in its log. To use another wrapper instead, run
-`amdl wrapper uninstall`, then `amdl service install --wrapper <address>` (or restart
-`amdl serve --local --wrapper <address>`); `wrapper.address` is a startup key that
-`amdl config set` cannot change.
+While the guest is installed, a `--wrapper` address given to that backend is ignored,
+with a line in its log, and `amdl config set wrapper.address=...` is refused. To use
+another wrapper instead, run `amdl wrapper uninstall`, then
+`amdl config set wrapper.address=<address>` and `amdl system restart` (or
+`amdl service install --wrapper <address>`).
 
 | Host | Acceleration |
 | --- | --- |

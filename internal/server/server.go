@@ -13,8 +13,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +41,10 @@ type Options struct {
 	// ConfigPath is config.yaml. A missing file is created from the embedded
 	// example (configs.Example).
 	ConfigPath string
+	// Init are values written into config.yaml when Run creates it (amdl
+	// serve --init); see config.EnsureFile for the one that also applies to
+	// an existing file.
+	Init []config.Seed
 	// HooksPath is hooks.yaml. A missing file disables hooks.
 	HooksPath string
 	// Listener is served when non-nil; otherwise Run listens on server.listen.
@@ -73,10 +79,16 @@ func Logged(err error) bool {
 	return errors.As(err, &logged)
 }
 
-// Run starts the backend, serves until ctx ends or the HTTP server fails, and
-// then stops every component in shutdownSteps order. Every deferred close runs
-// on every return path; a startup failure is returned. Run sets the process's
-// default slog logger to the configured one.
+// ErrRestart is what Run returns after POST /api/v1/system/restart stopped
+// it: the caller runs it again, which reads config.yaml afresh. With a
+// Listener in Options, the caller passes a new one on the same address.
+var ErrRestart = errors.New("restart requested")
+
+// Run starts the backend, serves until ctx ends, the HTTP server fails or a
+// restart is requested, and then stops every component in shutdownSteps
+// order. Every deferred close runs on every return path; a startup failure is
+// returned, and a requested restart returns ErrRestart. Run sets the
+// process's default slog logger to the configured one.
 func Run(ctx context.Context, opts Options) (err error) {
 	if opts.Listener != nil {
 		// Covers the returns before Serve owns it; a second Close is harmless.
@@ -87,12 +99,27 @@ func Run(ctx context.Context, opts Options) (err error) {
 		logOut = os.Stdout
 	}
 	bootstrapLogger := slog.New(slog.NewTextHandler(logOut, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	created, err := config.EnsureFile(opts.ConfigPath, configs.Example)
+	boot, err := config.EnsureFile(opts.ConfigPath, configs.Example, opts.Init...)
 	if err != nil {
 		return fmt.Errorf("bootstrap config: %w", err)
 	}
-	if created {
+	if boot.Created {
 		bootstrapLogger.Info("created config from example", "path", opts.ConfigPath)
+	}
+	for _, r := range boot.Repaired {
+		bootstrapLogger.Warn("config key on a loopback address that cannot be reached here; rewrote it",
+			"key", r.Key, "was", r.File, "now", r.Seed, "path", opts.ConfigPath)
+	}
+	for _, k := range boot.Kept {
+		// A value the operator chose is fine; a loopback one, such as the
+		// example's wrapper address in a container upgraded from 1.x, most
+		// likely points nowhere.
+		level := slog.LevelInfo
+		if u, err := url.Parse(k.File); err == nil && isLoopbackHost(u.Hostname()) {
+			level = slog.LevelWarn
+		}
+		bootstrapLogger.Log(ctx, level, "config.yaml keeps its own value; --init applies only when the file is created; change it in Settings",
+			"key", k.Key, "value", k.File, "init", k.Seed)
 	}
 	cfg, err := config.Load(opts.ConfigPath)
 	if err != nil {
@@ -105,7 +132,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 	slog.SetDefault(logSystem.Logger)
 	logger := logSystem.Logger.With("component", "main")
 	defer func() {
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrRestart) {
 			logger.Error("amdl backend stopped on error", "error", err)
 			err = loggedError{err}
 		}
@@ -199,11 +226,21 @@ func Run(ctx context.Context, opts Options) (err error) {
 	if opts.HooksPath != "" {
 		hooksEditor = hooks.NewEditor(opts.HooksPath, hookDispatcher)
 	}
+	// POST /api/v1/system/restart signals here; the wait below then stops
+	// everything and Run returns ErrRestart for its caller to run it again.
+	restart := make(chan struct{}, 1)
 	apiServer, err := api.New(api.Deps{
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
 		Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
+		WrapperManaged: opts.WrapperHost != nil,
+		Restart: func() {
+			select {
+			case restart <- struct{}{}:
+			default: // one is already on its way
+			}
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("build api server: %w", err)
@@ -252,6 +289,9 @@ func Run(ctx context.Context, opts Options) (err error) {
 	var runErr error
 	select {
 	case <-ctx.Done():
+	case <-restart:
+		logger.Info("restarting: stopping, then starting again from config.yaml")
+		runErr = ErrRestart
 	case err := <-serveErr:
 		// Serve returns only on failure until Shutdown has been called.
 		runErr = fmt.Errorf("http server: %w", err)
@@ -291,6 +331,14 @@ func closeLogged(logger *slog.Logger, what string, closeFn func() error) {
 	if err := closeFn(); err != nil {
 		logger.Error(what, "error", err)
 	}
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // wrapperService is the wrapper client, or the managed wrapper in front of

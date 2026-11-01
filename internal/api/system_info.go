@@ -30,10 +30,14 @@ type systemInfo struct {
 	Tools                []domain.Capability `json:"tools"`
 	Storage              []storageInfo       `json:"storage"`
 	Startup              systemStartup       `json:"startup"`
+	// PendingRestart names the config keys saved with a value the next start
+	// applies (GET /config's pending_restart).
+	PendingRestart []string `json:"pending_restart"`
 }
 
-// systemStartup is the configuration that is read only at startup, so a client
-// can show it without offering to edit it. It carries no credential.
+// systemStartup is the configuration this process read when it started, as
+// it runs: the restart keys' saved values can differ until the next start
+// (pending_restart). It carries no credential.
 type systemStartup struct {
 	ConfigPath          string `json:"config_path"`
 	WrapperAddress      string `json:"wrapper_address"`
@@ -115,6 +119,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 			// A limit <= 0 runs as 1 (limits.NewSemaphore); report the one in effect.
 			MaxParallelRequests: max(1, cfg.Catalog.MaxParallelRequests),
 		},
+		PendingRestart: s.pendingRestart(s.savedConfig()),
 	})
 }
 

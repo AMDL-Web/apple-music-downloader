@@ -55,7 +55,7 @@ test('sections and fields: every field names a section, keys are unique dotted l
     const help = f.help || '';
     assert.ok(!/Default:/.test(help), `${f.key}: the default lives in defaultValue, not the help`);
     assert.ok(!/[.;] .*[.;] /.test(help), `${f.key}: the help is one short line`);
-    assert.equal(Boolean(f.group), f.key.startsWith('simulate.'), `${f.key}: only Server's simulate fields name a group`);
+    assert.equal(Boolean(f.group), f.section === 'server', `${f.key}: only Server's fields name a group`);
     if (f.group) assert.equal(groupById(f.group).section, f.section, `${f.key} names a group of another section`);
     if (f.type === 'select' || f.type === 'list' || f.type === 'set') assert.ok(f.options.length > 0, `${f.key} has options`);
   }
@@ -92,10 +92,10 @@ test('retired section ids and fields open the section that holds them now', () =
 
 test('every runtime key belongs to exactly one of the nine sections, and the board leaves out Lyrics & artwork', () => {
   const counts = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, FIELDS.filter((f) => f.section === s.id).length]));
-  assert.deepEqual(counts, { account: 1, quality: 5, files: 8, lyrics_artwork: 11, jobs: 5, library_sync: 2, hooks: 0, logging: 2, server: 3 });
-  assert.equal(FIELDS.length, 37);
+  assert.deepEqual(counts, { account: 5, quality: 5, files: 8, lyrics_artwork: 11, jobs: 8, library_sync: 2, hooks: 0, logging: 4, server: 6 });
+  assert.equal(FIELDS.length, 49);
   assert.deepEqual(BOARD_SECTIONS.map((s) => s.id), ['account', 'quality', 'files', 'jobs', 'library_sync', 'hooks', 'logging', 'server']);
-  assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['simulate', 'server'], ['config_file', 'server']]);
+  assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['wrapper', 'server'], ['simulate', 'server'], ['config_file', 'server']]);
   assert.equal(SETTINGS_SECTIONS.findIndex((s) => s.split), 5, 'the nav splits before Library sync');
 });
 
@@ -166,7 +166,9 @@ test('parseLockedKey', () => {
 test('fieldErrors maps 422 and 400 answers onto fields', () => {
   const locked = fieldErrors(new ApiError(422, 'config_key_not_mutable', 'fields can only be changed in the config file and require a restart: download.max_running_jobs', { keys: ['download.max_running_jobs'] }));
   assert.deepEqual(Object.keys(locked.fields), ['download.max_running_jobs']);
-  assert.equal(locked.message, 'fields can only be changed in the config file and require a restart: download.max_running_jobs');
+  assert.equal(locked.message, 'fields can only be changed in the config file and require a restart: Jobs at once');
+  const managed = fieldErrors(new ApiError(422, 'config_key_not_mutable', 'wrapper.address is set by the wrapper this machine runs', { keys: ['wrapper.address'], reason: 'managed_wrapper' }));
+  assert.match(managed.fields['wrapper.address'], /runs this machine’s wrapper/);
 
   const range = fieldErrors(new ApiError(422, 'invalid_config', 'download.max_attempts must be at most 10'));
   assert.deepEqual(range.fields, { 'download.max_attempts': 'Tries per file must be at most 10' }, 'by label, not by key');
@@ -298,7 +300,7 @@ test('every field states its default, and every default matches config.example.y
     assert.ok(f.defaultValue !== undefined, `${f.key} states no default`);
     assert.deepEqual(f.defaultValue, exampleDefault(f.key), `${f.key} drifted from config.example.yaml`);
   }
-  const templates = FIELDS.filter((f) => f.type === 'template' || f.type === 'path');
+  const templates = FIELDS.filter((f) => (f.type === 'template' || f.type === 'path') && f.key.startsWith('download.'));
   assert.equal(templates.length, 7);
   for (const f of templates) {
     assert.ok(f.defaultValue, `${f.key} has no defaultValue`);

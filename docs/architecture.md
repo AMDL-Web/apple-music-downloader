@@ -227,7 +227,7 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   "finished" from "broken".
 - `GET /logs` and `GET /logs/stream` page with `cursor` (log sequence) as well; the list
   returns `next_cursor`. With `logging.buffer_size: 0` both answer
-  `503 feature_unavailable`; `buffer_size` is a startup key, so the API decides this
+  `503 feature_unavailable`; `buffer_size` is a restart key, so the API decides this
   once, in `internal/api#New`.
 - Only milestone events reach the overview feed. `item_progress` events are kept while a
   job runs and pruned when it finishes.
