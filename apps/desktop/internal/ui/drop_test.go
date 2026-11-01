@@ -30,7 +30,7 @@ func TestADroppedLinkDownloadsAsAHitDoes(t *testing.T) {
 	// Dropped again while it downloads, it opens that download, as its
 	// search hit does.
 	a.dropLinks(time.Now(), transfer.TextData(link))
-	run(func() bool { return a.Screen == ScreenDetail })
+	run(func() bool { return a.Screen == ScreenAlbum && a.Store.Detail() != nil })
 }
 
 func TestDroppedLinksGoToTheField(t *testing.T) {

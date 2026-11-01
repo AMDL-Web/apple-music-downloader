@@ -143,7 +143,7 @@ func TestQueueRowOpensOnAClickAndKeepsItsMenuForTheRightButton(t *testing.T) {
 	if menu := tt.Menu(); menu != nil {
 		t.Errorf("a click shows the menu %q", menu)
 	}
-	if a.Screen != ScreenDetail || a.Store.DetailID != "f" {
+	if a.Screen != ScreenAlbum || a.Store.DetailID != "f" {
 		t.Errorf("a click shows screen %v with job %q, want the job's detail", a.Screen, a.Store.DetailID)
 	}
 	if !tt.HasText("Broken Album") {
@@ -178,7 +178,7 @@ func TestQueueOpensOnAllAndTheHeroCoverOpensTheJob(t *testing.T) {
 		if err := tt.Click("Open Hero Album"); err != nil {
 			t.Fatal(err)
 		}
-		if a.Screen != ScreenDetail || a.Store.DetailID != "h" {
+		if a.Screen != ScreenAlbum || a.Store.DetailID != "h" {
 			t.Errorf("%s: the hero's cover shows screen %v with job %q, want the job's detail", status, a.Screen, a.Store.DetailID)
 		}
 	}

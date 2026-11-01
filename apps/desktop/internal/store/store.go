@@ -74,6 +74,9 @@ type Store struct {
 
 	nextSeq   int
 	followers map[string]context.CancelFunc
+	// histories names the jobs whose follower read their events from the
+	// first one, for the activity log.
+	histories map[string]bool
 	notified  map[string]domain.JobStatus
 	// tracksRead names the jobs whose tracks WantTracks read.
 	tracksRead map[string]bool
@@ -98,7 +101,7 @@ func (s *Store) reset() {
 	s.Conn, s.ConnChanged, s.LastLive, s.Loaded = client.ConnState{Phase: client.Connecting}, s.now(), time.Time{}, false
 	s.Jobs, s.byID, s.Counts, s.move = nil, map[string]*Job{}, domain.JobStatusCounts{}, nil
 	s.Selection, s.DetailID = map[string]bool{}, ""
-	s.followers, s.notified, s.tracksRead = map[string]context.CancelFunc{}, map[string]domain.JobStatus{}, map[string]bool{}
+	s.followers, s.histories, s.notified, s.tracksRead = map[string]context.CancelFunc{}, map[string]bool{}, map[string]domain.JobStatus{}, map[string]bool{}
 	s.Omni.reset()
 	s.Search.reset()
 	s.Server, s.Config, s.Login = Server{}, Config{}, Login{}
@@ -191,13 +194,22 @@ func (s *Store) CloseDetail() {
 }
 
 // follow starts a follower for j unless one runs. history follows its events
-// from the first one, so the activity log shows the whole run.
+// from the first one, so the activity log shows the whole run: a follower
+// that started later, as every running job's does, starts again from there.
 func (s *Store) follow(j *Job, history bool) {
-	if s.client == nil || s.followers[j.ID] != nil {
+	if s.client == nil {
 		return
 	}
+	if stop := s.followers[j.ID]; stop != nil {
+		if !history || s.histories[j.ID] {
+			return
+		}
+		// The replay writes the log again from its start.
+		stop()
+		j.Activity = nil
+	}
 	ctx, cancel := context.WithCancel(s.ctx)
-	s.followers[j.ID] = cancel
+	s.followers[j.ID], s.histories[j.ID] = cancel, history
 	id, c := j.ID, s.client
 	go func() {
 		err := c.FollowJob(ctx, id, client.JobHandlers{
@@ -207,6 +219,7 @@ func (s *Store) follow(j *Job, history bool) {
 		})
 		s.postIf(ctx, func() {
 			delete(s.followers, id)
+			delete(s.histories, id)
 			if errors.Is(err, client.ErrJobGone) {
 				s.remove(id)
 				return
@@ -227,6 +240,7 @@ func (s *Store) unfollowUnlessNeeded(id string) {
 	if cancel := s.followers[id]; cancel != nil {
 		cancel()
 		delete(s.followers, id)
+		delete(s.histories, id)
 	}
 }
 

@@ -15,20 +15,17 @@ import (
 	"amdl/internal/format"
 )
 
-// heroJob is the job whose palette lights the screen: on the queue the one
-// downloading now, else the one that finished last; the open one on the
-// detail screen.
+// heroJob is the job whose palette lights the queue: the one downloading
+// now, else the one that finished last.
 func (a *App) heroJob() *store.Job {
-	switch a.Screen {
-	case ScreenDetail:
-		return a.Store.Detail()
-	case ScreenQueue:
-		if j := a.Store.Now(); j != nil {
-			return j
-		}
-		if f := a.Store.Finished(); len(f) > 0 {
-			return f[0]
-		}
+	if a.Screen != ScreenQueue {
+		return nil
+	}
+	if j := a.Store.Now(); j != nil {
+		return j
+	}
+	if f := a.Store.Finished(); len(f) > 0 {
+		return f[0]
 	}
 	return nil
 }
@@ -36,7 +33,7 @@ func (a *App) heroJob() *store.Job {
 // backdrop lights the top of the main column with the hero's palette.
 func (a *App) backdrop(c *ui.Context, k *Tokens) {
 	if a.Screen == ScreenAlbum {
-		a.albumBackdrop(c, k)
+		paletteBackdrop(c, k, a.pagePalette(c))
 		return
 	}
 	if a.Screen == ScreenHome {
@@ -50,8 +47,7 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 		return
 	}
 	// A narrow window's queue hero shows the still cover.
-	moving := a.Screen != ScreenQueue || !a.compact
-	pal := jobPalette(j, moving && a.motionShown(c, j.MotionArtworkURL))
+	pal := jobPalette(j, !a.compact && a.motionShown(c, j.MotionArtworkURL))
 	paletteBackdrop(c, k, pal)
 }
 

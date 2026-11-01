@@ -4,20 +4,18 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/store"
-	"amdl/apps/desktop/internal/widgets"
 	"amdl/internal/client"
 	"amdl/internal/domain"
 	"amdl/internal/format"
 )
 
-// The album screen's track list, in DIPs. Its rows take the download
-// page's metrics (trackInset, trackPadY, trackStateWidth) so the two lists
-// of one album line up.
+// The album screen's track list, in DIPs. The album's songs and a
+// download's own tracks share the rows' metrics (trackInset, trackPadY,
+// trackStateWidth), so the list keeps its place when the album is read.
 const (
 	// trackHeight is a skeleton row while the songs load.
 	trackHeight = 48
@@ -29,60 +27,108 @@ const (
 	trackLead   = 4 + trackNumber + 16
 	// trackLength is the length's column.
 	trackLength = 44
+	// trackNamesHeight is a title over the line under it: 17 for the title,
+	// 2 between, 14 for the line, as the type sets them.
+	trackNamesHeight = 33
 )
 
-// OpenAlbum shows an album hit's page, which reads its songs; Back returns
-// to the screen it was opened from.
-func (a *App) OpenAlbum(h client.SearchHit) {
-	// Another album opens at its top.
-	if st := a.scrolls["album"]; st != nil && a.Store.Search.Album.ID != h.ID {
-		st.Y, a.scrollSeen["album"] = 0, 0
-	}
-	a.Store.OpenAlbum(h)
-	a.push(ScreenAlbum)
-}
-
-// revealAlbum chooses, back on home, the album the page showed, so the
-// keys go on from it. The results keep the place they were left at, where
-// it was in view when it opened.
-func (a *App) revealAlbum() {
-	h := a.Store.Search.Album.Hit
-	for _, x := range a.Store.Search.ShownHits() {
-		if store.HitKey(x) == store.HitKey(h) {
-			a.searchSel, a.searchReveal = store.HitKey(h), false
-			return
-		}
-	}
-}
-
-// backLabel names the screen Back returns to.
-func (a *App) backLabel() string {
+// pageTracks lists the page's songs in the lower panel: the album's by
+// disc once read, in the state its download gives each, else the
+// download's own tracks. Skeleton rows stand for them until either is
+// there; a failed read of the album says so only where no download lists
+// them. The stage bars, stages wide, show while the download runs.
+func (a *App) pageTracks(c *ui.Context, k *Tokens, j *store.Job, accent ui.Color, stages float32) {
 	s := a.Store
-	switch a.backTo() {
-	case ScreenHome:
-		if s.Search.Artist.ID != "" && s.Search.Artist.Artist.Name != "" {
-			return clip(s.Search.Artist.Artist.Name, 28)
-		}
-		if s.Search.Term != "" {
-			return "Results"
-		}
-		return "Home"
-	case ScreenAlbum:
-		return clip(albumOf(&s.Search.Album).title, 28)
-	case ScreenSettings:
-		return "Settings"
-	case ScreenDetail:
-		return "Download"
+	p := &s.Search.Album
+	col := ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Padding(14, 24, 0, 32)
+	shown := float32(0)
+	if j != nil && !j.Status.IsTerminal() {
+		shown = stages
 	}
-	return "Queue"
+	bar := col.AnimateTo("stages", shown, orderMotion)
+	col.Children(func() {
+		var items []domain.JobItem
+		if j != nil {
+			items = s.JobItems(j.ID)
+		}
+		switch {
+		case p.ID != "" && p.Status == store.SearchReady:
+			a.albumTracks(c, k, j, items, accent, bar)
+		case len(items) > 0:
+			a.trackList(c, k, items, accent, bar)
+		case p.ID != "" && p.Status == store.SearchFailed && j == nil:
+			searchFailed(c, k, p.Err, s.RetryAlbum)
+		default:
+			n := p.Hit.TrackCount
+			if j != nil && j.TotalItems > 0 {
+				n = j.TotalItems
+			}
+			for i := range min(max(n, 6), 14) {
+				ui.Row(c.Key(i)).Height(trackHeight).PaddingX(4).Gap(16).AlignItems(ui.Center).Children(func() {
+					ui.Row(c).Width(trackNumber).Justify(ui.End).Children(func() { skeleton(c, k, 18, 10) })
+					ui.Column(c).Grow(1).Children(func() { skeleton(c, k, float32(140+(i*53)%160), 10) })
+					skeleton(c, k, 32, 10)
+				})
+			}
+		}
+	})
 }
 
-// clip cuts s to n characters, an ellipsis last.
-func clip(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
+// listStill reports whether the page's list scrolls, which holds its stage
+// bars still; its own scroll counts from this frame on.
+func (a *App) listStill(c *ui.Context) bool {
+	a.scrollState(c, "album")
+	return a.scrolling(c)
+}
+
+// jobMark is the mark a download gives its album's songs.
+func jobMark(j *store.Job) store.MarkState {
+	switch j.Status {
+	case domain.JobQueued, domain.JobRunning:
+		return store.MarkActive
+	case domain.JobCompleted:
+		return store.MarkDone
 	}
-	return string([]rune(s)[:n-1]) + "…"
+	return store.MarkNone
+}
+
+// albumTracks lists the album's songs by disc: in the state the page's
+// download gives each, else the album's mark through a download the feed
+// does not hold, and a song's own download.
+func (a *App) albumTracks(c *ui.Context, k *Tokens, j *store.Job, items []domain.JobItem, accent ui.Color, bar float32) {
+	s := a.Store
+	p := &s.Search.Album
+	al := &p.Album
+	mark := store.MarkNone
+	if j != nil {
+		mark = jobMark(j)
+	} else {
+		var job string
+		if mark, job = s.HitMark(p.Hit); mark != store.MarkNone {
+			items = s.JobItems(job)
+		}
+	}
+	lines := make([]trackMark, len(al.Tracks))
+	for i, t := range al.Tracks {
+		lines[i].mark, lines[i].item = s.TrackMark(t, mark, items)
+	}
+	discs := al.DiscCount > 1
+	still := a.listStill(c)
+	a.scrollArea(c, "album", detailGround(k), scrollGutter, func() {
+		for i, t := range al.Tracks {
+			if discs && (i == 0 || t.DiscNumber != al.Tracks[i-1].DiscNumber) {
+				top := float32(4)
+				if i > 0 {
+					top = 18
+				}
+				ui.Row(c.Key(fmt.Sprint("disc", t.DiscNumber))).Height(28).PaddingStart(trackLead).Margin(top, 0, 2, 0).AlignItems(ui.Center).Children(func() {
+					label(c, k, fmt.Sprintf("Disc %d", t.DiscNumber))
+				})
+			}
+			nextLit := i+1 < len(lines) && lines[i+1].lit()
+			a.trackLine(c, k, t, al.ArtistName, mark, lines[i], nextLit, accent, bar, still)
+		}
+	}).Grow(1)
 }
 
 // albumFacts are what the album screen shows of an album: the album once
@@ -138,172 +184,21 @@ func albumKind(title string) (kind, name string) {
 	return "Album", title
 }
 
-// albumBackdrop lights the album screen with the album's palette, as the
-// download page is lit with its job's.
-func (a *App) albumBackdrop(c *ui.Context, k *Tokens) {
-	paletteBackdrop(c, k, albumOf(&a.Store.Search.Album).pal)
-}
-
-// albumScreen is an album in the download page's layout: its cover and
-// title over its palette, what it is and the one action its state takes,
-// then its songs in the lower panel, those on disk or on their way with the
-// state the download page gives them.
-func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
-	s := a.Store
-	p := &s.Search.Album
-	if p.ID == "" {
-		a.Back()
-		return
+// heroStat is one figure of the head's band: its name over its value,
+// smaller in a compact head, where four figures share less room.
+func heroStat(c *ui.Context, k *Tokens, hc heroColors, l heroLayout, name, value, unit string) ui.Element {
+	size := float32(22)
+	if l.compact {
+		size = 18
 	}
-	s.WatchConfig()
-	f := albumOf(p)
-	hc := heroColorsFor(f.pal, k)
-	kind, name := albumKind(f.title)
-	if f.tracks > 0 {
-		kind += " · " + plural(f.tracks, "track")
-	}
-	a.collectionHero(c, k, pageHero(c, page), heroSpec{kicker: kind, title: name, artist: f.artist, colors: hc,
-		cover: func(size float32) {
-			widgets.Cover{Image: a.Art.Get(f.artwork, 512), Placeholder: f.pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true}.Show(c)
-		},
-		tags: func() {
-			for _, q := range qualityHints(f.traits) {
-				tag(c, k, q, q == "Hi-Res Lossless", hc.meta)
-			}
-			if f.explicit {
-				explicitBadge(c, k)
-			}
-			if mark, _ := s.HitMark(p.Hit); mark == store.MarkDone {
-				pill(c, k, pillOK, icCheck, "In your library")
-			}
-		},
-		band:    func() { a.albumBand(c, k, f, hc) },
-		actions: func() { a.albumActions(c, k, hc) },
-	})
-	ui.Column(c).Grow(1).MinHeight(0).Background(k.Ink.Alpha(detailInk)).BorderWidth(1, 0, 0, 0).BorderColor(k.Line).Children(func() {
-		a.albumTracks(c, k)
-	})
-}
-
-// albumBand is what the album is under its title, in the download
-// page's figures: when it came out, its genre and length; and its job's
-// bar once a job holds it, as the download page draws it, so the two
-// pages of one album differ in their figures alone.
-func (a *App) albumBand(c *ui.Context, k *Tokens, f albumFacts, hc heroColors) {
-	s := a.Store
-	ui.Row(c).Gap(12).MaxWidth(620).Margin(8, 0, 0, 0).Children(func() {
-		heroStat(c, k, hc, "Released", firstNonEmptyStr(f.year, "—"), "")
-		heroStat(c, k, hc, "Genre", firstNonEmptyStr(f.genre, "—"), "")
-		if m := int(f.length.Round(time.Minute) / time.Minute); m > 0 {
-			heroStat(c, k, hc, "Length", fmt.Sprint(m), " min")
-		} else {
-			heroStat(c, k, hc, "Length", "—", "")
-		}
-	})
-	if _, job := s.HitMark(s.Search.Album.Hit); s.Job(job) != nil {
-		ui.Column(c).FillWidth().MaxWidth(620).Margin(6, 0, 0, 0).Children(func() {
-			albumProgress(c, k, s.Job(job), "album-progress", 8, hc.title, hc.title.Alpha(0.16), hc.accent, hc.meta, 12)
-		})
-	}
-}
-
-// heroStat is one figure of the head's band: its name over its value, as
-// the download page's figures.
-func heroStat(c *ui.Context, k *Tokens, hc heroColors, name, value, unit string) {
-	ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
+	return ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(2).Children(func() {
 		label(c, k, name).TextColor(hc.meta.Alpha(0.8))
 		ui.Row(c).AlignItems(ui.Baseline).Children(func() {
-			mono(c, value, 22).FontWeight(600).TextColor(hc.title).SingleLine().Ellipsis("…").Shrink(1)
+			mono(c, value, size).FontWeight(600).TextColor(hc.title).SingleLine().Ellipsis("…").Shrink(1)
 			if unit != "" {
 				mono(c, unit, 14).TextColor(hc.meta.Alpha(0.8))
 			}
 		})
-	})
-}
-
-// albumActions are what the album's state lets be done, at the head's
-// end as the download page's buttons: a download; or, once a job holds it,
-// that job's page, and a download again of what is missing once it is in
-// the library.
-func (a *App) albumActions(c *ui.Context, k *Tokens, hc heroColors) {
-	s := a.Store
-	h := s.Search.Album.Hit
-	mark, job := s.HitMark(h)
-	// A start that answers within a frame keeps the buttons as they were.
-	since, starting := s.Search.Starting[store.HitKey(h)]
-	wait := waited(c, starting, since)
-	if mark == store.MarkNone {
-		if wait {
-			pill(c, k, pillWait, nil, "Starting…")
-		} else if artButton(c, "Download", hc.title, hc.ink).Label("Download "+h.Name).Clicked() && !starting {
-			a.download(h)
-		}
-		return
-	}
-	if mark == store.MarkDone && buttonOff(c, k, buttonOnArt, "Download again", nil, wait).Label("Download "+h.Name+" again").Clicked() && !starting {
-		a.download(h)
-	}
-	// The download page shows only a job the feed holds.
-	if s.Job(job) != nil && button(c, k, buttonOnArt, "Show download", nil).Label("Show the download of "+h.Name).Clicked() {
-		a.OpenJob(job)
-	}
-}
-
-// albumTracks lists the album's songs by disc in the lower panel, in the
-// download page's columns, or stands for them while they load or after
-// the read failed.
-func (a *App) albumTracks(c *ui.Context, k *Tokens) {
-	s := a.Store
-	p := &s.Search.Album
-	ui.Column(c).Grow(1).MinHeight(0).Padding(10, 24, 0, 32).Children(func() {
-		ui.Row(c).Gap(16).Padding(11, 4, 4, 4).Margin(0, scrollGutter, 0, 0).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Width(trackNumber)
-			label(c, k, "Track").Grow(1)
-			ui.Row(c).Width(trackLength).Justify(ui.End).Children(func() { ui.Icon(c, icClock).FontSize(13).TextColor(k.Faint) })
-			label(c, k, "State").Width(trackStateWidth).TextAlign(ui.End)
-		})
-		switch p.Status {
-		case store.SearchFailed:
-			searchFailed(c, k, p.Err, s.RetryAlbum)
-			return
-		case store.SearchReady:
-		default:
-			n := min(max(p.Hit.TrackCount, 6), 14)
-			for i := range n {
-				ui.Row(c.Key(i)).Height(trackHeight).PaddingX(4).Gap(16).AlignItems(ui.Center).Children(func() {
-					ui.Row(c).Width(trackNumber).Justify(ui.End).Children(func() { skeleton(c, k, 18, 10) })
-					ui.Column(c).Grow(1).Children(func() { skeleton(c, k, float32(140+(i*53)%160), 10) })
-					skeleton(c, k, 32, 10)
-				})
-			}
-			return
-		}
-		al := &p.Album
-		mark, job := s.HitMark(p.Hit)
-		var items []domain.JobItem
-		if mark != store.MarkNone {
-			items = s.JobItems(job)
-		}
-		lines := make([]trackMark, len(al.Tracks))
-		for i, t := range al.Tracks {
-			lines[i].mark, lines[i].item = s.TrackMark(t, mark, items)
-		}
-		discs := al.DiscCount > 1
-		a.scrollArea(c, "album", detailGround(k), scrollGutter, func() {
-			for i, t := range al.Tracks {
-				if discs && (i == 0 || t.DiscNumber != al.Tracks[i-1].DiscNumber) {
-					top := float32(4)
-					if i > 0 {
-						top = 18
-					}
-					ui.Row(c.Key(fmt.Sprint("disc", t.DiscNumber))).Height(28).PaddingStart(trackLead).Margin(top, 0, 2, 0).AlignItems(ui.Center).Children(func() {
-						label(c, k, fmt.Sprintf("Disc %d", t.DiscNumber))
-					})
-				}
-				nextLit := i+1 < len(lines) && lines[i+1].lit()
-				a.trackLine(c, k, t, al.ArtistName, mark, lines[i], nextLit)
-			}
-		}).Grow(1)
 	})
 }
 
@@ -314,17 +209,17 @@ type trackMark struct {
 	item *domain.JobItem
 }
 
-// lit reports whether the song's row is highlighted, as a track's on the
-// download page: its job works on it now.
+// lit reports whether the song's row is highlighted, as a download's
+// track: its job works on it now.
 func (m trackMark) lit() bool { return m.item != nil && trackLit(m.item) }
 
-// trackLine is one song of the album, in the download page's row: its
-// number, title, and under it the artists when they are not the album's or
-// what its job made of it, its length, and its state: the job's for a song
-// its album's job holds, else a check for one on disk, the queue's mark for
-// one on its way, else a download of the song alone while the row is
-// pointed at.
-func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArtist string, albumMark store.MarkState, m trackMark, nextLit bool) {
+// trackLine is one song of the album: its number, title, and under it what
+// its job is doing with it, else the artists when they are not the album's,
+// else what the job made of it; its stage bar while bar is wide, its
+// length, and its state: the job's for a song its album's job holds, else
+// a check for one on disk, the queue's mark for one on its way, else a
+// download of the song alone while the row is pointed at.
+func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArtist string, albumMark store.MarkState, m trackMark, nextLit bool, accent ui.Color, bar float32, still bool) {
 	s := a.Store
 	// A job just started has not listed its tracks yet: they wait with it.
 	queued := albumMark == store.MarkActive && m.item == nil && m.mark == store.MarkNone
@@ -343,7 +238,7 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 		switch {
 		case lit:
 			row.Background(k.AccentSoft.Alpha(0.45))
-		case pointed && m.mark == store.MarkNone && !wait && !queued:
+		case pointed && m.mark == store.MarkNone && m.item == nil && !wait && !queued:
 			row.Background(k.Fg.Alpha(0.055))
 		}
 		row.Children(func() {
@@ -352,27 +247,18 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 				num = k.Muted
 			}
 			mono(c, fmt.Sprint(t.TrackNumber), 12).TextColor(num).Width(trackNumber).TextAlign(ui.End)
-			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, t.Name).FontWeight(600).SingleLine().Ellipsis("…").Shrink(1)
-					if t.ContentRating == "explicit" {
-						explicitBadge(c, k)
-					}
-				})
-				sub := " "
-				switch {
-				case t.ArtistName != "" && t.ArtistName != albumArtist:
-					sub = t.ArtistName
-				case m.item != nil && trackSub(m.item) != "":
-					sub = trackSub(m.item)
-				}
-				mono(c, sub, 11).TextColor(k.Muted).Ellipsis("…")
-			})
-			length := ""
-			if t.DurationMS > 0 {
-				length = format.Duration(time.Duration(t.DurationMS) * time.Millisecond)
+			sub := ""
+			switch it := m.item; {
+			case it != nil && (lit || it.Status == domain.ItemFailed || it.Attempt > 1) && trackSub(it) != "":
+				sub = trackSub(it)
+			case t.ArtistName != "" && t.ArtistName != albumArtist:
+				sub = t.ArtistName
+			case it != nil:
+				sub = trackSub(it)
 			}
-			mono(c, length, 12).TextColor(k.Muted).Width(trackLength).TextAlign(ui.End)
+			trackNames(c, k, t.Name, t.ContentRating == "explicit", sub)
+			stageCell(c, k, m.item, accent, bar, still)
+			trackDuration(c, k, t.DurationMS)
 			ui.Row(c).Width(trackStateWidth).Height(trackControl).Gap(6).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 				switch {
 				case m.item != nil:
@@ -391,6 +277,33 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 			})
 		})
 	})
+}
+
+// trackNames is a row's title and, under it, sub; a row without one
+// centers its title in the same height, which lines it up with its number
+// and keeps the rows' rhythm.
+func trackNames(c *ui.Context, k *Tokens, title string, explicit bool, sub string) {
+	ui.Column(c).Grow(1).Shrink(1).MinWidth(0).MinHeight(trackNamesHeight).Gap(2).Justify(ui.Center).Children(func() {
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, title).FontWeight(600).SingleLine().Ellipsis("…").Shrink(1)
+			if explicit {
+				explicitBadge(c, k)
+			}
+		})
+		if sub != "" {
+			mono(c, sub, 11).TextColor(k.Muted).Ellipsis("…")
+		}
+	})
+}
+
+// trackDuration is a song's length in its column; ms is 0 where it is not
+// known.
+func trackDuration(c *ui.Context, k *Tokens, ms int) {
+	length := ""
+	if ms > 0 {
+		length = format.Duration(time.Duration(ms) * time.Millisecond)
+	}
+	mono(c, length, 12).TextColor(k.Muted).Width(trackLength).TextAlign(ui.End)
 }
 
 // stateWord is a state in the track lists' state column: its icon and word

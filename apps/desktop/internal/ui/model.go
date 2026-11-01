@@ -1,6 +1,6 @@
 // Package ui builds the desktop app's screens with MyGo's native UI, to the
 // design canvas: home with its one field for links and catalog search, the
-// queue with the album-lit "downloading now" hero, the job detail, settings,
+// queue with the album-lit "downloading now" hero, the album page, settings,
 // system, the menu bar panel, and their empty, loading and error states, dark
 // and light.
 package ui
@@ -25,7 +25,8 @@ const (
 	ScreenHome Screen = iota
 	ScreenQueue
 	ScreenSettings
-	ScreenDetail
+	// ScreenAlbum is the one page of an album and of a download (OpenAlbum,
+	// OpenJob).
 	ScreenAlbum
 	// ScreenSetup checks and installs what a mode needs (OpenSetup).
 	ScreenSetup
@@ -99,8 +100,12 @@ type App struct {
 
 	Screen Screen
 	// trail holds the screens Back returns to, the last one on top: the
-	// album screen and the detail push the one they were opened from.
+	// album screen pushes the one it was opened from.
 	trail []Screen
+	// pageKey is the album and download the album screen last opened on,
+	// and albumSeen the album's download as it was then (followAlbumJob).
+	pageKey   string
+	albumSeen string
 	// Tab is the queue's filter.
 	Tab int
 
@@ -185,7 +190,7 @@ func (a *App) tokens(c *ui.Context) *Tokens {
 // Go switches the main window to a screen, forgetting where Back would
 // return. Home puts the keyboard in its field.
 func (a *App) Go(s Screen) {
-	if s != ScreenDetail {
+	if s != ScreenAlbum {
 		a.Store.CloseDetail()
 	}
 	a.trail = nil
@@ -200,12 +205,6 @@ func (a *App) Go(s Screen) {
 	}
 }
 
-// OpenJob shows a job's detail; Back returns to the screen it opened from.
-func (a *App) OpenJob(id string) {
-	a.Store.OpenDetail(id)
-	a.push(ScreenDetail)
-}
-
 // push shows s, which Back leaves for the screen shown now. Setup is left
 // behind: Back never returns to it.
 func (a *App) push(s Screen) {
@@ -215,47 +214,34 @@ func (a *App) push(s Screen) {
 	a.Screen = s
 }
 
-// backTo is the screen Back returns to: the one the album screen or the
-// detail was opened from, else home for the album screen and the queue for
-// the detail.
+// backTo is the screen Back returns to: the one the album screen was opened
+// from, else the queue, as for a download opened from a notification over
+// setup.
 func (a *App) backTo() Screen {
 	if n := len(a.trail); n > 0 {
 		return a.trail[n-1]
 	}
-	if a.Screen == ScreenAlbum {
-		return ScreenHome
-	}
 	return ScreenQueue
 }
 
-// navScreen is the sidebar's screen for the one shown: the album screen and
-// the detail light the screen they were opened from.
+// navScreen is the sidebar's screen for the one shown: the album screen
+// lights the screen it was opened from.
 func (a *App) navScreen() Screen {
-	for i := len(a.trail) - 1; i >= 0; i-- {
-		if s := a.trail[i]; s != ScreenAlbum && s != ScreenDetail {
-			return s
-		}
-	}
-	switch a.Screen {
-	case ScreenAlbum:
-		return ScreenHome
-	case ScreenDetail:
-		return ScreenQueue
+	if a.Screen == ScreenAlbum {
+		return a.backTo()
 	}
 	return a.Screen
 }
 
-// Back returns to the screen the album screen or the detail was opened
-// from: home keeps its words, results, artist and place, so the search
-// comes back as it was left, with the keyboard in its field.
+// Back returns to the screen the album screen was opened from: home keeps
+// its words, results, artist and place, so the search comes back as it was
+// left, with the keyboard in its field; the queue keeps its tab and place.
 func (a *App) Back() {
 	to := a.backTo()
 	if n := len(a.trail); n > 0 {
 		a.trail = a.trail[:n-1]
 	}
-	if to != ScreenDetail {
-		a.Store.CloseDetail()
-	}
+	a.Store.CloseDetail()
 	if to == ScreenHome {
 		if a.Screen == ScreenAlbum {
 			a.revealAlbum()

@@ -71,8 +71,6 @@ func (a *App) View(c *ui.Context) {
 						switch a.Screen {
 						case ScreenSettings:
 							a.settings(c, k)
-						case ScreenDetail:
-							a.detail(c, k)
 						case ScreenAlbum:
 							a.albumScreen(c, k, page)
 						case ScreenQueue:
@@ -119,7 +117,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	c.OnShortcut(ui.Cmd, ui.Key2, func() { a.Go(ScreenQueue) })
 	c.OnShortcut(ui.Cmd, ui.KeyComma, func() { a.Go(ScreenSettings) })
 	switch a.Screen {
-	case ScreenDetail, ScreenAlbum:
+	case ScreenAlbum:
 		if c.Shortcut(0, ui.KeyEscape) {
 			a.Back()
 		}
@@ -142,7 +140,7 @@ func (a *App) titleBar(c *ui.Context, k *Tokens, sidebar bool) {
 		left = toggleRight(bar) + 10
 	}
 	ui.Row(c).Height(max(52, bar.Height)).PaddingStart(left).PaddingEnd(right).Gap(10).AlignItems(ui.Center).DragWindow().Children(func() {
-		if a.Screen == ScreenDetail || a.Screen == ScreenAlbum {
+		if a.Screen == ScreenAlbum {
 			if button(c, k, buttonGhost, a.backLabel(), icBack).Clicked() {
 				a.Back()
 			}

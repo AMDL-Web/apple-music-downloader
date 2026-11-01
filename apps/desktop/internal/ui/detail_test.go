@@ -8,8 +8,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/store"
+	"amdl/internal/client"
 	"amdl/internal/domain"
-	"amdl/internal/progress"
 )
 
 // longActivity is a retry line as the backend wrote it before its messages
@@ -57,22 +57,32 @@ func detailFixture(now time.Time) *store.Job {
 	return j
 }
 
-// detailView is the main window's column showing j as the detail screen,
-// without the sidebar: the backdrop, the title strip and the page.
-func detailView(a *App, j *store.Job) func(c *ui.Context) {
+// detailView is the main window's column showing the album screen, without
+// the sidebar: the backdrop, the title strip and the page.
+func detailView(a *App) func(c *ui.Context) {
 	return func(c *ui.Context) {
 		k := a.tokens(c)
 		applyTheme(c, k)
 		c.Root().Background(k.Ground)
+		w, _ := c.Size()
 		ui.Box(c).Fill().Background(k.Ground).Clip().Children(func() {
-			paletteBackdrop(c, k, jobPalette(j, false))
+			paletteBackdrop(c, k, a.pagePalette(c))
 			ui.Column(c.Key("content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() {
 				ui.Row(c).Height(52)
-				ui.Column(c).Grow(1).MinHeight(0).Children(func() { a.detailJob(c, k, j) })
+				ui.Column(c).Grow(1).MinHeight(0).Children(func() { a.albumScreen(c, k, w) })
 			})
 		})
 		a.scrollbars(c, k)
 	}
+}
+
+// openFixture puts j in the store, as the feed would, and opens its page.
+func openFixture(a *App, j *store.Job) *store.Job {
+	a.Store.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{j.Job}})
+	held := a.Store.Job(j.ID)
+	held.Items, held.Activity = j.Items, j.Activity
+	a.OpenJob(j.ID)
+	return held
 }
 
 // tickDetail moves the running tracks on, as their progress events do.
@@ -92,8 +102,8 @@ func newDetailTester(t *testing.T, w, h int) (*App, *store.Job, *ui.Tester) {
 	t.Helper()
 	a, _ := newTestApp(remoteSettings())
 	a.Settings.HideSidebar = true
-	j := detailFixture(time.Now())
-	return a, j, ui.NewTester(detailView(a, j), w, h)
+	j := openFixture(a, detailFixture(time.Now()))
+	return a, j, ui.NewTester(detailView(a), w, h)
 }
 
 func TestTrackStatesSayWhatRuns(t *testing.T) {
@@ -109,39 +119,6 @@ func TestTrackStatesSayWhatRuns(t *testing.T) {
 	}
 	if got := trackSub(&domain.JobItem{Status: domain.ItemResolving}); got == "" {
 		t.Error("a resolving track has no line under its title")
-	}
-}
-
-func TestStageLegendNeverOverlaps(t *testing.T) {
-	for _, weights := range [][progress.StageCount]float64{
-		progress.Weights,
-		{0.04, 0.80, 0.04, 0.04, 0.03, 0.03, 0.02},
-		{1. / 7, 1. / 7, 1. / 7, 1. / 7, 1. / 7, 1. / 7, 1. / 7},
-		{0.01, 0.01, 0.94, 0.01, 0.01, 0.01, 0.01},
-	} {
-		for _, width := range []float32{160, 220, 300} {
-			legend := stageLegend(width, weights)
-			for i, l := range legend {
-				// After the last segment comes the row's gap before the
-				// state column.
-				room := l.width + legendSpill
-				if i < len(legend)-1 {
-					room = l.width + stageGap
-				}
-				if w := float32(len(l.text)) * legendAdvance; w > room+0.01 {
-					t.Errorf("weights %v at %v: %q is %v wide in %v", weights, width, l.text, w, room)
-				}
-				if l.text != "" && l.text != stageWords[i] && l.text != stageInitials[i] {
-					t.Errorf("weights %v at %v: label %q", weights, width, l.text)
-				}
-				if l.text == stageInitials[i] && float32(len(stageWords[i]))*legendAdvance <= l.width {
-					t.Errorf("weights %v at %v: %q shortened though %q fits", weights, width, l.text, stageWords[i])
-				}
-			}
-		}
-	}
-	if got := stageLegend(300, progress.Weights)[progress.StageDownload].text; got != "Download" {
-		t.Errorf("the download segment says %q", got)
 	}
 }
 

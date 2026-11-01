@@ -59,7 +59,7 @@ type setupForm struct {
 func (a *App) OpenSetup(m mode.Kind) {
 	f := &a.su
 	back := a.Screen
-	if back == ScreenSetup || back == ScreenDetail {
+	if back == ScreenSetup || back == ScreenAlbum {
 		back = ScreenSettings
 	}
 	*f = setupForm{first: a.Settings.Mode == "", back: back, mode: m,

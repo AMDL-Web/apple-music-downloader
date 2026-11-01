@@ -86,19 +86,12 @@ func TestAlbumOpensFromSearchAndBackReturnsThere(t *testing.T) {
 			t.Errorf("no %q on the album page: %q", want, tt.Texts())
 		}
 	}
-	// The detail can show only a job the feed holds.
-	if tt.HasText("Show download") {
-		t.Errorf("Show download offered for a job the feed does not hold")
-	}
-	// Back from the job returns here.
-	a.OpenJob("done")
-	if a.backLabel() != "Album 0" {
-		t.Errorf("from the album, Back says %q", a.backLabel())
-	}
-	a.Back()
-	tt.Frame()
-	if a.Screen != ScreenAlbum || s.DetailID != "" {
-		t.Fatalf("Back from the job: screen %v job %q", a.Screen, s.DetailID)
+	// A download the feed does not hold has no figures to show: the
+	// album's stay.
+	for _, want := range []string{"RELEASED", "GENRE", "LENGTH"} {
+		if !tt.HasText(want) {
+			t.Errorf("no %q for an album whose download the feed does not hold", want)
+		}
 	}
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()

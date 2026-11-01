@@ -6,10 +6,8 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// heroLayout is the head of the album and download pages, which share it so
-// that going from one to the other of the same album moves nothing but
-// what differs: the cover's side, the title's size, the room above and
-// between.
+// heroLayout is the head of the album screen: the cover's side, the title's
+// size, the room above and between.
 type heroLayout struct {
 	cover, title, top, gap float32
 	compact                bool
@@ -54,9 +52,9 @@ type heroSpec struct {
 	colors        heroColors
 }
 
-// collectionHero is the head of the album and download pages: the cover,
-// then the label, title, artists and the page's band, then its buttons,
-// bottoms aligned.
+// collectionHero is the head of the album screen: the cover, then the
+// label, title, artists and the page's band, then its buttons, bottoms
+// aligned.
 func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec) {
 	hc := h.colors
 	ui.Row(c).Padding(l.top, 32, 22, 32).Gap(l.gap).AlignItems(ui.End).Children(func() {
@@ -78,7 +76,7 @@ func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec)
 		})
 		if h.actions != nil {
 			// One width whatever the buttons, so the band beside them ends
-			// at the same place on both pages.
+			// at the same place whatever the page's state.
 			ui.Column(c).MinWidth(heroActions).Gap(8).AlignItems(ui.End).Children(h.actions)
 		}
 	})

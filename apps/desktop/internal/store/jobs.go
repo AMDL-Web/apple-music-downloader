@@ -220,6 +220,7 @@ func (s *Store) ApplySnapshot(l client.DownloadList) {
 		if keep[id] == nil && id != s.DetailID {
 			cancel()
 			delete(s.followers, id)
+			delete(s.histories, id)
 		}
 	}
 	s.byID = keep
@@ -304,6 +305,7 @@ func (s *Store) remove(id string) {
 	if cancel := s.followers[id]; cancel != nil {
 		cancel()
 		delete(s.followers, id)
+		delete(s.histories, id)
 	}
 	if s.DetailID == id {
 		s.DetailID = ""
