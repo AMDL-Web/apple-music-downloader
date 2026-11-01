@@ -205,3 +205,24 @@ func TestAClickAroundTheFieldsTextFocusesIt(t *testing.T) {
 		t.Errorf("a click above the field's text at %v left the keyboard out of it", in)
 	}
 }
+
+// Links pasted into the empty field dock it and grow it at once, and its
+// bottom, which the rows below follow, moves one way to where it rests.
+func TestPastedLinksMoveTheFieldsBottomOneWay(t *testing.T) {
+	a, run := demoApp(t)
+	run(func() bool { return a.Store.Loaded })
+	a.Go(ScreenHome)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.Advance(time.Second)
+	tt.Type(pastedLinks)
+	tt.Advance(refresh)
+	prev := fieldBottom(t, tt)
+	for i := range 40 {
+		tt.Advance(refresh)
+		got := fieldBottom(t, tt)
+		if got > prev+0.5 {
+			t.Fatalf("frame %d: the field's bottom went back down from %v to %v", i+2, prev, got)
+		}
+		prev = got
+	}
+}

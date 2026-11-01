@@ -228,7 +228,9 @@ func (a *App) homeField(c *ui.Context, k *Tokens, width float32) {
 		if moved {
 			box.Jump("height", target)
 		}
-		box.Height(box.AnimateTo("height", target, ui.Snappy))
+		// With the glide that docks it, so that what is below a field
+		// docking and growing at once moves one way.
+		box.Height(box.AnimateWith("height", target, heroGlide, ui.EaseOut))
 		if ring {
 			focusRing(box, radiusCard)
 		}
