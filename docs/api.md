@@ -319,7 +319,7 @@ is `422 invalid_overrides`.
 | --- | --- |
 | `quality_priority`, `codec_alternative` | Codec order and whether to fall back to the next codec |
 | `alac_max_sample_rate`, `alac_max_bit_depth` | ALAC limits |
-| `force_overwrite` | Overwrite existing output files and their lyrics sidecars instead of skipping |
+| `force_overwrite` | Replace existing output files and their lyrics sidecars instead of skipping |
 
 Everything else comes from the runtime config for every job: directories, path templates,
 lyrics, covers, `max_attempts`, `check_integrity`, `integrity_mode`, and the media-user-token
@@ -328,9 +328,10 @@ lyrics, covers, `max_attempts`, `check_integrity`, `integrity_mode`, and the med
 `media_user_token`) or inside `overrides` (`hooks`, `downloads_dir`, `media_user_token`,
 ...), is `400 invalid_request` naming the unknown field.
 
-**`force_overwrite`** — `true` overwrites an existing audio file and its lyrics sidecars;
-`false` (the default, from `download.force_overwrite`) skips tracks whose output already
-exists.
+**`force_overwrite`** — `true` downloads the track again and replaces an existing audio
+file and its lyrics sidecars once the new copy is complete; if the download fails, the old
+files stay. `false` (the default, from `download.force_overwrite`) skips tracks whose
+output already exists.
 
 The overrides are persisted with each job and apply again on a retry or after a restart;
 a resubmit of the same link replaces them.

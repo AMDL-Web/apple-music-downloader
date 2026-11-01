@@ -68,15 +68,6 @@ func (s *outputSet) add(path string, size int64) {
 	s.sizes[outputKey(path)] = size
 }
 
-func (s *outputSet) remove(path string) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.sizes, outputKey(path))
-}
-
 func (s *outputSet) stat(path string) (int64, bool) {
 	if s == nil {
 		return 0, false

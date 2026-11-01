@@ -20,8 +20,10 @@ import (
 
 // handleExistingOutput decides whether outPath is already downloaded. Without
 // force_overwrite an existing file finishes the item as skipped_existing (and
-// drops any resume checkpoint for it); with it, the stale output is removed
-// and the item_overwrite event says so.
+// drops any resume checkpoint for it). With it, the existing file and its
+// sidecars stay where they are until the new copy is committed over them, so a
+// forced download that fails leaves the old track intact; only staging orphans
+// are swept, and the item_overwrite event says so.
 func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Reporter, job domain.Job, item *domain.JobItem, outPath string) (bool, error) {
 	backend := d.backend()
 	item.OutputPath = domain.AbsolutePath(outPath)
@@ -126,9 +128,14 @@ func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBacke
 	if err := backend.mkdirAll(filepath.Dir(out.outPath)); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}
+	// The sidecars are staged beside their final names now and renamed into
+	// place once the track is committed, so a failed attempt never touches the
+	// sidecars of a file it was going to replace.
+	var sidecars stagedSidecars
+	defer sidecars.discard()
 	for _, format := range d.cfg.Download.LyricsFiles {
 		if text := out.lyrics.sidecar(format); text != "" {
-			if err := backend.writeFile(lyricsSidecarPath(out.outPath, format), []byte(text)); err != nil {
+			if err := sidecars.stage(backend, lyricsSidecarPath(out.outPath, format), []byte(text)); err != nil {
 				return fmt.Errorf("write lyrics file: %w", err)
 			}
 		}
@@ -144,10 +151,14 @@ func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBacke
 	set(domain.ItemTagging, out.labels.tagged, markTagged)
 	// Only ever expose a complete, tagged file at outPath (see
 	// finalizeToOutput), so handleExistingOutput's "bare existence = done" skip
-	// stays correct even if the process dies mid-move.
+	// stays correct even if the process dies mid-move. A file already at
+	// outPath is replaced in the same rename.
 	size, err := backend.commit(out.staged, out.outPath)
 	if err != nil {
 		return fmt.Errorf("%s: %w", out.labels.commitErr, err)
+	}
+	if err := sidecars.install(); err != nil {
+		return fmt.Errorf("write lyrics file: %w", err)
 	}
 	item := out.item
 	item.Status = domain.ItemCompleted
@@ -208,9 +219,25 @@ func (d *Downloader) verifyStaged(ctx context.Context, backend mediaBackend, out
 // truncated file at path. Standalone covers depend on this: an existing cover
 // is never fetched again. The file ends up 0644 like every other output.
 func writeFileAtomic(path string, data []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), stagingPattern(path))
+	install, discard, err := stageFileAtomic(path, data)
 	if err != nil {
 		return err
+	}
+	if err := install(); err != nil {
+		discard()
+		return err
+	}
+	return nil
+}
+
+// stageFileAtomic writes data to a temp file in path's directory, flushed and
+// 0644, and returns the rename that puts it at path and the removal of the temp
+// file. Until install runs, path is untouched, so a file already there is
+// replaced in one step or not at all.
+func stageFileAtomic(path string, data []byte) (install func() error, discard func(), err error) {
+	tmp, err := os.CreateTemp(filepath.Dir(path), stagingPattern(path))
+	if err != nil {
+		return nil, nil, err
 	}
 	tmpPath := tmp.Name()
 	_, writeErr := tmp.Write(data)
@@ -223,14 +250,47 @@ func writeFileAtomic(path string, data []byte) error {
 	if writeErr == nil {
 		writeErr = os.Chmod(tmpPath, 0o644)
 	}
-	if writeErr == nil {
-		writeErr = os.Rename(tmpPath, path)
-	}
 	if writeErr != nil {
 		_ = os.Remove(tmpPath)
-		return writeErr
+		return nil, nil, writeErr
+	}
+	return func() error { return os.Rename(tmpPath, path) }, func() { _ = os.Remove(tmpPath) }, nil
+}
+
+// stagedSidecars are the lyrics sidecars of one track, written to temp files
+// next to their final names until the track itself is committed.
+type stagedSidecars struct {
+	installs []func() error
+	discards []func()
+}
+
+// stage writes data to a temp file beside path through backend.stageFile.
+func (s *stagedSidecars) stage(backend mediaBackend, path string, data []byte) error {
+	install, discard, err := backend.stageFile(path, data)
+	if err != nil {
+		return err
+	}
+	s.installs = append(s.installs, install)
+	s.discards = append(s.discards, discard)
+	return nil
+}
+
+// install renames every staged file onto its final name.
+func (s *stagedSidecars) install() error {
+	for _, install := range s.installs {
+		if err := install(); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// discard removes the temp files that were not renamed. It is safe after
+// install: a renamed file's temp name is gone.
+func (s *stagedSidecars) discard() {
+	for _, discard := range s.discards {
+		discard()
+	}
 }
 
 // outputFileSize returns the size in bytes of the finished output file, or 0
@@ -391,19 +451,20 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// cleanupFailedOutput removes outPath, its staged parts and both possible
-// lyrics sidecars.
+// cleanupFailedOutput removes what a failed attempt left in flight: the staging
+// files of outPath and of its lyrics sidecars. It never removes outPath or a
+// sidecar itself: an output reaches its path only whole (finalizeToOutput), so a
+// failed attempt has nothing there to clean up, and a file it was going to
+// replace must stay as it was.
 func cleanupFailedOutput(outPath string) {
-	_ = os.Remove(outPath)
 	removeStagedParts(outPath)
-	_ = os.Remove(lyricsSidecarPath(outPath, "lrc"))
-	_ = os.Remove(lyricsSidecarPath(outPath, "ttml"))
 }
 
-// removeStagedParts drops copyIntoPlace staging files for outPath. copyIntoPlace
-// removes its own staging file on every error return, so a survivor means the
-// process was killed mid-copy — but that survivor sits in the user's music
-// library, so the retry/force paths sweep it the way they always did.
+// removeStagedParts drops the staging files for outPath and for its lyrics
+// sidecars (the sidecar temp files carry the same "<name>.<digits>.part" shape).
+// copyIntoPlace removes its own staging file on every error return, so a
+// survivor means the process was killed mid-copy — but that survivor sits in the
+// user's music library, so the retry/force paths sweep it.
 //
 // Both shapes are swept: the pre-uniquified outPath+".part" (an orphan from a
 // build before the staging name carried a uniquifier — the deployed instance may
@@ -426,15 +487,25 @@ func cleanupFailedOutput(outPath string) {
 // sharing a ~240-byte title prefix delete each other's staging files.
 func removeStagedParts(outPath string) {
 	_ = os.Remove(outPath + partSuffix)
-	dir, outName := filepath.Dir(outPath), filepath.Base(outPath)
+	dir := filepath.Dir(outPath)
+	owners := []string{
+		filepath.Base(outPath),
+		filepath.Base(lyricsSidecarPath(outPath, "lrc")),
+		filepath.Base(lyricsSidecarPath(outPath, "ttml")),
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !isStagedPart(entry.Name(), outName) {
+		if entry.IsDir() {
 			continue
 		}
-		_ = os.Remove(filepath.Join(dir, entry.Name()))
+		for _, owner := range owners {
+			if isStagedPart(entry.Name(), owner) {
+				_ = os.Remove(filepath.Join(dir, entry.Name()))
+				break
+			}
+		}
 	}
 }

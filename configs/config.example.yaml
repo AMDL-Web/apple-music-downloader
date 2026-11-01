@@ -331,8 +331,9 @@ download:
   # AAC or Dolby track passes quick. A change takes effect for newly started jobs, without a restart.
   # Absent: quick. Default: quick.
   integrity_mode: "quick"
-  # bool: true overwrites an existing output file (and its lyrics sidecars) when
-  # a job downloads the same track again; false skips tracks whose output file
+  # bool: true replaces an existing output file (and its lyrics sidecars) when
+  # a job downloads the same track again, once the new copy is complete (a failed
+  # download leaves the old files); false skips tracks whose output file
   # already exists. Default: false. Can be overridden per submission via the
   # overrides.force_overwrite field of POST /api/v1/downloads.
   force_overwrite: false

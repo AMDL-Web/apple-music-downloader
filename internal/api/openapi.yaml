@@ -2613,9 +2613,10 @@ components:
         force_overwrite:
           type: boolean
           description: >-
-            Whether to force a re-download that overwrites existing output files
-            and their lyrics sidecar files. When omitted, the runtime configuration
-            value download.force_overwrite applies (default false).
+            Whether to force a re-download that replaces existing output files
+            and their lyrics sidecar files once the new copy is complete; a failed
+            download leaves the old files in place. When omitted, the runtime
+            configuration value download.force_overwrite applies (default false).
     RuntimeConfig:
       type: object
       description: >-

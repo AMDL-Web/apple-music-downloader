@@ -260,15 +260,17 @@ func TestCleanupFailedOutputSweepsStagedParts(t *testing.T) {
 	dir := t.TempDir()
 	outPath := filepath.Join(dir, "song.m4a")
 	removed := []string{
-		outPath,
 		// Orphan from a build predating the uniquifier.
 		outPath + partSuffix,
 		outPath + ".1234567890" + partSuffix,
 		outPath + ".987654321" + partSuffix,
-		filepath.Join(dir, "song.lrc"),
-		filepath.Join(dir, "song.ttml"),
+		filepath.Join(dir, "song.lrc.1234567890"+partSuffix),
 	}
 	kept := []string{
+		// The finished track and its sidecars are not staging files.
+		outPath,
+		filepath.Join(dir, "song.lrc"),
+		filepath.Join(dir, "song.ttml"),
 		// A different track downloading concurrently into the same album folder.
 		filepath.Join(dir, "other.m4a.1234567890"+partSuffix),
 		filepath.Join(dir, "song.m4a.other.m4a"),
