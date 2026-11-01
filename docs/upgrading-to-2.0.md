@@ -35,7 +35,7 @@ needs the API changes below before it works against 2.0.
    [wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2),
    which fronts wrapper-lite over HTTP and has the login API the console's Account page
    uses, or a bare
-   [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite), logged in
+   [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), logged in
    with its own `--login`. Set `wrapper.address` to its URL in `config.yaml`, or after the
    first start in the console's Settings › Account › Session service (then restart from
    its notice), such as `http://wrapper-manager:8080` or `http://127.0.0.1:12340`. Without Docker, the

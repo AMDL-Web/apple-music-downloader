@@ -83,8 +83,8 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 ### 2.1 The wrapper and decryption
 
 The backend holds no Apple account session and no decryption keys of its own. It talks
-over HTTP (`wrapper.address`) to one of two upstream services, which look the same to
-`internal/wrapper#Client`: [wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite),
+over HTTP (`wrapper.address`) to one of two services, which look the same to
+`internal/wrapper#Client`: [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite) (AMDL-Web's fork, [why](deployment.md#the-wrapper)),
 which holds one logged-in account, or [wrapper-manager
 v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2), which runs one
 wrapper-lite per account behind a single port and forwards each request to an account

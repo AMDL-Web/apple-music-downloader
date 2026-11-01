@@ -170,8 +170,8 @@ conversations block a merge, report what blocks it and wait.
 
 ## Related repositories
 
-[wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) holds the
-Apple Music account session and serves manifests, licenses, lyrics and per-key
+[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), AMDL-Web's fork of upstream's
+(patch: [The wrapper](docs/deployment.md#the-wrapper)), holds the Apple Music account session and serves manifests, licenses, lyrics and per-key
 decryption templates over HTTP (`internal/wrapper`); the backend decrypts in-process.
 [wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2) may
 sit in front of it and adds the login API the console uses; a bare wrapper-lite answers

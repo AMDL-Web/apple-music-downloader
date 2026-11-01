@@ -233,10 +233,20 @@ connection with `GET /api/v1/wrapper/status`.
 | Option | Upstream | Port | Login |
 | --- | --- | --- | --- |
 | wrapper-manager v2 (recommended) | [wrapper-manager `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
-| wrapper-lite | [wrapper `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
+| wrapper-lite | [AMDL-Web's wrapper fork, `lite` branch](https://github.com/AMDL-Web/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
 amdl 2.0 supports one wrapper account with either option: log one account into
 wrapper-manager. Accounts in several storefronts are not supported yet.
+
+The wrapper-lite that amdl points to is AMDL-Web's fork of
+[upstream's `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite)
+with one patch. Upstream keeps the FairPlay decrypt context of every `/key`; after
+1024 of them in one process every `/key` fails
+(`KDCanProcessCKC status: -42786` in the wrapper's log, `wrapper /key: code 500` in
+amdl's) until the wrapper restarts. The fork frees each context once its template is
+copied. The managed wrapper and the compose file's wrapper-lite service run the fork.
+wrapper-manager v2 downloads upstream's build, so it keeps the limit: when keys start
+failing, restart it (`docker restart wrapper-manager`), which keeps the login.
 
 Run natively or in upstream's Docker image, both use `wrapper-lite-rootless`, which needs
 user namespaces and `chroot` on a Linux host (x86_64 or arm64): `unshare -Ur true` must

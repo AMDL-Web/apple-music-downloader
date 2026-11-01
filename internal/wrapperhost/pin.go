@@ -10,7 +10,13 @@ import (
 	"time"
 )
 
-// Pin names one qemu-assets artifact of upstream's build-lite workflow and
+// GuestRepo is the GitHub repository whose build-lite artifacts hold the
+// guest: AMDL-Web's fork of WorldObservationLog/wrapper. Its lite branch
+// carries a patch that frees each FairPlay decrypt context after /key; upstream
+// leaks them and stops serving keys after 1024 per start.
+const GuestRepo = "AMDL-Web/wrapper"
+
+// Pin names one qemu-assets artifact of GuestRepo's build-lite workflow and
 // what its zip must hash to. GitHub deletes artifacts 90 days after a run, so
 // a pin built into a release goes stale; ManifestURL serves a current one.
 type Pin struct {
@@ -22,21 +28,21 @@ type Pin struct {
 	Expires    time.Time `json:"expires_at"`
 }
 
-// Builtin is the pin this binary was released with: run 40194181305 of
-// build-lite on lite at bde3335. Its sha256 is the artifact's digest from the
-// GitHub API, which matched the bytes nightly.link served for it.
+// Builtin is the pin this binary was released with: run 41328721176 of
+// build-lite on GuestRepo's lite at 582abf6. Its sha256 is the artifact's
+// digest from the GitHub API, which matched the bytes nightly.link served for it.
 var Builtin = Pin{
-	Commit:     "bde3335f47a30518e1f53f79cbae94bf76b27fb3",
-	RunID:      40194181305,
-	ArtifactID: 12598758939,
-	SHA256:     "d2c150c07e20a42d0978420f2d43a1a7b43c1e843575ff48075ef89940aef292",
-	Size:       64451213,
-	Expires:    time.Date(2027, 1, 23, 12, 40, 50, 0, time.UTC),
+	Commit:     "582abf6e1a2e9dcc0497f183138111bbc7dadd45",
+	RunID:      41328721176,
+	ArtifactID: 13092436409,
+	SHA256:     "5892e22d14381849f620400b2fa4d505e44c58d45d6b890f49f3305798fb5ad8",
+	Size:       64461982,
+	Expires:    time.Date(2027, 1, 30, 16, 54, 41, 0, time.UTC),
 }
 
 // ManifestURL serves the current pin as JSON, kept on its own branch so that
 // every amdl release reads the same file.
-const ManifestURL = "https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/wrapper-pins/wrapper-pin.json"
+const ManifestURL = "https://raw.githubusercontent.com/AMDL-Web/apple-music-downloader/wrapper-pins/wrapper-guest.json"
 
 var hexSHA = regexp.MustCompile(`^[0-9a-f]{64}$`)
 

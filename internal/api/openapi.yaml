@@ -1952,7 +1952,7 @@ components:
           description: The QEMU binary that runs the guest.
         guest:
           type: string
-          description: The installed guest, named by its upstream commit or as an import.
+          description: The installed guest, named by the commit it was built from or as an import.
         login_residue:
           type: boolean
           description: >-

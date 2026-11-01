@@ -36,7 +36,7 @@ func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, repo
 	return in, err
 }
 
-// Import installs a qemu-assets zip, one of upstream's wrapper-lite-qemu
+// Import installs a qemu-assets zip, one of the wrapper-lite-qemu
 // packages, or a directory holding vmlinuz-lite-qemu, lite-initramfs.cpio.gz
 // and data.img: the way in when no pin can be downloaded any more.
 func (h Home) Import(path string, now time.Time) (Installed, error) {
@@ -79,7 +79,7 @@ func (h Home) unpack(src string, in Installed) (Installed, error) {
 	}
 	for name := range want {
 		if !found[name] {
-			return Installed{}, fmt.Errorf("%s has no %s; expected upstream's qemu-assets artifact or a wrapper-lite-qemu package", src, name)
+			return Installed{}, fmt.Errorf("%s has no %s; expected a qemu-assets artifact or a wrapper-lite-qemu package", src, name)
 		}
 	}
 	_ = os.RemoveAll(dst) // a reinstall of the same id

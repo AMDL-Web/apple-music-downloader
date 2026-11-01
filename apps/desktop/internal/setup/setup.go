@@ -1,7 +1,7 @@
 // Package setup checks what each mode needs and installs what standalone
 // mode needs on this computer: ffmpeg and QEMU with the platform's package
 // manager, after the user agrees to the exact command, and the wrapper guest
-// from upstream's artifact (internal/wrapperhost). The Setup's fields belong
+// from the guest artifact (internal/wrapperhost). The Setup's fields belong
 // to the UI thread; background work hands its results back through post.
 package setup
 

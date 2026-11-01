@@ -92,7 +92,7 @@ func newArtifactServer(t *testing.T, body []byte, rate int) *artifactServer {
 	t.Helper()
 	a := &artifactServer{body: body}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/WorldObservationLog/wrapper/actions/artifacts/7.zip", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/"+GuestRepo+"/actions/artifacts/7.zip", func(w http.ResponseWriter, r *http.Request) {
 		a.resolves.Add(1)
 		http.Redirect(w, r, fmt.Sprintf("/blob/%d?sig=secret", a.token.Load()), http.StatusFound)
 	})

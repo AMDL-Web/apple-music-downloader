@@ -42,7 +42,7 @@ capabilities as MCP tools, and `amdl` alone in a terminal opens an interactive i
 for people, which `make tui-web` also builds for browsers over the desktop demo's made-up
 backend. Without a server of its own, `amdl service install` runs the backend on this
 machine as a background service that starts at login, and `amdl wrapper install` gives it
-a wrapper of its own: upstream's wrapper-lite in a QEMU guest that the backend runs
+a wrapper of its own: wrapper-lite in a QEMU guest that the backend runs
 ([docs/install.md](docs/install.md#a-wrapper-amdl-runs)). [docs/cli.md](docs/cli.md)
 describes it all.
 
@@ -127,8 +127,9 @@ wrapper-lite for you and lets you log in from the console.
 
 ### With a bare wrapper-lite
 
-[wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) serves one
-account and logs in from its own command line, not from the console.
+[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), AMDL-Web's fork of upstream's (see
+[The wrapper](docs/deployment.md#the-wrapper)), serves one account and logs in from its
+own command line, not from the console.
 
 - **As a Compose service:** uncomment the `wrapper-lite` service, set **Settings ›
   Account › Session service** to `http://wrapper-lite:12340` and restart, and put
@@ -137,7 +138,7 @@ account and logs in from its own command line, not from the console.
   build downloads the Android NDK and takes a while.
 - **On the host:** keep the session service the container starts with,
   `http://host.docker.internal:12340`, then log in once and serve
-  (upstream's commands):
+  (the README's commands):
 
   ```bash
   ./wrapper-lite-rootless --login user:pass --code-from-file --base-dir /data

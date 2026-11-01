@@ -115,12 +115,12 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 			pin, source, err := wrapperhost.CurrentPin(e.ctx, &http.Client{}, time.Now())
 			if err != nil {
 				return &cliError{Code: "wrapper_unavailable", exit: exitUnavailable, Message: err.Error(),
-					Hint: "download upstream's qemu-assets artifact and run amdl wrapper import <zip>"}
+					Hint: "download the qemu-assets artifact and run amdl wrapper import <zip>"}
 			}
 			if curErr == nil && cur.SHA256 == pin.SHA256 {
 				e.note("the wrapper guest from %s is already installed", pin.Commit[:12])
 			} else {
-				e.progressf("downloading the wrapper guest (%d MB, upstream commit %s, %s pin) and checking its sha256",
+				e.progressf("downloading the wrapper guest (%d MB, commit %s, %s pin) and checking its sha256",
 					pin.Size>>20, pin.Commit[:12], source)
 				rep := e.installReport()
 				_, err := h.Install(e.ctx, wrapperhost.NightlyLink{Client: &http.Client{}}, pin, time.Now(), rep.report)
