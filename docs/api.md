@@ -281,7 +281,7 @@ and, unless it was accepted, an `error` object `{code, message, details?}`:
 
 | `status` | `error.code` |
 | --- | --- |
-| `accepted` | — (the new `job` is included) |
+| `accepted` | — (the `job` is included; `requeued: true` when it is an existing job queued again) |
 | `invalid` | `invalid_url`, `unsupported_input`, `unsupported_storefront` (`details`: `storefront`, `supported_storefronts`), `decryptor_unavailable`, `invalid_configuration` |
 | `duplicate_in_request` | `duplicate_in_request` |
 | `duplicate_active` | `duplicate_active` (`existing_job_id` names the running job) |
@@ -292,6 +292,18 @@ The response is `202` with `{accepted, rejected, results}` when at least one URL
 accepted. When none was, it is an error whose `details` is that same body: `500
 store_error` if any URL failed in the job store (`500 internal_error` if the only server
 failure was an unexpected validator error), else `422 no_urls_accepted`.
+
+A link keeps one job. When its song, album, artist or playlist already has a finished job
+(`completed`, `failed` or `cancelled`; the newest one if an older database holds several)
+and none queued or running, that job is queued again under its id instead of a new one:
+the result says `requeued: true`, the job takes this request's `overrides` (replacing its
+old ones, none included), its `created_at` becomes the time of this submit, it goes to the
+end of the queue, and a `job_retried` event with `cause: "resubmit"` is recorded and the
+`job_queued` hook fires. Its run checks every track against the files first, so an album
+already on disk finishes in seconds without downloading; `force_overwrite` downloads it
+again. A job still finishing its previous run, or whose terminal hooks are still running,
+answers `duplicate_active` with its id. Station links always get a new job, since each
+draws a new track list.
 
 For album links carrying `?i=<song_id>`, `catalog.album_track_url_mode` decides the task
 type: `song` (default) treats it as a single-song job using the `i` parameter, `album`
@@ -320,7 +332,8 @@ lyrics, covers, `max_attempts`, `check_integrity`, `integrity_mode`, and the med
 `false` (the default, from `download.force_overwrite`) skips tracks whose output already
 exists.
 
-The overrides are persisted with each job and apply again on a retry or after a restart.
+The overrides are persisted with each job and apply again on a retry or after a restart;
+a resubmit of the same link replaces them.
 A job row written before the other fields were removed is read with them ignored, and its
 terminal write drops them.
 
@@ -405,7 +418,8 @@ album or artist track, at its current library path) and `force_overwrite` is off
 rest, failed and cancelled ones included, run again. A job still finishing
 its previous run is `409 job_finalizing` (retry a moment later), one whose input is
 already queued or running again is `409 duplicate_active`, and a full queue is
-`503 queue_full`. A retried job goes to the end of the queue.
+`503 queue_full`. A retried job goes to the end of the queue and keeps its `overrides` and
+`created_at`; unlike a resubmit, a retry does not fire the `job_queued` hook.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/move -d '{"before":"<job_id>"}'
@@ -415,7 +429,7 @@ Changes which queued job starts next. The body sets exactly one of `before` or `
 (another queued job's id) and `to` (`first` or `last`); anything else is
 `400 invalid_request`. The answer is `200 {job}`, the job with its new `queue_order`. A job
 that is not queued, or an anchor that is not, is `409 job_not_queued` (the message names
-it). A new job, a retried one and a moved one change only their own `queue_order`, so the
+it). A new job, a retried or resubmitted one and a moved one change only their own `queue_order`, so the
 overview feed's `download_upserted` for the moved job is all a client needs to re-sort;
 when no value is left between the new neighbors, the server renumbers the queue and
 records a `job_moved` for every job whose value changed. After a restart, the jobs that
@@ -472,6 +486,10 @@ Event types (the `EventType` enum in the spec; Go constants in `internal/domain`
 | Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired`, `integrity_overruled` |
 | Hooks | `hook_started`, `hook_succeeded`, `hook_failed` |
 | Other | `standalone_cover_failed` |
+
+`job_retried` marks the start of a job's new run. Besides the job snapshot its payload
+has `cause` (`retry` for `POST …/retry`, `resubmit` for a new submit of the same link) and
+`force_overwrite` (whether the job's overrides force overwriting files).
 
 A retry inside a codec attempt is an `operation_*` event whose `phase` is the codec.
 `job_deleted` and `motion_artwork_resolved` have no payload. Only the list-level

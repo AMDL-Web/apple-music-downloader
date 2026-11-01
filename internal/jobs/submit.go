@@ -33,6 +33,13 @@ var ErrJobFinalizing = errors.New("job is still finalizing its previous run; ret
 // batch), active-job lookup, and the DB's partial unique index as a backstop
 // against races.
 //
+// A canonical key keeps one queue entry: when it has no active job but a
+// finished one (completed, failed or cancelled; the newest when an older
+// database holds several), that job is queued again under its id
+// (requeued=true) with this request's overrides and created_at set to now,
+// and the run checks the files before downloading anything. Stations always
+// get a new job.
+//
 // overrides, when non-nil, is attached to every job created from this batch
 // and overlays the runtime config while those jobs run. Callers validate it
 // (DownloadOverrides.ApplyValidated) before submitting.
@@ -87,14 +94,14 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 			results[c.index] = duplicateActiveResult(c.url, existing.ID)
 			continue
 		}
-		job, result, admitted := m.admit(ctx, c.url, c.valid, c.key, overrides, now)
+		job, result, admitted := m.enqueue(ctx, c.url, c.valid, c.key, overrides, now)
 		results[c.index] = result
 		if result.Status == domain.SubmitQueueFull {
 			queueFull = true
 		}
 		if admitted {
 			m.wake.broadcast()
-			logging.FromContext(ctx, m.logger).Info("job queued", "job_id", job.ID, "job_type", job.Type, "storefront", job.Storefront)
+			logging.FromContext(ctx, m.logger).Info("job queued", "job_id", job.ID, "job_type", job.Type, "storefront", job.Storefront, "requeued", result.Requeued)
 		}
 	}
 
@@ -109,12 +116,10 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 	return resp
 }
 
-// admit creates one queued job at the end of the run order, records its
-// job_queued event, fires the job_queued hook and adds it to the wait list,
-// all under m.mu. Caller holds submitMu and has checked dedup.
-func (m *Manager) admit(ctx context.Context, url string, valid ValidationResult, key string, overrides *config.DownloadOverrides, now time.Time) (domain.Job, domain.SubmitResult, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+// admitLocked creates one queued job at the end of the run order, records
+// its job_queued event, fires the job_queued hook and adds it to the wait
+// list. Caller holds submitMu and m.mu and has checked dedup.
+func (m *Manager) admitLocked(ctx context.Context, url string, valid ValidationResult, key string, overrides *config.DownloadOverrides, now time.Time) (domain.Job, domain.SubmitResult, bool) {
 	if m.waiting.admitted() >= m.capacity {
 		return domain.Job{}, queueFullResult(url), false
 	}
@@ -155,9 +160,10 @@ func (m *Manager) admit(ctx context.Context, url string, valid ValidationResult,
 }
 
 // Retry re-queues a failed or cancelled job so only its unfinished tracks run
-// again: completed/skipped items keep their state (ProcessJob reuses those rows
-// and never downloads them again), while every other item (failed or
-// cancelled) is reset to queued and re-processed under its original item id.
+// again: completed/skipped items keep their state, while every other item
+// (failed or cancelled) is reset to queued and re-processed under its
+// original item id. The run checks the kept items against the files. The
+// overrides and created_at stay; the job_queued hook does not fire.
 //
 // The retried job goes to the end of the run order.
 //
@@ -182,71 +188,17 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	if job.Status != domain.JobFailed && job.Status != domain.JobCancelled {
 		return ErrJobNotRetryable
 	}
-	// The terminal status is persisted before the old worker's deferred cleanup
-	// removes its m.cancels entry (and before Cancel's queued path clears its
-	// finalizing mark), so a retry racing that window could requeue the job,
-	// let a new worker register its cancel func, and then have the old
-	// worker's deferred delete remove the new entry — leaving Cancel/Delete
-	// blind to the running retry. Same guard as Delete: refuse while either
-	// map still knows the job.
-	if m.cancels[jobID] != nil || m.finalizing[jobID] {
-		return ErrJobFinalizing
-	}
 	// The partial unique index on canonical_key allows only one queued/running
-	// job per key; refuse the retry when the same input was already
-	// resubmitted, instead of failing on the index during the status update.
+	// job per key; refuse the retry when the same input already runs in
+	// another row (an older database can hold several rows per key), instead
+	// of failing on the index during the status update.
 	if _, found, err := m.store.FindActiveJobByKey(ctx, job.CanonicalKey); err != nil {
 		return err
 	} else if found {
 		return db.ErrDuplicateActive
 	}
-	if m.waiting.admitted() >= m.capacity {
-		return ErrQueueFull
-	}
-	order, err := m.store.NextQueueOrder(ctx)
-	if err != nil {
+	if _, err := m.requeueLocked(ctx, job, requeue{cause: domain.RequeueRetry, message: "job re-queued to retry unfinished tracks"}); err != nil {
 		return err
-	}
-
-	// Reset unfinished items before the job becomes claimable, so a worker
-	// picking it up right after the enqueue never sees stale failed state.
-	// One batch statement rather than per-item updates: this runs while
-	// holding both scheduling locks, and a large collection must not stall
-	// every other queue operation for hundreds of round-trips.
-	now := time.Now().UTC()
-	if err := m.store.ResetUnfinishedItems(ctx, jobID, now); err != nil {
-		return err
-	}
-
-	// A retry is a new run: its worker sets started_at again, so the run's
-	// duration does not count the time the job sat failed.
-	job.Status = domain.JobQueued
-	job.Error = ""
-	// The reset above turned every failed and cancelled item back to queued;
-	// the job_retried payload below must carry the counters GET now derives.
-	job.FailedItems = 0
-	job.CancelledItems = 0
-	job.StartedAt = nil
-	job.FinishedAt = nil
-	job.UpdatedAt = now
-	job.QueueOrder = &order
-	// The order first: the status write below makes the job claimable.
-	if err := m.store.SetQueueOrder(ctx, jobID, order); err != nil {
-		return err
-	}
-	if err := m.store.UpdateJob(ctx, job); err != nil {
-		return err
-	}
-	m.waiting.add(jobID, false)
-	delete(m.unclaimable, jobID)
-	m.wake.broadcast()
-	// The job row already says queued and workers may claim it, so a failed
-	// event below is only logged. Mirrors SubmitBatch, which also treats the
-	// job_queued event as best-effort once the row is committed. A worker's
-	// claim waits for m.mu, so job_started cannot precede job_retried.
-	message := "job re-queued to retry unfinished tracks"
-	if err := m.Event(ctx, domain.Event{JobID: jobID, Type: domain.EventJobRetried, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
-		m.logger.Error("record job_retried event", "job_id", jobID, "error", err)
 	}
 	logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", jobID)
 	return nil

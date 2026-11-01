@@ -27,7 +27,9 @@ filters by `song`, `album`, `playlist`, `artist`, `station`; empty or omitted ma
 Every entry whose `enabled`, `events` and `job_types` all match runs, within that limit of two.
 
 - `job_queued` fires right after creation, before any track is resolved — the payload has
-  no `items` and `total_items` is 0. It **cannot** share an entry with a terminal event;
+  no `items`, and `total_items` is 0 for a new job. It fires again when a new submit of
+  the same link queues its finished job again under the same id (the payload then
+  carries the previous run's `total_items`); a retry does not fire it. It **cannot** share an entry with a terminal event;
   put creation and terminal hooks in separate entries, which may point at the same URL or
   command.
 - `job_finished` means zero failed items; `job_failed` means at least one failed item or an
@@ -178,7 +180,8 @@ Three details worth stating outright:
   album it just scanned.
 - When a new album's library-to-catalog lookup fails, the anchor stays where it was so the
   next pass tries that album again; the albums that did resolve are submitted again too,
-  which an active job dedupes and a finished one answers by skipping files on disk. A
+  which an active job dedupes and a finished one runs again under its id, skipping the
+  files already on disk. A
   lookup that fails with a client error (a 4xx other than 408 and 429) three passes in a
   row is skipped with a warning, so one album Apple refuses cannot hold the anchor back
   forever. An album with no catalog counterpart (404) is skipped at once.

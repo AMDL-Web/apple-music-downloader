@@ -60,11 +60,14 @@ type SubmitError struct {
 }
 
 // SubmitResult is the outcome of one URL. Error is set for every status
-// except accepted.
+// except accepted. Requeued is true on an accepted result whose Job is an
+// existing finished job put back in the queue under its id, rather than a new
+// one.
 type SubmitResult struct {
 	URL           string       `json:"url"`
 	Status        SubmitStatus `json:"status"`
 	Job           *Job         `json:"job,omitempty"`
+	Requeued      bool         `json:"requeued,omitempty"`
 	ExistingJobID string       `json:"existing_job_id,omitempty"`
 	Error         *SubmitError `json:"error,omitempty"`
 }

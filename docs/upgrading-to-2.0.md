@@ -93,6 +93,8 @@ needs the API changes below before it works against 2.0.
 | Submit result error | `results[].error: "code: message"`, only on some rejections | `results[].error: {code, message, details?}` on every result that is not `accepted`; codes are the spec's `SubmitErrorCode` enum | submit flows |
 | Submit store failure | `status: "invalid"` with the raw error text | `status: "error"`, `error.code: "store_error"` (retry the submit) | submit flows, status enums |
 | Submit, nothing accepted | `422` with the batch body | `422 no_urls_accepted` (or `500 store_error`) envelope; the batch body is in `error.details` | submit flows |
+| Submit of a link that already has a finished job | a new job with a new id | the finished job (completed, failed or cancelled; the newest of several) is queued again under its id: `results[].requeued: true`, its `overrides` replaced by this request's, `created_at` set to this submit; stations still get a new job | submit flows, clients that track jobs by id or sort by `created_at` |
+| `job_retried` payload | the job snapshot and `message` | adds `cause` (`retry` or `resubmit`) and `force_overwrite` | activity views |
 | Wrapper login already pending | `401` (wrapper-manager's `login already pending` reply) | `409 login_pending`; a two-step code already being verified is also `login_pending` | account screens |
 | Wrapper login timeout | `504` | `504 upstream_timeout` | account screens |
 | Wrapper login without a login API | not applicable (wrapper-manager always had one) | `501 login_unsupported` from login, two-step and logout when `wrapper.address` is a bare wrapper-lite; log in with its `--login` instead | account screens |
@@ -286,6 +288,7 @@ the Compose service name stay as they were.
 | Per-entry `timeout_seconds` | overrode the top-level timeout for one hook | removed; every attempt is cut off after 30 seconds; a file that still has it fails startup naming the entry | `hooks.yaml` entries that set it |
 | Webhook `send_payload` | `send_payload: false` sent an empty body | removed; the body is the JSON payload unless the entry's `body` template sets another, and a receiver that ignores the body ignores it; a file that still has it fails startup naming the entry | `hooks.yaml` webhook entries that set it |
 | Shutdown while a hook retries | slept out every remaining retry | retries stop; an attempt still running after the drain is cancelled and recorded as `hook_failed` | hooks whose last retry used to run during a shutdown; nothing to change |
+| `job_queued` on a repeated submit | fired for the new job | fires again for the finished job queued again under its id (same `job.id`); a retry still does not fire it | `job_queued` receivers that assume one call per job id |
 
 ## Output paths
 
@@ -359,6 +362,12 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
   again. Resume scratch that a
   job left under its own former `overrides.temp_dir` is not cleaned up: that job starts
   its tracks again, and the old folder can be deleted by hand.
+- A link keeps one job. Submitting a song, album, artist or playlist again while its
+  last job is finished runs that job again under its id instead of adding a row; the
+  run keeps nothing a file does not back up, so an album already on disk finishes in
+  seconds, and `force_overwrite` downloads it again. Rows a 1.x database holds several
+  of for one link stay as they are; only the newest is reused. `/stats` totals count
+  each job's items, so they follow its latest run.
 - Duplicate detection ignores the destination folder now that a submission cannot pick
   one: the same album, song or playlist is one download. A job from before the upgrade
   keeps its old key, so while it is queued or running (also after a retry of a failed
