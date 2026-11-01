@@ -92,8 +92,8 @@ func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T)
 	}
 
 	third := manager.SubmitBatch(ctx, []string{"song|us|222"}, nil)
-	if third.Results[0].Status != domain.SubmitAccepted {
-		t.Fatalf("third submit = %+v, want accepted after completion", third.Results[0])
+	if got := third.Results[0]; got.Status != domain.SubmitAccepted || !got.Requeued || got.Job == nil || got.Job.ID != jobID {
+		t.Fatalf("third submit = %+v, want %s requeued after completion", got, jobID)
 	}
 }
 

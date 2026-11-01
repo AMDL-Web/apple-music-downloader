@@ -1418,7 +1418,13 @@ paths:
         force_overwrite keys of the runtime download configuration. The
         media-user-token is the wrapper's when amdl can read it, else the runtime
         catalog.media_user_token (never one from the request), and every
-        enabled hooks.yaml entry that matches runs for every job.
+        enabled hooks.yaml entry that matches runs for every job. A link keeps
+        one job: when its canonical key has a finished job (completed, failed or
+        cancelled; the newest if several) and none queued or running, that job
+        is queued again under its id (requeued true) with this request's
+        overrides and created_at, a job_retried event with cause resubmit, and
+        the job_queued hook; its run checks the tracks against the files before
+        downloading. Station links always create a new job.
       operationId: createDownload
       requestBody:
         required: true
@@ -1604,8 +1610,9 @@ paths:
         library path) and force_overwrite is off; the remaining items (failed,
         cancelled, a finished one whose file is gone, etc.) are reset to queued and
         reprocessed under their original item ids, with the job's overrides unchanged.
-        Re-enqueueing records and pushes a job_retried event (an overview milestone
-        event, which drives the GET /downloads overview feed).
+        Re-enqueueing records and pushes a job_retried event with cause retry (an
+        overview milestone event, which drives the GET /downloads overview feed).
+        The job keeps its created_at, and the job_queued hook does not fire.
       operationId: retryDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
@@ -3344,7 +3351,8 @@ components:
           type: string
           enum: [accepted, invalid, duplicate_in_request, duplicate_active, queue_full, error]
           description: >-
-            accepted: a job was created. invalid: the URL will not be accepted as
+            accepted: a job was created, or a finished job for the same link was
+            queued again (requeued). invalid: the URL will not be accepted as
             it is (error.code says why). duplicate_in_request: an earlier URL in
             the same request names the same download. duplicate_active: a queued
             or running job already downloads it. queue_full: the job queue is
@@ -3352,7 +3360,12 @@ components:
             (store_error); the same submit may succeed when retried.
         job:
           $ref: '#/components/schemas/Job'
-          description: The newly created job, returned when status is accepted.
+          description: The queued job, returned when status is accepted.
+        requeued:
+          type: boolean
+          description: >-
+            True when status is accepted and job is an existing finished job
+            queued again under its id rather than a new one; omitted otherwise.
         existing_job_id:
           type: string
           description: When status is duplicate_active, points to the job with the same content that is already in progress (absent when the store's uniqueness check caught a concurrent submit).
@@ -4175,6 +4188,9 @@ components:
         created_at:
           type: string
           format: date-time
+          description: >-
+            When the job was last submitted: a resubmit of the same link sets it
+            again, a retry does not.
         updated_at:
           type: string
           format: date-time
@@ -4502,7 +4518,10 @@ components:
         job_moved, resolved_input, motion_artwork_resolved, item_completed,
         item_skipped, item_failed, job_finished, job_failed, job_cancelled and
         job_deleted reach the overview feed. job_moved records a queued job's
-        new queue_order (its payload is the Job). Clients should ignore types they do not know.
+        new queue_order (its payload is the Job). job_retried starts a job's new
+        run; its payload adds cause (retry or resubmit) and force_overwrite
+        (whether the job's overrides force overwriting files). Clients should
+        ignore types they do not know.
       enum:
         - job_queued
         - job_started

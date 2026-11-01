@@ -31,6 +31,19 @@ const (
 	EventJobDeleted EventType = "job_deleted"
 )
 
+// RequeueCause is the "cause" field of a job_retried payload: what put the
+// finished job back in the queue. The payload also carries "force_overwrite",
+// whether the job's overrides force overwriting files on disk.
+type RequeueCause string
+
+const (
+	// RequeueRetry is POST /downloads/{id}/retry of a failed or cancelled job.
+	RequeueRetry RequeueCause = "retry"
+	// RequeueResubmit is a new submission of a link whose canonical key
+	// already has a finished job; that job runs again under the same id.
+	RequeueResubmit RequeueCause = "resubmit"
+)
+
 // Input resolution events.
 const (
 	EventResolvedInput EventType = "resolved_input"
