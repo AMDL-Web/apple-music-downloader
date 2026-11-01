@@ -182,6 +182,7 @@ needs the API changes below before it works against 2.0.
   | `download.max_running_jobs` | `2` | `3` |
   | `download.max_attempts` | `4` | `3` |
   | `download.save_album_cover`, `save_artist_cover`, `save_playlist_cover` | `false` | `true` |
+  | `download.integrity_mode` (the integrity check) | every track decoded in full | `quick`, a failure confirmed with a full decode |
 - A hand edit to `config.yaml` is no longer applied by `GET /config`; send
   `POST /config/reload`. `PUT /config` re-reads the file first, so it keeps hand edits.
 - An invalid webhook URL in `hooks.yaml` fails startup instead of failing every run.

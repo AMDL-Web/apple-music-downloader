@@ -55,16 +55,16 @@ func TestMemoryModeDefaultLoadAndValidate(t *testing.T) {
 	}
 }
 
-// Existing config files lack download.integrity_mode; they must keep loading
-// with the full check.
+// Existing config files lack download.integrity_mode; they must keep loading,
+// with the quick check.
 func TestIntegrityModeDefaultLoadAndValidate(t *testing.T) {
 	cfg, err := Load(writeConfig(t, "download:\n  check_integrity: true\n"))
-	if err != nil || cfg.Download.IntegrityMode != IntegrityModeFull {
-		t.Fatalf("Load() config without integrity_mode = %q, %v; want %q", cfg.Download.IntegrityMode, err, IntegrityModeFull)
-	}
-	cfg, err = Load(writeConfig(t, "download:\n  integrity_mode: quick\n"))
 	if err != nil || cfg.Download.IntegrityMode != IntegrityModeQuick {
-		t.Fatalf("Load() quick integrity mode = %q, %v", cfg.Download.IntegrityMode, err)
+		t.Fatalf("Load() config without integrity_mode = %q, %v; want %q", cfg.Download.IntegrityMode, err, IntegrityModeQuick)
+	}
+	cfg, err = Load(writeConfig(t, "download:\n  integrity_mode: full\n"))
+	if err != nil || cfg.Download.IntegrityMode != IntegrityModeFull {
+		t.Fatalf("Load() full integrity mode = %q, %v", cfg.Download.IntegrityMode, err)
 	}
 	if _, err := Load(writeConfig(t, "download:\n  integrity_mode: fast\n")); err == nil || !strings.Contains(err.Error(), "integrity_mode") {
 		t.Fatalf("Load() invalid integrity mode error = %v, want integrity_mode validation error", err)

@@ -104,7 +104,7 @@ where in a file each sits:
 - A file cut short: samples past the end of its media data, or a box past the end of the
   file.
 
-`full` (default) decodes the whole track with ffmpeg. `quick` checks every sample's
+`full` decodes the whole track with ffmpeg. `quick` (default) checks every sample's
 position against the mdat boxes, parses every ALAC packet in Go down to its END element
 (what ffmpeg's decoder requires), and decodes only the first and last 5 seconds with
 ffmpeg. On a 24-bit/96 kHz ALAC track it costs a quarter to a third of the CPU of `full`;

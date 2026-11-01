@@ -2728,7 +2728,7 @@ components:
               enum: [full, quick]
               description: >-
                 How check_integrity checks a track; ignored when it is false. full
-                (default) decodes the whole track with ffmpeg. quick checks that every
+                decodes the whole track with ffmpeg. quick (default) checks that every
                 sample lies inside the file's media data, that every ALAC packet parses
                 and ends cleanly, and decodes only the first and last 5 seconds; damage
                 confined to the middle of an AAC or Dolby track passes it.

@@ -330,8 +330,8 @@ download:
   # with ffmpeg. A quick failure is confirmed with a full decode before it counts; if the decode passes,
   # the file is kept and an integrity_overruled event is recorded. Damage confined to the middle of an
   # AAC or Dolby track passes quick. A change takes effect for newly started jobs, without a restart.
-  # Absent: full. Default: full.
-  integrity_mode: "full"
+  # Absent: quick. Default: quick.
+  integrity_mode: "quick"
   # bool: true overwrites an existing output file (and its lyrics sidecars) when
   # a job downloads the same track again; false skips tracks whose output file
   # already exists. Default: false. Can be overridden per submission via the

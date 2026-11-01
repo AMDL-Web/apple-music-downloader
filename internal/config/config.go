@@ -262,7 +262,7 @@ func Default() Config {
 			EmbedCover: true, SaveAlbumCover: true, SaveArtistCover: true, SavePlaylistCover: true,
 			EmbedLyrics: true, LyricsFiles: []string{}, LyricsTiming: "line", LyricsExtras: []string{},
 			ALACMaxSampleRate: 192000, ALACMaxBitDepth: 24, CheckIntegrity: true,
-			IntegrityMode: IntegrityModeFull,
+			IntegrityMode: IntegrityModeQuick,
 		},
 		Tools:    ToolsConfig{FFmpeg: "ffmpeg"},
 		Simulate: SimulateConfig{Enabled: false, MinSpeedKBps: 512, MaxSpeedKBps: 4096},

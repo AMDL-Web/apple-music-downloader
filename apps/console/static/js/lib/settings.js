@@ -245,7 +245,7 @@ export const FIELDS = [
     section: 'jobs',
     type: 'select',
     label: 'Integrity check',
-    defaultValue: 'full',
+    defaultValue: 'quick',
     options: [
       { value: 'full', label: 'Full', hint: 'Decodes the whole track' },
       { value: 'quick', label: 'Quick', hint: 'A quarter to a third of the CPU; misses damage mid-track in AAC and Dolby' },
