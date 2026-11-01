@@ -135,12 +135,17 @@ func (m *model) finishedLine(j domain.Job, d *client.DownloadDetail, n int) stri
 	case domain.JobCancelled:
 		mark, c = "⊘ ", t.dim
 	}
+	dim := t.style(t.dim)
 	var parts []string
 	if j.TotalItems > 0 {
-		parts = append(parts, fmt.Sprintf("%d/%d saved", j.CompletedItems+j.SkippedItems, j.TotalItems))
+		saved := dim.Render(fmt.Sprintf("%d/%d saved", j.CompletedItems+j.SkippedItems, j.TotalItems))
+		if j.FailedItems > 0 {
+			saved += " " + t.style(t.bad).Render(fmt.Sprintf("✗%d", j.FailedItems))
+		}
+		parts = append(parts, saved)
 	}
 	if j.SkippedItems > 0 {
-		parts = append(parts, fmt.Sprintf("%d already on disk", j.SkippedItems))
+		parts = append(parts, dim.Render(fmt.Sprintf("%d already on disk", j.SkippedItems)))
 	}
 	if d != nil {
 		var size int64
@@ -152,36 +157,28 @@ func (m *model) finishedLine(j domain.Job, d *client.DownloadDetail, n int) stri
 			}
 		}
 		if quality != "" {
-			parts = append(parts, quality)
+			parts = append(parts, dim.Render(quality))
 		}
 		if size > 0 {
-			parts = append(parts, format.Bytes(size))
+			parts = append(parts, dim.Render(format.Bytes(size)))
 		}
 	}
 	if j.StartedAt != nil && j.FinishedAt != nil && j.FinishedAt.Sub(*j.StartedAt) >= time.Second {
-		parts = append(parts, format.Duration(j.FinishedAt.Sub(*j.StartedAt)))
+		parts = append(parts, dim.Render(format.Duration(j.FinishedAt.Sub(*j.StartedAt))))
 	}
-	parts = append(parts, fmt.Sprintf("#%d", n))
+	parts = append(parts, dim.Render(fmt.Sprintf("#%d", n)))
 	name := t.bold().Render(jobName(j))
 	if j.ArtistName != "" {
-		name += t.style(t.dim).Render(" — " + j.ArtistName)
+		name += dim.Render(" — " + j.ArtistName)
 	}
-	line := t.style(c).Render(mark) + name + t.style(t.dim).Render(" · "+strings.Join(parts, " · "))
+	sep := dim.Render(" · ")
+	line := t.style(c).Render(mark) + name + sep + strings.Join(parts, sep)
 	if j.FailedItems > 0 || j.Status == domain.JobFailed || j.Status == domain.JobCancelled {
-		why := ""
-		if j.FailedItems > 0 {
-			why = fmt.Sprintf("%d failed", j.FailedItems)
-		}
+		line += "\n  "
 		if j.Error != "" {
-			why = strings.TrimPrefix(why+": "+j.Error, ": ")
+			line += t.style(t.bad).Render(j.Error) + sep
 		}
-		var b strings.Builder
-		b.WriteString("\n  ")
-		if why != "" {
-			b.WriteString(t.style(t.bad).Render(why) + t.style(t.dim).Render(" · "))
-		}
-		b.WriteString(t.style(t.dim).Render(fmt.Sprintf("/retry %d", n)))
-		line += b.String()
+		line += dim.Render(fmt.Sprintf("/retry %d", n))
 	}
 	return line
 }

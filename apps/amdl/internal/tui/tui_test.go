@@ -221,7 +221,7 @@ func TestPrintedLinesFitTheTerminal(t *testing.T) {
 	m := sample(t)
 	m.width = 46
 	long := func(int) string {
-		return "✓ Glass Weather — Mira Solenne · 12/12 saved · ALAC 24/48 · 864.6 MB · 3:42 · #1\n  2 failed: the wrapper closed the connection · /retry 1"
+		return "✗ Glass Weather — Mira Solenne · 10/12 saved ✗2 · ALAC 24/48 · 864.6 MB · 3:42 · #1\n  the wrapper closed the connection while the key was read · /retry 1"
 	}
 	lines := m.printLines(long)
 	if len(lines) < 4 {
@@ -267,9 +267,15 @@ func TestFinishedJobGoesToScrollbackOnce(t *testing.T) {
 	if strings.Contains(line, "/retry") {
 		t.Errorf("a clean finish offers no retry: %q", line)
 	}
-	j.Status, j.FailedItems = domain.JobFailed, 1
-	if line := stripANSI(m.finishedLine(j, nil, 1)); !strings.Contains(line, "1 failed") || !strings.Contains(line, "/retry 1") {
-		t.Errorf("a failed job says how to retry it: %q", line)
+	// Two of the twelve failed: the count says so, so it never reads as 12/12.
+	j.Status, j.CompletedItems, j.FailedItems = domain.JobFailed, 9, 2
+	line = stripANSI(m.finishedLine(j, nil, 1))
+	if !strings.HasPrefix(line, "✗ IGOR — Tyler, The Creator · 10/12 saved ✗2 · 1 already on disk") || !strings.HasSuffix(line, "\n  /retry 1") {
+		t.Errorf("a partly failed job: %q", line)
+	}
+	j.TotalItems, j.CompletedItems, j.SkippedItems, j.FailedItems, j.Error = 0, 0, 0, 0, "the link is not available in the us storefront"
+	if line := stripANSI(m.finishedLine(j, nil, 1)); !strings.HasSuffix(line, "\n  the link is not available in the us storefront · /retry 1") || strings.Contains(line, "saved") {
+		t.Errorf("a job that failed before its tracks: %q", line)
 	}
 }
 

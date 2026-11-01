@@ -225,7 +225,9 @@ which are all queued or running already are not an error. `set_config`, like
 for people (`apps/amdl/internal/tui`). It renders inline rather than taking over the
 screen: what is done goes into the terminal's own scrollback (the banner, each request
 and its answer, and one line per job when it finishes), and only the bottom of the
-screen is redrawn.
+screen is redrawn. A finished line counts the tracks saved, then `✗` and the number that
+failed, if any; under a job that failed it names `/retry` with the job's number, which
+runs again only the tracks that did not finish (`POST /downloads/{id}/retry`).
 
 - **The banner** opens the session: the logo, amdl and its version, the server with its
   wrapper's state, the server's download folder with the space left there, and how many
