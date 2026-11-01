@@ -48,6 +48,10 @@ type Cache struct {
 	entries map[key]*entry
 	slots   chan struct{}
 	sweepAt bool
+
+	// now and decoder are time.Now and newDecoder but in tests.
+	now     func() time.Time
+	decoder func(ffmpeg, file string, w, h int, fps float64) (ui.VideoDecoder, error)
 }
 
 type key struct {
@@ -74,6 +78,14 @@ func New(post func(func()), dir string, log *slog.Logger) *Cache {
 		http:    &http.Client{Transport: netproxy.Transport(), Timeout: time.Minute},
 		entries: map[key]*entry{},
 		slots:   make(chan struct{}, 2),
+		now:     time.Now,
+		decoder: func(ffmpeg, file string, w, h int, fps float64) (ui.VideoDecoder, error) {
+			d, err := newDecoder(ffmpeg, file, w, h, fps)
+			if err != nil {
+				return nil, err
+			}
+			return d, nil
+		},
 	}
 	go trimDir(dir, dirLimit)
 	return c
@@ -112,7 +124,7 @@ func (c *Cache) Get(master string, px int) *ui.VideoPlayer {
 	if master == "" || c.ffmpeg == "" {
 		return nil
 	}
-	now := time.Now()
+	now := c.now()
 	c.sweep(now)
 	k := key{master, bucket(px)}
 	e := c.entries[k]
@@ -134,7 +146,7 @@ func (c *Cache) Get(master string, px int) *ui.VideoPlayer {
 			e.loading = false
 			switch {
 			case err != nil:
-				e.failedAt = time.Now()
+				e.failedAt = c.now()
 				c.log.Info("motion cover not played", "master", master, "error", err)
 			case c.entries[k] != e:
 				p.Close() // dropped while it opened
@@ -142,7 +154,7 @@ func (c *Cache) Get(master string, px int) *ui.VideoPlayer {
 				e.player = p
 				// The view may have left while it opened: the sweep stops it
 				// in time even if nothing asks again.
-				c.sweep(time.Now())
+				c.sweep(c.now())
 			}
 		})
 	}()
@@ -186,7 +198,7 @@ func (c *Cache) sweep(now time.Time) {
 		time.AfterFunc(idleClose, func() {
 			c.post(func() {
 				c.sweepAt = false
-				c.sweep(time.Now())
+				c.sweep(c.now())
 			})
 		})
 	}
@@ -214,13 +226,16 @@ func (c *Cache) open(k key, ffmpeg string) (*ui.VideoPlayer, error) {
 		return nil, err
 	}
 	w, h := outSize(v, k.px)
-	d, err := newDecoder(ffmpeg, file, w, h, v.FrameRate)
+	d, err := c.decoder(ffmpeg, file, w, h, v.FrameRate)
 	if err != nil {
 		return nil, err
 	}
 	p, err := ui.NewVideoPlayer(d)
 	if err != nil {
-		d.Close()
+		// A decoder that did not play is dropped whatever closing reports.
+		if cl, ok := d.(io.Closer); ok {
+			_ = cl.Close()
+		}
 		return nil, err
 	}
 	return p.SetLoop(true), nil
