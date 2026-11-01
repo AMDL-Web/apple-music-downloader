@@ -174,7 +174,7 @@ func (a *App) artistView(c *ui.Context, k *Tokens, sel *client.SearchHit, width 
 	ar := &s.Search.Artist
 	ui.Column(c).Gap(16).Children(func() {
 		if button(c, k, buttonGhost, "Results", icBack).Label("Back to the results").AlignSelf(ui.Start).Clicked() {
-			a.searchSel, a.searchReveal = store.HitKey(ar.Artist), true
+			a.searchSel, a.searchReveal, a.searchKeyed = store.HitKey(ar.Artist), true, false
 			s.OpenArtist("")
 			return
 		}
@@ -249,7 +249,7 @@ func (a *App) moveHit(by int) {
 		i += by
 	}
 	a.searchSel = store.HitKey(hits[min(max(i, 0), len(hits)-1)])
-	a.searchReveal = true
+	a.searchReveal, a.searchKeyed = true, true
 }
 
 // searchKeys are the search's window keys, for when the keyboard is out of
@@ -267,7 +267,7 @@ func (a *App) searchKeys(c *ui.Context) {
 		switch {
 		case s.Search.Artist.ID != "":
 			a.searchSel = store.HitKey(s.Search.Artist.Artist)
-			a.searchReveal = true
+			a.searchReveal, a.searchKeyed = true, true
 			s.OpenArtist("")
 		case s.Search.Focus != "":
 			a.focusGroup("")
@@ -287,7 +287,7 @@ func (a *App) actOnHit() {
 	h := a.chosenHit(hits)
 	if h == nil {
 		if len(hits) > 0 {
-			a.searchSel, a.searchReveal = store.HitKey(hits[0]), true
+			a.searchSel, a.searchReveal, a.searchKeyed = store.HitKey(hits[0]), true, true
 		}
 		return
 	}

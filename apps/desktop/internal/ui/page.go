@@ -93,7 +93,7 @@ func (a *App) revealAlbum() {
 	h := a.Store.Search.Album.Hit
 	for _, x := range a.Store.Search.ShownHits() {
 		if store.HitKey(x) == store.HitKey(h) {
-			a.searchSel, a.searchReveal = store.HitKey(h), false
+			a.searchSel, a.searchReveal, a.searchKeyed = store.HitKey(h), false, false
 			return
 		}
 	}

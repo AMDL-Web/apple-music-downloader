@@ -69,7 +69,9 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 			open := ui.ButtonBase(c.Key("open")).Size(size, size).Radius(radius).Label(h.Name).
 				Shadow(0, 12, 28, -14, ui.RGBA(0, 0, 0, 0.5))
 			if on {
-				focusRing(open, radius)
+				if a.searchKeyed {
+					focusRing(open, radius)
+				}
 				if a.searchReveal {
 					open.ScrollIntoView()
 					a.searchReveal = false
@@ -208,7 +210,9 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 		card.Background(k.Raise2)
 	}
 	if on {
-		focusRing(card, radiusTile)
+		if a.searchKeyed {
+			focusRing(card, radiusTile)
+		}
 		if a.searchReveal {
 			card.ScrollIntoView()
 			a.searchReveal = false

@@ -147,9 +147,12 @@ type App struct {
 	set        settingsForm
 	su         setupForm
 	// searchSel is the HitKey of the hit the search acts on; searchReveal
-	// scrolls it into view once, after the keyboard moved it.
+	// scrolls it into view once, after the keyboard moved it. searchKeyed
+	// is set while the keys chose it, which rings it: one chosen otherwise,
+	// as the album Back returns to, is only where the keys go on from.
 	searchSel    string
 	searchReveal bool
+	searchKeyed  bool
 	// confirmAll is the artist whose "Download all" waits for its second
 	// click since confirmAt.
 	confirmAll string
