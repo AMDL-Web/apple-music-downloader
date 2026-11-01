@@ -67,7 +67,7 @@ func (n NightlyLink) artifactURL(p Pin) string {
 	if base == "" {
 		base = "https://nightly.link"
 	}
-	return fmt.Sprintf("%s/WorldObservationLog/wrapper/actions/artifacts/%d.zip", base, p.ArtifactID)
+	return fmt.Sprintf("%s/%s/actions/artifacts/%d.zip", base, GuestRepo, p.ArtifactID)
 }
 
 // Ranges implements RangeFetcher. It resolves nightly.link's redirect once;

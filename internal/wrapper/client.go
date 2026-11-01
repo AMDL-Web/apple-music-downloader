@@ -126,7 +126,7 @@ type Managed struct {
 	// TCG, plain emulation.
 	AccelFallback bool   `json:"accel_fallback"`
 	QEMU          string `json:"qemu"`
-	// Guest names the installed guest: its upstream commit, or an import.
+	// Guest names the installed guest: the commit it was built from, or an import.
 	Guest string `json:"guest"`
 	// LoginResidue means the guest disk may still hold the last login's
 	// arguments, password included: amdl zeroes them before the next

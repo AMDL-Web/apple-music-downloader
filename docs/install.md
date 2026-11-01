@@ -194,24 +194,25 @@ amdl only needs its address. Four ways to get one:
 - **On macOS, Windows, or Linux without user namespaces** (such as Synology DSM), run
   upstream's `wrapper-lite-qemu` yourself, which boots wrapper-lite in a small QEMU guest
   and forwards its port to the host; the
-  [wrapper-lite README](https://github.com/WorldObservationLog/wrapper/tree/lite#run-with-qemu-recommended)
+  [wrapper-lite README](https://github.com/AMDL-Web/wrapper/tree/lite#run-with-qemu-recommended)
   calls it the recommended way to run. wrapper-manager v2 has an equivalent,
   `wrapper-manager-qemu`
   ([its README](https://github.com/WorldObservationLog/wrapper-manager/tree/v2#run-on-any-os-via-qemu-wrapper-manager-qemu)).
 
-Notes on `wrapper-lite-qemu`, from upstream's sources:
+Notes on `wrapper-lite-qemu`, from its sources:
 
 - Its packages, with QEMU and its firmware bundled, are build artifacts of the
-  `build-lite` workflow on the `lite` branch, not GitHub releases:
+  `build-lite` workflow on the `lite` branch of AMDL-Web's fork
+  ([why](deployment.md#the-wrapper)), not GitHub releases:
   `wrapper-lite-qemu-macos-aarch64`, `-windows-x86_64`, `-linux-x86_64` and
   `-linux-aarch64`. There is none for Intel Macs. GitHub serves artifacts only to
-  signed-in users and deletes them after 90 days; wrapper-manager's README downloads them
-  through nightly.link, for example
-  `https://nightly.link/WorldObservationLog/wrapper/workflows/build-lite.yml/lite/wrapper-lite-qemu-macos-aarch64.zip`.
+  signed-in users and deletes them after 90 days; nightly.link serves them without a
+  sign-in, for example
+  `https://nightly.link/AMDL-Web/wrapper/workflows/build-lite.yml/lite/wrapper-lite-qemu-macos-aarch64.zip`.
 - The guest is x86_64. The launcher accelerates it with KVM on Linux and WHPX on
   Windows, and falls back to TCG, software emulation, when those are unavailable. On
   Apple Silicon it always uses TCG, since HVF cannot run an x86_64 guest
-  ([`wrapper-lite-qemu.cpp`](https://github.com/WorldObservationLog/wrapper/blob/lite/wrapper-lite-qemu.cpp), `autoAccel`).
+  ([`wrapper-lite-qemu.cpp`](https://github.com/AMDL-Web/wrapper/blob/lite/wrapper-lite-qemu.cpp), `autoAccel`).
 - Log in once, then serve, as the README shows:
   `./wrapper-lite-qemu --login user:pass --code-from-file`, then `./wrapper-lite-qemu`.
   It listens on `127.0.0.1:12340`, so `--wrapper http://127.0.0.1:12340`.
@@ -219,7 +220,7 @@ Notes on `wrapper-lite-qemu`, from upstream's sources:
 ### A wrapper amdl runs
 
 ```bash
-amdl wrapper install          # QEMU, then upstream's guest
+amdl wrapper install          # QEMU, then the wrapper-lite guest
 amdl service install          # runs the backend, which runs the wrapper
 amdl wrapper login            # asks for the Apple ID, password and any two-step code
 ```
@@ -228,14 +229,16 @@ amdl wrapper login            # asks for the Apple ID, password and any two-step
 `brew install qemu` on macOS or `winget install --id SoftwareFreedomConservancy.QEMU -e`
 on Windows (pass `--yes` when no one can answer), and prints the package command on
 Linux, where it needs `sudo`; `--qemu PATH` names one elsewhere. It then downloads
-upstream's guest: the kernel, initramfs and empty disk image of the `qemu-assets`
-artifact of upstream's `build-lite` workflow, through nightly.link, and installs it
+the guest: the kernel, initramfs and empty disk image of the `qemu-assets` artifact of
+the `build-lite` workflow in `internal/wrapperhost#GuestRepo`, AMDL-Web's fork of
+wrapper-lite ([why](deployment.md#the-wrapper)), through nightly.link, and installs it
 only if its sha256 matches the pin amdl carries (`internal/wrapperhost#Builtin`) or
-the newer one published at `internal/wrapperhost#ManifestURL`. Upstream's artifacts
-expire 90 days after their build; when no pin can be downloaded, fetch the artifact
-yourself and run `amdl wrapper import <zip|dir>`, which also accepts one of
-upstream's `wrapper-lite-qemu` packages. Nothing upstream builds is shipped with amdl:
-the guest holds Apple's Android libraries.
+the newer one published at `internal/wrapperhost#ManifestURL`. The artifacts expire
+90 days after their build; when no pin can be downloaded, fetch the artifact yourself
+and run `amdl wrapper import <zip|dir>`, which also accepts one of the
+`wrapper-lite-qemu` packages. No guest is shipped with amdl: it holds Apple's Android
+libraries. Running `amdl wrapper install` again replaces an installed guest whose
+sha256 differs from the current pin.
 
 The desktop app's setup screen does the same in standalone mode, row by row: it shows
 the QEMU or ffmpeg package command and runs it after Run (it only shows a command that

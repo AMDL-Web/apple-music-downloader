@@ -1,5 +1,6 @@
 // Finds the qemu-assets artifact of the newest successful build-lite run on
-// upstream's lite branch, downloads it, and writes it as the pin amdl wrapper
+// the lite branch of AMDL-Web's wrapper fork (internal/wrapperhost#GuestRepo),
+// downloads it, and writes it as the pin amdl wrapper
 // install reads (internal/wrapperhost#Pin) once its sha256 matches the digest
 // GitHub reports. The wrapper-pin workflow runs it weekly and commits the file
 // to the wrapper-pins branch, so installs keep working after the pin a
@@ -10,7 +11,8 @@ import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const api = 'https://api.github.com/repos/WorldObservationLog/wrapper';
+const repo = 'AMDL-Web/wrapper';
+const api = `https://api.github.com/repos/${repo}`;
 
 // pick chooses the artifact to pin from a run and its artifacts listing.
 export function pick(run, artifacts) {
@@ -52,7 +54,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const run = runs.workflow_runs?.[0];
   if (!run) throw new Error('no successful build-lite run on lite');
   const pin = pick(run, (await json(`${api}/actions/runs/${run.id}/artifacts?per_page=100`)).artifacts);
-  const got = await sha256Of(`https://nightly.link/WorldObservationLog/wrapper/actions/artifacts/${pin.artifact_id}.zip`);
+  const got = await sha256Of(`https://nightly.link/${repo}/actions/artifacts/${pin.artifact_id}.zip`);
   if (got.sha256 !== pin.sha256 || got.size !== pin.size) {
     throw new Error(`artifact ${pin.artifact_id}: downloaded ${got.size} bytes with sha256 ${got.sha256}, GitHub says ${pin.size} with ${pin.sha256}`);
   }

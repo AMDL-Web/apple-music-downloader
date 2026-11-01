@@ -2,9 +2,9 @@
 // QEMU guest, for a backend that has no wrapper elsewhere: the desktop app's
 // standalone mode and amdl serve --local.
 //
-// The guest is upstream's (github.com/WorldObservationLog/wrapper, branch
-// lite): its kernel, initramfs and empty data image, the qemu-assets artifact
-// of the build-lite workflow, downloaded at install time and never shipped
+// The guest is wrapper-lite from the AMDL-Web fork (GuestRepo, branch lite):
+// its kernel, initramfs and empty data image, the qemu-assets artifact of the
+// build-lite workflow, downloaded at install time and never shipped
 // with amdl, since the initramfs holds Apple's Android libraries. QEMU is the
 // user's own. amdl starts QEMU itself rather than through upstream's
 // wrapper-lite-qemu launcher, which puts --login user:pass on the QEMU command
@@ -44,9 +44,9 @@ type Home struct{ Dir string }
 
 // Installed records the guest files in use.
 type Installed struct {
-	// ID names the assets directory: the upstream commit, or import-<sha>.
+	// ID names the assets directory: the build's commit, or import-<sha>.
 	ID string `json:"id"`
-	// Commit is the upstream commit the artifact was built from; empty for
+	// Commit is the GuestRepo commit the artifact was built from; empty for
 	// an import of unknown origin.
 	Commit     string    `json:"commit,omitempty"`
 	ArtifactID int64     `json:"artifact_id,omitempty"`

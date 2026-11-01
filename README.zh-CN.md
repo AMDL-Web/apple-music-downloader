@@ -36,7 +36,7 @@ Server-Sent Events 接口，以及同一端口上的网页控制台。它以容�
 JSON，错误以 JSON 写到 stderr，退出码区分失败类别，`amdl cli search "<任务>"` 能找到对应
 的命令。`amdl mcp` 把同样的能力作为 MCP 工具提供；在终端里直接运行 `amdl` 会打开给人用的交互界面，`make tui-web` 把它编译给浏览器，数据来自桌面演示版同一个虚构后端。没有单独部署服务器时，`amdl service install`
 会把后端作为登录即启动的后台服务跑在本机，`amdl wrapper install` 再给它配一个自己的 wrapper：
-由后端在 QEMU 虚拟机里运行的上游 wrapper-lite（[docs/install.md](docs/install.md#a-wrapper-amdl-runs)）。
+由后端在 QEMU 虚拟机里运行的 wrapper-lite（[docs/install.md](docs/install.md#a-wrapper-amdl-runs)）。
 详见 [docs/cli.md](docs/cli.md)。
 
 ### 官网
@@ -112,14 +112,14 @@ wrapper-lite，并且可以在控制台里登录。
 
 ### 搭配单独的 wrapper-lite
 
-[wrapper-lite](https://github.com/WorldObservationLog/wrapper/tree/lite) 只服务一个账号，
-在它自己的命令行里登录，不能从控制台登录。
+[wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite)（AMDL-Web 维护的上游 fork，见
+[The wrapper](docs/deployment.md#the-wrapper)）只服务一个账号，在它自己的命令行里登录，不能从控制台登录。
 
 - **作为 Compose 服务：** 取消注释 `wrapper-lite` 服务，设置
   `AMDL_WRAPPER_ADDRESS: "http://wrapper-lite:12340"`，并在 `docker-compose.yml` 旁边的
   `.env` 文件里写上 `USERNAME` 和 `PASSWORD`，供第一次启动登录用。Apple 要求两步验证码时，
   把验证码写进 `./data/wrapper` 里的 `2fa.txt`。构建镜像要下载 Android NDK，比较慢。
-- **直接跑在主机上：** 保持默认的 `AMDL_WRAPPER_ADDRESS`，先登录一次，再启动服务（上游给出的命令）：
+- **直接跑在主机上：** 保持默认的 `AMDL_WRAPPER_ADDRESS`，先登录一次，再启动服务（它的 README 给出的命令）：
 
   ```bash
   ./wrapper-lite-rootless --login user:pass --code-from-file --base-dir /data
