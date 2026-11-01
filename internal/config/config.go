@@ -131,7 +131,6 @@ func (c CatalogConfig) TokenTTL() time.Duration {
 type DownloadConfig struct {
 	QualityPriority      []string `yaml:"quality_priority" json:"quality_priority"`
 	CodecAlternative     bool     `yaml:"codec_alternative" json:"codec_alternative"`
-	MemoryMode           string   `yaml:"memory_mode" json:"memory_mode"`
 	MaxRunningJobs       int      `yaml:"max_running_jobs" json:"max_running_jobs"`
 	MaxParallelDownloads int      `yaml:"max_parallel_downloads" json:"max_parallel_downloads"`
 	MaxAttempts          int      `yaml:"max_attempts" json:"max_attempts"`
@@ -164,11 +163,7 @@ type DownloadConfig struct {
 	ForceOverwrite          bool     `yaml:"force_overwrite" json:"force_overwrite"`
 }
 
-// MemoryModeLow and MemoryModeHigh are the download.memory_mode values.
 const (
-	MemoryModeLow  = "low"
-	MemoryModeHigh = "high"
-
 	// IntegrityModeFull and IntegrityModeQuick are the download.integrity_mode
 	// values.
 	IntegrityModeFull  = "full"
@@ -243,7 +238,7 @@ func Default() Config {
 			MotionArtworkEnabled: true,
 		},
 		Download: DownloadConfig{
-			QualityPriority: []string{"alac"}, CodecAlternative: true, MemoryMode: MemoryModeLow,
+			QualityPriority: []string{"alac"}, CodecAlternative: true,
 			MaxRunningJobs: 3, MaxParallelDownloads: 16, MaxAttempts: 3,
 			ProgressEventIntervalMS: 500,
 			DownloadsDir:            "data/downloads",

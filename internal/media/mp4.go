@@ -283,9 +283,9 @@ func (p *MP4Processor) produceToFlatFile(
 
 // streamDecryptToFlatFile decrypts and re-encodes one fragment at a time and
 // feeds the resulting fragmented MP4 directly to ffmpeg over stdin. The caller
-// supplies either the high-mode encrypted whole-track cache or low-mode raw
-// checkpoint; both retain only the current encrypted and decrypted fragments
-// in Go's heap. No dec-* or fix-*/in.m4a copy is made.
+// supplies the encrypted checkpoint file; only the current encrypted and
+// decrypted fragments are held in Go's heap. No dec-* or fix-*/in.m4a copy is
+// made.
 func (p *MP4Processor) streamDecryptToFlatFile(
 	ctx context.Context,
 	r io.Reader,

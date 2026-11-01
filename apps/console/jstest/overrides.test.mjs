@@ -39,7 +39,6 @@ const SERVER = {
   lyrics_files: [],
   lyrics_timing: 'line',
   max_attempts: 3,
-  memory_mode: 'low',
   quality_priority: ['alac'],
   save_album_cover: true,
   save_artist_cover: true,
@@ -54,7 +53,7 @@ test('optionDefaults reads the edited keys from the server and nothing else', ()
   const d = optionDefaults(SERVER);
   assert.deepEqual(Object.keys(d), OPTION_KEYS);
   assert.deepEqual(d, { ...OPTION_DEFAULTS, quality_priority: ['alac'] });
-  for (const key of ['downloads_dir', 'memory_mode', 'max_attempts', 'embed_lyrics', 'cover_size']) assert.equal(key in d, false, key);
+  for (const key of ['downloads_dir', 'max_attempts', 'embed_lyrics', 'cover_size']) assert.equal(key in d, false, key);
 });
 
 test('optionDefaults falls back per key', () => {

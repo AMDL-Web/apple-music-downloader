@@ -141,7 +141,6 @@ func TestStoreGetSet(t *testing.T) {
 var overrideExclusions = map[string]bool{
 	"download.progress_event_interval_ms": true,
 	// Install settings that Settings changes for every job.
-	"download.memory_mode":          true,
 	"download.max_attempts":         true,
 	"download.downloads_dir":        true,
 	"download.song_path_format":     true,

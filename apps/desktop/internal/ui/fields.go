@@ -131,8 +131,6 @@ var configFields = []configField{
 		help: restartHelp, min: 1, max: 64},
 	{key: "catalog.max_parallel_requests", section: "jobs", kind: fieldNumber, label: "Apple requests at once",
 		help: restartHelp, min: 1, max: 64},
-	{key: "download.memory_mode", section: "jobs", kind: fieldSelect, label: "Memory use",
-		help: "Faster with more RAM, or slower and lighter.", options: []option{{"low", "Low memory"}, {"high", "High memory"}}},
 	{key: "download.max_attempts", section: "jobs", kind: fieldNumber, label: "Tries per file",
 		min: 1, max: 10},
 	{key: "download.progress_event_interval_ms", section: "jobs", kind: fieldNumber, label: "Progress updates every",

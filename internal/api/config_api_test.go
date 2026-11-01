@@ -57,9 +57,6 @@ func TestGetConfigReturnsEditableFields(t *testing.T) {
 	if download["cover_format"] != "jpg" {
 		t.Fatalf("download.cover_format = %v, want jpg", download["cover_format"])
 	}
-	if download["memory_mode"] != config.MemoryModeLow {
-		t.Fatalf("download.memory_mode = %v, want low", download["memory_mode"])
-	}
 	var catalog map[string]any
 	if err := json.Unmarshal(resp.Config["catalog"], &catalog); err != nil {
 		t.Fatal(err)
@@ -82,7 +79,7 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	server := &Server{cfg: store}
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
-		`{"download":{"embed_lyrics":false,"cover_format":"png","memory_mode":"high"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"album_track_url_mode":"album"}}`)
+		`{"download":{"embed_lyrics":false,"cover_format":"png"},"simulate":{"enabled":true,"min_speed_kbps":10,"max_speed_kbps":20},"catalog":{"album_track_url_mode":"album"}}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
@@ -92,7 +89,7 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	}
 
 	got := store.Get()
-	if got.Download.EmbedLyrics || got.Download.CoverFormat != "png" || got.Download.MemoryMode != config.MemoryModeHigh || !got.Simulate.Enabled {
+	if got.Download.EmbedLyrics || got.Download.CoverFormat != "png" || !got.Simulate.Enabled {
 		t.Fatalf("update not applied to store: %+v %+v", got.Download, got.Simulate)
 	}
 	if got.Catalog.AlbumTrackURLMode != "album" {
@@ -312,7 +309,7 @@ func TestUpdateConfigRejectsBadInput(t *testing.T) {
 		{name: "removed metadata limit", body: `{"download":{"max_parallel_metadata_requests":32}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_metadata_requests"},
 		{name: "removed media limit", body: `{"download":{"max_parallel_media_downloads":32}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_media_downloads"},
 		{name: "removed wrapper pool", body: `{"download":{"max_parallel_wrapper_requests":8}}`, status: http.StatusBadRequest, code: "invalid_request", want: "max_parallel_wrapper_requests"},
-		{name: "invalid memory mode", body: `{"download":{"memory_mode":"auto"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "memory_mode"},
+		{name: "removed memory mode", body: `{"download":{"memory_mode":"high"}}`, status: http.StatusBadRequest, code: "invalid_request", want: "memory_mode"},
 		{name: "malformed cover size", body: `{"download":{"cover_size":"big"}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "download.cover_size"},
 		{name: "locked field", body: `{"server":{"listen":"0.0.0.0:1"}}`, status: http.StatusUnprocessableEntity, code: "config_key_not_mutable", want: "server.listen"},
 		{name: "worker count over its limit", body: `{"download":{"max_running_jobs":99}}`, status: http.StatusUnprocessableEntity, code: "invalid_config", want: "max_running_jobs"},
@@ -406,7 +403,7 @@ func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default())}
 	for _, field := range []string{
 		"embedd_lyrics", "media_user_token", "hooks", "downloads_dir", "temp_dir", "song_path_format",
-		"embed_lyrics", "lyrics_extras", "cover_size", "save_album_cover", "max_attempts", "memory_mode", "check_integrity", "integrity_mode",
+		"embed_lyrics", "lyrics_extras", "cover_size", "save_album_cover", "max_attempts", "check_integrity", "integrity_mode",
 		"max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads", "max_parallel_wrapper_requests", "max_parallel_downloads", "max_parallel_decrypts",
 	} {
 		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",

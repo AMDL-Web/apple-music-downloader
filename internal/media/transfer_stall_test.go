@@ -67,7 +67,7 @@ func TestMediaTransferSurvivesSlowSteadyLink(t *testing.T) {
 
 	t.Run("memory", func(t *testing.T) {
 		start := time.Now()
-		got, err := downloadToMemory(context.Background(), server.Client(), server.URL, true, stall, nil)
+		got, err := downloadToMemory(context.Background(), server.Client(), server.URL, stall, nil)
 		if err != nil {
 			t.Fatalf("slow transfer failed: %v", err)
 		}
@@ -112,7 +112,7 @@ func TestMediaTransferFailsClearlyWhenTheBodyStalls(t *testing.T) {
 	}
 	t.Run("memory", func(t *testing.T) {
 		start := time.Now()
-		_, err := downloadToMemory(context.Background(), server.Client(), server.URL, false, stall, nil)
+		_, err := downloadToMemory(context.Background(), server.Client(), server.URL, stall, nil)
 		check(t, err, time.Since(start))
 	})
 	t.Run("checkpoint keeps the partial bytes", func(t *testing.T) {

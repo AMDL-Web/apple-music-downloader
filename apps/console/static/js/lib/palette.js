@@ -48,7 +48,7 @@ const SECTION_WORDS = {
   quality: 'codec alac atmos lossless formats',
   files: 'folder path template naming disk storage space overwrite',
   lyrics_artwork: 'cover artwork lyrics lrc ttml karaoke translation romanization pronunciation motion animated',
-  jobs: 'tuning workers parallel concurrency concurrent threads pool pools limits memory queue',
+  jobs: 'tuning workers parallel concurrency concurrent threads pool pools limits queue',
   library_sync: 'anchor poll',
   hooks: 'webhook exec notify',
   logging: 'logs errors',
@@ -74,7 +74,6 @@ const SECTION_ITEMS = [...SETTINGS_SECTIONS, ...SETTINGS_GROUPS].map((s) => ({
 const TYPE_WORDS = { template: 'template name format', path: 'folder directory' };
 const KEY_WORDS = {
   'download.max_attempts': 'retry retries tries attempts',
-  'download.memory_mode': 'ram parallel memory mode',
   'catalog.album_track_url_mode': 'song track album link',
   'library_sync.interval_minutes': 'poll interval',
   'download.force_overwrite': 'replace redownload again',

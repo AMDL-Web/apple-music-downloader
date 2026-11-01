@@ -18,7 +18,7 @@ here or its type here disagrees with the page.
 | [cli.md](cli.md) | reference | The `amdl` command line: commands, JSON output, exit statuses, confirmation, server selection, the MCP server and the terminal interface |
 | [api.md](api.md) | reference | Every endpoint with curl examples, job overrides, error codes, SSE stream semantics |
 | [configuration.md](configuration.md) | reference | Config file, runtime, restart and file-only keys, restart, simulate mode |
-| [download-pipeline.md](download-pipeline.md) | reference | Stages, retries, codec fallback, concurrency pools, memory modes, lyrics, output paths |
+| [download-pipeline.md](download-pipeline.md) | reference | Stages, retries, codec fallback, concurrency pools, encrypted checkpoints, lyrics, output paths |
 | [automation.md](automation.md) | reference | Job hooks and library sync |
 | [install.md](install.md) | runbook | Installing the `amdl` binary on macOS, Linux and Windows: install scripts, Homebrew and Scoop, ffmpeg, the wrapper options, the background service, upgrade and uninstall |
 | [deployment.md](deployment.md) | runbook | Docker, mounts, `PUID`/`PGID`, config seeding, releases and image tags |

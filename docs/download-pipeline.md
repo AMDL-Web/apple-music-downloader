@@ -124,14 +124,14 @@ saved, and later jobs skip it because it is already on disk.
 Encrypted media transfers have no whole-request deadline, because a 24-bit/192 kHz
 track can be several hundred MB. Connecting, the TLS handshake and waiting for the
 response headers are bounded by the HTTP transport; after that a transfer fails only
-when no byte of the body arrives for 60 seconds, with an error naming the stall. A
-low-memory checkpoint keeps the bytes that did arrive, so the retry resumes from there.
+when no byte of the body arrives for 60 seconds, with an error naming the stall. An
+Enhanced HLS checkpoint keeps the bytes that did arrive, so the retry resumes from there.
 Playlists and manifests keep a 30-second limit on the whole request.
 
-The in-memory and on-disk transfers share one `Range`/`If-Range` resume state machine:
-a resumed response is used only when its `Content-Range` and validator prove it belongs
-to the bytes already held, and a server that ignores the range restarts the transfer
-from zero rather than mixing two representations.
+A checkpoint resumes with `Range`/`If-Range`: a resumed response is used only when its
+`Content-Range` and validator prove it belongs to the bytes already held, and a server
+that ignores the range restarts the transfer from zero rather than mixing two
+representations. AAC-LC's in-memory transfer never resumes; its retry starts over.
 
 ## Concurrency
 
@@ -198,37 +198,28 @@ behind jobs.
 
 `download.progress_event_interval_ms` is documented in [api.md](api.md#events).
 
-## Memory modes
+## Encrypted checkpoints
 
-`download.memory_mode` controls the per-track RAM/disk trade-off on the Enhanced HLS path.
-Both modes decrypt fragment by fragment straight into `ffmpeg`; neither writes a plaintext
-whole-track file.
+Every Enhanced HLS track streams its encrypted media into a resumable checkpoint in
+`download.temp_dir` and is read back fragment by fragment during decrypt, straight into
+`ffmpeg`; no plaintext whole-track file is written. RAM stays fragment-sized, but the
+encrypted checkpoint and the flattened output coexist in `temp_dir` — roughly two
+track-sized files per held track. A track holds its checkpoint from its download until its
+decrypt ends, so up to `D+X` tracks (the in-flight ceiling above) hold one at a time.
 
-**`low` (default)** streams the encrypted media into a resumable checkpoint on disk and
-reads it back fragment by fragment. RAM stays fragment-sized, but the encrypted checkpoint
-and the flattened output coexist in `temp_dir` — roughly two track-sized files per
-in-flight track.
+A checkpoint resumes with a validated `Range` request after an interrupted transfer, a
+retry or a restart, and belongs to its job: a failed or recoverable job keeps it for the
+retry, while a completed, cancelled or deleted job removes it. Pointing `temp_dir` at a
+tmpfs keeps the checkpoints in RAM, which then has to hold that peak.
 
-**`high`** keeps one encrypted track in RAM instead of that checkpoint, so only the
-flattened output remains in `temp_dir`. The observed Go heap can temporarily approach twice
-the track size because the garbage collector retains allocation headroom, and both process
-memory and temp usage scale with the pools above. In-memory media is capped at 512 MiB per
-track; larger responses fail explicitly rather than risking an OOM. If a CDN response
-carries a usable `ETag` or `Last-Modified` validator and is interrupted after making
-progress, high mode retries once with a `Range` request from its in-memory prefix — it does
-not persist that prefix, so a process or container restart still begins at byte zero.
+AAC-LC WebPlayback has no checkpoint: its encrypted track stays in memory as the retry
+buffer (at most 512 MiB) and the decrypted output streams straight into `ffmpeg`. The
+Widevine parser may still hold decoded track structures until that stream completes.
 
-AAC-LC WebPlayback is unaffected by this option: both modes keep its encrypted retry buffer
-in memory and stream the decrypted output straight into `ffmpeg`. The Widevine parser may
-still hold decoded track structures until that stream completes.
-
-**Which to use.** Keep `low` unless you have measured a temp-disk bottleneck. High mode is
-5–19% faster in tests that exclude CDN variance, but the gain comes from skipping the
-encrypted checkpoint's filesystem I/O, and it is easily hidden by a slow network or a fast
-local temp disk. Its memory cost cannot be estimated per worker or per average track:
-every downloaded-but-not-yet-decrypted track holds a complete encrypted buffer until
-decryption consumes it. Start at 1/1 or 2/2 concurrency and only raise it once the peak is
-comfortable. Full numbers in [benchmarks.md](benchmarks.md).
+2.0 removed `download.memory_mode`, whose `high` value kept each encrypted track in RAM
+instead of a checkpoint;
+[benchmarks.md](benchmarks.md#memory-modes-after-in-process-decryption) has the measurements
+behind it.
 
 ## Lyrics
 

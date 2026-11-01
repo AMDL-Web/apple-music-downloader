@@ -101,11 +101,11 @@ func (r *trackRun) runCodec(ctx context.Context, codecs []string, index int, las
 		d.setRetryFailure(ctx, r.reporter, item, "decrypt", codecName, failure)
 		d.emitRetryEvent(ctx, r.reporter, r.job.ID, item, "decrypt", codec, failure)
 	})
-	// Once the decrypt phase has returned, low memory mode's checkpoint is no
+	// Once the decrypt phase has returned, the encrypted checkpoint is no
 	// longer useful to this run: a decrypt error may mean corrupt bytes, and a
 	// fallback codec fetches its own. An interrupted job keeps it: a cancelled
 	// job's checkpoints go with the job, and a shutdown's resume the download.
-	// High memory mode and AAC-LC have no rawPath.
+	// AAC-LC has no rawPath.
 	if ctx.Err() == nil {
 		cleanupResumableDownload(attempt.enhanced.rawPath)
 	}

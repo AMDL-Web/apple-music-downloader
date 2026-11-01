@@ -82,7 +82,7 @@ func (d *Downloader) backend() mediaBackend {
 type fetchRequest struct {
 	codec string
 	uri   string
-	// jobID and outPath own and key the low memory mode checkpoint.
+	// jobID and outPath own and key the Enhanced HLS checkpoint.
 	jobID   string
 	outPath string
 	// estimatedBytes is the size the manifest's bandwidth predicts for the
@@ -93,12 +93,12 @@ type fetchRequest struct {
 // encryptedMedia is one codec attempt's still-encrypted track, held by the
 // fetch phase for the decrypt phase so a decrypt retry never re-downloads.
 type encryptedMedia struct {
-	// raw holds the whole encrypted track in high memory mode and for AAC-LC.
-	// One immutable copy allows decrypt retries without another CDN request.
+	// raw holds the whole encrypted AAC-LC track. One immutable copy allows
+	// decrypt retries without another CDN request.
 	raw []byte
-	// rawPath is the low memory mode checkpoint: the encrypted bytes stay on
-	// disk so a whole Hi-Res track is never pinned in memory across the
-	// decrypt phase, and a decrypt retry re-reads them without re-fetching.
+	// rawPath is the Enhanced HLS checkpoint: the encrypted bytes stay on disk
+	// so a whole Hi-Res track is never pinned in memory across the decrypt
+	// phase, and a decrypt retry re-reads them without re-fetching.
 	rawPath string
 	// size is the byte count of a simulated transfer, which has no bytes.
 	size int64
@@ -212,24 +212,14 @@ func (m realMedia) resolveAACLC(ctx context.Context, songID string) (aacLCMedia,
 }
 
 func (m realMedia) fetch(ctx context.Context, req fetchRequest, progress transferProgress) (encryptedMedia, error) {
-	switch {
-	case req.codec == "aac-lc":
+	if req.codec == "aac-lc" {
 		raw, err := downloadBytes(ctx, m.d.http, req.uri, progress)
 		return encryptedMedia{raw: raw}, err
-	case m.cfg().Download.MemoryMode == config.MemoryModeHigh:
-		// High memory mode keeps exactly one whole-track encrypted copy. The
-		// fragment decrypt/remux stage remains streaming, so parsed, plaintext
-		// and remuxed whole-track copies never accumulate beside it. A
-		// validated Range reconnect may repair one interrupted response without
-		// creating a persistent checkpoint.
-		raw, err := downloadBytesWithRangeResume(ctx, m.d.http, req.uri, progress)
-		return encryptedMedia{raw: raw}, err
-	default:
-		// Low memory mode streams the response to a resumable checkpoint and
-		// reads it back fragment by fragment during decrypt.
-		path, err := downloadToFile(ctx, m.d.http, req.uri, m.cfg().Download.TempDir, req.jobID, req.outPath, progress)
-		return encryptedMedia{rawPath: path}, err
 	}
+	// Enhanced HLS streams the response to a resumable checkpoint in temp_dir
+	// and reads it back fragment by fragment during decrypt.
+	path, err := downloadToFile(ctx, m.d.http, req.uri, m.cfg().Download.TempDir, req.jobID, req.outPath, progress)
+	return encryptedMedia{rawPath: path}, err
 }
 
 func (m realMedia) discardCheckpoint(jobID, outPath string) {

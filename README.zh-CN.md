@@ -180,7 +180,7 @@ wrapper 还提供歌词、AAC-LC 许可证，以及 Hi-Res ALAC 曲目的设备�
 **并发。** 下载、解密、wrapper 请求和运行中的作业，各自共用一个进程级的池，所有作业共享。
 池满时优先分给最早提交的作业，所以作业往往一个接一个完成。
 
-阶段、重试、并发池和内存模式见 [docs/download-pipeline.md](docs/download-pipeline.md)（英文）。
+阶段、重试、并发池和加密断点文件见 [docs/download-pipeline.md](docs/download-pipeline.md)（英文）。
 进程生命周期和包的边界见 [docs/architecture.md](docs/architecture.md)（英文）。
 
 ## 文件存放位置
@@ -261,7 +261,7 @@ wrapper，或 `wrapper.data_dir` 指向 wrapper 的文件时，直接从 wrapper
 | [docs/cli.md](docs/cli.md) | `amdl` 命令行、JSON 输出与退出码、MCP 服务和终端界面 |
 | [docs/api.md](docs/api.md) | 每个接口的 curl 示例、作业覆盖参数、错误码、SSE 语义 |
 | [docs/architecture.md](docs/architecture.md) | 进程生命周期、包、API 约定、存储 |
-| [docs/download-pipeline.md](docs/download-pipeline.md) | 阶段、重试、编码回退、并发、内存模式、歌词、输出路径 |
+| [docs/download-pipeline.md](docs/download-pipeline.md) | 阶段、重试、编码回退、并发、加密断点文件、歌词、输出路径 |
 | [docs/automation.md](docs/automation.md) | 作业钩子与资料库同步 |
 | [docs/benchmarks.md](docs/benchmarks.md) | 解密后处理与端到端的实测结果 |
 | [docs/references.md](docs/references.md) | 借鉴、改造或放弃的外部做法 |

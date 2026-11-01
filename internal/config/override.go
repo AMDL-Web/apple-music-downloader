@@ -10,7 +10,7 @@ package config
 // (TestDownloadOverridesCoverRuntimeDownloadKeys). Every other runtime
 // download key is deliberately absent and comes only from the runtime config
 // (overrideExclusions): directories, path templates, lyrics, covers,
-// memory_mode, max_attempts, check_integrity and integrity_mode are install
+// max_attempts, check_integrity and integrity_mode are install
 // settings that Settings changes for every job, and progress_event_interval_ms
 // shapes the event stream every subscriber of a job shares. max_running_jobs
 // and max_parallel_downloads are restart keys that size process-wide pools.

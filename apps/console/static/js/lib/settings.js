@@ -272,17 +272,6 @@ export const FIELDS = [
     max: 10,
   },
   {
-    key: 'download.memory_mode',
-    section: 'jobs',
-    type: 'select',
-    label: 'Memory use',
-    defaultValue: 'low',
-    options: [
-      { value: 'low', label: 'Low memory', hint: 'Streams each track to disk: little RAM, more temporary files.' },
-      { value: 'high', label: 'High memory', hint: 'Keeps one track in RAM, up to 512 MiB each.' },
-    ],
-  },
-  {
     key: 'download.progress_event_interval_ms',
     section: 'jobs',
     type: 'number',

@@ -33,28 +33,6 @@ func TestWrapperLoginTimeout(t *testing.T) {
 	}
 }
 
-func TestMemoryModeDefaultLoadAndValidate(t *testing.T) {
-	cfg, err := Load(writeConfig(t, "download:\n  cover_format: jpg\n"))
-	if err != nil {
-		t.Fatalf("Load() config without memory_mode: %v", err)
-	}
-	if cfg.Download.MemoryMode != MemoryModeLow {
-		t.Fatalf("memory mode of a config without the key = %q, want %q", cfg.Download.MemoryMode, MemoryModeLow)
-	}
-
-	cfg, err = Load(writeConfig(t, "download:\n  memory_mode: high\n"))
-	if err != nil {
-		t.Fatalf("Load() high memory mode: %v", err)
-	}
-	if cfg.Download.MemoryMode != MemoryModeHigh {
-		t.Fatalf("loaded memory mode = %q, want %q", cfg.Download.MemoryMode, MemoryModeHigh)
-	}
-
-	if _, err := Load(writeConfig(t, "download:\n  memory_mode: auto\n")); err == nil || !strings.Contains(err.Error(), "memory_mode") {
-		t.Fatalf("Load() invalid memory mode error = %v, want memory_mode validation error", err)
-	}
-}
-
 // Existing config files lack download.integrity_mode; they must keep loading,
 // with the quick check.
 func TestIntegrityModeDefaultLoadAndValidate(t *testing.T) {
@@ -173,6 +151,7 @@ func TestLoadRejectsUnknownKeysNamingThemAndTheUpgradeGuide(t *testing.T) {
 			},
 		},
 		{name: "removed wrapper TLS switch", body: "wrapper:\n  insecure: true\n", want: []string{"wrapper.insecure"}},
+		{name: "removed memory mode", body: "download:\n  memory_mode: high\n", want: []string{"download.memory_mode"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -2582,7 +2582,7 @@ components:
         Per-job override layer for the quality and overwrite keys of the download
         section of the runtime configuration; each field maps one-to-one onto the
         download key of the same name. Every other setting (directories, path
-        templates, lyrics, covers, memory_mode, max_attempts, check_integrity,
+        templates, lyrics, covers, max_attempts, check_integrity,
         integrity_mode and hook selection) comes from the runtime configuration and hooks.yaml for
         every job, and the media-user-token is the wrapper's when amdl can read
         it, else the runtime catalog.media_user_token. All fields are optional; on submission the
@@ -2683,21 +2683,6 @@ components:
                 type: string
                 enum: [alac, aac, aac-binaural, aac-downmix, ec3, ac3]
             codec_alternative: {type: boolean}
-            memory_mode:
-              type: string
-              enum: [low, high]
-              description: >-
-                Controls the Enhanced HLS path. On the normal path, low (default)
-                uses bounded per-fragment memory, and the temporary disk peak is
-                usually about three files per parallel track; high keeps one
-                encrypted copy of the whole track in memory and decrypts it fragment
-                by fragment (in-memory media is capped at 512 MiB per track; because
-                of Go GC allocation headroom, the actual heap peak can approach
-                twice the track size), and the configured temp directory usually
-                holds only the final flattened output. AAC-LC is held in memory as a
-                whole track in both modes; the rare ALAC integrity repair also reads
-                and copies the whole track. In both modes, tagging also briefly
-                creates a whole-track rewrite file in the system temp directory.
             max_attempts:
               type: integer
               maximum: 10

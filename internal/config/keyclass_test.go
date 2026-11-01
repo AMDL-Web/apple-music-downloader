@@ -70,7 +70,7 @@ func TestMutableViewHasRuntimeAndRestartKeys(t *testing.T) {
 		t.Fatalf("wrapper section = %v", view["wrapper"])
 	}
 	download, _ := view["download"].(map[string]any)
-	if download["max_running_jobs"] != 3 || download["memory_mode"] != MemoryModeLow {
+	if download["max_running_jobs"] != 3 || download["integrity_mode"] != IntegrityModeQuick {
 		t.Fatalf("download section = %v", view["download"])
 	}
 	catalog, _ := view["catalog"].(map[string]any)

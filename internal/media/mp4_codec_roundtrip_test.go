@@ -246,137 +246,116 @@ func TestCodecRoundTripThroughRealEncryption(t *testing.T) {
 			}
 			referencePCM := decode(t, referencePath)
 
-			// Both memory modes now use the same non-seekable decrypt-to-ffmpeg
-			// pipe. Exercise the exact two reader backings selected by
-			// downloadEnhancedCodec: a bytes.Reader over high-mode memory and an
-			// *os.File over low-mode's resumable encrypted checkpoint. Container
-			// timing tables can differ from the seekable reference, so playback is
-			// compared as decoded PCM.
+			// downloadEnhancedCodec decrypts from the resumable encrypted checkpoint
+			// through a non-seekable decrypt-to-ffmpeg pipe. Exercise that *os.File
+			// backing. Container timing tables can differ from the seekable
+			// reference, so playback is compared as decoded PCM.
 			rawCheckpoint := filepath.Join(tmp, "raw-checkpoint.mp4")
 			if err := os.WriteFile(rawCheckpoint, fixture.raw, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			backings := []struct {
-				name string
-				open func() (io.ReadCloser, error)
-			}{
-				{
-					name: "high-memory",
-					open: func() (io.ReadCloser, error) {
-						return io.NopCloser(bytes.NewReader(fixture.raw)), nil
-					},
-				},
-				{
-					name: "low-disk-checkpoint",
-					open: func() (io.ReadCloser, error) {
-						return os.Open(rawCheckpoint)
-					},
-				},
-			}
-			for _, backing := range backings {
-				backing := backing
-				t.Run(backing.name, func(t *testing.T) {
-					reader, err := backing.open()
-					if err != nil {
-						t.Fatal(err)
-					}
-					flatPath := filepath.Join(tmp, backing.name+"-flat.m4a")
-					fragIdx := 0
-					phases := []domain.ItemStatus{domain.ItemDecrypting}
-					flatErr := p.streamDecryptToFlatFile(ctx, reader, flatPath, []string{"unused-key"},
-						func(_ string, samples [][]byte) ([][]byte, error) {
-							ivs := fixture.fragmentIVs[fragIdx]
-							fragIdx++
-							got := make([][]byte, len(samples))
-							for i := range samples {
-								got[i] = decryptCTR(t, key, ivs[i], samples[i])
-							}
-							return got, nil
-						}, nil, func() {
-							phases = append(phases, domain.ItemRemuxing)
-						})
-					closeErr := reader.Close()
-					if flatErr != nil {
-						t.Fatalf("streamDecryptToFlatFile: %v", flatErr)
-					}
-					phases = append(phases, domain.ItemSaving)
-					wantPhases := []domain.ItemStatus{domain.ItemDecrypting, domain.ItemRemuxing, domain.ItemSaving}
-					if !slices.Equal(phases, wantPhases) {
-						t.Fatalf("stream lifecycle phases = %v, want %v", phases, wantPhases)
-					}
-					if closeErr != nil {
-						t.Fatalf("close encrypted input: %v", closeErr)
-					}
-					if fragIdx != len(fixture.fragmentIVs) {
-						t.Fatalf("decrypted %d fragments, want %d", fragIdx, len(fixture.fragmentIVs))
-					}
-					flatBytes, err := os.ReadFile(flatPath)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if len(flatBytes) < 12 || string(flatBytes[8:12]) != "M4A " {
-						got := "<too short>"
-						if len(flatBytes) >= 12 {
-							got = string(flatBytes[8:12])
+			openCheckpoint := func() (io.ReadCloser, error) { return os.Open(rawCheckpoint) }
+			t.Run("checkpoint", func(t *testing.T) {
+				reader, err := openCheckpoint()
+				if err != nil {
+					t.Fatal(err)
+				}
+				flatPath := filepath.Join(tmp, "checkpoint-flat.m4a")
+				fragIdx := 0
+				phases := []domain.ItemStatus{domain.ItemDecrypting}
+				flatErr := p.streamDecryptToFlatFile(ctx, reader, flatPath, []string{"unused-key"},
+					func(_ string, samples [][]byte) ([][]byte, error) {
+						ivs := fixture.fragmentIVs[fragIdx]
+						fragIdx++
+						got := make([][]byte, len(samples))
+						for i := range samples {
+							got[i] = decryptCTR(t, key, ivs[i], samples[i])
 						}
-						t.Fatalf("ftyp major_brand = %q, want \"M4A \"", got)
+						return got, nil
+					}, nil, func() {
+						phases = append(phases, domain.ItemRemuxing)
+					})
+				closeErr := reader.Close()
+				if flatErr != nil {
+					t.Fatalf("streamDecryptToFlatFile: %v", flatErr)
+				}
+				phases = append(phases, domain.ItemSaving)
+				wantPhases := []domain.ItemStatus{domain.ItemDecrypting, domain.ItemRemuxing, domain.ItemSaving}
+				if !slices.Equal(phases, wantPhases) {
+					t.Fatalf("stream lifecycle phases = %v, want %v", phases, wantPhases)
+				}
+				if closeErr != nil {
+					t.Fatalf("close encrypted input: %v", closeErr)
+				}
+				if fragIdx != len(fixture.fragmentIVs) {
+					t.Fatalf("decrypted %d fragments, want %d", fragIdx, len(fixture.fragmentIVs))
+				}
+				flatBytes, err := os.ReadFile(flatPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(flatBytes) < 12 || string(flatBytes[8:12]) != "M4A " {
+					got := "<too short>"
+					if len(flatBytes) >= 12 {
+						got = string(flatBytes[8:12])
 					}
-					if err := p.checkIntegrityFile(ctx, flatPath); err != nil {
-						t.Fatal("flat output failed integrity check")
-					}
-					if gotPCM := decode(t, flatPath); !bytes.Equal(gotPCM, referencePCM) {
-						t.Fatalf("decoded audio (%d bytes) differs from reference (%d bytes)", len(gotPCM), len(referencePCM))
-					}
+					t.Fatalf("ftyp major_brand = %q, want \"M4A \"", got)
+				}
+				if err := p.checkIntegrityFile(ctx, flatPath); err != nil {
+					t.Fatal("flat output failed integrity check")
+				}
+				if gotPCM := decode(t, flatPath); !bytes.Equal(gotPCM, referencePCM) {
+					t.Fatalf("decoded audio (%d bytes) differs from reference (%d bytes)", len(gotPCM), len(referencePCM))
+				}
 
-					if tc.name != "alac-multifrag" {
-						return
-					}
+				if tc.name != "alac-multifrag" {
+					return
+				}
 
-					decryptErr := errors.New("forced fragment decrypt failure")
-					failureReader, err := backing.open()
-					if err != nil {
-						t.Fatal(err)
-					}
-					err = p.streamDecryptToFlatFile(ctx, failureReader, filepath.Join(tmp, backing.name+"-decrypt-failure.m4a"), []string{"unused-key"},
-						func(_ string, _ [][]byte) ([][]byte, error) { return nil, decryptErr }, nil, nil)
-					_ = failureReader.Close()
-					if !errors.Is(err, decryptErr) {
-						t.Fatalf("decrypt failure error = %v, want wrapped %v", err, decryptErr)
-					}
+				decryptErr := errors.New("forced fragment decrypt failure")
+				failureReader, err := openCheckpoint()
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = p.streamDecryptToFlatFile(ctx, failureReader, filepath.Join(tmp, "checkpoint-decrypt-failure.m4a"), []string{"unused-key"},
+					func(_ string, _ [][]byte) ([][]byte, error) { return nil, decryptErr }, nil, nil)
+				_ = failureReader.Close()
+				if !errors.Is(err, decryptErr) {
+					t.Fatalf("decrypt failure error = %v, want wrapped %v", err, decryptErr)
+				}
 
-					if runtime.GOOS == "windows" {
-						return
+				if runtime.GOOS == "windows" {
+					return
+				}
+				// A child that exits before consuming stdin must make the producer's
+				// next write fail, not leave the reader blocked forever.
+				failFFmpeg := filepath.Join(tmp, "fail-ffmpeg")
+				if err := os.WriteFile(failFFmpeg, []byte("#!/bin/sh\nexit 17\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				failCfg := cfg
+				failCfg.Tools.FFmpeg = failFFmpeg
+				failProcessor := newMP4Processor(failCfg)
+				failReader, err := openCheckpoint()
+				if err != nil {
+					t.Fatal(err)
+				}
+				done := make(chan error, 1)
+				go func() {
+					done <- failProcessor.streamDecryptToFlatFile(ctx, failReader, filepath.Join(tmp, "checkpoint-must-fail.m4a"), []string{"unused-key"},
+						func(_ string, samples [][]byte) ([][]byte, error) { return samples, nil }, nil, nil)
+				}()
+				select {
+				case err := <-done:
+					_ = failReader.Close()
+					if err == nil || !bytes.Contains([]byte(err.Error()), []byte("exit status 17")) {
+						t.Fatalf("early ffmpeg exit error = %v, want exit status 17", err)
 					}
-					// A child that exits before consuming stdin must make the producer's
-					// next write fail, not leave either reader backing blocked forever.
-					failFFmpeg := filepath.Join(tmp, "fail-ffmpeg")
-					if err := os.WriteFile(failFFmpeg, []byte("#!/bin/sh\nexit 17\n"), 0o755); err != nil {
-						t.Fatal(err)
-					}
-					failCfg := cfg
-					failCfg.Tools.FFmpeg = failFFmpeg
-					failProcessor := newMP4Processor(failCfg)
-					failReader, err := backing.open()
-					if err != nil {
-						t.Fatal(err)
-					}
-					done := make(chan error, 1)
-					go func() {
-						done <- failProcessor.streamDecryptToFlatFile(ctx, failReader, filepath.Join(tmp, backing.name+"-must-fail.m4a"), []string{"unused-key"},
-							func(_ string, samples [][]byte) ([][]byte, error) { return samples, nil }, nil, nil)
-					}()
-					select {
-					case err := <-done:
-						_ = failReader.Close()
-						if err == nil || !bytes.Contains([]byte(err.Error()), []byte("exit status 17")) {
-							t.Fatalf("early ffmpeg exit error = %v, want exit status 17", err)
-						}
-					case <-time.After(2 * time.Second):
-						_ = failReader.Close()
-						t.Fatal("streamDecryptToFlatFile blocked after ffmpeg exited")
-					}
-				})
-			}
+				case <-time.After(2 * time.Second):
+					_ = failReader.Close()
+					t.Fatal("streamDecryptToFlatFile blocked after ffmpeg exited")
+				}
+			})
 
 			// flattenFileToFile documents writing an "M4A " ftyp
 			// brand; the generic mp4 muxer needed for EC-3 support defaults to

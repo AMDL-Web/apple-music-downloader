@@ -32,7 +32,7 @@ wins when they disagree, so details are not copied here.
 | Run order | The order queued jobs start in, lowest `queue_order` first; a move changes it | `internal/db#Store.MoveQueuedJob` |
 | Quality priority | The ordered codec list a track is tried in | `configs/config.example.yaml#download.quality_priority` |
 | Codec fallback | Moving to the next codec when one codec's attempts run out; AAC-LC over WebPlayback is the implicit last resort | [docs/download-pipeline.md](docs/download-pipeline.md#retries-and-codec-fallback) |
-| Memory mode | `low` checkpoints the encrypted track to disk, `high` keeps it in RAM | `configs/config.example.yaml#download.memory_mode` |
+| Checkpoint | The resumable on-disk copy of an Enhanced HLS track's encrypted media in `download.temp_dir`, read back fragment by fragment during decrypt | [docs/download-pipeline.md](docs/download-pipeline.md#encrypted-checkpoints) |
 | Simulate mode | Real catalog data and media selection, then the real pipeline over a pretend media backend: paced transfers, no disk writes, no wrapper or ffmpeg | `internal/media#simulatedMedia` |
 | Media backend | The I/O side of the per-track pipeline (transfers, wrapper, ffmpeg, disk); production and simulate mode differ only here | `internal/media#mediaBackend` |
 | Path template | The per-job-type format that decides where a finished track lands | `internal/media#outputPath` |

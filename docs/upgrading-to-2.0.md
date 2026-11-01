@@ -54,6 +54,7 @@ needs the API changes below before it works against 2.0.
      `catalog.developer_token_ttl_hours`, `catalog.allowed_origins`;
    - `catalog.requests_per_second`, `catalog.request_burst`;
    - `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests`;
+   - `download.memory_mode`;
    - `logging.format`, `logging.include_source`, `logging.file_enabled`,
      `logging.file_path`, `logging.max_size_mb`, `logging.max_backups`,
      `logging.max_age_days`, `logging.compress`;
@@ -119,6 +120,7 @@ needs the API changes below before it works against 2.0.
 | `GET /config` | re-read the file and applied it | pure read; use `POST /config/reload` | settings screens |
 | Log records | `source` (file and line) when `logging.include_source` was on | no `source` field | log viewers |
 | `PUT /config` with a removed key | `logging.format`, the log file keys, `catalog.requests_per_second`, `catalog.request_burst`, `download.max_parallel_decrypts`, `download.max_parallel_wrapper_requests` were file-only keys, and changing one was a `422` with a plain-text body | `400 invalid_request` naming the unknown field, like any removed key | settings screens |
+| `download.memory_mode` | runtime key: `low` (default) checkpointed each encrypted Enhanced HLS track in `download.temp_dir`, `high` kept it in RAM | removed; every track takes the `low` path. The key fails startup in the file and is `400 invalid_request` naming it in a `PUT /config` body | `config.yaml` files and settings screens that set it |
 | `GET /config` and `PUT /config` lyrics and catalog fields | `download.save_lyrics_file`, `download.lyrics_format`, `download.lyrics_type` and `catalog.signed_mode_hls_source` (enum `wrapper`, `web_token`) were runtime fields | the three lyrics fields are replaced by `download.lyrics_files` (array of `lrc`, `ttml`) and `download.lyrics_timing` (`line`, `word`); `catalog.signed_mode_hls_source` is gone; `PUT` with an old field is `400 invalid_request` naming it | settings screens, scripts that PUT lyrics settings |
 | Env-pinned keys | an `AMDL_*` variable could set any runtime key; `PUT /config` refused a key one set with a `422` and a plain-text body, and `GET /config` did not say which keys were set that way | no environment variable can set a runtime key any more, so `PUT /config` accepts every runtime key | settings screens |
 | Developer token | `GET /developer-token` signed a token for other clients in local signing mode (a `409` with a plain-text body in legacy mode) | removed (`404 route_not_found`); the backend no longer signs any token and reads the catalog with the web player's token | browser players that fetched a token |
@@ -171,6 +173,11 @@ needs the API changes below before it works against 2.0.
   which follows a container CPU limit). All four are rejected in the file; delete them.
   `catalog.max_parallel_requests`, `download.max_parallel_downloads` and
   `download.max_running_jobs` remain keys.
+- `download.memory_mode` is removed: every Enhanced HLS track streams to a resumable
+  checkpoint in `download.temp_dir`, as `low` (the default) did. `high` was no faster
+  with in-process decryption and needed several times the memory
+  ([benchmarks](benchmarks.md#memory-modes-after-in-process-decryption)). The key is rejected in the file; delete it. To keep
+  checkpoints in RAM, point `temp_dir` at a tmpfs.
 - `catalog.developer_token_ttl_hours` and `catalog.allowed_origins` configured the removed
   `GET /developer-token`. Both are rejected in the file; delete them.
 - `catalog.apple_music_private_key_path`, `catalog.apple_music_key_id`,

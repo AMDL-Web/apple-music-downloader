@@ -35,8 +35,8 @@ import (
 
 // TestPostDecryptFixturePipeline is an opt-in, offline performance and
 // correctness harness for the real Enhanced-HLS post-decrypt pipeline. It is
-// intentionally absent from normal test cost: both AMDL_POSTDECRYPT_FIXTURE_DIR
-// and AMDL_POSTDECRYPT_MODE (low or high) must be set before it does any work.
+// intentionally absent from normal test cost: AMDL_POSTDECRYPT_FIXTURE_DIR must
+// be set before it does any work.
 //
 // The fixture directory must contain encrypted.m4a and fixture.json. The JSON
 // has the test-only AES key and one base64 IV per sample, grouped by fragment.
@@ -63,11 +63,7 @@ import (
 func TestPostDecryptFixturePipeline(t *testing.T) {
 	fixtureDir := strings.TrimSpace(os.Getenv("AMDL_POSTDECRYPT_FIXTURE_DIR"))
 	if fixtureDir == "" {
-		t.Skip("set AMDL_POSTDECRYPT_FIXTURE_DIR and AMDL_POSTDECRYPT_MODE to run the offline fixture harness")
-	}
-	mode := strings.ToLower(strings.TrimSpace(os.Getenv("AMDL_POSTDECRYPT_MODE")))
-	if mode != config.MemoryModeLow && mode != config.MemoryModeHigh {
-		t.Fatalf("AMDL_POSTDECRYPT_MODE must be %q or %q", config.MemoryModeLow, config.MemoryModeHigh)
+		t.Skip("set AMDL_POSTDECRYPT_FIXTURE_DIR to run the offline fixture harness")
 	}
 
 	fixtureDir = postDecryptExistingDir(t, fixtureDir, "fixture")
@@ -86,15 +82,15 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 	}
 
 	runRoot := t.TempDir()
-	tempDir := postDecryptRunDir(t, os.Getenv("AMDL_POSTDECRYPT_TEMP_DIR"), runRoot, "scratch", fixtureDir, mode)
-	outputDir := postDecryptRunDir(t, os.Getenv("AMDL_POSTDECRYPT_OUTPUT_DIR"), runRoot, "output", fixtureDir, mode)
-	systemTempDir := postDecryptRunDir(t, os.Getenv("AMDL_POSTDECRYPT_SYSTEM_TEMP_DIR"), runRoot, "system-temp", fixtureDir, mode)
+	tempDir := postDecryptRunDir(t, os.Getenv("AMDL_POSTDECRYPT_TEMP_DIR"), runRoot, "scratch", fixtureDir)
+	outputDir := postDecryptRunDir(t, os.Getenv("AMDL_POSTDECRYPT_OUTPUT_DIR"), runRoot, "output", fixtureDir)
+	systemTempDir := postDecryptRunDir(t, os.Getenv("AMDL_POSTDECRYPT_SYSTEM_TEMP_DIR"), runRoot, "system-temp", fixtureDir)
 	t.Setenv("TMPDIR", systemTempDir)
 	resultPath := strings.TrimSpace(os.Getenv("AMDL_POSTDECRYPT_RESULT_PATH"))
 	if resultPath != "" {
 		postDecryptRejectFixtureWrite(t, resultPath, fixtureDir, false)
 	}
-	outputPath := postDecryptUniqueOutputPath(t, outputDir, mode)
+	outputPath := postDecryptUniqueOutputPath(t, outputDir)
 
 	var requestCount atomic.Int64
 	var unexpectedRequestCount atomic.Int64
@@ -127,7 +123,6 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 	}
 
 	cfg := config.Default()
-	cfg.Download.MemoryMode = mode
 	cfg.Download.TempDir = tempDir
 	cfg.Download.DownloadsDir = outputDir
 	cfg.Download.MaxParallelDownloads = 1
@@ -207,7 +202,6 @@ func TestPostDecryptFixturePipeline(t *testing.T) {
 
 	metrics := postDecryptFixtureMetrics{
 		Timestamp:              time.Now().UTC().Format(time.RFC3339Nano),
-		Mode:                   mode,
 		WallMS:                 float64(wall.Microseconds()) / 1000,
 		InputBytes:             inputInfo.Size(),
 		FragmentCount:          len(fixture.fragmentIVs),
@@ -523,9 +517,9 @@ func startPostDecryptProbe(tempDir, systemTempDir, outputDir string) *postDecryp
 			}
 		}
 	}()
-	// Establish the baseline before downloadBytes can allocate high mode's
-	// whole-track buffer; otherwise goroutine scheduling could make the first
-	// sample look like the starting footprint and hide the allocation delta.
+	// Establish the baseline before the pipeline allocates; otherwise goroutine
+	// scheduling could make the first sample look like the starting footprint
+	// and hide the allocation delta.
 	<-ready
 	return probe
 }
@@ -586,7 +580,6 @@ func postDecryptDirBytes(root string) int64 {
 
 type postDecryptFixtureMetrics struct {
 	Timestamp              string   `json:"timestamp"`
-	Mode                   string   `json:"mode"`
 	WallMS                 float64  `json:"wall_ms"`
 	InputBytes             int64    `json:"input_bytes"`
 	FragmentCount          int      `json:"fragment_count"`
@@ -788,7 +781,7 @@ func postDecryptRegularFile(t *testing.T, path, label string) os.FileInfo {
 	return info
 }
 
-func postDecryptRunDir(t *testing.T, configuredBase, runRoot, fallback, fixtureDir, mode string) string {
+func postDecryptRunDir(t *testing.T, configuredBase, runRoot, fallback, fixtureDir string) string {
 	t.Helper()
 	base := strings.TrimSpace(configuredBase)
 	if base == "" {
@@ -802,7 +795,7 @@ func postDecryptRunDir(t *testing.T, configuredBase, runRoot, fallback, fixtureD
 	if err := os.MkdirAll(absBase, 0o755); err != nil {
 		t.Fatalf("create %s base: %v", fallback, err)
 	}
-	dir, err := os.MkdirTemp(absBase, "amdl-postdecrypt-"+mode+"-"+fallback+"-*")
+	dir, err := os.MkdirTemp(absBase, "amdl-postdecrypt-"+fallback+"-*")
 	if err != nil {
 		t.Fatalf("create unique %s directory: %v", fallback, err)
 	}
@@ -814,9 +807,9 @@ func postDecryptRunDir(t *testing.T, configuredBase, runRoot, fallback, fixtureD
 	return dir
 }
 
-func postDecryptUniqueOutputPath(t *testing.T, outputDir, mode string) string {
+func postDecryptUniqueOutputPath(t *testing.T, outputDir string) string {
 	t.Helper()
-	placeholder, err := os.CreateTemp(outputDir, "result-"+mode+"-*.m4a")
+	placeholder, err := os.CreateTemp(outputDir, "result-*.m4a")
 	if err != nil {
 		t.Fatalf("reserve unique output path: %v", err)
 	}

@@ -1,14 +1,11 @@
 package media
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -108,110 +105,6 @@ func TestSelectEnhancedMediaDoesNotDownloadEncryptedMedia(t *testing.T) {
 		t.Fatalf("downloaded media = %q, want encrypted media bytes", string(gotRaw))
 	}
 	if len(selected.raw) != 0 {
-		t.Fatalf("low-memory download retained %d bytes in memory, want 0", len(selected.raw))
-	}
-}
-
-func TestDownloadSelectedEnhancedMediaHighKeepsOnlyMemoryCopy(t *testing.T) {
-	const payload = "encrypted media bytes"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
-		_, _ = w.Write([]byte(payload))
-	}))
-	defer server.Close()
-
-	tempDir := t.TempDir()
-	cfg := config.Default()
-	cfg.Download.MemoryMode = config.MemoryModeHigh
-	cfg.Download.TempDir = tempDir
-	downloader := newTestDownloader(&Downloader{cfg: cfg, http: server.Client()})
-	selected, err := downloader.downloadSelectedEnhancedMedia(
-		context.Background(),
-		selectedDownloadMedia{info: selectedMediaInfo{MediaURI: server.URL}},
-		"alac",
-		"job-high",
-		filepath.Join(cfg.Download.DownloadsDir, "song.m4a"),
-		&keyPrefetch{},
-		func(domain.ItemStatus, string, func(*domain.ItemProgress)) {},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := string(selected.raw); got != payload {
-		t.Fatalf("selected.raw = %q, want %q", got, payload)
-	}
-	if selected.rawPath != "" {
-		t.Fatalf("selected.rawPath = %q, want no scratch file in high-memory mode", selected.rawPath)
-	}
-	entries, err := os.ReadDir(tempDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("high-memory download created temp entries: %v", entries)
-	}
-}
-
-func TestDownloadSelectedEnhancedMediaHighResumesInterruptedTransfer(t *testing.T) {
-	payload := []byte(strings.Repeat("high-memory-encrypted-media", 8192))
-	cut := 71 * 1024
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestNumber := requests.Add(1)
-		w.Header().Set("ETag", `"high-v1"`)
-		if requestNumber == 1 {
-			w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
-			_, _ = w.Write(payload[:cut])
-			return
-		}
-		if got, want := r.Header.Get("Range"), "bytes="+strconv.Itoa(cut)+"-"; got != want {
-			t.Errorf("Range = %q, want %q", got, want)
-		}
-		if got := r.Header.Get("If-Range"); got != `"high-v1"` {
-			t.Errorf("If-Range = %q, want high-memory ETag", got)
-		}
-		w.Header().Set("Content-Range", "bytes "+strconv.Itoa(cut)+"-"+strconv.Itoa(len(payload)-1)+"/"+strconv.Itoa(len(payload)))
-		w.Header().Set("Content-Length", strconv.Itoa(len(payload)-cut))
-		w.WriteHeader(http.StatusPartialContent)
-		_, _ = w.Write(payload[cut:])
-	}))
-	defer server.Close()
-
-	tempDir := t.TempDir()
-	cfg := config.Default()
-	cfg.Download.MemoryMode = config.MemoryModeHigh
-	cfg.Download.TempDir = tempDir
-	downloader := newTestDownloader(&Downloader{cfg: cfg, http: server.Client()})
-	selected, err := downloader.downloadSelectedEnhancedMedia(
-		context.Background(),
-		selectedDownloadMedia{info: selectedMediaInfo{MediaURI: server.URL}},
-		"alac",
-		"job-high-resume",
-		filepath.Join(cfg.Download.DownloadsDir, "song.m4a"),
-		&keyPrefetch{},
-		func(domain.ItemStatus, string, func(*domain.ItemProgress)) {},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if selected.releaseInFlight == nil {
-		t.Fatal("high-memory download did not retain its in-flight permit")
-	}
-	selected.releaseInFlight()
-	if !bytes.Equal(selected.raw, payload) {
-		t.Fatalf("selected.raw has %d bytes, want %d", len(selected.raw), len(payload))
-	}
-	if selected.rawPath != "" {
-		t.Fatalf("selected.rawPath = %q, want no scratch file", selected.rawPath)
-	}
-	entries, err := os.ReadDir(tempDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("high-memory resume created temp entries: %v", entries)
-	}
-	if got := requests.Load(); got != 2 {
-		t.Fatalf("requests = %d, want initial plus one Range resume", got)
+		t.Fatalf("download retained %d bytes in memory, want 0", len(selected.raw))
 	}
 }

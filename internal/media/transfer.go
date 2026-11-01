@@ -20,8 +20,8 @@ const (
 	// HLS playlists are text metadata, never media payloads. This is generous
 	// for even very large variant/segment lists while bounding a bad upstream.
 	maxPlaylistBytes int64 = 16 << 20
-	// AAC-LC and high memory mode hold the encrypted track in memory before MP4
-	// processing. Bound both advertised and streamed sizes so a forged
+	// AAC-LC holds the encrypted track in memory before MP4 processing.
+	// Bound both advertised and streamed sizes so a forged
 	// Content-Length or endless response cannot exhaust the process. 512 MiB
 	// still covers multi-hour AAC.
 	maxInMemoryMediaBytes int64 = 512 << 20
@@ -103,26 +103,16 @@ func readAllLimited(r io.Reader, limit int64) ([]byte, error) {
 // the response announced; total is 0 while the size is unknown.
 type transferProgress func(done, total int64)
 
-// downloadBytes fetches uri into memory without an internal reconnect. AAC-LC
-// uses this path and leaves retry/backoff to its caller.
-func downloadBytes(ctx context.Context, client *http.Client, uri string, onProgress transferProgress) ([]byte, error) {
-	return downloadToMemory(ctx, client, uri, false, mediaStallTimeout, onProgress)
-}
-
-// downloadBytesWithRangeResume fetches uri into memory. If a response body is
-// interrupted after making progress and the server supplied a usable If-Range
-// validator, one transparent Range/If-Range reconnect preserves the bytes
-// already held in memory. The reconnect is deliberately bounded to one request;
-// the caller's outer retry policy remains responsible for backoff and further
-// attempts.
+// downloadBytes fetches uri into memory in one request, without an internal
+// reconnect. AAC-LC uses this path and leaves retry/backoff to its caller.
 //
 // onProgress, if non-nil, is called periodically with the bytes held so far
 // and the announced total, which is 0 when the size is unknown.
-func downloadBytesWithRangeResume(ctx context.Context, client *http.Client, uri string, onProgress transferProgress) ([]byte, error) {
-	return downloadToMemory(ctx, client, uri, true, mediaStallTimeout, onProgress)
+func downloadBytes(ctx context.Context, client *http.Client, uri string, onProgress transferProgress) ([]byte, error) {
+	return downloadToMemory(ctx, client, uri, mediaStallTimeout, onProgress)
 }
 
-func downloadToMemory(ctx context.Context, client *http.Client, uri string, allowRangeResume bool, stall time.Duration, onProgress transferProgress) ([]byte, error) {
+func downloadToMemory(ctx context.Context, client *http.Client, uri string, stall time.Duration, onProgress transferProgress) ([]byte, error) {
 	sink := &memorySink{uri: uri}
 	transfer := &rangeTransfer{
 		client: client, uri: uri, stall: stall, sink: sink,
@@ -132,26 +122,18 @@ func downloadToMemory(ctx context.Context, client *http.Client, uri string, allo
 			return nil
 		},
 	}
-	resumed := false
-	for {
-		err := transfer.attempt(ctx)
-		if err == nil {
-			return sink.buf.Bytes(), nil
-		}
-		var body *bodyError
-		if !errors.As(err, &body) {
-			return nil, err
-		}
+	err := transfer.attempt(ctx)
+	var body *bodyError
+	if errors.As(err, &body) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		// A naked Range could splice two objects at the same URL. Only keep the
-		// in-memory prefix when If-Range can bind the follow-up request.
-		if !allowRangeResume || !body.resumable || resumed || sink.Len() == 0 || resumeValidator(transfer.meta) == "" {
-			return nil, body.err
-		}
-		resumed = true
+		return nil, body.err
 	}
+	if err != nil {
+		return nil, err
+	}
+	return sink.buf.Bytes(), nil
 }
 
 // downloadToFile streams uri into a stable checkpoint under dir. resumeKey is
@@ -265,7 +247,7 @@ type rangeTransfer struct {
 
 // resumeRejectedError reports a resumed request whose answer cannot extend the
 // held bytes. The checkpoint download discards its bytes and restarts; the
-// in-memory download fails.
+// in-memory download never resumes, so never sees one.
 type resumeRejectedError struct{ message string }
 
 func (e *resumeRejectedError) Error() string { return e.message }

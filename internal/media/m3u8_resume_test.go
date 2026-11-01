@@ -101,6 +101,55 @@ func TestDownloadToFileResumesInterruptedTransfer(t *testing.T) {
 	}
 }
 
+// A server that sends only Last-Modified still gets a validated resume:
+// If-Range carries that date.
+func TestDownloadToFileUsesLastModifiedForResume(t *testing.T) {
+	payload := bytes.Repeat([]byte("last-modified"), 16*1024)
+	cut := 41 * 1024
+	const modified = "Wed, 21 Oct 2015 07:28:00 GMT"
+	var mu sync.Mutex
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		requestNumber := requests
+		mu.Unlock()
+		w.Header().Set("Last-Modified", modified)
+		if requestNumber == 1 {
+			w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+			_, _ = w.Write(payload[:cut])
+			return
+		}
+		if got, want := r.Header.Get("Range"), fmt.Sprintf("bytes=%d-", cut); got != want {
+			t.Errorf("Range = %q, want %q", got, want)
+		}
+		if got := r.Header.Get("If-Range"); got != modified {
+			t.Errorf("If-Range = %q, want Last-Modified", got)
+		}
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", cut, len(payload)-1, len(payload)))
+		w.Header().Set("Content-Length", strconv.Itoa(len(payload)-cut))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(payload[cut:])
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	key := filepath.Join(dir, "final.m4a")
+	if _, err := downloadToFile(context.Background(), server.Client(), server.URL, dir, testResumeOwner, key, nil); err == nil {
+		t.Fatal("first truncated transfer succeeded")
+	}
+	path, err := downloadToFile(context.Background(), server.Client(), server.URL, dir, testResumeOwner, key, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFileBytes(t, path, payload)
+	mu.Lock()
+	defer mu.Unlock()
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2", requests)
+	}
+}
+
 func TestDownloadToFileTruncatesWhenServerIgnoresRange(t *testing.T) {
 	payload := bytes.Repeat([]byte("new representation"), 4096)
 	dir := t.TempDir()

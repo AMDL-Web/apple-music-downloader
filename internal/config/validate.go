@@ -122,11 +122,6 @@ func (c Config) Validate() error {
 	if c.Download.ProgressEventIntervalMS > maxProgressEventIntervalMSLimit {
 		return fmt.Errorf("download.progress_event_interval_ms must be at most %d", maxProgressEventIntervalMSLimit)
 	}
-	switch c.Download.MemoryMode {
-	case MemoryModeLow, MemoryModeHigh:
-	default:
-		return fmt.Errorf("download.memory_mode must be low or high")
-	}
 	switch c.Download.IntegrityMode {
 	case IntegrityModeFull, IntegrityModeQuick:
 	default:

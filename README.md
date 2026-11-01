@@ -207,7 +207,7 @@ the first codec is tried.
 process-wide pool across all jobs. A full pool serves the earliest-submitted job first, so
 jobs tend to finish one after another.
 
-Stages, retries, pools and memory modes: [docs/download-pipeline.md](docs/download-pipeline.md).
+Stages, retries, pools and encrypted checkpoints: [docs/download-pipeline.md](docs/download-pipeline.md).
 Process lifecycle and package boundaries: [docs/architecture.md](docs/architecture.md).
 
 ## Where files land
@@ -297,7 +297,7 @@ Both are off by default. See [docs/automation.md](docs/automation.md).
 | [docs/cli.md](docs/cli.md) | The `amdl` command line, its JSON output and exit statuses, the MCP server and the terminal interface |
 | [docs/api.md](docs/api.md) | Every endpoint with curl examples, job overrides, error codes, SSE semantics |
 | [docs/architecture.md](docs/architecture.md) | Process lifecycle, packages, API conventions, storage |
-| [docs/download-pipeline.md](docs/download-pipeline.md) | Stages, retries, codec fallback, concurrency, memory modes, lyrics, output paths |
+| [docs/download-pipeline.md](docs/download-pipeline.md) | Stages, retries, codec fallback, concurrency, encrypted checkpoints, lyrics, output paths |
 | [docs/automation.md](docs/automation.md) | Job hooks and library sync |
 | [docs/benchmarks.md](docs/benchmarks.md) | Measured post-decrypt and end-to-end results |
 | [docs/references.md](docs/references.md) | Outside practices adopted, adapted or declined |

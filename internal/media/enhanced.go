@@ -220,8 +220,8 @@ func (p *keyPrefetch) end() {
 
 // downloadEnhancedCodec is the enhanced codec's decrypt phase: it decrypts the
 // fetched media one fragment at a time straight into ffmpeg, then verifies,
-// tags and commits the result (finalizeTrackOutput). Both memory modes stream;
-// only the encrypted input's backing differs.
+// tags and commits the result (finalizeTrackOutput). The encrypted input is
+// the fetch phase's checkpoint in temp_dir.
 func (d *Downloader) downloadEnhancedCodec(ctx context.Context, job domain.Job, item *domain.JobItem, song applemusic.Song, codec string, lyrics trackLyrics, cover []byte, outPath string, selected selectedDownloadMedia, reporter jobs.Reporter, set publishStage) error {
 	backend := d.backend()
 	input, inputSize, closeInput, err := selected.open()

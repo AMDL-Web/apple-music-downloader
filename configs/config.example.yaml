@@ -143,7 +143,7 @@ catalog:
   motion_artwork_enabled: true
 
 download:
-  # quality_priority, codec_alternative, and memory_mode below are runtime-mutable;
+  # quality_priority and codec_alternative below are runtime-mutable;
   # they appear first to match the DownloadConfig field order.
   # list enum: alac, aac, aac-binaural, aac-downmix, ec3, ac3.
   # - alac: Apple Lossless Audio Codec
@@ -158,32 +158,6 @@ download:
   # bool: true tries the next codec in quality_priority after failure; false only tries the first codec.
   # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   codec_alternative: true
-  # enum: low, high. Controls the per-track RAM/disk trade-off for Enhanced HLS processing. Default: low.
-  # - low: streams encrypted Enhanced HLS media into a resumable checkpoint, then reads it fragment by fragment
-  #     and decrypts directly into ffmpeg. The normal path uses bounded fragment-sized RAM; the encrypted
-  #     checkpoint and flattened output can coexist in temp_dir, for roughly two track-sized files per parallel track.
-  # - high: keeps one encrypted track in RAM and decrypts it fragment by fragment directly into ffmpeg. The live
-  #     media payload per parallel track is roughly one encrypted track plus the current encrypted and plaintext
-  #     fragments; pathological single-fragment media can approach three track sizes. The observed Go heap may
-  #     temporarily approach about twice the track size (or more for unusually large fragments) because garbage
-  #     collection retains allocation headroom; ffmpeg and runtime overhead are additional. Only the flattened
-  #     output remains in temp_dir, so its peak is roughly one track per parallel track. In-memory media is limited
-  #     to 512 MiB per track; larger enhanced-media responses fail explicitly instead of risking process OOM. If a
-  #     CDN response has a usable ETag or Last-Modified validator and is interrupted after making progress, high
-  #     mode retries one Range request from its in-memory prefix. It does not persist that prefix, so process or
-  #     container restarts still begin at byte zero.
-  # AAC-LC WebPlayback is unchanged by this option: both modes keep its encrypted retry buffer in memory (subject
-  # to the same 512 MiB download limit) and stream gowidevine's decrypted output directly into ffmpeg instead of
-  # retaining another plaintext []byte or input file. The Widevine parser may still hold decoded track structures
-  # until that stream completes. The rare ALAC integrity-repair fallback also reads and copies one full flattened
-  # track in either mode; the fragment-sized low-mode estimate applies to the normal path.
-  # For the normal ffmpeg layout (media before a final moov), metadata tagging rewrites only a moov-plus-artwork
-  # sized shell in temp_dir and another shell of similar size in the operating system temp directory. Unusual
-  # compatible layouts fall back to go-mp4tag's legacy whole-track rewrite in the operating system temp directory.
-  # Total RAM and temporary disk usage scale with max_parallel_downloads below and the fixed limit of 32
-  # decrypts in flight.
-  # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
-  memory_mode: "low"
   # integer: maximum concurrently running jobs; sizes the worker pool built at startup.
   # Positive values allow 1-32; values <=0 behave as 1; values above 32 in this file are
   # clamped to 32 (the config API rejects them). Default: 3.
@@ -192,6 +166,11 @@ download:
   # integer: maximum media transfers in flight across all jobs. Positive values allow 1-64; values <=0 behave as 1;
   # values above 64 in this file are clamped to 64. Default: 16.
   # This sizes a process-wide pool at startup and cannot be overridden per job.
+  # A fetched track stays held until its decrypt ends, and decrypts run one per CPU Go uses (GOMAXPROCS, which
+  # follows a container's CPU limit), so up to this value plus that CPU count tracks are held at once. RAM and
+  # temp_dir usage scale with that number. An Enhanced HLS track is decrypted fragment by fragment from its
+  # checkpoint in temp_dir, so its RAM stays fragment-sized; an AAC-LC track is held whole in memory (at most
+  # 512 MiB). The rare ALAC integrity repair reads and copies one whole flattened track in memory.
   # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   # Upgrade note: this replaces the removed max_parallel_tracks key; old configs must be edited or startup fails.
   max_parallel_downloads: 16
@@ -268,19 +247,22 @@ download:
   # name/id; {SongNumber} is the 1-based position.
   station_path_format: "stations/{StationName}/{SongNumber:02d}. {SongName}"
   # string path: temporary media working directory. Relative paths are resolved from the backend working directory.
-  # All disk-backed per-track scratch and the flattened/verified/tagged file are
+  # Default: data/tmp. All disk-backed per-track scratch and the flattened/verified/tagged file are
   # staged here and only the finished file is
   # moved to downloads_dir. If temp_dir shares a filesystem with downloads_dir the
   # move is a cheap rename; if not, the finished file is copied across once. Put
   # temp_dir on fast local storage (e.g. SSD) to keep the flatten/verify/tag work
-  # off a slower downloads volume. For Enhanced HLS, peak usage in this directory depends
-  # on memory_mode: roughly two times one track's size per in-flight track in low mode,
-  # or one track's size per in-flight track in high mode (in-flight tracks are bounded by
-  # the startup pools above). AAC-LC uses roughly one track here in either mode.
+  # off a slower downloads volume. Enhanced HLS streams each encrypted track into a
+  # resumable checkpoint here and decrypts it back fragment by fragment into ffmpeg; the
+  # checkpoint and the flattened output can coexist, so peak usage is roughly two times
+  # one track's size per held track (see max_parallel_downloads above). AAC-LC uses
+  # roughly one track here. A temp_dir on a tmpfs keeps the checkpoints in RAM instead,
+  # which then needs room for that peak.
   # The common metadata rewrite briefly uses only moov-plus-artwork sized shells in temp_dir and the operating
-  # system temp directory; a compatible non-tail-moov layout can still use one track-sized legacy rewrite file.
+  # system temp directory; a compatible non-tail-moov layout can still use one track-sized legacy rewrite file
+  # in the operating system temp directory.
   # Assumed single-writer: stale non-resumable scratch
-  # in temp_dir is swept on startup. Encrypted HLS checkpoints (low mode) are grouped by
+  # in temp_dir is swept on startup. Encrypted HLS checkpoints are grouped by
   # task: failed/recoverable tasks retain them for retry, while completed, cancelled,
   # and deleted tasks remove them.
   temp_dir: "data/tmp"
