@@ -22,18 +22,24 @@ When a commit fixes a bug and adds or changes a regression test, prove after
 committing that the test guards the bug:
 
 ```bash
-go run ./tools/revertproof -test apps/desktop/internal/widgets/cover_test.go
+go run ./tools/revertproof -test apps/desktop/internal/widgets/cover_test.go \
+  -run '^TestTheMotionCoverFadesOut$'
 go run ./tools/revertproof -test apps/console/jstest/album-progress.test.mjs \
-  -cmd 'node --test apps/console/jstest/album-progress.test.mjs'
+  -cmd 'node --test --test-name-pattern="finish order" apps/console/jstest/album-progress.test.mjs'
 ```
 
+Name the new or changed tests with `-run` (or the command's own filter): any
+assertion failure in the run counts as red, so an older test in the same file could
+go red while the new one does not. Without `-run` every `Test` function in the file
+runs, and the summary lists the red ones (`redTests` in the JSON) for you to check.
+
 In a temporary worktree at HEAD it puts every changed non-test file back to its
-merge-base with `origin/dev` (`-base` picks another ref) and runs the test file's
-`Test` functions (`-run` narrows them), which must fail an assertion; then it runs
-them at HEAD 10 times (`-count`) and once with `-cpu 1`, which must all pass. The
-working tree and index stay as they are, and uncommitted changes are not part of the
-proof. Test files, `go.mod`, `go.sum`, `-keep` paths and files the change added
-stay at HEAD, so a fix inside an added file cannot go red (`addedKept`).
+merge-base with `origin/dev` (`-base` picks another ref) and runs the tests, which
+must fail an assertion; then it runs them at HEAD 10 times (`-count`) and once with
+`-cpu 1`, which must all pass. The working tree and index stay as they are, and
+uncommitted changes are not part of the proof. Test files, `go.mod`, `go.sum`,
+`-keep` paths and files the change added stay at HEAD, so a fix inside an added file
+cannot go red (`addedKept`).
 
 | Verdict | Means |
 | --- | --- |
@@ -42,13 +48,23 @@ stay at HEAD, so a fix inside an added file cannot go red (`addedKept`).
 | `not-red` | The test passes without the fix, or nothing was reverted. |
 | `red-not-assertion` | Without the fix the tests did not build, panicked, matched nothing or all skipped. |
 | `not-green` | A test failed every run at HEAD. |
-| `error` | git failed or a run timed out. |
+| `error` | git failed, or a run passed `-timeout` (go test's own, or the limit on a `-cmd` command): a run stopped by the clock shows no assertion either way. |
 
 The report gets a row with the verdict and the failure lines from `red.tail`;
 check that they describe the bug. Any other verdict goes under "Not verified"
 with its reason. A test that uses a field or function the fix adds cannot build
 without it (`red-not-assertion`); say so rather than splitting the fix to please
 the tool.
+
+Limits:
+
+- Only `*_test.go`, `*.test.mjs` and `testdata/` count as test files. A fixture
+  elsewhere, such as `apps/console/jstest/fixtures/`, is reverted with the fix
+  unless you pass it with `-keep`.
+- Changes are listed with `--no-renames`, so a renamed file is a deletion plus an
+  addition: the red run brings the old file back beside the new one, which in Go
+  usually means duplicate declarations and `red-not-assertion`. `-keep` the old
+  path so it stays deleted, or report the verdict with that reason.
 
 ## Live API check
 

@@ -62,6 +62,7 @@ wins when they disagree, so details are not copied here.
 | dev, main | Work lands on `dev`; `main` changes only through the release PR | [AGENTS.md](AGENTS.md#commits-and-releases) |
 | DCO sign-off | The `Signed-off-by` trailer every commit needs (`git commit -s`) | [CONTRIBUTING.md](CONTRIBUTING.md#sign-off-dco) |
 | Move-only split | Moving declarations between files of one package with no code change, proven by `tools/splitdecls` verify | [amdl-refactor](.claude/skills/amdl-refactor/SKILL.md) |
+| Revert proof | `tools/revertproof`: a regression test must fail an assertion with the fix reverted, then pass every repeat at HEAD | [amdl-verify](.claude/skills/amdl-verify/SKILL.md#revert-proof) |
 | Repo checks | Go tests that keep docs pointers and agent files honest | `tools/repocheck` |
 | Guard hook | The Claude Code PreToolUse script that blocks forbidden git and gh commands | `.claude/hooks/guard-commands.mjs` |
 | Dev server | `make dev`: simulate mode on 127.0.0.1:18080 with data under `data/dev/` | `Makefile#dev` |

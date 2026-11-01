@@ -40,11 +40,13 @@ type Run struct {
 	Tests map[string]*Tally `json:"tests,omitempty"`
 	// BuildFailed: a test binary did not compile.
 	BuildFailed bool `json:"buildFailed,omitempty"`
-	// PackageFailed: a package failed outside any test, from a panic in init,
-	// TestMain's exit code or go test's own -timeout.
-	PackageFailed bool     `json:"packageFailed,omitempty"`
-	TimedOut      bool     `json:"timedOut,omitempty"`
-	Tail          []string `json:"tail,omitempty"`
+	// PackageFailed: a package failed outside any test, from a panic in init
+	// or TestMain's exit code.
+	PackageFailed bool `json:"packageFailed,omitempty"`
+	// TimedOut: the run passed -timeout, go test's own or, for -cmd, the
+	// tool's.
+	TimedOut bool     `json:"timedOut,omitempty"`
+	Tail     []string `json:"tail,omitempty"`
 }
 
 type event struct {
@@ -80,6 +82,9 @@ func parseGoTest(r *Run, stream string) {
 			r.BuildFailed = true
 		case "output":
 			out := e.Output
+			if strings.HasPrefix(out, "panic: test timed out after ") {
+				r.TimedOut = true
+			}
 			if strings.HasPrefix(out, "panic: ") || strings.HasPrefix(out, "fatal error: ") {
 				panicking[e.Package+" "+top] = true
 				r.addTail(out)
@@ -186,7 +191,7 @@ func redVerdict(r Run) (verdict, reason string) {
 	sum := r.total()
 	switch {
 	case r.TimedOut:
-		return verdictError, "the run without the fix timed out"
+		return verdictError, "the run without the fix passed -timeout, which shows no assertion either way"
 	case sum.Fail > 0:
 		return "", ""
 	case r.BuildFailed:
@@ -194,7 +199,7 @@ func redVerdict(r Run) (verdict, reason string) {
 	case sum.Panic > 0:
 		return verdictRedNotAssertion, "a test panicked without the fix, rather than failing an assertion"
 	case r.PackageFailed || r.Exit != 0:
-		return verdictRedNotAssertion, fmt.Sprintf("exit %d without a failed test: a panic in init or TestMain, or a go test timeout", r.Exit)
+		return verdictRedNotAssertion, fmt.Sprintf("exit %d without a failed test: a panic in init or TestMain", r.Exit)
 	case sum.Pass == 0 && sum.Skip > 0:
 		return verdictRedNotAssertion, "every matched test skipped"
 	case sum.Pass == 0:

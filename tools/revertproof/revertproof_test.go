@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -64,6 +65,16 @@ const (
 {"Action":"pass","Package":"p/a","Test":"TestFade","Elapsed":0}
 {"Action":"fail","Package":"p/a","Elapsed":0.003}
 `
+	// go test -timeout 1s on a test that sleeps.
+	timeoutStream = `{"Action":"run","Package":"p/h","Test":"TestHang"}
+{"Action":"output","Package":"p/h","Test":"TestHang","Output":"=== RUN   TestHang\n"}
+{"Action":"output","Package":"p/h","Test":"TestHang","Output":"panic: test timed out after 1s\n"}
+{"Action":"output","Package":"p/h","Test":"TestHang","Output":"\trunning tests:\n"}
+{"Action":"output","Package":"p/h","Test":"TestHang","Output":"\t\tTestHang (1s)\n"}
+{"Action":"fail","Package":"p/h","Test":"TestHang","Elapsed":1}
+{"Action":"output","Package":"p/h","Output":"FAIL\tp/h\t1.006s\n"}
+{"Action":"fail","Package":"p/h","Elapsed":1.006}
+`
 	passStream = `{"Action":"run","Package":"p/a","Test":"TestFade"}
 {"Action":"pass","Package":"p/a","Test":"TestFade","Elapsed":0}
 {"Action":"pass","Package":"p/a","Elapsed":0.003}
@@ -88,6 +99,7 @@ func TestRedVerdict(t *testing.T) {
 		{"panic in init", initPanicStream, 1, verdictRedNotAssertion},
 		{"no tests", noTestsStream, 0, verdictRedNotAssertion},
 		{"all skipped", skipStream, 0, verdictRedNotAssertion},
+		{"go test timeout", timeoutStream, 1, verdictError},
 		{"passing", passStream, 0, verdictNotRed},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -126,6 +138,7 @@ func TestGreenVerdict(t *testing.T) {
 		{"fails every run", []Run{parsed(1, assertionStream), parsed(1, assertionStream)}, verdictNotGreen},
 		{"build failure", []Run{parsed(1, buildFailStream)}, verdictNotGreen},
 		{"no tests", []Run{parsed(0, noTestsStream)}, verdictNotGreen},
+		{"go test timeout", []Run{parsed(0, passStream), parsed(1, timeoutStream)}, verdictError},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if verdict, reason := greenVerdict(c.runs); verdict != c.verdict {
@@ -250,8 +263,13 @@ func tinyRepo(t *testing.T, test string) (string, string) {
 func proveTiny(t *testing.T, test string) Proof {
 	t.Helper()
 	root, base := tinyRepo(t, test)
-	p := prove(context.Background(), options{root: root, tests: []string{"calc/calc_test.go"}, base: base, count: 2, timeout: time.Minute})
-	out, _ := exec.Command("git", "-C", root, "worktree", "list", "--porcelain").Output()
+	return proveAndCheckWorktrees(t, options{root: root, tests: []string{"calc/calc_test.go"}, base: base, count: 2, timeout: time.Minute})
+}
+
+func proveAndCheckWorktrees(t *testing.T, o options) Proof {
+	t.Helper()
+	p := prove(context.Background(), o)
+	out, _ := exec.Command("git", "-C", o.root, "worktree", "list", "--porcelain").Output()
 	if n := strings.Count(string(out), "worktree "); n != 1 {
 		t.Errorf("%d worktrees left after the proof, want only the repository's own:\n%s", n, out)
 	}
@@ -312,5 +330,24 @@ func TestAbsOfANegative(t *testing.T) {
 `)
 	if p.Verdict != verdictFlaky {
 		t.Errorf("proof %+v, want flaky", p)
+	}
+}
+
+func TestACommandPastItsTimeoutStopsWithItsChildren(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process groups are unix only")
+	}
+	t.Parallel()
+	root, base := tinyRepo(t, "package calc\n")
+	start := time.Now()
+	// sh forks sleep rather than exec it, so sleep is a grandchild holding the
+	// output pipe after sh is killed.
+	p := proveAndCheckWorktrees(t, options{root: root, tests: []string{"calc"}, base: base, count: 1,
+		cmd: "sleep 30; true", timeout: time.Second})
+	if took := time.Since(start); took > 15*time.Second {
+		t.Errorf("the proof took %s, want the 1s timeout to stop it", took)
+	}
+	if p.Verdict != verdictError || p.Red == nil || !p.Red.TimedOut {
+		t.Errorf("proof %+v, want error from a timed-out red run", p)
 	}
 }

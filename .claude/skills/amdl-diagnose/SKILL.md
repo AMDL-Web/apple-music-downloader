@@ -54,10 +54,11 @@ time. Temporary logs carry a unique prefix such as `[DEBUG-7f3a]` so
 
 - Test at the public seam, called the way real callers call it, with expected
   values from independent facts.
-- Prove it guards the bug: after committing the fix and the test, the
-  [revert proof](../amdl-verify/SKILL.md#revert-proof) must say `proved`: red on an
-  assertion with the fix reverted (a build error does not count), green at HEAD in
-  every repeat.
+- Prove it guards the bug: after committing the fix and the test, run the
+  [revert proof](../amdl-verify/SKILL.md#revert-proof) on the new tests. `proved`
+  means red on an assertion with the fix reverted (a build error does not count) and
+  green at HEAD in every repeat; any other verdict goes under "Not verified" in the
+  report with its reason.
 - If no seam reaches the bug, say so instead of writing a test that restates the
   implementation.
 - Rerun the original, unshrunk command.

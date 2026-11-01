@@ -39,9 +39,13 @@ type Proof struct {
 	RevertedFiles []string `json:"revertedFiles"`
 	AddedKept     []string `json:"addedKept"`
 	KeptAtHead    []string `json:"keptAtHead,omitempty"`
-	Red           *Run     `json:"red,omitempty"`
-	Green         []Run    `json:"green,omitempty"`
-	usage         bool
+	// RunDefaulted: -run was not given, so every Test function in the -test
+	// files ran, old ones included.
+	RunDefaulted bool     `json:"runDefaulted,omitempty"`
+	Red          *Run     `json:"red,omitempty"`
+	RedTests     []string `json:"redTests,omitempty"`
+	Green        []Run    `json:"green,omitempty"`
+	usage        bool
 }
 
 func prove(ctx context.Context, o options) Proof {
@@ -79,7 +83,7 @@ func prove(ctx context.Context, o options) Proof {
 
 	pkgs, run := o.tests, o.run
 	if o.cmd == "" {
-		if pkgs, run, err = resolveTests(ctx, o, head); err != nil {
+		if pkgs, run, p.RunDefaulted, err = resolveTests(ctx, o, head); err != nil {
 			p.usage = true
 			return fail(err)
 		}
@@ -115,6 +119,7 @@ func prove(ctx context.Context, o options) Proof {
 		return fail(ctx.Err())
 	}
 	p.Red = &red
+	p.RedTests = red.failedTests()
 	redV, redReason := redVerdict(red)
 	if redV == verdictError {
 		p.Verdict, p.Reason = redV, redReason
@@ -140,9 +145,9 @@ func prove(ctx context.Context, o options) Proof {
 
 // resolveTests turns -test values into go test packages. A _test.go file
 // stands for its directory's package and, without -run, for its own Test
-// functions as they are at HEAD.
-func resolveTests(ctx context.Context, o options, head string) ([]string, string, error) {
-	var pkgs, names []string
+// functions as they are at HEAD; defaulted reports that case.
+func resolveTests(ctx context.Context, o options, head string) (pkgs []string, run string, defaulted bool, err error) {
+	var names []string
 	files := 0
 	for _, t := range o.tests {
 		if !strings.HasSuffix(t, "_test.go") {
@@ -155,14 +160,14 @@ func resolveTests(ctx context.Context, o options, head string) ([]string, string
 		rel := path.Clean(filepath.ToSlash(t))
 		src, err := git(ctx, o.root, "show", head+":"+rel)
 		if err != nil {
-			return nil, "", fmt.Errorf("%s is not a file at HEAD; give paths from the repository root", t)
+			return nil, "", false, fmt.Errorf("%s is not a file at HEAD; give paths from the repository root", t)
 		}
 		ns, err := testNames(rel, []byte(src))
 		if err != nil {
-			return nil, "", err
+			return nil, "", false, err
 		}
 		if len(ns) == 0 {
-			return nil, "", fmt.Errorf("%s declares no Test function", t)
+			return nil, "", false, fmt.Errorf("%s declares no Test function", t)
 		}
 		names = append(names, ns...)
 		pkg := "./" + path.Dir(rel)
@@ -173,19 +178,35 @@ func resolveTests(ctx context.Context, o options, head string) ([]string, string
 			pkgs = append(pkgs, pkg)
 		}
 	}
-	run := o.run
+	run = o.run
 	if run == "" && files == len(o.tests) {
-		run = runRegexp(names)
+		run, defaulted = runRegexp(names), true
 	}
-	return pkgs, run, nil
+	return pkgs, run, defaulted, nil
+}
+
+// waitDelay bounds how long a run waits for its output pipes once the process
+// has exited or been killed, in case something it started still holds them.
+const waitDelay = 3 * time.Second
+
+func boundedCommand(ctx context.Context, dir string, args []string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Dir = dir
+	cmd.WaitDelay = waitDelay
+	ownProcessGroup(cmd)
+	return cmd
 }
 
 func runTests(ctx context.Context, o options, dir string, pkgs []string, run string, count int, oneCPU bool) Run {
-	ctx, cancel := context.WithTimeout(ctx, o.timeout+5*time.Minute)
-	defer cancel()
 	if o.cmd != "" {
+		ctx, cancel := context.WithTimeout(ctx, o.timeout)
+		defer cancel()
 		return runCommand(ctx, o.cmd, dir, count, oneCPU)
 	}
+	// go test's own -timeout fires first; this deadline is for a go command
+	// that hangs around it.
+	ctx, cancel := context.WithTimeout(ctx, o.timeout+5*time.Minute)
+	defer cancel()
 	args := []string{"test", "-json", fmt.Sprintf("-count=%d", count), "-timeout", o.timeout.String()}
 	if oneCPU {
 		args = append(args, "-cpu", "1")
@@ -195,8 +216,7 @@ func runTests(ctx context.Context, o options, dir string, pkgs []string, run str
 	}
 	args = append(args, pkgs...)
 	r := Run{Args: append([]string{"go"}, args...)}
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir = dir
+	cmd := boundedCommand(ctx, dir, r.Args)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	r.Exit = exitCode(cmd.Run(), &r)
@@ -218,8 +238,7 @@ func runCommand(ctx context.Context, command, dir string, count int, oneCPU bool
 		r.Args = append([]string{"env", "GOMAXPROCS=1"}, r.Args...)
 	}
 	for range count {
-		cmd := exec.CommandContext(ctx, r.Args[0], r.Args[1:]...)
-		cmd.Dir = dir
+		cmd := boundedCommand(ctx, dir, r.Args)
 		var out bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &out
 		exit := exitCode(cmd.Run(), &r)
@@ -239,6 +258,9 @@ func exitCode(err error, r *Run) int {
 	var exit *exec.ExitError
 	switch {
 	case err == nil:
+		return 0
+	case errors.Is(err, exec.ErrWaitDelay):
+		r.addTail(fmt.Sprintf("the command exited 0, but something it started held its output open past %s", waitDelay))
 		return 0
 	case errors.As(err, &exit):
 		return exit.ExitCode()
@@ -263,9 +285,13 @@ func summarize(w io.Writer, p Proof) {
 	}
 	if p.Red != nil {
 		t := p.Red.total()
-		fmt.Fprintf(w, "  red: %d passed, %d failed %v, %d panicked\n", t.Pass, t.Fail, p.Red.failedTests(), t.Panic)
+		fmt.Fprintf(w, "  red: %d passed, %d failed %v, %d panicked\n", t.Pass, t.Fail, p.RedTests, t.Panic)
 		for _, l := range p.Red.Tail {
 			fmt.Fprintln(w, "    "+l)
+		}
+		if p.RunDefaulted && len(p.RedTests) > 0 {
+			fmt.Fprintf(w, "  note: without -run every Test in the file ran; red were %s: check the new test is among them\n",
+				strings.Join(p.RedTests, ", "))
 		}
 	}
 	for _, g := range p.Green {
