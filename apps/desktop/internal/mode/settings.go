@@ -27,7 +27,9 @@ type Settings struct {
 	Mode Kind `json:"mode"`
 	// RemoteURL is the address of the amdl the remote mode uses.
 	RemoteURL string `json:"remote_url,omitempty"`
-	// WrapperAddress is the wrapper the standalone backend decrypts with.
+	// WrapperAddress is the wrapper the standalone backend decrypts with. It
+	// is written to config.yaml only on the backend's first start and after
+	// Apply changed it; afterwards config.yaml owns the address.
 	WrapperAddress string `json:"wrapper_address,omitempty"`
 	// FFmpeg overrides the ffmpeg the standalone backend and the motion
 	// covers run; empty means the one ffmpeg.Find picks.

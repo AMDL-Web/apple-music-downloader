@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -178,7 +179,7 @@ func TestStoreUpdateAndSaveKeepsFileOnlyFieldsOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	if persisted.Server.Listen != "127.0.0.1:19000" {
-		t.Fatalf("startup field was overwritten on save: %q", persisted.Server.Listen)
+		t.Fatalf("file-only field was overwritten on save: %q", persisted.Server.Listen)
 	}
 	if persisted.Download.EmbedLyrics {
 		t.Fatal("runtime field was not persisted")
@@ -242,7 +243,7 @@ func TestStoreReloadResetsDeletedRuntimeKeysButNotStartupFields(t *testing.T) {
 	store := NewFileStore(base, path)
 
 	// A sparse file models a user deleting runtime keys. Load supplies their
-	// defaults, while the startup field remains the process-start snapshot.
+	// defaults, while the restart and file-only fields remain the process-start snapshot.
 	if err := os.WriteFile(path, []byte("server:\n  listen: \"127.0.0.1:20000\"\nlogging:\n  level: \"warn\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +260,7 @@ func TestStoreReloadResetsDeletedRuntimeKeysButNotStartupFields(t *testing.T) {
 }
 
 // PUT re-reads the file before applying its patch: a hand edit made since the
-// last reload survives (runtime fields become live, startup fields stay
+// last reload survives (runtime fields become live, restart and file-only fields stay
 // pending on disk) instead of being overwritten by the stale snapshot.
 func TestStoreUpdateAndSaveKeepsHandEditsMadeSinceLastReload(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -294,10 +295,15 @@ func TestStoreUpdateAndSaveKeepsHandEditsMadeSinceLastReload(t *testing.T) {
 		t.Fatalf("persisted runtime fields = %+v, want hand edit plus patch", persisted.Download)
 	}
 	if persisted.Server.Listen != "127.0.0.1:19999" {
-		t.Fatalf("pending startup edit lost: %q", persisted.Server.Listen)
+		t.Fatalf("pending file-only edit lost: %q", persisted.Server.Listen)
 	}
 	if store.Get().Server.Listen != base.Server.Listen {
-		t.Fatalf("pending startup edit became live: %q", store.Get().Server.Listen)
+		t.Fatalf("pending file-only edit became live: %q", store.Get().Server.Listen)
+	}
+	// The answer carries the saved file-only value too, so PendingRestart
+	// names it the way it does after Saved.
+	if updated.Server.Listen != "127.0.0.1:19999" || !slices.Contains(store.PendingRestart(updated), "server.listen") {
+		t.Fatalf("answer's listen = %q, pending %v; want the hand edit named", updated.Server.Listen, store.PendingRestart(updated))
 	}
 }
 

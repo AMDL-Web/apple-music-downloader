@@ -81,7 +81,7 @@ func unknownKeys(raw []byte) []string {
 	return unknown
 }
 
-// clampCatalogLimits lowers the startup-bound Apple request limit loaded from
+// clampCatalogLimits lowers the Apple request limit (a restart key) loaded from
 // disk to its hard process-wide limit.
 func clampCatalogLimits(c *CatalogConfig) {
 	if c.MaxParallelRequests > maxGlobalPoolLimit {

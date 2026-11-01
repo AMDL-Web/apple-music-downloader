@@ -363,7 +363,10 @@ tools:
   # ffmpeg 8 or later is recommended: 7.0.2 wrote a 24-bit/96 kHz ALAC
   # track's duration without its last, partial frame (about 16 ms short),
   # with the same audio; amdl doctor says when the one found is older.
-  # Set only in this file, not through the API; applies after a restart. The container image and the desktop app set it to the ffmpeg they ship or find.
+  # Set only in this file, not through the API; applies after a restart. The
+  # container image leaves the default, since its ffmpeg is on PATH; the desktop
+  # app writes the path of the ffmpeg it found (the one it ships, else one on
+  # PATH) on every start.
   ffmpeg: "ffmpeg"
 
 simulate:

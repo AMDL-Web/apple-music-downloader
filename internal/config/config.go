@@ -59,8 +59,8 @@ type DatabaseConfig struct {
 
 // LoggingConfig controls the process-wide structured logger, which writes
 // text lines to stdout (Console) and keeps the newest BufferSize records in
-// memory for the log API. Console and BufferSize are startup-bound; Level and
-// AccessLog are safe to update at runtime.
+// memory for the log API. Console and BufferSize are restart keys; Level and
+// AccessLog are runtime keys.
 type LoggingConfig struct {
 	Level      string `yaml:"level" json:"level"`
 	Console    bool   `yaml:"console" json:"console"`

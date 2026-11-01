@@ -39,7 +39,7 @@ value it saves always loads. `internal/config#classOf` sorts the keys:
 | --- | --- |
 | **Runtime** | `logging.level`, `logging.access_log`, `wrapper.data_dir`, `catalog.default_storefront`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.motion_artwork_enabled`, every `download.*` key except the two pools below, the whole `simulate` section and the whole `library_sync` section. A change applies at once, to new requests and newly started jobs. |
 | **Restart** | `wrapper.address`, `wrapper.timeout_seconds`, `wrapper.login_timeout_seconds`, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size`, and the pool sizes `download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`. `PUT` saves the value; it applies when the backend starts again, since components built at startup hold the old one. |
-| **File only** | `server.listen` (a wrong value cuts the console off), `database.path` (a new path looks like lost history) and `tools.ffmpeg` (set by the install that ships ffmpeg). `PUT` refuses them with `422 config_key_not_mutable`; edit the file and restart. |
+| **File only** | `server.listen` (a wrong value cuts the console off), `database.path` (a new path looks like lost history) and `tools.ffmpeg` (the desktop app writes the ffmpeg it found on every start; the container image keeps the default, its ffmpeg being on PATH). `PUT` refuses them with `422 config_key_not_mutable`; edit the file and restart. |
 
 While this machine runs its own wrapper (`amdl wrapper install`), the backend writes
 `wrapper.address` itself and `PUT` refuses to change it (`config_key_not_mutable`,
@@ -50,7 +50,8 @@ While this machine runs its own wrapper (`amdl wrapper install`), the backend wr
 keys whose saved value differs from the running one, a hand edit of a file-only key
 included. `POST /api/v1/system/restart` (the console's restart notice, `amdl system
 restart`) stops every component the way a shutdown does and starts again in the same
-process, on the same address, which applies them. No supervisor is needed: `amdl serve`,
+process, on the same address, which applies them; the process start time stays, so
+`uptime_seconds` in `GET /api/v1/system` does not reset. No supervisor is needed: `amdl serve`,
 the container and the desktop app all restart in place. The desktop app restarts the
 backend it runs by itself after such a save.
 

@@ -70,8 +70,9 @@ func (s *Store) Set(cfg Config) {
 // waiting for a restart) instead of overwriting them; then it writes the
 // runtime and restart fields of mutate's result to the file (keeping
 // file-class values on disk) and only then applies the runtime fields to the
-// snapshot. It returns mutate's result, the configuration as saved: pass it
-// to PendingRestart. An invalid file, a mutate error or a failed write leaves
+// snapshot. It returns mutate's result with the file-class fields as the file
+// holds them, the configuration as saved: pass it to PendingRestart, which
+// then names a hand-edited file-only key as Saved does. An invalid file, a mutate error or a failed write leaves
 // both the snapshot and the file unchanged. A missing file counts as having
 // no hand edits and is recreated. Concurrent updates run one after another,
 // each starting from the previous one's result.
@@ -79,7 +80,7 @@ func (s *Store) UpdateAndSave(mutate func(current Config) (Config, error)) (Conf
 	s.saveMu.Lock()
 	defer s.saveMu.Unlock()
 	live := s.Get()
-	base, err := s.readLocked(live, isEditable, true)
+	base, err := s.readLocked(live, func(string) bool { return true }, true)
 	if err != nil {
 		return Config{}, err
 	}
@@ -87,6 +88,7 @@ func (s *Store) UpdateAndSave(mutate func(current Config) (Config, error)) (Conf
 	if err != nil {
 		return Config{}, err
 	}
+	copyFields(&updated, base, func(key string) bool { return !isEditable(key) })
 	if s.path != "" {
 		if err := saveEditableFields(s.path, updated); err != nil {
 			return Config{}, err

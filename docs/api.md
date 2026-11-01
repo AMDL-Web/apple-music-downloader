@@ -124,7 +124,8 @@ curl -X POST http://localhost:18080/api/v1/system/restart
 Answers `202` with `{"restarting": true}`, then stops every component the way a shutdown
 does and starts again in the same process, on the same address, from `config.yaml`: the
 keys in `pending_restart` apply. Running jobs are interrupted and resume after the
-start, as after any restart. The API does not answer for the few seconds this takes;
+start, as after any restart. The process keeps its start time, so `started_at` and
+`uptime_seconds` of `GET /api/v1/system` do not reset. The API does not answer for the few seconds this takes;
 poll `GET /api/v1/health`. `amdl serve`, the container and the desktop app restart in
 place; a program that embeds the backend without starting it again answers `503
 feature_unavailable`.

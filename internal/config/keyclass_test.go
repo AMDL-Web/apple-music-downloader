@@ -248,3 +248,60 @@ func TestParseSeed(t *testing.T) {
 		t.Fatal("a seed that does not validate created a file")
 	}
 }
+
+// A missing key goes in at the indent of its section's own keys, even when
+// the section ends in a list item or a nested map, which sit deeper.
+func TestSetLeafInsertsAtTheSectionsOwnIndent(t *testing.T) {
+	for name, tc := range map[string]struct{ in, leaf, want string }{
+		"last line is a list item": {
+			"download:\n  quality_priority:\n    - alac\n    - aac\nlogging:\n  level: debug\n",
+			"max_running_jobs",
+			"download:\n  max_running_jobs: 3\n  quality_priority:\n    - alac\n    - aac\nlogging:\n  level: debug\n",
+		},
+		"last line is a nested map": {
+			"extra:\n  first: 1\n  nested:\n      deep: 2\nnext:\n  a: 1\n",
+			"leaf",
+			"extra:\n  leaf: 3\n  first: 1\n  nested:\n      deep: 2\nnext:\n  a: 1\n",
+		},
+		"four-space section": {
+			"extra:\n    first: 1\n    list:\n      - x\n",
+			"leaf",
+			"extra:\n    leaf: 3\n    first: 1\n    list:\n      - x\n",
+		},
+		"nested key of the same name is not the leaf": {
+			"extra:\n  nested:\n    leaf: 9\n",
+			"leaf",
+			"extra:\n  leaf: 3\n  nested:\n    leaf: 9\n",
+		},
+		"existing leaf is replaced after a nested map": {
+			"extra:\n  nested:\n      deep: 2\n  leaf: 1\nnext:\n  a: 1\n",
+			"leaf",
+			"extra:\n  nested:\n      deep: 2\n  leaf: 3\nnext:\n  a: 1\n",
+		},
+		"empty section": {"extra:\nnext:\n  a: 1\n", "leaf", "extra:\n  leaf: 3\nnext:\n  a: 1\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			section := "extra"
+			if strings.HasPrefix(tc.in, "download:") {
+				section = "download"
+			}
+			got := strings.Join(setLeaf(strings.Split(tc.in, "\n"), section, tc.leaf, "3"), "\n")
+			if got != tc.want {
+				t.Fatalf("setLeaf =\n%s\nwant\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+// EnsureFile seeds a key into a section whose last line is a list item and
+// still gets a file that loads.
+func TestEnsureFileSeedsIntoASectionEndingInAList(t *testing.T) {
+	path := writeConfig(t, "download:\n  quality_priority:\n    - alac\n    - aac\n")
+	if _, err := EnsureFile(path, configs.Example, Seed{"download.max_running_jobs", "3"}); err != nil {
+		t.Fatalf("EnsureFile: %v", err)
+	}
+	cfg, err := Load(path)
+	if err != nil || cfg.Download.MaxRunningJobs != 3 || len(cfg.Download.QualityPriority) != 2 {
+		t.Fatalf("seeded config = %+v, %v", cfg.Download, err)
+	}
+}

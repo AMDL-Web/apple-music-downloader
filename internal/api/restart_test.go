@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -68,6 +69,38 @@ func TestPutRestartKeyIsSavedForTheNextStart(t *testing.T) {
 	decode()
 	if len(resp.PendingRestart) != 0 || !strings.Contains(recorder.Body.String(), `"pending_restart":[]`) {
 		t.Fatalf("after the restart = %s", recorder.Body.String())
+	}
+}
+
+// PUT names the same pending keys GET does, a hand edit of a file-only key
+// included, though PUT cannot change that key itself.
+func TestPutReportsHandEditedFileOnlyKeysAsPending(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	running := config.Default()
+	writeConfigFile(t, path, running)
+	routes := newServer(t, Deps{Config: config.NewFileStore(running, path)}).Routes()
+
+	edited := running
+	edited.Server.Listen = "127.0.0.1:19999"
+	writeConfigFile(t, path, edited)
+
+	pending := func(recorder *httptest.ResponseRecorder) []string {
+		t.Helper()
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status %d %s", recorder.Code, recorder.Body.String())
+		}
+		var resp struct {
+			PendingRestart []string `json:"pending_restart"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		return resp.PendingRestart
+	}
+	put := pending(requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"catalog":{"default_storefront":"jp"}}`))
+	get := pending(requestJSON(t, routes, http.MethodGet, "/api/v1/config", ""))
+	if want := []string{"server.listen"}; !reflect.DeepEqual(put, want) || !reflect.DeepEqual(get, want) {
+		t.Fatalf("pending_restart: PUT %v, GET %v; want %v from both", put, get, want)
 	}
 }
 

@@ -162,7 +162,7 @@ var overrideExclusions = map[string]bool{
 	"download.lyrics_extras":        true,
 	"download.check_integrity":      true,
 	"download.integrity_mode":       true,
-	// Startup keys, so never runtime; listed to keep the godoc's list whole.
+	// Restart keys, so never runtime; listed to keep the godoc's list whole.
 	"download.max_running_jobs":       true,
 	"download.max_parallel_downloads": true,
 }

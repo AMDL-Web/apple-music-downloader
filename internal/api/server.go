@@ -124,7 +124,7 @@ func New(deps Deps) (*Server, error) {
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())
-	// logging.buffer_size is a startup key, so the snapshot read here is the
+	// logging.buffer_size is a restart key, so the snapshot read here is the
 	// size the log store was built with. A store without retention keeps no
 	// history for the log routes to serve.
 	if deps.Logging != nil {

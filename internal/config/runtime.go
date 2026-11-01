@@ -23,8 +23,9 @@ const (
 	// classFile keys change only in config.yaml and apply on the next start.
 	// A wrong value through the API would cut the console off
 	// (server.listen) or make the download history look lost
-	// (database.path), and tools.ffmpeg is set by the install that ships
-	// ffmpeg (the image, the desktop app).
+	// (database.path), and tools.ffmpeg belongs to the install (the desktop
+	// app writes the ffmpeg it found on every start; the image keeps the
+	// default, as its ffmpeg is on PATH).
 	classFile
 )
 

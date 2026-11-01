@@ -124,18 +124,27 @@ func setLeaf(lines []string, section, leaf, value string) []string {
 		}
 		return append(lines, section+":", "  "+leaf+": "+value, "")
 	}
-	indent := "  "
+	// The section's own children sit at the indent of its first direct
+	// child, whatever its last line is (a list item or a nested map is
+	// deeper); a section with no child yet takes two spaces.
+	indent, end := "  ", len(lines)
+	found := false
 	for i := start + 1; i < len(lines); i++ {
 		line := lines[i]
 		trimmed := strings.TrimLeft(line, " ")
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if len(trimmed) == len(line) {
-			break // the next section
+		if len(trimmed) == len(line) && !strings.HasPrefix(trimmed, "- ") {
+			end = i // the next section
+			break
 		}
-		indent = line[:len(line)-len(trimmed)]
-		if strings.HasPrefix(trimmed, leaf+":") {
+		if !found {
+			indent, found = line[:len(line)-len(trimmed)], true
+		}
+	}
+	for i := start + 1; i < end; i++ {
+		if strings.HasPrefix(lines[i], indent+leaf+":") {
 			lines[i] = indent + leaf + ": " + value
 			return lines
 		}

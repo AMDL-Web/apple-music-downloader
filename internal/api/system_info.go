@@ -78,7 +78,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 	cfg := s.currentConfig()
 	build := buildinfo.Get()
 	queue := s.manager.QueueStats()
-	// tools.ffmpeg is a startup key, so the live snapshot names the binary
+	// tools.ffmpeg is a file-only key, so the live snapshot names the binary
 	// the pipeline's own checker was built with.
 	tools := media.NewToolChecker(cfg.Tools).Check(r.Context())
 	writeJSON(w, http.StatusOK, systemInfo{

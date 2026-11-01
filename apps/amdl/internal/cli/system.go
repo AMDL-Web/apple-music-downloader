@@ -248,12 +248,21 @@ func serveCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 }
 
 // runRestarting runs the backend until ctx ends, starting it again each time
-// POST /api/v1/system/restart stops it (server.ErrRestart).
+// POST /api/v1/system/restart stops it (server.ErrRestart). A signal that
+// lands while a restart is shutting down ends it cleanly, like the local
+// backend's run.
 func runRestarting(ctx context.Context, opts server.Options) error {
+	return runRestartingWith(ctx, opts, server.Run)
+}
+
+func runRestartingWith(ctx context.Context, opts server.Options, run func(context.Context, server.Options) error) error {
 	for {
-		err := server.Run(ctx, opts)
-		if !errors.Is(err, server.ErrRestart) || ctx.Err() != nil {
+		err := run(ctx, opts)
+		if !errors.Is(err, server.ErrRestart) {
 			return err
+		}
+		if ctx.Err() != nil {
+			return nil
 		}
 	}
 }
