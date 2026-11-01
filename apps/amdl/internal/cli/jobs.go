@@ -266,7 +266,7 @@ func (e *env) progressLine(d client.DownloadDetail, rate *progress.Rate) {
 		title = d.Job.ID
 	}
 	left := format.Remaining(rate.Remaining())
-	line := fmt.Sprintf("%s  %d/%d  %d%%", title, a.Lit, a.Total, a.Percent)
+	line := fmt.Sprintf("%s  %d/%d  %d%%", title, a.OnDisk, a.Total, a.Percent)
 	if left != "" {
 		line += "  " + left
 	}

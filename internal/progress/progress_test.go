@@ -293,3 +293,15 @@ func TestAvgSpeedCountsTracksStillDownloading(t *testing.T) {
 		t.Errorf("a job that has not started: %v, want 0", got)
 	}
 }
+
+func TestAlbumCountsTheTracksOnDiskApartFromTheFailed(t *testing.T) {
+	items := []domain.JobItem{item(1, domain.ItemCompleted, domain.ItemProgress{}), item(2, domain.ItemSkipped, domain.ItemProgress{}),
+		item(3, domain.ItemFailed, domain.ItemProgress{Resolved: true}), item(4, domain.ItemCancelled, domain.ItemProgress{})}
+	p := AlbumProgress(domain.JobFailed, items)
+	if p.Lit != 4 || p.OnDisk != 2 || p.Failed != 1 {
+		t.Errorf("lit %d, on disk %d, failed %d; want 4, 2, 1", p.Lit, p.OnDisk, p.Failed)
+	}
+	if p := AlbumProgress(domain.JobRunning, []domain.JobItem{item(1, domain.ItemCompleted, domain.ItemProgress{}), item(2, domain.ItemQueued, domain.ItemProgress{})}); p.OnDisk != 1 || p.Failed != 0 {
+		t.Errorf("running: on disk %d, failed %d", p.OnDisk, p.Failed)
+	}
+}

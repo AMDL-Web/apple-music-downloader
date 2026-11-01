@@ -17,15 +17,18 @@ import (
 )
 
 // albumProgress is a job's album bar with how many tracks finished under
-// its left end and the overall percent under its right. ink is the text
-// color the bar's live fill is drawn from.
+// its left end, the failed ones counted apart, and the overall percent
+// under its right, which a job that failed or was cancelled leaves out:
+// it no longer measures anything. ink is the text color the bar's live
+// fill is drawn from.
 func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32, ink, track, working, text ui.Color, size float32) {
 	a := j.Album()
-	lit, total := a.Lit, a.Total
+	done, failed, total := a.OnDisk, a.Failed, a.Total
 	if total == 0 {
 		// Before the tracks arrive the list feed still has the counts.
-		lit, total = j.Done(), j.TotalItems
+		done, failed, total = j.Done(), j.FailedItems, j.TotalItems
 	}
+	short := j.Status == domain.JobFailed || j.Status == domain.JobCancelled
 	resolving := total == 0 && (j.Status == domain.JobQueued || j.Status == domain.JobRunning)
 	ui.Column(c).Gap(5).Children(func() {
 		widgets.AlbumBar{Album: a, Completed: k.OK, Skipped: k.Skip, Failed: k.Bad, Cancelled: k.Muted, Working: working,
@@ -35,9 +38,15 @@ func albumProgress(c *ui.Context, k *Tokens, j *store.Job, key string, h float32
 			case resolving:
 				mono(c, "Resolving tracks", size).TextColor(text)
 			default:
-				mono(c, fmt.Sprintf("%d / %d finished", lit, total), size).TextColor(text)
+				count := fmt.Sprintf("%d / %d finished", done, total)
+				if failed > 0 {
+					count += fmt.Sprintf(" · %d failed", failed)
+				}
+				mono(c, count, size).TextColor(text)
 				ui.Spacer(c)
-				mono(c, fmt.Sprintf("%d%%", a.Percent), size).TextColor(text)
+				if !short {
+					mono(c, fmt.Sprintf("%d%%", a.Percent), size).TextColor(text)
+				}
 			}
 		})
 	})

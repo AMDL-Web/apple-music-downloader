@@ -90,6 +90,11 @@ func TestAFailedAlbumDownloadOpensOnItsAlbum(t *testing.T) {
 	if tt.HasText("Download again") || tt.HasText("RELEASED") {
 		t.Errorf("a failed download's page offers %q", tt.Texts())
 	}
+	// Its two failed tracks are not finished, and a percent of a run that
+	// ended measures nothing.
+	if !tt.HasText("8 / 10 finished · 2 failed") || tt.HasText("83%") {
+		t.Errorf("a failed download's bar says %q", tt.Texts())
+	}
 	if a.backLabel() != "Queue" {
 		t.Errorf("from the queue, Back says %q", a.backLabel())
 	}

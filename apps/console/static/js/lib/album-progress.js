@@ -58,11 +58,11 @@ const finishTime = (item) => {
  *   (0..1), for the time-left estimate (lib/speed.js).
  * - `ticks`: cells to cut the bar into, 0 for none (one track, or more than
  *   TICK_MAX).
- * - `onDisk`: the tracks saved or already on disk, what a job that ended
- *   short of completion counts.
+ * - `onDisk`: the tracks saved or already on disk, what the caption counts
+ *   as finished; `failed`: the tracks that failed, which it counts apart.
  *
  * A single track is not segmented: the solid fill is its own progress.
- * @returns {{total: number, lit: number, onDisk: number, runs: {state: string, role: string, share: number}[], done: number, live: number, percent: number, fraction: number, ticks: number}}
+ * @returns {{total: number, lit: number, onDisk: number, failed: number, runs: {state: string, role: string, share: number}[], done: number, live: number, percent: number, fraction: number, ticks: number}}
  */
 export function albumProgress(jobStatus, items) {
   const list = Array.isArray(items) ? items.filter(Boolean) : [];
@@ -95,6 +95,7 @@ export function albumProgress(jobStatus, items) {
     total,
     lit: finished.length,
     onDisk: finished.filter((it) => it.status === 'completed' || it.status === 'skipped_existing').length,
+    failed: finished.filter((it) => it.status === 'failed').length,
     runs: runs.filter((r) => r.share > 0),
     done,
     live: total > 1 ? Math.max(done, overall) : done,

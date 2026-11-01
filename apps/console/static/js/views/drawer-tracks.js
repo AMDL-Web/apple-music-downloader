@@ -15,10 +15,11 @@ const OUTCOME_WORDS = { completed: 'saved', skipped_existing: 'already on disk',
 /**
  * The album bar, after the AMDL iOS app (lib/album-progress.js): a solid fill
  * of the finished tracks in the order they finished, a translucent fill to the
- * overall stage-weighted progress, and under it the finished count and the
- * percent. A job that failed or was cancelled counts the tracks on disk
- * instead and drops the percent, which no longer measures anything; so does
- * a single track, whose row has its own stage percent beside it. Drawn
+ * overall stage-weighted progress, and under it the finished count, the
+ * tracks saved or on disk with the failed ones counted apart, and the
+ * percent. A job that failed or was cancelled drops the percent, which no
+ * longer measures anything; so does a single track, whose row has its own
+ * stage percent beside it. Drawn
  * from the first render, resolving included, so nothing below it moves when
  * tracks arrive or the job ends.
  */
@@ -37,7 +38,8 @@ export function AlbumProgress({ job, items }) {
     ? 'Resolving tracks'
     : short
       ? [`${p.onDisk} of ${p.total} tracks on disk`, ...extra].join(', ')
-      : [`${p.lit} of ${p.total} tracks finished`, ...extra, `${p.percent}% overall`].join(', ');
+      : [`${p.onDisk} of ${p.total} tracks finished`, ...extra, `${p.percent}% overall`].join(', ');
+  const failed = p.failed ? ` · ${p.failed} failed` : '';
   return html`<div class="abar-wrap">
     <div
       class=${resolving && !isTerminal(job.status) ? 'abar is-indeterminate' : 'abar'}
@@ -56,7 +58,7 @@ export function AlbumProgress({ job, items }) {
       </span>
     </div>
     <div class="abar-caption num" aria-hidden="true">
-      <span class="abar-count">${resolving ? 'Resolving' : `${short ? p.onDisk : p.lit} / ${p.total}`}${speed ? html`<span class="abar-rate" title=${speed}>${speed}</span>` : null}</span>
+      <span class="abar-count">${resolving ? 'Resolving' : `${p.onDisk} / ${p.total}${failed}`}${speed ? html`<span class="abar-rate" title=${speed}>${speed}</span>` : null}</span>
       <span class="abar-pct">${resolving || short || p.total === 1 || job.status === 'queued' ? '' : `${p.percent}%`}</span>
     </div>
   </div>`;

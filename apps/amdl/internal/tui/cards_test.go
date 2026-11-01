@@ -93,7 +93,7 @@ func TestAlbumBarCells(t *testing.T) {
 func TestAlbumLineKeepsItsBarLength(t *testing.T) {
 	th := newTheme(true, nil)
 	bar := func(lit, pct int, eta string) int {
-		a := progress.Album{Total: 14, Lit: lit, Percent: pct}
+		a := progress.Album{Total: 14, Lit: lit, OnDisk: lit, Percent: pct}
 		line := stripANSI(albumLine(th, 80, a, th.accent, pad(eta, etaWidth)+"  "+pad("", speedWidth)))
 		return strings.Count(line, glyphTodo) + strings.Count(line, glyphDone)
 	}

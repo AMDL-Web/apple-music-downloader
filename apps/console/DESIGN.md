@@ -357,8 +357,10 @@ pointer is near its edge. Under reduced motion rows move at once.
   the tracks finished (by `updated_at`) and in that track's outcome color, with
   the overall stage-weighted progress as a translucent fill behind it; up to
   24 tracks (`TICK_MAX`) gaps cut it into cells, above that it is drawn whole.
-  Under it, the finished count left and the percent right (not for a single
-  track, whose row shows its stage's percent). After the count, on the same
+  Under it, the finished count left, the tracks saved or already on disk
+  with the failed ones counted apart ("7 / 10 · 3 failed"), and the percent
+  right (not for a single track, whose row shows its stage's percent, nor
+  for a job that failed or was cancelled). After the count, on the same
   line, a running job reads "avg 41 MB/s · ~1 min left" (a completed one, only
   its average): the transferred bytes (the sizes of the written tracks plus
   `progress.download_bytes` of the others) over the run's time, and the time

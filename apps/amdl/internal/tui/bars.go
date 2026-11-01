@@ -160,7 +160,7 @@ const (
 // they tick.
 func albumLine(t theme, w int, a progress.Album, accent color.Color, tail string) string {
 	digits := len(fmt.Sprint(a.Total))
-	left := pad(fmt.Sprintf("%d/%d", a.Lit, a.Total), 2*digits+1)
+	left := pad(fmt.Sprintf("%d/%d", a.OnDisk, a.Total), 2*digits+1)
 	right := fmt.Sprintf("%3d%%", a.Percent)
 	if tail != "" {
 		right += "  " + tail

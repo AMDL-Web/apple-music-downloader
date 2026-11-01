@@ -28,9 +28,14 @@ type Run struct {
 // The web console draws the same bar from albumProgress in
 // apps/console/static/js/lib/album-progress.js.
 type Album struct {
-	// Total is the number of tracks and Lit how many have finished.
-	Total int `json:"total"`
-	Lit   int `json:"lit"`
+	// Total is the number of tracks and Lit how many have finished, which
+	// lights them in the bar whatever their outcome. OnDisk is how many of
+	// those were saved or found on disk and Failed how many failed: a
+	// caption counts the tracks done apart from the failed ones.
+	Total  int `json:"total"`
+	Lit    int `json:"lit"`
+	OnDisk int `json:"on_disk"`
+	Failed int `json:"failed"`
 	// Runs is the solid fill, left to right, in finish order.
 	Runs []Run `json:"runs"`
 	// Done is where the solid fill ends and Live where the translucent fill
@@ -117,6 +122,14 @@ func AlbumProgress(status domain.JobStatus, items []domain.JobItem) Album {
 		}
 	}
 	out := Album{Total: total, Lit: len(finished), Percent: int(math.Round(overall * 100))}
+	for _, it := range finished {
+		switch it.Status {
+		case domain.ItemCompleted, domain.ItemSkipped:
+			out.OnDisk++
+		case domain.ItemFailed:
+			out.Failed++
+		}
+	}
 	for _, r := range runs {
 		if r.Share > 0 {
 			out.Runs = append(out.Runs, r)

@@ -84,6 +84,7 @@ test('albumProgress counts the tracks on disk for a job that ended short', () =>
   const p = albumProgress('failed', items);
   assert.equal(p.lit, 4);
   assert.equal(p.onDisk, 2);
+  assert.equal(p.failed, 1);
   assert.equal(albumProgress('running', [item(1, 'completed'), item(2, 'queued')]).onDisk, 1);
 });
 

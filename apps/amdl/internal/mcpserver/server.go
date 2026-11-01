@@ -630,7 +630,7 @@ func (h handlers) waitForJob(ctx context.Context, req *mcp.CallToolRequest, args
 			return
 		}
 		last, lastPercent = time.Now(), a.Percent
-		msg := fmt.Sprintf("%d/%d tracks", a.Lit, a.Total)
+		msg := fmt.Sprintf("%d/%d tracks", a.OnDisk, a.Total)
 		if d.Job.Title != "" {
 			msg = d.Job.Title + " · " + msg
 		}
