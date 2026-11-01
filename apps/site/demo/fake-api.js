@@ -111,8 +111,6 @@ const CONFIG = {
   download: {
     alac_max_bit_depth: 24,
     alac_max_sample_rate: 192000,
-    album_path_format: 'albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}',
-    artist_path_format: 'artists/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}',
     check_integrity: true,
     codec_alternative: true,
     cover_format: 'jpg',
@@ -122,6 +120,7 @@ const CONFIG = {
     embed_lyrics: true,
     force_overwrite: false,
     integrity_mode: 'quick',
+    library_path_format: 'library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}',
     lyrics_extras: [],
     lyrics_files: [],
     lyrics_timing: 'line',
@@ -134,7 +133,6 @@ const CONFIG = {
     save_album_cover: true,
     save_artist_cover: true,
     save_playlist_cover: true,
-    song_path_format: 'songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}',
     station_path_format: 'stations/{StationName}/{SongNumber:02d}. {SongName}',
     temp_dir: 'data/tmp',
   },
@@ -171,7 +169,7 @@ function parseLink(url) {
   return m ? { storefront: m[1], type: m[2], id: m[3], track_id: m[4] } : null;
 }
 
-const outputDir = (job) => (job.type === 'playlist' ? `playlists/${job.title}` : `albums/${job.artist_name}/${job.title}`);
+const outputDir = (job) => (job.type === 'playlist' ? `playlists/${job.title}` : `library/${job.artist_name}/${job.title}`);
 
 /**
  * A fresh demo world. `progress(status, items)` is the console's

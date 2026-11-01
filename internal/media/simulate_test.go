@@ -57,7 +57,7 @@ func TestSimulateUsesSharedPipelinedMediaPools(t *testing.T) {
 			item := domain.JobItem{ID: fmt.Sprintf("item-%d", i), JobID: fmt.Sprintf("job-%d", i)}
 			song := applemusic.Song{ID: item.ID, Name: fmt.Sprintf("Track %d", i), DurationInMillis: 1000}
 			err := base.withConfig(cfg).processTrack(context.Background(), domain.Job{ID: item.JobID}, item, song,
-				"cn", applemusic.TypeSong, "", "", 1, "", reporter)
+				"cn", applemusic.TypeSong, "", "", 1, reporter)
 			if err != nil {
 				t.Errorf("simulated track %d: %v", i, err)
 			}
@@ -107,7 +107,7 @@ func TestSimulateTrackSelectsRealMediaButNeverDownloadsOrWrites(t *testing.T) {
 	job := domain.Job{ID: "job-1"}
 	item := domain.JobItem{ID: "item-1", JobID: "job-1"}
 
-	if err := downloader.processTrack(context.Background(), job, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); err != nil {
+	if err := downloader.processTrack(context.Background(), job, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
 		t.Fatalf("simulated processTrack failed: %v", err)
 	}
 	if encryptedMediaHits.Load() != 0 {
@@ -208,7 +208,7 @@ func TestSimulateTrackFallsBackToAACLCWithoutManifest(t *testing.T) {
 	})
 	reporter := &recordingReporter{}
 
-	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); err != nil {
+	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
 		t.Fatalf("simulated processTrack failed: %v", err)
 	}
 	var fallbacks, completed int

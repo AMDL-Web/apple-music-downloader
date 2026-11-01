@@ -5,28 +5,14 @@ import (
 	"fmt"
 
 	"amdl/internal/applemusic"
-	"amdl/internal/config"
 )
 
-func collectionFolderArtist(collectionType applemusic.URLType, tracks []applemusic.Song) string {
-	if outputCollectionType(collectionType) != applemusic.TypeAlbum || len(tracks) == 0 {
-		return ""
-	}
-	if tracks[0].AlbumArtist != "" {
-		return tracks[0].AlbumArtist
-	}
-	return tracks[0].ArtistName
-}
-
-func outputCollectionType(collectionType applemusic.URLType) applemusic.URLType {
-	if collectionType == applemusic.TypeArtist {
-		return applemusic.TypeAlbum
-	}
-	return collectionType
-}
-
 type resolvedCollection struct {
-	Tracks     []applemusic.Song
+	Tracks []applemusic.Song
+	// Placements parallels Tracks for a song, album or artist: each track's
+	// album and position, from which its library path follows. Nil for
+	// playlists and stations, and for a song resolved without place.
+	Placements []libraryPlacement
 	ID         string
 	Name       string
 	ArtworkURL string
@@ -53,16 +39,21 @@ func (d *Downloader) mediaUserToken() string {
 	return d.tokens.Token(d.cfg).Value
 }
 
-func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.ParsedURL) (resolvedCollection, error) {
+// resolveCollection reads the link's resource and the tracks it downloads.
+// With place, a song is placed in the library: its album is read to find its
+// position there, and a failed read, a song without an album or one missing
+// from its album's track list fails the resolve. Without place (a quality
+// query) that album read only enriches the song and degrades to nothing.
+func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.ParsedURL, place bool) (resolvedCollection, error) {
 	switch parsed.Type {
 	case applemusic.TypeSong:
-		song, err := d.catalog.Song(ctx, parsed.Storefront, parsed.ID)
+		song, placements, err := d.resolveSong(ctx, parsed.Storefront, parsed.ID, place)
 		if err != nil {
 			return resolvedCollection{}, err
 		}
 		artworkURL, colors := song.DisplayArtwork()
 		return resolvedCollection{
-			Tracks: []applemusic.Song{song}, Name: song.Name, ArtworkURL: artworkURL,
+			Tracks: []applemusic.Song{song}, Placements: placements, Name: song.Name, ArtworkURL: artworkURL,
 			ArtistName: song.ArtistName, ArtistURL: song.ArtistURL, ReleaseDate: song.ReleaseDate, Genre: applemusic.PrimaryGenre(song.GenreNames),
 			ArtworkColors: colors,
 		}, nil
@@ -72,7 +63,7 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 			return resolvedCollection{}, err
 		}
 		return resolvedCollection{
-			Tracks: album.Tracks, ID: album.ID, Name: album.Name, ArtworkURL: album.ArtworkURL,
+			Tracks: album.Tracks, Placements: albumPlacements(album), ID: album.ID, Name: album.Name, ArtworkURL: album.ArtworkURL,
 			ArtistName: album.Artist, ArtistURL: album.ArtistURL, ReleaseDate: album.ReleaseDate, Genre: applemusic.PrimaryGenre(album.GenreNames),
 			ArtworkColors: album.ArtworkColors,
 		}, nil
@@ -104,12 +95,12 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 		if err != nil {
 			return resolvedCollection{}, err
 		}
-		tracks, err := d.artistTracks(ctx, parsed.Storefront, artist.Albums)
+		tracks, placements, err := d.artistTracks(ctx, parsed.Storefront, artist.Albums)
 		if err != nil {
 			return resolvedCollection{}, err
 		}
 		return resolvedCollection{
-			Tracks: tracks, ID: artist.ID, Name: artist.Name, ArtworkURL: artist.ArtworkURL,
+			Tracks: tracks, Placements: placements, ID: artist.ID, Name: artist.Name, ArtworkURL: artist.ArtworkURL,
 			// For artist jobs the artist's own name doubles as the display
 			// artist.
 			ArtistName:    artist.Name,
@@ -121,48 +112,57 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 	}
 }
 
-// collectionIndexes numbers each resolved track for {SongNumber}. For songs,
-// albums, playlists and stations that is the track's position in the resolved
-// list — for an album, Apple orders the track relationship disc by disc, so the
-// numbering runs unbroken across discs instead of restarting like TrackNumber
-// does.
-//
-// An artist job concatenates every album's tracks into one list, so its counter
-// restarts per album — but only when the template groups the output per album.
-// A configured artist template naming neither the album nor its id drops the
-// whole discography into a single directory, where a per-album counter would
-// hand two albums the same {SongNumber} and collide on an identically titled
-// track at the same position; there the job-wide position is what keeps the
-// names apart. The counter restarts exactly when the directories do.
-func collectionIndexes(cfg config.Config, collectionType applemusic.URLType, tracks []applemusic.Song) []int {
-	indexes := make([]int, len(tracks))
-	perAlbum := collectionType == applemusic.TypeArtist &&
-		segmentReferences(pathPattern(cfg, collectionType), "AlbumName", "AlbumId")
-	if !perAlbum {
-		for i := range tracks {
-			indexes[i] = i + 1
+// resolveSong reads a single song. Its song read carries the stream
+// (extendedAssetUrls) the album's track entries lack, so that read stays the
+// track; the album read adds the album-wide values and, with place, the
+// song's position for its library path.
+func (d *Downloader) resolveSong(ctx context.Context, storefront, id string, place bool) (applemusic.Song, []libraryPlacement, error) {
+	song, err := d.catalog.SongMetadata(ctx, storefront, id)
+	if err != nil {
+		return applemusic.Song{}, nil, err
+	}
+	if song.AlbumID == "" {
+		if place {
+			return applemusic.Song{}, nil, placementError{fmt.Sprintf("song %s has no album to place it in", song.ID)}
 		}
-		return indexes
+		return song, nil, nil
 	}
-	counts := make(map[string]int, len(tracks))
-	for i, track := range tracks {
-		counts[track.AlbumID]++
-		indexes[i] = counts[track.AlbumID]
+	album, err := d.catalog.Album(ctx, storefront, song.AlbumID)
+	if err != nil {
+		if place {
+			return applemusic.Song{}, nil, fmt.Errorf("read album %s to place song %s: %w", song.AlbumID, song.ID, err)
+		}
+		return song, nil, nil
 	}
-	return indexes
+	if len(album.Tracks) > 0 {
+		song = applemusic.EnrichWithAlbum(song, album)
+	}
+	if !place {
+		return song, nil, nil
+	}
+	placement, ok := placeInAlbum(album, song.ID)
+	if !ok {
+		return applemusic.Song{}, nil, placementError{fmt.Sprintf("song %s is not in its album's track list (album %s)", song.ID, song.AlbumID)}
+	}
+	return song, []libraryPlacement{placement}, nil
 }
 
-func (d *Downloader) artistTracks(ctx context.Context, storefront string, albums []applemusic.Collection) ([]applemusic.Song, error) {
+// artistTracks reads every album of an artist. Each track is placed in its
+// own album, so an album credited to another artist (a compilation, a
+// collaboration) lands under that album's artist.
+func (d *Downloader) artistTracks(ctx context.Context, storefront string, albums []applemusic.Collection) ([]applemusic.Song, []libraryPlacement, error) {
 	tracks := make([]applemusic.Song, 0)
+	placements := make([]libraryPlacement, 0)
 	for _, summary := range albums {
 		album, err := d.catalog.Album(ctx, storefront, summary.ID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// Keep the complete track list of every album. A catalog song may be
 		// related to more than one album with the same Adam ID; artist downloads
 		// still need one output in each album directory.
 		tracks = append(tracks, album.Tracks...)
+		placements = append(placements, albumPlacements(album)...)
 	}
-	return tracks, nil
+	return tracks, placements, nil
 }

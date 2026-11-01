@@ -54,6 +54,75 @@ func validatePathFormat(key, format string) error {
 	return nil
 }
 
+// templateVariablePattern finds "{Name}" and "{Name:spec}" tokens in a path
+// template; keep it matching internal/media's expansion pattern.
+var templateVariablePattern = regexp.MustCompile(`\{([A-Za-z]+)(?::[^}]*)?\}`)
+
+// albumVariables are the variables an album summary (search hit, artist
+// album list) carries, so a library folder named only by them is known
+// without reading the album's tracks. Every track of an album shares them.
+var albumVariables = map[string]bool{
+	"AlbumArtist": true, "AlbumName": true, "AlbumId": true, "ReleaseDate": true, "ReleaseYear": true,
+}
+
+// trackVariables are the per-track variables internal/media expands. A
+// library folder cannot use them: the tracks of one album would scatter.
+var trackVariables = map[string]bool{
+	"SongId": true, "SongNumber": true, "SongName": true, "ArtistName": true, "UrlArtistName": true,
+	"ArtistId": true, "UPC": true, "Copyright": true, "RecordLabel": true, "DiscNumber": true,
+	"DiscCount": true, "TrackNumber": true, "TrackCount": true,
+}
+
+// collectionVariables only mean something for a playlist, a station or one
+// codec attempt. The library decides "already downloaded" before a codec is
+// chosen, and a song is the same file whichever collection asked for it.
+var collectionVariables = map[string]bool{
+	"Quality": true, "Codec": true, "Tag": true,
+	"PlaylistName": true, "PlaylistId": true, "StationName": true, "StationId": true,
+}
+
+// validateLibraryFormat checks download.library_path_format on top of
+// validatePathFormat. Folders are named by album-level variables only, so
+// one album is exactly one folder; the file name carries a position that is
+// unique within the album and nothing that depends on the codec or the
+// collection, so a track has one path however it was downloaded.
+func validateLibraryFormat(key, format string) error {
+	segments := strings.Split(format, "/")
+	if len(segments) < 2 {
+		return fmt.Errorf("%s needs at least one folder before the file name, for example {AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}", key)
+	}
+	dirs, file := segments[:len(segments)-1], segments[len(segments)-1]
+	namesAlbum := false
+	for _, segment := range dirs {
+		for _, match := range templateVariablePattern.FindAllStringSubmatch(segment, -1) {
+			name := match[1]
+			switch {
+			case albumVariables[name]:
+				namesAlbum = namesAlbum || name == "AlbumName" || name == "AlbumId"
+			case name == "ArtistName" || name == "UrlArtistName" || name == "ArtistId":
+				return fmt.Errorf("%s folder %q uses {%s}: a track's artist can differ from its album's, so use {AlbumArtist}", key, segment, name)
+			case trackVariables[name] || collectionVariables[name]:
+				return fmt.Errorf("%s folder %q uses {%s}: folders can use only {AlbumArtist}, {AlbumName}, {AlbumId}, {ReleaseDate} and {ReleaseYear}", key, segment, name)
+			}
+		}
+	}
+	if !namesAlbum {
+		return fmt.Errorf("%s needs {AlbumName} or {AlbumId} in a folder, so each album gets its own folder", key)
+	}
+	used := map[string]bool{}
+	for _, match := range templateVariablePattern.FindAllStringSubmatch(file, -1) {
+		name := match[1]
+		if collectionVariables[name] {
+			return fmt.Errorf("%s file name uses {%s}: a library file is the same whatever codec or collection it came from", key, name)
+		}
+		used[name] = true
+	}
+	if !used["SongNumber"] && !(used["DiscNumber"] && used["TrackNumber"]) {
+		return fmt.Errorf("%s file name needs {SongNumber}, or both {DiscNumber} and {TrackNumber}, so two tracks of an album never share a name", key)
+	}
+	return nil
+}
+
 // maxLogBufferSize caps logging.buffer_size. The ring lives in memory and every
 // GET /api/v1/logs scans and copies matching entries under the store's lock;
 // at a few hundred bytes per entry this keeps the ring within tens of MiB and a
@@ -97,10 +166,8 @@ func (c Config) Validate() error {
 		key   string
 		value string
 	}{
-		{"download.album_path_format", c.Download.AlbumPathFormat},
-		{"download.artist_path_format", c.Download.ArtistPathFormat},
+		{"download.library_path_format", c.Download.LibraryPathFormat},
 		{"download.playlist_path_format", c.Download.PlaylistPathFormat},
-		{"download.song_path_format", c.Download.SongPathFormat},
 		{"download.station_path_format", c.Download.StationPathFormat},
 	} {
 		if strings.TrimSpace(format.value) == "" {
@@ -109,6 +176,9 @@ func (c Config) Validate() error {
 		if err := validatePathFormat(format.key, format.value); err != nil {
 			return err
 		}
+	}
+	if err := validateLibraryFormat("download.library_path_format", c.Download.LibraryPathFormat); err != nil {
+		return err
 	}
 	if c.Download.MaxRunningJobs > maxRunningJobsLimit {
 		return fmt.Errorf("download.max_running_jobs must be at most %d", maxRunningJobsLimit)

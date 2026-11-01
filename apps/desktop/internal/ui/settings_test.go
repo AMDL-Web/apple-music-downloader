@@ -68,8 +68,7 @@ func filesApp(t *testing.T) (*App, *ui.Tester) {
 	a.Store.Server.Read = time.Now()
 	a.Store.Config.Values = map[string]any{"download": map[string]any{
 		"downloads_dir": "/music", "temp_dir": "/scratch", "force_overwrite": false,
-		"album_path_format": "albums/{AlbumName}", "song_path_format": "songs/{SongName}",
-		"playlist_path_format": "playlists/{PlaylistName}", "artist_path_format": "artists/{ArtistName}",
+		"library_path_format": "library/{AlbumName}/{SongNumber}", "playlist_path_format": "playlists/{PlaylistName}",
 		"station_path_format": "stations/{StationName}",
 	}}
 	return a, ui.NewTester(a.View, 1280, 1600) // tall enough to show every field
@@ -119,12 +118,12 @@ func TestFolderAndNameChangesAskFirst(t *testing.T) {
 
 	// A fresh window, so the click lands where Find places the field.
 	_, tt = filesApp(t)
-	clickFieldOf(t, tt, "{SongNumber} keeps counting across discs.")
+	clickFieldOf(t, tt, "Songs, albums and artists; a file already here counts as downloaded.")
 	tt.Type(" ({ReleaseYear})")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	if !tt.HasText("Change how files are named?") {
-		t.Errorf("a new album template applied without asking: %q", tt.Texts())
+		t.Errorf("a new library template applied without asking: %q", tt.Texts())
 	}
 }
 

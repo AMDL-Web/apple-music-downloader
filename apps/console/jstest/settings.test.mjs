@@ -92,8 +92,8 @@ test('retired section ids and fields open the section that holds them now', () =
 
 test('every runtime key belongs to exactly one of the nine sections, and the board leaves out Lyrics & artwork', () => {
   const counts = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, FIELDS.filter((f) => f.section === s.id).length]));
-  assert.deepEqual(counts, { account: 5, quality: 5, files: 8, lyrics_artwork: 11, jobs: 7, library_sync: 2, hooks: 0, logging: 4, server: 6 });
-  assert.equal(FIELDS.length, 48);
+  assert.deepEqual(counts, { account: 5, quality: 5, files: 6, lyrics_artwork: 11, jobs: 7, library_sync: 2, hooks: 0, logging: 4, server: 6 });
+  assert.equal(FIELDS.length, 46);
   assert.deepEqual(BOARD_SECTIONS.map((s) => s.id), ['account', 'quality', 'files', 'jobs', 'library_sync', 'hooks', 'logging', 'server']);
   assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['wrapper', 'server'], ['simulate', 'server'], ['config_file', 'server']]);
   assert.equal(SETTINGS_SECTIONS.findIndex((s) => s.split), 5, 'the nav splits before Library sync');
@@ -203,8 +203,8 @@ test('validateDraft blocks unsendable numbers and warns on odd values', () => {
     'simulate.min_speed_kbps': 'fast',
     'library_sync.interval_minutes': 2000,
     'download.cover_size': 'big',
-    'download.album_path_format': 'albums/{AlbumName}/{Track}. {SongName}',
-    'download.song_path_format': 'songs/{TrackNumber:02d}. {SongName}',
+    'download.library_path_format': 'library/{AlbumName}/{Track}. {SongName}',
+    'download.playlist_path_format': 'lists/{TrackNumber:02d}. {SongName}',
     'download.quality_priority': [],
   });
   assert.deepEqual(Object.keys(errors).sort(), ['download.max_attempts', 'download.quality_priority', 'library_sync.interval_minutes', 'simulate.min_speed_kbps']);
@@ -213,8 +213,8 @@ test('validateDraft blocks unsendable numbers and warns on odd values', () => {
   for (const [v, warned] of [['0x0', true], ['05000x5000', true], ['5000x0', true], ['5000x5000', false], ['1400x1400', false]]) {
     assert.equal('download.cover_size' in validateDraft({ 'download.cover_size': v }).warnings, warned, v);
   }
-  assert.match(warnings['download.album_path_format'], /\{Track\}/);
-  assert.ok(!('download.song_path_format' in warnings));
+  assert.match(warnings['download.library_path_format'], /\{Track\}/);
+  assert.ok(!('download.playlist_path_format' in warnings));
 });
 
 test('parseNumberInput and changesLabel', () => {
@@ -227,7 +227,7 @@ test('parseNumberInput and changesLabel', () => {
 });
 
 test('templateUnknownVars', () => {
-  assert.deepEqual(templateUnknownVars('albums/{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}'), []);
+  assert.deepEqual(templateUnknownVars('library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}'), []);
   assert.deepEqual(templateUnknownVars('{Foo}/{SongName:02d}/{TrackNumber:2}/{Foo}'), ['{Foo}', '{SongName:02d}', '{TrackNumber:2}']);
   assert.deepEqual(templateUnknownVars('{TrackNumber:03d}'), ['{TrackNumber:03d}'], 'the backend pads only with :02d');
   assert.deepEqual(templateUnknownVars(''), []);
@@ -235,8 +235,7 @@ test('templateUnknownVars', () => {
 
 test('templateExample builds the sample track path the way the backend does', () => {
   const ex = (key) => templateExample(BY_KEY.get(key).defaultValue, templateKind(key));
-  assert.equal(ex('download.album_path_format'), 'albums/Frank Ocean/Blonde/01. Nikes.m4a');
-  assert.equal(ex('download.song_path_format'), 'songs/Frank Ocean/Blonde/01. Nikes.m4a');
+  assert.equal(ex('download.library_path_format'), 'library/Frank Ocean/Blonde/01. Nikes.m4a');
   assert.equal(ex('download.playlist_path_format'), 'playlists/Summer Mix/01. Nikes.m4a');
   assert.equal(ex('download.station_path_format'), 'stations/Frank Ocean Radio/01. Nikes.m4a');
   // Unknown variables stay; reserved characters become "_" per segment; an
@@ -301,7 +300,7 @@ test('every field states its default, and every default matches config.example.y
     assert.deepEqual(f.defaultValue, exampleDefault(f.key), `${f.key} drifted from config.example.yaml`);
   }
   const templates = FIELDS.filter((f) => (f.type === 'template' || f.type === 'path') && f.key.startsWith('download.'));
-  assert.equal(templates.length, 7);
+  assert.equal(templates.length, 5);
   for (const f of templates) {
     assert.ok(f.defaultValue, `${f.key} has no defaultValue`);
     assert.equal(f.defaultValue, exampleValue(f.key.split('.')[1]), `${f.key} drifted from config.example.yaml`);
@@ -309,12 +308,12 @@ test('every field states its default, and every default matches config.example.y
 });
 
 test('fieldWarning and savedWarnings keep an unknown variable flagged after the save', () => {
-  const song = FIELDS.find((f) => f.key === 'download.song_path_format');
-  assert.equal(fieldWarning(song, 'songs/{SongName}'), '');
-  assert.match(fieldWarning(song, 'songs/{Foo}/{SongName}'), /\{Foo\}/);
-  const base = { 'download.song_path_format': 'songs/{Foo}', 'download.album_path_format': 'a/{SongName}', 'download.cover_size': '5000x5000' };
-  assert.deepEqual(Object.keys(savedWarnings(base)), ['download.song_path_format']);
-  assert.deepEqual(savedWarnings(base, { 'download.song_path_format': 'songs/{SongName}' }), {}, 'a field under edit has its own warning');
+  const library = FIELDS.find((f) => f.key === 'download.library_path_format');
+  assert.equal(fieldWarning(library, 'library/{AlbumName}/{SongNumber}'), '');
+  assert.match(fieldWarning(library, 'library/{Foo}/{SongNumber}'), /\{Foo\}/);
+  const base = { 'download.library_path_format': 'library/{Foo}', 'download.playlist_path_format': 'a/{SongName}', 'download.cover_size': '5000x5000' };
+  assert.deepEqual(Object.keys(savedWarnings(base)), ['download.library_path_format']);
+  assert.deepEqual(savedWarnings(base, { 'download.library_path_format': 'library/{AlbumName}/{SongNumber}' }), {}, 'a field under edit has its own warning');
 });
 
 test('diffConfig, reloadSummary and labelList', () => {
@@ -334,17 +333,17 @@ test('diffConfig, reloadSummary and labelList', () => {
 
 test('changedSentence and unsavedAnnouncement', () => {
   assert.equal(changedSentence(['download.max_attempts', 'download.cover_size']), 'You changed Tries per file and Cover size.');
-  assert.equal(changedSentence(['download.max_attempts', 'download.song_path_format', 'logging.level', 'simulate.enabled', 'download.cover_size']), 'You changed Tries per file, Songs, Log level and 2 more.');
+  assert.equal(changedSentence(['download.max_attempts', 'download.library_path_format', 'logging.level', 'simulate.enabled', 'download.cover_size']), 'You changed Tries per file, Library, Log level and 2 more.');
   assert.equal(unsavedAnnouncement(1), '1 unsaved change');
   assert.equal(unsavedAnnouncement(4), '4 unsaved changes');
   assert.equal(unsavedAnnouncement(0), 'No unsaved changes');
 });
 
 test('fieldErrors marks only the keys of the PUT when the message names others', () => {
-  const err = new ApiError(422, 'invalid_config', 'download.song_path_format must stay inside download.downloads_dir');
-  assert.deepEqual(Object.keys(fieldErrors(err).fields), ['download.downloads_dir', 'download.song_path_format'], 'without the PUT keys, every named key');
-  assert.deepEqual(Object.keys(fieldErrors(err, ['download.song_path_format']).fields), ['download.song_path_format']);
-  assert.deepEqual(Object.keys(fieldErrors(err, ['logging.level']).fields), ['download.downloads_dir', 'download.song_path_format'], 'none of the PUT keys named: keep all');
+  const err = new ApiError(422, 'invalid_config', 'download.library_path_format must stay inside download.downloads_dir');
+  assert.deepEqual(Object.keys(fieldErrors(err).fields), ['download.downloads_dir', 'download.library_path_format'], 'without the PUT keys, every named key');
+  assert.deepEqual(Object.keys(fieldErrors(err, ['download.library_path_format']).fields), ['download.library_path_format']);
+  assert.deepEqual(Object.keys(fieldErrors(err, ['logging.level']).fields), ['download.downloads_dir', 'download.library_path_format'], 'none of the PUT keys named: keep all');
 });
 
 test('wrapperUnreachable reads the address out of a dial error', () => {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -77,15 +78,23 @@ func TestRunTrackTasksJoinsStartedTasksAndHonorsCancellation(t *testing.T) {
 	}
 }
 
+// A single song reads itself and, to place it, its album once at resolve;
+// the track run reuses both instead of reading either again.
 func TestProcessJobAvoidsDuplicateSingleSongMetadataReads(t *testing.T) {
+	albumTracks := []applemusic.Song{
+		{ID: "song-0", Name: "Intro", AlbumID: "album-1"},
+		{ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumID: "album-1"},
+	}
 	catalog := &metadataCountingCatalog{
-		songs: map[string]applemusic.Song{
+		metadataSongs: map[string]applemusic.Song{
 			"song-1": {
 				ID: "song-1", Name: "Song", ArtistName: "Artist", AlbumID: "album-1", AlbumName: "Album",
-				AlbumArtist: "Album Artist", TrackCount: 1, DiscCount: 1, DurationInMillis: 1000,
+				AlbumArtist: "Album Artist", TrackNumber: 2, DurationInMillis: 1000,
 			},
 		},
-		songCalls:     make(map[string]int),
+		albums: map[string]applemusic.Collection{
+			"album-1": {ID: "album-1", Name: "Album", Artist: "Album Artist", Tracks: albumTracks},
+		},
 		metadataCalls: make(map[string]int),
 		albumCalls:    make(map[string]int),
 	}
@@ -108,12 +117,16 @@ func TestProcessJobAvoidsDuplicateSingleSongMetadataReads(t *testing.T) {
 	if err := downloader.ProcessJob(context.Background(), job, reporter); err != nil {
 		t.Fatal(err)
 	}
-	songCalls, metadataCalls, albumCalls := catalog.counts()
-	if songCalls["song-1"] != 1 || len(metadataCalls) != 0 || len(albumCalls) != 0 {
-		t.Fatalf("song calls = %v, metadata calls = %v, album calls = %v, want one complete song read only", songCalls, metadataCalls, albumCalls)
+	metadataCalls, albumCalls := catalog.counts()
+	if len(metadataCalls) != 1 || metadataCalls["song-1"] != 1 || len(albumCalls) != 1 || albumCalls["album-1"] != 1 {
+		t.Fatalf("metadata calls = %v, album calls = %v, want one song read and one album read", metadataCalls, albumCalls)
 	}
-	if len(reporter.items) == 0 || reporter.items[len(reporter.items)-1].Status != domain.ItemCompleted {
+	last := reporter.items[len(reporter.items)-1]
+	if last.Status != domain.ItemCompleted {
 		t.Fatalf("job did not complete: %+v", reporter.items)
+	}
+	if want := filepath.Join(cfg.Download.DownloadsDir, "library", "Album Artist", "Album", "02. Song.m4a"); last.OutputPath != want {
+		t.Fatalf("output path = %q, want %q (the song's position in its album)", last.OutputPath, want)
 	}
 }
 
@@ -130,7 +143,6 @@ func TestProcessJobDoesNotRefetchResolvedAlbumPerTrack(t *testing.T) {
 		albums: map[string]applemusic.Collection{
 			"album-1": {ID: "album-1", Name: "Album", Artist: "Album Artist", Tracks: tracks},
 		},
-		songCalls:     make(map[string]int),
 		metadataCalls: make(map[string]int),
 		albumCalls:    make(map[string]int),
 	}
@@ -153,9 +165,9 @@ func TestProcessJobDoesNotRefetchResolvedAlbumPerTrack(t *testing.T) {
 	if err := downloader.ProcessJob(context.Background(), job, reporter); err != nil {
 		t.Fatal(err)
 	}
-	songCalls, metadataCalls, albumCalls := catalog.counts()
-	if len(songCalls) != 0 || metadataCalls["song-1"] != 1 || metadataCalls["song-2"] != 1 || albumCalls["album-1"] != 1 {
-		t.Fatalf("song calls = %v, metadata calls = %v, album calls = %v, want one album resolve and one lightweight read per track", songCalls, metadataCalls, albumCalls)
+	metadataCalls, albumCalls := catalog.counts()
+	if metadataCalls["song-1"] != 1 || metadataCalls["song-2"] != 1 || albumCalls["album-1"] != 1 {
+		t.Fatalf("metadata calls = %v, album calls = %v, want one album resolve and one lightweight read per track", metadataCalls, albumCalls)
 	}
 	if len(reporter.added) != 2 {
 		t.Fatalf("added items = %d, want 2", len(reporter.added))

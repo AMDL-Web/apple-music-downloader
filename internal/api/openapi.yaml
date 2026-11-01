@@ -2714,9 +2714,18 @@ components:
                 rejects them outright. Default 500. Read once when a job starts, so
                 changes only affect jobs started afterwards, not running ones.
             downloads_dir: {type: string}
-            song_path_format: {type: string}
-            album_path_format: {type: string}
-            artist_path_format: {type: string}
+            library_path_format:
+              type: string
+              description: >-
+                Where every song, album and artist download lands, relative to
+                downloads_dir; a file at that path counts as downloaded. Folder
+                segments may use only {AlbumArtist}, {AlbumName}, {AlbumId},
+                {ReleaseDate} and {ReleaseYear} and must name {AlbumName} or
+                {AlbumId}; the file name must contain {SongNumber} (the position in
+                the album's track list) or both {DiscNumber} and {TrackNumber}, and
+                cannot use {Quality}, {Codec}, {Tag} or playlist and station
+                variables. Anything else is 422 invalid_config. Default
+                "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}".
             playlist_path_format: {type: string}
             station_path_format: {type: string}
             temp_dir: {type: string}

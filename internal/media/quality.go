@@ -80,7 +80,7 @@ func (s *QualityService) QueryQuality(ctx context.Context, req QualityRequest) (
 		Raw: req.URL, Storefront: validated.Storefront, Type: applemusic.URLType(validated.Type), ID: validated.ID,
 	}
 	resolved, _, err := retryValue(ctx, downloader.cfg.Download.MaxAttempts, retryBackoff, func(int) (resolvedCollection, error) {
-		return downloader.resolveCollection(ctx, parsed)
+		return downloader.resolveCollection(ctx, parsed, false)
 	}, nil)
 	if err != nil {
 		return QualityResult{}, err

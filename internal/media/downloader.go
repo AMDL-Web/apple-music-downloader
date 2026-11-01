@@ -63,7 +63,6 @@ type Downloader struct {
 }
 
 type downloaderCatalog interface {
-	Song(context.Context, string, string) (applemusic.Song, error)
 	SongMetadata(context.Context, string, string) (applemusic.Song, error)
 	Album(context.Context, string, string) (applemusic.Collection, error)
 	Playlist(context.Context, string, string, string) (applemusic.Collection, error)

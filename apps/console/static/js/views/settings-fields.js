@@ -71,7 +71,7 @@ export function SettingsField({ field, value, changed, error, warning, showKeys,
         ? html`<p class="field-help" id=${`${id}-help`}>${field.help}${field.help && hint ? ' ' : ''}${hint ? html`<span class="field-option-hint">${hint}</span>` : null}</p>`
         : null}
       ${showKeys && hasDefault
-        ? html`<p class="field-default" id=${`${id}-default`}>Default: <code class="field-default-value">${valueLabel(field, field.defaultValue)}</code>${field.defaultNote ? html`. ${field.defaultNote}` : null}</p>`
+        ? html`<p class="field-default" id=${`${id}-default`}>Default: <code class="field-default-value">${valueLabel(field, field.defaultValue)}</code></p>`
         : null}
       ${showKeys ? html`<code class="field-key">${field.key}</code>` : null}
     </div>

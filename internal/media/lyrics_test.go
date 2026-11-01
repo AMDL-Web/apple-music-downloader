@@ -231,7 +231,7 @@ func TestFetchLyricsAsksForPlainTextOnceAfterAWordTimedMiss(t *testing.T) {
 			})
 			reporter := &recordingReporter{}
 			item := domain.JobItem{ID: "item-1", JobID: "job-1", AdamID: "song-1"}
-			if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); !errors.Is(err, errStopAtWebPlayback) {
+			if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"}, item, applemusic.Song{ID: "song-1"}, "cn", applemusic.TypeAlbum, "Album", "album-1", 1, reporter); !errors.Is(err, errStopAtWebPlayback) {
 				t.Fatalf("processTrack = %v, want the fake webplayback to stop it after the lyrics phase", err)
 			}
 			if want := []bool{true, false}; !slices.Equal(syllables, want) {

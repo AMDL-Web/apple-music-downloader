@@ -141,9 +141,7 @@ type DownloadConfig struct {
 	// and pipeline-stage completions are always published immediately.
 	ProgressEventIntervalMS int      `yaml:"progress_event_interval_ms" json:"progress_event_interval_ms"`
 	DownloadsDir            string   `yaml:"downloads_dir" json:"downloads_dir"`
-	SongPathFormat          string   `yaml:"song_path_format" json:"song_path_format"`
-	AlbumPathFormat         string   `yaml:"album_path_format" json:"album_path_format"`
-	ArtistPathFormat        string   `yaml:"artist_path_format" json:"artist_path_format"`
+	LibraryPathFormat       string   `yaml:"library_path_format" json:"library_path_format"`
 	PlaylistPathFormat      string   `yaml:"playlist_path_format" json:"playlist_path_format"`
 	StationPathFormat       string   `yaml:"station_path_format" json:"station_path_format"`
 	TempDir                 string   `yaml:"temp_dir" json:"temp_dir"`
@@ -223,7 +221,7 @@ type SimulateConfig struct {
 
 // Default returns the built-in configuration that a key missing from
 // config.yaml falls back to. Every value equals the one configs/config.example.yaml
-// sets, except AlbumPathFormat and ArtistPathFormat (TestDefaultMatchesExample).
+// sets (TestDefaultMatchesExample).
 func Default() Config {
 	return Config{
 		Server:   ServerConfig{Listen: "127.0.0.1:18080"},
@@ -244,18 +242,10 @@ func Default() Config {
 			MaxRunningJobs: 3, MaxParallelDownloads: 16, MaxAttempts: 3,
 			ProgressEventIntervalMS: 500,
 			DownloadsDir:            "data/downloads",
-			SongPathFormat:          "songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",
-			// config.example.yaml numbers these two by {SongNumber}, which is
-			// what a fresh install gets, because {TrackNumber} restarts at 1 on
-			// every disc and collides on a multi-disc album. These fall back to
-			// the older {TrackNumber} layout on purpose: a config that omits
-			// the key belongs to an install that predates the change, and
-			// renaming its files would strand everything already downloaded.
-			AlbumPathFormat:    "albums/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",
-			ArtistPathFormat:   "artists/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}",
-			PlaylistPathFormat: "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}",
-			StationPathFormat:  "stations/{StationName}/{SongNumber:02d}. {SongName}",
-			TempDir:            "data/tmp", CoverSize: "5000x5000", CoverFormat: "jpg",
+			LibraryPathFormat:       "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}",
+			PlaylistPathFormat:      "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}",
+			StationPathFormat:       "stations/{StationName}/{SongNumber:02d}. {SongName}",
+			TempDir:                 "data/tmp", CoverSize: "5000x5000", CoverFormat: "jpg",
 			EmbedCover: true, SaveAlbumCover: true, SaveArtistCover: true, SavePlaylistCover: true,
 			EmbedLyrics: true, LyricsFiles: []string{}, LyricsTiming: "line", LyricsExtras: []string{},
 			ALACMaxSampleRate: 192000, ALACMaxBitDepth: 24, CheckIntegrity: true,

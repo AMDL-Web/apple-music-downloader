@@ -5,14 +5,17 @@ playback requests on `play.music.apple.com` and `play.itunes.apple.com`. The tok
 and the request path are in the package comment (`go doc ./internal/applemusic`); root
 `AGENTS.md` "Apple catalog reads" lists which reads are required and which degrade.
 
-- A required read (the link's resource, a track's song metadata) returns its error,
-  a `catalogRequestError` for a non-2xx answer, so the caller's retries decide.
+- A required read (the link's resource, a single song's album, a track's song
+  metadata) returns its error, a `catalogRequestError` for a non-2xx answer, so the
+  caller's retries decide.
 - `WebPlayback`, `License` and `SongLyrics` carry the media-user-token and are required:
   their errors go back as they are, and `IsUserTokenRejected` marks the ones (401, 403, a
   `play.*` `failureType`) after which internal/media asks the wrapper instead.
 - A new optional read follows `MotionArtworkViaWebToken` or `libraryArtworkURL`: a
   failure, timeout or unexpected shape means "not available" to the caller, with a
-  test for that path. `Song` treats its album enrichment the same way.
+  test for that path. `Song` treats its album enrichment the same way; the download
+  pipeline reads a single song's album itself (`internal/media`), because it needs the
+  album to place the song.
 - Before adding a field or `extend=`, read Apple's documentation; developer.apple.com
   pages come as Markdown when `.md` is appended to the URL
   (https://developer.apple.com/documentation/applemusicapi.md). A field that exists

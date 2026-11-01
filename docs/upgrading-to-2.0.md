@@ -191,10 +191,8 @@ needs the API changes below before it works against 2.0.
   (no ceiling) takes the wrapper's device manifest, remembered for 12 hours. Remove any `.p8` key mount.
   `catalog.token_cache_ttl_hours` now applies to every install.
 - Built-in defaults now equal the values in `configs/config.example.yaml`, so a key
-  missing from `config.yaml` behaves the way the example documents. The exceptions are
-  `download.album_path_format` and `download.artist_path_format`: a config without them
-  predates `{SongNumber}` paths, and keeps `{TrackNumber}` so existing files are found.
-  Defaults that changed for keys missing from `config.yaml`:
+  missing from `config.yaml` behaves the way the example documents. Defaults that
+  changed for keys missing from `config.yaml`:
 
   | Key | 1.x default | 2.0 default |
   | --- | --- | --- |
@@ -214,6 +212,18 @@ needs the API changes below before it works against 2.0.
   empty included, and silently fell back to the standard sizes when Apple could not
   serve it; 2.0 fails startup and `PUT /config` (`422 invalid_config`). Set it in
   `config.yaml` to a size such as `5000x5000`.
+- `download.song_path_format`, `download.album_path_format` and
+  `download.artist_path_format` became one key, `download.library_path_format` (default
+  `library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}`), which places songs,
+  albums and artists alike (see [Output paths](#output-paths)). The old keys fail
+  startup naming them and this guide, and `PUT /config` with one is `400`; delete them,
+  and carry a custom layout over into the new key. Its folders take only `{AlbumArtist}`,
+  `{AlbumName}`, `{AlbumId}`, `{ReleaseDate}` and `{ReleaseYear}` and must name
+  `{AlbumName}` or `{AlbumId}`; its file name must contain `{SongNumber}`, or both
+  `{DiscNumber}` and `{TrackNumber}`, and cannot use `{Quality}`, `{Codec}`, `{Tag}` or
+  the playlist and station variables. Anything else fails startup and `PUT /config`
+  (`422 invalid_config`). The console's and the desktop app's Settings show one Library
+  field in place of Songs, Albums and Artists.
 - `download.*_path_format` templates must stay relative to `download.downloads_dir`
   and may carry only the `:02d` format spec. 1.x stored absolute templates, `..`
   segments and other `{Variable:spec}` forms verbatim; expansion sanitized them into
@@ -279,8 +289,24 @@ the Compose service name stay as they were.
 
 ## Output paths
 
-Unchanged, with the exceptions below. The first three only affect unusual titles; the
-last two only templates that use `{SongNumber}` or `{TrackCount}`:
+> **Every song, album and artist downloads again.** 2.0 puts all three in one library,
+> `library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}` under
+> `download.downloads_dir`. Files 1.x wrote under `songs/`, `albums/` and `artists/` are
+> not moved and not recognised: asking for them again downloads them again into the new
+> layout. Move or delete the old folders yourself once you no longer need them, and point
+> media servers at `library/`.
+
+| Area | 1.x | 2.0 | Affects |
+| --- | --- | --- | --- |
+| Song, album and artist paths | three templates, `songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}`, `albums/…` and `artists/…` | one, `download.library_path_format`; a track has one path whichever job type downloads it, and a file there counts as downloaded at any quality | every library, media-server scans, scripts that read paths |
+| A single song's file | in the song's artist's folder, numbered by `{TrackNumber}` (`{SongNumber}` was always 1) | in its album artist's folder, numbered by its position in the album, as an album download names it; the song's album is read to place it, and a song without one, or missing from its album's track list, fails | single-song downloads |
+| An artist download | every album under the first album's artist | each album under its own album artist, so a compilation lands in its own folder | artist downloads |
+| Standalone covers of a song or artist download | the song's artwork and the track artist's picture | the album's artwork and the album artist's picture, as for an album | `cover.jpg` and `artist.jpg` |
+| Playlists and stations | own folders | unchanged; not part of the library, so a song can be on disk twice | none |
+
+Apart from the library, paths are unchanged, with the exceptions below. The first three
+only affect unusual titles; the last two only templates that use `{SongNumber}` or
+`{TrackCount}`:
 
 - Leading dots (and spaces between them) are stripped from path segments, so a title
   such as "...Baby One More Time" is no longer written as a hidden file. Files written
@@ -292,11 +318,8 @@ last two only templates that use `{SongNumber}` or `{TrackCount}`:
   longer names only after the whole download (file names over 251 bytes, folder names
   over 255); a name between 241 bytes and those limits is now shorter, so that track
   downloads again.
-- In an artist job, `{SongNumber}` restarts at 1 with each album when
-  `download.artist_path_format` names `{AlbumName}` or `{AlbumId}`; 1.x numbered the whole
-  discography in one run. An install whose own artist template uses `{SongNumber}` that
-  way downloads those artists' albums again. 1.x's example and a config without the key
-  use `{TrackNumber}` there and are unaffected.
+- In an artist job, `{SongNumber}` is each track's position in its own album; 1.x
+  numbered the whole discography in one run.
 - `{TrackCount}` is the number of tracks on the track's own disc; 1.x used the album-wide
   count. A template that uses `{TrackCount}` downloads multi-disc albums again.
 

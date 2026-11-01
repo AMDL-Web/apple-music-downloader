@@ -26,7 +26,7 @@ func TestTrackMetadataResolverReusesResolvedSingleSong(t *testing.T) {
 	if got.ID != initial.ID || got.Name != initial.Name || got.AlbumID != initial.AlbumID || got.TrackCount != initial.TrackCount || got.DiscCount != initial.DiscCount || got.HasLyrics != initial.HasLyrics {
 		t.Fatalf("song = %+v, want resolved value %+v", got, initial)
 	}
-	_, metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := catalog.counts()
 	if len(metadataCalls) != 0 || len(albumCalls) != 0 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want no duplicate reads", metadataCalls, albumCalls)
 	}
@@ -58,7 +58,7 @@ func TestTrackMetadataResolverMergesResolvedAlbumWithoutRefetch(t *testing.T) {
 	if got.AlbumArtist != "Album Artist" || got.AlbumArtistID != "artist-1" || got.AlbumArtworkURL != "album-art" || got.TrackCount != 10 || got.DiscCount != 2 || got.UPC != "123456" {
 		t.Fatalf("album fields were not preserved: %+v", got)
 	}
-	_, metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := catalog.counts()
 	if metadataCalls["song-1"] != 1 || len(albumCalls) != 0 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want one lightweight song read and no album read", metadataCalls, albumCalls)
 	}
@@ -150,7 +150,7 @@ func TestTrackMetadataResolverCoalescesPlaylistAlbumReads(t *testing.T) {
 			t.Fatalf("playlist song missed album palette or artist URL: colors=%+v artist_url=%q", song.AlbumArtworkColors, song.ArtistURL)
 		}
 	}
-	_, metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := catalog.counts()
 	if metadataCalls["song-1"] != 1 || metadataCalls["song-2"] != 1 || albumCalls["album-1"] != 1 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want one song read each and one shared album read", metadataCalls, albumCalls)
 	}
@@ -189,7 +189,7 @@ func TestTrackMetadataResolverEnrichesStationTracksWithAlbum(t *testing.T) {
 			t.Fatalf("station song %s was not album-enriched: %+v", id, song)
 		}
 	}
-	_, metadataCalls, albumCalls := catalog.counts()
+	metadataCalls, albumCalls := catalog.counts()
 	if metadataCalls["song-1"] != 1 || metadataCalls["song-2"] != 1 || albumCalls["album-1"] != 1 {
 		t.Fatalf("metadata calls = %v, album calls = %v, want one song read each and one shared album read", metadataCalls, albumCalls)
 	}

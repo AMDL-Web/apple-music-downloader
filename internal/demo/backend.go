@@ -331,7 +331,7 @@ func (j *job) place(i int, now time.Time) {
 		p.Remuxed, p.Verified, p.Tagged, p.Saved = true, true, true, true
 		it.Status = domain.ItemCompleted
 		it.FileSize = size
-		it.OutputPath = fmt.Sprintf("%s/%s/%s/%02d %s.m4a", musicDir, j.album.artist.name, j.album.title, it.Index, it.Title)
+		it.OutputPath = fmt.Sprintf("%s/library/%s/%s/%02d. %s.m4a", musicDir, j.album.artist.name, j.album.title, it.Index, it.Title)
 		if it.HasLyrics {
 			it.LyricsStatus = domain.LyricsFetched
 		}

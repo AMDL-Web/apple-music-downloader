@@ -17,11 +17,9 @@ itself is managed by the backend and its comments do not survive a write.
 ## Defaults
 
 A key missing from `config.yaml` takes the value `configs/config.example.yaml` sets, so a
-sparse file behaves the way the example documents. The one exception is
-`download.album_path_format` and `download.artist_path_format`: a config without them
-predates `{SongNumber}` paths and keeps the older `{TrackNumber}` layout, so files already
-downloaded are still found. Tests in `internal/config` hold `Default()` equal to the
-example and every `Default:` note in its comments equal to `Default()`.
+sparse file behaves the way the example documents. Tests in `internal/config` hold
+`Default()` equal to the example and every `Default:` note in its comments equal to
+`Default()`.
 
 Unknown keys fail startup with an error naming each one; keys removed in 2.0 are listed in
 [Upgrading to 2.0](upgrading-to-2.0.md#config-and-environment). That includes the old

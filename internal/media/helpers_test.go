@@ -60,10 +60,10 @@ func newTestQualityService(cfg config.Config, catalog downloaderCatalog, wrapper
 
 // processTrack runs one track through the pipeline the way processJob does,
 // with its own metadata resolver.
-func (d *Downloader) processTrack(ctx context.Context, job domain.Job, item domain.JobItem, initial applemusic.Song, storefront string, collectionType applemusic.URLType, collectionName, collectionID string, collectionIndex int, folderArtist string, reporter jobs.Reporter) error {
+func (d *Downloader) processTrack(ctx context.Context, job domain.Job, item domain.JobItem, initial applemusic.Song, storefront string, collectionType applemusic.URLType, collectionName, collectionID string, collectionIndex int, reporter jobs.Reporter) error {
 	target := trackTarget{
 		storefront: storefront, collectionType: collectionType, collectionName: collectionName,
-		collectionID: collectionID, collectionIndex: collectionIndex, folderArtist: folderArtist,
+		collectionID: collectionID, collectionIndex: collectionIndex,
 	}
 	return d.newTrackRun(job, item, initial, target, newTrackMetadataResolver(d, storefront), reporter).run(ctx)
 }
@@ -137,6 +137,7 @@ type fakeDownloaderCatalog struct {
 	song             applemusic.Song
 	songErr          error
 	album            applemusic.Collection
+	albumErr         error
 	playlist         applemusic.Collection
 	artistAlbums     applemusic.ArtistAlbums
 	station          applemusic.Collection
@@ -146,15 +147,14 @@ type fakeDownloaderCatalog struct {
 	motionArtworkErr error
 }
 
-func (f fakeDownloaderCatalog) Song(context.Context, string, string) (applemusic.Song, error) {
-	return f.song, f.songErr
-}
-
 func (f fakeDownloaderCatalog) SongMetadata(context.Context, string, string) (applemusic.Song, error) {
 	return f.song, f.songErr
 }
 
 func (f fakeDownloaderCatalog) Album(_ context.Context, _, id string) (applemusic.Collection, error) {
+	if f.albumErr != nil {
+		return applemusic.Collection{}, f.albumErr
+	}
 	if f.album.ID == id {
 		return f.album, nil
 	}
@@ -215,22 +215,12 @@ type metadataCountingCatalog struct {
 	fakeDownloaderCatalog
 
 	mu            sync.Mutex
-	songs         map[string]applemusic.Song
 	metadataSongs map[string]applemusic.Song
 	albums        map[string]applemusic.Collection
-	songCalls     map[string]int
 	metadataCalls map[string]int
 	albumCalls    map[string]int
 	albumWait     <-chan struct{}
 	albumStarted  chan<- struct{}
-}
-
-func (c *metadataCountingCatalog) Song(ctx context.Context, _, id string) (applemusic.Song, error) {
-	c.mu.Lock()
-	c.songCalls[id]++
-	song := c.songs[id]
-	c.mu.Unlock()
-	return song, ctx.Err()
 }
 
 func (c *metadataCountingCatalog) SongMetadata(ctx context.Context, _, id string) (applemusic.Song, error) {
@@ -262,13 +252,9 @@ func (c *metadataCountingCatalog) Album(ctx context.Context, _, id string) (appl
 	return album, nil
 }
 
-func (c *metadataCountingCatalog) counts() (map[string]int, map[string]int, map[string]int) {
+func (c *metadataCountingCatalog) counts() (map[string]int, map[string]int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	songs := make(map[string]int, len(c.songCalls))
-	for id, count := range c.songCalls {
-		songs[id] = count
-	}
 	metadata := make(map[string]int, len(c.metadataCalls))
 	for id, count := range c.metadataCalls {
 		metadata[id] = count
@@ -277,7 +263,7 @@ func (c *metadataCountingCatalog) counts() (map[string]int, map[string]int, map[
 	for id, count := range c.albumCalls {
 		albums[id] = count
 	}
-	return songs, metadata, albums
+	return metadata, albums
 }
 
 func (*recordingReporter) SetJob(_ context.Context, job *domain.Job) error {

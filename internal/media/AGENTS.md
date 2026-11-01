@@ -9,8 +9,13 @@ Libraries, media-server scans and the skip-existing check key on the exact path 
 track lands at, so changing any of these renames or duplicates files on every
 install and needs the maintainer's OK and an upgrade note:
 
-- template expansion in `outputPath` and its variables (defaults and the variable
-  list are in `configs/config.example.yaml`);
+- template expansion in `outputPath` and `libraryTrackPath` and its variables
+  (defaults and the variable list are in `configs/config.example.yaml`);
+- library placement: a song, album or artist track's path comes only from
+  `libraryTrackPath` (its album and its position in the album's track list), its
+  folder from `libraryAlbumDir`, so one track has one path whichever job type
+  downloads it; `download.library_path_format` folders take album values only
+  (`internal/config#validateLibraryFormat`);
 - `safeName`: replaced characters, trimming, the segment byte cap;
 - `qualityLabel` strings, which `{Quality}` puts into names;
 - sidecar names: `lyricsSidecarPath`, `cover.<ext>`, `artist.<ext>`.

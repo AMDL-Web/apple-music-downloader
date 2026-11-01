@@ -91,8 +91,22 @@ func TestUpdateConfigMergesAndTakesEffect(t *testing.T) {
 	}
 	// Merge semantics: fields absent from the body keep their current values.
 	base := config.Default()
-	if got.Download.SongPathFormat != base.Download.SongPathFormat || got.Server.Listen != base.Server.Listen {
+	if got.Download.LibraryPathFormat != base.Download.LibraryPathFormat || got.Server.Listen != base.Server.Listen {
 		t.Fatalf("omitted fields changed: %+v", got)
+	}
+}
+
+// The per-type path templates became download.library_path_format; a client
+// still sending one is told which key it named instead of having it dropped.
+func TestUpdateConfigRejectsRemovedPathFormats(t *testing.T) {
+	for _, key := range []string{"song_path_format", "album_path_format", "artist_path_format"} {
+		store := config.NewStore(config.Default())
+		server := &Server{cfg: store}
+		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
+			`{"download":{"`+key+`":"x/{SongName}"}}`)
+		if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), key) {
+			t.Fatalf("%s: status = %d, body = %s; want 400 naming the removed key", key, recorder.Code, recorder.Body.String())
+		}
 	}
 }
 

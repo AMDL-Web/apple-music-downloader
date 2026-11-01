@@ -151,7 +151,7 @@ func simulateTrackEvents(t *testing.T, intervalMS, durationMS, minKBps, maxKBps 
 	reporter := &recordingReporter{}
 	if err := downloader.processTrack(context.Background(), domain.Job{ID: "job-1"},
 		domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{ID: "song-1"}, "cn",
-		applemusic.TypeAlbum, "Album", "album-1", 1, "", reporter); err != nil {
+		applemusic.TypeAlbum, "Album", "album-1", 1, reporter); err != nil {
 		t.Fatalf("simulated processTrack failed: %v", err)
 	}
 	return reporter.events

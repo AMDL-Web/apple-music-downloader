@@ -20,17 +20,26 @@ type trackTarget struct {
 	collectionName  string
 	collectionID    string
 	collectionIndex int
-	// folderArtist is the collection's grouping artist, used for {ArtistName}
-	// in directory segments so all of an album's tracks share one folder.
-	folderArtist string
+	// libraryPath, albumDir and artistDir place a song, album or artist track
+	// in the library (libraryTrackPath, libraryCoverDirs). Empty for playlist
+	// and station tracks, whose template is expanded per codec attempt.
+	libraryPath string
+	albumDir    string
+	artistDir   string
 }
 
 func (t trackTarget) outputPath(cfg config.Config, song applemusic.Song, codec, quality string) string {
-	return outputPath(cfg, song, t.collectionType, t.collectionIndex, t.folderArtist, t.collectionName, t.collectionID, codec, quality)
+	if t.libraryPath != "" {
+		return t.libraryPath
+	}
+	return outputPath(cfg, song, t.collectionType, t.collectionIndex, t.collectionName, t.collectionID, codec, quality)
 }
 
 func (t trackTarget) coverDirs(cfg config.Config, song applemusic.Song) (albumDir, artistDir string) {
-	return standaloneCoverDirs(cfg, song, t.collectionType, t.collectionIndex, t.folderArtist, t.collectionName, t.collectionID)
+	if t.libraryPath != "" {
+		return t.albumDir, t.artistDir
+	}
+	return libraryCoverDirs(cfg, trackAlbum(song))
 }
 
 // trackRun carries one track through the pipeline: metadata and standalone

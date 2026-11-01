@@ -116,10 +116,6 @@ type fakeQualityCatalog struct {
 	song applemusic.Song
 }
 
-func (f fakeQualityCatalog) Song(context.Context, string, string) (applemusic.Song, error) {
-	return f.song, nil
-}
-
 func (f fakeQualityCatalog) SongMetadata(context.Context, string, string) (applemusic.Song, error) {
 	return f.song, nil
 }
