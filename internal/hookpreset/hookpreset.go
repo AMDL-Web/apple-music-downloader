@@ -179,6 +179,9 @@ var All = []Preset{
 		// Jellyfin scans on POST /Library/Refresh, its key in the
 		// Authorization header's MediaBrowser scheme.
 		build: func(v map[string]string) (Request, error) {
+			if strings.ContainsAny(v["key"], `"\`) {
+				return Request{}, fmt.Errorf("API key is the one Jellyfin's dashboard shows, letters and digits")
+			}
 			return Request{Method: http.MethodPost, URL: joinURL(v["server"], "/Library/Refresh"),
 				Headers: map[string]string{"Authorization": `MediaBrowser Token="` + v["key"] + `"`}}, nil
 		}},

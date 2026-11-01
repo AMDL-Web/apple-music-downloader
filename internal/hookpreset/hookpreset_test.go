@@ -132,6 +132,10 @@ func TestMissingAndUnsafeValuesAreRefused(t *testing.T) {
 	if _, err := p.Build(map[string]string{"token": "123/ABC", "chat": "1"}); err == nil {
 		t.Errorf("a bot token with a slash went into the URL")
 	}
+	p, _ = Find("jellyfin")
+	if _, err := p.Build(map[string]string{"server": "http://nas:8096", "key": `k" Client="x`}); err == nil {
+		t.Errorf("a key with a quote went into the quoted Authorization token")
+	}
 	p, _ = Find("custom")
 	w, err := p.Build(map[string]string{"url": "https://x.example", "method": "GET", "body": "ignored", "header": "X-Key: v"})
 	if err != nil || w.Method != "GET" || w.Body != "" || (w.Headers)["X-Key"] != "v" {
