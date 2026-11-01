@@ -444,7 +444,7 @@ Event types (the `EventType` enum in the spec; Go constants in `internal/domain`
 | Job lifecycle | `job_queued`, `job_started`, `job_retried`, `job_recovered`, `job_moved` (new `queue_order`), `job_finished`, `job_failed`, `job_cancelled`, `job_deleted` |
 | Resolution | `resolved_input`, `motion_artwork_resolved` |
 | Item progress | `item_progress` (its `phase` is the item status), `item_completed`, `item_failed`, `item_skipped`, `item_overwrite` |
-| Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired` |
+| Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired`, `integrity_overruled` |
 | Hooks | `hook_started`, `hook_succeeded`, `hook_failed` |
 | Other | `standalone_cover_failed` |
 

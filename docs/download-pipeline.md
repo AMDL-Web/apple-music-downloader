@@ -110,6 +110,15 @@ position against the mdat boxes, parses every ALAC packet in Go down to its END 
 ffmpeg. On a 24-bit/96 kHz ALAC track it costs a quarter to a third of the CPU of `full`;
 damage confined to the middle of an AAC or Dolby track passes it.
 
+A `quick` failure counts only once a full decode confirms it
+(`internal/media#Downloader.verifyStaged`). When the decode passes, the file is kept and
+an `integrity_overruled` event carries the quick error; otherwise the track goes on to the
+repair or failure path as in `full`. A quick false positive would otherwise fail the codec
+and fall back to a lossy one.
+
+With `check_integrity` false neither the check nor the ALAC repair runs: a damaged file is
+saved, and later jobs skip it because it is already on disk.
+
 ## Transfers
 
 Encrypted media transfers have no whole-request deadline, because a 24-bit/192 kHz

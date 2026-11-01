@@ -320,14 +320,17 @@ download:
   # integer bits: maximum selected ALAC bit depth; 0 or less sets no ceiling. Use 24 for up to 24-bit.
   # Apple Music serves 16- and 24-bit ALAC, so 16 to 23 keeps 16-bit streams only.
   alac_max_bit_depth: 24
-  # bool: true verifies output MP4 integrity and repairs known ALAC terminator issues; false skips the integrity gate.
+  # bool: true verifies output MP4 integrity and repairs known ALAC terminator issues; false skips both the
+  # check and the repair, so a damaged file is saved and later jobs skip it as already downloaded.
   check_integrity: true
   # enum: full, quick. How check_integrity checks each track; ignored when it is false.
   # full decodes the whole track with ffmpeg. quick costs a fraction of that CPU on hi-res ALAC: it checks
   # that every sample lies inside the file's media data, that every ALAC packet parses and ends with a
   # clean END element (the defect the ALAC repair fixes), and decodes only the first and last 5 seconds
-  # with ffmpeg. Damage confined to the middle of an AAC or Dolby track passes quick. A change takes
-  # effect for newly started jobs, without a restart. Absent: full. Default: full.
+  # with ffmpeg. A quick failure is confirmed with a full decode before it counts; if the decode passes,
+  # the file is kept and an integrity_overruled event is recorded. Damage confined to the middle of an
+  # AAC or Dolby track passes quick. A change takes effect for newly started jobs, without a restart.
+  # Absent: full. Default: full.
   integrity_mode: "full"
   # bool: true overwrites an existing output file (and its lyrics sidecars) when
   # a job downloads the same track again; false skips tracks whose output file

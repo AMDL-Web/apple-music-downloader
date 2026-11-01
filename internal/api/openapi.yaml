@@ -4021,6 +4021,7 @@ components:
         - codec_fallback
         - codec_failed
         - alac_repaired
+        - integrity_overruled
         - operation_retry
         - operation_exhausted
         - operation_recovered
@@ -4060,7 +4061,8 @@ components:
             and resolved_input: the public Job snapshot plus message. Events
             with an item_id: the public JobItem snapshot plus event-specific
             fields (for example attempts, will_retry, delay_ms, codec), except
-            alac_repaired, which carries only patched_packets. operation_*
+            alac_repaired, which carries only patched_packets, and
+            integrity_overruled, which carries only quick_error. operation_*
             without an item_id: operation, codec, attempt, max_attempts and the
             retry fields. hook_*: hook plus attempt and duration_ms, or attempts.
             Any other event with a message: {message}. job_deleted and

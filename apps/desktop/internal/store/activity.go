@@ -79,6 +79,8 @@ func describe(j *Job, e domain.Event) (text string, kind ActivityKind, ok bool) 
 		return track + ": " + strings.ToUpper(e.Phase) + " failed" + detail(e.Message), ActivityWarn, true
 	case domain.EventALACRepaired:
 		return track + " repaired after the integrity check", ActivityInfo, true
+	case domain.EventIntegrityOverruled:
+		return track + " kept: a full decode passed what the quick check flagged", ActivityInfo, true
 	case domain.EventOperationRetry:
 		return track + ": retrying" + detail(e.Message), ActivityWarn, true
 	case domain.EventOperationExhausted:

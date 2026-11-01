@@ -51,9 +51,10 @@ type mediaBackend interface {
 	// decrypt decrypts req's input into the staged file, remuxing it into a
 	// progressive MP4 on the way.
 	decrypt(ctx context.Context, req decryptRequest, hooks decryptHooks) error
-	// verify checks the staged file as download.integrity_mode says: a full
-	// decode, or the quick checks of checkIntegrityQuick; nil means it passed.
-	verify(ctx context.Context, staged stagedFile) error
+	// verify checks the staged file in mode, a download.integrity_mode value:
+	// a full decode, or the quick checks of checkIntegrityQuick; nil means it
+	// passed.
+	verify(ctx context.Context, staged stagedFile, mode string) error
 	// sampleRate reads the sample rate in Hz the staged file declares, for an
 	// item whose manifest named none.
 	sampleRate(staged stagedFile) (int, error)
@@ -309,8 +310,8 @@ func (m realMedia) decryptAACLC(ctx context.Context, req decryptRequest, hooks d
 	return nil
 }
 
-func (m realMedia) verify(ctx context.Context, staged stagedFile) error {
-	if m.cfg().Download.IntegrityMode == config.IntegrityModeQuick {
+func (m realMedia) verify(ctx context.Context, staged stagedFile, mode string) error {
+	if mode == config.IntegrityModeQuick {
 		return m.d.mp4.checkIntegrityQuick(ctx, staged.path)
 	}
 	return m.d.mp4.checkIntegrityFile(ctx, staged.path)

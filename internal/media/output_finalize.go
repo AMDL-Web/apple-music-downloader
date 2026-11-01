@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"amdl/internal/applemusic"
+	"amdl/internal/config"
 	"amdl/internal/domain"
 	"amdl/internal/jobs"
 )
@@ -95,7 +96,7 @@ type trackOutput struct {
 func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBackend, out trackOutput, set publishStage) error {
 	set(domain.ItemSaving, out.labels.saving, nil)
 	if d.cfg.Download.CheckIntegrity {
-		if err := backend.verify(ctx, out.staged); err != nil {
+		if err := d.verifyStaged(ctx, backend, out); err != nil {
 			if !out.allowALACRepair {
 				return fmt.Errorf("%s: %w", out.labels.integrityFailed, err)
 			}
@@ -162,9 +163,37 @@ func (d *Downloader) repairALACOutput(ctx context.Context, backend mediaBackend,
 	if err != nil {
 		return err
 	}
-	if err := backend.verify(ctx, out.staged); err != nil {
+	if err := d.verifyStaged(ctx, backend, out); err != nil {
 		return fmt.Errorf("integrity check failed after alac repair: %w", err)
 	}
+	return nil
+}
+
+// verifyStaged checks the staged file in the configured integrity mode. The
+// quick checks stand in for the full decode, so a quick failure counts only
+// once a full decode confirms it: when the decode passes, the file is kept and
+// an integrity_overruled event records the disagreement. Without this, a quick
+// false positive would fail the codec and fall back to a lossy one.
+func (d *Downloader) verifyStaged(ctx context.Context, backend mediaBackend, out trackOutput) error {
+	mode := d.cfg.Download.IntegrityMode
+	err := backend.verify(ctx, out.staged, mode)
+	if err == nil || mode != config.IntegrityModeQuick || ctx.Err() != nil {
+		return err
+	}
+	if fullErr := backend.verify(ctx, out.staged, config.IntegrityModeFull); fullErr != nil {
+		if ctx.Err() != nil {
+			return fullErr
+		}
+		// The quick error names the defect; the decode only confirms it.
+		return err
+	}
+	payload, _ := json.Marshal(map[string]any{"quick_error": err.Error()})
+	// The file passed a full decode; a lost event must not fail the track.
+	_ = out.reporter.Event(ctx, domain.Event{
+		JobID: out.job.ID, ItemID: out.item.ID, Type: domain.EventIntegrityOverruled, Phase: out.codec,
+		Message: "Quick integrity check failed but a full decode passed; the file was kept: " + err.Error(),
+		Payload: payload,
+	})
 	return nil
 }
 

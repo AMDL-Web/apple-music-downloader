@@ -314,6 +314,7 @@ const ACTIVITY_VIEWS = {
   codec_fallback: ['Codec fallback', 'warning'],
   codec_failed: ['Codec failed', 'warning'],
   alac_repaired: ['ALAC repaired', 'neutral'],
+  integrity_overruled: ['Quick check overruled', 'neutral'],
   operation_retry: ['Retrying', 'warning'],
   operation_exhausted: ['Gave up', 'danger'],
   operation_recovered: ['Recovered', 'neutral'],

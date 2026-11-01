@@ -55,10 +55,13 @@ const (
 // Codec and retry events. phase is the codec, or the operation when no codec
 // applies; retries inside a codec attempt are operation_* with phase = codec.
 const (
-	EventCodecSelected      EventType = "codec_selected"
-	EventCodecFallback      EventType = "codec_fallback"
-	EventCodecFailed        EventType = "codec_failed"
-	EventALACRepaired       EventType = "alac_repaired"
+	EventCodecSelected EventType = "codec_selected"
+	EventCodecFallback EventType = "codec_fallback"
+	EventCodecFailed   EventType = "codec_failed"
+	EventALACRepaired  EventType = "alac_repaired"
+	// EventIntegrityOverruled records a quick integrity check that failed
+	// while a full decode of the same file passed, so the file was kept.
+	EventIntegrityOverruled EventType = "integrity_overruled"
 	EventOperationRetry     EventType = "operation_retry"
 	EventOperationExhausted EventType = "operation_exhausted"
 	EventOperationRecovered EventType = "operation_recovered"
@@ -79,7 +82,7 @@ var EventTypes = []EventType{
 	EventJobFinished, EventJobFailed, EventJobCancelled, EventJobMoved, EventJobDeleted,
 	EventResolvedInput, EventMotionArtworkResolved, EventStandaloneCoverFailed,
 	EventItemProgress, EventItemCompleted, EventItemFailed, EventItemSkipped, EventItemOverwrite,
-	EventCodecSelected, EventCodecFallback, EventCodecFailed, EventALACRepaired,
+	EventCodecSelected, EventCodecFallback, EventCodecFailed, EventALACRepaired, EventIntegrityOverruled,
 	EventOperationRetry, EventOperationExhausted, EventOperationRecovered,
 	EventHookStarted, EventHookSucceeded, EventHookFailed,
 }

@@ -96,7 +96,7 @@ func (m simulatedMedia) decrypt(ctx context.Context, req decryptRequest, hooks d
 	return simulatePause(ctx, simulatedRemuxPause)
 }
 
-func (simulatedMedia) verify(ctx context.Context, _ stagedFile) error {
+func (simulatedMedia) verify(ctx context.Context, _ stagedFile, _ string) error {
 	return simulatePause(ctx, simulatedVerifyPause)
 }
 
