@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -53,10 +52,6 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 	// A narrow window's queue hero shows the still cover.
 	moving := a.Screen != ScreenQueue || !a.compact
 	pal := jobPalette(j, moving && a.motionShown(c, j.MotionArtworkURL))
-	if a.Screen == ScreenQueue && j.Status == domain.JobCompleted {
-		master, _ := latestMotion(j)
-		pal = latestPalette(j, moving && a.motionShown(c, master))
-	}
 	paletteBackdrop(c, k, pal)
 }
 
@@ -217,10 +212,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	hc := heroColorsFor(pal, k)
 	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.End).Children(func() {
 		a.heroCover(c, j, func() {
-			cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
-			if j.MotionArtworkURL != "" && !compact {
-				cover.Children(func() { motionBadge(c, "MOTION") })
-			}
+			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		})
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
 			label(c, k, "Downloading now").TextColor(hc.label)
@@ -309,17 +301,6 @@ func (a *App) heroCover(c *ui.Context, j *store.Job, show func()) {
 		a.OpenJob(j.ID)
 	}
 	b.Cursor(ui.CursorPointer).Scale(1+0.02*lift, 1+0.02*lift).Children(show)
-}
-
-// motionBadge marks a cover that has a motion loop.
-func motionBadge(c *ui.Context, text string) {
-	b := ui.Row(c).Absolute().Left(8).Bottom(8).PaddingX(7).PaddingY(3).Gap(5).Radius(radiusFull).AlignItems(ui.Center).
-		Background(ui.RGBA(10, 12, 20, 0.55))
-	b.Children(func() {
-		d := ui.Box(c).Size(6, 6).Radius(radiusFull).Background(ui.Hex("#f2f3f8"))
-		d.Opacity(1 - 0.65*d.Loop("pulse", 1600*time.Millisecond, ui.Bounce(ui.EaseInOut)))
-		mono(c, text, 10).FontWeight(600).LetterSpacing(0.4).TextColor(ui.Hex("#f2f3f8"))
-	})
 }
 
 // jobRow is one job of the queue: cover, names, stage bar with counts,

@@ -40,10 +40,7 @@ func (a *App) detailJob(c *ui.Context, k *Tokens, j *store.Job) {
 	}
 	a.collectionHero(c, k, l, heroSpec{kicker: kind, title: j.Name(), artist: j.By(), colors: hc,
 		cover: func(size float32) {
-			cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
-			if j.MotionArtworkURL != "" {
-				cover.Children(func() { motionBadge(c, "MOTION") })
-			}
+			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		},
 		tags: func() {
 			if it := firstWithCodec(j); it != nil {

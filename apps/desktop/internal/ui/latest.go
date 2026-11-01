@@ -16,55 +16,23 @@ import (
 // its size in a narrow window, and wallGap the space between covers.
 const wallTile, wallCompact, wallGap = 64, 44, 12
 
-// latestMotion is the motion cover the latest download's hero plays: the
-// 3:4 loop where the album has one, else the square one.
-func latestMotion(j *store.Job) (master string, tall bool) {
-	if j.MotionArtworkTallURL != "" {
-		return j.MotionArtworkTallURL, true
-	}
-	return j.MotionArtworkURL, false
-}
-
-// latestPalette is the palette of what the latest download's hero shows:
-// its motion cover's while that plays, else the still's.
-func latestPalette(j *store.Job, playing bool) Palette {
-	_, tall := latestMotion(j)
-	switch {
-	case !playing:
-		return jobPalette(j, false)
-	case tall:
-		return tallPalette(j)
-	}
-	return jobPalette(j, true)
-}
-
 // latestHero shows the download that finished last while nothing
-// downloads, where the "downloading now" hero goes and in its colors: the
-// 3:4 motion loop, and how much landed where the percent would be.
+// downloads, where the "downloading now" hero goes and in its colors: its
+// motion cover, and how much landed where the percent would be.
 func (a *App) latestHero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	a.Store.WantTracks(j)
-	size, height := float32(196), float32(0)
+	size := float32(196)
 	var video *ui.VideoPlayer
 	if compact {
 		size = 88
 	} else {
-		master, tall := latestMotion(j)
-		if video = a.motionPlayer(c, master, 180); video != nil && tall {
-			size, height = 180, 240
-		}
+		video = a.motionPlayer(c, j.MotionArtworkURL, size)
 	}
-	pal := latestPalette(j, video != nil)
+	pal := jobPalette(j, video != nil)
 	hc := heroColorsFor(pal, k)
 	ui.Row(c).Padding(18, 28, 20, 28).Gap(28).AlignItems(ui.End).Children(func() {
 		a.heroCover(c, j, func() {
-			cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Height: height, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
-			switch {
-			case compact:
-			case height > 0:
-				cover.Children(func() { motionBadge(c, "3:4 LOOP") })
-			case j.MotionArtworkURL != "":
-				cover.Children(func() { motionBadge(c, "MOTION") })
-			}
+			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
 		})
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
 			when := ""

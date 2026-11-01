@@ -110,7 +110,7 @@ func (a *App) captureScreens(dir string) {
 	shot("15-files-light", func() { a.view.GoSettings("files") }, 1500*time.Millisecond)
 	a.waitFinished(job)
 	// With nothing downloading, the queue shows the album that just
-	// finished, playing its 3:4 loop, over the covers of those before it.
+	// finished, playing its motion cover, over the covers of those before it.
 	shot("07-home", func() { a.store.SetOmniText(""); a.view.Theme = a.opts.Theme; a.view.Go(appui.ScreenQueue) }, 6*time.Second)
 	shot("11-home-light", func() { a.view.Theme = "light" }, 2500*time.Millisecond)
 	shot("13-detail-done", func() { a.view.Theme = a.opts.Theme; a.view.OpenJob(job) }, 3*time.Second)

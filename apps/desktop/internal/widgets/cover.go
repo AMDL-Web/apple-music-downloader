@@ -18,9 +18,6 @@ type Cover struct {
 	Dim float32
 	// Shadow drops the large soft shadow of a hero cover.
 	Shadow bool
-	// Height makes a cover taller than wide, as a 3:4 motion cover; 0 is
-	// square.
-	Height float32
 	// Video, when set, plays over the still: the motion cover, which fades
 	// in once its first frame is there. The still stays underneath as its
 	// poster.
@@ -29,11 +26,7 @@ type Cover struct {
 
 // Show builds the cover.
 func (cv Cover) Show(c *ui.Context) ui.Element {
-	h := cv.Height
-	if h <= 0 {
-		h = cv.Size
-	}
-	box := ui.Box(c).Size(cv.Size, h).Radius(cv.Radius).Clip().Background(cv.Placeholder)
+	box := ui.Box(c).Size(cv.Size, cv.Size).Radius(cv.Radius).Clip().Background(cv.Placeholder)
 	if cv.Shadow {
 		box.Shadow(0, cv.Size/8, cv.Size/3, 0, ui.RGBA(0, 0, 0, 0.45))
 	}

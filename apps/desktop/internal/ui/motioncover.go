@@ -1,10 +1,6 @@
 package ui
 
-import (
-	"github.com/egoist/mygo/ui"
-
-	"amdl/apps/desktop/internal/store"
-)
+import "github.com/egoist/mygo/ui"
 
 // motionPlayer is the motion cover whose master playlist is master,
 // playing at size DIPs wide, or nil: before it is ready, without an
@@ -22,13 +18,4 @@ func (a *App) motionPlayer(c *ui.Context, master string, size float32) *ui.Video
 // a view lit by the palette of what the cover shows.
 func (a *App) motionShown(c *ui.Context, master string) bool {
 	return a.Motion != nil && !a.NoMotion && master != "" && !c.Preferences().ReduceMotion && a.Motion.Has(master)
-}
-
-// tallPalette is the palette of a job's 3:4 motion cover, which differs
-// from the square one's and the still's (domain.Job).
-func tallPalette(j *store.Job) Palette {
-	if j.MotionArtworkTallURL != "" && j.MotionArtworkTallBgColor != "" {
-		return ParsePalette(j.MotionArtworkTallBgColor, j.MotionArtworkTallTextColor1, j.MotionArtworkTallTextColor2, j.MotionArtworkTallTextColor3, j.MotionArtworkTallTextColor4)
-	}
-	return jobPalette(j, false)
 }
