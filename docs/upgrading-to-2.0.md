@@ -30,9 +30,9 @@ needs the API changes below before it works against 2.0.
 6. Give the container time to stop: `stop_grace_period: 2m` in Compose or
    `--stop-timeout 120` with `docker run`. Interrupted jobs now resume on the next start
    instead of being cancelled.
-7. Replace the wrapper-manager fork with an upstream wrapper (see
+7. Replace the 1.x wrapper-manager with a wrapper-lite based wrapper (see
    [Wrapper](#wrapper) and [Deployment](deployment.md#the-wrapper)): either
-   [wrapper-manager v2](https://github.com/WorldObservationLog/wrapper-manager/tree/v2),
+   [wrapper-manager v2](https://github.com/AMDL-Web/wrapper-manager/tree/v2),
    which fronts wrapper-lite over HTTP and has the login API the console's Account page
    uses, or a bare
    [wrapper-lite](https://github.com/AMDL-Web/wrapper/tree/lite), logged in

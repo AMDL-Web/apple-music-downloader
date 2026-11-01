@@ -232,7 +232,7 @@ connection with `GET /api/v1/wrapper/status`.
 
 | Option | Upstream | Port | Login |
 | --- | --- | --- | --- |
-| wrapper-manager v2 (recommended) | [wrapper-manager `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
+| wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager fork, `v2` branch](https://github.com/AMDL-Web/wrapper-manager/tree/v2): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
 | wrapper-lite | [AMDL-Web's wrapper fork, `lite` branch](https://github.com/AMDL-Web/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
 amdl 2.0 supports one wrapper account with either option: log one account into
@@ -244,20 +244,26 @@ with one patch. Upstream keeps the FairPlay decrypt context of every `/key`; aft
 1024 of them in one process every `/key` fails
 (`KDCanProcessCKC status: -42786` in the wrapper's log, `wrapper /key: code 500` in
 amdl's) until the wrapper restarts. The fork frees each context once its template is
-copied. The managed wrapper and the compose file's wrapper-lite service run the fork.
-wrapper-manager v2 downloads upstream's build, so it keeps the limit: when keys start
-failing, restart it (`docker restart wrapper-manager`), which keeps the login.
+copied. The managed wrapper and both compose wrapper services run the fork.
+
+wrapper-manager is AMDL-Web's fork of [upstream's `v2` branch](https://github.com/WorldObservationLog/wrapper-manager/tree/v2),
+changed only to download the fork's wrapper-lite. It records where its installed
+payload came from and, on start, replaces one installed by upstream's wrapper-manager,
+keeping the accounts; an existing `wrapper-data` volume or QEMU `data.img` switches on
+the first start of the fork's build. If that download fails, it keeps the old payload
+and tries again on the next start. Neither upstream nor the fork builds a native arm64
+wrapper-lite, so on arm64 wrapper-manager runs only as its QEMU variant.
 
 Run natively or in upstream's Docker image, both use `wrapper-lite-rootless`, which needs
-user namespaces and `chroot` on a Linux host (x86_64 or arm64): `unshare -Ur true` must
+user namespaces and `chroot` on a Linux host: `unshare -Ur true` must
 succeed there. Docker blocks them by default, so the wrapper-manager service runs
 `privileged: true` (upstream's compose) and the wrapper-lite service
 `security_opt: seccomp:unconfined` (upstream's compose); a seccomp profile that allows
 `unshare` is the alternative.
 
 A host without user namespaces, such as Synology DSM, cannot run that launcher. Run
-wrapper-manager v2's QEMU variant instead (upstream's section
-["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/WorldObservationLog/wrapper-manager/tree/v2)),
+wrapper-manager v2's QEMU variant instead (the fork's section
+["Run on any OS via QEMU (wrapper-manager-qemu)"](https://github.com/AMDL-Web/wrapper-manager/tree/v2#run-on-any-os-via-qemu-wrapper-manager-qemu)),
 which runs the manager inside a QEMU guest with its own kernel and needs `/dev/kvm`:
 
 - The container needs access to `/dev/kvm` and nothing else: no `privileged` and no added
