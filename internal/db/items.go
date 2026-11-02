@@ -31,22 +31,31 @@ func (s *Store) UpdateItem(ctx context.Context, item domain.JobItem) error {
 	return err
 }
 
-// ResetUnfinishedItems returns every item of jobID that has not finished
-// (i.e. is neither completed nor skipped_existing) to its pre-download queued
-// state in a single statement, so callers holding scheduling locks don't pay
-// one round-trip per item on large collections. The cleared fields must stay
-// in sync with domain.JobItem.ResetForRetry, which is the per-item form of
-// the same reset.
-func (s *Store) ResetUnfinishedItems(ctx context.Context, jobID string, updatedAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE run_items
-		SET status=?, download_progress=0, decrypt_progress=0, download_bytes=0,
-			progress_resolved=0, progress_remuxed=0, progress_verified=0, progress_tagged=0, progress_saved=0,
-			codec='', bit_depth=0, sample_rate=0, bitrate=0, file_size=0,
-			lyrics_status='', retry_kind='', attempt=0, max_attempts=0, status_message='', error='', updated_at=?
-		WHERE job_id=? AND status NOT IN (?,?)`,
-		string(domain.ItemQueued), formatTime(updatedAt), jobID,
-		string(domain.ItemCompleted), string(domain.ItemSkipped))
-	return err
+// ResetItems returns the items itemIDs of jobID that have not finished (i.e.
+// are neither completed nor skipped_existing) to their pre-download queued
+// state, in one statement per few hundred ids, so callers holding scheduling
+// locks don't pay one round-trip per item on large collections. Other items of
+// the job keep their state. The cleared fields must stay in sync with
+// domain.JobItem.ResetForRetry, which is the per-item form of the same reset.
+func (s *Store) ResetItems(ctx context.Context, jobID string, itemIDs []string, updatedAt time.Time) error {
+	const chunk = 500
+	for len(itemIDs) > 0 {
+		ids := itemIDs[:min(chunk, len(itemIDs))]
+		itemIDs = itemIDs[len(ids):]
+		args := []any{string(domain.ItemQueued), formatTime(updatedAt), jobID, string(domain.ItemCompleted), string(domain.ItemSkipped)}
+		for _, id := range ids {
+			args = append(args, id)
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE run_items
+			SET status=?, download_progress=0, decrypt_progress=0, download_bytes=0,
+				progress_resolved=0, progress_remuxed=0, progress_verified=0, progress_tagged=0, progress_saved=0,
+				codec='', bit_depth=0, sample_rate=0, bitrate=0, file_size=0,
+				lyrics_status='', retry_kind='', attempt=0, max_attempts=0, status_message='', error='', updated_at=?
+			WHERE job_id=? AND status NOT IN (?,?) AND id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CancelUnfinishedItems ends every item of jobID that has not reached a

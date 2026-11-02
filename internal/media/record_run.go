@@ -49,7 +49,13 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 	if err != nil {
 		return err
 	}
-	job.TotalItems = len(plan.Slots)
+	// Every item of the run, also one a recovered run kept from before the
+	// restart outside its new plan.
+	items, err := reporter.ListItems(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	job.TotalItems = len(items)
 	describeJob(&job, resolved)
 	if err := reporter.SetJob(ctx, &job); err != nil {
 		return err
@@ -72,7 +78,7 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 		}
 	}
 
-	runs, err := d.slotRuns(ctx, job, plan, parsed, resolved, record, reporter)
+	runs, err := d.slotRuns(job, plan, items, parsed, resolved, record, reporter)
 	if err != nil {
 		return err
 	}
@@ -248,12 +254,8 @@ func artworkColors(c applemusic.ArtworkColors) domain.ArtworkColors {
 }
 
 // slotRuns builds the track run of every planned slot, on the run item
-// PlanRun made for it.
-func (d *Downloader) slotRuns(ctx context.Context, job domain.Job, plan jobs.Plan, parsed applemusic.ParsedURL, resolved resolvedCollection, record jobs.RecordReporter, reporter jobs.Reporter) ([]*trackRun, error) {
-	items, err := reporter.ListItems(ctx, job.ID)
-	if err != nil {
-		return nil, err
-	}
+// PlanRun made for it (one of items).
+func (d *Downloader) slotRuns(job domain.Job, plan jobs.Plan, items []domain.JobItem, parsed applemusic.ParsedURL, resolved resolvedCollection, record jobs.RecordReporter, reporter jobs.Reporter) ([]*trackRun, error) {
 	itemsByID := make(map[string]domain.JobItem, len(items))
 	for _, item := range items {
 		itemsByID[item.ID] = item

@@ -166,7 +166,8 @@ func (m *Manager) SetCatalogState(ctx context.Context, kind domain.ResourceKind,
 // PlanRun plans a record run from the records, after its resolve: the due
 // slots for an audio run, the done slots of SongIDs for a lyrics run, none for
 // a covers run. Each slot gets a run item, queued; a recovered run reuses its
-// item for the same song and slot. The plan is stored on the run and
+// item for the same song and slot and keeps the end state of items its new
+// plan leaves out (settleUnplannedItems). The plan is stored on the run and
 // returned. A station run has nothing to plan.
 func (m *Manager) PlanRun(ctx context.Context, job domain.Job) (Plan, error) {
 	if job.ResourceID == "" {
@@ -200,11 +201,9 @@ func (m *Manager) PlanRun(ctx context.Context, job domain.Job) (Plan, error) {
 	for _, item := range items {
 		existing[item.AdamID+"\x00"+item.Slot] = item
 	}
-	if err := m.store.ResetUnfinishedItems(ctx, job.ID, now); err != nil {
-		return Plan{}, err
-	}
 	downloadsDir := m.config().Download.DownloadsDir
 	plan.Slots = make([]PlannedSlot, 0, len(due))
+	reused := map[string]bool{}
 	for _, slot := range due {
 		f := slot.File
 		planned := PlannedSlot{
@@ -219,6 +218,7 @@ func (m *Manager) PlanRun(ctx context.Context, job domain.Job) (Plan, error) {
 		}
 		if item, ok := existing[f.SongID+"\x00"+f.Slot]; ok {
 			planned.ItemID = item.ID
+			reused[item.ID] = true
 		} else {
 			item := domain.JobItem{
 				ID: ids.NewID("item"), JobID: job.ID, AdamID: f.SongID, Kind: "song", Index: slot.Position,
@@ -232,6 +232,9 @@ func (m *Manager) PlanRun(ctx context.Context, job domain.Job) (Plan, error) {
 		}
 		plan.Slots = append(plan.Slots, planned)
 	}
+	if err := m.settleUnplannedItems(ctx, job.ID, items, reused, now); err != nil {
+		return Plan{}, err
+	}
 	plan.Planned = true
 	encoded, err := encodePlan(plan)
 	if err != nil {
@@ -241,6 +244,27 @@ func (m *Manager) PlanRun(ctx context.Context, job domain.Job) (Plan, error) {
 		return Plan{}, err
 	}
 	return plan, nil
+}
+
+// settleUnplannedItems readies a recovered run's items for its new plan:
+// those the plan reuses go back to queued unless they finished. The others
+// keep an ended state (a slot this run failed before the restart is in its
+// backoff, not in the plan, and its failure stays the run's), and one left
+// mid-download is removed, as its slot is no longer the run's to download.
+func (m *Manager) settleUnplannedItems(ctx context.Context, jobID string, items []domain.JobItem, reused map[string]bool, now time.Time) error {
+	var reset []string
+	for _, item := range items {
+		switch {
+		case reused[item.ID]:
+			reset = append(reset, item.ID)
+		case item.Status != domain.ItemCompleted && item.Status != domain.ItemSkipped &&
+			item.Status != domain.ItemFailed && item.Status != domain.ItemCancelled:
+			if err := m.store.DeleteItem(ctx, item.ID); err != nil {
+				return fmt.Errorf("remove item %s: %w", item.ID, err)
+			}
+		}
+	}
+	return m.store.ResetItems(ctx, jobID, reset, now)
 }
 
 // doneSlots is the done slots of songIDs (every song when empty) as plan
@@ -409,10 +433,15 @@ func (m *Manager) settleRecordRun(ctx context.Context, job domain.Job, stopped b
 		}
 	}
 	release()
+	// Counted over the record, not the plan: a recovered run re-plans without
+	// a slot it failed before the restart, which still counts.
+	files, err := m.store.ListFiles(ctx, job.ResourceKind, job.ResourceID)
+	if err != nil {
+		logger.Error("count the run's failed slots", "error", err)
+	}
 	var out settled
-	for _, slot := range plan.Slots {
-		f, err := m.store.GetFile(ctx, slot.FileKey)
-		if err == nil && f.LastRunID == job.ID && (f.AudioState == domain.AudioFailed || f.AudioState == domain.AudioGivenUp) {
+	for _, f := range files {
+		if f.LastRunID == job.ID && (f.AudioState == domain.AudioFailed || f.AudioState == domain.AudioGivenUp) {
 			out.failures++
 		}
 	}

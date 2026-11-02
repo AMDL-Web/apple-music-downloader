@@ -645,3 +645,112 @@ func TestRecoverUnfinishedReleasesRunningSlots(t *testing.T) {
 		t.Fatalf("slot = %+v, want pending without a failure", f)
 	}
 }
+
+// restartProcessor writes items as internal/media does: song 1 fails, song 2
+// blocks until the run's context ends while block is set, else lands.
+type restartProcessor struct {
+	keyedProcessor
+	dir     string
+	block   bool
+	claimed chan struct{}
+}
+
+func (p *restartProcessor) ProcessJob(ctx context.Context, job domain.Job, reporter Reporter) error {
+	rr := reporter.(RecordReporter)
+	tracks := []domain.Track{{SongID: "1", TrackNumber: 1, SongNumber: 1}, {SongID: "2", TrackNumber: 2, SongNumber: 2}}
+	if err := rr.ApplyAlbumRead(ctx, db.AlbumRead{Album: domain.Album{ID: job.ResourceID, Name: "A", ReleaseTrackCount: 2}, Tracks: tracks, Storefront: "us"}); err != nil {
+		return err
+	}
+	plan, err := rr.PlanRun(ctx, job)
+	if err != nil {
+		return err
+	}
+	items, err := reporter.ListItems(ctx, job.ID)
+	if err != nil {
+		return err
+	}
+	byID := map[string]domain.JobItem{}
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	for _, slot := range plan.Slots {
+		item := byID[slot.ItemID]
+		if err := rr.ClaimSlot(ctx, job.ID, slot.FileKey, filepath.Join(p.dir, slot.SongID+".m4a")); err != nil {
+			return err
+		}
+		if slot.SongID == "1" {
+			item.Status, item.Error = domain.ItemFailed, "decrypt failed"
+			if err := reporter.UpdateItem(ctx, &item); err != nil {
+				return err
+			}
+			if _, err := rr.SlotFailed(ctx, job.ID, slot.FileKey, errors.New("decrypt failed")); err != nil {
+				return err
+			}
+			continue
+		}
+		if p.block {
+			close(p.claimed)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		item.Status = domain.ItemCompleted
+		if err := reporter.UpdateItem(ctx, &item); err != nil {
+			return err
+		}
+		if err := rr.SlotDone(ctx, job.ID, slot.FileKey, db.FileOutcome{Codec: "alac"}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// A run recovered after a restart re-plans without the slot it failed
+// before the restart (that slot waits for its backoff), and still ends
+// failed with that slot's item failed.
+func TestRecoveredRunKeepsASlotFailedBeforeTheRestart(t *testing.T) {
+	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	dir := t.TempDir()
+	cfg := config.Default()
+	ctx := context.Background()
+	manager := func(p Processor) *Manager {
+		m := NewManager(store, events.NewHub(), p, 1, slog.Default())
+		m.SetConfig(func() config.Config { return cfg })
+		return m
+	}
+
+	first := &restartProcessor{dir: dir, block: true, claimed: make(chan struct{})}
+	m1 := manager(first)
+	m1.Start(ctx)
+	run := m1.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
+	select {
+	case <-first.claimed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("song 2 was never claimed")
+	}
+	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := m1.Shutdown(stopCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	m2 := manager(&restartProcessor{dir: dir})
+	if _, err := m2.RecoverUnfinished(ctx); err != nil {
+		t.Fatal(err)
+	}
+	startManager(t, m2)
+	done := waitRun(t, store, run.ID)
+	if done.Status != domain.JobFailed || done.FailedItems != 1 || done.CompletedItems != 1 {
+		t.Fatalf("recovered run = %s (completed %d, failed %d), want failed with one item failed and one completed",
+			done.Status, done.CompletedItems, done.FailedItems)
+	}
+	if f := fileState(t, store, "100", "1", domain.SlotMain); f.AudioState != domain.AudioFailed || f.Failures != 1 {
+		t.Fatalf("slot 1 = %s with %d failures, want failed once", f.AudioState, f.Failures)
+	}
+	if f := fileState(t, store, "100", "2", domain.SlotMain); f.AudioState != domain.AudioDone {
+		t.Fatalf("slot 2 = %s, want done", f.AudioState)
+	}
+}
