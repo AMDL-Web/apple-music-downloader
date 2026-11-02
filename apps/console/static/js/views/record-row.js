@@ -10,8 +10,11 @@ import { Artwork, Badge, RelTime, Icon } from '../ui/components.js';
 
 const ROW_ART = artWidths(40, 48);
 
-/** Props: record, href, selected, onSelect(e) (selection mode: a plain click selects). */
-export function RecordRow({ record, href, selected, onSelect }) {
+/**
+ * Props: record, href, selected, onSelect(e) (selection mode: a plain click
+ * selects), bare (no state badge, where the list already says it).
+ */
+export function RecordRow({ record, href, selected, onSelect, bare = false }) {
   const palette = artPalette(recordPalette(record));
   const { view, flags } = recordView(record);
   const sub = recordSub(record);
@@ -43,7 +46,7 @@ export function RecordRow({ record, href, selected, onSelect }) {
         : null}
     </span>
     <span class="job-progress"></span>
-    <span class="job-status"><${Badge} view=${view} /></span>
+    <span class="job-status">${bare ? null : html`<${Badge} view=${view} />`}</span>
     <span class="job-updated"><${RelTime} value=${record.updated_at} /></span>
     <span class="job-chevron"><${Icon} name="chevron-right" /></span>
   </a>`;

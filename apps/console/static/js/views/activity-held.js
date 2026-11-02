@@ -70,11 +70,11 @@ export function HeldGroups() {
   };
   return [
     held.paused.length
-      ? html`<${Card} key="paused" section="paused" className="card-flush" title="Paused" note=${String(held.paused.length)} labelId="held-paused">
+      ? html`<${Card} key="paused" section="paused" className="card-flush" title=${`Paused (${held.paused.length})`} labelId="held-paused">
           <ul class="job-list">
             ${held.paused.map(
               (r) => html`<li key=${`${r.kind}:${r.id}`} class="job-item" data-action="">
-                <${RecordRow} record=${r} href=${recordHash(r.kind, r.id)} />
+                <${RecordRow} record=${r} href=${recordHash(r.kind, r.id)} bare />
                 <${Button} size="sm" icon="play" className="job-retry" disabled=${busy === r.id} onClick=${() => act(r.id, () => resumeRecord(r.kind, r.id), 'Resumed')}>Resume</${Button}>
               </li>`,
             )}
@@ -82,7 +82,7 @@ export function HeldGroups() {
         </${Card}>`
       : null,
     held.failed.length
-      ? html`<${Card} key="failed" section="couldnt-add" className="card-flush" title="Couldn't add" note=${String(held.failed.length)} labelId="held-failed">
+      ? html`<${Card} key="failed" section="couldnt-add" className="card-flush" title=${`Couldn't add (${held.failed.length})`} labelId="held-failed">
           <ul class="held-list">
             ${held.failed.map(
               (p) => html`<li key=${p.id} class="held-row" data-row>
