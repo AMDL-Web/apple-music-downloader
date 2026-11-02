@@ -89,7 +89,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 				if a.searchKeyed {
 					focusRing(open, radius)
 				}
-				if a.searchReveal {
+				if a.searchReveal && !a.viewSwapping(c) {
 					open.ScrollIntoView()
 					a.searchReveal = false
 				}
@@ -106,9 +106,12 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 					a.openOrDownload(h)
 				}
 			}
-			a.flySource(open, "hit:"+hk, partCover, "", radius)
+			// The cover flies, not the button: its shadow stays with the
+			// screen, which fades it out and back in as the page comes and
+			// goes, so the tile has it when the cover lands (flyShadow).
 			open.Cursor(ui.CursorPointer).Children(func() {
-				widgets.Cover{Image: a.Art.Get(h.ArtworkURL, int(2*size)), Placeholder: hitPalette(h).Bg, Size: size, Radius: radius, Color: 1}.Show(c)
+				cover := widgets.Cover{Image: a.Art.Get(h.ArtworkURL, int(2*size)), Placeholder: hitPalette(h).Bg, Size: size, Radius: radius, Color: 1}.Show(c)
+				a.flySource(cover, "hit:"+hk, partCover, "", radius)
 			})
 			if round {
 				return
@@ -176,12 +179,16 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	case mark == store.MarkActive:
 		b.Label(h.Name + " is in the queue").Tooltip("In the queue")
 		look = markLook{bg: k.Accent, fg: k.AccentInk, ic: icDown}
-	case mark == store.MarkDone && !pointed:
-		b.Label(h.Name + " is in your library: download again")
-		look = markLook{bg: k.OK, ic: icCheck, fg: ui.RGB(255, 255, 255)}
 	case mark == store.MarkDone:
-		b.Label(h.Name + " is in your library: download again").Tooltip("Download again")
+		// The check gives way to the download again button under the
+		// pointer, crossing over (doneCheck) rather than at once.
+		b.Label(h.Name + " is in your library: download again")
+		if pointed {
+			b.Tooltip("Download again")
+		}
 		look.interactive = true
+		look.check = b.AnimateWith("check", map[bool]float32{true: 0, false: 1}[pointed], 120*time.Millisecond, ui.EaseOut)
+		look.ok = k.OK
 	default:
 		b.Label("Download " + h.Name)
 		look.interactive = true
@@ -212,7 +219,10 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 			a.download(h)
 		}
 	}
-	b.Cursor(ui.CursorPointer).Children(func() { look.glyph(c) })
+	b.Cursor(ui.CursorPointer).Children(func() {
+		look.glyph(c)
+		look.doneCheck(c)
+	})
 }
 
 // markLook is how a tile's control looks: on glass, interactive while it
@@ -224,6 +234,10 @@ type markLook struct {
 	ic                 *ui.SVG
 	fg                 ui.Color
 	op                 float32
+	// check is how much an album in the library shows its check over the
+	// button, on ok.
+	check float32
+	ok    ui.Color
 }
 
 func (m markLook) style(el ui.Element) {
@@ -242,11 +256,25 @@ func (m markLook) glyph(c *ui.Context) {
 	ui.Icon(c, m.ic).FontSize(15).TextColor(m.fg)
 }
 
+// doneCheck is the check of an album in the library, as much as it shows,
+// over the control.
+func (m markLook) doneCheck(c *ui.Context) {
+	if m.check <= 0.001 {
+		return
+	}
+	ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Radius(radiusFull).Center().Background(m.ok).
+		Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3)).Opacity(m.check).
+		Children(func() { ui.Icon(c, icCheck).FontSize(15).TextColor(ui.RGB(255, 255, 255)) })
+}
+
 // copy builds the control again as it looks, for the flight to carry.
 func (m markLook) copy(c *ui.Context) ui.Element {
 	el := ui.Box(c).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().Opacity(m.op)
 	m.style(el)
-	el.Children(func() { m.glyph(c) })
+	el.Children(func() {
+		m.glyph(c)
+		m.doneCheck(c)
+	})
 	return el
 }
 

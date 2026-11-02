@@ -23,7 +23,7 @@ func (a *App) screens(c *ui.Context, k *Tokens, page float32) {
 	if under != ScreenAlbum && (!inPage || f.moving) {
 		l := layer(under)
 		if f.moving {
-			l.Opacity(1 - unit(f.q/crossover))
+			l.Opacity(1 - unit(f.fade()/crossover))
 		}
 		l.Children(func() { a.screen(c, k, under, page) })
 	}

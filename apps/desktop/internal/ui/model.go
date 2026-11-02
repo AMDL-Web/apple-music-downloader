@@ -166,6 +166,12 @@ type App struct {
 	groupsAt    time.Time
 	groupsFrom  string
 	groupsMoved bool
+	// viewArtist is the artist whose albums the search shows, "" for the
+	// results, since viewAt; viewScroll waits for the view going out to
+	// fade before the search scrolls (followView).
+	viewArtist string
+	viewAt     time.Time
+	viewScroll bool
 	// confirmAll is the artist whose "Download all" waits for its second
 	// click since confirmAt.
 	confirmAll string

@@ -82,8 +82,9 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 
 // flyBadges draws the badges of the cover the page flew from, its quality
 // hint and its mark, each at its corner of the flying cover and as large as
-// it was, fading out as the cover leaves it and in as it lands; o is the
-// copies' layer.
+// it was, fading out as the cover leaves it and, going out, in with the
+// screen under it, whose own badges take over where these are when the
+// flight ends; o is the copies' layer.
 func (a *App) flyBadges(c *ui.Context, o ui.Rect, t float32) {
 	f := &a.fly
 	from := f.src[partCover].box
@@ -101,7 +102,11 @@ func (a *App) flyBadges(c *ui.Context, o ui.Rect, t float32) {
 			x = at.X + at.W - (from.X + from.W - src.box.X)
 		}
 		y := at.Y + at.H - (from.Y + from.H - src.box.Y)
-		ui.Box(c.Key(part + flightParts)).Absolute().Left(x - o.X).Top(y - o.Y).Opacity(1 - unit(t/0.35)).
+		op := 1 - unit(t/0.35)
+		if f.out {
+			op = 1 - unit(f.fade()/crossover)
+		}
+		ui.Box(c.Key(part + flightParts)).Absolute().Left(x - o.X).Top(y - o.Y).Opacity(op).
 			Children(func() { src.build() })
 	}
 }

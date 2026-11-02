@@ -401,16 +401,19 @@ func TestATilesMarkRidesItsFlyingCover(t *testing.T) {
 	flyFrames(a, tt, 120)
 	a.Back()
 	tt.Frame()
+	// The last frame of the flight back and the first without it.
 	for range 120 {
 		tt.Advance(refresh)
-		if a.fly.q < 0.05 {
+		if a.fly.moving && a.fly.travel() < 0.05 {
+			green("landing")
+			flyFrames(a, tt, 10)
 			break
 		}
 	}
-	if !a.fly.moving {
-		t.Fatalf("the page landed before it was near: q %.2f", a.fly.q)
+	if a.fly.moving {
+		t.Fatalf("the page did not land: q %.2f", a.fly.q)
 	}
-	green("landing")
+	green("landed")
 }
 
 // A tile's quality hint is its own badge, not the page's tag: on its way

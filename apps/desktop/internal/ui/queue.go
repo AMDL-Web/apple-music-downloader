@@ -42,7 +42,7 @@ func (a *App) backdrop(c *ui.Context, k *Tokens) {
 		}
 		from := paletteBackdrop(k, a.screenPalette(c, under), under == ScreenHome)
 		b = paletteBackdrop(k, a.screenPalette(c, ScreenAlbum), false)
-		b.From, b.Mix = &from, f.q
+		b.From, b.Mix = &from, f.light()
 	}
 	b.Show(c)
 }

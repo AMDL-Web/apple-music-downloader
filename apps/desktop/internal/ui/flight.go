@@ -38,6 +38,9 @@ const (
 	// that crosses), so that nothing of the two screens shows at once but
 	// what flies.
 	crossover = 0.2
+	// outFade is how much of q, going out, the screens take to cross,
+	// ending as the cover lands at crossover (fade).
+	outFade = 0.25
 	// panelLined is the q from which the lower panel's top line shows, as
 	// it lands.
 	panelLined = 0.85
@@ -146,6 +149,9 @@ type flight struct {
 	// desktop asks for less motion.
 	q             float32
 	moving, still bool
+	// out is set while the page goes out with motion, which crosses the
+	// screens and ends sooner than it comes in (fade).
+	out bool
 	// instant is set by a change of screen that does not fly: q goes to
 	// its end at once.
 	instant bool
@@ -204,6 +210,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	if inPage && f.ready {
 		target = 1
 	}
+	f.out = target == 0 && !f.still && a.PageMotion
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
 	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	// A click names what it opens from in the frame it opens; one that
@@ -231,6 +238,14 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	default:
 		f.q = root.AnimateTo(flightKey{}, target, flightSpring)
 		f.fadeFrom, f.fadeTo = target, target
+		if f.out && f.q > 0 && f.q <= crossover {
+			// Going out, the cover has landed and the screens have crossed
+			// (fade) by crossover: the flight ends there, not over the
+			// spring's slow tail, so the screen under takes the pointer,
+			// and shows its tile's own shadow and marks, as the cover lands.
+			root.Jump(flightKey{}, 0)
+			f.q = 0
+		}
 	}
 	f.moving = f.q != target || f.q > 0 && f.q < 1 || inPage && !f.ready
 	if inPage && !f.ready {
@@ -388,6 +403,37 @@ func (a *App) flyTags(row, quality ui.Element, text string, hi bool, fg ui.Color
 // screen under the page shows it) to 1 (where the page does): it moves
 // only once that screen is gone (crossover), so that nothing moves beside
 // what stands still, and sets off and comes to rest smoothly.
+// fade is q as the screens' crossfade reads it, crossing at crossover:
+// q itself coming in, where q passes crossover within a few frames; going
+// out, the outFade of q above crossover, so the screens have crossed when
+// the cover lands and the flight ends (flightQ).
+func (f *flight) fade() float32 {
+	if !f.out {
+		return f.q
+	}
+	return crossover * unit((f.q-crossover)/outFade)
+}
+
+// partsFrom is the q from which the page's own parts show (flyFade):
+// crossover coming in, and going out the top of the screens' crossfade, so
+// they are gone before the screen under shows.
+func (f *flight) partsFrom() float32 {
+	if f.out {
+		return crossover + outFade
+	}
+	return crossover
+}
+
+// light is how far the light and the lower panel's ground have turned to
+// the page's: q coming in, and going out all the way back by the time the
+// cover lands.
+func (f *flight) light() float32 {
+	if f.out {
+		return unit((f.q - crossover) / (1 - crossover))
+	}
+	return f.q
+}
+
 func (f *flight) travel() float32 {
 	x := unit((f.q - crossover) / (1 - crossover))
 	return x * x * (3 - 2*x)
@@ -433,14 +479,15 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 		el.Radius(lerp(src.size, size, t) / s)
 	}
 	if p == crosses {
-		el.Opacity(unit((f.q - crossover) / 0.45))
+		el.Opacity(unit((f.q - f.partsFrom()) / 0.45))
 	}
 }
 
 // flyShadow is how much of its shadow the album page's cover drops in this
 // frame: all of it, but on the way to or from a cover with none, as a
-// tile's or a row's, as much as it has come of the way. The queue's hero
-// drops one as large.
+// row's, or one whose shadow stays with its screen, as a search tile's
+// (hitTile), as much as it has come of the way. The queue's hero drops one
+// as large.
 func (a *App) flyShadow() float32 {
 	f := &a.fly
 	if !f.moving || f.still || !f.src[partCover].ok || strings.HasPrefix(f.from, "hero:") {
@@ -521,7 +568,7 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	if !f.moving {
 		return
 	}
-	el.Background(k.Ground.Mix(detailGround(k), f.q)).Opacity(unit(f.q / crossover)).
+	el.Background(k.Ground.Mix(detailGround(k), f.light())).Opacity(unit(f.fade() / crossover)).
 		BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
 	if f.still {
 		return
@@ -537,8 +584,9 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 // flyFade fades el in with the album page, in place, once the screen under
 // it is gone.
 func (a *App) flyFade(el ui.Element) {
-	if a.fly.moving {
-		el.Opacity(unit((a.fly.q - crossover) / (1 - crossover)))
+	if f := &a.fly; f.moving {
+		from := f.partsFrom()
+		el.Opacity(unit((f.q - from) / (1 - from)))
 	}
 }
 

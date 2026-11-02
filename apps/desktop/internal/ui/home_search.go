@@ -38,26 +38,80 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 		c.After(groupEnter - since)
 	}
 	focus := q.Focus
-	body := ui.Column(c).Width(width).Gap(32)
+	a.followView(c, q.Artist.ID)
+	body := ui.Column(c).Width(width)
 	if q.Stale {
 		body.Opacity(0.5)
 	}
+	// The results and an artist's albums are views of their own: one
+	// fades out where it is, then the search goes to its top and the other
+	// rises in (followView), so the two never show over each other.
+	view := "results"
+	if q.Artist.ID != "" {
+		view = "artist"
+	}
 	body.Children(func() {
-		switch {
-		case q.Artist.ID != "":
-			a.artistView(c, k, sel, width)
-		case q.Status == store.SearchFailed:
-			searchFailed(c, k, q.Err, s.RetrySearch)
-		case q.Result == nil:
-			a.groupTabs(c, k)
-			skeletonGroups(c, k, width)
-		case store.NoHits(q.Result):
-			searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "")
-		default:
-			a.groupTabs(c, k)
-			a.searchGroups(c, k, focus, sel, width)
-		}
+		ui.Column(c.Key(view)).FillWidth().Gap(32).Transition(a.viewMotion(c)).Children(func() {
+			switch {
+			case q.Artist.ID != "":
+				a.artistView(c, k, sel, width)
+			case q.Status == store.SearchFailed:
+				searchFailed(c, k, q.Err, s.RetrySearch)
+			case q.Result == nil:
+				a.groupTabs(c, k)
+				skeletonGroups(c, k, width)
+			case store.NoHits(q.Result):
+				searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "")
+			default:
+				a.groupTabs(c, k)
+				a.searchGroups(c, k, focus, sel, width)
+			}
+		})
 	})
+}
+
+// viewSwap is how long the view going out takes to fade, after which the
+// one coming in rises in.
+var (
+	viewSwap     = groupFade.Duration
+	viewRiseLate = ui.Animation{Duration: groupEase.Duration, Ease: ui.EaseOut, Delay: viewSwap}
+)
+
+// followView notes the search switching between the results and artist's
+// albums, and once the view going out has faded, scrolls to what the one
+// coming in shows first: an artist's top, or the results' tile of the
+// artist left (searchReveal, in hitTile).
+func (a *App) followView(c *ui.Context, artist string) {
+	if artist != a.viewArtist {
+		a.viewArtist, a.viewAt, a.viewScroll = artist, c.Now(), true
+	}
+	if a.viewSwapping(c) {
+		c.After(viewSwap - c.Now().Sub(a.viewAt))
+		return
+	}
+	if a.viewScroll {
+		a.viewScroll = false
+		if st := a.scrolls["home-body"]; st != nil && artist != "" {
+			st.Y = 0
+		}
+	}
+}
+
+// viewSwapping reports whether the view going out still fades.
+func (a *App) viewSwapping(c *ui.Context) bool {
+	return a.PageMotion && c.Now().Sub(a.viewAt) < viewSwap
+}
+
+// viewMotion is the Transition of the search's view: the one coming in
+// rises in once the one going out has faded; that one fades out.
+func (a *App) viewMotion(c *ui.Context) ui.ElementTransition {
+	if !a.PageMotion {
+		return ui.ElementTransition{}
+	}
+	if a.viewSwapping(c) {
+		return ui.ElementTransition{Animation: &viewRiseLate, Enter: &riseIn, Exit: &fadeOut}
+	}
+	return ui.ElementTransition{Animation: &groupFade, Exit: &fadeOut}
 }
 
 // groupRow is the height of a group's title row and of the tabs; loadAhead
