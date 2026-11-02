@@ -82,16 +82,17 @@ type heroSpec struct {
 // collectionHero is the head of the album screen: the cover, then the
 // label, title and artists at the cover's top and the page's band at its
 // bottom, the column as tall as the cover whatever the title
-// (heroLayout.titleSize). The cover and label fly in from what the page
-// opened from (flyPage), the title and artists morph (flyText), and the
-// quality tag as one box (flyTags); the band rises in.
+// (heroLayout.titleSize). The cover flies in from what the page opened
+// from (flyPage), the label swaps with its match (flyLabel), the title and
+// artists morph (flyText), and the quality tag as one box (flyTags); the
+// band rises in.
 func (a *App) collectionHero(c *ui.Context, k *Tokens, l heroLayout, h heroSpec) {
 	hc := h.colors
 	ui.Row(c).Padding(l.top, heroPad, heroBottom, heroPad).Gap(l.gap).AlignItems(ui.Start).Children(func() {
 		a.flyPage(h.cover(l.cover), partCover, "", radiusCover)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).MinHeight(l.cover).Gap(12).Justify(ui.SpaceBetween).Children(func() {
 			ui.Column(c).Gap(12).Children(func() {
-				a.flyPage(label(c, k, h.kicker).TextColor(hc.label), partKicker, h.kicker, 11)
+				a.flyLabel(label(c, k, h.kicker).TextColor(hc.label), h.kicker, hc.label)
 				size := l.titleSize(c, h.title)
 				a.flyText(c, display(c, h.title, size).TextColor(hc.title).MaxLines(2).Ellipsis("…"), partTitle, displaySpan(h.title, size), hc.title, l.width)
 				ui.Row(c).Gap(10).AlignItems(ui.Center).Wrap().Children(func() {

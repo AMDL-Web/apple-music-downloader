@@ -297,3 +297,34 @@ func TestAnotherScreenLeavesThePageAtOnce(t *testing.T) {
 		t.Errorf("the page or the queue still shows over Settings")
 	}
 }
+
+// The hero's track count flies into the page's label, which says it,
+// rather than fading where it is with the queue.
+func TestTheTrackCountFliesIntoThePagesLabel(t *testing.T) {
+	a, tt, j := flightApp(t)
+	n := plural(j.TotalItems, "track")
+	from, ok := tt.Find(n)
+	if !ok {
+		t.Fatalf("no track count %q on the hero: %q", n, tt.Texts())
+	}
+	if err := tt.Click("Open " + j.Name()); err != nil {
+		t.Fatal(err)
+	}
+	for range 60 {
+		tt.Advance(refresh)
+		if a.fly.travel() >= 0.3 {
+			break
+		}
+	}
+	r, ok := tt.Find(n)
+	if !ok {
+		t.Fatalf("a third of the way in, the track count is gone: %q", tt.Texts())
+	}
+	if d := dist(from, r); d < 10 {
+		t.Errorf("a third of the way in, the track count moved %.1f DIPs from %v", d, from)
+	}
+	flyFrames(a, tt, 60)
+	if _, ok := tt.Find(n); ok {
+		t.Errorf("landed, the page still shows the hero's track count")
+	}
+}

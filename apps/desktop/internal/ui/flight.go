@@ -58,6 +58,9 @@ const (
 	partTitle
 	partArtist
 	partTag
+	// partTracks is the queue hero's track count, which flies into the
+	// page's label, where the page says it (flyLabel).
+	partTracks
 	flightParts
 )
 
@@ -77,6 +80,11 @@ const (
 	// crosses from its match, which says something else: it fades in as it
 	// moves, once its match has faded out.
 	crosses
+	// swaps with its match, which says something else in its own style:
+	// one copy moves from the match's place to its own, the match's words
+	// fading out in it as its own fade in, which hides both meanwhile
+	// (flightCopies).
+	swaps
 )
 
 // flightSrc is a part of the element the page opened from: its box in the
@@ -100,6 +108,14 @@ type flightSrc struct {
 type flightText struct {
 	box   ui.Rect
 	size  float32
+	color ui.Color
+}
+
+// flightLabel is where the page's label is laid out, what it says and its
+// color, when it swaps with its match (flyLabel).
+type flightLabel struct {
+	box   ui.Rect
+	text  string
 	color ui.Color
 }
 
@@ -148,8 +164,9 @@ type flight struct {
 	texts [flightParts]flightText
 	own   [flightParts]bool
 	// tag is the page's quality tag, as this frame lays it out, when it
-	// morphs.
-	tag flightTag
+	// morphs, and label its label, when it swaps.
+	tag   flightTag
+	label flightLabel
 	// closeDetail is set while Back waits for the page to leave before it
 	// closes the page's download, which the page shows until it is gone.
 	closeDetail bool
@@ -179,7 +196,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		target = 1
 	}
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
-	f.src, f.texts, f.tag, f.edgeOK = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, false
+	f.src, f.texts, f.tag, f.label, f.edgeOK = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.
 	f.next = ""
@@ -291,9 +308,45 @@ func (a *App) flySource(el ui.Element, from string, part flightPart, text string
 		return
 	}
 	f.src[part] = flightSrc{box: el.Bounds(), text: text, size: size, ok: true}
-	if p := f.pairWas[part]; p == flies || p == morphs {
+	if p := f.pairWas[part]; p == flies || p == morphs || p == swaps {
 		el.Invisible()
 	}
+}
+
+// flySourceLabel marks el, a label of the element from on the screen under
+// the page saying text in color, as flySource does, for the page's label
+// to swap with (flyLabel); part is partKicker for that label, partTracks
+// for a tag of the track count, which flies into it.
+func (a *App) flySourceLabel(el ui.Element, from string, part flightPart, text string, color ui.Color) {
+	a.flySource(el, from, part, text, 0)
+	if src := &a.fly.src[part]; src.ok {
+		src.color = color
+	}
+}
+
+// flyLabel shows el, the album page's label saying text in color, as this
+// frame of a flight has it: it swaps with its match under the page, the
+// match's track count flying into it and fading meanwhile; with no match,
+// it rises in.
+func (a *App) flyLabel(el ui.Element, text string, color ui.Color) {
+	f := &a.fly
+	if !f.moving {
+		return
+	}
+	dst, src := el.LayoutBounds(), f.src[partKicker]
+	if dst.W > 0 {
+		f.matched = true
+	}
+	if f.still || !src.ok || dst.W <= 0 || src.box.W <= 0 {
+		a.flyRise(el)
+		return
+	}
+	f.paired[partKicker] = swaps
+	if f.src[partTracks].ok {
+		f.paired[partTracks] = swaps
+	}
+	f.label = flightLabel{box: dst, text: text, color: color}
+	el.Invisible()
 }
 
 // flySourceText builds a text of the element from on the screen under the
@@ -382,7 +435,7 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	p := unpaired
 	if src.ok && dst.W > 0 && src.box.W > 0 && !f.still {
 		p = flies
-		if part == partKicker || text != src.text {
+		if text != src.text {
 			p = crosses
 		}
 	}

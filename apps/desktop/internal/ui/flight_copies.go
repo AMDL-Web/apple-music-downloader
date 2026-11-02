@@ -9,9 +9,10 @@ import (
 // flightCopies builds over the album page the copy of each text of it
 // that morphs and shows in its match's lines (flyText): its match built
 // again where it is, as wide, then moved and scaled towards the page's
-// text, its color turning to the page's; and the quality tag's box as it
+// text, its color turning to the page's; the quality tag's box as it
 // morphs (flyTags), from its match's place, size, gilt and color to the
-// page's, the one's text fading out in it as the other's fades in. Where
+// page's, the one's text fading out in it as the other's fades in; and the
+// label as it swaps (flyLabel), with the track count flying into it. Where
 // they have not moved, they are their matches, drawn as those are.
 func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 	f := &a.fly
@@ -44,6 +45,23 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 						Children(func() { tagText(c, s, ink).SingleLine() })
 				}
 			})
+		}
+		if f.paired[partKicker] == swaps {
+			src, dst := f.src[partKicker], f.label
+			at := func(el ui.Element, w float32) ui.Element {
+				return el.Absolute().Left(lerp(src.box.X, dst.box.X, t) - o.X).Top(lerp(src.box.Y, dst.box.Y, t) - o.Y).Width(w)
+			}
+			// The words it leaves fade out as it sets off, its own fade in
+			// as it lands, as the quality tag's do.
+			at(label(c, k, src.text).TextColor(src.color), src.box.W).Opacity(1 - unit((t-0.2)/0.4))
+			at(label(c, k, dst.text).TextColor(dst.color), dst.box.W).Opacity(unit((t - 0.4) / 0.4))
+			if n := f.src[partTracks]; f.paired[partTracks] == swaps {
+				// The track count goes into the label, which says it, and
+				// is gone by the time it lands.
+				x, y := dst.box.X+max(dst.box.W-n.box.W, 0), dst.box.Y+(dst.box.H-n.box.H)/2
+				tag(c, k, n.text, false, n.color).Absolute().Left(lerp(n.box.X, x, t) - o.X).Top(lerp(n.box.Y, y, t) - o.Y).
+					Opacity(1 - unit(t/0.6))
+			}
 		}
 		for part, src := range f.src {
 			if f.paired[part] != morphs || f.own[part] || src.build == nil {

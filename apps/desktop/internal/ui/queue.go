@@ -329,7 +329,7 @@ func (a *App) heroInk(c *ui.Context, pal Palette, k *Tokens) heroColors {
 // to the album page's as it opens from the hero (flySource).
 func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, hc heroColors, compact bool) {
 	from := heroFrom(j)
-	a.flySource(label(c, k, kicker).TextColor(hc.label), from, partKicker, "", 0)
+	a.flySourceLabel(label(c, k, kicker).TextColor(hc.label), from, partKicker, kicker, hc.label)
 	size, lines := float32(heroTitle), 2
 	if compact {
 		size, lines = heroTitleCompact, 1
@@ -346,7 +346,8 @@ func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, h
 				a.flySourceTag(tag(c, k, q, isHiRes(q), hc.meta), from, q, isHiRes(q), hc.meta)
 			}
 			if j.TotalItems > 0 {
-				tag(c, k, plural(j.TotalItems, "track"), false, hc.meta)
+				n := plural(j.TotalItems, "track")
+				a.flySourceLabel(tag(c, k, n, false, hc.meta), from, partTracks, n, hc.meta)
 			}
 		})
 	})
