@@ -145,6 +145,56 @@ export function applyCheckFeed(check, batch) {
   return next;
 }
 
+/** The scope a disk check names for a record: "album:<id>" or "playlist:<id>". */
+export const checkScope = (kind, id) => `${kind === 'playlists' ? 'playlist' : 'album'}:${id}`;
+
+/**
+ * The POST /library/check body that checks again what `scope` named ("all"
+ * or a record's checkScope), with force set when asked.
+ */
+export function checkBody(scope, force = false) {
+  const m = /^(album|playlist):(.+)$/.exec(scope || '');
+  const body = m ? { kind: `${m[1]}s`, id: m[2] } : {};
+  return force ? { ...body, force: true } : body;
+}
+
+/**
+ * The toast after a reset of `record` answered `out` ({slots, job}):
+ * `queued` when it queued a run, else why nothing downloads yet. A reset
+ * leaves a paused record paused.
+ */
+export function resetNote(out, record, queued) {
+  if (out && out.job) return queued;
+  const name = recordTitle(record);
+  if (record && record.paused) return `Reset “${name}”. Resume it to download`;
+  if (out && out.slots) return `Reset “${name}”. It waits for room in the queue`;
+  return 'Nothing to download';
+}
+
+/**
+ * The toast of a bulk reset over runLimited outcomes (item: the record,
+ * value: its reset answer) that all went through: how many it queued, and
+ * how many it left paused, waiting or with nothing to download.
+ */
+export function bulkResetText(outcomes, kind) {
+  let queued = 0;
+  let paused = 0;
+  let waiting = 0;
+  let none = 0;
+  for (const o of outcomes) {
+    if (o.value && o.value.job) queued++;
+    else if (o.item && o.item.paused) paused++;
+    else if (o.value && o.value.slots) waiting++;
+    else none++;
+  }
+  const parts = [];
+  if (queued || outcomes.length === 0) parts.push(`Queued ${count(queued)} ${kindWord(kind, queued)}`);
+  if (paused) parts.push(`${count(paused)} paused: resume to download`);
+  if (waiting) parts.push(`${count(waiting)} waiting for room in the queue`);
+  if (none) parts.push(`${count(none)} with nothing to download`);
+  return parts.join(' · ');
+}
+
 const PENDING_KIND = { song: 'Song', artist: 'Artist', album: 'Album', playlist: 'Playlist' };
 
 /** A pending add's name: its kind and catalog id ("Song 1440857788"). */

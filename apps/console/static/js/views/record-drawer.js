@@ -2,17 +2,19 @@
 // playlist record from GET /library/{kind}/{id}. The head (cover, title,
 // artist, facts with the tracks the storefront withholds, its state and
 // Paused), the actions (Pause or Resume, Download missing, Reset, Add
-// quality, Check this album, Remove from amdl), each track with its main
-// slot's state and its other qualities as chips, and its runs. Kept fresh
-// by the feed's resource_updated and check_updated.
+// quality, Check this album, Remove from amdl), how its last disk check
+// ended, each track with its main slot's state and its other qualities as
+// chips, and its runs. Kept fresh by the feed's resource_updated and
+// check_updated; what it changes it tells the app (recordsChanged), since
+// a pause, resume or removal with no run sends no resource_updated.
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { getRecord, pauseRecord, resumeRecord, resetRecord, deleteRecord, downloadRecord, startCheck, listDownloads } from '../api.js';
 import { artPalette, paletteStyle, artWidths, trackLength, count } from '../lib/format.js';
-import { recordTitle, recordSub, recordArt, recordPalette, recordView, trackState, slotQuality, audioView, trackCountText, kindWord, commonQuality } from '../lib/records.js';
+import { recordTitle, recordSub, recordArt, recordPalette, recordView, trackState, slotQuality, audioView, trackCountText, kindWord, commonQuality, checkScope, checkText, checkBody, resetNote } from '../lib/records.js';
 import { slotChoices, CHOICE_LABEL } from '../lib/download-ask.js';
 import { buildHash } from '../lib/route.js';
-import { useApp, Artwork, Badge, Button, Empty, ErrorNote, SkeletonRows, StatusText, Chip, RelTime } from '../ui/components.js';
+import { useApp, Artwork, Badge, Button, Empty, ErrorNote, SkeletonRows, StatusText, Chip, RelTime, Notice } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { MenuButton } from '../ui/menu.js';
 import { JobRow } from './queue-row.js';
@@ -145,6 +147,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
       if (out && out.job && out.job.id && app.watchJobs) app.watchJobs([out.job.id]);
       if (done) app.toast({ message: typeof done === 'function' ? done(out) : done, role: 'success' });
       reload();
+      if (app.recordsChanged) app.recordsChanged();
       return true;
     } catch (e) {
       app.toast({ message: `Couldn't do that: ${(e && e.message) || 'the request failed'}`, role: 'danger' });
@@ -153,15 +156,38 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
       setBusy('');
     }
   };
-  const resetWhat = (what, songs) => act(`reset-${what}`, () => resetRecord(kind, record.id, songs ? { what, songs } : { what }), (out) => (out && out.job ? `Downloading “${name}” again` : 'Nothing to download'));
+  const resetWhat = (what, songs) => act(`reset-${what}`, () => resetRecord(kind, record.id, songs ? { what, songs } : { what }), (out) => resetNote(out, record, `Downloading “${name}” again`));
   const onReset = (what) => (what === 'audio' || what === 'all' ? setAsk({ what }) : resetWhat(what));
   const addQuality = (codec) => act(`add-${codec}`, () => downloadRecord(kind, record.id, { codec }), `Adding ${CHOICE_LABEL[codec] || codec} to “${name}”`);
-  const check = () => act('check', () => startCheck({ kind, id: record.id }), 'Checking its files');
+  // The last disk check of this record, from the feed: an aborted one
+  // stays as a note with its way on, a finished one is said once.
+  const [checked, setChecked] = useState(null);
+  const said = useRef(0);
+  useEffect(
+    () =>
+      app.subscribeFeed((batch) => {
+        const scope = checkScope(kind, record.id);
+        const mine = batch.filter((m) => m.type === 'check_updated' && m.check && m.check.scope === scope && m.check.finished_at).pop();
+        if (!mine) return;
+        setChecked(mine.check);
+        if (!mine.check.aborted_reason && said.current !== mine.check.id) {
+          said.current = mine.check.id;
+          app.toast({ message: checkText(mine.check), role: 'success' });
+        }
+      }),
+    [kind, record.id],
+  );
+  const check = (force = false) =>
+    act('check', () => {
+      setChecked(null);
+      return startCheck(checkBody(checkScope(kind, record.id), force));
+    }, 'Checking its files');
   const remove = async () => {
     setBusy('delete');
     try {
       await deleteRecord(kind, record.id);
       app.toast({ message: `Removed “${name}” from amdl`, role: 'success' });
+      if (app.recordsChanged) app.recordsChanged();
       setAsk(null);
       onClose();
     } catch (e) {
@@ -192,7 +218,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
           ? html`<${Button} variant="primary" icon="play" disabled=${Boolean(busy)} onClick=${() => act('resume', () => resumeRecord(kind, record.id), 'Resumed')}>Resume</${Button}>`
           : html`<${Button} icon="pause" disabled=${Boolean(busy)} onClick=${() => act('pause', () => pauseRecord(kind, record.id), 'Paused')}>Pause</${Button}>`}
         ${record.tracks_missing
-          ? html`<${Button} icon="download" disabled=${Boolean(busy) || active} title=${active ? 'Pause it first' : undefined} onClick=${() => act('missing', () => resetRecord(kind, record.id, { what: 'audio', states: ['missing'] }), `Downloading ${count(record.tracks_missing)} missing`)}>Download missing</${Button}>`
+          ? html`<${Button} icon="download" disabled=${Boolean(busy) || active} title=${active ? 'Pause it first' : undefined} onClick=${() => act('missing', () => resetRecord(kind, record.id, { what: 'audio', states: ['missing'] }), (out) => resetNote(out, record, `Downloading ${count(record.tracks_missing)} missing`))}>Download missing</${Button}>`
           : null}
         <${MenuButton} className="record-reset" text="Reset" icon="rotate" label="Reset" title=${active ? 'Pause it first' : undefined} heading=${name} disabled=${Boolean(busy) || active} items=${RESET_ITEMS} onChoose=${onReset} />
         ${doneTracks
@@ -210,9 +236,18 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
           : null}
       </div>
       <div class="drawer-actions-row">
-        <${Button} variant="ghost" icon="hard-drive" disabled=${Boolean(busy)} onClick=${check}>Check ${kindWord(kind) === 'album' ? 'this album' : 'this playlist'}</${Button}>
+        <${Button} variant="ghost" icon="hard-drive" disabled=${Boolean(busy)} onClick=${() => check()}>Check ${kindWord(kind) === 'album' ? 'this album' : 'this playlist'}</${Button}>
         <${Button} variant="ghost" icon="trash" className="drawer-delete" disabled=${Boolean(busy) || active} title=${active ? 'Pause it first' : undefined} onClick=${() => setAsk({ what: 'delete' })}>Remove from amdl</${Button}>
       </div>
+      ${checked && checked.aborted_reason
+        ? html`<${Notice}
+            role="warning"
+            icon="triangle-alert"
+            action=${checked.aborted_reason === 'too_many_missing'
+              ? html`<${Button} size="sm" variant="ghost" disabled=${Boolean(busy)} onClick=${() => check(true)}>Mark them anyway</${Button}>`
+              : null}
+          >${checkText(checked)}</${Notice}>`
+        : null}
     </div>
 
     <section class="drawer-section" aria-labelledby="tracks-title">

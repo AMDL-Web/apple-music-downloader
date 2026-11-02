@@ -10,7 +10,7 @@
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { listAlbumRecords, listPlaylistRecords, getLibrarySummary, startCheck, resetRecords, resetRecord, pauseRecord, deleteRecord } from '../api.js';
 import { libraryFilters, libraryHash, recordHash, LIBRARY_TABS } from '../lib/route.js';
-import { recordQuery, recordTitle, kindWord, checkText, checkRunning, applyCheckFeed } from '../lib/records.js';
+import { recordQuery, recordTitle, kindWord, checkText, checkRunning, applyCheckFeed, checkBody, bulkResetText } from '../lib/records.js';
 import { runLimited } from '../lib/bulk.js';
 import { count } from '../lib/format.js';
 import { toggleId, setIds, selectionState } from '../lib/selection.js';
@@ -54,7 +54,7 @@ function useSummary(app) {
     return () => {
       live = false;
     };
-  }, [stamp, app.epoch]);
+  }, [stamp, app.epoch, app.recordsStamp]);
   const timer = useRef(null);
   useEffect(() => {
     const off = app.subscribeFeed((batch) => {
@@ -86,7 +86,7 @@ function useRecords(app, f, enabled) {
   };
   useEffect(() => {
     if (enabled) load(0);
-  }, [key, stamp, app.epoch, enabled]);
+  }, [key, stamp, app.epoch, app.recordsStamp, enabled]);
   useEffect(() => setState({ items: [], total: 0, loading: true, error: null, more: false }), [key]);
   const timer = useRef(null);
   useEffect(() => {
@@ -138,11 +138,11 @@ export function LibraryPage({ route }) {
     setBusy(action);
     const out = await runLimited(chosen, 4, fn);
     const failed = out.filter((o) => !o.ok);
-    const verb = { again: 'Queued', pause: 'Paused', delete: 'Removed' }[action];
+    const verb = { again: 'Reset', pause: 'Paused', delete: 'Removed' }[action];
     app.toast(
       failed.length
         ? { message: `${verb} ${count(out.length - failed.length)} of ${count(out.length)}. ${failed.length} failed: ${failed.slice(0, 3).map((o) => recordTitle(o.item)).join(', ')} (${(failed[0].error && failed[0].error.message) || 'the request failed'}).`, role: 'danger' }
-        : { message: `${verb} ${count(out.length)} ${kindWord(kind, out.length)}`, role: 'success' },
+        : { message: action === 'again' ? bulkResetText(out, kind) : `${verb} ${count(out.length)} ${kindWord(kind, out.length)}`, role: 'success' },
     );
     setBusy('');
     setConfirm(null);
@@ -157,7 +157,8 @@ export function LibraryPage({ route }) {
     try {
       const r = await resetRecords({ what: 'audio', kind, filter: { flag: [f.flag] } });
       const skipped = r.skipped_active ? `, ${count(r.skipped_active)} downloading now left as they are` : '';
-      app.toast({ message: `Queued ${count(r.reset)} ${kindWord(kind, r.reset)}${skipped}`, role: 'success' });
+      // A paused record stays paused: its slots wait for a Resume.
+      app.toast({ message: `Reset ${count(r.reset)} ${kindWord(kind, r.reset)}${skipped}`, role: 'success' });
     } catch (e) {
       app.toast({ message: `Couldn't reset them: ${(e && e.message) || 'the request failed'}`, role: 'danger' });
     }
@@ -171,7 +172,8 @@ export function LibraryPage({ route }) {
   const runCheck = async (force = false) => {
     setBusy('check');
     try {
-      await startCheck(force ? { force: true } : {});
+      // Mark them anyway checks again what the aborted check covered.
+      await startCheck(force ? checkBody(check && check.scope, true) : {});
       reloadSummary();
     } catch (e) {
       app.toast({ message: `Couldn't check the files: ${(e && e.message) || 'the request failed'}`, role: 'danger' });
@@ -184,7 +186,7 @@ export function LibraryPage({ route }) {
     setBusy('missing');
     try {
       const r = await resetRecords({ what: 'audio', filter: { flag: ['missing'] } });
-      app.toast({ message: `Downloading the missing files of ${count(r.reset)} ${r.reset === 1 ? 'record' : 'records'}`, role: 'success' });
+      app.toast({ message: `Reset the missing files of ${count(r.reset)} ${r.reset === 1 ? 'record' : 'records'}`, role: 'success' });
     } catch (e) {
       app.toast({ message: `Couldn't download them: ${(e && e.message) || 'the request failed'}`, role: 'danger' });
     }

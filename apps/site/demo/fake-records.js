@@ -176,7 +176,7 @@ export function createRecordStore({ jobs, items, now }) {
 
   /** A disk check: every done slot is "found" in the demo. */
   function startCheck(body, at = Date.now()) {
-    const scope = body && body.kind && body.id ? `${body.kind}:${body.id}` : 'all';
+    const scope = body && body.kind && body.id ? `${body.kind === 'playlists' ? 'playlist' : 'album'}:${body.id}` : 'all';
     let n = 0;
     for (const r of records.values()) if (scope === 'all' || get(body.kind, body.id) === r) n += record(r).tracks_done;
     check = { id: ++checks, trigger: 'manual', scope, started_at: iso(at), finished_at: iso(at + 1200), checked: n, missing: 0 };

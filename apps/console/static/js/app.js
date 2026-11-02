@@ -125,6 +125,10 @@ export function App() {
 
   const { feed, conn, epoch, retryRef, subscribeFeed, watchJobs, unwatchJobs, announce, liveText } = useFeed({ toast, route });
   useOfflineToasts(conn, toasts, dismissToast, toastsHeld);
+  // A record change the feed does not carry (a pause, resume or removal
+  // with no run): views that list records read them again on it.
+  const [recordsStamp, setRecordsStamp] = useState(0);
+  const recordsChanged = useCallback(() => setRecordsStamp((n) => n + 1), []);
 
   // A sprite that could not load at startup is tried again after an outage.
   useEffect(() => {
@@ -294,13 +298,15 @@ export function App() {
       counts,
       conn,
       epoch,
+      recordsStamp,
+      recordsChanged,
       simulate,
       defaultStorefront,
       setLeaveGuard,
       resumeLeave,
       retryFeed: () => retryRef.current(),
     }),
-    [navigate, toast, watchJobs, unwatchJobs, announce, subscribeFeed, counts, conn, epoch, simulate, defaultStorefront, setLeaveGuard, resumeLeave],
+    [navigate, toast, watchJobs, unwatchJobs, announce, subscribeFeed, counts, conn, epoch, recordsStamp, recordsChanged, simulate, defaultStorefront, setLeaveGuard, resumeLeave],
   );
 
   const title = TITLES[route.page] || 'AMDL';

@@ -37,7 +37,7 @@ function useHeld(app) {
     return () => {
       live = false;
     };
-  }, [stamp, app.epoch]);
+  }, [stamp, app.epoch, app.recordsStamp]);
   const timer = useRef(null);
   useEffect(() => {
     const off = app.subscribeFeed((batch) => {

@@ -22,7 +22,9 @@ export async function runAgain({ app, resource, songs, answer, name, noteSubmitt
   }
   const job = res && res.job;
   if (!job || !job.id) {
-    app.toast({ message: `Nothing to download for “${name}”`, role: 'warning' });
+    // A reset leaves a paused record paused; a full queue takes it later.
+    if (res && (res.slots || res.status === 'waiting')) app.toast({ message: `Reset “${name}”. If it is paused, resume it to download`, role: 'success' });
+    else app.toast({ message: `Nothing to download for “${name}”`, role: 'warning' });
     return null;
   }
   const result = { status: 'accepted', resource, job };

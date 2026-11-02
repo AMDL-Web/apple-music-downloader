@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { recordView, trackState, trackCountText, checkText, checkRunning, applyCheckFeed, songsIn, recordQuery, slotQuality, pendingTitle, recordTitle, commonQuality } from '../static/js/lib/records.js';
+import { recordView, trackState, trackCountText, checkText, checkRunning, applyCheckFeed, songsIn, recordQuery, slotQuality, pendingTitle, recordTitle, commonQuality, checkScope, checkBody, resetNote, bulkResetText } from '../static/js/lib/records.js';
 
 const rec = (fields = {}) => ({ id: '1', name: 'A', state: 'none', tracks_done: 0, tracks_wanted: 9, withheld_count: 0, paused: false, resolved_at: '2026-11-02T00:00:00Z', catalog_state: 'ok', ...fields });
 
@@ -48,4 +48,27 @@ test('the usual quality is the one most tracks name', () => {
   const t = (q) => ({ files: [{ slot: 'main', audio_state: 'done', codec: 'alac', quality_label: q }] });
   assert.equal(commonQuality({ tracks: [t('16-bit/44.1 kHz'), t('16-bit/44.1 kHz'), t('24-bit/96 kHz')] }), 'ALAC 16-bit/44.1 kHz');
   assert.equal(commonQuality({ tracks: [] }), '');
+});
+
+test('a check is asked again for the scope it named', () => {
+  assert.equal(checkScope('albums', '7'), 'album:7');
+  assert.equal(checkScope('playlists', 'pl.1'), 'playlist:pl.1');
+  assert.deepEqual(checkBody('album:7', true), { kind: 'albums', id: '7', force: true });
+  assert.deepEqual(checkBody('playlist:pl.1'), { kind: 'playlists', id: 'pl.1' });
+  assert.deepEqual(checkBody('all', true), { force: true });
+  assert.deepEqual(checkBody(undefined), {});
+});
+
+test('a reset says why nothing downloads yet', () => {
+  assert.equal(resetNote({ slots: 2, job: { id: 'j' } }, rec(), 'Downloading'), 'Downloading');
+  assert.equal(resetNote({ slots: 2 }, rec({ paused: true }), 'Downloading'), 'Reset “A”. Resume it to download');
+  assert.equal(resetNote({ slots: 2 }, rec(), 'Downloading'), 'Reset “A”. It waits for room in the queue');
+  assert.equal(resetNote({ slots: 0 }, rec(), 'Downloading'), 'Nothing to download');
+});
+
+test('a bulk reset counts what it queued and what it left', () => {
+  const o = (item, value) => ({ item, ok: true, value });
+  const out = [o(rec({ id: '1' }), { slots: 3, job: { id: 'j' } }), o(rec({ id: '2', paused: true }), { slots: 3 }), o(rec({ id: '3' }), { slots: 0 })];
+  assert.equal(bulkResetText(out, 'albums'), 'Queued 1 album · 1 paused: resume to download · 1 with nothing to download');
+  assert.equal(bulkResetText([o(rec(), { slots: 1, job: { id: 'j' } }), o(rec(), { slots: 1, job: { id: 'k' } })], 'playlists'), 'Queued 2 playlists');
 });
