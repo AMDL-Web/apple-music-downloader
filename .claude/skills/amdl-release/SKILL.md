@@ -22,6 +22,13 @@ multi-arch image. The maintainer merges; agents prepare and check.
 - The desktop packages build: `gh workflow run desktop.yml --ref dev -f version=<version>`
   rehearses them without uploading, and its run (`gh run list --workflow desktop.yml --limit 1`)
   is green within `timeout 1800`.
+- The candidate starts on the files the previous release wrote. Build `amdl` from
+  the tip of `dev` and run `timeout 900 tools/upgradecheck/run.sh <previous-version> <amdl>`
+  on Linux or macOS: it runs the previous release's server (simulate mode) and
+  embedded backend, then the candidate on their files, and exits non-zero with the
+  candidate's error. A refusal the release means, such as a schema it no longer
+  opens, passes only when its message names what to do; check that the desktop app
+  shows it too.
 - `gh api repos/AMDL-Web/apple-music-downloader/code-scanning/alerts?state=open --jq length`
   is `0`; fix an alert or dismiss it with its reason.
 - The website describes the release: `apps/site/build.mjs#REF` is `main`, the
