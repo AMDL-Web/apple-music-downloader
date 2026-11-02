@@ -104,7 +104,7 @@ func (a *App) flyBadges(c *ui.Context, o ui.Rect, t float32) {
 		y := at.Y + at.H - (from.Y + from.H - src.box.Y)
 		op := 1 - unit(t/0.35)
 		if f.out {
-			op = 1 - unit(f.fade()/crossover)
+			op = f.underShown()
 		}
 		ui.Box(c.Key(part + flightParts)).Absolute().Left(x - o.X).Top(y - o.Y).Opacity(op).
 			Children(func() { src.build() })

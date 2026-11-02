@@ -11,9 +11,9 @@ import (
 // what was clicked, and from the queue's hero its label, title, artist and
 // tags too, fly from where that screen shows them to their places on the
 // page (shared elements), a text as one copy of itself that changes size
-// and place; the screen under it fades out, then the rest of the page fades
-// in as it rises a little, and what moves moves only then (travel), so
-// that nothing moves beside what stands still. The page's lower panel slides
+// and place; the page's lower panel comes in over the screen under it,
+// which thins out only once the panel is half in (cross), and the rest of
+// the page fades in as it rises a little. The page's lower panel slides
 // from the top of the list under it, and the light behind both turns from
 // the one screen's to the other's (backdrop). Everything follows one value,
 // q, from 0 (the screen under) to 1 (the page), on a spring, which Back
@@ -31,15 +31,18 @@ const (
 	flightFade = 150 * time.Millisecond
 	// flightRise is how far what only the page has rises as it comes in.
 	flightRise = 16
-	// crossover is the q by which the screen under the page has faded out
-	// and the page's opaque lower panel faded in, empty, over that screen's
-	// list; the rest of the page fades in only from there (flyFade, a part
-	// that crosses), so that nothing of the two screens shows at once but
-	// what flies.
+	// crossover is the q from which what flies moves (travel), as the
+	// screens cross (cross): going back, the flight ends when it is down to
+	// it, where the cover lands.
 	crossover = 0.2
-	// outFade is how much of q, going out, the screens take to cross,
-	// ending as the cover lands at crossover (fade).
-	outFade = 0.25
+	// inCross and outCross are how much of q the screens take to cross
+	// (cross): coming in from the start, over the first few frames, and
+	// going out down to crossover, where the cover lands.
+	inCross, outCross = 0.45, 0.3
+	// inParts and outParts are the q from which the page's own parts show
+	// (partsFrom), as the screen under thins out, so the two overlap a
+	// little and the window never stands blank between them.
+	inParts, outParts = 0.3, 0.4
 	// panelLined is the q from which the lower panel's top line shows, as
 	// it lands.
 	panelLined = 0.85
@@ -243,7 +246,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		f.fadeFrom, f.fadeTo = target, target
 		if f.out && f.q > 0 && f.q <= crossover {
 			// Going out, the cover has landed and the screens have crossed
-			// (fade) by crossover: the flight ends there, not over the
+			// (cross) by crossover: the flight ends there, not over the
 			// spring's slow tail, so the screen under takes the pointer,
 			// and shows its tile's own shadow and marks, as the cover lands.
 			root.Jump(flightKey{}, 0)
@@ -334,29 +337,29 @@ func (a *App) flyTags(row, quality ui.Element, text string, hi bool, fg ui.Color
 	row.Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y)
 }
 
-// travel is how far what moves in a flight has gone, from 0 (where the
-// screen under the page shows it) to 1 (where the page does): it moves
-// only once that screen is gone (crossover), so that nothing moves beside
-// what stands still, and sets off and comes to rest smoothly.
-// fade is q as the screens' crossfade reads it, crossing at crossover:
-// q itself coming in, where q passes crossover within a few frames; going
-// out, the outFade of q above crossover, so the screens have crossed when
-// the cover lands and the flight ends (flightQ).
-func (f *flight) fade() float32 {
-	if !f.out {
-		return f.q
+// cross is how far the screens have crossed to the page, 0 to 1: the
+// page's lower panel comes in over the screen under it, which stays whole
+// until the panel is half in and only then thins out (underShown). Two
+// layers thinning out together over the light ground wash out to white,
+// and a screen gone before the panel is there leaves it blank. Coming in
+// it runs over inCross of q; going out over outCross above crossover, so
+// it has crossed back when the cover lands and the flight ends (flightQ).
+func (f *flight) cross() float32 {
+	if f.out {
+		return unit((f.q - crossover) / outCross)
 	}
-	return crossover * unit((f.q-crossover)/outFade)
+	return unit(f.q / inCross)
 }
 
-// partsFrom is the q from which the page's own parts show (flyFade):
-// crossover coming in, and going out the top of the screens' crossfade, so
-// they are gone before the screen under shows.
+// underShown is how much the screen under the page shows (cross).
+func (f *flight) underShown() float32 { return unit(2 * (1 - f.cross())) }
+
+// partsFrom is the q from which the page's own parts show (flyFade).
 func (f *flight) partsFrom() float32 {
 	if f.out {
-		return crossover + outFade
+		return outParts
 	}
-	return crossover
+	return inParts
 }
 
 // light is how far the light and the lower panel's ground have turned to
@@ -369,6 +372,10 @@ func (f *flight) light() float32 {
 	return f.q
 }
 
+// travel is how far what moves in a flight has gone, from 0 (where the
+// screen under the page shows it) to 1 (where the page does): it sets off
+// at crossover, once the page's lower panel is coming in over the screen
+// under it, and sets off and comes to rest smoothly.
 func (f *flight) travel() float32 {
 	x := unit((f.q - crossover) / (1 - crossover))
 	return x * x * (3 - 2*x)
@@ -506,7 +513,7 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	if !f.moving {
 		return
 	}
-	el.Background(k.Ground.Mix(detailGround(k), f.light())).Opacity(unit(f.fade() / crossover)).
+	el.Background(k.Ground.Mix(detailGround(k), f.light())).Opacity(f.cross()).
 		BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
 	if f.still {
 		return

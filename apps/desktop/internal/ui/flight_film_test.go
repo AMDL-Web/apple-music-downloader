@@ -5,6 +5,7 @@ package ui
 import (
 	"fmt"
 	"image"
+	"math"
 	"testing"
 	"time"
 
@@ -336,4 +337,75 @@ func saturation(tt *ui.Tester, r ui.Rect) int {
 		}
 	}
 	return hi
+}
+
+// contrast is the spread of luminance over r, by every other pixel: high
+// where a screen shows its content, low where it is blank ground.
+func contrast(tt *ui.Tester, r image.Rectangle) float64 {
+	img := tt.Image()
+	s := img.Bounds().Dx() / 1280
+	var sum, sq, n float64
+	for y := r.Min.Y; y < r.Max.Y; y += 2 {
+		for x := r.Min.X; x < r.Max.X; x += 2 {
+			p := img.RGBAAt(x*s, y*s)
+			l := 0.2126*float64(p.R) + 0.7152*float64(p.G) + 0.0722*float64(p.B)
+			sum, sq, n = sum+l, sq+l*l, n+1
+		}
+	}
+	m := sum / n
+	return math.Sqrt(max(sq/n-m*m, 0))
+}
+
+// Opening an album from its tile and going back, the search and the page
+// dissolve into each other: no frame shows the window blank, its content
+// gone and the other's not yet there, which flashes as white ground.
+func TestTheScreensNeverGoBlankBetween(t *testing.T) {
+	a, run := demoApp(t)
+	a.Screen, a.PageMotion, a.Theme = ScreenHome, true, "light"
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	s := a.Store
+	s.SetOmniText("a")
+	tt.Frame()
+	run(func() bool { tt.Frame(); return s.Search.Status == store.SearchReady })
+	run(func() bool {
+		tt.Advance(100 * time.Millisecond)
+		for _, h := range s.Search.ShownHits() {
+			if a.Art.Get(h.ArtworkURL, 320) == nil || a.Art.Get(h.ArtworkURL, 512) == nil {
+				return false
+			}
+		}
+		return true
+	})
+	tt.Advance(time.Second)
+	h := s.Search.Result.Albums.Items[0]
+	tile, ok := tt.Find(h.Name)
+	if !ok {
+		t.Fatal("no tile")
+	}
+	// The right of the window, which the cover does not cross.
+	r := image.Rect(700, 300, 1250, 780)
+	film := func(way string) {
+		t.Helper()
+		start, low := contrast(tt, r), math.Inf(1)
+		for range 60 {
+			tt.Advance(filmFrame)
+			if !a.fly.moving {
+				break
+			}
+			low = min(low, contrast(tt, r))
+		}
+		tt.Advance(time.Second)
+		end := contrast(tt, r)
+		if low < 0.5*min(start, end) {
+			t.Errorf("%s, a frame shows the window's right with contrast %.1f, against %.1f before and %.1f after: it went blank", way, low, start, end)
+		}
+	}
+	tt.ClickAt(tile.X+tile.W/2, tile.Y+tile.H/2)
+	film("opening")
+	run(func() bool { tt.Advance(100 * time.Millisecond); return s.Search.Album.Status == store.SearchReady })
+	tt.Advance(time.Second)
+	a.Back()
+	tt.Frame()
+	film("going back")
 }
