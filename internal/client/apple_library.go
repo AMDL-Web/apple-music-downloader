@@ -77,6 +77,7 @@ type AppleLibraryRun struct {
 	Added      int        `json:"added"`
 	Removed    int        `json:"removed"`
 	Changed    int        `json:"changed"`
+	Capped     []string   `json:"capped,omitempty"`
 }
 
 // AppleLibrary reads one page of a kind (albums, songs, playlists, artists)

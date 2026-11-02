@@ -822,7 +822,7 @@ sync under way answers `409 apple_library_sync_running` with `details.sync_id`; 
 `reason` when false), `state` (`idle`, `running`, `failed`), `current` while a sync
 runs (`{id, mode, trigger, started_at, kind, pages_read, requests}`), `last_sync`
 (`{id, mode, trigger, started_at, finished_at, ok, error, requests, added, removed,
-changed}`), `last_full_sync_at`, `next_sync_at`, `counts` per kind and the two schedule
+changed, capped}`), `last_full_sync_at`, `next_sync_at`, `counts` per kind and the two schedule
 keys. There is no SSE event for the sync: poll the status every couple of seconds while
 `state` is `running`.
 
@@ -838,3 +838,10 @@ removed) is read in full, at most once an hour; otherwise removals show after th
 full sync. A full read removes rows only when every page was read and the total did not
 move meanwhile, so a sync cut short removes nothing. Each pass is bounded (2 minutes
 incremental, 15 full, page caps) and runs one at a time.
+
+A list that reaches its page cap (30,000 songs, 10,000 albums, 10,000 artists, 1,000
+playlists, 5,000 tracks of one playlist) is a partial result for that list only: the
+rows read are cached, nothing is removed for it, the sync stays `ok` and finishes the other
+lists, and `last_sync.capped` names the list (`songs`, or `playlist_tracks:{library id}`).
+In search, a capped kind marks only the hits it has cached as `in_apple_library: true`; it
+never claims `false`, since a hit may sit past the cap.

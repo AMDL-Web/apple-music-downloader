@@ -16,8 +16,9 @@ import (
 	"amdl/internal/domain"
 )
 
-// Bounds of one pass. A pass that reaches a page cap ends with an error and
-// removes nothing for that kind; the rows it read stay.
+// Bounds of one pass. A list that reaches a page cap is a partial result for
+// that list only: the rows read stay, nothing is removed for it, Run.Capped
+// names it, and the pass goes on with the other lists.
 const (
 	incrementalDeadline = 2 * time.Minute
 	fullDeadline        = 15 * time.Minute
@@ -35,10 +36,12 @@ const (
 	// maxTrackRefresh every track-list read per pass.
 	maxStaleRefresh = 20
 	maxTrackRefresh = 60
-	maxTrackPages   = 50
 )
 
-// maxPages is the page cap of a full read per kind.
+// maxTrackPages is the page cap of one playlist's track list; maxPages is the
+// page cap of a full read per kind. Variables so tests can lower them.
+var maxTrackPages = 50
+
 var maxPages = map[applemusic.LibraryKind]int{
 	applemusic.LibrarySongs: 300, applemusic.LibraryAlbums: 100,
 	applemusic.LibraryArtists: 100, applemusic.LibraryPlaylists: 10,
@@ -194,21 +197,45 @@ func (p *passRun) fullKind(ctx context.Context, kind applemusic.LibraryKind) err
 			break
 		}
 	}
-	if !complete {
-		return fmt.Errorf("stopped after %d pages; the rest waits for the next full sync", maxPages[kind])
-	}
-	if startTotal == endTotal {
+	switch {
+	case !complete:
+		// Without every page there is no telling a removed row from one past
+		// the cap, so nothing is removed.
+		p.capped(string(kind), "the rest of the list is not cached", "kind", kind, "pages", maxPages[kind], "apple_total", endTotal)
+	case startTotal == endTotal:
+		p.uncapped(string(kind))
 		removed, err := p.e.store.DeleteAppleLibraryUnseen(ctx, string(kind), p.run.ID)
 		if err != nil {
 			return err
 		}
 		p.run.Removed += int(removed)
-	} else {
+	default:
+		p.uncapped(string(kind))
 		p.e.logger.Info("apple library changed during the read; removals wait for the next full sync",
 			"kind", kind, "total_before", startTotal, "total_after", endTotal)
 	}
 	now := p.e.now().UTC()
-	return p.e.saveKindState(ctx, string(kind), kindState{Total: endTotal, FullAt: &now})
+	return p.e.saveKindState(ctx, string(kind), kindState{Total: endTotal, FullAt: &now, Capped: !complete})
+}
+
+// capped records that a page cap cut list short in this pass and warns the
+// first time it does, until the list is read whole again.
+func (p *passRun) capped(list, consequence string, attrs ...any) {
+	p.run.Capped = append(p.run.Capped, list)
+	p.e.mu.Lock()
+	first := !p.e.capNoted[list]
+	p.e.capNoted[list] = true
+	p.e.mu.Unlock()
+	if first {
+		p.e.logger.Warn("apple library: page cap reached; "+consequence, attrs...)
+	}
+}
+
+// uncapped forgets that list was capped, so a later cap warns again.
+func (p *passRun) uncapped(list string) {
+	p.e.mu.Lock()
+	delete(p.e.capNoted, list)
+	p.e.mu.Unlock()
 }
 
 // headKind reads songs or albums newest-first until an id already cached and
@@ -284,6 +311,11 @@ func (p *passRun) reconcileTotal(ctx context.Context, kind applemusic.LibraryKin
 	if counts[string(kind)] == total {
 		return nil
 	}
+	if st.Capped {
+		// The cache is short of Apple's total by design; a full read would
+		// only hit the cap again.
+		return nil
+	}
 	if st.FullAt != nil && p.e.now().Sub(*st.FullAt) < mismatchFullEvery {
 		return nil
 	}
@@ -338,9 +370,15 @@ func (p *passRun) refreshTracks(ctx context.Context) error {
 func (p *passRun) playlistTracks(ctx context.Context, st db.AppleLibraryPlaylistState) error {
 	var tracks []domain.AppleLibraryTrack
 	offset := 0
+	list := "playlist_tracks:" + st.ID
+	capped := false
 	for pages := 0; ; pages++ {
 		if pages == maxTrackPages {
-			return fmt.Errorf("playlist %s: stopped after %d pages of tracks", st.ID, maxTrackPages)
+			// Keep the first tracks; the list is read again when the playlist
+			// changes, not at every pass.
+			p.capped(list, "the first tracks are cached, the rest are not", "playlist", st.ID, "pages", maxTrackPages)
+			capped = true
+			break
 		}
 		page, err := p.e.apple.LibraryPlaylistTracks(ctx, p.token, st.ID, offset, pageSize)
 		p.run.Requests++
@@ -359,6 +397,9 @@ func (p *passRun) playlistTracks(ctx context.Context, st db.AppleLibraryPlaylist
 		if !page.HasMore || len(page.Items) == 0 {
 			break
 		}
+	}
+	if !capped {
+		p.uncapped(list)
 	}
 	return p.e.store.ReplaceAppleLibraryPlaylistTracks(ctx, st.ID, st.Version, tracks)
 }
