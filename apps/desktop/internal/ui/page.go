@@ -189,9 +189,9 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	a.flyPanel(lower, k)
 	accent := hc.accent
 	lower.Children(func() {
-		rows := ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Stretch)
-		a.flyFade(rows)
-		rows.Children(func() {
+		// The rows come and go with the panel (flyPanel), so it never
+		// stands empty over the screen under it.
+		ui.Row(c).Grow(1).Shrink(1).MinWidth(0).AlignItems(ui.Stretch).Children(func() {
 			a.pageTracks(c, k, j, accent, stageWidth(page))
 			if j != nil {
 				activity := float32(280)
@@ -236,7 +236,9 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 		artwork = j.ArtworkURL
 	}
 	h.cover = func(size float32) ui.Element {
-		return widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: a.flyShadow(), Video: video}.Show(c).Label("Artwork")
+		tone, dim, shadow, jump := a.flyCover()
+		return widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: tone, Dim: dim, Jump: jump,
+			Shadow: shadow, Video: video}.Show(c).Label("Artwork")
 	}
 	// What the download made of it, once known, stands for what the album
 	// offers.

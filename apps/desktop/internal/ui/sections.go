@@ -148,7 +148,7 @@ func (a *App) facts(c *ui.Context, k *Tokens, id string) {
 		}
 	case "server":
 		if sys != nil {
-			add(fact{label: "Version", value: sys.Version + " · " + shortCommit(sys.Commit), from: fromRun, mono: true})
+			add(fact{label: "Version", value: versionText(sys.Version, sys.Commit), from: fromRun, mono: true})
 			add(fact{label: "Started", value: sys.StartedAt.Local().Format("2 Jan 2006 15:04"), from: fromRun})
 			for _, t := range sys.Tools {
 				if t.Available {

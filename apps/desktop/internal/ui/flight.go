@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -12,9 +11,9 @@ import (
 // what was clicked, and from the queue's hero its label, title, artist and
 // tags too, fly from where that screen shows them to their places on the
 // page (shared elements), a text as one copy of itself that changes size
-// and place; the screen under it fades out, then the rest of the page fades
-// in as it rises a little, and what moves moves only then (travel), so
-// that nothing moves beside what stands still. The page's lower panel slides
+// and place; the page's lower panel comes in over the screen under it,
+// which thins out only once the panel is half in (cross), and the rest of
+// the page fades in as it rises a little. The page's lower panel slides
 // from the top of the list under it, and the light behind both turns from
 // the one screen's to the other's (backdrop). Everything follows one value,
 // q, from 0 (the screen under) to 1 (the page), on a spring, which Back
@@ -32,12 +31,18 @@ const (
 	flightFade = 150 * time.Millisecond
 	// flightRise is how far what only the page has rises as it comes in.
 	flightRise = 16
-	// crossover is the q by which the screen under the page has faded out
-	// and the page's opaque lower panel faded in, empty, over that screen's
-	// list; the rest of the page fades in only from there (flyFade, a part
-	// that crosses), so that nothing of the two screens shows at once but
-	// what flies.
+	// crossover is the q from which what flies moves (travel), as the
+	// screens cross (cross): going back, the flight ends when it is down to
+	// it, where the cover lands.
 	crossover = 0.2
+	// inCross and outCross are how much of q the screens take to cross
+	// (cross): coming in from the start, over the first few frames, and
+	// going out down to crossover, where the cover lands.
+	inCross, outCross = 0.45, 0.3
+	// inParts and outParts are the q from which the page's own parts show
+	// (partsFrom), as the screen under thins out, so the two overlap a
+	// little and the window never stands blank between them.
+	inParts, outParts = 0.3, 0.4
 	// panelLined is the q from which the lower panel's top line shows, as
 	// it lands.
 	panelLined = 0.85
@@ -97,7 +102,9 @@ const (
 // window as the frame before showed it, what it says, and its font size,
 // or a cover's corner radius; a text's or a tag's color, a text's widest
 // line, and build, which builds it again (flightCopies); whether a tag is
-// gilt, and whether it is a tile's glass hint rather than a tag.
+// gilt, and whether it is a tile's glass hint rather than a tag; a cover's
+// tone (widgets.Cover's Color), dim and how much of a hero cover's shadow
+// it drops, which the page's cover takes on its way (flySourceCover).
 type flightSrc struct {
 	box   ui.Rect
 	text  string
@@ -107,6 +114,8 @@ type flightSrc struct {
 	build func() ui.Element
 	hi    bool
 	ok    bool
+
+	tone, dim, shadow float32
 }
 
 // flightText is where a text of the page that morphs is laid out, its
@@ -146,6 +155,9 @@ type flight struct {
 	// desktop asks for less motion.
 	q             float32
 	moving, still bool
+	// out is set while the page goes out with motion, which crosses the
+	// screens and ends sooner than it comes in (fade).
+	out bool
 	// instant is set by a change of screen that does not fly: q goes to
 	// its end at once.
 	instant bool
@@ -204,6 +216,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	if inPage && f.ready {
 		target = 1
 	}
+	f.out = target == 0 && !f.still && a.PageMotion
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
 	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	// A click names what it opens from in the frame it opens; one that
@@ -231,6 +244,14 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 	default:
 		f.q = root.AnimateTo(flightKey{}, target, flightSpring)
 		f.fadeFrom, f.fadeTo = target, target
+		if f.out && f.q > 0 && f.q <= crossover {
+			// Going out, the cover has landed and the screens have crossed
+			// (cross) by crossover: the flight ends there, not over the
+			// spring's slow tail, so the screen under takes the pointer,
+			// and shows its tile's own shadow and marks, as the cover lands.
+			root.Jump(flightKey{}, 0)
+			f.q = 0
+		}
 	}
 	f.moving = f.q != target || f.q > 0 && f.q < 1 || inPage && !f.ready
 	if inPage && !f.ready {
@@ -252,31 +273,6 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 			f.closeDetail = false
 			a.Store.CloseDetail()
 		}
-	}
-}
-
-// flySource marks el as part of the element from on the screen under the
-// page: while the page moves, the page's part flies from it, and it hides
-// as long as that part flies or morphs.
-func (a *App) flySource(el ui.Element, from string, part flightPart, text string, size float32) {
-	f := &a.fly
-	if !f.moving || f.still || from == "" || from != f.from {
-		return
-	}
-	f.src[part] = flightSrc{box: el.Bounds(), text: text, size: size, ok: true}
-	if p := f.pairWas[part]; p == flies || p == morphs || p == swaps {
-		el.Invisible()
-	}
-}
-
-// flySourceLabel marks el, a label of the element from on the screen under
-// the page saying text in color, as flySource does, for the page's label
-// to swap with (flyLabel); part is partKicker for that label, partTracks
-// for a tag of the track count, which flies into it.
-func (a *App) flySourceLabel(el ui.Element, from string, part flightPart, text string, color ui.Color) {
-	a.flySource(el, from, part, text, 0)
-	if src := &a.fly.src[part]; src.ok {
-		src.color = color
 	}
 }
 
@@ -302,49 +298,6 @@ func (a *App) flyLabel(el ui.Element, text string, color ui.Color) {
 		f.paired[partTracks] = swaps
 	}
 	f.label = flightLabel{box: dst, text: text, color: color}
-	el.Invisible()
-}
-
-// flySourceText builds a text of the element from on the screen under the
-// page with build, set as span and in color, and marks it as flySource
-// does: build also builds the copy of it that morphs into the page's
-// (flightCopies).
-func (a *App) flySourceText(c *ui.Context, build func() ui.Element, span ui.Span, from string, part flightPart, color ui.Color) ui.Element {
-	el := build()
-	a.flySource(el, from, part, span.Text, span.Size)
-	if src := &a.fly.src[part]; src.ok {
-		src.build, src.color = build, color
-		src.ink, _ = c.MeasureText(src.box.W, span)
-	}
-	return el
-}
-
-// flySourceTag marks el, the quality tag of the element from on the screen
-// under the page, saying text, gilt when hi, in fg: the page's flies from
-// it as one box (flyTags).
-func (a *App) flySourceTag(el ui.Element, from, text string, hi bool, fg ui.Color) {
-	a.flySource(el, from, partTag, text, 0)
-	if src := &a.fly.src[partTag]; src.ok {
-		src.color, src.hi = fg, hi
-	}
-}
-
-// fliesFrom reports whether the album page is flying from or back to the
-// element from in this frame, whose parts then mark themselves.
-func (a *App) fliesFrom(from string) bool {
-	f := &a.fly
-	return f.moving && !f.still && from != "" && from == f.from
-}
-
-// flySourceBadge marks el, a badge on the cover of the element from, as
-// part, which build builds again: a copy of it rides the flying cover's
-// corner, fading out as the cover leaves and in as it lands, while el
-// hides (flightCopies).
-func (a *App) flySourceBadge(el ui.Element, from string, part flightPart, build func() ui.Element) {
-	if !a.fliesFrom(from) {
-		return
-	}
-	a.fly.src[part] = flightSrc{box: el.Bounds(), build: build, ok: true}
 	el.Invisible()
 }
 
@@ -384,10 +337,45 @@ func (a *App) flyTags(row, quality ui.Element, text string, hi bool, fg ui.Color
 	row.Translate(lerp(src.box.X, dst.X, t)-dst.X, lerp(src.box.Y, dst.Y, t)-dst.Y)
 }
 
+// cross is how far the screens have crossed to the page, 0 to 1: the
+// page's lower panel comes in over the screen under it, which stays whole
+// until the panel is half in and only then thins out (underShown). Two
+// layers thinning out together over the light ground wash out to white,
+// and a screen gone before the panel is there leaves it blank. Coming in
+// it runs over inCross of q; going out over outCross above crossover, so
+// it has crossed back when the cover lands and the flight ends (flightQ).
+func (f *flight) cross() float32 {
+	if f.out {
+		return unit((f.q - crossover) / outCross)
+	}
+	return unit(f.q / inCross)
+}
+
+// underShown is how much the screen under the page shows (cross).
+func (f *flight) underShown() float32 { return unit(2 * (1 - f.cross())) }
+
+// partsFrom is the q from which the page's own parts show (flyFade).
+func (f *flight) partsFrom() float32 {
+	if f.out {
+		return outParts
+	}
+	return inParts
+}
+
+// light is how far the light and the lower panel's ground have turned to
+// the page's: q coming in, and going out all the way back by the time the
+// cover lands.
+func (f *flight) light() float32 {
+	if f.out {
+		return unit((f.q - crossover) / (1 - crossover))
+	}
+	return f.q
+}
+
 // travel is how far what moves in a flight has gone, from 0 (where the
-// screen under the page shows it) to 1 (where the page does): it moves
-// only once that screen is gone (crossover), so that nothing moves beside
-// what stands still, and sets off and comes to rest smoothly.
+// screen under the page shows it) to 1 (where the page does): it sets off
+// at crossover, once the page's lower panel is coming in over the screen
+// under it, and sets off and comes to rest smoothly.
 func (f *flight) travel() float32 {
 	x := unit((f.q - crossover) / (1 - crossover))
 	return x * x * (3 - 2*x)
@@ -433,20 +421,24 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 		el.Radius(lerp(src.size, size, t) / s)
 	}
 	if p == crosses {
-		el.Opacity(unit((f.q - crossover) / 0.45))
+		el.Opacity(unit((f.q - f.partsFrom()) / 0.45))
 	}
 }
 
-// flyShadow is how much of its shadow the album page's cover drops in this
-// frame: all of it, but on the way to or from a cover with none, as a
-// tile's or a row's, as much as it has come of the way. The queue's hero
-// drops one as large.
-func (a *App) flyShadow() float32 {
+// flyCover is the album page's cover's tone, dim and shadow in this frame
+// (widgets.Cover's Color, Dim and Shadow): its own, but on the way to or
+// from the cover it flies from, as far between the two as it has come, a
+// search tile's shadow staying with its screen (hitTile); and
+// whether they change every frame, which the cover then shows at once
+// rather than easing to.
+func (a *App) flyCover() (tone, dim, shadow float32, jump bool) {
 	f := &a.fly
-	if !f.moving || f.still || !f.src[partCover].ok || strings.HasPrefix(f.from, "hero:") {
-		return 1
+	src := f.src[partCover]
+	if !f.moving || f.still || !src.ok {
+		return 1, 0, 1, false
 	}
-	return f.travel()
+	t := f.travel()
+	return lerp(src.tone, 1, t), lerp(src.dim, 0, t), lerp(src.shadow, 1, t), true
 }
 
 // flyText shows el, a text of the album page set as span in color, at
@@ -521,7 +513,7 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	if !f.moving {
 		return
 	}
-	el.Background(k.Ground.Mix(detailGround(k), f.q)).Opacity(unit(f.q / crossover)).
+	el.Background(k.Ground.Mix(detailGround(k), f.light())).Opacity(f.cross()).
 		BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
 	if f.still {
 		return
@@ -537,8 +529,9 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 // flyFade fades el in with the album page, in place, once the screen under
 // it is gone.
 func (a *App) flyFade(el ui.Element) {
-	if a.fly.moving {
-		el.Opacity(unit((a.fly.q - crossover) / (1 - crossover)))
+	if f := &a.fly; f.moving {
+		from := f.partsFrom()
+		el.Opacity(unit((f.q - from) / (1 - from)))
 	}
 }
 

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -61,7 +60,7 @@ func (a *App) tileGrid(c *ui.Context, k *Tokens, key string, hits []client.Searc
 	size := tileSize(width, count)
 	ui.Row(c).Width(width).Wrap().GapX(tileGap).GapY(24).Children(func() {
 		for i, h := range hits {
-			a.hitTile(c, k, h, fmt.Sprint(key, i), sel, size)
+			a.hitTile(c, k, h, a.tileKey(key, i), sel, size)
 		}
 	})
 }
@@ -72,8 +71,8 @@ func (a *App) tileGrid(c *ui.Context, k *Tokens, key string, hits []client.Searc
 // carry the best quality and one control, which downloads it or says it is
 // in the queue or the library (tileControl). An artist's opens its albums.
 func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, sel *client.SearchHit, size float32) {
-	hk := store.HitKey(h)
-	on := sel != nil && store.HitKey(*sel) == hk
+	hk, from := a.hitKey(h), a.hitFrom(h)
+	on := sel != nil && a.hitKey(*sel) == hk
 	round := h.Type == "artist"
 	radius := float32(radiusCover)
 	if round {
@@ -89,7 +88,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 				if a.searchKeyed {
 					focusRing(open, radius)
 				}
-				if a.searchReveal {
+				if a.searchReveal && !a.viewSwapping(c) {
 					open.ScrollIntoView()
 					a.searchReveal = false
 				}
@@ -106,17 +105,20 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 					a.openOrDownload(h)
 				}
 			}
-			a.flySource(open, "hit:"+hk, partCover, "", radius)
+			// The cover flies, not the button: its shadow stays with the
+			// screen, which fades it out and back in as the page comes and
+			// goes, so the tile has it when the cover lands (flyCover).
 			open.Cursor(ui.CursorPointer).Children(func() {
-				widgets.Cover{Image: a.Art.Get(h.ArtworkURL, int(2*size)), Placeholder: hitPalette(h).Bg, Size: size, Radius: radius, Color: 1}.Show(c)
+				cover := widgets.Cover{Image: a.Art.Get(h.ArtworkURL, int(2*size)), Placeholder: hitPalette(h).Bg, Size: size, Radius: radius, Color: 1}.Show(c)
+				a.flySource(cover, from, partCover, "", radius)
 			})
 			if round {
 				return
 			}
-			if hints := shortHints(h.AudioTraits, size); hints != "" {
+			if hints := a.tileHints(h, size); hints != "" {
 				hint := qualityHint(c, k, hints).Absolute().Left(8).Bottom(8).PassThrough()
-				if a.fliesFrom("hit:" + hk) {
-					a.flySourceBadge(hint, "hit:"+hk, partHint, func() ui.Element { return qualityHint(c, k, hints) })
+				if a.fliesFrom(from) {
+					a.flySourceBadge(hint, from, partHint, func() ui.Element { return qualityHint(c, k, hints) })
 				}
 			}
 			a.tileControl(c, k, h, hover || on)
@@ -132,7 +134,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 					explicitBadge(c, k)
 				}
 			})
-			if sub := strings.Join(tileFacts(h), " · "); sub != "" {
+			if sub := a.tileLine(h); sub != "" {
 				ui.Text(c, sub).FontSize(12).TextColor(k.Muted).SingleLine().Ellipsis("…").MaxWidth(size)
 			}
 		})
@@ -160,7 +162,7 @@ const tileControlSize = 32
 // to fetch the tracks missing from disk (those on disk are skipped).
 func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bool) {
 	s := a.Store
-	hk := store.HitKey(h)
+	hk, from := a.hitKey(h), a.hitFrom(h)
 	mark, _ := s.HitMark(h)
 	startedAt, starting := s.Search.Starting[hk]
 	// The glyph changes only when the start is slow, as a pill's does.
@@ -176,12 +178,16 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	case mark == store.MarkActive:
 		b.Label(h.Name + " is in the queue").Tooltip("In the queue")
 		look = markLook{bg: k.Accent, fg: k.AccentInk, ic: icDown}
-	case mark == store.MarkDone && !pointed:
-		b.Label(h.Name + " is in your library: download again")
-		look = markLook{bg: k.OK, ic: icCheck, fg: ui.RGB(255, 255, 255)}
 	case mark == store.MarkDone:
-		b.Label(h.Name + " is in your library: download again").Tooltip("Download again")
+		// The check gives way to the download again button under the
+		// pointer, crossing over (doneCheck) rather than at once.
+		b.Label(h.Name + " is in your library: download again")
+		if pointed {
+			b.Tooltip("Download again")
+		}
 		look.interactive = true
+		look.check = b.AnimateWith("check", map[bool]float32{true: 0, false: 1}[pointed], 120*time.Millisecond, ui.EaseOut)
+		look.ok = k.OK
 	default:
 		b.Label("Download " + h.Name)
 		look.interactive = true
@@ -198,8 +204,8 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	}
 	op := look.op
 	b.Opacity(op).Hidden(op < 0.01)
-	if a.fliesFrom("hit:"+hk) && op >= 0.01 {
-		a.flySourceBadge(b, "hit:"+hk, partMark, func() ui.Element { return look.copy(c) })
+	if a.fliesFrom(from) && op >= 0.01 {
+		a.flySourceBadge(b, from, partMark, func() ui.Element { return look.copy(c) })
 	}
 	if b.Clicked() && !starting {
 		switch {
@@ -212,7 +218,10 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 			a.download(h)
 		}
 	}
-	b.Cursor(ui.CursorPointer).Children(func() { look.glyph(c) })
+	b.Cursor(ui.CursorPointer).Children(func() {
+		look.glyph(c)
+		look.doneCheck(c)
+	})
 }
 
 // markLook is how a tile's control looks: on glass, interactive while it
@@ -224,6 +233,10 @@ type markLook struct {
 	ic                 *ui.SVG
 	fg                 ui.Color
 	op                 float32
+	// check is how much an album in the library shows its check over the
+	// button, on ok.
+	check float32
+	ok    ui.Color
 }
 
 func (m markLook) style(el ui.Element) {
@@ -242,11 +255,25 @@ func (m markLook) glyph(c *ui.Context) {
 	ui.Icon(c, m.ic).FontSize(15).TextColor(m.fg)
 }
 
+// doneCheck is the check of an album in the library, as much as it shows,
+// over the control.
+func (m markLook) doneCheck(c *ui.Context) {
+	if m.check <= 0.001 {
+		return
+	}
+	ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Radius(radiusFull).Center().Background(m.ok).
+		Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3)).Opacity(m.check).
+		Children(func() { ui.Icon(c, icCheck).FontSize(15).TextColor(ui.RGB(255, 255, 255)) })
+}
+
 // copy builds the control again as it looks, for the flight to carry.
 func (m markLook) copy(c *ui.Context) ui.Element {
 	el := ui.Box(c).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().Opacity(m.op)
 	m.style(el)
-	el.Children(func() { m.glyph(c) })
+	el.Children(func() {
+		m.glyph(c)
+		m.doneCheck(c)
+	})
 	return el
 }
 
@@ -256,7 +283,7 @@ func (a *App) songGrid(c *ui.Context, k *Tokens, hits []client.SearchHit, sel *c
 	cw := (width - songGap*float32(cols-1)) / float32(cols)
 	ui.Row(c).Width(width).Wrap().Gap(songGap).Children(func() {
 		for i, h := range hits {
-			a.songCard(c, k, h, fmt.Sprint("songs", i), sel, cw)
+			a.songCard(c, k, h, a.tileKey("songs", i), sel, cw)
 		}
 	})
 }
@@ -265,8 +292,8 @@ func (a *App) songGrid(c *ui.Context, k *Tokens, hits []client.SearchHit, sel *c
 // download button.
 func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string, sel *client.SearchHit, width float32) {
 	s := a.Store
-	hk := store.HitKey(h)
-	on := sel != nil && store.HitKey(*sel) == hk
+	hk := a.hitKey(h)
+	on := sel != nil && a.hitKey(*sel) == hk
 	card := ui.Row(c.Key(key)).Width(width).Height(songHeight).Padding(padTile).PaddingEnd(10).Gap(12).Radius(radiusTile).
 		AlignItems(ui.Center).Background(k.Raise).Border(1, k.Line).Transition(a.hitMotion(c))
 	if card.Hovered() {
@@ -291,7 +318,7 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 					explicitBadge(c, k)
 				}
 			})
-			ui.Text(c, strings.Join(hitFacts(h), " · ")).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
+			ui.Text(c, a.songLine(h)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
 		})
 		mark, job := s.HitMark(h)
 		startedAt, startingOn := s.Search.Starting[hk]

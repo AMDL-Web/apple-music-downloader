@@ -64,3 +64,9 @@ ff59d2435492f86824ad192e8f7338198000c72d
 bb616d1d519b9aad40cc20ca6ab7b121aa21aed5
 # refactor(hooks): move the hook presets to internal/hookpreset (move-only)
 0ac68bbe489eb12df105116303336151112b67ba
+# refactor(desktop): move the screens' layering into screens.go (move-only)
+b2e7c1d719516580911af778a09118e32fc5f539
+# refactor(desktop): move the flight's sources into flight_sources.go (move-only)
+917d23257be301ec505b56c0d89d9af56f2a4d85
+# refactor(desktop): move the queue's hero into queue_hero.go (move-only)
+7bbfa0c2f24a947fb04f9924cfcb6ef591572b4d

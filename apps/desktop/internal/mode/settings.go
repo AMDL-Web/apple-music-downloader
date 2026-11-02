@@ -31,6 +31,10 @@ type Settings struct {
 	// is written to config.yaml only on the backend's first start and after
 	// Apply changed it; afterwards config.yaml owns the address.
 	WrapperAddress string `json:"wrapper_address,omitempty"`
+	// WrapperElsewhere is the setup screen's "Another machine": the
+	// standalone backend uses WrapperAddress even when a wrapper is
+	// installed on this computer, and leaves that one stopped.
+	WrapperElsewhere bool `json:"wrapper_elsewhere,omitempty"`
 	// FFmpeg overrides the ffmpeg the standalone backend and the motion
 	// covers run; empty means the one ffmpeg.Find picks.
 	FFmpeg string `json:"ffmpeg,omitempty"`

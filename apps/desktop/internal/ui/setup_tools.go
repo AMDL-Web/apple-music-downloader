@@ -195,6 +195,7 @@ func (a *App) startLocal() {
 	f := &a.su
 	next := a.Settings
 	next.Mode = mode.Standalone
+	next.WrapperElsewhere = f.elsewhere
 	if f.elsewhere {
 		next.WrapperAddress = f.wrapperAddr
 	}

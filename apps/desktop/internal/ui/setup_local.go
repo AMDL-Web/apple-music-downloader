@@ -47,7 +47,7 @@ func (a *App) setupLocal(c *ui.Context, k *Tokens) {
 			f.elsewhere = place == 1
 		})
 		if f.elsewhere {
-			count(a.wrapperAddressRow(c, k))
+			count(a.wrapperAddressRow(c, k, applied))
 		} else {
 			count(s.QEMU.State)
 			a.toolRow(c, k, "QEMU", s.QEMU, nil)
@@ -94,7 +94,10 @@ func (a *App) localApplied() bool {
 	if a.Settings.Mode != mode.Standalone {
 		return false
 	}
-	return !f.elsewhere || (a.Settings.WrapperAddress != "" && a.Settings.WrapperAddress == f.wrapperAddr)
+	if !f.elsewhere {
+		return !a.Settings.WrapperElsewhere
+	}
+	return a.Settings.WrapperAddress != "" && a.Settings.WrapperAddress == f.wrapperAddr
 }
 
 // wrapperRow is the guest running under this computer's backend.
@@ -169,11 +172,19 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 
 // wrapperAddressRow is a wrapper on another machine: its address and the
 // last test of it.
-func (a *App) wrapperAddressRow(c *ui.Context, k *Tokens) setup.State {
+func (a *App) wrapperAddressRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 	f := &a.su
 	slow := waited(c, f.wrapperTesting, f.wrapperFrom)
 	st, status := setup.Missing, "Not tested"
+	var restart func()
 	switch {
+	case applied && a.Act.StartErr() != "":
+		st, status = setup.Failed, a.Act.StartErr()
+		restart = func() {
+			if button(c, k, buttonPlain, "Restart", nil).Clicked() {
+				a.Act.Reconnect()
+			}
+		}
 	case slow:
 		st, status = setup.Working, "Testing"
 	case len(f.wrapperChecks) > 0 && f.wrapperChecks[0].OK:
@@ -184,7 +195,7 @@ func (a *App) wrapperAddressRow(c *ui.Context, k *Tokens) setup.State {
 	case len(f.wrapperChecks) > 0:
 		st, status = setup.Failed, f.wrapperChecks[0].Text
 	}
-	setupRow(c, k, "wrapper-address", st, "Wrapper", status, false, nil, func() {
+	setupRow(c, k, "wrapper-address", st, "Wrapper", status, false, restart, func() {
 		ui.Row(c).Gap(8).Children(func() {
 			in := field(c, k, "setup-wrapper", &f.wrapperAddr, "http://192.168.3.5:30020", true)
 			in.Grow(1)

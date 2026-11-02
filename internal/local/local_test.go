@@ -47,6 +47,38 @@ func TestWriteConfig(t *testing.T) {
 	}
 }
 
+// A config.yaml an older version wrote still starts the backend, without
+// the keys this version removed, and the log names them.
+func TestWriteConfigDropsRemovedKeys(t *testing.T) {
+	d := tempDirs(t)
+	if err := (Backend{Dirs: d, Wrapper: "nas:30020"}).WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(d.ServerDir(), "config.yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := strings.Replace(string(raw), "download:\n", "download:\n    memory_mode: low\n", 1)
+	if stale == string(raw) {
+		t.Fatal("no download section to add to")
+	}
+	if err := os.WriteFile(path, []byte(stale), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var log strings.Builder
+	if err := (Backend{Dirs: d, LogOutput: &log}).WriteConfig(); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Wrapper.Address != "http://nas:30020" || !strings.Contains(log.String(), "download.memory_mode") {
+		t.Errorf("wrapper %q, log %q", cfg.Wrapper.Address, log.String())
+	}
+}
+
 func TestStartFindStop(t *testing.T) {
 	d := tempDirs(t)
 	if _, ok := Find(context.Background(), d); ok {

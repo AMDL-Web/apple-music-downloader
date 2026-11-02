@@ -93,6 +93,38 @@ func dropRetiredKeys(raw []byte) ([]byte, []string) {
 	return out, dropped
 }
 
+// LoadGenerated is Load for a config.yaml a program writes for itself, as the
+// embedded backend's (internal/local): keys this version no longer has are
+// dropped instead of refusing the file, and returned so the caller can say
+// so. Nobody reads the upgrade guide for a file they never wrote. A file a
+// person keeps goes through Load, which refuses them.
+func LoadGenerated(path string) (Config, []string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Default(), nil, err
+	}
+	unknown := unknownKeys(raw)
+	if len(unknown) > 0 {
+		var doc map[string]any
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			return Default(), nil, fmt.Errorf("decode %s: %w", path, err)
+		}
+		for _, key := range unknown {
+			section, leaf, ok := strings.Cut(key, ".")
+			if !ok {
+				delete(doc, section)
+			} else if m, isMap := doc[section].(map[string]any); isMap {
+				delete(m, leaf)
+			}
+		}
+		if raw, err = yaml.Marshal(doc); err != nil {
+			return Default(), nil, err
+		}
+	}
+	cfg, err := loadBytes(path, raw)
+	return cfg, unknown, err
+}
+
 // loadBytes is Load for a file already read; path labels its errors. Retired
 // keys are dropped first (RetiredKeys).
 func loadBytes(path string, raw []byte) (Config, error) {

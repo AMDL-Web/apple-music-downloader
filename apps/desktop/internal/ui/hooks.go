@@ -67,26 +67,30 @@ func (a *App) hookList(c *ui.Context, k *Tokens) {
 	if h == nil {
 		return
 	}
-	ui.Row(c).Gap(12).Padding(10, 12, 10, 16).Radius(radiusControl).Border(1, k.Line).AlignItems(ui.Center).Children(func() {
-		on := h.Enabled
-		toggle(c, k, "hooks-on", &on, "Run hooks")
-		if on != h.Enabled {
-			a.Store.SetHooksEnabled(on)
-		}
-		ui.Text(c, "Run hooks").FontSize(13).FontWeight(600).Grow(1)
-		if len(h.Entries) > 0 && len(a.Store.Server.HookPresets) > 0 && button(c, k, buttonPlain, "Add hook", icPlus).Clicked() {
-			a.openHookSheet(nil, "")
-		}
-	})
-	if len(h.Entries) == 0 {
-		if len(a.Store.Server.HookPresets) > 0 {
-			card(c, k).Gap(14).Children(func() {
-				a.presetGrid(c, k, func(id string) { a.openHookSheet(nil, id) })
-			})
-		}
-		return
-	}
+	// The master switch is the card's first row, as a section's own switch
+	// is among its fields (fieldRow).
 	ui.Column(c.Key("hook-list")).Padding(4, padCard).Radius(radiusCard).Background(k.Raise).Dividers(1, k.Line).Children(func() {
+		// Built from the right, so the switch, not its title, is what
+		// "Run hooks" names first.
+		ui.Row(c.Key("hooks-on-row")).Reverse().Gap(12).PaddingY(12).AlignItems(ui.Center).Children(func() {
+			on := h.Enabled
+			toggle(c, k, "hooks-on", &on, "Run hooks")
+			if on != h.Enabled {
+				a.Store.SetHooksEnabled(on)
+			}
+			if len(h.Entries) > 0 && len(a.Store.Server.HookPresets) > 0 && button(c, k, buttonPlain, "Add hook", icPlus).Clicked() {
+				a.openHookSheet(nil, "")
+			}
+			ui.Text(c, "Run hooks").FontSize(13).FontWeight(600).Grow(1)
+		})
+		if len(h.Entries) == 0 {
+			if len(a.Store.Server.HookPresets) > 0 {
+				ui.Column(c.Key("presets")).PaddingY(14).Children(func() {
+					a.presetGrid(c, k, func(id string) { a.openHookSheet(nil, id) })
+				})
+			}
+			return
+		}
 		for i := range h.Entries {
 			a.hookRow(c, k, h, &h.Entries[i])
 		}
@@ -258,8 +262,13 @@ func (a *App) presetGrid(c *ui.Context, k *Tokens, pick func(id string)) {
 		for _, g := range groups {
 			ui.Column(c).Gap(8).Children(func() {
 				label(c, k, g.label)
-				// Three a row, one width, so the rows line up.
-				ui.Grid(c).Columns(3).Gap(8).Children(func() {
+				// Three a row, one width, so the rows line up; a kind with
+				// one service gives it the whole row.
+				cols := 3
+				if n := countPresets(a.Store.Server.HookPresets, g.kind); n == 1 {
+					cols = 1
+				}
+				ui.Grid(c).Columns(cols).Gap(8).Children(func() {
 					for _, p := range a.Store.Server.HookPresets {
 						if p.Kind != g.kind {
 							continue
@@ -283,6 +292,17 @@ func (a *App) presetGrid(c *ui.Context, k *Tokens, pick func(id string)) {
 			})
 		}
 	})
+}
+
+// countPresets is how many of presets are of kind.
+func countPresets(presets []client.HookPreset, kind string) int {
+	n := 0
+	for _, p := range presets {
+		if p.Kind == kind {
+			n++
+		}
+	}
+	return n
 }
 
 // openHookSheet opens the sheet editing e, or adding a hook of preset

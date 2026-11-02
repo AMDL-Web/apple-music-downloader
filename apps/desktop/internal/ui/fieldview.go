@@ -2,8 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 
@@ -169,18 +171,13 @@ func (a *App) fieldControl(c *ui.Context, k *Tokens, f *configField, off bool) {
 	case fieldSelect:
 		a.selectField(c, k, f, v, off)
 	case fieldNumber:
-		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			a.textField(c, k, f, valueText(v), 96, off, func(s string) {
-				n, err := strconv.Atoi(s)
-				switch {
-				case err != nil || n < f.min || (f.max > 0 && n > f.max):
-					a.set.edit.errs[f.key] = rangeText(f)
-				default:
-					a.Store.SetConfig(f.key, n)
-				}
-			})
-			if f.unit != "" {
-				ui.Text(c, f.unit).FontSize(12).TextColor(k.Muted).Width(34)
+		a.textField(c, k, f, valueText(v), numberWidth(c, f), off, func(s string) {
+			n, err := strconv.Atoi(s)
+			switch {
+			case err != nil || n < f.min || (f.max > 0 && n > f.max):
+				a.set.edit.errs[f.key] = rangeText(f)
+			default:
+				a.Store.SetConfig(f.key, n)
 			}
 		})
 	case fieldPath, fieldTemplate, fieldText:
@@ -193,6 +190,27 @@ func (a *App) fieldControl(c *ui.Context, k *Tokens, f *configField, off bool) {
 		a.setField(c, k, f, strs(v), off)
 	}
 }
+
+// numberWidth is a number field's width: room for the digits of its
+// largest value (numberDigits without one) and its unit, which it holds at
+// its right, so its edge lines up with the switches and menus above it.
+func numberWidth(c *ui.Context, f *configField) float32 {
+	digits := numberDigits
+	if f.max > 0 {
+		digits = len(strconv.Itoa(f.max))
+	}
+	w, _ := c.MeasureText(0, ui.Span{Text: strings.Repeat("0", digits), Font: MonoFont, Size: 12})
+	w += 2*fieldPadX + 4
+	if f.unit != "" {
+		u, _ := c.MeasureText(0, ui.Span{Text: f.unit, Size: 12})
+		w += fieldUnitGap + u
+	}
+	return float32(math.Ceil(float64(w)))
+}
+
+// numberDigits is the digits a number field without a largest value has
+// room for.
+const numberDigits = 6
 
 func rangeText(f *configField) string {
 	if f.max > 0 {
@@ -210,7 +228,7 @@ func (a *App) textField(c *ui.Context, k *Tokens, f *configField, saved string, 
 	if !editing {
 		txt = saved
 	}
-	box, in := fieldBox(c, k, f.key, &txt, "", true)
+	box, in := fieldBoxUnit(c, k, f.key, &txt, "", true, f.unit)
 	in.Label(f.label)
 	if width > 0 {
 		box.Grow(0).Width(width)
@@ -248,9 +266,20 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 	if showCustom {
 		cur = customLabel
 	}
+	// As wide as its longest option.
+	width := float32(0)
+	for _, o := range f.options {
+		w, _ := c.MeasureText(0, ui.Span{Text: o.label, Size: 12.5})
+		width = max(width, w)
+	}
+	if f.custom {
+		w, _ := c.MeasureText(0, ui.Span{Text: customLabel, Size: 12.5})
+		width = max(width, w)
+	}
+	width = float32(math.Ceil(float64(width + 2*fieldPadX + 8 + 12 + 2)))
 	ui.Column(c).Gap(8).AlignItems(ui.End).Children(func() {
 		sel := ui.SelectBase(c.Key(f.key), &cur)
-		trigger := sel.Trigger.Width(220).Height(32).PaddingX(10).Gap(8).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2).
+		trigger := sel.Trigger.Width(width).Height(32).PaddingX(10).Gap(8).Radius(radiusControl).Background(k.Raise2).Border(1, k.Line2).
 			AlignItems(ui.Center).Justify(ui.SpaceBetween).Label(f.label).Disabled(off)
 		if sel.Open() {
 			trigger.Border(1, k.Accent)
@@ -260,7 +289,7 @@ func (a *App) selectField(c *ui.Context, k *Tokens, f *configField, v any, off b
 			ui.Icon(c, icChevron).FontSize(12).TextColor(k.Muted)
 		})
 		sel.Popup(func(panel ui.Element) {
-			panel.Width(220).Padding(padControl).Gap(1).Radius(radiusMenu).Background(k.Raise2).Border(1, k.Line2).Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.3))
+			panel.MinWidth(width).Padding(padControl).Gap(1).Radius(radiusMenu).Background(k.Raise2).Border(1, k.Line2).Shadow(0, 8, 24, 0, ui.RGBA(0, 0, 0, 0.3))
 			labels := make([]string, 0, len(f.options)+1)
 			for _, o := range f.options {
 				labels = append(labels, o.label)
@@ -444,7 +473,7 @@ func (a *App) setField(c *ui.Context, k *Tokens, f *configField, items []string,
 		for _, o := range f.options {
 			v := valueText(o.value)
 			on := slices.Contains(items, v)
-			b := ui.ButtonBase(c.Key(v)).Height(28).PaddingX(10).Gap(6).Radius(radiusControl).AlignItems(ui.Center).
+			b := ui.ButtonBase(c.Key(v)).Height(28).PaddingX(10).Radius(radiusControl).AlignItems(ui.Center).
 				Label(o.label).Selected(on).Disabled(off)
 			col := k.Muted
 			if on {
@@ -466,13 +495,9 @@ func (a *App) setField(c *ui.Context, k *Tokens, f *configField, items []string,
 				}
 				a.Store.SetConfig(f.key, next)
 			}
+			// The fill, border and ink say it is on; the label keeps one
+			// weight, so choosing an option moves nothing.
 			b.Cursor(ui.CursorPointer).Children(func() {
-				// The check keeps its room when the option is off, so
-				// choosing one moves neither it nor the options beside it.
-				mark := ui.Icon(c, icCheck).FontSize(12).TextColor(col)
-				if !on {
-					mark.Invisible()
-				}
 				ui.Text(c, o.label).FontSize(12.5).FontWeight(600).TextColor(col)
 			})
 		}

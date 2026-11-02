@@ -153,9 +153,9 @@ func (a *App) trackRow(c *ui.Context, k *Tokens, it *domain.JobItem, accent ui.C
 		}
 		row.Children(func() {
 			mono(c, fmt.Sprint(it.Index), 12).TextColor(k.Faint).Width(trackNumber).TextAlign(ui.End)
-			trackNames(c, k, it.Title, false, trackSub(it))
+			trackNames(c, k, it.Title, false, a.trackSubText(it))
 			stageCell(c, k, it, accent, bar, still)
-			trackDuration(c, k, it.DurationMS)
+			trackDuration(c, k, a.songLength(it.DurationMS))
 			ui.Row(c).Width(trackStateWidth).Height(trackControl).Gap(6).Justify(ui.End).AlignItems(ui.Center).Children(func() { trackState(c, k, it) })
 		})
 	})

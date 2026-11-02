@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -9,7 +10,6 @@ import (
 	"amdl/apps/desktop/internal/store"
 	"amdl/internal/client"
 	"amdl/internal/domain"
-	"amdl/internal/format"
 )
 
 // The album screen's track list, in DIPs. The album's songs and a
@@ -219,7 +219,7 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 	// A job just started has not listed its tracks yet: they wait with it.
 	queued := albumMark == store.MarkActive && m.item == nil && m.mark == store.MarkNone
 	th := store.TrackHit(t)
-	since, starting := s.Search.Starting[store.HitKey(th)]
+	since, starting := s.Search.Starting[a.hitKey(th)]
 	wait := waited(c, starting, since)
 	lit := m.lit()
 	line := k.Line
@@ -241,19 +241,19 @@ func (a *App) trackLine(c *ui.Context, k *Tokens, t client.AlbumTrack, albumArti
 			if m.mark == store.MarkDone {
 				num = k.Muted
 			}
-			mono(c, fmt.Sprint(t.TrackNumber), 12).TextColor(num).Width(trackNumber).TextAlign(ui.End)
+			mono(c, strconv.Itoa(t.TrackNumber), 12).TextColor(num).Width(trackNumber).TextAlign(ui.End)
 			sub := ""
 			switch it := m.item; {
-			case it != nil && (lit || it.Status == domain.ItemFailed || it.Attempt > 1) && trackSub(it) != "":
-				sub = trackSub(it)
+			case it != nil && (lit || it.Status == domain.ItemFailed || it.Attempt > 1) && a.trackSubText(it) != "":
+				sub = a.trackSubText(it)
 			case t.ArtistName != "" && t.ArtistName != albumArtist:
 				sub = t.ArtistName
 			case it != nil:
-				sub = trackSub(it)
+				sub = a.trackSubText(it)
 			}
 			trackNames(c, k, t.Name, t.ContentRating == "explicit", sub)
 			stageCell(c, k, m.item, accent, bar, still)
-			trackDuration(c, k, t.DurationMS)
+			trackDuration(c, k, a.songLength(t.DurationMS))
 			ui.Row(c).Width(trackStateWidth).Height(trackControl).Gap(6).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 				switch {
 				case m.item != nil:
@@ -291,13 +291,9 @@ func trackNames(c *ui.Context, k *Tokens, title string, explicit bool, sub strin
 	})
 }
 
-// trackDuration is a song's length in its column; ms is 0 where it is not
-// known.
-func trackDuration(c *ui.Context, k *Tokens, ms int) {
-	length := ""
-	if ms > 0 {
-		length = format.Duration(time.Duration(ms) * time.Millisecond)
-	}
+// trackDuration is a song's length in its column, "" where it is not
+// known (songLength).
+func trackDuration(c *ui.Context, k *Tokens, length string) {
 	mono(c, length, 12).TextColor(k.Muted).Width(trackLength).TextAlign(ui.End)
 }
 

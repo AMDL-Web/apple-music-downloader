@@ -481,3 +481,22 @@ func TestValidateGiveUpAfterRuns(t *testing.T) {
 		}
 	}
 }
+
+// A file a program writes for itself loses the keys this version removed,
+// and keeps every other value.
+func TestLoadGeneratedDropsRemovedKeys(t *testing.T) {
+	path := writeConfig(t, "download:\n  memory_mode: low\n  max_attempts: 7\nstorage:\n  path: x\nwrapper:\n  address: http://127.0.0.1:12340\n")
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load accepted removed keys")
+	}
+	cfg, dropped, err := LoadGenerated(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(dropped, ",") != "download.memory_mode,storage" {
+		t.Errorf("dropped %v", dropped)
+	}
+	if cfg.Download.MaxAttempts != 7 || cfg.Wrapper.Address != "http://127.0.0.1:12340" {
+		t.Errorf("kept max_attempts %d, wrapper %q", cfg.Download.MaxAttempts, cfg.Wrapper.Address)
+	}
+}
