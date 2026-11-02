@@ -426,8 +426,9 @@ apple_library:
   # interval and is never fatal.
   #
   # integer minutes: period of the incremental sync, range 0..1440. It reads the newest songs
-  # and albums until one already cached, the whole playlist list, and the artist total, about
-  # 4 Apple requests plus one per playlist whose contents changed; when a kind's total disagrees
+  # and albums until one already cached, the whole playlist list, and the artist total, 5
+  # Apple requests (the account storefront and one read of each kind) plus one per page of every
+  # playlist whose contents changed; when a kind's total disagrees
   # with the cache (something was removed) that kind is read in full at most once an hour.
   # 0 turns periodic incremental syncs off. Absent: 30.
   sync_interval_minutes: 30
