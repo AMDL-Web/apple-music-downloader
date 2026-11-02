@@ -107,22 +107,7 @@ func (a *App) recentWall(c *ui.Context, k *Tokens, finished []*store.Job, hero *
 				shown++
 			}
 			if done := a.Store.Count(store.TabDone); done > shown {
-				more := ui.ButtonBase(c.Key("wall-all")).Label("Show every finished download")
-				// On the Done tab the link keeps its room, so the row's height
-				// does not change with the tab.
-				if store.Tab(a.Tab) == store.TabDone {
-					more.Invisible()
-				}
-				col := k.Muted
-				if more.Hovered() {
-					col = k.Fg
-				}
-				if more.Clicked() {
-					a.Tab = int(store.TabDone)
-				}
-				more.Cursor(ui.CursorPointer).Children(func() {
-					mono(c, fmt.Sprintf("All %d in Done →", done), 11).TextColor(col)
-				})
+				mono(c, fmt.Sprintf("%d downloaded", done), 11).TextColor(k.Muted)
 			}
 		})
 		ui.Row(c).Gap(wallGap).Padding(2, 0, 4, 0).Children(func() {
@@ -150,7 +135,7 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 	if hover || (a.fly.moving && a.fly.from == "wall:"+j.ID) {
 		video = a.motionPlayer(c, j.MotionArtworkURL)
 	}
-	t.Cursor(ui.CursorPointer).Tooltip(j.Name() + " — " + j.By()).Children(func() {
+	t.Cursor(ui.CursorPointer).Children(func() {
 		frame := ui.Box(c).Size(size, size).Radius(radiusControl).Scale(1+0.06*lift, 1+0.06*lift)
 		a.flySource(frame, "wall:"+j.ID, partCover, "", radiusControl)
 		if lift > 0.01 {
@@ -158,9 +143,6 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 		}
 		frame.Children(func() {
 			widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: jobPalette(j, false).Bg, Size: size, Radius: radiusControl, Color: 1, Video: video}.Show(c)
-			if lift > 0.01 {
-				ui.Box(c).Fill().Radius(radiusControl).Absolute().Top(0).Left(0).Border(2, k.Accent.Alpha(lift)).PassThrough()
-			}
 		})
 	})
 }

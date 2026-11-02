@@ -61,28 +61,27 @@ func TestQueueShowsTheLatestDownloadUntilOneRuns(t *testing.T) {
 	again.ArtistName = "Artist a"
 	s.Jobs = append(s.Jobs, again)
 	tt := ui.NewTester(a.View, 1280, 800)
-	for _, want := range []string{"LATEST DOWNLOAD · FINISHED " + strings.ToUpper(dayClock(later, now)), "Newest Album", "Older Album", "All 12 in Done →"} {
+	for _, want := range []string{"LATEST DOWNLOAD · FINISHED " + strings.ToUpper(dayClock(later, now)), "Newest Album", "Older Album", "12 downloaded"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in %q", want, tt.Texts())
 		}
 	}
-	sortY := func() float32 {
-		r, ok := tt.Find("Newest first")
-		if !ok {
-			t.Fatalf("no sort control in %q", tt.Texts())
+	// A cover of the wall says nothing more under the pointer.
+	if r, ok := tt.Find("Older Album"); ok {
+		tt.Move(r.X+r.W/2, r.Y+r.H/2)
+		tt.Advance(2 * time.Second)
+		for _, x := range tt.Texts() {
+			if strings.HasPrefix(x, "Older Album — ") {
+				t.Errorf("a wall cover under the pointer names itself: %q", x)
+			}
 		}
-		return r.Y
+		tt.Move(1, 1)
+		tt.Advance(time.Second)
 	}
-	before := sortY()
-	if err := tt.Click("All 12 in Done →"); err != nil {
-		t.Fatal(err)
-	}
-	if store.Tab(a.Tab) != store.TabDone {
-		t.Errorf("the wall's link shows tab %d, want Done", a.Tab)
-	}
-	tt.Frame()
-	if after := sortY(); after != before {
-		t.Errorf("the list moved from %v to %v as the wall's link hid", before, after)
+	// The count says how many there are and goes nowhere.
+	tab := a.Tab
+	if err := tt.Click("12 downloaded"); err == nil && a.Tab != tab {
+		t.Errorf("the wall's count opened tab %d", a.Tab)
 	}
 	a.Tab = int(store.TabActive)
 	tt.Frame()
