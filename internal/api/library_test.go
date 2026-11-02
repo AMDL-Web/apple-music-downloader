@@ -62,7 +62,7 @@ func (f *fakeLibrary) AlbumFolderStates(_ context.Context, albums []applemusic.C
 }
 
 func newLibraryServer(catalog CatalogService, library LibraryService) http.Handler {
-	return (&Server{cfg: config.NewStore(config.Default()), catalog: catalog, library: library}).Routes()
+	return (&Server{cfg: config.NewStore(config.Default()), catalog: catalog, library: library, appleLibrary: &fakeAppleLibrary{}}).Routes()
 }
 
 func libraryOf(t *testing.T, v any) map[string]any {
