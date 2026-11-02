@@ -23,6 +23,9 @@ type ValidationResult struct {
 	Type       string
 	Storefront string
 	ID         string
+	// AlbumID is the album a song link names (album/...?i=), so the song is
+	// added to its album record at once; empty for other links.
+	AlbumID string
 }
 
 // RequestError is a Processor.ValidateRequest verdict on one URL. Code is

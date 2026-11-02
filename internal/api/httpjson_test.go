@@ -20,7 +20,7 @@ func TestJSONEndpointsRejectTrailingValues(t *testing.T) {
 		{name: "wrapper two step", method: http.MethodPost, path: "/api/v1/wrapper/login/login-1/2fa", body: `{"two_step_code":"123456"}`},
 		{name: "wrapper logout", method: http.MethodPost, path: "/api/v1/wrapper/logout", body: `{"username":"user"}`},
 		{name: "quality", method: http.MethodPost, path: "/api/v1/quality", body: `{"url":"song|us|1"}`},
-		{name: "downloads", method: http.MethodPost, path: "/api/v1/downloads", body: `{"urls":["song|us|1"]}`},
+		{name: "downloads", method: http.MethodPost, path: "/api/v1/downloads", body: `{"urls":["station|us|1"]}`},
 	}
 	for _, tc := range tests {
 		for _, suffix := range []struct {

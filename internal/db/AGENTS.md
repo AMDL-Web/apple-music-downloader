@@ -33,7 +33,7 @@ migration order and query invariants are in the package comment
   are never reused or renumbered.
 - The partial unique indexes over queued and running runs make dedup safe under
   concurrent adds: one active run per record (`idx_runs_active_resource`) and,
-  until the planner keys runs by record, per canonical key
+  for a one-off run such as a station, per canonical key
   (`internal/jobs#canonicalKey`).
 - A record's rollup columns are stored and recomputed in the transaction of
   every write to its tracks or files; `files.path` is unique, so one file has

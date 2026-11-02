@@ -207,8 +207,10 @@ func Run(ctx context.Context, opts Options) (err error) {
 	manager := jobs.NewManager(store, hub, downloader, cfg.Download.MaxRunningJobs, logSystem.Logger.With("component", "jobs"))
 	hookDispatcher := hooks.NewDispatcher(hooksCfg, manager.Event, logSystem.Logger.With("component", "hooks"))
 	manager.SetHooks(hookDispatcher)
-	// The library watcher submits through the same manager as the REST API, so
-	// anything it queues is an ordinary job (same dedup, same hooks).
+	manager.SetConfig(cfgStore.Get)
+	manager.SetCatalog(downloader)
+	// The library watcher adds album records through the same manager as the
+	// REST API, so their runs are ordinary runs (same picker, same hooks).
 	libraryWatcher := librarysync.New(cfgStore, tokens, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
 	// The Apple library cache never submits anything; it only reads.
 	appleLibrary := applelibrary.New(cfgStore, tokens, catalog, store, logSystem.Logger.With("component", "applelibrary"))

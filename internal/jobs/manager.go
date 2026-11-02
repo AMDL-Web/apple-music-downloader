@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"amdl/internal/config"
 	"amdl/internal/db"
 	"amdl/internal/events"
 	"amdl/internal/hooks"
@@ -28,7 +29,9 @@ type Manager struct {
 	logger    *slog.Logger
 	mu        sync.Mutex
 	submitMu  sync.Mutex
-	cancels   map[string]context.CancelFunc
+	// cancels holds each running job's cancel; the cause says why it stopped
+	// (context.Canceled, ErrPaused).
+	cancels map[string]context.CancelCauseFunc
 	// finalizing marks jobs whose terminal status is already persisted but
 	// whose finalize sequence (terminal event + hook dispatch) has not finished
 	// yet via Cancel's queued path. run()'s finalize window needs no entry here
@@ -55,6 +58,20 @@ type Manager struct {
 	unclaimable map[string]bool
 	// wake tells idle workers that a job may have become claimable.
 	wake signal
+	// pickWake tells the picker a record may have work; resolveWake tells
+	// the resolver a pending add may be resolvable.
+	pickWake    signal
+	resolveWake signal
+	// backoff holds records the picker passes over after a failed run with no
+	// slot to carry the failure, guarded by mu (noteRecordRunEnd).
+	backoff map[recordKey]recordBackoff
+
+	// cfg reads the live config (SetConfig); nil means the defaults.
+	cfg func() config.Config
+	// catalog makes the resolver's catalog reads (SetCatalog), guarded by
+	// catalogMu.
+	catalogMu sync.Mutex
+	catalog   Catalog
 
 	// lifecycle makes worker shutdown observable. In particular, callers must
 	// not close the store or processor dependencies until Shutdown/Wait says
@@ -72,8 +89,9 @@ func NewManager(store *db.Store, hub *events.Hub, processor Processor, workers i
 	}
 	return &Manager{
 		store: store, hub: hub, processor: processor,
-		logger: logger, cancels: map[string]context.CancelFunc{}, finalizing: map[string]bool{}, workers: workers,
+		logger: logger, cancels: map[string]context.CancelCauseFunc{}, finalizing: map[string]bool{}, workers: workers,
 		capacity: queueCapacity, unclaimable: map[string]bool{}, workerDone: make(chan struct{}),
+		backoff: map[recordKey]recordBackoff{},
 	}
 }
 
@@ -136,6 +154,8 @@ func (m *Manager) FinalizeInFlight(jobID string) bool {
 	return m.cancels[jobID] != nil || m.finalizing[jobID]
 }
 
+// Start runs the worker pool, the picker and the resolver until Shutdown or
+// until ctx ends.
 func (m *Manager) Start(ctx context.Context) {
 	m.lifecycleMu.Lock()
 	if m.started {
@@ -145,12 +165,20 @@ func (m *Manager) Start(ctx context.Context) {
 	workerCtx, cancel := context.WithCancelCause(ctx)
 	m.started = true
 	m.workerCancel = cancel
-	m.workerWG.Add(m.workers)
+	m.workerWG.Add(m.workers + 2)
 	m.lifecycleMu.Unlock()
 
 	for i := 0; i < m.workers; i++ {
 		go m.worker(workerCtx, i)
 	}
+	go func() {
+		defer m.workerWG.Done()
+		m.picker(workerCtx, pickInterval)
+	}()
+	go func() {
+		defer m.workerWG.Done()
+		m.resolver(workerCtx, resolveInterval)
+	}()
 	go func() {
 		m.workerWG.Wait()
 		close(m.workerDone)

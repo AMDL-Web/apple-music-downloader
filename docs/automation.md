@@ -145,9 +145,9 @@ It depends on a media-user-token: the wrapper's when the backend can read it
 and the web-player token alone will not do. With neither the watcher idles and warns once
 instead of erroring every pass.
 
-Submissions go through `jobs.Manager.SubmitBatch`, not through the backend's own HTTP API,
-so they are identical to jobs you submit by hand — same deduplication, same validation,
-same hooks. Catalog reads use the scraped web-player token, like every other catalog read.
+New albums are added through `jobs.Manager.AddAlbums` as album records, not through the
+backend's own HTTP API, so their runs are ordinary runs — same picker, same hooks. An album
+you removed from amdl is not added back. Catalog reads use the scraped web-player token, like every other catalog read.
 
 ### Why the watermark is a position, not a timestamp
 

@@ -176,7 +176,7 @@ type recoveryBacklogProcessor struct {
 }
 
 func (p *recoveryBacklogProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
-	return ValidationResult{Type: "song", Storefront: "cn"}, nil
+	return ValidationResult{Type: "station", Storefront: "cn"}, nil
 }
 
 func (p *recoveryBacklogProcessor) ProcessJob(ctx context.Context, _ domain.Job, _ Reporter) error {
@@ -327,7 +327,7 @@ func TestRecoverUnfinishedDoesNotDispatchJobQueuedHook(t *testing.T) {
 func TestNilHooksDispatcherIsNoop(t *testing.T) {
 	manager := newTestManager(t)
 	manager.Start(context.Background())
-	resp := manager.SubmitBatch(context.Background(), []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -379,7 +379,7 @@ func TestFinalizeInFlightTracksFinalizeMarks(t *testing.T) {
 	}
 
 	manager.mu.Lock()
-	manager.cancels["job-1"] = func() {}
+	manager.cancels["job-1"] = func(error) {}
 	manager.mu.Unlock()
 	if !manager.FinalizeInFlight("job-1") {
 		t.Fatal("FinalizeInFlight with a cancels entry = false, want true")

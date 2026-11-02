@@ -7,6 +7,7 @@ import (
 
 	"amdl/internal/applemusic"
 	"amdl/internal/domain"
+	"amdl/internal/jobs"
 )
 
 // maxClientErrorPasses is how many passes in a row one album's lookup may fail
@@ -16,12 +17,14 @@ import (
 // keeps every later addition "new" and resubmitted each pass.
 const maxClientErrorPasses = 3
 
-// submitAlbums turns new songs into a deduplicated album submission. Several
-// new songs from one album produce one job. It returns the number of jobs
-// accepted and a description of each album that was not consumed: one whose
-// catalog link could not be resolved, or whose submission was rejected for a
-// reason that can pass (submissionConsumed). A library album with no catalog
-// counterpart is consumed: it can never be submitted.
+// submitAlbums adds the albums of new songs as album records, one per album
+// however many of its songs are new (Submitter.AddAlbums, source
+// library_sync). It returns the number of runs the add queued and a
+// description of each album that was not consumed: one whose catalog link
+// could not be resolved, or the albums of a batch the store failed to add. A
+// library album with no catalog counterpart is consumed: it can never be
+// added. So is an album removed from amdl, which the monitor does not add
+// back.
 func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applemusic.LibrarySong) (int, []string) {
 	type albumInfo struct {
 		name   string
@@ -49,8 +52,9 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 		info := albums[albumID]
 		return fmt.Sprintf("%q by %q (%s): %s", info.name, info.artist, albumID, reason)
 	}
-	urls := make([]string, 0, len(order))
-	urlAlbums := make([]string, 0, len(order))
+	catalogIDs := make([]string, 0, len(order))
+	libraryIDs := make([]string, 0, len(order))
+	seen := map[string]bool{}
 	for _, albumID := range order {
 		info := albums[albumID]
 		catalogURL, ok, err := w.library.LibraryAlbumCatalogURL(ctx, token, albumID)
@@ -71,79 +75,47 @@ func (w *Watcher) submitAlbums(ctx context.Context, token string, added []applem
 				"album", info.name, "artist", info.artist, "library_album_id", albumID)
 			continue
 		}
-		urls = append(urls, catalogURL)
-		urlAlbums = append(urlAlbums, albumID)
+		// The album record is keyed by its catalog id without the storefront.
+		parsed, err := applemusic.ParseWithAlbumTrackMode(catalogURL, "album")
+		if err != nil || parsed.Type != applemusic.TypeAlbum {
+			w.logger.Warn("library album's catalog link is not an album link; skipping",
+				"album", info.name, "artist", info.artist, "library_album_id", albumID, "url", catalogURL, "error", err)
+			continue
+		}
+		if seen[parsed.ID] {
+			continue
+		}
+		seen[parsed.ID] = true
+		catalogIDs = append(catalogIDs, parsed.ID)
+		libraryIDs = append(libraryIDs, albumID)
 		w.logger.Info("library addition detected",
-			"album", info.name, "artist", info.artist, "new_songs", info.songs, "url", catalogURL)
+			"album", info.name, "artist", info.artist, "new_songs", info.songs, "album_id", parsed.ID)
 	}
-	if len(urls) == 0 {
+	if len(catalogIDs) == 0 {
 		return 0, pending
 	}
-	// No overrides: these are ordinary jobs, so they honour the same runtime
-	// config and the same hooks as anything submitted by hand.
-	resp := w.jobs.SubmitBatch(ctx, urls, nil)
-	for i, albumID := range urlAlbums {
-		if i >= len(resp.Results) {
-			pending = append(pending, describe(albumID, "no submission result"))
-			continue
-		}
-		result := resp.Results[i]
-		if submissionConsumed(result) {
-			if result.Status != domain.SubmitAccepted {
-				w.logger.Info("library submission not queued",
-					"url", result.URL, "status", string(result.Status), "error", rejectionReason(result))
+	outcomes, err := w.jobs.AddAlbums(ctx, domain.SourceLibrarySync, catalogIDs)
+	queued := 0
+	for i, id := range catalogIDs {
+		outcome, done := outcomes[id]
+		if !done {
+			reason := "not added"
+			if err != nil {
+				reason = err.Error()
 			}
+			w.logger.Warn("library album not added; retrying next pass", "album_id", id, "error", reason)
+			pending = append(pending, describe(libraryIDs[i], reason))
 			continue
 		}
-		w.logger.Warn("library submission rejected; retrying next pass",
-			"url", result.URL, "status", string(result.Status), "error", rejectionReason(result))
-		pending = append(pending, describe(albumID, rejectionReason(result)))
+		switch outcome {
+		case jobs.AddQueued:
+			queued++
+		case jobs.AddTombstoned:
+			w.logger.Info("library album was removed from amdl; not added again", "album_id", id)
+		}
 	}
-	w.logger.Info("library sync submitted albums",
-		"accepted", resp.Accepted, "rejected", resp.Rejected)
-	return resp.Accepted, pending
-}
-
-// permanentRejections are the submit error codes of an invalid input that
-// will never be accepted, however often it is retried. Every other rejection
-// (decryptor_unavailable, invalid_configuration, a code this list does not
-// know) leaves the album to be retried, and so does every result with status
-// error (store_error). The codes are set by the job processor's request
-// validation (internal/media Downloader.ValidateRequest).
-var permanentRejections = map[string]bool{
-	"invalid_url":            true,
-	"unsupported_input":      true,
-	"unsupported_storefront": true,
-}
-
-// submissionConsumed reports whether a submission result settles its album for
-// good, so the anchor may move past it. Accepted and duplicate submissions are
-// consumed; a full queue or a transient rejection is not.
-func submissionConsumed(result domain.SubmitResult) bool {
-	switch result.Status {
-	case domain.SubmitAccepted, domain.SubmitDuplicateActive, domain.SubmitDuplicateInRequest:
-		return true
-	case domain.SubmitInvalid:
-		return permanentRejections[rejectionCode(result)]
-	default:
-		return false
-	}
-}
-
-// rejectionCode is the submit error code of a rejection, or "" when it
-// carries none.
-func rejectionCode(result domain.SubmitResult) string {
-	if result.Error == nil {
-		return ""
-	}
-	return result.Error.Code
-}
-
-func rejectionReason(result domain.SubmitResult) string {
-	if result.Error == nil {
-		return string(result.Status)
-	}
-	return string(result.Status) + ": " + result.Error.Code + ": " + result.Error.Message
+	w.logger.Info("library sync added albums", "albums", len(outcomes), "queued", queued)
+	return queued, pending
 }
 
 // giveUpOnAlbum records a failed catalog lookup and reports whether the album

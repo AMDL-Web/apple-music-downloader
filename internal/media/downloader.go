@@ -169,7 +169,14 @@ func (d *Downloader) validateRequest(ctx context.Context, url string) (jobs.Vali
 	if err := d.validateStorefront(ctx, parsed.Storefront); err != nil {
 		return jobs.ValidationResult{}, err
 	}
-	return jobs.ValidationResult{Type: string(parsed.Type), Storefront: parsed.Storefront, ID: parsed.ID}, nil
+	result := jobs.ValidationResult{Type: string(parsed.Type), Storefront: parsed.Storefront, ID: parsed.ID}
+	if parsed.Type == applemusic.TypeSong && parsed.TrackID != "" {
+		// An album-track link names the song's album: read it in album mode.
+		if album, err := applemusic.ParseWithAlbumTrackMode(url, "album"); err == nil {
+			result.AlbumID = album.ID
+		}
+	}
+	return result, nil
 }
 
 func (d *Downloader) validateStorefront(ctx context.Context, storefront string) error {

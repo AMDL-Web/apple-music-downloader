@@ -469,88 +469,6 @@ func TestGetDownloadReportsOutputPathOfFinishedItemsOnly(t *testing.T) {
 	}
 }
 
-func TestRetryDownloadRequeuesFailedJobAndKeepsFinishedItems(t *testing.T) {
-	server := newTestServerWithManager(t)
-	ctx := context.Background()
-	job := domain.Job{ID: "job1", Input: "album|us|1", Type: "album", CanonicalKey: "album:us:1", Status: domain.JobFailed, Error: "boom"}
-	if err := server.store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-	for _, item := range []domain.JobItem{
-		{ID: "item1", JobID: job.ID, AdamID: "s1", Kind: "song", Index: 1, Status: domain.ItemCompleted, Progress: domain.ItemProgress{Download: 1, Decrypt: 1, Resolved: true, Remuxed: true, Verified: true, Tagged: true, Saved: true}},
-		{ID: "item2", JobID: job.ID, AdamID: "s2", Kind: "song", Index: 2, Status: domain.ItemFailed, Error: "boom"},
-	} {
-		if err := server.store.CreateItem(ctx, item); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+job.ID+"/retry", "")
-	if recorder.Code != http.StatusAccepted {
-		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
-	}
-	var resp map[string]string
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	if resp["status"] != "queued" {
-		t.Fatalf("body = %s, want status queued", recorder.Body.String())
-	}
-	got, err := server.store.GetJob(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != domain.JobQueued || got.Error != "" {
-		t.Fatalf("job after retry = status %s error %q, want queued with empty error", got.Status, got.Error)
-	}
-	items, err := server.store.ListItems(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if items[0].Status != domain.ItemCompleted {
-		t.Fatalf("completed item status = %s, want untouched completed", items[0].Status)
-	}
-	if items[1].Status != domain.ItemQueued || items[1].Error != "" {
-		t.Fatalf("failed item after retry = %+v, want queued with empty error", items[1])
-	}
-}
-
-func TestRetryDownloadRequeuesCancelledJob(t *testing.T) {
-	server := newTestServerWithManager(t)
-	ctx := context.Background()
-	job := domain.Job{ID: "job-cancelled", Input: "album|us|2", Type: "album", CanonicalKey: "album:us:2", Status: domain.JobCancelled, Error: "cancelled"}
-	if err := server.store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-	for _, item := range []domain.JobItem{
-		{ID: "c-item1", JobID: job.ID, AdamID: "s1", Kind: "song", Index: 1, Status: domain.ItemCompleted},
-		{ID: "c-item2", JobID: job.ID, AdamID: "s2", Kind: "song", Index: 2, Status: domain.ItemCancelled, StatusMessage: "Cancelled"},
-	} {
-		if err := server.store.CreateItem(ctx, item); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+job.ID+"/retry", "")
-	if recorder.Code != http.StatusAccepted || !strings.Contains(recorder.Body.String(), `"queued"`) {
-		t.Fatalf("status = %d, body = %s; want 202 queued", recorder.Code, recorder.Body.String())
-	}
-	got, err := server.store.GetJob(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != domain.JobQueued || got.Error != "" {
-		t.Fatalf("job after retry = status %s error %q, want queued with empty error", got.Status, got.Error)
-	}
-	items, err := server.store.ListItems(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if items[0].Status != domain.ItemCompleted || items[1].Status != domain.ItemQueued || items[1].StatusMessage != "" {
-		t.Fatalf("items after retry = %+v, want completed kept and the cancelled one queued", items)
-	}
-}
-
 func TestCancelOnlyStopsAJobThatHasNotEnded(t *testing.T) {
 	server := newTestServerWithManager(t)
 	ctx := context.Background()
@@ -651,5 +569,30 @@ func TestListAndDetailCarryTheJobsProgress(t *testing.T) {
 	}
 	if detail.Job.Progress == nil || *detail.Job.Progress != 0.5 {
 		t.Fatalf("detail progress = %v", detail.Job.Progress)
+	}
+}
+
+// A retry is a new run (one row per run): the failed or cancelled one-off
+// run stays as it ended and its input gets a queued run. TODO(P3): the
+// response names the new run.
+func TestRetryDownloadQueuesANewRun(t *testing.T) {
+	for _, status := range []domain.JobStatus{domain.JobFailed, domain.JobCancelled} {
+		server := newTestServerWithManager(t)
+		ctx := context.Background()
+		job := domain.Job{ID: "job-" + string(status), Input: "station|us|ra.1", Type: "station", Storefront: "us", CanonicalKey: "station:us:ra.1", Status: status, Error: "boom"}
+		if err := server.store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads/"+job.ID+"/retry", "")
+		if recorder.Code != http.StatusAccepted || !strings.Contains(recorder.Body.String(), `"queued"`) {
+			t.Fatalf("%s: status = %d, body = %s; want 202 queued", status, recorder.Code, recorder.Body.String())
+		}
+		if got, err := server.store.GetJob(ctx, job.ID); err != nil || got.Status != status {
+			t.Fatalf("%s: retried run = %+v (%v), want it left as it ended", status, got, err)
+		}
+		active, found, err := server.store.FindActiveJobByKey(ctx, job.CanonicalKey)
+		if err != nil || !found || active.ID == job.ID || active.Status != domain.JobQueued || active.Input != job.Input {
+			t.Fatalf("%s: active run = %+v (%v, %v), want a new queued run of the same input", status, active, found, err)
+		}
 	}
 }

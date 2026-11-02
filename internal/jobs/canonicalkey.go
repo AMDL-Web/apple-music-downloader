@@ -4,11 +4,12 @@ import (
 	"strings"
 )
 
-// A job's canonical key is "type:storefront:adamID". It is the dedup identity
-// enforced by the partial unique index on jobs(canonical_key) over the
+// A one-off run's canonical key is "type:storefront:adamID" (a station's; a
+// record run stores none and dedups by its record). It is the dedup identity
+// enforced by the partial unique index on runs(canonical_key) over the
 // queued/running statuses, and it is also the record of what was parsed at
 // submission time, replayed by the download worker instead of re-parsing the
-// raw input.
+// raw input. 1.x rows carry one for every job type.
 //
 // Rows written while submissions could pick their own downloads directory
 // carry a fourth segment, a hash of that directory. ParseCanonicalKey still

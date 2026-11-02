@@ -25,7 +25,7 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"codec_alternative":false,"quality_priority":["aac"],"alac_max_bit_depth":16}}`)
+		`{"urls":["station|us|1"],"overrides":{"codec_alternative":false,"quality_priority":["aac"],"alac_max_bit_depth":16}}`)
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
@@ -83,7 +83,7 @@ func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
 		"max_parallel_tracks", "max_parallel_metadata_requests", "max_parallel_media_downloads", "max_parallel_wrapper_requests", "max_parallel_downloads", "max_parallel_decrypts",
 	} {
 		recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-			`{"urls":["song|us|1"],"overrides":{"`+field+`":1}}`)
+			`{"urls":["station|us|1"],"overrides":{"`+field+`":1}}`)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("field %s: status = %d, body = %s (unknown overrides must not be silently accepted)", field, recorder.Code, recorder.Body.String())
 		}
@@ -96,7 +96,7 @@ func TestCreateDownloadRejectsUnknownFields(t *testing.T) {
 func TestCreateDownloadRejectsInvalidOverrides(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default())}
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"quality_priority":["flac"]}}`)
+		`{"urls":["station|us|1"],"overrides":{"quality_priority":["flac"]}}`)
 	assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "invalid_overrides")
 	if !strings.Contains(recorder.Body.String(), "invalid overrides") {
 		t.Fatalf("error body %q does not mention invalid overrides", recorder.Body.String())

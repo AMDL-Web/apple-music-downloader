@@ -20,8 +20,32 @@ import (
 // job succeeds again.
 var ErrJobNotCancellable = errors.New("the job already finished; only a queued or running job can be cancelled")
 
-// Cancel stops a queued or running job.
+// Cancel stops a queued or running job. A record run is not cancelled on its
+// own: Cancel pauses its record (Pause), so the picker does not queue the
+// record again a minute later; Resume continues it. A station run is
+// cancelled and its scratch removed.
 func (m *Manager) Cancel(ctx context.Context, jobID string) error {
+	job, err := m.store.GetJob(ctx, jobID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.ErrJobNotFound
+		}
+		return err
+	}
+	if job.ResourceID != "" && !job.Status.IsTerminal() {
+		err := m.Pause(ctx, job.ResourceKind, job.ResourceID)
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return m.stopRun(ctx, jobID, context.Canceled)
+		}
+		return err
+	}
+	return m.stopRun(ctx, jobID, context.Canceled)
+}
+
+// stopRun cancels a queued or running run with cause: ErrPaused for a
+// paused record, context.Canceled for a user cancel. A paused record's run
+// keeps its scratch for the resumed run.
+func (m *Manager) stopRun(ctx context.Context, jobID string, cause error) error {
 	m.mu.Lock()
 	if cancel := m.cancels[jobID]; cancel != nil {
 		m.mu.Unlock()
@@ -30,8 +54,8 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 		// finalizes the job (status, event, hook dispatch) exactly once.
 		// Writing the terminal state here too would race with that write
 		// and double-fire the job_cancelled hook.
-		cancel()
-		logging.FromContext(ctx, m.logger).Info("job cancellation requested", "job_id", jobID)
+		cancel(cause)
+		logging.FromContext(ctx, m.logger).Info("job cancellation requested", "job_id", jobID, "cause", cause.Error())
 		return nil
 	}
 
@@ -75,7 +99,7 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 		return fmt.Errorf("reload cancelled job %s: %w", jobID, err)
 	}
 	job.Status = domain.JobCancelled
-	job.Error = "cancelled"
+	job.Error = cancelledError(cause)
 	job.UpdatedAt = now
 	job, persistErr := m.persistTerminal(ctx, job, domain.EventJobCancelled, "job cancelled")
 	if persistErr == nil {
@@ -94,7 +118,7 @@ func (m *Manager) Cancel(ctx context.Context, jobID string) error {
 	if persistErr != nil {
 		return persistErr
 	}
-	if cleaner, ok := m.processor.(ArtifactCleaner); ok {
+	if cleaner, ok := m.processor.(ArtifactCleaner); ok && !errors.Is(cause, ErrPaused) {
 		cleaner.CleanupJobArtifacts(job)
 	}
 	m.dispatchHooks(ctx, job)
@@ -146,8 +170,11 @@ func (m *Manager) Delete(ctx context.Context, jobID string) error {
 
 // run processes a job claimNext marked running under ctx, whose cancel func
 // claimNext registered in m.cancels, and finalizes it. A concurrent Cancel
-// finds that func and cancels ctx; run then finalizes the job cancelled.
-func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, job domain.Job) {
+// finds that func and cancels ctx; run then finalizes the job cancelled. A
+// record run whose record was paused, removed or found gone while the run
+// waited ends cancelled without processing; any other record run settles its
+// slots when it ends (settleRecordRun) and wakes the picker.
+func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, job domain.Job) {
 	jobID := job.ID
 	started := time.Now()
 	jobLogger := m.logger.With("job_id", job.ID, "job_type", job.Type, "storefront", job.Storefront)
@@ -160,11 +187,14 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, job domain
 	jobLogger.Info("job started")
 
 	defer func() {
-		cancel()
+		cancel(nil)
 		m.mu.Lock()
 		delete(m.cancels, jobID)
 		m.mu.Unlock()
 		m.wakeStreams(jobID)
+		if job.ResourceID != "" {
+			m.pickWake.broadcast()
+		}
 	}()
 
 	// A download's decrypt/remux pipeline allocates on the order of a track's
@@ -182,6 +212,16 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, job domain
 			debug.FreeOSMemory()
 		}
 	}()
+
+	if job.ResourceID != "" {
+		if reason := m.recordStopReason(ctx, job); reason != "" {
+			job.Status = domain.JobCancelled
+			job.Error = reason
+			m.finalizeLogged(job, domain.EventJobCancelled, "job cancelled: "+reason)
+			jobLogger.Info("job not started", "reason", reason)
+			return
+		}
+	}
 
 	message := "job started"
 	if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobStarted, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
@@ -201,6 +241,15 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, job domain
 		jobLogger.Info("job interrupted by shutdown; it resumes on the next start", "duration_ms", time.Since(started).Milliseconds())
 		return
 	}
+	stopped := !panicked && errors.Is(ctx.Err(), context.Canceled)
+	settledFailures := 0
+	if job.ResourceID != "" {
+		var runErr error
+		if !stopped {
+			runErr = err
+		}
+		settledFailures = m.settleRecordRun(context.Background(), job, stopped, runErr)
+	}
 	// The reload carries the item counters the terminal decision and the
 	// terminal event payload use, derived by the store from run_items.
 	latest, loadErr := m.store.GetJob(context.Background(), job.ID)
@@ -210,39 +259,52 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, job domain
 		jobLogger.Error("reload job before finalize", "error", loadErr)
 	}
 
+	// The record's backoff is noted before the terminal write: once the run
+	// reads finished, the picker may look at the record again.
+	finish := func(eventType domain.EventType, message string) {
+		if job.ResourceID != "" && !stopped {
+			rec, recErr := m.recordStatus(context.Background(), job.ResourceKind, job.ResourceID)
+			m.noteRecordRunEnd(job, settledFailures, recErr == nil && !rec.resolved)
+		}
+		m.finalizeLogged(job, eventType, message)
+	}
 	switch {
 	case panicked:
 		// A panic is a defect, not a verdict on the input: fail the job so
 		// Retry stays available, whatever else happened meanwhile.
 		job.Status = domain.JobFailed
 		job.Error = err.Error()
-		m.finalizeLogged(job, domain.EventJobFailed, err.Error())
+		finish(domain.EventJobFailed, err.Error())
 	case errors.Is(ctx.Err(), context.Canceled):
 		// Cancellation takes priority over ProcessJob's return value: a job
 		// cancelled mid-flight must never be reported as completed, even if
 		// ProcessJob happened to return nil (e.g. it finished its last item
 		// just as the cancel arrived, or it doesn't surface ctx errors).
 		job.Status = domain.JobCancelled
-		job.Error = "cancelled"
-		m.finalizeLogged(job, domain.EventJobCancelled, "job cancelled")
+		job.Error = cancelledError(context.Cause(ctx))
+		finish(domain.EventJobCancelled, "job cancelled")
 	case err != nil:
 		job.Status = domain.JobFailed
 		job.Error = err.Error()
-		m.finalizeLogged(job, domain.EventJobFailed, err.Error())
+		finish(domain.EventJobFailed, err.Error())
 	case loadErr != nil:
 		// Without the reload the counters are the claim-time ones, so success
 		// cannot be judged. Failing keeps Retry available, and a retry skips the
 		// items that did finish.
 		job.Status = domain.JobFailed
 		job.Error = fmt.Sprintf("read final item states: %v", loadErr)
-		m.finalizeLogged(job, domain.EventJobFailed, job.Error)
+		finish(domain.EventJobFailed, job.Error)
 	default:
-		if job.FailedItems > 0 {
+		switch {
+		case job.FailedItems > 0:
 			job.Status = domain.JobFailed
-		} else {
+		case settledFailures > 0:
+			job.Status = domain.JobFailed
+			job.Error = fmt.Sprintf("%d tracks failed", settledFailures)
+		default:
 			job.Status = domain.JobCompleted
 		}
-		m.finalizeLogged(job, domain.EventJobFinished, string(job.Status))
+		finish(domain.EventJobFinished, string(job.Status))
 	}
 	attrs := []any{
 		"status", string(job.Status), "duration_ms", time.Since(started).Milliseconds(),
@@ -292,6 +354,33 @@ func (m *Manager) processRecovered(ctx context.Context, job domain.Job, logger *
 		}
 	}()
 	return m.processor.ProcessJob(ctx, job, m)
+}
+
+// cancelledError is the error a cancelled run records for its cause.
+func cancelledError(cause error) string {
+	if errors.Is(cause, ErrPaused) {
+		return "paused"
+	}
+	return "cancelled"
+}
+
+// recordStopReason says why a claimed record run must not start: its record
+// was paused, removed, or found gone from the catalog while the run waited.
+func (m *Manager) recordStopReason(ctx context.Context, job domain.Job) string {
+	rec, err := m.recordStatus(ctx, job.ResourceKind, job.ResourceID)
+	switch {
+	case errors.Is(err, db.ErrRecordNotFound):
+		return "removed"
+	case err != nil:
+		// Let the run try: it reads the record again when it plans.
+		m.logger.Error("read the record of a claimed run", "job_id", job.ID, "error", err)
+		return ""
+	case rec.paused:
+		return "paused"
+	case rec.catalog != domain.CatalogOK:
+		return string(rec.catalog)
+	}
+	return ""
 }
 
 // cancelledItemMessage is the status message of an item whose job the user

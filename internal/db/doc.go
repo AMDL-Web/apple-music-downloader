@@ -12,8 +12,10 @@
 // RecoverRunningFiles. Pending adds: AddPending, ListPending, DeletePending,
 // RecordPendingFailure, RetryPending. Runs (domain.Job): CreateJob, GetJob,
 // ListJobs, UpdateJob, DeleteJob, FinalizeJob, FindActiveJobByKey,
-// FindLatestFinishedJobByKey, RequeueJob. Run order: NextQueueOrder,
-// SetQueueOrder, NextQueuedJobID, QueuedJobIDs, MoveQueuedJob. Items:
+// ActiveRunID, SetRunPlan, SetRunPriority. Planning: DueSlots,
+// RecordNeedsRun, ListEligibleRecords, ReleaseRunSlots. Run order:
+// NextQueueOrder, SetQueueOrder, NextQueuedJobID, QueuedJobIDs,
+// MoveQueuedJob. Items:
 // CreateItem, UpdateItem, ListItems. Events: AddEvent, ListEventsAfterLimit,
 // ListMilestoneEventsAfterLimit, ListHookEvents.
 //
@@ -35,8 +37,9 @@
 //   - At most one queued/running run per record and per canonical_key;
 //     CreateJob reports a collision as ErrDuplicateActive.
 //   - Queued runs run in (priority, queue_order, rowid) order. queue_order is
-//     written only by CreateJob, SetQueueOrder, MoveQueuedJob and RequeueJob,
-//     never by UpdateJob, whose callers may hold a stale Job.
+//     written only by CreateJob, SetQueueOrder and MoveQueuedJob, never by
+//     UpdateJob, whose callers may hold a stale Job. A run is never queued
+//     again: a retry is a new run.
 //   - FinalizeJob and DeleteJob write the run change and its event in one tx;
 //     FinalizeJob also prunes the run's item_progress events.
 package db

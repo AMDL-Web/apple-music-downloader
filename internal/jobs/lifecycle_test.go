@@ -234,7 +234,7 @@ func TestProcessorPanicFailsJobAndWorkerSurvives(t *testing.T) {
 	}()
 
 	ctx := context.Background()
-	resp := manager.SubmitBatch(ctx, []string{"song|us|panic", "song|us|fine"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|panic", "station|us|fine"}, nil)
 	if resp.Accepted != 2 {
 		t.Fatalf("submit = %+v", resp)
 	}
@@ -455,7 +455,7 @@ func TestStartContextCancelIsNotShutdown(t *testing.T) {
 	manager := NewManager(store, events.NewHub(), processor, 1, slog.Default())
 	ctx, stop := context.WithCancel(context.Background())
 	manager.Start(ctx)
-	resp := manager.SubmitBatch(context.Background(), []string{"album|us|1"}, nil)
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v", resp)
 	}
