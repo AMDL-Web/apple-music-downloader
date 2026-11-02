@@ -50,8 +50,15 @@ const songGap = 12
 func songColumns(width float32) int { return max(1, int((width+songGap)/(songMin+songGap))) }
 
 // tileGrid lays hits out as tiles of their covers, rows filling width.
-func (a *App) tileGrid(c *ui.Context, k *Tokens, key string, hits []client.SearchHit, sel *client.SearchHit, width float32) {
-	size := tileSize(width, len(hits))
+// Only hits that are whole, all there are, take tiles down to fit one row
+// (tileSize): a first page that would fit one row grows to the columns'
+// size when the next arrives, as its tiles move to their places.
+func (a *App) tileGrid(c *ui.Context, k *Tokens, key string, hits []client.SearchHit, whole bool, sel *client.SearchHit, width float32) {
+	count := 0
+	if whole {
+		count = len(hits)
+	}
+	size := tileSize(width, count)
 	ui.Row(c).Width(width).Wrap().GapX(tileGap).GapY(24).Children(func() {
 		for i, h := range hits {
 			a.hitTile(c, k, h, fmt.Sprint(key, i), sel, size)

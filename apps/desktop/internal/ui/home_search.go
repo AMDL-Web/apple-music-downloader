@@ -179,12 +179,12 @@ func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.S
 				n := overviewCount(g, width)
 				q.SetOverview(g, n)
 				a.groupHead(c, k, g)
-				a.groupGrid(c, k, g, hg.Items[:min(n, len(hg.Items))], sel, width)
+				a.groupGrid(c, k, g, hg.Items[:min(n, len(hg.Items))], false, sel, width)
 				return
 			}
 			switch {
 			case hg != nil && len(hg.Items) > 0:
-				a.groupGrid(c, k, g, hg.Items, sel, width)
+				a.groupGrid(c, k, g, hg.Items, hg.NextOffset == 0, sel, width)
 			case hg != nil && hg.NextOffset > 0:
 				skeletonTiles(c, k, width, 5)
 			default:
@@ -251,15 +251,16 @@ func (a *App) groupMore(c *ui.Context, k *Tokens, g string) {
 	}
 }
 
-// groupGrid lays a group's hits out: songs as cards, the rest as tiles. It
-// moves as its group does when the title over it goes.
-func (a *App) groupGrid(c *ui.Context, k *Tokens, g string, hits []client.SearchHit, sel *client.SearchHit, width float32) {
+// groupGrid lays a group's hits out: songs as cards, the rest as tiles,
+// whole when they are all the group has (tileGrid). It moves as its group
+// does when the title over it goes.
+func (a *App) groupGrid(c *ui.Context, k *Tokens, g string, hits []client.SearchHit, whole bool, sel *client.SearchHit, width float32) {
 	ui.Column(c.Key("grid")).Transition(a.groupMotion(c, g, false)).Children(func() {
 		if g == "songs" {
 			a.songGrid(c, k, hits, sel, width)
 			return
 		}
-		a.tileGrid(c, k, g, hits, sel, width)
+		a.tileGrid(c, k, g, hits, whole, sel, width)
 	})
 }
 
@@ -363,7 +364,7 @@ func (a *App) artistView(c *ui.Context, k *Tokens, sel *client.SearchHit, width 
 		return
 	}
 	ui.Column(c).Gap(14).Children(func() {
-		a.tileGrid(c, k, "album", ar.Albums.Items, sel, width)
+		a.tileGrid(c, k, "album", ar.Albums.Items, ar.Albums.NextOffset == 0, sel, width)
 		morePage(c, k, "artist", ar.Albums.NextOffset > 0, ar.More, s.MoreArtist)
 	})
 }

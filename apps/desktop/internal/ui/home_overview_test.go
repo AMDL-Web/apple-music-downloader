@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"amdl/apps/desktop/internal/store"
+	"amdl/internal/client"
 )
 
 // overviewApp is home on the demo's answer to "a", in the overview.
@@ -92,5 +93,29 @@ func TestAGroupsHitsMoveIntoItsTab(t *testing.T) {
 	}
 	if mid.Y <= to.Y+2 || mid.Y >= from.Y-2 {
 		t.Errorf("partway the first song is at %.1f, not between %.1f and %.1f", mid.Y, from.Y, to.Y)
+	}
+}
+
+// A tab whose first page would fit one row lays it out at the columns'
+// size while more pages are to come, the overview's: its tiles neither
+// shrink to fit the row nor grow back when the next page arrives.
+func TestATabsFirstPageKeepsItsTilesSize(t *testing.T) {
+	a, albums := searchApp(t)
+	q := &a.Store.Search
+	q.Result.Albums = &client.HitGroup{Items: albums[:6], NextOffset: 6}
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.Frame()
+	over, ok := tt.Find(albums[0].Name)
+	if !ok {
+		t.Fatalf("no tile %q in the overview: %q", albums[0].Name, tt.Texts())
+	}
+	a.focusGroup("albums")
+	tt.Frame()
+	tab, ok := tt.Find(albums[0].Name)
+	if !ok {
+		t.Fatalf("no tile %q in the Albums tab: %q", albums[0].Name, tt.Texts())
+	}
+	if tab.W != over.W {
+		t.Errorf("with more to come, the Albums tab's tile is %.1f wide, the overview's %.1f", tab.W, over.W)
 	}
 }
