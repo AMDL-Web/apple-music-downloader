@@ -28,10 +28,12 @@ not a test fix.
 
 ## Pipeline
 
-- `trackRun` owns statuses, messages, progress, retries and events, except the
-  skip of a library track already on disk, which `skipTracksOnDisk` writes before
-  any track run starts; all I/O goes through `mediaBackend`, and "on disk" is only
-  ever `mediaBackend.statOutput`. Don't branch on `Simulate.Enabled` inside the
+- `trackRun` owns statuses, messages, progress, retries and events, and for a slot
+  of a record run its path claim and outcome (`jobs.RecordReporter`). Records decide
+  what is downloaded; the one stat of a target is `mediaBackend.statOutput` at the
+  claim, which adopts a file already there. All I/O goes through `mediaBackend`.
+  Resume checkpoints of a record run belong to the record (`resumeOwner`), so a
+  pause keeps them. Don't branch on `Simulate.Enabled` inside the
   pipeline: give the backend a method, so simulate mode keeps walking the real
   lifecycle. The simulated backend never writes, deletes or runs anything; what it
   committed counts as on disk until a restart.

@@ -10,7 +10,6 @@ import (
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
-	"amdl/internal/domain"
 )
 
 // replaceMedia fails the stage a test names, on top of the real backend.
@@ -47,7 +46,6 @@ func newReplaceFixture(t *testing.T) *replaceFixture {
 	cfg.Download.CheckIntegrity = false
 	cfg.Download.TempDir = t.TempDir()
 	d := newTestDownloader(&Downloader{cfg: cfg})
-	d.replaceExisting = true
 	dir := filepath.Join(t.TempDir(), "Album")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -74,11 +72,12 @@ func newReplaceFixture(t *testing.T) *replaceFixture {
 // check, then finalize, then the sweep the retry path runs after a failure.
 func (f *replaceFixture) forcedDownload(t *testing.T) error {
 	t.Helper()
-	item := domain.JobItem{ID: "item-1", JobID: "job-1"}
-	skip, err := f.d.handleExistingOutput(context.Background(), &recordingReporter{}, domain.Job{ID: "job-1"}, &item, f.outPath)
+	run := newOutputRun(f.d, &recordingReporter{}, true)
+	skip, err := run.handleExistingOutput(context.Background(), f.outPath)
 	if err != nil || skip {
-		t.Fatalf("handleExistingOutput = skip %v, err %v, want a forced download", skip, err)
+		t.Fatalf("handleExistingOutput = skip %v, err %v, want a replacing download", skip, err)
 	}
+	item := run.item
 	err = f.d.finalizeTrackOutput(context.Background(), f.media, trackOutput{
 		item: &item, song: applemusic.Song{Name: "Song"}, codec: "alac",
 		lyrics: trackLyrics{lrc: "[00:01.00]new", ttml: "<tt>new</tt>"}, staged: stagedFile{path: f.staged}, outPath: f.outPath, labels: enhancedOutputLabels,

@@ -324,6 +324,8 @@ func (r *recordingReporter) Event(_ context.Context, ev domain.Event) error {
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-// keepAll keeps every finished item, as syncJobItems did before it re-checked
-// them.
-func keepAll(domain.JobItem, int) bool { return true }
+// newOutputRun is a track run of job-1's item-1 with no metadata resolver, for
+// the output steps alone; replace marks a slot that was done before.
+func newOutputRun(d *Downloader, reporter jobs.Reporter, replace bool) *trackRun {
+	return d.newTrackRun(domain.Job{ID: "job-1"}, domain.JobItem{ID: "item-1", JobID: "job-1"}, applemusic.Song{}, trackTarget{replace: replace}, nil, reporter)
+}

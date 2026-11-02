@@ -35,6 +35,10 @@ func (e *PathTakenError) Error() string {
 
 func (e *PathTakenError) Is(target error) bool { return target == ErrPathTaken }
 
+// NonRetryable reports true: the other slot keeps the path until a template
+// change or a reset, so a later run would only meet it again.
+func (e *PathTakenError) NonRetryable() bool { return true }
+
 // Retry backoff across runs: a slot that failed n times is due again
 // retryBackoffBase × 4^(n−1) after the failure (30 min, then 2 h).
 const retryBackoffBase = 30 * time.Minute

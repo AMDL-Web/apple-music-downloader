@@ -136,7 +136,7 @@ func (d *Downloader) resolveEnhancedHLS(ctx context.Context, storefront string, 
 // media, fetching the stream's keys in the background through keys once it
 // holds the in-flight permit. The in-flight permit is returned held, in
 // selected.releaseInFlight, until decryption has consumed the bytes.
-func (d *Downloader) downloadSelectedEnhancedMedia(ctx context.Context, selected selectedDownloadMedia, codec, jobID, outPath string, keys *keyPrefetch, set publishStage) (selectedDownloadMedia, error) {
+func (d *Downloader) downloadSelectedEnhancedMedia(ctx context.Context, selected selectedDownloadMedia, codec, owner, outPath string, keys *keyPrefetch, set publishStage) (selectedDownloadMedia, error) {
 	codecName := strings.ToUpper(codec)
 	onProgress := func(done, total int64) {
 		if total <= 0 {
@@ -160,7 +160,7 @@ func (d *Downloader) downloadSelectedEnhancedMedia(ctx context.Context, selected
 	media, err := func() (encryptedMedia, error) {
 		defer releaseDownload()
 		return d.backend().fetch(ctx, fetchRequest{
-			codec: codec, uri: selected.info.MediaURI, jobID: jobID, outPath: outPath,
+			codec: codec, uri: selected.info.MediaURI, owner: owner, outPath: outPath,
 			estimatedBytes: selected.estimatedBytes,
 		}, onProgress)
 	}()
