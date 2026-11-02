@@ -437,5 +437,8 @@ apple_library:
   # 5,000 songs, 500 albums, 100 playlists and 1,000 artists) plus up to 20 playlist track lists,
   # and removes what is gone from the library. The first sync after start-up is always a full
   # one while the cache is empty. 0 runs full syncs only through POST /api/v1/apple-library/sync.
+  # A list over its page cap (30,000 songs, 10,000 albums, 10,000 artists, 1,000 playlists, 5,000
+  # tracks in one playlist) is cached in part, removes nothing and is named in last_sync.capped of
+  # GET /api/v1/apple-library/status; the sync still finishes the other lists.
   # Absent: 24.
   full_sync_hours: 24

@@ -3180,6 +3180,14 @@ components:
         changed:
           type: integer
           description: Cached items whose shown fields changed.
+        capped:
+          type: array
+          items: {type: string}
+          description: >-
+            The lists a page cap cut short in this sync, a kind (songs) or
+            playlist_tracks:{library id}. The sync is still ok: the rows read are
+            cached, nothing was removed for those lists, and the other lists
+            finished. Absent when no list hit its cap.
     AppleLibraryPage:
       type: object
       required: [kind, items, total, offset]

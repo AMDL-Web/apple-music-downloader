@@ -21,7 +21,9 @@
 //     pass also refreshes the stalest lists.
 //
 // Every pass is bounded (deadline, page caps), idempotent and safe to cut
-// short: an interrupted pass removes nothing. A sync never touches download
+// short: an interrupted pass removes nothing. A list that reaches its page cap
+// (30,000 songs, 5,000 tracks of one playlist) is cached in part and named in
+// Run.Capped; the pass still finishes the other lists. A sync never touches download
 // jobs; reading the library is an optional read, so without a usable
 // media-user-token the engine idles and says so in Status.
 package applelibrary
@@ -94,6 +96,10 @@ type Run struct {
 	Added    int `json:"added"`
 	Removed  int `json:"removed"`
 	Changed  int `json:"changed"`
+	// Capped names the lists a page cap cut short in this pass: a kind
+	// ("songs") or "playlist_tracks:<library id>". The pass is still ok; the
+	// rows read are cached and nothing was removed for those lists.
+	Capped []string `json:"capped,omitempty"`
 }
 
 // Progress is the pass under way (the AppleLibrarySyncProgress schema).
@@ -151,6 +157,9 @@ var ErrPlaylistNotFound = errors.New("playlist not in the cached Apple library")
 type kindState struct {
 	Total  int        `json:"total"`
 	FullAt *time.Time `json:"full_at,omitempty"`
+	// Capped is set when the last full read hit its page cap: the cache holds
+	// the first pages only.
+	Capped bool `json:"capped,omitempty"`
 }
 
 // Meta keys of apple_library_meta.
@@ -184,14 +193,16 @@ type Engine struct {
 	// refused is the digest of the token Apple last refused; a different
 	// token clears it.
 	refused [sha256.Size]byte
-	loaded  bool
-	passes  sync.WaitGroup
+	// capNoted holds the lists whose page cap is already logged.
+	capNoted map[string]bool
+	loaded   bool
+	passes   sync.WaitGroup
 }
 
 // New builds the engine. tokens picks the media-user-token; nil uses
 // catalog.media_user_token alone. It does no I/O; Run runs the schedule.
 func New(cfg *config.Store, tokens *usertoken.Provider, apple Apple, store *db.Store, logger *slog.Logger) *Engine {
-	return &Engine{cfg: cfg, tokens: tokens, apple: apple, store: store, logger: logger, now: time.Now}
+	return &Engine{cfg: cfg, tokens: tokens, apple: apple, store: store, logger: logger, now: time.Now, capNoted: map[string]bool{}}
 }
 
 // Run drives the schedule until ctx is cancelled and returns once every pass,
@@ -445,9 +456,11 @@ func (e *Engine) PlaylistTracks(ctx context.Context, playlistID string) (Tracks,
 // Membership reports, for catalog ids of one search group (songs, albums,
 // playlists, artists), which are in the cached library. It returns nil when
 // that kind has not completed a full read, so the caller leaves the mark out
-// rather than claiming "not in the library".
+// rather than claiming "not in the library"; a kind whose full read hit its
+// page cap answers only for the ids it has cached.
 func (e *Engine) Membership(ctx context.Context, kind string, catalogIDs []string) map[string]bool {
-	if len(catalogIDs) == 0 || e.kindState(ctx, kind).FullAt == nil {
+	state := e.kindState(ctx, kind)
+	if len(catalogIDs) == 0 || state.FullAt == nil {
 		return nil
 	}
 	in, err := e.store.AppleLibraryMembership(ctx, kind, catalogIDs)
@@ -457,7 +470,11 @@ func (e *Engine) Membership(ctx context.Context, kind string, catalogIDs []strin
 	}
 	out := make(map[string]bool, len(catalogIDs))
 	for _, id := range catalogIDs {
-		out[id] = in[id]
+		// A capped kind is cached only in part, so an id that is not cached
+		// may still be in the library: only the found ones are answered.
+		if in[id] || !state.Capped {
+			out[id] = in[id]
+		}
 	}
 	return out
 }
