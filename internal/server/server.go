@@ -22,6 +22,7 @@ import (
 
 	"amdl/configs"
 	"amdl/internal/api"
+	"amdl/internal/applelibrary"
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/db"
@@ -205,6 +206,8 @@ func Run(ctx context.Context, opts Options) (err error) {
 	// The library watcher submits through the same manager as the REST API, so
 	// anything it queues is an ordinary job (same dedup, same hooks).
 	libraryWatcher := librarysync.New(cfgStore, tokens, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
+	// The Apple library cache never submits anything; it only reads.
+	appleLibrary := applelibrary.New(cfgStore, tokens, catalog, store, logSystem.Logger.With("component", "applelibrary"))
 
 	listener := opts.Listener
 	if listener == nil {
@@ -239,7 +242,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
-		Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
+		AppleLibrary: appleLibrary, Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
 		WrapperManaged: opts.WrapperHost != nil,
 		Restart: func() {
 			select {
@@ -284,6 +287,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 	// the inline scrape.
 	background.Go(func() { catalog.RunTokenRefresher(backgroundCtx) })
 	background.Go(func() { libraryWatcher.Run(backgroundCtx) })
+	background.Go(func() { appleLibrary.Run(backgroundCtx) })
 	background.Go(func() { tokens.RunEndpoint(backgroundCtx) })
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.Serve(listener) }()

@@ -132,8 +132,8 @@ func TestToolsComeFromTheCapabilityTable(t *testing.T) {
 			t.Errorf("%s readOnlyHint = %v", c.Tool, tl.Annotations.ReadOnlyHint)
 		}
 	}
-	if len(got) != 17 {
-		t.Errorf("%d tools, want 17", len(got))
+	if len(got) != 21 {
+		t.Errorf("%d tools, want 21", len(got))
 	}
 	if d := got["delete_job"].Annotations.DestructiveHint; d == nil || !*d {
 		t.Error("delete_job should be destructive")

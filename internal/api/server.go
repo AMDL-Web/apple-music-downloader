@@ -38,6 +38,9 @@ type Deps struct {
 	Wrapper     WrapperService
 	Quality     QualityService
 	LibrarySync LibrarySyncService
+	// AppleLibrary backs /apple-library and the in_apple_library mark on
+	// search hits.
+	AppleLibrary AppleLibraryService
 	// Catalog backs POST /lookup, GET /search, GET /artists/{id}/albums and
 	// GET /albums/{id}.
 	Catalog CatalogService
@@ -73,14 +76,15 @@ type Server struct {
 	logStore  *logging.Store
 	// logsOff is set when logging.buffer_size is 0: the log routes answer 503
 	// feature_unavailable with that reason.
-	logsOff     bool
-	wrapper     WrapperService
-	quality     QualityService
-	librarySync LibrarySyncService
-	catalog     CatalogService
-	tokens      *usertoken.Provider
-	console     http.Handler
-	hooks       HooksService
+	logsOff      bool
+	wrapper      WrapperService
+	quality      QualityService
+	librarySync  LibrarySyncService
+	appleLibrary AppleLibraryService
+	catalog      CatalogService
+	tokens       *usertoken.Provider
+	console      http.Handler
+	hooks        HooksService
 	// wrapperManaged and restart are Deps.WrapperManaged and Deps.Restart.
 	wrapperManaged bool
 	restart        func()
@@ -110,6 +114,7 @@ func New(deps Deps) (*Server, error) {
 		{"Wrapper", deps.Wrapper == nil},
 		{"Quality", deps.Quality == nil},
 		{"LibrarySync", deps.LibrarySync == nil},
+		{"AppleLibrary", deps.AppleLibrary == nil},
 		{"Catalog", deps.Catalog == nil},
 	} {
 		if dep.missing {
@@ -119,7 +124,7 @@ func New(deps Deps) (*Server, error) {
 	s := &Server{
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
-		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync,
+		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, appleLibrary: deps.AppleLibrary,
 		catalog: deps.Catalog, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
@@ -174,6 +179,11 @@ func (s *Server) routes() []route {
 		{http.MethodPost, "/api/v1/hooks/{name}/test", h(s.testHook)},
 		{http.MethodGet, "/api/v1/library-sync", h(s.librarySyncStatus)},
 		{http.MethodPost, "/api/v1/library-sync/reset", h(s.librarySyncReset)},
+		// The literal status and sync segments are more specific than {kind}.
+		{http.MethodGet, "/api/v1/apple-library/status", h(s.appleLibraryStatus)},
+		{http.MethodPost, "/api/v1/apple-library/sync", h(s.appleLibrarySync)},
+		{http.MethodGet, "/api/v1/apple-library/{kind}", h(s.appleLibraryList)},
+		{http.MethodGet, "/api/v1/apple-library/playlists/{playlist_id}/tracks", h(s.appleLibraryPlaylistTracks)},
 		{http.MethodGet, "/api/v1/wrapper/status", h(s.wrapperStatus)},
 		{http.MethodPost, "/api/v1/wrapper/login", h(s.wrapperLogin)},
 		{http.MethodPost, "/api/v1/wrapper/login/{login_id}/2fa", h(s.wrapperTwoStep)},

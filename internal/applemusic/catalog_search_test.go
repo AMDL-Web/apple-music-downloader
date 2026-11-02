@@ -41,7 +41,7 @@ func recordedCatalog(t *testing.T, file string, status int) (*CatalogClient, *ur
 
 func TestSearchMapsTheRecordedResponse(t *testing.T) {
 	client, req := recordedCatalog(t, "search-us.json", http.StatusOK)
-	res, err := client.Search(context.Background(), "us", "Taylor Swift", SearchTypes, 2, 0)
+	res, err := client.Search(context.Background(), "us", "Taylor Swift", SearchTypes, 2, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestSearchMapsTheRecordedResponse(t *testing.T) {
 // listener's playlist (playlistType external) and one Apple's own (editorial).
 func TestSearchMapsPlaylists(t *testing.T) {
 	client, req := recordedCatalog(t, "search-playlists-us.json", http.StatusOK)
-	res, err := client.Search(context.Background(), "us", "lofi beats to study", []SearchType{SearchPlaylists}, 2, 0)
+	res, err := client.Search(context.Background(), "us", "lofi beats to study", []SearchType{SearchPlaylists}, 2, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestSearchMapsPlaylists(t *testing.T) {
 
 func TestSearchReadsNonLatinTermsAndStorefronts(t *testing.T) {
 	client, req := recordedCatalog(t, "search-jp.json", http.StatusOK)
-	res, err := client.Search(context.Background(), "jp", "星街すいせい", []SearchType{SearchSongs, SearchArtists}, 2, 4)
+	res, err := client.Search(context.Background(), "jp", "星街すいせい", []SearchType{SearchSongs, SearchArtists}, 2, 4, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestSearchWithoutHits(t *testing.T) {
 		body := `{"results":{},"meta":{"results":{"order":[],"rawOrder":[]}}}`
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), Request: req}, nil
 	})}
-	res, err := client.Search(context.Background(), "us", "zzqxjvkwplmnbvc", SearchTypes, 10, 0)
+	res, err := client.Search(context.Background(), "us", "zzqxjvkwplmnbvc", SearchTypes, 10, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestSearchWithoutHits(t *testing.T) {
 
 func TestSearchReturnsTheCatalogError(t *testing.T) {
 	client, _ := recordedCatalog(t, "", http.StatusBadRequest)
-	_, err := client.Search(context.Background(), "zz", "a", SearchTypes, 10, 0)
+	_, err := client.Search(context.Background(), "zz", "a", SearchTypes, 10, 0, "")
 	if err == nil || err.Error() != "Apple Music catalog search request in storefront zz failed: 400 Bad Request" {
 		t.Fatalf("err = %v", err)
 	}

@@ -49,6 +49,9 @@ type SearchHit struct {
 	AppleDigitalMaster bool      `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string  `json:"audio_traits,omitempty"`
 	PriorJob           *PriorJob `json:"prior_job,omitempty"`
+	// InAppleLibrary is whether the item is in the user's Apple Music account
+	// library; nil when the backend cannot tell.
+	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
 }
 
 // PriorJob is the PriorJob schema: the job that put a hit in the library

@@ -10,7 +10,7 @@ wins when they disagree, so details are not copied here.
 | --- | --- | --- |
 | amp-api | `amp-api.music.apple.com`: Apple's undocumented web-player API, called with a scraped JWT and an `Origin` header; the only source of some fields | `internal/applemusic#CatalogClient.doWithWebAuth` |
 | Web-player JWT | The token scraped from music.apple.com's JS bundle that amp-api requires | `internal/applemusic#CatalogClient.doWithWebAuth` |
-| Media-user-token | A signed-in account's token; radio stations, private playlists and library sync need it, and with it the backend fetches lyrics and the AAC-LC playlist and license from Apple itself. The wrapper's own (its `GET /token` or `MUSIC_TOKEN` file) when the backend can get it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
+| Media-user-token | A signed-in account's token; radio stations, private playlists, library sync and the Apple library need it, and with it the backend fetches lyrics and the AAC-LC playlist and license from Apple itself. The wrapper's own (its `GET /token` or `MUSIC_TOKEN` file) when the backend can get it, else `catalog.media_user_token` | `internal/usertoken#Provider.Token` |
 | Storefront | The country code in a link (`us`, `cn`) that selects Apple's regional catalog | `configs/config.example.yaml#catalog.default_storefront` |
 | enhancedHls | The amp-api-only HLS manifest that lists the lossless and spatial variants | `internal/applemusic#Song` |
 | editorialVideo, motion artwork | Animated album covers, amp-api only; absence is normal, never an error | `internal/applemusic#CatalogClient.MotionArtworkViaWebToken` |
@@ -52,6 +52,7 @@ wins when they disagree, so details are not copied here.
 | Job overrides | The per-submission `overrides` object that overlays the quality and `force_overwrite` keys of the runtime config for one batch | `internal/config#DownloadOverrides` |
 | Job hook | A webhook or command fired on `job_queued` or a terminal job event | `internal/hooks#Dispatcher` |
 | Library sync | The poller that turns newly added library songs into album jobs | `internal/librarysync#Watcher` |
+| Apple library | The signed-in Apple Music account's own library (albums, songs, playlists, artists), as Apple Music calls it; amdl keeps a local copy for `/api/v1/apple-library` and `in_apple_library`. Not the download library on disk, which the console and `amdl library list` call the library | `internal/applelibrary#Engine` |
 | Watermark | Library sync's position-based anchor in the newest-first library list | [docs/automation.md](docs/automation.md#why-the-watermark-is-a-position-not-a-timestamp) |
 | Skin | The console's look, one skin (`music`) on `<html data-skin>`, separate from the light/dark theme | [apps/console/DESIGN.md](apps/console/DESIGN.md#skin) |
 

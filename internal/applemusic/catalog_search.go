@@ -25,13 +25,17 @@ var SearchTypes = []SearchType{SearchSongs, SearchAlbums, SearchPlaylists, Searc
 
 // SearchResults holds one catalog search's hits per group, each in Apple's
 // relevance order. NextOffset maps a group to the offset of its next page and
-// holds only the groups Apple reports more hits for.
+// holds only the groups Apple reports more hits for. InLibrary maps a group to
+// the hits Apple marked as in or not in the user's library, by catalog id; it
+// holds only the hits Apple answered for (songs, albums and playlists, and
+// only when the search carried a usable media-user-token).
 type SearchResults struct {
 	Songs      []Song
 	Albums     []Collection
 	Playlists  []Collection
 	Artists    []Artist
 	NextOffset map[SearchType]int
+	InLibrary  map[SearchType]map[string]bool
 }
 
 // AlbumPage is one page of an artist's albums. NextOffset is the offset of the
@@ -58,7 +62,13 @@ type searchGroup[T any] struct {
 // Search reads one page of catalog hits for term in storefront: limit hits per
 // group in types, starting at offset in each. A group without hits is empty;
 // Apple leaves such a group out of its response.
-func (c *CatalogClient) Search(ctx context.Context, storefront, term string, types []SearchType, limit, offset int) (SearchResults, error) {
+//
+// A non-empty mediaUserToken asks Apple to mark each song, album and playlist
+// hit as in the user's library (extend=inLibrary, no extra request). The mark
+// is optional: Apple leaves it out for an unusable token, and a search Apple
+// refuses because of the token is asked again without it, so the token never
+// fails a search.
+func (c *CatalogClient) Search(ctx context.Context, storefront, term string, types []SearchType, limit, offset int, mediaUserToken string) (SearchResults, error) {
 	names := make([]string, 0, len(types))
 	for _, t := range types {
 		names = append(names, string(t))
@@ -72,24 +82,51 @@ func (c *CatalogClient) Search(ctx context.Context, storefront, term string, typ
 	if offset > 0 {
 		params.Set("offset", strconv.Itoa(offset))
 	}
+	endpoint := fmt.Sprintf("%s/v1/catalog/%s/search", ampAPIBase, storefront)
 	var resp catalogSearchResponse
-	if err := c.get(ctx, fmt.Sprintf("%s/v1/catalog/%s/search", ampAPIBase, storefront), params, &resp); err != nil {
+	var err error
+	if mediaUserToken != "" {
+		marked := url.Values{"extend": []string{"inLibrary"}}
+		for k, v := range params {
+			marked[k] = v
+		}
+		err = c.getWithUserToken(ctx, endpoint, marked, mediaUserToken, &resp)
+		if err != nil && IsUserTokenRejected(err) {
+			resp = catalogSearchResponse{}
+			err = c.get(ctx, endpoint, params, &resp)
+		}
+	} else {
+		err = c.get(ctx, endpoint, params, &resp)
+	}
+	if err != nil {
 		return SearchResults{}, err
 	}
-	out := SearchResults{NextOffset: map[SearchType]int{}}
+	out := SearchResults{NextOffset: map[SearchType]int{}, InLibrary: map[SearchType]map[string]bool{}}
+	mark := func(group SearchType, id string, in *bool) {
+		if in == nil {
+			return
+		}
+		if out.InLibrary[group] == nil {
+			out.InLibrary[group] = map[string]bool{}
+		}
+		out.InLibrary[group][id] = *in
+	}
 	for _, raw := range resp.Results.Songs.Data {
 		if raw.Type == "songs" {
 			out.Songs = append(out.Songs, mapSong(raw))
+			mark(SearchSongs, raw.ID, raw.Attributes.InLibrary)
 		}
 	}
 	for _, raw := range resp.Results.Albums.Data {
 		if raw.Type == "albums" {
 			out.Albums = append(out.Albums, mapAlbumSummary(raw))
+			mark(SearchAlbums, raw.ID, raw.Attributes.InLibrary)
 		}
 	}
 	for _, raw := range resp.Results.Playlists.Data {
 		if raw.Type == "playlists" {
 			out.Playlists = append(out.Playlists, mapPlaylistSummary(raw))
+			mark(SearchPlaylists, raw.ID, raw.Attributes.InLibrary)
 		}
 	}
 	for _, raw := range resp.Results.Artists.Data {

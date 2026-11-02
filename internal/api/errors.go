@@ -40,7 +40,9 @@ const (
 	CodeDuplicateActive   ErrorCode = "duplicate_active"
 	CodeAlreadyLoggedIn   ErrorCode = "already_logged_in"
 	CodeLoginPending      ErrorCode = "login_pending"
-	CodeHookReadOnly      ErrorCode = "hook_read_only"
+	// CodeAppleLibrarySyncRunning: POST /apple-library/sync while a pass runs.
+	CodeAppleLibrarySyncRunning ErrorCode = "apple_library_sync_running"
+	CodeHookReadOnly            ErrorCode = "hook_read_only"
 	// 413
 	CodeRequestTooLarge ErrorCode = "request_too_large"
 	// 422
@@ -61,6 +63,9 @@ const (
 	CodeQueueFull          ErrorCode = "queue_full"
 	CodeWrapperUnavailable ErrorCode = "wrapper_unavailable"
 	CodeFeatureUnavailable ErrorCode = "feature_unavailable"
+	// CodeAppleLibraryUnavailable: the Apple library cannot be read (no
+	// usable media-user-token) and nothing is cached.
+	CodeAppleLibraryUnavailable ErrorCode = "apple_library_unavailable"
 	// 504
 	CodeUpstreamTimeout ErrorCode = "upstream_timeout"
 )

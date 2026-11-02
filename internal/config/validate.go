@@ -90,6 +90,12 @@ func (c Config) Validate() error {
 	if c.LibrarySync.IntervalMinutes < 1 || c.LibrarySync.IntervalMinutes > 1440 {
 		return fmt.Errorf("library_sync.interval_minutes must be between 1 and 1440")
 	}
+	if c.AppleLibrary.SyncIntervalMinutes < 0 || c.AppleLibrary.SyncIntervalMinutes > 1440 {
+		return fmt.Errorf("apple_library.sync_interval_minutes must be between 0 and 1440")
+	}
+	if c.AppleLibrary.FullSyncHours < 0 || c.AppleLibrary.FullSyncHours > 720 {
+		return fmt.Errorf("apple_library.full_sync_hours must be between 0 and 720")
+	}
 	if c.Catalog.MaxParallelRequests > maxGlobalPoolLimit {
 		return fmt.Errorf("catalog.max_parallel_requests must be at most %d", maxGlobalPoolLimit)
 	}

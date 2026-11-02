@@ -10,6 +10,10 @@ and the request path are in the package comment (`go doc ./internal/applemusic`)
 - `WebPlayback`, `License` and `SongLyrics` carry the media-user-token and are required:
   their errors go back as they are, and `IsUserTokenRejected` marks the ones (401, 403, a
   `play.*` `failureType`) after which internal/media asks the wrapper instead.
+- The Apple library reads (`LibraryItems`, `LibraryPlaylistTracks`) and the search's
+  `extend=inLibrary` mark are optional: `internal/applelibrary` turns a failure into "not
+  available" in its status, and a search Apple refuses because of the token is asked
+  again without it.
 - A new optional read follows `MotionArtworkViaWebToken` or `libraryArtworkURL`: a
   failure, timeout or unexpected shape means "not available" to the caller, with a
   test for that path. `Song` treats its album enrichment the same way.

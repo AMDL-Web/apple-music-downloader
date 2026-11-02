@@ -23,7 +23,7 @@ type CatalogService interface {
 	Playlist(ctx context.Context, storefront, id, mediaUserToken string) (applemusic.Collection, error)
 	Station(ctx context.Context, storefront, id string) (applemusic.StationInfo, error)
 	Artist(ctx context.Context, storefront, id string) (applemusic.Artist, error)
-	Search(ctx context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int) (applemusic.SearchResults, error)
+	Search(ctx context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int, mediaUserToken string) (applemusic.SearchResults, error)
 	ArtistAlbumsPage(ctx context.Context, storefront, id string, limit, offset int) (applemusic.AlbumPage, error)
 }
 

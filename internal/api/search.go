@@ -62,6 +62,9 @@ type searchHit struct {
 	AppleDigitalMaster bool               `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string           `json:"audio_traits,omitempty"`
 	PriorJob           *priorJob          `json:"prior_job,omitempty"`
+	// InAppleLibrary is whether the hit is in the user's Apple Music account
+	// library; absent when that is not known (markAppleLibrary).
+	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
 }
 
 // priorJob is the PriorJob schema: the job that put a hit in the library or
@@ -193,7 +196,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), searchTimeout)
 	defer cancel()
-	res, err := s.catalog.Search(ctx, storefront, term, types, limit, offset)
+	res, err := s.catalog.Search(ctx, storefront, term, types, limit, offset, s.tokens.Token(s.currentConfig()).Value)
 	if err != nil {
 		s.writeCatalogError(ctx, w, r, err, searchTimeout, nil, "search failed", "term", term, "storefront", storefront)
 		return
@@ -224,6 +227,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			}
 			resp.Artists = group
 		}
+		s.markAppleLibrary(r.Context(), t, group.Items, res.InLibrary[t])
 		hits = append(hits, group.Items...)
 	}
 	s.markPriorJobs(r.Context(), hits)
@@ -270,6 +274,8 @@ func (s *Server) artistAlbums(w http.ResponseWriter, r *http.Request) {
 	for _, album := range page.Albums {
 		resp.Albums.Items = append(resp.Albums.Items, albumHit(storefront, album))
 	}
+	s.markAppleLibrary(r.Context(), applemusic.SearchArtists, []*searchHit{resp.Artist}, nil)
+	s.markAppleLibrary(r.Context(), applemusic.SearchAlbums, resp.Albums.Items, nil)
 	s.markPriorJobs(r.Context(), append([]*searchHit{resp.Artist}, resp.Albums.Items...))
 	writeJSON(w, http.StatusOK, resp)
 }

@@ -238,6 +238,7 @@ is the API's only browser client: responses carry no CORS headers.
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
 | **Library sync** | `GET /library-sync` · `POST /library-sync/reset` |
+| **Apple library** | `GET /apple-library/{kind}`: your Apple Music account library from a local copy · `GET /apple-library/playlists/{id}/tracks` · `POST /apple-library/sync` · `GET /apple-library/status` |
 | **System** | `GET /health` · `GET /system` · `POST /system/restart` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
 
 Submit an album and follow it:

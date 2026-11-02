@@ -60,6 +60,9 @@ func classOf(key string) keyClass {
 	// handling of its results.
 	case "library_sync":
 		return classRuntime
+	// The Apple library sync loop reads both keys every tick.
+	case "apple_library":
+		return classRuntime
 	}
 	return classFile
 }

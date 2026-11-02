@@ -409,3 +409,32 @@ library_sync:
   # usually makes only 1 Apple request (one page covers the anchor window), plus 1 more per new
   # album to map its library id to a catalog id.
   interval_minutes: 15
+
+apple_library:
+  # Apple library cache: a local copy of the signed-in Apple Music account library (albums,
+  # songs, playlists with their tracks, artists) that GET /api/v1/apple-library/{kind} and the
+  # in_apple_library mark on search hits read, so browsing never waits on Apple. A sync fills it;
+  # it never creates download jobs and never affects one (library_sync above is the monitor
+  # that submits new albums).
+  #
+  # Both keys are runtime-mutable through PUT /api/v1/config and config reload; no restart is
+  # required. The sync loop re-reads them every 15 seconds.
+  #
+  # Needs a media-user-token, found the same way as library_sync's. Without one, or while Apple
+  # refuses it, nothing is synced, GET /api/v1/apple-library/status reports available: false,
+  # and rows already cached are still served. A sync that fails is retried at the next
+  # interval and is never fatal.
+  #
+  # integer minutes: period of the incremental sync, range 0..1440. It reads the newest songs
+  # and albums until one already cached, the whole playlist list, and the artist total, about
+  # 4 Apple requests plus one per playlist whose contents changed; when a kind's total disagrees
+  # with the cache (something was removed) that kind is read in full at most once an hour.
+  # 0 turns periodic incremental syncs off. Absent: 30.
+  sync_interval_minutes: 30
+  # integer hours: period of the full reconciliation, range 0..720. It reads every page of every
+  # kind (100 items per request: about 15 requests for 700 songs and 350 albums, about 66 for
+  # 5,000 songs, 500 albums, 100 playlists and 1,000 artists) plus up to 20 playlist track lists,
+  # and removes what is gone from the library. The first sync after start-up is always a full
+  # one while the cache is empty. 0 runs full syncs only through POST /api/v1/apple-library/sync.
+  # Absent: 24.
+  full_sync_hours: 24
