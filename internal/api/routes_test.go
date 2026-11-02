@@ -214,20 +214,12 @@ func TestRuntimeConfigSchemaMatchesRuntimeKeys(t *testing.T) {
 	}
 	slices.Sort(documented)
 	slices.Sort(runtime)
-	// TODO(P3): openapi.yaml follows the 2.0 record keys; drop this list.
-	specPendingP3 := map[string]bool{"download.give_up_after_runs": true, "download.force_overwrite": true}
 	for _, key := range runtime {
-		if specPendingP3[key] {
-			continue
-		}
 		if _, found := slices.BinarySearch(documented, key); !found {
 			t.Errorf("runtime config key %s has no RuntimeConfig property in openapi.yaml", key)
 		}
 	}
 	for _, key := range documented {
-		if specPendingP3[key] {
-			continue
-		}
 		if _, found := slices.BinarySearch(runtime, key); !found {
 			t.Errorf("openapi.yaml RuntimeConfig property %s is not a runtime config key", key)
 		}

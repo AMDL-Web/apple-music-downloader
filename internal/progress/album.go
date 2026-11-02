@@ -55,7 +55,7 @@ type Album struct {
 // already-on-disk tracks count as 1; a failed or cancelled track stays where it
 // stopped.
 func ItemFraction(it domain.JobItem) float64 {
-	if it.Status == domain.ItemCompleted || it.Status == domain.ItemSkipped {
+	if it.Status == domain.ItemCompleted || it.Status == domain.ItemSkipped || it.Status == domain.ItemUnavailable {
 		return 1
 	}
 	p := it.Progress
@@ -82,6 +82,8 @@ var outcomeRank = map[domain.ItemStatus]int{
 	domain.ItemSkipped:   1,
 	domain.ItemFailed:    2,
 	domain.ItemCancelled: 3,
+	// An unavailable slot settles the track without a file or a failure.
+	domain.ItemUnavailable: 4,
 }
 
 // AlbumProgress computes the album bar of a job from its status and items.

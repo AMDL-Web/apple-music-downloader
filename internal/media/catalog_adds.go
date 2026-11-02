@@ -50,15 +50,18 @@ func (d *Downloader) SongAlbumID(ctx context.Context, storefront, songID string)
 }
 
 // ArtistAlbumIDs implements jobs.Catalog with the artist's album list: every
-// album the artist read returns, today's artist download. TODO(P3): include
-// "albums" (no singles) needs the album kind in the artist read.
-func (d *Downloader) ArtistAlbumIDs(ctx context.Context, storefront, artistID, _ string) ([]string, error) {
+// album the artist read returns for include "all", the ones that are not
+// singles for "albums".
+func (d *Downloader) ArtistAlbumIDs(ctx context.Context, storefront, artistID, include string) ([]string, error) {
 	artist, err := d.catalog.ArtistAlbums(ctx, storefront, artistID)
 	if err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(artist.Albums))
 	for _, album := range artist.Albums {
+		if include == "albums" && album.IsSingle {
+			continue
+		}
 		ids = append(ids, album.ID)
 	}
 	return ids, nil

@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"amdl/internal/domain"
 )
@@ -29,43 +28,31 @@ type SearchQuery struct {
 // schemas: the fields every hit has, then those of its type. URL submitted to POST
 // /api/v1/downloads downloads exactly that item.
 type SearchHit struct {
-	ID                 string    `json:"id"`
-	Type               string    `json:"type"`
-	Name               string    `json:"name"`
-	URL                string    `json:"url"`
-	ArtworkURL         string    `json:"artwork_url,omitempty"`
-	ArtworkBgColor     string    `json:"artwork_bg_color,omitempty"`
-	ArtworkTextColor1  string    `json:"artwork_text_color1,omitempty"`
-	ArtworkTextColor2  string    `json:"artwork_text_color2,omitempty"`
-	ArtworkTextColor3  string    `json:"artwork_text_color3,omitempty"`
-	ArtworkTextColor4  string    `json:"artwork_text_color4,omitempty"`
-	ArtistName         string    `json:"artist_name,omitempty"`
-	AlbumName          string    `json:"album_name,omitempty"`
-	ReleaseDate        string    `json:"release_date,omitempty"`
-	Genre              string    `json:"genre,omitempty"`
-	TrackCount         int       `json:"track_count,omitempty"`
-	DurationMS         int       `json:"duration_ms,omitempty"`
-	ContentRating      string    `json:"content_rating,omitempty"`
-	AppleDigitalMaster bool      `json:"apple_digital_master,omitempty"`
-	AudioTraits        []string  `json:"audio_traits,omitempty"`
-	PriorJob           *PriorJob `json:"prior_job,omitempty"`
+	ID                 string   `json:"id"`
+	Type               string   `json:"type"`
+	Name               string   `json:"name"`
+	URL                string   `json:"url"`
+	ArtworkURL         string   `json:"artwork_url,omitempty"`
+	ArtworkBgColor     string   `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1  string   `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2  string   `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3  string   `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4  string   `json:"artwork_text_color4,omitempty"`
+	ArtistName         string   `json:"artist_name,omitempty"`
+	AlbumName          string   `json:"album_name,omitempty"`
+	ReleaseDate        string   `json:"release_date,omitempty"`
+	Genre              string   `json:"genre,omitempty"`
+	TrackCount         int      `json:"track_count,omitempty"`
+	DurationMS         int      `json:"duration_ms,omitempty"`
+	ContentRating      string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits        []string `json:"audio_traits,omitempty"`
 	// InAppleLibrary is whether the item is in the user's Apple Music account
 	// library; nil when the backend cannot tell.
 	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
-	// Library is an album hit's state estimated from its library folder, or
-	// whether a song hit's file is at its library path; nil for other hits,
-	// for a song the search alone cannot place, and when the backend did not
-	// count in time.
-	Library *domain.LibraryState `json:"library,omitempty"`
-}
-
-// PriorJob is the PriorJob schema: the hit's queue entry, its queued or
-// running job, else its last completed one. A completed job does not mean
-// the files are on disk; SearchHit.Library says that.
-type PriorJob struct {
-	ID         string           `json:"id"`
-	Status     domain.JobStatus `json:"status"`
-	FinishedAt *time.Time       `json:"finished_at,omitempty"`
+	// Resource is the record holding the hit: an album's or playlist's own,
+	// a song's album record with the song's state; nil when amdl has none.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
 }
 
 // HitGroup is one page of a search group or of an artist's albums.
@@ -167,10 +154,9 @@ type Album struct {
 	MotionArtworkTextColor2 string `json:"motion_artwork_text_color2,omitempty"`
 	MotionArtworkTextColor3 string `json:"motion_artwork_text_color3,omitempty"`
 	MotionArtworkTextColor4 string `json:"motion_artwork_text_color4,omitempty"`
-	// Library is how many of the songs are on disk, checked song by song;
-	// nil when the backend could not check.
-	Library *domain.LibraryState `json:"library,omitempty"`
-	Tracks  []AlbumTrack         `json:"tracks"`
+	// Resource is the album's record; nil when amdl has none.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
+	Tracks   []AlbumTrack         `json:"tracks"`
 }
 
 // AlbumTrack is the AlbumTrack schema: one song of an album, in the order
@@ -189,9 +175,9 @@ type AlbumTrack struct {
 	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string `json:"audio_traits,omitempty"`
 	HasLyrics          bool     `json:"has_lyrics,omitempty"`
-	// OnDisk is whether the song has a file at its library path; nil
-	// exactly when Album.Library is.
-	OnDisk *bool `json:"on_disk,omitempty"`
+	// State is the main slot state the album's record keeps for the song;
+	// empty when the record does not list it or there is no record.
+	State domain.AudioState `json:"state,omitempty"`
 }
 
 // Album reads an album and its songs with GET /api/v1/albums/{id}. An empty

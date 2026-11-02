@@ -437,10 +437,15 @@ const (
 // win over the snapshot the search carried; a failed, cancelled or deleted
 // job marks nothing.
 func (s *Store) HitMark(h client.SearchHit) (MarkState, string) {
+	// TODO(P3-desktop): show the record mark in full (paused, partial, a
+	// song's state) instead of reducing it to a job.
 	q := &s.Search
 	id := q.sent[HitKey(h)]
-	if id == "" && h.PriorJob != nil {
-		id = h.PriorJob.ID
+	if id == "" && h.Resource != nil {
+		id = h.Resource.ActiveJobID
+	}
+	if id == "" && h.Resource != nil && h.Resource.State == domain.RecordComplete {
+		return MarkDone, ""
 	}
 	if id == "" || q.gone[id] {
 		return MarkNone, ""
@@ -448,8 +453,8 @@ func (s *Store) HitMark(h client.SearchHit) (MarkState, string) {
 	status := domain.JobStatus("")
 	if j := s.byID[id]; j != nil {
 		status = j.Status
-	} else if h.PriorJob != nil && h.PriorJob.ID == id {
-		status = h.PriorJob.Status
+	} else if h.Resource != nil && h.Resource.ActiveJobID == id {
+		status = domain.JobQueued
 	}
 	switch status {
 	case domain.JobQueued, domain.JobRunning:

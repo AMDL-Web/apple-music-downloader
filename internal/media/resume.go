@@ -32,9 +32,12 @@ func resumableDownloadPaths(dir, owner, resumeKey string) (string, string) {
 	return path, path + ".json"
 }
 
+// resumeOwnerPrefix starts the name of every resume owner's folder.
+const resumeOwnerPrefix = "resume-job-"
+
 func resumeOwnerDir(dir, owner string) string {
 	sum := sha256.Sum256([]byte(owner))
-	return filepath.Join(dir, "resume-job-"+hex.EncodeToString(sum[:]))
+	return filepath.Join(dir, resumeOwnerPrefix+hex.EncodeToString(sum[:]))
 }
 
 func loadResumeCheckpoint(path, metadataPath, uri string) (int64, resumeMetadata) {

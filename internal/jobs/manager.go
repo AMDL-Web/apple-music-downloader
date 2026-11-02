@@ -65,6 +65,8 @@ type Manager struct {
 	// backoff holds records the picker passes over after a failed run with no
 	// slot to carry the failure, guarded by mu (noteRecordRunEnd).
 	backoff map[recordKey]recordBackoff
+	// check is the running or last disk check (StartCheck).
+	check checkState
 
 	// cfg reads the live config (SetConfig); nil means the defaults.
 	cfg func() config.Config

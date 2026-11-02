@@ -363,16 +363,15 @@ func (r *trackRun) runCodecs(ctx context.Context, codecs []string, set publishSt
 	return lastErr
 }
 
-// finishUnavailable ends the item of a slot the track does not offer. It is
-// written as skipped, the run's other outcome that is not a failure.
-// TODO(P3): its own item status and the item_unavailable event (design §4.3).
+// finishUnavailable ends the item of a slot the track does not offer:
+// unavailable, not a failure.
 func (r *trackRun) finishUnavailable(ctx context.Context, err error) {
-	r.item.Status = domain.ItemSkipped
+	r.item.Status = domain.ItemUnavailable
 	r.item.OutputPath = ""
 	r.item.Error = ""
 	r.item.StatusMessage = "Not offered for this track: " + err.Error()
 	r.d.persistTerminal(ctx, r.reporter, &r.item, func() domain.Event {
-		return domain.Event{JobID: r.job.ID, ItemID: r.item.ID, Type: domain.EventItemSkipped, Message: "unavailable", Payload: domain.MarshalEventPayload(r.item, map[string]any{"message": "unavailable"})}
+		return domain.Event{JobID: r.job.ID, ItemID: r.item.ID, Type: domain.EventItemUnavailable, Message: "unavailable", Payload: domain.MarshalEventPayload(r.item, map[string]any{"message": "unavailable"})}
 	})
 }
 

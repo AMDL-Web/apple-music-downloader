@@ -160,8 +160,10 @@ func (d *Downloader) validateRequest(ctx context.Context, url string) (jobs.Vali
 		message := fmt.Sprintf("%s download is not implemented", parsed.Type)
 		return jobs.ValidationResult{}, &jobs.RequestError{Code: "unsupported_input", Message: message}
 	}
-	if err := d.validateStorefront(ctx, parsed.Storefront); err != nil {
-		return jobs.ValidationResult{}, err
+	if storefront, which, ok := d.requestStorefront(ctx, parsed.Type, parsed.Storefront); ok {
+		if err := d.validateStorefront(ctx, storefront, which); err != nil {
+			return jobs.ValidationResult{}, err
+		}
 	}
 	result := jobs.ValidationResult{Type: string(parsed.Type), Storefront: parsed.Storefront, ID: parsed.ID}
 	if parsed.Type == applemusic.TypeSong && parsed.TrackID != "" {
@@ -173,7 +175,28 @@ func (d *Downloader) validateRequest(ctx context.Context, url string) (jobs.Vali
 	return result, nil
 }
 
-func (d *Downloader) validateStorefront(ctx context.Context, storefront string) error {
+// requestStorefront is the storefront a submitted link's run reads in: the
+// account storefront for a record (the link's own storefront only names it),
+// the link's for a station, which plays in it. An unreadable account
+// storefront skips the check; the run reads it again and fails there.
+func (d *Downloader) requestStorefront(ctx context.Context, typ applemusic.URLType, linkStorefront string) (string, string, bool) {
+	if typ == applemusic.TypeStation {
+		return linkStorefront, "the link's storefront", true
+	}
+	if d.cfg.Simulate.Enabled {
+		return "", "", false
+	}
+	account, err := d.AccountStorefront(ctx)
+	if err != nil {
+		return "", "", false
+	}
+	return account, "the account storefront", true
+}
+
+// validateStorefront checks that the wrapper's account serves storefront,
+// which a run reads in; which names it in the error. A mismatch is
+// decryptor_unavailable naming both.
+func (d *Downloader) validateStorefront(ctx context.Context, storefront, which string) error {
 	if d.cfg.Simulate.Enabled {
 		// Test mode never decrypts, so it must not depend on a running
 		// wrapper or its supported-storefront list.
@@ -195,9 +218,9 @@ func (d *Downloader) validateStorefront(ctx context.Context, storefront string) 
 			return nil
 		}
 	}
-	message := fmt.Sprintf("storefront %q is not served by the wrapper's account (it serves: %s)", storefront, strings.Join(status.Regions, ", "))
+	message := fmt.Sprintf("%s %q is not served by the wrapper's account (it serves: %s)", which, storefront, strings.Join(status.Regions, ", "))
 	return &jobs.RequestError{
-		Code: "unsupported_storefront", Message: message, Storefront: storefront,
+		Code: "decryptor_unavailable", Message: message, Storefront: storefront,
 		SupportedStorefronts: append([]string(nil), status.Regions...),
 	}
 }

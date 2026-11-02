@@ -25,6 +25,7 @@ tags:
   - name: System
   - name: Wrapper
   - name: Quality
+  - name: Library
   - name: Downloads
   - name: Search
   - name: Apple library
@@ -1080,12 +1081,10 @@ paths:
         next_offset. Apple reports no totals.
 
         A hit's url downloads exactly that item when submitted to POST
-        /api/v1/downloads. prior_job names the hit's queue entry; a failed
-        read of the job store leaves hits unmarked instead of failing the
-        search. An album hit's library estimates how much of it is on disk
-        from one listing of its library folder, with no further catalog read.
-        The catalog read and the folder listings are bounded by 10 seconds
-        together.
+        /api/v1/library/add. resource marks a hit amdl keeps a record of, read
+        from the records and never from the disk; a failed store read leaves
+        hits unmarked instead of failing the search. The catalog read is
+        bounded by 10 seconds.
       operationId: searchCatalog
       parameters:
         - name: term
@@ -1227,11 +1226,10 @@ paths:
         same album. A song's url submitted to POST /api/v1/downloads downloads
         that song alone.
 
-        library says how many of the songs are on disk and each song's on_disk
-        whether it has a file at its library path (download.library_path_format),
-        whichever job wrote it, at whatever quality. Submitting the album
-        downloads only the songs not on disk; force_overwrite downloads all of
-        them again.
+        resource is the album's record and each song's state its main slot
+        state there, read from the records and never from the disk. Adding the
+        album downloads the songs its record does not have done; a reset
+        (POST /api/v1/library/albums/{id}/reset) downloads them again.
       operationId: getAlbum
       parameters:
         - name: album_id
@@ -1315,14 +1313,525 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/library/summary:
+    get:
+      tags: [Library]
+      summary: Count the records per state and flag
+      description: |
+        Album and playlist records per state (none, partial, complete) and per
+        flag, pending adds per state, and the running or last disk check.
+      operationId: getLibrarySummary
+      responses:
+        '200':
+          description: The counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibrarySummary'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/albums:
+    get:
+      tags: [Library]
+      summary: List album records
+      description: |
+        The album records amdl keeps: what is downloaded is what they say, never
+        what is on disk. state and flag take several values (repeat or comma
+        separate); a record matches any of them. Newest added first by default.
+      operationId: listLibraryAlbums
+      parameters:
+        - $ref: '#/components/parameters/RecordState'
+        - $ref: '#/components/parameters/RecordFlag'
+        - $ref: '#/components/parameters/RecordSource'
+        - $ref: '#/components/parameters/RecordQuery'
+        - $ref: '#/components/parameters/RecordSort'
+        - $ref: '#/components/parameters/RecordLimit'
+        - $ref: '#/components/parameters/BrowseOffset'
+      responses:
+        '200':
+          description: One page of album records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, limit, offset]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlbumResource'
+                  total: {type: integer, description: Records that match the filters.}
+                  limit: {type: integer}
+                  offset: {type: integer}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/albums/{id}:
+    get:
+      tags: [Library]
+      summary: Get an album record with its tracks and slots
+      operationId: getLibraryAlbum
+      parameters:
+        - $ref: '#/components/parameters/RecordID'
+      responses:
+        '200':
+          description: The record, its tracks in list order and each one's quality slots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordDetail'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/playlists:
+    get:
+      tags: [Library]
+      summary: List playlist records
+      description: As GET /api/v1/library/albums, for catalog playlists (pl. ids).
+      operationId: listLibraryPlaylists
+      parameters:
+        - $ref: '#/components/parameters/RecordState'
+        - $ref: '#/components/parameters/RecordFlag'
+        - $ref: '#/components/parameters/RecordSource'
+        - $ref: '#/components/parameters/RecordQuery'
+        - $ref: '#/components/parameters/RecordSort'
+        - $ref: '#/components/parameters/RecordLimit'
+        - $ref: '#/components/parameters/BrowseOffset'
+      responses:
+        '200':
+          description: One page of playlist records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, limit, offset]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlaylistResource'
+                  total: {type: integer, description: Records that match the filters.}
+                  limit: {type: integer}
+                  offset: {type: integer}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/playlists/{id}:
+    get:
+      tags: [Library]
+      summary: Get a playlist record with its songs and slots
+      operationId: getLibraryPlaylist
+      parameters:
+        - $ref: '#/components/parameters/RecordID'
+      responses:
+        '200':
+          description: The record, its songs by position (removed ones included) and each one's slots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordDetail'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/add:
+    post:
+      tags: [Library]
+      summary: Add links to the library
+      description: |
+        POST /api/v1/downloads with three more fields: codecs (the codec order
+        of the main slots the add creates), now (each queued run starts next)
+        and include (an artist link's albums). The answer is the same.
+      operationId: addToLibrary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LibraryAddRequest'
+      responses:
+        '202':
+          description: At least one URL was taken; see results for the per-URL outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSubmitResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/JSONBodyTooLarge'
+        '422':
+          description: >-
+            no_urls_accepted: every URL was rejected, and error.details is the
+            BatchSubmitResponse; invalid_overrides: overrides failed configuration
+            validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            store_error (or internal_error): no URL was taken and at least one
+            failed on the server side; error.details is the BatchSubmitResponse.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/library/reset:
+    post:
+      tags: [Library]
+      summary: Reset every record a filter selects
+      description: |
+        POST /api/v1/library/{kind}/{id}/reset for each album and playlist
+        record the filter selects (kind limits it to one kind). A record with a
+        queued or running run is skipped and counted in skipped_active. An
+        audio reset of records selected by the failed, given_up or missing flag
+        re-arms only the slots in that state unless states says otherwise, so
+        "download missing" is {"what": "audio", "filter": {"flag": ["missing"]}}.
+        A filter that names nothing is refused.
+      operationId: resetLibrary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LibraryResetRequest'
+      responses:
+        '200':
+          description: How many records were reset and skipped.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reset, skipped_active]
+                properties:
+                  reset: {type: integer}
+                  skipped_active: {type: integer}
+        '400':
+          $ref: '#/components/responses/InvalidScope'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/check:
+    get:
+      tags: [Library]
+      summary: Show the running or last disk check
+      operationId: getLibraryCheck
+      responses:
+        '200':
+          description: The check; null before the first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [check]
+                properties:
+                  check:
+                    oneOf:
+                      - $ref: '#/components/schemas/CheckRun'
+                      - type: 'null'
+        '500':
+          $ref: '#/components/responses/StoreError'
+    post:
+      tags: [Library]
+      summary: Check the stored files on disk
+      description: |
+        Starts a disk check in the background: it stats the stored path of
+        every done slot (audio files only) of the library, or of one record,
+        and marks the missing ones missing. It never marks a found file, moves
+        a file or queues a download; download the missing slots again with a
+        reset. Two guards: download.downloads_dir must exist (503
+        downloads_dir_unavailable), and when more than half the checked files
+        are missing the check ends with aborted_reason too_many_missing and
+        marks nothing, unless force is set (an unmounted share must not mark a
+        whole library missing). One check runs at a time; the overview feed
+        sends check_updated as it moves on.
+      operationId: startLibraryCheck
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckRequest'
+      responses:
+        '202':
+          description: The check started.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [check]
+                properties:
+                  check:
+                    $ref: '#/components/schemas/CheckRun'
+        '400':
+          $ref: '#/components/responses/InvalidScope'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '409':
+          description: check_running; a check is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: downloads_dir_unavailable; download.downloads_dir is missing or not a directory.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/pending:
+    get:
+      tags: [Library]
+      summary: List pending adds
+      description: |
+        Adds that need a catalog read before they become records: a song
+        without its album, an artist, a library playlist's songs. The resolver
+        reads them in the background; one it gave up on is failed with its
+        last_error and waits for a retry or a delete.
+      operationId: listLibraryPending
+      parameters:
+        - name: state
+          in: query
+          description: Only adds in this state; every add when absent.
+          schema:
+            type: string
+            enum: [pending, failed]
+      responses:
+        '200':
+          description: The adds, oldest first by class.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PendingAdd'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/pending/{pending_id}:
+    delete:
+      tags: [Library]
+      summary: Drop a pending add
+      operationId: deleteLibraryPending
+      parameters:
+        - $ref: '#/components/parameters/PendingID'
+      responses:
+        '204':
+          description: The add is gone.
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/pending/{pending_id}/retry:
+    post:
+      tags: [Library]
+      summary: Read a failed pending add again
+      operationId: retryLibraryPending
+      parameters:
+        - $ref: '#/components/parameters/PendingID'
+      responses:
+        '200':
+          description: The add, pending again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingAdd'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/{kind}/{id}/download:
+    post:
+      tags: [Library]
+      summary: Download a record now, or another quality of it
+      description: |
+        Resumes the record and queues its run when it needs one. codec adds
+        that quality as another slot of each track (of songs, or every track)
+        whose main slot is done; its file is named with a quality suffix. now
+        moves the run to the front.
+      operationId: downloadLibraryRecord
+      parameters:
+        - $ref: '#/components/parameters/RecordKind'
+        - $ref: '#/components/parameters/RecordID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordDownloadRequest'
+      responses:
+        '200':
+          description: >-
+            Nothing was queued: already_downloaded (every wanted track is done)
+            or waiting (a failed slot waits for its automatic retry, or the
+            queue is full and the scheduler queues it later).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [already_downloaded, waiting]
+        '202':
+          description: The record's run is queued or running.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, job]
+                properties:
+                  status:
+                    type: string
+                    const: queued
+                  job:
+                    $ref: '#/components/schemas/Job'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '409':
+          description: >-
+            main_not_done: no asked-for track has its first quality done;
+            quality_present: the first quality already is that codec.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/{kind}/{id}/reset:
+    post:
+      tags: [Library]
+      summary: Download a record's files, lyrics or covers again
+      description: |
+        Re-arms slots of one record and queues a run (trigger reset). all
+        re-arms every slot, clears failures and the paused flag and rewrites the
+        covers; audio re-downloads the selected slots (slot, songs, states),
+        and a done file is replaced at its stored path only once the new copy
+        is complete; codecs, with slot main, become the main slots' codec
+        order; lyrics fetches the lyrics of done slots again and rewrites the
+        file's tag and sidecars; covers rewrites the cover files. A record with
+        a queued or running run is refused: pause it first.
+      operationId: resetLibraryRecord
+      parameters:
+        - $ref: '#/components/parameters/RecordKind'
+        - $ref: '#/components/parameters/RecordID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordResetRequest'
+      responses:
+        '200':
+          description: >-
+            slots is how many slots went back to pending; job is the queued
+            run, null when nothing needs one, the record is paused or the queue
+            is full.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [slots, job]
+                properties:
+                  slots: {type: integer}
+                  job:
+                    oneOf:
+                      - $ref: '#/components/schemas/Job'
+                      - type: 'null'
+        '400':
+          $ref: '#/components/responses/InvalidScope'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '409':
+          $ref: '#/components/responses/RunActive'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/{kind}/{id}/pause:
+    post:
+      tags: [Library]
+      summary: Pause a record
+      description: |
+        The scheduler stops queuing runs for the record, and its queued or
+        running run is cancelled; running slots go back to pending and resume
+        checkpoints stay, so a resume continues partial downloads.
+      operationId: pauseLibraryRecord
+      parameters:
+        - $ref: '#/components/parameters/RecordKind'
+        - $ref: '#/components/parameters/RecordID'
+      responses:
+        '200':
+          description: The record, as GET /api/v1/library/{kind}/{id} answers it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordDetail'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/{kind}/{id}/resume:
+    post:
+      tags: [Library]
+      summary: Resume a paused record
+      operationId: resumeLibraryRecord
+      parameters:
+        - $ref: '#/components/parameters/RecordKind'
+        - $ref: '#/components/parameters/RecordID'
+      responses:
+        '200':
+          description: The record; the scheduler queues its run when it needs one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordDetail'
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '500':
+          $ref: '#/components/responses/StoreError'
+  /api/v1/library/{kind}/{id}:
+    delete:
+      tags: [Library]
+      summary: Remove a record from amdl
+      description: |
+        Deletes the record with its tracks, slots and resume checkpoints. The
+        files on disk and the record's runs stay. The library monitor does not
+        add it back; adding it by hand does, and its first run then downloads
+        every track again over the files.
+      operationId: deleteLibraryRecord
+      parameters:
+        - $ref: '#/components/parameters/RecordKind'
+        - $ref: '#/components/parameters/RecordID'
+      responses:
+        '204':
+          description: The record is gone.
+        '404':
+          $ref: '#/components/responses/ResourceNotFound'
+        '409':
+          $ref: '#/components/responses/RunActive'
+        '500':
+          $ref: '#/components/responses/StoreError'
   /api/v1/downloads:
     get:
       tags: [Downloads]
       summary: List download jobs
       description: |
         Returns a snapshot of the download job list, with pagination,
-        status and type filters, and substring search over title, artist and
-        input URL. Sorted by created_at descending by default. Other query
+        status, type, record and trigger filters, and substring search over
+        title, artist and input URL. Each download of a record is its own job
+        (run), so the list is history. Sorted by created_at descending by default. Other query
         parameters are ignored.
         Multi-value parameters (status, type) accept repeated keys or comma
         separation; for example `status=failed&status=cancelled` is equivalent to
@@ -1366,6 +1875,28 @@ paths:
             items:
               type: string
               enum: [song, album, playlist, artist, station]
+          style: form
+          explode: true
+        - name: resource_kind
+          in: query
+          description: Only runs of records of this kind.
+          schema:
+            type: string
+            enum: [album, playlist]
+        - name: resource_id
+          in: query
+          description: Only runs of the record with this catalog id.
+          schema:
+            type: string
+        - name: trigger
+          in: query
+          description: >-
+            Filter by what started the run; repeat the parameter or separate
+            values with commas.
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/RunTrigger'
           style: form
           explode: true
         - name: q
@@ -1412,7 +1943,7 @@ paths:
           $ref: '#/components/responses/StoreError'
     post:
       tags: [Downloads]
-      summary: Create download jobs in bulk
+      summary: Add links (alias of POST /library/add)
       description: >-
         Submits a batch of URLs and returns the enqueue result for each one;
         duplicate, unsupported or queue-full URLs are flagged individually in
@@ -1422,18 +1953,19 @@ paths:
         none was, it is an ErrorResponse whose details is the BatchSubmitResponse:
         500 store_error if any URL failed in the job store (status error; the same
         submit may succeed when retried), 500 internal_error if the only server
-        failure was an unexpected validator error, else 422 no_urls_accepted. The optional overrides field
-        applies to the jobs created by this request and overrides the quality and
-        force_overwrite keys of the runtime download configuration. The
-        media-user-token is the wrapper's when amdl can read it, else the runtime
-        catalog.media_user_token (never one from the request), and every
-        enabled hooks.yaml entry that matches runs for every job. A link keeps
-        one job: when its canonical key has a finished job (completed, failed or
-        cancelled; the newest if several) and none queued or running, that job
-        is queued again under its id (requeued true) with this request's
-        overrides and created_at, a job_retried event with cause resubmit, and
-        the job_queued hook; its run checks the tracks against the files before
-        downloading. Station links always create a new job.
+        failure was an unexpected validator error, else 422 no_urls_accepted.
+        Accepted, pending and already_downloaded count as accepted. An album,
+        an album-track link and a catalog playlist (pl.) add or extend a record
+        and queue its run (job) when the record needs one; a song without its
+        album, an artist and a library playlist's songs become pending adds
+        that the resolver reads into records (status pending, no job yet); a
+        record whose every wanted track is done answers already_downloaded and
+        queues nothing; a station is a one-off run. Each download is a new
+        job. The optional overrides field is stored on the record and applies
+        to its runs. The media-user-token is the wrapper's when amdl can read
+        it, else the runtime catalog.media_user_token (never one from the
+        request), and every enabled hooks.yaml entry that matches runs for
+        every job.
       operationId: createDownload
       requestBody:
         required: true
@@ -1452,8 +1984,9 @@ paths:
           description: >-
             invalid_json: the body cannot be parsed; invalid_request: it contains
             unknown fields (for example media_user_token at the top level or
-            inside overrides, a key overrides does not carry such as hooks or
-            downloads_dir, or a misspelled key), urls is empty, or it exceeds the
+            inside overrides, a key overrides does not carry such as hooks,
+            downloads_dir or the removed force_overwrite, or a misspelled key),
+            urls is empty, or it exceeds the
             per-request limit (100 URLs). The message names the unknown field.
           content:
             application/json:
@@ -1490,14 +2023,20 @@ paths:
         - download_upserted: a job was created or changed (queued, started,
           progress as each song finishes, terminal state); data.job is the job's
           latest snapshot (item counters derived from its items);
-        - download_deleted: a job was deleted; data.job_id is the deleted job's id.
-        Both message types carry status_counts, the latest status counts of all
+        - download_deleted: a job was deleted; data.job_id is the deleted job's id;
+        - resource_updated: after a download_upserted of a record's run, the
+          record's latest state; data.resource is the record (AlbumResource
+          or PlaylistResource), data.resource_kind and data.resource_id name it;
+        - check_updated: a disk check started, moved on or ended; data.check
+          is the CheckRun. It is no event: it carries the event_id already
+          reached, and a client that reconnects reads GET /library/check.
+        Every message type carries status_counts, the latest status counts of all
         jobs at the moment the message was generated; in a delete message the
         deleted job has already been subtracted.
         Only "milestone" events that affect how the list is displayed trigger a
         push (created/recovered/started/moved in the queue/input
-        resolved/animated cover resolved/song completed, skipped or
-        failed/terminal state/deleted);
+        resolved/animated cover resolved/song completed, skipped,
+        unavailable, lyrics refreshed or failed/terminal state/deleted);
         per-track progress events are not pushed. Instead, every 2 seconds the
         feed sends a download_upserted for each running job whose progress has
         moved since it was last sent, with the event_id already reached.
@@ -1580,6 +2119,12 @@ paths:
     post:
       tags: [Downloads]
       summary: Cancel a download job
+      description: |
+        A station run is cancelled and its scratch removed. A record's run is
+        not cancelled on its own: its record is paused (POST
+        /api/v1/library/{kind}/{id}/pause), which cancels the run, keeps its
+        resume checkpoints and stops the record from being queued again until
+        it is resumed. Clients label the action Pause for a record's run.
       operationId: cancelDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
@@ -1612,22 +2157,18 @@ paths:
       tags: [Downloads]
       summary: Retry a failed or cancelled download job
       description: |
-        Re-enqueues a job in the failed or cancelled terminal state; only unfinished
-        tracks are actually retried: items that already completed (completed) or were
-        skipped (skipped_existing) keep their state while their file is still at the
-        output_path they recorded (for a song, album or artist track, its current
-        library path) and force_overwrite is off; the remaining items (failed,
-        cancelled, a finished one whose file is gone, etc.) are reset to queued and
-        reprocessed under their original item ids, with the job's overrides unchanged.
-        Re-enqueueing records and pushes a job_retried event with cause retry (an
-        overview milestone event, which drives the GET /downloads overview feed).
-        The job keeps its created_at, and the job_queued hook does not fire.
+        Starts a failed or cancelled job's download again as a new job, which
+        the answer names. For a record's run it resumes the record, re-arms the
+        record's failed and given-up slots and queues a run with trigger reset;
+        done slots stay done, and when nothing is left to download it answers
+        200 already_downloaded. For a station it queues a new run of the same
+        link and overrides. The new job fires job_queued like any other.
       operationId: retryDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
       responses:
-        '202':
-          description: The job has been re-enqueued.
+        '200':
+          description: The record has nothing left to download; no job was queued.
           content:
             application/json:
               schema:
@@ -1636,17 +2177,27 @@ paths:
                 properties:
                   status:
                     type: string
+                    const: already_downloaded
+        '202':
+          description: A new job was queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, job]
+                properties:
+                  status:
+                    type: string
                     const: queued
+                  job:
+                    $ref: '#/components/schemas/Job'
         '404':
           $ref: '#/components/responses/JobNotFound'
         '409':
           description: |
             job_not_retryable: the job is not in the failed or cancelled state;
-            duplicate_active: a queued/running job for the same link already
-            exists; job_finalizing: the previous run is still wrapping up (the
-            terminal state was just written but worker cleanup or hook dispatch
-            has not finished, or one of its terminal hooks is still running);
-            retry once it has ended.
+            duplicate_active: the record, or the station link, already has a
+            queued or running job.
           content:
             application/json:
               schema:
@@ -1871,6 +2422,85 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z]{2}$'
+    RecordKind:
+      name: kind
+      in: path
+      required: true
+      description: albums or playlists; another value answers 404 resource_not_found.
+      schema:
+        type: string
+        enum: [albums, playlists]
+    RecordID:
+      name: id
+      in: path
+      required: true
+      description: The record's catalog id, without a storefront.
+      schema:
+        type: string
+    PendingID:
+      name: pending_id
+      in: path
+      required: true
+      description: The pending add's id.
+      schema:
+        type: integer
+        format: int64
+    RecordState:
+      name: state
+      in: query
+      description: Only records in these states.
+      schema:
+        type: array
+        items:
+          $ref: '#/components/schemas/RecordState'
+      style: form
+      explode: true
+    RecordFlag:
+      name: flag
+      in: query
+      description: >-
+        Only records with any of these flags: failed, given_up, missing (a
+        track has a slot in that state), waiting (a failed slot waits for its
+        automatic retry), paused, unresolved (no read listed its tracks yet).
+      schema:
+        type: array
+        items:
+          type: string
+          enum: [failed, given_up, missing, waiting, paused, unresolved]
+      style: form
+      explode: true
+    RecordSource:
+      name: source
+      in: query
+      description: Only records added this way.
+      schema:
+        type: string
+        enum: [manual, library_sync, artist, import_1x]
+    RecordQuery:
+      name: q
+      in: query
+      description: Substring of the name or artist (curator for a playlist), or the exact catalog id.
+      schema:
+        type: string
+    RecordSort:
+      name: sort
+      in: query
+      description: >-
+        added (newest first, the default), name, artist, or release (newest
+        first; a playlist's last modification).
+      schema:
+        type: string
+        enum: [added, name, artist, release]
+        default: added
+    RecordLimit:
+      name: limit
+      in: query
+      description: Page size; default 50, maximum 500.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 50
     BrowseOffset:
       name: offset
       in: query
@@ -1890,6 +2520,24 @@ components:
         apple_library_unavailable; there is no usable media-user-token
         (details.reason no_token, or token_refused when Apple refused it) and
         nothing is cached.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ResourceNotFound:
+      description: resource_not_found; no record (or pending add) has that id.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RunActive:
+      description: run_active; the record has a queued or running run. Pause it first.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InvalidScope:
+      description: invalid_json, invalid_request or invalid_scope; the body names no valid scope.
       content:
         application/json:
           schema:
@@ -2021,23 +2669,30 @@ components:
       description: |
         Stable, machine-readable error code, sent with the status listed here.
         400 invalid_request (query or body validation), invalid_json (the body
-        is not well-formed JSON); 401 authentication_failed; 404
+        is not well-formed JSON), invalid_scope (a reset or check names no
+        valid scope); 401 authentication_failed; 404
         route_not_found, job_not_found, login_not_found, account_not_found,
-        catalog_not_found (Apple has no resource with that id), hook_not_found; 405
+        catalog_not_found (Apple has no resource with that id), hook_not_found,
+        resource_not_found (no record or pending add with that id); 405
         method_not_allowed (with an Allow header); 409 job_active,
-        job_not_retryable, job_not_cancellable, job_finalizing, job_not_queued,
+        job_not_retryable, job_not_cancellable, job_not_queued,
         duplicate_active, already_logged_in, login_pending, hook_read_only,
-        apple_library_sync_running; 413 request_too_large; 422
+        apple_library_sync_running, run_active (the record has a queued or
+        running run; pause it first), main_not_done (another quality needs the
+        track's first quality done), quality_present (the first quality is that
+        codec), check_running; 413 request_too_large; 422
         invalid_overrides, config_key_not_mutable, invalid_config, invalid_hook,
         invalid_hooks_file, no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 501 login_unsupported; 502 upstream_error; 503 queue_full,
         wrapper_unavailable, feature_unavailable (the process keeps no log
         history, so the log routes cannot answer, or has no hooks.yaml to
         write), apple_library_unavailable (no usable media-user-token and
-        nothing cached); 504 upstream_timeout.
+        nothing cached), downloads_dir_unavailable (download.downloads_dir is
+        missing or not a directory); 504 upstream_timeout.
       enum:
         - invalid_request
         - invalid_json
+        - invalid_scope
         - authentication_failed
         - route_not_found
         - job_not_found
@@ -2045,17 +2700,21 @@ components:
         - account_not_found
         - catalog_not_found
         - hook_not_found
+        - resource_not_found
         - method_not_allowed
         - job_active
         - job_not_retryable
         - job_not_cancellable
-        - job_finalizing
         - job_not_queued
         - duplicate_active
         - already_logged_in
         - login_pending
         - hook_read_only
         - apple_library_sync_running
+        - run_active
+        - main_not_done
+        - quality_present
+        - check_running
         - request_too_large
         - invalid_overrides
         - config_key_not_mutable
@@ -2071,6 +2730,7 @@ components:
         - wrapper_unavailable
         - feature_unavailable
         - apple_library_unavailable
+        - downloads_dir_unavailable
         - upstream_timeout
     WrapperStatus:
       type: object
@@ -2762,16 +3422,16 @@ components:
         overrides:
           $ref: '#/components/schemas/DownloadOverrides'
           description: >-
-            Optional configuration overrides that apply only to the jobs created by
-            this request. Omitted fields keep the current runtime configuration.
-            Download overrides are persisted with each job and still apply after a
-            retry or a restart recovery. No override affects any other job.
+            Optional configuration overrides for the records and runs this
+            request adds. Omitted fields keep the current runtime configuration.
+            They are stored on the record (the latest add's win) and copied into
+            each of its runs, so they apply after a retry or a restart recovery.
     DownloadOverrides:
       type: object
       additionalProperties: false
       description: >-
-        Per-job override layer for the quality and overwrite keys of the download
-        section of the runtime configuration; each field maps one-to-one onto the
+        Per-record override layer for the quality keys of the download section
+        of the runtime configuration; each field maps one-to-one onto the
         download key of the same name. Every other setting (directories, path
         templates, lyrics, covers, max_attempts, check_integrity,
         integrity_mode and hook selection) comes from the runtime configuration and hooks.yaml for
@@ -2789,13 +3449,6 @@ components:
         codec_alternative: {type: boolean}
         alac_max_sample_rate: {type: integer}
         alac_max_bit_depth: {type: integer}
-        force_overwrite:
-          type: boolean
-          description: >-
-            Whether to force a re-download that replaces existing output files
-            and their lyrics sidecar files once the new copy is complete; a failed
-            download leaves the old files in place. When omitted, the runtime
-            configuration value download.force_overwrite applies (default false).
     RuntimeConfig:
       type: object
       description: >-
@@ -2878,7 +3531,18 @@ components:
             max_attempts:
               type: integer
               maximum: 10
-              description: Positive values 1-10 are allowed; values <=0 are treated as 1.
+              description: >-
+                Tries of each operation inside one run. Positive values 1-10 are
+                allowed; values <=0 are treated as 1.
+            give_up_after_runs:
+              type: integer
+              minimum: 0
+              maximum: 20
+              description: >-
+                Runs that may end a slot failed before it is given up; 0 never
+                gives up. A failed slot is retried by a new run (trigger retry)
+                30 minutes after the failure, then each wait four times the last; a reset
+                re-arms a given-up slot. Default 3.
             progress_event_interval_ms:
               type: integer
               maximum: 10000
@@ -2986,12 +3650,6 @@ components:
                 sample lies inside the file's media data, that every ALAC packet parses
                 and ends cleanly, and decodes only the first and last 5 seconds; damage
                 confined to the middle of an AAC or Dolby track passes it.
-            force_overwrite:
-              type: boolean
-              description: >-
-                Whether to force a re-download that overwrites existing output
-                files and their lyrics sidecar files; default false. Can be
-                overridden per batch with overrides.force_overwrite in the request.
         logging:
           type: object
           properties:
@@ -3360,23 +4018,29 @@ components:
           description: A single input URL after splitting and normalization.
         status:
           type: string
-          enum: [accepted, invalid, duplicate_in_request, duplicate_active, queue_full, error]
+          enum: [accepted, pending, already_downloaded, invalid, duplicate_in_request, duplicate_active, queue_full, error]
           description: >-
-            accepted: a job was created, or a finished job for the same link was
-            queued again (requeued). invalid: the URL will not be accepted as
+            accepted: the link added or extended a record and job is its queued
+            run, absent when the record waits (a failed slot's automatic retry,
+            or a full queue the scheduler drains later), or a station's one-off
+            run was queued. pending: the link needs a catalog read before it
+            becomes records (a song without its album, an artist, a library
+            playlist's songs); they appear in GET /library/albums once read.
+            already_downloaded: every wanted track of the link's record is done;
+            nothing was queued (reset it to download again). invalid: the URL will not be accepted as
             it is (error.code says why). duplicate_in_request: an earlier URL in
             the same request names the same download. duplicate_active: a queued
             or running job already downloads it. queue_full: the job queue is
             full; retry later. error: the server failed while handling the URL
             (store_error); the same submit may succeed when retried.
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+          description: >-
+            The record the link added or extended; absent for a station, a
+            pending add and a link that was not taken.
         job:
           $ref: '#/components/schemas/Job'
-          description: The queued job, returned when status is accepted.
-        requeued:
-          type: boolean
-          description: >-
-            True when status is accepted and job is an existing finished job
-            queued again under its id rather than a new one; omitted otherwise.
+          description: The queued run, when status is accepted and a run was queued.
         existing_job_id:
           type: string
           description: When status is duplicate_active, points to the job with the same content that is already in progress (absent when the store's uniqueness check caught a concurrent submit).
@@ -3384,7 +4048,7 @@ components:
           $ref: '#/components/schemas/SubmitError'
     SubmitError:
       type: object
-      description: Why one URL was not accepted; present for every status except accepted.
+      description: Why one URL was not taken; present for every status except accepted, pending and already_downloaded.
       required: [code, message]
       properties:
         code:
@@ -3395,8 +4059,10 @@ components:
         details:
           type: object
           description: >-
-            unsupported_storefront: {"storefront": "jp", "supported_storefronts":
-            ["us"]}, the storefronts the wrapper's account serves.
+            decryptor_unavailable when the wrapper does not serve the storefront
+            the run reads in (the account storefront for a record, the link's
+            for a station): {"storefront": "cn", "supported_storefronts": ["us"]},
+            the storefronts the wrapper's account serves.
           properties:
             storefront:
               type: string
@@ -3410,9 +4076,10 @@ components:
         Stable per-URL code. With status invalid: invalid_url (not an Apple
         Music URL the backend can parse), unsupported_input (a link type the
         backend does not download, such as music videos),
-        unsupported_storefront (the wrapper's account does not serve the URL's
-        storefront), decryptor_unavailable (the wrapper is not ready; retrying
-        later may succeed), invalid_configuration (the runtime configuration
+        decryptor_unavailable (the wrapper is not ready, retrying later may
+        succeed, or its account does not serve the storefront the run reads
+        in; a link's own storefront only names a record, which is read in the
+        account storefront), invalid_configuration (the runtime configuration
         cannot parse this link). With the status of the same name:
         duplicate_in_request, duplicate_active, queue_full. With status error:
         store_error, internal_error (the validator failed unexpectedly).
@@ -3420,7 +4087,6 @@ components:
         - invalid_url
         - invalid_configuration
         - unsupported_input
-        - unsupported_storefront
         - decryptor_unavailable
         - duplicate_in_request
         - duplicate_active
@@ -3433,7 +4099,7 @@ components:
       properties:
         accepted:
           type: integer
-          description: Number of URLs enqueued successfully.
+          description: Number of URLs taken (accepted, pending or already_downloaded).
         rejected:
           type: integer
           description: Number of URLs rejected.
@@ -3637,13 +4303,11 @@ components:
                 True for a station: its download reads the next-tracks feed,
                 which needs a media-user-token (the wrapper's or
                 catalog.media_user_token). Absent for other types.
-            library:
-              $ref: '#/components/schemas/LibraryState'
+            resource:
+              $ref: '#/components/schemas/ResourceMark'
               description: >-
-                Albums and songs: how many of the album's songs, or whether the
-                song (tracks_total 1), have a file at their library path. Exact,
-                checked song by song. Absent for other types, and for a song
-                whose album could not be read.
+                The record holding the link's album, playlist or song (for a song,
+                its album record with song_state); absent when amdl has none.
     SearchResponse:
       type: object
       required: [term, storefront]
@@ -3748,8 +4412,11 @@ components:
         genre:
           type: string
           description: First genreNames entry that is not the "Music" umbrella genre.
-        prior_job:
-          $ref: '#/components/schemas/PriorJob'
+        resource:
+          $ref: '#/components/schemas/ResourceMark'
+          description: >-
+            The record holding the hit: an album's or playlist's own, a song's
+            album record with song_state; absent when amdl has none.
         in_apple_library:
           type: boolean
           description: >-
@@ -3783,15 +4450,6 @@ components:
               description: True when the catalog marks the song isAppleDigitalMaster; absent otherwise.
             audio_traits:
               $ref: '#/components/schemas/AudioTraits'
-            library:
-              $ref: '#/components/schemas/LibraryState'
-              description: >-
-                Whether a file is at the song's library path (tracks_total 1),
-                placed from the song and its album as the search returned
-                them, with no further catalog read. Absent for a song past its
-                album's first disc, without a track number, under a
-                library_path_format file name that uses {TrackCount} or
-                {DiscCount}, and when the check did not finish in time.
     SearchAlbum:
       allOf:
         - $ref: '#/components/schemas/SearchHit'
@@ -3816,16 +4474,6 @@ components:
               description: True when the catalog marks the album isMasteredForItunes; absent otherwise.
             audio_traits:
               $ref: '#/components/schemas/AudioTraits'
-            library:
-              $ref: '#/components/schemas/LibraryState'
-              description: >-
-                An estimate from the album's library folder alone: the .m4a
-                files in it against the tracks its prior_job resolved, else
-                against track_count (which also counts tracks the storefront
-                withholds from the track list), so a file the track list does
-                not name counts and an album without either reads as none.
-                GET /api/v1/albums/{album_id} checks song by song. Absent when
-                the listing did not finish in time.
     SearchPlaylist:
       allOf:
         - $ref: '#/components/schemas/SearchHit'
@@ -3856,26 +4504,6 @@ components:
         seen include lossless, hi-res-lossless, lossy-stereo, atmos and
         spatial. A hint of what the catalog offers; POST /api/v1/quality reads what a download
         gets. Absent when the catalog sends none.
-    PriorJob:
-      type: object
-      required: [id, status]
-      description: >-
-        The hit's queue entry: the newest queued or running job of the same
-        type and id, else the newest completed one, from a link in any
-        storefront. A song downloaded as part of an album or playlist job has
-        none; failed and cancelled jobs mark nothing. A completed job does not
-        mean the files are still on disk: an album hit's library says that.
-      properties:
-        id:
-          type: string
-          description: The job's id (GET /api/v1/downloads/{job_id}).
-        status:
-          type: string
-          enum: [queued, running, completed]
-        finished_at:
-          type: string
-          format: date-time
-          description: When a completed job finished; absent for a queued or running one.
     ArtistAlbumsResponse:
       type: object
       required: [storefront, artist, albums]
@@ -3971,11 +4599,9 @@ components:
         motion_artwork_text_color4:
           type: string
           description: Quaternary text color paired with motion_artwork_bg_color.
-        library:
-          $ref: '#/components/schemas/LibraryState'
-          description: >-
-            How many of the songs have a file at their library path, checked
-            song by song. Absent when the backend could not check in time.
+        resource:
+          $ref: '#/components/schemas/ResourceMark'
+          description: The album's record; absent when amdl has none.
         tracks:
           type: array
           items:
@@ -4019,36 +4645,488 @@ components:
         has_lyrics:
           type: boolean
           description: True when the catalog reports lyrics for the song (regular or time-synced); absent otherwise.
-        on_disk:
-          type: boolean
+        state:
+          $ref: '#/components/schemas/AudioState'
           description: >-
-            Whether the song has a file at its library path; present exactly
-            when the album's library is.
-    LibraryState:
+            The song's main slot state in the album's record; absent when the
+            record does not list it, or there is no record.
+    ResourceRef:
       type: object
-      required: [state, tracks_on_disk, tracks_total]
-      description: >-
-        How much of an album, or whether a song, is in the library on disk: a
-        file at the library path download.library_path_format gives each
-        track, whichever job wrote it and at whatever quality. Job history
-        plays no part.
+      required: [kind, id]
+      description: Names a record.
       properties:
+        kind:
+          type: string
+          enum: [album, playlist]
+        id:
+          type: string
+          description: The catalog id, without a storefront.
+    RunTrigger:
+      type: string
+      enum: [manual, library_sync, artist, retry, reset, import_1x]
+      description: >-
+        What started a run: an add by hand (and stations), the library monitor,
+        an artist link, an automatic retry of failed slots, a reset or a
+        retry, or the 1.x import.
+    RecordState:
+      type: string
+      enum: [none, partial, complete]
+      description: >-
+        A record's rollup over the main slots of its wanted, available tracks:
+        complete when every one is done, none when none is (and while the
+        record is unresolved), partial otherwise.
+    AudioState:
+      type: string
+      enum: [pending, running, done, failed, given_up, unavailable, missing]
+      description: >-
+        One slot's audio: done when the file landed (download, decrypt, remux,
+        verify and tags); failed waits for an automatic retry (next_attempt_at);
+        given_up waits for a reset; unavailable is not offered (the codec, or
+        the account storefront) and never retried; missing is a done file a
+        disk check did not find.
+    ResourceMark:
+      type: object
+      required: [kind, id, state, tracks_done, tracks_wanted, withheld_count, paused]
+      description: >-
+        The record holding a catalog object, as search hits, lookups and the
+        album page mark it; read from the records, never from the disk.
+      properties:
+        kind:
+          type: string
+          enum: [album, playlist]
+        id: {type: string}
+        state:
+          $ref: '#/components/schemas/RecordState'
+        tracks_done: {type: integer}
+        tracks_wanted: {type: integer}
+        withheld_count:
+          type: integer
+          description: Tracks of the release the account storefront does not list; 0 for playlists.
+        active_job_id:
+          type: string
+          description: The record's queued or running run; absent without one.
+        paused: {type: boolean}
+        song_state:
+          $ref: '#/components/schemas/AudioState'
+          description: For a song, its main slot state in this album record.
+    Artwork:
+      type: object
+      description: A record's still cover and animated covers, each with its own palette (hex without "#").
+      properties:
+        url: {type: string}
+        colors:
+          $ref: '#/components/schemas/ArtworkColors'
+        motion_square_url: {type: string}
+        motion_tall_url: {type: string}
+        motion_square_colors:
+          $ref: '#/components/schemas/ArtworkColors'
+        motion_tall_colors:
+          $ref: '#/components/schemas/ArtworkColors'
+    ArtworkColors:
+      type: object
+      properties:
+        bg: {type: string}
+        text1: {type: string}
+        text2: {type: string}
+        text3: {type: string}
+        text4: {type: string}
+    RecordRollup:
+      type: object
+      required: [tracks_wanted, tracks_done, tracks_failed, tracks_given_up, tracks_missing, state]
+      description: Stored with the record and recomputed with every slot write.
+      properties:
+        tracks_wanted: {type: integer, description: Wanted tracks the account storefront lists.}
+        tracks_done: {type: integer, description: Of those, tracks whose main slot is done.}
+        tracks_failed: {type: integer, description: Tracks with a failed slot.}
+        tracks_given_up: {type: integer, description: Tracks with a given-up slot.}
+        tracks_missing: {type: integer, description: Tracks with a missing slot.}
+        state:
+          $ref: '#/components/schemas/RecordState'
+    AlbumResource:
+      description: An album record.
+      allOf:
+        - $ref: '#/components/schemas/RecordRollup'
+        - type: object
+          required: [id, name, artist_name, artwork, release_track_count, withheld_count, catalog_state, wanted_all, paused, priority, cover_state, artist_cover_state, added_at, updated_at]
+          properties:
+            id: {type: string}
+            name: {type: string, description: Empty until the first read.}
+            artist_name: {type: string}
+            artist_id: {type: string}
+            artist_url: {type: string}
+            release_date: {type: string}
+            genre: {type: string}
+            upc: {type: string}
+            content_rating: {type: string}
+            artwork:
+              $ref: '#/components/schemas/Artwork'
+            resolved_at:
+              type: string
+              format: date-time
+              description: When a run last read the track list; absent while the record is unresolved.
+            release_track_count: {type: integer}
+            withheld_count:
+              type: integer
+              description: Tracks of the release the account storefront does not list; not counted, not retried.
+            storefront_read: {type: string, description: The storefront of the last track-list read (the account's).}
+            catalog_state:
+              type: string
+              enum: [ok, not_in_storefront, gone]
+              description: Not ok after a 404 on a run's required read; the scheduler then skips the record until a reset.
+            wanted_all:
+              type: boolean
+              description: True for a whole album; false when tracks were added one by one.
+            paused: {type: boolean}
+            priority:
+              type: integer
+              enum: [1, 2]
+              description: The class its runs get, 1 manual, 2 the library monitor's.
+            overrides:
+              $ref: '#/components/schemas/DownloadOverrides'
+            cover_state:
+              type: string
+              enum: [pending, done, failed, 'off']
+            artist_cover_state:
+              type: string
+              enum: [pending, done, failed, 'off']
+            added_at: {type: string, format: date-time}
+            refreshed_at: {type: string, format: date-time}
+            completed_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+            active_job_id:
+              type: string
+              description: The record's queued or running run; absent without one.
+    PlaylistResource:
+      description: A catalog playlist record (pl. id).
+      allOf:
+        - $ref: '#/components/schemas/RecordRollup'
+        - type: object
+          required: [id, name, artwork, catalog_state, paused, priority, cover_state, added_at, updated_at]
+          properties:
+            id: {type: string}
+            name: {type: string}
+            curator_name: {type: string}
+            artwork:
+              $ref: '#/components/schemas/Artwork'
+            resolved_at: {type: string, format: date-time}
+            storefront_read: {type: string}
+            catalog_state:
+              type: string
+              enum: [ok, not_in_storefront, gone]
+            last_modified: {type: string}
+            paused: {type: boolean}
+            priority: {type: integer, enum: [1, 2]}
+            overrides:
+              $ref: '#/components/schemas/DownloadOverrides'
+            cover_state:
+              type: string
+              enum: [pending, done, failed, 'off']
+            added_at: {type: string, format: date-time}
+            refreshed_at: {type: string, format: date-time}
+            completed_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+            active_job_id: {type: string}
+    FileSlot:
+      type: object
+      required: [slot, audio_state, failures]
+      description: One quality of one track copy.
+      properties:
+        slot:
+          type: string
+          description: main (the first quality, the plain file name) or a codec (another quality, named with a suffix).
+        audio_state:
+          $ref: '#/components/schemas/AudioState'
+        lyrics_state:
+          type: string
+          enum: [fetched, none, disabled, failed, '']
+        codec: {type: string, description: The codec that landed.}
+        quality_label: {type: string}
+        bit_depth: {type: integer}
+        sample_rate: {type: integer}
+        bitrate: {type: integer}
+        file_size: {type: integer, format: int64}
+        path:
+          type: string
+          description: Absolute; stored when the slot claims its output, so present on a running slot too.
+        failures: {type: integer, description: Runs that ended the slot failed since the last reset.}
+        next_attempt_at: {type: string, format: date-time, description: When a failed slot is retried.}
+        last_error: {type: string}
+        last_job_id: {type: string}
+        completed_at: {type: string, format: date-time}
+        checked_at: {type: string, format: date-time, description: When a disk check last marked it missing.}
+    RecordTrack:
+      type: object
+      required: [song_id, name, has_lyrics, wanted, availability, files]
+      description: A track of an album record, or a song of a playlist record (position, album_name, removed_at).
+      properties:
+        song_id: {type: string}
+        disc_number: {type: integer}
+        track_number: {type: integer}
+        song_number: {type: integer, description: "The {SongNumber} its file is named with."}
+        position: {type: integer}
+        name: {type: string}
+        artist_name: {type: string}
+        album_name: {type: string}
+        duration_ms: {type: integer}
+        has_lyrics: {type: boolean}
+        wanted: {type: boolean, description: Counts toward the record and is downloaded.}
+        availability:
+          type: string
+          enum: [available, unavailable]
+        removed_at: {type: string, format: date-time, description: When a song left the playlist; its file stays.}
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileSlot'
+    RecordDetail:
+      description: >-
+        A record (AlbumResource or PlaylistResource fields) with why it exists,
+        whether it is in the Apple library, when a check last covered it, and
+        its tracks.
+      allOf:
+        - oneOf:
+            - $ref: '#/components/schemas/AlbumResource'
+            - $ref: '#/components/schemas/PlaylistResource'
+        - type: object
+          required: [sources, tracks]
+          properties:
+            sources:
+              type: array
+              items:
+                type: string
+                enum: [manual, library_sync, artist, import_1x]
+            in_apple_library:
+              type: boolean
+              description: Absent when the Apple library cache cannot tell.
+            last_checked_at:
+              type: string
+              format: date-time
+              description: When a finished disk check of the library or of this record last ran.
+            tracks:
+              type: array
+              items:
+                $ref: '#/components/schemas/RecordTrack'
+    PendingAdd:
+      type: object
+      required: [id, kind, catalog_id, source, priority, paused, added_at, attempts, state]
+      properties:
+        id: {type: integer, format: int64}
+        kind:
+          type: string
+          enum: [song, artist, album, playlist]
+        catalog_id: {type: string}
+        album_hint: {type: string}
+        source:
+          type: string
+          enum: [manual, library_sync, artist, import_1x]
+        priority: {type: integer}
+        paused: {type: boolean, description: Becomes paused records (the 1.x import).}
+        include:
+          type: string
+          enum: [all, albums]
+          description: An artist add's albums.
+        overrides:
+          $ref: '#/components/schemas/DownloadOverrides'
+        added_at: {type: string, format: date-time}
+        attempts: {type: integer}
+        last_error: {type: string}
         state:
           type: string
-          enum: [none, partial, complete]
+          enum: [pending, failed]
+    CheckRun:
+      type: object
+      required: [id, trigger, scope, started_at, checked, missing]
+      properties:
+        id: {type: integer, format: int64}
+        trigger:
+          type: string
+          enum: [manual, patrol]
+        scope:
+          type: string
+          description: all, or <kind>:<id> for one record.
+        started_at: {type: string, format: date-time}
+        finished_at:
+          type: string
+          format: date-time
+          description: Absent while the check runs.
+        checked: {type: integer, description: Files stated so far.}
+        missing: {type: integer, description: Of those, files not found.}
+        aborted_reason:
+          type: string
+          enum: [too_many_missing, interrupted, failed]
           description: >-
-            complete when every track is on disk (and there is at least one),
-            partial when some are, none otherwise.
-        tracks_on_disk:
-          type: integer
-          minimum: 0
-          description: Tracks on disk, at most tracks_total.
-        tracks_total:
-          type: integer
-          minimum: 0
+            Set when the check marked nothing: too_many_missing (more than half
+            missing and not forced), interrupted (the server stopped), failed (a
+            store error).
+    LibrarySummary:
+      type: object
+      required: [albums, playlists, pending, check]
+      properties:
+        albums:
+          $ref: '#/components/schemas/RecordCounts'
+        playlists:
+          $ref: '#/components/schemas/RecordCounts'
+        pending:
+          type: object
+          required: [pending, failed]
+          properties:
+            pending: {type: integer}
+            failed: {type: integer}
+        check:
+          oneOf:
+            - $ref: '#/components/schemas/CheckRun'
+            - type: 'null'
+    RecordCounts:
+      type: object
+      required: [total, states, flags]
+      properties:
+        total: {type: integer}
+        states:
+          type: object
+          required: [none, partial, complete]
+          properties:
+            none: {type: integer}
+            partial: {type: integer}
+            complete: {type: integer}
+        flags:
+          type: object
+          required: [failed, given_up, missing, waiting, paused, unresolved]
+          properties:
+            failed: {type: integer}
+            given_up: {type: integer}
+            missing: {type: integer}
+            waiting: {type: integer}
+            paused: {type: integer}
+            unresolved: {type: integer}
+    LibraryAddRequest:
+      type: object
+      additionalProperties: false
+      required: [urls]
+      properties:
+        urls:
+          type: array
+          minItems: 1
+          items: {type: string}
+          description: As DownloadRequest.urls.
+        codecs:
+          type: array
+          items:
+            type: string
+            enum: [alac, aac, aac-binaural, aac-downmix, ec3, ac3]
+          description: The codec order of the main slots the add creates (overrides.quality_priority).
+        overrides:
+          $ref: '#/components/schemas/DownloadOverrides'
+        now:
+          type: boolean
+          description: Each run the add queues starts next (priority 0).
+        include:
+          type: string
+          enum: [all, albums]
+          default: all
+          description: An artist link's albums; albums leaves singles out.
+    RecordDownloadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        codec:
+          type: string
+          enum: [alac, aac, aac-binaural, aac-downmix, ec3, ac3]
+          description: Another quality to download for each track whose main slot is done.
+        songs:
+          type: array
+          items: {type: string}
+          description: The tracks codec applies to; every track when absent.
+        now:
+          type: boolean
+          description: The run starts next.
+    RecordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [what]
+      properties:
+        what:
+          type: string
+          enum: [all, audio, lyrics, covers]
           description: >-
-            The songs the album's track list names (a storefront can withhold
-            some), 1 for a song.
+            all: every slot, failures and the paused flag, and the covers;
+            audio: the selected slots' files; lyrics: the lyrics of done slots;
+            covers: the cover files.
+        slot:
+          type: string
+          description: With audio, only this slot (main or a codec).
+        songs:
+          type: array
+          items: {type: string}
+          description: Only these tracks; every track when absent.
+        codecs:
+          type: array
+          items:
+            type: string
+            enum: [alac, aac, aac-binaural, aac-downmix, ec3, ac3]
+          description: With audio and slot main, the main slots' new codec order.
+        states:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioState'
+          description: With audio, only slots in these states (missing downloads the missing files again).
+    LibraryResetRequest:
+      type: object
+      additionalProperties: false
+      required: [what, filter]
+      properties:
+        what:
+          type: string
+          enum: [all, audio, lyrics, covers]
+          description: As RecordResetRequest.what.
+        slot:
+          type: string
+          description: With audio, only this slot (main or a codec).
+        codecs:
+          type: array
+          items: {type: string}
+          description: With audio and slot main, the main slots' new codec order.
+        states:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioState'
+          description: With audio, only slots in these states; by default the states the filter's flags name.
+        kind:
+          type: string
+          enum: [albums, playlists]
+          description: Only records of this kind; both when absent.
+        filter:
+          type: object
+          additionalProperties: false
+          description: The records to reset, as the list filters select them; at least one field.
+          properties:
+            state:
+              type: array
+              items:
+                $ref: '#/components/schemas/RecordState'
+            flag:
+              type: array
+              items:
+                type: string
+                enum: [failed, given_up, missing, waiting, paused, unresolved]
+            source:
+              type: string
+              enum: [manual, library_sync, artist, import_1x]
+            q: {type: string}
+    CheckRequest:
+      type: object
+      additionalProperties: false
+      description: An empty body checks the whole library.
+      properties:
+        kind:
+          type: string
+          enum: [albums, playlists]
+          description: With id, check one record.
+        id:
+          type: string
+          description: The record's catalog id, with kind.
+        force:
+          type: boolean
+          description: Mark what is missing even when more than half the checked files are.
     Job:
       type: object
       required: [id, input, type, status, total_items, completed_items, skipped_items, failed_items, cancelled_items, created_at, updated_at]
@@ -4224,6 +5302,19 @@ components:
         status:
           type: string
           enum: [queued, running, completed, failed, cancelled]
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+          description: >-
+            The record this run downloads for; absent for a station and for
+            imported 1.x song and artist history.
+        trigger:
+          $ref: '#/components/schemas/RunTrigger'
+        priority:
+          type: integer
+          enum: [0, 1, 2]
+          description: >-
+            The run's claim class: 0 download now, 1 manual (and stations), 2
+            the library monitor's. Queued runs start by class, then queue_order.
         queue_order:
           type: integer
           format: int64
@@ -4250,7 +5341,10 @@ components:
         skipped_items:
           type: integer
           minimum: 0
-          description: Items whose output file already existed (item status skipped_existing).
+          description: >-
+            Items not downloaded and not failed: the file was already at the
+            slot's path (skipped_existing), or the track does not offer the
+            slot (unavailable).
         failed_items:
           type: integer
           minimum: 0
@@ -4445,7 +5539,12 @@ components:
             pool, and `waiting_decrypt` also covers waiting for the track's
             decryption keys; `downloading` and `decrypting` begin only after
             that pool has admitted the item.
-          enum: [queued, resolving, waiting_download, downloading, waiting_decrypt, decrypting, remuxing, tagging, saving, completed, failed, skipped_existing, cancelled]
+          enum: [queued, resolving, waiting_download, downloading, waiting_decrypt, decrypting, remuxing, tagging, saving, completed, failed, skipped_existing, unavailable, cancelled]
+        slot:
+          type: string
+          description: >-
+            The quality slot the item downloads: main, or a codec for another
+            quality. Absent for a station's items.
         progress:
           $ref: '#/components/schemas/ItemProgress'
         codec: {type: string}
@@ -4545,21 +5644,38 @@ components:
       required: [type, status_counts]
       description: >-
         One push on the overview event stream (GET /downloads/events). Every
-        job creation, status change or deletion carries the latest global job
-        status counts.
+        message carries the latest global job status counts.
       properties:
         type:
           type: string
-          enum: [download_upserted, download_deleted]
+          enum: [download_upserted, download_deleted, resource_updated, check_updated]
           description: >-
             download_upserted: a job was created or changed, and job is its latest
             snapshot; download_deleted: a job was deleted, and job_id is the
-            deleted job's id.
+            deleted job's id; resource_updated: right after the download_upserted
+            of a record's run, resource is the record (AlbumResource or
+            PlaylistResource); check_updated: check is the disk check that
+            started, moved on or ended.
         job:
           $ref: '#/components/schemas/Job'
         job_id:
           type: string
           description: Present only for download_deleted; the id of the deleted job.
+        resource_kind:
+          type: string
+          enum: [album, playlist]
+          description: Present only for resource_updated.
+        resource_id:
+          type: string
+          description: Present only for resource_updated.
+        resource:
+          description: Present only for resource_updated.
+          oneOf:
+            - $ref: '#/components/schemas/AlbumResource'
+            - $ref: '#/components/schemas/PlaylistResource'
+        check:
+          $ref: '#/components/schemas/CheckRun'
+          description: Present only for check_updated.
         status_counts:
           allOf:
             - $ref: '#/components/schemas/DownloadStatusCounts'
@@ -4614,14 +5730,16 @@ components:
         Type of a persisted job event, and the SSE event name on
         GET /downloads/{job_id}/events. Retries inside a codec attempt are
         operation_retry / operation_exhausted / operation_recovered with the codec
-        as phase. Only job_queued, job_recovered, job_retried, job_started,
-        job_moved, resolved_input, motion_artwork_resolved, item_completed,
-        item_skipped, item_failed, job_finished, job_failed, job_cancelled and
-        job_deleted reach the overview feed. job_moved records a queued job's
-        new queue_order (its payload is the Job). job_retried starts a job's new
-        run; its payload adds cause (retry or resubmit) and force_overwrite
-        (whether the job's overrides force overwriting files). Clients should
-        ignore types they do not know.
+        as phase. Only job_queued, job_recovered, job_started, job_moved,
+        resolved_input, motion_artwork_resolved, item_completed, item_skipped,
+        item_unavailable, lyrics_refreshed, item_failed, job_finished,
+        job_failed, job_cancelled and job_deleted reach the overview feed.
+        job_moved records a queued job's new queue_order (its payload is the
+        Job). item_unavailable ends an item whose slot the track does not offer
+        (the codec, or the account storefront); lyrics_refreshed ends an item
+        of a lyrics reset. job_retried and item_overwrite are not emitted since
+        2.0, where a retry is a new job; they stay so 1.x history decodes.
+        Clients should ignore types they do not know.
       enum:
         - job_queued
         - job_started
@@ -4639,6 +5757,8 @@ components:
         - item_completed
         - item_failed
         - item_skipped
+        - item_unavailable
+        - lyrics_refreshed
         - item_overwrite
         - codec_selected
         - codec_fallback

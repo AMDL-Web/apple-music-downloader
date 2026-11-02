@@ -65,9 +65,9 @@ func (s *Store) ResetItems(ctx context.Context, jobID string, itemIDs []string, 
 // keep the item's last state.
 func (s *Store) CancelUnfinishedItems(ctx context.Context, jobID, statusMessage string, updatedAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE run_items SET status=?, status_message=?, updated_at=?
-		WHERE job_id=? AND status NOT IN (?,?,?,?)`,
+		WHERE job_id=? AND status NOT IN (?,?,?,?,?)`,
 		string(domain.ItemCancelled), statusMessage, formatTime(updatedAt), jobID,
-		string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemFailed), string(domain.ItemCancelled))
+		string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemUnavailable), string(domain.ItemFailed), string(domain.ItemCancelled))
 	return err
 }
 

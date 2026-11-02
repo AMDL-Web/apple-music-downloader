@@ -31,7 +31,7 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 	}
 	// The link's storefront only named the record; the account's is the one
 	// the wrapper decrypts for.
-	if err := d.validateStorefront(ctx, storefront); err != nil {
+	if err := d.validateStorefront(ctx, storefront, "the account storefront"); err != nil {
 		return err
 	}
 	parsed := applemusic.ParsedURL{Raw: job.Input, Type: applemusic.URLType(job.ResourceKind), Storefront: storefront, ID: job.ResourceID}
@@ -431,9 +431,8 @@ func (r *trackRun) refreshLyrics(ctx context.Context) error {
 	}
 	item.Status = domain.ItemCompleted
 	item.StatusMessage = message
-	// TODO(P3): the lyrics_refreshed event (design §4.3).
 	r.d.persistTerminal(ctx, r.reporter, item, func() domain.Event {
-		return domain.Event{JobID: r.job.ID, ItemID: item.ID, Type: domain.EventItemCompleted, Message: message, Payload: domain.MarshalEventPayload(*item, map[string]any{"message": message})}
+		return domain.Event{JobID: r.job.ID, ItemID: item.ID, Type: domain.EventLyricsRefreshed, Message: message, Payload: domain.MarshalEventPayload(*item, map[string]any{"message": message})}
 	})
 	return nil
 }

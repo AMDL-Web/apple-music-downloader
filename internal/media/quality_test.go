@@ -204,8 +204,11 @@ func TestQualityQueryUsesDownloadStorefrontValidation(t *testing.T) {
 		wantCode string
 	}{
 		{name: "decryptor unavailable", wrapper: countingQualityWrapper{statusErr: errors.New("offline")}, wantCode: "decryptor_unavailable"},
-		{name: "unsupported storefront", wrapper: countingQualityWrapper{status: &wrapper.Status{Ready: true, LoggedIn: true, Regions: []string{"us"}}}, wantCode: "unsupported_storefront"},
+		// The account storefront (here catalog.default_storefront, with no
+		// token and two wrapper regions) is the one checked, not the link's.
+		{name: "account storefront not served", wrapper: countingQualityWrapper{status: &wrapper.Status{Ready: true, LoggedIn: true, Regions: []string{"us", "jp"}}}, wantCode: "decryptor_unavailable"},
 	}
+	cfg.Catalog.DefaultStorefront = "cn"
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := newTestQualityService(cfg, catalog, tt.wrapper)

@@ -154,9 +154,9 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 | --- | --- |
 | 400 | `invalid_request` (query/body validation, a malformed stream cursor), `invalid_json` |
 | 401 | `authentication_failed` (wrapper login) |
-| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
+| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `resource_not_found` |
 | 405 | `method_not_allowed` |
-| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
+| 409 | `job_active`, `job_not_retryable`, `duplicate_active`, `already_logged_in`, `login_pending`, `run_active`, `main_not_done`, `quality_present`, `check_running` |
 | 413 | `request_too_large` |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` |
@@ -187,11 +187,13 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 ### 3.2 Jobs
 
 - Counters are disjoint and always present: `total_items`, `completed_items` (written by
-  this job), `skipped_items` (already on disk), `failed_items`, `cancelled_items`.
+  this job), `skipped_items` (already at the slot's path, or `unavailable`), `failed_items`,
+  `cancelled_items`.
   `total_items` is stored when the input resolves; the other four are always derived
   from `run_items` by one store query, including when the manager decides the terminal
   status at finalize. There are no stored per-status counter columns. `done_items` and
-  the legacy `force` flag are gone; forcing is `overrides.force_overwrite`.
+  the legacy `force` flag are gone, and so is `force_overwrite`: a reset of the record
+  downloads again.
 - `started_at` is set when a worker first starts the current run and kept across
   recovery after a restart; a retry starts a new run and clears it, with `finished_at`.
   `finished_at` is set on the terminal transition. So `finished_at - started_at` is the
@@ -318,9 +320,9 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 ## 5. Output paths
 
 Songs, albums and artists share one library layout, `download.library_path_format`:
-a track lands at one path whichever job type downloads it, and the "already downloaded"
-check compares that path, so a song downloaded on its own is skipped when its album
-comes, and an album already on disk is skipped inside an artist download. The path comes
+a track lands at one path per slot whichever link downloads it, and its album record
+says whether it is downloaded, so a song added on its own is done when its album comes,
+and an album already downloaded is skipped inside an artist link. The path comes
 from the track's placement, its album and its number in that album as released
 (`internal/media#libraryTrackPath`); folders take only album values, so one album is one
 folder. Playlists and stations keep their own templates and folders. Any change to how a

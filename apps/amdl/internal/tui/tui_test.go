@@ -69,7 +69,7 @@ func render(m *model, w int) string {
 
 func withResults(m *model) {
 	m.res = &results{term: "igor", items: []pick{
-		{hit: client.SearchHit{Type: "album", Name: "IGOR", ArtistName: "Tyler, The Creator", ReleaseDate: "2019-05-17", TrackCount: 12, Library: &domain.LibraryState{State: domain.LibraryComplete, TracksOnDisk: 12, TracksTotal: 12}}},
+		{hit: client.SearchHit{Type: "album", Name: "IGOR", ArtistName: "Tyler, The Creator", ReleaseDate: "2019-05-17", TrackCount: 12, Resource: &domain.ResourceMark{Kind: domain.ResourceAlbum, State: domain.RecordComplete, TracksDone: 12, TracksWanted: 12}}},
 		{hit: client.SearchHit{Type: "album", Name: "CALL ME IF YOU GET LOST", ArtistName: "Tyler, The Creator", ReleaseDate: "2021-06-25", TrackCount: 16}, selected: true},
 		{hit: client.SearchHit{Type: "song", Name: "EARFQUAKE", ArtistName: "Tyler, The Creator", DurationMS: 190000}},
 		{hit: client.SearchHit{Type: "playlist", Name: "Tyler, The Creator Essentials", ArtistName: "Apple Music Hip-Hop"}},

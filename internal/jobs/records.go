@@ -88,7 +88,7 @@ func (m *Manager) admittedLocked(ctx context.Context, job domain.Job) {
 	}
 	// Ordering between the job_queued hook and a later terminal hook is best
 	// effort only: both are independent async deliveries.
-	m.hooks.Dispatch(string(domain.EventJobQueued), job, nil)
+	m.hooks.DispatchRun(string(domain.EventJobQueued), job, nil, m.hookRun(ctx, job, nil))
 	m.waiting.add(job.ID, false)
 	m.wake.broadcast()
 }
@@ -101,9 +101,12 @@ const (
 	AddQueued AddOutcome = "queued"
 	// AddActive: the album already had a queued or running run.
 	AddActive AddOutcome = "active"
-	// AddRecorded: the record is stored and needs no run now (every wanted
-	// track done, or paused), or the queue is full and the picker queues it.
+	// AddRecorded: the record is stored and needs no run now (paused, a
+	// failed slot waiting for its retry), or the queue is full and the picker
+	// queues it.
 	AddRecorded AddOutcome = "recorded"
+	// AddAlreadyDone: every wanted track of the resolved record is done.
+	AddAlreadyDone AddOutcome = "already_downloaded"
 	// AddTombstoned: the album was removed from amdl and the library monitor
 	// does not add it back.
 	AddTombstoned AddOutcome = "tombstoned"
@@ -168,8 +171,13 @@ func (m *Manager) afterAddLocked(ctx context.Context, kind domain.ResourceKind, 
 		return "", domain.Job{}, err
 	}
 	if !needs {
-		if active, found, err := m.store.ActiveRunID(ctx, kind, id); err != nil || !found {
-			return AddRecorded, domain.Job{}, err
+		if active, found, err := m.store.ActiveRunID(ctx, kind, id); err != nil {
+			return "", domain.Job{}, err
+		} else if !found {
+			if rec.resolved && rec.state == domain.RecordComplete {
+				return AddAlreadyDone, domain.Job{}, nil
+			}
+			return AddRecorded, domain.Job{}, nil
 		} else if job, err := m.store.GetJob(ctx, active); err == nil {
 			return AddActive, job, nil
 		}
@@ -259,6 +267,9 @@ type ResetRequest struct {
 	Slot string
 	// Codecs, for an audio reset of main slots, becomes their codec order.
 	Codecs []string
+	// States limits an audio reset to slots in these states (missing for
+	// "download missing"); empty is every state.
+	States []domain.AudioState
 }
 
 // ResetResult is what Reset did.
@@ -289,7 +300,7 @@ func (m *Manager) Reset(ctx context.Context, r ResetRequest) (ResetResult, error
 	case ResetAll, ResetAudio, "":
 		reset := db.FileReset{Kind: r.Kind, ID: r.ID, SongIDs: r.SongIDs, Now: now}
 		if r.What == ResetAudio {
-			reset.Slot, reset.QualityPriority = r.Slot, r.Codecs
+			reset.Slot, reset.QualityPriority, reset.States = r.Slot, r.Codecs, r.States
 		}
 		n, err := m.store.ResetFiles(ctx, reset)
 		if err != nil {

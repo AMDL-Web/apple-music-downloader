@@ -40,14 +40,38 @@ type JobStatusCounts struct {
 }
 
 // MarshalJSON omits queue_order unless the job is queued: a running or
-// finished job keeps its last value in the store, but it orders nothing.
+// finished job keeps its last value in the store, but it orders nothing. It
+// writes the record as resource {kind, id}, absent without one.
 func (j Job) MarshalJSON() ([]byte, error) {
 	type plain Job
-	out := plain(j)
+	out := struct {
+		plain
+		Resource *ResourceRef `json:"resource,omitempty"`
+	}{plain: plain(j)}
 	if j.Status != JobQueued {
 		out.QueueOrder = nil
 	}
+	if j.ResourceID != "" {
+		out.Resource = &ResourceRef{Kind: j.ResourceKind, ID: j.ResourceID}
+	}
 	return json.Marshal(out)
+}
+
+// UnmarshalJSON reads what MarshalJSON writes.
+func (j *Job) UnmarshalJSON(raw []byte) error {
+	type plain Job
+	var in struct {
+		plain
+		Resource *ResourceRef `json:"resource,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return err
+	}
+	*j = Job(in.plain)
+	if in.Resource != nil {
+		j.ResourceKind, j.ResourceID = in.Resource.Kind, in.Resource.ID
+	}
+	return nil
 }
 
 // MotionArtwork is one album's animated covers plus the palette belonging to
@@ -132,14 +156,15 @@ type Job struct {
 	MotionArtworkTallTextColor4 string `json:"motion_artwork_tall_text_color4,omitempty"`
 	CanonicalKey                string `json:"-"`
 	// ResourceKind and ResourceID name the record a run downloads for; both
-	// empty for stations and for imported 1.x song and artist history.
-	// Trigger is what started the run, Priority its claim class
-	// (PriorityNow, PriorityManual, PriorityAuto) and Plan the JSON of the
-	// slots and overrides it started with. TODO(P3): expose them in the API.
+	// empty for stations and for imported 1.x song and artist history. JSON
+	// carries them as resource {kind, id} (MarshalJSON). Trigger is what
+	// started the run, Priority its claim class (PriorityNow, PriorityManual,
+	// PriorityAuto) and Plan the JSON of the slots and overrides it started
+	// with.
 	ResourceKind ResourceKind `json:"-"`
 	ResourceID   string       `json:"-"`
-	Trigger      RunTrigger   `json:"-"`
-	Priority     int          `json:"-"`
+	Trigger      RunTrigger   `json:"trigger,omitempty"`
+	Priority     int          `json:"priority"`
 	Plan         string       `json:"-"`
 	// Overrides is the per-request job config overlay attached at submission;
 	// nil for jobs submitted without one. It is persisted with the job and
@@ -158,8 +183,8 @@ type Job struct {
 	QueueOrder *int64 `json:"queue_order,omitempty"`
 	// TotalItems is stored when the input resolves. The four item counters
 	// are disjoint, never stored, and filled from run_items by every store
-	// read: CompletedItems were written by this job, SkippedItems were already
-	// on disk (skipped_existing).
+	// read: CompletedItems were written by this job, SkippedItems were
+	// already at their path (skipped_existing) or not offered (unavailable).
 	TotalItems     int `json:"total_items"`
 	CompletedItems int `json:"completed_items"`
 	SkippedItems   int `json:"skipped_items"`

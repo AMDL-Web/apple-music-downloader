@@ -87,8 +87,15 @@ func (s *Store) JobAlbum(j *Job) (client.SearchHit, bool) {
 	h := client.SearchHit{Type: "album", ID: id, Name: j.Title, URL: j.Input, ArtistName: j.ArtistName, ArtworkURL: j.ArtworkURL,
 		ArtworkBgColor: j.ArtworkBgColor, ArtworkTextColor1: j.ArtworkTextColor1, ArtworkTextColor2: j.ArtworkTextColor2,
 		ArtworkTextColor3: j.ArtworkTextColor3, ArtworkTextColor4: j.ArtworkTextColor4, TrackCount: j.TotalItems}
+	// TODO(P3-desktop): read the album's record instead of its job.
 	if lib := s.byID[s.AlbumJob(id)]; lib != nil {
-		h.PriorJob = &client.PriorJob{ID: lib.ID, Status: lib.Status, FinishedAt: lib.FinishedAt}
+		h.Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: id}
+		switch lib.Status {
+		case domain.JobQueued, domain.JobRunning:
+			h.Resource.ActiveJobID = lib.ID
+		case domain.JobCompleted:
+			h.Resource.State = domain.RecordComplete
+		}
 	}
 	return h, true
 }

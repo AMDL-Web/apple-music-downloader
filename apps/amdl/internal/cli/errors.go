@@ -57,15 +57,16 @@ const otherWrapper = "amdl service install --wrapper <url>; or restart the servi
 // exitFor maps an API error code to its exit status.
 func exitFor(code string, status int) int {
 	switch code {
-	case "invalid_request", "invalid_json", "request_too_large", "invalid_overrides",
+	case "invalid_request", "invalid_json", "invalid_scope", "request_too_large", "invalid_overrides",
 		"config_key_not_mutable", "invalid_config", "no_urls_accepted", "usage_error":
 		return exitInput
-	case "route_not_found", "job_not_found", "login_not_found", "account_not_found", "catalog_not_found":
+	case "route_not_found", "job_not_found", "login_not_found", "account_not_found", "catalog_not_found", "resource_not_found":
 		return exitNotFound
-	case "job_active", "job_not_retryable", "job_not_cancellable", "job_finalizing", "job_not_queued", "duplicate_active",
-		"already_logged_in", "login_pending", "method_not_allowed", "apple_library_sync_running":
+	case "job_active", "job_not_retryable", "job_not_cancellable", "job_not_queued", "duplicate_active",
+		"already_logged_in", "login_pending", "method_not_allowed", "apple_library_sync_running",
+		"run_active", "main_not_done", "quality_present", "check_running":
 		return exitConflict
-	case "upstream_error", "queue_full", "wrapper_unavailable", "feature_unavailable", "apple_library_unavailable",
+	case "upstream_error", "queue_full", "wrapper_unavailable", "feature_unavailable", "apple_library_unavailable", "downloads_dir_unavailable",
 		"upstream_timeout", "server_unreachable", "server_not_configured":
 		return exitUnavailable
 	case "authentication_failed", "login_unsupported":

@@ -128,6 +128,11 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 				if err := write(domain.DownloadFeedMessage{Type: "download_upserted", Job: snap, EventID: pending.eventID, StatusCounts: statusCounts}); err != nil {
 					return err
 				}
+				if msg, ok := s.resourceMessage(ctx, snap, pending.eventID, statusCounts); ok {
+					if err := write(msg); err != nil {
+						return err
+					}
+				}
 				lastID = pending.eventID
 			}
 			if len(events) < streamEventPageSize {
@@ -180,6 +185,29 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 		return nil
 	}
 
+	// pushCheck sends check_updated when the disk check moved since it was
+	// last sent, at the cursor already reached, like pushProgress.
+	var checkVersion uint64
+	if _, v, ok := s.manager.CheckStatus(); ok {
+		checkVersion = v
+	}
+	pushCheck := func() error {
+		run, v, ok := s.manager.CheckStatus()
+		if !ok || v == checkVersion {
+			return nil
+		}
+		counts, err := s.store.CountJobsByStatus(ctx, db.JobListFilter{})
+		if err != nil {
+			return nil
+		}
+		total := 0
+		for _, count := range counts {
+			total += count
+		}
+		checkVersion = v
+		return write(domain.DownloadFeedMessage{Type: "check_updated", Check: &run, EventID: lastID, StatusCounts: makeJobStatusCounts(counts, total)})
+	}
+
 	if err := drain(); err != nil {
 		return
 	}
@@ -196,7 +224,7 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 				return
 			}
 		case <-ticks.progress:
-			if pushProgress() != nil {
+			if pushProgress() != nil || pushCheck() != nil {
 				return
 			}
 		case <-ticks.keepalive:
@@ -205,4 +233,35 @@ func (s *Server) runDownloadsFeed(ctx context.Context, sink sseSink, lastID int6
 			}
 		}
 	}
+}
+
+// resourceMessage is the resource_updated message that follows a record
+// run's download_upserted: the record as GET /library/{kind} lists it. A
+// station's run, or a record gone or unreadable, sends none.
+func (s *Server) resourceMessage(ctx context.Context, job *domain.Job, eventID int64, counts domain.JobStatusCounts) (domain.DownloadFeedMessage, bool) {
+	if job == nil || job.ResourceID == "" {
+		return domain.DownloadFeedMessage{}, false
+	}
+	msg := domain.DownloadFeedMessage{Type: "resource_updated", ResourceKind: job.ResourceKind, ResourceID: job.ResourceID, EventID: eventID, StatusCounts: counts}
+	active, _, err := s.store.ActiveRunID(ctx, job.ResourceKind, job.ResourceID)
+	if err != nil {
+		return msg, false
+	}
+	switch job.ResourceKind {
+	case domain.ResourceAlbum:
+		a, err := s.store.GetAlbum(ctx, job.ResourceID)
+		if err != nil {
+			return msg, false
+		}
+		msg.Resource = albumResource{Album: a, ActiveJobID: active}
+	case domain.ResourcePlaylist:
+		p, err := s.store.GetPlaylist(ctx, job.ResourceID)
+		if err != nil {
+			return msg, false
+		}
+		msg.Resource = playlistResource{Playlist: p, ActiveJobID: active}
+	default:
+		return msg, false
+	}
+	return msg, true
 }

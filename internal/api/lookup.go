@@ -65,9 +65,9 @@ type lookupResponse struct {
 	AppleDigitalMaster  bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits         []string `json:"audio_traits,omitempty"`
 	NeedsMediaUserToken bool     `json:"needs_media_user_token,omitempty"`
-	// Library is not set since 2.0, which stats no file before a download.
-	// TODO(P3): the record's resource replaces it.
-	Library *domain.LibraryState `json:"library,omitempty"`
+	// Resource is the record holding the link's album, playlist or song;
+	// absent when none does.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
 }
 
 func (r *lookupResponse) setArtwork(url string, colors applemusic.ArtworkColors) {
@@ -123,6 +123,7 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		resp.lookupLinkFields = link
+		resp.Resource = s.resourceMark(r.Context(), parsed.Type, parsed.ID)
 		writeJSON(w, http.StatusOK, resp)
 	case errors.As(err, new(notDownloadableError)):
 		writeErrorDetails(w, http.StatusBadRequest, CodeInvalidRequest, err.Error(), details)

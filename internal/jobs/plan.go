@@ -261,7 +261,7 @@ func (m *Manager) settleUnplannedItems(ctx context.Context, jobID string, items 
 		switch {
 		case reused[item.ID]:
 			reset = append(reset, item.ID)
-		case item.Status != domain.ItemCompleted && item.Status != domain.ItemSkipped &&
+		case item.Status != domain.ItemCompleted && item.Status != domain.ItemSkipped && item.Status != domain.ItemUnavailable &&
 			item.Status != domain.ItemFailed && item.Status != domain.ItemCancelled:
 			if err := m.store.DeleteItem(ctx, item.ID); err != nil {
 				return fmt.Errorf("remove item %s: %w", item.ID, err)
@@ -460,6 +460,8 @@ func (m *Manager) catalogState(ctx context.Context, kind domain.ResourceKind, id
 
 type recordStatus struct {
 	paused    bool
+	state     domain.RecordState
+	wantedAll bool
 	resolved  bool
 	catalog   domain.CatalogState
 	priority  int
@@ -473,13 +475,13 @@ func (m *Manager) recordStatus(ctx context.Context, kind domain.ResourceKind, id
 		if err != nil {
 			return recordStatus{}, err
 		}
-		return recordStatus{paused: a.Paused, resolved: a.ResolvedAt != nil, catalog: a.CatalogState, priority: a.Priority, overrides: a.Overrides}, nil
+		return recordStatus{paused: a.Paused, state: a.State, wantedAll: a.WantedAll, resolved: a.ResolvedAt != nil, catalog: a.CatalogState, priority: a.Priority, overrides: a.Overrides}, nil
 	case domain.ResourcePlaylist:
 		p, err := m.store.GetPlaylist(ctx, id)
 		if err != nil {
 			return recordStatus{}, err
 		}
-		return recordStatus{paused: p.Paused, resolved: p.ResolvedAt != nil, catalog: p.CatalogState, priority: p.Priority, overrides: p.Overrides}, nil
+		return recordStatus{paused: p.Paused, state: p.State, wantedAll: true, resolved: p.ResolvedAt != nil, catalog: p.CatalogState, priority: p.Priority, overrides: p.Overrides}, nil
 	}
 	return recordStatus{}, fmt.Errorf("unknown record kind %q", kind)
 }

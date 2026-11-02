@@ -24,8 +24,10 @@ wins when they disagree, so details are not copied here.
 | wrapper-manager | Upstream v2 gateway in front of one wrapper-lite per account; the only upstream wrapper with the login API behind the console's Account page (`login_supported`) | `internal/wrapper#Client.StartLogin` |
 | Managed wrapper | A wrapper-lite that amdl runs itself in a QEMU guest on the backend's machine (`amdl wrapper install`); it logs in by booting the guest with the account, and `GET /wrapper/status` describes it in `managed` | `internal/wrapperhost#Supervisor` |
 | Key template | The `ctx` and `state` tables wrapper-lite's `/key` returns for a FairPlay key URI; `internal/fairplay` decrypts samples with it, in-process | `internal/fairplay#Template` |
-| Job | One submitted link (song, album, playlist, artist or station) and its lifecycle | `internal/domain#Job` |
-| Item | One track inside a job | `internal/domain#JobItem` |
+| Record | An album or catalog playlist amdl keeps: its tracks and per track its slots; the only truth of what is downloaded. The API calls it a resource | `internal/domain#Album`, `internal/domain#Playlist` |
+| Slot | One quality of one track copy: `main`, the first quality with the plain file name, or a codec, another quality with a suffixed name | `internal/domain#File` |
+| Job, run | One download pass over one record (or a station): `/api/v1/downloads` and hooks call it a job | `internal/domain#Job` |
+| Item | One planned slot (a station's track) inside a job | `internal/domain#JobItem` |
 | Stage breakdown | An item's durable per-stage flags (resolved, remuxed, verified, tagged, saved) that let a reconnecting client redraw progress | `internal/domain#ItemProgress` |
 | Terminal status | `completed`, `failed` or `cancelled`; written once, with its event | `internal/domain#JobStatus.IsTerminal` |
 | Canonical key | A one-off run's (a station's) dedup identity: type, storefront and id; record runs dedup by their record | `internal/jobs#canonicalKey` |
@@ -37,7 +39,9 @@ wins when they disagree, so details are not copied here.
 | Media backend | The I/O side of the per-track pipeline (transfers, wrapper, ffmpeg, disk); production and simulate mode differ only here | `internal/media#mediaBackend` |
 | Path template | The format that decides where a finished track lands: one library template for songs, albums and artists, one each for playlists and stations | `internal/media#libraryTrackPath`, `internal/media#outputPath` |
 | Library, library layout | The folder tree songs, albums and artists share under `download.library_path_format`: one path per track copy and slot whichever add downloads it; another quality gets a quality suffix. Playlists and stations are not part of it | [docs/download-pipeline.md](docs/download-pipeline.md#library-records-and-slots) |
-| On disk, library state | Until 2.0, whether a track's file was at its library path. 2.0 stats no file before a download, so the API leaves `library` unset; the record's state replaces it | `internal/domain#LibraryState` |
+| Record mark | The `resource` field of search hits, lookups and the album page: the record holding the item and its state, read from the records, never the disk | `internal/domain#ResourceMark` |
+| Disk check | `POST /api/v1/library/check`: stats the stored path of every done slot and marks the missing ones; it marks nothing when `downloads_dir` is gone or more than half are missing, unless forced | `internal/jobs#Manager.StartCheck` |
+| Pending add | An add that needs a catalog read before it becomes records (a song without its album, an artist); the resolver reads it | `internal/domain#PendingAdd` |
 | Queue entry | A queued run. A record has at most one queued or running run; a new add, a retry or a reset of it is a new run, never the old row queued again | `internal/jobs#Manager.SubmitBatch` |
 | Download again | A reset of a record's slots: each done file is downloaded again to its stored path and replaced once its new copy is complete | `internal/jobs#Manager.Reset` |
 | Quality label | The `{Quality}` path value, such as `24-bit/96 kHz` or `256Kbps` | `internal/media#qualityLabel` |
@@ -55,8 +59,8 @@ wins when they disagree, so details are not copied here.
 | Seed | A first value `amdl serve --init key=value` writes into a config.yaml it creates | `internal/config#Seed` |
 | Job overrides | The per-add `overrides` object that overlays the quality keys of the runtime config; stored on the record (or a station run) and applied each time a run starts | `internal/config#DownloadOverrides` |
 | Job hook | A webhook or command fired on `job_queued` or a terminal job event | `internal/hooks#Dispatcher` |
-| Library sync | The poller that turns newly added library songs into album jobs | `internal/librarysync#Watcher` |
-| Apple library | The signed-in Apple Music account's own library (albums, songs, playlists, artists), as Apple Music calls it; amdl keeps a local copy for `/api/v1/apple-library` and `in_apple_library`. Not the download library on disk, which the console and `amdl library list` call the library | `internal/applelibrary#Engine` |
+| Library sync | The poller that turns newly added library songs into album records | `internal/librarysync#Watcher` |
+| Apple library | The signed-in Apple Music account's own library (albums, songs, playlists, artists), as Apple Music calls it; amdl keeps a local copy for `/api/v1/apple-library` and `in_apple_library`. Not amdl's own records of what it downloaded, which `/api/v1/library` and `amdl library list` call the library | `internal/applelibrary#Engine` |
 | Watermark | Library sync's position-based anchor in the newest-first library list | [docs/automation.md](docs/automation.md#why-the-watermark-is-a-position-not-a-timestamp) |
 | Skin | The console's look, one skin (`music`) on `<html data-skin>`, separate from the light/dark theme | [apps/console/DESIGN.md](apps/console/DESIGN.md#skin) |
 

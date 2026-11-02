@@ -167,6 +167,30 @@ func listJobs(ctx context.Context, c *client.Client, gen int, q client.ListQuery
 	}
 }
 
+// reset downloads a hit in the library again: a reset of its record's audio,
+// the song's slot alone for a song, with the chosen quality first.
+func reset(ctx context.Context, c *client.Client, h client.SearchHit, o *config.DownloadOverrides) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		r := h.Resource
+		req := client.RecordReset{What: "audio"}
+		if h.Type == "song" {
+			req.Songs = []string{h.ID}
+		}
+		if o != nil && o.QualityPriority != nil {
+			req.Slot, req.Codecs = domain.SlotMain, *o.QualityPriority
+		}
+		job, err := c.ResetRecord(ctx, r.Kind, r.ID, req)
+		var res domain.BatchSubmitResponse
+		if err == nil {
+			res.Accepted = 1
+			res.Results = []domain.SubmitResult{{URL: h.URL, Status: domain.SubmitAccepted, Resource: &domain.ResourceRef{Kind: r.Kind, ID: r.ID}, Job: job}}
+		}
+		return submitMsg{batch: res, err: err}
+	}
+}
+
 func login(ctx context.Context, c *client.Client, username, password string) tea.Cmd {
 	return func() tea.Msg {
 		c := c.WithTimeout(client.LoginWait)

@@ -10,6 +10,7 @@ import (
 
 	"amdl/apps/desktop/internal/store"
 	"amdl/internal/client"
+	"amdl/internal/domain"
 )
 
 // linkDrop is what the window takes dropped from another app: links, as
@@ -42,7 +43,7 @@ func (a *App) dropLinks(now time.Time, d transfer.Data) {
 				return // another drop came since
 			}
 			a.dropping = ""
-			a.openOrDownload(lookupHit(url, l, a.Store.PriorJobFor(l)))
+			a.openOrDownload(lookupHit(url, l, a.Store.ResourceFor(l)))
 		})
 	default:
 		var urls []string
@@ -68,7 +69,7 @@ func droppedText(d transfer.Data) string {
 
 // lookupHit is a link's preview as the search hit it names, submitted by
 // the link itself.
-func lookupHit(url string, l client.Lookup, prior *client.PriorJob) client.SearchHit {
+func lookupHit(url string, l client.Lookup, resource *domain.ResourceMark) client.SearchHit {
 	id := l.ID
 	if l.Type == "song" && l.TrackID != "" {
 		id = l.TrackID
@@ -80,7 +81,7 @@ func lookupHit(url string, l client.Lookup, prior *client.PriorJob) client.Searc
 		ArtworkTextColor3: l.ArtworkTextColor3, ArtworkTextColor4: l.ArtworkTextColor4,
 		ArtistName: l.ArtistName, AlbumName: l.AlbumName, ReleaseDate: l.ReleaseDate, Genre: l.Genre,
 		TrackCount: l.TrackCount, DurationMS: l.DurationMS, ContentRating: l.ContentRating,
-		AppleDigitalMaster: l.AppleDigitalMaster, AudioTraits: l.AudioTraits, PriorJob: prior,
+		AppleDigitalMaster: l.AppleDigitalMaster, AudioTraits: l.AudioTraits, Resource: resource,
 	}
 }
 

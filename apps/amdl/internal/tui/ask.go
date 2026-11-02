@@ -19,8 +19,8 @@ import (
 // ask is a download from search waiting for its choices, the desktop app's
 // sheet (apps/desktop/internal/ui#downloadAsk) as a panel: the quality, where
 // a hit has lossless and Dolby and the server's priority lists both, and
-// whether to replace the files of hits already in the library. A download
-// with nothing to choose starts at once.
+// whether to download hits already in the library again. A download with
+// nothing to choose starts at once.
 type ask struct {
 	hits     []client.SearchHit
 	names    []string
@@ -29,8 +29,8 @@ type ask struct {
 	// default; nil asks nothing about quality.
 	codecs []string
 	codec  int
-	// again asks about hits in the library; replace is the choice, 0 to skip
-	// their files.
+	// again asks about hits in the library; replace is the choice, 0 to keep
+	// them, 1 to reset their records.
 	again   bool
 	replace int
 	row     int // the question ←→ changes: 0 quality, 1 library
@@ -44,23 +44,34 @@ type choicesMsg struct {
 	err      error
 }
 
-// inLibrary is a hit whose files are all on disk (an album hit's folder
-// count): downloading it again replaces them only when asked to. Song hits
-// carry no library state.
+// inLibrary is a hit amdl has downloaded: an album or playlist whose record
+// is complete, a song whose slot is done. Downloading it again is a reset.
 func inLibrary(h client.SearchHit) bool {
-	return h.Library != nil && h.Library.State == domain.LibraryComplete
+	r := h.Resource
+	if r == nil {
+		return false
+	}
+	if h.Type == "song" {
+		return r.SongState == domain.AudioDone
+	}
+	return r.State == domain.RecordComplete
 }
 
-// hitMark is a result row's state: a job queued or running for it, else
-// how much of it is on disk; "" for neither.
+// hitMark is a result row's state from its record: a run queued or running
+// for it, else how much of it is downloaded; "" without a record.
 func hitMark(h client.SearchHit) string {
+	r := h.Resource
 	switch {
-	case h.PriorJob != nil && h.PriorJob.Status != domain.JobCompleted:
+	case r == nil:
+		return ""
+	case r.ActiveJobID != "":
 		return "↻ downloading"
+	case r.Paused:
+		return "‖ paused"
 	case inLibrary(h):
 		return "✓ in library"
-	case h.Library != nil && h.Library.State == domain.LibraryPartial:
-		return fmt.Sprintf("%d/%d", h.Library.TracksOnDisk, h.Library.TracksTotal)
+	case h.Type != "song" && r.State == domain.RecordPartial:
+		return fmt.Sprintf("%d/%d", r.TracksDone, r.TracksWanted)
 	}
 	return ""
 }
@@ -130,9 +141,7 @@ func (m *model) choose(hits []client.SearchHit, names []string, priority []strin
 }
 
 // overrides are h's: the chosen quality first, then the rest of the
-// server's priority in its order, where h offers the choice. TODO(P3): the
-// replace choice for a hit in the library becomes a reset of its record;
-// overrides no longer carry force_overwrite.
+// server's priority in its order, where h offers the choice.
 func (a *ask) overrides(h client.SearchHit) *config.DownloadOverrides {
 	var o config.DownloadOverrides
 	set := false
@@ -163,6 +172,9 @@ func (a *ask) batches() []batch {
 	var out []batch
 	at := map[string]int{}
 	for _, h := range a.hits {
+		if a.replace == 1 && inLibrary(h) {
+			continue // reset, not added
+		}
 		o := a.overrides(h)
 		k := fmt.Sprint(o != nil && o.QualityPriority != nil, inLibrary(h))
 		i, ok := at[k]
@@ -183,6 +195,13 @@ func (m *model) send(a *ask) tea.Cmd {
 	cmds := []tea.Cmd{m.println(func(int) string { return you })}
 	for _, b := range a.batches() {
 		cmds = append(cmds, submit(m.ctx, m.c, b.urls, b.o))
+	}
+	if a.replace == 1 {
+		for _, h := range a.hits {
+			if inLibrary(h) {
+				cmds = append(cmds, reset(m.ctx, m.c, h, a.overrides(h)))
+			}
+		}
 	}
 	return tea.Sequence(cmds...)
 }
@@ -260,9 +279,9 @@ func (m *model) askView(w int) string {
 		question(0, "quality", names, a.codec)
 	}
 	if a.again {
-		choices := []string{"Skip files on disk", "Replace them"}
+		choices := []string{"Keep what is downloaded", "Download again"}
 		if w < mediumCols {
-			choices = []string{"Skip", "Replace"}
+			choices = []string{"Keep", "Again"}
 		}
 		question(1, "in library", choices, a.replace)
 	}

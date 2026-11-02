@@ -11,6 +11,7 @@ import (
 
 	"amdl/internal/db"
 	"amdl/internal/domain"
+	"amdl/internal/hooks"
 	"amdl/internal/limits"
 	"amdl/internal/logging"
 )
@@ -445,8 +446,54 @@ func (m *Manager) dispatchHooks(ctx context.Context, job domain.Job) {
 			// AMDL_OUTPUT_PATHS are missing.
 			m.logger.Error("list items for hook payload; dispatching without items", "job_id", job.ID, "hook_event", hookEvent, "error", err)
 		}
-		m.hooks.Dispatch(hookEvent, job, items)
+		m.hooks.DispatchRun(hookEvent, job, items, m.hookRun(ctx, job, items))
 	}
+}
+
+// hookRun reads what a hook dispatch says of a run's record: the record's
+// rollup, and for a failed run whether every failed slot waits for an
+// automatic retry. A failed read leaves the part out; the hook still fires.
+func (m *Manager) hookRun(ctx context.Context, job domain.Job, items []domain.JobItem) hooks.RunContext {
+	var run hooks.RunContext
+	if job.ResourceID == "" {
+		return run
+	}
+	res := &hooks.ResourcePayload{Kind: string(job.ResourceKind), ID: job.ResourceID}
+	var rollup domain.Rollup
+	switch job.ResourceKind {
+	case domain.ResourceAlbum:
+		a, err := m.store.GetAlbum(ctx, job.ResourceID)
+		if err != nil {
+			return run
+		}
+		res.Name, rollup, run.WantedAll = a.Name, a.Rollup, a.WantedAll
+	case domain.ResourcePlaylist:
+		p, err := m.store.GetPlaylist(ctx, job.ResourceID)
+		if err != nil {
+			return run
+		}
+		res.Name, rollup, run.WantedAll = p.Name, p.Rollup, true
+	default:
+		return run
+	}
+	res.State, res.TracksDone, res.TracksWanted = string(rollup.State), rollup.TracksDone, rollup.TracksWanted
+	run.Resource = res
+	if job.Status != domain.JobFailed {
+		return run
+	}
+	failed := 0
+	for _, item := range items {
+		if item.Status != domain.ItemFailed || item.OwnerID == "" {
+			continue
+		}
+		failed++
+		f, err := m.store.GetFile(ctx, domain.FileKey{OwnerKind: item.OwnerKind, OwnerID: item.OwnerID, SongID: item.AdamID, Slot: item.Slot})
+		if err != nil || f.AudioState != domain.AudioFailed {
+			return run
+		}
+	}
+	run.WillRetry = failed > 0
+	return run
 }
 
 // finalizeLogged is the worker-path wrapper around finalizeJob: there is no

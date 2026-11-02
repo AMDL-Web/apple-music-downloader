@@ -164,9 +164,10 @@ func TestArtistPagesOpenPageOnAndCache(t *testing.T) {
 func TestHitMarkFollowsTheLiveJob(t *testing.T) {
 	s, _ := newTestStore(t)
 	h := hit("album", "1")
-	h.PriorJob = &client.PriorJob{ID: "j", Status: domain.JobCompleted}
+	h.Resource = &domain.ResourceMark{ID: "1", ActiveJobID: "j"}
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobCompleted}}})
 	if m, id := s.HitMark(h); m != MarkDone || id != "j" {
-		t.Fatalf("prior job: mark %v %q", m, id)
+		t.Fatalf("record's run: mark %v %q", m, id)
 	}
 	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning}}})
 	if m, _ := s.HitMark(h); m != MarkActive {

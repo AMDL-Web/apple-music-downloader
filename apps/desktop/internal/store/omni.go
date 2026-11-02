@@ -197,21 +197,25 @@ func (s *Store) LookupOne(url string, then func(client.Lookup)) {
 	}()
 }
 
-// PriorJobFor is the job in the list that downloads what a preview names:
-// a queued or running one, else a completed one; nil for none. It stands
-// in for a search hit's prior_job, which a preview does not carry.
-func (s *Store) PriorJobFor(l client.Lookup) *client.PriorJob {
-	var done *client.PriorJob
+// ResourceFor is the record mark of what a preview names: the preview's own
+// resource, else one made from a queued or running job in the list, else a
+// completed one; nil for none.
+// TODO(P3-desktop): read the record instead of the job list.
+func (s *Store) ResourceFor(l client.Lookup) *domain.ResourceMark {
+	if l.Resource != nil {
+		return l.Resource
+	}
+	var done *domain.ResourceMark
 	for _, j := range s.Jobs {
 		if t, id, ok := j.link(); !ok || t != l.Type || id != l.ID {
 			continue
 		}
 		switch j.Status {
 		case domain.JobQueued, domain.JobRunning:
-			return &client.PriorJob{ID: j.ID, Status: j.Status}
+			return &domain.ResourceMark{ID: l.ID, ActiveJobID: j.ID}
 		case domain.JobCompleted:
 			if done == nil {
-				done = &client.PriorJob{ID: j.ID, Status: j.Status, FinishedAt: j.FinishedAt}
+				done = &domain.ResourceMark{ID: l.ID, State: domain.RecordComplete}
 			}
 		}
 	}

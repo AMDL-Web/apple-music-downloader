@@ -6,10 +6,11 @@ import (
 
 type DownloadRequest struct {
 	URLs []string `json:"urls"`
-	// Overrides optionally overlays the quality and overwrite keys of the
-	// runtime config for every job created from this request. Omitted fields
-	// keep the runtime values. Unknown fields, a request-level `force`
-	// included, are rejected; forcing is overrides.force_overwrite.
+	// Overrides optionally overlays the quality keys of the runtime config
+	// for every record and run this request adds. Omitted fields keep the
+	// runtime values. Unknown fields, `force` and `force_overwrite` included,
+	// are rejected: a record downloads what it does not have, and a reset
+	// downloads again.
 	Overrides *config.DownloadOverrides `json:"overrides,omitempty"`
 }
 
@@ -26,7 +27,17 @@ type MoveRequest struct {
 type SubmitStatus string
 
 const (
-	SubmitAccepted           SubmitStatus = "accepted"
+	// SubmitAccepted: the link was added; Job is its record's queued or
+	// running run, absent when the record waits (a failed slot's retry, a
+	// full queue the picker drains).
+	SubmitAccepted SubmitStatus = "accepted"
+	// SubmitPending: the link needs a catalog read before it becomes records
+	// (a song without its album, an artist, a library playlist's songs); the
+	// records appear once the resolver has read it.
+	SubmitPending SubmitStatus = "pending"
+	// SubmitAlreadyDownloaded: every wanted track of the link's record is
+	// done; nothing was queued.
+	SubmitAlreadyDownloaded  SubmitStatus = "already_downloaded"
 	SubmitInvalid            SubmitStatus = "invalid"
 	SubmitDuplicateInRequest SubmitStatus = "duplicate_in_request"
 	SubmitDuplicateActive    SubmitStatus = "duplicate_active"
@@ -38,7 +49,7 @@ const (
 
 // Submit error codes set by the job manager. The request validator adds its
 // own (internal/media Downloader.ValidateRequest: invalid_url,
-// invalid_configuration, unsupported_input, unsupported_storefront,
+// invalid_configuration, unsupported_input,
 // decryptor_unavailable). The SubmitErrorCode enum in openapi.yaml lists both.
 const (
 	SubmitCodeDuplicateInRequest = "duplicate_in_request"
@@ -52,7 +63,8 @@ const (
 
 // SubmitError explains why one URL of a batch was not accepted. Code is
 // stable; Message is for humans; Details is code-specific (storefront and
-// supported_storefronts for unsupported_storefront).
+// supported_storefronts for a decryptor_unavailable that names the
+// storefront the wrapper does not serve).
 type SubmitError struct {
 	Code    string         `json:"code"`
 	Message string         `json:"message"`
@@ -60,18 +72,25 @@ type SubmitError struct {
 }
 
 // SubmitResult is the outcome of one URL. Error is set for every status
-// except accepted. Requeued is true on an accepted result whose Job is an
-// existing finished job put back in the queue under its id, rather than a new
-// one.
+// except accepted, pending and already_downloaded. Resource names the record
+// the link added or extended; absent for a station, a pending add and a
+// refused link.
 type SubmitResult struct {
 	URL           string       `json:"url"`
 	Status        SubmitStatus `json:"status"`
+	Resource      *ResourceRef `json:"resource,omitempty"`
 	Job           *Job         `json:"job,omitempty"`
-	Requeued      bool         `json:"requeued,omitempty"`
 	ExistingJobID string       `json:"existing_job_id,omitempty"`
 	Error         *SubmitError `json:"error,omitempty"`
 }
 
+// Taken reports whether the link was added: accepted, pending or already
+// downloaded.
+func (r SubmitResult) Taken() bool {
+	return r.Status == SubmitAccepted || r.Status == SubmitPending || r.Status == SubmitAlreadyDownloaded
+}
+
+// BatchSubmitResponse counts the taken links as accepted.
 type BatchSubmitResponse struct {
 	Accepted int            `json:"accepted"`
 	Rejected int            `json:"rejected"`

@@ -142,9 +142,9 @@ type Lookup struct {
 	AppleDigitalMaster  bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits         []string `json:"audio_traits,omitempty"`
 	NeedsMediaUserToken bool     `json:"needs_media_user_token,omitempty"`
-	// Library is how much of an album, or whether a song, is on disk; nil
-	// for other types and when the backend could not tell.
-	Library *domain.LibraryState `json:"library,omitempty"`
+	// Resource is the record holding the link's album, playlist or song;
+	// nil when amdl has none.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
 }
 
 // ListQuery is the query of GET /api/v1/downloads; zero fields are left out.

@@ -20,6 +20,8 @@ const (
 	// 400
 	CodeInvalidRequest ErrorCode = "invalid_request"
 	CodeInvalidJSON    ErrorCode = "invalid_json"
+	// CodeInvalidScope: a reset or check names no valid scope.
+	CodeInvalidScope ErrorCode = "invalid_scope"
 	// 401
 	CodeAuthenticationFailed ErrorCode = "authentication_failed"
 	// 404
@@ -29,13 +31,15 @@ const (
 	CodeAccountNotFound ErrorCode = "account_not_found"
 	CodeCatalogNotFound ErrorCode = "catalog_not_found"
 	CodeHookNotFound    ErrorCode = "hook_not_found"
+	// CodeResourceNotFound: no album or playlist record, or pending add,
+	// has the id.
+	CodeResourceNotFound ErrorCode = "resource_not_found"
 	// 405
 	CodeMethodNotAllowed ErrorCode = "method_not_allowed"
 	// 409
 	CodeJobActive         ErrorCode = "job_active"
 	CodeJobNotRetryable   ErrorCode = "job_not_retryable"
 	CodeJobNotCancellable ErrorCode = "job_not_cancellable"
-	CodeJobFinalizing     ErrorCode = "job_finalizing"
 	CodeJobNotQueued      ErrorCode = "job_not_queued"
 	CodeDuplicateActive   ErrorCode = "duplicate_active"
 	CodeAlreadyLoggedIn   ErrorCode = "already_logged_in"
@@ -43,6 +47,14 @@ const (
 	// CodeAppleLibrarySyncRunning: POST /apple-library/sync while a pass runs.
 	CodeAppleLibrarySyncRunning ErrorCode = "apple_library_sync_running"
 	CodeHookReadOnly            ErrorCode = "hook_read_only"
+	// CodeRunActive: the record has a queued or running run; pause it first.
+	CodeRunActive ErrorCode = "run_active"
+	// CodeMainNotDone: another quality needs the track's main slot done.
+	CodeMainNotDone ErrorCode = "main_not_done"
+	// CodeQualityPresent: the main slot already holds that codec.
+	CodeQualityPresent ErrorCode = "quality_present"
+	// CodeCheckRunning: POST /library/check while a check runs.
+	CodeCheckRunning ErrorCode = "check_running"
 	// 413
 	CodeRequestTooLarge ErrorCode = "request_too_large"
 	// 422
@@ -66,6 +78,9 @@ const (
 	// CodeAppleLibraryUnavailable: the Apple library cannot be read (no
 	// usable media-user-token) and nothing is cached.
 	CodeAppleLibraryUnavailable ErrorCode = "apple_library_unavailable"
+	// CodeDownloadsDirUnavailable: download.downloads_dir is missing or not
+	// a directory, so a disk check would see every file gone.
+	CodeDownloadsDirUnavailable ErrorCode = "downloads_dir_unavailable"
 	// 504
 	CodeUpstreamTimeout ErrorCode = "upstream_timeout"
 )

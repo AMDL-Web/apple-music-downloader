@@ -340,7 +340,7 @@ download:
   # Apple Music serves 16- and 24-bit ALAC, so 16 to 23 keeps 16-bit streams only.
   alac_max_bit_depth: 24
   # bool: true verifies output MP4 integrity and repairs known ALAC terminator issues; false skips both the
-  # check and the repair, so a damaged file is saved and later jobs skip it as already downloaded.
+  # check and the repair, so a damaged file is saved and its slot recorded as downloaded.
   check_integrity: true
   # enum: full, quick. How check_integrity checks each track; ignored when it is false.
   # full decodes the whole track with ffmpeg. quick costs a fraction of that CPU on hi-res ALAC: it checks
@@ -378,8 +378,9 @@ simulate:
   # download. Every API response, job/item status, progress breakdown, status message, and SSE event
   # matches a real download. The wrapper decryptor status/storefront check is skipped so jobs can be
   # submitted without a running wrapper; a Hi-Res track then keeps the web player's manifest, which can
-  # leave out its 88.2 kHz and higher ALAC renditions. A track a simulated job finished counts as
-  # already downloaded for later jobs until the backend restarts.
+  # leave out its 88.2 kHz and higher ALAC renditions. A simulated run records its slots as
+  # downloaded like a real one but writes no file, so a disk check (POST /api/v1/library/check)
+  # finds them missing.
   # false runs real downloads.
   enabled: false
   # integer KB/s (kilobytes per second): lower bound of the randomized simulated transfer speed.
@@ -425,7 +426,7 @@ library_sync:
 apple_library:
   # Apple library cache: a local copy of the signed-in Apple Music account library (albums,
   # songs, playlists with their tracks, artists) that GET /api/v1/apple-library/{kind} and the
-  # in_apple_library mark on search hits read, so browsing never waits on Apple. A sync fills it;
+  # in_apple_library mark on search hits and records read, so browsing never waits on Apple. A sync fills it;
   # it never adds downloads (library_sync above is the monitor that adds new albums).
   #
   # Both keys are runtime-mutable through PUT /api/v1/config and config reload; no restart is

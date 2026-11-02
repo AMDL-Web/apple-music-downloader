@@ -58,24 +58,12 @@ type searchHit struct {
 	ContentRating      string             `json:"content_rating,omitempty"`
 	AppleDigitalMaster bool               `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string           `json:"audio_traits,omitempty"`
-	// PriorJob is not set since 2.0: records, not job history, say what is
-	// downloaded. TODO(P3): the hit's resource replaces it.
-	PriorJob *priorJob `json:"prior_job,omitempty"`
 	// InAppleLibrary is whether the hit is in the user's Apple Music account
 	// library; absent when that is not known (markAppleLibrary).
 	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
-	// Library is not set since 2.0, which stats no file before a download.
-	// TODO(P3): the hit's resource replaces it.
-	Library *domain.LibraryState `json:"library,omitempty"`
-}
-
-// priorJob is the PriorJob schema: the hit's queue entry, its queued or
-// running job, else its last completed one. Whether the hit is on disk is
-// library's to say.
-type priorJob struct {
-	ID         string           `json:"id"`
-	Status     domain.JobStatus `json:"status"`
-	FinishedAt *time.Time       `json:"finished_at,omitempty"`
+	// Resource is the record holding the hit (markResources); absent when
+	// none does.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
 }
 
 // hitGroup is the SearchGroup schema.
@@ -230,6 +218,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			resp.Artists = group
 		}
 		s.markAppleLibrary(r.Context(), t, group.Items, res.InLibrary[t])
+		s.markResources(r.Context(), group.Items)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -276,6 +265,7 @@ func (s *Server) artistAlbums(w http.ResponseWriter, r *http.Request) {
 	}
 	s.markAppleLibrary(r.Context(), applemusic.SearchArtists, []*searchHit{resp.Artist}, nil)
 	s.markAppleLibrary(r.Context(), applemusic.SearchAlbums, resp.Albums.Items, nil)
+	s.markResources(r.Context(), resp.Albums.Items)
 	writeJSON(w, http.StatusOK, resp)
 }
 

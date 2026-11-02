@@ -185,6 +185,14 @@ func Run(ctx context.Context, opts Options) (err error) {
 	// pipeline. Process-wide concurrency pools are sized once from this startup
 	// snapshot; runtime-mutable fields are read when each job starts.
 	cfgStore := config.NewFileStore(cfg, opts.ConfigPath)
+	store.FollowDownloadsDir(func() string { return cfgStore.Get().Download.DownloadsDir })
+	// Resume checkpoints of records deleted or runs gone while the server was
+	// down: nothing resumes them.
+	if owners, err := store.ResumeOwners(context.Background()); err != nil {
+		logSystem.Logger.Warn("list resume owners; resume checkpoints kept", "error", err)
+	} else {
+		media.CleanupStaleResume(cfg.Download.TempDir, owners, logSystem.Logger.With("component", "media"))
+	}
 	wrapperClient, err := wrapper.NewClient(cfg.Wrapper)
 	if err != nil {
 		return fmt.Errorf("set up wrapper client: %w", err)

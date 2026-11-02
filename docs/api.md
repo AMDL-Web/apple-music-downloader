@@ -30,17 +30,17 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 
 | Status | Codes |
 | --- | --- |
-| 400 | `invalid_request` (query or body validation, a malformed stream cursor), `invalid_json` (the body is not well-formed JSON) |
+| 400 | `invalid_request` (query or body validation, a malformed stream cursor), `invalid_json` (the body is not well-formed JSON), `invalid_scope` (a reset or check names no valid scope) |
 | 401 | `authentication_failed` |
-| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `catalog_not_found`, `hook_not_found` |
+| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `catalog_not_found`, `hook_not_found`, `resource_not_found` (no record or pending add) |
 | 405 | `method_not_allowed`, with an `Allow` header |
-| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_finalizing`, `job_not_queued`, `duplicate_active`, `already_logged_in`, `login_pending`, `hook_read_only`, `apple_library_sync_running` |
+| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_not_queued`, `duplicate_active`, `already_logged_in`, `login_pending`, `hook_read_only`, `apple_library_sync_running`, `run_active`, `main_not_done`, `quality_present`, `check_running` |
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `invalid_hook`, `invalid_hooks_file`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
 | 501 | `login_unsupported` |
 | 502 | `upstream_error` |
-| 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable`, `apple_library_unavailable` |
+| 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable`, `apple_library_unavailable`, `downloads_dir_unavailable` |
 | 504 | `upstream_timeout` |
 
 An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
@@ -264,6 +264,107 @@ code, is already in progress), `404 login_not_found` (the two-step session expir
 (the wrapper is a bare wrapper-lite: log in with `wrapper-lite-rootless --login` on its
 host), `502 upstream_error`, `504 upstream_timeout`.
 
+## Library
+
+amdl keeps a record of each album and catalog playlist it downloads: its tracks, and per
+track one row per quality slot. Records, never the disk, say what is downloaded: search,
+lookup and the album page read them, a run downloads only the slots its record does not
+have, and a file deleted outside amdl stays downloaded until a [disk check](#disk-check)
+marks it missing. Each download of a record is a run, which the API calls a job: the
+`/downloads` routes list runs, and a job names its record in `resource {kind, id}`.
+
+| Route | What it does |
+| --- | --- |
+| `GET /library/albums`, `GET /library/playlists` | List records: `state` (`none`, `partial`, `complete`), `flag` (`failed`, `given_up`, `missing`, `waiting`, `paused`, `unresolved`), `source`, `q`, `sort` (`added`, `name`, `artist`, `release`), `limit` (max 500), `offset` |
+| `GET /library/albums/{id}`, `GET /library/playlists/{id}` | One record with `sources`, `in_apple_library`, `last_checked_at` and `tracks`, each with its `files` |
+| `GET /library/summary` | Records per state and flag, pending adds, the last check |
+| `POST /library/add` | `POST /downloads` plus `codecs`, `now` and `include` |
+| `POST /library/{kind}/{id}/download` | Queue the record's run now; `{codec}` adds another quality, `{now: true}` puts the run first |
+| `POST /library/{kind}/{id}/reset` | Download files, lyrics or covers again |
+| `POST /library/reset` | Reset every record a filter selects |
+| `POST /library/{kind}/{id}/pause`, `/resume` | Stop and continue a record |
+| `DELETE /library/{kind}/{id}` | Remove a record; its files and runs stay |
+| `GET /library/pending`, `DELETE /library/pending/{id}`, `POST /library/pending/{id}/retry` | Adds waiting for a catalog read |
+| `POST /library/check`, `GET /library/check` | Check the stored files on disk |
+
+`{kind}` is `albums` or `playlists`; another value is `404 resource_not_found`.
+
+```bash
+curl 'http://localhost:18080/api/v1/library/albums?flag=given_up,missing&sort=name'
+curl http://localhost:18080/api/v1/library/albums/1463409338
+```
+
+A record's rollup is stored with it: `tracks_wanted` (wanted tracks the account storefront
+lists), `tracks_done` (of those, the ones whose main slot is done), `tracks_failed`,
+`tracks_given_up`, `tracks_missing`, and `state`, `complete` when every wanted track is
+done. `withheld_count` counts tracks of the release the account storefront does not list;
+they are not counted and not retried. A track's `files` are its slots: `main`, the first
+quality, owns the plain file name, and another quality is a codec slot whose file name
+carries a suffix such as ` [EC3 768Kbps]`. Each slot has `audio_state` (`pending`,
+`running`, `done`, `failed`, `given_up`, `unavailable`, `missing`), `lyrics_state`, what
+landed (`codec`, `quality_label`, `bit_depth`, `sample_rate`, `bitrate`, `file_size`), the
+absolute `path`, `failures`, `next_attempt_at`, `last_error` and `last_job_id`.
+
+**Retries.** Inside a run, `download.max_attempts` bounds the tries of each operation. A
+run that ends a slot failed counts a failure and the scheduler queues a new run (trigger
+`retry`) 30 minutes later, then each wait four times the last; after
+`download.give_up_after_runs` (default 3) the slot is `given_up` until a reset. An error
+that cannot pass gives up at once. A track the account storefront stops listing, and a
+codec the track does not offer, is `unavailable` and never retried.
+
+**Download, pause, delete.** `POST /library/{kind}/{id}/download` resumes the record and
+answers `202 {status: "queued", job}`, or `200 {status: "already_downloaded"}`, or `200
+{status: "waiting"}` when a failed slot waits for its retry. With `codec`, each track whose
+main slot is done gets that quality as another slot (`409 main_not_done` when none has its
+first quality, `409 quality_present` when the first quality is that codec). Pause cancels
+the record's run, keeps its resume checkpoints and stops the scheduler from queuing it;
+resume continues it. Both answer the record. Delete answers `204`; a record with a queued
+or running run is `409 run_active`. The library monitor does not add a deleted album back;
+adding it by hand does, and its first run downloads every track again over the files.
+
+**Reset** replaces what `force_overwrite` did:
+
+```bash
+curl -X POST http://localhost:18080/api/v1/library/albums/1463409338/reset -d '{"what":"audio","states":["missing"]}'
+curl -X POST http://localhost:18080/api/v1/library/reset -d '{"what":"audio","filter":{"flag":["missing"]}}'
+```
+
+`what` is `all` (every slot, failures, the paused flag and the covers), `audio` (the
+selected slots, by `slot`, `songs` and `states`; `codecs` with `slot: "main"` sets the main
+slots' codec order), `lyrics` (the lyrics of done slots, written into the file and its
+sidecars) or `covers`. A done file is downloaded again to its stored path and replaced only
+once the new copy is complete. The answer is `{slots, job}`; a record with an active run is
+`409 run_active` (pause it first). `POST /library/reset` resets every record its `filter`
+(`state`, `flag`, `source`, `q`; at least one) selects, skips those with an active run, and
+answers `{reset, skipped_active}`; an audio reset by the `failed`, `given_up` or `missing`
+flag re-arms only the slots in that state, so the second line above downloads every
+missing file again.
+
+**Pending adds.** A song link without its album, an artist link and a library playlist's
+songs need a catalog read before they become records. `POST /downloads` answers them
+`pending`; the resolver reads them in the background, and one it gives up on is `failed`
+with `last_error` in `GET /library/pending` until a retry or a delete.
+
+### Disk check
+
+```bash
+curl -X POST http://localhost:18080/api/v1/library/check
+curl -X POST http://localhost:18080/api/v1/library/check -d '{"kind":"albums","id":"1463409338"}'
+curl http://localhost:18080/api/v1/library/check
+```
+
+Stats the stored path of every done slot (audio files, not sidecars or covers) of the
+library or of one record, in the background, and marks the missing ones `missing`. It
+never marks a found file, moves a file or queues a download; reset with `states:
+["missing"]` to download them again. Two guards: `download.downloads_dir` must exist (`503
+downloads_dir_unavailable`), and when more than half the checked files are missing the
+check marks nothing and ends with `aborted_reason: "too_many_missing"` unless the body sets
+`force: true`, so an unmounted share does not mark a whole library missing. One check runs
+at a time (`409 check_running`). `POST` answers `202 {check}`; `GET` answers the running or
+last `{check}` (`{id, trigger, scope, started_at, finished_at?, checked, missing,
+aborted_reason?}`, `null` before the first), and the overview feed sends `check_updated` as
+it moves on.
+
 ## Downloads
 
 ### Create
@@ -272,7 +373,7 @@ host), `502 upstream_error`, `504 upstream_timeout`.
 curl -X POST http://localhost:18080/api/v1/downloads \
   -H 'Content-Type: application/json' \
   -d '{"urls":["https://music.apple.com/us/album/example/123456789?i=987654321"],
-       "overrides":{"force_overwrite":true}}'
+       "overrides":{"quality_priority":["alac","aac"]}}'
 ```
 
 `urls` is a list; each entry may itself hold several URLs separated by whitespace, commas
@@ -281,29 +382,29 @@ and, unless it was accepted, an `error` object `{code, message, details?}`:
 
 | `status` | `error.code` |
 | --- | --- |
-| `accepted` | — (the `job` is included; `requeued: true` when it is an existing job queued again) |
-| `invalid` | `invalid_url`, `unsupported_input`, `unsupported_storefront` (`details`: `storefront`, `supported_storefronts`), `decryptor_unavailable`, `invalid_configuration` |
+| `accepted` | — (`resource` names the record; `job` is its queued run, absent when the record waits for a retry or the queue is full) |
+| `pending` | — (the link is read into records first; no `job` yet) |
+| `already_downloaded` | — (`resource` names the record; every wanted track is done, nothing was queued) |
+| `invalid` | `invalid_url`, `unsupported_input`, `decryptor_unavailable` (`details`: `storefront`, `supported_storefronts` when the wrapper does not serve the storefront the run reads in), `invalid_configuration` |
 | `duplicate_in_request` | `duplicate_in_request` |
 | `duplicate_active` | `duplicate_active` (`existing_job_id` names the running job) |
 | `queue_full` | `queue_full` |
 | `error` | `store_error`, `internal_error` — the server failed; the same submit may succeed when retried |
 
 The response is `202` with `{accepted, rejected, results}` when at least one URL was
-accepted. When none was, it is an error whose `details` is that same body: `500
-store_error` if any URL failed in the job store (`500 internal_error` if the only server
-failure was an unexpected validator error), else `422 no_urls_accepted`.
+taken (`accepted`, `pending` and `already_downloaded` all count). When none was, it is an
+error whose `details` is that same body: `500 store_error` if any URL failed in the job
+store (`500 internal_error` if the only server failure was an unexpected validator error),
+else `422 no_urls_accepted`.
 
-A link keeps one job. When its song, album, artist or playlist already has a finished job
-(`completed`, `failed` or `cancelled`; the newest one if an older database holds several)
-and none queued or running, that job is queued again under its id instead of a new one:
-the result says `requeued: true`, the job takes this request's `overrides` (replacing its
-old ones, none included), its `created_at` becomes the time of this submit, it goes to the
-end of the queue, and a `job_retried` event with `cause: "resubmit"` is recorded and the
-`job_queued` hook fires. Its run checks every track against the files first, so an album
-already on disk finishes in seconds without downloading; `force_overwrite` downloads it
-again. A job still finishing its previous run, or whose terminal hooks are still running,
-answers `duplicate_active` with its id. Station links always get a new job, since each
-draws a new track list.
+An album link, an album-track link and a catalog playlist (`pl.`) add or extend a
+[record](#library) and queue its run when the record needs one; a record with an active run
+answers `duplicate_active` with that run's id. Every download is a new job. A record is
+read in the account's storefront whatever the link's says, so a `us` link on a `cn`
+account downloads the `cn` track list; the wrapper must serve the account storefront, else
+the link is `decryptor_unavailable` naming both. A station link is a one-off run read in
+its own storefront. An artist link adds every album the artist read returns; `POST
+/library/add` with `include: "albums"` leaves singles out.
 
 For album links carrying `?i=<song_id>`, `catalog.album_track_url_mode` decides the task
 type: `song` (default) treats it as a single-song job using the `i` parameter, `album`
@@ -311,30 +412,25 @@ ignores `i` and downloads the whole album.
 
 ### Job overrides
 
-`overrides` overlays the quality and overwrite keys of the runtime `download` config for
-that submission only. Omitted fields keep the global value; a value that fails validation
+`overrides` overlays the quality keys of the runtime `download` config for the records and
+runs the submission adds. Omitted fields keep the global value; a value that fails validation
 is `422 invalid_overrides`.
 
 | Field | Notes |
 | --- | --- |
 | `quality_priority`, `codec_alternative` | Codec order and whether to fall back to the next codec |
 | `alac_max_sample_rate`, `alac_max_bit_depth` | ALAC limits |
-| `force_overwrite` | Replace existing output files and their lyrics sidecars instead of skipping |
 
 Everything else comes from the runtime config for every job: directories, path templates,
 lyrics, covers, `max_attempts`, `check_integrity`, `integrity_mode`, and the media-user-token
 (the wrapper's when the backend can read it, else `catalog.media_user_token`). Every enabled hook in `hooks.yaml` whose `events` and
 `job_types` match runs for every job. Any other field, at the top level (`force`,
-`media_user_token`) or inside `overrides` (`hooks`, `downloads_dir`, `media_user_token`,
-...), is `400 invalid_request` naming the unknown field.
+`media_user_token`) or inside `overrides` (`force_overwrite`, `hooks`, `downloads_dir`,
+`media_user_token`, ...), is `400 invalid_request` naming the unknown field. To download
+again, [reset](#library) the record.
 
-**`force_overwrite`** — `true` downloads the track again and replaces an existing audio
-file and its lyrics sidecars once the new copy is complete; if the download fails, the old
-files stay. `false` (the default, from `download.force_overwrite`) skips tracks whose
-output already exists.
-
-The overrides are persisted with each job and apply again on a retry or after a restart;
-a resubmit of the same link replaces them.
+The overrides are stored on the record, the latest add's winning, and copied into each of
+its runs, so they apply on a retry and after a restart.
 A job row written before the other fields were removed is read with them ignored, and its
 terminal write drops them.
 
@@ -368,8 +464,8 @@ Without one the playlist still downloads, just without its cover.
 curl http://localhost:18080/api/v1/downloads/{job_id}
 ```
 
-Returns `{job, items, hooks, event_cursor}`. A finished item (`completed` or
-`skipped_existing`) carries `output_path`, the absolute path of its file on the machine
+Returns `{job, items, hooks, event_cursor}`. A record's run has one item per planned slot,
+with its `slot`. A finished item (`completed` or `skipped_existing`) carries `output_path`, the absolute path of its file on the machine
 that runs the backend, fixed when the track was written; the console's Files section
 shows the folder it sits in. An item
 that is not finished omits it, and the item events on the stream follow the same rule.
@@ -378,7 +474,8 @@ that is not finished omits it, and the item events on the stream follow the same
 curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,cancelled&type=album&q=beta&sort=updated_at&order=desc'
 ```
 
-Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `q` (substring of
+Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `resource_kind`
+(`album`, `playlist`) and `resource_id` (one record's runs), `trigger`, `q` (substring of
 the title, artist name or input), `sort` (`created_at` | `updated_at` | `queue_order`), `order`
 (`asc` | `desc`); other parameters are ignored. `sort=queue_order` lists the queued jobs in
 run order (with `order=asc`, the next to start first) ahead of every other job; combine it
@@ -389,7 +486,11 @@ filter), `total`, `limit`, `offset` and the global `event_cursor`.
 
 Every job carries `total_items` (tracks the input resolved to) and four disjoint item
 counters, always present: `completed_items` (written by this job), `skipped_items`
-(already on disk), `failed_items` and `cancelled_items`. They are derived from the job's
+(already at the slot's path, or `unavailable`: not offered), `failed_items` and
+`cancelled_items`. `resource` names the record a run downloads for (absent for a station),
+`trigger` what started it (`manual`, `library_sync`, `artist`, `retry`, `reset`,
+`import_1x`) and `priority` its class (`0` download now, `1` manual, `2` the library
+monitor's): queued runs start by class, then `queue_order`. They are derived from the job's
 items on every read, so a running job's counters match its `items`. `progress` (0 to 1, to
 three decimals) is the job's overall progress, the mean of its tracks' stage-weighted
 progress as the console's album bar shows it (`internal/progress#Overall`): below 1 while
@@ -397,7 +498,7 @@ a track has not finished, 1 once the job completed. It is derived on every read 
 event payloads leave it out. `started_at` is set
 when a worker first starts the current run and kept across restarts; a retry starts a
 new run and clears it. `finished_at` is set when the job reaches a terminal status and
-cleared by a retry. Both are RFC 3339 and absent until set. Forcing an overwrite is `overrides.force_overwrite`.
+cleared by a retry. Both are RFC 3339 and absent until set.
 A queued job carries `queue_order`, its place in the run order: when a worker frees up it
 starts the queued job with the lowest value, so a client sorts the queue ascending by it.
 The values are sparse and only their order means anything; running and finished jobs omit
@@ -413,15 +514,13 @@ curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/retry
 
 Only `failed` and `cancelled` jobs can be retried: otherwise `409 job_not_retryable`.
 Only a `queued` or `running` job can be cancelled: a `completed` or `failed` one is
-`409 job_not_cancellable`, and a `cancelled` one answers `200` again.
-Finished tracks stay done while their file is still where they recorded it (for a song,
-album or artist track, at its current library path) and `force_overwrite` is off; the
-rest, failed and cancelled ones included, run again. A job still finishing
-its previous run, or whose terminal hook is still running, is `409 job_finalizing`
-(retry once it has ended), one whose input is
-already queued or running again is `409 duplicate_active`, and a full queue is
-`503 queue_full`. A retried job goes to the end of the queue and keeps its `overrides` and
-`created_at`; unlike a resubmit, a retry does not fire the `job_queued` hook.
+`409 job_not_cancellable`, and a `cancelled` one answers `200` again. Cancel on a record's
+run pauses the record (clients label it Pause); a station's run is cancelled.
+A retry is a new job: for a record's run it resumes the record, re-arms its failed and
+given-up slots and answers `202 {status: "queued", job}`, or `200 {status:
+"already_downloaded"}` when nothing is left; for a station it queues the same link again.
+A record or link that already has a queued or running job is `409 duplicate_active`, and a
+full queue is `503 queue_full`.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/move -d '{"before":"<job_id>"}'
@@ -441,8 +540,8 @@ were running go ahead of the queued ones, which keep their order.
 curl -X DELETE http://localhost:18080/api/v1/downloads/{job_id}
 ```
 
-Deletes a terminal job and its records. A job that is queued, running, finalizing or
-running a hook is `409 job_active`.
+Deletes a terminal job's history. Its record and files stay. A job that is queued,
+running, finalizing or running a hook is `409 job_active`.
 
 ## Events
 
@@ -461,8 +560,13 @@ non-200 answer as a generic `error`, so a client whose stream closed refetches
 `GET /api/v1/downloads/events` is the cross-job overview feed: it pushes only the
 milestones that change how a job appears in the list, so a client can render the whole
 downloads page without subscribing to each job. Messages are named `download_upserted`
-(data: `{type, job, event_id, status_counts}`, the job's current snapshot) and
-`download_deleted` (`{type, job_id, event_id, status_counts}`); `status_counts` is global.
+(data: `{type, job, event_id, status_counts}`, the job's current snapshot),
+`download_deleted` (`{type, job_id, event_id, status_counts}`), `resource_updated`
+(`{type, resource_kind, resource_id, resource, event_id, status_counts}`, sent right after
+the `download_upserted` of a record's run with the record as `GET /library/albums` lists
+it) and `check_updated` (`{type, check, event_id, status_counts}`, a disk check that
+started, moved on or ended; no event, so it carries the `event_id` already reached);
+`status_counts` is global.
 `event_id` is also the SSE id and only moves forward; a resent message is idempotent.
 A move in the queue is a milestone too: queued jobs sort by `queue_order`, so a client
 re-sorts on the upsert.
@@ -482,21 +586,19 @@ Event types (the `EventType` enum in the spec; Go constants in `internal/domain`
 
 | | |
 | --- | --- |
-| Job lifecycle | `job_queued`, `job_started`, `job_retried`, `job_recovered`, `job_moved` (new `queue_order`), `job_finished`, `job_failed`, `job_cancelled`, `job_deleted` |
+| Job lifecycle | `job_queued`, `job_started`, `job_recovered`, `job_moved` (new `queue_order`), `job_finished`, `job_failed`, `job_cancelled`, `job_deleted` |
 | Resolution | `resolved_input`, `motion_artwork_resolved` |
-| Item progress | `item_progress` (its `phase` is the item status), `item_completed`, `item_failed`, `item_skipped`, `item_overwrite` |
+| Item progress | `item_progress` (its `phase` is the item status), `item_completed`, `item_failed`, `item_skipped`, `item_unavailable` (the slot is not offered), `lyrics_refreshed` (a lyrics reset wrote the lyrics) |
 | Codec and retries | `codec_selected`, `codec_fallback`, `codec_failed`, `operation_retry`, `operation_exhausted`, `operation_recovered`, `alac_repaired`, `integrity_overruled` |
 | Hooks | `hook_started`, `hook_succeeded`, `hook_failed` |
 | Other | `standalone_cover_failed` |
-
-`job_retried` marks the start of a job's new run. Besides the job snapshot its payload
-has `cause` (`retry` for `POST …/retry`, `resubmit` for a new submit of the same link) and
-`force_overwrite` (whether the job's overrides force overwriting files).
+| Not emitted since 2.0 | `job_retried`, `item_overwrite`: a retry is a new job; they stay so 1.x history decodes |
 
 A retry inside a codec attempt is an `operation_*` event whose `phase` is the codec.
 `job_deleted` and `motion_artwork_resolved` have no payload. Only the list-level
 milestones reach the overview feed: the job lifecycle types, `resolved_input`,
-`motion_artwork_resolved`, `item_completed`, `item_skipped` and `item_failed`.
+`motion_artwork_resolved`, `item_completed`, `item_skipped`, `item_unavailable`,
+`lyrics_refreshed` and `item_failed`.
 `item_progress` events are kept while a job runs and deleted when it finishes; the
 item rows keep their final state.
 
@@ -526,7 +628,8 @@ curl -X POST http://localhost:18080/api/v1/lookup \
  "artwork_text_color3":"423337","artwork_text_color4":"4f3b41","release_date":"2019-05-17",
  "genre":"Hip-Hop/Rap","track_count":12,"content_rating":"explicit","apple_digital_master":true,
  "audio_traits":["lossless","lossy-stereo"],
- "library":{"state":"partial","tracks_on_disk":9,"tracks_total":12}}
+ "resource":{"kind":"album","id":"1463409338","state":"partial","tracks_done":9,"tracks_wanted":12,
+   "withheld_count":0,"paused":false}}
 ```
 
 Previews one link without creating a job, so a client can show the cover, title and artist
@@ -540,11 +643,8 @@ a song or album carries Apple's `audio_traits` as search hits do, and a station 
 album or playlist pages through its track list): never the animated-cover or Enhanced
 HLS reads, never a station's next-tracks feed, at most 15 seconds in all.
 
-An album or a song also carries `library` (a [library state](#library-state)): how many
-of the album's songs, or whether the song (`tracks_total` 1), have a file at their library
-path, checked song by song. A song reads its album too, to find where it sits in the
-library; when that read fails, or the album does not list the song, the song answers
-without `library` rather than failing.
+An album, playlist or song amdl keeps a record of carries `resource` (a [record
+mark](#record-marks)).
 
 The body is `{url}` only. A private playlist's cover is read with the wrapper's
 media-user-token when the backend can read it, else `catalog.media_user_token`; the token is
@@ -579,9 +679,9 @@ curl 'http://localhost:18080/api/v1/search?term=Taylor+Swift&storefront=us&limit
  "albums":{"items":[{"id":"6814997249","type":"album","name":"The Life of a Showgirl: The Encore",
    "url":"https://music.apple.com/us/album/the-life-of-a-showgirl-the-encore/6814997249",
    "artist_name":"Taylor Swift","release_date":"2026-09-24","track_count":16,
-   "content_rating":"explicit","prior_job":{"id":"job_…","status":"completed",
-   "finished_at":"2026-10-30T03:12:09Z"},
-   "library":{"state":"complete","tracks_on_disk":16,"tracks_total":16}, …}, …],"next_offset":2},
+   "content_rating":"explicit",
+   "resource":{"kind":"album","id":"6814997249","state":"complete","tracks_done":16,
+     "tracks_wanted":16,"withheld_count":0,"paused":false}, …}, …],"next_offset":2},
  "playlists":{"items":[{"id":"pl.2553030a768547e9ab3e91230de8439f","type":"playlist",
    "name":"Lo-fi beats to study, work, sleep and relax to",
    "url":"https://music.apple.com/us/playlist/lo-fi-beats-to-study-work-sleep-and-relax-to/pl.2553030a768547e9ab3e91230de8439f",
@@ -611,27 +711,9 @@ A playlist hit has `type` `playlist`, the curator as `artist_name` and no `track
 the catalog states none. `audio_traits` is Apple's list for the song, album or playlist, such as `lossless`,
 `hi-res-lossless`, `atmos` and `spatial`, when the catalog sends one.
 
-`prior_job` names a hit's queue entry: the newest queued or running job of the same type
-and id, else the newest completed one, whatever the storefront of its link. A song
-downloaded as part of an album or playlist job has none, and a failed or cancelled job
-marks nothing. When the job store cannot be read the hits come back unmarked rather than
-failing the search. A completed `prior_job` does not mean the files are still there.
-
-An album hit carries `library`, a [library state](#library-state) estimated from its
-library folder alone: one listing per album, no further catalog read, the `.m4a` files in
-it counted against the tracks its `prior_job` resolved, else against `track_count`. A
-storefront can withhold tracks from an album's track list that `track_count` still counts,
-so a downloaded album with a withheld track reads `partial` until it has a job. A file the
-track list does not name counts too, and an album the catalog gives no `track_count` and
-that has no job reads as `none`; `GET /albums/{id}` checks song by song. An album whose
-listing does not finish within the search's 10 seconds has no `library`.
-
-A song hit carries `library` with `tracks_total` 1: whether a file is at its library
-path. The search asks Apple for each song's album in the same request, so placing the
-song costs one file check and no catalog read. Its number is its track number, which is
-the album's numbering only on the first disc: a song on a later disc, one without a track
-number, and every song under a `download.library_path_format` file name that uses
-`{TrackCount}` or `{DiscCount}` have no `library`. Playlists and artists have none.
+A hit amdl keeps a record of carries `resource`, a [record mark](#record-marks): an album's
+or playlist's own record, a song's album record with `song_state`. When the store cannot be
+read the hits come back unmarked rather than failing the search.
 
 `in_apple_library` says whether the item is in the signed-in Apple Music account library
 ([Apple library](#apple-library)). The search asks Apple for its own mark on songs, albums
@@ -649,7 +731,7 @@ curl 'http://localhost:18080/api/v1/artists/159260351/albums?storefront=us&limit
 
 Returns `storefront`, the `artist` as a search hit, and `albums`, one page of the artist's
 albums in the order an artist download takes them, as album hits with `next_offset`,
-each with its folder-count `library` as in a search. `limit` is 1-100 (default 25). The
+each with its `resource` as in a search. `limit` is 1-100 (default 25). The
 artist and the page are read at once, so every page carries the artist.
 
 | Case | Answer |
@@ -673,11 +755,12 @@ curl 'http://localhost:18080/api/v1/albums/1783644603?storefront=cn'
  "artwork_text_color3":"121e22","artwork_text_color4":"1e282b","release_date":"2023-11-01",
  "genre":"动画","track_count":13,"disc_count":1,"apple_digital_master":true,
  "audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
- "library":{"state":"partial","tracks_on_disk":1,"tracks_total":13},
+ "resource":{"kind":"album","id":"1783644603","state":"partial","tracks_done":1,"tracks_wanted":13,
+   "withheld_count":0,"paused":false},
  "tracks":[{"id":"1783644604","url":"https://music.apple.com/cn/song/%E8%BF%B7%E6%98%9F%E5%8F%AB/1783644604",
    "disc_number":1,"track_number":1,"name":"迷星叫","artist_name":"MyGO!!!!!","duration_ms":211373,
    "apple_digital_master":true,"audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
-   "has_lyrics":true,"on_disk":true}, …]}
+   "has_lyrics":true,"state":"done"}, …]}
 ```
 
 Returns the album's metadata and `tracks`, its songs in disc and track order: the songs an
@@ -697,20 +780,16 @@ of the job fields. The read is optional: the fields are absent when the album ha
 cover, the read fails, or it does not answer within 1.5 seconds of the album's own read, and
 the album answers either way.
 
-`library` says how many of the songs are on disk and each song's `on_disk` whether it has a
-file at its library path, whichever job wrote it (a song job, this album's, an artist's)
-and at whatever quality. Submitting the album downloads only the songs not on disk, and
-`force_overwrite` downloads them all again. Both fields are absent when the check did not
-finish within the 15 seconds.
+`resource` is the album's record and each song's `state` its main slot's `audio_state`
+there; both are absent when amdl has no record of the album.
 
-### Library state
+### Record marks
 
-`library` on an album, a song lookup and an album hit is `{state, tracks_on_disk,
-tracks_total}`: `state` is `complete` when every track has a file at its library path
-(`download.library_path_format`, with at least one track), `partial` when some do, `none`
-otherwise. `tracks_total` counts the songs the album's track list names, so a track the
-storefront withholds is not missing. Job history never says a track is on disk: a file
-moved away reads as not on disk, and a file a lower-quality download wrote counts.
+`resource` on a search hit, a lookup and the album page is `{kind, id, state, tracks_done,
+tracks_wanted, withheld_count, active_job_id?, paused, song_state?}`, read from the
+[records](#library) and never from the disk: a file moved away still counts until a disk
+check marks it missing. A song is marked with the album record that holds it and its main
+slot's state as `song_state`. An object amdl has no record of has no `resource`.
 
 | Case | Answer |
 | --- | --- |

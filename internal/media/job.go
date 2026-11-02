@@ -85,8 +85,8 @@ func (d *Downloader) CleanupJobArtifacts(job domain.Job) {
 	cleanupResumeOwner(d.baseConfig().Download.TempDir, job.ID)
 }
 
-// CleanupRecordArtifacts removes the resume checkpoints of a record, for when
-// the record is deleted. TODO(P3): the record delete calls it.
+// CleanupRecordArtifacts implements jobs.RecordCleaner: it removes the resume
+// checkpoints of a record when the record is deleted.
 func (d *Downloader) CleanupRecordArtifacts(kind domain.ResourceKind, id string) {
 	cleanupResumeOwner(d.baseConfig().Download.TempDir, recordResumeOwner(kind, id))
 }
@@ -132,7 +132,7 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 
 	// The wrapper may change between submission and execution, so retain a
 	// defensive check even though Submit already validated this storefront.
-	if err := d.validateStorefront(ctx, parsed.Storefront); err != nil {
+	if err := d.validateStorefront(ctx, parsed.Storefront, "the link's storefront"); err != nil {
 		return err
 	}
 	job.Type = string(parsed.Type)

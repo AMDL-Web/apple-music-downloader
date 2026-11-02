@@ -21,7 +21,10 @@ const (
 	ItemCompleted       ItemStatus = "completed"
 	ItemFailed          ItemStatus = "failed"
 	ItemSkipped         ItemStatus = "skipped_existing"
-	ItemCancelled       ItemStatus = "cancelled"
+	// ItemUnavailable: the track does not offer the slot's codec, or the
+	// account storefront does not list it. Not a failure, never retried.
+	ItemUnavailable ItemStatus = "unavailable"
+	ItemCancelled   ItemStatus = "cancelled"
 )
 
 // LyricsStatus records the durable outcome of one download attempt's lyrics
@@ -167,9 +170,9 @@ type JobItem struct {
 	// before the file exists; MarshalJSON decides what the API shows.
 	OutputPath string `json:"output_path,omitempty"`
 	// Slot, OwnerKind and OwnerID name the files row this item downloads:
-	// Slot is SlotMain or a codec id; the owner is empty for station items.
-	// TODO(P3): expose them in the API.
-	Slot      string       `json:"-"`
+	// Slot is SlotMain or a codec id; the owner is empty for station items,
+	// and the job's resource names it for the others.
+	Slot      string       `json:"slot,omitempty"`
 	OwnerKind ResourceKind `json:"-"`
 	OwnerID   string       `json:"-"`
 	Error     string       `json:"error,omitempty"`

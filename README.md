@@ -233,10 +233,11 @@ is the API's only browser client: responses carry no CORS headers.
 
 | | |
 | --- | --- |
-| **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` · `POST /downloads/{id}/move` |
+| **Library** | `GET /library/albums` · `GET /library/playlists` · `GET /library/{kind}/{id}`: the records of what amdl downloaded, each track's quality slots · `GET /library/summary` · `POST /library/add` · `POST /library/{kind}/{id}/download` · `POST /library/{kind}/{id}/reset` · `POST /library/reset` · `POST /library/{kind}/{id}/pause` · `/resume` · `DELETE /library/{kind}/{id}` · `GET /library/pending` · `DELETE /library/pending/{id}` · `POST /library/pending/{id}/retry` · `POST /library/check` · `GET /library/check`: check the stored files on disk |
+| **Downloads** | `POST /downloads` · `GET /downloads` · `GET/DELETE /downloads/{id}` · `POST /downloads/{id}/cancel` · `POST /downloads/{id}/retry` · `POST /downloads/{id}/move`: runs, one per download of a record |
 | **Events** | `GET /downloads/{id}/events` per job · `GET /downloads/events` overview feed (SSE) |
-| **Lookup** | `POST /lookup`: preview a link's title, artist and cover, and how much of an album or song is on disk, without creating a job |
-| **Search** | `GET /search`: search the catalog for songs, albums, playlists and artists · `GET /artists/{id}/albums`: an artist's albums, page by page · `GET /albums/{id}`: an album's songs, each marked on disk or not |
+| **Lookup** | `POST /lookup`: preview a link's title, artist and cover, and its record, without creating a job |
+| **Search** | `GET /search`: search the catalog for songs, albums, playlists and artists · `GET /artists/{id}/albums`: an artist's albums, page by page · `GET /albums/{id}`: an album's songs, each with its state in the album's record |
 | **Quality** | `POST /quality`: probe a link's codecs and audio quality without creating a job |
 | **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |

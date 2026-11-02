@@ -34,14 +34,21 @@ by meaning.
 | `albums get <album_id> [--storefront]` | `GET /albums/{album_id}` | read |
 | `lookup <url>` | `POST /lookup` | read |
 | `quality <url>` | `POST /quality` | read |
-| `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--overwrite] [--wait\|--watch] [--timeout]` | `POST /downloads` | write; destructive with `--overwrite` |
+| `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--wait\|--watch] [--timeout]` | `POST /downloads` | write |
 | `jobs list [--status] [--type] [--q] [--sort] [--order] [--limit] [--offset]` | `GET /downloads` | read |
 | `jobs get <job_id> [--view summary\|full]` | `GET /downloads/{job_id}` | read |
 | `jobs watch [<job_id>] [--types] [--progress-interval] [--timeout]` | the job's event stream, or the overview feed | read |
 | `jobs wait <job_id> [--timeout]` | the job's event stream | read |
 | `jobs cancel <job_id>`, `jobs retry <job_id>`, `jobs move <job_id>` | `POST …/cancel`, `…/retry`, `…/move` | write |
 | `jobs delete <job_id>` | `DELETE /downloads/{job_id}` | destructive |
-| `library list [--kind] [--q] [--limit] [--offset]` | `GET /downloads?status=completed` | read |
+| `library list [--state] [--flag] [--source] [--q] [--sort] [--limit] [--offset]`, `library playlists [same]` | `GET /library/albums`, `GET /library/playlists` | read |
+| `library get <id>`, `library playlist <id>`, `library summary` | `GET /library/albums/{id}`, `GET /library/playlists/{id}`, `GET /library/summary` | read |
+| `library add --urls [--codecs] [--now] [--include all\|albums]` | `POST /library/add` | write |
+| `library download <kind> <id> [--codec] [--songs] [--now]`, `library pause <kind> <id>`, `library resume <kind> <id>` | `POST /library/{kind}/{id}/download`, `…/pause`, `…/resume` | write |
+| `library reset <kind> <id> --what [--slot] [--songs] [--codecs] [--states]`, `library reset-all --what --filter <json> [--kind]` | `POST /library/{kind}/{id}/reset`, `POST /library/reset` | destructive |
+| `library delete <kind> <id>` | `DELETE /library/{kind}/{id}` | destructive |
+| `library check [--kind --id] [--force]`, `library check-status` | `POST`/`GET /library/check` | write, read |
+| `library pending list [--state]`, `library pending retry <pending_id>`, `library pending delete <pending_id>` | `/library/pending`, `…/{pending_id}/retry`, `DELETE …/{pending_id}` | read, write, destructive |
 | `library sync get`, `library sync reset` | `/library-sync`, `…/reset` | read, destructive |
 | `apple-library list <kind> [--sort] [--order] [--q] [--limit] [--offset]`, `apple-library tracks <playlist_id>`, `apple-library status` | `GET /apple-library/{kind}`, `…/playlists/{playlist_id}/tracks`, `…/status` | read |
 | `apple-library sync [--mode full\|incremental]` | `POST /apple-library/sync` | write |
@@ -67,12 +74,13 @@ and reads the password from the first line of stdin; a `needs_2fa` answer then c
 the `login_id` for `wrapper 2fa <login_id>`, which reads the code the same way (a
 prompt in a terminal, else stdin's first line) and has to follow within 60 seconds.
 
-What is downloaded follows the files: `lookup` of an album or song and `albums get` print
-`library` (`complete`, `partial` with `tracks_on_disk` of `tracks_total`, or `none`), and
-`albums get` marks each song `on_disk`. `download` skips the tracks already on disk, so a
-complete album finishes in seconds, and a link downloaded before is queued again under its
-job id (`requeued: true`). `--overwrite` downloads it again, replacing those files.
-`library list` is job history, the completed jobs; it does not check the files.
+What is downloaded is what amdl's records say, never the disk: `library list` and
+`library get` show them, and `search`, `lookup` and `albums get` mark what they find with
+its record's `resource` (`albums get` gives each song its `state`). `download` of a record
+with every track done answers `already_downloaded` and queues nothing; `library reset`
+downloads it again (`--what audio`), and `library check` then `library reset --what audio
+--states missing` brings back files deleted outside amdl. `{kind}` is `albums` or
+`playlists`. `jobs list` is the history: one job per download.
 
 ## Output
 
@@ -138,8 +146,9 @@ and prints the batch, whose results carry `existing_job_id`.
 
 ## Safety
 
-- **Destructive commands** (`jobs delete`, `library sync reset`, `wrapper logout`,
-  `download --overwrite`, `wrapper uninstall --purge`, and `wrapper install` when it
+- **Destructive commands** (`jobs delete`, `library reset`, `library reset-all`,
+  `library delete`, `library pending delete`, `library sync reset`, `wrapper logout`,
+  `wrapper uninstall --purge`, and `wrapper install` when it
   would install QEMU) ask `[y/N]` when stdin and stderr are a terminal and otherwise
   need `--yes`; without it they exit 10 before changing anything.
 - **`--dry-run`** on every command that changes something, except `mcp`, prints
@@ -214,8 +223,11 @@ which are all queued or running already are not an error. `set_config`, like
 
 - **From a search to a download takes two calls**: `search_catalog`, then
   `start_download` with the hits' `url` values. It answers at once with
-  `accepted[].job_id` and `rejected[]`; links already queued or running come back
-  rejected with `existing_job_id`. This shape is the MCP's own: the CLI's `download`
+  `accepted[]` (`{url, status, job_id?, resource?}`: `accepted` with the record's run,
+  `pending` for a link read into records first, `already_downloaded` with nothing queued)
+  and `rejected[]`; links already queued or running come back rejected with
+  `existing_job_id`. `reset_resource` downloads a record again, `check_library` checks its
+  files on disk, and `list_library` and `get_resource` read the records. This shape is the MCP's own: the CLI's `download`
   prints the API's batch, whose jobs are `results[].job.id`. `search_catalog`,
   `list_artist_albums`, `get_album` and `lookup_link` leave out the artwork color palette unless
   `artwork_colors` is true.
@@ -240,7 +252,9 @@ screen: what is done goes into the terminal's own scrollback (the banner, each r
 and its answer, and one line per job when it finishes), and only the bottom of the
 screen is redrawn. A finished line counts the tracks saved, then `✗` and the number that
 failed, if any; under a job that failed it names `/retry` with the job's number, which
-runs again only the tracks that did not finish (`POST /downloads/{id}/retry`).
+starts a new job for the tracks that did not finish (`POST /downloads/{id}/retry`).
+`/library [text]` lists the album records, each with how much is downloaded and what holds
+it up.
 
 - **The banner** opens the session: the logo, amdl and its version, the server with its
   wrapper's state, the server's download folder with the space left there, and how many
@@ -266,9 +280,10 @@ runs again only the tracks that did not finish (`POST /downloads/{id}/retry`).
 - **A download from search asks first** only where there is a choice, below the prompt:
   Lossless or Dolby Atmos where a hit has both and the server's
   `download.quality_priority` lists both (`internal/format#QualityChoices`; the one it
-  lists first is chosen), and, for what is already in the library, whether to skip or
-  replace the files on disk. The answers go as the job's overrides. A pasted link
-  downloads with the server's settings.
+  lists first is chosen), and, for what is already in the library, whether to keep it or
+  download it again. The quality goes as the add's overrides; downloading again resets
+  the hit's record (`POST /library/{kind}/{id}/reset`, `what: audio`, the song alone for
+  a song hit). A pasted link downloads with the server's settings.
 - **Above the prompt** sits one card per job in progress, up to three, in the order the
   server runs them: the running jobs in the order they started, then the queue in its
   order, so the job that starts next keeps its place. A card holds its title and session

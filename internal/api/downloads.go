@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"amdl/internal/config"
 	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/jobs"
@@ -31,8 +32,14 @@ func (s *Server) createDownload(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONBody(w, r, &req, true) {
 		return
 	}
+	s.submit(w, r, req.URLs, req.Overrides, jobs.SubmitOptions{}, false)
+}
+
+// submit adds the links of POST /downloads and POST /library/add. With now,
+// each run it queues moves to the front of the run order.
+func (s *Server) submit(w http.ResponseWriter, r *http.Request, raws []string, overrides *config.DownloadOverrides, opts jobs.SubmitOptions, now bool) {
 	var urls []string
-	for _, raw := range req.URLs {
+	for _, raw := range raws {
 		for _, entry := range urlSplitPattern.Split(raw, -1) {
 			entry = strings.TrimSpace(entry)
 			if entry != "" {
@@ -48,15 +55,25 @@ func (s *Server) createDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, fmt.Sprintf("too many urls: max %d per request", maxBatchSubmitURLs))
 		return
 	}
-	if req.Overrides != nil {
+	if overrides != nil {
 		// Validate the overlay against the same rules the runtime config must
 		// satisfy, applied to the config these jobs would actually run under.
-		if _, err := req.Overrides.ApplyValidated(s.currentConfig()); err != nil {
+		if _, err := overrides.ApplyValidated(s.currentConfig()); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, CodeInvalidOverrides, "invalid overrides: "+err.Error())
 			return
 		}
 	}
-	resp := s.manager.SubmitBatch(r.Context(), urls, req.Overrides)
+	resp := s.manager.SubmitBatchWith(r.Context(), urls, overrides, opts)
+	if now {
+		for i, result := range resp.Results {
+			if result.Job == nil || result.Job.Status != domain.JobQueued {
+				continue
+			}
+			if moved, err := s.manager.DownloadNow(r.Context(), result.Job.ID); err == nil {
+				resp.Results[i].Job = &moved
+			}
+		}
+	}
 	if resp.Accepted > 0 {
 		writeJSON(w, http.StatusAccepted, resp)
 		return
@@ -185,17 +202,17 @@ func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
-// retryDownload re-queues a failed or cancelled job. Only tracks that did not
-// finish are downloaded again: completed/skipped items are preserved as-is,
-// failed and cancelled ones are reset to queued and re-processed.
+// retryDownload starts a failed or cancelled run's download again as a new
+// run. For a record run the record's failed and given-up slots are re-armed;
+// what is done stays done. The answer names the new run, or says the record
+// has nothing left to download.
 func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if err := s.manager.Retry(r.Context(), id); err != nil {
+	run, err := s.manager.RetryRun(r.Context(), id)
+	if err != nil {
 		switch {
 		case errors.Is(err, jobs.ErrJobNotRetryable):
 			writeError(w, http.StatusConflict, CodeJobNotRetryable, err.Error())
-		case errors.Is(err, jobs.ErrJobFinalizing):
-			writeError(w, http.StatusConflict, CodeJobFinalizing, err.Error())
 		case errors.Is(err, db.ErrDuplicateActive):
 			writeError(w, http.StatusConflict, CodeDuplicateActive, "an active job already downloads this input")
 		case errors.Is(err, jobs.ErrQueueFull):
@@ -205,7 +222,11 @@ func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued"})
+	if run == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "already_downloaded"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "queued", "job": run})
 }
 
 // moveDownload places a queued job elsewhere in the run order: before or

@@ -141,6 +141,10 @@ const maxLogBufferSize = 100000
 // per-request job overrides applied to a base config). It reports the first
 // violation, checking keys in a fixed order so the same invalid config always
 // yields the same message.
+// Codecs are the codec ids download.quality_priority and a quality slot
+// name.
+var Codecs = []string{"alac", "aac", "aac-binaural", "aac-downmix", "ec3", "ac3"}
+
 func (c Config) Validate() error {
 	switch c.Logging.Level {
 	case "debug", "info", "warn", "error":
@@ -243,11 +247,8 @@ func (c Config) Validate() error {
 	if len(c.Download.QualityPriority) == 0 {
 		return fmt.Errorf("download.quality_priority must contain at least one codec")
 	}
-	allowedCodecs := map[string]struct{}{
-		"alac": {}, "aac": {}, "aac-binaural": {}, "aac-downmix": {}, "ec3": {}, "ac3": {},
-	}
 	for _, codec := range c.Download.QualityPriority {
-		if _, ok := allowedCodecs[codec]; !ok {
+		if !slices.Contains(Codecs, codec) {
 			return fmt.Errorf("unsupported codec %q in download.quality_priority", codec)
 		}
 	}

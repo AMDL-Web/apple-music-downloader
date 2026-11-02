@@ -104,6 +104,7 @@ func mapAlbumSummary(raw catalogAlbumData) Collection {
 		ReleaseDate: raw.Attributes.ReleaseDate, GenreNames: raw.Attributes.GenreNames,
 		ContentRating: raw.Attributes.ContentRating, AppleDigitalMaster: raw.Attributes.IsMasteredForItunes,
 		URL: raw.Attributes.URL, TrackCount: raw.Attributes.TrackCount, AudioTraits: raw.Attributes.AudioTraits,
+		IsSingle: raw.Attributes.IsSingle,
 	}
 }
 

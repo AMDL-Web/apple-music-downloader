@@ -209,7 +209,7 @@ func (h *recordHarness) submit(urls ...string) domain.BatchSubmitResponse {
 	h.t.Helper()
 	resp := h.m.SubmitBatch(context.Background(), urls, nil)
 	for _, r := range resp.Results {
-		if r.Status != domain.SubmitAccepted {
+		if !r.Taken() {
 			h.t.Fatalf("submit %s = %s %+v", r.URL, r.Status, r.Error)
 		}
 	}

@@ -37,8 +37,8 @@ Lyrics sidecars and standalone covers are written through a temp file in the sam
 folder and a rename, so an interrupted write never leaves a truncated file behind. That
 matters for covers in particular: a cover already on disk is never fetched again. A
 track's sidecars are renamed into place right after its audio file, so one that is
-replaced under `force_overwrite` keeps its old audio and sidecars until the new copy is
-complete: a forced download that fails leaves them as they were, and a failed attempt
+replaced by a reset keeps its old audio and sidecars until the new copy is complete: a
+reset download that fails leaves them as they were, and a failed attempt
 removes only its own `.part` staging files, never a finished track.
 
 ### Cancel and shutdown
@@ -125,7 +125,7 @@ repair or failure path as in `full`. A quick false positive would otherwise fail
 and fall back to a lossy one.
 
 With `check_integrity` false neither the check nor the ALAC repair runs: a damaged file is
-saved, and later jobs skip it because it is already on disk.
+saved, and its slot is recorded as downloaded.
 
 ## Transfers
 
@@ -277,9 +277,9 @@ and codec fallback. Only the backend's work is pretended: transfers and decrypti
 paced by a speed drawn from `simulate.min_speed_kbps`..`max_speed_kbps`, the AAC-LC
 WebPlayback asset, cover art and lyrics are stand-ins, and nothing is written, deleted
 or run (no ffmpeg, no wrapper). An output that already exists on disk is still reported
-as skipped, and simulate mode never deletes or replaces a real file. A track a simulated
-job finished counts as on disk too, for later jobs and the library state, until the
-backend restarts.
+as skipped, and simulate mode never deletes or replaces a real file. A simulated run
+records its slots as downloaded like a real one, so a disk check finds their files
+missing.
 
 ## Output paths
 
@@ -313,7 +313,7 @@ track list (`internal/media#libraryTrackPath`).
   disc starts at 13). A storefront can withhold a track from the album's track list (cn
   lists 9 of the 10 tracks of album 1524443761); the tracks after it keep their numbers,
   so track 3 is still `03.`. Withheld tracks are not counted as missing: an album is
-  complete when every track the list names is on disk. A track withheld last on a disc
+  complete when every track the list names is downloaded. A track withheld last on a disc
   moves the next disc's numbers, which the list cannot show, and an album whose tracks
   carry no track numbers is numbered in list order. The file name must contain
   `{SongNumber}`, or both `{DiscNumber}` and

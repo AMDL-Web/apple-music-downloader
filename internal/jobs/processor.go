@@ -30,7 +30,7 @@ type ValidationResult struct {
 
 // RequestError is a Processor.ValidateRequest verdict on one URL. Code is
 // the stable submit error code (domain.SubmitError.Code); Storefront and
-// SupportedStorefronts are set for unsupported_storefront.
+// SupportedStorefronts are set for a decryptor_unavailable that names the storefront the wrapper does not serve.
 type RequestError struct {
 	Code                 string
 	Message              string

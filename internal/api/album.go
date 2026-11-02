@@ -45,10 +45,9 @@ type albumResponse struct {
 	MotionArtworkTextColor2 string `json:"motion_artwork_text_color2,omitempty"`
 	MotionArtworkTextColor3 string `json:"motion_artwork_text_color3,omitempty"`
 	MotionArtworkTextColor4 string `json:"motion_artwork_text_color4,omitempty"`
-	// Library is not set since 2.0, which stats no file before a download.
-	// TODO(P3): the album's resource replaces it.
-	Library *domain.LibraryState `json:"library,omitempty"`
-	Tracks  []albumTrack         `json:"tracks"`
+	// Resource is the album's record; absent when amdl has none.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
+	Tracks   []albumTrack         `json:"tracks"`
 }
 
 // albumTrack is the AlbumTrack schema: one song of the album. The metadata
@@ -65,8 +64,9 @@ type albumTrack struct {
 	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string `json:"audio_traits,omitempty"`
 	HasLyrics          bool     `json:"has_lyrics,omitempty"`
-	// OnDisk is not set since 2.0. TODO(P3): the track's state replaces it.
-	OnDisk *bool `json:"on_disk,omitempty"`
+	// State is the main slot state the album's record keeps for the song;
+	// absent when the record does not list it, or there is no record.
+	State domain.AudioState `json:"state,omitempty"`
 }
 
 // getAlbum answers GET /albums/{album_id}: the album's metadata and its song
@@ -91,6 +91,13 @@ func (s *Server) getAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := newAlbumResponse(storefront, id, album)
+	if resp.Resource = s.resourceMark(ctx, applemusic.TypeAlbum, id); resp.Resource != nil {
+		if states, err := s.store.AlbumTrackStates(ctx, id); err == nil {
+			for i := range resp.Tracks {
+				resp.Tracks[i].State = states[resp.Tracks[i].ID]
+			}
+		}
+	}
 	if art := motion(); !art.IsZero() {
 		resp.MotionArtworkURL, resp.MotionArtworkTallURL = art.Square, art.Tall
 		resp.MotionArtworkBgColor, resp.MotionArtworkTextColor1 = art.SquareColors.BgColor, art.SquareColors.TextColor1

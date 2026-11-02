@@ -201,7 +201,7 @@ func (d *Downloader) cancelUnfinishedItems(ctx context.Context, jobID string, re
 	}
 	for i := range items {
 		switch items[i].Status {
-		case domain.ItemCompleted, domain.ItemSkipped, domain.ItemFailed, domain.ItemCancelled:
+		case domain.ItemCompleted, domain.ItemSkipped, domain.ItemUnavailable, domain.ItemFailed, domain.ItemCancelled:
 			continue
 		}
 		d.markCancelled(ctx, reporter, jobID, &items[i])

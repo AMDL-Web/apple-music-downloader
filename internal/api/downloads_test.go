@@ -573,8 +573,8 @@ func TestListAndDetailCarryTheJobsProgress(t *testing.T) {
 }
 
 // A retry is a new run (one row per run): the failed or cancelled one-off
-// run stays as it ended and its input gets a queued run. TODO(P3): the
-// response names the new run.
+// run stays as it ended, its input gets a queued run, and the answer names
+// that run.
 func TestRetryDownloadQueuesANewRun(t *testing.T) {
 	for _, status := range []domain.JobStatus{domain.JobFailed, domain.JobCancelled} {
 		server := newTestServerWithManager(t)
@@ -587,11 +587,17 @@ func TestRetryDownloadQueuesANewRun(t *testing.T) {
 		if recorder.Code != http.StatusAccepted || !strings.Contains(recorder.Body.String(), `"queued"`) {
 			t.Fatalf("%s: status = %d, body = %s; want 202 queued", status, recorder.Code, recorder.Body.String())
 		}
+		var body struct {
+			Job domain.Job `json:"job"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil || body.Job.ID == "" || body.Job.ID == job.ID {
+			t.Fatalf("%s: the answer names run %q (%v), want the new one", status, body.Job.ID, err)
+		}
 		if got, err := server.store.GetJob(ctx, job.ID); err != nil || got.Status != status {
 			t.Fatalf("%s: retried run = %+v (%v), want it left as it ended", status, got, err)
 		}
 		active, found, err := server.store.FindActiveJobByKey(ctx, job.CanonicalKey)
-		if err != nil || !found || active.ID == job.ID || active.Status != domain.JobQueued || active.Input != job.Input {
+		if err != nil || !found || active.ID != body.Job.ID || active.Status != domain.JobQueued || active.Input != job.Input {
 			t.Fatalf("%s: active run = %+v (%v, %v), want a new queued run of the same input", status, active, found, err)
 		}
 	}

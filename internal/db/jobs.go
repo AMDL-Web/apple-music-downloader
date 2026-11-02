@@ -79,7 +79,7 @@ const jobColumns = `j.id, j.input, j.type, j.storefront, j.title, j.artwork_url,
 	j.canonical_key, j.overrides, j.status, j.queue_order, j.total_items,
 	COALESCE(j.resource_kind, ''), COALESCE(j.resource_id, ''), j.trigger, j.priority, j.plan,
 	(SELECT COUNT(*) FROM run_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemCompleted) + `'),
-	(SELECT COUNT(*) FROM run_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemSkipped) + `'),
+	(SELECT COUNT(*) FROM run_items i WHERE i.job_id = j.id AND i.status IN ('` + string(domain.ItemSkipped) + `', '` + string(domain.ItemUnavailable) + `')),
 	(SELECT COUNT(*) FROM run_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemFailed) + `'),
 	(SELECT COUNT(*) FROM run_items i WHERE i.job_id = j.id AND i.status = '` + string(domain.ItemCancelled) + `'),
 	j.error, j.started_at, j.finished_at, j.created_at, j.updated_at`
@@ -177,6 +177,11 @@ type JobListFilter struct {
 	Query    string
 	Sort     string // created_at (default), updated_at or queue_order
 	Order    string // desc (default) or asc
+	// ResourceKind, ResourceID and Triggers select runs of a record and
+	// runs started a given way.
+	ResourceKind domain.ResourceKind
+	ResourceID   string
+	Triggers     []domain.RunTrigger
 }
 
 const (
@@ -232,6 +237,20 @@ func (f JobListFilter) whereClause() (string, []any) {
 			args = append(args, t)
 		}
 		conds = append(conds, "j.type IN ("+strings.Join(placeholders, ",")+")")
+	}
+	if f.ResourceKind != "" {
+		conds = append(conds, "j.resource_kind = ?")
+		args = append(args, string(f.ResourceKind))
+	}
+	if f.ResourceID != "" {
+		conds = append(conds, "j.resource_id = ?")
+		args = append(args, f.ResourceID)
+	}
+	if len(f.Triggers) > 0 {
+		conds = append(conds, "j.trigger IN ("+placeholders(len(f.Triggers))+")")
+		for _, t := range f.Triggers {
+			args = append(args, string(t))
+		}
 	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		like := "%" + escapeLike(q) + "%"

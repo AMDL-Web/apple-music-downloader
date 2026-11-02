@@ -21,11 +21,6 @@ var ErrQueueFull = errors.New("job queue is full")
 // has nothing left to retry.
 var ErrJobNotRetryable = errors.New("only failed or cancelled jobs can be retried")
 
-// ErrJobFinalizing is kept for the API's error mapping; nothing returns it
-// since a retry is a new run (one row per run). TODO(P3): drop it with the
-// API's retry route.
-var ErrJobFinalizing = errors.New("job is still finalizing its previous run; retry again shortly")
-
 // SubmitBatch validates and adds each url independently (design §3.1). An
 // album, an album-track link and a catalog playlist (pl.) become records, and
 // the add queues the record's run in the same step when it needs one; a song
@@ -36,15 +31,30 @@ var ErrJobFinalizing = errors.New("job is still finalizing its previous run; ret
 //
 // An accepted result carries the record's new run, so a caller can wait for
 // it; a record whose run is already active answers duplicate_active with that
-// run's id, as before. An accepted result carries no run when the add needs no download
-// (every wanted track done, the record paused), when it waits for the
-// resolver, and when the queue is full (the picker queues it later).
-// TODO(P3): distinct statuses for those (already_downloaded, pending).
+// run's id, as before. A record with every wanted track done answers
+// already_downloaded, an add the resolver must read answers pending, and an
+// accepted result carries no run when the record waits (a failed slot's
+// retry, a full queue the picker drains later).
 //
 // overrides, when non-nil, becomes the overrides of every record the batch
 // adds and of its station runs. Callers validate it
 // (DownloadOverrides.ApplyValidated) before submitting.
 func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *config.DownloadOverrides) domain.BatchSubmitResponse {
+	return m.SubmitBatchWith(ctx, urls, overrides, SubmitOptions{})
+}
+
+// SubmitOptions are a batch's choices beyond its overrides.
+type SubmitOptions struct {
+	// ArtistInclude picks an artist link's albums: "all" (the default) or
+	// "albums", which leaves singles out.
+	ArtistInclude string
+}
+
+// SubmitBatchWith is SubmitBatch with options.
+func (m *Manager) SubmitBatchWith(ctx context.Context, urls []string, overrides *config.DownloadOverrides, opts SubmitOptions) domain.BatchSubmitResponse {
+	if opts.ArtistInclude == "" {
+		opts.ArtistInclude = "all"
+	}
 	results := make([]domain.SubmitResult, len(urls))
 
 	type candidate struct {
@@ -81,7 +91,7 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 	now := time.Now().UTC()
 	queueFull := false
 	for _, c := range candidates {
-		result := m.submitOne(ctx, c.url, c.key, c.valid, overrides, now, queueFull)
+		result := m.submitOne(ctx, c.url, c.key, c.valid, overrides, opts, now, queueFull)
 		if result.Status == domain.SubmitQueueFull {
 			queueFull = true
 		}
@@ -94,7 +104,7 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 
 	resp := domain.BatchSubmitResponse{Results: results}
 	for _, r := range results {
-		if r.Status == domain.SubmitAccepted {
+		if r.Taken() {
 			resp.Accepted++
 		} else {
 			resp.Rejected++
@@ -104,26 +114,26 @@ func (m *Manager) SubmitBatch(ctx context.Context, urls []string, overrides *con
 }
 
 // submitOne adds one validated URL. Caller holds submitMu.
-func (m *Manager) submitOne(ctx context.Context, url, key string, valid ValidationResult, overrides *config.DownloadOverrides, now time.Time, queueFull bool) domain.SubmitResult {
+func (m *Manager) submitOne(ctx context.Context, url, key string, valid ValidationResult, overrides *config.DownloadOverrides, opts SubmitOptions, now time.Time, queueFull bool) domain.SubmitResult {
 	// A manual add resumes a paused record: the user asked for the download.
 	resume := false
 	switch valid.Type {
 	case string(domain.ResourceAlbum):
-		return addResult(url)(m.addAlbum(ctx, db.AlbumAdd{
+		return addResult(url, domain.ResourceAlbum, valid.ID)(m.addAlbum(ctx, db.AlbumAdd{
 			ID: valid.ID, WantedAll: true, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Now: now,
 		}, domain.TriggerManual))
 	case "song":
 		if valid.AlbumID != "" {
-			return addResult(url)(m.addAlbum(ctx, db.AlbumAdd{
+			return addResult(url, domain.ResourceAlbum, valid.AlbumID)(m.addAlbum(ctx, db.AlbumAdd{
 				ID: valid.AlbumID, SongIDs: []string{valid.ID}, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Now: now,
 			}, domain.TriggerManual))
 		}
 		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingSong, CatalogID: valid.ID, Source: domain.SourceManual, Overrides: overrides, AddedAt: now})
 	case "artist":
-		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingArtist, CatalogID: valid.ID, Source: domain.SourceManual, Include: "all", Overrides: overrides, AddedAt: now})
+		return m.pendingResult(ctx, url, domain.PendingAdd{Kind: domain.PendingArtist, CatalogID: valid.ID, Source: domain.SourceManual, Include: opts.ArtistInclude, Overrides: overrides, AddedAt: now})
 	case string(domain.ResourcePlaylist):
 		if strings.HasPrefix(valid.ID, "pl.") {
-			return addResult(url)(m.addPlaylist(ctx, db.PlaylistAdd{
+			return addResult(url, domain.ResourcePlaylist, valid.ID)(m.addPlaylist(ctx, db.PlaylistAdd{
 				ID: valid.ID, Source: domain.SourceManual, Overrides: overrides, Paused: &resume, Now: now,
 			}))
 		}
@@ -138,18 +148,25 @@ func (m *Manager) submitOne(ctx context.Context, url, key string, valid Validati
 }
 
 // addResult turns an add's outcome into the URL's submit result.
-func addResult(url string) func(AddOutcome, domain.Job, error) domain.SubmitResult {
+func addResult(url string, kind domain.ResourceKind, id string) func(AddOutcome, domain.Job, error) domain.SubmitResult {
 	return func(outcome AddOutcome, job domain.Job, err error) domain.SubmitResult {
+		ref := &domain.ResourceRef{Kind: kind, ID: id}
+		var result domain.SubmitResult
 		switch {
 		case err != nil:
 			return storeFailure(url, "add record", err)
 		case outcome == AddActive:
-			return duplicateActiveResult(url, job.ID)
+			result = duplicateActiveResult(url, job.ID)
 		case outcome == AddQueued:
 			accepted := job
-			return domain.SubmitResult{URL: url, Status: domain.SubmitAccepted, Job: &accepted}
+			result = domain.SubmitResult{URL: url, Status: domain.SubmitAccepted, Job: &accepted}
+		case outcome == AddAlreadyDone:
+			result = domain.SubmitResult{URL: url, Status: domain.SubmitAlreadyDownloaded}
+		default:
+			result = domain.SubmitResult{URL: url, Status: domain.SubmitAccepted}
 		}
-		return domain.SubmitResult{URL: url, Status: domain.SubmitAccepted}
+		result.Resource = ref
+		return result
 	}
 }
 
@@ -158,7 +175,7 @@ func (m *Manager) pendingResult(ctx context.Context, url string, p domain.Pendin
 	if _, err := m.AddPending(ctx, p); err != nil {
 		return storeFailure(url, "add pending", err)
 	}
-	return domain.SubmitResult{URL: url, Status: domain.SubmitAccepted}
+	return domain.SubmitResult{URL: url, Status: domain.SubmitPending}
 }
 
 // addPlaylist stores a catalog playlist add and queues its run when needed.
@@ -197,7 +214,7 @@ func (m *Manager) addLibraryPlaylist(ctx context.Context, url, playlistID string
 	if skipped > 0 {
 		logging.FromContext(ctx, m.logger).Info("library playlist songs without a catalog id skipped", "playlist_id", playlistID, "skipped", skipped)
 	}
-	return domain.SubmitResult{URL: url, Status: domain.SubmitAccepted}, true
+	return domain.SubmitResult{URL: url, Status: domain.SubmitPending}, true
 }
 
 // submitOneOff queues a run that downloads no record: a station, or a
@@ -244,54 +261,62 @@ func (m *Manager) admitLocked(ctx context.Context, url string, valid ValidationR
 	return job, domain.SubmitResult{URL: url, Status: domain.SubmitAccepted, Job: &accepted}, true
 }
 
-// Retry starts a failed or cancelled run's download again as a new run. For
-// a record run it resumes the record, re-arms its failed and given-up slots
-// and queues a run with trigger reset; with nothing left to download it
-// queues nothing. For a one-off run (a station) it queues a new run of the
-// same input and overrides. ErrJobNotRetryable refuses a queued, running or
-// completed run; db.ErrDuplicateActive a record or input with an active run.
+// Retry is RetryRun without the new run.
 func (m *Manager) Retry(ctx context.Context, jobID string) error {
+	_, err := m.RetryRun(ctx, jobID)
+	return err
+}
+
+// RetryRun starts a failed or cancelled run's download again as a new run
+// and returns it. For a record run it resumes the record, re-arms its failed
+// and given-up slots and queues a run with trigger reset; with nothing left
+// to download it queues nothing and returns nil. For a one-off run (a
+// station) it queues a new run of the same input and overrides.
+// ErrJobNotRetryable refuses a queued, running or completed run;
+// db.ErrDuplicateActive a record or input with an active run.
+func (m *Manager) RetryRun(ctx context.Context, jobID string) (*domain.Job, error) {
 	m.submitMu.Lock()
 	defer m.submitMu.Unlock()
 
 	job, err := m.store.GetJob(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return db.ErrJobNotFound
+			return nil, db.ErrJobNotFound
 		}
-		return err
+		return nil, err
 	}
 	if job.Status != domain.JobFailed && job.Status != domain.JobCancelled {
-		return ErrJobNotRetryable
+		return nil, ErrJobNotRetryable
 	}
 	now := time.Now().UTC()
 	if job.ResourceID != "" {
 		if err := m.store.SetPaused(ctx, job.ResourceKind, job.ResourceID, false, now); err != nil {
-			return err
+			return nil, err
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if _, found, err := m.store.ActiveRunID(ctx, job.ResourceKind, job.ResourceID); err != nil {
-			return err
+			return nil, err
 		} else if found {
-			return db.ErrDuplicateActive
+			return nil, db.ErrDuplicateActive
 		}
 		delete(m.backoff, recordKey{job.ResourceKind, job.ResourceID})
 		if _, err := m.store.ResetFiles(ctx, db.FileReset{
 			Kind: job.ResourceKind, ID: job.ResourceID, States: []domain.AudioState{domain.AudioFailed, domain.AudioGivenUp}, Now: now,
 		}); err != nil {
-			return err
+			return nil, err
 		}
 		outcome, run, err := m.afterAddLocked(ctx, job.ResourceKind, job.ResourceID, domain.TriggerReset, now)
-		if err == nil && outcome == AddQueued {
-			logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", run.ID, "retried_job_id", jobID)
+		if err != nil || outcome != AddQueued {
+			return nil, err
 		}
-		return err
+		logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", run.ID, "retried_job_id", jobID)
+		return &run, nil
 	}
 	if _, found, err := m.store.FindActiveJobByKey(ctx, job.CanonicalKey); err != nil {
-		return err
+		return nil, err
 	} else if found {
-		return db.ErrDuplicateActive
+		return nil, db.ErrDuplicateActive
 	}
 	typ, id := job.Type, ""
 	if t, _, parsedID, ok := ParseCanonicalKey(job.CanonicalKey); ok {
@@ -302,15 +327,15 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 	run, result, admitted := m.admitLocked(ctx, job.Input, ValidationResult{Type: typ, Storefront: job.Storefront, ID: id}, job.CanonicalKey, job.Overrides, now)
 	if !admitted {
 		if result.Status == domain.SubmitQueueFull {
-			return ErrQueueFull
+			return nil, ErrQueueFull
 		}
 		if result.Status == domain.SubmitDuplicateActive {
-			return db.ErrDuplicateActive
+			return nil, db.ErrDuplicateActive
 		}
-		return errors.New(result.Error.Message)
+		return nil, errors.New(result.Error.Message)
 	}
 	logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", run.ID, "retried_job_id", jobID)
-	return nil
+	return &run, nil
 }
 
 // validationFailure is the result for a URL the processor refused. A

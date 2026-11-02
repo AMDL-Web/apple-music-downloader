@@ -93,7 +93,9 @@ type Collection struct {
 	URL         string
 	TrackCount  int
 	AudioTraits []string
-	Tracks      []Song
+	// IsSingle (attributes.isSingle) is filled for album summaries.
+	IsSingle bool
+	Tracks   []Song
 }
 
 type Artist struct {
@@ -286,7 +288,9 @@ type albumAttributes struct {
 	// attributes of the public catalog's Albums resource.
 	ContentRating       string `json:"contentRating"`
 	IsMasteredForItunes bool   `json:"isMasteredForItunes"`
-	URL                 string `json:"url"`
+	// IsSingle is a documented attribute of the Albums resource.
+	IsSingle bool   `json:"isSingle"`
+	URL      string `json:"url"`
 	// AudioTraits is amp-api only, as on songs.
 	AudioTraits []string `json:"audioTraits"`
 	// InLibrary is as on songs.

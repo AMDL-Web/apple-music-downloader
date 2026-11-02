@@ -350,7 +350,6 @@ var customSchemas = map[string]map[string]any{
 		"codec_fallback":  withDescription(toggle, "Fall back to the next codec when one is unavailable; omit for the server's setting."),
 		"max_sample_rate": map[string]any{"type": "integer", "description": "Highest ALAC sample rate in Hz."},
 		"max_bit_depth":   map[string]any{"type": "integer", "description": "Highest ALAC bit depth."},
-		"overwrite":       withDescription(toggle, "Download again: replace the tracks already on disk instead of skipping them (lookup_link and get_album report library, what is on disk). Destructive; only when the user asks for it."),
 	}, "urls"),
 	"list_jobs": obj(map[string]any{
 		"status": withDescription(strs, "Job statuses to keep: queued, running, completed, failed, cancelled."),
@@ -515,9 +514,6 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 	if v := intArg(args, "max_bit_depth", 0); v > 0 {
 		overrides["alac_max_bit_depth"] = v
 	}
-	if v, _ := args["overwrite"].(bool); v {
-		overrides["force_overwrite"] = true
-	}
 	body := map[string]any{"urls": urls}
 	if len(overrides) > 0 {
 		body["overrides"] = overrides
@@ -533,11 +529,12 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 		return nil, err
 	}
 	type accepted struct {
-		URL   string `json:"url"`
-		JobID string `json:"job_id"`
-		// Requeued is a finished job of the same link queued again under
-		// its id; its run skips the tracks already on disk.
-		Requeued bool `json:"requeued,omitempty"`
+		URL string `json:"url"`
+		// Status is accepted, pending (the records appear once the link is
+		// read) or already_downloaded.
+		Status   string              `json:"status"`
+		JobID    string              `json:"job_id,omitempty"`
+		Resource *domain.ResourceRef `json:"resource,omitempty"`
 	}
 	type rejected struct {
 		URL           string `json:"url"`
@@ -551,8 +548,12 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 		Rejected []rejected `json:"rejected"`
 	}{Accepted: []accepted{}, Rejected: []rejected{}}
 	for _, r := range batch.Results {
-		if r.Job != nil {
-			out.Accepted = append(out.Accepted, accepted{r.URL, r.Job.ID, r.Requeued})
+		if r.Taken() {
+			a := accepted{URL: r.URL, Status: string(r.Status), Resource: r.Resource}
+			if r.Job != nil {
+				a.JobID = r.Job.ID
+			}
+			out.Accepted = append(out.Accepted, a)
 			continue
 		}
 		rj := rejected{URL: r.URL, Status: string(r.Status), ExistingJobID: r.ExistingJobID}
