@@ -96,7 +96,7 @@ func (a *App) setupScreen(c *ui.Context, k *Tokens) {
 		c.After(2 * time.Second)
 	}
 	ui.Row(c).Height(max(52, bar.Height)).PaddingStart(bar.Left + 12).PaddingEnd(18).AlignItems(ui.Center).DragWindow()
-	a.scrollArea(c, "setup", k.Ground, 0, func() {
+	a.scrollArea(c, "setup", 0, func() {
 		ui.Column(c).FillWidth().AlignItems(ui.Center).Padding(4, 24, 40, 24).Children(func() {
 			ui.Column(c).Width(setupWidth).MaxWidth(setupWidth).Gap(24).Children(func() {
 				a.setupHead(c, k)

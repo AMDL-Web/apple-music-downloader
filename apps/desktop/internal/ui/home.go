@@ -70,7 +70,7 @@ func (a *App) home(c *ui.Context, k *Tokens, page float32) {
 			if a.dockShown() {
 				bottom = dockBottom + dockHeight + 24
 			}
-			a.scrollArea(c, "home-body", k.Ground, 0, func() {
+			a.scrollArea(c, "home-body", 0, func() {
 				ui.Column(c).FillWidth().AlignItems(ui.Center).Padding(32, 0, bottom, 0).Children(func() {
 					switch {
 					case len(s.Omni.Links) > 0:

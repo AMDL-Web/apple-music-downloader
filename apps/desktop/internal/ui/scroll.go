@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/shader"
 )
 
 // Scroll bars, in DIPs. MyGo draws the thumbs over the content, in the
@@ -15,8 +16,8 @@ const (
 	// scrollGutter is the room a list keeps at its trailing edge, so that a
 	// thumb never covers its text.
 	scrollGutter = 12
-	// scrollFade is the band a list's last visible line fades out in while
-	// more is below, instead of showing cut in half.
+	// scrollFade is the band a list's edge fades out in while more is
+	// beyond it, instead of showing a line cut in half.
 	scrollFade = 28
 	// scrollHold is how long thumbs stay after the content stops moving,
 	// and scrollFadeOut how long they take to go, as macOS's overlay
@@ -43,21 +44,55 @@ func (a *App) scrollState(c *ui.Context, key string) *ui.ScrollState {
 	return st
 }
 
+// edgeFade fades what an element draws to nothing towards its top over
+// Top DIPs, and towards its bottom over Bottom, 0 for an edge that stays:
+// what goes under the edge thins out over whatever is behind, a backdrop
+// lit by an album or a plain ground.
+var edgeFade = shader.MustCompile(`package main
+
+var Top float
+var Bottom float
+
+func ColorEffect(pos vec2, color vec4) vec4 {
+	k := 1.0
+	if Top > 0 {
+		k *= smoothstep(0, Top, pos.y)
+	}
+	if Bottom > 0 {
+		k *= smoothstep(0, Bottom, rectSize().y-pos.y)
+	}
+	return color * k
+}
+`)
+
+var (
+	edgeFadeTop    = edgeFade.Uniform("Top")
+	edgeFadeBottom = edgeFade.Uniform("Bottom")
+)
+
 // scrollArea is a vertical scroll container: its children keep gutter
 // clear at their trailing edge (scrollGutter for a list that runs to it, 0
-// for content with room of its own), and while more is below, its last line
-// fades into bg. Size the area it returns, as by Grow.
-func (a *App) scrollArea(c *ui.Context, key string, bg ui.Color, gutter float32, children func()) ui.Element {
+// for content with room of its own), and an edge with more beyond it fades
+// out (edgeFade, with EdgeFades). Size the area it returns, as by Grow.
+func (a *App) scrollArea(c *ui.Context, key string, gutter float32, children func()) ui.Element {
 	st := a.scrollState(c, key)
 	area := ui.Box(c.Key(key + "-area")).MinHeight(0)
 	area.Children(func() {
-		ui.Scroll(c.Key(key)).Absolute().Top(0).Left(0).Right(0).Bottom(0).TrackScroll(st).Children(func() {
+		sc := ui.Scroll(c.Key(key)).Absolute().Top(0).Left(0).Right(0).Bottom(0).TrackScroll(st)
+		var top, bottom float32
+		if st.Y > 1 {
+			top = scrollFade
+		}
+		if st.MaxY-st.Y > 1 {
+			bottom = scrollFade
+		}
+		if a.EdgeFades && (top > 0 || bottom > 0) {
+			v := edgeFade.NewValues().Float(edgeFadeTop, top).Float(edgeFadeBottom, bottom)
+			sc.Effect(edgeFade.Effect(shader.Options{Values: v}))
+		}
+		sc.Children(func() {
 			ui.Column(c).FillWidth().Padding(0, gutter, 0, 0).Children(children)
 		})
-		if st.MaxY-st.Y > 1 {
-			ui.Box(c).Absolute().Left(0).Right(gutter).Bottom(0).Height(scrollFade).PassThrough().
-				LinearGradient(ui.LinearGradient{From: bg.Alpha(0), To: bg, Angle: 180})
-		}
 	})
 	return area
 }

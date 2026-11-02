@@ -37,8 +37,8 @@ the backend with a wrapper here or on another machine.
 - A button that can be disabled is built with `buttonOff`, not `button`
   then `Disabled`: MyGo reports hover until the element is disabled.
 - Scroll containers go through `scrollArea` (or `scrollState`): MyGo draws thumbs at all times over the content, so the app hides
-  them at rest where the desktop does, keeps lists clear of them and fades a
-  cut last line.
+  them at rest where the desktop does, keeps lists clear of them and fades
+  an edge with more beyond it.
 - A drawing with its own rate (`Painter.AnimationFrameRate`, as a stage
   bar's stripes) holds still while a list scrolls (`App.scrolling`,
   `widgets.StageBar` Still): MyGo paces the window, and on macOS the

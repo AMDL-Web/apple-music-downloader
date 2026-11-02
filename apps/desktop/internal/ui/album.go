@@ -113,7 +113,7 @@ func (a *App) albumTracks(c *ui.Context, k *Tokens, j *store.Job, items []domain
 	}
 	discs := al.DiscCount > 1
 	still := a.listStill(c)
-	a.scrollArea(c, "album", detailGround(k), scrollGutter, func() {
+	a.scrollArea(c, "album", scrollGutter, func() {
 		for i, t := range al.Tracks {
 			if discs && (i == 0 || t.DiscNumber != al.Tracks[i-1].DiscNumber) {
 				top := float32(4)

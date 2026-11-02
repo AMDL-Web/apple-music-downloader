@@ -108,7 +108,7 @@ func stageWidth(page float32) float32 {
 // listed until the album is read, or where it is not an album's.
 func (a *App) trackList(c *ui.Context, k *Tokens, items []domain.JobItem, accent ui.Color, bar float32) {
 	still := a.listStill(c)
-	a.scrollArea(c, "album", detailGround(k), scrollGutter, func() {
+	a.scrollArea(c, "album", scrollGutter, func() {
 		for i := range items {
 			next := i+1 < len(items) && trackLit(&items[i+1])
 			a.trackRow(c, k, &items[i], accent, bar, next, still)
@@ -255,7 +255,7 @@ func trackState(c *ui.Context, k *Tokens, it *domain.JobItem) {
 func (a *App) activity(c *ui.Context, k *Tokens, j *store.Job, width float32) {
 	ui.Column(c).Width(width).Padding(16, 20).Gap(4).BorderWidth(0, 0, 0, 1).BorderColor(k.Line).Children(func() {
 		label(c, k, "Activity").Margin(0, 0, 6, 0)
-		a.scrollArea(c, "activity", detailGround(k), scrollGutter, func() {
+		a.scrollArea(c, "activity", scrollGutter, func() {
 			for i, ev := range j.Activity {
 				ui.Row(c.Key(i)).FillWidth().Gap(10).PaddingY(6).AlignItems(ui.Start).Children(func() {
 					mono(c, format.Seconds(ev.At), 11).TextColor(k.Faint).Width(62).Shrink(0)
@@ -293,8 +293,7 @@ var revealLabel = func() string {
 }()
 
 // detailInk is how much of the ink the album screen's lower half mixes into
-// the ground, and detailGround the color that makes, which its lists fade
-// into.
+// the ground, and detailGround the color that makes.
 const detailInk = 0.72
 
 func detailGround(k *Tokens) ui.Color { return k.Ground.Mix(k.Ink, detailInk) }

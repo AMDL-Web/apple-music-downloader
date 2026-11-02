@@ -101,6 +101,11 @@ type App struct {
 	// from (flight.go); without it the screens change at once, as tests
 	// need, whose clock stands still between Advances.
 	PageMotion bool
+	// EdgeFades fades the scroll containers' edges (scrollArea) through a
+	// shader, which a GPU draws in no time and a headless Tester runs on
+	// the CPU many times slower than the rest of a frame: tests that look
+	// at the edges set it.
+	EdgeFades bool
 
 	Screen Screen
 	// trail holds the screens Back returns to, the last one on top: the

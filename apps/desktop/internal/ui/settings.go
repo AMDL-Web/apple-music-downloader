@@ -137,7 +137,7 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 			})
 		})
 		width := min(max(a.pageWidth(c)-settingsNavWidth-2*settingsPad, 320), settingsMaxWidth)
-		area := a.scrollArea(c, "settings", k.Ground, 0, func() {
+		area := a.scrollArea(c, "settings", 0, func() {
 			ui.Column(c).FillWidth().AlignItems(ui.Center).Padding(20, settingsPad, 64, settingsPad).Children(func() {
 				ui.Column(c).Width(width).Gap(40).Children(func() { a.settingsSections(c, k, width) })
 			})
