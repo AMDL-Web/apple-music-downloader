@@ -243,7 +243,8 @@ func (s *Store) ListAppleLibrary(ctx context.Context, q AppleLibraryQuery) ([]do
 		return nil, 0, err
 	}
 	defer rows.Close()
-	items := make([]domain.AppleLibraryItem, 0, q.Limit)
+	// The API caps a page at 200; the store does not trust that for the capacity.
+	items := make([]domain.AppleLibraryItem, 0, min(max(q.Limit, 0), 200))
 	for rows.Next() {
 		it, err := scanAppleLibraryItem(rows)
 		if err != nil {
