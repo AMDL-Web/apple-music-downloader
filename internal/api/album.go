@@ -45,10 +45,9 @@ type albumResponse struct {
 	MotionArtworkTextColor2 string `json:"motion_artwork_text_color2,omitempty"`
 	MotionArtworkTextColor3 string `json:"motion_artwork_text_color3,omitempty"`
 	MotionArtworkTextColor4 string `json:"motion_artwork_text_color4,omitempty"`
-	// Library is unknown (nil) without a LibraryService or when the stats
-	// did not finish within the request's time.
-	Library *domain.LibraryState `json:"library,omitempty"`
-	Tracks  []albumTrack         `json:"tracks"`
+	// Resource is the album's record; absent when amdl has none.
+	Resource *domain.ResourceMark `json:"resource,omitempty"`
+	Tracks   []albumTrack         `json:"tracks"`
 }
 
 // albumTrack is the AlbumTrack schema: one song of the album. The metadata
@@ -65,8 +64,9 @@ type albumTrack struct {
 	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string `json:"audio_traits,omitempty"`
 	HasLyrics          bool     `json:"has_lyrics,omitempty"`
-	// OnDisk is set exactly when the album's library state is known.
-	OnDisk *bool `json:"on_disk,omitempty"`
+	// State is the main slot state the album's record keeps for the song;
+	// absent when the record does not list it, or there is no record.
+	State domain.AudioState `json:"state,omitempty"`
 }
 
 // getAlbum answers GET /albums/{album_id}: the album's metadata and its song
@@ -90,8 +90,14 @@ func (s *Server) getAlbum(w http.ResponseWriter, r *http.Request) {
 		s.writeCatalogError(ctx, w, r, err, lookupTimeout, nil, "album failed", "album_id", id, "storefront", storefront)
 		return
 	}
-	library, onDisk := s.albumOnDisk(ctx, album)
-	resp := newAlbumResponse(storefront, id, album, library, onDisk)
+	resp := newAlbumResponse(storefront, id, album)
+	if resp.Resource = s.resourceMark(ctx, applemusic.TypeAlbum, id); resp.Resource != nil {
+		if states, err := s.store.AlbumTrackStates(ctx, id); err == nil {
+			for i := range resp.Tracks {
+				resp.Tracks[i].State = states[resp.Tracks[i].ID]
+			}
+		}
+	}
 	if art := motion(); !art.IsZero() {
 		resp.MotionArtworkURL, resp.MotionArtworkTallURL = art.Square, art.Tall
 		resp.MotionArtworkBgColor, resp.MotionArtworkTextColor1 = art.SquareColors.BgColor, art.SquareColors.TextColor1
@@ -146,9 +152,8 @@ func (s *Server) albumMotion(ctx context.Context, storefront, id string) func() 
 	}
 }
 
-// newAlbumResponse builds the answer; onDisk, in album.Tracks order, is nil
-// when library is.
-func newAlbumResponse(storefront, id string, album applemusic.Collection, library *domain.LibraryState, onDisk []bool) albumResponse {
+// newAlbumResponse builds the answer.
+func newAlbumResponse(storefront, id string, album applemusic.Collection) albumResponse {
 	resp := albumResponse{
 		Storefront: storefront, ID: id, URL: hitURL(applemusic.TypeAlbum, storefront, id, album.URL),
 		Title: album.Name, ArtistName: album.Artist, ArtistURL: album.ArtistURL,
@@ -158,9 +163,9 @@ func newAlbumResponse(storefront, id string, album applemusic.Collection, librar
 		ReleaseDate: album.ReleaseDate, Genre: applemusic.PrimaryGenre(album.GenreNames),
 		TrackCount: len(album.Tracks), ContentRating: album.ContentRating,
 		AppleDigitalMaster: album.AppleDigitalMaster, AudioTraits: album.AudioTraits,
-		Library: library, Tracks: make([]albumTrack, 0, len(album.Tracks)),
+		Tracks: make([]albumTrack, 0, len(album.Tracks)),
 	}
-	for i, song := range album.Tracks {
+	for _, song := range album.Tracks {
 		disc := max(1, song.DiscNumber)
 		resp.DiscCount = max(resp.DiscCount, disc)
 		track := albumTrack{
@@ -168,9 +173,6 @@ func newAlbumResponse(storefront, id string, album applemusic.Collection, librar
 			DiscNumber: disc, TrackNumber: song.TrackNumber, Name: song.Name, ArtistName: song.ArtistName,
 			DurationMS: song.DurationInMillis, ContentRating: song.ContentRating,
 			AppleDigitalMaster: song.AppleDigitalMaster, AudioTraits: song.AudioTraits, HasLyrics: song.HasLyrics,
-		}
-		if library != nil && i < len(onDisk) {
-			track.OnDisk = &onDisk[i]
 		}
 		resp.Tracks = append(resp.Tracks, track)
 	}

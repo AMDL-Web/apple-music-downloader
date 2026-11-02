@@ -71,11 +71,12 @@ func TestTheRowMenuOpensOnAClickAndDeletesOnlyAFinishedJob(t *testing.T) {
 	// A job under way is cancelled from its menu, never deleted.
 	a.Tab = int(store.TabActive)
 	tt := stillTester(a.View, 1280, 800)
-	cancels := strings.Count(strings.Join(tt.Texts(), "\n"), "Cancel")
+	// A record's run is paused, not cancelled.
+	cancels := strings.Count(strings.Join(tt.Texts(), "\n"), "Pause")
 	if err := tt.Click("More actions"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("Show details") || strings.Count(strings.Join(tt.Texts(), "\n"), "Cancel") <= cancels || tt.HasText("Delete…") {
+	if !tt.HasText("Show details") || strings.Count(strings.Join(tt.Texts(), "\n"), "Pause") <= cancels || tt.HasText("Delete…") {
 		t.Errorf("a running job's menu shows %q", tt.Texts())
 	}
 	tt.Key(0, ui.KeyEscape)

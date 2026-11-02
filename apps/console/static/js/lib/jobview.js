@@ -7,7 +7,7 @@ import { jobCounts, jobStatusView, activityView } from './status.js';
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // A track's statuses after which it changes no more.
-const ITEM_FINISHED = ['completed', 'skipped_existing', 'failed', 'cancelled'];
+const ITEM_FINISHED = ['completed', 'skipped_existing', 'unavailable', 'failed', 'cancelled'];
 
 /** Whether a job's error says Apple has nothing at the link (a 404 in the text before any JSON body). */
 export function isNotFound(error) {

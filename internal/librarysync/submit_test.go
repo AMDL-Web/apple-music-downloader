@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"amdl/internal/domain"
+	"amdl/internal/jobs"
 )
 
 // clientError carries applemusic's NonRetryable marker, like a 4xx catalog
@@ -31,7 +31,7 @@ func TestTransientResolveFailureKeepsAnchorAndRetries(t *testing.T) {
 
 	w.RunOnce(context.Background())
 
-	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 1 || jobs.batches[0][0] != catalog["l.album0"] {
+	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 1 || jobs.batches[0][0] != "l.album0" {
 		t.Fatalf("batches = %v, want only album0 submitted while album1 fails", jobs.batches)
 	}
 	if store.writes != 0 || !reflect.DeepEqual(store.anchor, initial) {
@@ -45,7 +45,7 @@ func TestTransientResolveFailureKeepsAnchorAndRetries(t *testing.T) {
 	lib.failURL = nil
 	w.RunOnce(context.Background())
 
-	if len(jobs.batches) != 2 || !slices.Contains(jobs.batches[1], catalog["l.album1"]) {
+	if len(jobs.batches) != 2 || !slices.Contains(jobs.batches[1], "l.album1") {
 		t.Fatalf("second pass batches = %v, want album1 submitted", jobs.batches)
 	}
 	if store.anchor[0].SongID != "i.song0" {
@@ -87,7 +87,7 @@ func TestPersistentClientErrorIsSkippedAfterBoundedPasses(t *testing.T) {
 		t.Fatalf("anchor writes = %d head = %q, want the anchor advanced once album0 resolves", store.writes, store.anchor[0].SongID)
 	}
 	last := jobs.batches[len(jobs.batches)-1]
-	if !slices.Contains(last, catalog["l.album0"]) || slices.Contains(last, catalog["l.album1"]) {
+	if !slices.Contains(last, "l.album0") || slices.Contains(last, "l.album1") {
 		t.Fatalf("last batch = %v, want album0 and not album1", last)
 	}
 }
@@ -106,7 +106,7 @@ func TestClientErrorThatClearsIsSubmitted(t *testing.T) {
 	}
 	lib.clientErrorURL = nil
 	w.RunOnce(context.Background())
-	if last := jobs.batches[len(jobs.batches)-1]; !slices.Contains(last, catalog["l.album1"]) {
+	if last := jobs.batches[len(jobs.batches)-1]; !slices.Contains(last, "l.album1") {
 		t.Fatalf("last batch = %v, want album1 submitted once its lookup works", last)
 	}
 	if store.anchor[0].SongID != "i.song0" {
@@ -146,22 +146,20 @@ func TestClientErrorCountResetsBetweenPasses(t *testing.T) {
 	}
 }
 
-// A submission the job manager rejects for a reason that can pass leaves the
-// album for the next pass; one it will never accept, or already has, is done.
-func TestRejectedSubmissionKeepsAnchorOnlyWhenRetryable(t *testing.T) {
+// An album the store failed to add stays for the next pass; one added, already
+// queued, needing no run or removed from amdl is done.
+func TestAddOutcomeKeepsAnchorOnlyWhenTheAddFailed(t *testing.T) {
 	tests := []struct {
 		name         string
-		result       domain.SubmitResult
+		outcome      jobs.AddOutcome
+		fail         bool
 		wantAdvanced bool
 	}{
-		{name: "queue full", result: domain.SubmitResult{Status: domain.SubmitQueueFull}, wantAdvanced: false},
-		{name: "decryptor unavailable", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "decryptor_unavailable", Message: "decryptor is not ready"}}, wantAdvanced: false},
-		{name: "invalid without a code", result: domain.SubmitResult{Status: domain.SubmitInvalid}, wantAdvanced: false},
-		{name: "store failure", result: domain.SubmitResult{Status: domain.SubmitServerError, Error: &domain.SubmitError{Code: "store_error", Message: "disk I/O error"}}, wantAdvanced: false},
-		{name: "invalid url", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "invalid_url", Message: "not an Apple Music URL"}}, wantAdvanced: true},
-		{name: "unsupported input", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "unsupported_input", Message: "music-video download is not implemented"}}, wantAdvanced: true},
-		{name: "unsupported storefront", result: domain.SubmitResult{Status: domain.SubmitInvalid, Error: &domain.SubmitError{Code: "unsupported_storefront", Message: "storefront \"cn\" is not supported by decryptor"}}, wantAdvanced: true},
-		{name: "already downloading", result: domain.SubmitResult{Status: domain.SubmitDuplicateActive, ExistingJobID: "job_1"}, wantAdvanced: true},
+		{name: "store failure", fail: true, wantAdvanced: false},
+		{name: "queued", outcome: jobs.AddQueued, wantAdvanced: true},
+		{name: "already downloading", outcome: jobs.AddActive, wantAdvanced: true},
+		{name: "nothing to download", outcome: jobs.AddRecorded, wantAdvanced: true},
+		{name: "removed from amdl", outcome: jobs.AddTombstoned, wantAdvanced: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -169,13 +167,16 @@ func TestRejectedSubmissionKeepsAnchorOnlyWhenRetryable(t *testing.T) {
 			lib := &fakeLibrary{songs: songs, catalog: catalog}
 			initial := toEntries(songs[1 : 1+anchorSize])
 			store := &fakeStore{anchor: initial}
-			jobs := &fakeSubmitter{rejections: map[string]domain.SubmitResult{catalog["l.album0"]: tt.result}}
-			w := newWatcher(t, lib, store, jobs, nil)
+			submitter := &fakeSubmitter{outcomes: map[string]jobs.AddOutcome{"l.album0": tt.outcome}}
+			if tt.fail {
+				submitter.failAt = "l.album0"
+			}
+			w := newWatcher(t, lib, store, submitter, nil)
 
 			w.RunOnce(context.Background())
 
-			if len(jobs.batches) != 1 {
-				t.Fatalf("batches = %v, want one submission", jobs.batches)
+			if len(submitter.batches) != 1 {
+				t.Fatalf("batches = %v, want one add", submitter.batches)
 			}
 			advanced := store.anchor[0].SongID == "i.song0"
 			if advanced != tt.wantAdvanced {
@@ -186,7 +187,7 @@ func TestRejectedSubmissionKeepsAnchorOnlyWhenRetryable(t *testing.T) {
 				t.Fatalf("last_error = %q, want a clean pass", lastError)
 			}
 			if !tt.wantAdvanced && !strings.Contains(lastError, "l.album0") {
-				t.Fatalf("last_error = %q, want it to name the unsubmitted album", lastError)
+				t.Fatalf("last_error = %q, want it to name the album not added", lastError)
 			}
 		})
 	}

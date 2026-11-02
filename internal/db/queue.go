@@ -18,12 +18,13 @@ const QueueOrderGap int64 = 1 << 20
 
 // nextQueueOrderSelect selects the queue_order that puts a job behind every
 // other.
-var nextQueueOrderSelect = fmt.Sprintf(`SELECT COALESCE(MAX(queue_order), 0) + %d FROM jobs`, QueueOrderGap)
+var nextQueueOrderSelect = fmt.Sprintf(`SELECT COALESCE(MAX(queue_order), 0) + %d FROM runs`, QueueOrderGap)
 
-// queuedRunOrder is the claim order of queued jobs: lowest queue_order first,
-// then insertion order. The literal status lets the partial index
-// idx_jobs_queued_order serve it.
-const queuedRunOrder = `status = '` + string(domain.JobQueued) + `' ORDER BY queue_order ASC, rowid ASC`
+// queuedRunOrder is the claim order of queued runs: lowest priority class
+// first (domain.PriorityNow, then manual, then auto), then lowest
+// queue_order, then insertion order. The literal status lets the partial
+// index idx_runs_queued_order serve it.
+const queuedRunOrder = `status = '` + string(domain.JobQueued) + `' ORDER BY priority ASC, queue_order ASC, rowid ASC`
 
 // ErrJobNotQueued is returned by MoveQueuedJob when the moved job or the
 // anchor it is placed next to is not queued: running and finished jobs have
@@ -40,14 +41,14 @@ func (s *Store) NextQueueOrder(ctx context.Context) (int64, error) {
 
 // SetQueueOrder writes one job's queue_order and nothing else.
 func (s *Store) SetQueueOrder(ctx context.Context, jobID string, order int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE jobs SET queue_order=? WHERE id=?`, order, jobID)
+	_, err := s.db.ExecContext(ctx, `UPDATE runs SET queue_order=? WHERE id=?`, order, jobID)
 	return err
 }
 
 // NextQueuedJobID returns the id of the queued job that runs next, skipping
 // the ids in skip; false when there is none.
 func (s *Store) NextQueuedJobID(ctx context.Context, skip map[string]bool) (string, bool, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM jobs WHERE `+queuedRunOrder)
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM runs WHERE `+queuedRunOrder)
 	if err != nil {
 		return "", false, err
 	}
@@ -66,7 +67,7 @@ func (s *Store) NextQueuedJobID(ctx context.Context, skip map[string]bool) (stri
 
 // QueuedJobIDs returns the ids of the queued jobs in run order.
 func (s *Store) QueuedJobIDs(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM jobs WHERE `+queuedRunOrder)
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM runs WHERE `+queuedRunOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -190,12 +191,12 @@ func (s *Store) MoveQueuedJob(ctx context.Context, jobID string, place Placement
 			ids = append(ids, jobID)
 		}
 		for _, id := range ids {
-			if _, err := tx.ExecContext(ctx, `UPDATE jobs SET queue_order=? WHERE id=?`, changed[id], id); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE runs SET queue_order=? WHERE id=?`, changed[id], id); err != nil {
 				return domain.Job{}, nil, err
 			}
 		}
 		for _, id := range ids {
-			job, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.id=?`, id))
+			job, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM runs j WHERE j.id=?`, id))
 			if err != nil {
 				return domain.Job{}, nil, err
 			}
@@ -211,7 +212,7 @@ func (s *Store) MoveQueuedJob(ctx context.Context, jobID string, place Placement
 			events = append(events, ev)
 		}
 	}
-	job, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM jobs j WHERE j.id=?`, jobID))
+	job, err := scanJob(tx.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM runs j WHERE j.id=?`, jobID))
 	if err != nil {
 		return domain.Job{}, nil, err
 	}
@@ -222,7 +223,7 @@ func (s *Store) MoveQueuedJob(ctx context.Context, jobID string, place Placement
 }
 
 func queuedRows(ctx context.Context, tx *sql.Tx) ([]queuedRow, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id, queue_order FROM jobs WHERE `+queuedRunOrder)
+	rows, err := tx.QueryContext(ctx, `SELECT id, queue_order FROM runs WHERE `+queuedRunOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +251,7 @@ func indexOfQueued(rows []queuedRow, id string) int {
 // jobExists returns nil when jobID has a row, ErrJobNotFound when it has none.
 func jobExists(ctx context.Context, tx *sql.Tx, jobID string) error {
 	var one int
-	err := tx.QueryRowContext(ctx, `SELECT 1 FROM jobs WHERE id=?`, jobID).Scan(&one)
+	err := tx.QueryRowContext(ctx, `SELECT 1 FROM runs WHERE id=?`, jobID).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrJobNotFound
 	}

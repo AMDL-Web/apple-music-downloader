@@ -2,11 +2,13 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
+	"amdl/internal/db"
 	"amdl/internal/domain"
 	"amdl/internal/jobs"
 	"amdl/internal/logging"
@@ -20,23 +22,53 @@ type trackTarget struct {
 	collectionName  string
 	collectionID    string
 	collectionIndex int
-	// libraryPath, albumDir and artistDir place a song, album or artist track
-	// in the library (libraryTrackPath, libraryCoverDirs). Empty for playlist
-	// and station tracks, whose template is expanded per codec attempt.
-	libraryPath string
-	albumDir    string
-	artistDir   string
+	// placement, albumDir and artistDir place a song, album or artist track
+	// in the library (libraryTrackPathFor, libraryCoverDirs). placement is nil
+	// for playlist and station tracks.
+	placement *libraryPlacement
+	albumDir  string
+	artistDir string
+	// fixedPath is the path of the file the slot completed before (a reset of
+	// a done slot). It wins over the template, so a template change since
+	// does not move the file.
+	fixedPath string
+	// extra marks another quality of a downloaded track: unless the template
+	// names {Codec} or {Quality}, it is named after mainPath, the track's
+	// main file, with a quality suffix (qualitySuffixedPath).
+	extra    bool
+	mainPath string
+	// replace is set when the slot was done before this run: a file at the
+	// target is replaced once the new copy is complete, instead of being
+	// adopted as the slot's file.
+	replace bool
 }
 
+// outputPath is the path of the attempt with codec and its quality label.
+// Every attempt expands the template again, so a template that names {Codec}
+// or {Quality} gives each codec its own name.
 func (t trackTarget) outputPath(cfg config.Config, song applemusic.Song, codec, quality string) string {
-	if t.libraryPath != "" {
-		return t.libraryPath
+	if t.fixedPath != "" {
+		return t.fixedPath
+	}
+	if t.extra && !fileNamesQuality(pathPattern(cfg, t.collectionType)) {
+		main := t.mainPath
+		if main == "" {
+			main = t.templatePath(cfg, song, "", "")
+		}
+		return qualitySuffixedPath(main, codec, quality)
+	}
+	return t.templatePath(cfg, song, codec, quality)
+}
+
+func (t trackTarget) templatePath(cfg config.Config, song applemusic.Song, codec, quality string) string {
+	if t.placement != nil {
+		return libraryTrackPathFor(cfg, *t.placement, codec, quality)
 	}
 	return outputPath(cfg, song, t.collectionType, t.collectionIndex, t.collectionName, t.collectionID, codec, quality)
 }
 
 func (t trackTarget) coverDirs(cfg config.Config, song applemusic.Song) (albumDir, artistDir string) {
-	if t.libraryPath != "" {
+	if t.placement != nil {
 		return t.albumDir, t.artistDir
 	}
 	return libraryCoverDirs(cfg, trackAlbum(song))
@@ -72,6 +104,19 @@ type trackRun struct {
 	lastProgress domain.ItemProgress
 
 	output outputLease
+	// slot and record are set for a slot of a record run (processRecordRun):
+	// the run claims the slot's path before it downloads and reports the
+	// slot's outcome (reportSlot). Both nil for a one-off run.
+	slot   *jobs.PlannedSlot
+	record jobs.RecordReporter
+	// owner owns the resume checkpoints (resumeOwner). quality is the label
+	// of the attempt that last named the output, lastOutPath that path.
+	owner       string
+	quality     string
+	lastOutPath string
+	// lyricsOnly makes the run a lyrics refresh of the slot's file
+	// (refreshLyrics) instead of a download.
+	lyricsOnly bool
 	// enriched is set once cover and lyrics hold what enrich fetched.
 	enriched bool
 	cover    []byte
@@ -81,7 +126,7 @@ type trackRun struct {
 func (d *Downloader) newTrackRun(job domain.Job, item domain.JobItem, initial applemusic.Song, target trackTarget, metadata *trackMetadataResolver, reporter jobs.Reporter) *trackRun {
 	r := &trackRun{
 		d: d, media: d.backend(), job: job, item: item, initial: initial, target: target, metadata: metadata,
-		base: reporter, lastProgress: domain.ItemProgress{Download: -1, Decrypt: -1},
+		base: reporter, lastProgress: domain.ItemProgress{Download: -1, Decrypt: -1}, owner: resumeOwner(job),
 	}
 	r.gate = newProgressGate(reporter, progressEventInterval(d.cfg))
 	r.gate.emit = r.publish
@@ -89,8 +134,9 @@ func (d *Downloader) newTrackRun(job domain.Job, item domain.JobItem, initial ap
 	return r
 }
 
-// run processes the track and writes its terminal state. A panic anywhere in
-// the pipeline fails this item instead of the process.
+// run processes the track, writes its terminal state and, for a slot of a
+// record run, reports the slot's outcome. A panic anywhere in the pipeline
+// fails this item instead of the process.
 func (r *trackRun) run(ctx context.Context) (err error) {
 	defer r.output.release()
 	defer func() {
@@ -100,6 +146,7 @@ func (r *trackRun) run(ctx context.Context) (err error) {
 				"panic", p, "stack", string(debug.Stack()))
 			err = r.finish(ctx, fmt.Errorf("track pipeline panicked: %v", p))
 		}
+		r.reportSlot(ctx, err)
 	}()
 	return r.finish(ctx, r.process(ctx))
 }
@@ -124,6 +171,10 @@ func (r *trackRun) finish(ctx context.Context, err error) error {
 	// A held meter value goes out first, as the item's last live state, then
 	// the failure.
 	r.gate.flush(ctx)
+	if errors.As(err, new(slotUnavailableError)) {
+		r.finishUnavailable(ctx, err)
+		return err
+	}
 	r.item.Status = domain.ItemFailed
 	r.item.Error = err.Error()
 	if r.item.StatusMessage == "" || r.item.Attempt == 0 {
@@ -186,6 +237,9 @@ func (r *trackRun) stageSetter(ctx context.Context) publishStage {
 func (r *trackRun) maxAttempts() int { return r.d.cfg.Download.MaxAttempts }
 
 func (r *trackRun) process(ctx context.Context) error {
+	if r.lyricsOnly {
+		return r.refreshLyrics(ctx)
+	}
 	set := r.stageSetter(ctx)
 	set(domain.ItemResolving, "resolving metadata", nil)
 	if err := r.resolveMetadata(ctx); err != nil {
@@ -195,7 +249,7 @@ func (r *trackRun) process(ctx context.Context) error {
 	if err := r.media.requireTools(ctx); err != nil {
 		return err
 	}
-	codecs, err := configuredCodecs(r.d.cfg.Download)
+	codecs, err := r.slotCodecs()
 	if err != nil {
 		return err
 	}
@@ -280,23 +334,45 @@ func (r *trackRun) fetchCover(ctx context.Context) error {
 
 // runCodecs tries each configured codec until one completes or the item is
 // skipped. A cancelled job stops the chain at once instead of walking every
-// remaining codec on a dead context.
+// remaining codec on a dead context, and a path another slot holds stops it
+// too: the next codec would claim the same path. When every codec was missing
+// from the track's manifest, a slot of a record run is unavailable
+// (slotUnavailableError), not failed.
 func (r *trackRun) runCodecs(ctx context.Context, codecs []string, set publishStage) error {
 	var lastErr error
+	notOffered := true
 	for i := range codecs {
 		done, err := r.runCodec(ctx, codecs, i, lastErr, set)
 		if done {
 			return err
 		}
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || errors.Is(err, db.ErrPathTaken) {
 			return err
+		}
+		if !errors.As(err, new(codecNotFoundError)) {
+			notOffered = false
 		}
 		lastErr = err
 	}
 	if lastErr == nil {
-		lastErr = fmt.Errorf("no configured codec succeeded")
+		return fmt.Errorf("no configured codec succeeded")
+	}
+	if notOffered && r.slot != nil {
+		return slotUnavailableError{lastErr}
 	}
 	return lastErr
+}
+
+// finishUnavailable ends the item of a slot the track does not offer:
+// unavailable, not a failure.
+func (r *trackRun) finishUnavailable(ctx context.Context, err error) {
+	r.item.Status = domain.ItemUnavailable
+	r.item.OutputPath = ""
+	r.item.Error = ""
+	r.item.StatusMessage = "Not offered for this track: " + err.Error()
+	r.d.persistTerminal(ctx, r.reporter, &r.item, func() domain.Event {
+		return domain.Event{JobID: r.job.ID, ItemID: r.item.ID, Type: domain.EventItemUnavailable, Message: "unavailable", Payload: domain.MarshalEventPayload(r.item, map[string]any{"message": "unavailable"})}
+	})
 }
 
 // enrich fetches the embedded cover and the lyrics the first time it runs and
@@ -319,11 +395,19 @@ func (r *trackRun) enrich(ctx context.Context, resume func()) error {
 	return nil
 }
 
-// claimOutput locks outPath and reports whether it already exists, in which
-// case the item is now skipped.
-func (r *trackRun) claimOutput(ctx context.Context, outPath string) (bool, error) {
+// claimOutput locks outPath, claims it for the slot of a record run (a path
+// another slot holds fails the slot with path_taken before any download), and
+// reports whether a file is already there and was adopted, in which case the
+// item is now skipped.
+func (r *trackRun) claimOutput(ctx context.Context, outPath, quality string) (bool, error) {
 	if err := r.output.acquire(ctx, outPath); err != nil {
 		return false, err
 	}
-	return r.d.handleExistingOutput(ctx, r.reporter, r.job, &r.item, outPath)
+	r.lastOutPath, r.quality = outPath, quality
+	if r.slot != nil {
+		if err := r.record.ClaimSlot(ctx, r.job.ID, r.slot.FileKey, outPath); err != nil {
+			return false, err
+		}
+	}
+	return r.handleExistingOutput(ctx, outPath)
 }

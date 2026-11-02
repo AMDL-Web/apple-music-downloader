@@ -29,6 +29,15 @@
   row-gap: var(--s-2);
 }
 
+/* The status cell is a badge's height whatever it holds, so the card keeps
+   its height when the run ends. */
+.job-list.job-list-compact.new-results > .new-result > .job-row > .job-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 20px;
+}
+
 @media (min-width: 640px) {
   .job-list.job-list-compact.new-results > .new-result > .job-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -58,17 +67,8 @@
     display: none;
   }
 
-  /* A job with nothing in flight has no progress line: its status sits
-     beside the title, centered on the row like every list's status column. */
-  .job-list.job-list-compact.new-results > .new-result > .job-row[data-progress="off"] {
-    grid-template-rows: auto;
-    grid-template-areas: "art main status";
-    align-items: center;
-  }
-
-  .job-list.job-list-compact.new-results > .new-result > .job-row[data-progress="off"] > .job-progress {
-    display: none;
-  }
+  /* A job with nothing in flight keeps both rows, the progress line empty
+     and its status where the running one's was. */
 }
 
 .new-result-row {
@@ -465,6 +465,19 @@
 /* ---- Phone --------------------------------------------------------- */
 
 @media (max-width: 639px) {
+  /* A Submitted job keeps its progress row, a text line tall, before its
+     numbers arrive and once its run ends, as above. */
+  .job-list.job-list-compact.new-results > .new-result > .job-row[data-progress="off"] {
+    grid-template-areas:
+      "art main status"
+      "prog prog prog";
+  }
+
+  .job-list.job-list-compact.new-results > .new-result > .job-row > .job-progress {
+    display: block;
+    min-height: var(--lh-13);
+  }
+
   /* The dock is fixed above the tab bar, outside the cards, and the page
      keeps its height free below the last row (--new-bar-h, measured by the
      page). */

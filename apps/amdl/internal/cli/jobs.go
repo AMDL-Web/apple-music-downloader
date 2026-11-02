@@ -51,7 +51,6 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	})
 	sampleRate := fs.Int("max-sample-rate", 0, "highest ALAC sample rate in Hz (download.alac_max_sample_rate)")
 	bitDepth := fs.Int("max-bit-depth", 0, "highest ALAC bit depth (download.alac_max_bit_depth)")
-	overwrite := fs.Bool("overwrite", false, "download again: replace the tracks already on disk instead of skipping them (destructive)")
 	wait := fs.Bool("wait", false, "wait until every job finishes and print them")
 	watch := fs.Bool("watch", false, "stream the jobs' events as NDJSON until they finish")
 	timeout := fs.Duration("timeout", 2*time.Hour, "how long --wait or --watch waits for all the jobs together, as a duration such as 90s, 20m or 2h (default 2h); 0 only looks once")
@@ -73,9 +72,6 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		if *bitDepth > 0 {
 			overrides["alac_max_bit_depth"] = *bitDepth
 		}
-		if *overwrite {
-			overrides["force_overwrite"] = true
-		}
 		body := map[string]any{"urls": urls}
 		if len(overrides) > 0 {
 			body["overrides"] = overrides
@@ -83,11 +79,6 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		req := capability.Request{Method: http.MethodPost, Path: "/api/v1/downloads", Body: body}
 		if e.dry {
 			return e.send(req, nil)
-		}
-		if *overwrite {
-			if err := e.confirm("--overwrite replaces files already on disk"); err != nil {
-				return err
-			}
 		}
 		raw, err := e.c.Call(e.ctx, req.Method, req.Path, nil, body)
 		var batch domain.BatchSubmitResponse
@@ -111,6 +102,17 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 			return e.out.result(raw)
 		}
 		e.note("%d accepted, %d rejected", batch.Accepted, batch.Rejected)
+		if pending := pendingURLs(batch); len(pending) > 0 {
+			e.note("not waiting for %d link(s) read into records first, with no job yet (amdl library pending list): %s",
+				len(pending), strings.Join(pending, " "))
+			if e.running != nil {
+				e.note("the embedded backend reads them on its next start")
+			}
+		}
+		if len(ids) == 0 {
+			// No link has a job to follow: the answer says what each got.
+			return e.out.result(raw)
+		}
 		ctx, cancel := context.WithTimeout(e.ctx, *timeout)
 		defer cancel()
 		var finals []map[string]any
@@ -167,6 +169,18 @@ func readURLs(e *env, args []string) ([]string, error) {
 		return nil, usageErr("no link given; usage: amdl download <url>... (or - to read them from stdin)")
 	}
 	return args, nil
+}
+
+// pendingURLs are the links a submission answered pending: read into records
+// first, they have no job to follow yet.
+func pendingURLs(b domain.BatchSubmitResponse) []string {
+	var urls []string
+	for _, r := range b.Results {
+		if r.Status == domain.SubmitPending {
+			urls = append(urls, r.URL)
+		}
+	}
+	return urls
 }
 
 // jobIDs are the jobs a submission created or found already running, in
@@ -388,27 +402,6 @@ func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Co
 		return context.WithTimeout(ctx, timeout)
 	}
 	return context.WithCancel(ctx)
-}
-
-func libraryListCmd(fs *flag.FlagSet) func(e *env, args []string) error {
-	kind := fs.String("kind", "", "album, playlist, song, station or artist (default all)")
-	q := fs.String("q", "", "text to find in the title, artist or link")
-	limit := fs.Int("limit", 50, "how many per page, at most 200")
-	offset := fs.Int("offset", 0, "where the page starts")
-	return func(e *env, args []string) error {
-		if len(args) > 0 {
-			return usageErr("usage: amdl library list [--kind album] [--q text]")
-		}
-		values := map[string]any{"status": []string{"completed"}, "limit": *limit, "q": *q, "type": *kind, "sort": "updated_at"}
-		if *offset > 0 {
-			values["offset"] = *offset
-		}
-		req, err := capability.Lookup("listDownloads").Build(values)
-		if err != nil {
-			return usageErr("%v", err)
-		}
-		return e.send(req, nil)
-	}
 }
 
 func logsTailCmd(fs *flag.FlagSet) func(e *env, args []string) error {

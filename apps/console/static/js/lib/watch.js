@@ -54,5 +54,5 @@ export function finishedToast(jobs, route = { page: 'overview', params: {} }) {
   if (cancelled) parts.push(`${cancelled} cancelled`);
   const message = done === jobs.length ? `${jobs.length} downloads finished` : `${jobs.length} downloads ended: ${parts.join(', ')}`;
   const role = failed === 0 ? (done > 0 ? 'success' : 'neutral') : failed === jobs.length ? 'danger' : 'warning';
-  return { message, role, action: { label: 'Queue', hash: buildHash('queue', { tab: failed === jobs.length ? 'failed' : 'all' }) } };
+  return { message, role, action: { label: 'Activity', hash: buildHash('queue', { tab: failed === jobs.length ? 'failed' : 'all' }) } };
 }

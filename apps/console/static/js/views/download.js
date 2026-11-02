@@ -36,7 +36,8 @@ import { Compose, Options, clearBox } from './download-hero.js';
 import { ArtistConfirm } from './download-confirm.js';
 import { AskDialog } from './download-ask.js';
 import { downloadAsks, hasAsks, answerOverrides } from '../lib/download-ask.js';
-import { filesOnDisk } from '../lib/on-disk.js';
+import { markedFiles } from '../lib/marks.js';
+import { runAgain } from './download-again.js';
 
 // The quality choice lasts for the tab too, so the next album can follow
 // with the same one: a PRESETS id or 'custom' with its values.
@@ -123,7 +124,7 @@ export function DownloadPage({ route }) {
   const savedToken = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.media_user_token || '' : undefined;
   const token = tokenState(savedToken, wrapper);
 
-  const { statusOf, issueOf, sendable: allowed, skipped, queue, markOf, forgetPrior } = useLookups({
+  const { statusOf, issueOf, sendable: allowed, skipped, queue, markOf, noteSubmitted } = useLookups({
     settled,
     entries,
     token,
@@ -134,8 +135,8 @@ export function DownloadPage({ route }) {
     subscribeFeed: app.subscribeFeed,
   });
   const jobHref = (id) => buildHash('new', route.params, id);
-  // The checked rows are what the submit sends: a row wholly on disk or in
-  // the queue starts unchecked unless the person checks it.
+  // The checked rows are what the submit sends: a row wholly in the library
+  // or in the queue starts unchecked unless the person checks it.
   const [picks, setPicks] = useState(() => new Map());
   const onPick = (url, on) => setPicks((m) => new Map(m).set(url, on));
   const sendable = allowed.filter((u) => isPicked(u, markOf(u), picks));
@@ -160,13 +161,17 @@ export function DownloadPage({ route }) {
   /**
    * Runs a download, after the questions it asks (lib/download-ask.js):
    * the quality, while the preset follows Settings, and, for Download again
-   * (`again`, the files on disk it replaces), a confirmation. run(overrides)
-   * sends it with the page's overrides and the answer's.
+   * (`again`, the downloaded tracks it replaces, of `mark`'s record), a
+   * confirmation that may add another quality instead. run(overrides)
+   * sends a plain download with the page's overrides and the answer's.
    */
-  const askFirst = ({ title, traits, again = 0, run }) => {
+  const askFirst = ({ title, name, traits, again = 0, mark = null, songs, run, onAgain }) => {
     const priority = defaults ? defaults.quality_priority : [];
     const asks = downloadAsks({ traits, priority, follow: choice.preset === 'follow', again });
-    const go = (answer) => run({ ...overrides, ...answerOverrides({ ...answer, priority, again }) });
+    const go = (answer) =>
+      again && mark && mark.resource
+        ? runAgain({ app, resource: mark.resource, songs, answer, name, noteSubmitted }).then((result) => result && onAgain && onAgain(result))
+        : run({ ...overrides, ...answerOverrides({ ...answer, priority }) });
     if (!hasAsks(asks)) go({});
     else setAsking({ title, asks, go });
   };
@@ -197,7 +202,7 @@ export function DownloadPage({ route }) {
     app.toast({
       message: submitSummary(rows),
       role: ids.length ? 'success' : 'warning',
-      action: ids.length ? { label: 'View in Queue', hash: '#/queue' } : null,
+      action: ids.length ? { label: 'View in Activity', hash: '#/queue' } : null,
     });
     if (ids.length && app.watchJobs) app.watchJobs(ids);
     return true;
@@ -228,18 +233,29 @@ export function DownloadPage({ route }) {
     const one = urls.length === 1 ? previewOf(urls[0]) : null;
     askFirst({
       title: one && one.title ? `Download “${one.title}”` : label,
+      name: (one && one.title) || label,
       traits: [],
       run: (used) => sendLinks(urls, used),
     });
   };
 
-  // A link row with files on disk downloads again, replacing them.
+  // A song link's id: an album link's ?i= or the /song/ id.
+  const songOf = (url) => {
+    const e = entries.find((x) => x.url === url);
+    const link = e && e.link;
+    return link ? [link.trackId || link.id] : undefined;
+  };
+  // A link row with downloaded tracks downloads again, replacing them, or adds another quality.
   const againLink = (url, mark) => {
     const data = previewOf(url);
+    const name = (data && data.title) || url;
     askFirst({
-      title: `Download “${(data && data.title) || url}” again`,
+      title: `Download “${name}” again`,
+      name,
       traits: data ? data.audio_traits : [],
-      again: filesOnDisk(mark),
+      again: markedFiles(mark),
+      mark,
+      songs: mark && mark.song ? songOf(url) : undefined,
       run: (used) => sendLinks([url], used),
     });
   };
@@ -251,7 +267,7 @@ export function DownloadPage({ route }) {
     const { pairs, fail } = await sendUrls(urls, used);
     setBusy(false);
     if (!report(pairs, fail, previewOf, false, used)) return;
-    forgetPrior(pairs.map((p) => p.url));
+    noteSubmitted(pairs);
     // Keep what was not handled: links not sent (flagged, or after a failed
     // chunk), links the server did not take, and anything typed meanwhile.
     // ?url= follows the text.
@@ -264,8 +280,17 @@ export function DownloadPage({ route }) {
     });
   };
 
-  const askHit = (hit, run, again = 0) =>
-    askFirst({ title: again ? `Download “${hit.name}” again` : `Download “${hit.name}”`, traits: hit.audio_traits, again, run });
+  const askHit = (hit, run, again = 0, mark = null) =>
+    askFirst({
+      title: again ? `Download “${hit.name}” again` : `Download “${hit.name}”`,
+      name: hit.name,
+      traits: hit.audio_traits,
+      again,
+      mark,
+      songs: hit.type === 'song' ? [hit.id] : undefined,
+      run,
+      onAgain: (result) => search.recordSent(hit, result),
+    });
   const hits = useHitActions({ app, route, term, artistId, search, send: sendUrls, report, ask: askHit, setConfirm, clearNotes: () => (setFailure(''), setRefusal('')) });
 
   const retry = async (urls) => {

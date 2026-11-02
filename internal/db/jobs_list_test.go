@@ -153,7 +153,7 @@ func TestListJobsOrdersFractionalTimes(t *testing.T) {
 
 	// Persist via CreateJob uses formatTime; assert fixed-width storage.
 	var stored string
-	if err := store.db.QueryRowContext(ctx, `SELECT created_at FROM jobs WHERE id='frac'`).Scan(&stored); err != nil {
+	if err := store.db.QueryRowContext(ctx, `SELECT created_at FROM runs WHERE id='frac'`).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
 	wantStored := "2024-07-10T12:00:00.123000000Z"
@@ -241,5 +241,55 @@ func TestListJobsBatchSharingTimestampKeepsSubmissionOrderAcrossPages(t *testing
 		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
 			t.Errorf("%s: paged list = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// Current leaves out a failed run that a newer run of its record (or its
+// station link) replaced, and a run of a record that is now complete.
+func TestListJobsCurrentLeavesOutReplacedRuns(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "amdl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	base := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	if _, err := store.AddAlbum(ctx, AlbumAdd{ID: "B", WantedAll: true, Source: domain.SourceManual, Now: base}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE albums SET state = 'complete' WHERE id = 'B'`); err != nil {
+		t.Fatal(err)
+	}
+	run := func(id string, kind domain.ResourceKind, rid, key string, status domain.JobStatus, at int) domain.Job {
+		created := base.Add(time.Duration(at) * time.Minute)
+		return domain.Job{ID: id, Input: "x", Type: "album", Status: status, ResourceKind: kind, ResourceID: rid, CanonicalKey: key, CreatedAt: created, UpdatedAt: created}
+	}
+	for _, job := range []domain.Job{
+		run("a1", domain.ResourceAlbum, "A", "", domain.JobFailed, 1),
+		run("a2", domain.ResourceAlbum, "A", "", domain.JobFailed, 2),
+		run("b1", domain.ResourceAlbum, "B", "", domain.JobFailed, 3),
+		run("c1", domain.ResourceAlbum, "C", "", domain.JobFailed, 4),
+		run("s1", "", "", "station|us|9", domain.JobFailed, 5),
+		run("s2", "", "", "station|us|9", domain.JobQueued, 6),
+		run("s3", "", "", "station|us|8", domain.JobFailed, 7),
+	} {
+		if err := store.CreateJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+	filter := JobListFilter{Statuses: []domain.JobStatus{domain.JobFailed}, Current: true}
+	listed, total, err := store.ListJobs(ctx, filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(idsOf(listed), ","); got != "s3,c1,a2" || total != 3 {
+		t.Fatalf("current failed runs = %s (total %d), want s3,c1,a2", got, total)
+	}
+	counts, err := store.CountJobsByStatus(ctx, filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts[domain.JobFailed] != 3 {
+		t.Fatalf("failed count = %d, want 3", counts[domain.JobFailed])
 	}
 }

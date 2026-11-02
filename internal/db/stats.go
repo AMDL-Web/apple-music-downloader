@@ -66,26 +66,26 @@ type HookStats struct {
 // statsDateLayout is the YYYY-MM-DD prefix of a formatTime timestamp.
 const statsDateLayout = "2006-01-02"
 
-// The window queries of Stats. Each filters job_events on type and a
-// created_at range, which idx_job_events_type_created (migration 2) serves;
+// The window queries of Stats. Each filters run_events on type and a
+// created_at range, which idx_run_events_type_created serves;
 // TestStatsWindowQueriesUseTypeCreatedIndex checks the query plans.
 const (
 	// An item that completed more than once (it should not, but events are
 	// not unique per item) counts once, on its latest completion.
 	statsDailyTracksSQL = `SELECT substr(c.at, 1, 10), COUNT(*), COALESCE(SUM(i.file_size), 0)
-		FROM (SELECT item_id, MAX(created_at) AS at FROM job_events
+		FROM (SELECT item_id, MAX(created_at) AS at FROM run_events
 			WHERE type = ? AND created_at >= ? AND created_at < ? GROUP BY item_id) AS c
-		JOIN job_items i ON i.id = c.item_id
+		JOIN run_items i ON i.id = c.item_id
 		WHERE i.status = ?
 		GROUP BY 1`
-	statsDailyJobsSQL = `SELECT substr(created_at, 1, 10), type, COUNT(*) FROM job_events
+	statsDailyJobsSQL = `SELECT substr(created_at, 1, 10), type, COUNT(*) FROM run_events
 		WHERE type IN (?, ?) AND created_at >= ? AND created_at < ?
 		GROUP BY 1, 2`
 	statsHooksSQL = `SELECT phase,
 			COUNT(CASE WHEN type = ? THEN 1 END),
 			COUNT(CASE WHEN type = ? THEN 1 END),
 			MAX(CASE WHEN type = ? THEN created_at END)
-		FROM job_events
+		FROM run_events
 		WHERE type IN (?, ?) AND created_at >= ? AND created_at < ?
 		GROUP BY phase
 		ORDER BY phase`
@@ -123,13 +123,13 @@ func (s *Store) statsTotals(ctx context.Context) (StatsTotals, error) {
 	completed, skipped, failed := string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemFailed)
 	var t StatsTotals
 	err := s.db.QueryRowContext(ctx, `SELECT
-			(SELECT COUNT(*) FROM jobs),
+			(SELECT COUNT(*) FROM runs),
 			COUNT(CASE WHEN status = ? THEN 1 END),
 			COUNT(CASE WHEN status = ? THEN 1 END),
 			COUNT(CASE WHEN status = ? THEN 1 END),
 			COALESCE(SUM(CASE WHEN status = ? THEN file_size END), 0),
 			COALESCE(SUM(CASE WHEN status = ? THEN duration_ms END), 0)
-		FROM job_items`,
+		FROM run_items`,
 		completed, skipped, failed, completed, completed,
 	).Scan(&t.Jobs, &t.TracksCompleted, &t.TracksSkipped, &t.TracksFailed, &t.BytesWritten, &t.DurationMS)
 	return t, err
@@ -196,7 +196,7 @@ func (s *Store) statsDaily(ctx context.Context, start time.Time, days int, from,
 }
 
 func (s *Store) statsCodecs(ctx context.Context) ([]CodecStats, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT codec, bit_depth, sample_rate, COUNT(*) FROM job_items
+	rows, err := s.db.QueryContext(ctx, `SELECT codec, bit_depth, sample_rate, COUNT(*) FROM run_items
 		WHERE status = ?
 		GROUP BY codec, bit_depth, sample_rate
 		ORDER BY COUNT(*) DESC, codec, bit_depth, sample_rate`,

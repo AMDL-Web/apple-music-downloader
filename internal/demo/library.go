@@ -5,9 +5,8 @@ import (
 	"amdl/internal/domain"
 )
 
-// onDisk is the demo's stand-in for a file at a song's library path: a track
-// some job finished, downloaded or skipped as already there. The caller holds
-// b.mu.
+// onDisk is the demo's stand-in for a done slot: a track some job finished,
+// downloaded or skipped as already there. The caller holds b.mu.
 func (b *Backend) onDisk(songID string) bool {
 	for _, j := range b.jobs {
 		for _, it := range j.items {
@@ -19,29 +18,69 @@ func (b *Backend) onDisk(songID string) bool {
 	return false
 }
 
-// albumOnDisk is a's library state and which of its tracks are on disk, in
-// track order. The caller holds b.mu.
-func (b *Backend) albumOnDisk(a *album) (*domain.LibraryState, []bool) {
-	got := make([]bool, len(a.tracks))
-	n := 0
+// albumMark is a's record mark, as the backend's records give it, and each
+// track's main slot state in track order: nil and empty states when no job
+// ever held the album. The caller holds b.mu.
+func (b *Backend) albumMark(a *album) (*domain.ResourceMark, []domain.AudioState) {
+	states := make([]domain.AudioState, len(a.tracks))
+	done := 0
 	for i := range a.tracks {
 		if b.onDisk(songID(a, i)) {
-			got[i] = true
-			n++
+			states[i] = domain.AudioDone
+			done++
 		}
 	}
-	state := domain.NewLibraryState(n, len(a.tracks))
-	return &state, got
+	j, held := b.priorJob(a.id)
+	if b.removed[a.id] || (!held && done == 0 && !b.paused[a.id]) {
+		return nil, make([]domain.AudioState, len(a.tracks))
+	}
+	for i := range states {
+		if states[i] == "" {
+			states[i] = domain.AudioPending
+		}
+	}
+	m := &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: a.id, TracksDone: done, TracksWanted: len(a.tracks), State: domain.RecordPartial}
+	switch {
+	case done == len(a.tracks):
+		m.State = domain.RecordComplete
+	case done == 0:
+		m.State = domain.RecordNone
+	}
+	if held && !j.Status.IsTerminal() {
+		m.ActiveJobID = j.ID
+	}
+	m.Paused = b.paused[a.id]
+	return m, states
 }
 
-// withLibrary sets library on an album hit, as the backend's folder count
-// does. The caller holds b.mu.
-func (b *Backend) withLibrary(h client.SearchHit) client.SearchHit {
-	if h.Type != "album" {
-		return h
+// songMark is the mark of a song hit: its album's, with the song's state.
+// The caller holds b.mu.
+func (b *Backend) songMark(id string) *domain.ResourceMark {
+	for _, a := range albums {
+		for i := range a.tracks {
+			if songID(a, i) != id {
+				continue
+			}
+			m, states := b.albumMark(a)
+			if m != nil {
+				m.SongState = states[i]
+			}
+			return m
+		}
 	}
-	if a := findAlbum(h.ID); a != nil {
-		h.Library, _ = b.albumOnDisk(a)
+	return nil
+}
+
+// marked sets resource on a hit, as the backend's records do. The caller
+// holds b.mu.
+func (b *Backend) marked(h client.SearchHit) client.SearchHit {
+	switch h.Type {
+	case "album":
+		if a := findAlbum(h.ID); a != nil {
+			h.Resource, _ = b.albumMark(a)
+		}
+	case "song":
+		h.Resource = b.songMark(h.ID)
 	}
 	return h
 }

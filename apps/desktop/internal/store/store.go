@@ -63,6 +63,10 @@ type Store struct {
 	Omni Omnibox
 	// Search is the catalog search for the words in Omni.
 	Search Search
+	// Records are the newest marks of amdl's records and the disk check.
+	Records Records
+	// Library is the Library screen's lists of records and Apple's library.
+	Library Library
 	// Notice is the latest message for a toast, or zero.
 	Notice Notice
 	// HookTests are the webhooks' last tests, by name.
@@ -108,6 +112,8 @@ func (s *Store) reset() {
 	s.Omni.reset()
 	s.Search.reset()
 	s.Server, s.Config, s.Login = Server{}, Config{}, Login{}
+	s.Records.reset()
+	s.Library.reset()
 }
 
 // SetClock replaces the clock the store stamps requests with, which a test
@@ -250,15 +256,45 @@ func (s *Store) unfollowUnlessNeeded(id string) {
 // Following reports whether the store follows job id's events.
 func (s *Store) Following(id string) bool { return s.followers[id] != nil }
 
-// Cancel asks the backend to cancel job id.
-func (s *Store) Cancel(id string) { s.act(id, "Cancelled", (*client.Client).Cancel) }
+// Cancel asks the backend to cancel job id, which for a record's run
+// pauses the record.
+func (s *Store) Cancel(id string) {
+	done := "Cancelled"
+	if j := s.byID[id]; j != nil && j.ResourceID != "" {
+		done = "Paused"
+	}
+	s.act(id, done, (*client.Client).Cancel)
+}
 
 // Delete asks the backend to delete finished job id; the feed then drops
 // it.
 func (s *Store) Delete(id string) { s.act(id, "Deleted", (*client.Client).Delete) }
 
-// Retry asks the backend to retry job id.
-func (s *Store) Retry(id string) { s.act(id, "Queued again", (*client.Client).Retry) }
+// Retry asks the backend to download job id's download again, as a new
+// job the detail screen moves to when it showed id.
+func (s *Store) Retry(id string) {
+	c, ctx := s.client, s.ctx
+	if c == nil {
+		return
+	}
+	go func() {
+		a, err := c.Retry(ctx, id)
+		s.postIf(ctx, func() {
+			switch {
+			case err != nil:
+				s.setNotice(err.Error(), true)
+			case a.Job != nil:
+				s.upsert(*a.Job)
+				if s.DetailID == id {
+					s.OpenDetail(a.Job.ID)
+				}
+				s.setNotice("Queued again", false)
+			default:
+				s.setNotice(runAnswerNotice(a), false)
+			}
+		})
+	}()
+}
 
 func (s *Store) act(id, okText string, call func(*client.Client, context.Context, string) error) {
 	c, ctx := s.client, s.ctx

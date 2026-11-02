@@ -110,7 +110,7 @@ func TestJobItemHasLyricsRoundTrip(t *testing.T) {
 	if err := store.UpdateItem(ctx, updated); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.ResetUnfinishedItems(ctx, want.JobID, time.Now().UTC()); err != nil {
+	if err := store.ResetItems(ctx, want.JobID, []string{want.ID}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	items, err = store.ListItems(ctx, want.JobID)
@@ -166,21 +166,34 @@ func TestJobItemProgressRoundTrip(t *testing.T) {
 		t.Fatalf("progress after UpdateItem = %+v, want %+v", got, updated.Progress)
 	}
 
-	// ResetUnfinishedItems must clear every breakdown column, matching
+	// ResetItems must clear every breakdown column, matching
 	// domain.JobItem.ResetForRetry. A completed item is left alone, so reset a
-	// non-finished one.
+	// non-finished one. An item it is not given keeps its state.
 	updated.Status = domain.ItemFailed
 	if err := store.UpdateItem(ctx, updated); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.ResetUnfinishedItems(ctx, item.JobID, now); err != nil {
+	other := domain.JobItem{ID: "item-2", JobID: "job-1", AdamID: "456", Kind: "song", Index: 2, Status: domain.ItemFailed, CreatedAt: now, UpdatedAt: now}
+	if err := store.CreateItem(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResetItems(ctx, item.JobID, []string{item.ID}, now); err != nil {
 		t.Fatal(err)
 	}
 	items, err = store.ListItems(ctx, item.JobID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := items[0].Progress; got != (domain.ItemProgress{}) {
-		t.Fatalf("progress after ResetUnfinishedItems = %+v, want zero", got)
+	for _, got := range items {
+		switch got.ID {
+		case item.ID:
+			if got.Status != domain.ItemQueued || got.Progress != (domain.ItemProgress{}) {
+				t.Fatalf("item after ResetItems = %s %+v, want queued with zero progress", got.Status, got.Progress)
+			}
+		case other.ID:
+			if got.Status != domain.ItemFailed {
+				t.Fatalf("item not reset = %s, want failed", got.Status)
+			}
+		}
 	}
 }

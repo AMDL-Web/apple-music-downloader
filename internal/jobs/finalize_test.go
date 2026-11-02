@@ -85,7 +85,7 @@ func TestManagerDeleteSurvivesCorruptOverridesRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.Exec(`UPDATE jobs SET overrides='{broken' WHERE id=?`, failed.ID); err != nil {
+	if _, err := raw.Exec(`UPDATE runs SET overrides='{broken' WHERE id=?`, failed.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := raw.Close(); err != nil {
@@ -111,7 +111,7 @@ type cancelAfterTotalProcessor struct {
 }
 
 func (p *cancelAfterTotalProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
-	return ValidationResult{Type: "artist", Storefront: "cn", ID: "1495777901"}, nil
+	return ValidationResult{Type: "station", Storefront: "cn", ID: "ra.1495777901"}, nil
 }
 
 func (p *cancelAfterTotalProcessor) ProcessJob(ctx context.Context, job domain.Job, reporter Reporter) error {
@@ -191,7 +191,7 @@ func (failingProcessor) ProcessJob(context.Context, domain.Job, Reporter) error 
 func TestTerminalJobKeepsOverrides(t *testing.T) {
 	newOverrides := func() *config.DownloadOverrides {
 		force := true
-		return &config.DownloadOverrides{ForceOverwrite: &force}
+		return &config.DownloadOverrides{CodecAlternative: &force}
 	}
 	waitOverrides := func(t *testing.T, m *Manager, jobID string) {
 		t.Helper()
@@ -208,8 +208,8 @@ func TestTerminalJobKeepsOverrides(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		if job.Overrides == nil || job.Overrides.ForceOverwrite == nil || !*job.Overrides.ForceOverwrite {
-			t.Fatalf("overrides after %s = %+v, want force_overwrite kept", job.Status, job.Overrides)
+		if job.Overrides == nil || job.Overrides.CodecAlternative == nil || !*job.Overrides.CodecAlternative {
+			t.Fatalf("overrides after %s = %+v, want codec_alternative kept", job.Status, job.Overrides)
 		}
 	}
 
@@ -281,7 +281,7 @@ func TestJobCompletionDispatchesHook(t *testing.T) {
 	defer stop()
 	manager.Start(ctx)
 
-	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -334,7 +334,7 @@ func TestCancelQueuedJobDispatchesCancelledHookAndNeverRuns(t *testing.T) {
 	// Deliberately do not call manager.Start(ctx): no worker claims the
 	// submitted job, so Cancel() must take the "not yet running" path.
 	ctx := context.Background()
-	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -396,7 +396,7 @@ func TestDeleteRefusesActiveAndFinalizingJobs(t *testing.T) {
 	defer stop()
 	manager.Start(ctx)
 
-	resp := manager.SubmitBatch(ctx, []string{"artist|cn|1495777901"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|cn|1495777901"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -460,7 +460,7 @@ func TestDeleteRefusesJobWhileHookIsPending(t *testing.T) {
 	}}}, manager.Event, slog.Default())
 	manager.SetHooks(dispatcher)
 
-	job := domain.Job{ID: "job-with-hook", Input: "song|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobCompleted}
+	job := domain.Job{ID: "job-with-hook", Input: "station|us|1", Type: "song", CanonicalKey: "song:us:1", Status: domain.JobCompleted}
 	if err := store.CreateJob(context.Background(), job); err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +502,7 @@ func TestCancelRunningJobDispatchesCancelledHookExactlyOnce(t *testing.T) {
 	defer stop()
 	manager.Start(ctx)
 
-	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -545,7 +545,7 @@ func TestCancelRunningJobDispatchesCancelledHookExactlyOnce(t *testing.T) {
 type neverRunProcessor struct{ t *testing.T }
 
 func (p *neverRunProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
-	return ValidationResult{Type: "song", Storefront: "us", ID: "1"}, nil
+	return ValidationResult{Type: "station", Storefront: "us", ID: "1"}, nil
 }
 
 func (p *neverRunProcessor) ProcessJob(context.Context, domain.Job, Reporter) error {
@@ -562,7 +562,7 @@ type cancelThenReturnNilProcessor struct {
 }
 
 func (p *cancelThenReturnNilProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
-	return ValidationResult{Type: "song", Storefront: "us", ID: "1"}, nil
+	return ValidationResult{Type: "station", Storefront: "us", ID: "1"}, nil
 }
 
 func (p *cancelThenReturnNilProcessor) ProcessJob(ctx context.Context, _ domain.Job, _ Reporter) error {
@@ -604,7 +604,7 @@ func TestCancelRunningJobWinsOverNilProcessorReturn(t *testing.T) {
 	defer stop()
 	manager.Start(ctx)
 
-	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -695,9 +695,9 @@ func TestTerminalJobEventPayloadCarriesRESTJobSnapshot(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Add(-time.Minute)
 	job := domain.Job{
-		ID: "job-terminal-payload", Input: "song|us|1", Type: "song", Storefront: "us",
+		ID: "job-terminal-payload", Input: "station|us|1", Type: "song", Storefront: "us",
 		CanonicalKey: "song:us:1", Status: domain.JobRunning, TotalItems: 1,
-		Overrides: &config.DownloadOverrides{ForceOverwrite: &force}, CreatedAt: now, UpdatedAt: now,
+		Overrides: &config.DownloadOverrides{CodecAlternative: &force}, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
@@ -807,7 +807,7 @@ func TestRunDecidesTerminalStatusFromStoreCounters(t *testing.T) {
 			manager.Start(ctx)
 
 			before := time.Now().UTC().Add(-time.Second)
-			resp := manager.SubmitBatch(ctx, []string{"album|us|1"}, nil)
+			resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
 			if resp.Accepted != 1 {
 				t.Fatalf("submit = %+v", resp)
 			}
@@ -841,7 +841,7 @@ func TestRunDecidesTerminalStatusFromStoreCounters(t *testing.T) {
 func TestCancelQueuedJobSetsFinishedAtWithoutStartedAt(t *testing.T) {
 	manager := newTestManager(t)
 	ctx := context.Background()
-	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v", resp)
 	}
@@ -925,7 +925,7 @@ func TestCancelRacingStartupDispatchesExactlyOneConsistentHook(t *testing.T) {
 	jobIDs := make([]string, 0, jobs)
 	var wg sync.WaitGroup
 	for i := 0; i < jobs; i++ {
-		url := "song|us|" + strconv.Itoa(i)
+		url := "station|us|" + strconv.Itoa(i)
 		resp := manager.SubmitBatch(ctx, []string{url}, nil)
 		if resp.Accepted != 1 || resp.Results[0].Job == nil {
 			t.Fatalf("submit %d = %+v, want 1 accepted", i, resp)
@@ -1014,7 +1014,7 @@ func TestRunStampsPoolPriorityFromJobCreationTime(t *testing.T) {
 		_ = manager.Shutdown(shutdownCtx)
 	}()
 
-	resp := manager.SubmitBatch(context.Background(), []string{"song|cn|priority"}, nil)
+	resp := manager.SubmitBatch(context.Background(), []string{"station|cn|priority"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v", resp)
 	}

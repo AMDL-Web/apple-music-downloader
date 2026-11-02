@@ -24,16 +24,23 @@ hook executions run at once across all jobs and entries; neither limit is a key.
 Each entry in `entries` needs a unique `name`, a `type` (`webhook` or `exec`), and at least
 one event from `job_queued`, `job_finished`, `job_failed`, `job_cancelled`. `job_types`
 filters by `song`, `album`, `playlist`, `artist`, `station`; empty or omitted matches all.
+A job is one run of a record, so its type is the record's kind, `album` or `playlist`, or
+`station`; `song` also matches the runs of an album whose tracks were added one by one,
+and `artist` the runs an artist link started.
 Every entry whose `enabled`, `events` and `job_types` all match runs, within that limit of two.
 
 - `job_queued` fires right after creation, before any track is resolved — the payload has
-  no `items`, and `total_items` is 0 for a new job. It fires again when a new submit of
-  the same link queues its finished job again under the same id (the payload then
-  carries the previous run's `total_items`); a retry does not fire it. It **cannot** share an entry with a terminal event;
+  no `items`, and `total_items` is 0. Every download of a record is a new job, so it fires
+  for a retry, an automatic retry (`job.trigger` `retry`) and a reset too, and an artist
+  link fires it once per album. It **cannot** share an entry with a terminal event;
   put creation and terminal hooks in separate entries, which may point at the same URL or
   command.
 - `job_finished` means zero failed items; `job_failed` means at least one failed item or an
-  aborted job; `job_cancelled` means cancelled through the API. A job that was running
+  aborted job, with `job.will_retry` true when every failed track waits for an automatic
+  retry (`download.give_up_after_runs`). Hooks built from a notification preset (ntfy,
+  Bark, Telegram) skip those, so a phone hears about a failure once it is given up; a hook
+  written by hand gets every one and can filter on `will_retry`. `job_cancelled` means
+  cancelled through the API, or a record paused. A job that was running
   when the backend stopped fires none of them then: it resumes on the next start and fires
   its terminal hook when it finishes.
 
@@ -68,10 +75,14 @@ AMDL_JOB_INPUT        original Apple Music URL
 AMDL_STOREFRONT       storefront code, e.g. "us", "cn"
 AMDL_TOTAL_ITEMS      total track count
 AMDL_COMPLETED_ITEMS  tracks this job wrote
-AMDL_SKIPPED_ITEMS    tracks already on disk
+AMDL_SKIPPED_ITEMS    tracks already at their path, or not offered in the asked quality
 AMDL_FAILED_ITEMS     failed tracks
 AMDL_CANCELLED_ITEMS  tracks cancelled before they finished
 AMDL_OUTPUT_PATHS     newline-separated absolute output paths
+AMDL_JOB_TRIGGER      manual | library_sync | artist | retry | reset | import_1x
+AMDL_JOB_WILL_RETRY   true when a failed job's tracks all wait for an automatic retry
+AMDL_RESOURCE_KIND    album | playlist, empty for a station
+AMDL_RESOURCE_ID      the record's catalog id, empty for a station
 ```
 
 A failing exec hook records the last 4 KiB of its stderr in its `hook_failed` event.
@@ -80,7 +91,8 @@ The JSON payload — the webhook body unless `body` replaces it, and written to 
 exec hook's stdin — looks like this. The `job` counters are the API's (see
 [api.md](api.md#query-cancel-retry-move-delete)); `title` and `artist_name` are present once the
 link has resolved (never for `job_queued`), `error` only when the job has one, `started_at`
-and `finished_at` only once set, and `output_path` is absolute:
+and `finished_at` only once set, and `output_path` is absolute. `resource` is the job's
+record as it stands when the hook fires, absent for a station:
 
 ```json
 {
@@ -99,8 +111,18 @@ and `finished_at` only once set, and `output_path` is absolute:
     "skipped_items": 1,
     "failed_items": 0,
     "cancelled_items": 0,
+    "trigger": "manual",
+    "will_retry": false,
     "started_at": "2026-07-04T10:28:41Z",
     "finished_at": "2026-07-04T10:30:00Z"
+  },
+  "resource": {
+    "kind": "album",
+    "id": "1463409338",
+    "name": "Album Name",
+    "state": "complete",
+    "tracks_done": 12,
+    "tracks_wanted": 12
   },
   "items": [
     {
@@ -110,7 +132,7 @@ and `finished_at` only once set, and `output_path` is absolute:
       "album": "Album Name",
       "status": "completed",
       "codec": "alac",
-      "output_path": "/app/data/downloads/albums/Album Name/01. Song 1.m4a"
+      "output_path": "/app/data/downloads/library/Artist Name/Album Name/01. Song 1.m4a"
     }
   ]
 }
@@ -145,9 +167,9 @@ It depends on a media-user-token: the wrapper's when the backend can read it
 and the web-player token alone will not do. With neither the watcher idles and warns once
 instead of erroring every pass.
 
-Submissions go through `jobs.Manager.SubmitBatch`, not through the backend's own HTTP API,
-so they are identical to jobs you submit by hand — same deduplication, same validation,
-same hooks. Catalog reads use the scraped web-player token, like every other catalog read.
+New albums are added through `jobs.Manager.AddAlbums` as album records, not through the
+backend's own HTTP API, so their runs are ordinary runs — same picker, same hooks. An album
+you removed from amdl is not added back. Catalog reads use the scraped web-player token, like every other catalog read.
 
 ### Why the watermark is a position, not a timestamp
 
@@ -179,9 +201,8 @@ Three details worth stating outright:
   boundary left. The watcher re-anchors and submits nothing, rather than queueing every
   album it just scanned.
 - When a new album's library-to-catalog lookup fails, the anchor stays where it was so the
-  next pass tries that album again; the albums that did resolve are submitted again too,
-  which an active job dedupes and a finished one runs again under its id, skipping the
-  files already on disk. A
+  next pass tries that album again; the albums that did resolve are added again too,
+  which their records absorb: an active run stays, and a complete record queues nothing. A
   lookup that fails with a client error (a 4xx other than 408 and 429) three passes in a
   row is skipped with a warning, so one album Apple refuses cannot hold the anchor back
   forever. An album with no catalog counterpart (404) is skipped at once.

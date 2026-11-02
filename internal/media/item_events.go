@@ -16,7 +16,7 @@ import (
 // reportCodecFailed emits the codec_failed event for either the download or
 // the decrypt phase, using the attempts actually spent in that phase.
 //
-// It also logs, because job_events are deleted along with their job: once the
+// It also logs, because run_events are deleted along with their job: once the
 // user removes a finished job, the process log is the only surviving record of
 // why a track was degraded to a fallback codec.
 func (d *Downloader) reportCodecFailed(ctx context.Context, reporter jobs.Reporter, job domain.Job, item domain.JobItem, codec, phase string, codecMaxAttempts, attempts int, err error) {
@@ -201,7 +201,7 @@ func (d *Downloader) cancelUnfinishedItems(ctx context.Context, jobID string, re
 	}
 	for i := range items {
 		switch items[i].Status {
-		case domain.ItemCompleted, domain.ItemSkipped, domain.ItemFailed, domain.ItemCancelled:
+		case domain.ItemCompleted, domain.ItemSkipped, domain.ItemUnavailable, domain.ItemFailed, domain.ItemCancelled:
 			continue
 		}
 		d.markCancelled(ctx, reporter, jobID, &items[i])

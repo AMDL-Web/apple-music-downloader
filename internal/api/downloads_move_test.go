@@ -38,7 +38,7 @@ func moveServer(t *testing.T) (*Server, map[string]string) {
 	}
 	ids := map[string]string{}
 	for _, name := range []string{"q1", "q2", "q3"} {
-		resp := manager.SubmitBatch(ctx, []string{"song|us|" + name}, nil)
+		resp := manager.SubmitBatch(ctx, []string{"station|us|" + name}, nil)
 		if resp.Accepted != 1 {
 			t.Fatalf("submit %s: %+v", name, resp.Results)
 		}

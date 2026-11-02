@@ -107,5 +107,5 @@ test('words offer a catalog search on New download; links do not', () => {
   assert.equal(search('x'.repeat(201)), undefined, 'longer than the backend searches');
   assert.equal(search(''), undefined);
   // Matching pages and settings come first: Return still opens them.
-  assert.equal(paletteItems('queue')[0].label, 'Queue');
+  assert.equal(paletteItems('queue')[0].label, 'Activity');
 });

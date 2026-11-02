@@ -26,7 +26,7 @@ func searchApp(t *testing.T) (*App, []client.SearchHit) {
 		albums = append(albums, client.SearchHit{Type: "album", ID: fmt.Sprint(100 + i), Name: fmt.Sprintf("Album %d", i), ArtistName: "Yorushika", TrackCount: 3,
 			URL: fmt.Sprintf("https://music.apple.com/cn/album/x/%d", 100+i)})
 	}
-	albums[0].PriorJob = &client.PriorJob{ID: "done", Status: domain.JobCompleted}
+	albums[0].Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "100", State: domain.RecordComplete}
 
 	s.Search.Result = &client.SearchResult{Albums: &client.HitGroup{Items: albums}}
 	s.Search.Status = store.SearchReady

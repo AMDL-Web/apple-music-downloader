@@ -148,7 +148,7 @@ var setupStages = []setupStage{
 		storage(&v.Store.Server)
 	}},
 	{name: "13-start-failed", settings: standalone, show: mode.Standalone,
-		act:   shotActions{startErr: "no wrapper address: the embedded backend needs one on its first start"},
+		act:   shotActions{startErr: "open database: /Users/me/Library/Application Support/AMDL/server/db/amdl.db was written by a 2.0 release candidate (schema 5), which this version does not read: move the file aside (it is not changed) and start again"},
 		stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) { tools(s) }},
 	{name: "14-elsewhere", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, tt *ui.Tester) {
 		s.FFmpeg = setup.Tool{State: setup.Ready, Path: ffmpegPath, Source: "system"}

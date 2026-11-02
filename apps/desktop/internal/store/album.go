@@ -52,13 +52,12 @@ func (s *Store) CloseAlbum() {
 	p.ID, p.Hit, p.Status, p.Album, p.Err = "", client.SearchHit{}, SearchIdle, client.Album{}, ""
 }
 
-// AlbumJob is the download of album id the album screen shows: a queued or
-// running one, else the latest that completed; "" for none. A song
-// downloaded through a link of its album is not the album's.
+// AlbumJob is the run of album id's record the album screen shows: a
+// queued or running one, else the latest that completed; "" for none.
 func (s *Store) AlbumJob(id string) string {
 	done := ""
 	for _, j := range s.Jobs {
-		if t, aid, ok := j.link(); j.Type != "album" || !ok || t != "album" || aid != id {
+		if j.ResourceKind != domain.ResourceAlbum || j.ResourceID != id {
 			continue
 		}
 		switch j.Status {
@@ -70,27 +69,51 @@ func (s *Store) AlbumJob(id string) string {
 			}
 		}
 	}
+	if m := s.RecordMark(domain.ResourceAlbum, id); m != nil && m.ActiveJobID != "" {
+		return m.ActiveJobID
+	}
 	return done
 }
 
-// JobAlbum is the album an album download is of, as a hit the album screen
-// opens: what the job holds stands for the album until it is read, and the
-// album's own download marks it. false for a download of anything else.
+// JobAlbum is the album a run is of, as a hit the album screen opens: what
+// the job holds stands for the album until it is read, and the album's
+// record marks it. false for a run of anything else.
 func (s *Store) JobAlbum(j *Job) (client.SearchHit, bool) {
-	if j == nil || j.Type != "album" {
+	if j == nil || j.ResourceKind != domain.ResourceAlbum || j.ResourceID == "" {
 		return client.SearchHit{}, false
 	}
-	t, id, ok := j.link()
-	if !ok || t != "album" {
-		return client.SearchHit{}, false
-	}
+	id := j.ResourceID
 	h := client.SearchHit{Type: "album", ID: id, Name: j.Title, URL: j.Input, ArtistName: j.ArtistName, ArtworkURL: j.ArtworkURL,
 		ArtworkBgColor: j.ArtworkBgColor, ArtworkTextColor1: j.ArtworkTextColor1, ArtworkTextColor2: j.ArtworkTextColor2,
 		ArtworkTextColor3: j.ArtworkTextColor3, ArtworkTextColor4: j.ArtworkTextColor4, TrackCount: j.TotalItems}
-	if lib := s.byID[s.AlbumJob(id)]; lib != nil {
-		h.PriorJob = &client.PriorJob{ID: lib.ID, Status: lib.Status, FinishedAt: lib.FinishedAt}
+	h.Resource = s.RecordMark(domain.ResourceAlbum, id)
+	if h.Resource == nil {
+		h.Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: id}
+		if j.Status == domain.JobQueued || j.Status == domain.JobRunning {
+			h.Resource.ActiveJobID = j.ID
+		}
 	}
 	return h, true
+}
+
+// albumMoved reads album id again where its record changed: the open page
+// at once, so its songs' states follow, a cached one when it opens next.
+func (s *Store) albumMoved(id string) {
+	p := &s.Search.Album
+	p.cache.drop(id)
+	if p.ID != id || p.Status != SearchReady || s.client == nil {
+		return
+	}
+	c, ctx, gen := s.client, s.ctx, p.gen
+	go func() {
+		a, err := c.Album(ctx, id, "")
+		s.postIf(ctx, func() {
+			// A failed read keeps the songs the page shows.
+			if err == nil {
+				s.applyAlbum(gen, id, a, nil)
+			}
+		})
+	}()
 }
 
 // RetryAlbum reads the album again after an error.
@@ -163,10 +186,11 @@ func TrackHit(t client.AlbumTrack) client.SearchHit {
 	return client.SearchHit{Type: "song", ID: t.ID, Name: t.Name, URL: t.URL, ArtistName: t.ArtistName, DurationMS: t.DurationMS}
 }
 
-// TrackMark is whether track is on disk or on its way: through the album's
-// job, whose tracks are items, while albumMark says that job is in the
-// library or the queue, or through a download of the song alone started
-// here. item is the album job's track, nil when it has none.
+// TrackMark is how track stands: through the page's run of its album,
+// whose tracks are items, while albumMark says that run is queued or
+// running, else its main slot's state in the album's record, else a
+// download of the song alone started here. item is the run's track, nil
+// when it has none.
 func (s *Store) TrackMark(t client.AlbumTrack, albumMark MarkState, items []domain.JobItem) (mark MarkState, item *domain.JobItem) {
 	for i := range items {
 		if items[i].AdamID == t.ID {
@@ -174,16 +198,19 @@ func (s *Store) TrackMark(t client.AlbumTrack, albumMark MarkState, items []doma
 			break
 		}
 	}
-	if item != nil && albumMark != MarkNone {
+	if item != nil {
 		switch item.Status {
 		case domain.ItemCompleted, domain.ItemSkipped:
 			return MarkDone, item
-		case domain.ItemFailed, domain.ItemCancelled:
+		case domain.ItemFailed, domain.ItemCancelled, domain.ItemUnavailable:
 		default:
 			if albumMark == MarkActive {
 				return MarkActive, item
 			}
 		}
+	}
+	if t.State == domain.AudioDone {
+		return MarkDone, item
 	}
 	m, _ := s.HitMark(TrackHit(t))
 	return m, item

@@ -16,7 +16,7 @@ func addEvent(ctx context.Context, x execer, event domain.Event) (domain.Event, 
 	}
 	// The payload is bound as a string: a json.RawMessage would bind as []byte
 	// and land as a BLOB in the TEXT column.
-	res, err := x.ExecContext(ctx, `INSERT INTO job_events(job_id,item_id,type,phase,message,payload,created_at) VALUES(?,?,?,?,?,?,?)`,
+	res, err := x.ExecContext(ctx, `INSERT INTO run_events(job_id,item_id,type,phase,message,payload,created_at) VALUES(?,?,?,?,?,?,?)`,
 		event.JobID, event.ItemID, string(event.Type), event.Phase, event.Message, string(event.Payload), formatTime(event.CreatedAt))
 	if err != nil {
 		return event, err
@@ -36,21 +36,21 @@ func (s *Store) AddEvent(ctx context.Context, event domain.Event) (domain.Event,
 // reflects.
 func (s *Store) LatestEventID(ctx context.Context, jobID string) (int64, error) {
 	var id int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM job_events WHERE job_id=?`, jobID).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM run_events WHERE job_id=?`, jobID).Scan(&id)
 	return id, err
 }
 
 // ListEventsAfterLimit returns up to limit of jobID's events with an id
 // greater than afterID, oldest first. limit <= 0 means no limit.
 func (s *Store) ListEventsAfterLimit(ctx context.Context, jobID string, afterID int64, limit int) ([]domain.Event, error) {
-	return s.queryEvents(ctx, `SELECT `+eventColumns+` FROM job_events WHERE job_id=? AND id>? ORDER BY id ASC LIMIT ?`, jobID, afterID, sqlLimit(limit))
+	return s.queryEvents(ctx, `SELECT `+eventColumns+` FROM run_events WHERE job_id=? AND id>? ORDER BY id ASC LIMIT ?`, jobID, afterID, sqlLimit(limit))
 }
 
 // LatestGlobalEventID returns the id of the most recent event across all jobs
 // (0 if none): the overview feed's cursor for a GET /downloads snapshot.
 func (s *Store) LatestGlobalEventID(ctx context.Context) (int64, error) {
 	var id int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM job_events`).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM run_events`).Scan(&id)
 	return id, err
 }
 
@@ -77,7 +77,7 @@ var (
 func (s *Store) ListMilestoneEventsAfterLimit(ctx context.Context, afterID int64, limit int) ([]domain.Event, error) {
 	args := append([]any{afterID}, milestoneTypeArgs...)
 	args = append(args, sqlLimit(limit))
-	return s.queryEvents(ctx, `SELECT `+eventColumns+` FROM job_events
+	return s.queryEvents(ctx, `SELECT `+eventColumns+` FROM run_events
 		WHERE id>? AND type IN (`+milestoneTypePlaceholders+`)
 		ORDER BY id ASC LIMIT ?`, args...)
 }
@@ -87,7 +87,7 @@ func (s *Store) ListMilestoneEventsAfterLimit(ctx context.Context, afterID int64
 // sharing the table.
 func (s *Store) ListHookEvents(ctx context.Context, jobID string) ([]domain.Event, error) {
 	args := append([]any{jobID}, hookTypeArgs...)
-	return s.queryEvents(ctx, `SELECT `+eventColumns+` FROM job_events WHERE job_id=? AND type IN (`+hookTypePlaceholders+`) ORDER BY id ASC`, args...)
+	return s.queryEvents(ctx, `SELECT `+eventColumns+` FROM run_events WHERE job_id=? AND type IN (`+hookTypePlaceholders+`) ORDER BY id ASC`, args...)
 }
 
 // sqlLimit maps "no limit" (limit <= 0) to SQLite's LIMIT -1.

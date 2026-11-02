@@ -1,18 +1,20 @@
-// A Queue row's "…" menu (items from lib/jobactions.js rowMenu): Show
-// details opens the drawer, Move to top and Move to bottom reorder a queued
-// job (views/queue-order.js), Cancel and Retry act at once, Copy link copies
-// the job's link, and Download again… and Delete… ask first. One job's action runs alone, so
-// the selection bar (a bulk run) stays out of it.
+// An Activity row's "…" menu (items from lib/jobactions.js rowMenu): Show
+// details opens the drawer, Open in Library its record, Move to top and
+// Move to bottom reorder a queued job (views/queue-order.js), Cancel, Pause
+// and Retry act at once, Copy link copies the job's link, and Download
+// again… and Delete… ask first. One job's action runs alone, so the
+// selection bar (a bulk run) stays out of it.
 
 import { html, useState } from '../ui/preact.js';
-import { cancelDownload, retryDownload, deleteDownload, createDownload } from '../api.js';
+import { cancelDownload, retryDownload, deleteDownload, createDownload, resetRecord } from '../api.js';
+import { recordHash } from '../lib/route.js';
 import { jobTitle, isUnresolved, inputLabel } from '../lib/format.js';
-import { rowMenu, actionError, bulkSummary } from '../lib/jobactions.js';
+import { rowMenu, actionError, bulkSummary, retryNote } from '../lib/jobactions.js';
 import { useApp, copyText } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { MenuButton } from '../ui/menu.js';
 
-const CALLS = { retry: retryDownload, cancel: cancelDownload, delete: deleteDownload };
+const CALLS = { retry: retryDownload, cancel: cancelDownload, pause: cancelDownload, delete: deleteDownload };
 
 // The delete dialog's title names the job, cut like the desktop app's.
 const TITLE_MAX = 48;
@@ -20,18 +22,23 @@ const TITLE_MAX = 48;
 export const jobName = (job) => (isUnresolved(job) ? inputLabel(job.input) : jobTitle(job));
 
 /**
- * Runs `action` on one job. A failure toasts why (lib/jobactions.js
- * actionError); a retry that went through says so, since the row may leave
- * the tab. Resolves to whether it went through.
+ * Runs `action` on one job (pause: the cancel of a record's run). A
+ * failure toasts why (lib/jobactions.js actionError); a retry that went
+ * through says so, since its new job may land on another tab. Resolves to
+ * whether it went through.
  */
 export async function runOne(app, action, job) {
+  let res;
   try {
-    await CALLS[action](job.id);
+    res = await CALLS[action](job.id);
   } catch (error) {
-    app.toast({ message: actionError(action, error), role: 'danger' });
+    app.toast({ message: actionError(action === 'pause' ? 'cancel' : action, error), role: 'danger' });
     return false;
   }
-  if (action === 'retry') app.toast(bulkSummary(action, [{ ok: true, item: job }], jobTitle));
+  if (action === 'retry') {
+    if (retryNote(res)) app.toast({ message: `“${jobTitle(job)}”: ${retryNote(res).toLowerCase()}`, role: 'success' });
+    else app.toast(bulkSummary(action, [{ ok: true, item: job }], jobTitle));
+  }
   return true;
 }
 
@@ -51,6 +58,7 @@ export function JobMenu({ job, href, onLeaving, place, onMove }) {
   const name = jobName(job);
   const choose = (id) => {
     if (id === 'details') app.navigate(href);
+    else if (id === 'record') app.navigate(recordHash(job.resource.kind, job.resource.id));
     else if (id === 'copy') copyText(app, job.input);
     else if (id === 'delete') setAsking(true);
     else if (id === 'again') setAgain(true);
@@ -67,12 +75,13 @@ export function JobMenu({ job, href, onLeaving, place, onMove }) {
     setBusy(false);
     setAsking(false);
   };
-  // The job's own overrides again, with force_overwrite: the server queues
-  // this job again under its id and replaces its files.
+  // A record's run: its record's tracks again, replacing the files at their
+  // stored paths. A station's: the link queued again with the job's overrides.
   const downloadAgain = async () => {
     setBusy(true);
     try {
-      await createDownload({ urls: [job.input], overrides: { ...(job.overrides || {}), force_overwrite: true } });
+      if (job.resource) await resetRecord(job.resource.kind, job.resource.id, { what: 'audio' });
+      else await createDownload({ urls: [job.input], overrides: { ...(job.overrides || {}) } });
       app.toast({ message: `Downloading “${jobTitle(job)}” again`, role: 'success' });
     } catch (error) {
       app.toast({ message: actionError('again', error), role: 'danger' });
@@ -101,7 +110,7 @@ export function JobMenu({ job, href, onLeaving, place, onMove }) {
           busy=${busy}
           onConfirm=${remove}
           onCancel=${() => setAsking(false)}
-        >The download and its history leave the queue. Files already saved stay on disk.</${ConfirmDialog}>`
+        >Its history leaves Activity. ${job.resource ? 'Its library record and files stay.' : 'Files already saved stay on disk.'}</${ConfirmDialog}>`
       : null,
     again
       ? html`<${ConfirmDialog}
@@ -112,7 +121,7 @@ export function JobMenu({ job, href, onLeaving, place, onMove }) {
           busy=${busy}
           onConfirm=${downloadAgain}
           onCancel=${() => setAgain(false)}
-        >Replaces its files on disk.</${ConfirmDialog}>`
+        >${job.resource ? 'Replaces its downloaded files.' : 'Queues its link again.'}</${ConfirmDialog}>`
       : null,
   ];
 }

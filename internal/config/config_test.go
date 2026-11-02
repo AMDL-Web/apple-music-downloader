@@ -440,6 +440,48 @@ func TestValidateReportsViolationsInKeyOrder(t *testing.T) {
 	}
 }
 
+// download.force_overwrite was written into every config.yaml by PUT
+// /api/v1/config. Its removal must not stop an upgraded install: Load drops
+// it, RetiredKeys names it for the startup warning, and the other keys of the
+// section still load.
+func TestLoadDropsRetiredForceOverwrite(t *testing.T) {
+	path := writeConfig(t, "download:\n  force_overwrite: true\n  max_attempts: 5\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v, want the retired key dropped", err)
+	}
+	if cfg.Download.MaxAttempts != 5 {
+		t.Fatalf("max_attempts = %d, want 5 from the file", cfg.Download.MaxAttempts)
+	}
+	retired := RetiredKeys(path)
+	if len(retired) != 1 || retired[0].Key != "download.force_overwrite" || retired[0].Replacement == "" {
+		t.Fatalf("RetiredKeys() = %+v, want download.force_overwrite with its replacement", retired)
+	}
+	if got := RetiredKeys(writeConfig(t, "download:\n  max_attempts: 5\n")); len(got) != 0 {
+		t.Fatalf("RetiredKeys() of a current file = %+v, want none", got)
+	}
+}
+
+func TestValidateGiveUpAfterRuns(t *testing.T) {
+	if got := Default().Download.GiveUpAfterRuns; got != 3 {
+		t.Fatalf("default give_up_after_runs = %d, want 3", got)
+	}
+	for _, value := range []int{0, 1, giveUpAfterRunsLimit} {
+		cfg := Default()
+		cfg.Download.GiveUpAfterRuns = value
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() rejected give_up_after_runs=%d: %v", value, err)
+		}
+	}
+	for _, value := range []int{-1, giveUpAfterRunsLimit + 1} {
+		cfg := Default()
+		cfg.Download.GiveUpAfterRuns = value
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "give_up_after_runs") {
+			t.Errorf("Validate() with give_up_after_runs=%d error = %v, want a bounds error", value, err)
+		}
+	}
+}
+
 // A file a program writes for itself loses the keys this version removed,
 // and keeps every other value.
 func TestLoadGeneratedDropsRemovedKeys(t *testing.T) {

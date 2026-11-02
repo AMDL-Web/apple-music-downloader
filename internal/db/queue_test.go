@@ -49,7 +49,7 @@ func queuedIDs(t *testing.T, store *Store) []string {
 
 func queueOrders(t *testing.T, store *Store) map[string]int64 {
 	t.Helper()
-	rows, err := store.db.Query(`SELECT id, queue_order FROM jobs`)
+	rows, err := store.db.Query(`SELECT id, queue_order FROM runs`)
 	if err != nil {
 		t.Fatal(err)
 	}

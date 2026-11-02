@@ -68,6 +68,7 @@ test('item status views', () => {
   assert.equal(itemStatusView({ status: 'decrypting' }).role, 'info');
   assert.equal(itemStatusView({ status: 'decrypting' }).label, 'Decrypting');
   assert.deepEqual(itemStatusView({ status: 'skipped_existing' }), { icon: 'archive', role: 'skipped', label: 'Already on disk' });
+  assert.deepEqual(itemStatusView({ status: 'unavailable' }), { icon: 'circle-minus', role: 'skipped', label: 'Not offered' });
   assert.equal(itemStatusView({ status: 'failed', error: 'boom' }).detail, 'boom');
 });
 
@@ -228,8 +229,9 @@ test('activityView names the event and keeps one useful line', () => {
   assert.equal(failed.text, 'Apple Music has nothing at this link');
   assert.equal(activityView({ type: 'operation_exhausted', phase: 'resolve_tracks' }).text, 'resolve tracks');
   assert.equal(activityView({ type: 'some_new_event' }).label, 'Some new event');
-  assert.deepEqual(activityView({ type: 'job_retried', cause: 'resubmit', message: 'job queued again by a new submission' }), { label: 'Queued again', role: 'info', text: '' });
-  assert.equal(activityView({ type: 'job_retried', cause: 'retry' }).label, 'Retried');
+  assert.equal(activityView({ type: 'item_unavailable' }).label, 'Not offered');
+  assert.equal(activityView({ type: 'lyrics_refreshed' }).label, 'Lyrics refreshed');
+  assert.equal(activityView({ type: 'job_retried' }).label, 'Job retried', 'a 1.x event still reads, by its name');
 });
 
 test('runningFirst lifts running jobs and keeps each group in order', () => {

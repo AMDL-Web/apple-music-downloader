@@ -82,6 +82,7 @@ func (a *App) View(c *ui.Context) {
 		}
 	})
 	a.deleteDialog(c, k)
+	a.removeDialog(c, k)
 	a.downloadSheet(c, k)
 	a.hookDialog(c, k)
 	a.toast(c, k)
@@ -95,9 +96,9 @@ func (a *App) View(c *ui.Context) {
 	}
 }
 
-// shortcuts are the window's keys: Cmd+1 home, Cmd+2 the queue, Cmd+,
-// settings, Cmd+L home's field from any screen, and the sidebar's, which
-// the View menu holds on macOS (sidebarKey).
+// shortcuts are the window's keys: Cmd+1 home, Cmd+2 the queue, Cmd+3 the
+// library, Cmd+, settings, Cmd+L home's field from any screen, and the
+// sidebar's, which the View menu holds on macOS (sidebarKey).
 func (a *App) shortcuts(c *ui.Context) {
 	k := &a.keys
 	if k.home == nil {
@@ -106,6 +107,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		k.toggle, k.field = a.ToggleSidebar, a.FocusField
 		k.home = func() { a.Go(ScreenHome) }
 		k.queue = func() { a.Go(ScreenQueue) }
+		k.library = func() { a.Go(ScreenLibrary) }
 		k.settings = func() { a.Go(ScreenSettings) }
 	}
 	if runtime.GOOS != "darwin" {
@@ -114,6 +116,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	c.OnShortcut(ui.Cmd, ui.KeyL, k.field)
 	c.OnShortcut(ui.Cmd, ui.Key1, k.home)
 	c.OnShortcut(ui.Cmd, ui.Key2, k.queue)
+	c.OnShortcut(ui.Cmd, ui.Key3, k.library)
 	c.OnShortcut(ui.Cmd, ui.KeyComma, k.settings)
 	switch a.Screen {
 	case ScreenAlbum:

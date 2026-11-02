@@ -1,7 +1,8 @@
 // New download: the questions a download asks before it goes
 // (lib/download-ask.js): which quality, when the release has both lossless
-// and Dolby Atmos and Settings lists both; and, for Download again, one line
-// on the files it replaces.
+// and Dolby Atmos and Settings lists both; and, for an item already in the
+// library, whether to download it again (one line on the files it
+// replaces) or add another quality beside it.
 
 import { html, useState } from '../ui/preact.js';
 import { CHOICE_LABEL, againText } from '../lib/download-ask.js';
@@ -9,16 +10,18 @@ import { Segmented } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 
 /**
- * Props: title ("Download “…”"), asks ({codecs, again}), onDone({codec}),
- * onCancel(). The quality starts on the codec Settings ranks first.
+ * Props: title ("Download “…”"), asks ({codecs, again, slots}),
+ * onDone({codec, slot}), onCancel(). The quality starts on the codec
+ * Settings ranks first; Download again starts on the same quality.
  */
 export function AskDialog({ title, asks, onDone, onCancel }) {
   const [codec, setCodec] = useState(asks.codecs[0] || '');
+  const [slot, setSlot] = useState('');
   return html`<${ConfirmDialog}
     title=${title}
-    confirmLabel=${asks.again ? 'Download again' : 'Download'}
+    confirmLabel=${!asks.again ? 'Download' : slot ? 'Add quality' : 'Download again'}
     confirmFocus
-    onConfirm=${() => onDone({ codec })}
+    onConfirm=${() => onDone({ codec, slot })}
     onCancel=${onCancel}
   >
     <div class="ask">
@@ -28,7 +31,16 @@ export function AskDialog({ title, asks, onDone, onCancel }) {
             <${Segmented} label="Quality" options=${asks.codecs.map((c) => ({ value: c, label: CHOICE_LABEL[c] || c }))} value=${codec} onChange=${setCodec} />
           </div>`
         : null}
-      ${asks.again ? html`<p class="ask-note" key="again">${againText(asks.again)}</p>` : null}
+      ${asks.again && asks.slots.length
+        ? html`<div class="ask-row" key="slot">
+            <label class="ask-label" for="ask-slot">Quality</label>
+            <select id="ask-slot" class="select" value=${slot} onChange=${(e) => setSlot(e.currentTarget.value)}>
+              <option value="">Same as before</option>
+              ${asks.slots.map((c) => html`<option key=${c} value=${c}>Add ${CHOICE_LABEL[c] || c}</option>`)}
+            </select>
+          </div>`
+        : null}
+      ${asks.again ? html`<p class="ask-note" key="again" data-hidden=${slot ? '' : undefined}>${againText(asks.again)}</p>` : null}
     </div>
   </${ConfirmDialog}>`;
 }

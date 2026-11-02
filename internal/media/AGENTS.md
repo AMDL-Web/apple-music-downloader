@@ -5,19 +5,22 @@ The per-track pipeline. Entry points and invariants are in the package comment
 
 ## Output paths are load-bearing
 
-Libraries, media-server scans and the skip-existing check key on the exact path a
-track lands at, so changing any of these renames or duplicates files on every
+Libraries, media-server scans and the stored `files.path` of every record key on
+the exact path a track lands at, so changing any of these renames or duplicates files on every
 install and needs the maintainer's OK and an upgrade note:
 
 - template expansion in `outputPath` and `libraryTrackPath` and its variables
   (defaults and the variable list are in `configs/config.example.yaml`);
 - library placement: a song, album or artist track's path comes only from
-  `libraryTrackPath` (its album and its number in the album, `albumSongNumbers`), its
-  folder from `libraryAlbumDir`, so one track has one path whichever job type
-  downloads it; `download.library_path_format` folders take album values only
+  `libraryTrackPathFor` (its album and its number in the album, `albumSongNumbers`),
+  its folder from `libraryAlbumDir`, so one track copy has one path per slot whichever
+  add downloads it; `download.library_path_format` folders take album values only
   (`internal/config#validateLibraryFormat`);
-- `safeName`: replaced characters, trimming, the segment byte cap;
-- `qualityLabel` strings, which `{Quality}` puts into names;
+- slot names (`trackTarget.outputPath`): a completed slot's stored path wins; another
+  quality is the main file's name plus `qualitySuffixedPath`'s suffix unless the file
+  name names `{Codec}` or `{Quality}`;
+- `safeName` and `safeNameCapped`: replaced characters, trimming, the segment byte cap;
+- `qualityLabel` strings, which `{Quality}` and the suffix put into names;
 - sidecar names: `lyricsSidecarPath`, `cover.<ext>`, `artist.<ext>`.
 
 `paths_golden_test.go` pins these. A golden that has to change is a path change,
@@ -25,10 +28,12 @@ not a test fix.
 
 ## Pipeline
 
-- `trackRun` owns statuses, messages, progress, retries and events, except the
-  skip of a library track already on disk, which `skipTracksOnDisk` writes before
-  any track run starts; all I/O goes through `mediaBackend`, and "on disk" is only
-  ever `mediaBackend.statOutput`. Don't branch on `Simulate.Enabled` inside the
+- `trackRun` owns statuses, messages, progress, retries and events, and for a slot
+  of a record run its path claim and outcome (`jobs.RecordReporter`). Records decide
+  what is downloaded; the one stat of a target is `mediaBackend.statOutput` at the
+  claim, which adopts a file already there. All I/O goes through `mediaBackend`.
+  Resume checkpoints of a record run belong to the record (`resumeOwner`), so a
+  pause keeps them. Don't branch on `Simulate.Enabled` inside the
   pipeline: give the backend a method, so simulate mode keeps walking the real
   lifecycle. The simulated backend never writes, deletes or runs anything; what it
   committed counts as on disk until a restart.

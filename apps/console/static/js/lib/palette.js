@@ -18,14 +18,16 @@ const STATIC_ITEMS = [
   {
     id: 'nav-queue',
     group: 'Navigate',
-    label: 'Queue',
-    icon: 'list',
+    label: 'Activity',
+    icon: 'activity',
+    words: 'queue runs jobs downloads',
     // Its last filters, read when the palette lists it.
     get hash() {
       return queueHash();
     },
     keys: 'g q',
   },
+  { id: 'nav-library', group: 'Navigate', label: 'Library', icon: 'disc', hash: buildHash('library'), keys: 'g b', words: 'albums playlists records check disk missing apple music' },
   { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
   { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,', words: 'system status health server' },
   { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },
@@ -46,7 +48,7 @@ const SECTIONS_SHOWN_EMPTY = ['account', 'library_sync'];
 const SECTION_WORDS = {
   account: 'login log in log out wrapper session apple id media user token storefront language',
   quality: 'codec alac atmos lossless formats',
-  files: 'folder path template naming disk storage space overwrite',
+  files: 'folder path template naming disk storage space',
   lyrics_artwork: 'cover artwork lyrics lrc ttml karaoke translation romanization pronunciation motion animated',
   jobs: 'tuning workers parallel concurrency concurrent threads pool pools limits queue',
   library_sync: 'anchor poll',
@@ -76,7 +78,7 @@ const KEY_WORDS = {
   'download.max_attempts': 'retry retries tries attempts',
   'catalog.album_track_url_mode': 'song track album link',
   'library_sync.interval_minutes': 'poll interval',
-  'download.force_overwrite': 'replace redownload again',
+  'download.give_up_after_runs': 'retry retries give up failed runs',
   'download.progress_event_interval_ms': 'throttle',
   'logging.level': 'verbose',
 };

@@ -43,7 +43,7 @@ func TestMarshalEventPayloadKeepsSnapshotFields(t *testing.T) {
 	force := true
 	payload := MarshalEventPayload(Job{
 		ID: "job-1", Status: JobCompleted,
-		Overrides: &config.DownloadOverrides{ForceOverwrite: &force},
+		Overrides: &config.DownloadOverrides{CodecAlternative: &force},
 	}, map[string]any{"message": "completed", "attempts": 2})
 	if len(payload) == 0 {
 		t.Fatal("MarshalEventPayload returned an empty payload")
@@ -105,7 +105,7 @@ func TestSummarizeHooksEmpty(t *testing.T) {
 func TestIsOverviewMilestone(t *testing.T) {
 	milestones := []EventType{
 		"job_queued", "job_recovered", "job_retried", "job_started", "job_moved", "resolved_input", "motion_artwork_resolved",
-		"item_completed", "item_skipped", "item_failed",
+		"item_completed", "item_skipped", "item_unavailable", "lyrics_refreshed", "item_failed",
 		"job_finished", "job_failed", "job_cancelled", "job_deleted",
 	}
 	for _, ty := range milestones {

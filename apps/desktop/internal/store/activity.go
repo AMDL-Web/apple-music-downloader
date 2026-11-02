@@ -43,8 +43,6 @@ func describe(j *Job, e domain.Event) (text string, kind ActivityKind, ok bool) 
 		return "Queued", ActivityInfo, true
 	case domain.EventJobStarted:
 		return "Started", ActivityInfo, true
-	case domain.EventJobRetried:
-		return "Retried", ActivityInfo, true
 	case domain.EventJobRecovered:
 		return "Picked up again after a restart", ActivityInfo, true
 	case domain.EventResolvedInput:
@@ -64,8 +62,10 @@ func describe(j *Job, e domain.Event) (text string, kind ActivityKind, ok bool) 
 		return track + " saved", ActivityDone, true
 	case domain.EventItemSkipped:
 		return track + " already on disk", ActivityDone, true
-	case domain.EventItemOverwrite:
-		return track + " will replace the file on disk", ActivityInfo, true
+	case domain.EventItemUnavailable:
+		return track + " is not offered" + detail(firstNonEmpty(it.Error, e.Message)), ActivityWarn, true
+	case domain.EventLyricsRefreshed:
+		return track + ": lyrics written", ActivityDone, true
 	case domain.EventItemFailed:
 		return track + " failed" + detail(firstNonEmpty(it.Error, e.Message)), ActivityFailed, true
 	case domain.EventCodecSelected:

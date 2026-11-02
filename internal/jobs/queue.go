@@ -78,12 +78,21 @@ func (s *signal) broadcast() {
 	}
 }
 
-// RecoverUnfinished requeues the jobs a previous process left queued or
-// running and records job_recovered for each. Interrupted running jobs go to
+// RecoverUnfinished sets the slots a previous process left running back to
+// pending, then requeues the jobs it left queued or running and records
+// job_recovered for each. Interrupted running jobs go to
 // the front of the run order, in the order they had, because they were ahead
 // of every queued job when they started; queued jobs keep their place. Call it
 // before Start.
 func (m *Manager) RecoverUnfinished(ctx context.Context) (int, error) {
+	// A slot a stopped process left running would never be due again; it
+	// goes back to pending without a failure, and its recovered run plans it
+	// again.
+	if released, err := m.store.RecoverRunningFiles(ctx, time.Now().UTC()); err != nil {
+		return 0, err
+	} else if released > 0 {
+		m.logger.Info("slots left running by the previous process are pending again", "slots", released)
+	}
 	jobs, err := m.store.ListRecoverableJobs(ctx)
 	if err != nil {
 		return 0, err
@@ -178,7 +187,7 @@ func (m *Manager) worker(ctx context.Context, index int) {
 type claimed struct {
 	job    domain.Job
 	ctx    context.Context
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 }
 
 // claimNext marks the first claimable queued job in run order running and
@@ -214,7 +223,7 @@ func (m *Manager) claimNext(parent context.Context) (claimed, bool, error) {
 			m.passOver(parent, id, "mark job running", err)
 			continue
 		}
-		ctx, cancel := context.WithCancel(parent)
+		ctx, cancel := context.WithCancelCause(parent)
 		m.cancels[id] = cancel
 		m.waiting.remove(id)
 		return claimed{job: job, ctx: ctx, cancel: cancel}, true, nil

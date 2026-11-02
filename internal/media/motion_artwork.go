@@ -55,12 +55,20 @@ func (d *Downloader) startMotionArtworkBackfill(ctx context.Context, jobID strin
 		if art.IsZero() {
 			return
 		}
-		applied, err := reporter.SetJobMotionArtwork(detached, jobID, domain.MotionArtwork{
+		motion := domain.MotionArtwork{
 			SquareURL:    art.Square,
 			TallURL:      art.Tall,
 			SquareColors: domain.ArtworkPalette(art.SquareColors),
 			TallColors:   domain.ArtworkPalette(art.TallColors),
-		})
+		}
+		// An album record keeps its animated covers (albums.artwork); the run
+		// shows them too until the API reads the record.
+		if record, ok := reporter.(jobs.RecordReporter); ok && parsed.Type == applemusic.TypeAlbum {
+			if err := record.SetRecordMotionArtwork(detached, albumID, motion); err != nil {
+				log.Warn("persist motion artwork on the album", "album_id", albumID, "error", err)
+			}
+		}
+		applied, err := reporter.SetJobMotionArtwork(detached, jobID, motion)
 		if err != nil {
 			log.Warn("persist motion artwork", "job_id", jobID, "error", err)
 			return

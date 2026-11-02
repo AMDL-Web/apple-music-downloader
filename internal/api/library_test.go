@@ -3,309 +3,96 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
-	"reflect"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"amdl/internal/applemusic"
 	"amdl/internal/config"
+	"amdl/internal/db"
 	"amdl/internal/domain"
 )
 
-// fakeLibrary answers the library queries from a set of song ids on disk and
-// per-album folder counts.
-type fakeLibrary struct {
-	onDisk  map[string]bool
-	folders map[string]int
-	// cancelled makes AlbumTracksOnDisk fail as a request past its deadline.
-	cancelled bool
-}
+// The record routes read what the store keeps, add through the submit path
+// with its statuses, and refuse a bad scope, kind or downloads dir with the
+// documented codes.
+func TestLibraryRoutesServeRecords(t *testing.T) {
+	cfg := config.Default()
+	cfg.Download.DownloadsDir = filepath.Join(t.TempDir(), "not-there")
+	s := newServer(t, Deps{Config: config.NewStore(cfg)})
+	h := s.Routes()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if _, err := s.store.AddAlbum(ctx, db.AlbumAdd{ID: "1", WantedAll: true, Source: domain.SourceManual, Now: now}); err != nil {
+		t.Fatal(err)
+	}
 
-func (f *fakeLibrary) AlbumTracksOnDisk(_ context.Context, album applemusic.Collection) (domain.LibraryState, []bool, error) {
-	if f.cancelled {
-		return domain.LibraryState{}, nil, context.DeadlineExceeded
+	rec := requestJSON(t, h, http.MethodGet, "/api/v1/library/albums?flag=unresolved", "")
+	var list struct {
+		Items []struct {
+			ID    string             `json:"id"`
+			State domain.RecordState `json:"state"`
+		} `json:"items"`
+		Total int `json:"total"`
 	}
-	got := make([]bool, len(album.Tracks))
-	n := 0
-	for i, track := range album.Tracks {
-		if f.onDisk[track.ID] {
-			got[i] = true
-			n++
-		}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &list) != nil || list.Total != 1 || list.Items[0].ID != "1" || list.Items[0].State != domain.RecordNone {
+		t.Fatalf("list = %d %s", rec.Code, rec.Body)
 	}
-	return domain.NewLibraryState(n, len(album.Tracks)), got, nil
-}
+	rec = requestJSON(t, h, http.MethodGet, "/api/v1/library/albums/1", "")
+	var detail struct {
+		ID      string                `json:"id"`
+		Sources []domain.RecordSource `json:"sources"`
+		Tracks  []any                 `json:"tracks"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &detail) != nil || detail.ID != "1" || len(detail.Sources) != 1 || detail.Tracks == nil {
+		t.Fatalf("detail = %d %s", rec.Code, rec.Body)
+	}
 
-func (f *fakeLibrary) SongOnDisk(album applemusic.Collection, songID string) (domain.LibraryState, bool) {
-	for _, track := range album.Tracks {
-		if track.ID == songID {
-			n := 0
-			if f.onDisk[songID] {
-				n = 1
-			}
-			return domain.NewLibraryState(n, 1), true
-		}
+	// A second add of a record whose run is queued answers with that run.
+	rec = requestJSON(t, h, http.MethodPost, "/api/v1/library/add", `{"urls":["album|cn|2"],"codecs":["aac"]}`)
+	var batch domain.BatchSubmitResponse
+	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &batch) != nil || batch.Accepted != 1 {
+		t.Fatalf("add = %d %s", rec.Code, rec.Body)
 	}
-	return domain.LibraryState{}, false
-}
+	if r := batch.Results[0]; r.Resource == nil || r.Resource.ID != "2" || r.Job == nil || r.Job.ResourceID != "2" || r.Job.Trigger != domain.TriggerManual {
+		t.Fatalf("add result = %+v", r)
+	}
+	if a, err := s.store.GetAlbum(ctx, "2"); err != nil || a.Overrides == nil || (*a.Overrides.QualityPriority)[0] != "aac" {
+		t.Fatalf("codecs are not the record's overrides: %+v, %v", a.Overrides, err)
+	}
+	rec = requestJSON(t, h, http.MethodPost, "/api/v1/library/albums/2/reset", `{"what":"audio"}`)
+	assertErrorCode(t, rec, http.StatusConflict, CodeRunActive)
 
-func (f *fakeLibrary) AlbumFolderStates(_ context.Context, albums []applemusic.Collection) []*domain.LibraryState {
-	out := make([]*domain.LibraryState, len(albums))
-	for i, album := range albums {
-		if n, ok := f.folders[album.ID]; ok {
-			state := domain.NewLibraryState(n, album.TrackCount)
-			out[i] = &state
-		}
-	}
-	return out
-}
-
-func (f *fakeLibrary) SongHitStates(_ context.Context, songs []applemusic.Song) []*domain.LibraryState {
-	out := make([]*domain.LibraryState, len(songs))
-	for i, song := range songs {
-		if song.AlbumID == "" {
-			continue
-		}
-		n := 0
-		if f.onDisk[song.ID] {
-			n = 1
-		}
-		state := domain.NewLibraryState(n, 1)
-		out[i] = &state
-	}
-	return out
-}
-
-func newLibraryServer(catalog CatalogService, library LibraryService) http.Handler {
-	return (&Server{cfg: config.NewStore(config.Default()), catalog: catalog, library: library, appleLibrary: &fakeAppleLibrary{}}).Routes()
-}
-
-func libraryOf(t *testing.T, v any) map[string]any {
-	t.Helper()
-	m, ok := v.(map[string]any)
-	if !ok {
-		t.Fatalf("library = %#v, want an object", v)
-	}
-	return m
-}
-
-func TestAlbumSaysWhichSongsAreOnDisk(t *testing.T) {
-	catalog := &fakeCatalog{t: t, album: sampleAlbum()}
-	library := &fakeLibrary{onDisk: map[string]bool{"10": true, "12": true}}
-	recorder := requestJSON(t, newLibraryServer(catalog, library), http.MethodGet, "/api/v1/albums/1783644603?storefront=cn", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	got := decodeBody(t, recorder.Body.Bytes())
-	if want := map[string]any{"state": "partial", "tracks_on_disk": float64(2), "tracks_total": float64(3)}; !reflect.DeepEqual(got["library"], want) {
-		t.Fatalf("library = %v, want %v", got["library"], want)
-	}
-	// The tracks are sorted by disc and track; on_disk follows each song,
-	// not its position in the catalog's list.
-	onDisk := map[string]any{}
-	for _, tr := range got["tracks"].([]any) {
-		m := tr.(map[string]any)
-		onDisk[m["id"].(string)] = m["on_disk"]
-	}
-	if want := map[string]any{"10": true, "11": false, "12": true}; !reflect.DeepEqual(onDisk, want) {
-		t.Fatalf("on_disk = %v, want %v", onDisk, want)
-	}
-}
-
-func TestAlbumLeavesTheLibraryOutWhenItCannotCheck(t *testing.T) {
-	for name, library := range map[string]LibraryService{"no library": nil, "past the deadline": &fakeLibrary{cancelled: true}} {
-		t.Run(name, func(t *testing.T) {
-			catalog := &fakeCatalog{t: t, album: sampleAlbum()}
-			recorder := requestJSON(t, newLibraryServer(catalog, library), http.MethodGet, "/api/v1/albums/1783644603?storefront=cn", "")
-			if recorder.Code != http.StatusOK {
-				t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-			}
-			got := decodeBody(t, recorder.Body.Bytes())
-			if _, ok := got["library"]; ok {
-				t.Errorf("library present: %v", got["library"])
-			}
-			for _, tr := range got["tracks"].([]any) {
-				if _, ok := tr.(map[string]any)["on_disk"]; ok {
-					t.Errorf("on_disk present without a library: %v", tr)
-				}
-			}
-		})
-	}
-}
-
-func TestLookupAlbumCarriesItsLibraryState(t *testing.T) {
-	catalog := &fakeCatalog{t: t, album: sampleAlbum()}
-	library := &fakeLibrary{onDisk: map[string]bool{"10": true, "11": true, "12": true}}
-	recorder := requestJSON(t, newLibraryServer(catalog, library), http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/cn/album/two-discs/1783644603"}`)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	got := decodeLookup(t, recorder.Body.Bytes())
-	if lib := libraryOf(t, got["library"]); lib["state"] != "complete" || lib["tracks_on_disk"] != float64(3) || lib["tracks_total"] != float64(3) {
-		t.Fatalf("library = %v", lib)
-	}
-	if want := []string{"album cn/1783644603"}; !reflect.DeepEqual(catalog.calls, want) {
-		t.Fatalf("catalog calls = %v, want %v (an album needs no further read)", catalog.calls, want)
-	}
-}
-
-func TestLookupSongReadsItsAlbumForTheLibraryState(t *testing.T) {
-	song := &applemusic.Song{ID: "11", Name: "Closer", AlbumID: "1783644603", AlbumName: "Two Discs"}
-	catalog := &fakeCatalog{t: t, song: song, album: sampleAlbum()}
-	library := &fakeLibrary{onDisk: map[string]bool{"11": true}}
-	recorder := requestJSON(t, newLibraryServer(catalog, library), http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/cn/song/closer/11"}`)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	got := decodeLookup(t, recorder.Body.Bytes())
-	if want := map[string]any{"state": "complete", "tracks_on_disk": float64(1), "tracks_total": float64(1)}; !reflect.DeepEqual(got["library"], want) {
-		t.Fatalf("library = %v, want %v", got["library"], want)
-	}
-	if want := []string{"song cn/11", "album cn/1783644603"}; !reflect.DeepEqual(catalog.calls, want) {
-		t.Fatalf("catalog calls = %v, want %v", catalog.calls, want)
-	}
-}
-
-// failingAlbumCatalog answers the song and fails the album read.
-type failingAlbumCatalog struct{ *fakeCatalog }
-
-func (failingAlbumCatalog) Album(context.Context, string, string) (applemusic.Collection, error) {
-	return applemusic.Collection{}, errors.New("upstream 500")
-}
-
-func TestLookupSongAnswersWithoutLibraryWhenItsAlbumCannotPlaceIt(t *testing.T) {
-	song := &applemusic.Song{ID: "11", Name: "Closer", AlbumID: "1783644603"}
-	library := &fakeLibrary{onDisk: map[string]bool{"11": true}}
-	for name, catalog := range map[string]CatalogService{
-		"album read fails":         failingAlbumCatalog{&fakeCatalog{t: t, song: song}},
-		"album does not list song": &fakeCatalog{t: t, song: song, album: &applemusic.Collection{ID: "1783644603", Tracks: []applemusic.Song{{ID: "99"}}}},
+	for _, tc := range []struct {
+		method, path, body string
+		status             int
+		code               ErrorCode
+	}{
+		{http.MethodPost, "/api/v1/library/albums/1/reset", `{"what":"everything"}`, http.StatusBadRequest, CodeInvalidScope},
+		{http.MethodPost, "/api/v1/library/albums/1/reset", `{"what":"lyrics","codecs":["alac"]}`, http.StatusBadRequest, CodeInvalidScope},
+		{http.MethodPost, "/api/v1/library/reset", `{"what":"audio","filter":{}}`, http.StatusBadRequest, CodeInvalidScope},
+		{http.MethodDelete, "/api/v1/library/songs/1", "", http.StatusNotFound, CodeResourceNotFound},
+		{http.MethodGet, "/api/v1/library/albums/9", "", http.StatusNotFound, CodeResourceNotFound},
+		{http.MethodPost, "/api/v1/library/check", "", http.StatusServiceUnavailable, CodeDownloadsDirUnavailable},
+		{http.MethodGet, "/api/v1/library/albums?flag=bogus", "", http.StatusBadRequest, CodeInvalidRequest},
 	} {
-		t.Run(name, func(t *testing.T) {
-			recorder := requestJSON(t, newLibraryServer(catalog, library), http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/cn/song/closer/11"}`)
-			if recorder.Code != http.StatusOK {
-				t.Fatalf("status = %d, body %s (the album read is optional)", recorder.Code, recorder.Body.String())
-			}
-			got := decodeLookup(t, recorder.Body.Bytes())
-			if got["title"] != "Closer" {
-				t.Errorf("title = %v", got["title"])
-			}
-			if _, ok := got["library"]; ok {
-				t.Errorf("library present: %v", got["library"])
-			}
-		})
-	}
-}
-
-func TestSearchAndArtistAlbumsEstimateAlbumsFromTheirFolders(t *testing.T) {
-	library := &fakeLibrary{folders: map[string]int{"6814997249": 9}}
-	want := map[string]any{"state": "partial", "tracks_on_disk": float64(9), "tracks_total": float64(16)}
-
-	catalog := &fakeCatalog{t: t, search: sampleSearch()}
-	recorder := requestJSON(t, newLibraryServer(catalog, library), http.MethodGet, "/api/v1/search?term=taylor&storefront=us", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("search status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	var res struct {
-		Songs, Albums, Playlists struct {
-			Items []map[string]any `json:"items"`
-		}
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &res); err != nil {
-		t.Fatal(err)
-	}
-	if got := res.Albums.Items[0]["library"]; !reflect.DeepEqual(got, want) {
-		t.Errorf("album hit library = %v, want %v", got, want)
-	}
-	for _, hit := range append(res.Songs.Items, res.Playlists.Items...) {
-		if _, ok := hit["library"]; ok {
-			t.Errorf("%v hit has library: %v", hit["type"], hit)
-		}
+		rec := requestJSON(t, h, tc.method, tc.path, tc.body)
+		assertErrorCode(t, rec, tc.status, tc.code)
 	}
 
-	artistCatalog := &fakeCatalog{t: t, artist: &applemusic.Artist{ID: "159260351", Name: "Taylor Swift"},
-		albums: &applemusic.AlbumPage{Albums: sampleSearch().Albums}}
-	recorder = requestJSON(t, newLibraryServer(artistCatalog, library), http.MethodGet, "/api/v1/artists/159260351/albums?storefront=us", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("artist albums status = %d, body %s", recorder.Code, recorder.Body.String())
+	rec = requestJSON(t, h, http.MethodPost, "/api/v1/library/albums/1/pause", "")
+	var paused struct {
+		Paused bool `json:"paused"`
 	}
-	got := decodeBody(t, recorder.Body.Bytes())
-	if _, ok := got["artist"].(map[string]any)["library"]; ok {
-		t.Errorf("artist hit has library: %v", got["artist"])
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &paused) != nil || !paused.Paused {
+		t.Fatalf("pause = %d %s", rec.Code, rec.Body)
 	}
-	items := got["albums"].(map[string]any)["items"].([]any)
-	if lib := items[0].(map[string]any)["library"]; !reflect.DeepEqual(lib, want) {
-		t.Errorf("artist album library = %v, want %v", lib, want)
+	rec = requestJSON(t, h, http.MethodDelete, "/api/v1/library/albums/1", "")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d %s", rec.Code, rec.Body)
 	}
-}
-
-// A storefront can withhold tracks from an album's track list while the
-// summary's track_count still counts them. An album whose queue entry
-// resolved 15 of the summary's 16 tracks, all 15 on disk, reads complete on a
-// card, as it does on its album page, instead of 15/16 for good.
-func TestAlbumCardsCountTheTracksTheirJobResolved(t *testing.T) {
-	catalog := &fakeCatalog{t: t, search: sampleSearch(), artist: &applemusic.Artist{ID: "159260351", Name: "Taylor Swift"},
-		albums: &applemusic.AlbumPage{Albums: sampleSearch().Albums}}
-	server := newServer(t, Deps{Catalog: catalog, Library: &fakeLibrary{folders: map[string]int{"6814997249": 15}}})
-	created := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
-	if err := server.store.CreateJob(context.Background(), domain.Job{
-		ID: "album-done", Type: "album", Input: "input", Storefront: "cn", CanonicalKey: "album:cn:6814997249",
-		Status: domain.JobCompleted, TotalItems: 15, CreatedAt: created, UpdatedAt: created, FinishedAt: &created,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]any{"state": "complete", "tracks_on_disk": float64(15), "tracks_total": float64(15)}
-	for _, path := range []string{"/api/v1/search?term=taylor&types=albums&storefront=us", "/api/v1/artists/159260351/albums?storefront=us"} {
-		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("%s status = %d, body %s", path, recorder.Code, recorder.Body.String())
-		}
-		hit := decodeBody(t, recorder.Body.Bytes())["albums"].(map[string]any)["items"].([]any)[0].(map[string]any)
-		if got := hit["library"]; !reflect.DeepEqual(got, want) {
-			t.Errorf("%s album library = %v, want %v", path, got, want)
-		}
-	}
-}
-
-// A song hit the search placed (its album came with it) says whether its
-// file is on disk; one the library cannot place has no library.
-func TestSearchMarksSongHitsOnDisk(t *testing.T) {
-	results := sampleSearch()
-	placed := results.Songs[0]
-	placed.ID, placed.AlbumID, placed.AlbumArtist = "s-on-disk", "6814997249", "Taylor Swift"
-	missing := placed
-	missing.ID = "s-missing"
-	results.Songs = append(results.Songs, placed, missing)
-	library := &fakeLibrary{onDisk: map[string]bool{"s-on-disk": true}}
-	recorder := requestJSON(t, newLibraryServer(&fakeCatalog{t: t, search: results}, library), http.MethodGet, "/api/v1/search?term=taylor&types=songs", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	items := decodeBody(t, recorder.Body.Bytes())["songs"].(map[string]any)["items"].([]any)
-	got := make([]any, len(items))
-	for i, item := range items {
-		got[i] = item.(map[string]any)["library"]
-	}
-	want := []any{
-		nil,
-		map[string]any{"state": "complete", "tracks_on_disk": float64(1), "tracks_total": float64(1)},
-		map[string]any{"state": "none", "tracks_on_disk": float64(0), "tracks_total": float64(1)},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("song hit libraries = %v, want %v", got, want)
-	}
-}
-
-func TestSearchLeavesAnUncountedAlbumWithoutLibrary(t *testing.T) {
-	catalog := &fakeCatalog{t: t, search: sampleSearch()}
-	recorder := requestJSON(t, newLibraryServer(catalog, &fakeLibrary{}), http.MethodGet, "/api/v1/search?term=taylor&types=albums", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	got := decodeBody(t, recorder.Body.Bytes())
-	hit := got["albums"].(map[string]any)["items"].([]any)[0].(map[string]any)
-	if _, ok := hit["library"]; ok {
-		t.Errorf("library present for an album the folder listing did not reach: %v", hit["library"])
+	rec = requestJSON(t, h, http.MethodGet, "/api/v1/library/check", "")
+	if rec.Code != http.StatusOK || rec.Body.String() != "{\"check\":null}\n" {
+		t.Fatalf("check before any = %d %q", rec.Code, rec.Body)
 	}
 }

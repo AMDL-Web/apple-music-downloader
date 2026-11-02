@@ -33,7 +33,6 @@ const SERVER = {
   downloads_dir: '/data/downloads',
   embed_cover: true,
   embed_lyrics: true,
-  force_overwrite: false,
   integrity_mode: 'full',
   lyrics_extras: [],
   lyrics_files: [],
@@ -45,8 +44,8 @@ const SERVER = {
   save_playlist_cover: true,
 };
 
-test('the form edits quality and overwrite only', () => {
-  assert.deepEqual(OPTION_KEYS, ['quality_priority', 'codec_alternative', 'alac_max_sample_rate', 'alac_max_bit_depth', 'force_overwrite']);
+test('the form edits quality only', () => {
+  assert.deepEqual(OPTION_KEYS, ['quality_priority', 'codec_alternative', 'alac_max_sample_rate', 'alac_max_bit_depth']);
 });
 
 test('optionDefaults reads the edited keys from the server and nothing else', () => {
@@ -57,10 +56,9 @@ test('optionDefaults reads the edited keys from the server and nothing else', ()
 });
 
 test('optionDefaults falls back per key', () => {
-  const d = optionDefaults({ quality_priority: ['aac', 'bogus'], alac_max_sample_rate: 0, force_overwrite: 'yes' });
+  const d = optionDefaults({ quality_priority: ['aac', 'bogus'], alac_max_sample_rate: 0 });
   assert.deepEqual(d.quality_priority, ['alac'], 'an unknown codec voids the list');
   assert.equal(d.alac_max_sample_rate, 192000);
-  assert.equal(d.force_overwrite, false);
   assert.deepEqual(optionDefaults(null), { ...OPTION_DEFAULTS, quality_priority: ['alac'] });
 });
 
@@ -76,13 +74,11 @@ test('only changed options are sent, with their exact values', () => {
     quality_priority: ['ec3', 'alac'],
     codec_alternative: false,
     alac_max_sample_rate: 48000,
-    force_overwrite: true,
   };
   assert.deepEqual(buildOverrides(d, v), {
     quality_priority: ['ec3', 'alac'],
     codec_alternative: false,
     alac_max_sample_rate: 48000,
-    force_overwrite: true,
   });
 });
 
@@ -93,11 +89,11 @@ test('quality order matters', () => {
 
 test('invalid form values are never sent', () => {
   const d = optionDefaults(SERVER);
-  assert.deepEqual(buildOverrides(d, { ...d, quality_priority: [], alac_max_bit_depth: -1, force_overwrite: 'yes' }), {});
+  assert.deepEqual(buildOverrides(d, { ...d, quality_priority: [], alac_max_bit_depth: -1 }), {});
 });
 
 test('sanitizeOverrides keeps only the edited keys with valid values', () => {
-  const raw = { quality_priority: ['aac'], media_user_token: 'secret', bogus: 1, embed_cover: false, hooks: ['a'], force_overwrite: 'yes' };
+  const raw = { quality_priority: ['aac'], media_user_token: 'secret', bogus: 1, embed_cover: false, hooks: ['a'], force_overwrite: true };
   assert.deepEqual(sanitizeOverrides(raw), { quality_priority: ['aac'] });
   assert.deepEqual(sanitizeOverrides([1, 2]), {});
   assert.deepEqual(sanitizeOverrides(null), {});
@@ -106,7 +102,7 @@ test('sanitizeOverrides keeps only the edited keys with valid values', () => {
 test('applyOverrides lays overrides over the defaults', () => {
   const d = optionDefaults(SERVER);
   const form = applyOverrides(d, { quality_priority: ['aac'], force_overwrite: true, embed_cover: false });
-  assert.deepEqual(form, { ...d, quality_priority: ['aac'], force_overwrite: true });
+  assert.deepEqual(form, { ...d, quality_priority: ['aac'] }, 'force_overwrite is gone since 2.0: a reset downloads again');
 });
 
 test('choices adds a server value outside the usual list', () => {
@@ -116,12 +112,10 @@ test('choices adds a server value outside the usual list', () => {
   assert.equal(rateLabel(192000), '192 kHz');
 });
 
-test('each preset maps to its overrides; following Settings with Overwrite untouched sends none', () => {
+test('each preset maps to its overrides; following Settings sends none', () => {
   const d = optionDefaults(SERVER);
   assert.deepEqual(PRESETS.map((p) => p.id), ['follow', 'lossless', 'atmos', 'aac']);
   assert.deepEqual(presetOverrides(d, 'follow'), {});
-  assert.deepEqual(presetOverrides(d, 'follow', null, false), {}, 'Overwrite at the Settings value is not sent');
-  assert.deepEqual(presetOverrides(d, 'follow', null, true), { force_overwrite: true });
   assert.deepEqual(presetOverrides(d, 'lossless'), {}, 'Settings already downloads ALAC with the fallback on');
   assert.deepEqual(presetOverrides(d, 'atmos'), { quality_priority: ['ec3', 'alac'] });
   assert.deepEqual(presetOverrides(d, 'aac'), { quality_priority: ['aac'] });
@@ -136,7 +130,6 @@ test('the custom preset sends its edited quality keys, never other keys', () => 
   assert.deepEqual(presetOverrides(d, 'custom', custom), { quality_priority: ['ec3', 'aac'], codec_alternative: false, alac_max_sample_rate: 48000, alac_max_bit_depth: 16 });
   assert.deepEqual(presetOverrides(d, 'custom', { quality_priority: [] }), {}, 'an empty codec list is never sent');
   assert.deepEqual(presetOverrides(d, 'bogus'), {});
-  assert.equal(presetValues(d, 'atmos', null, true).force_overwrite, true);
 });
 
 test('qualityText, customLabel and probeWarning say what a download gets', () => {

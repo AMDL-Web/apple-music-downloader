@@ -2,6 +2,7 @@ package media
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+
+	"amdl/internal/config"
 
 	"github.com/zhaarey/go-mp4tag"
 )
@@ -528,4 +531,37 @@ func splitTestMP4Boxes(t *testing.T, data []byte) [][]byte {
 		offset += size
 	}
 	return boxes
+}
+
+// A lyrics refresh replaces the embedded lyrics on a copy and commits it over
+// the track, keeping every other tag and the media bytes.
+func TestRewriteLyricsKeepsOtherTags(t *testing.T) {
+	payload := bytes.Repeat([]byte("audio-payload-"), 1024)
+	path := filepath.Join(t.TempDir(), "01. Song.m4a")
+	if err := os.WriteFile(path, metadataTestMP4(payload, false), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeMP4TagsLegacy(path, &mp4tag.MP4Tags{Title: "Song", Lyrics: "[00:01.00]old", Comment: "kept"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Download.TempDir = t.TempDir()
+	d := newTestDownloader(&Downloader{cfg: cfg})
+	if err := (realMedia{d: d}).rewriteLyrics(context.Background(), path, "[00:01.00]new"); err != nil {
+		t.Fatal(err)
+	}
+	tags := readTestMP4Tags(t, path)
+	if tags.Lyrics != "[00:01.00]new" || tags.Title != "Song" || tags.Comment != "kept" {
+		t.Fatalf("tags = lyrics %q, title %q, comment %q; want the new lyrics and the rest kept", tags.Lyrics, tags.Title, tags.Comment)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(after, payload) {
+		t.Fatal("the media payload changed")
+	}
+	if entries, _ := os.ReadDir(cfg.Download.TempDir); len(entries) != 0 {
+		t.Fatalf("temp dir keeps %d files, want the copy gone", len(entries))
+	}
 }

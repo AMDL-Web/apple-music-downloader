@@ -9,37 +9,53 @@ import (
 )
 
 func (s *Store) CreateItem(ctx context.Context, item domain.JobItem) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO job_items(id,job_id,adam_id,kind,idx,title,artist,album,duration_ms,artwork_url,has_lyrics,lyrics_status,status,download_progress,decrypt_progress,download_bytes,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved,codec,bit_depth,sample_rate,bitrate,file_size,retry_kind,attempt,max_attempts,status_message,output_path,error,created_at,updated_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.JobID, item.AdamID, item.Kind, item.Index, item.Title, item.Artist, item.Album, item.DurationMS, item.ArtworkURL, item.HasLyrics, string(item.LyricsStatus),
+	_, err := s.db.ExecContext(ctx, `INSERT INTO run_items(id,job_id,adam_id,kind,idx,title,artist,album,duration_ms,artwork_url,has_lyrics,lyrics_status,status,download_progress,decrypt_progress,download_bytes,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved,codec,bit_depth,sample_rate,bitrate,file_size,retry_kind,attempt,max_attempts,status_message,output_path,error,slot,owner_kind,owner_id,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.JobID, item.AdamID, item.Kind, item.Index, item.Title, item.Artist, item.Album, item.DurationMS, item.ArtworkURL, item.HasLyrics, string(item.LyricsStatus),
 		string(item.Status), item.Progress.Download, item.Progress.Decrypt, item.Progress.DownloadBytes, item.Progress.Resolved, item.Progress.Remuxed, item.Progress.Verified, item.Progress.Tagged, item.Progress.Saved,
-		item.Codec, item.BitDepth, item.SampleRate, item.Bitrate, item.FileSize, item.RetryKind, item.Attempt, item.MaxAttempts, item.StatusMessage, item.OutputPath, item.Error, formatTime(item.CreatedAt), formatTime(item.UpdatedAt))
+		item.Codec, item.BitDepth, item.SampleRate, item.Bitrate, item.FileSize, item.RetryKind, item.Attempt, item.MaxAttempts, item.StatusMessage, item.OutputPath, item.Error, itemSlot(item.Slot), string(item.OwnerKind), item.OwnerID, formatTime(item.CreatedAt), formatTime(item.UpdatedAt))
 	return err
 }
 
+func itemSlot(slot string) string {
+	if slot == "" {
+		return domain.SlotMain
+	}
+	return slot
+}
+
 func (s *Store) UpdateItem(ctx context.Context, item domain.JobItem) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE job_items SET title=?,artist=?,album=?,duration_ms=?,artwork_url=?,has_lyrics=?,lyrics_status=?,status=?,download_progress=?,decrypt_progress=?,download_bytes=?,progress_resolved=?,progress_remuxed=?,progress_verified=?,progress_tagged=?,progress_saved=?,codec=?,bit_depth=?,sample_rate=?,bitrate=?,file_size=?,retry_kind=?,attempt=?,max_attempts=?,status_message=?,output_path=?,error=?,updated_at=? WHERE id=?`,
+	_, err := s.db.ExecContext(ctx, `UPDATE run_items SET title=?,artist=?,album=?,duration_ms=?,artwork_url=?,has_lyrics=?,lyrics_status=?,status=?,download_progress=?,decrypt_progress=?,download_bytes=?,progress_resolved=?,progress_remuxed=?,progress_verified=?,progress_tagged=?,progress_saved=?,codec=?,bit_depth=?,sample_rate=?,bitrate=?,file_size=?,retry_kind=?,attempt=?,max_attempts=?,status_message=?,output_path=?,error=?,updated_at=? WHERE id=?`,
 		item.Title, item.Artist, item.Album, item.DurationMS, item.ArtworkURL, item.HasLyrics, string(item.LyricsStatus), string(item.Status),
 		item.Progress.Download, item.Progress.Decrypt, item.Progress.DownloadBytes, item.Progress.Resolved, item.Progress.Remuxed, item.Progress.Verified, item.Progress.Tagged, item.Progress.Saved,
 		item.Codec, item.BitDepth, item.SampleRate, item.Bitrate, item.FileSize, item.RetryKind, item.Attempt, item.MaxAttempts, item.StatusMessage, item.OutputPath, item.Error, formatTime(item.UpdatedAt), item.ID)
 	return err
 }
 
-// ResetUnfinishedItems returns every item of jobID that has not finished
-// (i.e. is neither completed nor skipped_existing) to its pre-download queued
-// state in a single statement, so callers holding scheduling locks don't pay
-// one round-trip per item on large collections. The cleared fields must stay
-// in sync with domain.JobItem.ResetForRetry, which is the per-item form of
-// the same reset.
-func (s *Store) ResetUnfinishedItems(ctx context.Context, jobID string, updatedAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE job_items
-		SET status=?, download_progress=0, decrypt_progress=0, download_bytes=0,
-			progress_resolved=0, progress_remuxed=0, progress_verified=0, progress_tagged=0, progress_saved=0,
-			codec='', bit_depth=0, sample_rate=0, bitrate=0, file_size=0,
-			lyrics_status='', retry_kind='', attempt=0, max_attempts=0, status_message='', error='', updated_at=?
-		WHERE job_id=? AND status NOT IN (?,?)`,
-		string(domain.ItemQueued), formatTime(updatedAt), jobID,
-		string(domain.ItemCompleted), string(domain.ItemSkipped))
-	return err
+// ResetItems returns the items itemIDs of jobID that have not finished (i.e.
+// are neither completed nor skipped_existing) to their pre-download queued
+// state, in one statement per few hundred ids, so callers holding scheduling
+// locks don't pay one round-trip per item on large collections. Other items of
+// the job keep their state. The cleared fields must stay in sync with
+// domain.JobItem.ResetForRetry, which is the per-item form of the same reset.
+func (s *Store) ResetItems(ctx context.Context, jobID string, itemIDs []string, updatedAt time.Time) error {
+	const chunk = 500
+	for len(itemIDs) > 0 {
+		ids := itemIDs[:min(chunk, len(itemIDs))]
+		itemIDs = itemIDs[len(ids):]
+		args := []any{string(domain.ItemQueued), formatTime(updatedAt), jobID, string(domain.ItemCompleted), string(domain.ItemSkipped)}
+		for _, id := range ids {
+			args = append(args, id)
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE run_items
+			SET status=?, download_progress=0, decrypt_progress=0, download_bytes=0,
+				progress_resolved=0, progress_remuxed=0, progress_verified=0, progress_tagged=0, progress_saved=0,
+				codec='', bit_depth=0, sample_rate=0, bitrate=0, file_size=0,
+				lyrics_status='', retry_kind='', attempt=0, max_attempts=0, status_message='', error='', updated_at=?
+			WHERE job_id=? AND status NOT IN (?,?) AND id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CancelUnfinishedItems ends every item of jobID that has not reached a
@@ -48,10 +64,10 @@ func (s *Store) ResetUnfinishedItems(ctx context.Context, jobID string, updatedA
 // the per-item cancel internal/media writes while a job runs; other columns
 // keep the item's last state.
 func (s *Store) CancelUnfinishedItems(ctx context.Context, jobID, statusMessage string, updatedAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE job_items SET status=?, status_message=?, updated_at=?
-		WHERE job_id=? AND status NOT IN (?,?,?,?)`,
+	_, err := s.db.ExecContext(ctx, `UPDATE run_items SET status=?, status_message=?, updated_at=?
+		WHERE job_id=? AND status NOT IN (?,?,?,?,?)`,
 		string(domain.ItemCancelled), statusMessage, formatTime(updatedAt), jobID,
-		string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemFailed), string(domain.ItemCancelled))
+		string(domain.ItemCompleted), string(domain.ItemSkipped), string(domain.ItemUnavailable), string(domain.ItemFailed), string(domain.ItemCancelled))
 	return err
 }
 
@@ -60,7 +76,7 @@ func (s *Store) CancelUnfinishedItems(ctx context.Context, jobID, statusMessage 
 // a previous run created an item for, so stale rows don't distort the job's
 // progress counters.
 func (s *Store) DeleteItem(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM job_items WHERE id=?`, id)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM run_items WHERE id=?`, id)
 	return err
 }
 
@@ -76,7 +92,7 @@ func (s *Store) ItemProgress(ctx context.Context, jobIDs []string) (map[string][
 	for i, id := range jobIDs {
 		args[i] = id
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT job_id,status,download_progress,decrypt_progress,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved FROM job_items WHERE job_id IN (?`+strings.Repeat(",?", len(jobIDs)-1)+`)`, args...)
+	rows, err := s.db.QueryContext(ctx, `SELECT job_id,status,download_progress,decrypt_progress,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved FROM run_items WHERE job_id IN (?`+strings.Repeat(",?", len(jobIDs)-1)+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +110,7 @@ func (s *Store) ItemProgress(ctx context.Context, jobIDs []string) (map[string][
 }
 
 func (s *Store) ListItems(ctx context.Context, jobID string) ([]domain.JobItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,job_id,adam_id,kind,idx,title,artist,album,duration_ms,artwork_url,has_lyrics,lyrics_status,status,download_progress,decrypt_progress,download_bytes,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved,codec,bit_depth,sample_rate,bitrate,file_size,retry_kind,attempt,max_attempts,status_message,output_path,error,created_at,updated_at FROM job_items WHERE job_id=? ORDER BY idx`, jobID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,job_id,adam_id,kind,idx,title,artist,album,duration_ms,artwork_url,has_lyrics,lyrics_status,status,download_progress,decrypt_progress,download_bytes,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved,codec,bit_depth,sample_rate,bitrate,file_size,retry_kind,attempt,max_attempts,status_message,output_path,error,slot,owner_kind,owner_id,created_at,updated_at FROM run_items WHERE job_id=? ORDER BY idx`, jobID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,10 +128,11 @@ func (s *Store) ListItems(ctx context.Context, jobID string) ([]domain.JobItem, 
 
 func scanItem(row jobScanner) (domain.JobItem, error) {
 	var item domain.JobItem
-	var lyricsStatus, status, created, updated string
+	var lyricsStatus, status, ownerKind, created, updated string
 	err := row.Scan(&item.ID, &item.JobID, &item.AdamID, &item.Kind, &item.Index, &item.Title, &item.Artist, &item.Album, &item.DurationMS, &item.ArtworkURL, &item.HasLyrics, &lyricsStatus, &status,
 		&item.Progress.Download, &item.Progress.Decrypt, &item.Progress.DownloadBytes, &item.Progress.Resolved, &item.Progress.Remuxed, &item.Progress.Verified, &item.Progress.Tagged, &item.Progress.Saved,
-		&item.Codec, &item.BitDepth, &item.SampleRate, &item.Bitrate, &item.FileSize, &item.RetryKind, &item.Attempt, &item.MaxAttempts, &item.StatusMessage, &item.OutputPath, &item.Error, &created, &updated)
+		&item.Codec, &item.BitDepth, &item.SampleRate, &item.Bitrate, &item.FileSize, &item.RetryKind, &item.Attempt, &item.MaxAttempts, &item.StatusMessage, &item.OutputPath, &item.Error, &item.Slot, &ownerKind, &item.OwnerID, &created, &updated)
+	item.OwnerKind = domain.ResourceKind(ownerKind)
 	item.LyricsStatus = domain.LyricsStatus(lyricsStatus)
 	item.Status = domain.ItemStatus(status)
 	item.CreatedAt = parseTime(created)

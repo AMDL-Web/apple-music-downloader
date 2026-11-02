@@ -60,13 +60,20 @@ func TestTrackMarksFollowTheAlbumJobAndTheSongs(t *testing.T) {
 		{"t3", MarkDone, MarkNone},
 		{"t4", MarkActive, MarkActive},
 		{"t5", MarkDone, MarkNone},
-		// A failed or deleted album job marks none of its tracks.
-		{"t1", MarkNone, MarkNone},
+		// A track a run finished is done whatever became of the run.
+		{"t1", MarkNone, MarkDone},
+		{"t4", MarkNone, MarkNone},
 	}
 	for _, c := range cases {
 		if got, _ := s.TrackMark(track(c.id), c.album, items); got != c.want {
 			t.Errorf("%s with the album %v: mark %v, want %v", c.id, c.album, got, c.want)
 		}
+	}
+	// The album's record says which tracks are done.
+	done := track("t6")
+	done.State = domain.AudioDone
+	if got, _ := s.TrackMark(done, MarkNone, nil); got != MarkDone {
+		t.Errorf("done in the record: mark %v", got)
 	}
 	// A song downloaded alone from the album screen marks its track.
 	s.Search.sent[HitKey(TrackHit(track("t5")))] = "song-job"

@@ -164,7 +164,7 @@ func (r *trackRun) fetch(ctx context.Context, attempt *codecAttempt, n int, set 
 		// enhanced codecs' HLS variant); leave bit_depth/sample_rate/bitrate at
 		// 0 (omitted from the API response) rather than assert a value.
 		attempt.outPath = r.target.outputPath(d.cfg, r.song, attempt.codec, aacLCQualityLabel)
-		if skip, err := r.claimOutput(ctx, attempt.outPath); skip || err != nil {
+		if skip, err := r.claimOutput(ctx, attempt.outPath, aacLCQualityLabel); skip || err != nil {
 			attempt.skipped = skip
 			return err
 		}
@@ -185,8 +185,9 @@ func (r *trackRun) fetch(ctx context.Context, attempt *codecAttempt, n int, set 
 	if err != nil {
 		return err
 	}
-	attempt.outPath = r.target.outputPath(d.cfg, r.song, attempt.codec, qualityLabel(selected.info))
-	if skip, err := r.claimOutput(ctx, attempt.outPath); skip || err != nil {
+	quality := qualityLabel(selected.info)
+	attempt.outPath = r.target.outputPath(d.cfg, r.song, attempt.codec, quality)
+	if skip, err := r.claimOutput(ctx, attempt.outPath, quality); skip || err != nil {
 		attempt.skipped = skip
 		return err
 	}
@@ -195,7 +196,7 @@ func (r *trackRun) fetch(ctx context.Context, attempt *codecAttempt, n int, set 
 	}); err != nil {
 		return err
 	}
-	selected, err = d.downloadSelectedEnhancedMedia(ctx, selected, attempt.codec, r.job.ID, attempt.outPath, &attempt.keys, set)
+	selected, err = d.downloadSelectedEnhancedMedia(ctx, selected, attempt.codec, r.owner, attempt.outPath, &attempt.keys, set)
 	if err != nil {
 		return err
 	}

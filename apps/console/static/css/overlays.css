@@ -288,6 +288,11 @@
   margin: 0;
 }
 
+/* Another quality replaces nothing; the line keeps its room so the dialog does not move. */
+.ask-note[data-hidden] {
+  visibility: hidden;
+}
+
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;

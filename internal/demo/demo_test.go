@@ -218,7 +218,7 @@ func TestCancelAndRetry(t *testing.T) {
 	if err := c.Cancel(ctx, running); !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict {
 		t.Errorf("cancelling again: %v", err)
 	}
-	if err := c.Retry(ctx, failed); err != nil {
+	if _, err := c.Retry(ctx, failed); err != nil {
 		t.Fatal(err)
 	}
 	run(b, clk, 4*time.Minute)
@@ -234,8 +234,8 @@ func TestSearchAlbumAndArtist(t *testing.T) {
 	if err != nil || r.Albums == nil || len(r.Albums.Items) != 1 || r.Songs == nil || len(r.Songs.Items) == 0 {
 		t.Fatalf("search %+v, %v", r, err)
 	}
-	// Glass Weather is running: its hit carries the job.
-	if hit := r.Albums.Items[0]; hit.Name != "Glass Weather" || hit.PriorJob == nil || hit.PriorJob.Status != domain.JobRunning {
+	// Glass Weather is running: its hit's record carries the run.
+	if hit := r.Albums.Items[0]; hit.Name != "Glass Weather" || hit.Resource == nil || hit.Resource.ActiveJobID == "" {
 		t.Errorf("album hit %+v", hit)
 	}
 	if r, _ := c.Search(ctx, client.SearchQuery{Term: "夏夜"}); r.Albums == nil || len(r.Albums.Items) != 1 {

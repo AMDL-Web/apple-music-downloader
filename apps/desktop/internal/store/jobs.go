@@ -259,7 +259,7 @@ func (j *Job) recount() {
 		switch it.Status {
 		case domain.ItemCompleted:
 			j.CompletedItems++
-		case domain.ItemSkipped:
+		case domain.ItemSkipped, domain.ItemUnavailable:
 			j.SkippedItems++
 		case domain.ItemFailed:
 			j.FailedItems++
@@ -324,6 +324,12 @@ func (s *Store) applyMessage(m domain.DownloadFeedMessage) {
 		}
 	case "download_deleted":
 		s.remove(m.JobID)
+	case "resource_updated":
+		s.applyResource(m)
+	case "check_updated":
+		if m.Check != nil {
+			s.Records.Check = m.Check
+		}
 	}
 }
 
@@ -458,7 +464,7 @@ func (s *Store) applyEvent(id string, e domain.Event) {
 		return
 	}
 	switch e.Type {
-	case domain.EventJobQueued, domain.EventJobStarted, domain.EventJobRetried, domain.EventJobRecovered,
+	case domain.EventJobQueued, domain.EventJobStarted, domain.EventJobRecovered,
 		domain.EventResolvedInput, domain.EventJobFinished, domain.EventJobFailed, domain.EventJobCancelled:
 		var dj domain.Job
 		if json.Unmarshal(e.Payload, &dj) == nil && dj.ID == id {

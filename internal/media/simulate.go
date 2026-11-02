@@ -16,7 +16,7 @@ import (
 // do it only pretends, pacing transfers by a speed drawn from the configured
 // simulate range. It never touches the wrapper, ffmpeg or the disk, so test
 // mode needs neither a decryptor nor ffmpeg, and never deletes a real download
-// even under force. It only reads the disk: a track counts as on disk when a
+// even when replacing one. It only reads the disk: a track counts as on disk when a
 // real file is there or when outputs records a simulated commit of it.
 type simulatedMedia struct {
 	cfg     config.Config
@@ -75,15 +75,8 @@ func (m simulatedMedia) statOutput(outPath string) (int64, bool) {
 	return statDiskOutput(outPath)
 }
 
-func (m simulatedMedia) countOutputs(dir string) int {
-	names := diskOutputNames(dir)
-	if names == nil {
-		names = make(map[string]struct{})
-	}
-	for _, name := range m.outputs.names(dir) {
-		names[name] = struct{}{}
-	}
-	return len(names)
+func (simulatedMedia) rewriteLyrics(ctx context.Context, _, _ string) error {
+	return simulatePause(ctx, simulatedTagPause)
 }
 
 func (simulatedMedia) stage(media encryptedMedia) (stagedFile, func(), error) {

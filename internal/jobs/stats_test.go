@@ -27,7 +27,7 @@ func TestQueueStats(t *testing.T) {
 	if recovered, err := m.RecoverUnfinished(ctx); err != nil || recovered != 3 {
 		t.Fatalf("RecoverUnfinished = (%d, %v), want (3, nil)", recovered, err)
 	}
-	resp := m.SubmitBatch(ctx, []string{"album|us|1", "album|us|2"}, nil)
+	resp := m.SubmitBatch(ctx, []string{"station|us|1", "station|us|2"}, nil)
 	if resp.Accepted != 2 {
 		t.Fatalf("SubmitBatch accepted %d, want 2: %+v", resp.Accepted, resp.Results)
 	}
@@ -40,7 +40,7 @@ func TestQueueStats(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("claimNext = (%v, %v), want a job", ok, err)
 	}
-	defer claim.cancel()
+	defer claim.cancel(nil)
 	if claim.job.ID != "job_recovered_a" {
 		t.Fatalf("claimed %s, want the first recovered job", claim.job.ID)
 	}

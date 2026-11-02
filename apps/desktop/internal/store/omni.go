@@ -197,26 +197,9 @@ func (s *Store) LookupOne(url string, then func(client.Lookup)) {
 	}()
 }
 
-// PriorJobFor is the job in the list that downloads what a preview names:
-// a queued or running one, else a completed one; nil for none. It stands
-// in for a search hit's prior_job, which a preview does not carry.
-func (s *Store) PriorJobFor(l client.Lookup) *client.PriorJob {
-	var done *client.PriorJob
-	for _, j := range s.Jobs {
-		if t, id, ok := j.link(); !ok || t != l.Type || id != l.ID {
-			continue
-		}
-		switch j.Status {
-		case domain.JobQueued, domain.JobRunning:
-			return &client.PriorJob{ID: j.ID, Status: j.Status}
-		case domain.JobCompleted:
-			if done == nil {
-				done = &client.PriorJob{ID: j.ID, Status: j.Status, FinishedAt: j.FinishedAt}
-			}
-		}
-	}
-	return done
-}
+// ResourceFor is the record mark of what a preview names, with the
+// newest news; nil for none.
+func (s *Store) ResourceFor(l client.Lookup) *domain.ResourceMark { return s.Latest(l.Resource) }
 
 // Startable returns the links a submit would start: previewed, supported
 // and not already running.
@@ -251,10 +234,10 @@ func (s *Store) Submit() {
 		case err != nil && res.Rejected == 0:
 			s.setNotice(err.Error(), true)
 		case res.Rejected == 0:
-			s.setNotice(plural(res.Accepted, "download")+" started", false)
+			s.setNotice(batchNotice(res), false)
 			o.Text, o.Links, o.Result = "", nil, nil
 		default:
-			s.setNotice(plural(res.Accepted, "download")+" started, "+plural(res.Rejected, "link")+" refused", res.Accepted == 0)
+			s.setNotice(batchNotice(res)+", "+plural(res.Rejected, "link")+" refused", res.Accepted == 0)
 		}
 	})
 }
@@ -274,9 +257,37 @@ func (s *Store) submit(urls []string, overrides *config.DownloadOverrides, then 
 					s.upsert(*r.Job)
 				}
 			}
+			s.noteSubmitted(res)
 			then(res, err)
 		})
 	}()
+}
+
+// batchNotice counts what a submit's taken links became: downloads
+// started, adds waiting for a catalog read, and links already downloaded.
+func batchNotice(res domain.BatchSubmitResponse) string {
+	var started, adding, have int
+	for _, r := range res.Results {
+		switch r.Status {
+		case domain.SubmitAccepted:
+			started++
+		case domain.SubmitPending:
+			adding++
+		case domain.SubmitAlreadyDownloaded:
+			have++
+		}
+	}
+	var parts []string
+	if started > 0 || adding+have == 0 {
+		parts = append(parts, plural(started, "download")+" started")
+	}
+	if adding > 0 {
+		parts = append(parts, plural(adding, "link")+" being added")
+	}
+	if have > 0 {
+		parts = append(parts, plural(have, "link")+" already downloaded")
+	}
+	return strings.Join(parts, ", ")
 }
 
 func plural(n int, word string) string {

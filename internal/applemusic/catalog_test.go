@@ -232,6 +232,11 @@ func TestAlbumKeepsAppleTrackCountOnSingleDiscReleases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The album's own count is the release's, though the list names two: the
+	// record's withheld_count is the difference.
+	if album.TrackCount != 12 {
+		t.Fatalf("album TrackCount = %d, want 12", album.TrackCount)
+	}
 	for _, track := range album.Tracks {
 		if track.TrackCount != 12 {
 			t.Fatalf("track %s TrackCount = %d, want 12", track.ID, track.TrackCount)

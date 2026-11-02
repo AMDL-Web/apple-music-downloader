@@ -102,24 +102,21 @@ test('submittable keeps links without a blocking issue, in order', () => {
 
 const JP = 'https://music.apple.com/jp/album/1635388716';
 
-test('linkIssue flags a storefront the wrapper does not serve, and only when the regions are known', () => {
-  const issue = linkIssue(entry(JP), null, { regions: ['cn'] });
+test('linkIssue flags a station in a storefront the wrapper does not serve; other links read in the account storefront', () => {
+  const ST = 'https://music.apple.com/jp/station/x/ra.1';
+  const issue = linkIssue(entry(ST), null, { regions: ['cn'] });
   assert.deepEqual(issue, {
     code: 'storefront_not_served',
     role: 'danger',
     blocking: true,
     message: "Storefront not served. The wrapper's Apple Music account is in another storefront. It serves CN.",
   });
-  const view = resultView({ status: 'invalid', error: { code: 'unsupported_storefront', message: 'x', details: { supported_storefronts: ['cn'] } } });
-  assert.ok(issue.message.startsWith(`${view.label}. ${view.message}.`), 'reads like the submit result');
-  assert.ok(issue.message.endsWith(servedNote(view.storefronts)));
-  assert.equal(linkIssue(entry(JP), null, { regions: ['cn', 'jp'] }), null, 'a served storefront is fine');
-  assert.equal(linkIssue(entry('https://music.apple.com/JP/album/x/1'), null, { regions: ['jp'] }), null, 'case does not matter');
-  for (const regions of [null, undefined, []]) assert.equal(linkIssue(entry(JP), null, { regions }), null, 'unknown regions flag nothing');
-  const links = scanLinks(`${JP} ${IGOR}`);
-  assert.deepEqual(submittable(links, (e) => linkIssue(e, null, { regions: ['us'] })), [IGOR], 'the unserved link leaves the submit set');
-  const noSf = scanLinks('https://music.apple.com/album/x/1', 'jp')[0];
-  assert.equal(linkIssue(noSf, null, { regions: ['cn'] }).code, 'storefront_not_served', 'a borrowed storefront counts too');
+  assert.equal(linkIssue(entry(JP), null, { regions: ['cn'] }), null, 'an album is read in the account storefront whatever the link says');
+  assert.equal(linkIssue(entry(ST), null, { regions: ['cn', 'jp'], hasToken: true }), null, 'a served storefront is fine');
+  assert.equal(linkIssue(entry('https://music.apple.com/JP/station/x/ra.1'), null, { regions: ['jp'], hasToken: true }), null, 'case does not matter');
+  for (const regions of [null, undefined, []]) assert.equal(linkIssue(entry(ST), null, { regions, hasToken: true }), null, 'unknown regions flag nothing');
+  const links = scanLinks(`${ST} ${IGOR}`);
+  assert.deepEqual(submittable(links, (e) => linkIssue(e, null, { regions: ['us'] })), [IGOR], 'the unserved station leaves the submit set');
 });
 
 test('servedRegions reads the wrapper status, or null when it cannot say', () => {
@@ -144,14 +141,15 @@ const RESPONSE = {
     { url: IGOR, status: 'accepted', job: job('job_1', 'queued', '2026-10-29T10:00:00Z') },
     { url: FOLKLORE, status: 'duplicate_active', existing_job_id: 'job_old', error: { code: 'duplicate_active', message: 'already queued or running' } },
     { url: STATION, status: 'queue_full', error: { code: 'queue_full', message: 'job queue is full' } },
-    { url: 'https://music.apple.com/jp/album/x/1', status: 'invalid', error: { code: 'unsupported_storefront', message: 'storefront jp is not served', details: { storefront: 'jp', supported_storefronts: ['us', 'ca'] } } },
+    { url: 'https://music.apple.com/jp/album/x/1', status: 'invalid', error: { code: 'decryptor_unavailable', message: 'the wrapper does not serve cn', details: { storefront: 'cn', supported_storefronts: ['us', 'ca'] } } },
     { url: PRIVATE, status: 'error', error: { code: 'store_error', message: 'database is locked' } },
   ],
 };
 const SENT = [IGOR, FOLKLORE, STATION, 'https://music.apple.com/jp/album/x/1', PRIVATE];
 
 test('resultView words every status and code', () => {
-  assert.equal(resultView({ status: 'accepted', requeued: true, job: { id: 'j' } }).label, 'Queued again', "a link's earlier job queued again under its id");
+  assert.equal(resultView({ status: 'accepted', resource: { kind: 'album', id: '1' } }).label, 'Waiting', 'a record waiting for its retry queues no run now');
+  assert.deepEqual(['pending', 'already_downloaded'].map((status) => resultView({ status, resource: { kind: 'album', id: '1' } }).label), ['Adding', 'Already downloaded']);
   const v = RESPONSE.results.map(resultView);
   assert.deepEqual(v.map((x) => [x.status, x.role, x.label]), [
     ['accepted', 'success', 'Queued'],
@@ -166,7 +164,7 @@ test('resultView words every status and code', () => {
   assert.equal(v[2].retry, true, 'queue_full can be retried');
   assert.equal(v[2].detail, '', 'the server words add nothing here');
   assert.deepEqual(v[3].storefronts, ['us', 'ca']);
-  assert.equal(v[3].message, "The wrapper's Apple Music account is in another storefront");
+  assert.equal(v[3].message, "The wrapper's account does not serve CN");
   assert.equal(v[4].retry, true);
   assert.equal(v[4].detail, 'Database is locked.', 'a store error shows what the server said');
   const notReady = resultView({ status: 'invalid', error: { code: 'decryptor_unavailable', message: 'the wrapper is not ready' } });
@@ -270,24 +268,20 @@ test('submitSummary says started, then how started jobs finished', () => {
   assert.equal(submitSummary(done), 'Started 2 downloads · 1 completed · 1 deleted');
 });
 
-test('submitSummary says a resubmitted link was queued again, not started', () => {
-  const again = (url, id) => ({ url, result: { url, status: 'accepted', requeued: true, job: job(id, 'queued', '2026-10-29T00:00:00Z') } });
+test('submitSummary counts links read into records first and ones already downloaded', () => {
+  const r = (url, status) => ({ url, result: { url, status, resource: { kind: 'album', id: url } } });
   const fresh = (url, id) => ({ url, result: { url, status: 'accepted', job: job(id, 'queued', '2026-10-29T00:00:00Z') } });
-  assert.equal(submitSummary(resultRows([again(IGOR, 'a')])), 'Queued again');
-  assert.equal(submitSummary(resultRows([again(IGOR, 'a'), again(FOLKLORE, 'b')])), 'Queued 2 downloads again');
-  const mixed = resultRows([fresh(IGOR, 'a'), again(FOLKLORE, 'b')]);
-  assert.equal(submitSummary(mixed), 'Started 1 download · 1 queued again');
-  const done = applyFeedToResults(mixed, [{ type: 'download_upserted', job: job('b', 'completed', '2026-10-29T00:01:00Z') }]);
-  assert.equal(submitSummary(done), 'Started 1 download · 1 queued again · 1 completed');
-  const stored = resultRows([again(IGOR, 'a')]).map((r) => ({ ...r, view: { ...r.view, requeued: undefined } }));
-  assert.equal(submitSummary(stored), 'Queued again', 'rows stored before requeued was kept read by their label');
+  assert.equal(submitSummary(resultRows([r(IGOR, 'already_downloaded')])), 'Already downloaded');
+  assert.equal(submitSummary(resultRows([r(IGOR, 'pending')])), 'Adding');
+  assert.equal(submitSummary(resultRows([fresh(IGOR, 'a'), r(FOLKLORE, 'pending'), r(STATION, 'already_downloaded')])), 'Started 1 download · 1 adding · 1 already downloaded');
+  assert.deepEqual(keptAfterSubmit(pairResults([IGOR, FOLKLORE], [r(IGOR, 'pending').result, r(FOLKLORE, 'already_downloaded').result])), [], 'both leave the text box');
 });
 
 test('stored results round-trip with only the known overrides', () => {
   const rows = resultRows([{ url: IGOR, result: { url: IGOR, status: 'accepted', job: job('a', 'queued', '2026-10-29T00:00:00Z') } }]);
-  const text = storedResults({ rows, overrides: { force_overwrite: true, media_user_token: 'secret' } });
+  const text = storedResults({ rows, overrides: { quality_priority: ['aac'], force_overwrite: true, media_user_token: 'secret' } });
   assert.ok(!text.includes('secret'));
-  assert.deepEqual(parseStoredResults(text), { rows, overrides: { force_overwrite: true } });
+  assert.deepEqual(parseStoredResults(text), { rows, overrides: { quality_priority: ['aac'] } });
   assert.equal(storedResults({ rows: [], overrides: {} }), '');
   for (const bad of [null, '', '{', '{"rows":[{"url":1}]}', '[]']) assert.equal(parseStoredResults(bad), null);
 });

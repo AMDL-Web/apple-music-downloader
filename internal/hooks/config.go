@@ -86,6 +86,13 @@ func (e Entry) MatchesJobType(jobType string) bool {
 	return false
 }
 
+// skipsRetries reports whether the entry was built from a notification
+// preset, which tells a phone about a failure only once it is given up.
+func (e Entry) skipsRetries() bool {
+	p, ok := hookpreset.Find(e.Preset)
+	return ok && p.Kind == hookpreset.Notify
+}
+
 func Default() Config {
 	return Config{}
 }

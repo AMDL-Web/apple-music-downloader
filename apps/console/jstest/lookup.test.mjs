@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLink } from '../static/js/lib/links.js';
-import { createLookupQueue, previewFacts, qualitySpec, qualitySpecParts, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, priorJob, priorQuery, needsAttention, isPicked, applyFeedToJobs, differingTracks, slotName } from '../static/js/lib/lookup.js';
+import { createLookupQueue, previewFacts, qualitySpec, qualitySpecParts, qualityOverview, kindLabel, shortError, LOOKUP_CACHE_MAX, needsAttention, isPicked, differingTracks, slotName } from '../static/js/lib/lookup.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -200,48 +200,21 @@ test('shortError keeps lookup failures to one line', () => {
   assert.equal(shortError(undefined), '');
 });
 
-test('priorJob finds the earlier job of the same item, not of an id that merely contains it', () => {
-  const BLONDE = 'https://music.apple.com/us/album/blonde/1146195596';
-  const j = (id, input, status, created, finished) => ({ id, input, status, created_at: created, finished_at: finished });
-  const jobs = [
-    j('old', BLONDE, 'completed', '2026-10-01T00:00:00Z', '2026-10-01T00:05:00Z'),
-    j('new', `${BLONDE}?l=en`, 'completed', '2026-10-28T00:00:00Z', '2026-10-28T00:05:00Z'),
-    j('fail', BLONDE, 'failed', '2026-10-29T00:00:00Z', '2026-10-29T00:01:00Z'),
-    j('other', 'https://music.apple.com/us/album/x/91146195596', 'running', '2026-10-29T00:00:00Z', ''),
-    j('song', `${BLONDE}?i=1146195599`, 'running', '2026-10-29T00:00:00Z', ''),
-  ];
-  assert.deepEqual(priorJob(jobs, parseLink(BLONDE)), { state: 'done', job: jobs[1] });
-  assert.equal(priorJob(jobs, parseLink(`${BLONDE}?i=1146195599`)).job.id, 'song');
-  assert.deepEqual(priorJob(jobs, parseLink(BLONDE), 'album'), { state: 'active', job: jobs[4] }, 'in album mode a ?i= job downloads the album');
-  const queued = [...jobs, j('q', BLONDE, 'queued', '2026-10-29T01:00:00Z', '')];
-  assert.deepEqual(priorJob(queued, parseLink(BLONDE)), { state: 'active', job: queued[5] });
-  assert.equal(priorJob([jobs[2]], parseLink(BLONDE)), null, 'a failed job is no copy');
-  assert.equal(priorJob(null, parseLink(BLONDE)), null);
-});
-
-test('priorQuery searches for the id a job would download', () => {
-  const link = parseLink('https://music.apple.com/us/album/blonde/1146195596?i=1146195599');
-  assert.equal(priorQuery(link), '1146195599', 'song mode: the track, so a /song/ job is found too');
-  assert.equal(priorQuery(link, 'song'), '1146195599');
-  assert.equal(priorQuery(link, 'album'), '1146195596');
-  assert.equal(priorQuery(parseLink('https://music.apple.com/us/album/blonde/1146195596')), '1146195596');
-  assert.equal(priorQuery(null), '');
-});
-
-test('a row needs attention for any issue or an earlier job still in flight, not for a finished one', () => {
+test('a row needs attention for any issue or a run of its record in flight, not for a finished one', () => {
   assert.equal(needsAttention({ blocking: true }, null), true);
   assert.equal(needsAttention({ blocking: false, text: 'needs a token' }, null), true, 'a warning counts');
   assert.equal(needsAttention(null, { state: 'active', job: {} }), true);
-  assert.equal(needsAttention(null, { state: 'done', job: {} }), false);
+  assert.equal(needsAttention(null, { state: 'complete', job: null }), false);
   assert.equal(needsAttention(null, null), false);
 });
 
-test('rows in the queue or wholly on disk start unchecked, a partial album checked; a pick wins', () => {
-  const complete = { state: 'complete', onDisk: 12, total: 12, job: null };
+test('rows in the queue or wholly in the library start unchecked, a partial or paused album checked; a pick wins', () => {
+  const complete = { state: 'complete', done: 12, total: 12, job: null };
   assert.equal(isPicked('u', null, new Map()), true);
   assert.equal(isPicked('u', complete, new Map()), false);
   assert.equal(isPicked('u', { state: 'active', job: { id: 'j' } }, null), false);
-  assert.equal(isPicked('u', { state: 'partial', onDisk: 3, total: 12, job: null }, null), true, 'a partial album downloads its missing songs');
+  assert.equal(isPicked('u', { state: 'partial', done: 3, total: 12, job: null }, null), true, 'a partial album downloads its missing songs');
+  assert.equal(isPicked('u', { state: 'paused', done: 3, total: 12, job: null }, null), true, 'a download resumes a paused album');
   assert.equal(isPicked('u', complete, new Map([['u', true]])), true);
   assert.equal(isPicked('u', null, new Map([['u', false]])), false);
 });
@@ -251,37 +224,20 @@ test('a refresh keeps the shown answer until the new one, and keeps it when the 
   const q = createLookupQueue({ lookup });
   q.want(['a']);
   await tick();
-  calls[0].resolve({ title: 'A', library: { state: 'none', tracks_on_disk: 0, tracks_total: 2 } });
+  calls[0].resolve({ title: 'A', resource: { kind: 'album', id: '1', state: 'none' } });
   await tick();
   q.refresh(['a', 'b']);
   await tick();
   assert.equal(calls.length, 2, 'only a wanted link with an answer is looked up again');
   assert.equal(q.status('a').state, 'ready', 'the old answer shows while the refresh runs');
-  calls[1].resolve({ title: 'A', library: { state: 'complete', tracks_on_disk: 2, tracks_total: 2 } });
+  calls[1].resolve({ title: 'A', resource: { kind: 'album', id: '1', state: 'complete' } });
   await tick();
-  assert.equal(q.status('a').data.library.state, 'complete');
+  assert.equal(q.status('a').data.resource.state, 'complete');
   q.refresh(['a']);
   await tick();
   calls[2].reject(new Error('502'));
   await tick();
-  assert.equal(q.status('a').data.library.state, 'complete', 'a failed refresh keeps the answer');
-});
-
-test('the feed keeps an earlier-job answer live', () => {
-  const IGOR = 'https://music.apple.com/us/album/igor/1463409338';
-  const link = parseLink(IGOR);
-  const queued = { id: 'j1', input: IGOR, status: 'running', updated_at: '2026-10-29T10:00:00Z', created_at: '2026-10-29T10:00:00Z' };
-  const jobs = [queued];
-  assert.equal(priorJob(jobs, link).state, 'active');
-  const done = applyFeedToJobs(jobs, [{ type: 'download_upserted', job: { ...queued, status: 'completed', updated_at: '2026-10-29T10:05:00Z', finished_at: '2026-10-29T10:05:00Z' } }], link);
-  assert.equal(priorJob(done, link).state, 'done');
-  const stale = applyFeedToJobs(done, [{ type: 'download_upserted', job: queued }], link);
-  assert.equal(stale, done, 'an older snapshot changes nothing');
-  const other = applyFeedToJobs(jobs, [{ type: 'download_upserted', job: { id: 'x', input: 'https://music.apple.com/us/album/blonde/1146195596', status: 'queued' } }], link);
-  assert.equal(other, jobs, 'a job of another item is ignored');
-  const fresh = applyFeedToJobs([], [{ type: 'download_upserted', job: { id: 'j2', input: `${IGOR}?l=en`, status: 'queued', created_at: '2026-10-29T11:00:00Z' } }], link);
-  assert.equal(priorJob(fresh, link).job.id, 'j2', 'a new job of the same item joins');
-  assert.deepEqual(applyFeedToJobs(done, [{ type: 'download_deleted', job_id: 'j1' }], link), []);
+  assert.equal(q.status('a').data.resource.state, 'complete', 'a failed refresh keeps the answer');
 });
 
 test('the quality sheet lists only tracks that differ, and never says a codec twice', () => {

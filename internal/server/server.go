@@ -139,6 +139,10 @@ func Run(ctx context.Context, opts Options) (err error) {
 		}
 	}()
 	logger.Info("logging initialized", "level", cfg.Logging.Level)
+	for _, retired := range config.RetiredKeys(opts.ConfigPath) {
+		logger.Warn("config key is retired and ignored; the next settings save removes it",
+			"key", retired.Key, "replacement", retired.Replacement, "see", config.UpgradeGuide)
+	}
 	for _, name := range config.UnreadEnv(os.Environ()) {
 		logger.Warn("environment variable is no longer read; set its key in config.yaml",
 			"variable", name, "see", config.UpgradeGuide)
@@ -170,7 +174,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 		return fmt.Errorf("create database dir: %w", err)
 	}
 
-	store, err := db.Open(cfg.Database.Path)
+	store, err := db.OpenWith(cfg.Database.Path, db.Options{DownloadsDir: cfg.Download.DownloadsDir})
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -181,6 +185,14 @@ func Run(ctx context.Context, opts Options) (err error) {
 	// pipeline. Process-wide concurrency pools are sized once from this startup
 	// snapshot; runtime-mutable fields are read when each job starts.
 	cfgStore := config.NewFileStore(cfg, opts.ConfigPath)
+	store.FollowDownloadsDir(func() string { return cfgStore.Get().Download.DownloadsDir })
+	// Resume checkpoints of records deleted or runs gone while the server was
+	// down: nothing resumes them.
+	if owners, err := store.ResumeOwners(context.Background()); err != nil {
+		logSystem.Logger.Warn("list resume owners; resume checkpoints kept", "error", err)
+	} else {
+		media.CleanupStaleResume(cfg.Download.TempDir, owners, logSystem.Logger.With("component", "media"))
+	}
 	wrapperClient, err := wrapper.NewClient(cfg.Wrapper)
 	if err != nil {
 		return fmt.Errorf("set up wrapper client: %w", err)
@@ -203,8 +215,10 @@ func Run(ctx context.Context, opts Options) (err error) {
 	manager := jobs.NewManager(store, hub, downloader, cfg.Download.MaxRunningJobs, logSystem.Logger.With("component", "jobs"))
 	hookDispatcher := hooks.NewDispatcher(hooksCfg, manager.Event, logSystem.Logger.With("component", "hooks"))
 	manager.SetHooks(hookDispatcher)
-	// The library watcher submits through the same manager as the REST API, so
-	// anything it queues is an ordinary job (same dedup, same hooks).
+	manager.SetConfig(cfgStore.Get)
+	manager.SetCatalog(downloader)
+	// The library watcher adds album records through the same manager as the
+	// REST API, so their runs are ordinary runs (same picker, same hooks).
 	libraryWatcher := librarysync.New(cfgStore, tokens, catalog, store, manager, logSystem.Logger.With("component", "librarysync"))
 	// The Apple library cache never submits anything; it only reads.
 	appleLibrary := applelibrary.New(cfgStore, tokens, catalog, store, logSystem.Logger.With("component", "applelibrary"))
@@ -242,7 +256,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
-		AppleLibrary: appleLibrary, Catalog: catalog, Library: downloader, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
+		AppleLibrary: appleLibrary, Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
 		WrapperManaged: opts.WrapperHost != nil,
 		Restart: func() {
 			select {

@@ -161,8 +161,8 @@ func TestStatsWindowQueriesUseTypeCreatedIndex(t *testing.T) {
 			plan = append(plan, detail)
 		}
 		rows.Close()
-		if !strings.Contains(strings.Join(plan, "\n"), "idx_job_events_type_created") {
-			t.Errorf("%s: query plan %q does not use idx_job_events_type_created", name, plan)
+		if !strings.Contains(strings.Join(plan, "\n"), "idx_run_events_type_created") {
+			t.Errorf("%s: query plan %q does not use idx_run_events_type_created", name, plan)
 		}
 	}
 }

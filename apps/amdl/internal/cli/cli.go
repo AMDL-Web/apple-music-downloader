@@ -326,9 +326,9 @@ func (e *env) note(format string, a ...any) {
 // confirm asks before a destructive action: a terminal answers y or n, and
 // anywhere else --yes is required.
 // asksToConfirm lists the commands that are not destructive as a whole but
-// can ask before one step (download --overwrite, installing QEMU, wrapper
-// uninstall --purge), so they take --yes too.
-var asksToConfirm = map[string]bool{"download": true, "wrapper install": true, "wrapper update": true, "wrapper uninstall": true}
+// can ask before one step (installing QEMU, wrapper uninstall --purge), so
+// they take --yes too.
+var asksToConfirm = map[string]bool{"wrapper install": true, "wrapper update": true, "wrapper uninstall": true}
 
 func (e *env) confirm(what string) error {
 	if e.yes || e.dry {

@@ -1,15 +1,17 @@
 // Pure hash routing and filter mapping. Routes are #/ (also #/overview),
-// #/overview/:id, #/queue, #/queue/:id, #/logs, #/new, #/new/:id and
-// #/settings; filters live in the hash query so a filtered view is a
-// shareable link.
+// #/overview/:id, #/queue (Activity; also #/activity), #/queue/:id,
+// #/library, #/library/albums/:id and #/library/playlists/:id (a record),
+// #/logs, #/new, #/new/:id and #/settings; filters live in the hash query
+// so a filtered view is a shareable link.
 
-export const PAGES = ['overview', 'queue', 'logs', 'new', 'settings'];
+export const PAGES = ['overview', 'queue', 'library', 'logs', 'new', 'settings'];
 
-const PAGE_PATHS = { overview: '', queue: 'queue', logs: 'logs', new: 'new', settings: 'settings' };
+const PAGE_PATHS = { overview: '', queue: 'queue', library: 'library', logs: 'logs', new: 'new', settings: 'settings' };
 // #/overview is an alias of #/: a natural guess at the address. buildHash
 // writes #/, or #/overview/:id with a job. #/showcase is the address of a
 // page the Overview replaced; its links, drawer included, land there.
-const PATH_PAGES = { ...Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k])), overview: 'overview', showcase: 'overview' };
+const PATH_PAGES = { ...Object.fromEntries(Object.entries(PAGE_PATHS).map(([k, v]) => [v, k])), overview: 'overview', showcase: 'overview', activity: 'queue' };
+const RECORD_KINDS = ['albums', 'playlists'];
 // Addresses of pages merged into another: the route reports `replace`, and
 // the router rewrites the address in place, so Back does not return to it.
 const PAGE_ALIASES = { system: 'settings' };
@@ -27,9 +29,10 @@ function decodeSegment(s) {
 }
 
 /**
- * Parses location.hash into {page, jobId, params}, plus `replace: true` for
- * an alias address. Unknown paths, and a job id with a malformed percent
- * escape, give page "notfound".
+ * Parses location.hash into {page, jobId, params}, plus `record` and `replace:
+ * true` for an alias address. `record` ({kind: 'albums'|'playlists', id})
+ * opens a record's drawer over the Library. Unknown paths, and an id with
+ * a malformed percent escape, give page "notfound".
  */
 export function parseHash(hash) {
   let h = typeof hash === 'string' ? hash : '';
@@ -48,7 +51,44 @@ export function parseHash(hash) {
     const jobId = decodeSegment(parts[1]);
     if (jobId !== null) return { page, jobId, params };
   }
+  if (parts.length === 3 && page === 'library' && RECORD_KINDS.includes(parts[1])) {
+    const id = decodeSegment(parts[2]);
+    if (id) return { page, jobId: null, record: { kind: parts[1], id }, params };
+  }
   return { page: 'notfound', jobId: null, params };
+}
+
+/** The hash of a record's drawer over the Library; kind is album(s) or playlist(s). */
+export function recordHash(kind, id, params = {}) {
+  const k = kind === 'playlist' || kind === 'playlists' ? 'playlists' : 'albums';
+  return buildHash('library', params).replace(/^#\/library/, `#/library/${k}/${encodeURIComponent(id)}`);
+}
+
+/** The Library's tabs: amdl's album and playlist records, and the Apple Music account library. */
+export const LIBRARY_TABS = ['albums', 'playlists', 'apple'];
+const RECORD_STATES = ['none', 'partial', 'complete'];
+const RECORD_FLAGS = ['failed', 'given_up', 'missing', 'waiting', 'paused', 'unresolved'];
+const APPLE_KINDS = ['albums', 'songs', 'playlists', 'artists'];
+
+/** Normalizes Library route params: tab, state, flag, q, and the Apple tab's kind. */
+export function libraryFilters(params = {}) {
+  const tab = LIBRARY_TABS.includes(params.tab) ? params.tab : LIBRARY_TABS[0];
+  const state = RECORD_STATES.includes(params.state) ? params.state : '';
+  const flag = RECORD_FLAGS.includes(params.flag) ? params.flag : '';
+  const q = typeof params.q === 'string' ? params.q : '';
+  const kind = APPLE_KINDS.includes(params.kind) ? params.kind : APPLE_KINDS[0];
+  return { tab, state, flag, q, kind };
+}
+
+/** The Library hash for these filters (defaults left out). */
+export function libraryHash(f = {}) {
+  return buildHash('library', {
+    tab: f.tab && f.tab !== LIBRARY_TABS[0] ? f.tab : '',
+    state: f.state || '',
+    flag: f.flag || '',
+    q: f.q || '',
+    kind: f.tab === 'apple' && f.kind && f.kind !== APPLE_KINDS[0] ? f.kind : '',
+  });
 }
 
 /** Builds a hash from a page, optional job id and params (empty values omitted). */

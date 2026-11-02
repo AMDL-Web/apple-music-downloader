@@ -1,6 +1,7 @@
 package store
 
 import (
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -420,44 +421,41 @@ func (s *Store) applyArtist(gen int, id string, r client.ArtistAlbums, err error
 	a.cache.put(id, client.ArtistAlbums{Storefront: r.Storefront, Artist: a.Artist, Albums: a.Albums})
 }
 
-// MarkState is whether a hit is in the library or the queue.
+// MarkState is how a hit stands in amdl's records.
 type MarkState int
 
 // Mark states.
 const (
 	MarkNone MarkState = iota
-	// MarkActive: a job of the hit is queued or running.
+	// MarkActive: a run of the hit's record is queued or running.
 	MarkActive
-	// MarkDone: a job of the hit completed, so it is in the library.
+	// MarkDone: every wanted track of the record is downloaded, or a
+	// song's own track is.
 	MarkDone
+	// MarkPartial: some of the record's wanted tracks are downloaded.
+	MarkPartial
+	// MarkPaused: the record is paused with tracks still to download.
+	MarkPaused
 )
 
-// HitMark is whether h is in the library or the queue, and through which
-// job. A job this app started for it, then the store's live copy of the job,
-// win over the snapshot the search carried; a failed, cancelled or deleted
-// job marks nothing.
+// HitMark is how h stands, and through which run while one is queued or
+// running: a run this app started for it while the feed has it queued or
+// running, or a song's that completed, else the hit's record with the
+// newest news (MarkOf).
 func (s *Store) HitMark(h client.SearchHit) (MarkState, string) {
 	q := &s.Search
-	id := q.sent[HitKey(h)]
-	if id == "" && h.PriorJob != nil {
-		id = h.PriorJob.ID
+	if id := q.sent[HitKey(h)]; id != "" && !q.gone[id] {
+		if j := s.byID[id]; j != nil {
+			switch {
+			case j.Status == domain.JobQueued || j.Status == domain.JobRunning:
+				return MarkActive, id
+			// The record's counts cannot say which song a run finished.
+			case j.Status == domain.JobCompleted && h.Type == "song":
+				return MarkDone, id
+			}
+		}
 	}
-	if id == "" || q.gone[id] {
-		return MarkNone, ""
-	}
-	status := domain.JobStatus("")
-	if j := s.byID[id]; j != nil {
-		status = j.Status
-	} else if h.PriorJob != nil && h.PriorJob.ID == id {
-		status = h.PriorJob.Status
-	}
-	switch status {
-	case domain.JobQueued, domain.JobRunning:
-		return MarkActive, id
-	case domain.JobCompleted:
-		return MarkDone, id
-	}
-	return MarkNone, ""
+	return MarkOf(s.HitRecord(h), h.Type == "song")
 }
 
 // SubmitHit downloads exactly h under overrides (nil: the backend's
@@ -480,12 +478,27 @@ func (s *Store) SubmitHit(h client.SearchHit, overrides *config.DownloadOverride
 		switch {
 		case err != nil && res.Rejected == 0:
 			s.setNotice(err.Error(), true)
-		case res.Accepted > 0:
-			s.setNotice("Downloading "+h.Name, false)
-		case len(res.Results) > 0 && res.Results[0].Error != nil:
+		case len(res.Results) == 0:
+		case res.Results[0].Error != nil:
 			s.setNotice(res.Results[0].Error.Message, true)
+		default:
+			s.setNotice(submitNotice(res.Results[0], h.Name), false)
 		}
 	})
+}
+
+// submitNotice is what a taken link says: started, waiting for a catalog
+// read, already downloaded, or waiting for room or its retry.
+func submitNotice(r domain.SubmitResult, name string) string {
+	switch {
+	case r.Status == domain.SubmitAlreadyDownloaded:
+		return name + " is already in your library"
+	case r.Status == domain.SubmitPending:
+		return "Adding " + name
+	case r.Job == nil:
+		return name + " waits to download"
+	}
+	return "Downloading " + name
 }
 
 // lru is a small most-recently-used cache.
@@ -503,6 +516,13 @@ func (c *lru[V]) get(k string) (V, bool) {
 		c.touch(k)
 	}
 	return v, ok
+}
+
+func (c *lru[V]) drop(k string) {
+	if _, ok := c.items[k]; ok {
+		delete(c.items, k)
+		c.order = slices.DeleteFunc(c.order, func(x string) bool { return x == k })
+	}
 }
 
 func (c *lru[V]) put(k string, v V) {

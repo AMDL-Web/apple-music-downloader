@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"amdl/internal/client"
-	"amdl/internal/domain"
 )
 
 func (b *Backend) lookup(w http.ResponseWriter, r *http.Request) {
@@ -30,15 +29,10 @@ func (b *Backend) lookup(w http.ResponseWriter, r *http.Request) {
 		ArtworkTextColor2: "ffffff", ReleaseDate: a.releaseDate(), Genre: a.artist.genre, TrackCount: len(a.tracks),
 		AudioTraits: a.traits()}
 	b.mu.Lock()
-	l.Library, _ = b.albumOnDisk(a)
+	l.Resource, _ = b.albumMark(a)
 	if one != nil {
 		l.Type, l.TrackID, l.Title, l.AlbumName, l.TrackCount, l.DurationMS = "song", one.id, a.tracks[one.index], a.title, 0, durationMS(one.id)
-		n := 0
-		if b.onDisk(one.id) {
-			n = 1
-		}
-		state := domain.NewLibraryState(n, 1)
-		l.Library = &state
+		l.Resource = b.songMark(one.id)
 	}
 	b.mu.Unlock()
 	writeJSON(w, http.StatusOK, l)
@@ -122,15 +116,6 @@ func (b *Backend) hits(match func(...string) bool) searchHits {
 	return g
 }
 
-// marked gives a hit the job that holds it and, for an album, how much of it
-// is on disk, as the queue and library marks of search read them.
-func (b *Backend) marked(h client.SearchHit) client.SearchHit {
-	if j, ok := b.priorJob(h.ID); ok {
-		h.PriorJob = &client.PriorJob{ID: j.ID, Status: j.Status, FinishedAt: j.FinishedAt}
-	}
-	return b.withLibrary(h)
-}
-
 func pageOf(q url.Values, def int) (limit, offset int) {
 	limit, _ = strconv.Atoi(q.Get("limit"))
 	offset, _ = strconv.Atoi(q.Get("offset"))
@@ -176,11 +161,13 @@ func (b *Backend) album(w http.ResponseWriter, r *http.Request) {
 	}
 	out := a.detail()
 	b.mu.Lock()
-	library, onDisk := b.albumOnDisk(a)
+	mark, states := b.albumMark(a)
 	b.mu.Unlock()
-	out.Library = library
-	for i := range out.Tracks {
-		out.Tracks[i].OnDisk = &onDisk[i]
+	out.Resource = mark
+	if mark != nil {
+		for i := range out.Tracks {
+			out.Tracks[i].State = states[i]
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

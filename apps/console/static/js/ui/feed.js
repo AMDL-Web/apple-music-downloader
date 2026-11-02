@@ -13,6 +13,10 @@ import { BURST_MS, endsWatch, addEnded, finishedToast } from '../lib/watch.js';
 
 const ANNOUNCE_GAP_MS = 5000;
 
+// The overview feed's messages: jobs, and the records and the disk check
+// their runs change (subscribers pick the types they read).
+const FEED_TYPES = new Set(['download_upserted', 'download_deleted', 'resource_updated', 'check_updated']);
+
 /**
  * Downloads feed, connection state and live announcements for App():
  * {feed, counts, conn, epoch, retryRef, retryFeed, subscribeFeed, watchJobs, unwatchJobs, announce, liveText}.
@@ -173,7 +177,7 @@ export function useFeed({ toast, route }) {
           url: feedStreamUrl(),
           cursor: body.event_cursor ?? null,
           onEvent: (ev) => {
-            if (ev.type !== 'download_upserted' && ev.type !== 'download_deleted') return;
+            if (!FEED_TYPES.has(ev.type)) return;
             const msg = parseData(ev);
             if (msg) coalescer.push(msg);
           },

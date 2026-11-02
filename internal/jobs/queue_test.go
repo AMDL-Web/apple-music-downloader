@@ -97,13 +97,13 @@ func TestWorkerFollowsRunOrderAfterMove(t *testing.T) {
 	defer shutdown(t, m)
 	ctx := context.Background()
 
-	submitOne(t, m, "song|us|a")
-	if got := waitEntered(t, p); got != "song|us|a" {
+	submitOne(t, m, "station|us|a")
+	if got := waitEntered(t, p); got != "station|us|a" {
 		t.Fatalf("first job = %s", got)
 	}
 	ids := map[string]string{}
 	for _, name := range []string{"b", "c", "d", "e"} {
-		ids[name] = submitOne(t, m, "song|us|"+name)
+		ids[name] = submitOne(t, m, "station|us|"+name)
 	}
 	// Queue b c d e -> e first, then c after d: e b d c.
 	select {
@@ -131,7 +131,7 @@ func TestWorkerFollowsRunOrderAfterMove(t *testing.T) {
 		waitEntered(t, p)
 	}
 	p.release <- struct{}{}
-	want := []string{"song|us|a", "song|us|e", "song|us|b", "song|us|d", "song|us|c"}
+	want := []string{"station|us|a", "station|us|e", "station|us|b", "station|us|d", "station|us|c"}
 	if got := p.startOrder(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("start order = %v, want %v", got, want)
 	}
@@ -161,9 +161,9 @@ func TestMoveRefusesRunningAndFinishedJobs(t *testing.T) {
 	defer shutdown(t, m)
 	ctx := context.Background()
 
-	running := submitOne(t, m, "song|us|1")
+	running := submitOne(t, m, "station|us|1")
 	waitEntered(t, p)
-	queued := submitOne(t, m, "song|us|2")
+	queued := submitOne(t, m, "station|us|2")
 	if _, err := m.Move(ctx, running, db.Placement{Edge: db.EdgeLast}); !errors.Is(err, db.ErrJobNotQueued) {
 		t.Fatalf("Move(running) = %v, want ErrJobNotQueued", err)
 	}
@@ -190,11 +190,11 @@ func TestRecoveryKeepsRunOrder(t *testing.T) {
 	first := NewManager(store, events.NewHub(), p, 1, slog.Default())
 	first.Start(context.Background())
 	ctx := context.Background()
-	submitOne(t, first, "song|us|a")
+	submitOne(t, first, "station|us|a")
 	waitEntered(t, p)
 	ids := map[string]string{}
 	for _, name := range []string{"b", "c", "d"} {
-		ids[name] = submitOne(t, first, "song|us|"+name)
+		ids[name] = submitOne(t, first, "station|us|"+name)
 	}
 	// Two moves to the front leave d and c below a's queue_order, so a goes
 	// first after the restart only if recovery puts it ahead of them.
@@ -225,7 +225,7 @@ func TestRecoveryKeepsRunOrder(t *testing.T) {
 		waitEntered(t, p2)
 		p2.release <- struct{}{}
 	}
-	want := []string{"song|us|a", "song|us|d", "song|us|c", "song|us|b"}
+	want := []string{"station|us|a", "station|us|d", "station|us|c", "station|us|b"}
 	if got := p2.startOrder(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("start order after restart = %v, want %v", got, want)
 	}
@@ -242,7 +242,7 @@ func TestBatchSubmitStartsEveryIdleWorker(t *testing.T) {
 	m := NewManager(store, events.NewHub(), p, 3, slog.Default())
 	m.Start(context.Background())
 	defer shutdown(t, m)
-	resp := m.SubmitBatch(context.Background(), []string{"song|us|1", "song|us|2", "song|us|3", "song|us|4", "song|us|5"}, nil)
+	resp := m.SubmitBatch(context.Background(), []string{"station|us|1", "station|us|2", "station|us|3", "station|us|4", "station|us|5"}, nil)
 	if resp.Accepted != 5 {
 		t.Fatalf("submit = %+v", resp)
 	}
@@ -258,7 +258,7 @@ func TestBatchSubmitStartsEveryIdleWorker(t *testing.T) {
 	// ProcessJob, so only the set is fixed.
 	got := p.startOrder()
 	slices.Sort(got)
-	if !reflect.DeepEqual(got, []string{"song|us|1", "song|us|2", "song|us|3"}) {
+	if !reflect.DeepEqual(got, []string{"station|us|1", "station|us|2", "station|us|3"}) {
 		t.Fatalf("first three = %v, want the batch's first three", got)
 	}
 	close(p.release)
@@ -284,7 +284,7 @@ func TestQueueOperationsRace(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := range jobs {
-			resp := m.SubmitBatch(ctx, []string{fmt.Sprintf("song|us|%d", i)}, nil)
+			resp := m.SubmitBatch(ctx, []string{fmt.Sprintf("station|us|%d", i)}, nil)
 			if resp.Accepted == 1 {
 				ids.Store(i, resp.Results[0].Job.ID)
 			}

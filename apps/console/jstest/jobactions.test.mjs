@@ -10,6 +10,8 @@ import {
   bulkProgressText,
   bulkLabel,
   bulkSummary,
+  retryNote,
+  retryToast,
   rowMenu,
 } from '../static/js/lib/jobactions.js';
 
@@ -50,7 +52,7 @@ test('actionReason words every refusal the job routes answer', () => {
   assert.equal(actionReason('cancel', err(404, 'job_not_found')), 'no longer exists');
   assert.equal(actionReason('retry', err(409, 'job_not_retryable')), 'only failed or cancelled jobs can be retried');
   assert.equal(actionReason('cancel', err(409, 'job_not_cancellable')), 'already finished');
-  assert.equal(actionReason('retry', err(409, 'job_finalizing')), 'still finishing its last run, try again in a moment');
+  assert.equal(actionReason('again', err(409, 'run_active')), 'it is downloading now; pause it first');
   assert.equal(actionReason('retry', err(409, 'duplicate_active')), 'another active job already downloads this link');
   assert.equal(actionReason('retry', err(503, 'queue_full')), 'the queue is full');
   assert.equal(actionReason('cancel', err(0, 'network_error', 'Cannot reach the server.')), 'cannot reach the server');
@@ -81,6 +83,17 @@ test('bulkSummary reports full success in the success role', () => {
   });
   assert.deepEqual(bulkSummary('retry', [ok(job('a', 'failed'))], title), { message: 'Queued 1 job again', role: 'success' });
   assert.equal(bulkSummary('cancel', [], title).role, 'neutral');
+});
+
+test('a retry that queued nothing says what it answered', () => {
+  assert.equal(retryNote({ status: 'already_downloaded' }), 'Already downloaded');
+  assert.equal(retryNote({ status: 'waiting' }), 'Waiting to download');
+  assert.equal(retryNote({ status: 'queued', job: { id: 'b' } }), '');
+  assert.equal(retryToast({ status: 'queued', job: { id: 'b' } }, 'Beta'), 'Downloading “Beta” again');
+  assert.equal(retryToast({ status: 'waiting' }, 'Beta'), '“Beta”: waiting to download');
+  const said = (status) => ({ item: job('x', 'failed'), ok: true, value: { status } });
+  assert.deepEqual(bulkSummary('retry', [ok(job('a', 'failed')), said('already_downloaded'), said('waiting')], title), { message: 'Queued 1 job again · 1 already downloaded · 1 waiting', role: 'success' });
+  assert.equal(bulkSummary('retry', [said('already_downloaded'), said('already_downloaded')], title).message, '2 already downloaded');
 });
 
 test('bulkSummary counts an already deleted job as deleted', () => {
@@ -125,6 +138,14 @@ test('a row menu offers what the status of its job allows, as in the desktop app
   assert.deepEqual(gone.map((it) => (it.separator ? '-' : it.id)), ['details', '-', 'copy', '-', 'delete'], 'a link Apple has nothing at gets no Retry');
   const labels = rowMenu({ id: 'j', status: 'failed', input: 'x' }).filter((it) => !it.separator).map((it) => it.label);
   assert.deepEqual(labels, ['Show details', 'Retry', 'Copy link', 'Delete…']);
+});
+
+test("a record's run opens its record and pauses it instead of cancelling", () => {
+  const run = (status) => rowMenu({ id: 'j', status, input: 'x', resource: { kind: 'album', id: '1' } }).map((it) => (it.separator ? '-' : it.id));
+  assert.deepEqual(run('running'), ['details', 'record', 'pause', '-', 'copy']);
+  assert.deepEqual(run('completed'), ['details', 'record', 'again', '-', 'copy', '-', 'delete']);
+  const labels = rowMenu({ id: 'j', status: 'queued', resource: { kind: 'album', id: '1' } }).filter((it) => !it.separator).map((it) => it.label);
+  assert.deepEqual(labels, ['Show details', 'Open in Library', 'Move to top', 'Move to bottom', 'Pause']);
 });
 
 test('a queued row offers only the moves that move it', () => {

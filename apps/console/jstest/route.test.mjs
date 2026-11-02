@@ -19,6 +19,9 @@ import {
   newDownloadHash,
   settingsSection,
   settingsHash,
+  recordHash,
+  libraryFilters,
+  libraryHash,
 } from '../static/js/lib/route.js';
 import { resolveUrl, toApiError } from '../static/js/api.js';
 
@@ -162,4 +165,17 @@ test('the plain way to the Queue returns to its last filters', () => {
   assert.equal(queueHash(), '#/queue?q=ado', 'no tab in the link: the default, All');
   rememberQueue({});
   assert.equal(queueHash(), '#/queue');
+});
+
+test('a record opens its drawer over the Library, and Activity has its own address', () => {
+  assert.deepEqual(parseHash('#/library/albums/1524443761?tab=albums'), { page: 'library', jobId: null, record: { kind: 'albums', id: '1524443761' }, params: { tab: 'albums' } });
+  assert.deepEqual(parseHash('#/library/playlists/pl.u-abc'), { page: 'library', jobId: null, record: { kind: 'playlists', id: 'pl.u-abc' }, params: {} });
+  assert.equal(parseHash('#/library/songs/1').page, 'notfound');
+  assert.equal(parseHash('#/library/albums/%E0%A4%A').page, 'notfound');
+  assert.equal(recordHash('album', '1'), '#/library/albums/1');
+  assert.equal(recordHash('playlist', 'pl.1', { tab: 'playlists' }), '#/library/playlists/pl.1?tab=playlists');
+  assert.deepEqual(parseHash('#/activity'), { page: 'queue', jobId: null, params: {} });
+  assert.deepEqual(libraryFilters({ tab: 'apple', kind: 'songs', flag: 'nope' }), { tab: 'apple', state: '', flag: '', q: '', kind: 'songs' });
+  assert.equal(libraryHash({ tab: 'albums', flag: 'missing' }), '#/library?flag=missing');
+  assert.equal(libraryHash({ tab: 'apple', kind: 'albums' }), '#/library?tab=apple');
 });

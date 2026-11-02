@@ -14,8 +14,10 @@ type EventType string
 // Job lifecycle events. Their payload is the public Job snapshot plus
 // "message"; job_deleted has no payload.
 const (
-	EventJobQueued    EventType = "job_queued"
-	EventJobStarted   EventType = "job_started"
+	EventJobQueued  EventType = "job_queued"
+	EventJobStarted EventType = "job_started"
+	// EventJobRetried is not emitted since 2.0, where a retry is a new run;
+	// it stays so 1.x event rows still decode.
 	EventJobRetried   EventType = "job_retried"
 	EventJobRecovered EventType = "job_recovered"
 	EventJobFinished  EventType = "job_finished"
@@ -31,8 +33,8 @@ const (
 	EventJobDeleted EventType = "job_deleted"
 )
 
-// RequeueCause is the "cause" field of a job_retried payload: what put the
-// finished job back in the queue. The payload also carries "force_overwrite",
+// RequeueCause is the "cause" field of a 1.x job_retried payload: what put
+// the finished job back in the queue. The payload also carries "force_overwrite",
 // whether the job's overrides force overwriting files on disk.
 type RequeueCause string
 
@@ -62,6 +64,14 @@ const (
 	EventItemCompleted EventType = "item_completed"
 	EventItemFailed    EventType = "item_failed"
 	EventItemSkipped   EventType = "item_skipped"
+	// EventItemUnavailable ends an item whose slot the track does not offer
+	// (the codec, or the account storefront); the slot is unavailable.
+	EventItemUnavailable EventType = "item_unavailable"
+	// EventLyricsRefreshed ends an item of a lyrics reset: the lyrics were
+	// fetched again and written into the file and its sidecars.
+	EventLyricsRefreshed EventType = "lyrics_refreshed"
+	// EventItemOverwrite is not emitted since 2.0; it stays so 1.x event
+	// rows still decode.
 	EventItemOverwrite EventType = "item_overwrite"
 )
 
@@ -94,7 +104,7 @@ var EventTypes = []EventType{
 	EventJobQueued, EventJobStarted, EventJobRetried, EventJobRecovered,
 	EventJobFinished, EventJobFailed, EventJobCancelled, EventJobMoved, EventJobDeleted,
 	EventResolvedInput, EventMotionArtworkResolved, EventStandaloneCoverFailed,
-	EventItemProgress, EventItemCompleted, EventItemFailed, EventItemSkipped, EventItemOverwrite,
+	EventItemProgress, EventItemCompleted, EventItemFailed, EventItemSkipped, EventItemUnavailable, EventLyricsRefreshed, EventItemOverwrite,
 	EventCodecSelected, EventCodecFallback, EventCodecFailed, EventALACRepaired, EventIntegrityOverruled,
 	EventOperationRetry, EventOperationExhausted, EventOperationRecovered,
 	EventHookStarted, EventHookSucceeded, EventHookFailed,
@@ -220,6 +230,8 @@ var OverviewMilestones = []EventType{
 	EventMotionArtworkResolved,
 	EventItemCompleted,
 	EventItemSkipped,
+	EventItemUnavailable,
+	EventLyricsRefreshed,
 	EventItemFailed,
 	EventJobFinished,
 	EventJobFailed,
@@ -249,9 +261,16 @@ func IsOverviewMilestone(eventType EventType) bool {
 // summary after the change. EventID is the persisted-event cursor a client
 // hands back to resume.
 type DownloadFeedMessage struct {
-	Type         string          `json:"type"`
-	Job          *Job            `json:"job,omitempty"`
-	JobID        string          `json:"job_id,omitempty"`
+	Type  string `json:"type"`
+	Job   *Job   `json:"job,omitempty"`
+	JobID string `json:"job_id,omitempty"`
+	// ResourceKind, ResourceID and Resource are set on resource_updated:
+	// the record (an AlbumResource or PlaylistResource) a run downloads for.
+	ResourceKind ResourceKind `json:"resource_kind,omitempty"`
+	ResourceID   string       `json:"resource_id,omitempty"`
+	Resource     any          `json:"resource,omitempty"`
+	// Check is set on check_updated.
+	Check        *CheckRun       `json:"check,omitempty"`
 	EventID      int64           `json:"event_id,omitempty"`
 	StatusCounts JobStatusCounts `json:"status_counts"`
 }

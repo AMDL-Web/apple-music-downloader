@@ -37,8 +37,8 @@ Lyrics sidecars and standalone covers are written through a temp file in the sam
 folder and a rename, so an interrupted write never leaves a truncated file behind. That
 matters for covers in particular: a cover already on disk is never fetched again. A
 track's sidecars are renamed into place right after its audio file, so one that is
-replaced under `force_overwrite` keeps its old audio and sidecars until the new copy is
-complete: a forced download that fails leaves them as they were, and a failed attempt
+replaced by a reset keeps its old audio and sidecars until the new copy is complete: a
+reset download that fails leaves them as they were, and a failed attempt
 removes only its own `.part` staging files, never a finished track.
 
 ### Cancel and shutdown
@@ -125,7 +125,7 @@ repair or failure path as in `full`. A quick false positive would otherwise fail
 and fall back to a lossy one.
 
 With `check_integrity` false neither the check nor the ALAC repair runs: a damaged file is
-saved, and later jobs skip it because it is already on disk.
+saved, and its slot is recorded as downloaded.
 
 ## Transfers
 
@@ -277,9 +277,9 @@ and codec fallback. Only the backend's work is pretended: transfers and decrypti
 paced by a speed drawn from `simulate.min_speed_kbps`..`max_speed_kbps`, the AAC-LC
 WebPlayback asset, cover art and lyrics are stand-ins, and nothing is written, deleted
 or run (no ffmpeg, no wrapper). An output that already exists on disk is still reported
-as skipped, and simulate mode never deletes or replaces a real file. A track a simulated
-job finished counts as on disk too, for later jobs and the library state, until the
-backend restarts.
+as skipped, and simulate mode never deletes or replaces a real file. A simulated run
+records its slots as downloaded like a real one, so a disk check finds their files
+missing.
 
 ## Output paths
 
@@ -296,8 +296,9 @@ directories. How a segment is cleaned (reserved characters, leading and trailing
 | `download.playlist_path_format` | `playlists/{PlaylistName}/{SongNumber:02d}. {SongName}` |
 | `download.station_path_format` | `stations/{StationName}/{SongNumber:02d}. {SongName}` |
 
-A track has one library path whichever job type downloads it, and a file there counts as
-downloaded ([Library and skipping](#library-and-skipping)). The path comes from the
+A track copy has one library path per slot, whichever add downloads it; records, not
+files, say what is downloaded ([Library, records and slots](#library-records-and-slots)).
+The path comes from the
 track's placement: its album and its position in that album's
 track list (`internal/media#libraryTrackPath`).
 
@@ -312,7 +313,7 @@ track list (`internal/media#libraryTrackPath`).
   disc starts at 13). A storefront can withhold a track from the album's track list (cn
   lists 9 of the 10 tracks of album 1524443761); the tracks after it keep their numbers,
   so track 3 is still `03.`. Withheld tracks are not counted as missing: an album is
-  complete when every track the list names is on disk. A track withheld last on a disc
+  complete when every track the list names is downloaded. A track withheld last on a disc
   moves the next disc's numbers, which the list cannot show, and an album whose tracks
   carry no track numbers is numbered in list order. The file name must contain
   `{SongNumber}`, or both `{DiscNumber}` and
@@ -342,41 +343,29 @@ list is in the `download` section of
 `:02d` padding. `{TrackCount}` is the number of tracks on that track's disc, not the whole
 release. Unknown variables are preserved literally.
 
-### Library and skipping
+### Library, records and slots
 
-A track has one library path whichever job type downloads it, and a file at that path
-counts as downloaded, whatever quality it was saved in. So a song downloaded on its own
-is skipped when its album is downloaded later, and an artist download skips the tracks of
-albums already on disk. Playlists and stations are not part of the library: a song in one
-is downloaded into its folder even when the library holds it.
+An album or catalog playlist that amdl downloads is a record, and its records alone say
+what is downloaded: no search, lookup or plan stats a file. A run of a record resolves it
+in the account's storefront and plans its slots from the records
+(`internal/jobs#Manager.PlanRun`): the main quality of each wanted track that is pending,
+or failed with its backoff over. Each slot claims its path in the store before anything
+is downloaded (`internal/jobs#Manager.ClaimSlot`), so two records whose templates give
+the same path fail the second with `path_taken` instead of overwriting the first.
 
-A submit does not look at the files, and reads nothing from Apple: it only queues the
-link. A link whose last job is finished is queued again on that job, under the same id
-(`requeued: true`, `job_retried` with `cause: resubmit`), instead of adding a row; a
-station always gets a new job. The work happens when the job runs:
+The one stat left is at that claim (`internal/media#trackRun.handleExistingOutput`): a
+file already at the slot's path, put there by hand or by an earlier install, is adopted as
+the slot's file, `skipped_existing`, without a download. A reset of a done slot downloads
+it again to its stored path, and the new file replaces the old one only once it is
+complete, so a failed or paused run leaves the old file as it was.
 
-- Before any track starts, the job checks its library tracks
-  (`internal/media#Downloader.skipTracksOnDisk`): a track already at its path is
-  `skipped_existing` after one stat, with no per-track catalog read and no stream
-  selection, so an album fully on disk finishes in seconds and an artist download skips
-  every album already there. The check at claim time stays, for a file another job
-  commits meanwhile.
-- Every run re-checks the tracks an earlier run of the job finished
-  (`internal/media#Downloader.keepFinished`): one stays finished only while its file is
-  still at the path it recorded, that path is its current library path, and
-  `force_overwrite` is off; otherwise it runs again.
-- "Download again" is a submit with `force_overwrite`: nothing is skipped, and each new
-  file replaces the old one only once it is complete, so cancelling or failing midway
-  leaves the old files as they were.
-
-Clients learn what is on disk from the reads that already go to the catalog, not from the
-submit. `internal/media#Downloader.AlbumTracksOnDisk` stats each track of an album's
-track list (exact; the album page and an album lookup), a song lookup reads the song's
-album and stats that one track (`internal/media#Downloader.SongOnDisk`), and
-`internal/media#Downloader.AlbumFolderStates` counts the `.m4a` files in each album's
-folder against its summary's track count, with no catalog read (approximate; search and
-artist album cards). Each answers `library`: `complete`, `partial` with a count, or
-`none`.
+A library track copy has one path per slot: the main slot takes the plain template name,
+and another quality of a downloaded track is named after it with a quality suffix,
+`01. Song [ALAC 24-bit_96 kHz].m4a` (`internal/media#qualitySuffixedPath`), unless the
+file name names `{Codec}` or `{Quality}`. The path of a file a slot completed stays its
+path when the template changes; a slot that never completed is named by the template
+again on each attempt. Playlists keep their own copies in their folders. A station is a
+one-off run that downloads every track of its feed.
 
 ### Standalone covers
 

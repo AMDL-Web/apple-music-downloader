@@ -14,8 +14,8 @@ it.
 - The reporter's words: which job or link, what they saw and expected, which
   version or image tag.
 - The job and its events: `GET /api/v1/downloads/{id}` and
-  `GET /api/v1/downloads/{id}/events`; for a user's install, the `jobs`,
-  `job_items` and `job_events` rows.
+  `GET /api/v1/downloads/{id}/events`; for a user's install, the `runs`,
+  `run_items` and `run_events` rows.
 - One request's access and job logs: `GET /api/v1/logs?request_id=<id>`.
 - Which catalog read failed: a required read fails the job, an optional one
   (motion artwork, a playlist track's album enrichment) degrades to "not available" (root

@@ -1,8 +1,8 @@
 // Pure helpers for catalog search on the New download page (GET search and
 // GET artists/{id}/albums): the term the text box holds, a searcher that
 // keeps one search in flight and pages each group, an artist's album pages,
-// what a hit row shows and where the arrow keys move; which job a hit is in
-// the library or the queue through is in lib/search-jobs.js. No DOM; the
+// what a hit row shows and where the arrow keys move; a hit's record mark
+// is in lib/marks.js. No DOM; the
 // caller passes the network functions.
 
 import { releaseYear, trackLength, count } from './format.js';
@@ -440,4 +440,18 @@ export function nextStop(stops, at, key) {
   });
   if (best >= 0) return best;
   return down ? at : -1;
+}
+
+/** The key a hit is tracked by: its type and id. */
+export const hitKey = (hit) => (hit ? `${hit.type}:${hit.id}` : '');
+
+/** The preview a submitted hit's result row shows until its job resolves (lib/submit.js previewSeed). */
+export function hitPreview(hit) {
+  if (!hit) return null;
+  const out = { title: hit.name, type: hit.type };
+  for (const key of ['artist_name', 'artwork_url', 'release_date', 'genre', 'artwork_bg_color', 'artwork_text_color1', 'artwork_text_color2', 'artwork_text_color3', 'artwork_text_color4']) {
+    if (hit[key]) out[key] = hit[key];
+  }
+  if (hit.type === 'artist') out.artist_name = hit.name;
+  return out;
 }

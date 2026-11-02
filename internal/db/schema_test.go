@@ -228,10 +228,10 @@ func TestNormalizeTimestampColumnsOnOpen(t *testing.T) {
 		query string
 		want  string
 	}{
-		{`SELECT created_at FROM jobs WHERE id='j1'`, "2024-07-10T12:00:00.000000000Z"},
-		{`SELECT updated_at FROM jobs WHERE id='j1'`, "2024-07-10T12:00:00.123000000Z"},
-		{`SELECT created_at FROM job_items WHERE id='i1'`, "2024-07-10T12:00:00.500000000Z"},
-		{`SELECT created_at FROM job_events WHERE job_id='j1'`, "2024-07-10T12:00:01.000000000Z"},
+		{`SELECT created_at FROM runs WHERE id='j1'`, "2024-07-10T12:00:00.000000000Z"},
+		{`SELECT updated_at FROM runs WHERE id='j1'`, "2024-07-10T12:00:00.123000000Z"},
+		{`SELECT created_at FROM run_items WHERE id='i1'`, "2024-07-10T12:00:00.500000000Z"},
+		{`SELECT created_at FROM run_events WHERE job_id='j1'`, "2024-07-10T12:00:01.000000000Z"},
 	}
 	for _, c := range checks {
 		var got string
@@ -251,7 +251,7 @@ func TestNormalizeTimestampColumnsOnOpen(t *testing.T) {
 	}
 	defer store.Close()
 	var got string
-	if err := store.db.QueryRow(`SELECT created_at FROM jobs WHERE id='j1'`).Scan(&got); err != nil {
+	if err := store.db.QueryRow(`SELECT created_at FROM runs WHERE id='j1'`).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
 	if got != "2024-07-10T12:00:00.000000000Z" {

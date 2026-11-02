@@ -15,7 +15,7 @@ import (
 type recoveryProcessor struct{}
 
 func (recoveryProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
-	return ValidationResult{Type: "song", Storefront: "cn"}, nil
+	return ValidationResult{Type: "station", Storefront: "cn"}, nil
 }
 
 func (recoveryProcessor) ProcessJob(context.Context, domain.Job, Reporter) error {
@@ -23,19 +23,24 @@ func (recoveryProcessor) ProcessJob(context.Context, domain.Job, Reporter) error
 }
 
 // keyedProcessor derives ValidationResult from a "type|storefront|id" test
-// URL so canonical-key dedup can be exercised without real Apple Music
-// parsing. URLs prefixed "bad:" are treated as invalid.
+// URL, or "song|storefront|id|albumID" for an album-track link, so adds can
+// be exercised without real Apple Music parsing. URLs prefixed "bad:" are
+// treated as invalid.
 type keyedProcessor struct{}
 
 func (keyedProcessor) ValidateRequest(_ context.Context, url string) (ValidationResult, error) {
 	if strings.HasPrefix(url, "bad:") {
 		return ValidationResult{}, &RequestError{Code: "invalid_url", Message: "bad test url"}
 	}
-	parts := strings.SplitN(url, "|", 3)
-	if len(parts) != 3 {
+	parts := strings.SplitN(url, "|", 4)
+	if len(parts) < 3 {
 		return ValidationResult{}, &RequestError{Code: "invalid_url", Message: "malformed test url"}
 	}
-	return ValidationResult{Type: parts[0], Storefront: parts[1], ID: parts[2]}, nil
+	result := ValidationResult{Type: parts[0], Storefront: parts[1], ID: parts[2]}
+	if len(parts) == 4 {
+		result.AlbumID = parts[3]
+	}
+	return result, nil
 }
 
 func (keyedProcessor) ProcessJob(context.Context, domain.Job, Reporter) error {

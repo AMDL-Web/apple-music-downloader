@@ -108,6 +108,7 @@ func (a *App) captureScreens(dir string) {
 	}, 3*time.Second)
 	shot("12-status-light", func() { a.view.GoSettings("") }, 2500*time.Millisecond)
 	shot("15-files-light", func() { a.view.GoSettings("files") }, 1500*time.Millisecond)
+	a.libraryShots(shot)
 	a.waitFinished(job)
 	// With nothing downloading, the queue shows the album that just
 	// finished, playing its motion cover, over the covers of those before it.

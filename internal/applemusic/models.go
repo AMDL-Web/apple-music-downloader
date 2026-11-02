@@ -84,15 +84,18 @@ type Collection struct {
 	// them.
 	ContentRating      string
 	AppleDigitalMaster bool
-	// URL (attributes.url) and TrackCount (attributes.trackCount, the whole
-	// release) are filled for album summaries: search hits and an artist's
-	// albums. AudioTraits (amp-api's attributes.audioTraits) is filled for
-	// those, by Album and for playlists. Playlists have no TrackCount: the
-	// catalog states none.
+	// URL (attributes.url) is filled for album summaries: search hits and an
+	// artist's albums. TrackCount (attributes.trackCount: the whole release,
+	// tracks the storefront withholds from the list included) is filled for
+	// those and by Album. AudioTraits (amp-api's attributes.audioTraits) is
+	// filled for those, by Album and for playlists. Playlists have no
+	// TrackCount: the catalog states none.
 	URL         string
 	TrackCount  int
 	AudioTraits []string
-	Tracks      []Song
+	// IsSingle (attributes.isSingle) is filled for album summaries.
+	IsSingle bool
+	Tracks   []Song
 }
 
 type Artist struct {
@@ -285,7 +288,9 @@ type albumAttributes struct {
 	// attributes of the public catalog's Albums resource.
 	ContentRating       string `json:"contentRating"`
 	IsMasteredForItunes bool   `json:"isMasteredForItunes"`
-	URL                 string `json:"url"`
+	// IsSingle is a documented attribute of the Albums resource.
+	IsSingle bool   `json:"isSingle"`
+	URL      string `json:"url"`
 	// AudioTraits is amp-api only, as on songs.
 	AudioTraits []string `json:"audioTraits"`
 	// InLibrary is as on songs.

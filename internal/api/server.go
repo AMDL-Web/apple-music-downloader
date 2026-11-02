@@ -19,7 +19,7 @@ import (
 )
 
 // Deps are the components the HTTP layer serves. Every field is required
-// except Logger, Logging, Library, Tokens, Console, Hooks and Restart; New
+// except Logger, Logging, Tokens, Console, Hooks and Restart; New
 // refuses a nil one, so no handler answers 503 for a missing dependency.
 type Deps struct {
 	// Config is the live runtime config shared with the download pipeline;
@@ -44,9 +44,6 @@ type Deps struct {
 	// Catalog backs POST /lookup, GET /search, GET /artists/{id}/albums and
 	// GET /albums/{id}.
 	Catalog CatalogService
-	// Library says which tracks of those albums and songs are on disk (the
-	// library fields); nil leaves the fields out.
-	Library LibraryService
 	// Tokens picks the media-user-token for lookups and reports the
 	// wrapper's, masked, on GET /wrapper/status; nil means
 	// catalog.media_user_token alone.
@@ -85,7 +82,6 @@ type Server struct {
 	librarySync  LibrarySyncService
 	appleLibrary AppleLibraryService
 	catalog      CatalogService
-	library      LibraryService
 	tokens       *usertoken.Provider
 	console      http.Handler
 	hooks        HooksService
@@ -129,7 +125,7 @@ func New(deps Deps) (*Server, error) {
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, appleLibrary: deps.AppleLibrary,
-		catalog: deps.Catalog, library: deps.Library, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
+		catalog: deps.Catalog, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())
@@ -197,6 +193,25 @@ func (s *Server) routes() []route {
 		{http.MethodGet, "/api/v1/search", h(s.search)},
 		{http.MethodGet, "/api/v1/artists/{artist_id}/albums", h(s.artistAlbums)},
 		{http.MethodGet, "/api/v1/albums/{album_id}", h(s.getAlbum)},
+		// Records. The literal segments (summary, add, reset, check, pending)
+		// are more specific than {kind}.
+		{http.MethodGet, "/api/v1/library/summary", h(s.librarySummary)},
+		{http.MethodGet, "/api/v1/library/albums", s.listLibrary(domain.ResourceAlbum)},
+		{http.MethodGet, "/api/v1/library/albums/{id}", s.getLibraryRecord(domain.ResourceAlbum)},
+		{http.MethodGet, "/api/v1/library/playlists", s.listLibrary(domain.ResourcePlaylist)},
+		{http.MethodGet, "/api/v1/library/playlists/{id}", s.getLibraryRecord(domain.ResourcePlaylist)},
+		{http.MethodPost, "/api/v1/library/add", h(s.addToLibrary)},
+		{http.MethodPost, "/api/v1/library/reset", h(s.resetLibrary)},
+		{http.MethodGet, "/api/v1/library/check", h(s.getCheck)},
+		{http.MethodPost, "/api/v1/library/check", h(s.startCheck)},
+		{http.MethodGet, "/api/v1/library/pending", h(s.listPending)},
+		{http.MethodDelete, "/api/v1/library/pending/{pending_id}", h(s.deletePending)},
+		{http.MethodPost, "/api/v1/library/pending/{pending_id}/retry", h(s.retryPending)},
+		{http.MethodPost, "/api/v1/library/{kind}/{id}/download", h(s.downloadRecord)},
+		{http.MethodPost, "/api/v1/library/{kind}/{id}/reset", h(s.resetRecord)},
+		{http.MethodPost, "/api/v1/library/{kind}/{id}/pause", h(s.pauseRecord)},
+		{http.MethodPost, "/api/v1/library/{kind}/{id}/resume", h(s.resumeRecord)},
+		{http.MethodDelete, "/api/v1/library/{kind}/{id}", h(s.deleteRecord)},
 		{http.MethodPost, "/api/v1/downloads", h(s.createDownload)},
 		{http.MethodGet, "/api/v1/downloads", h(s.listDownloads)},
 		// The literal "events" segment is more specific than "{id}", so the

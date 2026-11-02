@@ -58,6 +58,30 @@ func parseJobListFilter(r *http.Request) (db.JobListFilter, error) {
 		filter.Types = append(filter.Types, t)
 	}
 
+	switch kind := domain.ResourceKind(q.Get("resource_kind")); kind {
+	case "", domain.ResourceAlbum, domain.ResourcePlaylist:
+		filter.ResourceKind = kind
+	default:
+		return filter, fmt.Errorf("resource_kind must be album or playlist")
+	}
+	filter.ResourceID = strings.TrimSpace(q.Get("resource_id"))
+	for _, t := range parseCSVQuery(q, "trigger") {
+		switch tr := domain.RunTrigger(t); tr {
+		case domain.TriggerManual, domain.TriggerLibrarySync, domain.TriggerArtist, domain.TriggerRetry, domain.TriggerReset, domain.TriggerImport1x:
+			filter.Triggers = append(filter.Triggers, tr)
+		default:
+			return filter, fmt.Errorf("trigger %q is not supported; allowed: manual, library_sync, artist, retry, reset, import_1x", t)
+		}
+	}
+
+	switch q.Get("current") {
+	case "", "false":
+	case "true":
+		filter.Current = true
+	default:
+		return filter, fmt.Errorf("current must be true or false")
+	}
+
 	switch filter.Sort {
 	case "", db.JobListSortCreatedAt, db.JobListSortUpdatedAt, db.JobListSortQueueOrder:
 	default:

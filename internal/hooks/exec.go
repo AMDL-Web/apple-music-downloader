@@ -63,7 +63,7 @@ func (r *execRunner) Run(ctx context.Context, entry Entry, payload Payload) erro
 // install may hold a secret, so none is passed on; PATH, HOME, TZ and the
 // rest are.
 func hookEnv(environ []string, payload Payload) []string {
-	env := make([]string, 0, len(environ)+12)
+	env := make([]string, 0, len(environ)+16)
 	for _, kv := range environ {
 		if strings.HasPrefix(kv, backendEnvPrefix) {
 			continue
@@ -82,6 +82,10 @@ func buildEnv(payload Payload) []string {
 			outputPaths = append(outputPaths, item.OutputPath)
 		}
 	}
+	var resource ResourcePayload
+	if payload.Resource != nil {
+		resource = *payload.Resource
+	}
 	return []string{
 		"AMDL_EVENT=" + payload.Event,
 		"AMDL_JOB_ID=" + payload.Job.ID,
@@ -95,6 +99,10 @@ func buildEnv(payload Payload) []string {
 		"AMDL_FAILED_ITEMS=" + strconv.Itoa(payload.Job.FailedItems),
 		"AMDL_CANCELLED_ITEMS=" + strconv.Itoa(payload.Job.CancelledItems),
 		"AMDL_OUTPUT_PATHS=" + strings.Join(outputPaths, "\n"),
+		"AMDL_JOB_TRIGGER=" + payload.Job.Trigger,
+		"AMDL_JOB_WILL_RETRY=" + strconv.FormatBool(payload.Job.WillRetry),
+		"AMDL_RESOURCE_KIND=" + resource.Kind,
+		"AMDL_RESOURCE_ID=" + resource.ID,
 	}
 }
 

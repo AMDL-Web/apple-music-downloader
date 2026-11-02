@@ -11,6 +11,8 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/wrapper"
+
+	"github.com/zhaarey/go-mp4tag"
 )
 
 // mediaBackend is every piece of I/O one track performs: network transfers,
@@ -31,20 +33,18 @@ type mediaBackend interface {
 	resolveAACLC(ctx context.Context, songID string) (aacLCMedia, error)
 	// fetch transfers one codec's still-encrypted media.
 	fetch(ctx context.Context, req fetchRequest, progress transferProgress) (encryptedMedia, error)
-	// discardCheckpoint drops a resumable transfer for outPath that is no
-	// longer needed because the output already exists.
-	discardCheckpoint(jobID, outPath string)
+	// discardCheckpoint drops owner's resumable transfer for outPath that is
+	// no longer needed: the output exists, or its slot is done or given up.
+	discardCheckpoint(owner, outPath string)
 	// discardOutput removes the staging files an earlier attempt left for
-	// outPath and its lyrics sidecars, before a forced overwrite and after a
-	// failed attempt. It never removes outPath or a sidecar: the file a forced
+	// outPath and its lyrics sidecars, before a replacing download and after
+	// a failed attempt. It never removes outPath or a sidecar: the file a
 	// download replaces stays until the new copy is committed over it.
 	discardOutput(outPath string)
 	// statOutput reports whether a finished track is at outPath, and its size.
-	// A file there is complete (finalizeToOutput), so this is the one test of
-	// "already downloaded".
+	// A file there is complete (finalizeToOutput), so a track run adopts it
+	// (handleExistingOutput).
 	statOutput(outPath string) (size int64, ok bool)
-	// countOutputs counts the finished tracks (.m4a files) directly in dir.
-	countOutputs(dir string) int
 
 	// stage creates the scratch file a codec attempt flattens, verifies and
 	// tags before it is committed; cleanup removes whatever is left of it.
@@ -81,6 +81,10 @@ type mediaBackend interface {
 	// commit moves the staged file to outPath and returns its final size; see
 	// finalizeToOutput for why this is the only way a track reaches outPath.
 	commit(staged stagedFile, outPath string) (int64, error)
+	// rewriteLyrics replaces the embedded lyrics of the finished track at
+	// path, keeping every other tag: on a temp copy, committed over path
+	// once written, so a failure leaves the file as it was.
+	rewriteLyrics(ctx context.Context, path, lyrics string) error
 }
 
 // backend picks the media backend for this Downloader's effective config.
@@ -94,8 +98,9 @@ func (d *Downloader) backend() mediaBackend {
 type fetchRequest struct {
 	codec string
 	uri   string
-	// jobID and outPath own and key the Enhanced HLS checkpoint.
-	jobID   string
+	// owner and outPath own and key the Enhanced HLS checkpoint
+	// (resumeOwner).
+	owner   string
 	outPath string
 	// estimatedBytes is the size the manifest's bandwidth predicts for the
 	// track. Only the simulated transfer uses it.
@@ -240,19 +245,17 @@ func (m realMedia) fetch(ctx context.Context, req fetchRequest, progress transfe
 	}
 	// Enhanced HLS streams the response to a resumable checkpoint in temp_dir
 	// and reads it back fragment by fragment during decrypt.
-	path, err := downloadToFile(ctx, m.d.http, req.uri, m.cfg().Download.TempDir, req.jobID, req.outPath, progress)
+	path, err := downloadToFile(ctx, m.d.http, req.uri, m.cfg().Download.TempDir, req.owner, req.outPath, progress)
 	return encryptedMedia{rawPath: path}, err
 }
 
-func (m realMedia) discardCheckpoint(jobID, outPath string) {
-	cleanupResumeForKey(m.cfg().Download.TempDir, jobID, outPath)
+func (m realMedia) discardCheckpoint(owner, outPath string) {
+	cleanupResumeForKey(m.cfg().Download.TempDir, owner, outPath)
 }
 
 func (m realMedia) discardOutput(outPath string) { cleanupFailedOutput(outPath) }
 
 func (realMedia) statOutput(outPath string) (int64, bool) { return statDiskOutput(outPath) }
-
-func (realMedia) countOutputs(dir string) int { return len(diskOutputNames(dir)) }
 
 func (m realMedia) stage(encryptedMedia) (stagedFile, func(), error) {
 	f, err := os.CreateTemp(m.cfg().Download.TempDir, "flat-*.m4a")
@@ -369,6 +372,24 @@ func (m realMedia) stageFile(path string, data []byte) (func() error, func(), er
 
 func (m realMedia) tag(ctx context.Context, staged stagedFile, song applemusic.Song, lyrics string, cover []byte) error {
 	return m.d.mp4.writeMetadata(ctx, staged.path, song, lyrics, cover)
+}
+
+func (m realMedia) rewriteLyrics(ctx context.Context, path, lyrics string) error {
+	staged, cleanup, err := m.stage(encryptedMedia{})
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if err := copyFile(path, staged.path); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := writeMP4Tags(staged.path, &mp4tag.MP4Tags{Lyrics: lyrics}); err != nil {
+		return err
+	}
+	return finalizeToOutput(staged.path, path)
 }
 
 func (m realMedia) commit(staged stagedFile, outPath string) (int64, error) {

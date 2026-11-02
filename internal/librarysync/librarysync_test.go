@@ -2,6 +2,7 @@ package librarysync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/domain"
+	"amdl/internal/jobs"
 	"amdl/internal/usertoken"
 )
 
@@ -84,28 +86,31 @@ func (s *fakeStore) ClearLibrarySyncAnchor(context.Context) (int64, error) {
 
 type fakeSubmitter struct {
 	batches [][]string
-	// rejections answers the listed URLs with this result instead of
-	// accepting them.
-	rejections map[string]domain.SubmitResult
+	// outcomes answers the listed album ids with this outcome instead of
+	// jobs.AddQueued.
+	outcomes map[string]jobs.AddOutcome
+	// failAt makes the add fail at this album id, leaving it and the ones
+	// after it unadded.
+	failAt string
 }
 
-func (f *fakeSubmitter) SubmitBatch(_ context.Context, urls []string, _ *config.DownloadOverrides) domain.BatchSubmitResponse {
-	f.batches = append(f.batches, append([]string(nil), urls...))
-	resp := domain.BatchSubmitResponse{Results: make([]domain.SubmitResult, 0, len(urls))}
-	for _, u := range urls {
-		result, rejected := f.rejections[u]
-		if !rejected {
-			result = domain.SubmitResult{Status: domain.SubmitAccepted}
-		}
-		result.URL = u
-		if result.Status == domain.SubmitAccepted {
-			resp.Accepted++
-		} else {
-			resp.Rejected++
-		}
-		resp.Results = append(resp.Results, result)
+func (f *fakeSubmitter) AddAlbums(_ context.Context, source domain.RecordSource, ids []string) (map[string]jobs.AddOutcome, error) {
+	if source != domain.SourceLibrarySync {
+		return nil, fmt.Errorf("source = %q, want library_sync", source)
 	}
-	return resp
+	f.batches = append(f.batches, append([]string(nil), ids...))
+	out := map[string]jobs.AddOutcome{}
+	for _, id := range ids {
+		if id == f.failAt {
+			return out, errors.New("disk I/O error")
+		}
+		outcome, ok := f.outcomes[id]
+		if !ok {
+			outcome = jobs.AddQueued
+		}
+		out[id] = outcome
+	}
+	return out, nil
 }
 
 // library builds n songs, newest first, each on its own album unless albumOf
@@ -214,7 +219,7 @@ func TestNewSongsSubmitDedupedAlbums(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("submitted %v, want 2 albums (l.shared collapsed, l.album2)", got)
 	}
-	if got[0] != catalog["l.shared"] || got[1] != catalog["l.album2"] {
+	if got[0] != "l.shared" || got[1] != "l.album2" {
 		t.Fatalf("submitted %v, want shared album first then album2", got)
 	}
 	if store.anchor[0].SongID != "i.song0" {
@@ -236,7 +241,7 @@ func TestAlbumWithoutCatalogCounterpartIsSkipped(t *testing.T) {
 	if len(jobs.batches) != 1 || len(jobs.batches[0]) != 1 {
 		t.Fatalf("batches = %v, want just the resolvable album", jobs.batches)
 	}
-	if jobs.batches[0][0] != catalog["l.album1"] {
+	if jobs.batches[0][0] != "l.album1" {
 		t.Fatalf("submitted %v, want album1", jobs.batches[0])
 	}
 	// No counterpart is a property of the album, not a failure: the anchor

@@ -14,7 +14,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"amdl/internal/client"
-	"amdl/internal/domain"
 	"amdl/internal/format"
 )
 
@@ -26,11 +25,11 @@ var slashes = []slash{
 	{"/download", "<link>…", "download links"},
 	{"/jobs", "", "list recent jobs"},
 	{"/cancel", "<job>", "cancel a queued or running job"},
-	{"/retry", "<job>", "re-run a failed or cancelled job"},
-	{"/remove", "<job>", "delete a finished job's records"},
+	{"/retry", "<job>", "download a failed or cancelled job's record again as a new job"},
+	{"/remove", "<job>", "delete a finished job's history"},
 	{"/copy", "<job>", "copy a job's link"},
 	{"/queue", "", "reorder the jobs waiting to start"},
-	{"/library", "[text]", "list finished downloads"},
+	{"/library", "[text]", "list the albums amdl keeps and how much of each is downloaded"},
 	{"/logs", "[job]", "show recent warnings and errors"},
 	{"/system", "", "show the server's version, queue and free space"},
 	{"/wrapper", "", "show whether an Apple ID is signed in"},
@@ -434,7 +433,13 @@ func (m *model) command(line string) tea.Cmd {
 	case "/jobs":
 		return listJobs(m.ctx, m.c, m.read("reading jobs"), client.ListQuery{Limit: 10})
 	case "/library":
-		return listJobs(m.ctx, m.c, m.read("reading the library"), client.ListQuery{Limit: 10, Status: []domain.JobStatus{domain.JobCompleted}, Search: arg, Sort: "updated_at"})
+		return m.do("reading the library", func(ctx context.Context) (string, error) {
+			l, err := m.c.LibraryAlbums(ctx, client.RecordQuery{Query: arg, Limit: 10})
+			if err != nil {
+				return "", err
+			}
+			return recordLines(l), nil
+		})
 	case "/cancel", "/retry":
 		id, ok := needJob()
 		if !ok {
@@ -445,7 +450,8 @@ func (m *model) command(line string) tea.Cmd {
 			if name == "/cancel" {
 				return "cancelling " + ref, m.c.Cancel(ctx, id)
 			}
-			return "retrying " + ref, m.c.Retry(ctx, id)
+			_, err := m.c.Retry(ctx, id)
+			return "retrying " + ref, err
 		})
 	case "/remove":
 		id, ok := needJob()
@@ -619,4 +625,37 @@ func (m *model) loginKey(k tea.KeyPressMsg) tea.Cmd {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(k)
 	return cmd
+}
+
+// recordLines is a page of album records, one line each: name, artist, how
+// much is downloaded, and what holds it up.
+func recordLines(l client.AlbumRecords) string {
+	if len(l.Items) == 0 {
+		return "no albums in the library"
+	}
+	lines := make([]string, 0, len(l.Items)+1)
+	for _, r := range l.Items {
+		name := r.Name
+		if name == "" {
+			name = "album " + r.ID + " (not read yet)"
+		}
+		line := fmt.Sprintf("%s — %s  %d/%d", name, r.ArtistName, r.TracksDone, r.TracksWanted)
+		switch {
+		case r.ActiveJobID != "":
+			line += "  ↻ downloading"
+		case r.Paused:
+			line += "  ‖ paused"
+		case r.TracksGivenUp > 0:
+			line += fmt.Sprintf("  %d given up", r.TracksGivenUp)
+		case r.TracksMissing > 0:
+			line += fmt.Sprintf("  %d missing", r.TracksMissing)
+		case r.TracksFailed > 0:
+			line += fmt.Sprintf("  %d failed", r.TracksFailed)
+		}
+		lines = append(lines, line)
+	}
+	if l.Total > len(l.Items) {
+		lines = append(lines, fmt.Sprintf("%d more; /library <text> narrows it", l.Total-len(l.Items)))
+	}
+	return strings.Join(lines, "\n")
 }

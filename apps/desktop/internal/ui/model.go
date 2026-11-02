@@ -30,6 +30,8 @@ const (
 	ScreenAlbum
 	// ScreenSetup checks and installs what a mode needs (OpenSetup).
 	ScreenSetup
+	// ScreenLibrary is amdl's records and the Apple Music library.
+	ScreenLibrary
 )
 
 // Actions are what the screens ask of the app around them.
@@ -139,6 +141,7 @@ type App struct {
 	scrolledAt time.Time
 
 	queue ui.ListState
+	lib   libraryForm
 	// field is home's field, and fieldTxt its text, which follows the
 	// store's Omni.Text.
 	field    ui.Handle
@@ -160,7 +163,7 @@ type App struct {
 	searchReveal bool
 	searchKeyed  bool
 	// keys are the window shortcuts' actions (shortcuts).
-	keys struct{ toggle, field, home, queue, settings func() }
+	keys struct{ toggle, field, home, queue, library, settings func() }
 	// groupsAt is when the search last changed tab, from groupsFrom, which
 	// groupsMoved asks the next frame to note (tabChange).
 	groupsAt    time.Time
@@ -229,6 +232,9 @@ func (a *App) Go(s Screen) {
 	a.fly.instant = true
 	a.trail = nil
 	a.Screen = s
+	if s != ScreenLibrary {
+		a.Store.CloseLibrary()
+	}
 	if s == ScreenHome {
 		a.focusField = true
 	}

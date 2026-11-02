@@ -122,7 +122,7 @@ Surfaces are flat: no card shadows or borders. Only artwork and floating layers
 lift. Covers on album-colored cards cast a shadow tinted with the album's own
 text color; shelf covers and New download's link covers cast one tinted with
 `--art-bg`. Sidebar, tab bar, top bar, palette, sheets and toasts are
-translucent with a backdrop blur; the save bar and the Queue selection bar
+translucent with a backdrop blur; the save bar and the Activity selection bar
 float over the content they stick to, so they are frosted `--toast-bg` with
 `--shadow-float`. Live covers scale 1.02 on hover,
 only under `prefers-reduced-motion: no-preference`. Running shows a
@@ -140,7 +140,7 @@ base durations (120 ms color, 200 ms overlays).
   a surface pill otherwise; on phones without the fill, the word still next
   to the dot); the search pill ("Search or paste a link…", ⌘K or Ctrl K);
   and one theme button that cycles System, Light and Dark. A segment's count
-  (the Queue tabs) is primary ink in regular weight, since secondary text
+  (the Activity tabs) is primary ink in regular weight, since secondary text
   falls under 4.5:1 on the track and on the dark thumb. Inline code is
   primary ink on `--bg-fill` for the same reason. The icon rail (640-1023) shows the active count as a
   neutral `--bg-fill` badge.
@@ -153,7 +153,7 @@ base durations (120 ms color, 200 ms overlays).
   labels' line; Settings turns red like any current tab while Logs is
   shown.
 - **Page head**: title with its summary line beneath (15 px secondary; only
-  Overview (the date) and Queue (its live counts) have one), as an Apple
+  Overview (the date) and Activity (its live counts) have one), as an Apple
   large title. Page actions are icon buttons at the row's end (Settings' config
   keys, Logs' link to its settings); New download lives in the sidebar and
   the tab bar.
@@ -209,7 +209,7 @@ base durations (120 ms color, 200 ms overlays).
 - **Throughput**: totals as 20 px figures over their labels; the per-day
   bars are `--chart-bar`. The formats bar (Settings › Quality) takes one hue
   per position (`--series-1` to `-4`: blue, orange, purple, gray).
-- **Queue**: one grouped list, 48 px covers, hairlines inset past the cover.
+- **Activity**: one grouped list, 48 px covers, hairlines inset past the cover; the Library's record lists and Activity's Paused group are drawn the same way.
   Only a queued or running job draws progress; a finished row is title, then
   artist and track count, and a plain completed status is a green check with
   no word. A failed row says what went wrong in red under the link and ends
@@ -217,7 +217,7 @@ base durations (120 ms color, 200 ms overlays).
   status-tab chip row that scrolls sideways when it must, an edge fading where
   chips lie past it (the Failed count in red text) and
   Select, which reads Done while selecting.
-- **Queue selection**: Select wears the toggle pill of Pause and Wrap
+- **Activity selection**: Select wears the toggle pill of Pause and Wrap
   (outlined or filled while off, the pressed fill while on). Rows gain Apple
   edit-mode circles: a 22 px ring in `--border-control`, then an `--ink` disc
   with an `--on-ink` check (the select-all circle is a neutral gray disc
@@ -251,12 +251,12 @@ base durations (120 ms color, 200 ms overlays).
   capsule shape, frosted `--dock-bg` with `--shadow-float`, a 15 px
   semibold count, a 13 px secondary line and the red Download pill 8 px
   in. A glow sits behind the field (`--stage-glow-*`). Detected links
-  are Queue-style rows: 48 px covers (8 px radius) with an `--art-bg` shadow,
+  are Activity-style rows: 48 px covers (8 px radius) with an `--art-bg` shadow,
   hairlines from the text, a 15 px semibold title with a gray E mark and
   Apple Digital Master (and a storefront that is not the default) as quiet
   filled tags on `--bg-inset`, one 13 px meta line, Available qualities a
   filled pill and remove a secondary glyph. Submitted reuses
-  the Queue list language (covers, the joined capsule bar, hairlines from the
+  the Activity list language (covers, the joined capsule bar, hairlines from the
   text; on phones the bar starts under the title); an outcome row names its result in its role color beside the role
   glyph. Download is the red pill, the only solid red on the page. The
   browser shortcut's code is

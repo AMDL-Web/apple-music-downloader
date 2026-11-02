@@ -27,7 +27,7 @@ test('a burst becomes one toast with counts and a Queue link', () => {
   const all = finishedToast([job('a', 'completed'), job('b', 'completed'), job('c', 'completed')]);
   assert.equal(all.message, '3 downloads finished');
   assert.equal(all.role, 'success');
-  assert.deepEqual(all.action, { label: 'Queue', hash: '#/queue?tab=all' });
+  assert.deepEqual(all.action, { label: 'Activity', hash: '#/queue?tab=all' });
   const mixed = finishedToast([job('a', 'completed'), job('b', 'failed'), job('c', 'cancelled')]);
   assert.equal(mixed.message, '3 downloads ended: 1 completed, 1 failed, 1 cancelled');
   assert.equal(mixed.role, 'warning');

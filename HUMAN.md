@@ -21,6 +21,9 @@ Reversible work, stating any assumption that matters:
 - Any branch-protection bypass such as `gh pr merge --admin`, approved per bypass.
 - Output-path changes (templates, `{Quality}` labels, name cleaning, sidecar names).
 - Applying a schema migration to a real database.
+- Editing or removing a migration that shipped in a release. The release-candidate
+  migrations 2 to 5 were folded into the 2.0 schema once, by your decision, and rc
+  databases are refused.
 - Deleting branches, tags, releases or GHCR images.
 - Repository and account settings: branch protection, secrets, repo variables such
   as `CLAUDE_AUTO_REVIEW` and `CODEX_AUTO_REVIEW`, installed apps.

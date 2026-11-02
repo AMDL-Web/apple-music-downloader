@@ -1,27 +1,45 @@
-// Package db is the SQLite persistence layer for download jobs, their items,
-// the job event log and the library-sync anchor.
+// Package db is the SQLite persistence layer for records (albums, playlists,
+// their tracks and per-slot files), the runs that download them with their
+// items and event log, pending adds, tombstones and the library-sync anchor.
 //
-// Open applies the pending schema migrations and returns a Store on a
-// single-connection pool, so every statement is serialized. Jobs: CreateJob,
-// GetJob, ListJobs, UpdateJob, DeleteJob, FinalizeJob, FindActiveJobByKey,
-// FindLatestFinishedJobByKey, RequeueJob. Run order: NextQueueOrder,
-// SetQueueOrder, NextQueuedJobID, QueuedJobIDs, MoveQueuedJob. Items: CreateItem,
-// UpdateItem, ListItems. Events: AddEvent, ListEventsAfterLimit,
+// OpenWith applies the pending schema migrations and returns a Store on a
+// single-connection pool, so every statement is serialized. Records:
+// AddAlbum, AddPlaylist, ApplyAlbumRead, ApplyPlaylistRead, GetAlbum,
+// GetPlaylist, ListAlbumTracks, ListPlaylistTracks, SetCatalogState,
+// SetPaused, DeleteRecord, Tombstoned, RecordSources, ListEligibleRecords.
+// Files: GetFile, ListFiles, ClaimPath, MarkFileDone, MarkFileFailed,
+// MarkFileUnavailable, MarkFileMissing, RequestSlot, ResetFiles,
+// RecoverRunningFiles. Pending adds: AddPending, ListPending, DeletePending,
+// RecordPendingFailure, RetryPending. Runs (domain.Job): CreateJob, GetJob,
+// ListJobs, UpdateJob, DeleteJob, FinalizeJob, FindActiveJobByKey,
+// ActiveRunID, SetRunPlan, SetRunPriority. Planning: DueSlots,
+// RecordNeedsRun, ListEligibleRecords, ReleaseRunSlots. Run order:
+// NextQueueOrder, SetQueueOrder, NextQueuedJobID, QueuedJobIDs,
+// MoveQueuedJob. Items:
+// CreateItem, UpdateItem, ListItems. Events: AddEvent, ListEventsAfterLimit,
 // ListMilestoneEventsAfterLimit, ListHookEvents.
 //
 // Invariants:
-//   - The schema version is PRAGMA user_version. The migrations slice is the
-//     ordered history; each entry runs once, in its own transaction, preserves
-//     user data, and is never edited after it ships.
-//   - Every Job the store returns carries item counters derived from job_items
+//   - The schema version is PRAGMA user_version. The migrations version map
+//     is the history; each step runs once, in its own transaction, preserves
+//     user data, and is never edited after it ships in a release. Versions 2
+//     to 5 (the 2.0 release candidates) are refused at open.
+//   - Every Job the store returns carries item counters derived from run_items
 //     by the jobColumns select list; no counter is stored.
+//   - A record's rollup (tracks_wanted, tracks_done, the flag counts, state)
+//     is stored and recomputed in the transaction of every write to its tracks
+//     or files, so it always equals computeRollup.
+//   - files.path is unique and stored relative to the downloads dir when the
+//     file is under it; ClaimPath and MarkFileDone report a path another slot
+//     holds as a *PathTakenError.
 //   - Timestamps are stored via formatTime in fixed-width form so TEXT order is
 //     chronological.
-//   - At most one queued/running job per canonical_key; CreateJob reports a
-//     collision as ErrDuplicateActive.
-//   - Queued jobs run in (queue_order, rowid) order. queue_order is written
-//     only by CreateJob, SetQueueOrder, MoveQueuedJob and RequeueJob, never by
-//     UpdateJob, whose callers may hold a stale Job.
-//   - FinalizeJob and DeleteJob write the job change and its event in one tx;
-//     FinalizeJob also prunes the job's item_progress events.
+//   - At most one queued/running run per record and per canonical_key;
+//     CreateJob reports a collision as ErrDuplicateActive.
+//   - Queued runs run in (priority, queue_order, rowid) order. queue_order is
+//     written only by CreateJob, SetQueueOrder and MoveQueuedJob, never by
+//     UpdateJob, whose callers may hold a stale Job. A run is never queued
+//     again: a retry is a new run.
+//   - FinalizeJob and DeleteJob write the run change and its event in one tx;
+//     FinalizeJob also prunes the run's item_progress events.
 package db

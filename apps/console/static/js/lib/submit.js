@@ -25,7 +25,6 @@ export const CODES = {
   invalid_url: ['Not accepted', 'Not an Apple Music link the backend can read'],
   invalid_configuration: ['Not accepted', 'The server configuration cannot handle this link'],
   unsupported_input: ['Not accepted', 'This kind of link cannot be downloaded'],
-  unsupported_storefront: ['Storefront not served', "The wrapper's Apple Music account is in another storefront"],
   decryptor_unavailable: ['Wrapper not ready', 'The wrapper has no account ready yet; try again in a moment'],
   duplicate_in_request: ['Listed twice', 'An earlier link in this batch downloads the same thing'],
   duplicate_active: ['Already downloading', ''],
@@ -39,18 +38,27 @@ const ROLES = { duplicate_active: 'info', duplicate_in_request: 'neutral', queue
 const ICONS = { duplicate_active: 'rotate', duplicate_in_request: 'layers', queue_full: 'clock', decryptor_unavailable: 'triangle-alert' };
 const UNREACHABLE = /cannot reach the wrapper|connection refused|no such host|deadline exceeded|timed? ?out/i;
 
+// Results the server took without queuing a run now.
+const TAKEN = {
+  pending: { role: 'info', icon: 'clock', label: 'Adding' },
+  already_downloaded: { role: 'neutral', icon: 'circle-check', label: 'Already downloaded' },
+};
+
 /**
  * How one SubmitResult reads: {status, code, role, icon, label, message,
- * detail, retry, existingJobId, storefronts}, and `requeued` when accepted. `label` is the short state,
+ * detail, retry, existingJobId, storefronts}. `label` is the short state,
  * `message` the human reason for the code, `detail` the server's message
  * where it says more (store errors, parse failures, unknown codes);
- * `retry` marks results a later submit may fix. A requeued result is the
- * link's earlier job queued again under its id: "Queued again".
+ * `retry` marks results a later submit may fix. An accepted link without a
+ * run waits for its record's retry ("Waiting"); a pending one is read into
+ * records first ("Adding"); one whose record has every track is "Already
+ * downloaded".
  */
 export function resultView(result) {
   const r = result || {};
   const err = r.error || {};
-  if (r.status === 'accepted') return { status: 'accepted', code: '', role: 'success', icon: 'circle-check', label: r.requeued ? 'Queued again' : 'Queued', requeued: r.requeued === true, message: '', detail: '', retry: false };
+  if (r.status === 'accepted') return { status: 'accepted', code: '', role: 'success', icon: 'circle-check', label: r.job || !r.resource ? 'Queued' : 'Waiting', message: '', detail: '', retry: false };
+  if (TAKEN[r.status]) return { status: r.status, code: '', ...TAKEN[r.status], message: '', detail: '', retry: false };
   const code = err.code || r.status || '';
   const known = CODES[code];
   const isError = r.status === 'error';
@@ -62,6 +70,15 @@ export function resultView(result) {
       status: r.status || 'invalid', code, role: 'danger', icon: 'circle-x', label: 'Wrapper unreachable',
       message: 'The backend cannot reach the wrapper at wrapper.address; check that it is running',
       detail: summarizeError(err.message) || '', retry: true, existingJobId: '', storefronts: [],
+    };
+  }
+  // decryptor_unavailable naming storefronts: the wrapper does not serve the one the run reads in.
+  if (code === 'decryptor_unavailable' && err.details && err.details.storefront) {
+    const served = Array.isArray(err.details.supported_storefronts) ? err.details.supported_storefronts : [];
+    return {
+      status: r.status || 'invalid', code, role: 'danger', icon: 'circle-x', label: 'Storefront not served',
+      message: `The wrapper's account does not serve ${String(err.details.storefront).toUpperCase()}`,
+      detail: '', retry: false, existingJobId: '', storefronts: served,
     };
   }
   return {
@@ -96,7 +113,7 @@ export function pairResults(sent, results) {
   return sent.map((url) => ({ url, result: byUrl.get(normalized(url)) || null }));
 }
 
-const DONE = new Set(['accepted', 'duplicate_active', 'duplicate_in_request']);
+const DONE = new Set(['accepted', 'pending', 'already_downloaded', 'duplicate_active', 'duplicate_in_request']);
 
 /** The sent URLs to keep in the text box: those not queued, not already downloading and not a repeat. */
 export function keptAfterSubmit(pairs) {
@@ -188,7 +205,7 @@ export function applyFeedToResults(rows, batch) {
   return next;
 }
 
-// The summary's parts after "Started N downloads" and "N queued again":
+// The summary's parts after "Started N downloads":
 // accepted jobs that have finished (or were deleted), then the rows the
 // server did not queue. Queued and running jobs are what "started" means, so
 // they get no part of their own and the words never contradict the list.
@@ -197,6 +214,8 @@ const SUMMARY = [
   ['failed', 'failed'],
   ['cancelled', 'cancelled'],
   ['deleted', 'deleted'],
+  ['pending', 'adding'],
+  ['already_downloaded', 'already downloaded'],
   ['duplicate_active', 'already downloading'],
   ['duplicate_in_request', 'listed twice'],
   ['other', 'not accepted'],
@@ -209,20 +228,16 @@ function summaryState(r) {
     const st = r.job && r.job.status;
     return SUMMARY.some(([k]) => k === st) ? st : 'started';
   }
-  if (r.view.status === 'duplicate_active' || r.view.status === 'duplicate_in_request') return r.view.status;
+  if (['pending', 'already_downloaded', 'duplicate_active', 'duplicate_in_request'].includes(r.view.status)) return r.view.status;
   return 'other';
 }
 
-/** Whether an accepted row is a link's earlier job queued again under its id (rows stored before `requeued` carry only the label). */
-const isRequeued = (r) => r.view.requeued === true || r.view.label === 'Queued again';
-
 /**
  * One line for the toast, the live region and the Submitted card, from the
- * rows as they are now: "Started 3 downloads · 1 queued again · 1 completed
- * · 1 already downloading · 1 not accepted", or "Queued again" for one
- * resubmitted link alone. Every accepted row counts as started, or as queued
- * again when the server requeued the link's earlier job; those that finished
- * are named again by how.
+ * rows as they are now: "Started 3 downloads · 1 completed · 1 adding · 1
+ * already downloaded · 1 not accepted". Every accepted row counts as
+ * started; those that finished are named again by how. One row alone that
+ * did not start says its own state ("Already downloaded").
  */
 export function submitSummary(rows) {
   const n = new Map();
@@ -230,11 +245,9 @@ export function submitSummary(rows) {
     const k = summaryState(r);
     n.set(k, (n.get(k) || 0) + 1);
   }
-  const accepted = rows.filter((r) => r.view.status === 'accepted');
-  const again = accepted.filter(isRequeued).length;
-  const started = accepted.length - again;
+  const started = rows.filter((r) => r.view.status === 'accepted').length;
+  if (rows.length === 1 && !started && TAKEN[rows[0].view.status]) return TAKEN[rows[0].view.status].label;
   const parts = SUMMARY.filter(([k]) => n.get(k)).map(([k, text]) => `${n.get(k)} ${text}`);
-  if (again) parts.unshift(started ? `${again} queued again` : again === 1 ? 'Queued again' : `Queued ${again} downloads again`);
   if (started) parts.unshift(`Started ${started} ${started === 1 ? 'download' : 'downloads'}`);
   return parts.join(' · ') || 'Nothing was submitted';
 }

@@ -154,9 +154,9 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 | --- | --- |
 | 400 | `invalid_request` (query/body validation, a malformed stream cursor), `invalid_json` |
 | 401 | `authentication_failed` (wrapper login) |
-| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found` |
+| 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `resource_not_found` |
 | 405 | `method_not_allowed` |
-| 409 | `job_active`, `job_not_retryable`, `job_finalizing`, `duplicate_active`, `already_logged_in`, `login_pending` |
+| 409 | `job_active`, `job_not_retryable`, `duplicate_active`, `already_logged_in`, `login_pending`, `run_active`, `main_not_done`, `quality_present`, `check_running` |
 | 413 | `request_too_large` |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` |
@@ -167,17 +167,18 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 
 `feature_unavailable` comes only from `GET /logs` and `GET /logs/stream`: `logging.buffer_size`
 is `0`, so no log history is kept. Every other dependency in `internal/api#Deps` is
-required, and the process does not start without it, except `Library`: without it the album, lookup and
-search answers leave out `library` and `on_disk`.
+required, and the process does not start without it. The album, lookup and search answers
+read the records for their `resource` marks and stat no file.
 
-Per-URL submit results keep the coarse `status` enum (`accepted`, `invalid`,
-`duplicate_in_request`, `duplicate_active`, `queue_full`, plus `error` for a server-side
-failure) and carry the detail in `results[].error` (`{code, message, details?}`). The
-codes are the spec's `SubmitErrorCode` enum: with `invalid`, `invalid_url`,
-`unsupported_input`, `unsupported_storefront` (`details` carries the storefront and the
-supported ones), `decryptor_unavailable` and `invalid_configuration`; with the status of
-the same name, `duplicate_in_request`, `duplicate_active` and `queue_full`; with
-`error`, `store_error` and `internal_error` (the validator failed unexpectedly).
+Per-URL submit results keep the coarse `status` enum (`accepted`, `pending`,
+`already_downloaded`, `invalid`, `duplicate_in_request`, `duplicate_active`, `queue_full`,
+plus `error` for a server-side failure) and carry the detail in `results[].error`
+(`{code, message, details?}`). The codes are the spec's `SubmitErrorCode` enum: with
+`invalid`, `invalid_url`, `unsupported_input`, `decryptor_unavailable` (for a storefront
+the wrapper's account does not serve, `details` carries the storefront and the supported
+ones) and `invalid_configuration`; with the status of the same name,
+`duplicate_in_request`, `duplicate_active` and `queue_full`; with `error`, `store_error`
+and `internal_error` (the validator failed unexpectedly).
 `POST /downloads` answers `202` with the batch body when at least one URL was accepted.
 When none was, it answers `500 store_error` if any rejection was a store failure,
 `500 internal_error` if the only server-side failures came from the validator (the
@@ -187,11 +188,13 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 ### 3.2 Jobs
 
 - Counters are disjoint and always present: `total_items`, `completed_items` (written by
-  this job), `skipped_items` (already on disk), `failed_items`, `cancelled_items`.
+  this job), `skipped_items` (already at the slot's path, or `unavailable`), `failed_items`,
+  `cancelled_items`.
   `total_items` is stored when the input resolves; the other four are always derived
-  from `job_items` by one store query, including when the manager decides the terminal
+  from `run_items` by one store query, including when the manager decides the terminal
   status at finalize. There are no stored per-status counter columns. `done_items` and
-  the legacy `force` flag are gone; forcing is `overrides.force_overwrite`.
+  the legacy `force` flag are gone, and so is `force_overwrite`: a reset of the record
+  downloads again.
 - `started_at` is set when a worker first starts the current run and kept across
   recovery after a restart; a retry starts a new run and clears it, with `finished_at`.
   `finished_at` is set on the terminal transition. So `finished_at - started_at` is the
@@ -280,8 +283,8 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   `item_completed` event (its `file_size` is the day's `bytes_written`), a job once per
   `job_finished` or `job_failed` event. `hooks` groups `hook_succeeded`/`hook_failed`
   events by hook name. The numbers cover jobs that still exist, since deleting a job
-  deletes its items and events. The window queries use the `job_events(type,
-  created_at)` index of migration 2 (`internal/db#Store.Stats`). A result is cached for
+  deletes its items and events. The window queries use the `run_events(type,
+  created_at)` index (`internal/db#Store.Stats`). A result is cached for
   30 s per `days` value (`statsCacheTTL` in `internal/api`); `generated_at` says when it
   was computed.
 
@@ -297,29 +300,30 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 
 ## 4. Storage
 
-- Schema changes are ordered migrations gated by `PRAGMA user_version`. Migration 1
-  brings any 1.x database to the final 1.x schema: it runs, once, everything 1.x ran on
-  every open (`CREATE TABLE IF NOT EXISTS`, the column backfills, progress backfill,
-  timestamp normalization). After that, `Open` does nothing schema-shaped.
-- Migration 2 is the 2.0 schema: `jobs.started_at`/`finished_at` (backfilled from
-  events), drops `jobs.force`, `jobs.done_items` and `jobs.failed_items`, indexes
-  `job_events(type, created_at)` and deletes `item_progress` events of terminal jobs.
-- Migration 3 adds `job_items.download_bytes`, the bytes of encrypted media the current
-  attempt has received (`progress.download_bytes` in the API).
-- Migration 4 adds `jobs.queue_order`, the run order of queued jobs, backfilled in
-  `created_at` order, and a partial index on it for queued jobs.
-- Migrations preserve every row of user data (jobs, items, milestone events,
-  library-sync anchor). A test builds a database from the frozen 1.x schema SQL, inserts
-  rows, migrates, and asserts every row survived and migration 1 changed nothing on a
-  database that was already current.
+- Schema changes are a version map of migrations gated by `PRAGMA user_version`.
+  Migration 1 brings any 1.x database to the final 1.x schema: it runs, once,
+  everything 1.x ran on every open (`CREATE TABLE IF NOT EXISTS`, the column backfills,
+  progress backfill, timestamp normalization). After that, `Open` does nothing
+  schema-shaped.
+- Migration 6 (1 → 6) is the 2.0 schema: records (`albums`, `tracks`, `playlists`,
+  `playlist_tracks`), per-slot `files`, `runs` / `run_items` / `run_events` (the 1.x
+  jobs tables plus a record reference, trigger, priority and plan), `pending_adds`,
+  `resource_sources`, `deleted_resources`, `check_runs` and the Apple library cache.
+  It imports the 1.x jobs tables in the same transaction (`internal/db#import1x`) and
+  drops them. Versions 2 to 5 belonged to the release candidates; `Open` refuses them.
+- Migrations preserve every row of user data (runs, items, milestone events, records,
+  files, the library-sync anchor). A test builds a database from the frozen 1.x schema
+  SQL, inserts rows, migrates, and asserts the counts per table, that every row
+  survived, and that migration 1 changed nothing on a database that was already
+  current.
 - Timestamps are fixed-width UTC text so lexical order is time order.
 
 ## 5. Output paths
 
 Songs, albums and artists share one library layout, `download.library_path_format`:
-a track lands at one path whichever job type downloads it, and the "already downloaded"
-check compares that path, so a song downloaded on its own is skipped when its album
-comes, and an album already on disk is skipped inside an artist download. The path comes
+a track lands at one path per slot whichever link downloads it, and its album record
+says whether it is downloaded, so a song added on its own is done when its album comes,
+and an album already downloaded is skipped inside an artist link. The path comes
 from the track's placement, its album and its number in that album as released
 (`internal/media#libraryTrackPath`); folders take only album values, so one album is one
 folder. Playlists and stations keep their own templates and folders. Any change to how a

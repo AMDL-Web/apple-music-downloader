@@ -62,23 +62,13 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 		if err != nil {
 			return resolvedCollection{}, err
 		}
-		return resolvedCollection{
-			Tracks: album.Tracks, Placements: albumPlacements(album), ID: album.ID, Name: album.Name, ArtworkURL: album.ArtworkURL,
-			ArtistName: album.Artist, ArtistURL: album.ArtistURL, ReleaseDate: album.ReleaseDate, Genre: applemusic.PrimaryGenre(album.GenreNames),
-			ArtworkColors: album.ArtworkColors,
-		}, nil
+		return albumCollection(album), nil
 	case applemusic.TypePlaylist:
 		playlist, err := d.catalog.Playlist(ctx, parsed.Storefront, parsed.ID, d.mediaUserToken())
 		if err != nil {
 			return resolvedCollection{}, err
 		}
-		return resolvedCollection{
-			Tracks: playlist.Tracks, ID: playlist.ID, Name: playlist.Name, ArtworkURL: playlist.ArtworkURL,
-			// Playlist collections carry curatorName (falling back to
-			// artistName) in Artist.
-			CuratorName:   playlist.Artist,
-			ArtworkColors: playlist.ArtworkColors,
-		}, nil
+		return playlistCollection(playlist), nil
 	case applemusic.TypeStation:
 		station, err := d.catalog.StationTracks(ctx, parsed.Storefront, parsed.ID, d.mediaUserToken())
 		if err != nil {
@@ -109,6 +99,27 @@ func (d *Downloader) resolveCollection(ctx context.Context, parsed applemusic.Pa
 		}, nil
 	default:
 		return resolvedCollection{}, fmt.Errorf("unsupported input type %s", parsed.Type)
+	}
+}
+
+// albumCollection is an album read as the tracks it downloads, each placed in
+// the album.
+func albumCollection(album applemusic.Collection) resolvedCollection {
+	return resolvedCollection{
+		Tracks: album.Tracks, Placements: albumPlacements(album), ID: album.ID, Name: album.Name, ArtworkURL: album.ArtworkURL,
+		ArtistName: album.Artist, ArtistURL: album.ArtistURL, ReleaseDate: album.ReleaseDate, Genre: applemusic.PrimaryGenre(album.GenreNames),
+		ArtworkColors: album.ArtworkColors,
+	}
+}
+
+// playlistCollection is a playlist read as the tracks it downloads.
+func playlistCollection(playlist applemusic.Collection) resolvedCollection {
+	return resolvedCollection{
+		Tracks: playlist.Tracks, ID: playlist.ID, Name: playlist.Name, ArtworkURL: playlist.ArtworkURL,
+		// Playlist collections carry curatorName (falling back to
+		// artistName) in Artist.
+		CuratorName:   playlist.Artist,
+		ArtworkColors: playlist.ArtworkColors,
 	}
 }
 

@@ -61,7 +61,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 				percent(fmt.Sprint(j.Percent()), true)
 			})
 			ui.Row(c).Gap(8).Children(func() {
-				if button(c, k, buttonOnArt, "Cancel", nil).Clicked() {
+				if button(c, k, buttonOnArt, cancelWord(j), nil).Clicked() {
 					a.Store.Cancel(j.ID)
 				}
 				if artButton(c, "Details", hc.title, hc.ink).Clicked() {

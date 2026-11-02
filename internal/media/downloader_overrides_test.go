@@ -17,8 +17,8 @@ func TestCleanupJobArtifactsUsesConfiguredTempDir(t *testing.T) {
 	cfg := config.Default()
 	cfg.Download.TempDir = filepath.Join(root, "temp")
 	downloader := newTestDownloader(&Downloader{store: config.NewStore(cfg)})
-	force := true
-	job := domain.Job{ID: "job-clean", Overrides: &config.DownloadOverrides{ForceOverwrite: &force}}
+	alternative := false
+	job := domain.Job{ID: "job-clean", Overrides: &config.DownloadOverrides{CodecAlternative: &alternative}}
 	path, metadataPath := resumableDownloadPaths(cfg.Download.TempDir, job.ID, "output")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
@@ -32,52 +32,6 @@ func TestCleanupJobArtifactsUsesConfiguredTempDir(t *testing.T) {
 	downloader.CleanupJobArtifacts(job)
 	if _, err := os.Stat(resumeOwnerDir(cfg.Download.TempDir, job.ID)); !os.IsNotExist(err) {
 		t.Fatalf("job resume directory still exists: %v", err)
-	}
-}
-
-// TestProcessJobAppliesPerJobOverrides runs jobs through the same Downloader
-// in simulate mode: one carrying a force_overwrite override and one without.
-// Only the overridden job records item_overwrite, proving the overlay reaches
-// the pipeline and is scoped to its job, never leaking into the shared
-// Downloader.
-func TestProcessJobAppliesPerJobOverrides(t *testing.T) {
-	cfg := config.Default()
-	cfg.Simulate = config.SimulateConfig{Enabled: true, MinSpeedKBps: 1_000_000, MaxSpeedKBps: 1_000_000}
-	cfg.Download.DownloadsDir = t.TempDir()
-	cfg.Download.MaxAttempts = 1
-
-	song := applemusic.Song{ID: "987654321", Name: "Track", ArtistName: "Artist", AlbumID: "555", AlbumName: "Album", DurationInMillis: 1000}
-	album := applemusic.Collection{ID: "555", Name: "Album", Artist: "Artist", Tracks: []applemusic.Song{song}}
-	downloader := newTestDownloader(&Downloader{
-		store:   config.NewStore(cfg),
-		catalog: fakeDownloaderCatalog{song: song, album: album},
-	})
-
-	overwrote := func(t *testing.T, id string, overrides *config.DownloadOverrides) bool {
-		t.Helper()
-		reporter := &recordingReporter{}
-		job := domain.Job{ID: id, Input: "https://music.apple.com/us/song/foo/987654321", Overrides: overrides}
-		if err := downloader.ProcessJob(context.Background(), job, reporter); err != nil {
-			t.Fatalf("ProcessJob failed: %v", err)
-		}
-		// The plain job finds the forced job's simulated commit and skips it.
-		if len(reporter.items) == 0 || !reporter.items[len(reporter.items)-1].Finished() {
-			t.Fatalf("job %s did not finish: %+v", id, reporter.items)
-		}
-		for _, ev := range reporter.events {
-			if ev.Type == domain.EventItemOverwrite {
-				return true
-			}
-		}
-		return false
-	}
-
-	force := true
-	if !overwrote(t, "job-1", &config.DownloadOverrides{ForceOverwrite: &force}) {
-		t.Fatal("job with force_overwrite recorded no item_overwrite")
-	}
-	if overwrote(t, "job-2", nil) {
-		t.Fatal("plain job recorded item_overwrite: the previous job's override leaked")
 	}
 }
 

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"amdl/apps/desktop/internal/store"
 	"amdl/apps/desktop/internal/widgets"
 	"amdl/internal/client"
+	"amdl/internal/domain"
 	"amdl/internal/format"
 )
 
@@ -178,6 +180,16 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	case mark == store.MarkActive:
 		b.Label(h.Name + " is in the queue").Tooltip("In the queue")
 		look = markLook{bg: k.Accent, fg: k.AccentInk, ic: icDown}
+	case mark == store.MarkPaused:
+		b.Label(h.Name + " is paused: resume").Tooltip("Paused")
+		look = markLook{bg: k.Raise2, fg: k.Fg, ic: icPause, interactive: true}
+	case mark == store.MarkPartial:
+		r := s.HitRecord(h)
+		b.Label(fmt.Sprintf("%s: %d of %d tracks downloaded, download the rest", h.Name, r.TracksDone, r.TracksWanted))
+		if pointed {
+			b.Tooltip(fmt.Sprintf("%d of %d downloaded", r.TracksDone, r.TracksWanted))
+		}
+		look.interactive = true
 	case mark == store.MarkDone:
 		// The check gives way to the download again button under the
 		// pointer, crossing over (doneCheck) rather than at once.
@@ -193,7 +205,8 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 		look.interactive = true
 	}
 	look.style(b)
-	// Only the download button waits for the pointer; a mark stays.
+	// Only the download button waits for the pointer; a mark, and the
+	// button of an album partly downloaded, stays.
 	look.op = 1
 	if mark == store.MarkNone {
 		show := float32(0)
@@ -326,7 +339,11 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 		case mark == store.MarkDone:
 			if markButton(c, k, "In library", pillOK, icCheck).Clicked() {
 				a.openingFrom("song:" + hk)
-				a.OpenJob(job)
+				a.openSongPlace(h, job)
+			}
+		case mark == store.MarkPaused:
+			if markButton(c, k, "Paused", pillWait, icPause).Label("Paused: resume").Clicked() {
+				a.download(h)
 			}
 		case mark == store.MarkActive:
 			if markButton(c, k, "In the queue", pillRun, icDown).Clicked() {
@@ -489,4 +506,18 @@ func skeletonTiles(c *ui.Context, k *Tokens, width float32, n int) {
 			})
 		}
 	})
+}
+
+// openSongPlace opens what a song in the library opens: the run this app
+// finished for it, else its album's page.
+func (a *App) openSongPlace(h client.SearchHit, job string) {
+	if job != "" {
+		a.OpenJob(job)
+		return
+	}
+	if r := a.Store.HitRecord(h); r != nil && r.Kind == domain.ResourceAlbum {
+		a.OpenAlbum(client.SearchHit{Type: "album", ID: r.ID, Name: h.AlbumName, ArtistName: h.ArtistName, ArtworkURL: h.ArtworkURL,
+			ArtworkBgColor: h.ArtworkBgColor, ArtworkTextColor1: h.ArtworkTextColor1, ArtworkTextColor2: h.ArtworkTextColor2,
+			ArtworkTextColor3: h.ArtworkTextColor3, ArtworkTextColor4: h.ArtworkTextColor4, Resource: r})
+	}
 }

@@ -1,5 +1,6 @@
-// Package librarysync watches the signed-in Apple Music library and submits
-// the albums of newly added songs as ordinary download jobs.
+// Package librarysync watches the signed-in Apple Music library and adds the
+// albums of newly added songs as album records, which download like records
+// added by hand.
 //
 // # Why this cannot be done with timestamps
 //
@@ -28,6 +29,7 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/domain"
+	"amdl/internal/jobs"
 	"amdl/internal/usertoken"
 )
 
@@ -44,11 +46,13 @@ const (
 	scanCap = 2000
 )
 
-// Submitter is the job manager's batch entry point. Using it directly rather
-// than the HTTP API means library submissions go through exactly the same
-// deduplication, validation, and hook dispatch as manual ones.
+// Submitter is the record service's album add (jobs.Manager.AddAlbums). The
+// monitor adds unresolved album records with source library_sync and the
+// auto priority class, makes no catalog read for them, and gets back what
+// became of each id; an album removed from amdl comes back tombstoned and is
+// not added again.
 type Submitter interface {
-	SubmitBatch(ctx context.Context, urls []string, overrides *config.DownloadOverrides) domain.BatchSubmitResponse
+	AddAlbums(ctx context.Context, source domain.RecordSource, albumIDs []string) (map[string]jobs.AddOutcome, error)
 }
 
 // AnchorStore persists the positional watermark across restarts.

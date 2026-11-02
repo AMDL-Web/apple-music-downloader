@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"amdl/internal/domain"
 )
 
 func detailJSON(status string, hooks string) string {
@@ -102,6 +104,25 @@ func TestDownloadWaitTimeoutOfOneJobIsAnObject(t *testing.T) {
 	r := run(t, srv, "", "download", "https://music.apple.com/us/album/x/1", "--wait", "--timeout", "0s")
 	var one map[string]any
 	if r.code != exitWaitTimeout || json.Unmarshal([]byte(r.stdout), &one) != nil || one["id"] != "job_a" {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+// A link read into records first has no job: --wait follows nothing and
+// prints the submit answer, so the caller sees the pending status instead of
+// null.
+func TestDownloadWaitWithOnlyPendingLinksPrintsTheAnswer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("unexpected %s %s: nothing to follow", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		fmt.Fprint(w, `{"accepted":1,"rejected":0,"results":[{"url":"https://music.apple.com/us/artist/x/1","status":"pending"}]}`)
+	}))
+	defer srv.Close()
+	r := run(t, srv, "", "download", "https://music.apple.com/us/artist/x/1", "--wait")
+	var got domain.BatchSubmitResponse
+	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &got) != nil || len(got.Results) != 1 || got.Results[0].Status != domain.SubmitPending {
 		t.Fatalf("got %+v", r)
 	}
 }

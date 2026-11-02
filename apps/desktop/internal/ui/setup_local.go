@@ -118,7 +118,9 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 		setupRow(c, k, "wrapper", setup.Working, title, "Starting AMDL", false, nil, nil)
 		return setup.Working
 	case a.Act.StartErr() != "":
-		setupRow(c, k, "wrapper", setup.Failed, title, a.Act.StartErr(), false, restart, nil)
+		// The backend itself did not start, often for a reason that is not the
+		// wrapper's (its database, its config), so the row names AMDL.
+		setupRow(c, k, "wrapper", setup.Failed, "AMDL", a.Act.StartErr(), false, restart, nil)
 		return setup.Failed
 	case w == nil:
 		setupRow(c, k, "wrapper", setup.Checking, title, "", false, nil, nil)

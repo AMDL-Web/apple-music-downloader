@@ -24,11 +24,11 @@ import (
 func TestSubmitBatchStoresOverridesOnEveryJob(t *testing.T) {
 	manager := newTestManager(t)
 	force := true
-	overrides := &config.DownloadOverrides{ForceOverwrite: &force}
+	overrides := &config.DownloadOverrides{CodecAlternative: &force}
 	resp := manager.SubmitBatch(context.Background(), []string{
 		"station|us|ra.1",
 		"playlist|us|pl.u-private",
-		"song|us|1",
+		"station|us|1",
 	}, overrides)
 	if resp.Accepted != 3 {
 		t.Fatalf("accepted = %d, want 3: %+v", resp.Accepted, resp.Results)
@@ -38,8 +38,8 @@ func TestSubmitBatchStoresOverridesOnEveryJob(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if job.Overrides == nil || job.Overrides.ForceOverwrite == nil || !*job.Overrides.ForceOverwrite {
-			t.Fatalf("job %s (%s) overrides = %+v, want force_overwrite", result.Job.ID, result.URL, job.Overrides)
+		if job.Overrides == nil || job.Overrides.CodecAlternative == nil || !*job.Overrides.CodecAlternative {
+			t.Fatalf("job %s (%s) overrides = %+v, want codec_alternative", result.Job.ID, result.URL, job.Overrides)
 		}
 	}
 }
@@ -49,7 +49,7 @@ func TestSubmitBatchDedupesWithinRequest(t *testing.T) {
 	ctx := context.Background()
 	resp := manager.SubmitBatch(ctx, []string{
 		"album|us|111",
-		"song|us|222",
+		"station|us|222",
 		"album|us|111", // same canonical key as the first entry
 	}, nil)
 	if len(resp.Results) != 3 {
@@ -70,13 +70,13 @@ func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T)
 	manager := newTestManager(t)
 	ctx := context.Background()
 
-	first := manager.SubmitBatch(ctx, []string{"song|us|222"}, nil)
+	first := manager.SubmitBatch(ctx, []string{"station|us|222"}, nil)
 	if first.Accepted != 1 {
 		t.Fatalf("first submit = %+v, want 1 accepted", first)
 	}
 	jobID := first.Results[0].Job.ID
 
-	second := manager.SubmitBatch(ctx, []string{"song|us|222"}, nil)
+	second := manager.SubmitBatch(ctx, []string{"station|us|222"}, nil)
 	if second.Results[0].Status != domain.SubmitDuplicateActive || second.Results[0].ExistingJobID != jobID ||
 		second.Results[0].Error == nil || second.Results[0].Error.Code != "duplicate_active" {
 		t.Fatalf("second submit = %+v, want duplicate_active for %s", second.Results[0], jobID)
@@ -91,9 +91,10 @@ func TestSubmitBatchRejectsActiveDuplicateButAllowsAfterCompletion(t *testing.T)
 		t.Fatal(err)
 	}
 
-	third := manager.SubmitBatch(ctx, []string{"song|us|222"}, nil)
-	if got := third.Results[0]; got.Status != domain.SubmitAccepted || !got.Requeued || got.Job == nil || got.Job.ID != jobID {
-		t.Fatalf("third submit = %+v, want %s requeued after completion", got, jobID)
+	// A one-off run is never queued twice: the input gets a new run.
+	third := manager.SubmitBatch(ctx, []string{"station|us|222"}, nil)
+	if got := third.Results[0]; got.Status != domain.SubmitAccepted || got.Job == nil || got.Job.ID == jobID {
+		t.Fatalf("third submit = %+v, want a new run after %s completed", got, jobID)
 	}
 }
 
@@ -102,7 +103,7 @@ func TestSubmitBatchQueueFullMarksRemainingWithoutRollback(t *testing.T) {
 	manager.capacity = 1
 	ctx := context.Background()
 
-	resp := manager.SubmitBatch(ctx, []string{"song|us|1", "song|us|2", "song|us|3"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1", "station|us|2", "station|us|3"}, nil)
 	if resp.Results[0].Status != domain.SubmitAccepted {
 		t.Fatalf("first = %+v, want accepted", resp.Results[0])
 	}
@@ -133,7 +134,7 @@ func TestSubmitBatchStoreFailureIsErrorNotInvalid(t *testing.T) {
 	if err := manager.store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	resp := manager.SubmitBatch(context.Background(), []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
 	got := resp.Results[0]
 	if got.Status != domain.SubmitServerError || got.Error == nil || got.Error.Code != "store_error" {
 		t.Fatalf("result = %+v, want status error with store_error", got)
@@ -197,7 +198,7 @@ func TestJobQueuedDispatchesHook(t *testing.T) {
 
 	// Deliberately do NOT start workers: the creation hook fires from
 	// SubmitBatch itself, so the job stays queued and only job_queued can fire.
-	resp := manager.SubmitBatch(context.Background(), []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -221,153 +222,6 @@ func TestJobQueuedDispatchesHook(t *testing.T) {
 	}
 	if gotTotal != 0 || gotItems != 0 {
 		t.Fatalf("creation payload total_items=%d items=%d, want 0 and 0 (no tracks resolved yet)", gotTotal, gotItems)
-	}
-}
-
-func TestRetryRequeuesFailedJobAndResetsOnlyUnfinishedItems(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	started, finished := now.Add(-time.Minute), now.Add(-time.Second)
-	job := domain.Job{ID: "job-failed", Input: "https://music.apple.com/cn/album/example/1", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:1", Status: domain.JobFailed, TotalItems: 2, Error: "boom", StartedAt: &started, FinishedAt: &finished, CreatedAt: now, UpdatedAt: now}
-	if err := store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-	donePR := domain.ItemProgress{Download: 1, Decrypt: 1, Resolved: true, Remuxed: true, Verified: true, Tagged: true, Saved: true}
-	completed := domain.JobItem{ID: "item-done", JobID: job.ID, AdamID: "song-1", Kind: "song", Index: 1, Status: domain.ItemCompleted, Progress: donePR, Codec: "alac", CreatedAt: now, UpdatedAt: now}
-	failed := domain.JobItem{ID: "item-failed", JobID: job.ID, AdamID: "song-2", Kind: "song", Index: 2, Status: domain.ItemFailed, Progress: domain.ItemProgress{Download: 0.4, Resolved: true}, Codec: "alac", RetryKind: "download", Attempt: 3, MaxAttempts: 3, StatusMessage: "ALAC failed", Error: "boom", CreatedAt: now, UpdatedAt: now}
-	for _, item := range []domain.JobItem{completed, failed} {
-		if err := store.CreateItem(ctx, item); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
-	if err := manager.Retry(ctx, job.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := store.GetJob(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != domain.JobQueued || got.Error != "" {
-		t.Fatalf("job after retry = status %s error %q, want queued with empty error", got.Status, got.Error)
-	}
-	// A retry is a new run: both timestamps belong to the previous one, so the
-	// next run's duration does not count the time the job sat failed.
-	if got.StartedAt != nil || got.FinishedAt != nil {
-		t.Fatalf("job timing after retry = started %v finished %v, want both cleared", got.StartedAt, got.FinishedAt)
-	}
-	items, err := store.ListItems(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(items) != 2 {
-		t.Fatalf("items = %d, want 2", len(items))
-	}
-	if items[0].Status != domain.ItemCompleted || items[0].Progress != donePR || items[0].Codec != "alac" {
-		t.Fatalf("completed item was touched by retry: %+v", items[0])
-	}
-	reset := items[1]
-	if reset.Status != domain.ItemQueued || reset.Progress != (domain.ItemProgress{}) || reset.Codec != "" || reset.Error != "" ||
-		reset.RetryKind != "" || reset.Attempt != 0 || reset.MaxAttempts != 0 || reset.StatusMessage != "" {
-		t.Fatalf("failed item was not reset to queued: %+v", reset)
-	}
-	if !isWaiting(manager, job.ID) || manager.QueueStats().QueueDepth != 1 {
-		t.Fatal("retry did not enqueue the job")
-	}
-	events, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 1 || events[0].Type != "job_retried" {
-		t.Fatalf("events = %+v, want one job_retried", events)
-	}
-}
-
-// A cancelled job is retried like a failed one: its cancelled and failed items
-// run again, finished items stay done, and the job emits the same job_retried
-// event, so an operator who cancelled a batch by mistake can bring it back.
-func TestRetryRequeuesCancelledJob(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	started, finished := now.Add(-time.Minute), now.Add(-time.Second)
-	force := true
-	job := domain.Job{ID: "job-cancelled", Input: "in", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:c1", Status: domain.JobCancelled, TotalItems: 3, Error: "cancelled", StartedAt: &started, FinishedAt: &finished, Overrides: &config.DownloadOverrides{ForceOverwrite: &force}, CreatedAt: now, UpdatedAt: now}
-	if err := store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-	for i, status := range []domain.ItemStatus{domain.ItemCompleted, domain.ItemCancelled, domain.ItemFailed} {
-		item := domain.JobItem{ID: "item-" + strconv.Itoa(i), JobID: job.ID, AdamID: "song-" + strconv.Itoa(i), Kind: "song", Index: i + 1, Status: status, StatusMessage: "Cancelled", CreatedAt: now, UpdatedAt: now}
-		if err := store.CreateItem(ctx, item); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
-	if err := manager.Retry(ctx, job.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := store.GetJob(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Status != domain.JobQueued || got.Error != "" || got.StartedAt != nil || got.FinishedAt != nil {
-		t.Fatalf("job after retry = %+v, want queued with error, started_at and finished_at cleared", got)
-	}
-	if got.Overrides == nil || got.Overrides.ForceOverwrite == nil || !*got.Overrides.ForceOverwrite {
-		t.Fatalf("overrides after retry = %+v, want them kept", got.Overrides)
-	}
-	items, err := store.ListItems(ctx, job.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if items[0].Status != domain.ItemCompleted || items[0].StatusMessage != "Cancelled" {
-		t.Fatalf("completed item touched by retry: %+v", items[0])
-	}
-	for _, it := range items[1:] {
-		if it.Status != domain.ItemQueued || it.StatusMessage != "" {
-			t.Fatalf("unfinished item not reset to queued: %+v", it)
-		}
-	}
-	if got.CompletedItems != 1 || got.CancelledItems != 0 || got.FailedItems != 0 {
-		t.Fatalf("counters after retry = completed %d cancelled %d failed %d, want 1/0/0", got.CompletedItems, got.CancelledItems, got.FailedItems)
-	}
-	if !isWaiting(manager, job.ID) || manager.QueueStats().QueueDepth != 1 {
-		t.Fatal("retry did not enqueue the job")
-	}
-	evs, err := store.ListEventsAfterLimit(ctx, job.ID, 0, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(evs) != 1 || evs[0].Type != domain.EventJobRetried {
-		t.Fatalf("events = %+v, want one job_retried", evs)
-	}
-	// The event must describe the job as it is after the reset, the same
-	// counters GET /downloads/{id} returns, not the cancelled/failed ones the
-	// retry just cleared.
-	var payload struct {
-		Status         string `json:"status"`
-		CompletedItems int    `json:"completed_items"`
-		FailedItems    int    `json:"failed_items"`
-		CancelledItems int    `json:"cancelled_items"`
-	}
-	if err := json.Unmarshal(evs[0].Payload, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Status != "queued" || payload.CompletedItems != 1 || payload.FailedItems != 0 || payload.CancelledItems != 0 {
-		t.Fatalf("job_retried payload = %+v, want queued with completed 1, failed 0, cancelled 0", payload)
 	}
 }
 
@@ -413,51 +267,6 @@ func TestRetryRefusesActiveCompletedMissingAndDuplicateJobs(t *testing.T) {
 	}
 }
 
-// TestRetryRefusesWhilePreviousRunIsFinalizing covers the window where the
-// job row already reads failed but the old worker's deferred cleanup has not
-// removed its cancels entry yet (or Cancel's queued path is still dispatching
-// hooks under a finalizing mark). Retrying inside that window would let the
-// old worker's deferred delete remove the new run's cancel registration.
-func TestRetryRefusesWhilePreviousRunIsFinalizing(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "amdl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	job := domain.Job{ID: "job-finalizing", Input: "in", Type: "song", CanonicalKey: "song:cn:fin", Status: domain.JobFailed, CreatedAt: now, UpdatedAt: now}
-	if err := store.CreateJob(ctx, job); err != nil {
-		t.Fatal(err)
-	}
-	manager := NewManager(store, events.NewHub(), recoveryProcessor{}, 1, slog.Default())
-
-	manager.mu.Lock()
-	manager.cancels[job.ID] = func() {}
-	manager.mu.Unlock()
-	if err := manager.Retry(ctx, job.ID); !errors.Is(err, ErrJobFinalizing) {
-		t.Fatalf("Retry(with lingering cancels entry) = %v, want ErrJobFinalizing", err)
-	}
-
-	manager.mu.Lock()
-	delete(manager.cancels, job.ID)
-	manager.finalizing[job.ID] = true
-	manager.mu.Unlock()
-	if err := manager.Retry(ctx, job.ID); !errors.Is(err, ErrJobFinalizing) {
-		t.Fatalf("Retry(while finalizing) = %v, want ErrJobFinalizing", err)
-	}
-
-	manager.mu.Lock()
-	delete(manager.finalizing, job.ID)
-	manager.mu.Unlock()
-	if err := manager.Retry(ctx, job.ID); err != nil {
-		t.Fatalf("Retry(after finalize finished) = %v, want success", err)
-	}
-	if !isWaiting(manager, job.ID) {
-		t.Fatal("retry after finalize did not enqueue the job")
-	}
-}
-
 // holdProcessor reports every ProcessJob entry and blocks it until release is
 // closed, so a test can see whether a second worker also entered the job.
 type holdProcessor struct {
@@ -487,7 +296,7 @@ func TestRetryOfQueuedCancelledJobRunsItOnce(t *testing.T) {
 	manager := NewManager(store, events.NewHub(), processor, 2, slog.Default())
 	ctx := context.Background()
 
-	resp := manager.SubmitBatch(ctx, []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(ctx, []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}

@@ -49,14 +49,17 @@ entries:
   #   #     and terminal hooks in separate entries, which may share a url/command.
   #   #   job_finished: job completed with zero failed items.
   #   #   job_failed: job completed with at least one failed item, or aborted
-  #   #     with an error.
+  #   #     with an error; job.will_retry is true while every failed track
+  #   #     waits for an automatic retry (notification presets skip those).
   #   #   job_cancelled: job was cancelled via the API.
   #   # A job that was running when the backend stopped fires none of these
   #   # then: it resumes on the next start and fires its terminal event when it
   #   # finishes.
   #   events: ["job_finished"]
   #   # list enum: song, album, playlist, artist, station. Empty list or
-  #   # omitted = all job types match.
+  #   # omitted = all job types match. A job is one run of an album or
+  #   # playlist record, or a station; song also matches an album whose
+  #   # tracks were added one by one, artist the runs an artist link started.
   #   job_types: ["album"]
   #   # string, required for type webhook: target URL of the request.
   #   # Must be an absolute http:// or https:// URL with a host; anything else
@@ -107,11 +110,17 @@ entries:
   #   #   AMDL_STOREFRONT      - storefront code, e.g. "us", "cn"
   #   #   AMDL_TOTAL_ITEMS     - total track count
   #   #   AMDL_COMPLETED_ITEMS - tracks this job wrote
-  #   #   AMDL_SKIPPED_ITEMS   - tracks already on disk
+  #   #   AMDL_SKIPPED_ITEMS   - tracks already at their path, or not offered
+  #   #                          in the asked quality
   #   #   AMDL_FAILED_ITEMS    - failed tracks
   #   #   AMDL_CANCELLED_ITEMS - tracks cancelled before they finished
   #   #   AMDL_OUTPUT_PATHS    - newline-separated absolute paths of every
   #   #                          downloaded track's output file
+  #   #   AMDL_JOB_TRIGGER     - manual | library_sync | artist | retry | reset | import_1x
+  #   #   AMDL_JOB_WILL_RETRY  - true when a failed job's tracks all wait for
+  #   #                          an automatic retry
+  #   #   AMDL_RESOURCE_KIND   - album | playlist (empty for a station)
+  #   #   AMDL_RESOURCE_ID     - the record's catalog id (empty for a station)
   #   # A failing command records the last 4 KiB of its stderr in its
   #   # hook_failed event.
   #   command: "/opt/amdl/hooks/on-complete.sh"

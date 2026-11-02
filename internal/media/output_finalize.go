@@ -18,35 +18,35 @@ import (
 	"amdl/internal/jobs"
 )
 
-// handleExistingOutput decides whether outPath is already downloaded. Without
-// force_overwrite an existing file finishes the item as skipped_existing (and
-// drops any resume checkpoint for it). With it, the existing file and its
-// sidecars stay where they are until the new copy is committed over them, so a
-// forced download that fails leaves the old track intact; only staging orphans
-// are swept, and the item_overwrite event says so.
-func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Reporter, job domain.Job, item *domain.JobItem, outPath string) (bool, error) {
-	backend := d.backend()
-	item.OutputPath = domain.AbsolutePath(outPath)
-	// d.cfg is the job's effective config (runtime snapshot plus overrides),
-	// so overrides.force_overwrite already won over the global key here.
-	force := d.cfg.Download.ForceOverwrite
-	if size, ok := backend.statOutput(outPath); ok && !force {
-		d.finishSkipped(ctx, backend, reporter, job, item, outPath, size)
-		return true, nil
+// handleExistingOutput looks at outPath before anything is downloaded to it.
+// A file already there is adopted: the item finishes as skipped_existing (and
+// drops any resume checkpoint for it), and for a slot of a record run the file
+// becomes the slot's (reportSlot). Records decide what is downloaded; this
+// stat only keeps a file someone put at the target. A slot that was done
+// before (target.replace) keeps the old file and its sidecars where they are
+// until the new copy is committed over them, so a download that fails leaves
+// the old track intact; only staging orphans are swept.
+func (r *trackRun) handleExistingOutput(ctx context.Context, outPath string) (bool, error) {
+	r.item.OutputPath = domain.AbsolutePath(outPath)
+	size, exists := r.media.statOutput(outPath)
+	if !exists {
+		return false, nil
 	}
-	if force {
-		backend.discardOutput(outPath)
-		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemOverwrite, Message: "force overwrite enabled", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "force overwrite enabled"})})
+	if r.target.replace {
+		r.media.discardOutput(outPath)
+		return false, nil
 	}
-	return false, nil
+	r.adoptExisting(ctx, outPath, size)
+	return true, nil
 }
 
-// finishSkipped finishes item as skipped_existing: the track is already at
-// outPath, size bytes. The progress breakdown gets resolved and nothing
+// adoptExisting finishes the item as skipped_existing: the track is already
+// at outPath, size bytes. The progress breakdown gets resolved and nothing
 // later: the catalog resolve is what produced outPath, and no later stage
 // ran.
-func (d *Downloader) finishSkipped(ctx context.Context, backend mediaBackend, reporter jobs.Reporter, job domain.Job, item *domain.JobItem, outPath string, size int64) {
-	backend.discardCheckpoint(job.ID, outPath)
+func (r *trackRun) adoptExisting(ctx context.Context, outPath string, size int64) {
+	item := &r.item
+	r.media.discardCheckpoint(r.owner, outPath)
 	item.OutputPath = domain.AbsolutePath(outPath)
 	item.Status = domain.ItemSkipped
 	markResolved(&item.Progress)
@@ -54,9 +54,9 @@ func (d *Downloader) finishSkipped(ctx context.Context, backend mediaBackend, re
 	item.RetryKind = ""
 	item.Attempt = 0
 	item.MaxAttempts = 0
-	item.StatusMessage = "File already exists; skipped"
-	d.persistTerminal(ctx, reporter, item, func() domain.Event {
-		return domain.Event{JobID: job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})}
+	item.StatusMessage = "File already exists; kept"
+	r.d.persistTerminal(ctx, r.reporter, item, func() domain.Event {
+		return domain.Event{JobID: r.job.ID, ItemID: item.ID, Type: domain.EventItemSkipped, Message: "already exists", Payload: domain.MarshalEventPayload(*item, map[string]any{"message": "already exists"})}
 	})
 }
 
@@ -150,9 +150,9 @@ func (d *Downloader) finalizeTrackOutput(ctx context.Context, backend mediaBacke
 	}
 	set(domain.ItemTagging, out.labels.tagged, markTagged)
 	// Only ever expose a complete, tagged file at outPath (see
-	// finalizeToOutput), so handleExistingOutput's "bare existence = done" skip
-	// stays correct even if the process dies mid-move. A file already at
-	// outPath is replaced in the same rename.
+	// finalizeToOutput), so handleExistingOutput's "bare existence = done"
+	// adoption stays correct even if the process dies mid-move. A file already
+	// at outPath is replaced in the same rename.
 	size, err := backend.commit(out.staged, out.outPath)
 	if err != nil {
 		return fmt.Errorf("%s: %w", out.labels.commitErr, err)

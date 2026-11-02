@@ -334,3 +334,116 @@ func TestLyricsSidecarPathGolden(t *testing.T) {
 		}
 	}
 }
+
+// Another quality of a downloaded track is named after the main file plus
+// " [CODEC label]" (design §3.8). The codec is part of the suffix because aac
+// and aac-binaural share a label.
+func TestQualitySuffixGolden(t *testing.T) {
+	main := filepath.Join("downloads", "library", "AC_DC", "Back in Black", "01. Hells Bells.m4a")
+	dir := filepath.Dir(main)
+	tests := []struct {
+		name, codec, label, want string
+	}{
+		{"hi-res alac", "alac", "24-bit/96 kHz", "01. Hells Bells [ALAC 24-bit_96 kHz].m4a"},
+		{"aac", "aac", "256Kbps", "01. Hells Bells [AAC 256Kbps].m4a"},
+		{"aac-binaural", "aac-binaural", "256Kbps", "01. Hells Bells [AAC-BINAURAL 256Kbps].m4a"},
+		{"aac-lc", "aac-lc", aacLCQualityLabel, "01. Hells Bells [AAC-LC 256Kbps].m4a"},
+		{"ec3", "ec3", "768Kbps", "01. Hells Bells [EC3 768Kbps].m4a"},
+		{"empty label", "alac", "", "01. Hells Bells [ALAC].m4a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := qualitySuffixedPath(main, tt.codec, tt.label); got != filepath.Join(dir, tt.want) {
+				t.Fatalf("qualitySuffixedPath() = %q, want %q", got, filepath.Join(dir, tt.want))
+			}
+		})
+	}
+}
+
+// A main name already at the segment cap is trimmed, never the suffix.
+func TestQualitySuffixKeepsTheSuffixOfALongName(t *testing.T) {
+	long := strings.Repeat("歌", 80) // 240 bytes
+	main := filepath.Join("downloads", long+".m4a")
+	got := filepath.Base(qualitySuffixedPath(main, "alac", "24-bit/192 kHz"))
+	suffix := " [ALAC 24-bit_192 kHz].m4a"
+	if !strings.HasSuffix(got, suffix) {
+		t.Fatalf("name %q lost its suffix", got)
+	}
+	if name := strings.TrimSuffix(got, ".m4a"); len(name) > maxSegmentBytes || !utf8.ValidString(name) {
+		t.Fatalf("name %q is %d bytes, cap %d", name, len(name), maxSegmentBytes)
+	}
+	if want := strings.Repeat("歌", (maxSegmentBytes-len(" [ALAC 24-bit_192 kHz]"))/3) + suffix; got != want {
+		t.Fatalf("name = %q, want %q", got, want)
+	}
+}
+
+func TestSafeNameCappedTrimsAtItsOwnCap(t *testing.T) {
+	if got := safeNameCapped("Song. Title", 6); got != "Song" {
+		t.Fatalf("safeNameCapped = %q, want %q", got, "Song")
+	}
+	if got := safeNameCapped("...", 6); got != "_" {
+		t.Fatalf("safeNameCapped = %q, want _", got)
+	}
+}
+
+// The slot rules of trackTarget.outputPath: a stored path wins; a main slot
+// takes the plain template name; an extra slot is the main file suffixed,
+// unless the template names {Codec} or {Quality}, which then names every
+// slot and adds no suffix.
+func TestTrackTargetSlotPathsGolden(t *testing.T) {
+	cfg := config.Default()
+	cfg.Download.DownloadsDir = "downloads"
+	cfg.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}"
+	cfg.Download.PlaylistPathFormat = "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}"
+	song := applemusic.Song{ID: "s1", Name: "Hells Bells", AlbumArtist: "AC/DC", AlbumName: "Back in Black", TrackNumber: 1, DiscNumber: 1}
+	album := applemusic.Collection{ID: "a1", Name: "Back in Black", Artist: "AC/DC", Tracks: []applemusic.Song{song}}
+	placement := libraryPlacement{Album: album, Index: 1, Number: 1}
+	libDir := filepath.Join("downloads", "library", "AC_DC", "Back in Black")
+	library := func(t trackTarget) trackTarget {
+		t.collectionType, t.placement = applemusic.TypeAlbum, &placement
+		return t
+	}
+	stored := filepath.Join("downloads", "old layout", "01. Hells Bells.m4a")
+	playlistMain := filepath.Join("downloads", "playlists", "Mix", "04. Hells Bells.m4a")
+	tests := []struct {
+		name   string
+		cfg    func(config.Config) config.Config
+		target trackTarget
+		codec  string
+		label  string
+		want   string
+	}{
+		{name: "main", target: library(trackTarget{}), codec: "alac", label: "24-bit/96 kHz", want: filepath.Join(libDir, "01. Hells Bells.m4a")},
+		{name: "stored path wins", target: library(trackTarget{fixedPath: stored}), codec: "aac", label: "256Kbps", want: stored},
+		{name: "extra slot", target: library(trackTarget{extra: true, mainPath: filepath.Join(libDir, "01. Hells Bells.m4a")}), codec: "aac-binaural", label: "256Kbps",
+			want: filepath.Join(libDir, "01. Hells Bells [AAC-BINAURAL 256Kbps].m4a")},
+		{name: "extra slot follows a main file that moved", target: library(trackTarget{extra: true, mainPath: stored}), codec: "alac", label: "",
+			want: filepath.Join("downloads", "old layout", "01. Hells Bells [ALAC].m4a")},
+		{name: "extra playlist copy", target: trackTarget{collectionType: applemusic.TypePlaylist, collectionName: "Mix", collectionIndex: 4, extra: true, mainPath: playlistMain},
+			codec: "ec3", label: "768Kbps", want: filepath.Join("downloads", "playlists", "Mix", "04. Hells Bells [EC3 768Kbps].m4a")},
+		{name: "template names the codec", target: library(trackTarget{}), codec: "aac", label: "256Kbps",
+			cfg: func(c config.Config) config.Config {
+				c.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName} [{Codec} {Quality}]"
+				return c
+			},
+			want: filepath.Join(libDir, "01. Hells Bells [AAC 256Kbps].m4a")},
+		{name: "template names the codec for an extra slot", target: library(trackTarget{extra: true, mainPath: filepath.Join(libDir, "01. Hells Bells [AAC 256Kbps].m4a")}),
+			codec: "alac", label: "24-bit/96 kHz",
+			cfg: func(c config.Config) config.Config {
+				c.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName} [{Codec} {Quality}]"
+				return c
+			},
+			want: filepath.Join(libDir, "01. Hells Bells [ALAC 24-bit_96 kHz].m4a")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := cfg
+			if tt.cfg != nil {
+				c = tt.cfg(c)
+			}
+			if got := tt.target.outputPath(c, song, tt.codec, tt.label); got != tt.want {
+				t.Fatalf("outputPath() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -20,7 +20,7 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 	both := client.SearchHit{Type: "album", Name: "Glass Weather", URL: "https://music.apple.com/us/album/glass-weather/920001", AudioTraits: []string{"atmos", "lossless"}}
 	plain := client.SearchHit{Type: "album", Name: "Tidal Rooms", URL: "https://music.apple.com/us/album/tidal-rooms/920002", AudioTraits: []string{"lossless"}}
 	owned := client.SearchHit{Type: "album", Name: "Late Bloom", URL: "https://music.apple.com/us/album/late-bloom/920006", AudioTraits: []string{"lossless"},
-		Library: &domain.LibraryState{State: domain.LibraryComplete, TracksOnDisk: 9, TracksTotal: 9}}
+		Resource: &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "920006", State: domain.RecordComplete, TracksDone: 9, TracksWanted: 9}}
 	priority := []string{"alac", "ec3", "aac"}
 
 	if cmd := m.choose([]client.SearchHit{plain}, []string{plain.Name}, priority); cmd == nil || m.panel == panelAsk {
@@ -36,7 +36,7 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 		t.Errorf("the panel offers the two qualities only:\n%s", out)
 	}
 	m.askKey("right")
-	if o := m.ask.overrides(both); o == nil || !slices.Equal(*o.QualityPriority, []string{"ec3", "alac", "aac"}) || o.ForceOverwrite != nil {
+	if o := m.ask.overrides(both); o == nil || !slices.Equal(*o.QualityPriority, []string{"ec3", "alac", "aac"}) {
 		t.Errorf("Dolby chosen: %+v", o)
 	}
 	m.askKey("esc")
@@ -48,13 +48,11 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 	if m.panel != panelAsk || m.ask.codecs != nil || !m.ask.again {
 		t.Fatalf("in the library: ask %+v", m.ask)
 	}
-	if o := m.ask.overrides(owned); o == nil || *o.ForceOverwrite || o.QualityPriority != nil {
-		t.Errorf("skip is the default, said either way: %+v", o)
+	// Downloading it again is a reset of its record, not an override.
+	if o := m.ask.overrides(owned); o != nil {
+		t.Errorf("a hit in the library carries no overrides: %+v", o)
 	}
 	m.askKey("right")
-	if o := m.ask.overrides(owned); o == nil || !*o.ForceOverwrite {
-		t.Errorf("replace chosen: %+v", o)
-	}
 	if o := m.ask.overrides(plain); o != nil {
 		t.Errorf("a hit not in the library has nothing to override: %+v", o)
 	}
@@ -65,13 +63,19 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 				t.Errorf("%d columns: a %d-column line", w, lipgloss.Width(l))
 			}
 		}
-		if !strings.Contains(out, "Skip") || !strings.Contains(out, "Replace") {
+		if !strings.Contains(out, "Keep") || !strings.Contains(out, "gain") {
 			t.Errorf("%d columns: both choices show:\n%s", w, out)
 		}
 	}
 
 	// Hits with different overrides go in separate submits.
 	a := &ask{hits: []client.SearchHit{both, plain, owned}, priority: priority, codecs: []string{"alac", "ec3"}, codec: 1, again: true, replace: 1}
+	// Downloading the hit in the library again is a reset of its record,
+	// not an add.
+	if bs := a.batches(); len(bs) != 2 {
+		t.Errorf("download again: %d submits, want the two hits not in the library", len(bs))
+	}
+	a.replace = 0
 	bs := a.batches()
 	if len(bs) != 3 {
 		t.Fatalf("%d submits, want one per set of overrides", len(bs))
@@ -82,8 +86,8 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 	if b := bs[1]; !slices.Equal(b.urls, []string{plain.URL}) || b.o != nil {
 		t.Errorf("the server's settings for the rest: %+v", b)
 	}
-	if b := bs[2]; !slices.Equal(b.urls, []string{owned.URL}) || !*b.o.ForceOverwrite {
-		t.Errorf("replace for the hit in the library: %+v", b)
+	if b := bs[2]; !slices.Equal(b.urls, []string{owned.URL}) || b.o != nil {
+		t.Errorf("the hit in the library goes on its own: %+v", b)
 	}
 }
 
@@ -197,19 +201,24 @@ func TestQualityPriorityIsEditedFromTheKeyboard(t *testing.T) {
 	}
 }
 
-// A result row says a job is under way first, then how much of the album is
-// on disk; a completed job alone says nothing, since its files may be gone.
-func TestHitMarkFollowsTheQueueThenTheFiles(t *testing.T) {
-	partial := &domain.LibraryState{State: domain.LibraryPartial, TracksOnDisk: 9, TracksTotal: 12}
+// A result row says a run is under way first, then a pause, then how much
+// of the record is downloaded; no record says nothing.
+func TestHitMarkFollowsTheRecord(t *testing.T) {
+	partial := domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", State: domain.RecordPartial, TracksDone: 9, TracksWanted: 12}
+	running, paused := partial, partial
+	running.ActiveJobID, paused.Paused = "j", true
+	complete := domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", State: domain.RecordComplete, TracksDone: 12, TracksWanted: 12}
+	song := domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", State: domain.RecordPartial, SongState: domain.AudioDone}
 	for _, tt := range []struct {
 		hit  client.SearchHit
 		want string
 	}{
-		{client.SearchHit{Library: partial, PriorJob: &client.PriorJob{Status: domain.JobRunning}}, "↻ downloading"},
-		{client.SearchHit{Library: partial, PriorJob: &client.PriorJob{Status: domain.JobCompleted}}, "9/12"},
-		{client.SearchHit{Library: &domain.LibraryState{State: domain.LibraryComplete, TracksOnDisk: 12, TracksTotal: 12}}, "✓ in library"},
-		{client.SearchHit{PriorJob: &client.PriorJob{Status: domain.JobCompleted}}, ""},
-		{client.SearchHit{Library: &domain.LibraryState{State: domain.LibraryNone, TracksTotal: 12}}, ""},
+		{client.SearchHit{Type: "album", Resource: &running}, "↻ downloading"},
+		{client.SearchHit{Type: "album", Resource: &paused}, "‖ paused"},
+		{client.SearchHit{Type: "album", Resource: &partial}, "9/12"},
+		{client.SearchHit{Type: "album", Resource: &complete}, "✓ in library"},
+		{client.SearchHit{Type: "song", Resource: &song}, "✓ in library"},
+		{client.SearchHit{Type: "album"}, ""},
 	} {
 		if got := hitMark(tt.hit); got != tt.want {
 			t.Errorf("hitMark(%+v) = %q, want %q", tt.hit, got, tt.want)

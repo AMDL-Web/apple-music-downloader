@@ -132,8 +132,8 @@ func TestToolsComeFromTheCapabilityTable(t *testing.T) {
 			t.Errorf("%s readOnlyHint = %v", c.Tool, tl.Annotations.ReadOnlyHint)
 		}
 	}
-	if len(got) != 21 {
-		t.Errorf("%d tools, want 21", len(got))
+	if len(got) != 25 {
+		t.Errorf("%d tools, want 25", len(got))
 	}
 	if d := got["delete_job"].Annotations.DestructiveHint; d == nil || !*d {
 		t.Error("delete_job should be destructive")
@@ -160,7 +160,7 @@ func TestSearchThenDownloadInTwoCalls(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			submitted.Store(body)
 			w.WriteHeader(http.StatusAccepted)
-			fmt.Fprint(w, `{"accepted":1,"rejected":0,"results":[{"url":"https://music.apple.com/us/album/igor/1","status":"accepted","requeued":true,
+			fmt.Fprint(w, `{"accepted":1,"rejected":0,"results":[{"url":"https://music.apple.com/us/album/igor/1","status":"accepted","resource":{"kind":"album","id":"1"},
 				"job":{"id":"job_a","input":"x","type":"album","status":"queued","title":"IGOR","total_items":0,"completed_items":0,"skipped_items":0,"failed_items":0,"cancelled_items":0,"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:00:00Z"}}]}`)
 		default:
 			http.NotFound(w, r)
@@ -173,7 +173,7 @@ func TestSearchThenDownloadInTwoCalls(t *testing.T) {
 	}
 	out, isErr := s.call(t, "start_download", map[string]any{"urls": []string{url}, "codec_priority": []string{"alac"}})
 	acc := out["accepted"].([]any)
-	if isErr || len(acc) != 1 || acc[0].(map[string]any)["job_id"] != "job_a" || acc[0].(map[string]any)["requeued"] != true {
+	if isErr || len(acc) != 1 || acc[0].(map[string]any)["job_id"] != "job_a" || acc[0].(map[string]any)["resource"].(map[string]any)["id"] != "1" {
 		t.Fatalf("start_download = %v", out)
 	}
 	body := submitted.Load().(map[string]any)
@@ -259,7 +259,7 @@ func TestBadArgumentsNameTheField(t *testing.T) {
 		{"list_jobs", map[string]any{"limit": 1.5}, "limit must be a whole number"},
 		{"set_config", map[string]any{"changes": []string{"a"}}, "changes must be an object"},
 		{"get_job", map[string]any{"job_id": 7}, "job_id must be a string"},
-		{"start_download", map[string]any{"urls": []string{"x"}, "overwrite": "yes"}, "overwrite must be true or false"},
+		{"start_download", map[string]any{"urls": []string{"x"}, "codec_fallback": "yes"}, "codec_fallback must be true or false"},
 	} {
 		out, isErr := s.call(t, tc.tool, tc.args)
 		e := errorOf(t, out)

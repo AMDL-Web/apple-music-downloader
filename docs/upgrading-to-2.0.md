@@ -93,8 +93,18 @@ needs the API changes below before it works against 2.0.
 | Submit result error | `results[].error: "code: message"`, only on some rejections | `results[].error: {code, message, details?}` on every result that is not `accepted`; codes are the spec's `SubmitErrorCode` enum | submit flows |
 | Submit store failure | `status: "invalid"` with the raw error text | `status: "error"`, `error.code: "store_error"` (retry the submit) | submit flows, status enums |
 | Submit, nothing accepted | `422` with the batch body | `422 no_urls_accepted` (or `500 store_error`) envelope; the batch body is in `error.details` | submit flows |
-| Submit of a link that already has a finished job | a new job with a new id | the finished job (completed, failed or cancelled; the newest of several) is queued again under its id: `results[].requeued: true`, its `overrides` replaced by this request's, `created_at` set to this submit; stations still get a new job | submit flows, clients that track jobs by id or sort by `created_at` |
-| `job_retried` payload | the job snapshot and `message` | adds `cause` (`retry` or `resubmit`) and `force_overwrite` | activity views |
+| What is downloaded | jobs and the files on disk | records: `GET /library/albums`, `GET /library/playlists` and `GET /library/{kind}/{id}` list what amdl downloaded per track and quality slot, never read from the disk; a run (job) is one download of a record. 1.x song, album and artist files do not count | every client that showed what is downloaded |
+| Submit result | `status: accepted` with `job` | adds `resource {kind, id}` (the record the link added or extended) and the statuses `pending` (a song without its album, an artist or a library playlist's songs, read into records first; no `job`) and `already_downloaded` (every wanted track is done; nothing queued). Both count as `accepted` in the batch, so a re-add stays idempotent. An `accepted` record whose slots wait for a retry has no `job` | submit flows, `start_download` callers |
+| Submit of a link downloaded before | a new job with a new id | a new job when its record needs one, else `already_downloaded`; there is no `requeued`. Download again with a reset (`POST /library/{kind}/{id}/reset`) | submit flows |
+| `POST /downloads/{id}/retry` | queued the job again under its id; `202 {"status":"queued"}` | a new job: for a record's run the record's failed, given-up and missing slots are re-armed, answering `202 {"status":"queued","job"}`, `200 {"status":"already_downloaded"}` with nothing left, or `200 {"status":"waiting"}` when no run takes the record now (a full queue too); `409 job_finalizing` is gone | retry buttons, clients that follow the retried id |
+| `POST /downloads/{id}/cancel` on a record's run | cancelled the job | pauses the record (its run ends `cancelled`, checkpoints stay, nothing is queued until `POST /library/{kind}/{id}/resume`); a station's run is cancelled as before. Label it Pause | queue views |
+| `DELETE /downloads/{id}` | deleted the job and its records | deletes the run's history; the record and files stay (`DELETE /library/{kind}/{id}` removes a record) | queue views |
+| A link's storefront | the wrapper had to serve it, else `unsupported_storefront` | a record is read in the account storefront whatever the link's, so a `us` link on a `cn` account downloads the `cn` track list; the wrapper must serve the account storefront, else `decryptor_unavailable` naming both. `unsupported_storefront` is gone from `SubmitErrorCode`; a station still plays in its link's storefront | submit flows that switched on `unsupported_storefront` |
+| `library`, `prior_job`, `on_disk` on search hits, lookups and the album page | not in 1.x | removed; `resource {kind, id, state, tracks_done, tracks_wanted, withheld_count, active_job_id?, paused, song_state?}` marks the record holding the hit, and an album track's `state` is its main slot state | search, link preview and album page clients |
+| Job fields | none | `resource {kind, id}`, `trigger` (`manual`, `library_sync`, `artist`, `retry`, `reset`, `import_1x`) and `priority` (`0` now, `1` manual, `2` the library monitor); queued runs start by `priority`, then `queue_order`. `GET /downloads` filters by `resource_kind`, `resource_id` and `trigger` | queue views |
+| Items | one per track | one per planned quality slot, with `slot` (`main` or a codec); the status `unavailable` (the track does not offer the slot) counts in `skipped_items` | job detail views |
+| Events | | `item_unavailable` and `lyrics_refreshed` are new; `job_retried` and `item_overwrite` are no longer emitted (they stay in the enum so 1.x history decodes). The overview feed adds `resource_updated` and `check_updated` messages | activity views, feed clients |
+| New error codes | | `resource_not_found` (404), `run_active`, `main_not_done`, `quality_present`, `check_running` (409), `downloads_dir_unavailable` (503), `invalid_scope` (400) | error handlers |
 | Wrapper login already pending | `401` (wrapper-manager's `login already pending` reply) | `409 login_pending`; a two-step code already being verified is also `login_pending` | account screens |
 | Wrapper login timeout | `504` | `504 upstream_timeout` | account screens |
 | Wrapper login without a login API | not applicable (wrapper-manager always had one) | `501 login_unsupported` from login, two-step and logout when `wrapper.address` is a bare wrapper-lite; log in with its `--login` instead | account screens |
@@ -109,7 +119,7 @@ needs the API changes below before it works against 2.0.
 | Stream cursor in snapshots | `last_event_id` on `GET /downloads` and `GET /downloads/{id}` | `event_cursor` | stream clients |
 | Job counters | `done_items` (completed + skipped), `failed_items` | `completed_items`, `skipped_items`, `failed_items`, `cancelled_items` | job lists, progress bars |
 | Job timing | none | `started_at`, `finished_at` | new |
-| Job `force` | legacy boolean | removed; use `overrides.force_overwrite` | submit forms |
+| Job `force` | legacy boolean | removed, and so is `overrides.force_overwrite` (`400 invalid_request` naming it); download again with a reset (`POST /library/{kind}/{id}/reset`, `POST /library/reset`) | submit forms |
 | Event `payload` | JSON string (parse twice) | JSON object | per-job event consumers |
 | WebSocket streams | `/logs/stream/ws`, `/downloads/events/ws`, `/downloads/{id}/events/ws` | removed; use the SSE endpoints | cross-origin clients |
 | Stream resume | header only on SSE; `last_event_id` / `after` query on WS and logs | `Last-Event-ID` header or `?cursor=` on every stream (the header wins); a malformed cursor is `400 invalid_request` instead of being read as `0` | stream clients |
@@ -130,13 +140,13 @@ needs the API changes below before it works against 2.0.
 | CORS | `Access-Control-Allow-Origin: *` on every response; `OPTIONS` answered `204` | no CORS headers; `OPTIONS` under `/api/` is `405 method_not_allowed`. Only same-origin pages (the console) and non-browser clients can call the API | web clients on another origin, such as amdl-web |
 | Request id | a well-formed incoming `X-Request-ID` was adopted and echoed | always generated by the server; read it from the response to filter `GET /logs?request_id=` | scripts that set their own id |
 | `GET /downloads` filters | `storefront`, `created_after`, `created_before`, `updated_after`, `updated_before` | removed and ignored like any unknown parameter: the response is no longer narrowed by them (`status`, `type` and `q` still filter) | scripts that filtered by storefront or date |
-| Submit `overrides` | overlaid the whole job-mutable `download` section (directories, path templates, lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`) plus `media_user_token` and a `hooks` allow-list | only `quality_priority`, `codec_alternative`, `alac_max_sample_rate`, `alac_max_bit_depth`, `force_overwrite`; any other field is `400 invalid_request` naming it. Set the rest in the runtime config; every enabled matching hook runs | scripts that sent per-batch folders, lyrics or cover settings, a token or a hook list |
+| Submit `overrides` | overlaid the whole job-mutable `download` section (directories, path templates, lyrics, covers, `memory_mode`, `max_attempts`, `check_integrity`) plus `media_user_token` and a `hooks` allow-list | only `quality_priority`, `codec_alternative`, `alac_max_sample_rate`, `alac_max_bit_depth`, stored on the record and copied into its runs; any other field is `400 invalid_request` naming it. Set the rest in the runtime config; every enabled matching hook runs | scripts that sent per-batch folders, lyrics or cover settings, a token or a hook list |
 | Media-user-token per request | `overrides.media_user_token` on `POST /downloads` and `media_user_token` on `POST /lookup` overlaid `catalog.media_user_token` (`""` cleared it) | removed (`400 invalid_request` naming the field); downloads and lookups use the backend's own token: the wrapper's when the backend can read it, else `catalog.media_user_token` | scripts that passed a token per request |
-| Job `overrides` in responses and events | could hold every field above; the token was redacted | holds only the five fields above | job detail clients |
+| Job `overrides` in responses and events | could hold every field above; the token was redacted | holds only the four fields above | job detail clients |
 | Spec version | `info.version: 1.0.0` | `2.0.0`; the URL prefix stays `/api/v1` | client generators that key on `info.version`; requests are unchanged |
 | `PUT /config` keys | runtime keys only; every other key `422 config_key_not_mutable` | every key except `server.listen`, `database.path` and `tools.ffmpeg`. Restart keys (`wrapper.address`, the wrapper timeouts, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size` and the three pool sizes) are saved, listed in the answer's `pending_restart` and applied by the next start; `catalog.default_storefront` and `wrapper.data_dir` apply at once. `wrapper.address` is refused (`config_key_not_mutable`, `details.reason` `managed_wrapper`) while amdl runs the wrapper itself | clients that relied on the 422 for those keys |
 | `GET /config` | the runtime keys | also the restart keys, as saved in the file, and a `pending_restart` array | clients that walk every key of `config` |
-| New | | `GET /system` (with `default_storefront` and `pending_restart`; it reports no signing mode, because the backend signs no token), `POST /system/restart` (stops and starts the backend in the same process), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search`, `GET /artists/{id}/albums` and `GET /albums/{id}` (catalog search, an artist's albums and an album's songs; albums, songs and album hits say how much is on disk in `library`), web console at `/console/` (`/` redirects there) | none: additions only |
+| New | | `GET /system` (with `default_storefront` and `pending_restart`; it reports no signing mode, because the backend signs no token), `POST /system/restart` (stops and starts the backend in the same process), `GET /stats`, `POST /config/reload`, `POST /lookup` (a link preview that creates no job), `GET /search`, `GET /artists/{id}/albums` and `GET /albums/{id}` (catalog search, an artist's albums and an album's songs, marked with their `resource`), the `/library/*` record routes and the disk check (`POST /library/check`), web console at `/console/` (`/` redirects there) | none: additions only |
 
 ## Config and environment
 
@@ -222,8 +232,8 @@ needs the API changes below before it works against 2.0.
   and carry a custom layout over into the new key. Its folders take only `{AlbumArtist}`,
   `{AlbumName}`, `{AlbumId}`, `{ReleaseDate}` and `{ReleaseYear}` and must name
   `{AlbumName}` or `{AlbumId}`; its file name must contain `{SongNumber}`, or both
-  `{DiscNumber}` and `{TrackNumber}`, and cannot use `{Quality}`, `{Codec}`, `{Tag}` or
-  the playlist and station variables. Anything else fails startup and `PUT /config`
+  `{DiscNumber}` and `{TrackNumber}`, may use `{Quality}` only together with `{Codec}`, and
+  cannot use `{Tag}` or the playlist and station variables. Anything else fails startup and `PUT /config`
   (`422 invalid_config`). The console's and the desktop app's Settings show one Library
   field in place of Songs, Albums and Artists.
 - `download.*_path_format` templates must stay relative to `download.downloads_dir`
@@ -241,6 +251,13 @@ needs the API changes below before it works against 2.0.
   keeps its values and now shapes LRC only. Lyrics come from the storefront of the
   account whose media-user-token fetches them (the wrapper's), whatever the job's, with
   the translation in `catalog.language`.
+- `download.force_overwrite` is removed: records decide what downloads, and a reset
+  downloads again. A `config.yaml` that still has it starts with a warning naming the key
+  (the console used to write every key into the file), and `PUT /config` with it is `400`.
+- `download.give_up_after_runs` (default 3, `0` never gives up) is new: a run that fails a
+  slot is retried by a new run 30 minutes later, then each wait four times the last, and
+  after that many failed runs the slot is given up until a reset. `download.max_attempts`
+  still counts the tries inside one run.
 
 ## Image and source tree
 
@@ -288,7 +305,10 @@ the Compose service name stay as they were.
 | Per-entry `timeout_seconds` | overrode the top-level timeout for one hook | removed; every attempt is cut off after 30 seconds; a file that still has it fails startup naming the entry | `hooks.yaml` entries that set it |
 | Webhook `send_payload` | `send_payload: false` sent an empty body | removed; the body is the JSON payload unless the entry's `body` template sets another, and a receiver that ignores the body ignores it; a file that still has it fails startup naming the entry | `hooks.yaml` webhook entries that set it |
 | Shutdown while a hook retries | slept out every remaining retry | retries stop; an attempt still running after the drain is cancelled and recorded as `hook_failed` | hooks whose last retry used to run during a shutdown; nothing to change |
-| `job_queued` on a repeated submit | fired for the new job | fires again for the finished job queued again under its id (same `job.id`); a retry still does not fire it | `job_queued` receivers that assume one call per job id |
+| Runs and records | one job per submission | each download of a record is a new `job.id`: a retry, an automatic retry (trigger `retry`) and a reset fire `job_queued`, and an artist link fires one per album | `job_queued` receivers |
+| Record and trigger in the payload | none | `resource {kind, id, name, state, tracks_done, tracks_wanted}` (absent for a station), `job.trigger` and `job.will_retry`; in the exec environment `AMDL_RESOURCE_KIND`, `AMDL_RESOURCE_ID`, `AMDL_JOB_TRIGGER` and `AMDL_JOB_WILL_RETRY` | webhook receivers, exec scripts |
+| `job_failed` with an automatic retry ahead | not applicable | fires on every failed run with `will_retry: true` while every failed slot waits for its retry; hooks built from a notification preset (ntfy, Bark, Telegram) skip those, so a phone hears about a failure once it is given up | notification hooks written by hand, which should filter on `will_retry` |
+| `job_types` | the job's type | a run's type is its record's kind (`album`, `playlist`) or `station`; `song` still matches the runs of an album whose tracks were added one by one, and `artist` the runs an artist link started, so every `hooks.yaml` keeps loading | `hooks.yaml` entries that select types |
 
 ## Output paths
 
@@ -301,7 +321,8 @@ the Compose service name stay as they were.
 
 | Area | 1.x | 2.0 | Affects |
 | --- | --- | --- | --- |
-| Song, album and artist paths | three templates, `songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}`, `albums/…` and `artists/…` | one, `download.library_path_format`; a track has one path whichever job type downloads it, and a file there counts as downloaded at any quality | every library, media-server scans, scripts that read paths |
+| Song, album and artist paths | three templates, `songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}`, `albums/…` and `artists/…` | one, `download.library_path_format`; a track has one path per quality slot whichever link downloads it | every library, media-server scans, scripts that read paths |
+| Another quality of a track | one file per track | the first quality downloaded keeps the plain name; another quality asked for later (`POST /library/{kind}/{id}/download {"codec"}`) is a second file named with a suffix, ` [CODEC label]`, such as `01. Song [EC3 768Kbps].m4a`, beside it, unless the template names `{Quality}` and `{Codec}`. Media servers list both files | media servers, scripts that read paths |
 | A single song's file | in the song's artist's folder, numbered by `{TrackNumber}` (`{SongNumber}` was always 1) | in its album artist's folder, numbered by its number in the album, as an album download names it; the song's album is read to place it, and a song without one, or missing from its album's track list, fails | single-song downloads |
 | An artist download | every album under the first album's artist | each album under its own album artist, so a compilation lands in its own folder | artist downloads |
 | Standalone covers of a song or artist download | the song's artwork and the track artist's picture | the album's artwork and the album artist's picture, as for an album | `cover.jpg` and `artist.jpg` |
@@ -329,8 +350,8 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 ## Downloads
 
 - The track-total tag of a multi-disc album counts the tracks on its own disc ("3 of
-  19", not "3 of 48"). Files 1.x wrote keep the old total unless a job runs with
-  `force_overwrite`.
+  19", not "3 of 48"). Files 1.x wrote keep the old total until a reset downloads them
+  again.
 - Cancelling a job ends each of its unfinished items `cancelled`; 1.x left them in
   their last state, such as `downloading`. Items of a running job each get an
   `item_progress` event whose `phase` is `cancelled`; a queued job's leftover items
@@ -341,14 +362,10 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 - Stopping the backend no longer cancels running jobs: they stay `running` and resume
   on the next start (`job_recovered`), keeping finished tracks and, while the temp
   directory survives, partial transfers.
-- Every run of a job (a retry, a recovery) re-checks the tracks an earlier run finished:
-  one stays `completed` or `skipped_existing` only while its file is still at the path
-  it recorded, that path is the track's current library path (songs, albums and
-  artists), and `force_overwrite` is off. Otherwise it runs again; 1.x kept every
-  finished track whatever happened to its file.
-- A song, album or artist track already at its library path is `skipped_existing`
-  before any per-track catalog read, so an album that is fully on disk finishes in
-  seconds.
+- A run downloads only the slots its record does not have done; a done slot stays done
+  whatever happens to its file, until a disk check (`POST /library/check`) marks it
+  missing and a reset downloads it again. A file already at a slot's path when the slot
+  is first downloaded is taken as that slot (`skipped_existing`).
 - Media transfers no longer have a 90 s whole-request timeout: a transfer fails only
   when no data arrives for 60 s, so a large Hi-Res track on a slow link finishes.
 - A song without an Enhanced HLS manifest falls back to the next codec at once instead
@@ -362,16 +379,13 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
   again. Resume scratch that a
   job left under its own former `overrides.temp_dir` is not cleaned up: that job starts
   its tracks again, and the old folder can be deleted by hand.
-- A link keeps one job. Submitting a song, album, artist or playlist again while its
-  last job is finished runs that job again under its id instead of adding a row; the
-  run keeps nothing a file does not back up, so an album already on disk finishes in
-  seconds, and `force_overwrite` downloads it again. Rows a 1.x database holds several
-  of for one link stay as they are; only the newest is reused. `/stats` totals count
-  each job's items, so they follow its latest run.
-- `force_overwrite` no longer deletes first. 1.x removed the existing file and its lyrics
-  sidecars before downloading, so a download that failed left nothing; 2.0 downloads into
-  a temporary file and renames it over the old track once it is complete, then the
-  sidecars. A forced download that fails leaves the old files as they were.
+- One record per album or catalog playlist, a run per download: submitting a link again
+  answers `already_downloaded` when its record has every track, and a reset downloads
+  it again. A failed slot is retried by new runs (`download.give_up_after_runs`).
+- A reset no longer deletes first. 1.x's `force_overwrite` removed the existing file and
+  its lyrics sidecars before downloading, so a download that failed left nothing; 2.0
+  downloads into a temporary file and renames it over the old track once it is complete,
+  then the sidecars. A reset download that fails leaves the old files as they were.
 - Duplicate detection ignores the destination folder now that a submission cannot pick
   one: the same album, song or playlist is one download. A job from before the upgrade
   keeps its old key, so while it is queued or running (also after a retry of a failed
@@ -387,31 +401,41 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
   translation line no longer disappears when its line has background vocals, romanized
   syllables are no longer split by spaces, and a translation or romanization that reads
   the same as its line is no longer repeated. `embed_lyrics: false` now keeps lyrics out
-  of the tag even when a sidecar is written. Existing files are left alone unless a job
-  runs with `force_overwrite`. Jellyfin reads sidecar lyrics only, so it needs
+  of the tag even when a sidecar is written. Existing files are left alone until a lyrics
+  reset (`POST /library/{kind}/{id}/reset {"what":"lyrics"}`) rewrites them. Jellyfin reads sidecar lyrics only, so it needs
   `lyrics_files: [lrc]`.
 
 ## Database
 
-The first start applies migrations in one transaction each:
+Back up `amdl.db` first: the upgrade rewrites the 1.x tables and cannot be undone
+except from that copy. The first start runs one migration in one transaction
+(schema version 6, `PRAGMA user_version`):
 
-- records the schema version (`PRAGMA user_version`);
-- adds `jobs.started_at` / `jobs.finished_at`, backfilled from job events (`started_at`
-  from the latest run, after the last retry);
-- folds a 1.x `jobs.force = 1` into `overrides.force_overwrite = true`, then drops
-  `jobs.force`, `jobs.done_items` and `jobs.failed_items` (counters are derived from
-  items);
-- indexes `job_events(type, created_at)` for `/stats`;
-- deletes `item_progress` events of finished jobs (live progress telemetry; item rows
-  keep their final state);
-- adds `job_items.download_bytes` (0 for every existing row), the bytes of encrypted
-  media an item's current attempt has received. A database that has run this
-  migration is refused by an older build, so a release candidate from before it cannot
-  open the file again;
-- adds `jobs.queue_order`, numbering every existing job in `created_at` order so queued
-  jobs keep running in the order they were submitted. A build from before this migration
-  refuses the file too; back up `amdl.db` before trying one.
+- every 1.x job becomes a run in `runs`, keeping its id, type, values and
+  timestamps; `started_at` and `finished_at` are backfilled from its events
+  (`started_at` from the latest run, after the last retry). Album runs and catalog
+  playlist (`pl.`) runs name their record by catalog id without the storefront, so
+  the `us` and `jp` runs of one album point at one album;
+- `jobs.force`, `jobs.done_items` and `jobs.failed_items` are dropped (counters are
+  derived from items), and `force_overwrite` is removed from every run's overrides.
+  Other removed fields there (a `media_user_token`, `hooks`) stay in the row and are
+  ignored when it is read;
+- items become `run_items` (slot `main`) and events become `run_events` with their
+  ids, so SSE cursors stay valid; `item_progress` events of finished runs are deleted
+  (live progress telemetry; item rows keep their final state);
+- a job that was still queued or running ends `cancelled` with the error "stopped by
+  the 2.0 upgrade", and its unfinished items are cancelled. What it asked for is kept
+  as a paused add, one per album, playlist, song or artist; it becomes a paused record
+  on the first start and downloads into `library/` only after you resume it. A
+  queued station keeps only its cancelled run;
+- completed and skipped items of catalog playlist jobs become downloaded files of a
+  paused playlist record at the paths they were saved to (playlist paths did not
+  change). The record reads `partial` until you resume it, which reads the playlist
+  again and downloads only what is missing. Files from finished song, album and artist jobs (in `songs/`, `albums/`,
+  `artists/`) do not count as downloaded;
+- the library-sync anchor is kept as it is.
 
-No migration rewrites `jobs.overrides`: a row that still holds a `media_user_token`,
-`hooks` or another removed field is read with it ignored, and the job's next terminal
-write stores only the fields that remain.
+A database written by a 2.0 release candidate (schema 2 to 5) is refused with a
+message; move it aside and start again. A 1.x build opening the migrated file finds no
+`jobs` table and starts with an empty one (inferred, not tested); a release candidate
+refuses it as newer.

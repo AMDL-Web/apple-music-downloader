@@ -76,7 +76,6 @@ export function appendPage(list, page) {
 const JOB_EVENTS = new Set([
   'job_queued',
   'job_recovered',
-  'job_retried',
   'job_started',
   'resolved_input',
   'job_finished',
@@ -85,21 +84,19 @@ const JOB_EVENTS = new Set([
 ]);
 
 /** Events that change the item set or fields the per-job stream does not carry. */
-const REFETCH_EVENTS = new Set(['resolved_input', 'job_retried', 'job_recovered', 'motion_artwork_resolved']);
+const REFETCH_EVENTS = new Set(['resolved_input', 'job_recovered', 'motion_artwork_resolved']);
 
 const HOOK_STATUS = { hook_started: 'running', hook_succeeded: 'succeeded', hook_failed: 'failed' };
 
 const ACTIVITY_LIMIT = 200;
 
 /** Per-track and per-codec events the track list already shows; Activity keeps the rest. */
-const QUIET_EVENTS = new Set(['item_progress', 'item_completed', 'item_skipped', 'codec_selected']);
+const QUIET_EVENTS = new Set(['item_progress', 'item_completed', 'item_skipped', 'item_unavailable', 'codec_selected']);
 
 /** Activity with `ev` added in id order; a quiet event or one already held leaves it as is. */
 function addActivity(activity, ev) {
   if (QUIET_EVENTS.has(ev.type) || activity.some((a) => a.id === ev.id)) return activity;
   const entry = { id: ev.id, type: ev.type, phase: ev.phase, message: ev.message, item_id: ev.item_id, created_at: ev.created_at };
-  // job_retried says whether a retry or a new submit of the link queued it.
-  if (ev.payload && typeof ev.payload === 'object' && ev.payload.cause) entry.cause = ev.payload.cause;
   const next = [...activity, entry];
   next.sort((a, b) => Number(a.id) - Number(b.id));
   return next.length > ACTIVITY_LIMIT ? next.slice(next.length - ACTIVITY_LIMIT) : next;
@@ -123,7 +120,7 @@ function withoutMessage(payload) {
   return rest;
 }
 
-const COUNTED = { completed: 'completed_items', skipped_existing: 'skipped_items', failed: 'failed_items', cancelled: 'cancelled_items' };
+const COUNTED = { completed: 'completed_items', skipped_existing: 'skipped_items', unavailable: 'skipped_items', failed: 'failed_items', cancelled: 'cancelled_items' };
 
 /**
  * The job's per-status track counts from its tracks, as the server derives

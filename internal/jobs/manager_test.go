@@ -125,8 +125,8 @@ func TestRecoverUnfinishedRunsLegacyOverridesRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := `{"media_user_token":"old-token","hooks":["notify"],"downloads_dir":"/elsewhere","force_overwrite":true}`
-	if _, err := raw.Exec(`UPDATE jobs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
+	legacy := `{"media_user_token":"old-token","hooks":["notify"],"downloads_dir":"/elsewhere","force_overwrite":true,"codec_alternative":true}`
+	if _, err := raw.Exec(`UPDATE runs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
 		_ = raw.Close()
 		t.Fatal(err)
 	}
@@ -149,9 +149,9 @@ func TestRecoverUnfinishedRunsLegacyOverridesRow(t *testing.T) {
 	manager.Start(ctx)
 	select {
 	case recovered := <-processor.jobs:
-		if recovered.Overrides == nil || *recovered.Overrides != (config.DownloadOverrides{ForceOverwrite: recovered.Overrides.ForceOverwrite}) ||
-			recovered.Overrides.ForceOverwrite == nil || !*recovered.Overrides.ForceOverwrite {
-			t.Fatalf("recovered overrides = %+v, want only force_overwrite", recovered.Overrides)
+		if recovered.Overrides == nil || *recovered.Overrides != (config.DownloadOverrides{CodecAlternative: recovered.Overrides.CodecAlternative}) ||
+			recovered.Overrides.CodecAlternative == nil || !*recovered.Overrides.CodecAlternative {
+			t.Fatalf("recovered overrides = %+v, want only codec_alternative", recovered.Overrides)
 		}
 		if typ, sf, id, ok := ParseCanonicalKey(recovered.CanonicalKey); !ok || typ != "station" || sf != "us" || id != "ra.1" {
 			t.Fatalf("legacy key %q parsed as %s/%s/%s (%v)", recovered.CanonicalKey, typ, sf, id, ok)
@@ -176,7 +176,7 @@ type recoveryBacklogProcessor struct {
 }
 
 func (p *recoveryBacklogProcessor) ValidateRequest(context.Context, string) (ValidationResult, error) {
-	return ValidationResult{Type: "song", Storefront: "cn"}, nil
+	return ValidationResult{Type: "station", Storefront: "cn"}, nil
 }
 
 func (p *recoveryBacklogProcessor) ProcessJob(ctx context.Context, _ domain.Job, _ Reporter) error {
@@ -327,7 +327,7 @@ func TestRecoverUnfinishedDoesNotDispatchJobQueuedHook(t *testing.T) {
 func TestNilHooksDispatcherIsNoop(t *testing.T) {
 	manager := newTestManager(t)
 	manager.Start(context.Background())
-	resp := manager.SubmitBatch(context.Background(), []string{"song|us|1"}, nil)
+	resp := manager.SubmitBatch(context.Background(), []string{"station|us|1"}, nil)
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v, want 1 accepted", resp)
 	}
@@ -379,7 +379,7 @@ func TestFinalizeInFlightTracksFinalizeMarks(t *testing.T) {
 	}
 
 	manager.mu.Lock()
-	manager.cancels["job-1"] = func() {}
+	manager.cancels["job-1"] = func(error) {}
 	manager.mu.Unlock()
 	if !manager.FinalizeInFlight("job-1") {
 		t.Fatal("FinalizeInFlight with a cancels entry = false, want true")

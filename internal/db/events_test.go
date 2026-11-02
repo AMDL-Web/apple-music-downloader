@@ -110,11 +110,11 @@ func TestEventPayloadRoundTripsAsJSONObject(t *testing.T) {
 	}
 	// A row written by hand (or by a broken writer) that is not JSON must not
 	// make the event unencodable.
-	if _, err := store.db.ExecContext(ctx, `INSERT INTO job_events(job_id,type,payload,created_at) VALUES('job1','item_failed','{broken',?)`, formatTime(now())); err != nil {
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO run_events(job_id,type,payload,created_at) VALUES('job1','item_failed','{broken',?)`, formatTime(now())); err != nil {
 		t.Fatal(err)
 	}
 	var stored string
-	if err := store.db.QueryRowContext(ctx, `SELECT typeof(payload) || ':' || payload FROM job_events WHERE type='item_completed'`).Scan(&stored); err != nil {
+	if err := store.db.QueryRowContext(ctx, `SELECT typeof(payload) || ':' || payload FROM run_events WHERE type='item_completed'`).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
 	if stored != `text:{"status":"completed","attempts":2}` {

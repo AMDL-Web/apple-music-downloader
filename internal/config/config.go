@@ -150,6 +150,9 @@ type DownloadConfig struct {
 	MaxRunningJobs       int      `yaml:"max_running_jobs" json:"max_running_jobs"`
 	MaxParallelDownloads int      `yaml:"max_parallel_downloads" json:"max_parallel_downloads"`
 	MaxAttempts          int      `yaml:"max_attempts" json:"max_attempts"`
+	// GiveUpAfterRuns is how many runs may fail a slot before it is given
+	// up; 0 never gives up. Between runs a failed slot waits 30 min, then 2 h.
+	GiveUpAfterRuns int `yaml:"give_up_after_runs" json:"give_up_after_runs"`
 	// ProgressEventIntervalMS is the minimum gap between two consecutive
 	// item_progress events for the same item while it stays in one state. It
 	// throttles only movement of the download/decrypt meters; status changes
@@ -174,7 +177,6 @@ type DownloadConfig struct {
 	ALACMaxBitDepth         int      `yaml:"alac_max_bit_depth" json:"alac_max_bit_depth"`
 	CheckIntegrity          bool     `yaml:"check_integrity" json:"check_integrity"`
 	IntegrityMode           string   `yaml:"integrity_mode" json:"integrity_mode"`
-	ForceOverwrite          bool     `yaml:"force_overwrite" json:"force_overwrite"`
 }
 
 const (
@@ -188,6 +190,9 @@ const (
 	maxRunningJobsLimit = 32
 	maxGlobalPoolLimit  = 64
 	maxAttemptsLimit    = 10
+	// giveUpAfterRunsLimit caps download.give_up_after_runs: with the 2 h
+	// backoff, 20 runs already retry a failing track for well over a day.
+	giveUpAfterRunsLimit = 20
 	// A progress meter that only moves every few seconds still reads as live;
 	// beyond this it looks frozen, so the coalescing interval is capped rather
 	// than left open-ended.
@@ -254,7 +259,7 @@ func Default() Config {
 		},
 		Download: DownloadConfig{
 			QualityPriority: []string{"alac"}, CodecAlternative: true,
-			MaxRunningJobs: 3, MaxParallelDownloads: 16, MaxAttempts: 3,
+			MaxRunningJobs: 3, MaxParallelDownloads: 16, MaxAttempts: 3, GiveUpAfterRuns: 3,
 			ProgressEventIntervalMS: 500,
 			DownloadsDir:            "data/downloads",
 			LibraryPathFormat:       "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}",

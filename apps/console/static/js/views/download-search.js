@@ -13,8 +13,7 @@
 
 import { html, useState, useRef, useLayoutEffect } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths } from '../lib/format.js';
-import { shownHits, hasMore, nextStop, SEARCH_GROUPS, SEARCH_FIRST, SEARCH_MAX_TERM } from '../lib/search.js';
-import { hitKey } from '../lib/search-jobs.js';
+import { shownHits, hasMore, nextStop, hitKey, SEARCH_GROUPS, SEARCH_FIRST, SEARCH_MAX_TERM } from '../lib/search.js';
 import { shortError } from '../lib/lookup.js';
 import { Card, Button, Icon, Artwork, Skeleton, Notice } from '../ui/components.js';
 import { AlbumTile, ArtistTile, SkeletonTiles } from './download-tiles.js';

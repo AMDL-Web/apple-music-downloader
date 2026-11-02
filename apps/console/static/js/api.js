@@ -179,6 +179,45 @@ export const logoutWrapper = (username) => request('POST', '/api/v1/wrapper/logo
 /** Clears the library-sync anchor; the next poll re-anchors without submitting albums. */
 export const resetLibrarySync = () => request('POST', '/api/v1/library-sync/reset');
 
+// Records (/library): `kind` is album(s) or playlist(s).
+const rec = (kind) => (kind === 'playlists' || kind === 'playlist' ? 'playlists' : 'albums');
+/** Record counts per state and flag, pending adds and the last disk check (LibrarySummary). */
+export const getLibrarySummary = () => request('GET', '/api/v1/library/summary');
+/** One page of album records: query {state?, flag?, source?, q?, sort?, limit?, offset?}; {items, total}. */
+export const listAlbumRecords = (query) => request('GET', '/api/v1/library/albums', query);
+export const listPlaylistRecords = (query) => request('GET', '/api/v1/library/playlists', query);
+/** One record with its tracks and their slots (RecordDetail); 404 resource_not_found. */
+export const getRecord = (kind, id) =>
+  rec(kind) === 'playlists' ? request('GET', `/api/v1/library/playlists/${encodeURIComponent(id)}`) : request('GET', `/api/v1/library/albums/${encodeURIComponent(id)}`);
+/** Queues the record's run now; body {codec?, songs?, now?}: a codec adds that quality as another slot. */
+export const downloadRecord = (kind, id, body = {}) => request('POST', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}/download`, undefined, { body });
+/** Downloads again: body {what: all|audio|lyrics|covers, slot?, songs?, codecs?, states?}; 409 run_active. */
+export const resetRecord = (kind, id, body) => request('POST', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}/reset`, undefined, { body });
+export const pauseRecord = (kind, id) => request('POST', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}/pause`);
+export const resumeRecord = (kind, id) => request('POST', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}/resume`);
+/** Removes a record; its files and runs stay. 409 run_active. */
+export const deleteRecord = (kind, id) => request('DELETE', `/api/v1/library/${rec(kind)}/${encodeURIComponent(id)}`);
+/** Resets every record a filter selects: body {what, filter, kind?, states?}; {reset, skipped_active}. */
+export const resetRecords = (body) => request('POST', '/api/v1/library/reset', undefined, { body });
+/** Adds that wait for a catalog read: query {state?: pending|failed}; {items: PendingAdd[]}. */
+export const listPendingAdds = (query) => request('GET', '/api/v1/library/pending', query);
+export const retryPendingAdd = (id) => request('POST', `/api/v1/library/pending/${encodeURIComponent(id)}/retry`);
+export const deletePendingAdd = (id) => request('DELETE', `/api/v1/library/pending/${encodeURIComponent(id)}`);
+/** Starts a disk check of the library, or of one record ({kind, id}); body.force marks even when most files are missing. 202 {check}. */
+export const startCheck = (body = {}) => request('POST', '/api/v1/library/check', undefined, { body });
+/** The running or last disk check: {check} (null before the first). */
+export const getCheck = () => request('GET', '/api/v1/library/check');
+
+// The Apple Music account library cache.
+/** {available, reason?, state, current?, last_sync?, counts, ...} (AppleLibraryStatus). */
+export const getAppleLibraryStatus = () => request('GET', '/api/v1/apple-library/status');
+/** Starts a full sync; 409 apple_library_sync_running, 503 apple_library_unavailable. */
+export const syncAppleLibrary = () => request('POST', '/api/v1/apple-library/sync', undefined, { body: { mode: 'full' } });
+/** One page of a kind (albums, songs, playlists, artists): query {sort?, order?, q?, limit?, offset?}. */
+export const listAppleLibrary = (kind, query) => request('GET', `/api/v1/apple-library/${encodeURIComponent(kind)}`, query);
+/** A library playlist's tracks in order (AppleLibraryTracks). */
+export const listAppleLibraryTracks = (id) => request('GET', `/api/v1/apple-library/playlists/${encodeURIComponent(id)}/tracks`);
+
 /** Stream URLs; StreamClient appends ?cursor=. */
 export const feedStreamUrl = () => resolveUrl('/api/v1/downloads/events');
 export const jobStreamUrl = (id) => resolveUrl(`/api/v1/downloads/${encodeURIComponent(id)}/events`);

@@ -258,7 +258,7 @@ func TestSimulateModeSkipsWrapperStorefrontCheck(t *testing.T) {
 	cfg := config.Default()
 	cfg.Simulate.Enabled = true
 	downloader := newTestDownloader(&Downloader{cfg: cfg}) // no wrapper wired at all
-	if err := downloader.validateStorefront(context.Background(), "cn"); err != nil {
+	if err := downloader.validateStorefront(context.Background(), "cn", "the account storefront"); err != nil {
 		t.Fatalf("simulate mode must not require a running wrapper, got: %v", err)
 	}
 }
