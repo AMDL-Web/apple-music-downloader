@@ -123,3 +123,59 @@ func TestAlbumCatalogFailures(t *testing.T) {
 		assertErrorCode(t, requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1", ""), tt.status, tt.code)
 	}
 }
+
+// motionCatalog is fakeCatalog with the optional animated-cover read.
+type motionCatalog struct {
+	*fakeCatalog
+	art   applemusic.MotionArtwork
+	err   error
+	asked int
+}
+
+func (m *motionCatalog) MotionArtworkViaWebToken(_ context.Context, storefront, id string) (applemusic.MotionArtwork, error) {
+	m.asked++
+	return m.art, m.err
+}
+
+// An album carries its animated cover and the cover's own palette, read
+// alongside it; a failed read, or the read turned off, leaves them out and
+// the album answers as before.
+func TestAlbumCarriesItsAnimatedCoverWhenItCanBeRead(t *testing.T) {
+	art := applemusic.MotionArtwork{Square: "https://mvod.itunes.apple.com/a/square.m3u8", Tall: "https://mvod.itunes.apple.com/a/tall.m3u8",
+		SquareColors: applemusic.ArtworkColors{BgColor: "5c6786", TextColor1: "ffffff", TextColor2: "eeeeee", TextColor3: "dddddd", TextColor4: "cccccc"}}
+	catalog := &motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, art: art}
+	recorder := requestJSON(t, newLookupServer(catalog, nil), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
+	}
+	got := decodeBody(t, recorder.Body.Bytes())
+	for key, want := range map[string]string{
+		"motion_artwork_url": art.Square, "motion_artwork_tall_url": art.Tall, "motion_artwork_bg_color": "5c6786",
+		"motion_artwork_text_color1": "ffffff", "motion_artwork_text_color4": "cccccc", "artwork_bg_color": "101010",
+	} {
+		if got[key] != want {
+			t.Errorf("%s = %v, want %s", key, got[key], want)
+		}
+	}
+
+	for name, c := range map[string]struct {
+		catalog *motionCatalog
+		mutate  func(*config.Config)
+		asked   int
+	}{
+		"read fails": {&motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, err: errors.New("no editorialVideo")}, nil, 1},
+		"turned off": {&motionCatalog{fakeCatalog: &fakeCatalog{t: t, album: sampleAlbum()}, art: art}, func(c *config.Config) { c.Catalog.MotionArtworkEnabled = false }, 0},
+	} {
+		recorder := requestJSON(t, newLookupServer(c.catalog, c.mutate), http.MethodGet, "/api/v1/albums/1783644603?storefront=CN", "")
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d, body %s", name, recorder.Code, recorder.Body.String())
+		}
+		got := decodeBody(t, recorder.Body.Bytes())
+		if _, ok := got["motion_artwork_url"]; ok || got["title"] != "Two Discs" {
+			t.Errorf("%s: album = %v", name, got)
+		}
+		if c.catalog.asked != c.asked {
+			t.Errorf("%s: the animated cover was asked for %d times, want %d", name, c.catalog.asked, c.asked)
+		}
+	}
+}

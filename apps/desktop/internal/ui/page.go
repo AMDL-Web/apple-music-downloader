@@ -125,16 +125,31 @@ func clip(s string, n int) string {
 	return string([]rune(s)[:n-1]) + "…"
 }
 
-// pagePalette lights the album screen: its download's palette, the motion
-// cover's while that plays, else the album's.
+// pagePalette lights the album screen: the motion cover's palette while
+// that plays, else its download's, else the album's.
 func (a *App) pagePalette(c *ui.Context) Palette {
 	s := a.Store
+	if master, pal := a.pageMotion(); pal.OK && a.motionShown(c, master) {
+		return pal
+	}
 	if j := s.Detail(); j != nil {
-		if pal := jobPalette(j, a.motionShown(c, j.MotionArtworkURL)); pal.OK {
+		if pal := jobPalette(j, false); pal.OK {
 			return pal
 		}
 	}
 	return albumOf(&s.Search.Album).pal
+}
+
+// pageMotion is the album screen's motion cover and its palette: its
+// download's, else the album's, which an album not downloaded yet is read
+// with.
+func (a *App) pageMotion() (string, Palette) {
+	s := a.Store
+	if j := s.Detail(); j != nil && j.MotionArtworkURL != "" {
+		return j.MotionArtworkURL, jobPalette(j, true)
+	}
+	al := albumOf(&s.Search.Album)
+	return al.motion, al.motionPal
 }
 
 // albumScreen is the one page of an album and of a download: an album with
@@ -158,10 +173,8 @@ func (a *App) albumScreen(c *ui.Context, k *Tokens, page float32) {
 	}
 	s.WatchConfig()
 	l := pageHero(c, page)
-	var video *ui.VideoPlayer
-	if j != nil {
-		video = a.motionPlayer(c, j.MotionArtworkURL)
-	}
+	master, _ := a.pageMotion()
+	video := a.motionPlayer(c, master)
 	pal := a.pagePalette(c)
 	hc := heroColorsFor(pal, k)
 	if in {

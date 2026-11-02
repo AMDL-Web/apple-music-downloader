@@ -139,6 +139,10 @@ type albumFacts struct {
 	tracks                              int
 	length                              time.Duration
 	pal                                 Palette
+	// motion is the album's motion cover once it is read, and motionPal
+	// that cover's own palette (jobPalette says why).
+	motion    string
+	motionPal Palette
 }
 
 func albumOf(p *store.AlbumPage) albumFacts {
@@ -163,6 +167,9 @@ func albumOf(p *store.AlbumPage) albumFacts {
 		}
 		if pal := ParsePalette(al.ArtworkBgColor, al.ArtworkTextColor1, al.ArtworkTextColor2, al.ArtworkTextColor3, al.ArtworkTextColor4); pal.OK {
 			f.pal = pal
+		}
+		if f.motion = al.MotionArtworkURL; f.motion != "" {
+			f.motionPal = ParsePalette(al.MotionArtworkBgColor, al.MotionArtworkTextColor1, al.MotionArtworkTextColor2, al.MotionArtworkTextColor3, al.MotionArtworkTextColor4)
 		}
 	}
 	if len(date) >= 4 {

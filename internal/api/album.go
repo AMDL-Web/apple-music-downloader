@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/domain"
@@ -33,6 +34,17 @@ type albumResponse struct {
 	ContentRating      string   `json:"content_rating,omitempty"`
 	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string `json:"audio_traits,omitempty"`
+	// MotionArtwork* are the album's animated cover and its palette, with the
+	// names and meaning of the Job fields of the same name, read alongside
+	// the album (albumMotion): absent when it has none or the read did not
+	// answer in time.
+	MotionArtworkURL        string `json:"motion_artwork_url,omitempty"`
+	MotionArtworkTallURL    string `json:"motion_artwork_tall_url,omitempty"`
+	MotionArtworkBgColor    string `json:"motion_artwork_bg_color,omitempty"`
+	MotionArtworkTextColor1 string `json:"motion_artwork_text_color1,omitempty"`
+	MotionArtworkTextColor2 string `json:"motion_artwork_text_color2,omitempty"`
+	MotionArtworkTextColor3 string `json:"motion_artwork_text_color3,omitempty"`
+	MotionArtworkTextColor4 string `json:"motion_artwork_text_color4,omitempty"`
 	// Library is unknown (nil) without a LibraryService or when the stats
 	// did not finish within the request's time.
 	Library *domain.LibraryState `json:"library,omitempty"`
@@ -72,13 +84,66 @@ func (s *Server) getAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), lookupTimeout)
 	defer cancel()
+	motion := s.albumMotion(ctx, storefront, id)
 	album, err := s.catalog.Album(ctx, storefront, id)
 	if err != nil {
 		s.writeCatalogError(ctx, w, r, err, lookupTimeout, nil, "album failed", "album_id", id, "storefront", storefront)
 		return
 	}
 	library, onDisk := s.albumOnDisk(ctx, album)
-	writeJSON(w, http.StatusOK, newAlbumResponse(storefront, id, album, library, onDisk))
+	resp := newAlbumResponse(storefront, id, album, library, onDisk)
+	if art := motion(); !art.IsZero() {
+		resp.MotionArtworkURL, resp.MotionArtworkTallURL = art.Square, art.Tall
+		resp.MotionArtworkBgColor, resp.MotionArtworkTextColor1 = art.SquareColors.BgColor, art.SquareColors.TextColor1
+		resp.MotionArtworkTextColor2, resp.MotionArtworkTextColor3 = art.SquareColors.TextColor2, art.SquareColors.TextColor3
+		resp.MotionArtworkTextColor4 = art.SquareColors.TextColor4
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// albumMotionWait is how long GET /albums/{id} waits for the album's
+// animated cover once the album itself is read: the cover is decoration,
+// read alongside, and never holds the answer up for long.
+const albumMotionWait = 1500 * time.Millisecond
+
+// motionArtworkReader reads an album's animated cover, an optional read
+// (applemusic.CatalogClient.MotionArtworkViaWebToken).
+type motionArtworkReader interface {
+	MotionArtworkViaWebToken(ctx context.Context, storefront, id string) (applemusic.MotionArtwork, error)
+}
+
+// albumMotion starts reading album id's animated cover beside the album's
+// own read and returns the wait for it. The wait gives the zero
+// MotionArtwork, no cover, when catalog.motion_artwork_enabled is off, the
+// catalog has no such read, the read fails, or it has not answered
+// albumMotionWait after the wait starts, once the album is read: it is
+// optional, and its failure is "not available", never the album's.
+func (s *Server) albumMotion(ctx context.Context, storefront, id string) func() applemusic.MotionArtwork {
+	reader, ok := s.catalog.(motionArtworkReader)
+	if !ok || !s.currentConfig().Catalog.MotionArtworkEnabled {
+		return func() applemusic.MotionArtwork { return applemusic.MotionArtwork{} }
+	}
+	got := make(chan applemusic.MotionArtwork, 1)
+	go func() {
+		// An album without an animated cover answers an error too; either
+		// way there is none to show.
+		art, err := reader.MotionArtworkViaWebToken(ctx, storefront, id)
+		if err != nil {
+			art = applemusic.MotionArtwork{}
+		}
+		got <- art
+	}()
+	return func() applemusic.MotionArtwork {
+		wait := time.NewTimer(albumMotionWait)
+		defer wait.Stop()
+		select {
+		case art := <-got:
+			return art
+		case <-wait.C:
+		case <-ctx.Done():
+		}
+		return applemusic.MotionArtwork{}
+	}
 }
 
 // newAlbumResponse builds the answer; onDisk, in album.Tracks order, is nil

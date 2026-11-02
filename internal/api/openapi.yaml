@@ -3943,6 +3943,34 @@ components:
           description: True when the catalog marks the album isMasteredForItunes; absent otherwise.
         audio_traits:
           $ref: '#/components/schemas/AudioTraits'
+        motion_artwork_url:
+          type: string
+          description: >-
+            The album's animated cover (1:1), as Job.motion_artwork_url, read
+            alongside the album while catalog.motion_artwork_enabled is on. An
+            optional read: absent when the album has none, the read fails, or it
+            does not answer within 1.5 seconds of the album's own read.
+        motion_artwork_tall_url:
+          type: string
+          description: The 3:4 variant (motionDetailTall); present and absent with motion_artwork_url.
+        motion_artwork_bg_color:
+          type: string
+          description: >-
+            Background color for the 1:1 animated cover, as
+            Job.motion_artwork_bg_color: that variant's own palette, not
+            artwork_bg_color. Present and absent with motion_artwork_url.
+        motion_artwork_text_color1:
+          type: string
+          description: Primary text color paired with motion_artwork_bg_color.
+        motion_artwork_text_color2:
+          type: string
+          description: Secondary text color paired with motion_artwork_bg_color.
+        motion_artwork_text_color3:
+          type: string
+          description: Tertiary text color paired with motion_artwork_bg_color.
+        motion_artwork_text_color4:
+          type: string
+          description: Quaternary text color paired with motion_artwork_bg_color.
         library:
           $ref: '#/components/schemas/LibraryState'
           description: >-

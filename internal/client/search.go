@@ -158,6 +158,15 @@ type Album struct {
 	ContentRating      string   `json:"content_rating,omitempty"`
 	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string `json:"audio_traits,omitempty"`
+	// MotionArtwork* are the album's animated cover and its own palette, as
+	// on a job; empty when it has none or the backend could not read it.
+	MotionArtworkURL        string `json:"motion_artwork_url,omitempty"`
+	MotionArtworkTallURL    string `json:"motion_artwork_tall_url,omitempty"`
+	MotionArtworkBgColor    string `json:"motion_artwork_bg_color,omitempty"`
+	MotionArtworkTextColor1 string `json:"motion_artwork_text_color1,omitempty"`
+	MotionArtworkTextColor2 string `json:"motion_artwork_text_color2,omitempty"`
+	MotionArtworkTextColor3 string `json:"motion_artwork_text_color3,omitempty"`
+	MotionArtworkTextColor4 string `json:"motion_artwork_text_color4,omitempty"`
 	// Library is how many of the songs are on disk, checked song by song;
 	// nil when the backend could not check.
 	Library *domain.LibraryState `json:"library,omitempty"`

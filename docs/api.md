@@ -690,6 +690,13 @@ has them, `artist_name`, `duration_ms`, `content_rating`, `apple_digital_master`
 `audio_traits` and `has_lyrics`. The whole list comes in one answer; there is no paging.
 `storefront` is a two-letter code, default `catalog.default_storefront`.
 
+With `catalog.motion_artwork_enabled` on, the album's animated cover is read alongside it:
+`motion_artwork_url`, `motion_artwork_tall_url` and the square cover's palette
+(`motion_artwork_bg_color`, `motion_artwork_text_color1` to `4`) have the names and meaning
+of the job fields. The read is optional: the fields are absent when the album has no animated
+cover, the read fails, or it does not answer within 1.5 seconds of the album's own read, and
+the album answers either way.
+
 `library` says how many of the songs are on disk and each song's `on_disk` whether it has a
 file at its library path, whichever job wrote it (a song job, this album's, an artist's)
 and at whatever quality. Submitting the album downloads only the songs not on disk, and

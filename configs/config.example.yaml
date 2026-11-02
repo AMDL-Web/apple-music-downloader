@@ -135,12 +135,15 @@ catalog:
   # stations fail and private playlists keep the catalog cover.
   media_user_token: ""
   # bool: true/false. Whether to look up Apple Music animated album covers (attributes.editorialVideo) and
-  # expose them on jobs as motion_artwork_url / motion_artwork_tall_url plus each variant's palette.
+  # expose them on jobs and on GET /api/v1/albums/{id} as motion_artwork_url / motion_artwork_tall_url plus
+  # each variant's palette.
   # Default: true.
   # - true: after a job's input resolves, one extra amp-api request per album runs out of band, on a context
   #     detached from the job. It never blocks or fails a download; the fields appear a moment later via the
-  #     motion_artwork_resolved event. Requires a scraped music.apple.com web-player token.
-  # - false: no lookup, no request, no token scrape. Jobs simply carry no motion artwork fields, which is
+  #     motion_artwork_resolved event. GET /api/v1/albums/{id} makes the same request beside the album's read
+  #     and leaves the fields out when it fails or has not answered 1.5 seconds after the album.
+  #     Requires a scraped music.apple.com web-player token.
+  # - false: no lookup, no request, no token scrape. Jobs and albums simply carry no motion artwork fields, which is
   #     indistinguishable to clients from an album that has no animated cover. Set this if nothing you use
   #     renders animated covers and you would rather not generate undocumented-endpoint traffic.
   # This is the only amp-api traffic the backend makes purely for decoration.

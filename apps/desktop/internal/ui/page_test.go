@@ -297,3 +297,26 @@ func TestAFinishedDownloadsPageSaysHowLongItTook(t *testing.T) {
 		t.Errorf("a finished download's page still shows its average speed")
 	}
 }
+
+// An album not downloaded yet plays the motion cover it is read with, in
+// that cover's own palette; a download of it with a motion cover of its
+// own plays that one.
+func TestAnAlbumNotDownloadedPlaysItsMotionCover(t *testing.T) {
+	a, _ := newTestApp(remoteSettings())
+	p := &a.Store.Search.Album
+	p.ID, p.Status = "1", store.SearchReady
+	p.Album = client.Album{ID: "1", Title: "Album", ArtworkBgColor: "f4f0e8", ArtworkTextColor1: "101010",
+		MotionArtworkURL: "https://mvod.example/album.m3u8", MotionArtworkBgColor: "102030", MotionArtworkTextColor1: "f0e0d0"}
+	master, pal := a.pageMotion()
+	if master != "https://mvod.example/album.m3u8" || !pal.OK || pal.Bg != ui.Hex("102030") || pal.Text1 != ui.Hex("f0e0d0") {
+		t.Errorf("the album's page plays %q in %+v, want its motion cover in that cover's palette", master, pal)
+	}
+
+	a.Store.ApplySnapshot(client.DownloadList{StatusCounts: domain.JobStatusCounts{Completed: 1, Total: 1}, Downloads: []domain.Job{{
+		ID: "j", Type: "album", Status: domain.JobCompleted, Title: "Album",
+		MotionArtworkURL: "https://mvod.example/job.m3u8", MotionArtworkBgColor: "302010", MotionArtworkTextColor1: "e0f0d0"}}})
+	a.Store.OpenDetail("j")
+	if master, pal := a.pageMotion(); master != "https://mvod.example/job.m3u8" || pal.Bg != ui.Hex("302010") {
+		t.Errorf("with its download open the page plays %q in %+v, want the download's", master, pal)
+	}
+}
