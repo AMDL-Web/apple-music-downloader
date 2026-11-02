@@ -260,7 +260,7 @@ describe('made-up catalog', () => {
   });
 
   test('the demo world names no other host and has no motion artwork', async () => {
-    for (const file of ['catalog.js', 'fake-api.js', 'fake-hooks.js', 'boot.js']) {
+    for (const file of ['catalog.js', 'fake-api.js', 'fake-config.js', 'fake-hooks.js', 'boot.js']) {
       assert.doesNotMatch(fs.readFileSync(path.join(here, 'demo', file), 'utf8'), /mzstatic|itunes\.apple\.com/, file);
     }
     const body = await (await call(fresh(), 'GET', '../api/v1/downloads?limit=200')).text();

@@ -7,6 +7,7 @@
 
 import { albums, songs, artists, playlists, find, albumNamed, playlistNamed, albumFor, STOREFRONT } from './catalog.js';
 import { createHookStore } from './fake-hooks.js';
+import { CONFIG, RESTART_KEYS } from './fake-config.js';
 
 const MIN = 60000;
 const HOUR = 60 * MIN;
@@ -97,64 +98,6 @@ const MILESTONES = new Set(['job_queued', 'job_started', 'job_moved', 'resolved_
 const QUEUE_GAP = 2 ** 20;
 const MAX_RUNNING = 3;
 const DECRYPT_ERROR = 'decrypt: wrapper closed the connection while a sample was in flight; 3 attempts used';
-
-const CONFIG = {
-  catalog: {
-    album_track_url_mode: 'song',
-    default_storefront: 'us',
-    language: 'en-US',
-    max_parallel_requests: 16,
-    media_user_token: '',
-    motion_artwork_enabled: false,
-    token_cache_ttl_hours: 12,
-  },
-  download: {
-    alac_max_bit_depth: 24,
-    alac_max_sample_rate: 192000,
-    check_integrity: true,
-    codec_alternative: true,
-    cover_format: 'jpg',
-    cover_size: '5000x5000',
-    downloads_dir: 'data/downloads',
-    embed_cover: true,
-    embed_lyrics: true,
-    force_overwrite: false,
-    integrity_mode: 'quick',
-    library_path_format: 'library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}',
-    lyrics_extras: [],
-    lyrics_files: [],
-    lyrics_timing: 'line',
-    max_attempts: 3,
-    max_parallel_downloads: 16,
-    max_running_jobs: 3,
-    playlist_path_format: 'playlists/{PlaylistName}/{SongNumber:02d}. {SongName}',
-    progress_event_interval_ms: 500,
-    quality_priority: ['alac'],
-    save_album_cover: true,
-    save_artist_cover: true,
-    save_playlist_cover: true,
-    station_path_format: 'stations/{StationName}/{SongNumber:02d}. {SongName}',
-    temp_dir: 'data/tmp',
-  },
-  library_sync: { enabled: false, interval_minutes: 15 },
-  logging: { access_log: false, buffer_size: 2000, console: true, level: 'info' },
-  simulate: { enabled: false, max_speed_kbps: 4096, min_speed_kbps: 512 },
-  wrapper: { address: 'http://wrapper:12340', data_dir: '', login_timeout_seconds: 120, timeout_seconds: 30 },
-};
-
-// The keys a PUT saves for the next start (x-applies: restart in openapi.yaml).
-const RESTART_KEYS = new Set([
-  'logging.console',
-  'logging.buffer_size',
-  'wrapper.address',
-  'wrapper.timeout_seconds',
-  'wrapper.login_timeout_seconds',
-  'catalog.language',
-  'catalog.max_parallel_requests',
-  'catalog.token_cache_ttl_hours',
-  'download.max_running_jobs',
-  'download.max_parallel_downloads',
-]);
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const apiError = (status, code, message, details) => json(status, { error: { code, message, ...(details ? { details } : {}) } });
