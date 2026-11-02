@@ -16,8 +16,9 @@ type Cover struct {
 	Color       float32
 	// Dim darkens a grayscale cover, as a queued or failed job's.
 	Dim float32
-	// Shadow drops the large soft shadow of a hero cover.
-	Shadow bool
+	// Shadow is how much of a hero cover's large soft shadow it drops: 0
+	// none, 1 all of it.
+	Shadow float32
 	// Video, when set, plays over the still: the motion cover, which fades
 	// in once its first frame is there, and out, still playing, once Video
 	// is unset. The still stays underneath as its poster.
@@ -27,8 +28,8 @@ type Cover struct {
 // Show builds the cover.
 func (cv Cover) Show(c *ui.Context) ui.Element {
 	box := ui.Box(c).Size(cv.Size, cv.Size).Radius(cv.Radius).Clip().Background(cv.Placeholder)
-	if cv.Shadow {
-		box.Shadow(0, cv.Size/8, cv.Size/3, 0, ui.RGBA(0, 0, 0, 0.45))
+	if k := min(max(cv.Shadow, 0), 1); k > 0 {
+		box.Shadow(0, k*cv.Size/8, k*cv.Size/3, 0, ui.RGBA(0, 0, 0, 0.45*k))
 	}
 	video := box.AnimateTo("video", map[bool]float32{true: 1, false: 0}[cv.Video != nil], ui.Smooth)
 	// The player that showed last, which a fade out shows.

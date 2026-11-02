@@ -328,3 +328,41 @@ func TestTheTrackCountFliesIntoThePagesLabel(t *testing.T) {
 		t.Errorf("landed, the page still shows the hero's track count")
 	}
 }
+
+// A click on the tile the album page goes back to, while it does, opens
+// the page again at once, from where it is, not after the page is gone.
+func TestAClickOnTheTileGoingBackOpensItAgain(t *testing.T) {
+	a, albums := searchApp(t)
+	a.PageMotion = true
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(0.5)
+	name := albums[1].Name
+	// The tile's cover, which its name labels.
+	tile, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("no tile %q: %q", name, tt.Texts())
+	}
+	if err := tt.Click(name); err != nil {
+		t.Fatal(err)
+	}
+	flyFrames(a, tt, 120)
+	if a.Screen != ScreenAlbum {
+		t.Fatalf("the tile opened %v", a.Screen)
+	}
+	a.Back()
+	tt.Frame()
+	for range 60 {
+		tt.Advance(refresh)
+		if a.fly.travel() < 0.6 {
+			break
+		}
+	}
+	if !a.fly.moving || a.fly.q <= 0 {
+		t.Fatalf("the page is not on its way out: q %.2f", a.fly.q)
+	}
+	tt.ClickAt(tile.X+tile.W/2, tile.Y+tile.H/2)
+	flyFrames(a, tt, 120)
+	if a.Screen != ScreenAlbum || a.fly.q != 1 {
+		t.Errorf("a click on the tile going back left the screen %v, q %.2f", a.Screen, a.fly.q)
+	}
+}

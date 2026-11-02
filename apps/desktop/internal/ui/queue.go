@@ -255,7 +255,7 @@ func (a *App) hero(c *ui.Context, k *Tokens, j *store.Job, compact bool) {
 	hc := a.heroInk(c, pal, k)
 	ui.Row(c).Padding(18, 28, 24, 28).Gap(28).AlignItems(ui.End).Children(func() {
 		a.heroCover(c, j, func() ui.Element {
-			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: true, Video: video}.Show(c)
+			return widgets.Cover{Image: a.Art.Get(j.ArtworkURL, int(size*2)), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: 1, Video: video}.Show(c)
 		})
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(10).Children(func() {
 			a.heroNames(c, k, j, "Downloading now", hc, compact)

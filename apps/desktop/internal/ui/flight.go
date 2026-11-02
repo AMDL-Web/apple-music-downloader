@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -280,9 +281,28 @@ func (a *App) screens(c *ui.Context, k *Tokens, page float32) {
 	}
 	if f.moving {
 		// Neither screen takes the pointer while the page moves; Back and
-		// Escape still turn it round.
-		ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0)
+		// Escape still turn it round, and so does a click, while it goes
+		// out, where its cover lands: the screen under it shows that
+		// cover's place before it takes the pointer again.
+		guard := ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0)
+		if src := f.src[partCover]; !inPage && src.ok {
+			o := guard.LayoutBounds()
+			guard.Children(func() {
+				again := ui.ButtonBase(c.Key("reopen")).Absolute().Left(src.box.X-o.X).Top(src.box.Y-o.Y).Size(src.box.W, src.box.H).
+					Label("Open again").Cursor(ui.CursorPointer)
+				if again.Clicked() {
+					a.reopen()
+				}
+			})
+		}
 	}
+}
+
+// reopen turns the album page going out back in, from where it is: its
+// download is still open until it is gone.
+func (a *App) reopen() {
+	a.fly.closeDetail = false
+	a.push(ScreenAlbum)
 }
 
 // screen builds s.
@@ -459,6 +479,18 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	if p == crosses {
 		el.Opacity(unit((f.q - crossover) / 0.45))
 	}
+}
+
+// flyShadow is how much of its shadow the album page's cover drops in this
+// frame: all of it, but on the way to or from a cover with none, as a
+// tile's or a row's, as much as it has come of the way. The queue's hero
+// drops one as large.
+func (a *App) flyShadow() float32 {
+	f := &a.fly
+	if !f.moving || f.still || !f.src[partCover].ok || strings.HasPrefix(f.from, "hero:") {
+		return 1
+	}
+	return f.travel()
 }
 
 // flyText shows el, a text of the album page set as span in color, at
