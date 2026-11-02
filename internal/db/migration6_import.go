@@ -39,7 +39,8 @@ const (
 //     library-playlist runs name none.
 //   - A job still queued or running ends cancelled with stoppedByUpgrade and
 //     its unfinished items cancelled; its intent becomes a paused pending_adds
-//     row per (kind, catalog id). Stations keep only the run.
+//     row per (kind, catalog id). Stations and library playlists keep only
+//     the run.
 //   - Items become run_items in slot main; events become run_events with
 //     their ids, and the AUTOINCREMENT high-water mark carries over, so SSE
 //     cursors stay valid. item_progress events of terminal runs are dropped.
@@ -343,7 +344,13 @@ func importStoppedIntents(ctx context.Context, tx *sql.Tx, stopped []stoppedRun)
 		}
 		include, hint := "", ""
 		switch kind {
-		case "album", "playlist":
+		case "album":
+		case "playlist":
+			// A library playlist (p.) gets no record: it expands per track
+			// through a library read the migration cannot make.
+			if !strings.HasPrefix(catalogID, "pl.") {
+				continue
+			}
 		case "song":
 			hint = albumHint1x(run.input, catalogID)
 		case "artist":

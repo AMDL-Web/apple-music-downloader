@@ -178,7 +178,7 @@ INSERT INTO library_sync_anchor(position,song_id,song_name,album_name) VALUES
 -- path with the first, and a library playlist (p.), which gets no record.
 -- Albums: one album queued from two storefronts, a legacy four-segment key.
 -- Songs: an album-track link queued. Artists: a queued legacy key. A queued
--- station. Event 30 was handed out and deleted, so the next id is 31.
+-- station and a queued library playlist, which keep only the run. Event 30 was handed out and deleted, so the next id is 31.
 INSERT INTO jobs(id,input,type,storefront,title,artwork_url,curator_name,artwork_bg_color,canonical_key,force,overrides,status,total_items,error,created_at,updated_at) VALUES
 	('j-pl-us','https://music.apple.com/us/playlist/mix/pl.u1','playlist','us','Mix','https://art/mix.jpg','Curator','112233','playlist:us:pl.u1',0,'','completed',3,'','2024-07-15T10:00:00Z','2024-07-15T10:10:00Z'),
 	('j-pl-jp','https://music.apple.com/jp/playlist/mix/pl.u1','playlist','jp','Mix JP','https://art/mixjp.jpg','Curator','445566','playlist:jp:pl.u1',0,'','failed',3,'1 of 3 tracks failed','2024-07-16T10:00:00Z','2024-07-16T10:10:00Z'),
@@ -189,7 +189,8 @@ INSERT INTO jobs(id,input,type,storefront,title,artwork_url,curator_name,artwork
 	('j-queued-song-album','https://music.apple.com/us/album/x/555?i=556','song','us','','','','','song:us:556',0,'','queued',0,'','2024-07-17T03:00:00Z','2024-07-17T03:00:00Z'),
 	('j-legacy','https://music.apple.com/us/album/l/10','album','us','Legacy','','','','album:us:10:0123456789ab',0,'','completed',0,'','2024-07-09T00:00:00Z','2024-07-09T00:00:00Z'),
 	('j-legacy-queued','https://music.apple.com/us/artist/a/20','artist','us','','','','','artist:us:20:abcdef012345',0,'','queued',0,'','2024-07-17T04:00:00Z','2024-07-17T04:00:00Z'),
-	('j-station-queued','https://music.apple.com/us/station/s/ra.2','station','us','','','','','station:us:ra.2',0,'','queued',0,'','2024-07-17T05:00:00Z','2024-07-17T05:00:00Z');
+	('j-station-queued','https://music.apple.com/us/station/s/ra.2','station','us','','','','','station:us:ra.2',0,'','queued',0,'','2024-07-17T05:00:00Z','2024-07-17T05:00:00Z'),
+	('j-pl-lib-queued','https://music.apple.com/library/playlist/p.lib2','playlist','us','','','','','playlist:us:p.lib2',0,'','queued',0,'','2024-07-17T06:00:00Z','2024-07-17T06:00:00Z');
 
 INSERT INTO job_items(id,job_id,adam_id,kind,idx,title,artist,album,duration_ms,has_lyrics,lyrics_status,status,download_progress,decrypt_progress,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved,codec,bit_depth,sample_rate,bitrate,file_size,output_path,error,created_at,updated_at) VALUES
 	('i-pl-us-1','j-pl-us','61','song',1,'A','Artist','Album',1000,1,'fetched','completed',1,1,1,1,1,1,1,'alac',16,44100,0,100,'/music/Playlists/Mix/01 A.m4a','','2024-07-15T10:00:01Z','2024-07-15T10:01:00Z'),

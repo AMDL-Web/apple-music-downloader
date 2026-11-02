@@ -18,7 +18,7 @@ import (
 // stoppedJobs are the rows1x jobs that were queued or running.
 var stoppedJobs = map[string]bool{
 	"j-running": true, "j-queued": true, "j-queued-early": true, "j-album-us9": true, "j-album-jp9": true,
-	"j-queued-song-album": true, "j-legacy-queued": true, "j-station-queued": true,
+	"j-queued-song-album": true, "j-legacy-queued": true, "j-station-queued": true, "j-pl-lib-queued": true,
 }
 
 func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
@@ -138,7 +138,7 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	wantResource := map[string]string{
 		"j-done": "album/1", "j-running": "album/2", "j-legacy": "album/10", "j-album-us9": "album/9", "j-album-jp9": "album/9",
 		"j-pl-us": "playlist/pl.u1", "j-pl-jp": "playlist/pl.u1", "j-pl-other": "playlist/pl.u2",
-		"j-pl-lib": "", "j-failed": "", "j-retried": "", "j-queued": "", "j-legacy-queued": "",
+		"j-pl-lib": "", "j-pl-lib-queued": "", "j-failed": "", "j-retried": "", "j-queued": "", "j-legacy-queued": "",
 	}
 	for id, want := range wantResource {
 		run := after["runs"][id]
@@ -214,6 +214,11 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	for _, key := range []string{"album/2", "song/3", "song/8", "album/9", "song/556", "artist/20"} {
 		if _, ok := gotPending[key]; !ok {
 			t.Errorf("no pending add for %s; have %v", key, gotPending)
+		}
+	}
+	for _, key := range []string{"station/ra.2", "playlist/p.lib2"} {
+		if _, ok := gotPending[key]; ok {
+			t.Errorf("pending add for %s, want none", key)
 		}
 	}
 	if p := gotPending["song/556"]; p.AlbumHint != "555" {
