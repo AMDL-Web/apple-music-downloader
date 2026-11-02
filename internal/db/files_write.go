@@ -233,12 +233,13 @@ func (s *Store) RequestSlot(ctx context.Context, key domain.FileKey, now time.Ti
 }
 
 // FileReset selects the slots ResetFiles re-arms: every slot of the record,
-// or only SongIDs, and only Slot when set.
+// or only SongIDs, only Slot when set, and only slots in States when set.
 type FileReset struct {
 	Kind    domain.ResourceKind
 	ID      string
 	SongIDs []string
 	Slot    string
+	States  []domain.AudioState
 	// QualityPriority, when set, becomes the main slots' codec order.
 	QualityPriority []string
 	Now             time.Time
@@ -277,6 +278,12 @@ func (s *Store) ResetFiles(ctx context.Context, r FileReset) (int64, error) {
 		if r.Slot != "" {
 			where += ` AND slot = ?`
 			args = append(args, r.Slot)
+		}
+		if len(r.States) > 0 {
+			where += ` AND audio_state IN (` + placeholders(len(r.States)) + `)`
+			for _, state := range r.States {
+				args = append(args, string(state))
+			}
 		}
 		res, err := tx.ExecContext(ctx, `UPDATE files SET `+set+` WHERE `+where, args...)
 		if err != nil {
