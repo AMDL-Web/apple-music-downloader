@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -214,6 +215,54 @@ func TestResubmitWaitsForPendingHooks(t *testing.T) {
 	got := manager.SubmitBatch(ctx, []string{"album|us|9"}, nil).Results[0]
 	if got.Status != domain.SubmitDuplicateActive || got.ExistingJobID != jobID {
 		t.Fatalf("resubmit with a pending hook = %+v, want duplicate_active for %s", got, jobID)
+	}
+}
+
+// A retry waits for the previous run's terminal hook too: the hook may still
+// be working on the files a new run would write. It answers ErrJobFinalizing
+// (409 job_finalizing), and goes through once the hook has ended.
+func TestRetryWaitsForPendingHooks(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	var once sync.Once
+	releaseHook := func() { once.Do(func() { close(release) }) }
+	defer releaseHook()
+
+	manager := newTestManager(t)
+	dispatcher := hooks.NewDispatcher(hooks.Config{Enabled: true, Entries: []hooks.Entry{
+		{Name: "slow", Type: "webhook", Events: []string{"job_failed"}, URL: server.URL},
+	}}, manager.Event, slog.Default())
+	manager.SetHooks(dispatcher)
+	ctx := context.Background()
+	jobID := manager.SubmitBatch(ctx, []string{"album|us|9"}, nil).Results[0].Job.ID
+	job := finishJob(t, manager, jobID, domain.JobFailed)
+	dispatcher.Dispatch("job_failed", job, nil)
+	if !manager.HooksPending(jobID) {
+		t.Fatal("hook not pending")
+	}
+
+	if err := manager.Retry(ctx, jobID); !errors.Is(err, ErrJobFinalizing) {
+		after, _ := manager.store.GetJob(ctx, jobID)
+		t.Fatalf("Retry with a pending terminal hook = %v (job now %s), want ErrJobFinalizing", err, after.Status)
+	}
+	if after, err := manager.store.GetJob(ctx, jobID); err != nil || after.Status != domain.JobFailed {
+		t.Fatalf("job after the refused retry = %s, %v; want failed", after.Status, err)
+	}
+
+	releaseHook()
+	deadline := time.Now().Add(5 * time.Second)
+	for manager.HooksPending(jobID) {
+		if time.Now().After(deadline) {
+			t.Fatal("hook still pending 5s after its webhook answered")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := manager.Retry(ctx, jobID); err != nil {
+		t.Fatalf("Retry once the hook ended = %v", err)
 	}
 }
 

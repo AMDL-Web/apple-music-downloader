@@ -417,7 +417,8 @@ Only a `queued` or `running` job can be cancelled: a `completed` or `failed` one
 Finished tracks stay done while their file is still where they recorded it (for a song,
 album or artist track, at its current library path) and `force_overwrite` is off; the
 rest, failed and cancelled ones included, run again. A job still finishing
-its previous run is `409 job_finalizing` (retry a moment later), one whose input is
+its previous run, or whose terminal hook is still running, is `409 job_finalizing`
+(retry once it has ended), one whose input is
 already queued or running again is `409 duplicate_active`, and a full queue is
 `503 queue_full`. A retried job goes to the end of the queue and keeps its `overrides` and
 `created_at`; unlike a resubmit, a retry does not fire the `job_queued` hook.

@@ -14,8 +14,8 @@
 // its terminal event in one store call, and hooks are dispatched only after
 // that write succeeds. A job interrupted by Shutdown (cause ErrShutdown) gets
 // no terminal write at all and stays running for RecoverUnfinished. Delete and
-// requeueLocked refuse a job while m.cancels or m.finalizing still holds it;
-// Delete and a resubmit also wait for its pending hooks.
+// requeueLocked (so a retry and a resubmit alike) refuse a job while m.cancels
+// or m.finalizing still holds it or one of its hooks is still pending.
 //
 // Locking: submitMu serializes SubmitBatch, Retry and RecoverUnfinished. mu
 // guards cancels, finalizing, waiting and unclaimable, and every change to a

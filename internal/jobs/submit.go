@@ -20,12 +20,14 @@ var ErrQueueFull = errors.New("job queue is full")
 // has nothing left to retry.
 var ErrJobNotRetryable = errors.New("only failed or cancelled jobs can be retried")
 
-// ErrJobFinalizing is returned by Retry when the job's row already reads
-// failed but its previous run has not fully wound down (the worker's cancel
-// registration is still in place, or a finalize sequence is dispatching
-// hooks). Retrying in that window would let the old worker's deferred
-// cleanup delete the new run's cancel entry. The window is tiny; callers can
-// simply retry shortly.
+// ErrJobFinalizing is returned by Retry, and turned into duplicate_active by
+// a resubmit, when the job's row already reads finished but its previous run
+// has not fully wound down: the worker's cancel registration is still in
+// place, a finalize sequence is dispatching hooks, or a terminal hook still
+// runs. Requeueing in the first two windows would let the old worker's
+// deferred cleanup delete the new run's cancel entry; in the last, the new
+// run would write the files the hook is still working on. The first two are
+// tiny; a hook can take as long as its timeout. Callers retry later.
 var ErrJobFinalizing = errors.New("job is still finalizing its previous run; retry again shortly")
 
 // SubmitBatch validates and enqueues each url independently, applying

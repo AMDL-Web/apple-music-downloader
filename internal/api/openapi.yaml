@@ -1644,9 +1644,9 @@ paths:
             job_not_retryable: the job is not in the failed or cancelled state;
             duplicate_active: a queued/running job for the same link already
             exists; job_finalizing: the previous run is still wrapping up (the
-            terminal state was just written but worker cleanup/hook dispatch has
-            not finished; the window is very short, so simply retry a moment
-            later).
+            terminal state was just written but worker cleanup or hook dispatch
+            has not finished, or one of its terminal hooks is still running);
+            retry once it has ended.
           content:
             application/json:
               schema:

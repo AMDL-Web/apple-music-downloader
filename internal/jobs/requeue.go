@@ -33,8 +33,8 @@ type requeue struct {
 // and has checked that no other active job holds the job's canonical key.
 //
 // It refuses with ErrJobFinalizing while the previous run's worker or
-// finalize sequence still knows the job (see Retry), and with ErrQueueFull
-// when the wait list is full. Unfinished items return to queued before the
+// finalize sequence still knows the job, or one of its terminal hooks still
+// runs, and with ErrQueueFull when the wait list is full. Unfinished items return to queued before the
 // job becomes claimable; finished items stay, and the next run checks them
 // against the files. It records job_retried with the cause and returns the
 // requeued row.
@@ -46,6 +46,13 @@ func (m *Manager) requeueLocked(ctx context.Context, job domain.Job, r requeue) 
 	// deferred delete remove it, leaving Cancel and Delete blind to the new
 	// run. Same guard as Delete.
 	if m.cancels[job.ID] != nil || m.finalizing[job.ID] {
+		return domain.Job{}, ErrJobFinalizing
+	}
+	// A terminal hook of the previous run may still be working on its files
+	// (moving them, tagging them, telling a media server); a new run would
+	// write or replace them underneath it. The job stays where it is until
+	// the hook ends, as Delete waits for it.
+	if m.hooks.Pending(job.ID) {
 		return domain.Job{}, ErrJobFinalizing
 	}
 	if m.waiting.admitted() >= m.capacity {
@@ -108,11 +115,6 @@ func (m *Manager) enqueue(ctx context.Context, url string, valid ValidationResul
 	}
 	if !found {
 		return m.admitLocked(ctx, url, valid, key, overrides, now)
-	}
-	// A terminal hook of the previous run may still be working on its files;
-	// the job stays where it is until the hook ends, as Delete waits for it.
-	if m.hooks.Pending(prev.ID) {
-		return domain.Job{}, duplicateActiveResult(url, prev.ID), false
 	}
 	job, err := m.requeueLocked(ctx, prev, requeue{
 		cause: domain.RequeueResubmit, replaceOverrides: true, overrides: overrides, createdAt: &now,
