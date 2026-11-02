@@ -19,6 +19,15 @@ import (
 // idleRelease is how long a cover nobody asked for keeps its pixels.
 const idleRelease = 2 * time.Minute
 
+// retryFirst is how long a cover that failed to load waits before it is
+// tried again, doubling with each failure up to retryMost: a view asks for
+// it every frame, so without a retry one dropped request would leave its
+// placeholder for as long as it shows.
+const (
+	retryFirst = 5 * time.Second
+	retryMost  = 5 * time.Minute
+)
+
 // Cache holds decoded covers. Use Get on the UI thread.
 type Cache struct {
 	post    func(func())
@@ -26,13 +35,17 @@ type Cache struct {
 	slots   chan struct{}
 	entries map[string]*entry
 	swept   time.Time
+	// now is time.Now but in tests.
+	now func() time.Time
 }
 
 type entry struct {
 	img     ui.ImageSource
-	failed  bool
 	used    time.Time
 	loading bool
+	// failures counts the loads that failed in a row, the last at failedAt.
+	failures int
+	failedAt time.Time
 }
 
 // New returns a cache that hands decoded covers to the UI thread with post,
@@ -51,6 +64,7 @@ func NewWith(post func(func()), rt http.RoundTripper) *Cache {
 		http:    &http.Client{Transport: rt, Timeout: 30 * time.Second},
 		slots:   make(chan struct{}, 6),
 		entries: map[string]*entry{},
+		now:     time.Now,
 	}
 }
 
@@ -72,14 +86,14 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 	}
 	px = bucket(px)
 	key := URL(template, px)
-	now := time.Now()
+	now := c.now()
 	e := c.entries[key]
 	if e == nil {
 		e = &entry{}
 		c.entries[key] = e
 	}
 	e.used = now
-	if e.img == nil && !e.loading && !e.failed {
+	if e.img == nil && !e.loading && (e.failures == 0 || now.Sub(e.failedAt) >= retryWait(e.failures)) {
 		e.loading = true
 		go c.fetch(key, e)
 	}
@@ -87,6 +101,11 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 		c.sweep(now)
 	}
 	return e.img
+}
+
+// retryWait is how long a cover waits after its nth failure in a row.
+func retryWait(n int) time.Duration {
+	return min(retryFirst<<min(n-1, 10), retryMost)
 }
 
 func bucket(px int) int {
@@ -105,10 +124,13 @@ func (c *Cache) fetch(url string, e *entry) {
 	c.post(func() {
 		e.loading = false
 		if err != nil {
-			e.failed = true
+			e.failures++
+			e.failedAt = c.now()
+			// The view asks again only as it redraws: one is due then.
+			time.AfterFunc(retryWait(e.failures), func() { c.post(func() {}) })
 			return
 		}
-		e.img = img
+		e.img, e.failures = img, 0
 	})
 }
 
@@ -134,8 +156,7 @@ func (c *Cache) load(url string) (ui.ImageSource, error) {
 	return ui.DecodeImage(data)
 }
 
-// sweep drops covers not asked for lately; a failed one is forgotten too,
-// so it is tried again when it shows next.
+// sweep drops covers not asked for lately, failed ones too.
 func (c *Cache) sweep(now time.Time) {
 	c.swept = now
 	for k, e := range c.entries {
