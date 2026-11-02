@@ -623,8 +623,15 @@ it counted against the tracks its `prior_job` resolved, else against `track_coun
 storefront can withhold tracks from an album's track list that `track_count` still counts,
 so a downloaded album with a withheld track reads `partial` until it has a job. A file the
 track list does not name counts too, and an album the catalog gives no `track_count` and
-that has no job reads as `none`; `GET /albums/{id}` checks song by song. An album whose listing does not finish within the search's 10 seconds has no
-`library`. Songs, playlists and artists have none.
+that has no job reads as `none`; `GET /albums/{id}` checks song by song. An album whose
+listing does not finish within the search's 10 seconds has no `library`.
+
+A song hit carries `library` with `tracks_total` 1: whether a file is at its library
+path. The search asks Apple for each song's album in the same request, so placing the
+song costs one file check and no catalog read. Its number is its track number, which is
+the album's numbering only on the first disc: a song on a later disc, one without a track
+number, and every song under a `download.library_path_format` file name that uses
+`{TrackCount}` or `{DiscCount}` have no `library`. Playlists and artists have none.
 
 `in_apple_library` says whether the item is in the signed-in Apple Music account library
 ([Apple library](#apple-library)). The search asks Apple for its own mark on songs, albums

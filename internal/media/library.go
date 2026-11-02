@@ -213,6 +213,40 @@ func (d *Downloader) SongOnDisk(album applemusic.Collection, songID string) (sta
 	return domain.NewLibraryState(count, 1), true
 }
 
+// SongHitStates says, for each song (a search hit), whether a file is at its
+// library path, from the song's own values and its album's (AlbumArtist,
+// AlbumName, AlbumId, AlbumRelease, which a search carries when it includes
+// the song's album): one stat per song and no catalog read. Its number is
+// its trackNumber, which is the album's numbering only on the first disc
+// (albumSongNumbers); a song on a later disc, without a trackNumber or an
+// album, or under a file name that uses {TrackCount} or {DiscCount} (which
+// need the album's track list) has no state (nil), as does each song left
+// when ctx ends.
+func (d *Downloader) SongHitStates(ctx context.Context, songs []applemusic.Song) []*domain.LibraryState {
+	cfg, backend := d.libraryView()
+	segments := strings.Split(cfg.Download.LibraryPathFormat, "/")
+	if segmentReferences(segments[len(segments)-1], "TrackCount", "DiscCount") {
+		return make([]*domain.LibraryState, len(songs))
+	}
+	states := make([]*domain.LibraryState, len(songs))
+	for i, song := range songs {
+		if ctx.Err() != nil {
+			break
+		}
+		if song.AlbumID == "" || song.AlbumArtist == "" || song.TrackNumber < 1 || song.DiscNumber > 1 {
+			continue
+		}
+		album := applemusic.Collection{ID: song.AlbumID, Name: song.AlbumName, Artist: song.AlbumArtist, ReleaseDate: song.AlbumRelease, Tracks: []applemusic.Song{song}}
+		count := 0
+		if _, ok := backend.statOutput(libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1, Number: song.TrackNumber})); ok {
+			count = 1
+		}
+		state := domain.NewLibraryState(count, 1)
+		states[i] = &state
+	}
+	return states
+}
+
 // AlbumFolderStates estimates each album's state from its folder alone: one
 // listing of libraryAlbumDir per album, compared with the summary's
 // TrackCount, and no catalog read, so it suits album cards (search results,

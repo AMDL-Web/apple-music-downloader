@@ -362,6 +362,35 @@ func TestAlbumFolderStatesCountFinishedTracks(t *testing.T) {
 	}
 }
 
+// A song search hit carries its album's values, so its library path is known
+// without reading the album, as long as its number is: on the first disc,
+// its trackNumber. Elsewhere, and under a file name that needs the album's
+// track list, the state is unknown rather than guessed.
+func TestSongHitStatesStatTheSongsLibraryPath(t *testing.T) {
+	cfg := libraryTestConfig(t, false)
+	writeTrackFile(t, libraryFile(cfg, "02. Two.m4a"))
+	album := libraryTestAlbum()
+	one, two := album.Tracks[0], album.Tracks[1]
+	laterDisc := two
+	laterDisc.DiscNumber = 2
+	noAlbum := two
+	noAlbum.AlbumID = ""
+	songs := []applemusic.Song{two, one, laterDisc, noAlbum}
+
+	states := newLibraryTestDownloader(cfg, libraryTestCatalog()).SongHitStates(context.Background(), songs)
+	complete, none := domain.NewLibraryState(1, 1), domain.NewLibraryState(0, 1)
+	if len(states) != 4 || states[0] == nil || *states[0] != complete || states[1] == nil || *states[1] != none || states[2] != nil || states[3] != nil {
+		t.Fatalf("song states = %v, want [complete none nil nil]", states)
+	}
+
+	cfg.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d} of {TrackCount}. {SongName}"
+	for i, state := range newLibraryTestDownloader(cfg, libraryTestCatalog()).SongHitStates(context.Background(), songs) {
+		if state != nil {
+			t.Fatalf("song %d under a {TrackCount} name = %+v, want unknown", i, *state)
+		}
+	}
+}
+
 func TestNewLibraryState(t *testing.T) {
 	for _, tc := range []struct {
 		onDisk, total int

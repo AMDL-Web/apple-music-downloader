@@ -69,7 +69,8 @@ type searchHit struct {
 	// library; absent when that is not known (markAppleLibrary).
 	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
 	// Library is an album hit's state from its folder alone
-	// (LibraryService.AlbumFolderStates); other hits leave it unset.
+	// (LibraryService.AlbumFolderStates) or a song hit's from its library
+	// path (LibraryService.SongHitStates); other hits leave it unset.
 	Library *domain.LibraryState `json:"library,omitempty"`
 }
 
@@ -218,6 +219,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			for _, song := range res.Songs {
 				group.Items = append(group.Items, songHit(storefront, song))
 			}
+			s.markSongFiles(ctx, group.Items, res.Songs)
 			resp.Songs = group
 		case applemusic.SearchAlbums:
 			for _, album := range res.Albums {

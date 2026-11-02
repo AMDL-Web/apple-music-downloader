@@ -15,8 +15,8 @@ const HIT_ART = artWidths(48);
  * A song: a row on the Songs surface. Download is its one focus stop
  * (data-hit-primary). While it is sent, and once the song is in the queue,
  * it is aria-disabled rather than disabled, so focus and the arrow keys
- * stay on it. A search does not say which songs are on disk; a song this
- * page watched download is, and then downloads again instead.
+ * stay on it. A song the search says is on disk (`library`), or one this
+ * page watched download, downloads again instead.
  */
 export function HitRow({ hit, row }) {
   const v = hitView(hit);

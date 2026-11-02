@@ -21,6 +21,10 @@ type LibraryService interface {
 	// AlbumFolderStates estimates each album from one listing of its folder;
 	// an entry is nil when ctx ended first.
 	AlbumFolderStates(ctx context.Context, albums []applemusic.Collection) []*domain.LibraryState
+	// SongHitStates checks each song hit at its library path from the
+	// song's own and its album's values; an entry is nil when the song alone
+	// cannot place it or ctx ended first.
+	SongHitStates(ctx context.Context, songs []applemusic.Song) []*domain.LibraryState
 }
 
 // albumOnDisk is album's library state and, in album.Tracks order, which of
@@ -52,6 +56,20 @@ func (s *Server) songOnDisk(ctx context.Context, storefront string, song applemu
 		return nil
 	}
 	return &state
+}
+
+// markSongFiles sets library on each song hit the song alone places
+// (LibraryService.SongHitStates), within ctx. songs are the songs the hits
+// were made from, in the same order.
+func (s *Server) markSongFiles(ctx context.Context, hits []*searchHit, songs []applemusic.Song) {
+	if s.library == nil || len(songs) == 0 {
+		return
+	}
+	for i, state := range s.library.SongHitStates(ctx, songs) {
+		if i < len(hits) {
+			hits[i].Library = state
+		}
+	}
 }
 
 // markAlbumFolders sets library on each album hit from its folder alone

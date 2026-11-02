@@ -52,8 +52,10 @@ type SearchHit struct {
 	// InAppleLibrary is whether the item is in the user's Apple Music account
 	// library; nil when the backend cannot tell.
 	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
-	// Library is an album hit's state estimated from its library folder;
-	// nil for other hits and when the backend did not count in time.
+	// Library is an album hit's state estimated from its library folder, or
+	// whether a song hit's file is at its library path; nil for other hits,
+	// for a song the search alone cannot place, and when the backend did not
+	// count in time.
 	Library *domain.LibraryState `json:"library,omitempty"`
 }
 

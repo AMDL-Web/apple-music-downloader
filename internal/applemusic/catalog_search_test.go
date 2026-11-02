@@ -52,6 +52,10 @@ func TestSearchMapsTheRecordedResponse(t *testing.T) {
 	if q.Get("term") != "Taylor Swift" || q.Get("types") != "songs,albums,playlists,artists" || q.Get("limit") != "2" || q.Get("l") != "zh-Hans_CN" || q.Has("offset") {
 		t.Fatalf("query = %v", q)
 	}
+	// A song hit's album places it in the library; it comes in the same request.
+	if q.Get("include[songs]") != "albums" {
+		t.Fatalf("include[songs] = %q, want albums", q.Get("include[songs]"))
+	}
 
 	if got := []string{res.Songs[0].ID, res.Songs[1].ID}; !reflect.DeepEqual(got, []string{"6814997425", "6775527443"}) || len(res.Songs) != 2 {
 		t.Fatalf("song ids = %v", got)
@@ -107,7 +111,7 @@ func TestSearchMapsPlaylists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q := req.Query(); q.Get("types") != "playlists" || q.Get("limit") != "2" {
+	if q := req.Query(); q.Get("types") != "playlists" || q.Get("limit") != "2" || q.Has("include[songs]") {
 		t.Fatalf("query = %v", q)
 	}
 	if len(res.Playlists) != 2 || len(res.Songs)+len(res.Albums)+len(res.Artists) != 0 {

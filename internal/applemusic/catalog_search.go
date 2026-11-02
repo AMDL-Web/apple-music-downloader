@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -67,7 +68,8 @@ type searchGroup[T any] struct {
 // hit as in the user's library (extend=inLibrary, no extra request). The mark
 // is optional: Apple leaves it out for an unusable token, and a search Apple
 // refuses because of the token is asked again without it, so the token never
-// fails a search.
+// fails a search. A song hit carries its album's values (Song.AlbumArtist,
+// AlbumRelease and AlbumID), read in the same request.
 func (c *CatalogClient) Search(ctx context.Context, storefront, term string, types []SearchType, limit, offset int, mediaUserToken string) (SearchResults, error) {
 	names := make([]string, 0, len(types))
 	for _, t := range types {
@@ -78,6 +80,11 @@ func (c *CatalogClient) Search(ctx context.Context, storefront, term string, typ
 		"types": []string{strings.Join(names, ",")},
 		"limit": []string{strconv.Itoa(limit)},
 		"l":     []string{c.cfg.Language},
+	}
+	if slices.Contains(types, SearchSongs) {
+		// A song hit's album (artist, name, release) places it in the
+		// library, at no extra request.
+		params.Set("include[songs]", "albums")
 	}
 	if offset > 0 {
 		params.Set("offset", strconv.Itoa(offset))

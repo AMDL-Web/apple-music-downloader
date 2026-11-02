@@ -3783,6 +3783,15 @@ components:
               description: True when the catalog marks the song isAppleDigitalMaster; absent otherwise.
             audio_traits:
               $ref: '#/components/schemas/AudioTraits'
+            library:
+              $ref: '#/components/schemas/LibraryState'
+              description: >-
+                Whether a file is at the song's library path (tracks_total 1),
+                placed from the song and its album as the search returned
+                them, with no further catalog read. Absent for a song past its
+                album's first disc, without a track number, under a
+                library_path_format file name that uses {TrackCount} or
+                {DiscCount}, and when the check did not finish in time.
     SearchAlbum:
       allOf:
         - $ref: '#/components/schemas/SearchHit'

@@ -62,6 +62,22 @@ func (f *fakeLibrary) AlbumFolderStates(_ context.Context, albums []applemusic.C
 	return out
 }
 
+func (f *fakeLibrary) SongHitStates(_ context.Context, songs []applemusic.Song) []*domain.LibraryState {
+	out := make([]*domain.LibraryState, len(songs))
+	for i, song := range songs {
+		if song.AlbumID == "" {
+			continue
+		}
+		n := 0
+		if f.onDisk[song.ID] {
+			n = 1
+		}
+		state := domain.NewLibraryState(n, 1)
+		out[i] = &state
+	}
+	return out
+}
+
 func newLibraryServer(catalog CatalogService, library LibraryService) http.Handler {
 	return (&Server{cfg: config.NewStore(config.Default()), catalog: catalog, library: library, appleLibrary: &fakeAppleLibrary{}}).Routes()
 }
@@ -249,6 +265,35 @@ func TestAlbumCardsCountTheTracksTheirJobResolved(t *testing.T) {
 		if got := hit["library"]; !reflect.DeepEqual(got, want) {
 			t.Errorf("%s album library = %v, want %v", path, got, want)
 		}
+	}
+}
+
+// A song hit the search placed (its album came with it) says whether its
+// file is on disk; one the library cannot place has no library.
+func TestSearchMarksSongHitsOnDisk(t *testing.T) {
+	results := sampleSearch()
+	placed := results.Songs[0]
+	placed.ID, placed.AlbumID, placed.AlbumArtist = "s-on-disk", "6814997249", "Taylor Swift"
+	missing := placed
+	missing.ID = "s-missing"
+	results.Songs = append(results.Songs, placed, missing)
+	library := &fakeLibrary{onDisk: map[string]bool{"s-on-disk": true}}
+	recorder := requestJSON(t, newLibraryServer(&fakeCatalog{t: t, search: results}, library), http.MethodGet, "/api/v1/search?term=taylor&types=songs", "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
+	}
+	items := decodeBody(t, recorder.Body.Bytes())["songs"].(map[string]any)["items"].([]any)
+	got := make([]any, len(items))
+	for i, item := range items {
+		got[i] = item.(map[string]any)["library"]
+	}
+	want := []any{
+		nil,
+		map[string]any{"state": "complete", "tracks_on_disk": float64(1), "tracks_total": float64(1)},
+		map[string]any{"state": "none", "tracks_on_disk": float64(0), "tracks_total": float64(1)},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("song hit libraries = %v, want %v", got, want)
 	}
 }
 
