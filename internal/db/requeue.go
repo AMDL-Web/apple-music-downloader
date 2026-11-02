@@ -21,7 +21,7 @@ var ErrJobNotFinished = errors.New("job is not finished")
 // hold several finished rows for a key; only the newest is reused, the others
 // stay as they are.
 func (s *Store) FindLatestFinishedJobByKey(ctx context.Context, canonicalKey string) (domain.Job, bool, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM jobs j
+	row := s.db.QueryRowContext(ctx, `SELECT `+jobColumns+` FROM runs j
 		WHERE j.canonical_key=? AND j.status IN (?,?,?)
 		ORDER BY j.created_at DESC, j.rowid DESC LIMIT 1`,
 		canonicalKey, string(domain.JobCompleted), string(domain.JobFailed), string(domain.JobCancelled))
@@ -66,7 +66,7 @@ func (s *Store) RequeueJob(ctx context.Context, id string, p RequeueParams) erro
 	if p.CreatedAt != nil {
 		createdAt = formatTime(*p.CreatedAt)
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE jobs SET status=?, error='', started_at=NULL, finished_at=NULL,
+	res, err := s.db.ExecContext(ctx, `UPDATE runs SET status=?, error='', started_at=NULL, finished_at=NULL,
 			queue_order=?, updated_at=?,
 			overrides=CASE WHEN ? THEN ? ELSE overrides END,
 			created_at=COALESCE(?, created_at)
@@ -89,7 +89,7 @@ func (s *Store) RequeueJob(ctx context.Context, id string, p RequeueParams) erro
 		return nil
 	}
 	var status string
-	if err := s.db.QueryRowContext(ctx, `SELECT status FROM jobs WHERE id=?`, id).Scan(&status); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT status FROM runs WHERE id=?`, id).Scan(&status); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrJobNotFound
 		}

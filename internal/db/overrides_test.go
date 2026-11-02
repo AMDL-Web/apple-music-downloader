@@ -36,7 +36,7 @@ func TestGetJobFailsOnCorruptOverrides(t *testing.T) {
 
 	// Corrupt the column behind the store's back: the load must fail loudly
 	// instead of silently running the job with the global config.
-	if _, err := store.db.ExecContext(ctx, `UPDATE jobs SET overrides='{broken' WHERE id=?`, job.ID); err != nil {
+	if _, err := store.db.ExecContext(ctx, `UPDATE runs SET overrides='{broken' WHERE id=?`, job.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.GetJob(ctx, job.ID); err == nil || !strings.Contains(err.Error(), "decode overrides") {
@@ -65,7 +65,7 @@ func TestRemovedOverrideKeysDoNotBlockHistoricalJobLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := `{"media_user_token":"old-token","hooks":["notify"],"downloads_dir":"/elsewhere","max_parallel_tracks":64,"embed_lyrics":false,"force_overwrite":true}`
-	if _, err := store.db.ExecContext(ctx, `UPDATE jobs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
+	if _, err := store.db.ExecContext(ctx, `UPDATE runs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -87,7 +87,7 @@ func TestRemovedOverrideKeysDoNotBlockHistoricalJobLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stored string
-	if err := store.db.QueryRowContext(ctx, `SELECT overrides FROM jobs WHERE id=?`, job.ID).Scan(&stored); err != nil {
+	if err := store.db.QueryRowContext(ctx, `SELECT overrides FROM runs WHERE id=?`, job.ID).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
 	if stored != `{"force_overwrite":true}` {

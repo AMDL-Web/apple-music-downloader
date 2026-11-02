@@ -393,25 +393,34 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
 
 ## Database
 
-The first start applies migrations in one transaction each:
+Back up `amdl.db` first: the upgrade rewrites the 1.x tables and cannot be undone
+except from that copy. The first start runs one migration in one transaction
+(schema version 6, `PRAGMA user_version`):
 
-- records the schema version (`PRAGMA user_version`);
-- adds `jobs.started_at` / `jobs.finished_at`, backfilled from job events (`started_at`
-  from the latest run, after the last retry);
-- folds a 1.x `jobs.force = 1` into `overrides.force_overwrite = true`, then drops
-  `jobs.force`, `jobs.done_items` and `jobs.failed_items` (counters are derived from
-  items);
-- indexes `job_events(type, created_at)` for `/stats`;
-- deletes `item_progress` events of finished jobs (live progress telemetry; item rows
-  keep their final state);
-- adds `job_items.download_bytes` (0 for every existing row), the bytes of encrypted
-  media an item's current attempt has received. A database that has run this
-  migration is refused by an older build, so a release candidate from before it cannot
-  open the file again;
-- adds `jobs.queue_order`, numbering every existing job in `created_at` order so queued
-  jobs keep running in the order they were submitted. A build from before this migration
-  refuses the file too; back up `amdl.db` before trying one.
+- every 1.x job becomes a run in `runs`, keeping its id, type, values and
+  timestamps; `started_at` and `finished_at` are backfilled from its events
+  (`started_at` from the latest run, after the last retry). Album runs and catalog
+  playlist (`pl.`) runs name their record by catalog id without the storefront, so
+  the `us` and `jp` runs of one album point at one album;
+- `jobs.force`, `jobs.done_items` and `jobs.failed_items` are dropped (counters are
+  derived from items), and `force_overwrite` is removed from every run's overrides.
+  Other removed fields there (a `media_user_token`, `hooks`) stay in the row and are
+  ignored when it is read;
+- items become `run_items` (slot `main`) and events become `run_events` with their
+  ids, so SSE cursors stay valid; `item_progress` events of finished runs are deleted
+  (live progress telemetry; item rows keep their final state);
+- a job that was still queued or running ends `cancelled` with the error "stopped by
+  the 2.0 upgrade", and its unfinished items are cancelled. What it asked for is kept
+  as a paused add, one per album, playlist, song or artist; it becomes a paused record
+  on the first start and downloads into `library/` only after you resume it. A
+  queued station keeps only its cancelled run;
+- completed and skipped items of catalog playlist jobs become downloaded files of a
+  paused playlist record at the paths they were saved to (playlist paths did not
+  change). Files from finished song, album and artist jobs (in `songs/`, `albums/`,
+  `artists/`) do not count as downloaded;
+- the library-sync anchor is kept as it is.
 
-No migration rewrites `jobs.overrides`: a row that still holds a `media_user_token`,
-`hooks` or another removed field is read with it ignored, and the job's next terminal
-write stores only the fields that remain.
+A database written by a 2.0 release candidate (schema 2 to 5) is refused with a
+message; move it aside and start again. A 1.x build opening the migrated file finds no
+`jobs` table and starts with an empty one (inferred, not tested); a release candidate
+refuses it as newer.

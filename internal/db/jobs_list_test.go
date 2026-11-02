@@ -153,7 +153,7 @@ func TestListJobsOrdersFractionalTimes(t *testing.T) {
 
 	// Persist via CreateJob uses formatTime; assert fixed-width storage.
 	var stored string
-	if err := store.db.QueryRowContext(ctx, `SELECT created_at FROM jobs WHERE id='frac'`).Scan(&stored); err != nil {
+	if err := store.db.QueryRowContext(ctx, `SELECT created_at FROM runs WHERE id='frac'`).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
 	wantStored := "2024-07-10T12:00:00.123000000Z"

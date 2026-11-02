@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -31,22 +33,44 @@ func isUniqueConstraintErr(err error) bool {
 	return false
 }
 
-// Store is the SQLite-backed persistence for jobs, items, events and the
-// library-sync anchor. It is safe for concurrent use; the pool has one
-// connection, so statements run one at a time.
+// Store is the SQLite-backed persistence for records, their files, runs,
+// items, events, pending adds and the library-sync anchor. It is safe for
+// concurrent use; the pool has one connection, so statements run one at a
+// time.
 type Store struct {
-	db *sql.DB
+	db           *sql.DB
+	downloadsDir atomic.Pointer[string]
 }
 
-// Open opens (creating if needed) the database at path and applies every
+// Options configure OpenWith.
+type Options struct {
+	// DownloadsDir is download.downloads_dir. File paths under it are stored
+	// relative to it (domain.File.Path); empty stores paths as given.
+	DownloadsDir string
+}
+
+// Open is OpenWith without options.
+func Open(path string) (*Store, error) { return OpenWith(path, Options{}) }
+
+// OpenWith opens (creating if needed) the database at path and applies every
 // pending schema migration (see migrations) before returning. Nothing
-// schema-shaped runs after that.
-func Open(path string) (*Store, error) {
+// schema-shaped runs after that. A database a 2.0 release candidate wrote is
+// refused before anything is written to it.
+func OpenWith(path string, opts Options) (*Store, error) {
 	database, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
 	database.SetMaxOpenConns(1)
+	version, err := schemaVersion(context.Background(), database)
+	if err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+	if isReleaseCandidateSchema(version) {
+		_ = database.Close()
+		return nil, refuseReleaseCandidate(filepath.Base(path), version)
+	}
 	// WAL avoids a full journal+fsync cycle per statement; NORMAL still syncs
 	// at WAL checkpoints, which is durable enough for resumable download state.
 	for _, pragma := range []string{
@@ -59,7 +83,7 @@ func Open(path string) (*Store, error) {
 			return nil, fmt.Errorf("apply %s: %w", pragma, err)
 		}
 	}
-	if err := migrate(context.Background(), database, latestSchemaVersion()); err != nil {
+	if err := migrateWith(context.Background(), database, latestSchemaVersion(), migrationEnv{downloadsDir: opts.DownloadsDir, now: now()}); err != nil {
 		_ = database.Close()
 		return nil, err
 	}
@@ -74,8 +98,17 @@ func Open(path string) (*Store, error) {
 			}
 		}
 	}
-	return &Store{db: database}, nil
+	store := &Store{db: database}
+	store.SetDownloadsDir(opts.DownloadsDir)
+	return store, nil
 }
+
+// SetDownloadsDir changes the directory file paths are stored relative to,
+// for writes from now on. Stored paths are not rewritten.
+func (s *Store) SetDownloadsDir(dir string) { s.downloadsDir.Store(&dir) }
+
+// storedPath is p as files.path stores it under the current downloads dir.
+func (s *Store) storedPath(p string) string { return storedPath(*s.downloadsDir.Load(), p) }
 
 func (s *Store) Close() error { return s.db.Close() }
 

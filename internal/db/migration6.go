@@ -1,0 +1,351 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+)
+
+// migrateTo6 is the 2.0 schema: records (albums, tracks, playlists,
+// playlist_tracks), their per-slot files, the runs that download them
+// (runs, run_items, run_events, today's jobs tables plus a record
+// reference), pending_adds, record sources and tombstones, check-disk
+// history and the Apple library cache. It creates every table, imports the
+// 1.x jobs tables that migrateTo1 left (import1x) and drops them, in one
+// transaction. Frozen like every shipped migration: statuses, types and
+// sources are spelled as literals.
+//
+// The release candidates' migrations 2 to 5 are folded into the CREATE
+// statements: the timing columns, counters derived from items,
+// download_bytes, queue_order and the Apple library tables.
+func migrateTo6(ctx context.Context, tx *sql.Tx, env migrationEnv) error {
+	if err := execAll(ctx, tx, schemaV6); err != nil {
+		return err
+	}
+	if err := import1x(ctx, tx, env); err != nil {
+		return err
+	}
+	return execAll(ctx, tx, []string{
+		`DROP TABLE job_events`,
+		`DROP TABLE job_items`,
+		`DROP TABLE jobs`,
+	})
+}
+
+var schemaV6 = []string{
+	// runs is today's jobs with a record reference. canonical_key and its
+	// partial index stay until the planner keys runs by record.
+	// TODO(P2): drop canonical_key and idx_runs_active_key.
+	`CREATE TABLE runs (
+		id TEXT PRIMARY KEY,
+		input TEXT NOT NULL,
+		type TEXT NOT NULL,
+		storefront TEXT,
+		title TEXT NOT NULL DEFAULT '',
+		artwork_url TEXT NOT NULL DEFAULT '',
+		artist_name TEXT NOT NULL DEFAULT '',
+		artist_url TEXT NOT NULL DEFAULT '',
+		curator_name TEXT NOT NULL DEFAULT '',
+		release_date TEXT NOT NULL DEFAULT '',
+		genre TEXT NOT NULL DEFAULT '',
+		artwork_bg_color TEXT NOT NULL DEFAULT '',
+		artwork_text_color1 TEXT NOT NULL DEFAULT '',
+		artwork_text_color2 TEXT NOT NULL DEFAULT '',
+		artwork_text_color3 TEXT NOT NULL DEFAULT '',
+		artwork_text_color4 TEXT NOT NULL DEFAULT '',
+		motion_artwork_url TEXT NOT NULL DEFAULT '',
+		motion_artwork_tall_url TEXT NOT NULL DEFAULT '',
+		motion_artwork_bg_color TEXT NOT NULL DEFAULT '',
+		motion_artwork_text_color1 TEXT NOT NULL DEFAULT '',
+		motion_artwork_text_color2 TEXT NOT NULL DEFAULT '',
+		motion_artwork_text_color3 TEXT NOT NULL DEFAULT '',
+		motion_artwork_text_color4 TEXT NOT NULL DEFAULT '',
+		motion_artwork_tall_bg_color TEXT NOT NULL DEFAULT '',
+		motion_artwork_tall_text_color1 TEXT NOT NULL DEFAULT '',
+		motion_artwork_tall_text_color2 TEXT NOT NULL DEFAULT '',
+		motion_artwork_tall_text_color3 TEXT NOT NULL DEFAULT '',
+		motion_artwork_tall_text_color4 TEXT NOT NULL DEFAULT '',
+		canonical_key TEXT NOT NULL DEFAULT '',
+		overrides TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL,
+		total_items INTEGER NOT NULL DEFAULT 0,
+		error TEXT NOT NULL DEFAULT '',
+		started_at TEXT,
+		finished_at TEXT,
+		queue_order INTEGER NOT NULL DEFAULT 0,
+		resource_kind TEXT,
+		resource_id TEXT,
+		trigger TEXT NOT NULL DEFAULT 'manual',
+		priority INTEGER NOT NULL DEFAULT 1,
+		plan TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE UNIQUE INDEX idx_runs_active_key ON runs(canonical_key)
+		WHERE status IN ('queued','running') AND canonical_key <> ''`,
+	`CREATE UNIQUE INDEX idx_runs_active_resource ON runs(resource_kind, resource_id)
+		WHERE status IN ('queued','running') AND resource_id IS NOT NULL`,
+	`CREATE INDEX idx_runs_queued_order ON runs(priority, queue_order) WHERE status = 'queued'`,
+	`CREATE INDEX idx_runs_resource ON runs(resource_kind, resource_id, created_at) WHERE resource_id IS NOT NULL`,
+	`CREATE TABLE run_items (
+		id TEXT PRIMARY KEY,
+		job_id TEXT NOT NULL,
+		adam_id TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		idx INTEGER NOT NULL,
+		title TEXT NOT NULL DEFAULT '',
+		artist TEXT NOT NULL DEFAULT '',
+		album TEXT NOT NULL DEFAULT '',
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		artwork_url TEXT NOT NULL DEFAULT '',
+		has_lyrics INTEGER NOT NULL DEFAULT 0,
+		lyrics_status TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL,
+		download_progress REAL NOT NULL DEFAULT 0,
+		decrypt_progress REAL NOT NULL DEFAULT 0,
+		download_bytes INTEGER NOT NULL DEFAULT 0,
+		progress_resolved INTEGER NOT NULL DEFAULT 0,
+		progress_remuxed INTEGER NOT NULL DEFAULT 0,
+		progress_verified INTEGER NOT NULL DEFAULT 0,
+		progress_tagged INTEGER NOT NULL DEFAULT 0,
+		progress_saved INTEGER NOT NULL DEFAULT 0,
+		codec TEXT NOT NULL DEFAULT '',
+		bit_depth INTEGER NOT NULL DEFAULT 0,
+		sample_rate INTEGER NOT NULL DEFAULT 0,
+		bitrate INTEGER NOT NULL DEFAULT 0,
+		file_size INTEGER NOT NULL DEFAULT 0,
+		retry_kind TEXT NOT NULL DEFAULT '',
+		attempt INTEGER NOT NULL DEFAULT 0,
+		max_attempts INTEGER NOT NULL DEFAULT 0,
+		status_message TEXT NOT NULL DEFAULT '',
+		output_path TEXT NOT NULL DEFAULT '',
+		error TEXT NOT NULL DEFAULT '',
+		slot TEXT NOT NULL DEFAULT 'main',
+		owner_kind TEXT NOT NULL DEFAULT '',
+		owner_id TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		FOREIGN KEY(job_id) REFERENCES runs(id)
+	)`,
+	`CREATE INDEX idx_run_items_job_id ON run_items(job_id, idx)`,
+	`CREATE TABLE run_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		job_id TEXT NOT NULL,
+		item_id TEXT NOT NULL DEFAULT '',
+		type TEXT NOT NULL,
+		phase TEXT NOT NULL DEFAULT '',
+		message TEXT NOT NULL DEFAULT '',
+		payload TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX idx_run_events_job_id_id ON run_events(job_id, id)`,
+	`CREATE INDEX idx_run_events_type_created ON run_events(type, created_at)`,
+	`CREATE TABLE albums (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL DEFAULT '',
+		artist_name TEXT NOT NULL DEFAULT '',
+		artist_id TEXT NOT NULL DEFAULT '',
+		artist_url TEXT NOT NULL DEFAULT '',
+		release_date TEXT NOT NULL DEFAULT '',
+		genre TEXT NOT NULL DEFAULT '',
+		upc TEXT NOT NULL DEFAULT '',
+		content_rating TEXT NOT NULL DEFAULT '',
+		artwork TEXT NOT NULL DEFAULT '',
+		resolved_at TEXT,
+		release_track_count INTEGER NOT NULL DEFAULT 0,
+		withheld_count INTEGER NOT NULL DEFAULT 0,
+		storefront_read TEXT NOT NULL DEFAULT '',
+		catalog_state TEXT NOT NULL DEFAULT 'ok',
+		wanted_all INTEGER NOT NULL DEFAULT 0,
+		paused INTEGER NOT NULL DEFAULT 0,
+		priority INTEGER NOT NULL DEFAULT 1,
+		overrides TEXT NOT NULL DEFAULT '',
+		cover_state TEXT NOT NULL DEFAULT 'pending',
+		artist_cover_state TEXT NOT NULL DEFAULT 'pending',
+		tracks_wanted INTEGER NOT NULL DEFAULT 0,
+		tracks_done INTEGER NOT NULL DEFAULT 0,
+		tracks_failed INTEGER NOT NULL DEFAULT 0,
+		tracks_given_up INTEGER NOT NULL DEFAULT 0,
+		tracks_missing INTEGER NOT NULL DEFAULT 0,
+		state TEXT NOT NULL DEFAULT 'none',
+		added_at TEXT NOT NULL,
+		refreshed_at TEXT,
+		completed_at TEXT,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX idx_albums_state ON albums(state, added_at)`,
+	`CREATE INDEX idx_albums_pick ON albums(paused, priority)`,
+	`CREATE TABLE tracks (
+		album_id TEXT NOT NULL,
+		song_id TEXT NOT NULL,
+		disc_number INTEGER NOT NULL DEFAULT 0,
+		track_number INTEGER NOT NULL DEFAULT 0,
+		song_number INTEGER NOT NULL DEFAULT 0,
+		name TEXT NOT NULL DEFAULT '',
+		artist_name TEXT NOT NULL DEFAULT '',
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		has_lyrics INTEGER NOT NULL DEFAULT 0,
+		isrc TEXT NOT NULL DEFAULT '',
+		wanted INTEGER NOT NULL DEFAULT 0,
+		availability TEXT NOT NULL DEFAULT 'available',
+		list_position INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (album_id, song_id)
+	)`,
+	`CREATE INDEX idx_tracks_song ON tracks(song_id)`,
+	`CREATE TABLE playlists (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL DEFAULT '',
+		curator_name TEXT NOT NULL DEFAULT '',
+		artwork TEXT NOT NULL DEFAULT '',
+		resolved_at TEXT,
+		storefront_read TEXT NOT NULL DEFAULT '',
+		catalog_state TEXT NOT NULL DEFAULT 'ok',
+		last_modified TEXT NOT NULL DEFAULT '',
+		paused INTEGER NOT NULL DEFAULT 0,
+		priority INTEGER NOT NULL DEFAULT 1,
+		overrides TEXT NOT NULL DEFAULT '',
+		cover_state TEXT NOT NULL DEFAULT 'pending',
+		tracks_wanted INTEGER NOT NULL DEFAULT 0,
+		tracks_done INTEGER NOT NULL DEFAULT 0,
+		tracks_failed INTEGER NOT NULL DEFAULT 0,
+		tracks_given_up INTEGER NOT NULL DEFAULT 0,
+		tracks_missing INTEGER NOT NULL DEFAULT 0,
+		state TEXT NOT NULL DEFAULT 'none',
+		added_at TEXT NOT NULL,
+		refreshed_at TEXT,
+		completed_at TEXT,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX idx_playlists_state ON playlists(state, added_at)`,
+	`CREATE INDEX idx_playlists_pick ON playlists(paused, priority)`,
+	`CREATE TABLE playlist_tracks (
+		playlist_id TEXT NOT NULL,
+		song_id TEXT NOT NULL,
+		position INTEGER NOT NULL DEFAULT 0,
+		name TEXT NOT NULL DEFAULT '',
+		artist_name TEXT NOT NULL DEFAULT '',
+		album_name TEXT NOT NULL DEFAULT '',
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		has_lyrics INTEGER NOT NULL DEFAULT 0,
+		availability TEXT NOT NULL DEFAULT 'available',
+		removed_at TEXT,
+		PRIMARY KEY (playlist_id, song_id)
+	)`,
+	`CREATE INDEX idx_playlist_tracks_song ON playlist_tracks(song_id)`,
+	// One row per slot. The primary key's (owner_kind, owner_id) prefix
+	// serves the per-owner reads, so there is no separate owner index.
+	`CREATE TABLE files (
+		owner_kind TEXT NOT NULL,
+		owner_id TEXT NOT NULL,
+		song_id TEXT NOT NULL,
+		slot TEXT NOT NULL,
+		audio_state TEXT NOT NULL DEFAULT 'pending',
+		lyrics_state TEXT NOT NULL DEFAULT '',
+		quality_priority TEXT,
+		codec TEXT NOT NULL DEFAULT '',
+		quality_label TEXT NOT NULL DEFAULT '',
+		bit_depth INTEGER NOT NULL DEFAULT 0,
+		sample_rate INTEGER NOT NULL DEFAULT 0,
+		bitrate INTEGER NOT NULL DEFAULT 0,
+		file_size INTEGER NOT NULL DEFAULT 0,
+		path TEXT NOT NULL DEFAULT '',
+		failures INTEGER NOT NULL DEFAULT 0,
+		next_attempt_at TEXT,
+		last_error TEXT NOT NULL DEFAULT '',
+		last_run_id TEXT NOT NULL DEFAULT '',
+		completed_at TEXT,
+		checked_at TEXT,
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (owner_kind, owner_id, song_id, slot)
+	)`,
+	`CREATE UNIQUE INDEX idx_files_path ON files(path) WHERE path <> ''`,
+	`CREATE INDEX idx_files_due ON files(audio_state, next_attempt_at)`,
+	`CREATE TABLE pending_adds (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		kind TEXT NOT NULL,
+		catalog_id TEXT NOT NULL,
+		album_hint TEXT NOT NULL DEFAULT '',
+		source TEXT NOT NULL,
+		priority INTEGER NOT NULL DEFAULT 1,
+		paused INTEGER NOT NULL DEFAULT 0,
+		include TEXT NOT NULL DEFAULT '',
+		overrides TEXT NOT NULL DEFAULT '',
+		added_at TEXT NOT NULL,
+		attempts INTEGER NOT NULL DEFAULT 0,
+		last_error TEXT NOT NULL DEFAULT '',
+		state TEXT NOT NULL DEFAULT 'pending'
+	)`,
+	`CREATE UNIQUE INDEX idx_pending_adds_catalog ON pending_adds(kind, catalog_id)`,
+	`CREATE TABLE resource_sources (
+		resource_kind TEXT NOT NULL,
+		resource_id TEXT NOT NULL,
+		source TEXT NOT NULL,
+		added_at TEXT NOT NULL,
+		PRIMARY KEY (resource_kind, resource_id, source)
+	)`,
+	`CREATE TABLE deleted_resources (
+		resource_kind TEXT NOT NULL,
+		resource_id TEXT NOT NULL,
+		name TEXT NOT NULL DEFAULT '',
+		deleted_at TEXT NOT NULL,
+		PRIMARY KEY (resource_kind, resource_id)
+	)`,
+	`CREATE TABLE check_runs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		trigger TEXT NOT NULL,
+		scope TEXT NOT NULL DEFAULT '',
+		started_at TEXT NOT NULL,
+		finished_at TEXT,
+		checked INTEGER NOT NULL DEFAULT 0,
+		missing INTEGER NOT NULL DEFAULT 0,
+		aborted_reason TEXT NOT NULL DEFAULT ''
+	)`,
+	// The Apple library cache: a copy of what Apple holds, refilled by the
+	// next full sync, so not user data in the migration sense.
+	`CREATE TABLE apple_library_items (
+		kind TEXT NOT NULL,
+		item_id TEXT NOT NULL,
+		catalog_id TEXT NOT NULL DEFAULT '',
+		url TEXT NOT NULL DEFAULT '',
+		name TEXT NOT NULL DEFAULT '',
+		artist_name TEXT NOT NULL DEFAULT '',
+		album_name TEXT NOT NULL DEFAULT '',
+		artwork_url TEXT NOT NULL DEFAULT '',
+		description TEXT NOT NULL DEFAULT '',
+		genre TEXT NOT NULL DEFAULT '',
+		release_date TEXT NOT NULL DEFAULT '',
+		track_count INTEGER NOT NULL DEFAULT 0,
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		track_number INTEGER NOT NULL DEFAULT 0,
+		disc_number INTEGER NOT NULL DEFAULT 0,
+		date_added TEXT NOT NULL DEFAULT '',
+		last_modified TEXT NOT NULL DEFAULT '',
+		version_hash TEXT NOT NULL DEFAULT '',
+		playlist_kind TEXT NOT NULL DEFAULT '',
+		add_order INTEGER NOT NULL DEFAULT 0,
+		fingerprint TEXT NOT NULL DEFAULT '',
+		seen_run TEXT NOT NULL DEFAULT '',
+		tracks_version TEXT NOT NULL DEFAULT '',
+		tracks_read_at TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (kind, item_id)
+	)`,
+	`CREATE INDEX idx_apple_library_items_catalog ON apple_library_items(kind, catalog_id) WHERE catalog_id <> ''`,
+	`CREATE INDEX idx_apple_library_items_order ON apple_library_items(kind, add_order)`,
+	`CREATE TABLE apple_library_playlist_tracks (
+		playlist_id TEXT NOT NULL,
+		position INTEGER NOT NULL,
+		song_id TEXT NOT NULL DEFAULT '',
+		catalog_id TEXT NOT NULL DEFAULT '',
+		url TEXT NOT NULL DEFAULT '',
+		name TEXT NOT NULL DEFAULT '',
+		artist_name TEXT NOT NULL DEFAULT '',
+		album_name TEXT NOT NULL DEFAULT '',
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		artwork_url TEXT NOT NULL DEFAULT '',
+		PRIMARY KEY (playlist_id, position)
+	)`,
+	`CREATE TABLE apple_library_meta (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	)`,
+}

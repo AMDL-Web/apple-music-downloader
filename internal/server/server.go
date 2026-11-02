@@ -170,7 +170,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 		return fmt.Errorf("create database dir: %w", err)
 	}
 
-	store, err := db.Open(cfg.Database.Path)
+	store, err := db.OpenWith(cfg.Database.Path, db.Options{DownloadsDir: cfg.Download.DownloadsDir})
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

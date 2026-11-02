@@ -124,7 +124,7 @@ func TestJobTimingRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	var finishedCol sql.NullString
-	if err := store.db.QueryRowContext(ctx, `SELECT finished_at FROM jobs WHERE id=?`, job.ID).Scan(&finishedCol); err != nil {
+	if err := store.db.QueryRowContext(ctx, `SELECT finished_at FROM runs WHERE id=?`, job.ID).Scan(&finishedCol); err != nil {
 		t.Fatal(err)
 	}
 	if finishedCol.Valid {
@@ -339,7 +339,7 @@ func TestJobDisplayMetadataRoundTrip(t *testing.T) {
 	assertMeta("FindActiveJobByKey", active)
 }
 
-// TestCreateJobEnforcesActiveKeyUniqueness exercises idx_jobs_active_key
+// TestCreateJobEnforcesActiveKeyUniqueness exercises idx_runs_active_key
 // directly. It is the backstop under the manager's dedup lookup — the thing
 // that closes the race between two concurrent submits of the same key — so it
 // has to keep rejecting a genuine duplicate no matter what goes into the key,

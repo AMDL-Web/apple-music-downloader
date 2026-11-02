@@ -172,6 +172,41 @@ INSERT INTO job_events(id,job_id,item_id,type,phase,message,payload,created_at) 
 INSERT INTO library_sync_anchor(position,song_id,song_name,album_name) VALUES
 	(0,'i.song1','Newest','Album N'),
 	(1,'i.song2','Older','Album O');
+
+-- Playlists: one catalog playlist downloaded from two storefronts (the jp run
+-- is newer and wins per song), a second playlist whose only file shares a
+-- path with the first, and a library playlist (p.), which gets no record.
+-- Albums: one album queued from two storefronts, a legacy four-segment key.
+-- Songs: an album-track link queued. Artists: a queued legacy key. A queued
+-- station. Event 30 was handed out and deleted, so the next id is 31.
+INSERT INTO jobs(id,input,type,storefront,title,artwork_url,curator_name,artwork_bg_color,canonical_key,force,overrides,status,total_items,error,created_at,updated_at) VALUES
+	('j-pl-us','https://music.apple.com/us/playlist/mix/pl.u1','playlist','us','Mix','https://art/mix.jpg','Curator','112233','playlist:us:pl.u1',0,'','completed',3,'','2024-07-15T10:00:00Z','2024-07-15T10:10:00Z'),
+	('j-pl-jp','https://music.apple.com/jp/playlist/mix/pl.u1','playlist','jp','Mix JP','https://art/mixjp.jpg','Curator','445566','playlist:jp:pl.u1',0,'','failed',3,'1 of 3 tracks failed','2024-07-16T10:00:00Z','2024-07-16T10:10:00Z'),
+	('j-pl-other','https://music.apple.com/us/playlist/other/pl.u2','playlist','us','Other','','','','playlist:us:pl.u2',0,'','completed',1,'','2024-07-14T10:00:00Z','2024-07-14T10:10:00Z'),
+	('j-pl-lib','https://music.apple.com/library/playlist/p.lib1','playlist','us','Favourites','','','','playlist:us:p.lib1',0,'','completed',1,'','2024-07-14T11:00:00Z','2024-07-14T11:10:00Z'),
+	('j-album-us9','https://music.apple.com/us/album/n/9','album','us','','','','','album:us:9',0,'{"codec_alternative":false}','queued',0,'','2024-07-17T01:00:00Z','2024-07-17T01:00:00Z'),
+	('j-album-jp9','https://music.apple.com/jp/album/n/9','album','jp','','','','','album:jp:9',0,'','queued',0,'','2024-07-17T02:00:00Z','2024-07-17T02:00:00Z'),
+	('j-queued-song-album','https://music.apple.com/us/album/x/555?i=556','song','us','','','','','song:us:556',0,'','queued',0,'','2024-07-17T03:00:00Z','2024-07-17T03:00:00Z'),
+	('j-legacy','https://music.apple.com/us/album/l/10','album','us','Legacy','','','','album:us:10:0123456789ab',0,'','completed',0,'','2024-07-09T00:00:00Z','2024-07-09T00:00:00Z'),
+	('j-legacy-queued','https://music.apple.com/us/artist/a/20','artist','us','','','','','artist:us:20:abcdef012345',0,'','queued',0,'','2024-07-17T04:00:00Z','2024-07-17T04:00:00Z'),
+	('j-station-queued','https://music.apple.com/us/station/s/ra.2','station','us','','','','','station:us:ra.2',0,'','queued',0,'','2024-07-17T05:00:00Z','2024-07-17T05:00:00Z');
+
+INSERT INTO job_items(id,job_id,adam_id,kind,idx,title,artist,album,duration_ms,has_lyrics,lyrics_status,status,download_progress,decrypt_progress,progress_resolved,progress_remuxed,progress_verified,progress_tagged,progress_saved,codec,bit_depth,sample_rate,bitrate,file_size,output_path,error,created_at,updated_at) VALUES
+	('i-pl-us-1','j-pl-us','61','song',1,'A','Artist','Album',1000,1,'fetched','completed',1,1,1,1,1,1,1,'alac',16,44100,0,100,'/music/Playlists/Mix/01 A.m4a','','2024-07-15T10:00:01Z','2024-07-15T10:01:00Z'),
+	('i-pl-us-2','j-pl-us','62','song',2,'B','Artist','Album',2000,0,'','skipped_existing',0,0,1,0,0,0,0,'',0,0,0,200,'/music/Playlists/Mix/02 B.m4a','','2024-07-15T10:00:01Z','2024-07-15T10:02:00Z'),
+	('i-pl-us-3','j-pl-us','63','song',3,'C','Artist','Album',3000,0,'','failed',0,0,1,0,0,0,0,'',0,0,0,0,'','no manifest','2024-07-15T10:00:01Z','2024-07-15T10:03:00Z'),
+	('i-pl-jp-1','j-pl-jp','61','song',1,'A','Artist','Album',1000,1,'fetched','completed',1,1,1,1,1,1,1,'aac-lc',0,44100,256000,50,'/music/Playlists/Mix JP/01 A.m4a','','2024-07-16T10:00:01Z','2024-07-16T10:01:00Z'),
+	('i-pl-jp-2','j-pl-jp','62','song',2,'B','Artist','Album',2000,0,'','failed',0,0,1,0,0,0,0,'',0,0,0,0,'','decrypt failed','2024-07-16T10:00:01Z','2024-07-16T10:02:00Z'),
+	('i-pl-jp-3','j-pl-jp','63','song',3,'C','Artist','Album',3000,0,'none','completed',1,1,1,1,1,1,1,'alac',24,96000,0,300,'/music/Playlists/Mix JP/03 C.m4a','','2024-07-16T10:00:01Z','2024-07-16T10:03:00Z'),
+	('i-pl-other-1','j-pl-other','71','song',1,'O','Artist','Album',1000,0,'','completed',1,1,1,1,1,1,1,'alac',16,44100,0,400,'/music/Playlists/Mix/02 B.m4a','','2024-07-14T10:00:01Z','2024-07-14T10:01:00Z'),
+	('i-pl-lib-1','j-pl-lib','81','song',1,'F','Artist','Album',1000,0,'','completed',1,1,1,1,1,1,1,'alac',16,44100,0,500,'/music/Playlists/Favourites/01 F.m4a','','2024-07-14T11:00:01Z','2024-07-14T11:01:00Z'),
+	('i-legacy-1','j-legacy','101','song',1,'L','Artist','Legacy',1000,0,'','completed',1,1,1,1,1,1,1,'alac',16,44100,0,600,'/music/Artist/Legacy/01 L.m4a','','2024-07-09T00:00:01Z','2024-07-09T00:01:00Z');
+
+INSERT INTO job_events(id,job_id,item_id,type,phase,message,payload,created_at) VALUES
+	(28,'j-pl-us','','job_finished','','completed','','2024-07-15T10:10:00Z'),
+	(29,'j-pl-jp','','job_failed','','1 of 3 tracks failed','','2024-07-16T10:10:00Z'),
+	(30,'j-gone','','job_queued','','job queued','','2024-07-16T11:00:00Z');
+DELETE FROM job_events WHERE id = 30;
 `
 
 func create1xDatabase(t *testing.T) string {
@@ -192,9 +227,10 @@ func create1xDatabase(t *testing.T) string {
 
 type tableDump map[string]map[string]any // primary key -> column -> value
 
+// dumpTable reads every row of table, keyed by the SQL expression key.
 func dumpTable(t *testing.T, database *sql.DB, table, key string) tableDump {
 	t.Helper()
-	rows, err := database.Query(`SELECT * FROM ` + table)
+	rows, err := database.Query(`SELECT *, (` + key + `) AS dump_key FROM ` + table)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +253,9 @@ func dumpTable(t *testing.T, database *sql.DB, table, key string) tableDump {
 		for i, col := range cols {
 			row[col] = values[i]
 		}
-		out[fmt.Sprint(row[key])] = row
+		dumpKey := fmt.Sprint(row["dump_key"])
+		delete(row, "dump_key")
+		out[dumpKey] = row
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
@@ -225,13 +263,35 @@ func dumpTable(t *testing.T, database *sql.DB, table, key string) tableDump {
 	return out
 }
 
-func dumpAll(t *testing.T, database *sql.DB) map[string]tableDump {
+// dump1x dumps the user data of a 1.x schema.
+func dump1x(t *testing.T, database *sql.DB) map[string]tableDump {
 	t.Helper()
 	return map[string]tableDump{
 		"jobs":                dumpTable(t, database, "jobs", "id"),
 		"job_items":           dumpTable(t, database, "job_items", "id"),
 		"job_events":          dumpTable(t, database, "job_events", "id"),
 		"library_sync_anchor": dumpTable(t, database, "library_sync_anchor", "position"),
+	}
+}
+
+// dumpAll dumps every table of the 2.0 schema that holds user data, plus
+// the AUTOINCREMENT high-water marks.
+func dumpAll(t *testing.T, database *sql.DB) map[string]tableDump {
+	t.Helper()
+	return map[string]tableDump{
+		"runs":                dumpTable(t, database, "runs", "id"),
+		"run_items":           dumpTable(t, database, "run_items", "id"),
+		"run_events":          dumpTable(t, database, "run_events", "id"),
+		"albums":              dumpTable(t, database, "albums", "id"),
+		"tracks":              dumpTable(t, database, "tracks", "album_id || '/' || song_id"),
+		"playlists":           dumpTable(t, database, "playlists", "id"),
+		"playlist_tracks":     dumpTable(t, database, "playlist_tracks", "playlist_id || '/' || song_id"),
+		"files":               dumpTable(t, database, "files", "owner_kind || '/' || owner_id || '/' || song_id || '/' || slot"),
+		"pending_adds":        dumpTable(t, database, "pending_adds", "kind || '/' || catalog_id"),
+		"resource_sources":    dumpTable(t, database, "resource_sources", "resource_kind || '/' || resource_id || '/' || source"),
+		"deleted_resources":   dumpTable(t, database, "deleted_resources", "resource_kind || '/' || resource_id"),
+		"library_sync_anchor": dumpTable(t, database, "library_sync_anchor", "position"),
+		"sqlite_sequence":     dumpTable(t, database, "sqlite_sequence", "name"),
 	}
 }
 

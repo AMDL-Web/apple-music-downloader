@@ -189,7 +189,7 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 - Counters are disjoint and always present: `total_items`, `completed_items` (written by
   this job), `skipped_items` (already on disk), `failed_items`, `cancelled_items`.
   `total_items` is stored when the input resolves; the other four are always derived
-  from `job_items` by one store query, including when the manager decides the terminal
+  from `run_items` by one store query, including when the manager decides the terminal
   status at finalize. There are no stored per-status counter columns. `done_items` and
   the legacy `force` flag are gone; forcing is `overrides.force_overwrite`.
 - `started_at` is set when a worker first starts the current run and kept across
@@ -280,8 +280,8 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
   `item_completed` event (its `file_size` is the day's `bytes_written`), a job once per
   `job_finished` or `job_failed` event. `hooks` groups `hook_succeeded`/`hook_failed`
   events by hook name. The numbers cover jobs that still exist, since deleting a job
-  deletes its items and events. The window queries use the `job_events(type,
-  created_at)` index of migration 2 (`internal/db#Store.Stats`). A result is cached for
+  deletes its items and events. The window queries use the `run_events(type,
+  created_at)` index (`internal/db#Store.Stats`). A result is cached for
   30 s per `days` value (`statsCacheTTL` in `internal/api`); `generated_at` says when it
   was computed.
 
@@ -297,21 +297,22 @@ client should retry either), and `422 no_urls_accepted` otherwise; the batch bod
 
 ## 4. Storage
 
-- Schema changes are ordered migrations gated by `PRAGMA user_version`. Migration 1
-  brings any 1.x database to the final 1.x schema: it runs, once, everything 1.x ran on
-  every open (`CREATE TABLE IF NOT EXISTS`, the column backfills, progress backfill,
-  timestamp normalization). After that, `Open` does nothing schema-shaped.
-- Migration 2 is the 2.0 schema: `jobs.started_at`/`finished_at` (backfilled from
-  events), drops `jobs.force`, `jobs.done_items` and `jobs.failed_items`, indexes
-  `job_events(type, created_at)` and deletes `item_progress` events of terminal jobs.
-- Migration 3 adds `job_items.download_bytes`, the bytes of encrypted media the current
-  attempt has received (`progress.download_bytes` in the API).
-- Migration 4 adds `jobs.queue_order`, the run order of queued jobs, backfilled in
-  `created_at` order, and a partial index on it for queued jobs.
-- Migrations preserve every row of user data (jobs, items, milestone events,
-  library-sync anchor). A test builds a database from the frozen 1.x schema SQL, inserts
-  rows, migrates, and asserts every row survived and migration 1 changed nothing on a
-  database that was already current.
+- Schema changes are a version map of migrations gated by `PRAGMA user_version`.
+  Migration 1 brings any 1.x database to the final 1.x schema: it runs, once,
+  everything 1.x ran on every open (`CREATE TABLE IF NOT EXISTS`, the column backfills,
+  progress backfill, timestamp normalization). After that, `Open` does nothing
+  schema-shaped.
+- Migration 6 (1 → 6) is the 2.0 schema: records (`albums`, `tracks`, `playlists`,
+  `playlist_tracks`), per-slot `files`, `runs` / `run_items` / `run_events` (the 1.x
+  jobs tables plus a record reference, trigger, priority and plan), `pending_adds`,
+  `resource_sources`, `deleted_resources`, `check_runs` and the Apple library cache.
+  It imports the 1.x jobs tables in the same transaction (`internal/db#import1x`) and
+  drops them. Versions 2 to 5 belonged to the release candidates; `Open` refuses them.
+- Migrations preserve every row of user data (runs, items, milestone events, records,
+  files, the library-sync anchor). A test builds a database from the frozen 1.x schema
+  SQL, inserts rows, migrates, and asserts the counts per table, that every row
+  survived, and that migration 1 changed nothing on a database that was already
+  current.
 - Timestamps are fixed-width UTC text so lexical order is time order.
 
 ## 5. Output paths

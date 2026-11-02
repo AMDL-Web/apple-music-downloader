@@ -39,7 +39,7 @@ func (s *Store) JobMarks(ctx context.Context, types, ids []string) ([]JobMark, e
 		match[i] = "instr(canonical_key, ?) > 0"
 		args = append(args, ":"+id)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, canonical_key, status, created_at, finished_at, total_items FROM jobs
+	rows, err := s.db.QueryContext(ctx, `SELECT id, canonical_key, status, created_at, finished_at, total_items FROM runs
 		WHERE type IN (`+placeholders(len(types))+`) AND status IN (?,?,?) AND (`+strings.Join(match, " OR ")+`)`, args...)
 	if err != nil {
 		return nil, err

@@ -16,7 +16,7 @@ package config
 // and max_parallel_downloads are restart keys that size process-wide pools.
 //
 // QualityPriority is *[]string rather than []string so an explicit empty list
-// survives the JSON round trip through the jobs table; Validate then rejects
+// survives the JSON round trip through the runs table; Validate then rejects
 // it like an empty download.quality_priority. Rows stored before the other
 // keys were removed decode with those keys ignored.
 type DownloadOverrides struct {

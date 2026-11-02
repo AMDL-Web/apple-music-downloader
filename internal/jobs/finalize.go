@@ -138,7 +138,7 @@ func (m *Manager) Delete(ctx context.Context, jobID string) error {
 		cleaner.CleanupJobArtifacts(job)
 	}
 	// Broadcast the persisted tombstone so live overview subscribers can drop the
-	// job immediately; missed broadcasts are replayed from job_events by cursor.
+	// job immediately; missed broadcasts are replayed from run_events by cursor.
 	m.hub.Publish(deleted)
 	logging.FromContext(ctx, m.logger).Info("job deleted", "job_id", jobID)
 	return nil
@@ -202,7 +202,7 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, job domain
 		return
 	}
 	// The reload carries the item counters the terminal decision and the
-	// terminal event payload use, derived by the store from job_items.
+	// terminal event payload use, derived by the store from run_items.
 	latest, loadErr := m.store.GetJob(context.Background(), job.ID)
 	if loadErr == nil {
 		job = latest
