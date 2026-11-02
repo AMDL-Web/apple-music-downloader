@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -120,12 +121,13 @@ func bucket(px int) int {
 func (c *Cache) fetch(url string, e *entry) {
 	c.slots <- struct{}{}
 	defer func() { <-c.slots }()
-	img, err := c.load(url)
+	img, status, err := c.load(url)
 	c.post(func() {
 		e.loading = false
 		if err != nil {
 			e.failures++
 			e.failedAt = c.now()
+			slog.Debug("artwork fetch failed", "url", url, "status", status, "failures", e.failures, "err", err)
 			// The view asks again only as it redraws: one is due then.
 			time.AfterFunc(retryWait(e.failures), func() { c.post(func() {}) })
 			return
@@ -134,26 +136,29 @@ func (c *Cache) fetch(url string, e *entry) {
 	})
 }
 
-func (c *Cache) load(url string) (ui.ImageSource, error) {
+// load reads and decodes the cover at url, with the HTTP status it came
+// with, 0 when none came.
+func (c *Cache) load(url string) (ui.ImageSource, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("artwork %s: %s", url, resp.Status)
+		return nil, resp.StatusCode, fmt.Errorf("artwork %s: %s", url, resp.Status)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return nil, err
+		return nil, resp.StatusCode, err
 	}
-	return ui.DecodeImage(data)
+	img, err := ui.DecodeImage(data)
+	return img, resp.StatusCode, err
 }
 
 // sweep drops covers not asked for lately, failed ones too.
