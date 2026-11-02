@@ -2160,15 +2160,21 @@ paths:
         Starts a failed or cancelled job's download again as a new job, which
         the answer names. For a record's run it resumes the record, re-arms the
         record's failed and given-up slots and queues a run with trigger reset;
-        done slots stay done, and when nothing is left to download it answers
-        200 already_downloaded. For a station it queues a new run of the same
-        link and overrides. The new job fires job_queued like any other.
+        done slots stay done. When no run is queued it answers 200, as POST
+        /library/{kind}/{id}/download does. For a station it queues a new run
+        of the same link and overrides. The new job fires job_queued like any
+        other.
       operationId: retryDownload
       parameters:
         - $ref: '#/components/parameters/JobID'
       responses:
         '200':
-          description: The record has nothing left to download; no job was queued.
+          description: >-
+            A record's run queued nothing: already_downloaded (every wanted
+            track is done) or waiting (slots are left that no run takes now:
+            the queue is full and the scheduler queues it later, a failed slot
+            waits for its automatic retry, the record is gone from the catalog,
+            or only missing files are left, which a reset downloads).
           content:
             application/json:
               schema:
@@ -2177,7 +2183,7 @@ paths:
                 properties:
                   status:
                     type: string
-                    const: already_downloaded
+                    enum: [already_downloaded, waiting]
         '202':
           description: A new job was queued.
           content:
@@ -2203,7 +2209,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          description: queue_full; the job queue is full, retry later.
+          description: queue_full; the job queue is full, retry later (a station's run).
           content:
             application/json:
               schema:

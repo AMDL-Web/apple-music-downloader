@@ -550,6 +550,29 @@ func TestResetAndRetryQueueRunsWithTriggerReset(t *testing.T) {
 	if len(plan.Slots) != 1 || !plan.Slots[0].Replace || plan.Slots[0].FixedPath == "" {
 		t.Fatalf("reset plan = %+v, want the done slot replaced at its stored path", plan.Slots)
 	}
+	if again, err := m.RetryRun(ctx, run.ID); err != nil || again.Job != nil || !again.AlreadyDownloaded {
+		t.Fatalf("retry of a complete record = %+v (%v), want already downloaded", again, err)
+	}
+}
+
+// A retry of a record's run that the full queue cannot take queues nothing
+// and is not "already downloaded": the scheduler queues the record later.
+func TestRetryWithAFullQueueWaits(t *testing.T) {
+	m, _ := newRecordManager(t, &recordProcessor{dir: t.TempDir(), tracks: []string{"1"}}, config.Default())
+	m.capacity = 1
+	ctx := context.Background()
+
+	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
+	if err := m.Cancel(ctx, run.ID); err != nil {
+		t.Fatal(err)
+	}
+	if other := m.SubmitBatch(ctx, []string{"album|us|200"}, nil).Results[0]; other.Job == nil {
+		t.Fatalf("second album = %+v, want a queued run filling the queue", other)
+	}
+	res, err := m.RetryRun(ctx, run.ID)
+	if err != nil || res.Job != nil || res.AlreadyDownloaded {
+		t.Fatalf("retry with a full queue = %+v (%v), want neither a run nor already downloaded", res, err)
+	}
 }
 
 // The library monitor does not add back an album removed from amdl; a

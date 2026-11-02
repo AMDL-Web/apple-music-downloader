@@ -126,6 +126,20 @@ export function bulkLabel(action, n) {
 
 const NAMES_PER_REASON = 3;
 
+const RETRY_NOTES = { already_downloaded: 'already downloaded', waiting: 'waiting' };
+
+/**
+ * What a retry's answer says when it queued no job: "Already downloaded"
+ * (every wanted track is done) or "Waiting to download" (the record waits
+ * for the scheduler: a full queue, a backoff); '' for a queued job.
+ */
+export function retryNote(res) {
+  const s = res && res.status;
+  if (s === 'already_downloaded') return 'Already downloaded';
+  if (s === 'waiting') return 'Waiting to download';
+  return '';
+}
+
 /**
  * The toast after a bulk run of `action` over runLimited outcomes, naming
  * the jobs that failed (grouped by reason, at most three titles each):
@@ -140,7 +154,13 @@ export function bulkSummary(action, outcomes, titleOf = (job) => (job && job.id)
   const total = outcomes.length;
   const failed = outcomes.filter((o) => !o.ok && !actionDone(action, o.error));
   const ok = total - failed.length;
-  if (failed.length === 0) return { message: `${w.did} ${jobs(total)}${w.after}`, role: total === 0 ? 'neutral' : 'success' };
+  if (failed.length === 0) {
+    // A retry that queued nothing says what it answered instead.
+    const notes = action === 'retry' ? Object.entries(RETRY_NOTES).map(([s, words]) => [outcomes.filter((o) => o.ok && o.value && o.value.status === s).length, words]).filter(([n]) => n > 0) : [];
+    const queued = total - notes.reduce((sum, [n]) => sum + n, 0);
+    const parts = [...(queued > 0 || notes.length === 0 ? [`${w.did} ${jobs(queued)}${w.after}`] : []), ...notes.map(([n, words]) => `${n} ${words}`)];
+    return { message: parts.join(' · '), role: total === 0 ? 'neutral' : 'success' };
+  }
   const groups = new Map();
   for (const o of failed) {
     const reason = actionReason(action, o.error);

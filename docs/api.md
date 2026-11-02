@@ -517,10 +517,12 @@ Only a `queued` or `running` job can be cancelled: a `completed` or `failed` one
 `409 job_not_cancellable`, and a `cancelled` one answers `200` again. Cancel on a record's
 run pauses the record (clients label it Pause); a station's run is cancelled.
 A retry is a new job: for a record's run it resumes the record, re-arms its failed and
-given-up slots and answers `202 {status: "queued", job}`, or `200 {status:
-"already_downloaded"}` when nothing is left; for a station it queues the same link again.
-A record or link that already has a queued or running job is `409 duplicate_active`, and a
-full queue is `503 queue_full`.
+given-up slots and answers `202 {status: "queued", job}`, `200 {status:
+"already_downloaded"}` when every wanted track is done, or `200 {status: "waiting"}` when
+slots are left that no run takes now (a full queue, which the scheduler fills later, a
+backoff, a record gone from the catalog, or only missing files, which a reset downloads).
+For a station it queues the same link again, and a full queue is `503 queue_full`. A record
+or link that already has a queued or running job is `409 duplicate_active`.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads/{job_id}/move -d '{"before":"<job_id>"}'

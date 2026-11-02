@@ -9,7 +9,7 @@ import { html, useState } from '../ui/preact.js';
 import { cancelDownload, retryDownload, deleteDownload, createDownload, resetRecord } from '../api.js';
 import { recordHash } from '../lib/route.js';
 import { jobTitle, isUnresolved, inputLabel } from '../lib/format.js';
-import { rowMenu, actionError, bulkSummary } from '../lib/jobactions.js';
+import { rowMenu, actionError, bulkSummary, retryNote } from '../lib/jobactions.js';
 import { useApp, copyText } from '../ui/components.js';
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { MenuButton } from '../ui/menu.js';
@@ -36,7 +36,7 @@ export async function runOne(app, action, job) {
     return false;
   }
   if (action === 'retry') {
-    if (res && res.status === 'already_downloaded') app.toast({ message: `“${jobTitle(job)}” is already downloaded`, role: 'success' });
+    if (retryNote(res)) app.toast({ message: `“${jobTitle(job)}”: ${retryNote(res).toLowerCase()}`, role: 'success' });
     else app.toast(bulkSummary(action, [{ ok: true, item: job }], jobTitle));
   }
   return true;

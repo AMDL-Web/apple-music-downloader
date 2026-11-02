@@ -204,11 +204,12 @@ func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
 
 // retryDownload starts a failed or cancelled run's download again as a new
 // run. For a record run the record's failed and given-up slots are re-armed;
-// what is done stays done. The answer names the new run, or says the record
-// has nothing left to download.
+// what is done stays done. The answer names the new run, or, like POST
+// /library/{kind}/{id}/download, says the record has nothing left to
+// download or waits.
 func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	run, err := s.manager.RetryRun(r.Context(), id)
+	res, err := s.manager.RetryRun(r.Context(), id)
 	if err != nil {
 		switch {
 		case errors.Is(err, jobs.ErrJobNotRetryable):
@@ -222,11 +223,14 @@ func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if run == nil {
+	switch {
+	case res.Job != nil:
+		writeJSON(w, http.StatusAccepted, map[string]any{"status": "queued", "job": res.Job})
+	case res.AlreadyDownloaded:
 		writeJSON(w, http.StatusOK, map[string]any{"status": "already_downloaded"})
-		return
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"status": "waiting"})
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "queued", "job": run})
 }
 
 // moveDownload places a queued job elsewhere in the run order: before or

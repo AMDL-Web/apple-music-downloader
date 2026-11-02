@@ -268,55 +268,63 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 }
 
 // RetryRun starts a failed or cancelled run's download again as a new run
-// and returns it. For a record run it resumes the record, re-arms its failed
-// and given-up slots and queues a run with trigger reset; with nothing left
-// to download it queues nothing and returns nil. For a one-off run (a
-// station) it queues a new run of the same input and overrides.
+// and returns it in Job. For a record run it resumes the record, re-arms its
+// failed and given-up slots and queues a run with trigger reset, like
+// DownloadRecord: with every wanted track done it queues nothing and sets
+// AlreadyDownloaded; with slots left that no run takes now (a full queue,
+// which the scheduler fills later, a backoff, a catalog miss, missing files)
+// it returns neither. For a one-off run (a station) it queues a new run of
+// the same input and overrides, or fails with ErrQueueFull.
 // ErrJobNotRetryable refuses a queued, running or completed run;
 // db.ErrDuplicateActive a record or input with an active run.
-func (m *Manager) RetryRun(ctx context.Context, jobID string) (*domain.Job, error) {
+func (m *Manager) RetryRun(ctx context.Context, jobID string) (RecordDownloadResult, error) {
 	m.submitMu.Lock()
 	defer m.submitMu.Unlock()
 
 	job, err := m.store.GetJob(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, db.ErrJobNotFound
+			return RecordDownloadResult{}, db.ErrJobNotFound
 		}
-		return nil, err
+		return RecordDownloadResult{}, err
 	}
 	if job.Status != domain.JobFailed && job.Status != domain.JobCancelled {
-		return nil, ErrJobNotRetryable
+		return RecordDownloadResult{}, ErrJobNotRetryable
 	}
 	now := time.Now().UTC()
 	if job.ResourceID != "" {
 		if err := m.store.SetPaused(ctx, job.ResourceKind, job.ResourceID, false, now); err != nil {
-			return nil, err
+			return RecordDownloadResult{}, err
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if _, found, err := m.store.ActiveRunID(ctx, job.ResourceKind, job.ResourceID); err != nil {
-			return nil, err
+			return RecordDownloadResult{}, err
 		} else if found {
-			return nil, db.ErrDuplicateActive
+			return RecordDownloadResult{}, db.ErrDuplicateActive
 		}
 		delete(m.backoff, recordKey{job.ResourceKind, job.ResourceID})
 		if _, err := m.store.ResetFiles(ctx, db.FileReset{
 			Kind: job.ResourceKind, ID: job.ResourceID, States: []domain.AudioState{domain.AudioFailed, domain.AudioGivenUp}, Now: now,
 		}); err != nil {
-			return nil, err
+			return RecordDownloadResult{}, err
 		}
 		outcome, run, err := m.afterAddLocked(ctx, job.ResourceKind, job.ResourceID, domain.TriggerReset, now)
-		if err != nil || outcome != AddQueued {
-			return nil, err
+		switch {
+		case err != nil:
+			return RecordDownloadResult{}, err
+		case outcome == AddAlreadyDone:
+			return RecordDownloadResult{AlreadyDownloaded: true}, nil
+		case outcome != AddQueued:
+			return RecordDownloadResult{}, nil
 		}
 		logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", run.ID, "retried_job_id", jobID)
-		return &run, nil
+		return RecordDownloadResult{Job: &run}, nil
 	}
 	if _, found, err := m.store.FindActiveJobByKey(ctx, job.CanonicalKey); err != nil {
-		return nil, err
+		return RecordDownloadResult{}, err
 	} else if found {
-		return nil, db.ErrDuplicateActive
+		return RecordDownloadResult{}, db.ErrDuplicateActive
 	}
 	typ, id := job.Type, ""
 	if t, _, parsedID, ok := ParseCanonicalKey(job.CanonicalKey); ok {
@@ -327,15 +335,15 @@ func (m *Manager) RetryRun(ctx context.Context, jobID string) (*domain.Job, erro
 	run, result, admitted := m.admitLocked(ctx, job.Input, ValidationResult{Type: typ, Storefront: job.Storefront, ID: id}, job.CanonicalKey, job.Overrides, now)
 	if !admitted {
 		if result.Status == domain.SubmitQueueFull {
-			return nil, ErrQueueFull
+			return RecordDownloadResult{}, ErrQueueFull
 		}
 		if result.Status == domain.SubmitDuplicateActive {
-			return nil, db.ErrDuplicateActive
+			return RecordDownloadResult{}, db.ErrDuplicateActive
 		}
-		return nil, errors.New(result.Error.Message)
+		return RecordDownloadResult{}, errors.New(result.Error.Message)
 	}
 	logging.FromContext(ctx, m.logger).Info("job retry queued", "job_id", run.ID, "retried_job_id", jobID)
-	return &run, nil
+	return RecordDownloadResult{Job: &run}, nil
 }
 
 // validationFailure is the result for a URL the processor refused. A
