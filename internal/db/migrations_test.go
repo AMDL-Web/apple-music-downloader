@@ -31,8 +31,8 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	}
 	defer store.Close()
 	ctx := context.Background()
-	if got := userVersion(t, store.db); got != 4 {
-		t.Fatalf("user_version = %d, want 4", got)
+	if got := userVersion(t, store.db); got != 5 {
+		t.Fatalf("user_version = %d, want 5", got)
 	}
 	after := dumpAll(t, store.db)
 
@@ -51,7 +51,8 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	if !columnsOf(t, store.db, "job_items")["download_bytes"] {
 		t.Error("job_items.download_bytes missing after migration")
 	}
-	for _, index := range []string{"idx_jobs_active_key", "idx_job_items_job_id", "idx_job_events_job_id_id", "idx_job_events_type_created", "idx_jobs_queued_order"} {
+	for _, index := range []string{"idx_jobs_active_key", "idx_job_items_job_id", "idx_job_events_job_id_id", "idx_job_events_type_created", "idx_jobs_queued_order",
+		"idx_apple_library_items_catalog", "idx_apple_library_items_order"} {
 		if !indexExists(t, store.db, index) {
 			t.Errorf("index %s missing after migration", index)
 		}
@@ -278,8 +279,13 @@ func TestOpenCreatesLatestSchemaInFreshDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if got := userVersion(t, store.db); got != 4 || got != latestSchemaVersion() {
-		t.Fatalf("fresh user_version = %d, want 4 (latest %d)", got, latestSchemaVersion())
+	if got := userVersion(t, store.db); got != 5 || got != latestSchemaVersion() {
+		t.Fatalf("fresh user_version = %d, want 5 (latest %d)", got, latestSchemaVersion())
+	}
+	for _, table := range []string{"apple_library_items", "apple_library_playlist_tracks", "apple_library_meta"} {
+		if len(columnsOf(t, store.db, table)) == 0 {
+			t.Errorf("fresh database lacks table %s", table)
+		}
 	}
 	jobCols := columnsOf(t, store.db, "jobs")
 	if jobCols["force"] || jobCols["done_items"] || jobCols["failed_items"] || !jobCols["started_at"] || !jobCols["finished_at"] || !jobCols["queue_order"] {
