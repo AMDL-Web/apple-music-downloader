@@ -759,3 +759,39 @@ type motionCatalog struct{ *recordCatalog }
 func (motionCatalog) MotionArtworkViaWebToken(context.Context, string, string) (applemusic.MotionArtwork, error) {
 	return applemusic.MotionArtwork{Square: "square.m3u8", Tall: "tall.m3u8", SquareColors: applemusic.ArtworkColors{BgColor: "112233"}}, nil
 }
+
+// A reset downloads a done slot again to its stored path, though the
+// template changed since, and replaces the file there.
+func TestRecordResetKeepsTheStoredPath(t *testing.T) {
+	cfg := recordTestConfig(t)
+	catalog := newRecordCatalog()
+	catalog.addAlbum("100", "Album", "Artist", 1, 1, 1000, "")
+	first := newRecordHarness(t, cfg, nil, catalog)
+	first.start()
+	first.submit("https://music.apple.com/cn/album/album/100")
+	first.waitFor("the album", first.albumComplete("100"))
+	first.waitFor("the first run to end", first.idle())
+	before := first.files(domain.ResourceAlbum, "100")[0]
+	first.stop()
+
+	moved := cfg
+	moved.Download.LibraryPathFormat = "new/{AlbumArtist}/{AlbumName} [{AlbumId}]/{SongNumber:02d} {SongName}"
+	second := newRecordHarness(t, moved, first.store, catalog)
+	second.start()
+	result, err := second.m.Reset(context.Background(), jobs.ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: jobs.ResetAudio})
+	if err != nil || result.Run == nil {
+		t.Fatalf("reset = %+v, %v; want a run", result, err)
+	}
+	second.waitFor("the reset run", func() bool {
+		run, err := second.store.GetJob(context.Background(), result.Run.ID)
+		return err == nil && run.Status.IsTerminal()
+	})
+	after := second.files(domain.ResourceAlbum, "100")[0]
+	if after.AudioState != domain.AudioDone || after.Path != before.Path || after.LastRunID != result.Run.ID {
+		t.Fatalf("after the reset: %+v, want done again at %q by run %s", after, before.Path, result.Run.ID)
+	}
+	items, err := second.store.ListItems(context.Background(), result.Run.ID)
+	if err != nil || len(items) != 1 || items[0].Status != domain.ItemCompleted {
+		t.Fatalf("reset run items = %+v (err %v), want one completed, not adopted", items, err)
+	}
+}
