@@ -412,3 +412,43 @@ func TestATilesMarkRidesItsFlyingCover(t *testing.T) {
 	}
 	green("landing")
 }
+
+// A tile's quality hint is its own badge, not the page's tag: on its way
+// out it keeps to its corner of the flying cover, as the mark does, while
+// the page's tag comes in apart.
+func TestATilesHintKeepsToItsCoverCorner(t *testing.T) {
+	a, albums := searchApp(t)
+	a.PageMotion = true
+	albums[0].AudioTraits = []string{"hi-res-lossless"}
+	a.Store.Search.Result.Albums.Items[0] = albums[0]
+	tt := ui.NewTester(a.View, 1280, 800)
+	cover, ok := tt.Find(albums[0].Name)
+	if !ok {
+		t.Fatalf("no tile %q: %q", albums[0].Name, tt.Texts())
+	}
+	hint, ok := tt.Find("Hi-Res")
+	if !ok {
+		t.Fatalf("no quality hint on the tile: %q", tt.Texts())
+	}
+	left, below := hint.X-cover.X, cover.Y+cover.H-hint.Y
+	if err := tt.Click(albums[0].Name); err != nil {
+		t.Fatal(err)
+	}
+	for range 60 {
+		tt.Advance(refresh)
+		if a.fly.travel() >= 0.25 {
+			break
+		}
+	}
+	art, ok := tt.Find("Artwork")
+	if !ok {
+		t.Fatalf("no flying cover: %q", tt.Texts())
+	}
+	now, ok := tt.Find("Hi-Res")
+	if !ok {
+		t.Fatalf("a quarter of the way, the hint is gone: %q", tt.Texts())
+	}
+	if dx, dy := now.X-art.X-left, art.Y+art.H-now.Y-below; dx*dx+dy*dy > 4 {
+		t.Errorf("a quarter of the way the hint is %.1f, %.1f off its corner of the cover %v: %v", dx, dy, art, now)
+	}
+}

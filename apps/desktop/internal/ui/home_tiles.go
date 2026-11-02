@@ -116,7 +116,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 			if hints := shortHints(h.AudioTraits, size); hints != "" {
 				hint := qualityHint(c, k, hints).Absolute().Left(8).Bottom(8).PassThrough()
 				if a.fliesFrom("hit:" + hk) {
-					a.flySourceHint(hint, "hit:"+hk, hints, strings.HasPrefix(hints, "Hi-Res"), k.Fg, func() ui.Element { return qualityHint(c, k, hints) })
+					a.flySourceBadge(hint, "hit:"+hk, partHint, func() ui.Element { return qualityHint(c, k, hints) })
 				}
 			}
 			a.tileControl(c, k, h, hover || on)
@@ -139,12 +139,9 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 	})
 }
 
-// hintPad is the room either side of a quality hint's words.
-const hintPad = 8
-
 // qualityHint is a tile's glass pill of its best quality.
 func qualityHint(c *ui.Context, k *Tokens, s string) ui.Element {
-	return ui.Row(c).Height(22).PaddingX(hintPad).Radius(radiusFull).AlignItems(ui.Center).Material(glass.Glass{}).
+	return ui.Row(c).Height(22).PaddingX(8).Radius(radiusFull).AlignItems(ui.Center).Material(glass.Glass{}).
 		Children(func() { hintText(c, s, k.Fg) })
 }
 

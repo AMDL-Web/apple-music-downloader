@@ -62,8 +62,10 @@ const (
 	// partTracks is the queue hero's track count, which flies into the
 	// page's label, where the page says it (flyLabel).
 	partTracks
-	// partMark is a search tile's mark in its cover's corner, which rides
-	// the flying cover and fades (flySourceBadge).
+	// partHint and partMark are a search tile's quality hint and mark in
+	// its cover's corners, which ride the flying cover and fade
+	// (flySourceBadge): the page's own quality tag comes in apart.
+	partHint
 	partMark
 	flightParts
 )
@@ -104,7 +106,6 @@ type flightSrc struct {
 	ink   float32
 	build func() ui.Element
 	hi    bool
-	glass bool
 	ok    bool
 }
 
@@ -333,21 +334,6 @@ func (a *App) flySourceTag(el ui.Element, from, text string, hi bool, fg ui.Colo
 func (a *App) fliesFrom(from string) bool {
 	f := &a.fly
 	return f.moving && !f.still && from != "" && from == f.from
-}
-
-// flySourceHint marks el, a search tile's glass quality hint saying text,
-// gilt when hi, in fg, which build builds again: the page's quality tag
-// morphs from it, out of the glass into its own look (flightCopies), or,
-// where the page shows none, it rides the flying cover as a badge does.
-// It hides for the whole flight, as its copy stands for it.
-func (a *App) flySourceHint(el ui.Element, from, text string, hi bool, fg ui.Color, build func() ui.Element) {
-	if !a.fliesFrom(from) {
-		return
-	}
-	a.flySourceTag(el, from, text, hi, fg)
-	src := &a.fly.src[partTag]
-	src.glass, src.build = true, build
-	el.Invisible()
 }
 
 // flySourceBadge marks el, a badge on the cover of the element from, as
