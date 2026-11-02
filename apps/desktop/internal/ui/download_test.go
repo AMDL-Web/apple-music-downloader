@@ -10,21 +10,29 @@ import (
 	"amdl/apps/desktop/internal/store"
 )
 
-// The choices go out as the job's overrides; which choices a hit offers is
+// The choices go out as the job's overrides, or as the codec order of a
+// reset where the sheet downloads again; which choices a hit offers is
 // format.QualityChoices.
 func TestTheDownloadChoicesBecomeTheJobsOverrides(t *testing.T) {
 	d := downloadAsk{codecs: []string{"alac", "ec3"}, priority: []string{"alac", "ec3", "aac"}, codec: 1}
-	o := d.overrides(false)
+	o := d.overrides()
 	if o == nil || !slices.Equal(*o.QualityPriority, []string{"ec3", "alac", "aac"}) {
 		t.Errorf("Dolby chosen: %+v", o)
 	}
-	// TODO(P3): replace becomes a reset of the record, not an override.
-	again := downloadAsk{again: true, replace: 1}
-	if o := again.overrides(true); o != nil {
-		t.Errorf("a hit in the library carries no overrides: %+v", o)
+	if d.replaces() {
+		t.Error("a hit with nothing downloaded downloads again")
 	}
-	if o := (&downloadAsk{}).overrides(false); o != nil {
+	if o := (&downloadAsk{}).overrides(); o != nil {
 		t.Errorf("nothing to ask: %+v", o)
+	}
+	for _, c := range []struct {
+		again store.MarkState
+		all   int
+		want  bool
+	}{{store.MarkDone, 0, true}, {store.MarkPartial, 0, false}, {store.MarkPartial, 1, true}, {store.MarkNone, 1, false}} {
+		if got := (&downloadAsk{again: c.again, all: c.all}).replaces(); got != c.want {
+			t.Errorf("again %v, all %d: replaces %v, want %v", c.again, c.all, got, c.want)
+		}
 	}
 }
 
@@ -72,26 +80,27 @@ func TestSearchShowsOneGroupUnderTabsAndReadsItsNextPages(t *testing.T) {
 	}
 }
 
-func TestAnAlbumInLosslessAndDolbyAsksWhichBeforeItDownloads(t *testing.T) {
+func TestASongInLosslessAndDolbyAsksWhichBeforeItDownloads(t *testing.T) {
 	a, run := demoApp(t)
 	a.Screen = ScreenHome
 	tt := ui.NewTester(a.View, 1280, 800)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
-	a.Store.SetOmniText("glass weather")
+	// Its album's record downloaded two tracks and has no run.
+	a.Store.SetOmniText("evening rounds")
 	tt.Frame()
 	run(func() bool { return a.Store.Search.Status == store.SearchReady && a.Store.Config.Values != nil })
 	tt.Frame()
 	jobs := len(a.Store.Jobs)
-	if err := tt.Click("Download Glass Weather"); err != nil {
+	if err := tt.Click("Download Evening Rounds"); err != nil {
 		t.Fatalf("%v in %q", err, tt.Texts())
 	}
-	for _, want := range []string{"Download “Glass Weather”", "Lossless", "Dolby Atmos"} {
+	for _, want := range []string{"Download “Evening Rounds”", "Lossless", "Dolby Atmos"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q in the sheet: %q", want, tt.Texts())
 		}
 	}
 	if strings.Contains(strings.Join(tt.Texts(), "\n"), "In your library") {
-		t.Errorf("a new album asks about the library: %q", tt.Texts())
+		t.Errorf("a song not downloaded asks about the library: %q", tt.Texts())
 	}
 	if len(a.Store.Search.Starting) != 0 {
 		t.Fatal("the download started before the sheet's answer")

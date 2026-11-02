@@ -119,7 +119,7 @@ func (a *App) trackList(c *ui.Context, k *Tokens, items []domain.JobItem, accent
 // itemRunning reports whether a track is in the pipeline now.
 func itemRunning(it *domain.JobItem) bool {
 	switch it.Status {
-	case domain.ItemQueued, domain.ItemCompleted, domain.ItemSkipped, domain.ItemFailed, domain.ItemCancelled:
+	case domain.ItemQueued, domain.ItemCompleted, domain.ItemSkipped, domain.ItemUnavailable, domain.ItemFailed, domain.ItemCancelled:
 		return false
 	}
 	return true
@@ -238,6 +238,8 @@ func trackState(c *ui.Context, k *Tokens, it *domain.JobItem) {
 		show(icCheck, "Saved", k.OK)
 	case domain.ItemSkipped:
 		show(icCheck, "On disk", k.Skip)
+	case domain.ItemUnavailable:
+		show(icCross, "Not offered", k.Skip)
 	case domain.ItemFailed:
 		show(icCross, "Failed", k.Bad)
 	case domain.ItemCancelled:

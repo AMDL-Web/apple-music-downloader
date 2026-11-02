@@ -450,7 +450,8 @@ func (m *model) command(line string) tea.Cmd {
 			if name == "/cancel" {
 				return "cancelling " + ref, m.c.Cancel(ctx, id)
 			}
-			return "retrying " + ref, m.c.Retry(ctx, id)
+			_, err := m.c.Retry(ctx, id)
+			return "retrying " + ref, err
 		})
 	case "/remove":
 		id, ok := needJob()

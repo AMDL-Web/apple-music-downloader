@@ -117,7 +117,7 @@ func (b AlbumBar) outcome(s domain.ItemStatus) ui.Color {
 	switch s {
 	case domain.ItemCompleted:
 		return b.Completed
-	case domain.ItemSkipped:
+	case domain.ItemSkipped, domain.ItemUnavailable:
 		return b.Skipped
 	case domain.ItemFailed:
 		return b.Failed

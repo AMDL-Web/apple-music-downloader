@@ -56,6 +56,10 @@ type Backend struct {
 	feeds     map[chan domain.DownloadFeedMessage]bool
 	covers    map[string][]byte
 	hooks     client.Hooks
+	// paused and removed are the album records paused and removed from
+	// amdl; check is the last disk check.
+	paused, removed map[string]bool
+	check           *domain.CheckRun
 }
 
 type job struct {
@@ -73,7 +77,8 @@ type job struct {
 // New returns a backend whose clock is now, with its jobs as they stand at
 // that moment: two running, one waiting, some finished, one failed.
 func New(now func() time.Time) *Backend {
-	b := &Backend{now: now, signedIn: true, pending: map[string]bool{}, feeds: map[chan domain.DownloadFeedMessage]bool{}, covers: map[string][]byte{}, hooks: demoHooks()}
+	b := &Backend{now: now, signedIn: true, pending: map[string]bool{}, feeds: map[chan domain.DownloadFeedMessage]bool{}, covers: map[string][]byte{}, hooks: demoHooks(),
+		paused: map[string]bool{}, removed: map[string]bool{}}
 	view, err := config.MutableView(config.Default())
 	if err != nil {
 		panic("demo: the default config does not render: " + err.Error())
@@ -138,7 +143,10 @@ func (b *Backend) newJob(a *album, one *song, t time.Time) *job {
 		Title: a.title, ArtworkURL: a.artwork(), ArtistName: a.artist.name, ArtistURL: a.artist.url(),
 		ReleaseDate: a.releaseDate(), Genre: a.artist.genre, ArtworkBgColor: a.bg, ArtworkTextColor1: a.fg,
 		ArtworkTextColor2: "ffffff", Status: domain.JobQueued, QueueOrder: b.nextOrder(), CreatedAt: t, UpdatedAt: t,
+		ResourceKind: domain.ResourceAlbum, ResourceID: a.id, Trigger: domain.TriggerManual, Priority: domain.PriorityManual,
 	}
+	delete(b.removed, a.id)
+	delete(b.paused, a.id)
 	indexes := make([]int, len(a.tracks))
 	for i := range indexes {
 		indexes[i] = i
@@ -395,6 +403,15 @@ func (b *Backend) emit(j *job, t domain.EventType, itemID string, payload any, n
 func (b *Backend) feed(j *job) {
 	snap := j.snapshot()
 	msg := domain.DownloadFeedMessage{Type: "download_upserted", Job: &snap, EventID: b.seq, StatusCounts: b.counts()}
+	b.send(msg)
+	if rec, ok := b.albumRecord(j.album); ok {
+		b.send(domain.DownloadFeedMessage{Type: "resource_updated", ResourceKind: domain.ResourceAlbum, ResourceID: j.album.id,
+			Resource: rec, EventID: b.seq, StatusCounts: msg.StatusCounts})
+	}
+}
+
+// send hands msg to every overview feed that keeps up.
+func (b *Backend) send(msg domain.DownloadFeedMessage) {
 	for ch := range b.feeds {
 		select {
 		case ch <- msg:
@@ -584,7 +601,7 @@ func (b *Backend) priorJob(id string) (*job, bool) {
 		if j.Status == domain.JobFailed || j.Status == domain.JobCancelled {
 			continue
 		}
-		if j.album.id == id && j.Type == "album" {
+		if j.album.id == id && (j.Type == "album" || !j.Status.IsTerminal()) {
 			return j, true
 		}
 		for _, it := range j.items {

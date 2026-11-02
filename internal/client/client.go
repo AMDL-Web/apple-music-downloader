@@ -382,7 +382,11 @@ func (c *Client) Move(ctx context.Context, id string, req domain.MoveRequest) (d
 	return res.Job, err
 }
 
-// Retry starts a failed or cancelled job's download again as a new job.
-func (c *Client) Retry(ctx context.Context, id string) error {
-	return c.do(ctx, http.MethodPost, "/api/v1/downloads/"+url.PathEscape(id)+"/retry", nil, nil, nil)
+// Retry starts a failed or cancelled job's download again as a new job:
+// queued with that job, or, for a record's run, already_downloaded or
+// waiting when no run is queued.
+func (c *Client) Retry(ctx context.Context, id string) (RunAnswer, error) {
+	var out RunAnswer
+	err := c.do(ctx, http.MethodPost, "/api/v1/downloads/"+url.PathEscape(id)+"/retry", nil, nil, &out, http.StatusOK, http.StatusAccepted)
+	return out, err
 }

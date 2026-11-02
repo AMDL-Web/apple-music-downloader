@@ -67,7 +67,7 @@ func filesApp(t *testing.T) (*App, *ui.Tester) {
 	a.GoSettings("files")
 	a.Store.Server.Read = time.Now()
 	a.Store.Config.Values = map[string]any{"download": map[string]any{
-		"downloads_dir": "/music", "temp_dir": "/scratch", "force_overwrite": false,
+		"downloads_dir": "/music", "temp_dir": "/scratch",
 		"library_path_format": "library/{AlbumName}/{SongNumber}", "playlist_path_format": "playlists/{PlaylistName}",
 		"station_path_format": "stations/{StationName}",
 	}}
@@ -118,7 +118,7 @@ func TestFolderAndNameChangesAskFirst(t *testing.T) {
 
 	// A fresh window, so the click lands where Find places the field.
 	_, tt = filesApp(t)
-	clickFieldOf(t, tt, "Songs, albums and artists; a file already here counts as downloaded.")
+	clickFieldOf(t, tt, "Songs, albums and artists.")
 	tt.Type(" ({ReleaseYear})")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()

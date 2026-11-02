@@ -369,6 +369,10 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 		case mark == store.MarkActive:
 			// A download the feed does not hold, past the newest it lists.
 			pill(c, k, pillRun, icDown, "In the queue")
+		case mark == store.MarkPaused:
+			if clicked(button(c, k, buttonOnArt, "Resume", nil).Label("Resume "+h.Name)) {
+				a.download(h)
+			}
 		case wait:
 			pill(c, k, pillWait, nil, "Starting…")
 		default:
@@ -383,11 +387,11 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 	}
 	switch j.Status {
 	case domain.JobQueued, domain.JobRunning:
-		if clicked(button(c, k, buttonOnArt, "Cancel", nil)) {
+		if clicked(button(c, k, buttonOnArt, cancelWord(j), nil)) {
 			s.Cancel(j.ID)
 		}
 	case domain.JobFailed, domain.JobCancelled:
-		if clicked(button(c, k, buttonOnArt, "Retry", nil)) {
+		if clicked(button(c, k, buttonOnArt, retryWord(j), nil)) {
 			s.Retry(j.ID)
 		}
 	case domain.JobCompleted:

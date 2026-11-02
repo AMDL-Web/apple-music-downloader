@@ -197,30 +197,9 @@ func (s *Store) LookupOne(url string, then func(client.Lookup)) {
 	}()
 }
 
-// ResourceFor is the record mark of what a preview names: the preview's own
-// resource, else one made from a queued or running job in the list, else a
-// completed one; nil for none.
-// TODO(P3-desktop): read the record instead of the job list.
-func (s *Store) ResourceFor(l client.Lookup) *domain.ResourceMark {
-	if l.Resource != nil {
-		return l.Resource
-	}
-	var done *domain.ResourceMark
-	for _, j := range s.Jobs {
-		if t, id, ok := j.link(); !ok || t != l.Type || id != l.ID {
-			continue
-		}
-		switch j.Status {
-		case domain.JobQueued, domain.JobRunning:
-			return &domain.ResourceMark{ID: l.ID, ActiveJobID: j.ID}
-		case domain.JobCompleted:
-			if done == nil {
-				done = &domain.ResourceMark{ID: l.ID, State: domain.RecordComplete}
-			}
-		}
-	}
-	return done
-}
+// ResourceFor is the record mark of what a preview names, with the
+// newest news; nil for none.
+func (s *Store) ResourceFor(l client.Lookup) *domain.ResourceMark { return s.Latest(l.Resource) }
 
 // Startable returns the links a submit would start: previewed, supported
 // and not already running.
@@ -255,10 +234,10 @@ func (s *Store) Submit() {
 		case err != nil && res.Rejected == 0:
 			s.setNotice(err.Error(), true)
 		case res.Rejected == 0:
-			s.setNotice(plural(res.Accepted, "download")+" started", false)
+			s.setNotice(batchNotice(res), false)
 			o.Text, o.Links, o.Result = "", nil, nil
 		default:
-			s.setNotice(plural(res.Accepted, "download")+" started, "+plural(res.Rejected, "link")+" refused", res.Accepted == 0)
+			s.setNotice(batchNotice(res)+", "+plural(res.Rejected, "link")+" refused", res.Accepted == 0)
 		}
 	})
 }
@@ -278,9 +257,37 @@ func (s *Store) submit(urls []string, overrides *config.DownloadOverrides, then 
 					s.upsert(*r.Job)
 				}
 			}
+			s.noteSubmitted(res)
 			then(res, err)
 		})
 	}()
+}
+
+// batchNotice counts what a submit's taken links became: downloads
+// started, adds waiting for a catalog read, and links already downloaded.
+func batchNotice(res domain.BatchSubmitResponse) string {
+	var started, adding, have int
+	for _, r := range res.Results {
+		switch r.Status {
+		case domain.SubmitAccepted:
+			started++
+		case domain.SubmitPending:
+			adding++
+		case domain.SubmitAlreadyDownloaded:
+			have++
+		}
+	}
+	var parts []string
+	if started > 0 || adding+have == 0 {
+		parts = append(parts, plural(started, "download")+" started")
+	}
+	if adding > 0 {
+		parts = append(parts, plural(adding, "link")+" being added")
+	}
+	if have > 0 {
+		parts = append(parts, plural(have, "link")+" already downloaded")
+	}
+	return strings.Join(parts, ", ")
 }
 
 func plural(n int, word string) string {

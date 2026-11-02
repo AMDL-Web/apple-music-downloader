@@ -400,11 +400,11 @@ func (a *App) jobMenu(m *ui.Menu, j *store.Job) {
 				a.Store.MoveJob(j.ID, len(q)-1)
 			}
 		}
-		if m.Item("Cancel").Chosen() {
+		if m.Item(cancelWord(j)).Chosen() {
 			a.Store.Cancel(j.ID)
 		}
 	case domain.JobFailed, domain.JobCancelled:
-		if m.Item("Retry").Chosen() {
+		if m.Item(retryWord(j)).Chosen() {
 			a.Store.Retry(j.ID)
 		}
 	}
@@ -461,4 +461,22 @@ func (a *App) deleteDialog(c *ui.Context, k *Tokens) {
 	if !a.deleteOpen {
 		a.deleting = nil
 	}
+}
+
+// cancelWord is what stopping a run is called: Pause for a record's run,
+// which pauses the record, Cancel for a station's.
+func cancelWord(j *store.Job) string {
+	if j.ResourceID != "" {
+		return "Pause"
+	}
+	return "Cancel"
+}
+
+// retryWord is what starting a stopped run again is called: Resume for a
+// record's cancelled run, which its pause cancelled, else Retry.
+func retryWord(j *store.Job) string {
+	if j.ResourceID != "" && j.Status == domain.JobCancelled {
+		return "Resume"
+	}
+	return "Retry"
 }

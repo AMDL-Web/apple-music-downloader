@@ -161,30 +161,52 @@ func TestArtistPagesOpenPageOnAndCache(t *testing.T) {
 	}
 }
 
-func TestHitMarkFollowsTheLiveJob(t *testing.T) {
+func TestHitMarkReadsTheRecordWithTheNewestNews(t *testing.T) {
 	s, _ := newTestStore(t)
 	h := hit("album", "1")
-	h.Resource = &domain.ResourceMark{ID: "1", ActiveJobID: "j"}
-	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobCompleted}}})
-	if m, id := s.HitMark(h); m != MarkDone || id != "j" {
+	h.Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", ActiveJobID: "j", State: domain.RecordPartial, TracksDone: 3, TracksWanted: 9}
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning}}})
+	if m, id := s.HitMark(h); m != MarkActive || id != "j" {
 		t.Fatalf("record's run: mark %v %q", m, id)
 	}
-	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning}}})
-	if m, _ := s.HitMark(h); m != MarkActive {
-		t.Errorf("live job running: mark %v", m)
+	// Once the feed ends the run, the hit's record stands as it was read.
+	s.upsert(domain.Job{ID: "j", Status: domain.JobCompleted})
+	if m, _ := s.HitMark(h); m != MarkPartial {
+		t.Errorf("run ended: mark %v", m)
 	}
-	s.upsert(domain.Job{ID: "j", Status: domain.JobFailed})
-	if m, _ := s.HitMark(h); m != MarkNone {
-		t.Errorf("live job failed: mark %v", m)
+	feed := func(r map[string]any) {
+		s.applyMessage(domain.DownloadFeedMessage{Type: "resource_updated", ResourceKind: domain.ResourceAlbum, ResourceID: "1", Resource: r})
 	}
-	// A job started from the search wins over the prior one.
+	feed(map[string]any{"state": "complete", "tracks_done": 9, "tracks_wanted": 9})
+	if m, _ := s.HitMark(h); m != MarkDone {
+		t.Errorf("record complete: mark %v", m)
+	}
+	feed(map[string]any{"state": "partial", "tracks_done": 3, "tracks_wanted": 9, "paused": true})
+	if m, _ := s.HitMark(h); m != MarkPaused {
+		t.Errorf("record paused: mark %v", m)
+	}
+	// A song reads its own track: done, or waiting with its album.
+	song := hit("song", "s")
+	song.Resource = &domain.ResourceMark{Kind: domain.ResourceAlbum, ID: "1", SongState: domain.AudioDone}
+	if m, _ := s.HitMark(song); m != MarkDone {
+		t.Errorf("song done: mark %v", m)
+	}
+	song.Resource.SongState = domain.AudioPending
+	if m, _ := s.HitMark(song); m != MarkPaused {
+		t.Errorf("song waiting in a paused album: mark %v", m)
+	}
+	song.Resource.SongState = domain.AudioUnavailable
+	if m, _ := s.HitMark(song); m != MarkNone {
+		t.Errorf("song not offered: mark %v", m)
+	}
+	// A run started from the search wins while it is queued or running.
 	s.Search.sent[HitKey(h)] = "k"
 	s.upsert(domain.Job{ID: "k", Status: domain.JobQueued})
 	if m, id := s.HitMark(h); m != MarkActive || id != "k" {
 		t.Errorf("sent job: mark %v %q", m, id)
 	}
 	s.remove("k")
-	if m, _ := s.HitMark(h); m != MarkNone {
+	if m, _ := s.HitMark(h); m != MarkPaused {
 		t.Errorf("deleted job: mark %v", m)
 	}
 }

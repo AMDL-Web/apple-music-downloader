@@ -68,16 +68,12 @@ func (b *Backend) handler() http.Handler {
 		if j.Status.IsTerminal() {
 			return errNotCancellable
 		}
+		// A record's run is cancelled by pausing the record.
+		b.paused[j.album.id] = true
 		b.cancel(j, now)
 		return nil
 	}))
-	m.HandleFunc("POST /api/v1/downloads/{id}/retry", b.act(func(j *job, now time.Time) error {
-		if j.Status != domain.JobFailed && j.Status != domain.JobCancelled {
-			return errNotRetryable
-		}
-		b.retry(j, now)
-		return nil
-	}))
+	m.HandleFunc("POST /api/v1/downloads/{id}/retry", b.retryJob)
 	m.HandleFunc("POST /api/v1/downloads/{id}/move", b.moveJob)
 	m.HandleFunc("DELETE /api/v1/downloads/{id}", b.remove)
 	m.HandleFunc("POST /api/v1/lookup", b.lookup)
@@ -85,6 +81,7 @@ func (b *Backend) handler() http.Handler {
 	m.HandleFunc("GET /api/v1/artists/{id}/albums", b.artistAlbums)
 	m.HandleFunc("GET /api/v1/albums/{id}", b.album)
 	m.HandleFunc("GET /art/{id}/{size}", b.cover)
+	b.libraryRoutes(m)
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "the demo has no "+r.Method+" "+r.URL.Path)
 	})

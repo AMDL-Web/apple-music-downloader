@@ -31,7 +31,7 @@ func (b *Backend) albumMark(a *album) (*domain.ResourceMark, []domain.AudioState
 		}
 	}
 	j, held := b.priorJob(a.id)
-	if !held && done == 0 {
+	if b.removed[a.id] || (!held && done == 0 && !b.paused[a.id]) {
 		return nil, make([]domain.AudioState, len(a.tracks))
 	}
 	for i := range states {
@@ -49,6 +49,7 @@ func (b *Backend) albumMark(a *album) (*domain.ResourceMark, []domain.AudioState
 	if held && !j.Status.IsTerminal() {
 		m.ActiveJobID = j.ID
 	}
+	m.Paused = b.paused[a.id]
 	return m, states
 }
 

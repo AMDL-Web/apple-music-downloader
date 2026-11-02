@@ -11,13 +11,13 @@ import (
 	"amdl/internal/domain"
 )
 
-// The album screen and the hits ask which download is an album's on every
-// frame: once each job's link is read, asking allocates nothing.
+// The album screen and the hits ask which run is an album's on every
+// frame: asking allocates nothing.
 func TestAnAlbumsDownloadIsFoundWithoutAllocating(t *testing.T) {
 	s, _ := newTestStore(t)
 	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{
-		{ID: "a", Type: "album", Status: domain.JobCompleted, Input: "https://music.apple.com/cn/album/x/1858184006"},
-		{ID: "b", Type: "song", Status: domain.JobRunning, Input: "https://music.apple.com/cn/song/y/42"},
+		{ID: "a", Type: "album", Status: domain.JobCompleted, ResourceKind: domain.ResourceAlbum, ResourceID: "1858184006"},
+		{ID: "b", Type: "album", Status: domain.JobRunning, ResourceKind: domain.ResourceAlbum, ResourceID: "42"},
 	}})
 	if got := s.AlbumJob("1858184006"); got != "a" {
 		t.Fatalf("AlbumJob found %q", got)

@@ -54,4 +54,5 @@ var (
 	icSync     = icon(`<path d="M3 8a5 5 0 0 1 9-3M13 8a5 5 0 0 1-9 3M12 2v3h-3M4 14v-3h3"/>`)
 	icNote     = icon(`<path d="M6 12V4l7-1.5V10"/><circle cx="4.5" cy="12" r="1.6"/><circle cx="11.5" cy="10" r="1.6"/>`)
 	icVideo    = icon(`<rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M7 6.5v3l2.5-1.5z"/>`)
+	icPause    = icon(`<path d="M6 4.5v7M10 4.5v7"/>`)
 )

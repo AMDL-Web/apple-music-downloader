@@ -34,6 +34,12 @@ type RecordQuery struct {
 
 // LibraryAlbums lists album records.
 func (c *Client) LibraryAlbums(ctx context.Context, q RecordQuery) (AlbumRecords, error) {
+	var out AlbumRecords
+	err := c.do(ctx, http.MethodGet, "/api/v1/library/albums", q.values(), nil, &out, http.StatusOK)
+	return out, err
+}
+
+func (q RecordQuery) values() url.Values {
 	v := url.Values{}
 	for _, s := range q.State {
 		v.Add("state", s)
@@ -53,9 +59,7 @@ func (c *Client) LibraryAlbums(ctx context.Context, q RecordQuery) (AlbumRecords
 	if q.Offset > 0 {
 		v.Set("offset", strconv.Itoa(q.Offset))
 	}
-	var out AlbumRecords
-	err := c.do(ctx, http.MethodGet, "/api/v1/library/albums", v, nil, &out, http.StatusOK)
-	return out, err
+	return v
 }
 
 // RecordReset is the body of POST /api/v1/library/{kind}/{id}/reset.
@@ -74,6 +78,151 @@ func (c *Client) ResetRecord(ctx context.Context, kind domain.ResourceKind, id s
 	var out struct {
 		Job *domain.Job `json:"job"`
 	}
-	err := c.do(ctx, http.MethodPost, "/api/v1/library/"+string(kind)+"s/"+url.PathEscape(id)+"/reset", nil, r, &out, http.StatusOK)
+	err := c.do(ctx, http.MethodPost, recordPath(kind, id)+"/reset", nil, r, &out, http.StatusOK)
 	return out.Job, err
+}
+
+// PlaylistRecord is one row of GET /api/v1/library/playlists.
+type PlaylistRecord struct {
+	domain.Playlist
+	ActiveJobID string `json:"active_job_id,omitempty"`
+}
+
+// PlaylistRecords is a page of playlist records.
+type PlaylistRecords struct {
+	Items []PlaylistRecord `json:"items"`
+	Total int              `json:"total"`
+}
+
+// LibraryPlaylists lists playlist records.
+func (c *Client) LibraryPlaylists(ctx context.Context, q RecordQuery) (PlaylistRecords, error) {
+	var out PlaylistRecords
+	err := c.do(ctx, http.MethodGet, "/api/v1/library/playlists", q.values(), nil, &out, http.StatusOK)
+	return out, err
+}
+
+// RecordCounts counts one kind of record per state and per flag (failed,
+// given_up, missing, waiting, paused, unresolved).
+type RecordCounts struct {
+	Total  int                        `json:"total"`
+	States map[domain.RecordState]int `json:"states"`
+	Flags  map[string]int             `json:"flags"`
+}
+
+// LibrarySummary is GET /api/v1/library/summary.
+type LibrarySummary struct {
+	Albums    RecordCounts                   `json:"albums"`
+	Playlists RecordCounts                   `json:"playlists"`
+	Pending   map[domain.PendingAddState]int `json:"pending"`
+	// Check is the running or last disk check; nil before the first.
+	Check *domain.CheckRun `json:"check"`
+}
+
+// LibrarySummary counts the records and pending adds and reads the last
+// disk check.
+func (c *Client) LibrarySummary(ctx context.Context) (LibrarySummary, error) {
+	var out LibrarySummary
+	err := c.do(ctx, http.MethodGet, "/api/v1/library/summary", nil, nil, &out, http.StatusOK)
+	return out, err
+}
+
+// RunAnswer is what a record download or a job retry answers: Status
+// queued with Job, already_downloaded (every wanted track is done) or
+// waiting (a failed slot waits for its automatic retry).
+type RunAnswer struct {
+	Status string      `json:"status"`
+	Job    *domain.Job `json:"job,omitempty"`
+}
+
+func recordPath(kind domain.ResourceKind, id string) string {
+	return "/api/v1/library/" + string(kind) + "s/" + url.PathEscape(id)
+}
+
+// DownloadRecord resumes a record and queues its run; now puts the run
+// first. codec, when set, adds that quality as another slot of each track
+// whose first quality is done.
+func (c *Client) DownloadRecord(ctx context.Context, kind domain.ResourceKind, id, codec string, now bool) (RunAnswer, error) {
+	body := struct {
+		Codec string `json:"codec,omitempty"`
+		Now   bool   `json:"now,omitempty"`
+	}{codec, now}
+	var out RunAnswer
+	err := c.do(ctx, http.MethodPost, recordPath(kind, id)+"/download", nil, body, &out, http.StatusOK, http.StatusAccepted)
+	return out, err
+}
+
+// PauseRecord cancels a record's run and keeps the scheduler from queuing
+// it until ResumeRecord.
+func (c *Client) PauseRecord(ctx context.Context, kind domain.ResourceKind, id string) error {
+	return c.do(ctx, http.MethodPost, recordPath(kind, id)+"/pause", nil, nil, nil, http.StatusOK)
+}
+
+// ResumeRecord lets the scheduler queue a paused record again.
+func (c *Client) ResumeRecord(ctx context.Context, kind domain.ResourceKind, id string) error {
+	return c.do(ctx, http.MethodPost, recordPath(kind, id)+"/resume", nil, nil, nil, http.StatusOK)
+}
+
+// DeleteRecord removes a record; its files and runs stay. A record with a
+// queued or running run answers run_active.
+func (c *Client) DeleteRecord(ctx context.Context, kind domain.ResourceKind, id string) error {
+	return c.do(ctx, http.MethodDelete, recordPath(kind, id), nil, nil, nil, http.StatusNoContent)
+}
+
+// StartCheck checks the stored files of the whole library (ref nil) or of
+// one record on disk, in the background. force marks them even when more
+// than half are missing.
+func (c *Client) StartCheck(ctx context.Context, ref *domain.ResourceRef, force bool) (*domain.CheckRun, error) {
+	body := struct {
+		Kind  string `json:"kind,omitempty"`
+		ID    string `json:"id,omitempty"`
+		Force bool   `json:"force,omitempty"`
+	}{Force: force}
+	if ref != nil {
+		body.Kind, body.ID = string(ref.Kind)+"s", ref.ID
+	}
+	var out struct {
+		Check *domain.CheckRun `json:"check"`
+	}
+	err := c.do(ctx, http.MethodPost, "/api/v1/library/check", nil, body, &out, http.StatusAccepted)
+	return out.Check, err
+}
+
+// PendingAdds lists the adds waiting for a catalog read, and those the
+// resolver gave up on.
+func (c *Client) PendingAdds(ctx context.Context) ([]domain.PendingAdd, error) {
+	var out struct {
+		Items []domain.PendingAdd `json:"items"`
+	}
+	err := c.do(ctx, http.MethodGet, "/api/v1/library/pending", nil, nil, &out, http.StatusOK)
+	return out.Items, err
+}
+
+// RetryPending reads a failed pending add again.
+func (c *Client) RetryPending(ctx context.Context, id int64) error {
+	return c.do(ctx, http.MethodPost, "/api/v1/library/pending/"+strconv.FormatInt(id, 10)+"/retry", nil, nil, nil, http.StatusOK)
+}
+
+// DeletePending drops a pending add.
+func (c *Client) DeletePending(ctx context.Context, id int64) error {
+	return c.do(ctx, http.MethodDelete, "/api/v1/library/pending/"+strconv.FormatInt(id, 10), nil, nil, nil, http.StatusNoContent)
+}
+
+// ResetLibrary resets every record whose state is in states or that carries
+// one of flags (what as in RecordReset; an audio reset by a flag re-arms only
+// the slots in that state), skipping records with an active run.
+func (c *Client) ResetLibrary(ctx context.Context, what string, states, flags []string) (reset, skippedActive int, err error) {
+	type filter struct {
+		State []string `json:"state,omitempty"`
+		Flag  []string `json:"flag,omitempty"`
+	}
+	body := struct {
+		What   string `json:"what"`
+		Filter filter `json:"filter"`
+	}{what, filter{states, flags}}
+	var out struct {
+		Reset         int `json:"reset"`
+		SkippedActive int `json:"skipped_active"`
+	}
+	err = c.do(ctx, http.MethodPost, "/api/v1/library/reset", nil, body, &out, http.StatusOK)
+	return out.Reset, out.SkippedActive, err
 }

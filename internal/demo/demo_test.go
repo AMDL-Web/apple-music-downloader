@@ -218,7 +218,7 @@ func TestCancelAndRetry(t *testing.T) {
 	if err := c.Cancel(ctx, running); !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict {
 		t.Errorf("cancelling again: %v", err)
 	}
-	if err := c.Retry(ctx, failed); err != nil {
+	if _, err := c.Retry(ctx, failed); err != nil {
 		t.Fatal(err)
 	}
 	run(b, clk, 4*time.Minute)

@@ -57,7 +57,7 @@ func TestADownloadStartedFromAnAlbumTakesItsPage(t *testing.T) {
 	if j := s.Detail(); j.Status.IsTerminal() || a.Screen != ScreenAlbum {
 		t.Fatalf("the page shows %v on screen %v", j.Status, a.Screen)
 	}
-	for _, want := range []string{"SIZE", "AVG SPEED", "ACTIVITY", "Cancel", "Harbor Lights", "ALBUM · 9 TRACKS"} {
+	for _, want := range []string{"SIZE", "AVG SPEED", "ACTIVITY", "Pause", "Harbor Lights", "ALBUM · 9 TRACKS"} {
 		if !tt.HasText(want) {
 			t.Errorf("no %q once the album downloads: %q", want, tt.Texts())
 		}
@@ -142,6 +142,7 @@ func TestAnAlbumReadThatFailsLeavesTheDownloadsTracks(t *testing.T) {
 	a.Settings.HideSidebar = true
 	j := detailFixture(time.Now())
 	j.Input = "https://music.apple.com/us/album/midnight-archive/1700000001"
+	j.ResourceKind, j.ResourceID = domain.ResourceAlbum, "1700000001"
 	for i := range j.Items {
 		j.Items[i].AdamID = "t" + j.Items[i].ID
 	}

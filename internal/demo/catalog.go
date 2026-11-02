@@ -93,10 +93,10 @@ func (p *playlist) hit() client.SearchHit {
 	}
 }
 
-// traits are the album's audio traits: two albums come in Dolby Atmos too,
-// so a download of them asks which to take.
+// traits are the album's audio traits: three albums come in Dolby Atmos
+// too, so a download of them asks which to take.
 func (a *album) traits() []string {
-	if a.id == "920001" || a.id == "920003" {
+	if a.id == "920001" || a.id == "920003" || a.id == "920006" {
 		return []string{"atmos", "lossless", "lossy-stereo", "spatial"}
 	}
 	return []string{"lossless", "lossy-stereo"}
