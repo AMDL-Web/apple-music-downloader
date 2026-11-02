@@ -85,7 +85,7 @@ func TestResubmitRequeuesFinishedJobUnderItsID(t *testing.T) {
 			jobID := "job-" + string(status)
 			if err := manager.store.CreateJob(ctx, domain.Job{
 				ID: jobID, Input: "album|us|1", Type: "album", Storefront: "us", CanonicalKey: "album:us:1",
-				Overrides: &config.DownloadOverrides{ForceOverwrite: &force}, Status: status, Error: "boom",
+				Overrides: &config.DownloadOverrides{CodecAlternative: &force}, Status: status, Error: "boom",
 				StartedAt: &started, FinishedAt: &finished, CreatedAt: created, UpdatedAt: finished,
 			}); err != nil {
 				t.Fatal(err)
@@ -123,8 +123,8 @@ func TestResubmitRequeuesFinishedJobUnderItsID(t *testing.T) {
 				t.Fatalf("jobs = %d, want the one row", total)
 			}
 			payloads := retriedEvents(t, manager.store, jobID)
-			if len(payloads) != 1 || payloads[0]["cause"] != string(domain.RequeueResubmit) || payloads[0]["force_overwrite"] != false || payloads[0]["status"] != string(domain.JobQueued) {
-				t.Fatalf("job_retried payloads = %+v, want one with cause resubmit and force_overwrite false", payloads)
+			if len(payloads) != 1 || payloads[0]["cause"] != string(domain.RequeueResubmit) || payloads[0]["status"] != string(domain.JobQueued) {
+				t.Fatalf("job_retried payloads = %+v, want one with cause resubmit", payloads)
 			}
 		})
 	}
@@ -283,7 +283,7 @@ func TestRetryAndResubmitRecordTheirCause(t *testing.T) {
 	manager.SetHooks(dispatcher)
 	ctx := context.Background()
 	force := true
-	jobID := manager.SubmitBatch(ctx, []string{"album|us|5"}, &config.DownloadOverrides{ForceOverwrite: &force}).Results[0].Job.ID
+	jobID := manager.SubmitBatch(ctx, []string{"album|us|5"}, &config.DownloadOverrides{CodecAlternative: &force}).Results[0].Job.ID
 	waitHooks := func(want int32) {
 		t.Helper()
 		deadline := time.Now().Add(2 * time.Second)
@@ -306,13 +306,13 @@ func TestRetryAndResubmitRecordTheirCause(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !retried.CreatedAt.Equal(failed.CreatedAt) || retried.Overrides == nil || !*retried.Overrides.ForceOverwrite {
+	if !retried.CreatedAt.Equal(failed.CreatedAt) || retried.Overrides == nil || !*retried.Overrides.CodecAlternative {
 		t.Fatalf("retried job = %+v, want created_at %v and the stored overrides kept", retried, failed.CreatedAt)
 	}
 	waitHooks(1)
 
 	finishJob(t, manager, jobID, domain.JobCompleted)
-	if got := manager.SubmitBatch(ctx, []string{"album|us|5"}, &config.DownloadOverrides{ForceOverwrite: &force}).Results[0]; !got.Requeued {
+	if got := manager.SubmitBatch(ctx, []string{"album|us|5"}, &config.DownloadOverrides{CodecAlternative: &force}).Results[0]; !got.Requeued {
 		t.Fatalf("resubmit = %+v, want requeued", got)
 	}
 	waitHooks(2)
@@ -322,11 +322,11 @@ func TestRetryAndResubmitRecordTheirCause(t *testing.T) {
 	if len(payloads) != 2 {
 		t.Fatalf("job_retried payloads = %+v, want two", payloads)
 	}
-	if payloads[0]["cause"] != string(domain.RequeueRetry) || payloads[0]["force_overwrite"] != true {
-		t.Fatalf("retry payload = %+v, want cause retry with the stored force_overwrite", payloads[0])
+	if payloads[0]["cause"] != string(domain.RequeueRetry) {
+		t.Fatalf("retry payload = %+v, want cause retry", payloads[0])
 	}
-	if payloads[1]["cause"] != string(domain.RequeueResubmit) || payloads[1]["force_overwrite"] != true {
-		t.Fatalf("resubmit payload = %+v, want cause resubmit with this request's force_overwrite", payloads[1])
+	if payloads[1]["cause"] != string(domain.RequeueResubmit) {
+		t.Fatalf("resubmit payload = %+v, want cause resubmit", payloads[1])
 	}
 }
 

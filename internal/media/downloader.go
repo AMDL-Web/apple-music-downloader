@@ -59,6 +59,12 @@ type Downloader struct {
 	// different cover paths are allowed to proceed concurrently.
 	standaloneCoverState *standaloneCoverState
 
+	// replaceExisting replaces a file already at a track's target once the
+	// new copy is complete, instead of finishing the track as already there.
+	// download.force_overwrite set it until 2.0; a reset of a done slot sets
+	// it now. TODO(P2 media): set it from the run's plan.
+	replaceExisting bool
+
 	// background tracks work a job starts but does not wait for (the
 	// motion-artwork backfill). A pointer, so every withConfig clone adds to
 	// the one Wait drains.

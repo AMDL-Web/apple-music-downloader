@@ -36,7 +36,7 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 		t.Errorf("the panel offers the two qualities only:\n%s", out)
 	}
 	m.askKey("right")
-	if o := m.ask.overrides(both); o == nil || !slices.Equal(*o.QualityPriority, []string{"ec3", "alac", "aac"}) || o.ForceOverwrite != nil {
+	if o := m.ask.overrides(both); o == nil || !slices.Equal(*o.QualityPriority, []string{"ec3", "alac", "aac"}) {
 		t.Errorf("Dolby chosen: %+v", o)
 	}
 	m.askKey("esc")
@@ -48,13 +48,11 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 	if m.panel != panelAsk || m.ask.codecs != nil || !m.ask.again {
 		t.Fatalf("in the library: ask %+v", m.ask)
 	}
-	if o := m.ask.overrides(owned); o == nil || *o.ForceOverwrite || o.QualityPriority != nil {
-		t.Errorf("skip is the default, said either way: %+v", o)
+	// TODO(P3): replace becomes a reset of the record, not an override.
+	if o := m.ask.overrides(owned); o != nil {
+		t.Errorf("a hit in the library carries no overrides: %+v", o)
 	}
 	m.askKey("right")
-	if o := m.ask.overrides(owned); o == nil || !*o.ForceOverwrite {
-		t.Errorf("replace chosen: %+v", o)
-	}
 	if o := m.ask.overrides(plain); o != nil {
 		t.Errorf("a hit not in the library has nothing to override: %+v", o)
 	}
@@ -82,8 +80,8 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 	if b := bs[1]; !slices.Equal(b.urls, []string{plain.URL}) || b.o != nil {
 		t.Errorf("the server's settings for the rest: %+v", b)
 	}
-	if b := bs[2]; !slices.Equal(b.urls, []string{owned.URL}) || !*b.o.ForceOverwrite {
-		t.Errorf("replace for the hit in the library: %+v", b)
+	if b := bs[2]; !slices.Equal(b.urls, []string{owned.URL}) || b.o != nil {
+		t.Errorf("the hit in the library goes on its own: %+v", b)
 	}
 }
 

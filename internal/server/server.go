@@ -139,6 +139,10 @@ func Run(ctx context.Context, opts Options) (err error) {
 		}
 	}()
 	logger.Info("logging initialized", "level", cfg.Logging.Level)
+	for _, retired := range config.RetiredKeys(opts.ConfigPath) {
+		logger.Warn("config key is retired and ignored; the next settings save removes it",
+			"key", retired.Key, "replacement", retired.Replacement, "see", config.UpgradeGuide)
+	}
 	for _, name := range config.UnreadEnv(os.Environ()) {
 		logger.Warn("environment variable is no longer read; set its key in config.yaml",
 			"variable", name, "see", config.UpgradeGuide)

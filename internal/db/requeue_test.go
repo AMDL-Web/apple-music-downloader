@@ -55,7 +55,7 @@ func TestRequeueJobResetsTheRunAndWritesOnlyWhatItIsTold(t *testing.T) {
 	ctx := context.Background()
 	created := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
 	force := true
-	forced := &config.DownloadOverrides{ForceOverwrite: &force}
+	forced := &config.DownloadOverrides{CodecAlternative: &force}
 	addKeyedJob(t, store, "keep", "album:us:1", domain.JobFailed, created, forced)
 	addKeyedJob(t, store, "replace", "album:us:2", domain.JobCompleted, created, forced)
 
@@ -71,7 +71,7 @@ func TestRequeueJobResetsTheRunAndWritesOnlyWhatItIsTold(t *testing.T) {
 		kept.QueueOrder == nil || *kept.QueueOrder != 7 || !kept.UpdatedAt.Equal(now) {
 		t.Fatalf("requeued = %+v, want a queued fresh run at order 7", kept)
 	}
-	if !kept.CreatedAt.Equal(created) || kept.Overrides == nil || !*kept.Overrides.ForceOverwrite {
+	if !kept.CreatedAt.Equal(created) || kept.Overrides == nil || !*kept.Overrides.CodecAlternative {
 		t.Fatalf("requeued = %+v, want created_at and overrides kept", kept)
 	}
 

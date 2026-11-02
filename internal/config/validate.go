@@ -73,19 +73,22 @@ var trackVariables = map[string]bool{
 	"DiscCount": true, "TrackNumber": true, "TrackCount": true,
 }
 
-// collectionVariables only mean something for a playlist, a station or one
-// codec attempt. The library decides "already downloaded" before a codec is
-// chosen, and a song is the same file whichever collection asked for it.
+// collectionVariables only mean something for a playlist or a station. A
+// library track copy is the same file whichever collection asked for it.
 var collectionVariables = map[string]bool{
-	"Quality": true, "Codec": true, "Tag": true,
-	"PlaylistName": true, "PlaylistId": true, "StationName": true, "StationId": true,
+	"Tag": true, "PlaylistName": true, "PlaylistId": true, "StationName": true, "StationId": true,
 }
+
+// qualityVariables name what one codec attempt landed. A library file name
+// may use them, so each quality slot of a track names its own file; a folder
+// may not, because every quality of an album shares one folder.
+var qualityVariables = map[string]bool{"Quality": true, "Codec": true}
 
 // validateLibraryFormat checks download.library_path_format on top of
 // validatePathFormat. Folders are named by album-level variables only, so
 // one album is exactly one folder; the file name carries a position that is
-// unique within the album and nothing that depends on the codec or the
-// collection, so a track has one path however it was downloaded.
+// unique within the album and nothing that depends on the collection, so one
+// track copy has one path per quality slot however it was downloaded.
 func validateLibraryFormat(key, format string) error {
 	segments := strings.Split(format, "/")
 	if len(segments) < 2 {
@@ -101,7 +104,7 @@ func validateLibraryFormat(key, format string) error {
 				namesAlbum = namesAlbum || name == "AlbumName" || name == "AlbumId"
 			case name == "ArtistName" || name == "UrlArtistName" || name == "ArtistId":
 				return fmt.Errorf("%s folder %q uses {%s}: a track's artist can differ from its album's, so use {AlbumArtist}", key, segment, name)
-			case trackVariables[name] || collectionVariables[name]:
+			case trackVariables[name] || collectionVariables[name] || qualityVariables[name]:
 				return fmt.Errorf("%s folder %q uses {%s}: folders can use only {AlbumArtist}, {AlbumName}, {AlbumId}, {ReleaseDate} and {ReleaseYear}", key, segment, name)
 			}
 		}
@@ -113,9 +116,13 @@ func validateLibraryFormat(key, format string) error {
 	for _, match := range templateVariablePattern.FindAllStringSubmatch(file, -1) {
 		name := match[1]
 		if collectionVariables[name] {
-			return fmt.Errorf("%s file name uses {%s}: a library file is the same whatever codec or collection it came from", key, name)
+			return fmt.Errorf("%s file name uses {%s}: a library file is the same whatever collection it came from", key, name)
 		}
 		used[name] = true
+	}
+	// {Quality} alone gives aac and aac-binaural (both 256Kbps) one name.
+	if used["Quality"] && !used["Codec"] {
+		return fmt.Errorf("%s file name uses {Quality} without {Codec}: two codecs can share a quality label, so name both", key)
 	}
 	if !used["SongNumber"] && !(used["DiscNumber"] && used["TrackNumber"]) {
 		return fmt.Errorf("%s file name needs {SongNumber}, or both {DiscNumber} and {TrackNumber}, so two tracks of an album never share a name", key)
@@ -194,6 +201,9 @@ func (c Config) Validate() error {
 	}
 	if c.Download.MaxAttempts > maxAttemptsLimit {
 		return fmt.Errorf("download.max_attempts must be at most %d", maxAttemptsLimit)
+	}
+	if c.Download.GiveUpAfterRuns < 0 || c.Download.GiveUpAfterRuns > giveUpAfterRunsLimit {
+		return fmt.Errorf("download.give_up_after_runs must be between 0 and %d", giveUpAfterRunsLimit)
 	}
 	if c.Download.ProgressEventIntervalMS > maxProgressEventIntervalMSLimit {
 		return fmt.Errorf("download.progress_event_interval_ms must be at most %d", maxProgressEventIntervalMSLimit)

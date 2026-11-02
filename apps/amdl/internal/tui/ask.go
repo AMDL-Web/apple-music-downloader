@@ -130,9 +130,9 @@ func (m *model) choose(hits []client.SearchHit, names []string, priority []strin
 }
 
 // overrides are h's: the chosen quality first, then the rest of the
-// server's priority in its order, where h offers the choice; and, for a hit
-// in the library, whether its files are replaced, said either way so the
-// server's own force_overwrite does not decide.
+// server's priority in its order, where h offers the choice. TODO(P3): the
+// replace choice for a hit in the library becomes a reset of its record;
+// overrides no longer carry force_overwrite.
 func (a *ask) overrides(h client.SearchHit) *config.DownloadOverrides {
 	var o config.DownloadOverrides
 	set := false
@@ -145,10 +145,6 @@ func (a *ask) overrides(h client.SearchHit) *config.DownloadOverrides {
 			}
 		}
 		o.QualityPriority, set = &list, true
-	}
-	if inLibrary(h) {
-		replace := a.again && a.replace == 1
-		o.ForceOverwrite, set = &replace, true
 	}
 	if !set {
 		return nil

@@ -43,11 +43,11 @@ type replaceFixture struct {
 func newReplaceFixture(t *testing.T) *replaceFixture {
 	t.Helper()
 	cfg := config.Default()
-	cfg.Download.ForceOverwrite = true
 	cfg.Download.LyricsFiles = []string{"lrc", "ttml"}
 	cfg.Download.CheckIntegrity = false
 	cfg.Download.TempDir = t.TempDir()
 	d := newTestDownloader(&Downloader{cfg: cfg})
+	d.replaceExisting = true
 	dir := filepath.Join(t.TempDir(), "Album")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

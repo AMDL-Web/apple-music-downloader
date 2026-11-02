@@ -108,11 +108,7 @@ func TestProcessJobAvoidsDuplicateSingleSongMetadataReads(t *testing.T) {
 	cfg.Download.QualityPriority = []string{"alac"}
 	downloader := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg, catalog: catalog}, 1))
 	reporter := &recordingReporter{}
-	force := true
-	job := domain.Job{
-		ID: "job-1", Input: "https://music.apple.com/cn/song/song/song-1",
-		CanonicalKey: "song:cn:song-1", Overrides: &config.DownloadOverrides{ForceOverwrite: &force},
-	}
+	job := domain.Job{ID: "job-1", Input: "https://music.apple.com/cn/song/song/song-1", CanonicalKey: "song:cn:song-1"}
 
 	if err := downloader.ProcessJob(context.Background(), job, reporter); err != nil {
 		t.Fatal(err)
@@ -156,11 +152,7 @@ func TestProcessJobDoesNotRefetchResolvedAlbumPerTrack(t *testing.T) {
 	cfg.Download.QualityPriority = []string{"alac"}
 	downloader := newTestDownloader(withDecryptLimit(&Downloader{cfg: cfg, catalog: catalog}, 1))
 	reporter := &recordingReporter{}
-	force := true
-	job := domain.Job{
-		ID: "job-1", Input: "https://music.apple.com/cn/album/album/album-1",
-		CanonicalKey: "album:cn:album-1", Overrides: &config.DownloadOverrides{ForceOverwrite: &force},
-	}
+	job := domain.Job{ID: "job-1", Input: "https://music.apple.com/cn/album/album/album-1", CanonicalKey: "album:cn:album-1"}
 
 	if err := downloader.ProcessJob(context.Background(), job, reporter); err != nil {
 		t.Fatal(err)

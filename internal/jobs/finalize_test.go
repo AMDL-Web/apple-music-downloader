@@ -191,7 +191,7 @@ func (failingProcessor) ProcessJob(context.Context, domain.Job, Reporter) error 
 func TestTerminalJobKeepsOverrides(t *testing.T) {
 	newOverrides := func() *config.DownloadOverrides {
 		force := true
-		return &config.DownloadOverrides{ForceOverwrite: &force}
+		return &config.DownloadOverrides{CodecAlternative: &force}
 	}
 	waitOverrides := func(t *testing.T, m *Manager, jobID string) {
 		t.Helper()
@@ -208,8 +208,8 @@ func TestTerminalJobKeepsOverrides(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		if job.Overrides == nil || job.Overrides.ForceOverwrite == nil || !*job.Overrides.ForceOverwrite {
-			t.Fatalf("overrides after %s = %+v, want force_overwrite kept", job.Status, job.Overrides)
+		if job.Overrides == nil || job.Overrides.CodecAlternative == nil || !*job.Overrides.CodecAlternative {
+			t.Fatalf("overrides after %s = %+v, want codec_alternative kept", job.Status, job.Overrides)
 		}
 	}
 
@@ -697,7 +697,7 @@ func TestTerminalJobEventPayloadCarriesRESTJobSnapshot(t *testing.T) {
 	job := domain.Job{
 		ID: "job-terminal-payload", Input: "song|us|1", Type: "song", Storefront: "us",
 		CanonicalKey: "song:us:1", Status: domain.JobRunning, TotalItems: 1,
-		Overrides: &config.DownloadOverrides{ForceOverwrite: &force}, CreatedAt: now, UpdatedAt: now,
+		Overrides: &config.DownloadOverrides{CodecAlternative: &force}, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)

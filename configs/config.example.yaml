@@ -165,7 +165,8 @@ download:
   # bool: true tries the next codec in quality_priority after failure; false only tries the first codec.
   # Runtime-mutable through PUT /api/v1/config and config reload; no restart required.
   codec_alternative: true
-  # integer: maximum concurrently running jobs; sizes the worker pool built at startup.
+  # integer: maximum runs in flight (a run is one download pass over one album, playlist or
+  # station; an album or playlist has at most one run at a time); sizes the worker pool built at startup.
   # Positive values allow 1-32; values <=0 behave as 1; values above 32 in this file are
   # clamped to 32 (the config API rejects them). Default: 3.
   # Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
@@ -183,10 +184,17 @@ download:
   max_parallel_downloads: 16
   # The remaining download keys are runtime-mutable through PUT /api/v1/config
   # and config reload; no restart is required.
-  # integer: maximum total attempts (including the first) for metadata, cover, lyrics,
-  # and each codec's download/decrypt phase. Positive values allow 1-10; values <=0 behave as 1;
+  # integer: maximum total attempts (including the first) within one run for metadata, cover,
+  # lyrics, and each codec's download/decrypt phase. Positive values allow 1-10; values <=0 behave as 1;
   # values above 10 in this file are clamped to 10 (the config API rejects them). Default: 3.
   max_attempts: 3
+  # integer: how many runs may fail a track's quality slot before it is given up. A failed slot is
+  # retried by a new run 30 minutes after the failure, then 2 hours after the next, and so on, each
+  # wait four times the last; once this many runs failed it, it waits for a Reset. An error that
+  # cannot pass (the track cannot be placed, Apple refuses it for good) gives up at once. 0 never
+  # gives up. Distinct from max_attempts, which counts tries inside one run. Allowed 0-20.
+  # When the key is absent: 3. Runtime key: applies to the next failure.
+  give_up_after_runs: 3
   # integer milliseconds: minimum gap between two consecutive item_progress events for the same item
   # while it stays in one state. Only movement of the download/decrypt meters is delayed by this;
   # status changes (queued -> resolving -> waiting_download -> downloading -> waiting_decrypt ->
@@ -218,8 +226,8 @@ download:
   #
   # string template: where every song, album and artist download lands — the library. One
   # template serves all three, so a song lands at the same file whether it was downloaded on
-  # its own, with its album or with its artist, and a file at that path counts as downloaded:
-  # the track is skipped (force_overwrite replaces it), whatever quality it was saved in.
+  # its own, with its album or with its artist. amdl's own records, not the files, decide what
+  # is downloaded; a file already at a track's path when it downloads is taken as that track.
   # When the key is absent, the value below applies.
   # Folder segments may use only literal text and the album's own values: {AlbumArtist},
   # {AlbumName}, {AlbumId}, {ReleaseDate} (YYYY-MM-DD) and {ReleaseYear}, and at least one
@@ -229,15 +237,20 @@ download:
   # {ArtistName} (the track's artist; {UrlArtistName} is an alias), {ArtistId}, {DiscNumber},
   # {DiscCount}, {TrackNumber}, {TrackCount}, {UPC}, {Copyright}, {RecordLabel}. It must
   # contain {SongNumber}, or both {DiscNumber} and {TrackNumber}, so two tracks of an album
-  # never share a name. {Quality}, {Codec}, {Tag} and the playlist and station variables are
-  # rejected: whether a track is downloaded is decided before a codec is chosen.
+  # never share a name. The file name may also use {Codec} (for example "ALAC") and {Quality}
+  # (for example "24-bit_96 kHz"), but {Quality} only together with {Codec}: aac and
+  # aac-binaural share "256Kbps". Folders may not use them: every quality of an album shares
+  # its folder. {Tag} and the playlist and station variables are rejected.
+  # Another quality of a track that is already downloaded is saved next to it with a suffix,
+  # for example "01. Song [AAC 256Kbps].m4a", unless the file name names {Codec}; media
+  # servers list both files as two tracks.
   # {SongNumber} is the track's number in its album as released: Apple's track number,
   # counting on across discs, so a track a storefront withholds keeps its number free (an
   # album whose tracks carry no numbers uses the track list order); a single song takes its
   # number from its album, which is read to place it.
-  # Names come from the album in catalog.language, so changing the language, Apple renaming
-  # an album or editing this template makes files at the old paths count as missing, and they
-  # download again. Runtime key: applies to jobs started after the change.
+  # Names come from the album in catalog.language. A track keeps the path it was downloaded
+  # to: changing the language, Apple renaming an album or editing this template applies to new
+  # downloads only. Runtime key: applies to runs started after the change.
   library_path_format: "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}"
   # string template: output path for playlist tasks. A playlist keeps its own folder and is
   # not part of the library. Variables: everything listed for library_path_format, without
@@ -245,6 +258,8 @@ download:
   # (for example "24-bit_96 kHz" or "256Kbps"), {Codec} (for example "ALAC") and {Tag}
   # (always empty, accepted so templates that use it still parse). {SongNumber} is the
   # 1-based position in the playlist. In folder segments {ArtistName} is the track's artist.
+  # Another quality of a playlist track is saved next to it with the library's quality suffix
+  # unless the template names {Quality} or {Codec}.
   # When the key is absent, the value below applies. Runtime key.
   playlist_path_format: "playlists/{PlaylistName}/{SongNumber:02d}. {SongName}"
   # string template: output path for radio station (station/ra.xxxx) tasks. A station resolves to a
@@ -336,12 +351,6 @@ download:
   # AAC or Dolby track passes quick. A change takes effect for newly started jobs, without a restart.
   # Absent: quick. Default: quick.
   integrity_mode: "quick"
-  # bool: true replaces an existing output file (and its lyrics sidecars) when
-  # a job downloads the same track again, once the new copy is complete (a failed
-  # download leaves the old files); false skips tracks whose output file
-  # already exists. Default: false. Can be overridden per submission via the
-  # overrides.force_overwrite field of POST /api/v1/downloads.
-  force_overwrite: false
 
 tools:
   # string path or command name: ffmpeg executable. Used to flatten the
@@ -381,9 +390,10 @@ simulate:
   max_speed_kbps: 4096
 
 library_sync:
-  # Library monitor: polls the signed-in Apple Music library and submits the **album** of each
-  # newly added track as an ordinary download job. Add a song to your library on your phone and
-  # the whole album downloads here automatically, with no manual submission.
+  # Library monitor: polls the signed-in Apple Music library and adds the **album** of each
+  # newly added track to amdl's library as an album record, which downloads like one added by
+  # hand. Add a song to your library on your phone and the whole album downloads here
+  # automatically. An album removed from amdl is not added again by the monitor.
   #
   # Both keys are runtime-mutable through PUT /api/v1/config and config reload; no restart
   # is required. The polling loop re-reads them at the start of every round, so turning the
@@ -404,8 +414,8 @@ library_sync:
   # library at that moment counts as existing), and every later round pages newest-first until
   # it sees the oldest track of the anchor again; anything in between that is not in the
   # anchor is new.
-  # bool: true enables polling. Default: false — this is the only feature that creates
-  # download jobs on its own, so it stays off until enabled explicitly.
+  # bool: true enables polling. Default: false — this is the only feature that adds
+  # downloads on its own, so it stays off until enabled explicitly.
   enabled: false
   # integer minutes: polling interval, range 1..1440. Default: 15. In steady state a round
   # usually makes only 1 Apple request (one page covers the anchor window), plus 1 more per new
@@ -416,8 +426,7 @@ apple_library:
   # Apple library cache: a local copy of the signed-in Apple Music account library (albums,
   # songs, playlists with their tracks, artists) that GET /api/v1/apple-library/{kind} and the
   # in_apple_library mark on search hits read, so browsing never waits on Apple. A sync fills it;
-  # it never creates download jobs and never affects one (library_sync above is the monitor
-  # that submits new albums).
+  # it never adds downloads (library_sync above is the monitor that adds new albums).
   #
   # Both keys are runtime-mutable through PUT /api/v1/config and config reload; no restart is
   # required. The sync loop re-reads them every 15 seconds.

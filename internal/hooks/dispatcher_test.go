@@ -181,7 +181,7 @@ func TestDispatchRunsEveryEnabledMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runner.reset()
-			job := domain.Job{ID: "job-1", Type: "song", Overrides: &config.DownloadOverrides{ForceOverwrite: &force}}
+			job := domain.Job{ID: "job-1", Type: "song", Overrides: &config.DownloadOverrides{CodecAlternative: &force}}
 			d := NewDispatcher(cfg, nil, discardLogger())
 			d.runner = runner
 			d.Dispatch(tt.event, job, nil)

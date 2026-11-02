@@ -110,7 +110,8 @@ func TestValidateRejectsUnsafePathFormats(t *testing.T) {
 
 // One album is exactly one library folder, named by values an album summary
 // carries, and a file name is unique within its album and independent of the
-// codec and of the collection the track was downloaded as.
+// collection the track was downloaded as. The file name may name the quality,
+// but {Quality} only next to {Codec}: aac and aac-binaural share 256Kbps.
 func TestValidateLibraryPathFormat(t *testing.T) {
 	accepted := []string{
 		"library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}", // the default
@@ -119,6 +120,8 @@ func TestValidateLibraryPathFormat(t *testing.T) {
 		"music/{AlbumId}/{DiscNumber}-{TrackNumber:02d} {SongName} {ISRC}",
 		"{AlbumArtist} ({ReleaseDate})/{AlbumName}/{SongNumber} {UPC} {Copyright} {RecordLabel}",
 		"{AlbumName} {Unknown}/{SongNumber}", // unknown variables stay literal
+		"{AlbumArtist}/{AlbumName}/{SongNumber}. {SongName} {Codec}",
+		"{AlbumArtist}/{AlbumName}/{SongNumber}. {SongName} [{Codec} {Quality}]",
 	}
 	for _, format := range accepted {
 		cfg := Default()
@@ -128,20 +131,20 @@ func TestValidateLibraryPathFormat(t *testing.T) {
 		}
 	}
 	rejected := map[string]string{
-		"{SongNumber:02d}. {SongName}":                               "at least one folder",
-		"{AlbumArtist}/{SongNumber:02d}. {SongName}":                 "{AlbumName} or {AlbumId}",
-		"{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}":      "use {AlbumArtist}",
-		"{UrlArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}":   "use {AlbumArtist}",
-		"{AlbumArtist}/{AlbumName} [{ArtistId}]/{SongNumber}":        "use {AlbumArtist}",
-		"{AlbumArtist}/{AlbumName}/Disc {DiscNumber}/{SongNumber}":   "{DiscNumber}",
-		"{AlbumArtist}/{AlbumName} [{Quality}]/{SongNumber}":         "{Quality}",
-		"{AlbumArtist}/{AlbumName}/{SongNumber}. {SongName} {Codec}": "{Codec}",
-		"{AlbumArtist}/{AlbumName}/{SongNumber} [{Quality}]":         "{Quality}",
-		"{AlbumArtist}/{AlbumName}/{SongNumber}{Tag}":                "{Tag}",
-		"{AlbumArtist}/{AlbumName}/{SongNumber} {PlaylistName}":      "{PlaylistName}",
-		"{AlbumArtist}/{AlbumName}/{SongNumber} {StationId}":         "{StationId}",
-		"{AlbumArtist}/{AlbumName}/{TrackNumber:02d}. {SongName}":    "{SongNumber}, or both",
-		"{AlbumArtist}/{AlbumName}/{DiscNumber}. {SongName}":         "{SongNumber}, or both",
+		"{SongNumber:02d}. {SongName}":                             "at least one folder",
+		"{AlbumArtist}/{SongNumber:02d}. {SongName}":               "{AlbumName} or {AlbumId}",
+		"{ArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}":    "use {AlbumArtist}",
+		"{UrlArtistName}/{AlbumName}/{SongNumber:02d}. {SongName}": "use {AlbumArtist}",
+		"{AlbumArtist}/{AlbumName} [{ArtistId}]/{SongNumber}":      "use {AlbumArtist}",
+		"{AlbumArtist}/{AlbumName}/Disc {DiscNumber}/{SongNumber}": "{DiscNumber}",
+		"{AlbumArtist}/{AlbumName} [{Quality}]/{SongNumber}":       "{Quality}",
+		"{AlbumArtist}/{AlbumName} [{Codec}]/{SongNumber}":         "{Codec}",
+		"{AlbumArtist}/{AlbumName}/{SongNumber} [{Quality}]":       "{Quality} without {Codec}",
+		"{AlbumArtist}/{AlbumName}/{SongNumber}{Tag}":              "{Tag}",
+		"{AlbumArtist}/{AlbumName}/{SongNumber} {PlaylistName}":    "{PlaylistName}",
+		"{AlbumArtist}/{AlbumName}/{SongNumber} {StationId}":       "{StationId}",
+		"{AlbumArtist}/{AlbumName}/{TrackNumber:02d}. {SongName}":  "{SongNumber}, or both",
+		"{AlbumArtist}/{AlbumName}/{DiscNumber}. {SongName}":       "{SongNumber}, or both",
 	}
 	for format, want := range rejected {
 		cfg := Default()

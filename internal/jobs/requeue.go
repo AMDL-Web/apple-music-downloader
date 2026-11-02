@@ -91,8 +91,7 @@ func (m *Manager) requeueLocked(ctx context.Context, job domain.Job, r requeue) 
 	// The row already says queued and workers may claim it, so a failed event
 	// below is only logged, like job_queued in admitLocked. A worker's claim
 	// waits for mu, so job_started cannot precede job_retried.
-	force := requeued.Overrides != nil && requeued.Overrides.ForceOverwrite != nil && *requeued.Overrides.ForceOverwrite
-	payload := domain.MarshalEventPayload(requeued, map[string]any{"message": r.message, "cause": r.cause, "force_overwrite": force})
+	payload := domain.MarshalEventPayload(requeued, map[string]any{"message": r.message, "cause": r.cause})
 	if err := m.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventJobRetried, Message: r.message, Payload: payload}); err != nil {
 		logging.FromContext(ctx, m.logger).Error("record job_retried event", "job_id", job.ID, "error", err)
 	}

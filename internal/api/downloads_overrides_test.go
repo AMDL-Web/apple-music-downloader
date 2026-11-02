@@ -25,7 +25,7 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 	server := &Server{cfg: config.NewStore(config.Default()), store: store, manager: manager}
 
 	recorder := requestJSON(t, server.Routes(), http.MethodPost, "/api/v1/downloads",
-		`{"urls":["song|us|1"],"overrides":{"force_overwrite":true,"quality_priority":["aac"],"alac_max_bit_depth":16}}`)
+		`{"urls":["song|us|1"],"overrides":{"codec_alternative":false,"quality_priority":["aac"],"alac_max_bit_depth":16}}`)
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
@@ -36,8 +36,8 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 	if resp.Accepted != 1 || resp.Results[0].Job == nil {
 		t.Fatalf("submit response = %+v", resp)
 	}
-	if o := resp.Results[0].Job.Overrides; o == nil || o.ForceOverwrite == nil || !*o.ForceOverwrite {
-		t.Fatalf("accepted job overrides = %+v, want force_overwrite=true", resp.Results[0].Job.Overrides)
+	if o := resp.Results[0].Job.Overrides; o == nil || o.CodecAlternative == nil || *o.CodecAlternative {
+		t.Fatalf("accepted job overrides = %+v, want codec_alternative=false", resp.Results[0].Job.Overrides)
 	}
 
 	// The overrides must survive the DB round-trip so retries and
@@ -46,8 +46,8 @@ func TestCreateDownloadWithOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.Overrides == nil || persisted.Overrides.ForceOverwrite == nil || !*persisted.Overrides.ForceOverwrite {
-		t.Fatalf("persisted overrides = %+v, want force_overwrite=true", persisted.Overrides)
+	if persisted.Overrides == nil || persisted.Overrides.CodecAlternative == nil || *persisted.Overrides.CodecAlternative {
+		t.Fatalf("persisted overrides = %+v, want codec_alternative=false", persisted.Overrides)
 	}
 	if qp := persisted.Overrides.QualityPriority; qp == nil || len(*qp) != 1 || (*qp)[0] != "aac" {
 		t.Fatalf("persisted quality_priority override = %v, want [aac]", qp)

@@ -203,12 +203,12 @@ func (d *Downloader) trackTargets(parsed applemusic.ParsedURL, resolved resolved
 }
 
 // keepFinished decides whether a track finished by an earlier run of the job
-// stays finished, re-checked on every run: never under force_overwrite, only
+// stays finished, re-checked on every run: never under replaceExisting, only
 // while its recorded output is still there, and for a library track only
 // while that output is the track's current library path, so a changed
 // download.library_path_format or a file from an older layout downloads again.
 func (d *Downloader) keepFinished(backend mediaBackend, targets []trackTarget) func(domain.JobItem, int) bool {
-	force := d.cfg.Download.ForceOverwrite
+	force := d.replaceExisting
 	return func(prev domain.JobItem, i int) bool {
 		if force || prev.OutputPath == "" {
 			return false
@@ -228,7 +228,7 @@ func (d *Downloader) keepFinished(backend mediaBackend, targets []trackTarget) f
 // a file another job commits meanwhile. The standalone covers of each album it
 // skipped are still ensured, as a track run would have before its skip.
 func (d *Downloader) skipTracksOnDisk(ctx context.Context, backend mediaBackend, job domain.Job, tracks []applemusic.Song, items []domain.JobItem, finished []bool, targets []trackTarget, reporter jobs.Reporter) error {
-	if d.cfg.Download.ForceOverwrite {
+	if d.replaceExisting {
 		return nil
 	}
 	coverTrack := make(map[string]int)

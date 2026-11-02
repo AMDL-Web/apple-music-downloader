@@ -24,7 +24,7 @@ import (
 func TestSubmitBatchStoresOverridesOnEveryJob(t *testing.T) {
 	manager := newTestManager(t)
 	force := true
-	overrides := &config.DownloadOverrides{ForceOverwrite: &force}
+	overrides := &config.DownloadOverrides{CodecAlternative: &force}
 	resp := manager.SubmitBatch(context.Background(), []string{
 		"station|us|ra.1",
 		"playlist|us|pl.u-private",
@@ -38,8 +38,8 @@ func TestSubmitBatchStoresOverridesOnEveryJob(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if job.Overrides == nil || job.Overrides.ForceOverwrite == nil || !*job.Overrides.ForceOverwrite {
-			t.Fatalf("job %s (%s) overrides = %+v, want force_overwrite", result.Job.ID, result.URL, job.Overrides)
+		if job.Overrides == nil || job.Overrides.CodecAlternative == nil || !*job.Overrides.CodecAlternative {
+			t.Fatalf("job %s (%s) overrides = %+v, want codec_alternative", result.Job.ID, result.URL, job.Overrides)
 		}
 	}
 }
@@ -303,7 +303,7 @@ func TestRetryRequeuesCancelledJob(t *testing.T) {
 	now := time.Now().UTC()
 	started, finished := now.Add(-time.Minute), now.Add(-time.Second)
 	force := true
-	job := domain.Job{ID: "job-cancelled", Input: "in", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:c1", Status: domain.JobCancelled, TotalItems: 3, Error: "cancelled", StartedAt: &started, FinishedAt: &finished, Overrides: &config.DownloadOverrides{ForceOverwrite: &force}, CreatedAt: now, UpdatedAt: now}
+	job := domain.Job{ID: "job-cancelled", Input: "in", Type: "album", Storefront: "cn", CanonicalKey: "album:cn:c1", Status: domain.JobCancelled, TotalItems: 3, Error: "cancelled", StartedAt: &started, FinishedAt: &finished, Overrides: &config.DownloadOverrides{CodecAlternative: &force}, CreatedAt: now, UpdatedAt: now}
 	if err := store.CreateJob(ctx, job); err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +326,7 @@ func TestRetryRequeuesCancelledJob(t *testing.T) {
 	if got.Status != domain.JobQueued || got.Error != "" || got.StartedAt != nil || got.FinishedAt != nil {
 		t.Fatalf("job after retry = %+v, want queued with error, started_at and finished_at cleared", got)
 	}
-	if got.Overrides == nil || got.Overrides.ForceOverwrite == nil || !*got.Overrides.ForceOverwrite {
+	if got.Overrides == nil || got.Overrides.CodecAlternative == nil || !*got.Overrides.CodecAlternative {
 		t.Fatalf("overrides after retry = %+v, want them kept", got.Overrides)
 	}
 	items, err := store.ListItems(ctx, job.ID)

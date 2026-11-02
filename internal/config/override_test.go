@@ -34,30 +34,12 @@ func TestDownloadOverridesApplyMergesOnlySetFields(t *testing.T) {
 		t.Fatalf("overridden fields not applied: %+v", got.Download)
 	}
 	// Untouched fields keep the base values.
-	if got.Download.ALACMaxBitDepth != base.Download.ALACMaxBitDepth || got.Download.ForceOverwrite != base.Download.ForceOverwrite {
+	if got.Download.ALACMaxBitDepth != base.Download.ALACMaxBitDepth {
 		t.Fatalf("unset fields changed: %+v", got.Download)
 	}
 	// The base config must not be mutated in place.
 	if !reflect.DeepEqual(base.Download.QualityPriority, Default().Download.QualityPriority) || base.Download.CodecAlternative != true {
 		t.Fatalf("Apply mutated the base config: %+v", base.Download)
-	}
-}
-
-func TestDownloadOverridesApplyForceOverwrite(t *testing.T) {
-	forceOn := true
-	forceOff := false
-
-	base := Default()
-	if got := (&DownloadOverrides{ForceOverwrite: &forceOn}).Apply(base); !got.Download.ForceOverwrite {
-		t.Fatal("force_overwrite override true was not applied over the false default")
-	}
-
-	base.Download.ForceOverwrite = true
-	if got := (&DownloadOverrides{ForceOverwrite: &forceOff}).Apply(base); got.Download.ForceOverwrite {
-		t.Fatal("force_overwrite override false did not win over the global true")
-	}
-	if got := (&DownloadOverrides{}).Apply(base); !got.Download.ForceOverwrite {
-		t.Fatal("unset force_overwrite override changed the global value")
 	}
 }
 
@@ -68,17 +50,17 @@ func TestDownloadOverridesApplyForceOverwrite(t *testing.T) {
 func TestDownloadOverridesIgnoreRemovedKeysInPersistedJSON(t *testing.T) {
 	stored := `{"media_user_token":"old-token","hooks":["notify"],"downloads_dir":"/elsewhere","temp_dir":"/elsewhere/tmp",` +
 		`"song_path_format":"{SongName}","embed_cover":false,"lyrics_extras":[],"max_attempts":99,"check_integrity":false,` +
-		`"memory_mode":"high","max_parallel_tracks":64,"force_overwrite":true}`
+		`"memory_mode":"high","max_parallel_tracks":64,"force_overwrite":true,"codec_alternative":false}`
 	var overrides DownloadOverrides
 	if err := json.Unmarshal([]byte(stored), &overrides); err != nil {
 		t.Fatalf("decode historical override: %v", err)
 	}
-	if overrides.ForceOverwrite == nil || !*overrides.ForceOverwrite {
+	if overrides.CodecAlternative == nil || *overrides.CodecAlternative {
 		t.Fatalf("kept field was not decoded: %+v", overrides)
 	}
 	raw, err := json.Marshal(overrides)
-	if err != nil || string(raw) != `{"force_overwrite":true}` {
-		t.Fatalf("re-encoded override = %s, %v; want only force_overwrite", raw, err)
+	if err != nil || string(raw) != `{"codec_alternative":false}` {
+		t.Fatalf("re-encoded override = %s, %v; want only codec_alternative", raw, err)
 	}
 	base := Default()
 	base.Catalog.MediaUserToken = "settings-token"
@@ -87,9 +69,9 @@ func TestDownloadOverridesIgnoreRemovedKeysInPersistedJSON(t *testing.T) {
 		t.Fatalf("historical override no longer validates: %v", err)
 	}
 	want := base
-	want.Download.ForceOverwrite = true
+	want.Download.CodecAlternative = false
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("historical override changed more than force_overwrite: %+v", got.Download)
+		t.Fatalf("historical override changed more than codec_alternative: %+v", got.Download)
 	}
 }
 
@@ -142,6 +124,7 @@ var overrideExclusions = map[string]bool{
 	"download.progress_event_interval_ms": true,
 	// Install settings that Settings changes for every job.
 	"download.max_attempts":         true,
+	"download.give_up_after_runs":   true,
 	"download.downloads_dir":        true,
 	"download.library_path_format":  true,
 	"download.playlist_path_format": true,

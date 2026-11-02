@@ -280,12 +280,12 @@ func TestProcessJobRechecksFinishedItems(t *testing.T) {
 	}
 }
 
-// force_overwrite downloads every track again, files on disk or not.
-func TestProcessJobForceOverwriteIgnoresFilesOnDisk(t *testing.T) {
+// replaceExisting downloads every track again, files on disk or not.
+func TestProcessJobReplaceExistingIgnoresFilesOnDisk(t *testing.T) {
 	cfg := libraryTestConfig(t, true)
-	cfg.Download.ForceOverwrite = true
 	catalog := libraryTestCatalog()
 	downloader := newLibraryTestDownloader(cfg, catalog)
+	downloader.replaceExisting = true
 	downloader.simulatedOutputs.add(libraryFile(cfg, "01. One.m4a"), 7)
 	reporter := &recordingReporter{existing: []domain.JobItem{
 		{ID: "item-1", JobID: albumJob.ID, AdamID: "song-1", Index: 1, Status: domain.ItemSkipped, OutputPath: libraryFile(cfg, "01. One.m4a")},
@@ -320,10 +320,10 @@ func TestKeepFinishedPlaylistTrackFollowsRecordedFile(t *testing.T) {
 	if keep(domain.JobItem{Status: domain.ItemCompleted, OutputPath: recorded + ".gone"}, 0) {
 		t.Fatal("playlist item whose file is gone was kept")
 	}
-	cfg.Download.ForceOverwrite = true
 	forced := downloader.withConfig(cfg)
+	forced.replaceExisting = true
 	if forced.keepFinished(forced.backend(), targets)(domain.JobItem{Status: domain.ItemCompleted, OutputPath: recorded}, 0) {
-		t.Fatal("playlist item was kept under force_overwrite")
+		t.Fatal("playlist item was kept under replaceExisting")
 	}
 }
 

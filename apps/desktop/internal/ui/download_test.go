@@ -15,21 +15,13 @@ import (
 func TestTheDownloadChoicesBecomeTheJobsOverrides(t *testing.T) {
 	d := downloadAsk{codecs: []string{"alac", "ec3"}, priority: []string{"alac", "ec3", "aac"}, codec: 1}
 	o := d.overrides(false)
-	if o == nil || !slices.Equal(*o.QualityPriority, []string{"ec3", "alac", "aac"}) || o.ForceOverwrite != nil {
+	if o == nil || !slices.Equal(*o.QualityPriority, []string{"ec3", "alac", "aac"}) {
 		t.Errorf("Dolby chosen: %+v", o)
 	}
-	again := downloadAsk{again: true}
-	if o := again.overrides(true); o == nil || *o.ForceOverwrite {
-		t.Errorf("skip chosen: %+v", o)
-	}
-	again.replace = 1
-	if o := again.overrides(true); o == nil || !*o.ForceOverwrite {
-		t.Errorf("replace chosen: %+v", o)
-	}
-	// SkipExisting: in the library, not asked, the files are kept whatever
-	// the server's force_overwrite.
-	if o := (&downloadAsk{}).overrides(true); o == nil || *o.ForceOverwrite {
-		t.Errorf("skipped without asking: %+v", o)
+	// TODO(P3): replace becomes a reset of the record, not an override.
+	again := downloadAsk{again: true, replace: 1}
+	if o := again.overrides(true); o != nil {
+		t.Errorf("a hit in the library carries no overrides: %+v", o)
 	}
 	if o := (&downloadAsk{}).overrides(false); o != nil {
 		t.Errorf("nothing to ask: %+v", o)

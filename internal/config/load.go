@@ -25,8 +25,78 @@ func Load(path string) (Config, error) {
 	return loadBytes(path, raw)
 }
 
-// loadBytes is Load for a file already read; path labels its errors.
+// retiredKeys are keys a config.yaml written by an earlier version may still
+// hold, with what replaces each. PUT /api/v1/config wrote every key into the
+// file, so failing on them as unknown keys would stop an upgraded install from
+// starting; the loader drops them instead and RetiredKeys names them for a
+// startup warning.
+var retiredKeys = map[string]string{
+	"download.force_overwrite": "records decide what downloads; re-download with Reset",
+}
+
+// RetiredKey is a retired key found in a config file and what replaces it.
+type RetiredKey struct {
+	Key         string
+	Replacement string
+}
+
+// RetiredKeys returns the retired keys the file at path holds, sorted. Load
+// ignores them; the caller logs a warning for each. An unreadable file yields
+// none: Load reports that.
+func RetiredKeys(path string) []RetiredKey {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	_, dropped := dropRetiredKeys(raw)
+	out := make([]RetiredKey, 0, len(dropped))
+	for _, key := range dropped {
+		out = append(out, RetiredKey{Key: key, Replacement: retiredKeys[key]})
+	}
+	return out
+}
+
+// dropRetiredKeys returns raw without the retiredKeys leaves and the dotted
+// keys it removed, sorted. A document that does not parse as a map of sections
+// is returned unchanged, leaving the error to the typed decoder.
+func dropRetiredKeys(raw []byte) ([]byte, []string) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return raw, nil
+	}
+	var dropped []string
+	root := doc.Content[0]
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		section, leaves := root.Content[i].Value, root.Content[i+1]
+		if leaves.Kind != yaml.MappingNode {
+			continue
+		}
+		kept := leaves.Content[:0:0]
+		for j := 0; j+1 < len(leaves.Content); j += 2 {
+			key := section + "." + leaves.Content[j].Value
+			if _, retired := retiredKeys[key]; retired {
+				dropped = append(dropped, key)
+				continue
+			}
+			kept = append(kept, leaves.Content[j], leaves.Content[j+1])
+		}
+		leaves.Content = kept
+	}
+	if len(dropped) == 0 {
+		return raw, nil
+	}
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return raw, nil
+	}
+	slices.Sort(dropped)
+	return out, dropped
+}
+
+// loadBytes is Load for a file already read; path labels its errors. Retired
+// keys are dropped first (RetiredKeys).
 func loadBytes(path string, raw []byte) (Config, error) {
+	raw, _ = dropRetiredKeys(raw)
 	cfg := Default()
 	if unknown := unknownKeys(raw); len(unknown) > 0 {
 		return cfg, fmt.Errorf("%s: unknown config key(s) %s; removed keys and their replacements are listed in %s",

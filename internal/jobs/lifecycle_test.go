@@ -123,7 +123,7 @@ func TestShutdownInterruptsJobAndRestartResumesIt(t *testing.T) {
 	first.SetHooks(firstHooks)
 	first.Start(context.Background())
 	force := true
-	resp := first.SubmitBatch(ctx, []string{"station|us|ra.1"}, &config.DownloadOverrides{ForceOverwrite: &force})
+	resp := first.SubmitBatch(ctx, []string{"station|us|ra.1"}, &config.DownloadOverrides{CodecAlternative: &force})
 	if resp.Accepted != 1 {
 		t.Fatalf("submit = %+v", resp)
 	}
@@ -156,7 +156,7 @@ func TestShutdownInterruptsJobAndRestartResumesIt(t *testing.T) {
 		t.Fatalf("interrupted job = status %s finished %v error %q started %v, want running, unfinished, no error, started",
 			interrupted.Status, interrupted.FinishedAt, interrupted.Error, interrupted.StartedAt)
 	}
-	if interrupted.Overrides == nil || interrupted.Overrides.ForceOverwrite == nil || !*interrupted.Overrides.ForceOverwrite {
+	if interrupted.Overrides == nil || interrupted.Overrides.CodecAlternative == nil || !*interrupted.Overrides.CodecAlternative {
 		t.Fatalf("interrupted job overrides = %+v, want them kept for the resumed run", interrupted.Overrides)
 	}
 	items, err := store.ListItems(ctx, jobID)
@@ -190,8 +190,8 @@ func TestShutdownInterruptsJobAndRestartResumesIt(t *testing.T) {
 	}()
 	select {
 	case resumed := <-processor.resumed:
-		if resumed.Overrides == nil || resumed.Overrides.ForceOverwrite == nil || !*resumed.Overrides.ForceOverwrite {
-			t.Fatalf("resumed run overrides = %+v, want force_overwrite", resumed.Overrides)
+		if resumed.Overrides == nil || resumed.Overrides.CodecAlternative == nil || !*resumed.Overrides.CodecAlternative {
+			t.Fatalf("resumed run overrides = %+v, want codec_alternative", resumed.Overrides)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("recovered job did not run")

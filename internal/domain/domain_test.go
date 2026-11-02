@@ -43,7 +43,7 @@ func TestMarshalEventPayloadKeepsSnapshotFields(t *testing.T) {
 	force := true
 	payload := MarshalEventPayload(Job{
 		ID: "job-1", Status: JobCompleted,
-		Overrides: &config.DownloadOverrides{ForceOverwrite: &force},
+		Overrides: &config.DownloadOverrides{CodecAlternative: &force},
 	}, map[string]any{"message": "completed", "attempts": 2})
 	if len(payload) == 0 {
 		t.Fatal("MarshalEventPayload returned an empty payload")

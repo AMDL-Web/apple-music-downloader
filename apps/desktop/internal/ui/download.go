@@ -59,9 +59,9 @@ func (a *App) openOrDownload(h client.SearchHit) {
 }
 
 // overrides are the submit's: the chosen codec first, then the rest of the
-// server's priority in its order; and, for a hit in the library, whether
-// its files are replaced, said either way so the server's own
-// force_overwrite does not decide.
+// server's priority in its order. TODO(P3): the replace choice for a hit in
+// the library becomes a reset of its record; overrides no longer carry
+// force_overwrite.
 func (d *downloadAsk) overrides(inLibrary bool) *config.DownloadOverrides {
 	var o config.DownloadOverrides
 	set := false
@@ -74,10 +74,6 @@ func (d *downloadAsk) overrides(inLibrary bool) *config.DownloadOverrides {
 			}
 		}
 		o.QualityPriority, set = &list, true
-	}
-	if inLibrary {
-		replace := d.again && d.replace == 1
-		o.ForceOverwrite, set = &replace, true
 	}
 	if !set {
 		return nil

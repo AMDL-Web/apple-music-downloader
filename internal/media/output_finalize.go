@@ -18,18 +18,16 @@ import (
 	"amdl/internal/jobs"
 )
 
-// handleExistingOutput decides whether outPath is already downloaded. Without
-// force_overwrite an existing file finishes the item as skipped_existing (and
-// drops any resume checkpoint for it). With it, the existing file and its
+// handleExistingOutput decides whether outPath is already downloaded. Unless
+// d.replaceExisting, an existing file finishes the item as skipped_existing
+// (and drops any resume checkpoint for it). With it, the existing file and its
 // sidecars stay where they are until the new copy is committed over them, so a
 // forced download that fails leaves the old track intact; only staging orphans
 // are swept, and the item_overwrite event says so.
 func (d *Downloader) handleExistingOutput(ctx context.Context, reporter jobs.Reporter, job domain.Job, item *domain.JobItem, outPath string) (bool, error) {
 	backend := d.backend()
 	item.OutputPath = domain.AbsolutePath(outPath)
-	// d.cfg is the job's effective config (runtime snapshot plus overrides),
-	// so overrides.force_overwrite already won over the global key here.
-	force := d.cfg.Download.ForceOverwrite
+	force := d.replaceExisting
 	if size, ok := backend.statOutput(outPath); ok && !force {
 		d.finishSkipped(ctx, backend, reporter, job, item, outPath, size)
 		return true, nil
