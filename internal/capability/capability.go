@@ -68,7 +68,7 @@ var All = []Capability{
 		Summary:  "Show the codecs and audio quality each track of a link can be downloaded in",
 		Examples: []string{"amdl quality https://music.apple.com/us/album/igor/1463409338"}},
 	{Command: "download", Tool: "start_download", Ops: []string{"createDownload", "streamDownloadEvents"}, Safety: Write, Args: []string{"urls"},
-		Summary:     "Download songs, albums, playlists, stations or artists by link; --wait blocks until done",
+		Summary:     "Download songs, albums, playlists, stations or artists by link; --wait blocks until their jobs are done (a pending link has no job yet)",
 		ToolSummary: "Add songs, albums, playlists, stations or artists by link and answer at once with {accepted: [{url, status, job_id, resource}], rejected: [{url, status, code, message, existing_job_id}]}; status accepted carries the record's queued run as job_id, pending means the link is read into records first (no job yet), already_downloaded means the record has every track (reset_resource downloads again); follow each job_id with wait_for_job",
 		Examples: []string{
 			"amdl download https://music.apple.com/us/album/igor/1463409338 --wait --timeout 20m",

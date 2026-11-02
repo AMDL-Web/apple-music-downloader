@@ -109,7 +109,9 @@ downloads it again (`--what audio`), and `library check` then `library reset --w
 ## Waiting
 
 - `download --wait` and `jobs wait` return as soon as the job is finished, without waiting for
-  its post-download hooks. A finished job's summary, here and in `jobs get`, carries
+  its post-download hooks. `download --wait` follows the links that have a job: a link
+  answered `pending` (a song, an artist or a library playlist, read into records first) or
+  `already_downloaded` has none, and when no link has one it prints the submit answer. A finished job's summary, here and in `jobs get`, carries
   `hooks_running: true` while any still run.
 - `download --watch` and `jobs watch <job_id>` keep streaming until the hooks have ended too.
 - A finished job never ends in `wait_timeout`, and `--timeout 0` (or a negative value) looks
@@ -330,7 +332,7 @@ says otherwise. When a backend is already running there, such as the desktop app
 command connects to it instead, and so does a command that names no server at all.
 Otherwise amdl starts one on a loopback port and stops it when the command ends;
 unfinished jobs resume on its next start, and a `download` waits for its jobs so they
-can finish. The first start needs the wrapper's address, from `--wrapper`, and fails with
+can finish. A `pending` link has no job to wait for; the backend reads it on its next start. The first start needs the wrapper's address, from `--wrapper`, and fails with
 `wrapper_not_configured` without it. Later starts keep the address in the config, which
 `amdl config set wrapper.address=...` and `amdl system restart` change; `--wrapper`
 writes a new one.

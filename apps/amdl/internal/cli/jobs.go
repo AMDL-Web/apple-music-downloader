@@ -102,6 +102,17 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 			return e.out.result(raw)
 		}
 		e.note("%d accepted, %d rejected", batch.Accepted, batch.Rejected)
+		if pending := pendingURLs(batch); len(pending) > 0 {
+			e.note("not waiting for %d link(s) read into records first, with no job yet (amdl library pending list): %s",
+				len(pending), strings.Join(pending, " "))
+			if e.running != nil {
+				e.note("the embedded backend reads them on its next start")
+			}
+		}
+		if len(ids) == 0 {
+			// No link has a job to follow: the answer says what each got.
+			return e.out.result(raw)
+		}
 		ctx, cancel := context.WithTimeout(e.ctx, *timeout)
 		defer cancel()
 		var finals []map[string]any
@@ -158,6 +169,18 @@ func readURLs(e *env, args []string) ([]string, error) {
 		return nil, usageErr("no link given; usage: amdl download <url>... (or - to read them from stdin)")
 	}
 	return args, nil
+}
+
+// pendingURLs are the links a submission answered pending: read into records
+// first, they have no job to follow yet.
+func pendingURLs(b domain.BatchSubmitResponse) []string {
+	var urls []string
+	for _, r := range b.Results {
+		if r.Status == domain.SubmitPending {
+			urls = append(urls, r.URL)
+		}
+	}
+	return urls
 }
 
 // jobIDs are the jobs a submission created or found already running, in
