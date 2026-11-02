@@ -300,7 +300,7 @@ func TestRecordAddsSimulateEndToEnd(t *testing.T) {
 		{ID: "400", Name: "Let There Be Rock"}, {ID: "410", Name: "Flick of the Switch"},
 	}}
 	catalog.playlists["pl.mix"] = applemusic.Collection{ID: "pl.mix", Type: applemusic.TypePlaylist, Name: "Mix", Artist: "Curator", Tracks: []applemusic.Song{
-		catalog.songs["1002"], catalog.songs["3001"],
+		catalog.songs["1002"], catalog.songs["1002"], catalog.songs["3001"],
 	}}
 	catalog.stations["ra.rock"] = applemusic.Collection{ID: "ra.rock", Type: applemusic.TypeStation, Name: "Rock Radio", Tracks: []applemusic.Song{
 		catalog.songs["3002"],
@@ -349,7 +349,8 @@ func TestRecordAddsSimulateEndToEnd(t *testing.T) {
 			t.Fatalf("artist album %s = %+v, want added whole and done", id, album)
 		}
 	}
-	// A playlist keeps its own copies, numbered by position.
+	// A playlist keeps its own copies, numbered by their place in Apple's
+	// list: a song listed twice is one copy and does not renumber the next.
 	playlist, err := h.store.GetPlaylist(context.Background(), "pl.mix")
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +363,7 @@ func TestRecordAddsSimulateEndToEnd(t *testing.T) {
 		playlistPaths = append(playlistPaths, f.Path)
 	}
 	slices.Sort(playlistPaths)
-	if want := []string{filepath.Join("playlists", "Mix", "01. Song 2.m4a"), filepath.Join("playlists", "Mix", "02. Song 1.m4a")}; !slices.Equal(playlistPaths, want) {
+	if want := []string{filepath.Join("playlists", "Mix", "01. Song 2.m4a"), filepath.Join("playlists", "Mix", "03. Song 1.m4a")}; !slices.Equal(playlistPaths, want) {
 		t.Fatalf("playlist paths = %v, want %v", playlistPaths, want)
 	}
 	// A station is a one-off run with no record and no slots.
@@ -806,6 +807,20 @@ func TestRecordRunRenamesASlotThatNeverCompleted(t *testing.T) {
 	f := h.files(domain.ResourceAlbum, "100")[0]
 	if want := "library/Artist/Album/01. Song 1 [AAC-LC 256Kbps].m4a"; f.Codec != "aac-lc" || f.Path != want {
 		t.Fatalf("slot = %s at %q, want aac-lc at %q", f.Codec, f.Path, want)
+	}
+}
+
+// A playlist song keeps its place in Apple's list as its number: a song
+// listed twice is kept at its first place and does not renumber the songs
+// after it.
+func TestPlaylistReadKeepsListPositions(t *testing.T) {
+	read := playlistRead(applemusic.Collection{ID: "pl.1", Tracks: []applemusic.Song{{ID: "a"}, {ID: "b"}, {ID: "a"}, {ID: "c"}}}, "cn")
+	var got []string
+	for _, tr := range read.Tracks {
+		got = append(got, fmt.Sprintf("%s@%d", tr.SongID, tr.Position))
+	}
+	if want := []string{"a@1", "b@2", "c@4"}; !slices.Equal(got, want) {
+		t.Fatalf("tracks = %v, want %v", got, want)
 	}
 }
 

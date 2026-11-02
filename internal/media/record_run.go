@@ -224,8 +224,10 @@ func albumRead(album applemusic.Collection, storefront string) db.AlbumRead {
 	return read
 }
 
-// playlistRead is a playlist read as the store keeps it. A song listed twice
-// is kept once, at its first position.
+// playlistRead is a playlist read as the store keeps it. Each song keeps its
+// 1-based place in the list Apple returned, its {SongNumber}, so a song
+// listed twice is kept once, at its first place, and the songs after it keep
+// their numbers.
 func playlistRead(playlist applemusic.Collection, storefront string) db.PlaylistRead {
 	read := db.PlaylistRead{
 		Playlist: domain.Playlist{
@@ -236,13 +238,13 @@ func playlistRead(playlist applemusic.Collection, storefront string) db.Playlist
 		Storefront: storefront,
 	}
 	seen := make(map[string]bool, len(playlist.Tracks))
-	for _, t := range playlist.Tracks {
+	for i, t := range playlist.Tracks {
 		if t.ID == "" || seen[t.ID] {
 			continue
 		}
 		seen[t.ID] = true
 		read.Tracks = append(read.Tracks, domain.PlaylistTrack{
-			PlaylistID: playlist.ID, SongID: t.ID, Name: t.Name, ArtistName: t.ArtistName, AlbumName: t.AlbumName,
+			PlaylistID: playlist.ID, SongID: t.ID, Position: i + 1, Name: t.Name, ArtistName: t.ArtistName, AlbumName: t.AlbumName,
 			DurationMS: t.DurationInMillis, HasLyrics: t.HasLyrics,
 		})
 	}

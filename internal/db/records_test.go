@@ -256,6 +256,17 @@ func TestPlaylistRecordTracksRemovalAndPathClaims(t *testing.T) {
 	if p.TracksWanted != 2 || p.State != domain.RecordNone || p.Name != "Mix" {
 		t.Fatalf("after read: %+v", p)
 	}
+	// A track's position is the one the read gives, else its index.
+	positions := PlaylistRead{Playlist: read.Playlist, Storefront: "cn", Now: now,
+		Tracks: []domain.PlaylistTrack{{SongID: "a"}, {SongID: "b", Position: 4}, {SongID: "c", Availability: domain.Unavailable}}}
+	must(t, store.ApplyPlaylistRead(ctx, positions))
+	listed, err := store.ListPlaylistTracks(ctx, "pl.1")
+	must(t, err)
+	for _, tr := range listed {
+		if want := map[string]int{"a": 1, "b": 4, "c": 3}[tr.SongID]; tr.Position != want {
+			t.Fatalf("track %s at %d, want %d", tr.SongID, tr.Position, want)
+		}
+	}
 
 	// The same song in an album and a playlist is two copies; a path is one.
 	_, err = store.AddAlbum(ctx, AlbumAdd{ID: "9", SongIDs: []string{"a"}, Source: domain.SourceManual, Now: now})

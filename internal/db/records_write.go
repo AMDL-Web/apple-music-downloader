@@ -245,8 +245,8 @@ type PlaylistRead struct {
 
 // ApplyPlaylistRead refreshes a playlist record from a read in one
 // transaction, as ApplyAlbumRead does. Every listed song is wanted, at its
-// 1-based position, with the availability the read gives it (available when
-// empty). A song gone from the list gets removed_at and keeps its row and
+// Position (its 1-based index in Tracks when zero), with the availability the
+// read gives it (available when empty). A song gone from the list gets removed_at and keeps its row and
 // files; one that comes back loses it.
 func (s *Store) ApplyPlaylistRead(ctx context.Context, read PlaylistRead) error {
 	_, err := withTx(ctx, s.db, func(tx *sql.Tx) (struct{}, error) {
@@ -271,13 +271,17 @@ func (s *Store) ApplyPlaylistRead(ctx context.Context, read PlaylistRead) error 
 			if availability == "" {
 				availability = domain.Available
 			}
+			position := t.Position
+			if position == 0 {
+				position = i + 1
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO playlist_tracks(playlist_id, song_id, position, name, artist_name, album_name,
 					duration_ms, has_lyrics, availability, removed_at)
 				VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
 				ON CONFLICT(playlist_id, song_id) DO UPDATE SET position = excluded.position, name = excluded.name,
 					artist_name = excluded.artist_name, album_name = excluded.album_name, duration_ms = excluded.duration_ms,
 					has_lyrics = excluded.has_lyrics, availability = excluded.availability, removed_at = NULL`,
-				p.ID, t.SongID, i+1, t.Name, t.ArtistName, t.AlbumName, t.DurationMS, t.HasLyrics, string(availability)); err != nil {
+				p.ID, t.SongID, position, t.Name, t.ArtistName, t.AlbumName, t.DurationMS, t.HasLyrics, string(availability)); err != nil {
 				return struct{}{}, fmt.Errorf("store track %s of playlist %s: %w", t.SongID, p.ID, err)
 			}
 		}
