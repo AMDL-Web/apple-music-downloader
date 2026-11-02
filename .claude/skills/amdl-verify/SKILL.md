@@ -67,6 +67,12 @@ Limits:
   path so it stays deleted (a fix inside the renamed file then stays too, so the
   proof covers only the other files), or report the verdict with that reason.
 
+## Catch the class
+
+After fixing a bug, ask whether the same class of defect can be caught automatically
+by a test, a parity test or a `tools/repocheck` check. If a cheap one exists, add it
+in the same change; if not, say so in the report.
+
 ## Live API check
 
 `make dev` (or the `amdl-dev` entry in `.claude/launch.json`) serves the API on

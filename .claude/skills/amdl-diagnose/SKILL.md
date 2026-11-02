@@ -40,7 +40,9 @@ first:
 5. State bugs: a copy of the user's SQLite file under `data/` (never the original),
    with `database.path` in a copied config pointing at it.
 6. Concurrency: `go test -race -count=200 -run 'TestX' ./internal/<pkg>/`, with
-   time, seeds and pool sizes pinned.
+   time, seeds and pool sizes pinned. When the symptom looks like an interleaving
+   that a test cannot pin down, model the protocol first
+   ([amdl-formal-model](../amdl-formal-model/SKILL.md)).
 7. "It used to work": `git bisect run <command>` between a good tag and
    `origin/dev`.
 
