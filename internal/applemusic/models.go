@@ -262,6 +262,9 @@ type songAttributes struct {
 	// AudioTraits is returned without extend=.
 	AudioTraits []string `json:"audioTraits"`
 	URL         string   `json:"url"`
+	// InLibrary is set only by a search that asks for extend=inLibrary with a
+	// usable media-user-token.
+	InLibrary *bool `json:"inLibrary"`
 }
 
 type albumAttributes struct {
@@ -285,6 +288,8 @@ type albumAttributes struct {
 	URL                 string `json:"url"`
 	// AudioTraits is amp-api only, as on songs.
 	AudioTraits []string `json:"audioTraits"`
+	// InLibrary is as on songs.
+	InLibrary *bool `json:"inLibrary"`
 }
 
 type playlistAttributes struct {
@@ -297,6 +302,8 @@ type playlistAttributes struct {
 	// AudioTraits is amp-api only, as on songs and albums; search hits carry
 	// it, empty so far.
 	AudioTraits []string `json:"audioTraits"`
+	// InLibrary is as on songs.
+	InLibrary *bool `json:"inLibrary"`
 }
 
 type artwork struct {

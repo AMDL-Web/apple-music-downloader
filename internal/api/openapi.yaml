@@ -27,6 +27,7 @@ tags:
   - name: Quality
   - name: Downloads
   - name: Search
+  - name: Apple library
 paths:
   /api/v1/health:
     get:
@@ -566,6 +567,162 @@ paths:
                 $ref: '#/components/schemas/LibrarySyncResetResponse'
         '500':
           $ref: '#/components/responses/StoreError'
+  /api/v1/apple-library/status:
+    get:
+      tags: [Apple library]
+      summary: Get the Apple library cache and sync status
+      description: >-
+        Whether the signed-in Apple Music account library can be read, the sync
+        under way, the last sync, and the number of cached items per kind. It
+        makes no Apple request. While state is running, poll it every couple of
+        seconds; there is no SSE event for the sync.
+      operationId: getAppleLibraryStatus
+      responses:
+        '200':
+          description: The status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppleLibraryStatus'
+  /api/v1/apple-library/sync:
+    post:
+      tags: [Apple library]
+      summary: Sync the Apple library cache now
+      description: >-
+        Starts a sync of the local copy of the account library in the
+        background and answers at once; current.id of the returned status is
+        the sync's id. A full sync (the default) reads every page of every
+        kind and removes what left the library; an incremental one reads the
+        newest additions, the playlist list and the totals. Download jobs are
+        never touched.
+      operationId: syncAppleLibrary
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                mode:
+                  type: string
+                  enum: [full, incremental]
+                  default: full
+                  description: >-
+                    full reads every page of every kind and removes what left
+                    the library; incremental reads only the newest additions,
+                    the playlist list and the totals.
+      responses:
+        '202':
+          description: The sync started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppleLibraryStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: apple_library_sync_running; a sync is under way, its id in details.sync_id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/AppleLibraryUnavailable'
+  /api/v1/apple-library/{kind}:
+    get:
+      tags: [Apple library]
+      summary: List one kind of the Apple library
+      description: >-
+        One page of the cached account library: albums, songs, playlists or
+        artists. Served from the local copy only; no Apple request. Before the
+        first full sync of the kind completes, items is empty and synced_at is
+        absent.
+      operationId: listAppleLibrary
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          description: Which part of the library to list.
+          schema:
+            type: string
+            enum: [albums, songs, playlists, artists]
+        - name: sort
+          in: query
+          description: >-
+            added (newest first by default; albums, songs, playlists), name, or
+            artist (albums and songs). Default added, name for artists, which
+            Apple gives no add order.
+          schema:
+            type: string
+            enum: [added, name, artist]
+        - name: order
+          in: query
+          description: Default desc for added, asc otherwise.
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: q
+          in: query
+          description: >-
+            Keeps items whose name, artist or album contains this text
+            (case-insensitive for ASCII letters); at most 200 characters.
+          schema:
+            type: string
+            maxLength: 200
+        - name: limit
+          in: query
+          description: Items per page; default 50, maximum 200.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - $ref: '#/components/parameters/BrowseOffset'
+      responses:
+        '200':
+          description: The page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppleLibraryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/AppleLibraryUnavailable'
+  /api/v1/apple-library/playlists/{playlist_id}/tracks:
+    get:
+      tags: [Apple library]
+      summary: List a cached Apple library playlist's tracks
+      description: >-
+        The tracks of one library playlist in playlist order, from the local
+        copy. It is how a playlist without a catalog link (an unshared own
+        playlist, Favorite Songs) is shown and its songs downloaded one by one.
+        read_at is absent while the list has not been read yet.
+      operationId: listAppleLibraryPlaylistTracks
+      parameters:
+        - name: playlist_id
+          in: path
+          required: true
+          description: The library playlist id (p.…), the id of an AppleLibraryItem.
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        '200':
+          description: The tracks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppleLibraryTracks'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: catalog_not_found; no cached library playlist has this id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/wrapper/status:
     get:
       tags: [Wrapper]
@@ -1710,6 +1867,15 @@ components:
       description: Number of UTC calendar days in the daily series and hook window, ending today; default 14.
       schema: {type: integer, minimum: 1, maximum: 90, default: 14}
   responses:
+    AppleLibraryUnavailable:
+      description: >-
+        apple_library_unavailable; there is no usable media-user-token
+        (details.reason no_token, or token_refused when Apple refused it) and
+        nothing is cached.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     BadRequest:
       description: invalid_request or invalid_json; invalid request parameters or body.
       content:
@@ -1842,13 +2008,15 @@ components:
         catalog_not_found (Apple has no resource with that id), hook_not_found; 405
         method_not_allowed (with an Allow header); 409 job_active,
         job_not_retryable, job_not_cancellable, job_finalizing, job_not_queued,
-        duplicate_active, already_logged_in, login_pending, hook_read_only; 413 request_too_large; 422
+        duplicate_active, already_logged_in, login_pending, hook_read_only,
+        apple_library_sync_running; 413 request_too_large; 422
         invalid_overrides, config_key_not_mutable, invalid_config, invalid_hook,
         invalid_hooks_file, no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 501 login_unsupported; 502 upstream_error; 503 queue_full,
         wrapper_unavailable, feature_unavailable (the process keeps no log
         history, so the log routes cannot answer, or has no hooks.yaml to
-        write); 504 upstream_timeout.
+        write), apple_library_unavailable (no usable media-user-token and
+        nothing cached); 504 upstream_timeout.
       enum:
         - invalid_request
         - invalid_json
@@ -1869,6 +2037,7 @@ components:
         - already_logged_in
         - login_pending
         - hook_read_only
+        - apple_library_sync_running
         - request_too_large
         - invalid_overrides
         - config_key_not_mutable
@@ -1883,6 +2052,7 @@ components:
         - queue_full
         - wrapper_unavailable
         - feature_unavailable
+        - apple_library_unavailable
         - upstream_timeout
     WrapperStatus:
       type: object
@@ -2866,6 +3036,29 @@ components:
                 resource limit (a poll usually makes only 1 Apple request); it rules
                 out values that would show as enabled but never actually fire.
                 Changes take effect immediately, with no restart needed.
+        apple_library:
+          type: object
+          description: >-
+            Schedule of the sync that keeps the local copy of the signed-in Apple
+            Music account library read by /apple-library and the in_apple_library
+            mark on search hits. Needs a media-user-token, found as for
+            library_sync. Both keys take effect within 15 seconds.
+          properties:
+            sync_interval_minutes:
+              type: integer
+              minimum: 0
+              maximum: 1440
+              description: >-
+                Minutes between incremental syncs (newest additions, the playlist
+                list, totals; about 4 Apple requests). 0 turns them off. Default 30.
+            full_sync_hours:
+              type: integer
+              minimum: 0
+              maximum: 720
+              description: >-
+                Hours between full reconciliations (every page of every kind;
+                catches removals and metadata changes). 0 runs them only through
+                POST /apple-library/sync. Default 24.
     LibrarySyncStatus:
       type: object
       required: [enabled, interval_minutes, anchor_size, last_submitted, total_submitted]
@@ -2907,6 +3100,192 @@ components:
           description: Number of anchor entries cleared.
         status:
           $ref: '#/components/schemas/LibrarySyncStatus'
+    AppleLibraryStatus:
+      type: object
+      required: [available, state, counts, sync_interval_minutes, full_sync_hours]
+      properties:
+        available:
+          type: boolean
+          description: A usable media-user-token is there to sync with.
+        reason:
+          type: string
+          enum: [no_token, token_refused]
+          description: Why available is false; absent when it is true.
+        state:
+          type: string
+          enum: [idle, running, failed]
+          description: failed means the last sync ended with an error; cached items are still served.
+        current:
+          $ref: '#/components/schemas/AppleLibrarySyncProgress'
+        last_sync:
+          $ref: '#/components/schemas/AppleLibrarySyncRun'
+        last_full_sync_at:
+          type: string
+          format: date-time
+          description: End of the last successful full sync; absent before the first.
+        next_sync_at:
+          type: string
+          format: date-time
+          description: When the schedule runs the next sync; absent when both schedules are off or nothing ran yet.
+        counts:
+          type: object
+          description: Cached items per kind.
+          required: [albums, songs, playlists, artists]
+          properties:
+            albums: {type: integer}
+            songs: {type: integer}
+            playlists: {type: integer}
+            artists: {type: integer}
+        sync_interval_minutes:
+          type: integer
+          description: apple_library.sync_interval_minutes in the runtime configuration.
+        full_sync_hours:
+          type: integer
+          description: apple_library.full_sync_hours in the runtime configuration.
+    AppleLibrarySyncProgress:
+      type: object
+      description: The sync under way; absent from AppleLibraryStatus when none runs.
+      required: [id, mode, trigger, started_at, kind, pages_read, requests]
+      properties:
+        id: {type: string}
+        mode: {type: string, enum: [full, incremental]}
+        trigger: {type: string, enum: [manual, schedule]}
+        started_at: {type: string, format: date-time}
+        kind:
+          type: string
+          description: What is being read now; a kind, or playlist_tracks.
+        pages_read: {type: integer}
+        requests:
+          type: integer
+          description: Apple requests made so far.
+    AppleLibrarySyncRun:
+      type: object
+      description: The last finished sync; absent from AppleLibraryStatus before the first.
+      required: [id, mode, trigger, started_at, ok, requests, added, removed, changed]
+      properties:
+        id: {type: string}
+        mode: {type: string, enum: [full, incremental]}
+        trigger: {type: string, enum: [manual, schedule]}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+        ok: {type: boolean}
+        error:
+          type: string
+          description: Why the sync failed or stopped early; absent when ok.
+        requests:
+          type: integer
+          description: Apple requests the sync made.
+        added: {type: integer}
+        removed: {type: integer}
+        changed:
+          type: integer
+          description: Cached items whose shown fields changed.
+    AppleLibraryPage:
+      type: object
+      required: [kind, items, total, offset]
+      properties:
+        kind:
+          type: string
+          enum: [albums, songs, playlists, artists]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppleLibraryItem'
+        total:
+          type: integer
+          description: Items matching the query, across all pages.
+        offset: {type: integer}
+        synced_at:
+          type: string
+          format: date-time
+          description: When the kind last completed a full sync; absent before the first.
+    AppleLibraryItem:
+      type: object
+      required: [id, name]
+      description: >-
+        One item of the account library. Fields a kind does not have, or that
+        Apple left empty, are absent.
+      properties:
+        id:
+          type: string
+          description: Apple's library id (l. album, i. song, p. playlist, r. artist), personal to the account.
+        catalog_id:
+          type: string
+          description: The catalog id; absent when the item has no catalog counterpart (uploaded, withdrawn, or an unshared own playlist).
+        url:
+          type: string
+          description: >-
+            A music.apple.com link that downloads the item when submitted to
+            POST /api/v1/downloads; absent with catalog_id.
+        name: {type: string}
+        artist_name:
+          type: string
+          description: Albums and songs.
+        album_name:
+          type: string
+          description: Songs.
+        artwork_url:
+          type: string
+          description: >-
+            Artwork URL, a template with {w}x{h} placeholders, except an own
+            playlist's, which is a direct, expiring link.
+        description:
+          type: string
+          description: Playlists.
+        genre: {type: string}
+        release_date: {type: string}
+        track_count:
+          type: integer
+          description: Albums; the album's songs that are in the library.
+        duration_ms: {type: integer}
+        track_number: {type: integer}
+        disc_number: {type: integer}
+        date_added:
+          type: string
+          description: >-
+            Apple's dateAdded of albums and playlists (an album's is when its
+            first song entered the library; most own playlists report
+            1970-01-01). Songs have none; sort=added orders them exactly.
+        last_modified:
+          type: string
+          description: Playlists.
+        playlist_kind:
+          type: string
+          enum: [favorites, own, editorial, replay, shared]
+          description: Playlists. favorites is Favorite Songs; shared is someone else's playlist.
+    AppleLibraryTracks:
+      type: object
+      required: [playlist_id, items, total]
+      properties:
+        playlist_id: {type: string}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppleLibraryTrack'
+        total: {type: integer}
+        read_at:
+          type: string
+          format: date-time
+          description: When the tracks were read; absent while they have not been.
+    AppleLibraryTrack:
+      type: object
+      required: [position, song_id, name]
+      properties:
+        position:
+          type: integer
+          description: 0-based place in the playlist.
+        song_id:
+          type: string
+          description: The library song id.
+        catalog_id: {type: string}
+        url:
+          type: string
+          description: A /song/ link that downloads the song; absent without catalog_id.
+        name: {type: string}
+        artist_name: {type: string}
+        album_name: {type: string}
+        duration_ms: {type: integer}
+        artwork_url: {type: string}
     ConfigResponse:
       type: object
       required: [config, persisted, pending_restart]
@@ -3321,6 +3700,15 @@ components:
           description: First genreNames entry that is not the "Music" umbrella genre.
         prior_job:
           $ref: '#/components/schemas/PriorJob'
+        in_apple_library:
+          type: boolean
+          description: >-
+            Whether the item is in the signed-in Apple Music account library.
+            Songs, albums and playlists take Apple's own mark, which the search
+            asks for with the media-user-token at no extra request; otherwise,
+            and always for artists, the local Apple library cache answers once
+            that kind has completed a full sync. Absent when neither can tell
+            (no usable token and nothing cached).
     SearchSong:
       allOf:
         - $ref: '#/components/schemas/SearchHit'

@@ -325,7 +325,7 @@ func TestNewRequiresEveryService(t *testing.T) {
 	full := newServer(t, Deps{})
 	deps := Deps{
 		Config: full.cfg, Store: full.store, Hub: full.hub, Manager: full.manager,
-		Wrapper: full.wrapper, Quality: full.quality, LibrarySync: full.librarySync,
+		Wrapper: full.wrapper, Quality: full.quality, LibrarySync: full.librarySync, AppleLibrary: full.appleLibrary,
 	}
 	if _, err := New(deps); err == nil || !strings.Contains(err.Error(), "Deps.Catalog") {
 		t.Fatalf("New without Catalog error = %v, want Deps.Catalog named", err)

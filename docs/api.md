@@ -34,13 +34,13 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 401 | `authentication_failed` |
 | 404 | `route_not_found`, `job_not_found`, `login_not_found`, `account_not_found`, `catalog_not_found`, `hook_not_found` |
 | 405 | `method_not_allowed`, with an `Allow` header |
-| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_finalizing`, `job_not_queued`, `duplicate_active`, `already_logged_in`, `login_pending`, `hook_read_only` |
+| 409 | `job_active`, `job_not_retryable`, `job_not_cancellable`, `job_finalizing`, `job_not_queued`, `duplicate_active`, `already_logged_in`, `login_pending`, `hook_read_only`, `apple_library_sync_running` |
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `invalid_hook`, `invalid_hooks_file`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
 | 501 | `login_unsupported` |
 | 502 | `upstream_error` |
-| 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable` |
+| 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable`, `apple_library_unavailable` |
 | 504 | `upstream_timeout` |
 
 An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
@@ -586,6 +586,14 @@ storefront of its link. A song downloaded as part of an album or playlist job is
 and a failed or cancelled job marks nothing. When the job store cannot be read the hits
 come back unmarked rather than failing the search.
 
+`in_apple_library` says whether the item is in the signed-in Apple Music account library
+([Apple library](#apple-library)). The search asks Apple for its own mark on songs, albums
+and playlists with the media-user-token, at no extra request; where Apple leaves it out,
+and always for artists, the local Apple library cache answers once that kind has
+completed a full sync. The field is absent when neither can tell. A token Apple refuses
+never fails the search: it is asked again without the token. `GET /artists/{id}/albums`
+marks its artist and albums from the cache.
+
 ### Artist albums
 
 ```bash
@@ -753,3 +761,80 @@ curl -X POST http://localhost:18080/api/v1/library-sync/reset
 Clears the anchor. The next pass re-anchors to the library **as it stands then** and
 submits **nothing** — this is "forget history", not "replay history". To re-download an
 album, `POST /api/v1/downloads` it. See [automation.md](automation.md).
+
+## Apple library
+
+The backend keeps a local copy of the signed-in Apple Music account library (Apple's
+"Library": albums, songs, playlists with their tracks, artists) and serves these routes
+from it alone, so browsing makes no Apple request. This is not the download library on
+disk. A sync fills the copy (`internal/applelibrary`); it never creates or changes a
+download job. It needs the media-user-token ([Wrapper](#wrapper)); without one, or while
+Apple refuses it, nothing is synced and the routes serve what is already cached.
+
+```bash
+curl 'http://localhost:18080/api/v1/apple-library/albums?sort=added&limit=2'
+```
+
+```json
+{"kind":"albums","total":342,"offset":0,"synced_at":"2026-11-02T08:30:00Z",
+ "items":[{"id":"l.QUFYKuq","catalog_id":"6819973419",
+   "url":"https://music.apple.com/cn/album/ghost-sequence-single/6819973419",
+   "name":"Ghost Sequence - Single","artist_name":"East Of Eden",
+   "artwork_url":"https://is1-ssl.mzstatic.com/…/{w}x{h}bb.jpg","track_count":1,
+   "release_date":"2026-10-17","genre":"Rock","date_added":"2026-10-26T15:20:21Z"}, …]}
+```
+
+`GET /apple-library/{kind}` lists `albums`, `songs`, `playlists` or `artists`.
+
+| Parameter | Meaning |
+| --- | --- |
+| `sort` | `added` (default; newest first), `name`, or `artist` (albums and songs). Artists sort by `name` only, their default: Apple gives them no add order. |
+| `order` | `asc` or `desc`; default `desc` for `added`, `asc` otherwise. |
+| `q` | Keeps items whose name, artist or album contains it (case-insensitive for ASCII letters). |
+| `limit`, `offset` | 1-200 (default 50) and where the page starts. |
+
+`id` is Apple's library id (`l.`, `i.`, `p.`, `r.`). `url` downloads the item when
+submitted to `POST /downloads`; it and `catalog_id` are absent for an item with no
+catalog counterpart (an uploaded or withdrawn song or album, an unshared own playlist,
+Favorite Songs). Songs carry `album_name`, `duration_ms`, `track_number` and
+`disc_number`; playlists `playlist_kind` (`favorites`, `own`, `editorial`, `replay`,
+`shared`), `description` and `last_modified`; an album's `track_count` counts its songs
+in the library. An own playlist's `artwork_url` is a direct, expiring link with no
+`{w}x{h}`; the others are templates. Before the kind's first full sync, `items` is empty
+and `synced_at` absent. `503 apple_library_unavailable` (`details.reason` `no_token` or
+`token_refused`) comes only when nothing is cached and no usable token can fill the copy.
+
+`GET /apple-library/playlists/{playlist_id}/tracks` returns a playlist's tracks in order,
+`{playlist_id, items: [{position, song_id, catalog_id, url, name, artist_name,
+album_name, duration_ms, artwork_url}], total, read_at}`, `404 catalog_not_found` for a
+playlist that is not cached. It is how a playlist without a catalog link is shown and its
+songs downloaded one by one.
+
+```bash
+curl -X POST http://localhost:18080/api/v1/apple-library/sync -d '{"mode":"full"}'
+curl http://localhost:18080/api/v1/apple-library/status
+```
+
+`POST /apple-library/sync` starts a sync in the background and answers `202` with the
+status; its `current.id` names the sync. `mode` is `full` (default) or `incremental`. A
+sync under way answers `409 apple_library_sync_running` with `details.sync_id`; no token,
+`503 apple_library_unavailable`. `GET /apple-library/status` answers `available` (and
+`reason` when false), `state` (`idle`, `running`, `failed`), `current` while a sync
+runs (`{id, mode, trigger, started_at, kind, pages_read, requests}`), `last_sync`
+(`{id, mode, trigger, started_at, finished_at, ok, error, requests, added, removed,
+changed}`), `last_full_sync_at`, `next_sync_at`, `counts` per kind and the two schedule
+keys. There is no SSE event for the sync: poll the status every couple of seconds while
+`state` is `running`.
+
+How a sync keeps up without a change feed (Apple has none, and no per-song add time):
+
+| Pass | Reads | Apple requests |
+| --- | --- | --- |
+| Incremental, every `apple_library.sync_interval_minutes` (default 30) | songs and albums newest-first until one already cached, the whole playlist list, the artist total, then the tracks of each playlist whose `last_modified` or Apple version changed | about 5 when nothing changed |
+| Full, every `apple_library.full_sync_hours` (default 24), on `POST /sync` and while the copy is empty | every page of every kind (100 per request), the changed playlists' tracks and up to 20 track lists older than 7 days | 1 per 100 items: about 66 for 5,000 songs, 500 albums, 100 playlists and 1,000 artists, plus the track lists |
+
+A kind whose Apple total disagrees with the copy after an incremental pass (something was
+removed) is read in full, at most once an hour; otherwise removals show after the next
+full sync. A full read removes rows only when every page was read and the total did not
+move meanwhile, so a sync cut short removes nothing. Each pass is bounded (2 minutes
+incremental, 15 full, page caps) and runs one at a time.

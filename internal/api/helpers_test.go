@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"amdl/internal/applelibrary"
 	"amdl/internal/config"
 	"amdl/internal/db"
 	"amdl/internal/domain"
@@ -134,6 +135,9 @@ func newServer(t *testing.T, deps Deps) *Server {
 	}
 	if deps.Catalog == nil {
 		deps.Catalog = &fakeCatalog{t: t}
+	}
+	if deps.AppleLibrary == nil {
+		deps.AppleLibrary = applelibrary.New(deps.Config, deps.Tokens, nil, deps.Store, slog.Default())
 	}
 	server, err := New(deps)
 	if err != nil {

@@ -144,6 +144,10 @@ var configFields = []configField{
 		help: "Needs the media user token."},
 	{key: "library_sync.interval_minutes", section: "library_sync", kind: fieldNumber, label: "Check every",
 		help: "A check is usually one Apple request.", min: 1, max: 1440, unit: "min"},
+	{key: "apple_library.sync_interval_minutes", section: "library_sync", kind: fieldNumber, label: "Sync Apple library every",
+		help: "0 turns it off.", min: 0, max: 1440, unit: "min"},
+	{key: "apple_library.full_sync_hours", section: "library_sync", kind: fieldNumber, label: "Full Apple library sync every",
+		help: "0 turns it off.", min: 0, max: 720, unit: "h"},
 
 	{key: "logging.level", section: "logging", kind: fieldSelect, label: "Log level",
 		options: []option{

@@ -35,6 +35,8 @@ type fakeCatalog struct {
 	mu    sync.Mutex
 	calls []string
 	token string
+	// searchToken is the media-user-token the last search carried.
+	searchToken string
 }
 
 func (f *fakeCatalog) record(method, storefront, id string) error {
@@ -80,7 +82,10 @@ func (f *fakeCatalog) Artist(_ context.Context, storefront, id string) (applemus
 	return *f.artist, nil
 }
 
-func (f *fakeCatalog) Search(_ context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int) (applemusic.SearchResults, error) {
+func (f *fakeCatalog) Search(_ context.Context, storefront, term string, types []applemusic.SearchType, limit, offset int, mediaUserToken string) (applemusic.SearchResults, error) {
+	f.mu.Lock()
+	f.searchToken = mediaUserToken
+	f.mu.Unlock()
 	if err := f.record("search", storefront, fmt.Sprintf("%s %v %d+%d", term, types, limit, offset)); err != nil || f.search == nil {
 		return applemusic.SearchResults{}, f.missing(err, "search")
 	}
@@ -107,7 +112,7 @@ func newLookupServer(catalog CatalogService, mutate func(*config.Config)) http.H
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	return (&Server{cfg: config.NewStore(cfg), catalog: catalog}).Routes()
+	return (&Server{cfg: config.NewStore(cfg), catalog: catalog, appleLibrary: &fakeAppleLibrary{}}).Routes()
 }
 
 func decodeLookup(t *testing.T, body []byte) map[string]any {

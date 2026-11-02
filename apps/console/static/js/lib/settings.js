@@ -329,6 +329,28 @@ export const FIELDS = [
     max: 1440,
     unit: 'min',
   },
+  {
+    key: 'apple_library.sync_interval_minutes',
+    section: 'library_sync',
+    type: 'number',
+    label: 'Sync Apple library every',
+    help: '0 turns it off (0-1440).',
+    defaultValue: 30,
+    min: 0,
+    max: 1440,
+    unit: 'min',
+  },
+  {
+    key: 'apple_library.full_sync_hours',
+    section: 'library_sync',
+    type: 'number',
+    label: 'Full Apple library sync every',
+    help: '0 turns it off (0-720).',
+    defaultValue: 24,
+    min: 0,
+    max: 720,
+    unit: 'h',
+  },
   // Logs
   {
     key: 'logging.level',

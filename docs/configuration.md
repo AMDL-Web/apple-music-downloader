@@ -37,7 +37,7 @@ value it saves always loads. `internal/config#classOf` sorts the keys:
 
 | | |
 | --- | --- |
-| **Runtime** | `logging.level`, `logging.access_log`, `wrapper.data_dir`, `catalog.default_storefront`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.motion_artwork_enabled`, every `download.*` key except the two pools below, the whole `simulate` section and the whole `library_sync` section. A change applies at once, to new requests and newly started jobs. |
+| **Runtime** | `logging.level`, `logging.access_log`, `wrapper.data_dir`, `catalog.default_storefront`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.motion_artwork_enabled`, every `download.*` key except the two pools below, the whole `simulate` section, and the whole `library_sync` and `apple_library` sections. A change applies at once, to new requests and newly started jobs. |
 | **Restart** | `wrapper.address`, `wrapper.timeout_seconds`, `wrapper.login_timeout_seconds`, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size`, and the pool sizes `download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`. `PUT` saves the value; it applies when the backend starts again, since components built at startup hold the old one. |
 | **File only** | `server.listen` (a wrong value cuts the console off), `database.path` (a new path looks like lost history) and `tools.ffmpeg` (the desktop app writes the ffmpeg it found on every start; the container image keeps the default, its ffmpeg being on PATH). `PUT` refuses them with `422 config_key_not_mutable`; edit the file and restart. |
 
@@ -129,7 +129,8 @@ account session. `wrapper.data_dir` is a runtime key; the other three apply afte
 
 ### The media-user-token
 
-Station downloads, private playlist covers and library sync need the Apple Music
+Station downloads, private playlist covers, library sync and the Apple library cache (with
+the `in_apple_library` mark on search hits) need the Apple Music
 media-user-token of a subscribed account. With one, the backend also fetches lyrics and the
 AAC-LC playlist and license from Apple itself rather than through the wrapper
 ([Download pipeline](download-pipeline.md#lyrics)); without one, the wrapper does that.

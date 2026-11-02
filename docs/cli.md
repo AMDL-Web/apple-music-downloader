@@ -43,6 +43,8 @@ by meaning.
 | `jobs delete <job_id>` | `DELETE /downloads/{job_id}` | destructive |
 | `library list [--kind] [--q] [--limit] [--offset]` | `GET /downloads?status=completed` | read |
 | `library sync get`, `library sync reset` | `/library-sync`, `…/reset` | read, destructive |
+| `apple-library list <kind> [--sort] [--order] [--q] [--limit] [--offset]`, `apple-library tracks <playlist_id>`, `apple-library status` | `GET /apple-library/{kind}`, `…/playlists/{playlist_id}/tracks`, `…/status` | read |
+| `apple-library sync [--mode full\|incremental]` | `POST /apple-library/sync` | write |
 | `logs list [filters]`, `logs tail [filters]` | `GET /logs`, `/logs/stream` | read |
 | `system get`, `system health`, `system stats [--days]`, `hooks list` | `/system`, `/health`, `/stats`, `/hooks` | read |
 | `system restart` | `POST /system/restart` | write |

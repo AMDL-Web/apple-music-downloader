@@ -208,6 +208,7 @@ CORS 头。
 | **wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **配置** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
 | **资料库同步** | `GET /library-sync` · `POST /library-sync/reset` |
+| **Apple 资料库** | `GET /apple-library/{kind}`：从本地副本读你的 Apple Music 账户资料库 · `GET /apple-library/playlists/{id}/tracks` · `POST /apple-library/sync` · `GET /apple-library/status` |
 | **系统** | `GET /health` · `GET /system` · `POST /system/restart` · `GET /stats` · `GET /logs` · `GET /logs/stream` |
 
 提交一张专辑并跟踪进度：

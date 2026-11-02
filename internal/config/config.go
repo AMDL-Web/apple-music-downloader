@@ -19,6 +19,21 @@ type Config struct {
 	// LibrarySync is last so adding it left every existing section's position
 	// in the generated config.yaml unchanged.
 	LibrarySync LibrarySyncConfig `yaml:"library_sync" json:"library_sync"`
+	// AppleLibrary follows LibrarySync for the same reason.
+	AppleLibrary AppleLibraryConfig `yaml:"apple_library" json:"apple_library"`
+}
+
+// AppleLibraryConfig schedules the sync that keeps a local copy of the
+// signed-in user's Apple Music account library (internal/applelibrary). Both
+// keys are runtime keys: the sync loop reads them every tick. 0 turns that
+// schedule off; POST /api/v1/apple-library/sync still runs a sync.
+type AppleLibraryConfig struct {
+	// SyncIntervalMinutes is the period of the incremental sync (newest
+	// additions, the playlist list, totals).
+	SyncIntervalMinutes int `yaml:"sync_interval_minutes" json:"sync_interval_minutes"`
+	// FullSyncHours is the period of the full reconciliation (every page of
+	// every kind; catches removals and metadata changes).
+	FullSyncHours int `yaml:"full_sync_hours" json:"full_sync_hours"`
 }
 
 // LibrarySyncConfig controls the Apple Music library watcher: it polls the
@@ -265,6 +280,7 @@ func Default() Config {
 		Simulate: SimulateConfig{Enabled: false, MinSpeedKBps: 512, MaxSpeedKBps: 4096},
 		// Off by default: this is the one feature that creates download jobs
 		// nobody asked for, so an install must opt in.
-		LibrarySync: LibrarySyncConfig{Enabled: false, IntervalMinutes: 15},
+		LibrarySync:  LibrarySyncConfig{Enabled: false, IntervalMinutes: 15},
+		AppleLibrary: AppleLibraryConfig{SyncIntervalMinutes: 30, FullSyncHours: 24},
 	}
 }

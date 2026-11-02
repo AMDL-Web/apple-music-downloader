@@ -63,9 +63,9 @@ func exitFor(code string, status int) int {
 	case "route_not_found", "job_not_found", "login_not_found", "account_not_found", "catalog_not_found":
 		return exitNotFound
 	case "job_active", "job_not_retryable", "job_not_cancellable", "job_finalizing", "job_not_queued", "duplicate_active",
-		"already_logged_in", "login_pending", "method_not_allowed":
+		"already_logged_in", "login_pending", "method_not_allowed", "apple_library_sync_running":
 		return exitConflict
-	case "upstream_error", "queue_full", "wrapper_unavailable", "feature_unavailable",
+	case "upstream_error", "queue_full", "wrapper_unavailable", "feature_unavailable", "apple_library_unavailable",
 		"upstream_timeout", "server_unreachable", "server_not_configured":
 		return exitUnavailable
 	case "authentication_failed", "login_unsupported":
