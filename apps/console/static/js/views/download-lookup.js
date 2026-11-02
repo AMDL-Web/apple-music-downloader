@@ -1,15 +1,16 @@
 // New download: the link previews behind the rows, a POST lookup per
 // previewable link through a shared per-tab cache and a bounded queue, and
-// from them which links are flagged and which the submit may send. A second
-// queue asks GET downloads whether an album, song or playlist was
-// downloaded before (lib/lookup.js priorJob), and the feed keeps those
-// answers live.
+// from them which links are flagged and which the submit may send, and how
+// much of an album or song is on disk (the lookup's `library`). A second
+// queue asks GET downloads for a job of an album, song or playlist (lib/lookup.js
+// priorJob), for "In the queue now", and the feed keeps those answers live.
 
 import { useState, useEffect, useRef, useMemo } from '../ui/preact.js';
 import { lookupLink, listDownloads } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
 import { createLookupQueue, priorJob, priorQuery, applyFeedToJobs, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { linkIssue, submittable } from '../lib/submit-check.js';
+import { diskMark } from '../lib/on-disk.js';
 
 // Previews outlive the page, so coming back does not look links up again.
 // An album ?i= link previews as a song or the album depending on
@@ -19,7 +20,7 @@ import { linkIssue, submittable } from '../lib/submit-check.js';
 const LOOKUPS = new Map();
 let LOOKUPS_MODE = null;
 let LOOKUPS_TOKEN = null;
-// GET downloads?q=<id> pages per link, for the "Downloaded Oct 29" note.
+// GET downloads?q=<id> pages per link, for the "In the queue now" note.
 const HISTORY = new Map();
 const HISTORY_KINDS = ['album', 'song', 'playlist'];
 
@@ -35,7 +36,7 @@ const isAlbumTrack = (url) => {
 
 /**
  * The page's link previews: the lookup queue, the status and issue of each
- * entry, the links the submit may send, and each link's earlier job.
+ * entry, the links the submit may send, and each link's mark (markOf).
  * `settled` is the debounced text, `entries` its scanned links, `token`
  * the media-user-token a download would use (lib/user-token.js tokenState)
  * and `trackMode` the server's catalog config, `epoch` the shell's reconnect counter (a resync after an
@@ -75,19 +76,25 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
     });
   }
   useEffect(() => () => history.current.dispose(), []);
-  // Feed batches update the cached answers in place, so a job that
-  // completes turns "In the queue now" into "In your library".
+  // Feed batches update the cached answers in place, so "In the queue now"
+  // goes when the job finishes, and that link is looked up again in the
+  // background for what is on disk now.
   useEffect(
     () =>
       subscribeFeed((batch) => {
         let changed = false;
+        const finished = [];
         for (const [url, entry] of HISTORY) {
           if (entry.state !== 'ready' || !entry.data || !Array.isArray(entry.data.downloads)) continue;
           const next = applyFeedToJobs(entry.data.downloads, batch, parseLink(url), modeRef.current);
           if (next === entry.data.downloads) continue;
+          const was = priorJob(entry.data.downloads, parseLink(url), modeRef.current);
           entry.data = { ...entry.data, downloads: next };
+          const now = priorJob(next, parseLink(url), modeRef.current);
+          if (was && was.state === 'active' && !(now && now.state === 'active')) finished.push(url);
           changed = true;
         }
+        if (finished.length) queue.current.refresh(finished);
         if (changed) setTick((n) => n + 1);
       }),
     [],
@@ -141,8 +148,13 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
     const s = history.current.status(url);
     return s.state === 'ready' && s.data ? priorJob(s.data.downloads, parseLink(url), trackMode || 'song') : null;
   };
+  /** What a link's row shows (lib/on-disk.js diskMark): its job in the queue, else how much of it the lookup found on disk. */
+  const markOf = (url) => {
+    const s = queue.current.status(url);
+    return diskMark(priorOf(url), s.state === 'ready' && s.data ? s.data.library : null);
+  };
   /** Forgets the earlier-job answers of links just submitted. */
   const forgetPrior = (urls) => history.current.forget(urls);
 
-  return { statusOf, issueOf, sendable, flagged, warned, skipped, queue, priorOf, forgetPrior };
+  return { statusOf, issueOf, sendable, flagged, warned, skipped, queue, markOf, forgetPrior };
 }

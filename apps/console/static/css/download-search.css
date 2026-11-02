@@ -154,8 +154,20 @@
   height: 28px;
 }
 
-.new-tile-badge[data-state="done"] {
+.new-tile-badge[data-state="complete"] {
   color: var(--success-text);
+}
+
+/* Part of the album on disk: its count, "9/12", in a pill of the badge's
+   height. */
+.new-tile-badge[data-state="partial"] {
+  width: auto;
+  min-width: 28px;
+  padding: 0 var(--s-2);
+  font-size: var(--fs-11);
+  font-weight: var(--w-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Download: a 36 px glass circle (a 44 px target) that shows on hover or

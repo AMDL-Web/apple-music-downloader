@@ -151,6 +151,7 @@ const RESPONSE = {
 const SENT = [IGOR, FOLKLORE, STATION, 'https://music.apple.com/jp/album/x/1', PRIVATE];
 
 test('resultView words every status and code', () => {
+  assert.equal(resultView({ status: 'accepted', requeued: true, job: { id: 'j' } }).label, 'Queued again', "a link's earlier job queued again under its id");
   const v = RESPONSE.results.map(resultView);
   assert.deepEqual(v.map((x) => [x.status, x.role, x.label]), [
     ['accepted', 'success', 'Queued'],

@@ -801,8 +801,14 @@ paths:
         a song reads the song resource, an album the album with its track list, a
         playlist the playlist with its track list, a station its metadata (never
         the next-tracks feed), an artist the artist alone (so track_count is
-        absent). The animated-cover and Enhanced HLS reads are never made. The
-        whole lookup is bounded by 15 seconds.
+        absent). A song also reads its album, to find where the song sits in the
+        library; when that read fails the song answers without library. The
+        animated-cover and Enhanced HLS reads are never made. The whole lookup is
+        bounded by 15 seconds.
+
+        An album or song carries library: how much of it has a file at its
+        library path (download.library_path_format), checked track by track,
+        whatever job put it there.
 
         Only a private (pl.u-) playlist's cover uses a media-user-token: the
         wrapper's when amdl has it (WrapperStatus.media_user_token), else the
@@ -917,10 +923,12 @@ paths:
         next_offset. Apple reports no totals.
 
         A hit's url downloads exactly that item when submitted to POST
-        /api/v1/downloads. prior_job names the job that put a hit in the
-        library or holds it in the queue; a failed read of the job store
-        leaves hits unmarked instead of failing the search. The catalog read
-        is bounded by 10 seconds.
+        /api/v1/downloads. prior_job names the hit's queue entry; a failed
+        read of the job store leaves hits unmarked instead of failing the
+        search. An album hit's library estimates how much of it is on disk
+        from one listing of its library folder, with no further catalog read.
+        The catalog read and the folder listings are bounded by 10 seconds
+        together.
       operationId: searchCatalog
       parameters:
         - name: term
@@ -997,7 +1005,8 @@ paths:
         The artist and one page of its albums, in the order of Apple's albums
         relationship: the albums an artist download (POST /api/v1/downloads with
         the artist's url) takes. Every page carries the artist. The artist and
-        the page are read at once, bounded by 10 seconds together.
+        the page are read at once, bounded by 10 seconds together with the
+        folder listing behind each album's library (as on GET /api/v1/search).
       operationId: listArtistAlbums
       parameters:
         - name: artist_id
@@ -1061,11 +1070,11 @@ paths:
         same album. A song's url submitted to POST /api/v1/downloads downloads
         that song alone.
 
-        Nothing here says whether a song is on disk: where it lands depends on
-        the quality and codec a download picks. To mark the songs of an album a
-        job downloaded, read that job (GET /api/v1/downloads/{job_id}, from the
-        `prior_job` of the album's search hit) and match its items' `adam_id`
-        with the songs' `id`.
+        library says how many of the songs are on disk and each song's on_disk
+        whether it has a file at its library path (download.library_path_format),
+        whichever job wrote it, at whatever quality. Submitting the album
+        downloads only the songs not on disk; force_overwrite downloads all of
+        them again.
       operationId: getAlbum
       parameters:
         - name: album_id
@@ -3240,6 +3249,13 @@ components:
                 True for a station: its download reads the next-tracks feed,
                 which needs a media-user-token (the wrapper's or
                 catalog.media_user_token). Absent for other types.
+            library:
+              $ref: '#/components/schemas/LibraryState'
+              description: >-
+                Albums and songs: how many of the album's songs, or whether the
+                song (tracks_total 1), have a file at their library path. Exact,
+                checked song by song. Absent for other types, and for a song
+                whose album could not be read.
     SearchResponse:
       type: object
       required: [term, storefront]
@@ -3394,6 +3410,14 @@ components:
               description: True when the catalog marks the album isMasteredForItunes; absent otherwise.
             audio_traits:
               $ref: '#/components/schemas/AudioTraits'
+            library:
+              $ref: '#/components/schemas/LibraryState'
+              description: >-
+                An estimate from the album's library folder alone: the .m4a
+                files in it against track_count, so a file the track list does
+                not name counts and an album without a track_count reads as
+                none. GET /api/v1/albums/{album_id} checks song by song. Absent
+                when the listing did not finish in time.
     SearchPlaylist:
       allOf:
         - $ref: '#/components/schemas/SearchHit'
@@ -3428,11 +3452,11 @@ components:
       type: object
       required: [id, status]
       description: >-
-        The job that put the hit in the library or holds it in the queue: the
-        newest queued or running job of the same type and id, else the newest
-        completed one, from a link in any storefront. A song downloaded as part
-        of an album or playlist job is not marked; failed and cancelled jobs
-        mark nothing.
+        The hit's queue entry: the newest queued or running job of the same
+        type and id, else the newest completed one, from a link in any
+        storefront. A song downloaded as part of an album or playlist job has
+        none; failed and cancelled jobs mark nothing. A completed job does not
+        mean the files are still on disk: an album hit's library says that.
       properties:
         id:
           type: string
@@ -3511,6 +3535,11 @@ components:
           description: True when the catalog marks the album isMasteredForItunes; absent otherwise.
         audio_traits:
           $ref: '#/components/schemas/AudioTraits'
+        library:
+          $ref: '#/components/schemas/LibraryState'
+          description: >-
+            How many of the songs have a file at their library path, checked
+            song by song. Absent when the backend could not check in time.
         tracks:
           type: array
           items:
@@ -3554,6 +3583,34 @@ components:
         has_lyrics:
           type: boolean
           description: True when the catalog reports lyrics for the song (regular or time-synced); absent otherwise.
+        on_disk:
+          type: boolean
+          description: >-
+            Whether the song has a file at its library path; present exactly
+            when the album's library is.
+    LibraryState:
+      type: object
+      required: [state, tracks_on_disk, tracks_total]
+      description: >-
+        How much of an album, or whether a song, is in the library on disk: a
+        file at the library path download.library_path_format gives each
+        track, whichever job wrote it and at whatever quality. Job history
+        plays no part.
+      properties:
+        state:
+          type: string
+          enum: [none, partial, complete]
+          description: >-
+            complete when every track is on disk (and there is at least one),
+            partial when some are, none otherwise.
+        tracks_on_disk:
+          type: integer
+          minimum: 0
+          description: Tracks on disk, at most tracks_total.
+        tracks_total:
+          type: integer
+          minimum: 0
+          description: The album's songs, 1 for a song.
     Job:
       type: object
       required: [id, input, type, status, total_items, completed_items, skipped_items, failed_items, cancelled_items, created_at, updated_at]

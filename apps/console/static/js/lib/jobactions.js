@@ -13,6 +13,7 @@ export const JOB_ACTIONS = ['retry', 'cancel', 'delete'];
 
 const WORDS = {
   retry: { verb: 'Retry', ing: 'Retrying', did: 'Queued', after: ' again', fail: 'retry' },
+  again: { verb: 'Download again', ing: 'Queueing', did: 'Queued', after: ' again', fail: 'queue' },
   cancel: { verb: 'Cancel', ing: 'Cancelling', did: 'Cancelled', after: '', fail: 'cancel' },
   delete: { verb: 'Delete', ing: 'Deleting', did: 'Deleted', after: '', fail: 'delete' },
   move: { verb: 'Move', ing: 'Moving', did: 'Moved', after: '', fail: 'move' },
@@ -35,13 +36,15 @@ export function jobAllows(job, action) {
   }
 }
 
-const MENU_LABELS = { details: 'Show details', top: 'Move to top', bottom: 'Move to bottom', retry: 'Retry', cancel: 'Cancel', copy: 'Copy link', delete: 'Delete…' };
+const MENU_LABELS = { details: 'Show details', top: 'Move to top', bottom: 'Move to bottom', retry: 'Retry', again: 'Download again…', cancel: 'Cancel', copy: 'Copy link', delete: 'Delete…' };
 
 /**
  * A Queue row's menu, as the desktop app draws it: Show details; for a
  * queued job Move to top and Move to bottom (`place` {first, last}, when
  * known, leaves out the one that would not move it); Cancel (queued,
- * running) or Retry (failed, cancelled); then Copy link (the job's input),
+ * running), Retry (failed, cancelled) or Download again… (completed, with a
+ * link: the link submitted again with force_overwrite, which queues this
+ * job again and replaces its files); then Copy link (the job's input),
  * and for a finished job Delete… after a separator of its own. A job under
  * way can only be cancelled; a link Apple has nothing at (a 404) gets no
  * Retry, as in the lists. Entries are {id, label} or {separator: true}.
@@ -54,6 +57,7 @@ export function rowMenu(job, place = {}) {
   }
   if (jobAllows(job, 'cancel')) ids.push('cancel');
   else if (jobAllows(job, 'retry') && !isNotFound(job.error)) ids.push('retry');
+  else if (job && job.status === 'completed' && job.input) ids.push('again');
   if (job && job.input) ids.push('-', 'copy');
   if (jobAllows(job, 'delete')) ids.push('-', 'delete');
   return ids.map((id) => (id === '-' ? { separator: true } : { id, label: MENU_LABELS[id] }));

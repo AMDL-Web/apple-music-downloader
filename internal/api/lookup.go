@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"amdl/internal/applemusic"
+	"amdl/internal/domain"
 	"amdl/internal/logging"
 )
 
@@ -64,6 +65,10 @@ type lookupResponse struct {
 	AppleDigitalMaster  bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits         []string `json:"audio_traits,omitempty"`
 	NeedsMediaUserToken bool     `json:"needs_media_user_token,omitempty"`
+	// Library is how much of an album, or whether a song, is on disk;
+	// unknown (nil) for the other types, without a LibraryService, or when
+	// a song's album could not be read.
+	Library *domain.LibraryState `json:"library,omitempty"`
 }
 
 func (r *lookupResponse) setArtwork(url string, colors applemusic.ArtworkColors) {
@@ -162,7 +167,8 @@ func (s *Server) writeCatalogError(ctx context.Context, w http.ResponseWriter, r
 
 // previewLink reads the catalog metadata of parsed, filling the display fields
 // the way the job pipeline fills a job's (internal/media resolveCollection),
-// but from the lightest read that has them.
+// but from the lightest read that has them. A song also reads its album, to
+// find the song's library path; that read is optional.
 func (s *Server) previewLink(ctx context.Context, parsed applemusic.ParsedURL, mediaUserToken string) (lookupResponse, error) {
 	var resp lookupResponse
 	switch parsed.Type {
@@ -176,6 +182,7 @@ func (s *Server) previewLink(ctx context.Context, parsed applemusic.ParsedURL, m
 		resp.ReleaseDate, resp.Genre = song.ReleaseDate, applemusic.PrimaryGenre(song.GenreNames)
 		resp.TrackCount, resp.DurationMS = 1, song.DurationInMillis
 		resp.ContentRating, resp.AppleDigitalMaster, resp.AudioTraits = song.ContentRating, song.AppleDigitalMaster, song.AudioTraits
+		resp.Library = s.songOnDisk(ctx, parsed.Storefront, song)
 	case applemusic.TypeAlbum:
 		album, err := s.catalog.Album(ctx, parsed.Storefront, parsed.ID)
 		if err != nil {
@@ -186,6 +193,7 @@ func (s *Server) previewLink(ctx context.Context, parsed applemusic.ParsedURL, m
 		resp.ReleaseDate, resp.Genre = album.ReleaseDate, applemusic.PrimaryGenre(album.GenreNames)
 		resp.TrackCount = len(album.Tracks)
 		resp.ContentRating, resp.AppleDigitalMaster, resp.AudioTraits = album.ContentRating, album.AppleDigitalMaster, album.AudioTraits
+		resp.Library, _ = s.albumOnDisk(ctx, album)
 	case applemusic.TypePlaylist:
 		playlist, err := s.catalog.Playlist(ctx, parsed.Storefront, parsed.ID, mediaUserToken)
 		if err != nil {

@@ -117,10 +117,10 @@ test('a row menu offers what the status of its job allows, as in the desktop app
     rowMenu({ id: 'j', status, input }).map((it) => (it.separator ? '-' : it.id));
   assert.deepEqual(ids('queued'), ['details', 'top', 'bottom', 'cancel', '-', 'copy']);
   assert.deepEqual(ids('running'), ['details', 'cancel', '-', 'copy'], 'a job under way can only be cancelled');
-  assert.deepEqual(ids('completed'), ['details', '-', 'copy', '-', 'delete']);
+  assert.deepEqual(ids('completed'), ['details', 'again', '-', 'copy', '-', 'delete'], 'a finished download can be downloaded again');
   assert.deepEqual(ids('failed'), ['details', 'retry', '-', 'copy', '-', 'delete']);
   assert.deepEqual(ids('cancelled'), ['details', 'retry', '-', 'copy', '-', 'delete']);
-  assert.deepEqual(ids('completed', ''), ['details', '-', 'delete'], 'no link, nothing to copy');
+  assert.deepEqual(ids('completed', ''), ['details', '-', 'delete'], 'no link, nothing to copy or submit again');
   const gone = rowMenu({ id: 'j', status: 'failed', input: 'x', error: 'Apple Music has no album 1 in storefront cn (404)' });
   assert.deepEqual(gone.map((it) => (it.separator ? '-' : it.id)), ['details', '-', 'copy', '-', 'delete'], 'a link Apple has nothing at gets no Retry');
   const labels = rowMenu({ id: 'j', status: 'failed', input: 'x' }).filter((it) => !it.separator).map((it) => it.label);

@@ -122,7 +122,7 @@ function ArtistView({ artist, hit, row, onBack, onMore, onRetry, onDownloadAll }
  * Props: s (useSearch), term, tooLong, inputRef (the text box arrows
  * return to), openHit (the artist hit an artist view was opened from, for
  * its head before the answer), focusArtist (focus its Back on open), row: {busy (urls being sent), jobHref(id),
- * onDownload(hit), onOpenArtist(hit), priorOf(hit)}, onBack, onDownloadAll(artistHit),
+ * onDownload(hit), onAgain(hit, mark), onOpenArtist(hit), markOf(hit)}, onBack, onDownloadAll(artistHit),
  * group (the group shown alone, '' for every group), onGroup(id) (show that
  * group alone), onAllResults() (every group again).
  */

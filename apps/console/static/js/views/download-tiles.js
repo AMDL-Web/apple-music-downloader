@@ -1,41 +1,49 @@
 // New download: the search hits drawn as Overview's tile wall (css/overview.css
 // .wall-tile): an album or a playlist is its cover with Download over it,
 // then title and artist (a playlist's curator); an artist is a round cover
-// that opens its albums. A hit in the
-// library or the queue marks its cover, and the cover opens that job.
+// that opens its albums. A hit in the queue or on disk marks its cover
+// (lib/search-jobs.js hitMark): a clock, a check, or how many of its tracks
+// are there; the cover opens its job when one is known. A hit wholly on disk
+// downloads again (after a confirmation) instead.
 
 import { html } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths } from '../lib/format.js';
 import { hitView } from '../lib/search.js';
+import { diskFraction } from '../lib/on-disk.js';
 import { Icon, Artwork } from '../ui/components.js';
 
 const TILE_ART = artWidths(232);
 const TILE_SIZES = '(max-width: 639px) 45vw, 232px';
 
+const BADGE_LABEL = { active: () => 'In the queue', complete: () => 'In your library', partial: (m) => `${m.onDisk} of ${m.total} tracks in your library` };
+
 /**
- * An album or playlist hit. row: {busy, jobHref(id), onDownload(hit), priorOf(hit)}.
- * Download (data-hit-primary) is the tile's one focus stop, aria-disabled
- * (not disabled, so focus stays on it) while it is sent and once the hit
- * is in the queue.
+ * An album or playlist hit. row: {busy, jobHref(id), onDownload(hit),
+ * onAgain(hit, mark), markOf(hit)}. Download (data-hit-primary) is the
+ * tile's one focus stop, aria-disabled (not disabled, so focus stays on it)
+ * while it is sent and once the hit is in the queue; for a hit wholly on
+ * disk it is Download again.
  */
 export function AlbumTile({ hit, row }) {
   const v = hitView(hit);
   const palette = artPalette(hit);
-  const prior = row.priorOf(hit);
-  const queued = prior && prior.state === 'active';
+  const mark = row.markOf(hit);
+  const queued = Boolean(mark && mark.state === 'active');
+  const again = Boolean(mark && mark.state === 'complete');
   const busy = row.busy.has(hit.url);
   const sub = v.facts.map((f) => f.text).join(' · ');
   const cover = html`<${Artwork} url=${hit.artwork_url} bg=${palette && palette.bg} px=${464} widths=${TILE_ART} sizes=${TILE_SIZES} className="art-square" />`;
-  return html`<li class=${palette ? 'new-tile has-palette' : 'new-tile'} data-kind=${hit.type} data-id=${hit.id} data-prior=${prior ? prior.state : undefined} style=${paletteStyle(palette)}>
+  const label = mark ? BADGE_LABEL[mark.state](mark) : '';
+  return html`<li class=${palette ? 'new-tile has-palette' : 'new-tile'} data-kind=${hit.type} data-id=${hit.id} data-prior=${mark ? mark.state : undefined} style=${paletteStyle(palette)}>
     <div class="wall-tile">
       <div class="new-tile-cover">
-        ${prior
-          ? html`<a class="new-tile-job" href=${row.jobHref(prior.job.id)} tabindex="-1" title=${queued ? 'In the queue now: open that job' : 'In your library: open that job'}>${cover}</a>`
+        ${mark && mark.job
+          ? html`<a class="new-tile-job" href=${row.jobHref(mark.job.id)} tabindex="-1" title=${`${label}: open its job`}>${cover}</a>`
           : cover}
         ${v.quality[0] ? html`<span class="new-tile-chip">${v.quality[0]}</span>` : null}
-        ${prior
-          ? html`<span class="new-tile-badge" data-state=${prior.state} role="img" aria-label=${queued ? 'In the queue' : 'In your library'}>
-              <${Icon} name=${queued ? 'clock' : 'circle-check'} size="sm" />
+        ${mark
+          ? html`<span class="new-tile-badge" data-state=${mark.state} role="img" aria-label=${label}>
+              ${mark.state === 'partial' ? diskFraction(mark) : html`<${Icon} name=${queued ? 'clock' : 'circle-check'} size="sm" />`}
             </span>`
           : null}
         <button
@@ -44,10 +52,10 @@ export function AlbumTile({ hit, row }) {
           data-hit-primary
           aria-disabled=${busy || queued ? 'true' : undefined}
           aria-busy=${busy ? 'true' : undefined}
-          aria-label=${queued ? `${v.title} is in the queue` : `Download ${v.title}`}
-          title=${queued ? 'Already in the queue' : prior ? 'In your library' : 'Download'}
-          onClick=${() => busy || queued || row.onDownload(hit)}
-        ><${Icon} name="download" /></button>
+          aria-label=${queued ? `${v.title} is in the queue` : again ? `Download ${v.title} again` : `Download ${v.title}`}
+          title=${queued ? 'Already in the queue' : again ? 'Download again' : 'Download'}
+          onClick=${() => busy || queued || (again ? row.onAgain(hit, mark) : row.onDownload(hit))}
+        ><${Icon} name=${again ? 'rotate' : 'download'} /></button>
       </div>
       <span class="wall-title new-tile-title" title=${v.title}>
         <span class="new-tile-name" dir="auto">${v.title}</span>

@@ -7,31 +7,36 @@ import (
 	"slices"
 
 	"amdl/internal/applemusic"
+	"amdl/internal/domain"
 )
 
 // albumResponse is the AlbumResponse schema: the album's metadata under the
-// names and meaning of the LookupResponse fields, then its songs.
+// names and meaning of the LookupResponse fields, how much of it is on disk,
+// then its songs.
 type albumResponse struct {
-	Storefront         string       `json:"storefront"`
-	ID                 string       `json:"id"`
-	URL                string       `json:"url"`
-	Title              string       `json:"title"`
-	ArtistName         string       `json:"artist_name,omitempty"`
-	ArtistURL          string       `json:"artist_url,omitempty"`
-	ArtworkURL         string       `json:"artwork_url,omitempty"`
-	ArtworkBgColor     string       `json:"artwork_bg_color,omitempty"`
-	ArtworkTextColor1  string       `json:"artwork_text_color1,omitempty"`
-	ArtworkTextColor2  string       `json:"artwork_text_color2,omitempty"`
-	ArtworkTextColor3  string       `json:"artwork_text_color3,omitempty"`
-	ArtworkTextColor4  string       `json:"artwork_text_color4,omitempty"`
-	ReleaseDate        string       `json:"release_date,omitempty"`
-	Genre              string       `json:"genre,omitempty"`
-	TrackCount         int          `json:"track_count"`
-	DiscCount          int          `json:"disc_count,omitempty"`
-	ContentRating      string       `json:"content_rating,omitempty"`
-	AppleDigitalMaster bool         `json:"apple_digital_master,omitempty"`
-	AudioTraits        []string     `json:"audio_traits,omitempty"`
-	Tracks             []albumTrack `json:"tracks"`
+	Storefront         string   `json:"storefront"`
+	ID                 string   `json:"id"`
+	URL                string   `json:"url"`
+	Title              string   `json:"title"`
+	ArtistName         string   `json:"artist_name,omitempty"`
+	ArtistURL          string   `json:"artist_url,omitempty"`
+	ArtworkURL         string   `json:"artwork_url,omitempty"`
+	ArtworkBgColor     string   `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1  string   `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2  string   `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3  string   `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4  string   `json:"artwork_text_color4,omitempty"`
+	ReleaseDate        string   `json:"release_date,omitempty"`
+	Genre              string   `json:"genre,omitempty"`
+	TrackCount         int      `json:"track_count"`
+	DiscCount          int      `json:"disc_count,omitempty"`
+	ContentRating      string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits        []string `json:"audio_traits,omitempty"`
+	// Library is unknown (nil) without a LibraryService or when the stats
+	// did not finish within the request's time.
+	Library *domain.LibraryState `json:"library,omitempty"`
+	Tracks  []albumTrack         `json:"tracks"`
 }
 
 // albumTrack is the AlbumTrack schema: one song of the album. The metadata
@@ -48,6 +53,8 @@ type albumTrack struct {
 	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string `json:"audio_traits,omitempty"`
 	HasLyrics          bool     `json:"has_lyrics,omitempty"`
+	// OnDisk is set exactly when the album's library state is known.
+	OnDisk *bool `json:"on_disk,omitempty"`
 }
 
 // getAlbum answers GET /albums/{album_id}: the album's metadata and its song
@@ -70,10 +77,13 @@ func (s *Server) getAlbum(w http.ResponseWriter, r *http.Request) {
 		s.writeCatalogError(ctx, w, r, err, lookupTimeout, nil, "album failed", "album_id", id, "storefront", storefront)
 		return
 	}
-	writeJSON(w, http.StatusOK, newAlbumResponse(storefront, id, album))
+	library, onDisk := s.albumOnDisk(ctx, album)
+	writeJSON(w, http.StatusOK, newAlbumResponse(storefront, id, album, library, onDisk))
 }
 
-func newAlbumResponse(storefront, id string, album applemusic.Collection) albumResponse {
+// newAlbumResponse builds the answer; onDisk, in album.Tracks order, is nil
+// when library is.
+func newAlbumResponse(storefront, id string, album applemusic.Collection, library *domain.LibraryState, onDisk []bool) albumResponse {
 	resp := albumResponse{
 		Storefront: storefront, ID: id, URL: hitURL(applemusic.TypeAlbum, storefront, id, album.URL),
 		Title: album.Name, ArtistName: album.Artist, ArtistURL: album.ArtistURL,
@@ -83,17 +93,21 @@ func newAlbumResponse(storefront, id string, album applemusic.Collection) albumR
 		ReleaseDate: album.ReleaseDate, Genre: applemusic.PrimaryGenre(album.GenreNames),
 		TrackCount: len(album.Tracks), ContentRating: album.ContentRating,
 		AppleDigitalMaster: album.AppleDigitalMaster, AudioTraits: album.AudioTraits,
-		Tracks: make([]albumTrack, 0, len(album.Tracks)),
+		Library: library, Tracks: make([]albumTrack, 0, len(album.Tracks)),
 	}
-	for _, song := range album.Tracks {
+	for i, song := range album.Tracks {
 		disc := max(1, song.DiscNumber)
 		resp.DiscCount = max(resp.DiscCount, disc)
-		resp.Tracks = append(resp.Tracks, albumTrack{
+		track := albumTrack{
 			ID: song.ID, URL: hitURL(applemusic.TypeSong, storefront, song.ID, song.URL),
 			DiscNumber: disc, TrackNumber: song.TrackNumber, Name: song.Name, ArtistName: song.ArtistName,
 			DurationMS: song.DurationInMillis, ContentRating: song.ContentRating,
 			AppleDigitalMaster: song.AppleDigitalMaster, AudioTraits: song.AudioTraits, HasLyrics: song.HasLyrics,
-		})
+		}
+		if library != nil && i < len(onDisk) {
+			track.OnDisk = &onDisk[i]
+		}
+		resp.Tracks = append(resp.Tracks, track)
 	}
 	slices.SortStableFunc(resp.Tracks, func(a, b albumTrack) int {
 		return cmp.Or(cmp.Compare(a.DiscNumber, b.DiscNumber), cmp.Compare(a.TrackNumber, b.TrackNumber))

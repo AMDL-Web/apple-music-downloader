@@ -8,7 +8,8 @@ import { useState, useEffect, useRef } from '../ui/preact.js';
 import { searchCatalog, getArtistAlbums } from '../api.js';
 import { buildHash } from '../lib/route.js';
 import { createSearcher, createArtistPages, allHits, searchGroup } from '../lib/search.js';
-import { hitKey, hitPrior, trackJobs, sentJob, hitPreview } from '../lib/search-jobs.js';
+import { hitKey, hitMark, trackJobs, sentJob, hitPreview } from '../lib/search-jobs.js';
+import { filesOnDisk } from '../lib/on-disk.js';
 
 // Answers outlive the page for the life of the tab, like link previews.
 const SEARCHES = new Map();
@@ -18,7 +19,7 @@ const ARTISTS = new Map();
  * The page's search: `term` (lib/search.js searchTerm) is searched once
  * it has been stable for `debounced`; `artistId` (#/new?artist=) opens that
  * artist while there is a term. Returns {search, artist, pending, more,
- * retry, artistMore, artistRetry, runNow, priorOf, recordSent, hits}.
+ * retry, artistMore, artistRetry, runNow, markOf, recordSent, hits}.
  * `subscribeFeed` keeps the library and queue notes live.
  */
 export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
@@ -68,7 +69,7 @@ export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
     artistMore: () => artists.current.more(),
     artistRetry: () => artists.current.retry(),
     runNow: () => searcher.current.run(term),
-    priorOf: (hit) => hitPrior(hit, sent, jobs),
+    markOf: (hit) => hitMark(hit, sent, jobs),
     recordSent: (hit, job) => {
       setSent((m) => new Map(m).set(hitKey(hit), job.id));
       setJobs((m) => new Map(m).set(job.id, job));
@@ -79,12 +80,14 @@ export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
 /**
  * The page's side of the hits. download(hit) sends a song's, album's or playlist's url
  * alone through the page's `send` and `report` (its result joins the
- * results), after the page's questions (`ask(hit, run)`, which calls
- * run(overrides)), and asks first through `setConfirm` for an artist, whose
- * url queues every album as an artist link does. openArtist(hit) opens the
+ * results), after the page's questions (`ask(hit, run, again)`, which
+ * calls run(overrides)), and asks first through `setConfirm` for an artist,
+ * whose url queues every album as an artist link does. again(hit, mark)
+ * downloads a hit on disk again, replacing its files, after the page's
+ * confirmation. openArtist(hit) opens the
  * artist over the results as a history entry (#/new?artist=), so Back, the
  * browser's or the card's (closeArtist), returns to them. Returns {busy
- * (urls being sent), download, openArtist, closeArtist, openedHit (the hit
+ * (urls being sent), download, again, openArtist, closeArtist, openedHit (the hit
  * the open artist came from, for its head until the answer), focusArtist
  * (whether this page opened it), group (#/new?group=, the group shown
  * alone while there is a term), openGroup(id), closeGroup}. openGroup from
@@ -104,11 +107,12 @@ export function useHitActions({ app, route, term, artistId, search, send, report
     if (job) search.recordSent(hit, job);
     report(pairs, fail, () => hitPreview(hit), true, overrides);
   };
-  const start = (hit) => {
+  const start = (hit, again = 0) => {
     setConfirm(null);
-    if (!busy.has(hit.url)) ask(hit, (overrides) => sendHit(hit, overrides));
+    if (!busy.has(hit.url)) ask(hit, (overrides) => sendHit(hit, overrides), again);
   };
   const download = (hit) => (hit.type === 'artist' ? setConfirm({ names: [hit.name], label: 'Download all', run: () => start(hit) }) : start(hit));
+  const downloadAgain = (hit, mark) => start(hit, filesOnDisk(mark));
 
   const opened = useRef(null);
   const pushed = useRef(false);
@@ -142,6 +146,7 @@ export function useHitActions({ app, route, term, artistId, search, send, report
   return {
     busy,
     download,
+    again: downloadAgain,
     openArtist,
     closeArtist,
     openedHit: opened.current && opened.current.id === artistId ? opened.current : null,

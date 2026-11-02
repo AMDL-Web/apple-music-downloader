@@ -239,7 +239,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 		Config: cfgStore, Store: store, Hub: hub, Manager: manager,
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
-		Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
+		Catalog: catalog, Library: downloader, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
 		WrapperManaged: opts.WrapperHost != nil,
 		Restart: func() {
 			select {

@@ -228,6 +228,8 @@ test('activityView names the event and keeps one useful line', () => {
   assert.equal(failed.text, 'Apple Music has nothing at this link');
   assert.equal(activityView({ type: 'operation_exhausted', phase: 'resolve_tracks' }).text, 'resolve tracks');
   assert.equal(activityView({ type: 'some_new_event' }).label, 'Some new event');
+  assert.deepEqual(activityView({ type: 'job_retried', cause: 'resubmit', message: 'job queued again by a new submission' }), { label: 'Queued again', role: 'info', text: '' });
+  assert.equal(activityView({ type: 'job_retried', cause: 'retry' }).label, 'Retried');
 });
 
 test('runningFirst lifts running jobs and keeps each group in order', () => {

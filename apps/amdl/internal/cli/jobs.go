@@ -51,7 +51,7 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	})
 	sampleRate := fs.Int("max-sample-rate", 0, "highest ALAC sample rate in Hz (download.alac_max_sample_rate)")
 	bitDepth := fs.Int("max-bit-depth", 0, "highest ALAC bit depth (download.alac_max_bit_depth)")
-	overwrite := fs.Bool("overwrite", false, "overwrite files already on disk instead of skipping them (destructive)")
+	overwrite := fs.Bool("overwrite", false, "download again: replace the tracks already on disk instead of skipping them (destructive)")
 	wait := fs.Bool("wait", false, "wait until every job finishes and print them")
 	watch := fs.Bool("watch", false, "stream the jobs' events as NDJSON until they finish")
 	timeout := fs.Duration("timeout", 2*time.Hour, "how long --wait or --watch waits for all the jobs together, as a duration such as 90s, 20m or 2h (default 2h); 0 only looks once")

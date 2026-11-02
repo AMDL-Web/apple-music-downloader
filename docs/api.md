@@ -524,7 +524,8 @@ curl -X POST http://localhost:18080/api/v1/lookup \
  "artwork_bg_color":"f1a8bf","artwork_text_color1":"171615","artwork_text_color2":"272021",
  "artwork_text_color3":"423337","artwork_text_color4":"4f3b41","release_date":"2019-05-17",
  "genre":"Hip-Hop/Rap","track_count":12,"content_rating":"explicit","apple_digital_master":true,
- "audio_traits":["lossless","lossy-stereo"]}
+ "audio_traits":["lossless","lossy-stereo"],
+ "library":{"state":"partial","tracks_on_disk":9,"tracks_total":12}}
 ```
 
 Previews one link without creating a job, so a client can show the cover, title and artist
@@ -537,6 +538,12 @@ a song or album carries Apple's `audio_traits` as search hits do, and a station 
 `needs_media_user_token`. Each type costs light catalog reads only (an
 album or playlist pages through its track list): never the animated-cover or Enhanced
 HLS reads, never a station's next-tracks feed, at most 15 seconds in all.
+
+An album or a song also carries `library` (a [library state](#library-state)): how many
+of the album's songs, or whether the song (`tracks_total` 1), have a file at their library
+path, checked song by song. A song reads its album too, to find where it sits in the
+library; when that read fails, or the album does not list the song, the song answers
+without `library` rather than failing.
 
 The body is `{url}` only. A private playlist's cover is read with the wrapper's
 media-user-token when the backend can read it, else `catalog.media_user_token`; the token is
@@ -572,7 +579,8 @@ curl 'http://localhost:18080/api/v1/search?term=Taylor+Swift&storefront=us&limit
    "url":"https://music.apple.com/us/album/the-life-of-a-showgirl-the-encore/6814997249",
    "artist_name":"Taylor Swift","release_date":"2026-09-24","track_count":16,
    "content_rating":"explicit","prior_job":{"id":"job_…","status":"completed",
-   "finished_at":"2026-10-30T03:12:09Z"}, …}, …],"next_offset":2},
+   "finished_at":"2026-10-30T03:12:09Z"},
+   "library":{"state":"complete","tracks_on_disk":16,"tracks_total":16}, …}, …],"next_offset":2},
  "playlists":{"items":[{"id":"pl.2553030a768547e9ab3e91230de8439f","type":"playlist",
    "name":"Lo-fi beats to study, work, sleep and relax to",
    "url":"https://music.apple.com/us/playlist/lo-fi-beats-to-study-work-sleep-and-relax-to/pl.2553030a768547e9ab3e91230de8439f",
@@ -602,11 +610,18 @@ A playlist hit has `type` `playlist`, the curator as `artist_name` and no `track
 the catalog states none. `audio_traits` is Apple's list for the song, album or playlist, such as `lossless`,
 `hi-res-lossless`, `atmos` and `spatial`, when the catalog sends one.
 
-`prior_job` names the job that put a hit in the library or holds it in the queue: the newest
-queued or running job of the same type and id, else the newest completed one, whatever the
-storefront of its link. A song downloaded as part of an album or playlist job is not marked,
-and a failed or cancelled job marks nothing. When the job store cannot be read the hits
-come back unmarked rather than failing the search.
+`prior_job` names a hit's queue entry: the newest queued or running job of the same type
+and id, else the newest completed one, whatever the storefront of its link. A song
+downloaded as part of an album or playlist job has none, and a failed or cancelled job
+marks nothing. When the job store cannot be read the hits come back unmarked rather than
+failing the search. A completed `prior_job` does not mean the files are still there.
+
+An album hit carries `library`, a [library state](#library-state) estimated from its
+library folder alone: one listing per album, no further catalog read, the `.m4a` files in
+it counted against `track_count`. A file the track list does not name counts too, and an
+album the catalog gives no `track_count` reads as `none`; `GET /albums/{id}` checks song
+by song. An album whose listing does not finish within the search's 10 seconds has no
+`library`. Songs, playlists and artists have none.
 
 ### Artist albums
 
@@ -615,9 +630,9 @@ curl 'http://localhost:18080/api/v1/artists/159260351/albums?storefront=us&limit
 ```
 
 Returns `storefront`, the `artist` as a search hit, and `albums`, one page of the artist's
-albums in the order an artist download takes them, as album hits with `next_offset`.
-`limit` is 1-100 (default 25). The artist and the page are read at once, so every page
-carries the artist.
+albums in the order an artist download takes them, as album hits with `next_offset`,
+each with its folder-count `library` as in a search. `limit` is 1-100 (default 25). The
+artist and the page are read at once, so every page carries the artist.
 
 | Case | Answer |
 | --- | --- |
@@ -640,10 +655,11 @@ curl 'http://localhost:18080/api/v1/albums/1783644603?storefront=cn'
  "artwork_text_color3":"121e22","artwork_text_color4":"1e282b","release_date":"2023-11-01",
  "genre":"动画","track_count":13,"disc_count":1,"apple_digital_master":true,
  "audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
+ "library":{"state":"partial","tracks_on_disk":1,"tracks_total":13},
  "tracks":[{"id":"1783644604","url":"https://music.apple.com/cn/song/%E8%BF%B7%E6%98%9F%E5%8F%AB/1783644604",
    "disc_number":1,"track_number":1,"name":"迷星叫","artist_name":"MyGO!!!!!","duration_ms":211373,
    "apple_digital_master":true,"audio_traits":["hi-res-lossless","lossless","lossy-stereo"],
-   "has_lyrics":true}, …]}
+   "has_lyrics":true,"on_disk":true}, …]}
 ```
 
 Returns the album's metadata and `tracks`, its songs in disc and track order: the songs an
@@ -656,11 +672,19 @@ has them, `artist_name`, `duration_ms`, `content_rating`, `apple_digital_master`
 `audio_traits` and `has_lyrics`. The whole list comes in one answer; there is no paging.
 `storefront` is a two-letter code, default `catalog.default_storefront`.
 
-The response does not say which songs are on disk: where a song lands depends on the
-quality and codec its download picks, and only a job records that. To mark the songs an
-album job downloaded, read the job (`GET /downloads/{job_id}`, the id from the album hit's
-`prior_job`) and match its items' `adam_id` with the songs' `id`; a song downloaded by a
-song job or another album's job is not found that way.
+`library` says how many of the songs are on disk and each song's `on_disk` whether it has a
+file at its library path, whichever job wrote it (a song job, this album's, an artist's)
+and at whatever quality. Submitting the album downloads only the songs not on disk, and
+`force_overwrite` downloads them all again. Both fields are absent when the check did not
+finish within the 15 seconds.
+
+### Library state
+
+`library` on an album, a song lookup and an album hit is `{state, tracks_on_disk,
+tracks_total}`: `state` is `complete` when every track has a file at its library path
+(`download.library_path_format`, with at least one track), `partial` when some do, `none`
+otherwise. Job history plays no part: a file moved away reads as not on disk, and a file a
+lower-quality download wrote counts.
 
 | Case | Answer |
 | --- | --- |

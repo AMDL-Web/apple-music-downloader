@@ -9,8 +9,8 @@ import (
 	"amdl/internal/domain"
 )
 
-// JobMark is the part of a job row that says whether a catalog item is in the
-// library or in the queue: the job's id, canonical key, status and times.
+// JobMark is the part of a job row that names a catalog item's queue entry:
+// the job's id, canonical key, status and times.
 type JobMark struct {
 	ID           string
 	CanonicalKey string

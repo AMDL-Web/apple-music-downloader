@@ -20,7 +20,7 @@ func TestADownloadAsksOnlyWhenThereIsAChoice(t *testing.T) {
 	both := client.SearchHit{Type: "album", Name: "Glass Weather", URL: "https://music.apple.com/us/album/glass-weather/920001", AudioTraits: []string{"atmos", "lossless"}}
 	plain := client.SearchHit{Type: "album", Name: "Tidal Rooms", URL: "https://music.apple.com/us/album/tidal-rooms/920002", AudioTraits: []string{"lossless"}}
 	owned := client.SearchHit{Type: "album", Name: "Late Bloom", URL: "https://music.apple.com/us/album/late-bloom/920006", AudioTraits: []string{"lossless"},
-		PriorJob: &client.PriorJob{Status: domain.JobCompleted}}
+		Library: &domain.LibraryState{State: domain.LibraryComplete, TracksOnDisk: 9, TracksTotal: 9}}
 	priority := []string{"alac", "ec3", "aac"}
 
 	if cmd := m.choose([]client.SearchHit{plain}, []string{plain.Name}, priority); cmd == nil || m.panel == panelAsk {
@@ -194,5 +194,25 @@ func TestQualityPriorityIsEditedFromTheKeyboard(t *testing.T) {
 	}
 	if cmd, _ := m.priorityKey("enter"); cmd == nil || m.panel != panelNone {
 		t.Error("enter saves and closes")
+	}
+}
+
+// A result row says a job is under way first, then how much of the album is
+// on disk; a completed job alone says nothing, since its files may be gone.
+func TestHitMarkFollowsTheQueueThenTheFiles(t *testing.T) {
+	partial := &domain.LibraryState{State: domain.LibraryPartial, TracksOnDisk: 9, TracksTotal: 12}
+	for _, tt := range []struct {
+		hit  client.SearchHit
+		want string
+	}{
+		{client.SearchHit{Library: partial, PriorJob: &client.PriorJob{Status: domain.JobRunning}}, "↻ downloading"},
+		{client.SearchHit{Library: partial, PriorJob: &client.PriorJob{Status: domain.JobCompleted}}, "9/12"},
+		{client.SearchHit{Library: &domain.LibraryState{State: domain.LibraryComplete, TracksOnDisk: 12, TracksTotal: 12}}, "✓ in library"},
+		{client.SearchHit{PriorJob: &client.PriorJob{Status: domain.JobCompleted}}, ""},
+		{client.SearchHit{Library: &domain.LibraryState{State: domain.LibraryNone, TracksTotal: 12}}, ""},
+	} {
+		if got := hitMark(tt.hit); got != tt.want {
+			t.Errorf("hitMark(%+v) = %q, want %q", tt.hit, got, tt.want)
+		}
 	}
 }

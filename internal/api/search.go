@@ -62,10 +62,14 @@ type searchHit struct {
 	AppleDigitalMaster bool               `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string           `json:"audio_traits,omitempty"`
 	PriorJob           *priorJob          `json:"prior_job,omitempty"`
+	// Library is an album hit's state from its folder alone
+	// (LibraryService.AlbumFolderStates); other hits leave it unset.
+	Library *domain.LibraryState `json:"library,omitempty"`
 }
 
-// priorJob is the PriorJob schema: the job that put a hit in the library or
-// holds it in the queue.
+// priorJob is the PriorJob schema: the hit's queue entry, its queued or
+// running job, else its last completed one. Whether the hit is on disk is
+// library's to say.
 type priorJob struct {
 	ID         string           `json:"id"`
 	Status     domain.JobStatus `json:"status"`
@@ -212,6 +216,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			for _, album := range res.Albums {
 				group.Items = append(group.Items, albumHit(storefront, album))
 			}
+			s.markAlbumFolders(ctx, group.Items, res.Albums)
 			resp.Albums = group
 		case applemusic.SearchPlaylists:
 			for _, playlist := range res.Playlists {
@@ -270,6 +275,7 @@ func (s *Server) artistAlbums(w http.ResponseWriter, r *http.Request) {
 	for _, album := range page.Albums {
 		resp.Albums.Items = append(resp.Albums.Items, albumHit(storefront, album))
 	}
+	s.markAlbumFolders(ctx, resp.Albums.Items, page.Albums)
 	s.markPriorJobs(r.Context(), append([]*searchHit{resp.Artist}, resp.Albums.Items...))
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -330,9 +336,9 @@ func parseBrowsePage(q url.Values, def, max int) (limit, offset int, err error) 
 	return limit, offset, nil
 }
 
-// markPriorJobs sets prior_job on every hit a job has downloaded or is
-// downloading: the newest queued or running job of the same type and id, else
-// the newest completed one, from a link in any storefront. A song downloaded
+// markPriorJobs sets prior_job on every hit with a queue entry: the newest
+// queued or running job of the same type and id, else the newest completed
+// one, from a link in any storefront. A song downloaded
 // inside an album or playlist job is not marked. A failed store read leaves the
 // hits unmarked; the search still answers.
 func (s *Server) markPriorJobs(ctx context.Context, hits []*searchHit) {

@@ -167,7 +167,8 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 
 `feature_unavailable` comes only from `GET /logs` and `GET /logs/stream`: `logging.buffer_size`
 is `0`, so no log history is kept. Every other dependency in `internal/api#Deps` is
-required, and the process does not start without it.
+required, and the process does not start without it, except `Library`: without it the album, lookup and
+search answers leave out `library` and `on_disk`.
 
 Per-URL submit results keep the coarse `status` enum (`accepted`, `invalid`,
 `duplicate_in_request`, `duplicate_active`, `queue_full`, plus `error` for a server-side
