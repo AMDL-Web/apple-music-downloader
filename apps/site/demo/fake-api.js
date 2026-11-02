@@ -7,6 +7,7 @@
 
 import { albums, songs, artists, playlists, find, albumNamed, playlistNamed, albumFor, STOREFRONT } from './catalog.js';
 import { createHookStore } from './fake-hooks.js';
+import { createRecordStore, resourceOf } from './fake-records.js';
 import { CONFIG, RESTART_KEYS } from './fake-config.js';
 
 const MIN = 60000;
@@ -93,7 +94,7 @@ function stageFields(stage, frac, key) {
 const STAGE_ORDER = ['queued', 'resolving', 'waiting_download', 'downloading', 'waiting_decrypt', 'decrypting', 'remuxing', 'tagging', 'saving', 'completed'];
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 const DONE = new Set(['completed', 'failed', 'cancelled', 'skipped_existing']);
-const MILESTONES = new Set(['job_queued', 'job_started', 'job_moved', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'job_retried', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
+const MILESTONES = new Set(['job_queued', 'job_started', 'job_moved', 'resolved_input', 'job_finished', 'job_failed', 'job_cancelled', 'item_completed', 'item_failed', 'item_skipped', 'job_deleted']);
 // The spacing of queue_order values, as the real store hands them out.
 const QUEUE_GAP = 2 ** 20;
 const MAX_RUNNING = 3;
@@ -123,6 +124,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   if (typeof progress !== 'function') throw new Error('createFakeApi needs the album progress function');
   const jobs = new Map();
   const items = new Map();
+  const records = createRecordStore({ jobs, items, now });
   const events = [];
   const logs = [];
   const feeds = new Set();
@@ -174,6 +176,12 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         ? { type: 'download_upserted', job: withProgress(job), event_id: e.id, status_counts: statusCounts() }
         : { type: 'download_deleted', job_id: e.job_id, event_id: e.id, status_counts: statusCounts() };
       for (const send of feeds) send(e.id, msg.type, msg);
+      // A record's run is followed by its record, as GET /library lists it.
+      const rec = job && job.resource ? records.get(job.resource.kind, job.resource.id) : null;
+      if (rec) {
+        const upd = { type: 'resource_updated', resource_kind: rec.kind, resource_id: rec.id, resource: records.record(rec), event_id: e.id, status_counts: statusCounts() };
+        for (const send of feeds) send(e.id, upd.type, upd);
+      }
     }
     return e;
   }
@@ -284,6 +292,14 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     if (finished) job.finished_at = iso(finished);
     if (rest.error) job.error = rest.error;
     if (rest.overrides) job.overrides = rest.overrides;
+    // Albums, songs and playlists download for a record; stations and artists do not.
+    const ref = type === 'station' ? null : resourceOf(src);
+    if (ref) {
+      job.resource = ref;
+      records.ensure(ref, created, src.type === 'song' ? src.id : '');
+    }
+    job.trigger = rest.trigger || 'manual';
+    job.priority = 1;
     jobs.set(id, job);
     if (src) {
       describe(job, src);
@@ -552,6 +568,9 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     }
     if (action === 'cancel' && method === 'POST') {
       if (TERMINAL.has(job.status)) return apiError(409, 'job_finished', 'job has already finished');
+      // Cancel on a record's run pauses the record.
+      const rec = job.resource ? records.get(job.resource.kind, job.resource.id) : null;
+      if (rec) rec.paused = true;
       Object.assign(job, { status: 'cancelled', finished_at: iso(Date.now()), updated_at: iso(Date.now()) });
       delete job.queue_order;
       for (const it of list) if (!DONE.has(it.status)) Object.assign(it, stageFields('cancelled', 0));
@@ -559,19 +578,14 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       addEvent({ job_id: id, type: 'job_cancelled', message: 'job cancelled', payload: { ...job } });
       return json(200, withProgress(job));
     }
+    // A retry is a new run of the same link.
     if (action === 'retry' && method === 'POST') {
-      if (!TERMINAL.has(job.status)) return apiError(409, 'job_active', 'job is still active');
-      Object.assign(job, { status: 'queued', queue_order: nextOrder(), updated_at: iso(Date.now()) });
-      delete job.error;
-      delete job.finished_at;
-      for (const it of list) {
-        if (it.status !== 'failed' && it.status !== 'cancelled') continue;
-        Object.assign(it, stageFields('queued', 0), { attempt: 1 });
-        delete it.error;
-      }
-      recount(job);
-      addEvent({ job_id: id, type: 'job_retried', message: 'job retried', payload: { ...job } });
-      return json(202, withProgress(job));
+      if (job.status !== 'failed' && job.status !== 'cancelled') return apiError(409, 'job_not_retryable', 'only failed or cancelled jobs can be retried');
+      const rec = job.resource ? records.get(job.resource.kind, job.resource.id) : null;
+      if (rec) rec.paused = false;
+      const src = sourceOf(job.input);
+      const next = queueRun(src, job.input, job.overrides, 'retry');
+      return json(202, { status: 'queued', job: withProgress(next) });
     }
     if (action === 'move' && method === 'POST') return move(job, body);
     if (action === 'events' && method === 'GET') {
@@ -591,35 +605,17 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     return apiError(405, 'method_not_allowed', 'method not allowed');
   }
 
-  // The songs a finished track left on disk: the world's stand-in for the
-  // files GET /albums and POST /lookup check.
-  function onDisk() {
-    const ids = new Set();
-    for (const list of items.values()) for (const it of list) if (it.status === 'completed' || it.status === 'skipped_existing') ids.add(it.adam_id);
-    return ids;
+  /** The catalog object a job's or a link's input names. */
+  function sourceOf(url) {
+    const link = parseLink(url);
+    if (!link) return null;
+    const known = find(link.track_id || link.id);
+    return known && known.type !== 'artist' ? known : albumFor(link.id);
   }
 
-  const libraryState = (n, total) => ({ state: total > 0 && n >= total ? 'complete' : n > 0 ? 'partial' : 'none', tracks_on_disk: Math.min(n, total), tracks_total: total });
-  const albumLibrary = (album, disk = onDisk()) => libraryState(album.tracks.filter((t) => disk.has(t.id)).length, album.tracks.length);
-
-  // A link keeps one job: a finished one is queued again under its id, its
-  // finished tracks kept unless force_overwrite replaces them.
-  function requeue(job, overrides) {
-    const force = Boolean(overrides && overrides.force_overwrite);
-    const at = Date.now();
-    Object.assign(job, { status: 'queued', queue_order: nextOrder(), created_at: iso(at), updated_at: iso(at) });
-    delete job.error;
-    delete job.finished_at;
-    delete job.started_at;
-    if (overrides) job.overrides = overrides;
-    else delete job.overrides;
-    for (const it of items.get(job.id) || []) {
-      if (!force && (it.status === 'completed' || it.status === 'skipped_existing')) continue;
-      Object.assign(it, stageFields('queued', 0), { attempt: 1 });
-      delete it.error;
-    }
-    recount(job);
-    addEvent({ job_id: job.id, type: 'job_retried', message: 'job queued again by a new submission', payload: { ...job, cause: 'resubmit', force_overwrite: force } });
+  /** Queues a run of `src`, as a submit, a retry or a reset does. */
+  function queueRun(src, input, overrides, trigger = 'manual') {
+    return makeJob({ key: `submit${submitted++}:${input}`, src, type: src.type, status: 'queued', ago: 0, input, live: true, overrides, trigger });
   }
 
   function submit(body) {
@@ -630,23 +626,58 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         results.push({ url: u, status: 'invalid', error: { code: 'invalid_url', message: 'not an Apple Music link' } });
         continue;
       }
-      // (The demo queues a link that is still under way once more, where the
-      // server answers duplicate_active, so a visitor's click always runs.)
-      const same = [...jobs.values()].filter((j) => j.input === u);
-      const last = same.filter((j) => j.type !== 'station').sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
-      if (last && same.every((j) => TERMINAL.has(j.status))) {
-        requeue(last, body.overrides);
-        results.push({ url: u, status: 'accepted', requeued: true, job: withProgress(last) });
+      const src = sourceOf(u);
+      const ref = resourceOf(src);
+      const m = ref ? records.mark(ref, src.type === 'song' ? src.id : '') : null;
+      if (m && m.active_job_id) {
+        results.push({ url: u, status: 'duplicate_active', resource: ref, existing_job_id: m.active_job_id, error: { code: 'duplicate_active', message: 'already queued or running' } });
         continue;
       }
-      const known = find(link.track_id || link.id);
-      const src = known && known.type !== 'artist' ? known : albumFor(link.id);
-      const job = makeJob({ key: `submit${submitted++}:${u}`, src, type: src.type, status: 'queued', ago: 0, input: u, live: true, overrides: body.overrides });
-      results.push({ url: u, status: 'accepted', job: withProgress(job) });
+      const done = m && (src.type === 'song' ? m.song_state === 'done' : m.state === 'complete' && records.get(ref.kind, ref.id).wanted === 'all');
+      if (done) {
+        results.push({ url: u, status: 'already_downloaded', resource: ref });
+        continue;
+      }
+      if (ref) records.get(ref.kind, ref.id) && (records.get(ref.kind, ref.id).paused = false);
+      const job = queueRun(src, u, body.overrides);
+      results.push({ url: u, status: 'accepted', ...(ref ? { resource: ref } : {}), job: withProgress(job) });
     }
-    const accepted = results.filter((r) => r.status === 'accepted').length;
+    const accepted = results.filter((r) => ['accepted', 'pending', 'already_downloaded'].includes(r.status)).length;
     const out = { accepted, rejected: results.length - accepted, results };
     return accepted ? json(202, out) : apiError(422, 'no_urls_accepted', 'No URL was accepted.', out);
+  }
+
+  /** /library/{kind}/{id}[/action]: one record and what can be done to it. */
+  function recordRoute(method, kind, id, action, body) {
+    const rec = records.get(kind, id);
+    if (!rec) return apiError(404, 'resource_not_found', `no ${kind === 'playlists' ? 'playlist' : 'album'} record ${id}`);
+    const src = find(rec.id);
+    const run = records.activeRun(rec);
+    if (!action && method === 'GET') return json(200, records.detail(rec));
+    if (!action && method === 'DELETE') {
+      if (run) return apiError(409, 'run_active', 'the record has a queued or running run; pause it first');
+      records.drop(rec);
+      return new Response(null, { status: 204 });
+    }
+    if (action === 'pause' && method === 'POST') {
+      rec.paused = true;
+      if (run) jobRoute('POST', run.id, 'cancel');
+      return json(200, records.record(rec));
+    }
+    if (action === 'resume' && method === 'POST') {
+      rec.paused = false;
+      const x = records.record(rec);
+      if (x.state !== 'complete' && !x.active_job_id && src) queueRun(src, src.url, undefined, 'retry');
+      return json(200, records.record(rec));
+    }
+    if ((action === 'reset' || action === 'download') && method === 'POST') {
+      if (run) return apiError(409, 'run_active', 'the record has a queued or running run; pause it first');
+      if (!src) return json(200, { status: 'already_downloaded' });
+      rec.paused = false;
+      const job = queueRun(src, src.url, undefined, action === 'reset' ? 'reset' : 'manual');
+      return json(202, action === 'reset' ? { slots: records.tracksOf(rec).length, job: withProgress(job) } : { status: 'queued', job: withProgress(job) });
+    }
+    return apiError(405, 'method_not_allowed', 'method not allowed');
   }
 
   function lookup(body) {
@@ -662,8 +693,9 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     else out.artist_name = src.artist_name;
     if (src.type === 'album') out.track_count = src.track_count;
     if (src.type === 'song') out.album_name = src.album_name;
-    if (src.type === 'album') out.library = albumLibrary(src);
-    if (src.type === 'song') out.library = libraryState(onDisk().has(src.id) ? 1 : 0, 1);
+    const ref = resourceOf(src);
+    const mark = ref ? records.mark(ref, src.type === 'song' ? src.id : '') : null;
+    if (mark) out.resource = mark;
     return json(200, out);
   }
 
@@ -711,13 +743,17 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       const rows = arr.slice(offset, offset + limit).map(strip);
       return { items: rows, ...(offset + limit < arr.length ? { next_offset: offset + limit } : {}) };
     };
-    const song = ({ album_id, track_number, quality, ...s }) => s;
-    const disk = onDisk();
-    const album = ({ tracks, quality, artist_id, ...a }) => ({ ...a, library: albumLibrary({ tracks }, disk) });
+    const marked = (x, hit) => {
+      const ref = resourceOf(x);
+      const mark = ref ? records.mark(ref, x.type === 'song' ? x.id : '') : null;
+      return mark ? { ...hit, resource: mark } : hit;
+    };
+    const song = ({ album_id, track_number, quality, ...s }) => marked({ ...s, album_id }, s);
+    const album = ({ tracks, quality, artist_id, ...a }) => marked(a, a);
     const out = { term, storefront: STOREFRONT };
     if (want('songs')) out.songs = page(groups.songs, song);
     if (want('albums')) out.albums = page(groups.albums, album);
-    if (want('playlists')) out.playlists = page(groups.playlists, (p) => p);
+    if (want('playlists')) out.playlists = page(groups.playlists, (p) => marked(p, p));
     if (want('artists')) out.artists = page(groups.artists, (a) => a);
     return json(200, out);
   }
@@ -725,8 +761,10 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   function artistAlbums(id, q) {
     const artist = find(id);
     if (!artist || artist.type !== 'artist') return apiError(404, 'catalog_not_found', `Apple Music has no artist ${id}`);
-    const disk = onDisk();
-    const all = albums.filter((a) => a.artist_name === artist.name).map(({ tracks, quality, artist_id, ...a }) => ({ ...a, library: albumLibrary({ tracks }, disk) }));
+    const all = albums.filter((a) => a.artist_name === artist.name).map(({ tracks, quality, artist_id, ...a }) => {
+      const mark = records.mark({ kind: 'album', id: a.id });
+      return mark ? { ...a, resource: mark } : a;
+    });
     const offset = Number(q.get('offset')) || 0;
     const limit = Number(q.get('limit')) || 25;
     return json(200, { storefront: STOREFRONT, artist, albums: { items: all.slice(offset, offset + limit), ...(offset + limit < all.length ? { next_offset: offset + limit } : {}) } });
@@ -828,6 +866,14 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     if (at < 0) return apiError(404, 'not_found', 'not found');
     const path = url.pathname.slice(at);
     const q = url.searchParams;
+    const record = path.match(/^\/api\/v1\/library\/(albums|playlists)\/([^/]+)(?:\/(download|reset|pause|resume))?$/);
+    if (record) return recordRoute(method, record[1], decodeURIComponent(record[2]), record[3], await readBody(req));
+    const appleKind = path.match(/^\/api\/v1\/apple-library\/(albums|songs|playlists|artists)$/);
+    if (appleKind && method === 'GET') return json(200, records.appleList(appleKind[1], q));
+    const appleTracks = path.match(/^\/api\/v1\/apple-library\/playlists\/([^/]+)\/tracks$/);
+    if (appleTracks && method === 'GET') return json(200, records.appleTracks(decodeURIComponent(appleTracks[1])));
+    const pendingAdd = path.match(/^\/api\/v1\/library\/pending\/([^/]+)(\/retry)?$/);
+    if (pendingAdd) return apiError(404, 'resource_not_found', 'no pending add with this id');
     const job = path.match(/^\/api\/v1\/downloads\/(job_[0-9a-f]+)(?:\/(cancel|retry|move|events))?$/);
     if (job) return jobRoute(method, job[1], job[2], q, req.signal, job[2] === 'move' ? await readBody(req) : undefined);
     const artist = path.match(/^\/api\/v1\/artists\/([^/]+)\/albums$/);
@@ -905,6 +951,37 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         return quality(await readBody(req));
       case 'GET /api/v1/search':
         return search(q);
+      case 'GET /api/v1/library/summary':
+        return json(200, records.summary());
+      case 'GET /api/v1/library/albums':
+        return json(200, records.list('albums', q));
+      case 'GET /api/v1/library/playlists':
+        return json(200, records.list('playlists', q));
+      case 'POST /api/v1/library/add':
+        return submit(await readBody(req));
+      case 'POST /api/v1/library/reset': {
+        const body = await readBody(req);
+        let reset = 0;
+        let skipped = 0;
+        for (const rec of records.all()) {
+          const x = records.record(rec);
+          const flags = (body.filter && body.filter.flag) || [];
+          if (flags.length && !(flags.includes('failed') && x.tracks_failed) && !(flags.includes('paused') && rec.paused)) continue;
+          if (x.active_job_id) skipped++;
+          else if (recordRoute('POST', `${rec.kind}s`, rec.id, 'reset').status === 202) reset++;
+        }
+        return json(200, { reset, skipped_active: skipped });
+      }
+      case 'GET /api/v1/library/pending':
+        return json(200, { items: [] });
+      case 'GET /api/v1/library/check':
+        return json(200, { check: records.check() });
+      case 'POST /api/v1/library/check':
+        return json(202, { check: records.startCheck(await readBody(req)) });
+      case 'GET /api/v1/apple-library/status':
+        return json(200, records.appleStatus());
+      case 'POST /api/v1/apple-library/sync':
+        return json(202, records.appleStatus());
     }
     return apiError(404, 'not_found', `no route ${method} ${path}`);
   }

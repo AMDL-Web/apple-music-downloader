@@ -50,7 +50,7 @@ test('actionReason words every refusal the job routes answer', () => {
   assert.equal(actionReason('cancel', err(404, 'job_not_found')), 'no longer exists');
   assert.equal(actionReason('retry', err(409, 'job_not_retryable')), 'only failed or cancelled jobs can be retried');
   assert.equal(actionReason('cancel', err(409, 'job_not_cancellable')), 'already finished');
-  assert.equal(actionReason('retry', err(409, 'job_finalizing')), 'still finishing its last run, try again in a moment');
+  assert.equal(actionReason('again', err(409, 'run_active')), 'it is downloading now; pause it first');
   assert.equal(actionReason('retry', err(409, 'duplicate_active')), 'another active job already downloads this link');
   assert.equal(actionReason('retry', err(503, 'queue_full')), 'the queue is full');
   assert.equal(actionReason('cancel', err(0, 'network_error', 'Cannot reach the server.')), 'cannot reach the server');
@@ -125,6 +125,14 @@ test('a row menu offers what the status of its job allows, as in the desktop app
   assert.deepEqual(gone.map((it) => (it.separator ? '-' : it.id)), ['details', '-', 'copy', '-', 'delete'], 'a link Apple has nothing at gets no Retry');
   const labels = rowMenu({ id: 'j', status: 'failed', input: 'x' }).filter((it) => !it.separator).map((it) => it.label);
   assert.deepEqual(labels, ['Show details', 'Retry', 'Copy link', 'Delete…']);
+});
+
+test("a record's run opens its record and pauses it instead of cancelling", () => {
+  const run = (status) => rowMenu({ id: 'j', status, input: 'x', resource: { kind: 'album', id: '1' } }).map((it) => (it.separator ? '-' : it.id));
+  assert.deepEqual(run('running'), ['details', 'record', 'pause', '-', 'copy']);
+  assert.deepEqual(run('completed'), ['details', 'record', 'again', '-', 'copy', '-', 'delete']);
+  const labels = rowMenu({ id: 'j', status: 'queued', resource: { kind: 'album', id: '1' } }).filter((it) => !it.separator).map((it) => it.label);
+  assert.deepEqual(labels, ['Show details', 'Open in Library', 'Move to top', 'Move to bottom', 'Pause']);
 });
 
 test('a queued row offers only the moves that move it', () => {

@@ -11,12 +11,12 @@ const tabs = (page) =>
 test('the phone tab bar has five tabs with New download in the middle', () => {
   assert.deepEqual(
     tabs('overview').map((t) => t.page),
-    ['overview', 'queue', 'new', 'settings', 'logs'],
+    ['overview', 'queue', 'new', 'library', 'settings'],
   );
 });
 
 test('each tab is current only on its own page', () => {
-  for (const page of ['overview', 'queue', 'new', 'settings', 'logs']) {
+  for (const page of ['overview', 'queue', 'new', 'library', 'settings']) {
     const current = tabs(page).filter((t) => t.current === 'page');
     assert.deepEqual(current.map((t) => t.page), [page]);
   }

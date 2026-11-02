@@ -7,7 +7,7 @@ import { html } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths } from '../lib/format.js';
 import { hitView } from '../lib/search.js';
 import { Button, Artwork, Skeleton } from '../ui/components.js';
-import { DiskNote } from './download-disk.js';
+import { MarkNote, markHref } from './download-mark.js';
 
 const HIT_ART = artWidths(48);
 
@@ -15,7 +15,7 @@ const HIT_ART = artWidths(48);
  * A song: a row on the Songs surface. Download is its one focus stop
  * (data-hit-primary). While it is sent, and once the song is in the queue,
  * it is aria-disabled rather than disabled, so focus and the arrow keys
- * stay on it. A song the search says is on disk (`library`), or one this
+ * stay on it. A song its album's record has done (`resource`), or one this
  * page watched download, downloads again instead.
  */
 export function HitRow({ hit, row }) {
@@ -38,7 +38,7 @@ export function HitRow({ hit, row }) {
       <span class="new-hit-sub" title=${meta}>
         ${v.facts.map((f) => html`<span key=${f.key} class="new-hit-fact" data-key=${f.key} dir=${f.auto ? 'auto' : undefined}>${f.text}</span>`)}
       </span>
-      ${mark ? html`<${DiskNote} mark=${mark} href=${mark.job ? row.jobHref(mark.job.id) : ''} focusable=${false} />` : null}
+      ${mark ? html`<${MarkNote} mark=${mark} href=${markHref(mark, row.jobHref)} focusable=${false} />` : null}
     </div>
     <${Button}
       size="sm"

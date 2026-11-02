@@ -19,7 +19,7 @@ nothing from another host.
 | `static/` | Stylesheets (`site.css`, and `demo.css` for the live demos), script, favicon, the Open Graph card's template (`og.html`), the hero animation (`hero.html`), and the CLI and MCP samples |
 | `ansi.mjs` | Turns a frame of the terminal interface, with its color escapes, into the HTML the page shows |
 | `og.mjs` | Draws `og.png` from `static/og.html` and the English hero with headless Chrome |
-| `demo/` | The live console demo: the fake backend (`fake-api.js`, its config in `fake-config.js`), its made-up catalog, the module that installs it (`boot.js`), and `bundle.mjs`, which puts the demo into the build |
+| `demo/` | The live console demo: the fake backend (`fake-api.js`, its config in `fake-config.js`, its records in `fake-records.js`), its made-up catalog, the module that installs it (`boot.js`), and `bundle.mjs`, which puts the demo into the build |
 | `serve.mjs` | The preview server behind `--serve` |
 | `build.test.mjs` | Content parity, links and anchors, local-only resources, the terminal frame, the Open Graph card, arguments |
 | `demo.test.mjs` | The fake backend answers every console call, stays on its own origin, and runs jobs to the end |

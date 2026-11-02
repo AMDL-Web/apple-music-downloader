@@ -1,15 +1,14 @@
 // New download: the state behind catalog search (views/download-search.js
 // draws it). useSearch runs the searcher and an open artist's pages
-// (lib/search.js) and keeps the library and queue notes live;
+// (lib/search.js) and keeps the hits' record marks live (lib/marks.js);
 // useHitActions downloads a hit and opens or closes an artist or a group
 // shown alone as a history entry; toResults takes the text box's keys to the results.
 
 import { useState, useEffect, useRef } from '../ui/preact.js';
 import { searchCatalog, getArtistAlbums } from '../api.js';
 import { buildHash } from '../lib/route.js';
-import { createSearcher, createArtistPages, allHits, searchGroup } from '../lib/search.js';
-import { hitKey, hitMark, trackJobs, sentJob, hitPreview } from '../lib/search-jobs.js';
-import { filesOnDisk } from '../lib/on-disk.js';
+import { createSearcher, createArtistPages, searchGroup, hitKey, hitPreview } from '../lib/search.js';
+import { resourceMark, applyResourceFeed, applySentSongs, withLatest, submitMark, resourceKey, markedFiles } from '../lib/marks.js';
 
 // Answers outlive the page for the life of the tab, like link previews.
 const SEARCHES = new Map();
@@ -19,8 +18,8 @@ const ARTISTS = new Map();
  * The page's search: `term` (lib/search.js searchTerm) is searched once
  * it has been stable for `debounced`; `artistId` (#/new?artist=) opens that
  * artist while there is a term. Returns {search, artist, pending, more,
- * retry, artistMore, artistRetry, runNow, markOf, recordSent, hits}.
- * `subscribeFeed` keeps the library and queue notes live.
+ * retry, artistMore, artistRetry, runNow, markOf, recordSent}.
+ * `subscribeFeed` keeps the record marks live.
  */
 export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
   const [, setTick] = useState(0);
@@ -48,16 +47,30 @@ export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
     artists.current.retry();
   }, [epoch]);
 
-  // Jobs this page submitted for hits, and the latest snapshot of every job
-  // a shown hit names, kept live by the feed.
-  const [sent, setSent] = useState(() => new Map());
-  const [jobs, setJobs] = useState(() => new Map());
+  // The feed's newest record marks, the record each hit this page sent
+  // named, and the songs it sent with their run's outcome.
+  const [latest, setLatest] = useState(() => new Map());
+  const [sentRes, setSentRes] = useState(() => new Map());
+  const [songs, setSongs] = useState(() => new Map());
   const search = searcher.current.state();
   const artist = artists.current.state();
-  const hits = [...allHits(search.data), ...(artist.albums ? artist.albums.items : []), ...(artist.artist ? [artist.artist] : [])];
-  const watched = useRef(new Set());
-  watched.current = new Set([...sent.values(), ...hits.map((h) => h.prior_job && h.prior_job.id).filter(Boolean)]);
-  useEffect(() => subscribeFeed((batch) => setJobs((m) => trackJobs(m, batch, watched.current))), []);
+  useEffect(
+    () =>
+      subscribeFeed((batch) => {
+        setLatest((m) => applyResourceFeed(m, batch));
+        setSongs((m) => applySentSongs(m, batch));
+      }),
+    [],
+  );
+  /** A hit's mark: its record (the search's, else the one its submit named) with the feed's news. */
+  const markOf = (hit) => {
+    if (!hit) return null;
+    const r = hit.resource || sentRes.get(hitKey(hit)) || null;
+    if (!r) return null;
+    if (hit.type !== 'song') return resourceMark(withLatest(r, latest));
+    const sent = songs.get(hit.id);
+    return resourceMark(withLatest(r, latest), sent ? sent.state : r.song_state || null);
+  };
 
   return {
     search,
@@ -69,10 +82,14 @@ export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
     artistMore: () => artists.current.more(),
     artistRetry: () => artists.current.retry(),
     runNow: () => searcher.current.run(term),
-    markOf: (hit) => hitMark(hit, sent, jobs),
-    recordSent: (hit, job) => {
-      setSent((m) => new Map(m).set(hitKey(hit), job.id));
-      setJobs((m) => new Map(m).set(job.id, job));
+    markOf,
+    /** Takes a submit's or a reset's result for a hit into its mark at once. */
+    recordSent: (hit, result) => {
+      const m = submitMark(result);
+      if (!m) return;
+      setSentRes((x) => new Map(x).set(hitKey(hit), { kind: m.kind, id: m.id }));
+      setLatest((x) => new Map(x).set(resourceKey(m), { ...(x.get(resourceKey(m)) || {}), ...m }));
+      if (hit.type === 'song') setSongs((x) => new Map(x).set(hit.id, { jobId: m.active_job_id, state: 'pending' }));
     },
   };
 }
@@ -84,7 +101,7 @@ export function useSearch({ term, debounced, artistId, epoch, subscribeFeed }) {
  * calls run(overrides)), and asks first through `setConfirm` for an artist,
  * whose url queues every album as an artist link does. again(hit, mark)
  * downloads a hit on disk again, replacing its files, after the page's
- * confirmation. openArtist(hit) opens the
+ * confirmation (a reset of its record, or another quality). openArtist(hit) opens the
  * artist over the results as a history entry (#/new?artist=), so Back, the
  * browser's or the card's (closeArtist), returns to them. Returns {busy
  * (urls being sent), download, again, openArtist, closeArtist, openedHit (the hit
@@ -103,16 +120,15 @@ export function useHitActions({ app, route, term, artistId, search, send, report
     setBusy((b) => new Set(b).add(hit.url));
     const { pairs, fail } = await send([hit.url], overrides);
     setBusy((b) => new Set([...b].filter((u) => u !== hit.url)));
-    const job = pairs.length ? sentJob(pairs[0].result) : null;
-    if (job) search.recordSent(hit, job);
+    if (pairs.length) search.recordSent(hit, pairs[0].result);
     report(pairs, fail, () => hitPreview(hit), true, overrides);
   };
-  const start = (hit, again = 0) => {
+  const start = (hit, again = 0, mark = null) => {
     setConfirm(null);
-    if (!busy.has(hit.url)) ask(hit, (overrides) => sendHit(hit, overrides), again);
+    if (!busy.has(hit.url)) ask(hit, (overrides) => sendHit(hit, overrides), again, mark);
   };
   const download = (hit) => (hit.type === 'artist' ? setConfirm({ names: [hit.name], label: 'Download all', run: () => start(hit) }) : start(hit));
-  const downloadAgain = (hit, mark) => start(hit, filesOnDisk(mark));
+  const downloadAgain = (hit, mark) => start(hit, markedFiles(mark), mark);
 
   const opened = useRef(null);
   const pushed = useRef(false);

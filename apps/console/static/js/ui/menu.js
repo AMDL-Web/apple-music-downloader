@@ -40,8 +40,10 @@ function placeBy(button, items) {
  * choosing one closes the menu, puts focus back on the button and calls
  * onChoose(id). `label` names the button and the menu; `heading` titles the
  * sheet on a phone; `size` ('sm') and `disabled` style the button as Button's.
+ * With `text` the button is a labelled secondary one (its `icon` first)
+ * rather than the "…" glyph.
  */
-export function MenuButton({ label, title, heading, items, onChoose, className = '', size = '', disabled = false }) {
+export function MenuButton({ label, title, heading, items, onChoose, className = '', size = '', disabled = false, text = '', icon = '' }) {
   const [open, setOpen] = useState(null);
   const [headId] = useState(() => `menu-${++seq}-head`);
   const btn = useRef(null);
@@ -127,16 +129,16 @@ export function MenuButton({ label, title, heading, items, onChoose, className =
     html`<button
       key="button"
       type="button"
-      class=${`btn btn-ghost${size ? ` btn-${size}` : ''} btn-icon menu-btn ${className}`.trim()}
+      class=${`btn ${text ? 'btn-secondary' : 'btn-ghost btn-icon'}${size ? ` btn-${size}` : ''} menu-btn ${className}`.trim()}
       disabled=${disabled}
-      aria-label=${label}
+      aria-label=${text ? undefined : label}
       title=${title}
       aria-haspopup="menu"
       aria-expanded=${open ? 'true' : 'false'}
       ref=${btn}
       onKeyDown=${onButtonKey}
       onClick=${() => (open ? close(false) : show(false))}
-    ><${Icon} name="more" /></button>`,
+    >${text ? [icon ? html`<${Icon} key="i" name=${icon} />` : null, html`<span key="t">${text}</span>`] : html`<${Icon} name="more" />`}</button>`,
     menu,
   ];
 }

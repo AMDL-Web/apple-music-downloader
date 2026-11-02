@@ -2,9 +2,10 @@
 // status allows, the words for each refusal the API can answer, and the
 // progress line and summary of a bulk run. The status rules mirror
 // internal/jobs: only a failed or cancelled job can be retried (POST .../retry
-// answers 409 job_not_retryable otherwise), a queued or running one can be
-// cancelled, and only a finished one (completed, failed, cancelled) can be
-// deleted.
+// answers 409 job_not_retryable otherwise, and queues a new job), a queued
+// or running one can be cancelled (a record's run: its record is paused),
+// and only a finished one (completed, failed, cancelled) can be deleted
+// (its history; the record and files stay).
 
 import { isTerminal } from './status.js';
 import { isNotFound } from './jobview.js';
@@ -36,28 +37,30 @@ export function jobAllows(job, action) {
   }
 }
 
-const MENU_LABELS = { details: 'Show details', top: 'Move to top', bottom: 'Move to bottom', retry: 'Retry', again: 'Download again…', cancel: 'Cancel', copy: 'Copy link', delete: 'Delete…' };
+const MENU_LABELS = { details: 'Show details', record: 'Open in Library', top: 'Move to top', bottom: 'Move to bottom', retry: 'Retry', again: 'Download again…', cancel: 'Cancel', pause: 'Pause', copy: 'Copy link', delete: 'Delete…' };
 
 /**
- * A Queue row's menu, as the desktop app draws it: Show details; for a
- * queued job Move to top and Move to bottom (`place` {first, last}, when
- * known, leaves out the one that would not move it); Cancel (queued,
- * running), Retry (failed, cancelled) or Download again… (completed, with a
- * link: the link submitted again with force_overwrite, which queues this
- * job again and replaces its files); then Copy link (the job's input),
- * and for a finished job Delete… after a separator of its own. A job under
- * way can only be cancelled; a link Apple has nothing at (a 404) gets no
- * Retry, as in the lists. Entries are {id, label} or {separator: true}.
+ * An Activity row's menu, as the desktop app draws it: Show details, and
+ * Open in Library for a record's run; for a queued job Move to top and
+ * Move to bottom (`place` {first, last}, when known, leaves out the one
+ * that would not move it); Cancel (queued, running; Pause for a record's
+ * run), Retry (failed, cancelled) or Download again… (completed: a reset of
+ * its record, or a station's link queued again); then Copy link (the job's
+ * input), and for a finished job Delete… after a separator of its own. A
+ * job under way can only be cancelled; a link Apple has nothing at (a 404)
+ * gets no Retry, as in the lists. Entries are {id, label} or {separator:
+ * true}.
  */
 export function rowMenu(job, place = {}) {
   const ids = ['details'];
+  if (job && job.resource) ids.push('record');
   if (job && job.status === 'queued') {
     if (!place.first) ids.push('top');
     if (!place.last) ids.push('bottom');
   }
-  if (jobAllows(job, 'cancel')) ids.push('cancel');
+  if (jobAllows(job, 'cancel')) ids.push(job.resource ? 'pause' : 'cancel');
   else if (jobAllows(job, 'retry') && !isNotFound(job.error)) ids.push('retry');
-  else if (job && job.status === 'completed' && job.input) ids.push('again');
+  else if (job && job.status === 'completed' && (job.resource || job.input)) ids.push('again');
   if (job && job.input) ids.push('-', 'copy');
   if (jobAllows(job, 'delete')) ids.push('-', 'delete');
   return ids.map((id) => (id === '-' ? { separator: true } : { id, label: MENU_LABELS[id] }));
@@ -94,9 +97,9 @@ export function actionReason(action, err) {
   if (code === 'job_active') return 'still running, finishing or running a hook';
   if (code === 'job_not_retryable') return 'only failed or cancelled jobs can be retried';
   if (code === 'job_not_cancellable') return 'already finished';
-  if (code === 'job_finalizing') return 'still finishing its last run, try again in a moment';
   if (code === 'job_not_queued') return 'it or the job beside it is no longer queued';
   if (code === 'duplicate_active') return 'another active job already downloads this link';
+  if (code === 'run_active') return 'it is downloading now; pause it first';
   if (code === 'queue_full') return 'the queue is full';
   const message = stripStop(err && err.message);
   if (message) return message.charAt(0).toLowerCase() + message.slice(1);

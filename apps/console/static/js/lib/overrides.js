@@ -1,7 +1,7 @@
 // Pure download overrides for the New download page: the server's download
 // defaults (GET config `download`), the quality presets of the submit row
-// (Quality: Settings, Lossless, Dolby Atmos then lossless, AAC, Custom) and the
-// Overwrite switch, and the DownloadOverrides a submission sends, which holds
+// (Quality: Settings, Lossless, Dolby Atmos then lossless, AAC, Custom), and
+// the DownloadOverrides a submission sends, which holds
 // only what differs from the defaults. Everything else is a Settings value
 // for every download. Field names, enums and value lists follow
 // internal/api/openapi.yaml (DownloadOverrides) and the comments in
@@ -41,7 +41,6 @@ export const OPTION_DEFAULTS = Object.freeze({
   codec_alternative: true,
   alac_max_sample_rate: 192000,
   alac_max_bit_depth: 24,
-  force_overwrite: false,
 });
 
 /** The option keys the page edits, in display order. */
@@ -128,7 +127,7 @@ export function rateLabel(hz) {
   return `${Number.isInteger(k) ? k : Math.round(k * 10) / 10} kHz`;
 }
 
-/** The keys a quality preset sets; force_overwrite is the separate switch. */
+/** The keys a quality preset sets: every option key. */
 export const QUALITY_KEYS = ['quality_priority', 'codec_alternative', 'alac_max_sample_rate', 'alac_max_bit_depth'];
 
 /**
@@ -152,20 +151,17 @@ const pickQuality = (obj) => {
 /**
  * The option values a submission resolves to: `defaults` (the server's,
  * optionDefaults), the preset's quality keys on top ("custom": the quality
- * keys of `custom`; an unknown preset follows Settings), and force_overwrite
- * from `overwrite` unless it is null (follow Settings).
+ * keys of `custom`; an unknown preset follows Settings).
  */
-export function presetValues(defaults, preset, custom = null, overwrite = null) {
+export function presetValues(defaults, preset, custom = null) {
   const found = PRESETS.find((p) => p.id === preset);
   const quality = preset === 'custom' ? pickQuality(custom) : found ? found.values : {};
-  const out = applyOverrides(defaults, quality);
-  if (typeof overwrite === 'boolean') out.force_overwrite = overwrite;
-  return out;
+  return applyOverrides(defaults, quality);
 }
 
 /** The DownloadOverrides for a preset: only the keys whose values differ from `defaults`. */
-export function presetOverrides(defaults, preset, custom = null, overwrite = null) {
-  return buildOverrides(defaults, presetValues(defaults, preset, custom, overwrite));
+export function presetOverrides(defaults, preset, custom = null) {
+  return buildOverrides(defaults, presetValues(defaults, preset, custom));
 }
 
 const SHORT = { alac: 'ALAC', ec3: 'Dolby Atmos', ac3: 'Dolby Digital', aac: 'AAC', 'aac-binaural': 'AAC binaural', 'aac-downmix': 'AAC downmix' };

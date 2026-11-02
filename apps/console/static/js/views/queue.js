@@ -1,8 +1,9 @@
-// Queue page: All / Active / Completed / Failed / Cancelled tabs (All, the
-// default, first), search and type filter, a dense job list kept live from
-// the downloads feed with a "…" menu on each row (views/queue-menu.js), and
-// a selection mode for Retry, Cancel and Delete on many jobs
-// (views/queue-select.js).
+// Activity page (#/queue): the runs. All / Active / Completed / Failed /
+// Cancelled tabs (All, the default, first), search and type filter, a dense
+// job list kept live from the downloads feed with a "…" menu on each row
+// (views/queue-menu.js), a selection mode for Retry, Cancel and Delete on
+// many jobs (views/queue-select.js), and on All and Active the paused
+// records and the adds that failed under the runs (views/activity-held.js).
 
 import { html, useState, useEffect, useRef } from '../ui/preact.js';
 import { count } from '../lib/format.js';
@@ -20,6 +21,7 @@ import { orderable, arrange } from '../lib/queue-order.js';
 import { useChipRow } from './queue-chips.js';
 import { QueueEmpty } from './queue-empty.js';
 import { JobMenu, runOne, jobName } from './queue-menu.js';
+import { HeldGroups } from './activity-held.js';
 
 export { JobRow, applyFeedToList };
 
@@ -344,6 +346,7 @@ export function QueuePage({ route }) {
         />`
       : null}
     <div class="card card-flush" data-section="jobs"><div class="card-body">${listBar}${body}</div></div>
+    ${grouped ? html`<${HeldGroups} />` : null}
     <p class="sr-only" role="status" aria-live="polite">${order.said}</p>
     ${confirm
       ? html`<${BulkConfirm}

@@ -21,6 +21,8 @@ import { useFeed } from './ui/feed.js';
 import { useStatus, statusEpoch } from './ui/system-status.js';
 import { OverviewPage } from './views/overview.js';
 import { QueuePage } from './views/queue.js';
+import { LibraryPage } from './views/library.js';
+import { RecordDrawer } from './views/record-drawer.js';
 import { LogsPage } from './views/logs.js';
 import { DownloadPage } from './views/download.js';
 import { SettingsPage } from './views/settings.js';
@@ -31,7 +33,8 @@ import { NAV, NEW_DOWNLOAD, Sidebar, TabBar, ConnectionIndicator, SimulateTag, T
 
 const TITLES = {
   overview: 'Overview',
-  queue: 'Queue',
+  queue: 'Activity',
+  library: 'Library',
   logs: 'Logs',
   new: 'New download',
   settings: 'Settings',
@@ -151,29 +154,31 @@ export function App() {
     document.title = running > 0 ? `${count(running)} running · ${page} · AMDL` : `${page} · AMDL`;
   }, [running, route.page, askedSection]);
 
+  // A job's or a record's drawer over the page.
+  const drawer = route.jobId || (route.record ? `${route.record.kind}/${route.record.id}` : null);
   // Focus: a new page focuses its heading; the drawer returns focus to the row that opened it.
   const prevPage = useRef(route.page);
   useEffect(() => {
     if (prevPage.current !== route.page) {
       window.scrollTo(0, 0);
-      if (!route.jobId && h1Ref.current) h1Ref.current.focus({ preventScroll: true });
+      if (!drawer && h1Ref.current) h1Ref.current.focus({ preventScroll: true });
     }
     prevPage.current = route.page;
   }, [route.page]);
   // A layout effect: it reads the opener at commit, before the drawer's own
   // effect (a child's, so it runs first) moves focus into the panel.
-  const prevJob = useRef(route.jobId);
+  const prevJob = useRef(drawer);
   useLayoutEffect(() => {
-    if (route.jobId && !prevJob.current) opener.current = document.activeElement;
-    if (!route.jobId && prevJob.current) {
+    if (drawer && !prevJob.current) opener.current = document.activeElement;
+    if (!drawer && prevJob.current) {
       const el = opener.current;
       opener.current = null;
       if (el && el.isConnected && typeof el.focus === 'function') el.focus({ preventScroll: true });
       else if (mainRef.current) mainRef.current.focus({ preventScroll: true });
     }
-    prevJob.current = route.jobId;
-    document.documentElement.classList.toggle('has-overlay', Boolean(route.jobId));
-  }, [route.jobId]);
+    prevJob.current = drawer;
+    document.documentElement.classList.toggle('has-overlay', Boolean(drawer));
+  }, [drawer]);
 
   // After the heading focus above, so a palette result for a setting lands on its field.
   useFieldFocus(route);
@@ -185,7 +190,7 @@ export function App() {
   // pushed for a sheet, which would fight the leave guard's bookkeeping.
   // Only the page and the drawer count: pages rewrite their query as filters
   // or the New download box change (debounced), which may land after Cmd+K.
-  useEffect(() => setOverlay(null), [route.page, route.jobId]);
+  useEffect(() => setOverlay(null), [route.page, drawer]);
 
   // Keyboard shortcuts.
   const gPending = useRef(0);
@@ -204,7 +209,7 @@ export function App() {
           setOverlay(null);
         } else if (isTyping(e.target)) {
           leaveField(e);
-        } else if (route.jobId) {
+        } else if (drawer) {
           e.preventDefault();
           closeDrawer();
         }
@@ -259,7 +264,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [overlay, route.jobId, closeDrawer, navigate]);
+  }, [overlay, drawer, closeDrawer, navigate]);
 
   // Pasting text with an Apple Music link outside a text field opens New
   // download with its links, other sites' too so the page flags them; on
@@ -308,6 +313,9 @@ export function App() {
     case 'queue':
       page = html`<${QueuePage} route=${route} />`;
       break;
+    case 'library':
+      page = html`<${LibraryPage} route=${route} />`;
+      break;
     case 'logs':
       page = html`<${LogsPage} key=${'logs'} route=${route} />`;
       break;
@@ -352,6 +360,7 @@ export function App() {
       <${TabBar} route=${route} />
     </div>
     ${route.jobId ? html`<${JobDrawer} jobId=${route.jobId} onClose=${closeDrawer} />` : null}
+    ${route.record ? html`<${RecordDrawer} record=${route.record} onClose=${closeDrawer} />` : null}
     ${overlay === 'palette' ? html`<${CommandPalette} onClose=${() => setOverlay(null)} navigate=${navigate} setTheme=${setTheme} />` : null}
     ${overlay === 'shortcuts' ? html`<${ShortcutSheet} onClose=${() => setOverlay(null)} />` : null}
     <${ToastStack} toasts=${toasts} toastsRef=${toastsRef} dismissToast=${dismissToast} />

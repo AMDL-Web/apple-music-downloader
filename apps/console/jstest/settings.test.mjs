@@ -84,7 +84,7 @@ test('retired section ids and fields open the section that holds them now', () =
   // A field wins over the section named next to it (old links and bookmarks).
   assert.equal(sectionById('catalog', 'catalog.media_user_token').id, 'account');
   assert.equal(sectionById('downloads', 'download.max_attempts').id, 'jobs');
-  assert.equal(sectionById('advanced', 'download.force_overwrite').id, 'files');
+  assert.equal(sectionById('advanced', 'download.temp_dir').id, 'files');
   assert.equal(sectionById('advanced', 'catalog.motion_artwork_enabled').id, 'lyrics_artwork');
   assert.equal(sectionById('catalog', 'catalog.album_track_url_mode').id, 'quality');
   assert.equal(sectionById('quality', 'not.a_key').id, 'quality');
@@ -92,7 +92,7 @@ test('retired section ids and fields open the section that holds them now', () =
 
 test('every runtime key belongs to exactly one of the nine sections, and the board leaves out Lyrics & artwork', () => {
   const counts = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, FIELDS.filter((f) => f.section === s.id).length]));
-  assert.deepEqual(counts, { account: 5, quality: 5, files: 6, lyrics_artwork: 11, jobs: 7, library_sync: 4, hooks: 0, logging: 4, server: 6 });
+  assert.deepEqual(counts, { account: 5, quality: 5, files: 5, lyrics_artwork: 11, jobs: 8, library_sync: 4, hooks: 0, logging: 4, server: 6 });
   assert.equal(FIELDS.length, 48);
   assert.deepEqual(BOARD_SECTIONS.map((s) => s.id), ['account', 'quality', 'files', 'jobs', 'library_sync', 'hooks', 'logging', 'server']);
   assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['wrapper', 'server'], ['simulate', 'server'], ['config_file', 'server']]);

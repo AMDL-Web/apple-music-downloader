@@ -296,89 +296,22 @@ export function linkTarget(link, trackMode = 'song') {
 }
 
 /**
- * The id to search GET downloads?q= for when looking for earlier jobs of
- * `link`: the id a job of it would download (a song for an album ?i= link
- * unless catalog.album_track_url_mode is "album"), so a song job made from
- * a /song/ link is found too. '' when the link has no id.
- */
-export function priorQuery(link, trackMode = 'song') {
-  const target = linkTarget(link, trackMode);
-  return target ? target.id : '';
-}
-
-const ACTIVE = new Set(['queued', 'running']);
-
-/**
  * Whether a link row stays listed past ROWS_SHOWN: it has an issue (blocking
- * or a warning) or an earlier job still queued or running.
+ * or a warning) or its record has a run queued or running (`mark`,
+ * lib/marks.js resourceMark).
  */
-export function needsAttention(issue, prior) {
-  return Boolean(issue) || Boolean(prior && prior.state === 'active');
-}
-const newest = (a, b, key) => (Date.parse(b[key] || '') || 0) - (Date.parse(a[key] || '') || 0);
-
-/**
- * The earlier job of the same album, song or playlist among `jobs` (a GET
- * downloads?q=<id> page, whose q is a substring match, so each job's input
- * is parsed and compared): {state: 'active', job} for one queued or
- * running, else {state: 'done', job} for the latest completed one, else
- * null. Failed and cancelled jobs do not count. A done job says nothing
- * about the files: the lookup's `library` does (lib/on-disk.js diskMark).
- */
-export function priorJob(jobs, link, trackMode = 'song') {
-  const want = linkTarget(link, trackMode);
-  if (!want) return null;
-  const same = (Array.isArray(jobs) ? jobs : []).filter((j) => {
-    const got = j && typeof j.input === 'string' ? linkTarget(parseLink(j.input), trackMode) : null;
-    return got && got.type === want.type && got.id === want.id;
-  });
-  const active = same.filter((j) => ACTIVE.has(j.status)).sort((a, b) => newest(a, b, 'created_at'));
-  if (active.length) return { state: 'active', job: active[0] };
-  const done = same.filter((j) => j.status === 'completed').sort((a, b) => newest(a, b, 'finished_at'));
-  return done.length ? { state: 'done', job: done[0] } : null;
+export function needsAttention(issue, mark) {
+  return Boolean(issue) || Boolean(mark && mark.state === 'active');
 }
 
 /**
  * Whether a detected row is checked for the submit: the person's own pick
  * when there is one (`picks`, a Map of url -> boolean), else unchecked when
- * the item is in the queue or wholly on disk (`mark`, lib/on-disk.js
- * diskMark), else checked: a partial album downloads its missing songs.
+ * the item is in the queue or wholly in the library (`mark`, lib/marks.js
+ * resourceMark), else checked: a partial or paused album downloads its
+ * missing songs.
  */
 export function isPicked(url, mark, picks) {
   if (picks && picks.has(url)) return picks.get(url) === true;
-  return !mark || mark.state === 'partial';
-}
-
-const sameTarget = (a, b) => Boolean(a && b && a.type === b.type && a.id === b.id);
-
-/**
- * Applies feed messages to one cached GET downloads page (`jobs`) of
- * `link`: a job it holds is replaced by a newer snapshot or dropped when
- * deleted, and a job of the same item that it does not hold yet is added,
- * so "In the queue now" goes when the job finishes (the link is then
- * looked up again for what is on disk). Returns `jobs` itself when nothing
- * changed.
- */
-export function applyFeedToJobs(jobs, batch, link, trackMode = 'song') {
-  const want = linkTarget(link, trackMode);
-  let next = Array.isArray(jobs) ? jobs : [];
-  const start = next;
-  for (const msg of batch || []) {
-    if (!msg) continue;
-    if (msg.type === 'download_deleted') {
-      if (next.some((j) => j && j.id === msg.job_id)) next = next.filter((j) => !j || j.id !== msg.job_id);
-      continue;
-    }
-    const job = msg.type === 'download_upserted' ? msg.job : null;
-    if (!job || !job.id) continue;
-    const i = next.findIndex((j) => j && j.id === job.id);
-    if (i >= 0) {
-      if ((Date.parse(job.updated_at || '') || 0) < (Date.parse(next[i].updated_at || '') || 0)) continue;
-      next = next.slice();
-      next[i] = job;
-    } else if (typeof job.input === 'string' && sameTarget(linkTarget(parseLink(job.input), trackMode), want)) {
-      next = [job, ...next];
-    }
-  }
-  return next === start ? jobs : next;
+  return !mark || (mark.state !== 'active' && mark.state !== 'complete');
 }

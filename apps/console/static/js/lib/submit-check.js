@@ -6,7 +6,6 @@
 import { PREVIEW_KINDS, shortError } from './lookup.js';
 import { capitalized } from './format.js';
 import { settingsHash } from './route.js';
-import { CODES } from './submit.js';
 
 /** Where Settings edits catalog.media_user_token, the token a download uses when the wrapper's cannot be read. */
 export const TOKEN_SETTINGS_HASH = settingsHash('account', 'catalog.media_user_token');
@@ -16,7 +15,7 @@ export const TOKEN_SETTINGS_HASH = settingsHash('account', 'catalog.media_user_t
  * needs attention, or null when it is fine. `lookup` is its preview status
  * (lib/lookup.js), `hasToken` whether the backend has a media-user-token, the
  * wrapper's or Settings' (lib/user-token.js),
- * `regions` the storefronts the wrapper's account serves (servedRegions;
+ * `regions` the storefronts the wrapper's account serves (servedRegions, checked for stations;
  * null when unknown, which flags nothing). Returns {code, role, blocking, message, title?, href?, action?}; a blocking
  * issue keeps the link out of the submission, `title` holds a long server
  * message in full, and `href`/`action` name a page that fixes the issue.
@@ -31,11 +30,11 @@ export function linkIssue(entry, lookup = null, { hasToken = false, regions = nu
   if (!PREVIEW_KINDS.includes(link.kind)) {
     return { code: 'unsupported', role: 'danger', blocking: true, message: 'Not an album, song, playlist, artist or station link' };
   }
-  // The same refusal the submit gives (unsupported_storefront), read from
-  // the wrapper's status first. The backend still has the last word.
-  if (Array.isArray(regions) && regions.length && link.storefront && !regions.includes(link.storefront)) {
-    const [label, reason] = CODES.unsupported_storefront;
-    return { code: 'storefront_not_served', role: 'danger', blocking: true, message: `${label}. ${reason}. ${servedNote(regions)}` };
+  // A station is read in its own storefront, which the wrapper must serve;
+  // every other link is read in the account's. The backend still has the
+  // last word (decryptor_unavailable naming both).
+  if (link.kind === 'station' && Array.isArray(regions) && regions.length && link.storefront && !regions.includes(link.storefront)) {
+    return { code: 'storefront_not_served', role: 'danger', blocking: true, message: `Storefront not served. The wrapper's Apple Music account is in another storefront. ${servedNote(regions)}` };
   }
   const err = lookup && lookup.state === 'error' ? lookup.error : null;
   const msg = err ? String(err.message || '') : '';
@@ -122,9 +121,10 @@ export function downloadLabel(kinds, hasLinks = true, pickable = false) {
 
 /**
  * How the links that can be sent split for the count line, by each one's
- * mark (lib/on-disk.js diskMark): `fresh` those a download fetches songs for
- * (no mark, or partly on disk: the missing songs), `library` those wholly on
- * disk, `queued` those in the queue. The three add up to `urls`.
+ * mark (lib/marks.js resourceMark): `fresh` those a download fetches songs
+ * for (no mark, partly done or paused: the missing songs), `library` those
+ * wholly in the library, `queued` those in the queue. The three add up to
+ * `urls`.
  */
 export function markCounts(urls, markOf) {
   const out = { fresh: 0, library: 0, queued: 0 };

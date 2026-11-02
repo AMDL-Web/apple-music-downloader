@@ -63,8 +63,7 @@ export function Compose({ text, inputRef, term, links, busy, storefront, edit, o
 }
 
 /**
- * The options under the field: the quality menu and the Overwrite switch
- * (controls), then, when GET config failed, a chip that retries it.
+ * The options under the field: the quality menu (controls), then, when GET config failed, a chip that retries it.
  */
 export function Options({ controls, cfgError, onRetryCfg }) {
   return html`<div class="new-options">

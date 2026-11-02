@@ -84,6 +84,9 @@ export function itemStatusView(item) {
       case 'skipped_existing':
         view = { icon: 'archive', role: 'skipped', label: 'Already on disk' };
         break;
+      case 'unavailable':
+        view = { icon: 'circle-minus', role: 'skipped', label: 'Not offered' };
+        break;
       case 'failed':
         view = { icon: 'circle-x', role: 'danger', label: 'Failed', detail: (item && item.error) || undefined };
         break;
@@ -94,7 +97,7 @@ export function itemStatusView(item) {
         view = { icon: 'circle-help', role: 'neutral', label: status ? String(status) : 'Unknown' };
     }
   }
-  if (item && item.attempt > 1 && !['completed', 'skipped_existing', 'cancelled'].includes(status)) {
+  if (item && item.attempt > 1 && !['completed', 'skipped_existing', 'unavailable', 'cancelled'].includes(status)) {
     view.retry = item.max_attempts > 0 ? `Retry ${item.attempt}/${item.max_attempts}` : `Retry ${item.attempt}`;
   }
   return view;
@@ -265,10 +268,12 @@ export function stageSegments(item) {
     return { key, label, state, fraction: v, weight: STAGE_WEIGHTS[key] };
   };
   const flag = (key, label, on) => ({ key, label, state: on ? 'done' : 'empty', fraction: on ? 1 : 0, weight: STAGE_WEIGHTS[key] });
-  // A track already on disk ran no stage, but it is finished: a full bar in
-  // the skipped state, which the skin draws in its quiet ink, not success.
-  if (status === 'skipped_existing') {
-    return Object.entries(STAGE_LABELS).map(([key, label]) => ({ key, label, state: 'skipped', fraction: 1, weight: STAGE_WEIGHTS[key] }));
+  // A track already on disk, or a slot the track does not offer, ran no
+  // stage, but it is finished: a full bar in the skipped state, which the
+  // skin draws in its quiet ink, not success.
+  if (status === 'skipped_existing' || status === 'unavailable') {
+    const why = status === 'unavailable' ? 'unavailable' : 'existing';
+    return Object.entries(STAGE_LABELS).map(([key, label]) => ({ key, label, state: 'skipped', fraction: 1, weight: STAGE_WEIGHTS[key], why }));
   }
   const verify = flag('verify', 'Verify', Boolean(p.verified));
   if (finished && !p.verified) verify.state = 'unverified';
@@ -285,7 +290,7 @@ export function stageSegments(item) {
 
 /** Accessible description of the stage segments, e.g. "Download 45%, decrypt not started". */
 export function stageText(segments) {
-  if (segments.length && segments.every((s) => s.state === 'skipped')) return 'Already on disk, nothing downloaded';
+  if (segments.length && segments.every((s) => s.state === 'skipped')) return segments[0].why === 'unavailable' ? 'Not offered, nothing downloaded' : 'Already on disk, nothing downloaded';
   return segments
     .map((s) => {
       if (s.state === 'unverified') return `${s.label}: not verified`;
@@ -301,7 +306,6 @@ export function stageText(segments) {
 const ACTIVITY_VIEWS = {
   job_queued: ['Queued', 'neutral'],
   job_started: ['Started', 'info'],
-  job_retried: ['Retried', 'info'],
   job_recovered: ['Recovered after a restart', 'warning'],
   job_finished: ['Finished', 'success'],
   job_failed: ['Failed', 'danger'],
@@ -310,7 +314,8 @@ const ACTIVITY_VIEWS = {
   motion_artwork_resolved: ['Motion cover found', 'neutral'],
   standalone_cover_failed: ['Cover failed', 'warning'],
   item_failed: ['Track failed', 'danger'],
-  item_overwrite: ['Track replaced', 'neutral'],
+  item_unavailable: ['Not offered', 'neutral'],
+  lyrics_refreshed: ['Lyrics refreshed', 'neutral'],
   codec_fallback: ['Codec fallback', 'warning'],
   codec_failed: ['Codec failed', 'warning'],
   alac_repaired: ['ALAC repaired', 'neutral'],
@@ -327,12 +332,9 @@ const ACTIVITY_VIEWS = {
  * One Activity entry of the job drawer as {label, role, text}: a word for the
  * event type, and the event's own message as one line when it adds something
  * (the default "job queued" repeats the label; an error loses its JSON body).
- * A job_retried whose cause is resubmit (the link submitted again) reads
- * "Queued again" and says nothing more.
  */
 export function activityView(entry) {
   const type = (entry && entry.type) || '';
-  if (type === 'job_retried' && entry.cause === 'resubmit') return { label: 'Queued again', role: 'info', text: '' };
   const known = ACTIVITY_VIEWS[type];
   const plain = type.replaceAll('_', ' ');
   const label = known ? known[0] : plain.charAt(0).toUpperCase() + plain.slice(1);

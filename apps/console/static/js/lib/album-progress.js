@@ -11,21 +11,21 @@ import { STAGE_WEIGHTS } from './status.js';
 export const TICK_MAX = 24;
 
 /** Track statuses that end a track, with the role the bar draws them in. */
-const OUTCOMES = { completed: 'success', skipped_existing: 'skipped', failed: 'danger', cancelled: 'neutral' };
+const OUTCOMES = { completed: 'success', skipped_existing: 'skipped', unavailable: 'skipped', failed: 'danger', cancelled: 'neutral' };
 
 /** The order finished tracks take when their finish times are unknown. */
-const OUTCOME_RANK = { completed: 0, skipped_existing: 1, failed: 2, cancelled: 3 };
+const OUTCOME_RANK = { completed: 0, skipped_existing: 1, unavailable: 1, failed: 2, cancelled: 3 };
 
 const clamp01 = (v) => (typeof v === 'number' && v > 0 ? Math.min(1, v) : 0);
 
 /**
- * One track's progress, 0..1, weighted by STAGE_WEIGHTS. Completed and
- * already-on-disk tracks count as 1; a failed or cancelled track stays where it
- * stopped.
+ * One track's progress, 0..1, weighted by STAGE_WEIGHTS. Completed,
+ * already-on-disk and not-offered tracks count as 1; a failed or cancelled
+ * track stays where it stopped.
  */
 export function itemFraction(item) {
   const status = item && item.status;
-  if (status === 'completed' || status === 'skipped_existing') return 1;
+  if (status === 'completed' || status === 'skipped_existing' || status === 'unavailable') return 1;
   const p = (item && item.progress) || {};
   if (p.saved) return 1;
   const w = STAGE_WEIGHTS;

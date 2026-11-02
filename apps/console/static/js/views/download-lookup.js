@@ -1,16 +1,16 @@
 // New download: the link previews behind the rows, a POST lookup per
 // previewable link through a shared per-tab cache and a bounded queue, and
-// from them which links are flagged and which the submit may send, and how
-// much of an album or song is on disk (the lookup's `library`). A second
-// queue asks GET downloads for a job of an album, song or playlist (lib/lookup.js
-// priorJob), for "In the queue now", and the feed keeps those answers live.
+// from them which links are flagged and which the submit may send, and the
+// record each one has (the lookup's `resource`, lib/marks.js). The feed's
+// resource_updated keeps the marks live; a song link is looked up again
+// when its album's run ends, for its own track's state.
 
 import { useState, useEffect, useRef, useMemo } from '../ui/preact.js';
-import { lookupLink, listDownloads } from '../api.js';
+import { lookupLink } from '../api.js';
 import { scanLinks, parseLink } from '../lib/links.js';
-import { createLookupQueue, priorJob, priorQuery, applyFeedToJobs, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
+import { createLookupQueue, PREVIEW_KINDS, LOOKUP_LIMIT } from '../lib/lookup.js';
 import { linkIssue, submittable } from '../lib/submit-check.js';
-import { diskMark } from '../lib/on-disk.js';
+import { resourceMark, applyResourceFeed, withLatest, submitMark, resourceKey } from '../lib/marks.js';
 
 // Previews outlive the page, so coming back does not look links up again.
 // An album ?i= link previews as a song or the album depending on
@@ -20,9 +20,17 @@ import { diskMark } from '../lib/on-disk.js';
 const LOOKUPS = new Map();
 let LOOKUPS_MODE = null;
 let LOOKUPS_TOKEN = null;
-// GET downloads?q=<id> pages per link, for the "In the queue now" note.
-const HISTORY = new Map();
-const HISTORY_KINDS = ['album', 'song', 'playlist'];
+// The feed's newest record marks (lib/marks.js applyResourceFeed), for the tab.
+let LATEST = new Map();
+// Links this tab submitted, with the record each answer named: url ->
+// {kind, id}. A song link's own track waits until its album's run ends.
+const SENT = new Map();
+
+/** The record a link's answer or its submit named, or null. */
+function recordOf(url, entry) {
+  const r = entry && entry.state === 'ready' && entry.data ? entry.data.resource : null;
+  return r || SENT.get(url) || null;
+}
 
 const isPrivate = (url) => {
   const link = parseLink(url);
@@ -61,46 +69,39 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
   const wanted = useMemo(() => previewable(scanLinks(settled, storefront)).slice(0, LOOKUP_LIMIT).map((e) => e.url), [settled, storefront]);
   useEffect(() => queue.current.want(wanted), [wanted.join('\n')]);
 
-  // Earlier jobs of the wanted albums, songs and playlists, 2 at a time.
-  // The search term is the id a job would download (priorQuery), under the
-  // track mode in force when it runs.
-  const modeRef = useRef(trackMode);
-  modeRef.current = trackMode || 'song';
-  const history = useRef(null);
-  if (!history.current) {
-    history.current = createLookupQueue({
-      lookup: (url) => listDownloads({ q: priorQuery(parseLink(url), modeRef.current), limit: 50 }),
-      cache: HISTORY,
-      max: 2,
-      onChange: () => setTick((n) => n + 1),
-    });
+  // The feed's record marks: a run that ends reads its song links again,
+  // whose own track's state the record's counts do not say. The feed is
+  // heard only while the page is open, so coming back reads the answers
+  // that name a record again.
+  const stale = useRef(null);
+  if (stale.current === null) {
+    stale.current = [...LOOKUPS.keys()].filter((url) => SENT.has(url) || recordOf(url, LOOKUPS.get(url)));
+    LATEST = new Map();
+    SENT.clear();
   }
-  useEffect(() => () => history.current.dispose(), []);
-  // Feed batches update the cached answers in place, so "In the queue now"
-  // goes when the job finishes, and that link is looked up again in the
-  // background for what is on disk now.
+  useEffect(() => {
+    if (stale.current.length) queue.current.refresh(stale.current);
+  }, []);
   useEffect(
     () =>
       subscribeFeed((batch) => {
-        let changed = false;
-        const finished = [];
-        for (const [url, entry] of HISTORY) {
-          if (entry.state !== 'ready' || !entry.data || !Array.isArray(entry.data.downloads)) continue;
-          const next = applyFeedToJobs(entry.data.downloads, batch, parseLink(url), modeRef.current);
-          if (next === entry.data.downloads) continue;
-          const was = priorJob(entry.data.downloads, parseLink(url), modeRef.current);
-          entry.data = { ...entry.data, downloads: next };
-          const now = priorJob(next, parseLink(url), modeRef.current);
-          if (was && was.state === 'active' && !(now && now.state === 'active')) finished.push(url);
-          changed = true;
+        const next = applyResourceFeed(LATEST, batch);
+        if (next === LATEST) return;
+        const ended = [];
+        for (const [url, entry] of LOOKUPS) {
+          const r = recordOf(url, entry);
+          if (!r || !entry.data || entry.data.type !== 'song') continue;
+          const was = withLatest(r, LATEST);
+          const now = withLatest(r, next);
+          if (was.active_job_id && !now.active_job_id) ended.push(url);
         }
-        if (finished.length) queue.current.refresh(finished);
-        if (changed) setTick((n) => n + 1);
+        LATEST = next;
+        for (const url of ended) SENT.delete(url);
+        if (ended.length) queue.current.refresh(ended);
+        setTick((n) => n + 1);
       }),
     [],
   );
-  const historyWanted = wanted.filter((u) => HISTORY_KINDS.includes((parseLink(u) || {}).kind));
-  useEffect(() => history.current.want(historyWanted), [historyWanted.join('\n')]);
 
   // After an outage the shell resyncs and bumps epoch: failed previews and
   // every history answer are read again; good previews stay.
@@ -108,15 +109,14 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
   useEffect(() => {
     if (epochSeen.current === epoch) return;
     epochSeen.current = epoch;
-    queue.current.forget([...LOOKUPS.keys()].filter((k) => LOOKUPS.get(k).state === 'error'));
-    history.current.forget([...HISTORY.keys()]);
+    queue.current.forget([...LOOKUPS.keys()].filter((k) => LOOKUPS.get(k).state === 'error' || (LOOKUPS.get(k).data && LOOKUPS.get(k).data.resource)));
+    LATEST = new Map();
   }, [epoch]);
   // A changed album_track_url_mode reads album ?i= links again.
   useEffect(() => {
     if (trackMode === null) return;
     if (LOOKUPS_MODE !== null && LOOKUPS_MODE !== trackMode) {
       queue.current.forget([...LOOKUPS.keys()].filter(isAlbumTrack));
-      history.current.forget([...HISTORY.keys()].filter(isAlbumTrack));
     }
     LOOKUPS_MODE = trackMode;
   }, [trackMode]);
@@ -143,18 +143,32 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
     const i = issueOf(e);
     return i && !i.blocking;
   }).length;
-  /** The earlier job of a link ({state: 'active' | 'done', job}) or null. */
-  const priorOf = (url) => {
-    const s = history.current.status(url);
-    return s.state === 'ready' && s.data ? priorJob(s.data.downloads, parseLink(url), trackMode || 'song') : null;
-  };
-  /** What a link's row shows (lib/on-disk.js diskMark): its job in the queue, else how much of it the lookup found on disk. */
+  /**
+   * What a link's row shows (lib/marks.js resourceMark): the record its
+   * lookup or its submit named, with the feed's news; a song by its own
+   * track, which waits from its submit until its album's run ends.
+   */
   const markOf = (url) => {
     const s = queue.current.status(url);
-    return diskMark(priorOf(url), s.state === 'ready' && s.data ? s.data.library : null);
+    const r = recordOf(url, s);
+    if (!r) return null;
+    const song = s.state === 'ready' && s.data && s.data.type === 'song';
+    const songState = !song ? undefined : SENT.has(url) ? 'pending' : r.song_state || null;
+    return resourceMark(withLatest(r, LATEST), songState);
   };
-  /** Forgets the earlier-job answers of links just submitted. */
-  const forgetPrior = (urls) => history.current.forget(urls);
+  /** Takes the records a submit named into the marks at once, before the feed says so. */
+  const noteSubmitted = (pairs) => {
+    let changed = false;
+    for (const p of pairs) {
+      const m = submitMark(p.result);
+      if (!m) continue;
+      if (p.url) SENT.set(p.url, { kind: m.kind, id: m.id });
+      const key = resourceKey(m);
+      LATEST = new Map(LATEST).set(key, { ...(LATEST.get(key) || {}), ...m });
+      changed = true;
+    }
+    if (changed) setTick((n) => n + 1);
+  };
 
-  return { statusOf, issueOf, sendable, flagged, warned, skipped, queue, markOf, forgetPrior };
+  return { statusOf, issueOf, sendable, flagged, warned, skipped, queue, markOf, noteSubmitted };
 }

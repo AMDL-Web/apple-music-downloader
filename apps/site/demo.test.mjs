@@ -44,6 +44,10 @@ async function readEvents(res, enough = () => false) {
   return events;
 }
 
+// Albums no job of the seed downloads: a submit of one queues a run (one
+// under way would answer duplicate_active, one done already_downloaded).
+const unseeded = (api) => albums.filter((a) => ![...api.jobs.values()].some((j) => j.resource && j.resource.id === a.id));
+
 describe('fake API', () => {
   test('answers every call the console makes', async () => {
     // Every /api/v1 path in the console's client, with the method it is called with.
@@ -54,23 +58,28 @@ describe('fake API', () => {
 
     const api = fresh();
     const done = [...api.jobs.values()].find((j) => j.status === 'completed');
-    const ids = { downloads: done.id, artists: artists[0].id, login: 'login_1', hooks: 'ntfy' };
+    const kept = [...api.jobs.values()].find((j) => j.status === 'completed' && j.resource && j.resource.kind === 'album');
+    const list = [...api.jobs.values()].find((j) => j.resource && j.resource.kind === 'playlist');
+    const ids = { downloads: done.id, artists: artists[0].id, login: 'login_1', hooks: 'ntfy', library: 'albums', albums: kept.resource.id, playlists: list.resource.id, pending: '1', 'apple-library': 'albums' };
     const bodies = {
-      'POST /api/v1/downloads': { urls: [albums[3].url] },
+      'POST /api/v1/downloads': { urls: [unseeded(api)[0].url] },
+      'POST /api/v1/library/add': { urls: [unseeded(api)[1].url] },
       'POST /api/v1/lookup': { url: albums[0].url },
       'POST /api/v1/quality': { url: albums[0].url },
       'PUT /api/v1/config': { logging: { level: 'debug' } },
       'PUT /api/v1/hooks': { enabled: true },
       'POST /api/v1/downloads/${encodeURIComponent(id)}/move': { to: 'first' },
     };
+    // Deletes last, so the calls after them still find what they name.
+    calls.sort((a, b) => (a[0] === 'DELETE') - (b[0] === 'DELETE'));
     for (const [method, raw] of calls) {
-      const route = raw.replace(/\/(\w+)\/\$\{[^}]+\}/g, (_, seg) => `/${seg}/${ids[seg]}`);
+      const route = raw.replace(/\/([\w-]+)\/\$\{[^}]+\}/g, (_, seg) => `/${seg}/${ids[seg]}`).replace(/\/([\w-]+)\/\$\{[^}]+\}/g, (_, seg) => `/${seg}/${ids[seg]}`);
       assert.doesNotMatch(route, /\$\{|undefined/, `${raw}: no id for this path`);
       const ctl = new AbortController();
       const res = await api.handle({ method, url: new URL(route.slice(1), origin.replace('console/', '')).href, body: JSON.stringify(bodies[`${method} ${raw}`] ?? {}), signal: ctl.signal });
       ctl.abort();
       const label = `${method} ${route}`;
-      assert.ok([200, 202, 204, 409, 501].includes(res.status), `${label}: HTTP ${res.status}`);
+      assert.ok([200, 202, 204, 409, 501].includes(res.status) || (res.status === 404 && /\/pending\//.test(raw)), `${label}: HTTP ${res.status}`);
       if (res.status === 501) assert.match(raw, /\/wrapper\/login|\/wrapper\/logout/, `${label} answered 501`);
     }
   });
@@ -145,33 +154,41 @@ describe('fake API', () => {
     assert.equal(api.items.get(job.id)[0].sample_rate, 96000);
   });
 
-  test('a link downloaded before keeps its job, and the files say what is on disk', async () => {
+  test('a downloaded link names its record, and the record says it is done', async () => {
     const api = fresh();
     const album = albums.find((a) => a.name === 'Every Bridge Is a Promise');
     const first = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url] })).json();
+    assert.deepEqual(first.results[0].resource, { kind: 'album', id: album.id });
     settle(api);
     const after = await (await call(api, 'POST', '../api/v1/lookup', { url: album.url })).json();
-    assert.deepEqual(after.library, { state: 'complete', tracks_on_disk: album.track_count, tracks_total: album.track_count });
-    const again = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url], overrides: { force_overwrite: true } })).json();
-    assert.equal(again.results[0].requeued, true);
-    assert.equal(again.results[0].job.id, first.results[0].job.id, 'the same queue entry');
+    assert.deepEqual(after.resource, { kind: 'album', id: album.id, state: 'complete', tracks_done: album.track_count, tracks_wanted: album.track_count, withheld_count: 0, paused: false });
+    const again = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url] })).json();
+    assert.equal(again.results[0].status, 'already_downloaded');
+    const reset = await call(api, 'POST', `../api/v1/library/albums/${album.id}/reset`, { what: 'audio' });
+    assert.equal(reset.status, 202);
+    assert.notEqual((await reset.json()).job.id, first.results[0].job.id, 'a reset is a new run');
     const hits = await (await call(api, 'GET', `../api/v1/search?term=${encodeURIComponent(album.name)}&types=albums`)).json();
-    assert.ok(hits.albums.items.every((h) => h.library && typeof h.library.tracks_total === 'number'));
+    assert.ok(hits.albums.items.some((h) => h.resource && h.resource.id === album.id));
+    const rec = await (await call(api, 'GET', `../api/v1/library/albums/${album.id}`)).json();
+    assert.equal(rec.tracks.length, album.track_count);
   });
 
-  test('retry runs a failed job again', async () => {
+  test('retry runs a failed job again as a new job', async () => {
     const api = fresh();
     const failed = [...api.jobs.values()].find((j) => j.status === 'failed');
-    assert.equal((await call(api, 'POST', `../api/v1/downloads/${failed.id}/retry`)).status, 202);
+    const res = await call(api, 'POST', `../api/v1/downloads/${failed.id}/retry`);
+    assert.equal(res.status, 202);
+    const next = api.jobs.get((await res.json()).job.id);
+    assert.notEqual(next.id, failed.id);
     settle(api);
-    assert.equal(failed.status, 'completed');
-    assert.equal(failed.failed_items, 0);
+    assert.equal(next.status, 'completed');
+    assert.equal(failed.status, 'failed', 'the old run stays as history');
   });
 
   test('move changes which queued job starts next', async () => {
     const api = fresh();
     const queued = () => [...api.jobs.values()].filter((j) => j.status === 'queued').sort((a, b) => a.queue_order - b.queue_order);
-    for (const a of albums.slice(3, 5)) assert.equal((await call(api, 'POST', '../api/v1/downloads', { urls: [a.url] })).status, 202);
+    for (const a of unseeded(api).slice(0, 2)) assert.equal((await call(api, 'POST', '../api/v1/downloads', { urls: [a.url] })).status, 202);
     const before = queued();
     assert.ok(before.length >= 3, 'the seed and the submits queue at least three jobs');
     const last = before[before.length - 1];

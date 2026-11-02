@@ -1,5 +1,6 @@
 // Job drawer: one job's header with a summary line, the failure reason,
-// actions (Cancel, Retry, Remove), the tracks, where the files are and a
+// actions (Cancel, or Pause for a record's run; Retry, which opens the new
+// run; Remove), the tracks, where the files are and a
 // closed Details (times, id, Activity, hooks), kept live by the per-job event
 // stream and, once that stream has ended, by the overview feed. Parts:
 // drawer-detail.js (snapshot and stream), drawer-tracks.js (tracks),
@@ -22,7 +23,7 @@ import {
 import { drawerSummary, codecNote, isNotFound, rowView } from '../lib/jobview.js';
 import { jobStatusView, isTerminal } from '../lib/status.js';
 import { jobAllows, actionDone, actionError } from '../lib/jobactions.js';
-import { buildHash } from '../lib/route.js';
+import { buildHash, parseHash, recordHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
 import { AlbumProgress, TrackList } from './drawer-tracks.js';
 import { FailureNotice, FilesSection, DetailsSection } from './drawer-info.js';
@@ -158,8 +159,8 @@ export function JobDrawer({ jobId, onClose }) {
           onConfirm=${confirmDelete}
           onCancel=${() => setDeleting(null)}
         >
-          <strong dir="auto">${jobTitle(job)}</strong> leaves the console with its ${count(detail.items.length)}
-          ${detail.items.length === 1 ? ' track record' : ' track records'} and event history. Downloaded files stay on disk.
+          <strong dir="auto">${jobTitle(job)}</strong> leaves Activity with its ${count(detail.items.length)}
+          ${detail.items.length === 1 ? ' track' : ' tracks'} and event history. ${job.resource ? 'Its library record and files stay.' : 'Downloaded files stay on disk.'}
         </${ConfirmDialog}>`
       : null}
   </div>`;
@@ -243,9 +244,14 @@ function Actions({ job, app, onChanged, onDelete }) {
   const run = async (action, fn, okMessage) => {
     setBusy(true);
     try {
-      await fn(job.id);
-      app.toast({ message: okMessage, role: 'success' });
-      onChanged();
+      const res = await fn(job.id);
+      // A retry is a new run: the drawer follows it.
+      const next = action === 'retry' && res && res.job && res.job.id !== job.id ? res.job.id : '';
+      app.toast({ message: action === 'retry' && res && res.status === 'already_downloaded' ? 'Already downloaded' : okMessage, role: 'success' });
+      if (next) {
+        const at = parseHash(window.location.hash);
+        app.navigate(buildHash(at.page, at.params, next), { replace: true });
+      } else onChanged();
     } catch (e) {
       app.toast({ message: actionError(action, e), role: 'danger', offline: e.status === 0 });
     } finally {
@@ -254,6 +260,8 @@ function Actions({ job, app, onChanged, onDelete }) {
     }
   };
   const canCancel = jobAllows(job, 'cancel');
+  // Cancel on a record's run pauses the record (its partial downloads kept).
+  const pause = Boolean(job.resource);
   // Apple has nothing at this link: asking again fails the same way, so
   // there is no Retry, as in the lists, and the link stays a quiet one.
   const notFound = job.status === 'failed' && isNotFound(job.error);
@@ -265,13 +273,17 @@ function Actions({ job, app, onChanged, onDelete }) {
   return html`<div class="drawer-actions">
     <div class="drawer-actions-row">
       <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
+      ${job.resource ? html`<${LinkButton} href=${recordHash(job.resource.kind, job.resource.id)} icon="disc" variant="ghost">Open in Library</${LinkButton}>` : null}
       ${open ? html`<${LinkButton} href=${open} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
     </div>
     <div class="drawer-actions-row">
-      ${canCancel && !confirming
+      ${canCancel && pause
+        ? html`<${Button} variant="secondary" icon="pause" onClick=${() => run('cancel', cancelDownload, 'Paused')} disabled=${busy}>Pause</${Button}>`
+        : null}
+      ${canCancel && !pause && !confirming
         ? html`<${Button} variant="secondary" icon="circle-slash" onClick=${() => setConfirming(true)} disabled=${busy}>Cancel job</${Button}>`
         : null}
-      ${canCancel && confirming
+      ${canCancel && !pause && confirming
         ? html`<div class="confirm" role="group" aria-label="Confirm cancel">
             <span>Cancel this job? Finished tracks stay on disk, and Retry queues the rest again.</span>
             <${Button} variant="danger" onClick=${() => run('cancel', cancelDownload, 'Job cancelled')} disabled=${busy}>Cancel job</${Button}>

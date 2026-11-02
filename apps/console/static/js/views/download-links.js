@@ -2,12 +2,12 @@
 // is from lib/links.js, then the lookup preview when it arrives: a 48 px
 // cover, the title with the Explicit and Apple Digital Master marks, one
 // meta line (kind, artist, tracks, year), any reason it cannot be sent or
-// needs attention, and its mark (views/download-disk.js): in the queue, in
-// the library, or how many of its tracks are. The storefront is
+// needs attention, and its mark (views/download-mark.js): in the queue,
+// paused, in the library, or how many of its tracks are. The storefront is
 // shown only where it is not the server's default or was borrowed from
 // another link; the URL stays in the row's tooltip. Each row that can be
-// sent has a checkbox; one wholly on disk or in the queue starts
-// unchecked (lib/lookup.js isPicked), and one with files on disk has
+// sent has a checkbox; one wholly in the library or in the queue starts
+// unchecked (lib/lookup.js isPicked), and one with downloaded tracks has
 // Download again. A row whose qualities were read
 // says what it will download for that link; the dock says what the chosen
 // quality asks for. The page owns the lookup queues and the picks; rows read them. The
@@ -17,9 +17,9 @@
 import { html, useState } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths, linkLabel } from '../lib/format.js';
 import { kindLabel, previewFacts, needsAttention, ROWS_SHOWN, LOOKUP_LIMIT } from '../lib/lookup.js';
-import { filesOnDisk } from '../lib/on-disk.js';
+import { markedFiles } from '../lib/marks.js';
 import { Card, Button, Icon, Artwork, Skeleton } from '../ui/components.js';
-import { DiskNote } from './download-disk.js';
+import { MarkNote, markHref } from './download-mark.js';
 
 /** Quality words with their "24-bit / 44.1 kHz" kept on one line. */
 const keepSpec = (text) => {
@@ -38,7 +38,7 @@ const LINK_ART = artWidths(48);
 /**
  * Props: entries (scanLinks), statusOf(url) (the lookup status, with
  * 'idle' for a link past the lookup limit), issueOf(entry), markOf(url)
- * (lib/on-disk.js diskMark), picked(url) (the checkbox),
+ * (lib/marks.js resourceMark), picked(url) (the checkbox),
  * skipped (links past the lookup limit that would otherwise be looked up),
  * and row: {jobHref(id), onRemove(url), onRetry(url), onAgain(url, mark),
  * onQuality(entry, data), onPick(url, checked), storefront (the server's default),
@@ -50,7 +50,7 @@ export function LinksCard({ entries, statusOf, issueOf, markOf, picked, skipped,
   const shown = all ? entries : entries.filter((e, i) => i < ROWS_SHOWN || needsAttention(issueOf(e), markOf(e.url)));
   const hidden = entries.length - shown.length;
   // Hidden rows only have, at most, a quiet library note.
-  const hiddenPrior = all ? 0 : entries.filter((e) => !shown.includes(e) && filesOnDisk(markOf(e.url)) > 0).length;
+  const hiddenPrior = all ? 0 : entries.filter((e) => !shown.includes(e) && markedFiles(markOf(e.url)) > 0).length;
   return html`<${Card} section="links" className="card-flush new-links-card" title="Detected links" labelId="new-links-title">
     <ul class="new-links" aria-labelledby="new-links-title">
       ${shown.map(
@@ -107,8 +107,8 @@ function LinkRow({ entry, status, issue, mark, picked, row }) {
     artist ? { key: 'scope', text: 'Whole discography' } : null,
   ].filter(Boolean);
   const probed = data && !blocked ? row.probed(entry.url) : null;
-  // Download again replaces what is on disk; a job in the queue has it already.
-  const onDisk = !blocked && mark && mark.state !== 'active' ? filesOnDisk(mark) : 0;
+  // Download again replaces the downloaded tracks; a run in the queue has them already.
+  const onDisk = !blocked && mark && mark.state !== 'active' ? markedFiles(mark) : 0;
   return html`<li
     class=${cls}
     title=${entry.url}
@@ -151,7 +151,7 @@ function LinkRow({ entry, status, issue, mark, picked, row }) {
       ${link && link.noStorefront && link.storefront && !issue
         ? html`<span class="new-link-note" data-note="storefront">No storefront in the link: read as ${link.storefront.toUpperCase()}, like the other links</span>`
         : null}
-      ${mark && !blocked ? html`<${DiskNote} mark=${mark} href=${mark.job ? row.jobHref(mark.job.id) : ''} />` : null}
+      ${mark && !blocked ? html`<${MarkNote} mark=${mark} href=${markHref(mark, row.jobHref)} />` : null}
       ${probed
         ? html`<span class="new-link-will">
             <span>Will download: ${keepSpec(probed.text)}</span>

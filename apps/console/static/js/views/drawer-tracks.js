@@ -10,7 +10,7 @@ import { albumProgress } from '../lib/album-progress.js';
 import { useJobRate } from '../ui/job-rate.js';
 import { StatusText, StageTrack, Icon, Chip } from '../ui/components.js';
 
-const OUTCOME_WORDS = { completed: 'saved', skipped_existing: 'already on disk', failed: 'failed', cancelled: 'cancelled' };
+const OUTCOME_WORDS = { completed: 'saved', skipped_existing: 'already on disk', unavailable: 'not offered', failed: 'failed', cancelled: 'cancelled' };
 
 /**
  * The album bar, after the AMDL iOS app (lib/album-progress.js): a solid fill

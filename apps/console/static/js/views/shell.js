@@ -12,7 +12,8 @@ import { THEMES } from '../lib/prefs.js';
 
 export const NAV = [
   { page: 'overview', label: 'Overview', icon: 'grid', key: 'o' },
-  { page: 'queue', label: 'Queue', icon: 'list', key: 'q' },
+  { page: 'queue', label: 'Activity', icon: 'activity', key: 'q' },
+  { page: 'library', label: 'Library', icon: 'disc', key: 'b' },
   // g y opened System, which Settings now holds.
   { page: 'settings', label: 'Settings', icon: 'settings', key: ',', alias: 'y' },
   // Seldom opened: a quieter item at the foot of the sidebar; on a phone, the last tab.
@@ -61,9 +62,10 @@ export function Sidebar({ route, counts }) {
 const navItem = (page) => NAV.find((n) => n.page === page);
 
 /**
- * The phone tab bar: five equal tabs, Overview, Queue, New download (primary),
- * Settings and Logs, so New download is the middle one. Each tab is current
- * only on its own page.
+ * The phone tab bar: five equal tabs, Overview, Activity, New download
+ * (primary), Library and Settings, so New download is the middle one. Logs
+ * is reached from the Settings list. Each tab is current only on its own
+ * page.
  */
 export function TabBar({ route }) {
   const current = (page) => (route.page === page ? 'page' : undefined);
@@ -77,8 +79,8 @@ export function TabBar({ route }) {
     <a class="tab tab-new" data-page="new" href=${buildHash('new')} aria-current=${current('new')} aria-label=${NEW_DOWNLOAD.label} title=${NEW_DOWNLOAD.label}>
       <span class="tab-new-mark"><${Icon} name="plus" size="nav" /></span>
     </a>
+    ${tab(navItem('library'))}
     ${tab(navItem('settings'))}
-    ${tab(navItem('logs'))}
   </nav>`;
 }
 
