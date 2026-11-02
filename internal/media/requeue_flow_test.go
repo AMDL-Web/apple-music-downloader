@@ -67,7 +67,15 @@ func TestResubmittedAlbumRequeuesAndFinishesFromDisk(t *testing.T) {
 	}
 	metadataBefore, _ := catalog.counts()
 
-	second := manager.SubmitBatch(ctx, []string{url}, nil).Results[0]
+	// The row reads completed a moment before the manager has finalized the
+	// run; until then a submit answers duplicate_active, as documented.
+	var second domain.SubmitResult
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		second = manager.SubmitBatch(ctx, []string{url}, nil).Results[0]
+		if second.Status != domain.SubmitDuplicateActive || time.Now().After(deadline) {
+			break
+		}
+	}
 	if second.Status != domain.SubmitAccepted || !second.Requeued || second.Job.ID != first.Job.ID {
 		t.Fatalf("resubmit = %+v, want %s requeued", second, first.Job.ID)
 	}
