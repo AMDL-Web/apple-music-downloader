@@ -172,6 +172,17 @@
   margin-left: auto;
 }
 
+/* A record's actions sit in two equal columns, each in its own cell, so
+   Download missing appearing last fills a cell and moves nothing. */
+.record-drawer .drawer-actions-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.record-drawer .drawer-actions-row > .btn {
+  margin-left: 0;
+}
+
 .drawer-delete .icon {
   color: var(--danger);
 }

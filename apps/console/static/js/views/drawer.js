@@ -22,7 +22,7 @@ import {
 } from '../lib/format.js';
 import { drawerSummary, codecNote, isNotFound, rowView } from '../lib/jobview.js';
 import { jobStatusView, isTerminal } from '../lib/status.js';
-import { jobAllows, actionDone, actionError, retryNote } from '../lib/jobactions.js';
+import { jobAllows, actionDone, actionError, retryToast } from '../lib/jobactions.js';
 import { buildHash, parseHash, recordHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
 import { AlbumProgress, TrackList } from './drawer-tracks.js';
@@ -247,7 +247,7 @@ function Actions({ job, app, onChanged, onDelete }) {
       const res = await fn(job.id);
       // A retry is a new run: the drawer follows it.
       const next = action === 'retry' && res && res.job && res.job.id !== job.id ? res.job.id : '';
-      app.toast({ message: (action === 'retry' && retryNote(res)) || okMessage, role: 'success' });
+      app.toast({ message: action === 'retry' ? retryToast(res, jobTitle(job)) : okMessage, role: 'success' });
       if (next) {
         const at = parseHash(window.location.hash);
         app.navigate(buildHash(at.page, at.params, next), { replace: true });

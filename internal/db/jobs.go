@@ -182,6 +182,10 @@ type JobListFilter struct {
 	ResourceKind domain.ResourceKind
 	ResourceID   string
 	Triggers     []domain.RunTrigger
+	// Current keeps the runs nothing has replaced: no newer run of the same
+	// record (or, for a station, of the same link), and a record that is
+	// not complete.
+	Current bool
 }
 
 const (
@@ -251,6 +255,16 @@ func (f JobListFilter) whereClause() (string, []any) {
 		for _, t := range f.Triggers {
 			args = append(args, string(t))
 		}
+	}
+	if f.Current {
+		conds = append(conds,
+			`(j.resource_id IS NULL OR NOT EXISTS (SELECT 1 FROM runs n
+				WHERE n.resource_kind = j.resource_kind AND n.resource_id = j.resource_id AND n.rowid > j.rowid))`,
+			`(j.resource_id IS NOT NULL OR j.canonical_key = '' OR NOT EXISTS (SELECT 1 FROM runs n
+				WHERE n.canonical_key = j.canonical_key AND n.rowid > j.rowid))`,
+			`COALESCE(CASE j.resource_kind
+				WHEN 'album' THEN (SELECT a.state FROM albums a WHERE a.id = j.resource_id)
+				WHEN 'playlist' THEN (SELECT p.state FROM playlists p WHERE p.id = j.resource_id) END, '') <> 'complete'`)
 	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		like := "%" + escapeLike(q) + "%"

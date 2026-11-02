@@ -7,7 +7,7 @@ import { arrange } from '../lib/queue-order.js';
 import { count, jobTitle, isUnresolved, linkLabel, errorSummary } from '../lib/format.js';
 import { attentionRows, attentionGroups, domainView } from '../lib/domains.js';
 import { isNotFound } from '../lib/jobview.js';
-import { retryNote } from '../lib/jobactions.js';
+import { retryToast } from '../lib/jobactions.js';
 import { SETTINGS_SECTIONS } from '../lib/settings-sections.js';
 import { buildHash, settingsHash } from '../lib/route.js';
 import { useApp, Card, Icon, Badge, ErrorNote, SkeletonJobRows, Skeleton, LinkButton, Button, RelTime, StatusText } from '../ui/components.js';
@@ -179,11 +179,12 @@ const FAILED_FILTER = { statuses: ['failed'] };
 
 /**
  * The "Needs attention" card above the live queue, only while there are
- * failures: the latest failed jobs of the last 24 hours, each with Retry
- * unless Apple has nothing at its link (a retry fails the same way). A
- * retry is a new job and leaves the failed one as it ended, so a retried
- * job leaves the card here (a deleted one through the feed), and the next
- * one in line comes from a fresh read.
+ * failures: the latest failed jobs of the last 24 hours that nothing has
+ * replaced (current=true: no newer run of their record, a record not
+ * complete), each with Retry unless Apple has nothing at its link (a retry
+ * fails the same way). A retry is a new job and leaves the failed one as it
+ * ended, so the card reads the list again when a held row's record starts
+ * a new run or a held row leaves the feed's failed set.
  */
 const ATTENTION_KEY = 'overview-attention';
 const HOLD_MS = 400;
@@ -194,15 +195,10 @@ function Attention({ onKnown }) {
   const [jobs, setJobs] = useState(() => cached(ATTENTION_KEY) || []);
   const [stamp, setStamp] = useState(0);
   const [busy, setBusy] = useState(null);
-  const [retried, setRetried] = useState(() => new Set());
-  const retriedRef = useRef(retried);
-  retriedRef.current = retried;
-  // Rows retried here stay failed on the server: read that many more.
-  const limit = () => ATTENTION_LIMIT + retriedRef.current.size;
   const seq = useRef(0);
   useEffect(() => {
     const mine = ++seq.current;
-    listDownloads({ status: 'failed', sort: 'updated_at', order: 'desc', limit: limit() }).then(
+    listDownloads({ status: 'failed', current: 'true', sort: 'updated_at', order: 'desc', limit: ATTENTION_LIMIT }).then(
       (body) => {
         if (mine !== seq.current) return;
         remember(ATTENTION_KEY, body.downloads);
@@ -225,10 +221,14 @@ function Attention({ onKnown }) {
     () =>
       app.subscribeFeed((batch) => {
         const held = new Set(jobsRef.current.map((j) => j.id));
+        const records = new Set(jobsRef.current.filter((j) => j.resource).map((j) => `${j.resource.kind}:${j.resource.id}`));
         const leaving = batch.some(
-          (m) => (m.type === 'download_deleted' && held.has(m.job_id)) || (m.job && held.has(m.job.id) && m.job.status !== 'failed'),
+          (m) =>
+            (m.type === 'download_deleted' && held.has(m.job_id)) ||
+            (m.job && held.has(m.job.id) && m.job.status !== 'failed') ||
+            (m.job && !held.has(m.job.id) && m.job.resource && records.has(`${m.job.resource.kind}:${m.job.resource.id}`)),
         );
-        setJobs((list) => applyFeedToList(list, batch, FAILED_FILTER, { limit: limit() }));
+        setJobs((list) => applyFeedToList(list, batch, FAILED_FILTER, { limit: ATTENTION_LIMIT }));
         if (leaving) setStamp((n) => n + 1);
       }),
     [],
@@ -242,8 +242,7 @@ function Attention({ onKnown }) {
     setBusy(job.id);
     try {
       const res = await retryDownload(job.id);
-      app.toast({ message: retryNote(res) || 'Job queued again', role: 'success' });
-      setRetried((s) => new Set(s).add(job.id));
+      app.toast({ message: retryToast(res, jobTitle(job)), role: 'success' });
       setStamp((n) => n + 1);
     } catch (e) {
       app.toast({ message: e.message || 'The request failed', role: 'danger', offline: e.status === 0 });
@@ -259,7 +258,7 @@ function Attention({ onKnown }) {
     const target = document.querySelector('.attention .btn:not(:disabled)') || document.querySelector('[data-section="live"] .card-actions a');
     if (target) target.focus({ preventScroll: true });
   });
-  const recent = jobs.filter((j) => !retried.has(j.id) && now - Date.parse(j.finished_at || j.updated_at) < ATTENTION_WINDOW_MS).slice(0, ATTENTION_LIMIT);
+  const recent = jobs.filter((j) => now - Date.parse(j.finished_at || j.updated_at) < ATTENTION_WINDOW_MS);
   if (recent.length === 0) return null;
   return html`<${Card}
     section="attention"

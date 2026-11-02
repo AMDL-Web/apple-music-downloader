@@ -218,7 +218,11 @@ export function createRecordStore({ jobs, items, now }) {
   }
 
   /** Removes a record; its runs stay. */
-  const drop = (r) => records.delete(keyOf(r));
+  // A removed record takes its check along: the demo keeps no earlier one.
+  const drop = (r) => {
+    if (check && check.scope === keyOf(r)) check = null;
+    return records.delete(keyOf(r));
+  };
 
   return { ensure, drop, get, record, detail, mark, list, summary, startCheck, check: () => check, activeRun, tracksOf, appleStatus, appleList, appleTracks, all: () => [...records.values()] };
 }

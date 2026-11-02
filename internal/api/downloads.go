@@ -203,9 +203,9 @@ func (s *Server) cancelDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 // retryDownload starts a failed or cancelled run's download again as a new
-// run. For a record run the record's failed and given-up slots are re-armed;
-// what is done stays done. The answer names the new run, or, like POST
-// /library/{kind}/{id}/download, says the record has nothing left to
+// run. For a record run the record's failed, given-up and missing slots are
+// re-armed; what is done stays done. The answer names the new run, or, like
+// POST /library/{kind}/{id}/download, says the record has nothing left to
 // download or waits.
 func (s *Server) retryDownload(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

@@ -269,11 +269,11 @@ func (m *Manager) Retry(ctx context.Context, jobID string) error {
 
 // RetryRun starts a failed or cancelled run's download again as a new run
 // and returns it in Job. For a record run it resumes the record, re-arms its
-// failed and given-up slots and queues a run with trigger reset, like
-// DownloadRecord: with every wanted track done it queues nothing and sets
-// AlreadyDownloaded; with slots left that no run takes now (a full queue,
-// which the scheduler fills later, a backoff, a catalog miss, missing files)
-// it returns neither. For a one-off run (a station) it queues a new run of
+// failed, given-up and missing slots and queues a run with trigger reset,
+// like DownloadRecord: with every wanted track done it queues nothing and
+// sets AlreadyDownloaded; with slots left that no run takes now (a full
+// queue, which the scheduler fills later, or a catalog miss) it returns
+// neither. For a one-off run (a station) it queues a new run of
 // the same input and overrides, or fails with ErrQueueFull.
 // ErrJobNotRetryable refuses a queued, running or completed run;
 // db.ErrDuplicateActive a record or input with an active run.
@@ -305,7 +305,7 @@ func (m *Manager) RetryRun(ctx context.Context, jobID string) (RecordDownloadRes
 		}
 		delete(m.backoff, recordKey{job.ResourceKind, job.ResourceID})
 		if _, err := m.store.ResetFiles(ctx, db.FileReset{
-			Kind: job.ResourceKind, ID: job.ResourceID, States: []domain.AudioState{domain.AudioFailed, domain.AudioGivenUp}, Now: now,
+			Kind: job.ResourceKind, ID: job.ResourceID, States: []domain.AudioState{domain.AudioFailed, domain.AudioGivenUp, domain.AudioMissing}, Now: now,
 		}); err != nil {
 			return RecordDownloadResult{}, err
 		}

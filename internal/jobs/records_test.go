@@ -555,6 +555,49 @@ func TestResetAndRetryQueueRunsWithTriggerReset(t *testing.T) {
 	}
 }
 
+// A retry of a failed run whose record has only missing files left queues a
+// run that downloads them again; the missing slots are not left waiting for
+// a reset nothing would start.
+func TestRetryDownloadsMissingFiles(t *testing.T) {
+	failSong2 := true
+	p := &recordProcessor{dir: t.TempDir(), tracks: []string{"1", "2"}, outcome: func(s PlannedSlot) error {
+		if s.SongID == "2" && failSong2 {
+			return errors.New("boom")
+		}
+		return nil
+	}}
+	m, store := newRecordManager(t, p, config.Default())
+	ctx := context.Background()
+	startManager(t, m)
+
+	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
+	if done := waitRun(t, store, run.ID); done.Status != domain.JobFailed {
+		t.Fatalf("first run = %s, want failed", done.Status)
+	}
+	failSong2 = false
+	reset, err := m.Reset(ctx, ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: ResetAudio, SongIDs: []string{"2"}})
+	if err != nil || reset.Run == nil {
+		t.Fatalf("reset = %+v (%v), want a run", reset, err)
+	}
+	waitRun(t, store, reset.Run.ID)
+	key := domain.FileKey{OwnerKind: domain.ResourceAlbum, OwnerID: "100", SongID: "1", Slot: domain.SlotMain}
+	if marked, err := store.MarkFileMissing(ctx, key, time.Now().UTC()); err != nil || !marked {
+		t.Fatalf("mark missing = %v (%v)", marked, err)
+	}
+
+	res, err := m.RetryRun(ctx, run.ID)
+	if err != nil || res.Job == nil {
+		t.Fatalf("retry with only a missing file = %+v (%v), want a queued run", res, err)
+	}
+	waitRun(t, store, res.Job.ID)
+	if plan := p.lastPlan(); len(plan.Slots) != 1 || plan.Slots[0].SongID != "1" {
+		t.Fatalf("retry plan = %+v, want the missing slot", plan.Slots)
+	}
+	if f := fileState(t, store, "100", "1", domain.SlotMain); f.AudioState != domain.AudioDone {
+		t.Fatalf("slot 1 = %s, want done again", f.AudioState)
+	}
+}
+
 // A retry of a record's run that the full queue cannot take queues nothing
 // and is not "already downloaded": the scheduler queues the record later.
 func TestRetryWithAFullQueueWaits(t *testing.T) {

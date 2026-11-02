@@ -713,10 +713,11 @@ func (s *Server) getCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"check": check})
 }
 
-// lastCheck is the check this process runs or ran last, else the newest
-// stored one; nil before any.
+// lastCheck is the check this process runs, else the newest stored one
+// (Store.LastCheckRun skips a finished check of a removed record); nil
+// before any.
 func (s *Server) lastCheck(r *http.Request) (*domain.CheckRun, error) {
-	if run, _, ok := s.manager.CheckStatus(); ok {
+	if run, _, ok := s.manager.CheckStatus(); ok && run.FinishedAt == nil {
 		return &run, nil
 	}
 	run, found, err := s.store.LastCheckRun(r.Context())

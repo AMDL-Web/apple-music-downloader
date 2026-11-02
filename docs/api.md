@@ -363,8 +363,8 @@ check marks nothing and ends with `aborted_reason: "too_many_missing"` unless th
 `force: true`, so an unmounted share does not mark a whole library missing. One check runs
 at a time (`409 check_running`). `POST` answers `202 {check}`; `GET` answers the running or
 last `{check}` (`{id, trigger, scope, started_at, finished_at?, checked, missing,
-aborted_reason?}`, `null` before the first), and the overview feed sends `check_updated` as
-it moves on.
+aborted_reason?}`, `null` before the first; a finished check of a record removed since is
+skipped), and the overview feed sends `check_updated` as it moves on.
 
 ## Downloads
 
@@ -476,7 +476,9 @@ curl 'http://localhost:18080/api/v1/downloads?limit=20&offset=0&status=failed,ca
 ```
 
 Parameters: `limit` (default 50, max 200), `offset`, `status`, `type`, `resource_kind`
-(`album`, `playlist`) and `resource_id` (one record's runs), `trigger`, `q` (substring of
+(`album`, `playlist`) and `resource_id` (one record's runs), `trigger`, `current=true`
+(leaves out a run once its record, or a station's link, has a newer run, and a run of a
+complete record), `q` (substring of
 the title, artist name or input), `sort` (`created_at` | `updated_at` | `queue_order`), `order`
 (`asc` | `desc`); other parameters are ignored. `sort=queue_order` lists the queued jobs in
 run order (with `order=asc`, the next to start first) ahead of every other job; combine it
@@ -517,11 +519,11 @@ Only `failed` and `cancelled` jobs can be retried: otherwise `409 job_not_retrya
 Only a `queued` or `running` job can be cancelled: a `completed` or `failed` one is
 `409 job_not_cancellable`, and a `cancelled` one answers `200` again. Cancel on a record's
 run pauses the record (clients label it Pause); a station's run is cancelled.
-A retry is a new job: for a record's run it resumes the record, re-arms its failed and
-given-up slots and answers `202 {status: "queued", job}`, `200 {status:
+A retry is a new job: for a record's run it resumes the record, re-arms its failed,
+given-up and missing slots and answers `202 {status: "queued", job}`, `200 {status:
 "already_downloaded"}` when every wanted track is done, or `200 {status: "waiting"}` when
-slots are left that no run takes now (a full queue, which the scheduler fills later, a
-backoff, a record gone from the catalog, or only missing files, which a reset downloads).
+slots are left that no run takes now (a full queue, which the scheduler fills later, or a
+record gone from the catalog).
 For a station it queues the same link again, and a full queue is `503 queue_full`. A record
 or link that already has a queued or running job is `409 duplicate_active`.
 

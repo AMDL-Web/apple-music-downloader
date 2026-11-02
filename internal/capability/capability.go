@@ -92,7 +92,7 @@ var All = []Capability{
 	{Command: "jobs cancel", Tool: "cancel_job", Ops: []string{"cancelDownload"}, Safety: Write, Args: []string{"job_id"},
 		Summary: "Cancel a queued or running job; for a record's run this pauses the record (library resume continues it), and finished tracks stay"},
 	{Command: "jobs retry", Tool: "retry_job", Ops: []string{"retryDownload"}, Safety: Write, Args: []string{"job_id"},
-		Summary: "Download a failed or cancelled job's record again as a new job: its failed and given-up tracks; done tracks stay done. Answers already_downloaded or waiting (no job yet) when it queues nothing"},
+		Summary: "Download a failed or cancelled job's record again as a new job: its failed, given-up and missing tracks; done tracks stay done. Answers already_downloaded or waiting (no job yet) when it queues nothing"},
 	{Command: "jobs move", Tool: "move_job", Ops: []string{"moveDownload"}, Safety: Write, Args: []string{"job_id"},
 		Summary:     "Change which queued job starts next: put it before or after another queued job, or first or last",
 		ToolSummary: "Move a queued job in the run order (set exactly one of before, after, to) and answer {job} with its new queue_order; list the queue in run order with list_jobs sorted by queue_order",

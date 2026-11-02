@@ -11,6 +11,7 @@ import {
   bulkLabel,
   bulkSummary,
   retryNote,
+  retryToast,
   rowMenu,
 } from '../static/js/lib/jobactions.js';
 
@@ -88,6 +89,8 @@ test('a retry that queued nothing says what it answered', () => {
   assert.equal(retryNote({ status: 'already_downloaded' }), 'Already downloaded');
   assert.equal(retryNote({ status: 'waiting' }), 'Waiting to download');
   assert.equal(retryNote({ status: 'queued', job: { id: 'b' } }), '');
+  assert.equal(retryToast({ status: 'queued', job: { id: 'b' } }, 'Beta'), 'Downloading “Beta” again');
+  assert.equal(retryToast({ status: 'waiting' }, 'Beta'), '“Beta”: waiting to download');
   const said = (status) => ({ item: job('x', 'failed'), ok: true, value: { status } });
   assert.deepEqual(bulkSummary('retry', [ok(job('a', 'failed')), said('already_downloaded'), said('waiting')], title), { message: 'Queued 1 job again · 1 already downloaded · 1 waiting', role: 'success' });
   assert.equal(bulkSummary('retry', [said('already_downloaded'), said('already_downloaded')], title).message, '2 already downloaded');

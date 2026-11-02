@@ -55,9 +55,15 @@ func (s *Store) FinishCheckRun(ctx context.Context, id int64, checked, missing i
 	return err
 }
 
-// LastCheckRun returns the newest disk check and whether there is one.
+// LastCheckRun returns the newest disk check and whether there is one. A
+// finished check of a record that has been removed since is skipped: what
+// it found belongs to nothing in the library.
 func (s *Store) LastCheckRun(ctx context.Context) (domain.CheckRun, bool, error) {
-	c, err := scanCheckRun(s.db.QueryRowContext(ctx, `SELECT `+checkColumns+` FROM check_runs ORDER BY id DESC LIMIT 1`))
+	c, err := scanCheckRun(s.db.QueryRowContext(ctx, `SELECT `+checkColumns+` FROM check_runs
+		WHERE finished_at IS NULL OR scope = 'all'
+			OR (scope LIKE 'album:%' AND EXISTS (SELECT 1 FROM albums a WHERE a.id = substr(check_runs.scope, 7)))
+			OR (scope LIKE 'playlist:%' AND EXISTS (SELECT 1 FROM playlists p WHERE p.id = substr(check_runs.scope, 10)))
+		ORDER BY id DESC LIMIT 1`))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.CheckRun{}, false, nil
 	}

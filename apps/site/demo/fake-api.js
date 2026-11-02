@@ -499,10 +499,18 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     const statuses = q.getAll('status').flatMap(list);
     const types = q.getAll('type').flatMap(list);
     const term = (q.get('q') || '').toLowerCase();
-    const out = [...jobs.values()].filter(
-      (j) =>
+    const all = [...jobs.values()];
+    // current=true: no newer run of the same record (a station: link), and a record not complete.
+    const sameTarget = (a, b) => (a.resource ? Boolean(b.resource) && a.resource.kind === b.resource.kind && a.resource.id === b.resource.id : !b.resource && a.input === b.input);
+    const current = (j, i) => {
+      const rec = j.resource ? records.get(j.resource.kind, j.resource.id) : null;
+      return !all.slice(i + 1).some((n) => sameTarget(j, n)) && !(rec && records.record(rec).state === 'complete');
+    };
+    const out = all.filter(
+      (j, i) =>
         (!statuses.length || statuses.includes(j.status)) &&
         (!types.length || types.includes(j.type)) &&
+        (q.get('current') !== 'true' || current(j, i)) &&
         (!term || `${j.title || ''}\n${j.input}\n${j.artist_name || ''}`.toLowerCase().includes(term)),
     );
     const dir = q.get('order') === 'asc' ? 1 : -1;

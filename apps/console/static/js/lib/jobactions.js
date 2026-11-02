@@ -131,13 +131,19 @@ const RETRY_NOTES = { already_downloaded: 'already downloaded', waiting: 'waitin
 /**
  * What a retry's answer says when it queued no job: "Already downloaded"
  * (every wanted track is done) or "Waiting to download" (the record waits
- * for the scheduler: a full queue, a backoff); '' for a queued job.
+ * for the scheduler: a full queue); '' for a queued job.
  */
 export function retryNote(res) {
   const s = res && res.status;
   if (s === 'already_downloaded') return 'Already downloaded';
   if (s === 'waiting') return 'Waiting to download';
   return '';
+}
+
+/** The toast after retrying the job titled `title`: “X” again, or what the answer said. */
+export function retryToast(res, title) {
+  const note = retryNote(res);
+  return note ? `“${title}”: ${note.toLowerCase()}` : `Downloading “${title}” again`;
 }
 
 /**

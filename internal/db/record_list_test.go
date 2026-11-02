@@ -73,11 +73,14 @@ func TestRecordListsFilterAndMarksAgree(t *testing.T) {
 
 // A check run is recorded and closed; one a stopped server left open is
 // closed as interrupted when the next starts, and only finished checks of
-// the library or of the record count as the record's last check.
+// the library or of the record count as the record's last check. Once the
+// record is removed, its check is no longer the library's last.
 func TestCheckRunsRecordTheLastCheck(t *testing.T) {
 	store := openRecordStore(t)
 	ctx := context.Background()
 	t0 := mustTime(t, "2026-11-01T10:00:00Z")
+	_, err := store.AddAlbum(ctx, AlbumAdd{ID: "1", WantedAll: true, Source: domain.SourceManual, Now: t0})
+	must(t, err)
 	left, err := store.StartCheckRun(ctx, domain.CheckManual, "all", t0)
 	must(t, err)
 	t1 := t0.Add(30 * time.Second)
@@ -101,5 +104,9 @@ func TestCheckRunsRecordTheLastCheck(t *testing.T) {
 	must(t, store.db.QueryRowContext(ctx, `SELECT aborted_reason FROM check_runs WHERE id = ?`, left.ID).Scan(&reason))
 	if reason != domain.CheckAbortedInterrupted {
 		t.Errorf("the check left open ended %q", reason)
+	}
+	must(t, store.DeleteRecord(ctx, domain.ResourceAlbum, "1", t1.Add(time.Minute)))
+	if last, found, err := store.LastCheckRun(ctx); err != nil || !found || last.ID != left.ID {
+		t.Errorf("last check after removing album 1 = %+v (%v, %v), want the library check", last, found, err)
 	}
 }

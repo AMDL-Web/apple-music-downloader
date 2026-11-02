@@ -74,6 +74,14 @@ func parseJobListFilter(r *http.Request) (db.JobListFilter, error) {
 		}
 	}
 
+	switch q.Get("current") {
+	case "", "false":
+	case "true":
+		filter.Current = true
+	default:
+		return filter, fmt.Errorf("current must be true or false")
+	}
+
 	switch filter.Sort {
 	case "", db.JobListSortCreatedAt, db.JobListSortUpdatedAt, db.JobListSortQueueOrder:
 	default:
