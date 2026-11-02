@@ -79,18 +79,10 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 			})
 		})
 	}
-	local := here && a.Store.Server.Wrapper != nil && a.Store.Server.Wrapper.Managed != nil
 	// A test that answers quickly shows no Testing…, no grey button and no
 	// dimmed results: they would only flash.
 	slow := waited(c, f.testing, f.testFrom)
-	card(c, k).Gap(14).Children(func() {
-		addr, name, help := &d.RemoteURL, "Server address", "The web console's address."
-		if d.Mode == mode.Standalone {
-			addr, name, help = &d.WrapperAddress, "Wrapper address", "It has no password, so open its port to this computer only."
-			if local {
-				help = "Not used: this computer runs its own wrapper."
-			}
-		}
+	address := func(addr *string, name, help string) {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Text(c, name).FontSize(12).FontWeight(600)
 			ui.Row(c).Gap(8).Children(func() {
@@ -119,7 +111,40 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 			}
 			list.Children(func() { a.checkList(c, k, f.checks) })
 		}
-	})
+	}
+	if d.Mode != mode.Standalone {
+		card(c, k).Gap(14).Children(func() { address(&d.RemoteURL, "Server address", "The web console's address.") })
+	} else {
+		// Where the wrapper runs, as the setup screen asks it: this
+		// computer's guest shows how it runs and has no address to type;
+		// another machine's wrapper has its address and its test. Choosing
+		// the other place opens the setup screen, which checks what it
+		// needs before it applies.
+		elsewhere := a.Settings.WrapperElsewhere
+		if w := a.Store.Server.Wrapper; here && w != nil {
+			elsewhere = w.Managed == nil && a.Act.Shared() == ""
+		}
+		card(c, k).Padding(0).Gap(0).Dividers(1, k.Line).Children(func() {
+			setupSection(c, k, "Wrapper", func() {
+				place := 0
+				if elsewhere {
+					place = 1
+				}
+				segmented(c, k, "settings-wrapper-place", &place, []string{"This computer", "Another machine"}, nil)
+				if (place == 1) != elsewhere {
+					a.OpenSetup(mode.Standalone)
+					a.su.elsewhere = place == 1
+				}
+			})
+			if !elsewhere {
+				a.wrapperRow(c, k, here)
+				return
+			}
+			ui.Column(c).Padding(padCard).Gap(14).Children(func() {
+				address(&d.WrapperAddress, "Address", "It has no password, so open its port to this computer only.")
+			})
+		})
+	}
 	if d.Mode == mode.Standalone {
 		ui.Column(c).Gap(6).Children(func() {
 			ui.Text(c, "ffmpeg").FontSize(12).FontWeight(600)

@@ -220,16 +220,26 @@ func renderSetupShots(dir string, dirs mode.Dirs) error {
 	}
 	// Settings' connection page, which opens the setup screen.
 	for _, theme := range []string{"dark", "light"} {
-		for _, m := range []mode.Kind{mode.Remote, mode.Standalone} {
+		for _, name := range []string{"remote", "standalone", "elsewhere"} {
 			settings := mode.DefaultSettings()
-			settings.Mode, settings.RemoteURL = m, "http://192.168.3.5:18570"
+			settings.Mode, settings.RemoteURL = mode.Standalone, "http://192.168.3.5:18570"
+			if name == "remote" {
+				settings.Mode = mode.Remote
+			}
 			v := &appui.App{Store: store.New(post, nil), Art: artwork.New(post), Settings: settings, Dirs: dirs,
 				Act: shotActions{}, Theme: theme, Setup: stagedSetup(post), NoMotion: true}
+			switch name {
+			case "standalone":
+				v.Store.Server.Wrapper = managed("serving", "hvf", true, true)
+			case "elsewhere":
+				v.Settings.WrapperElsewhere, v.Settings.WrapperAddress = true, "http://192.168.3.44:12340"
+				v.Store.Server.Wrapper = &client.WrapperStatus{Ready: true}
+			}
 			v.GoSettings("connection")
 			tt := ui.NewTester(v.View, 1280, 800)
 			tt.SetScale(2)
 			tt.Frame()
-			if err := writePNG(filepath.Join(dir, fmt.Sprintf("connection-%s-%s.png", m, theme)), tt.Image()); err != nil {
+			if err := writePNG(filepath.Join(dir, fmt.Sprintf("connection-%s-%s.png", name, theme)), tt.Image()); err != nil {
 				return err
 			}
 		}

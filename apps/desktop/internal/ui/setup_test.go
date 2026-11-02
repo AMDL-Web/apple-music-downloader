@@ -343,3 +343,23 @@ func TestStartRecordsWhichWrapper(t *testing.T) {
 		t.Errorf("This computer applied %+v", act.applied)
 	}
 }
+
+// Settings show this computer's wrapper by how it runs, with no address to
+// type or test; choosing Another machine opens the setup screen there.
+func TestConnectionSettingsShowWhereTheWrapperRuns(t *testing.T) {
+	s := mode.DefaultSettings()
+	s.Mode, s.WrapperAddress = mode.Standalone, "http://127.0.0.1:12340"
+	a, act := newTestApp(s)
+	a.Store.Server.Wrapper = &client.WrapperStatus{Ready: true, Managed: &client.ManagedWrapper{Mode: "serving", Accel: "hvf"}}
+	a.GoSettings("connection")
+	tt := ui.NewTester(a.View, 1280, 800)
+	if !tt.HasText("Serving · HVF") || tt.HasText("Test connection") || tt.HasText("http://127.0.0.1:12340") {
+		t.Fatalf("this computer's wrapper: %q", tt.Texts())
+	}
+	if err := tt.Click("Another machine"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Screen != ScreenSetup || a.su.mode != mode.Standalone || !a.su.elsewhere || act.applied != nil {
+		t.Fatalf("screen %v, mode %q, elsewhere %v, applied %+v", a.Screen, a.su.mode, a.su.elsewhere, act.applied)
+	}
+}
