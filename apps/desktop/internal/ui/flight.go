@@ -62,6 +62,9 @@ const (
 	// partTracks is the queue hero's track count, which flies into the
 	// page's label, where the page says it (flyLabel).
 	partTracks
+	// partMark is a search tile's mark in its cover's corner, which rides
+	// the flying cover and fades (flySourceBadge).
+	partMark
 	flightParts
 )
 
@@ -92,7 +95,7 @@ const (
 // window as the frame before showed it, what it says, and its font size,
 // or a cover's corner radius; a text's or a tag's color, a text's widest
 // line, and build, which builds it again (flightCopies); whether a tag is
-// gilt.
+// gilt, and whether it is a tile's glass hint rather than a tag.
 type flightSrc struct {
 	box   ui.Rect
 	text  string
@@ -101,6 +104,7 @@ type flightSrc struct {
 	ink   float32
 	build func() ui.Element
 	hi    bool
+	glass bool
 	ok    bool
 }
 
@@ -173,6 +177,9 @@ type flight struct {
 	closeDetail bool
 	// back is what the title bar's Back button says, kept as it goes out.
 	back string
+	// cover is the page's cover as this frame lays it out, when it flies
+	// from its match: the badges of that match ride it (flightCopies).
+	cover ui.Rect
 	// edge is the top in the window of the list under the page, as this
 	// frame builds it, when edgeOK: the lower panel's top flies from it.
 	edge   float32
@@ -197,7 +204,7 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		target = 1
 	}
 	f.pairWas, f.paired = f.paired, [flightParts]pairing{}
-	f.src, f.texts, f.tag, f.label, f.edgeOK = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false
+	f.src, f.texts, f.tag, f.label, f.edgeOK, f.cover = [flightParts]flightSrc{}, [flightParts]flightText{}, flightTag{}, flightLabel{}, false, ui.Rect{}
 	// A click names what it opens from in the frame it opens; one that
 	// downloads instead leaves nothing for a later open.
 	f.next = ""
@@ -321,6 +328,40 @@ func (a *App) flySourceTag(el ui.Element, from, text string, hi bool, fg ui.Colo
 	}
 }
 
+// fliesFrom reports whether the album page is flying from or back to the
+// element from in this frame, whose parts then mark themselves.
+func (a *App) fliesFrom(from string) bool {
+	f := &a.fly
+	return f.moving && !f.still && from != "" && from == f.from
+}
+
+// flySourceHint marks el, a search tile's glass quality hint saying text,
+// gilt when hi, in fg, which build builds again: the page's quality tag
+// morphs from it, out of the glass into its own look (flightCopies), or,
+// where the page shows none, it rides the flying cover as a badge does.
+// It hides for the whole flight, as its copy stands for it.
+func (a *App) flySourceHint(el ui.Element, from, text string, hi bool, fg ui.Color, build func() ui.Element) {
+	if !a.fliesFrom(from) {
+		return
+	}
+	a.flySourceTag(el, from, text, hi, fg)
+	src := &a.fly.src[partTag]
+	src.glass, src.build = true, build
+	el.Invisible()
+}
+
+// flySourceBadge marks el, a badge on the cover of the element from, as
+// part, which build builds again: a copy of it rides the flying cover's
+// corner, fading out as the cover leaves and in as it lands, while el
+// hides (flightCopies).
+func (a *App) flySourceBadge(el ui.Element, from string, part flightPart, build func() ui.Element) {
+	if !a.fliesFrom(from) {
+		return
+	}
+	a.fly.src[part] = flightSrc{box: el.Bounds(), build: build, ok: true}
+	el.Invisible()
+}
+
 // tagFlies reports whether the album page's quality tag flies, as one box,
 // from its match under the page in this frame (flyTags).
 func (a *App) tagFlies() bool {
@@ -396,6 +437,7 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	s := float32(1)
 	switch part {
 	case partCover:
+		f.cover = dst
 		s = lerp(src.box.W, dst.W, t) / dst.W
 	case partTitle, partArtist:
 		s = lerp(src.size/size, 1, t)

@@ -107,10 +107,10 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 				return
 			}
 			if hints := shortHints(h.AudioTraits, size); hints != "" {
-				ui.Row(c).Absolute().Left(8).Bottom(8).Height(22).PaddingX(8).Radius(radiusFull).AlignItems(ui.Center).
-					Material(glass.Glass{}).PassThrough().Children(func() {
-					ui.Text(c, hints).FontSize(11).FontWeight(650).TextColor(k.Fg).SingleLine()
-				})
+				hint := qualityHint(c, k, hints).Absolute().Left(8).Bottom(8).PassThrough()
+				if a.fliesFrom("hit:" + hk) {
+					a.flySourceHint(hint, "hit:"+hk, hints, strings.HasPrefix(hints, "Hi-Res"), k.Fg, func() ui.Element { return qualityHint(c, k, hints) })
+				}
 			}
 			a.tileControl(c, k, h, hover || on)
 		})
@@ -132,6 +132,20 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 	})
 }
 
+// hintPad is the room either side of a quality hint's words.
+const hintPad = 8
+
+// qualityHint is a tile's glass pill of its best quality.
+func qualityHint(c *ui.Context, k *Tokens, s string) ui.Element {
+	return ui.Row(c).Height(22).PaddingX(hintPad).Radius(radiusFull).AlignItems(ui.Center).Material(glass.Glass{}).
+		Children(func() { hintText(c, s, k.Fg) })
+}
+
+// hintText is what a quality hint says, in ink.
+func hintText(c *ui.Context, s string, ink ui.Color) ui.Element {
+	return ui.Text(c, s).FontSize(11).FontWeight(650).TextColor(ink).SingleLine()
+}
+
 // tileControlSize is the round control in an album tile's corner.
 const tileControlSize = 32
 
@@ -150,32 +164,39 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	b := ui.ButtonBase(c.Key("control")).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().
 		Absolute().Right(8).Bottom(8)
 	pointed := b.Hovered()
-	ic, fg := icDown, k.Fg
+	look := markLook{ic: icDown, fg: k.Fg, glass: true}
 	switch {
 	case wait:
-		b.Material(glass.Glass{}).Label("Starting the download of " + h.Name)
-		ic = nil
+		b.Label("Starting the download of " + h.Name)
+		look.ic = nil
 	case mark == store.MarkActive:
-		b.Background(k.Accent).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3)).Label(h.Name + " is in the queue").Tooltip("In the queue")
-		fg = k.AccentInk
+		b.Label(h.Name + " is in the queue").Tooltip("In the queue")
+		look = markLook{bg: k.Accent, fg: k.AccentInk, ic: icDown}
 	case mark == store.MarkDone && !pointed:
-		b.Background(k.OK).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3)).Label(h.Name + " is in your library: download again")
-		ic, fg = icCheck, ui.RGB(255, 255, 255)
+		b.Label(h.Name + " is in your library: download again")
+		look = markLook{bg: k.OK, ic: icCheck, fg: ui.RGB(255, 255, 255)}
 	case mark == store.MarkDone:
-		b.Material(glass.Glass{Interactive: true}).Label(h.Name + " is in your library: download again").Tooltip("Download again")
+		b.Label(h.Name + " is in your library: download again").Tooltip("Download again")
+		look.interactive = true
 	default:
-		b.Material(glass.Glass{Interactive: true}).Label("Download " + h.Name)
+		b.Label("Download " + h.Name)
+		look.interactive = true
 	}
+	look.style(b)
 	// Only the download button waits for the pointer; a mark stays.
-	op := float32(1)
+	look.op = 1
 	if mark == store.MarkNone {
 		show := float32(0)
 		if shown || starting {
 			show = 1
 		}
-		op = b.AnimateWith("shown", show, 120*time.Millisecond, ui.EaseOut)
+		look.op = b.AnimateWith("shown", show, 120*time.Millisecond, ui.EaseOut)
 	}
+	op := look.op
 	b.Opacity(op).Hidden(op < 0.01)
+	if a.fliesFrom("hit:"+hk) && op >= 0.01 {
+		a.flySourceBadge(b, "hit:"+hk, partMark, func() ui.Element { return look.copy(c) })
+	}
 	if b.Clicked() && !starting {
 		switch {
 		case mark == store.MarkActive && h.Type == "album":
@@ -187,13 +208,42 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 			a.download(h)
 		}
 	}
-	b.Cursor(ui.CursorPointer).Children(func() {
-		if ic == nil {
-			ui.Text(c, "…").FontSize(13).FontWeight(700).TextColor(fg)
-			return
-		}
-		ui.Icon(c, ic).FontSize(15).TextColor(fg)
-	})
+	b.Cursor(ui.CursorPointer).Children(func() { look.glyph(c) })
+}
+
+// markLook is how a tile's control looks: on glass, interactive while it
+// is a button, or on bg with a shadow; its glyph, ic or a wait's ellipsis,
+// in fg; and how opaque it is.
+type markLook struct {
+	bg                 ui.Color
+	glass, interactive bool
+	ic                 *ui.SVG
+	fg                 ui.Color
+	op                 float32
+}
+
+func (m markLook) style(el ui.Element) {
+	if m.glass {
+		el.Material(glass.Glass{Interactive: m.interactive})
+		return
+	}
+	el.Background(m.bg).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.3))
+}
+
+func (m markLook) glyph(c *ui.Context) {
+	if m.ic == nil {
+		ui.Text(c, "…").FontSize(13).FontWeight(700).TextColor(m.fg)
+		return
+	}
+	ui.Icon(c, m.ic).FontSize(15).TextColor(m.fg)
+}
+
+// copy builds the control again as it looks, for the flight to carry.
+func (m markLook) copy(c *ui.Context) ui.Element {
+	el := ui.Box(c).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().Opacity(m.op)
+	m.style(el)
+	el.Children(func() { m.glyph(c) })
+	return el
 }
 
 // songGrid lays songs out as cards, rows filling width.

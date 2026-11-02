@@ -366,3 +366,49 @@ func TestAClickOnTheTileGoingBackOpensItAgain(t *testing.T) {
 		t.Errorf("a click on the tile going back left the screen %v, q %.2f", a.Screen, a.fly.q)
 	}
 }
+
+// A tile's mark rides the cover that flies from it: in the first frames out
+// and the last frames back, while the cover is still at the tile, the mark
+// shows over it at its corner, as on the tile, rather than the cover
+// hiding it and the tile showing it again at once on landing.
+func TestATilesMarkRidesItsFlyingCover(t *testing.T) {
+	a, albums := searchApp(t)
+	a.PageMotion = true
+	albums[0].ArtworkBgColor, albums[0].AudioTraits = "203040", []string{"lossless", "hi-res-lossless"}
+	a.Store.Search.Result.Albums.Items[0] = albums[0]
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	mark, ok := tt.Find(albums[0].Name + " is in your library: download again")
+	if !ok {
+		t.Fatalf("no library mark on the tile: %q", tt.Texts())
+	}
+	green := func(when string) {
+		t.Helper()
+		px := tt.Image().RGBAAt(int(mark.X+mark.W/2), int(mark.Y+mark.H/2))
+		if !(int(px.G) > int(px.R)+40 && int(px.G) > int(px.B)+20) {
+			t.Errorf("%s, the tile's mark is not over the cover: %v at its center", when, px)
+		}
+	}
+	if err := tt.Click(albums[0].Name); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(refresh)
+	tt.Frame()
+	if !a.fly.moving {
+		t.Fatal("the page does not fly")
+	}
+	green("leaving")
+	flyFrames(a, tt, 120)
+	a.Back()
+	tt.Frame()
+	for range 120 {
+		tt.Advance(refresh)
+		if a.fly.q < 0.05 {
+			break
+		}
+	}
+	if !a.fly.moving {
+		t.Fatalf("the page landed before it was near: q %.2f", a.fly.q)
+	}
+	green("landing")
+}

@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -30,10 +31,21 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 				}
 				return 0
 			}
+			x, y, w := lerp(src.box.X, dst.box.X, t)-o.X, lerp(src.box.Y, dst.box.Y, t)-o.Y, lerp(src.box.W, dst.box.W, t)
 			box, ink := tagBox(c.Key(partTag), k, lerp(gilt(src.hi), gilt(dst.hi), t), src.color.Mix(dst.fg, t))
-			box.Absolute().Left(lerp(src.box.X, dst.box.X, t) - o.X).Top(lerp(src.box.Y, dst.box.Y, t) - o.Y).
-				Width(lerp(src.box.W, dst.box.W, t)).Clip()
-			box.Children(func() {
+			box.Absolute().Left(x).Top(y).Width(w).Clip()
+			texts, pad := box, float32(6)
+			if src.glass {
+				// A tile's glass hint: the glass gives way to the tag's own
+				// look as it leaves, its height and corners to the tag's,
+				// and the words stay whole over both.
+				h, glassy := lerp(src.box.H, dst.box.H, t), 1-unit(t/0.5)
+				r := lerp(h/2, radiusInner, t)
+				ui.Box(c.Key("glass")).Absolute().Left(x).Top(y).Size(w, h).Radius(r).Material(glass.Glass{}).Opacity(glassy)
+				box.Height(h).Radius(r).Opacity(1 - glassy)
+				texts, pad, ink = ui.Box(c.Key("words")).Absolute().Left(x).Top(y).Size(w, h).Clip(), lerp(hintPad, 6, t), src.color.Mix(ink, t)
+			}
+			texts.Children(func() {
 				for i, s := range []string{src.text, dst.text} {
 					op := 1 - unit((t-0.2)/0.4)
 					if i == 1 {
@@ -41,11 +53,18 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 					}
 					// As wide as the wider tag, so that the box cuts the
 					// text rather than the text ending in an ellipsis.
-					ui.Row(c.Key(i)).Absolute().Left(6).Top(0).Bottom(0).Width(max(src.box.W, dst.box.W)).AlignItems(ui.Center).Opacity(op).
-						Children(func() { tagText(c, s, ink).SingleLine() })
+					ui.Row(c.Key(i)).Absolute().Left(pad).Top(0).Bottom(0).Width(max(src.box.W, dst.box.W)).AlignItems(ui.Center).Opacity(op).
+						Children(func() {
+							if i == 0 && src.glass {
+								hintText(c, s, ink)
+								return
+							}
+							tagText(c, s, ink).SingleLine()
+						})
 				}
 			})
 		}
+		a.flyBadges(c, o, t)
 		if f.paired[partKicker] == swaps {
 			src, dst := f.src[partKicker], f.label
 			at := func(el ui.Element, w float32) ui.Element {
@@ -64,7 +83,8 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 			}
 		}
 		for part, src := range f.src {
-			if f.paired[part] != morphs || f.own[part] || src.build == nil {
+			// The quality tag morphs as one box, above.
+			if f.paired[part] != morphs || f.own[part] || src.build == nil || flightPart(part) == partTag {
 				continue
 			}
 			dst := f.texts[part]
@@ -77,6 +97,32 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 			})
 		}
 	})
+}
+
+// flyBadges draws the badges of the cover the page flew from, its mark and,
+// where the page has no quality tag to take it, its quality hint, each at
+// its corner of the flying cover and as large as it was, fading out as the
+// cover leaves it and in as it lands; o is the copies' layer.
+func (a *App) flyBadges(c *ui.Context, o ui.Rect, t float32) {
+	f := &a.fly
+	from := f.src[partCover].box
+	if !f.src[partCover].ok || f.cover.W <= 0 || from.W <= 0 {
+		return
+	}
+	at := ui.Rect{X: lerp(from.X, f.cover.X, t), Y: lerp(from.Y, f.cover.Y, t), W: lerp(from.W, f.cover.W, t), H: lerp(from.H, f.cover.H, t)}
+	for _, part := range []flightPart{partTag, partMark} {
+		src := f.src[part]
+		if !src.ok || src.build == nil || part == partTag && f.paired[partTag] == morphs {
+			continue
+		}
+		x := at.X + src.box.X - from.X
+		if src.box.X+src.box.W/2 > from.X+from.W/2 {
+			x = at.X + at.W - (from.X + from.W - src.box.X)
+		}
+		y := at.Y + at.H - (from.Y + from.H - src.box.Y)
+		ui.Box(c.Key(part + flightParts)).Absolute().Left(x - o.X).Top(y - o.Y).Opacity(1 - unit(t/0.35)).
+			Children(func() { src.build() })
+	}
 }
 
 // sameText reports whether a text of the page and its match say the same,
