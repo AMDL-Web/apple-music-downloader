@@ -1,3 +1,9 @@
+//go:build !race
+
+// The edge fades are a shader's pixels, which the Tester draws on the CPU:
+// the race detector slows that many times over with no concurrency to
+// check.
+
 package ui
 
 import (
