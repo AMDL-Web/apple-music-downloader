@@ -350,7 +350,7 @@ var customSchemas = map[string]map[string]any{
 		"codec_fallback":  withDescription(toggle, "Fall back to the next codec when one is unavailable; omit for the server's setting."),
 		"max_sample_rate": map[string]any{"type": "integer", "description": "Highest ALAC sample rate in Hz."},
 		"max_bit_depth":   map[string]any{"type": "integer", "description": "Highest ALAC bit depth."},
-		"overwrite":       withDescription(toggle, "Replace files already on disk instead of skipping them. Destructive; only when the user asks for it."),
+		"overwrite":       withDescription(toggle, "Download again: replace the tracks already on disk instead of skipping them (lookup_link and get_album report library, what is on disk). Destructive; only when the user asks for it."),
 	}, "urls"),
 	"list_jobs": obj(map[string]any{
 		"status": withDescription(strs, "Job statuses to keep: queued, running, completed, failed, cancelled."),
@@ -535,6 +535,9 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 	type accepted struct {
 		URL   string `json:"url"`
 		JobID string `json:"job_id"`
+		// Requeued is a finished job of the same link queued again under
+		// its id; its run skips the tracks already on disk.
+		Requeued bool `json:"requeued,omitempty"`
 	}
 	type rejected struct {
 		URL           string `json:"url"`
@@ -549,7 +552,7 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 	}{Accepted: []accepted{}, Rejected: []rejected{}}
 	for _, r := range batch.Results {
 		if r.Job != nil {
-			out.Accepted = append(out.Accepted, accepted{r.URL, r.Job.ID})
+			out.Accepted = append(out.Accepted, accepted{r.URL, r.Job.ID, r.Requeued})
 			continue
 		}
 		rj := rejected{URL: r.URL, Status: string(r.Status), ExistingJobID: r.ExistingJobID}

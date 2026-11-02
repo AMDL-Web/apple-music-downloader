@@ -97,7 +97,10 @@ const QUIET_EVENTS = new Set(['item_progress', 'item_completed', 'item_skipped',
 /** Activity with `ev` added in id order; a quiet event or one already held leaves it as is. */
 function addActivity(activity, ev) {
   if (QUIET_EVENTS.has(ev.type) || activity.some((a) => a.id === ev.id)) return activity;
-  const next = [...activity, { id: ev.id, type: ev.type, phase: ev.phase, message: ev.message, item_id: ev.item_id, created_at: ev.created_at }];
+  const entry = { id: ev.id, type: ev.type, phase: ev.phase, message: ev.message, item_id: ev.item_id, created_at: ev.created_at };
+  // job_retried says whether a retry or a new submit of the link queued it.
+  if (ev.payload && typeof ev.payload === 'object' && ev.payload.cause) entry.cause = ev.payload.cause;
+  const next = [...activity, entry];
   next.sort((a, b) => Number(a.id) - Number(b.id));
   return next.length > ACTIVITY_LIMIT ? next.slice(next.length - ACTIVITY_LIMIT) : next;
 }

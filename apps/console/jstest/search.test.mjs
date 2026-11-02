@@ -22,7 +22,7 @@ import {
   SEARCH_CACHE_MAX,
   ARTIST_PAGE,
 } from '../static/js/lib/search.js';
-import { hitKey, hitPrior, trackJobs, hitPreview, sentJob } from '../static/js/lib/search-jobs.js';
+import { hitKey, hitPrior, hitMark, jobLibrary, trackJobs, hitPreview, sentJob } from '../static/js/lib/search-jobs.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const settle = async () => {
@@ -325,6 +325,21 @@ test('a hit is in the library or the queue through its prior job, the live one w
   assert.equal(hitPrior(done, sent, jobs).state, 'active');
   assert.equal(hitPrior(done, sent, new Map([['job_b', { id: 'job_b', status: 'completed' }]])).state, 'done');
   assert.equal(hitPrior(done, sent, new Map([['job_b', { id: 'job_b', status: 'failed' }]])), null, 'a failed job marks nothing');
+});
+
+test("a hit's card shows its job in the queue, else what the files say, never a finished job alone", () => {
+  const partial = { state: 'partial', tracks_on_disk: 9, tracks_total: 12 };
+  const prior = { id: 'job_a', status: 'completed', finished_at: '2026-10-29T10:00:00Z' };
+  assert.equal(hitMark(album('1', { prior_job: prior })), null, 'a completed job with no files on disk marks nothing');
+  assert.deepEqual(hitMark(album('1', { prior_job: prior, library: partial })), { state: 'partial', onDisk: 9, total: 12, job: prior });
+  assert.deepEqual(hitMark(album('2', { library: { state: 'complete', tracks_on_disk: 12, tracks_total: 12 } })), { state: 'complete', onDisk: 12, total: 12, job: null });
+  const running = new Map([['job_a', { id: 'job_a', status: 'running' }]]);
+  assert.equal(hitMark(album('1', { prior_job: prior, library: partial }), new Map(), running).state, 'active');
+  // This page watched the job finish: its tracks are newer than the search's count.
+  const finished = new Map([['job_a', { id: 'job_a', status: 'completed', total_items: 12, completed_items: 2, skipped_items: 10 }]]);
+  assert.equal(hitMark(album('1', { prior_job: prior, library: partial }), new Map(), finished).state, 'complete');
+  assert.deepEqual(jobLibrary({ total_items: 12, completed_items: 3, skipped_items: 0, failed_items: 9 }), { state: 'partial', tracks_on_disk: 3, tracks_total: 12 });
+  assert.equal(jobLibrary({ total_items: 0 }), null);
 });
 
 test('the feed updates watched jobs only, never with an older snapshot', () => {

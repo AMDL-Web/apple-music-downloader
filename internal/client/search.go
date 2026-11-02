@@ -52,10 +52,14 @@ type SearchHit struct {
 	// InAppleLibrary is whether the item is in the user's Apple Music account
 	// library; nil when the backend cannot tell.
 	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
+	// Library is an album hit's state estimated from its library folder;
+	// nil for other hits and when the backend did not count in time.
+	Library *domain.LibraryState `json:"library,omitempty"`
 }
 
-// PriorJob is the PriorJob schema: the job that put a hit in the library
-// (completed) or holds it in the queue (queued, running).
+// PriorJob is the PriorJob schema: the hit's queue entry, its queued or
+// running job, else its last completed one. A completed job does not mean
+// the files are on disk; SearchHit.Library says that.
 type PriorJob struct {
 	ID         string           `json:"id"`
 	Status     domain.JobStatus `json:"status"`
@@ -133,26 +137,29 @@ func (c *Client) ArtistAlbums(ctx context.Context, artistID string, q PageQuery)
 // meaning of the lookup fields, and its songs. URL submitted to POST
 // /api/v1/downloads downloads the whole album.
 type Album struct {
-	Storefront         string       `json:"storefront"`
-	ID                 string       `json:"id"`
-	URL                string       `json:"url"`
-	Title              string       `json:"title"`
-	ArtistName         string       `json:"artist_name,omitempty"`
-	ArtistURL          string       `json:"artist_url,omitempty"`
-	ArtworkURL         string       `json:"artwork_url,omitempty"`
-	ArtworkBgColor     string       `json:"artwork_bg_color,omitempty"`
-	ArtworkTextColor1  string       `json:"artwork_text_color1,omitempty"`
-	ArtworkTextColor2  string       `json:"artwork_text_color2,omitempty"`
-	ArtworkTextColor3  string       `json:"artwork_text_color3,omitempty"`
-	ArtworkTextColor4  string       `json:"artwork_text_color4,omitempty"`
-	ReleaseDate        string       `json:"release_date,omitempty"`
-	Genre              string       `json:"genre,omitempty"`
-	TrackCount         int          `json:"track_count"`
-	DiscCount          int          `json:"disc_count,omitempty"`
-	ContentRating      string       `json:"content_rating,omitempty"`
-	AppleDigitalMaster bool         `json:"apple_digital_master,omitempty"`
-	AudioTraits        []string     `json:"audio_traits,omitempty"`
-	Tracks             []AlbumTrack `json:"tracks"`
+	Storefront         string   `json:"storefront"`
+	ID                 string   `json:"id"`
+	URL                string   `json:"url"`
+	Title              string   `json:"title"`
+	ArtistName         string   `json:"artist_name,omitempty"`
+	ArtistURL          string   `json:"artist_url,omitempty"`
+	ArtworkURL         string   `json:"artwork_url,omitempty"`
+	ArtworkBgColor     string   `json:"artwork_bg_color,omitempty"`
+	ArtworkTextColor1  string   `json:"artwork_text_color1,omitempty"`
+	ArtworkTextColor2  string   `json:"artwork_text_color2,omitempty"`
+	ArtworkTextColor3  string   `json:"artwork_text_color3,omitempty"`
+	ArtworkTextColor4  string   `json:"artwork_text_color4,omitempty"`
+	ReleaseDate        string   `json:"release_date,omitempty"`
+	Genre              string   `json:"genre,omitempty"`
+	TrackCount         int      `json:"track_count"`
+	DiscCount          int      `json:"disc_count,omitempty"`
+	ContentRating      string   `json:"content_rating,omitempty"`
+	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
+	AudioTraits        []string `json:"audio_traits,omitempty"`
+	// Library is how many of the songs are on disk, checked song by song;
+	// nil when the backend could not check.
+	Library *domain.LibraryState `json:"library,omitempty"`
+	Tracks  []AlbumTrack         `json:"tracks"`
 }
 
 // AlbumTrack is the AlbumTrack schema: one song of an album, in the order
@@ -171,6 +178,9 @@ type AlbumTrack struct {
 	AppleDigitalMaster bool     `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string `json:"audio_traits,omitempty"`
 	HasLyrics          bool     `json:"has_lyrics,omitempty"`
+	// OnDisk is whether the song has a file at its library path; nil
+	// exactly when Album.Library is.
+	OnDisk *bool `json:"on_disk,omitempty"`
 }
 
 // Album reads an album and its songs with GET /api/v1/albums/{id}. An empty

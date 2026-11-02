@@ -7,7 +7,6 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"amdl/internal/domain"
 	"amdl/internal/format"
 )
 
@@ -196,13 +195,7 @@ func (m *model) resultsView(w, room int) string {
 			if h.DurationMS > 0 {
 				facts = append(facts, format.Duration(time.Duration(h.DurationMS)*time.Millisecond))
 			}
-			mark := ""
-			if h.PriorJob != nil {
-				mark = "✓ in library"
-				if h.PriorJob.Status != domain.JobCompleted {
-					mark = "↻ downloading"
-				}
-			}
+			mark := hitMark(h)
 			factW := w - lipgloss.Width(line) - 2 - lipgloss.Width(mark) - 2
 			line += rs.s(t.dim).Render("  " + pad(trunc(strings.Join(facts, " · "), factW), factW))
 			if mark != "" {

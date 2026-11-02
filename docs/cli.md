@@ -67,6 +67,13 @@ and reads the password from the first line of stdin; a `needs_2fa` answer then c
 the `login_id` for `wrapper 2fa <login_id>`, which reads the code the same way (a
 prompt in a terminal, else stdin's first line) and has to follow within 60 seconds.
 
+What is downloaded follows the files: `lookup` of an album or song and `albums get` print
+`library` (`complete`, `partial` with `tracks_on_disk` of `tracks_total`, or `none`), and
+`albums get` marks each song `on_disk`. `download` skips the tracks already on disk, so a
+complete album finishes in seconds, and a link downloaded before is queued again under its
+job id (`requeued: true`). `--overwrite` downloads it again, replacing those files.
+`library list` is job history, the completed jobs; it does not check the files.
+
 ## Output
 
 - **stdout holds one JSON value**, the API's response body as the spec describes it,

@@ -607,7 +607,7 @@
     min-height: 32px;
   }
 
-  .new-link-actions > :is(.new-link-quality, .new-link-remove) {
+  .new-link-actions > :is(.new-link-quality, .new-link-again, .new-link-remove) {
     width: 32px;
     min-width: 32px;
     padding: 0;
@@ -665,7 +665,7 @@
     display: none;
   }
 
-  .new-link-quality > span {
+  :is(.new-link-quality, .new-link-again) > span {
     position: absolute;
     width: 1px;
     height: 1px;

@@ -36,6 +36,10 @@ export const PREVIEW_KINDS = ['album', 'song', 'playlist', 'artist', 'station'];
  *   answers, then fetches the wanted ones again (the media user token in
  *   use for private playlist covers, the wrapper's or the one in Settings,
  *   changed).
+ * - refresh(urls): fetches wanted answers again in the background (a
+ *   download of the link finished, so its library state moved); status
+ *   keeps the cached answer until the new one arrives, and a failed
+ *   refresh keeps it.
  * - dispose(): aborts everything in flight.
  *
  * Answers (errors included) are cached per URL in `cache`, which the caller
@@ -62,13 +66,15 @@ export function createLookupQueue({ lookup, max = LOOKUP_CONCURRENCY, cache = ne
   const settle = (url, ctrl, entry) => {
     if (inflight.get(url) !== ctrl) return;
     inflight.delete(url);
-    if (!ctrl.signal.aborted) remember(url, entry);
+    const kept = entry.state === 'error' && ctrl.refresh && cache.has(url);
+    if (!ctrl.signal.aborted && !kept) remember(url, entry);
     pump();
     if (!disposed) onChange();
   };
 
-  const start = (url) => {
+  const start = (url, refresh = false) => {
     const ctrl = new AbortController();
+    ctrl.refresh = refresh;
     inflight.set(url, ctrl);
     Promise.resolve()
       .then(() => lookup(url, ctrl.signal))
@@ -116,8 +122,18 @@ export function createLookupQueue({ lookup, max = LOOKUP_CONCURRENCY, cache = ne
       pump();
       onChange();
     },
+    refresh(urls) {
+      let started = false;
+      for (const url of urls || []) {
+        if (inflight.has(url) || !cache.has(url) || !wanted.includes(url)) continue;
+        start(url, true);
+        started = true;
+      }
+      if (started) onChange();
+    },
     status(url) {
-      if (inflight.has(url)) return { state: 'loading' };
+      const ctrl = inflight.get(url);
+      if (ctrl && !(ctrl.refresh && cache.has(url))) return { state: 'loading' };
       if (cache.has(url)) return cache.get(url);
       return { state: wanted.includes(url) ? 'queued' : 'idle' };
     },
@@ -306,7 +322,8 @@ const newest = (a, b, key) => (Date.parse(b[key] || '') || 0) - (Date.parse(a[ke
  * downloads?q=<id> page, whose q is a substring match, so each job's input
  * is parsed and compared): {state: 'active', job} for one queued or
  * running, else {state: 'done', job} for the latest completed one, else
- * null. Failed and cancelled jobs do not count.
+ * null. Failed and cancelled jobs do not count. A done job says nothing
+ * about the files: the lookup's `library` does (lib/on-disk.js diskMark).
  */
 export function priorJob(jobs, link, trackMode = 'song') {
   const want = linkTarget(link, trackMode);
@@ -324,13 +341,12 @@ export function priorJob(jobs, link, trackMode = 'song') {
 /**
  * Whether a detected row is checked for the submit: the person's own pick
  * when there is one (`picks`, a Map of url -> boolean), else unchecked when
- * the item has an earlier job still in the queue, or a done one while
- * `overwrite` is off (`prior`, from priorJob), else checked.
+ * the item is in the queue or wholly on disk (`mark`, lib/on-disk.js
+ * diskMark), else checked: a partial album downloads its missing songs.
  */
-export function isPicked(url, prior, picks, overwrite = false) {
+export function isPicked(url, mark, picks) {
   if (picks && picks.has(url)) return picks.get(url) === true;
-  if (!prior) return true;
-  return overwrite && prior.state === 'done';
+  return !mark || mark.state === 'partial';
 }
 
 const sameTarget = (a, b) => Boolean(a && b && a.type === b.type && a.id === b.id);
@@ -339,8 +355,9 @@ const sameTarget = (a, b) => Boolean(a && b && a.type === b.type && a.id === b.i
  * Applies feed messages to one cached GET downloads page (`jobs`) of
  * `link`: a job it holds is replaced by a newer snapshot or dropped when
  * deleted, and a job of the same item that it does not hold yet is added,
- * so "In the queue now" turns into "In your library" when the job
- * completes. Returns `jobs` itself when nothing changed.
+ * so "In the queue now" goes when the job finishes (the link is then
+ * looked up again for what is on disk). Returns `jobs` itself when nothing
+ * changed.
  */
 export function applyFeedToJobs(jobs, batch, link, trackMode = 'song') {
   const want = linkTarget(link, trackMode);

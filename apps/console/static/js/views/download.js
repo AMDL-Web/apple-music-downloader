@@ -36,7 +36,7 @@ import { Compose, Options, clearBox } from './download-hero.js';
 import { ArtistConfirm } from './download-confirm.js';
 import { AskDialog } from './download-ask.js';
 import { downloadAsks, hasAsks, answerOverrides } from '../lib/download-ask.js';
-import { loadSkipExisting } from '../ui/skip-pref.js';
+import { filesOnDisk } from '../lib/on-disk.js';
 
 // The quality choice lasts for the tab too, so the next album can follow
 // with the same one: a PRESETS id or 'custom' with its values.
@@ -123,7 +123,7 @@ export function DownloadPage({ route }) {
   const savedToken = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.media_user_token || '' : undefined;
   const token = tokenState(savedToken, wrapper);
 
-  const { statusOf, issueOf, sendable: allowed, skipped, queue, priorOf, forgetPrior } = useLookups({
+  const { statusOf, issueOf, sendable: allowed, skipped, queue, markOf, forgetPrior } = useLookups({
     settled,
     entries,
     token,
@@ -134,11 +134,11 @@ export function DownloadPage({ route }) {
     subscribeFeed: app.subscribeFeed,
   });
   const jobHref = (id) => buildHash('new', route.params, id);
-  // The checked rows are what the submit sends: a row already in the
-  // library or the queue starts unchecked unless the person checks it.
+  // The checked rows are what the submit sends: a row wholly on disk or in
+  // the queue starts unchecked unless the person checks it.
   const [picks, setPicks] = useState(() => new Map());
   const onPick = (url, on) => setPicks((m) => new Map(m).set(url, on));
-  const sendable = allowed.filter((u) => isPicked(u, priorOf(u), picks));
+  const sendable = allowed.filter((u) => isPicked(u, markOf(u), picks));
   // What the chosen preset resolves to, for the Will download lines.
   const chosenValues = defaults ? presetValues(defaults, choice.preset, choice.custom) : null;
   const previewOf = (url) => {
@@ -159,14 +159,14 @@ export function DownloadPage({ route }) {
 
   /**
    * Runs a download, after the questions it asks (lib/download-ask.js):
-   * the quality, while the preset follows Settings, and what to do with
-   * files on disk, for a release in the library. run(overrides) sends it
-   * with the page's overrides and the answer's.
+   * the quality, while the preset follows Settings, and, for Download again
+   * (`again`, the files on disk it replaces), a confirmation. run(overrides)
+   * sends it with the page's overrides and the answer's.
    */
-  const askFirst = ({ title, traits, inLibrary, run }) => {
+  const askFirst = ({ title, traits, again = 0, run }) => {
     const priority = defaults ? defaults.quality_priority : [];
-    const asks = downloadAsks({ traits, priority, follow: choice.preset === 'follow', inLibrary, alwaysSkip: loadSkipExisting() });
-    const go = (answer) => run({ ...overrides, ...answerOverrides({ ...answer, priority, inLibrary }) });
+    const asks = downloadAsks({ traits, priority, follow: choice.preset === 'follow', again });
+    const go = (answer) => run({ ...overrides, ...answerOverrides({ ...answer, priority, again }) });
     if (!hasAsks(asks)) go({});
     else setAsking({ title, asks, go });
   };
@@ -229,8 +229,18 @@ export function DownloadPage({ route }) {
     askFirst({
       title: one && one.title ? `Download “${one.title}”` : label,
       traits: [],
-      inLibrary: urls.some((u) => (priorOf(u) || {}).state === 'done'),
       run: (used) => sendLinks(urls, used),
+    });
+  };
+
+  // A link row with files on disk downloads again, replacing them.
+  const againLink = (url, mark) => {
+    const data = previewOf(url);
+    askFirst({
+      title: `Download “${(data && data.title) || url}” again`,
+      traits: data ? data.audio_traits : [],
+      again: filesOnDisk(mark),
+      run: (used) => sendLinks([url], used),
     });
   };
 
@@ -254,8 +264,8 @@ export function DownloadPage({ route }) {
     });
   };
 
-  const askHit = (hit, run) =>
-    askFirst({ title: `Download “${hit.name}”`, traits: hit.audio_traits, inLibrary: (search.priorOf(hit) || {}).state === 'done', run });
+  const askHit = (hit, run, again = 0) =>
+    askFirst({ title: again ? `Download “${hit.name}” again` : `Download “${hit.name}”`, traits: hit.audio_traits, again, run });
   const hits = useHitActions({ app, route, term, artistId, search, send: sendUrls, report, ask: askHit, setConfirm, clearNotes: () => (setFailure(''), setRefusal('')) });
 
   const retry = async (urls) => {
@@ -307,7 +317,7 @@ export function DownloadPage({ route }) {
     if (term) toResults(e, term, search);
   };
 
-  const linkCount = useLinkCount({ settled, storefront, issueOf, priorOf });
+  const linkCount = useLinkCount({ settled, storefront, issueOf, markOf });
   const kindOf = (url) => {
     const st = statusOf(url);
     if (st.state === 'ready' && st.data && st.data.type) return st.data.type;
@@ -378,7 +388,7 @@ export function DownloadPage({ route }) {
           inputRef=${inputRef}
           openHit=${hits.openedHit}
           focusArtist=${hits.focusArtist}
-          row=${{ busy: hits.busy, jobHref, onDownload: hits.download, onOpenArtist: hits.openArtist, priorOf: search.priorOf }}
+          row=${{ busy: hits.busy, jobHref, onDownload: hits.download, onAgain: hits.again, onOpenArtist: hits.openArtist, markOf: search.markOf }}
           onBack=${hits.closeArtist}
           onDownloadAll=${hits.download}
           group=${hits.group}
@@ -391,13 +401,14 @@ export function DownloadPage({ route }) {
           entries=${entries}
           statusOf=${statusOf}
           issueOf=${issueOf}
-          priorOf=${priorOf}
-          picked=${(url) => isPicked(url, priorOf(url), picks)}
+          markOf=${markOf}
+          picked=${(url) => isPicked(url, markOf(url), picks)}
           skipped=${skipped}
           row=${{
             jobHref,
             onRemove: removeEntry,
             onRetry: (url) => queue.current.retry(url),
+            onAgain: againLink,
             onQuality: (entry, data) => setQuality({ url: entry.url, title: data.title || entry.url, tracks: data.track_count }),
             onPick,
             storefront,

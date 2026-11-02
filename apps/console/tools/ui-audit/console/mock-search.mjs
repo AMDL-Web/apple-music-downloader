@@ -39,7 +39,8 @@ export function search(world, res, q) {
   const withPrior = (h) => {
     const mine = jobs.filter((j) => j.type === h.type && j.input.endsWith(`/${h.id}`));
     const j = mine.find((x) => x.status === 'queued' || x.status === 'running') || mine.find((x) => x.status === 'completed');
-    return j ? { ...h, prior_job: { id: j.id, status: j.status, ...(j.finished_at ? { finished_at: j.finished_at } : {}) } } : h;
+    const marked = h.type === 'album' ? { ...h, library: mockLibrary(h.id, h.track_count) } : h;
+    return j ? { ...marked, prior_job: { id: j.id, status: j.status, ...(j.finished_at ? { finished_at: j.finished_at } : {}) } } : marked;
   };
   const out = { term: q.get('term'), storefront: 'cn' };
   for (const [g, arr] of Object.entries(groups)) {
@@ -49,11 +50,24 @@ export function search(world, res, q) {
   return json(res, 200, out);
 }
 
+/**
+ * A fixed library state per id, so every view shows all three: an album
+ * wholly on disk, one partly (a third of its tracks), one not; a song on
+ * disk or not.
+ */
+export function mockLibrary(id, total = 10, song = false) {
+  const n = [...String(id)].reduce((a, c) => a + c.charCodeAt(0), 0) % 3;
+  const t = song ? 1 : total || 10;
+  if (n === 0) return { state: 'complete', tracks_on_disk: t, tracks_total: t };
+  if (n === 1 && !song) return { state: 'partial', tracks_on_disk: Math.ceil(t / 3), tracks_total: t };
+  return { state: 'none', tracks_on_disk: 0, tracks_total: t };
+}
+
 export function artistAlbums(res, id, q) {
   const artist = CATALOG.artists.find((a) => a.id === id) || CATALOG.artists[0];
   const albums = CATALOG.albums.filter((a) => a.artist_name === artist.name);
   const offset = Number(q.get('offset')) || 0;
   const limit = Number(q.get('limit')) || 25;
-  const page = albums.slice(offset, offset + limit);
+  const page = albums.slice(offset, offset + limit).map((a) => ({ ...a, library: mockLibrary(a.id, a.track_count) }));
   return json(res, 200, { storefront: 'cn', artist, albums: { items: page, ...(offset + limit < albums.length ? { next_offset: offset + limit } : {}) } });
 }

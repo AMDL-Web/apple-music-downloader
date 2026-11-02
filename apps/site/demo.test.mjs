@@ -145,6 +145,20 @@ describe('fake API', () => {
     assert.equal(api.items.get(job.id)[0].sample_rate, 96000);
   });
 
+  test('a link downloaded before keeps its job, and the files say what is on disk', async () => {
+    const api = fresh();
+    const album = albums.find((a) => a.name === 'Every Bridge Is a Promise');
+    const first = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url] })).json();
+    settle(api);
+    const after = await (await call(api, 'POST', '../api/v1/lookup', { url: album.url })).json();
+    assert.deepEqual(after.library, { state: 'complete', tracks_on_disk: album.track_count, tracks_total: album.track_count });
+    const again = await (await call(api, 'POST', '../api/v1/downloads', { urls: [album.url], overrides: { force_overwrite: true } })).json();
+    assert.equal(again.results[0].requeued, true);
+    assert.equal(again.results[0].job.id, first.results[0].job.id, 'the same queue entry');
+    const hits = await (await call(api, 'GET', `../api/v1/search?term=${encodeURIComponent(album.name)}&types=albums`)).json();
+    assert.ok(hits.albums.items.every((h) => h.library && typeof h.library.tracks_total === 'number'));
+  });
+
   test('retry runs a failed job again', async () => {
     const api = fresh();
     const failed = [...api.jobs.values()].find((j) => j.status === 'failed');

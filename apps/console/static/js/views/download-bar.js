@@ -109,17 +109,17 @@ export function PasteButton({ storefront, onLinks }) {
  * The dock's count line for the links in the box. It is announced
  * (role=status), so it follows the settled text, not every keystroke.
  */
-export function useLinkCount({ settled, storefront, issueOf, priorOf }) {
+export function useLinkCount({ settled, storefront, issueOf, markOf }) {
   const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
   const settledDupes = useMemo(() => duplicateCount(settled, storefront), [settled, storefront]);
   const settledSend = submittable(settledEntries, issueOf);
-  const priorState = (url) => (priorOf(url) || {}).state;
+  const markState = (url) => (markOf(url) || {}).state;
   return countLine({
     links: settledEntries.length,
     merged: settledDupes,
-    fresh: settledSend.filter((u) => !priorOf(u)).length,
-    library: settledSend.filter((u) => priorState(u) === 'done').length,
-    queued: settledSend.filter((u) => priorState(u) === 'active').length,
+    fresh: settledSend.filter((u) => !markOf(u)).length,
+    library: settledSend.filter((u) => markState(u) === 'complete').length,
+    queued: settledSend.filter((u) => markState(u) === 'active').length,
     blocked: settledEntries.filter((e) => (issueOf(e) || {}).blocking).length,
     warned: settledEntries.filter((e) => {
       const i = issueOf(e);

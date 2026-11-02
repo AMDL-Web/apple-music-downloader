@@ -17,7 +17,6 @@ import { AccountPanel } from './settings-account.js';
 import { SyncResetAction, ConfigFilePanel } from './settings-panels.js';
 import { FactRows } from './settings-facts.js';
 import { HooksPanel } from './settings-hooks.js';
-import { SkipExistingField } from '../ui/skip-pref.js';
 
 /** The DOM id of a sub-group's block. */
 export const groupDomId = (id) => `settings-group-${id}`;
@@ -25,14 +24,13 @@ export const groupDomId = (id) => `settings-group-${id}`;
 /**
  * `form` carries the page state every field needs: valueOf, dirtyKeys,
  * errors, warnings, setValue, revert, showKeys. `after` maps a key to a
- * line under its row, `extra` to more props for its control, `insert` to a
- * row placed after it.
+ * line under its row, `extra` to more props for its control.
  */
-function FieldRows({ fields, form, after = {}, extra = {}, insert = {} }) {
+function FieldRows({ fields, form, after = {}, extra = {} }) {
   if (fields.length === 0) return null;
   return html`<div class="field-list">
-    ${fields.map((f) => [
-      html`<${SettingsField}
+    ${fields.map(
+      (f) => html`<${SettingsField}
         key=${f.key}
         field=${f}
         value=${form.valueOf(f.key)}
@@ -46,8 +44,7 @@ function FieldRows({ fields, form, after = {}, extra = {}, insert = {} }) {
         onChange=${(v) => form.setValue(f.key, v)}
         onRevert=${() => form.revert(f.key)}
       />`,
-      insert[f.key] || null,
-    ])}
+    )}
   </div>`;
 }
 
@@ -120,14 +117,14 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
   // Until the configuration answers, each list of rows holds a skeleton line
   // per field; a failed read says so once, in place of the first list.
   let told = false;
-  const fieldRows = (list, after, extra, insert) => {
+  const fieldRows = (list, after, extra) => {
     if (failed) {
       if (told) return null;
       told = true;
       return failed;
     }
     if (!cfg.loaded) return list.length ? html`<${SkeletonRows} n=${Math.min(list.length, 6)} kind="line" />` : null;
-    return html`<${FieldRows} fields=${list} form=${form} after=${after} extra=${extra} insert=${insert} />`;
+    return html`<${FieldRows} fields=${list} form=${form} after=${after} extra=${extra} />`;
   };
 
   switch (section.id) {
@@ -159,7 +156,7 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
       return html`<${Notice} role="warning" icon="triangle-alert">
           After a folder or template change, tracks saved under the old names download again.
         </${Notice}>
-        ${fieldRows(fields, after, undefined, { 'download.force_overwrite': html`<${SkipExistingField} key="local-skip" />` })}`;
+        ${fieldRows(fields, after)}`;
     }
     case 'jobs':
       return html`<${FactRows} section="jobs" system=${sys} pending=${sysPending} showKeys=${form.showKeys} />${fieldRows(fields)}`;

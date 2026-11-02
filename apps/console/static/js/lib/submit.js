@@ -44,12 +44,13 @@ const UNREACHABLE = /cannot reach the wrapper|connection refused|no such host|de
  * detail, retry, existingJobId, storefronts}. `label` is the short state,
  * `message` the human reason for the code, `detail` the server's message
  * where it says more (store errors, parse failures, unknown codes);
- * `retry` marks results a later submit may fix.
+ * `retry` marks results a later submit may fix. A requeued result is the
+ * link's earlier job queued again under its id: "Queued again".
  */
 export function resultView(result) {
   const r = result || {};
   const err = r.error || {};
-  if (r.status === 'accepted') return { status: 'accepted', code: '', role: 'success', icon: 'circle-check', label: 'Queued', message: '', detail: '', retry: false };
+  if (r.status === 'accepted') return { status: 'accepted', code: '', role: 'success', icon: 'circle-check', label: r.requeued ? 'Queued again' : 'Queued', message: '', detail: '', retry: false };
   const code = err.code || r.status || '';
   const known = CODES[code];
   const isError = r.status === 'error';

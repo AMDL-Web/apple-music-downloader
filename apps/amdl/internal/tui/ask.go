@@ -44,8 +44,25 @@ type choicesMsg struct {
 	err      error
 }
 
+// inLibrary is a hit whose files are all on disk (an album hit's folder
+// count): downloading it again replaces them only when asked to. Song hits
+// carry no library state.
 func inLibrary(h client.SearchHit) bool {
-	return h.PriorJob != nil && h.PriorJob.Status == domain.JobCompleted
+	return h.Library != nil && h.Library.State == domain.LibraryComplete
+}
+
+// hitMark is a result row's state: a job queued or running for it, else
+// how much of it is on disk; "" for neither.
+func hitMark(h client.SearchHit) string {
+	switch {
+	case h.PriorJob != nil && h.PriorJob.Status != domain.JobCompleted:
+		return "↻ downloading"
+	case inLibrary(h):
+		return "✓ in library"
+	case h.Library != nil && h.Library.State == domain.LibraryPartial:
+		return fmt.Sprintf("%d/%d", h.Library.TracksOnDisk, h.Library.TracksTotal)
+	}
+	return ""
 }
 
 // download starts hits, after the ask panel when there is something to

@@ -4,37 +4,30 @@
 // download-search.js lays them out.
 
 import { html } from '../ui/preact.js';
-import { artPalette, paletteStyle, artWidths, shortDate } from '../lib/format.js';
+import { artPalette, paletteStyle, artWidths } from '../lib/format.js';
 import { hitView } from '../lib/search.js';
-import { Button, Icon, Artwork, Skeleton } from '../ui/components.js';
+import { Button, Artwork, Skeleton } from '../ui/components.js';
+import { DiskNote } from './download-disk.js';
 
 const HIT_ART = artWidths(48);
-
-/** The note for an earlier job, as on a link row: in the queue now, or in the library since when, with Open. */
-function PriorNote({ prior, href }) {
-  const active = prior.state === 'active';
-  const when = active ? '' : shortDate(prior.job.finished_at);
-  return html`<span class="new-link-prior new-hit-prior" data-state=${prior.state}>
-    <${Icon} name=${active ? 'clock' : 'circle-check'} size="sm" />
-    <span>${active ? 'In the queue now' : 'In your library'}${when ? ` · ${when}` : ''} · <a class="link new-link-open" href=${href} title="Open that job" tabindex="-1">Open</a></span>
-  </span>`;
-}
 
 /**
  * A song: a row on the Songs surface. Download is its one focus stop
  * (data-hit-primary). While it is sent, and once the song is in the queue,
  * it is aria-disabled rather than disabled, so focus and the arrow keys
- * stay on it.
+ * stay on it. A search does not say which songs are on disk; a song this
+ * page watched download is, and then downloads again instead.
  */
 export function HitRow({ hit, row }) {
   const v = hitView(hit);
   const palette = artPalette(hit);
-  const prior = row.priorOf(hit);
+  const mark = row.markOf(hit);
   const busy = row.busy.has(hit.url);
-  const queued = prior && prior.state === 'active';
+  const queued = Boolean(mark && mark.state === 'active');
+  const again = Boolean(mark && mark.state === 'complete');
   const cls = ['new-hit', palette ? 'has-palette' : ''].filter(Boolean).join(' ');
   const meta = v.facts.map((f) => f.text).join(' · ');
-  return html`<li class=${cls} data-kind=${hit.type} data-id=${hit.id} data-prior=${prior ? prior.state : undefined} style=${paletteStyle(palette)}>
+  return html`<li class=${cls} data-kind=${hit.type} data-id=${hit.id} data-prior=${mark ? mark.state : undefined} style=${paletteStyle(palette)}>
     <${Artwork} url=${hit.artwork_url} bg=${palette && palette.bg} px=${100} widths=${HIT_ART} sizes="48px" className="art-48 new-hit-art" />
     <div class="new-hit-main">
       <span class="new-hit-head">
@@ -45,19 +38,19 @@ export function HitRow({ hit, row }) {
       <span class="new-hit-sub" title=${meta}>
         ${v.facts.map((f) => html`<span key=${f.key} class="new-hit-fact" data-key=${f.key} dir=${f.auto ? 'auto' : undefined}>${f.text}</span>`)}
       </span>
-      ${prior ? html`<${PriorNote} prior=${prior} href=${row.jobHref(prior.job.id)} />` : null}
+      ${mark ? html`<${DiskNote} mark=${mark} href=${mark.job ? row.jobHref(mark.job.id) : ''} focusable=${false} />` : null}
     </div>
     <${Button}
       size="sm"
       variant="ghost"
-      icon="download"
+      icon=${again ? 'rotate' : 'download'}
       className="new-hit-download"
       data-hit-primary
       aria-disabled=${busy || queued ? 'true' : undefined}
       aria-busy=${busy ? 'true' : undefined}
-      aria-label=${queued ? `${v.title} is in the queue` : `Download ${v.title}`}
-      title=${queued ? 'Already in the queue' : prior ? 'In your library' : 'Download'}
-      onClick=${() => busy || queued || row.onDownload(hit)}
+      aria-label=${queued ? `${v.title} is in the queue` : again ? `Download ${v.title} again` : `Download ${v.title}`}
+      title=${queued ? 'Already in the queue' : again ? 'Download again' : 'Download'}
+      onClick=${() => busy || queued || (again ? row.onAgain(hit, mark) : row.onDownload(hit))}
     />
   </li>`;
 }

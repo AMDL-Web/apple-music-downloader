@@ -327,9 +327,12 @@ const ACTIVITY_VIEWS = {
  * One Activity entry of the job drawer as {label, role, text}: a word for the
  * event type, and the event's own message as one line when it adds something
  * (the default "job queued" repeats the label; an error loses its JSON body).
+ * A job_retried whose cause is resubmit (the link submitted again) reads
+ * "Queued again" and says nothing more.
  */
 export function activityView(entry) {
   const type = (entry && entry.type) || '';
+  if (type === 'job_retried' && entry.cause === 'resubmit') return { label: 'Queued again', role: 'info', text: '' };
   const known = ACTIVITY_VIEWS[type];
   const plain = type.replaceAll('_', ' ');
   const label = known ? known[0] : plain.charAt(0).toUpperCase() + plain.slice(1);

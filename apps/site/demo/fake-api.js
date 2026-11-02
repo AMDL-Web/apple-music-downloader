@@ -591,12 +591,52 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     return apiError(405, 'method_not_allowed', 'method not allowed');
   }
 
+  // The songs a finished track left on disk: the world's stand-in for the
+  // files GET /albums and POST /lookup check.
+  function onDisk() {
+    const ids = new Set();
+    for (const list of items.values()) for (const it of list) if (it.status === 'completed' || it.status === 'skipped_existing') ids.add(it.adam_id);
+    return ids;
+  }
+
+  const libraryState = (n, total) => ({ state: total > 0 && n >= total ? 'complete' : n > 0 ? 'partial' : 'none', tracks_on_disk: Math.min(n, total), tracks_total: total });
+  const albumLibrary = (album, disk = onDisk()) => libraryState(album.tracks.filter((t) => disk.has(t.id)).length, album.tracks.length);
+
+  // A link keeps one job: a finished one is queued again under its id, its
+  // finished tracks kept unless force_overwrite replaces them.
+  function requeue(job, overrides) {
+    const force = Boolean(overrides && overrides.force_overwrite);
+    const at = Date.now();
+    Object.assign(job, { status: 'queued', queue_order: nextOrder(), created_at: iso(at), updated_at: iso(at) });
+    delete job.error;
+    delete job.finished_at;
+    delete job.started_at;
+    if (overrides) job.overrides = overrides;
+    else delete job.overrides;
+    for (const it of items.get(job.id) || []) {
+      if (!force && (it.status === 'completed' || it.status === 'skipped_existing')) continue;
+      Object.assign(it, stageFields('queued', 0), { attempt: 1 });
+      delete it.error;
+    }
+    recount(job);
+    addEvent({ job_id: job.id, type: 'job_retried', message: 'job queued again by a new submission', payload: { ...job, cause: 'resubmit', force_overwrite: force } });
+  }
+
   function submit(body) {
     const results = [];
     for (const u of Array.isArray(body.urls) ? body.urls : []) {
       const link = parseLink(u);
       if (!link) {
         results.push({ url: u, status: 'invalid', error: { code: 'invalid_url', message: 'not an Apple Music link' } });
+        continue;
+      }
+      // (The demo queues a link that is still under way once more, where the
+      // server answers duplicate_active, so a visitor's click always runs.)
+      const same = [...jobs.values()].filter((j) => j.input === u);
+      const last = same.filter((j) => j.type !== 'station').sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+      if (last && same.every((j) => TERMINAL.has(j.status))) {
+        requeue(last, body.overrides);
+        results.push({ url: u, status: 'accepted', requeued: true, job: withProgress(last) });
         continue;
       }
       const known = find(link.track_id || link.id);
@@ -622,6 +662,8 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     else out.artist_name = src.artist_name;
     if (src.type === 'album') out.track_count = src.track_count;
     if (src.type === 'song') out.album_name = src.album_name;
+    if (src.type === 'album') out.library = albumLibrary(src);
+    if (src.type === 'song') out.library = libraryState(onDisk().has(src.id) ? 1 : 0, 1);
     return json(200, out);
   }
 
@@ -670,7 +712,8 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
       return { items: rows, ...(offset + limit < arr.length ? { next_offset: offset + limit } : {}) };
     };
     const song = ({ album_id, track_number, quality, ...s }) => s;
-    const album = ({ tracks, quality, artist_id, ...a }) => a;
+    const disk = onDisk();
+    const album = ({ tracks, quality, artist_id, ...a }) => ({ ...a, library: albumLibrary({ tracks }, disk) });
     const out = { term, storefront: STOREFRONT };
     if (want('songs')) out.songs = page(groups.songs, song);
     if (want('albums')) out.albums = page(groups.albums, album);
@@ -682,7 +725,8 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   function artistAlbums(id, q) {
     const artist = find(id);
     if (!artist || artist.type !== 'artist') return apiError(404, 'catalog_not_found', `Apple Music has no artist ${id}`);
-    const all = albums.filter((a) => a.artist_name === artist.name).map(({ tracks, quality, artist_id, ...a }) => a);
+    const disk = onDisk();
+    const all = albums.filter((a) => a.artist_name === artist.name).map(({ tracks, quality, artist_id, ...a }) => ({ ...a, library: albumLibrary({ tracks }, disk) }));
     const offset = Number(q.get('offset')) || 0;
     const limit = Number(q.get('limit')) || 25;
     return json(200, { storefront: STOREFRONT, artist, albums: { items: all.slice(offset, offset + limit), ...(offset + limit < all.length ? { next_offset: offset + limit } : {}) } });

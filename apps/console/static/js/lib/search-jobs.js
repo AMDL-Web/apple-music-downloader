@@ -1,7 +1,9 @@
-// Pure helpers for which job a catalog search hit (lib/search.js) is in the
-// library or the queue through: the key a hit is tracked by, its earlier or
-// just-submitted job kept live by the feed, and what a submitted hit's
-// result row shows until its job resolves. No DOM.
+// Pure helpers for a catalog search hit's (lib/search.js) queue entry and
+// what its card shows: the key a hit is tracked by, its earlier or
+// just-submitted job kept live by the feed, how much of it is on disk, and
+// what a submitted hit's result row shows until its job resolves. No DOM.
+
+import { diskMark } from './on-disk.js';
 
 /** The key a hit is tracked by: its type and id, as a job of it is. */
 export const hitKey = (hit) => (hit ? `${hit.type}:${hit.id}` : '');
@@ -9,8 +11,7 @@ export const hitKey = (hit) => (hit ? `${hit.type}:${hit.id}` : '');
 const ACTIVE = new Set(['queued', 'running']);
 
 /**
- * The job a hit is in the library or the queue through, as lib/lookup.js
- * priorJob reports it: {state: 'active'|'done', job} or null. `sent` maps a
+ * A hit's queue entry, as lib/lookup.js priorJob reports it: {state: 'active'|'done', job} or null. `sent` maps a
  * hitKey to the id of a job this page submitted for it; `jobs` maps a job id
  * to its latest snapshot (submit results and the feed), which wins over the
  * hit's prior_job from the search. A job that failed, was cancelled or was
@@ -26,6 +27,31 @@ export function hitPrior(hit, sent = new Map(), jobs = new Map()) {
   if (ACTIVE.has(job.status)) return { state: 'active', job };
   if (job.status === 'completed') return { state: 'done', job };
   return null;
+}
+
+/**
+ * The library state a job leaves behind, for a run this page saw end: its
+ * finished tracks (downloaded or already there) are on disk, out of
+ * total_items. Null for a job with no tracks.
+ */
+export function jobLibrary(job) {
+  const total = (job && job.total_items) || 0;
+  if (!total) return null;
+  const n = Math.min(total, (job.completed_items || 0) + (job.skipped_items || 0));
+  return { state: n === total ? 'complete' : n > 0 ? 'partial' : 'none', tracks_on_disk: n, tracks_total: total };
+}
+
+/**
+ * What a hit's card shows (lib/on-disk.js diskMark): its job while queued
+ * or running, else how much of it is on disk. That is the hit's `library`
+ * from the search (album hits only), unless this page watched its job
+ * finish since (a snapshot in `jobs` that completed), whose tracks are
+ * newer news.
+ */
+export function hitMark(hit, sent = new Map(), jobs = new Map()) {
+  const prior = hitPrior(hit, sent, jobs);
+  const seen = prior && prior.state === 'done' && jobs.has(prior.job.id) ? jobLibrary(prior.job) : null;
+  return diskMark(prior, seen || (hit && hit.library));
 }
 
 /**

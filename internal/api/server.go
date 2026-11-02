@@ -19,8 +19,8 @@ import (
 )
 
 // Deps are the components the HTTP layer serves. Every field is required
-// except Logger, Logging, Tokens and Console; New refuses a nil one, so no handler
-// answers 503 for a missing dependency.
+// except Logger, Logging, Library, Tokens, Console, Hooks and Restart; New
+// refuses a nil one, so no handler answers 503 for a missing dependency.
 type Deps struct {
 	// Config is the live runtime config shared with the download pipeline;
 	// the /config routes read, reload and replace its snapshot.
@@ -44,6 +44,9 @@ type Deps struct {
 	// Catalog backs POST /lookup, GET /search, GET /artists/{id}/albums and
 	// GET /albums/{id}.
 	Catalog CatalogService
+	// Library says which tracks of those albums and songs are on disk (the
+	// library fields); nil leaves the fields out.
+	Library LibraryService
 	// Tokens picks the media-user-token for lookups and reports the
 	// wrapper's, masked, on GET /wrapper/status; nil means
 	// catalog.media_user_token alone.
@@ -82,6 +85,7 @@ type Server struct {
 	librarySync  LibrarySyncService
 	appleLibrary AppleLibraryService
 	catalog      CatalogService
+	library      LibraryService
 	tokens       *usertoken.Provider
 	console      http.Handler
 	hooks        HooksService
@@ -125,7 +129,7 @@ func New(deps Deps) (*Server, error) {
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, appleLibrary: deps.AppleLibrary,
-		catalog: deps.Catalog, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
+		catalog: deps.Catalog, library: deps.Library, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())

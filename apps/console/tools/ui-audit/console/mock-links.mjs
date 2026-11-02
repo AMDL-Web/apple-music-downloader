@@ -3,6 +3,7 @@
 
 import { CATALOG, LOSSY_ALBUM, findAlbum } from './fixtures.mjs';
 import { json, apiError, readBody, parseLink } from './mock-http.mjs';
+import { mockLibrary } from './mock-search.mjs';
 
 export async function lookup(req, res) {
   const body = (await readBody(req)) || {};
@@ -22,6 +23,8 @@ export async function lookup(req, res) {
   if (link.type === 'playlist') out.curator_name = 'Apple Music';
   if (src.duration_ms) out.duration_ms = src.duration_ms;
   if (src.audio_traits) out.audio_traits = src.audio_traits;
+  if (link.type === 'album') out.library = mockLibrary(link.id, out.track_count);
+  if (link.type === 'song') out.library = mockLibrary(link.track_id || link.id, 1, true);
   return json(res, 200, out);
 }
 

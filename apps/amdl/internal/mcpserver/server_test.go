@@ -160,7 +160,7 @@ func TestSearchThenDownloadInTwoCalls(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			submitted.Store(body)
 			w.WriteHeader(http.StatusAccepted)
-			fmt.Fprint(w, `{"accepted":1,"rejected":0,"results":[{"url":"https://music.apple.com/us/album/igor/1","status":"accepted",
+			fmt.Fprint(w, `{"accepted":1,"rejected":0,"results":[{"url":"https://music.apple.com/us/album/igor/1","status":"accepted","requeued":true,
 				"job":{"id":"job_a","input":"x","type":"album","status":"queued","title":"IGOR","total_items":0,"completed_items":0,"skipped_items":0,"failed_items":0,"cancelled_items":0,"created_at":"2026-10-30T10:00:00Z","updated_at":"2026-10-30T10:00:00Z"}}]}`)
 		default:
 			http.NotFound(w, r)
@@ -173,7 +173,7 @@ func TestSearchThenDownloadInTwoCalls(t *testing.T) {
 	}
 	out, isErr := s.call(t, "start_download", map[string]any{"urls": []string{url}, "codec_priority": []string{"alac"}})
 	acc := out["accepted"].([]any)
-	if isErr || len(acc) != 1 || acc[0].(map[string]any)["job_id"] != "job_a" {
+	if isErr || len(acc) != 1 || acc[0].(map[string]any)["job_id"] != "job_a" || acc[0].(map[string]any)["requeued"] != true {
 		t.Fatalf("start_download = %v", out)
 	}
 	body := submitted.Load().(map[string]any)

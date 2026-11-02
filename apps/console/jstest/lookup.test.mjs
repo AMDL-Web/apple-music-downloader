@@ -236,16 +236,35 @@ test('a row needs attention for any issue or an earlier job still in flight, not
   assert.equal(needsAttention(null, null), false);
 });
 
-test('rows with an earlier job start unchecked, unless Overwrite is on for one in the library; a pick wins', () => {
-  const done = { state: 'done', job: { id: 'j' } };
+test('rows in the queue or wholly on disk start unchecked, a partial album checked; a pick wins', () => {
+  const complete = { state: 'complete', onDisk: 12, total: 12, job: null };
   assert.equal(isPicked('u', null, new Map()), true);
-  assert.equal(isPicked('u', done, new Map()), false);
+  assert.equal(isPicked('u', complete, new Map()), false);
   assert.equal(isPicked('u', { state: 'active', job: { id: 'j' } }, null), false);
-  assert.equal(isPicked('u', done, new Map([['u', true]])), true);
+  assert.equal(isPicked('u', { state: 'partial', onDisk: 3, total: 12, job: null }, null), true, 'a partial album downloads its missing songs');
+  assert.equal(isPicked('u', complete, new Map([['u', true]])), true);
   assert.equal(isPicked('u', null, new Map([['u', false]])), false);
-  assert.equal(isPicked('u', done, new Map(), true), true, 'Overwrite on: a row in the library starts checked');
-  assert.equal(isPicked('u', { state: 'active', job: { id: 'j' } }, null, true), false, 'a row in the queue stays unchecked');
-  assert.equal(isPicked('u', done, new Map([['u', false]]), true), false, 'the pick still wins');
+});
+
+test('a refresh keeps the shown answer until the new one, and keeps it when the refresh fails', async () => {
+  const { calls, lookup } = fakeLookup();
+  const q = createLookupQueue({ lookup });
+  q.want(['a']);
+  await tick();
+  calls[0].resolve({ title: 'A', library: { state: 'none', tracks_on_disk: 0, tracks_total: 2 } });
+  await tick();
+  q.refresh(['a', 'b']);
+  await tick();
+  assert.equal(calls.length, 2, 'only a wanted link with an answer is looked up again');
+  assert.equal(q.status('a').state, 'ready', 'the old answer shows while the refresh runs');
+  calls[1].resolve({ title: 'A', library: { state: 'complete', tracks_on_disk: 2, tracks_total: 2 } });
+  await tick();
+  assert.equal(q.status('a').data.library.state, 'complete');
+  q.refresh(['a']);
+  await tick();
+  calls[2].reject(new Error('502'));
+  await tick();
+  assert.equal(q.status('a').data.library.state, 'complete', 'a failed refresh keeps the answer');
 });
 
 test('the feed keeps an earlier-job answer live', () => {

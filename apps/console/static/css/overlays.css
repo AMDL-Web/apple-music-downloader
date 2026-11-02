@@ -284,6 +284,10 @@
   font-weight: 500;
 }
 
+.ask-note {
+  margin: 0;
+}
+
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;

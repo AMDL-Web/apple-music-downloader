@@ -1,11 +1,11 @@
 // A Queue row's "…" menu (items from lib/jobactions.js rowMenu): Show
 // details opens the drawer, Move to top and Move to bottom reorder a queued
 // job (views/queue-order.js), Cancel and Retry act at once, Copy link copies
-// the job's link, and Delete… asks first. One job's action runs alone, so
+// the job's link, and Download again… and Delete… ask first. One job's action runs alone, so
 // the selection bar (a bulk run) stays out of it.
 
 import { html, useState } from '../ui/preact.js';
-import { cancelDownload, retryDownload, deleteDownload } from '../api.js';
+import { cancelDownload, retryDownload, deleteDownload, createDownload } from '../api.js';
 import { jobTitle, isUnresolved, inputLabel } from '../lib/format.js';
 import { rowMenu, actionError, bulkSummary } from '../lib/jobactions.js';
 import { useApp, copyText } from '../ui/components.js';
@@ -46,12 +46,14 @@ export async function runOne(app, action, job) {
 export function JobMenu({ job, href, onLeaving, place, onMove }) {
   const app = useApp();
   const [asking, setAsking] = useState(false);
+  const [again, setAgain] = useState(false);
   const [busy, setBusy] = useState(false);
   const name = jobName(job);
   const choose = (id) => {
     if (id === 'details') app.navigate(href);
     else if (id === 'copy') copyText(app, job.input);
     else if (id === 'delete') setAsking(true);
+    else if (id === 'again') setAgain(true);
     else if (id === 'top' || id === 'bottom') onMove(id);
     else {
       onLeaving(job.id);
@@ -64,6 +66,19 @@ export function JobMenu({ job, href, onLeaving, place, onMove }) {
     await runOne(app, 'delete', job);
     setBusy(false);
     setAsking(false);
+  };
+  // The job's own overrides again, with force_overwrite: the server queues
+  // this job again under its id and replaces its files.
+  const downloadAgain = async () => {
+    setBusy(true);
+    try {
+      await createDownload({ urls: [job.input], overrides: { ...(job.overrides || {}), force_overwrite: true } });
+      app.toast({ message: `Downloading “${jobTitle(job)}” again`, role: 'success' });
+    } catch (error) {
+      app.toast({ message: actionError('again', error), role: 'danger' });
+    }
+    setBusy(false);
+    setAgain(false);
   };
   const short = name.length > TITLE_MAX ? `${name.slice(0, TITLE_MAX - 1)}…` : name;
   return [
@@ -87,6 +102,17 @@ export function JobMenu({ job, href, onLeaving, place, onMove }) {
           onConfirm=${remove}
           onCancel=${() => setAsking(false)}
         >The download and its history leave the queue. Files already saved stay on disk.</${ConfirmDialog}>`
+      : null,
+    again
+      ? html`<${ConfirmDialog}
+          key="again"
+          title=${`Download “${short}” again?`}
+          confirmLabel="Download again"
+          busyLabel="Queueing…"
+          busy=${busy}
+          onConfirm=${downloadAgain}
+          onCancel=${() => setAgain(false)}
+        >Replaces its files on disk.</${ConfirmDialog}>`
       : null,
   ];
 }
