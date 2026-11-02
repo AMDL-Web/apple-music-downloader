@@ -19,7 +19,7 @@ const (
 	LibraryApple
 )
 
-// Record list filters, as GET /library/{kind} takes them: a state, or a
+// Record list filters, as GET /library/{kind} takes them: a state, and a
 // flag.
 const (
 	FilterAll        = ""
@@ -61,12 +61,14 @@ func (r Record) Mark() *domain.ResourceMark {
 // its filter, the counts and the last disk check, the adds the resolver
 // gave up on, and the Apple library tab's list.
 type Library struct {
-	Tab    LibraryTab
-	Filter string
-	Status SearchStatus
-	Err    string
-	Rows   []Record
-	Total  int
+	Tab LibraryTab
+	// Filter is the state the list selects ("" for any), Flag the flag
+	// ("" for any).
+	Filter, Flag string
+	Status       SearchStatus
+	Err          string
+	Rows         []Record
+	Total        int
 	// Summary is nil until read.
 	Summary *client.LibrarySummary
 	// Failed are the adds the resolver gave up on ("Couldn't add").
@@ -137,13 +139,14 @@ func (s *Store) SetLibraryTab(tab LibraryTab) {
 	l.refresh(s)
 }
 
-// SetLibraryFilter lists the records filter selects.
-func (s *Store) SetLibraryFilter(filter string) {
+// SetLibraryFilter lists the records in state filter ("" for any) that
+// carry flag ("" for any).
+func (s *Store) SetLibraryFilter(filter, flag string) {
 	l := &s.Library
-	if l.Filter == filter {
+	if l.Filter == filter && l.Flag == flag {
 		return
 	}
-	l.Filter, l.Rows, l.Total, l.Status = filter, nil, 0, SearchIdle
+	l.Filter, l.Flag, l.Rows, l.Total, l.Status = filter, flag, nil, 0, SearchIdle
 	l.refresh(s)
 }
 
@@ -186,7 +189,7 @@ func (l *Library) refresh(s *Store) {
 		return
 	}
 	l.gen++
-	gen, tab, filter := l.gen, l.Tab, l.Filter
+	gen, tab := l.gen, l.Tab
 	if l.Rows == nil && tab != LibraryApple {
 		l.Status, l.Err = SearchLoading, ""
 	}
@@ -211,11 +214,11 @@ func (l *Library) refresh(s *Store) {
 		return
 	}
 	q := client.RecordQuery{Sort: "added", Limit: recordPage}
-	switch filter {
-	case FilterComplete, FilterPartial, FilterNone:
-		q.State = []string{filter}
-	case FilterFailed, FilterGivenUp, FilterMissing, FilterPaused:
-		q.Flag = []string{filter}
+	if l.Filter != "" {
+		q.State = []string{l.Filter}
+	}
+	if l.Flag != "" {
+		q.Flag = []string{l.Flag}
 	}
 	go func() {
 		rows, total, err := readRecords(ctx, c, tab, q)

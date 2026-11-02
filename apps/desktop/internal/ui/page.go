@@ -370,7 +370,7 @@ func (a *App) pageActions(c *ui.Context, k *Tokens, p *store.AlbumPage, j *store
 			// A download the feed does not hold, past the newest it lists.
 			pill(c, k, pillRun, icDown, "In the queue")
 		case mark == store.MarkPaused:
-			if clicked(button(c, k, buttonOnArt, "Resume", nil).Label("Resume "+h.Name)) {
+			if clicked(button(c, k, buttonOnArt, "Resume", nil).Label("Resume " + h.Name)) {
 				a.download(h)
 			}
 		case wait:

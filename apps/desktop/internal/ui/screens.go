@@ -71,6 +71,8 @@ func (a *App) screen(c *ui.Context, k *Tokens, s Screen, page float32) {
 		a.albumScreen(c, k, page)
 	case ScreenQueue:
 		a.queueScreen(c, k, a.compact)
+	case ScreenLibrary:
+		a.libraryScreen(c, k, a.compact)
 	default:
 		a.home(c, k, page)
 	}
