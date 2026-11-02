@@ -19,7 +19,7 @@ export const markHref = (mark, jobHref) => (mark.job ? jobHref(mark.job.id) : ma
 
 /** Props: mark, href, focusable (false: Open is out of the Tab order). */
 export function MarkNote({ mark, href, focusable = true }) {
-  const text = markWords(mark).replaceAll(' ', ' ');
+  const text = markWords(mark).replaceAll(' ', '\u00a0');
   return html`<span class="new-link-prior" data-state=${mark.state}>
     <${Icon} name=${ICONS[mark.state]} size="sm" />
     <span
