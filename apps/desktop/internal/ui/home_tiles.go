@@ -108,7 +108,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 			}
 			// The cover flies, not the button: its shadow stays with the
 			// screen, which fades it out and back in as the page comes and
-			// goes, so the tile has it when the cover lands (flyShadow).
+			// goes, so the tile has it when the cover lands (flyCover).
 			open.Cursor(ui.CursorPointer).Children(func() {
 				cover := widgets.Cover{Image: a.Art.Get(h.ArtworkURL, int(2*size)), Placeholder: hitPalette(h).Bg, Size: size, Radius: radius, Color: 1}.Show(c)
 				a.flySource(cover, "hit:"+hk, partCover, "", radius)

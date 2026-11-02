@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -100,7 +99,9 @@ const (
 // window as the frame before showed it, what it says, and its font size,
 // or a cover's corner radius; a text's or a tag's color, a text's widest
 // line, and build, which builds it again (flightCopies); whether a tag is
-// gilt, and whether it is a tile's glass hint rather than a tag.
+// gilt, and whether it is a tile's glass hint rather than a tag; a cover's
+// tone (widgets.Cover's Color), dim and how much of a hero cover's shadow
+// it drops, which the page's cover takes on its way (flySourceCover).
 type flightSrc struct {
 	box   ui.Rect
 	text  string
@@ -110,6 +111,8 @@ type flightSrc struct {
 	build func() ui.Element
 	hi    bool
 	ok    bool
+
+	tone, dim, shadow float32
 }
 
 // flightText is where a text of the page that morphs is laid out, its
@@ -415,17 +418,20 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 	}
 }
 
-// flyShadow is how much of its shadow the album page's cover drops in this
-// frame: all of it, but on the way to or from a cover with none, as a
-// row's, or one whose shadow stays with its screen, as a search tile's
-// (hitTile), as much as it has come of the way. The queue's hero drops one
-// as large.
-func (a *App) flyShadow() float32 {
+// flyCover is the album page's cover's tone, dim and shadow in this frame
+// (widgets.Cover's Color, Dim and Shadow): its own, but on the way to or
+// from the cover it flies from, as far between the two as it has come, a
+// search tile's shadow staying with its screen (hitTile); and
+// whether they change every frame, which the cover then shows at once
+// rather than easing to.
+func (a *App) flyCover() (tone, dim, shadow float32, jump bool) {
 	f := &a.fly
-	if !f.moving || f.still || !f.src[partCover].ok || strings.HasPrefix(f.from, "hero:") {
-		return 1
+	src := f.src[partCover]
+	if !f.moving || f.still || !src.ok {
+		return 1, 0, 1, false
 	}
-	return f.travel()
+	t := f.travel()
+	return lerp(src.tone, 1, t), lerp(src.dim, 0, t), lerp(src.shadow, 1, t), true
 }
 
 // flyText shows el, a text of the album page set as span in color, at

@@ -137,7 +137,9 @@ func (a *App) wallCover(c *ui.Context, k *Tokens, j *store.Job, size float32) {
 	}
 	t.Cursor(ui.CursorPointer).Children(func() {
 		frame := ui.Box(c).Size(size, size).Radius(radiusControl).Scale(1+0.06*lift, 1+0.06*lift)
-		a.flySource(frame, "wall:"+j.ID, partCover, "", radiusControl)
+		// A lifted cover's shadow is a hero cover's at its size, which the
+		// page's cover keeps as it leaves.
+		a.flySourceCover(frame, "wall:"+j.ID, radiusControl, 1, 0, lift)
 		if lift > 0.01 {
 			frame.Shadow(0, 10*lift, 24*lift, 0, ui.RGBA(0, 0, 0, 0.45*lift))
 		}

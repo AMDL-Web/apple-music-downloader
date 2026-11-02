@@ -406,7 +406,7 @@ func (a *App) heroCover(c *ui.Context, j *store.Job, show func() ui.Element) {
 		a.OpenJob(j.ID)
 	}
 	b.Cursor(ui.CursorPointer).Scale(1+0.02*lift, 1+0.02*lift).Children(func() {
-		a.flySource(show(), heroFrom(j), partCover, "", radiusCover)
+		a.flySourceCover(show(), heroFrom(j), radiusCover, 1, 0, 1)
 	})
 }
 
@@ -454,7 +454,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 			dim = 0.3
 		}
 		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 88), Placeholder: pal.Bg, Size: 44, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
-		a.flySource(cover, "row:"+j.ID, partCover, "", radiusInner)
+		a.flySourceCover(cover, "row:"+j.ID, radiusInner, color, dim, 0)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(13.5).FontWeight(600).Ellipsis("…").SingleLine()
 			ui.Text(c, rowSubtitle(j)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()

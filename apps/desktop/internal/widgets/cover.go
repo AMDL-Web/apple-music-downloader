@@ -18,6 +18,9 @@ type Cover struct {
 	Color       float32
 	// Dim darkens a grayscale cover, as a queued or failed job's.
 	Dim float32
+	// Jump shows Color at once rather than easing to it, for a caller that
+	// moves it every frame, as the album page's flight does.
+	Jump bool
 	// Shadow is how much of a hero cover's large soft shadow it drops: 0
 	// none, 1 all of it.
 	Shadow float32
@@ -56,7 +59,12 @@ func (cv Cover) Show(c *ui.Context) ui.Element {
 	}
 	box.InsetShadow(0, 0, 0, 1, ui.RGBA(255, 255, 255, 0.06))
 	color := min(max(cv.Color, 0), 1)
-	shown := box.AnimateTo("color", color, ui.Smooth)
+	shown := color
+	if cv.Jump {
+		box.Jump("color", color)
+	} else {
+		shown = box.AnimateTo("color", color, ui.Smooth)
+	}
 	// How far each picture is from showing alone, mid-swap (away): the
 	// still's grows as the video comes in, the video's as it goes.
 	still, moving := float32(0), float32(0)

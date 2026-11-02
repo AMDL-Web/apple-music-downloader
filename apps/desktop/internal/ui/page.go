@@ -236,7 +236,9 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 		artwork = j.ArtworkURL
 	}
 	h.cover = func(size float32) ui.Element {
-		return widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: 1, Shadow: a.flyShadow(), Video: video}.Show(c).Label("Artwork")
+		tone, dim, shadow, jump := a.flyCover()
+		return widgets.Cover{Image: a.Art.Get(artwork, 512), Placeholder: pal.Bg, Size: size, Radius: radiusCover, Color: tone, Dim: dim, Jump: jump,
+			Shadow: shadow, Video: video}.Show(c).Label("Artwork")
 	}
 	// What the download made of it, once known, stands for what the album
 	// offers.

@@ -12,6 +12,7 @@ import (
 
 	"amdl/apps/desktop/internal/store"
 	"amdl/internal/client"
+	"amdl/internal/domain"
 )
 
 // The way back from an album to its search tile, watched frame by frame:
@@ -232,5 +233,66 @@ func TestAnArtistOpensFromTheTopOfItsOwnView(t *testing.T) {
 	back, ok := tt.Find("Back to the results")
 	if st.Y != 0 || !ok || back.H <= 0 || back.Y < 0 || back.Y > 800 {
 		t.Errorf("the artist's page shows from %v, its header at %v (%v)", st.Y, back, ok)
+	}
+}
+
+// A failed download's row shows its cover grey and dimmed; the page's cover
+// leaves it so, and colors in as it flies, rather than in full color from
+// the first frame.
+func TestARowsGreyCoverColorsInAsItFlies(t *testing.T) {
+	a, run := demoApp(t)
+	a.PageMotion = true
+	s := a.Store
+	run(func() bool { return s.Loaded })
+	var failed *store.Job
+	for _, j := range s.Jobs {
+		if j.Status == domain.JobFailed {
+			failed = j
+		}
+	}
+	if failed == nil {
+		t.Fatal("the demo has no failed download")
+	}
+	a.Go(ScreenQueue)
+	a.Tab = int(store.TabFailed)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	run(func() bool {
+		tt.Advance(filmFrame)
+		return a.Art.Get(failed.ArtworkURL, 88) != nil && a.Art.Get(failed.ArtworkURL, 512) != nil
+	})
+	tt.Advance(time.Second)
+	if err := tt.Click(failed.Name()); err != nil {
+		t.Fatalf("no row for %q: %v", failed.Name(), err)
+	}
+	saturation := func(r ui.Rect) int {
+		img := tt.Image()
+		s := float32(img.Bounds().Dx()) / 1280
+		hi := 0
+		for dy := float32(-0.3); dy <= 0.3; dy += 0.1 {
+			for dx := float32(-0.3); dx <= 0.3; dx += 0.1 {
+				p := img.RGBAAt(int((r.X+r.W*(0.5+dx))*s), int((r.Y+r.H*(0.5+dy))*s))
+				hi = max(hi, int(max(p.R, p.G, p.B))-int(min(p.R, p.G, p.B)))
+			}
+		}
+		return hi
+	}
+	// In the first frame the page's cover is where the row's was.
+	tt.Advance(filmFrame)
+	if !a.fly.moving || !a.fly.src[partCover].ok {
+		t.Fatal("the page does not fly from the row")
+	}
+	first := saturation(a.fly.src[partCover].box)
+	flyFrames(a, tt, 120)
+	page, ok := tt.Find("Artwork")
+	if !ok {
+		t.Fatal("no cover on the page")
+	}
+	landed := saturation(page)
+	if landed < 40 {
+		t.Fatalf("the landed cover shows saturation %d: no colors to compare", landed)
+	}
+	if first > landed/2 {
+		t.Errorf("the cover left the grey row with saturation %d of the landed %d: it was in color from the start", first, landed)
 	}
 }

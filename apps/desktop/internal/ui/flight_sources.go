@@ -12,7 +12,7 @@ func (a *App) flySource(el ui.Element, from string, part flightPart, text string
 	if !f.moving || f.still || from == "" || from != f.from {
 		return
 	}
-	f.src[part] = flightSrc{box: el.Bounds(), text: text, size: size, ok: true}
+	f.src[part] = flightSrc{box: el.Bounds(), text: text, size: size, ok: true, tone: 1}
 	if p := f.pairWas[part]; p == flies || p == morphs || p == swaps {
 		el.Invisible()
 	}
@@ -70,4 +70,15 @@ func (a *App) flySourceBadge(el ui.Element, from string, part flightPart, build 
 	}
 	a.fly.src[part] = flightSrc{box: el.Bounds(), build: build, ok: true}
 	el.Invisible()
+}
+
+// flySourceCover marks el, the cover of the element from with corners of
+// radius, as flySource does, with its tone and dim (widgets.Cover's Color
+// and Dim) and how much of a hero cover's shadow it drops: the page's cover
+// leaves and lands with them (flyCover), not with its own.
+func (a *App) flySourceCover(el ui.Element, from string, radius, tone, dim, shadow float32) {
+	a.flySource(el, from, partCover, "", radius)
+	if src := &a.fly.src[partCover]; src.ok {
+		src.tone, src.dim, src.shadow = tone, dim, shadow
+	}
 }
