@@ -36,6 +36,10 @@ wins when they disagree, so details are not copied here.
 | Simulate mode | Real catalog data and media selection, then the real pipeline over a pretend media backend: paced transfers, no disk writes, no wrapper or ffmpeg | `internal/media#simulatedMedia` |
 | Media backend | The I/O side of the per-track pipeline (transfers, wrapper, ffmpeg, disk); production and simulate mode differ only here | `internal/media#mediaBackend` |
 | Path template | The format that decides where a finished track lands: one library template for songs, albums and artists, one each for playlists and stations | `internal/media#libraryTrackPath`, `internal/media#outputPath` |
+| Library, library layout | The folder tree songs, albums and artists share under `download.library_path_format`: one path per track whichever job type downloads it, and a file there counts as downloaded. Playlists and stations are not part of it | [docs/download-pipeline.md](docs/download-pipeline.md#library-and-skipping) |
+| On disk, library state | Whether a track's file is at its library path; `library` (`complete`, `partial` with a count, `none`) sums it for an album or song, exact from its track list or estimated from a folder count for album cards | `internal/domain#LibraryState` |
+| Queue entry | The one job row a link keeps: a new submit of a finished link queues that row again under its id (`requeued`), and `prior_job` names it; stations get a new row each time | `internal/jobs#Manager.SubmitBatch` |
+| Download again | A submit with `force_overwrite`: nothing on disk is skipped, and each file is replaced once its new copy is complete | [docs/download-pipeline.md](docs/download-pipeline.md#library-and-skipping) |
 | Quality label | The `{Quality}` path value, such as `24-bit/96 kHz` or `256Kbps` | `internal/media#qualityLabel` |
 | Standalone cover | `cover.<ext>` or `artist.<ext>` written next to the audio | [docs/download-pipeline.md](docs/download-pipeline.md#standalone-covers) |
 
