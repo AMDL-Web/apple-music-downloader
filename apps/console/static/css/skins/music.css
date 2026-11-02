@@ -1671,9 +1671,17 @@
 }
 
 :root[data-skin="music"] .drawer-head > .art {
+  align-self: start;
   width: 112px;
   height: 112px;
   box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--art-t1, var(--text-primary)) 60%, transparent);
+}
+
+/* The cover stays put when a line joins the text: the text is centered
+   beside it while shorter and grows downward past it. */
+:root[data-skin="music"] .drawer-head-text {
+  justify-content: center;
+  min-height: 112px;
 }
 
 :root[data-skin="music"] .drawer-title {
@@ -3089,7 +3097,7 @@
   }
 
   /* A finished job has one row: the cover is centered beside it. */
-  :root[data-skin="music"] :is([data-section="jobs"], .new-results) .job-row[data-progress="off"] > .art {
+  :root[data-skin="music"] [data-section="jobs"] .job-row[data-progress="off"] > .art {
     grid-row: 1;
     align-self: center;
   }
@@ -3128,6 +3136,10 @@
   :root[data-skin="music"] .drawer-head > .art {
     width: 88px;
     height: 88px;
+  }
+
+  :root[data-skin="music"] .drawer-head-text {
+    min-height: 88px;
   }
 
   :root[data-skin="music"] .drawer-title {

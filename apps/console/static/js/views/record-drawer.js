@@ -1,8 +1,9 @@
 // Record drawer (#/library/albums/:id, #/library/playlists/:id): one album or
 // playlist record from GET /library/{kind}/{id}. The head (cover, title,
 // artist, facts with the tracks the storefront withholds, its state and
-// Paused), the actions (Pause or Resume, Download missing, Reset, Add
-// quality, Check this album, Remove from amdl), how its last disk check
+// Paused), the actions (Pause or Resume, Reset, Add quality, Download
+// missing last, so it appears without moving the others, then Check this
+// album and Remove from amdl), how its last disk check
 // ended, each track with its main slot's state and its other qualities as
 // chips, and its runs. Kept fresh by the feed's resource_updated and
 // check_updated; what it changes it tells the app (recordsChanged), since
@@ -172,16 +173,20 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
         setChecked(mine.check);
         if (!mine.check.aborted_reason && said.current !== mine.check.id) {
           said.current = mine.check.id;
-          app.toast({ message: checkText(mine.check), role: 'success' });
+          app.toast({ key: `check:${scope}`, message: checkText(mine.check), role: 'success' });
         }
       }),
     [kind, record.id],
   );
+  // One toast per check: "Checking its files", then its result in its place.
   const check = (force = false) =>
-    act('check', () => {
+    act('check', async () => {
       setChecked(null);
-      return startCheck(checkBody(checkScope(kind, record.id), force));
-    }, 'Checking its files');
+      const scope = checkScope(kind, record.id);
+      const out = await startCheck(checkBody(scope, force));
+      if (!(out && out.check && said.current === out.check.id)) app.toast({ key: `check:${scope}`, message: 'Checking its files', role: 'success' });
+      return out;
+    });
   const remove = async () => {
     setBusy('delete');
     try {
@@ -217,22 +222,20 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
         ${record.paused
           ? html`<${Button} variant="primary" icon="play" disabled=${Boolean(busy)} onClick=${() => act('resume', () => resumeRecord(kind, record.id), 'Resumed')}>Resume</${Button}>`
           : html`<${Button} icon="pause" disabled=${Boolean(busy)} onClick=${() => act('pause', () => pauseRecord(kind, record.id), 'Paused')}>Pause</${Button}>`}
-        ${record.tracks_missing
-          ? html`<${Button} icon="download" disabled=${Boolean(busy) || active} title=${active ? 'Pause it first' : undefined} onClick=${() => act('missing', () => resetRecord(kind, record.id, { what: 'audio', states: ['missing'] }), (out) => resetNote(out, record, `Downloading ${count(record.tracks_missing)} missing`))}>Download missing</${Button}>`
-          : null}
         <${MenuButton} className="record-reset" text="Reset" icon="rotate" label="Reset" title=${active ? 'Pause it first' : undefined} heading=${name} disabled=${Boolean(busy) || active} items=${RESET_ITEMS} onChoose=${onReset} />
-        ${doneTracks
-          ? html`<${MenuButton}
-              className="record-add"
-              text="Add quality"
-              icon="plus"
-              label="Add quality"
-              title=${active ? 'Pause it first' : undefined}
-              heading="Add quality"
-              disabled=${Boolean(busy) || active}
-              items=${slotChoices([]).map((c) => ({ id: c, label: CHOICE_LABEL[c] || c }))}
-              onChoose=${addQuality}
-            />`
+        <${MenuButton}
+          className="record-add"
+          text="Add quality"
+          icon="plus"
+          label="Add quality"
+          title=${active ? 'Pause it first' : undefined}
+          heading="Add quality"
+          disabled=${Boolean(busy) || active || !doneTracks}
+          items=${slotChoices([]).map((c) => ({ id: c, label: CHOICE_LABEL[c] || c }))}
+          onChoose=${addQuality}
+        />
+        ${record.tracks_missing
+          ? html`<${Button} icon="download" className="record-missing" disabled=${Boolean(busy) || active} title=${active ? 'Pause it first' : undefined} onClick=${() => act('missing', () => resetRecord(kind, record.id, { what: 'audio', states: ['missing'] }), (out) => resetNote(out, record, `Downloading ${count(record.tracks_missing)} missing`))}>Download missing</${Button}>`
           : null}
       </div>
       <div class="drawer-actions-row">

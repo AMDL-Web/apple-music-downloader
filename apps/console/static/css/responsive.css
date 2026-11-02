@@ -344,7 +344,7 @@
 
   /* Actions fill their rows evenly, except Remove: it keeps its own width
      at the row's end, away from where a thumb reaches for the others. */
-  .drawer-actions .btn {
+  .drawer-actions-row > .btn {
     flex: 1 1 auto;
   }
 
@@ -355,6 +355,17 @@
 
   .drawer-actions .confirm {
     flex-basis: 100%;
+  }
+
+  /* A notice's action goes under its text, which keeps the full width. */
+  .drawer-actions .notice {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .drawer-actions .notice > .btn {
+    grid-column: 2;
+    justify-self: start;
   }
 
   /* The selection bar keeps select-all, the count and the actions on one row:
