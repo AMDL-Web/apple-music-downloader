@@ -85,7 +85,7 @@ func TestManagerDeleteSurvivesCorruptOverridesRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.Exec(`UPDATE jobs SET overrides='{broken' WHERE id=?`, failed.ID); err != nil {
+	if _, err := raw.Exec(`UPDATE runs SET overrides='{broken' WHERE id=?`, failed.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := raw.Close(); err != nil {

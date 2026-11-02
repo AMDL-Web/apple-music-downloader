@@ -126,7 +126,7 @@ func TestRecoverUnfinishedRunsLegacyOverridesRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := `{"media_user_token":"old-token","hooks":["notify"],"downloads_dir":"/elsewhere","force_overwrite":true}`
-	if _, err := raw.Exec(`UPDATE jobs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
+	if _, err := raw.Exec(`UPDATE runs SET overrides=? WHERE id=?`, legacy, job.ID); err != nil {
 		_ = raw.Close()
 		t.Fatal(err)
 	}
