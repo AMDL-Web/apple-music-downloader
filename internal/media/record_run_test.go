@@ -800,8 +800,9 @@ func TestRecordRunRenamesASlotThatNeverCompleted(t *testing.T) {
 	if _, err := h.store.ReleaseRunSlots(ctx, "run-earlier", now); err != nil {
 		t.Fatal(err)
 	}
+	// The record is already added, so the picker queues its run; a submit
+	// here would race it and could answer duplicate_active.
 	h.start()
-	h.submit("https://music.apple.com/cn/album/album/100")
 	h.waitFor("the album", h.albumComplete("100"))
 	h.waitFor("the run to end", h.idle())
 	f := h.files(domain.ResourceAlbum, "100")[0]

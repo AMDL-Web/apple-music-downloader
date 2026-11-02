@@ -72,6 +72,11 @@ func (m *Manager) pickOnce(ctx context.Context) {
 		if b, held := m.backoff[recordKey{ref.Kind, ref.ID}]; held && (b.givenUp || now.Before(b.until)) {
 			continue
 		}
+		// The list was read before m.mu: a Pause since then has stopped the
+		// record's run, so without this check the record would get a new one.
+		if st, err := m.recordStatus(ctx, ref.Kind, ref.ID); err != nil || st.paused || st.catalog != domain.CatalogOK {
+			continue
+		}
 		job, created, err := m.queueRecordRunLocked(ctx, ref.Kind, ref.ID, m.pickTrigger(ctx, ref), nil)
 		switch {
 		case errors.Is(err, ErrQueueFull):
