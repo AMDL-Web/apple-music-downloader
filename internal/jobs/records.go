@@ -297,8 +297,9 @@ func (m *Manager) Reset(ctx context.Context, r ResetRequest) (ResetResult, error
 		}
 		result.Slots = n
 		if r.What == ResetAll {
-			// TODO(P2 media): set cover_state pending once the store has a
-			// cover-state write.
+			if err := m.store.SetCoverStates(ctx, r.Kind, r.ID, domain.CoverPending, domain.CoverPending, now); err != nil {
+				return ResetResult{}, err
+			}
 			if err := m.store.SetPaused(ctx, r.Kind, r.ID, false, now); err != nil {
 				return ResetResult{}, err
 			}
@@ -306,6 +307,9 @@ func (m *Manager) Reset(ctx context.Context, r ResetRequest) (ResetResult, error
 	case ResetLyrics:
 		plan = &Plan{Scope: ScopeLyrics, SongIDs: r.SongIDs}
 	case ResetCovers:
+		if err := m.store.SetCoverStates(ctx, r.Kind, r.ID, domain.CoverPending, domain.CoverPending, now); err != nil {
+			return ResetResult{}, err
+		}
 		plan = &Plan{Scope: ScopeCovers, SongIDs: r.SongIDs}
 	default:
 		return ResetResult{}, fmt.Errorf("unknown reset %q", r.What)

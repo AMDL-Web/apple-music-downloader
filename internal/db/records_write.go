@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"amdl/internal/config"
@@ -183,6 +184,16 @@ type AlbumRead struct {
 func (s *Store) ApplyAlbumRead(ctx context.Context, read AlbumRead) error {
 	_, err := withTx(ctx, s.db, func(tx *sql.Tx) (struct{}, error) {
 		a := read.Album
+		// A track-list read carries no animated cover; keep the one the
+		// motion-artwork backfill stored (SetAlbumMotionArtwork).
+		if a.Artwork.MotionSquareURL == "" && a.Artwork.MotionTallURL == "" {
+			var stored string
+			if err := tx.QueryRowContext(ctx, `SELECT artwork FROM albums WHERE id = ?`, a.ID).Scan(&stored); err == nil {
+				if prev, err := decodeArtwork(stored); err == nil {
+					keepMotion(&a.Artwork, prev)
+				}
+			}
+		}
 		artwork, err := json.Marshal(a.Artwork)
 		if err != nil {
 			return struct{}{}, err
@@ -276,6 +287,58 @@ func (s *Store) ApplyPlaylistRead(ctx context.Context, read PlaylistRead) error 
 		return struct{}{}, recomputeRollup(ctx, tx, domain.ResourcePlaylist, p.ID, read.Now)
 	})
 	return err
+}
+
+// keepMotion copies prev's animated covers into a.
+func keepMotion(a *domain.Artwork, prev domain.Artwork) {
+	a.MotionSquareURL, a.MotionTallURL = prev.MotionSquareURL, prev.MotionTallURL
+	a.MotionSquareColors, a.MotionTallColors = prev.MotionSquareColors, prev.MotionTallColors
+}
+
+// SetAlbumMotionArtwork stores an album's animated covers in its artwork,
+// keeping the still cover. ErrRecordNotFound when the album is gone.
+func (s *Store) SetAlbumMotionArtwork(ctx context.Context, id string, motion domain.Artwork, now time.Time) error {
+	_, err := withTx(ctx, s.db, func(tx *sql.Tx) (struct{}, error) {
+		var stored string
+		err := tx.QueryRowContext(ctx, `SELECT artwork FROM albums WHERE id = ?`, id).Scan(&stored)
+		if errors.Is(err, sql.ErrNoRows) {
+			return struct{}{}, ErrRecordNotFound
+		}
+		if err != nil {
+			return struct{}{}, err
+		}
+		artwork, err := decodeArtwork(stored)
+		if err != nil {
+			return struct{}{}, err
+		}
+		keepMotion(&artwork, motion)
+		raw, err := json.Marshal(artwork)
+		if err != nil {
+			return struct{}{}, err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE albums SET artwork = ?, updated_at = ? WHERE id = ?`, string(raw), formatTime(now), id)
+		return struct{}{}, err
+	})
+	return err
+}
+
+// SetCoverStates records the outcome of a record's cover.<ext> and, for an
+// album, artist.<ext>. An empty state leaves that column as it is; a
+// playlist has no artist cover.
+func (s *Store) SetCoverStates(ctx context.Context, kind domain.ResourceKind, id string, cover, artist domain.CoverState, now time.Time) error {
+	table, err := recordTable(kind)
+	if err != nil {
+		return err
+	}
+	set, args := []string{"updated_at = ?"}, []any{formatTime(now)}
+	if cover != "" {
+		set, args = append(set, "cover_state = ?"), append(args, string(cover))
+	}
+	if artist != "" && kind == domain.ResourceAlbum {
+		set, args = append(set, "artist_cover_state = ?"), append(args, string(artist))
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE `+table+` SET `+strings.Join(set, ", ")+` WHERE id = ?`, append(args, id)...)
+	return requireRow(res, err)
 }
 
 // SetCatalogState records what a required read said about a record.

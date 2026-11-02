@@ -176,6 +176,12 @@ func (s *Store) MarkFileUnavailable(ctx context.Context, key domain.FileKey, run
 	return s.setFileState(ctx, key, `audio_state = 'unavailable', next_attempt_at = NULL, last_run_id = ?`, []any{runID}, now)
 }
 
+// SetFileLyricsState records a lyrics refresh of a done slot. The audio
+// state and the file are left as they are.
+func (s *Store) SetFileLyricsState(ctx context.Context, key domain.FileKey, state domain.LyricsStatus, now time.Time) error {
+	return s.setFileState(ctx, key, `lyrics_state = ?`, []any{string(state)}, now)
+}
+
 // MarkFileMissing records that a done slot's file is no longer at its path.
 // It reports whether the slot was done.
 func (s *Store) MarkFileMissing(ctx context.Context, key domain.FileKey, now time.Time) (bool, error) {

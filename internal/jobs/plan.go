@@ -105,6 +105,11 @@ func encodePlan(plan Plan) (string, error) {
 // shutdown, which put such slots back to pending. A user pause cancels the
 // run's context with the cause ErrPaused: keep the record's resume
 // checkpoints then.
+//
+// A lyrics run (ScopeLyrics) reports each slot with SlotLyrics instead and
+// leaves its audio state alone; a covers run (ScopeCovers) plans no slots and
+// reports SetCoverStates. Any run may store an album's animated covers with
+// SetRecordMotionArtwork and its cover states with SetCoverStates.
 type RecordReporter interface {
 	Reporter
 	ApplyAlbumRead(ctx context.Context, read db.AlbumRead) error
@@ -115,6 +120,9 @@ type RecordReporter interface {
 	SlotDone(ctx context.Context, runID string, key domain.FileKey, out db.FileOutcome) error
 	SlotFailed(ctx context.Context, runID string, key domain.FileKey, cause error) (domain.AudioState, error)
 	SlotUnavailable(ctx context.Context, runID string, key domain.FileKey) error
+	SlotLyrics(ctx context.Context, runID string, key domain.FileKey, state domain.LyricsStatus) error
+	SetCoverStates(ctx context.Context, kind domain.ResourceKind, id string, cover, artist domain.CoverState) error
+	SetRecordMotionArtwork(ctx context.Context, albumID string, art domain.MotionArtwork) error
 }
 
 var _ RecordReporter = (*Manager)(nil)
@@ -282,6 +290,34 @@ func (m *Manager) SlotFailed(ctx context.Context, runID string, key domain.FileK
 
 func (m *Manager) SlotUnavailable(ctx context.Context, runID string, key domain.FileKey) error {
 	return m.store.MarkFileUnavailable(ctx, key, runID, time.Now().UTC())
+}
+
+// SlotLyrics records a lyrics run's refresh of a done slot.
+func (m *Manager) SlotLyrics(ctx context.Context, _ string, key domain.FileKey, state domain.LyricsStatus) error {
+	return m.store.SetFileLyricsState(ctx, key, state, time.Now().UTC())
+}
+
+// SetCoverStates records a record's cover outcomes; an empty state is left
+// as it is.
+func (m *Manager) SetCoverStates(ctx context.Context, kind domain.ResourceKind, id string, cover, artist domain.CoverState) error {
+	return m.store.SetCoverStates(ctx, kind, id, cover, artist, time.Now().UTC())
+}
+
+// SetRecordMotionArtwork stores an album record's animated covers. An album
+// removed meanwhile is not an error.
+func (m *Manager) SetRecordMotionArtwork(ctx context.Context, albumID string, art domain.MotionArtwork) error {
+	err := m.store.SetAlbumMotionArtwork(ctx, albumID, domain.Artwork{
+		MotionSquareURL: art.SquareURL, MotionTallURL: art.TallURL,
+		MotionSquareColors: artworkColors(art.SquareColors), MotionTallColors: artworkColors(art.TallColors),
+	}, time.Now().UTC())
+	if errors.Is(err, db.ErrRecordNotFound) {
+		return nil
+	}
+	return err
+}
+
+func artworkColors(p domain.ArtworkPalette) domain.ArtworkColors {
+	return domain.ArtworkColors{Bg: p.BgColor, Text1: p.TextColor1, Text2: p.TextColor2, Text3: p.TextColor3, Text4: p.TextColor4}
 }
 
 // errNoSlotOutcome is the failure recorded for a slot a run left without an

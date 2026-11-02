@@ -351,3 +351,46 @@ func TestStoredPath(t *testing.T) {
 		t.Errorf("ResolveStoredPath = %q", got)
 	}
 }
+
+// The animated covers the backfill stores survive the next track-list read,
+// which carries none; cover states and a lyrics refresh touch only their own
+// columns.
+func TestRecordDisplayAndSubtaskWrites(t *testing.T) {
+	store := openRecordStore(t)
+	ctx := context.Background()
+	now := mustTime(t, "2026-11-01T10:00:00Z")
+	_, err := store.AddAlbum(ctx, AlbumAdd{ID: "1", WantedAll: true, Source: domain.SourceManual, Now: now})
+	must(t, err)
+	read := albumRead("1", now, "11")
+	read.Album.Artwork = domain.Artwork{URL: "still", Colors: domain.ArtworkColors{Bg: "000000"}}
+	must(t, store.ApplyAlbumRead(ctx, read))
+	motion := domain.Artwork{MotionSquareURL: "square", MotionTallURL: "tall", MotionSquareColors: domain.ArtworkColors{Bg: "111111"}}
+	must(t, store.SetAlbumMotionArtwork(ctx, "1", motion, now))
+	read.Album.Artwork.URL = "still 2"
+	must(t, store.ApplyAlbumRead(ctx, read))
+	a, err := store.GetAlbum(ctx, "1")
+	must(t, err)
+	if a.Artwork.URL != "still 2" || a.Artwork.MotionSquareURL != "square" || a.Artwork.MotionTallURL != "tall" || a.Artwork.MotionSquareColors.Bg != "111111" {
+		t.Fatalf("artwork = %+v, want the new still cover and the stored motion", a.Artwork)
+	}
+	if err := store.SetAlbumMotionArtwork(ctx, "gone", motion, now); !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("motion for a missing album = %v, want ErrRecordNotFound", err)
+	}
+
+	must(t, store.SetCoverStates(ctx, domain.ResourceAlbum, "1", domain.CoverDone, "", now))
+	must(t, store.SetCoverStates(ctx, domain.ResourceAlbum, "1", "", domain.CoverOff, now))
+	if a, err = store.GetAlbum(ctx, "1"); err != nil || a.CoverState != domain.CoverDone || a.ArtistCoverState != domain.CoverOff {
+		t.Fatalf("cover states = %q/%q (err %v), want done/off", a.CoverState, a.ArtistCoverState, err)
+	}
+
+	key := mainSlot(domain.ResourceAlbum, "1", "11")
+	must(t, store.ClaimPath(ctx, key, "/music/a/01.m4a", "run-1", now))
+	must(t, store.MarkFileDone(ctx, key, FileOutcome{Codec: "alac", QualityLabel: "24-bit/96 kHz", FileSize: 9, LyricsState: domain.LyricsFailed, RunID: "run-1", Now: now}))
+	must(t, store.SetFileLyricsState(ctx, key, domain.LyricsFetched, now))
+	f, err := store.GetFile(ctx, key)
+	must(t, err)
+	if f.LyricsState != domain.LyricsFetched || f.AudioState != domain.AudioDone || f.Codec != "alac" || f.FileSize != 9 || f.Path != "a/01.m4a" {
+		t.Fatalf("file after a lyrics refresh = %+v, want only lyrics_state changed", f)
+	}
+	assertRollupsConsistent(t, store)
+}
