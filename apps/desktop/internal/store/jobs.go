@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -45,6 +46,9 @@ type Activity struct {
 	At   time.Time
 	Text string
 	Kind ActivityKind
+	// id is the event's, which orders the log and keeps an event that
+	// comes again, from a replay, from showing twice.
+	id int64
 }
 
 // ActivityKind colors an activity line.
@@ -390,16 +394,30 @@ func (s *Store) applyDetail(id string, d client.DownloadDetail) {
 	j.recompute(s.now())
 }
 
+// logActivity puts a in the job's activity log in its event's place,
+// newest first, unless the log has that event: the live stream and a
+// replay from the start, which can follow it, arrive interleaved.
+func (j *Job) logActivity(a Activity) {
+	i := sort.Search(len(j.Activity), func(i int) bool { return j.Activity[i].id <= a.id })
+	if i < len(j.Activity) && j.Activity[i].id == a.id {
+		return
+	}
+	if i >= maxActivity {
+		return
+	}
+	j.Activity = slices.Insert(j.Activity, i, a)
+	if len(j.Activity) > maxActivity {
+		j.Activity = j.Activity[:maxActivity]
+	}
+}
+
 func (s *Store) applyEvent(id string, e domain.Event) {
 	j := s.byID[id]
 	if j == nil {
 		return
 	}
 	if text, kind, ok := describe(j, e); ok {
-		j.Activity = append([]Activity{{At: e.CreatedAt, Text: text, Kind: kind}}, j.Activity...)
-		if len(j.Activity) > maxActivity {
-			j.Activity = j.Activity[:maxActivity]
-		}
+		j.logActivity(Activity{At: e.CreatedAt, Text: text, Kind: kind, id: e.ID})
 	}
 	if e.ID <= j.snapshotCursor || len(e.Payload) == 0 {
 		return // history older than the snapshot the store holds

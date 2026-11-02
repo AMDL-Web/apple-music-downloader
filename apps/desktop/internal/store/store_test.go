@@ -257,3 +257,34 @@ func TestTheShownSpeedHoldsItsFigureAWhile(t *testing.T) {
 		t.Errorf("two seconds on, the speed still shows %v", got)
 	}
 }
+
+// A job's activity lists each event once, newest first, however the live
+// stream and a replay from its start arrive: a live follower that saw the
+// last tracks and the finish ends with the job, and the replay the album
+// page starts then brings every event again, oldest first.
+func TestActivityListsEachEventOnceNewestFirst(t *testing.T) {
+	s, _ := newTestStore(t)
+	s.ApplySnapshot(client.DownloadList{Downloads: []domain.Job{{ID: "j", Status: domain.JobRunning, TotalItems: 3}}})
+	saved := func(id int64, index int, sec int) domain.Event {
+		it := domain.JobItem{ID: fmt.Sprint("i", index), Index: index, Status: domain.ItemCompleted}
+		return domain.Event{ID: id, ItemID: it.ID, Type: domain.EventItemCompleted, CreatedAt: at(0).Add(time.Duration(sec) * time.Second), Payload: mustJSON(it)}
+	}
+	queued := domain.Event{ID: 1, Type: domain.EventJobQueued, CreatedAt: at(0), Payload: mustJSON(domain.Job{ID: "j", Status: domain.JobQueued})}
+	finished := domain.Event{ID: 9, Type: domain.EventJobFinished, CreatedAt: at(0).Add(43 * time.Second), Payload: mustJSON(domain.Job{ID: "j", Status: domain.JobCompleted})}
+	live := []domain.Event{saved(7, 2, 42), saved(8, 3, 43), finished}
+	replay := []domain.Event{queued, saved(5, 1, 39), saved(7, 2, 42), saved(8, 3, 43), finished}
+	for _, e := range live {
+		s.applyEvent("j", e)
+	}
+	for _, e := range replay {
+		s.applyEvent("j", e)
+	}
+	var got []string
+	for _, a := range s.Job("j").Activity {
+		got = append(got, a.Text)
+	}
+	want := []string{"Finished", "Track 3 saved", "Track 2 saved", "Track 1 saved", "Queued"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("activity %q, want %q", got, want)
+	}
+}
