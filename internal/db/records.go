@@ -274,3 +274,8 @@ func withTx[T any](ctx context.Context, database *sql.DB, fn func(tx *sql.Tx) (T
 	}
 	return out, nil
 }
+
+// placeholders is n comma-separated "?" for an IN list.
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}

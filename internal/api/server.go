@@ -44,9 +44,6 @@ type Deps struct {
 	// Catalog backs POST /lookup, GET /search, GET /artists/{id}/albums and
 	// GET /albums/{id}.
 	Catalog CatalogService
-	// Library says which tracks of those albums and songs are on disk (the
-	// library fields); nil leaves the fields out.
-	Library LibraryService
 	// Tokens picks the media-user-token for lookups and reports the
 	// wrapper's, masked, on GET /wrapper/status; nil means
 	// catalog.media_user_token alone.
@@ -85,7 +82,6 @@ type Server struct {
 	librarySync  LibrarySyncService
 	appleLibrary AppleLibraryService
 	catalog      CatalogService
-	library      LibraryService
 	tokens       *usertoken.Provider
 	console      http.Handler
 	hooks        HooksService
@@ -129,7 +125,7 @@ func New(deps Deps) (*Server, error) {
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, appleLibrary: deps.AppleLibrary,
-		catalog: deps.Catalog, library: deps.Library, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
+		catalog: deps.Catalog, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())

@@ -9,11 +9,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
-	"amdl/internal/domain"
 )
 
 // sampleSearch is a catalog search as applemusic.Search maps Apple's answer:
@@ -171,62 +169,6 @@ func TestSearchCatalogFailures(t *testing.T) {
 	}
 }
 
-// A hit a job downloaded, or is downloading, names that job; the job's link
-// may be from another storefront. A failed job marks nothing.
-func TestSearchMarksHitsWithTheirJobs(t *testing.T) {
-	catalog := &fakeCatalog{t: t, search: sampleSearch()}
-	server := newServer(t, Deps{Catalog: catalog})
-	ctx := context.Background()
-	created := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
-	finished := created.Add(time.Hour)
-	for _, job := range []domain.Job{
-		{ID: "album-old", Type: "album", CanonicalKey: "album:jp:6814997249", Status: domain.JobCompleted, CreatedAt: created, FinishedAt: &finished},
-		{ID: "album-new", Type: "album", CanonicalKey: "album:us:6814997249", Status: domain.JobCompleted, CreatedAt: created, FinishedAt: ptr(finished.Add(time.Hour))},
-		{ID: "song-failed", Type: "song", CanonicalKey: "song:us:6814997425", Status: domain.JobFailed, CreatedAt: created},
-		{ID: "song-running", Type: "song", CanonicalKey: "song:us:6814997425", Status: domain.JobRunning, CreatedAt: created},
-		{ID: "song-done", Type: "song", CanonicalKey: "song:us:6814997425", Status: domain.JobCompleted, CreatedAt: created.Add(time.Hour), FinishedAt: &finished},
-		{ID: "playlist-done", Type: "playlist", CanonicalKey: "playlist:us:pl.2553030a768547e9ab3e91230de8439f", Status: domain.JobCompleted, CreatedAt: created, FinishedAt: &finished},
-	} {
-		job.Input, job.Storefront, job.UpdatedAt = "input", "us", created
-		if err := server.store.CreateJob(ctx, job); err != nil {
-			t.Fatal(err)
-		}
-	}
-	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/search?term=a&storefront=us", "")
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	var resp struct {
-		Songs, Albums, Playlists struct {
-			Items []struct {
-				PriorJob *struct {
-					ID         string `json:"id"`
-					Status     string `json:"status"`
-					FinishedAt string `json:"finished_at"`
-				} `json:"prior_job"`
-			} `json:"items"`
-		}
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
-		t.Fatal(err)
-	}
-	// The running job comes before a newer completed one: the song is in the
-	// queue now.
-	if got := resp.Songs.Items[0].PriorJob; got == nil || got.ID != "song-running" || got.Status != "running" || got.FinishedAt != "" {
-		t.Fatalf("song prior job = %+v", got)
-	}
-	if got := resp.Albums.Items[0].PriorJob; got == nil || got.ID != "album-new" || got.Status != "completed" || got.FinishedAt != "2026-10-01T10:00:00Z" {
-		t.Fatalf("album prior job = %+v", got)
-	}
-	if got := resp.Playlists.Items[0].PriorJob; got == nil || got.ID != "playlist-done" || got.Status != "completed" {
-		t.Fatalf("playlist prior job = %+v", got)
-	}
-}
-
-func ptr[T any](v T) *T { return &v }
-
-// Each hit's url, submitted, downloads exactly that item under either
-// catalog.album_track_url_mode.
 func TestHitURLsDownloadTheHit(t *testing.T) {
 	for _, c := range []struct {
 		kind     applemusic.URLType

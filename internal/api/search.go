@@ -13,10 +13,7 @@ import (
 	"unicode/utf8"
 
 	"amdl/internal/applemusic"
-	"amdl/internal/db"
 	"amdl/internal/domain"
-	"amdl/internal/jobs"
-	"amdl/internal/logging"
 )
 
 // searchTimeout bounds GET /search and GET /artists/{id}/albums: the console
@@ -61,16 +58,14 @@ type searchHit struct {
 	ContentRating      string             `json:"content_rating,omitempty"`
 	AppleDigitalMaster bool               `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string           `json:"audio_traits,omitempty"`
-	PriorJob           *priorJob          `json:"prior_job,omitempty"`
-	// resolvedTracks is the track count the prior job's last run resolved
-	// (markPriorJobs), 0 when unknown; markAlbumFolders counts against it.
-	resolvedTracks int
+	// PriorJob is not set since 2.0: records, not job history, say what is
+	// downloaded. TODO(P3): the hit's resource replaces it.
+	PriorJob *priorJob `json:"prior_job,omitempty"`
 	// InAppleLibrary is whether the hit is in the user's Apple Music account
 	// library; absent when that is not known (markAppleLibrary).
 	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
-	// Library is an album hit's state from its folder alone
-	// (LibraryService.AlbumFolderStates) or a song hit's from its library
-	// path (LibraryService.SongHitStates); other hits leave it unset.
+	// Library is not set since 2.0, which stats no file before a download.
+	// TODO(P3): the hit's resource replaces it.
 	Library *domain.LibraryState `json:"library,omitempty"`
 }
 
@@ -210,8 +205,6 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := searchResponse{Term: term, Storefront: storefront}
-	var hits []*searchHit
-	var albumHits []*searchHit
 	for _, t := range types {
 		group := &hitGroup{Items: []*searchHit{}, NextOffset: res.NextOffset[t]}
 		switch t {
@@ -219,13 +212,11 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			for _, song := range res.Songs {
 				group.Items = append(group.Items, songHit(storefront, song))
 			}
-			s.markSongFiles(ctx, group.Items, res.Songs)
 			resp.Songs = group
 		case applemusic.SearchAlbums:
 			for _, album := range res.Albums {
 				group.Items = append(group.Items, albumHit(storefront, album))
 			}
-			albumHits = group.Items
 			resp.Albums = group
 		case applemusic.SearchPlaylists:
 			for _, playlist := range res.Playlists {
@@ -239,10 +230,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			resp.Artists = group
 		}
 		s.markAppleLibrary(r.Context(), t, group.Items, res.InLibrary[t])
-		hits = append(hits, group.Items...)
 	}
-	s.markPriorJobs(r.Context(), hits)
-	s.markAlbumFolders(ctx, albumHits, res.Albums)
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -288,8 +276,6 @@ func (s *Server) artistAlbums(w http.ResponseWriter, r *http.Request) {
 	}
 	s.markAppleLibrary(r.Context(), applemusic.SearchArtists, []*searchHit{resp.Artist}, nil)
 	s.markAppleLibrary(r.Context(), applemusic.SearchAlbums, resp.Albums.Items, nil)
-	s.markPriorJobs(r.Context(), append([]*searchHit{resp.Artist}, resp.Albums.Items...))
-	s.markAlbumFolders(ctx, resp.Albums.Items, page.Albums)
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -347,59 +333,4 @@ func parseBrowsePage(q url.Values, def, max int) (limit, offset int, err error) 
 		}
 	}
 	return limit, offset, nil
-}
-
-// markPriorJobs sets prior_job on every hit with a queue entry: the newest
-// queued or running job of the same type and id, else the newest completed
-// one, from a link in any storefront. A song downloaded
-// inside an album or playlist job is not marked. A failed store read leaves the
-// hits unmarked; the search still answers.
-func (s *Server) markPriorJobs(ctx context.Context, hits []*searchHit) {
-	if s.store == nil || len(hits) == 0 {
-		return
-	}
-	typeSet := map[string]bool{}
-	var types, ids []string
-	for _, h := range hits {
-		if !typeSet[string(h.Type)] {
-			typeSet[string(h.Type)] = true
-			types = append(types, string(h.Type))
-		}
-		ids = append(ids, h.ID)
-	}
-	marks, err := s.store.JobMarks(ctx, types, ids)
-	if err != nil {
-		logging.FromContext(ctx, s.logger).Warn("read earlier jobs of search hits; answering without them", "error", err)
-		return
-	}
-	best := map[string]db.JobMark{}
-	for _, m := range marks {
-		jobType, _, id, ok := jobs.ParseCanonicalKey(m.CanonicalKey)
-		if !ok {
-			continue
-		}
-		key := jobType + "\x00" + id
-		if cur, seen := best[key]; !seen || newerMark(m, cur) {
-			best[key] = m
-		}
-	}
-	for _, h := range hits {
-		if m, ok := best[string(h.Type)+"\x00"+h.ID]; ok {
-			h.PriorJob = &priorJob{ID: m.ID, Status: m.Status, FinishedAt: m.FinishedAt}
-			h.resolvedTracks = m.TotalItems
-		}
-	}
-}
-
-// newerMark orders the jobs of one item: a queued or running job before a
-// completed one, then the newest.
-func newerMark(a, b db.JobMark) bool {
-	aActive, bActive := a.Status != domain.JobCompleted, b.Status != domain.JobCompleted
-	if aActive != bActive {
-		return aActive
-	}
-	if aActive || a.FinishedAt == nil || b.FinishedAt == nil {
-		return a.CreatedAt.After(b.CreatedAt)
-	}
-	return a.FinishedAt.After(*b.FinishedAt)
 }

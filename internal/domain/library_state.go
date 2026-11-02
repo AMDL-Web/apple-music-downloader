@@ -10,9 +10,11 @@ const (
 	LibraryComplete LibraryStatus = "complete"
 )
 
-// LibraryState is how many of an album's tracks have a file at their library
-// path (download.library_path_format). The downloaded state follows the
-// files, never job history.
+// LibraryState is the `library` field of search hits, lookups and the album
+// page: how many of an album's tracks had a file at their library path. The
+// backend no longer fills it, since records and not files say what is
+// downloaded; the clients and the demo still read it. TODO(P3): the record's
+// `resource` replaces it and this file goes.
 type LibraryState struct {
 	State        LibraryStatus `json:"state"`
 	TracksOnDisk int           `json:"tracks_on_disk"`
