@@ -152,14 +152,26 @@ func (c *Client) DownloadRecord(ctx context.Context, kind domain.ResourceKind, i
 }
 
 // PauseRecord cancels a record's run and keeps the scheduler from queuing
-// it until ResumeRecord.
-func (c *Client) PauseRecord(ctx context.Context, kind domain.ResourceKind, id string) error {
-	return c.do(ctx, http.MethodPost, recordPath(kind, id)+"/pause", nil, nil, nil, http.StatusOK)
+// it until ResumeRecord. It returns the record's mark as the answer has it:
+// the feed sends none when no run moved.
+func (c *Client) PauseRecord(ctx context.Context, kind domain.ResourceKind, id string) (domain.ResourceMark, error) {
+	return c.recordMark(ctx, kind, id, "/pause")
 }
 
-// ResumeRecord lets the scheduler queue a paused record again.
-func (c *Client) ResumeRecord(ctx context.Context, kind domain.ResourceKind, id string) error {
-	return c.do(ctx, http.MethodPost, recordPath(kind, id)+"/resume", nil, nil, nil, http.StatusOK)
+// ResumeRecord lets the scheduler queue a paused record again, and
+// returns its mark.
+func (c *Client) ResumeRecord(ctx context.Context, kind domain.ResourceKind, id string) (domain.ResourceMark, error) {
+	return c.recordMark(ctx, kind, id, "/resume")
+}
+
+// recordMark posts to a record action that answers the record, and reads
+// the record's mark from it: the record carries the mark's fields under
+// the same names.
+func (c *Client) recordMark(ctx context.Context, kind domain.ResourceKind, id, action string) (domain.ResourceMark, error) {
+	var m domain.ResourceMark
+	err := c.do(ctx, http.MethodPost, recordPath(kind, id)+action, nil, nil, &m, http.StatusOK)
+	m.Kind = kind
+	return m, err
 }
 
 // DeleteRecord removes a record; its files and runs stay. A record with a

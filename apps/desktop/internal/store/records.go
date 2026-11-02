@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 
 	"amdl/internal/client"
@@ -41,9 +42,14 @@ func (s *Store) applyResource(m domain.DownloadFeedMessage) {
 		// A record the store cannot read keeps its last mark.
 		return
 	}
-	ref := domain.ResourceRef{Kind: m.ResourceKind, ID: m.ResourceID}
-	mark := domain.ResourceMark{Kind: ref.Kind, ID: ref.ID, State: r.State, TracksDone: r.TracksDone, TracksWanted: r.TracksWanted,
-		WithheldCount: r.WithheldCount, ActiveJobID: r.ActiveJobID, Paused: r.Paused}
+	s.putMark(domain.ResourceMark{Kind: m.ResourceKind, ID: m.ResourceID, State: r.State, TracksDone: r.TracksDone,
+		TracksWanted: r.TracksWanted, WithheldCount: r.WithheldCount, ActiveJobID: r.ActiveJobID, Paused: r.Paused})
+}
+
+// putMark keeps mark as its record's newest, and moves what shows the
+// record when it changed.
+func (s *Store) putMark(mark domain.ResourceMark) {
+	ref := domain.ResourceRef{Kind: mark.Kind, ID: mark.ID}
 	old, had := s.Records.marks[ref]
 	s.Records.marks[ref] = mark
 	if had && old == mark {
@@ -143,18 +149,42 @@ func MarkOf(r *domain.ResourceMark, song bool) (MarkState, string) {
 }
 
 // HitRecord is the record a hit's mark reads, with the newest news: an
-// album's or playlist's own, a song's album record.
-func (s *Store) HitRecord(h client.SearchHit) *domain.ResourceMark { return s.Latest(h.Resource) }
+// album's or playlist's own, a song's album record. An album or playlist
+// the search found without a record has one once the feed names it.
+func (s *Store) HitRecord(h client.SearchHit) *domain.ResourceMark {
+	if h.Resource != nil {
+		return s.Latest(h.Resource)
+	}
+	switch h.Type {
+	case "album":
+		return s.Latest(s.RecordMark(domain.ResourceAlbum, h.ID))
+	case "playlist":
+		return s.Latest(s.RecordMark(domain.ResourcePlaylist, h.ID))
+	}
+	return nil
+}
 
 // Pause stops record ref: its run is cancelled with its partial downloads
 // kept, and nothing queues it until Resume.
 func (s *Store) Pause(ref domain.ResourceRef) {
-	s.recordAction(ref, func(c *client.Client) error { return c.PauseRecord(s.ctx, ref.Kind, ref.ID) }, "Paused")
+	s.markAction(ref, (*client.Client).PauseRecord, "Paused")
 }
 
 // Resume lets record ref download again.
 func (s *Store) Resume(ref domain.ResourceRef) {
-	s.recordAction(ref, func(c *client.Client) error { return c.ResumeRecord(s.ctx, ref.Kind, ref.ID) }, "Resumed")
+	s.markAction(ref, (*client.Client).ResumeRecord, "Resumed")
+}
+
+// markAction runs a record action that answers the record's mark, and
+// keeps the mark.
+func (s *Store) markAction(ref domain.ResourceRef, act func(*client.Client, context.Context, domain.ResourceKind, string) (domain.ResourceMark, error), done string) {
+	s.recordAction(ref, func(c *client.Client) error {
+		m, err := act(c, s.ctx, ref.Kind, ref.ID)
+		if err == nil && m.ID != "" {
+			s.post(func() { s.putMark(m) })
+		}
+		return err
+	}, done)
 }
 
 // recordAction runs act against the backend and says done, or why not.

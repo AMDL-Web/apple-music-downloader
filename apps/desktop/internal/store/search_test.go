@@ -199,6 +199,16 @@ func TestHitMarkReadsTheRecordWithTheNewestNews(t *testing.T) {
 	if m, _ := s.HitMark(song); m != MarkNone {
 		t.Errorf("song not offered: mark %v", m)
 	}
+	// An album found without a record reads the one the feed names.
+	fresh := hit("album", "2")
+	if m, _ := s.HitMark(fresh); m != MarkNone {
+		t.Errorf("no record: mark %v", m)
+	}
+	s.applyMessage(domain.DownloadFeedMessage{Type: "resource_updated", ResourceKind: domain.ResourceAlbum, ResourceID: "2",
+		Resource: map[string]any{"state": "complete", "tracks_done": 5, "tracks_wanted": 5}})
+	if m, _ := s.HitMark(fresh); m != MarkDone {
+		t.Errorf("record added by the feed: mark %v", m)
+	}
 	// A run started from the search wins while it is queued or running.
 	s.Search.sent[HitKey(h)] = "k"
 	s.upsert(domain.Job{ID: "k", Status: domain.JobQueued})
