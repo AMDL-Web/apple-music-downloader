@@ -294,16 +294,16 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 		a.flySourceCover(cover, "row:"+j.ID, radiusInner, color, dim, 0)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(13.5).FontWeight(600).Ellipsis("…").SingleLine()
-			ui.Text(c, rowSubtitle(j)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
+			ui.Text(c, a.jobSubtitle(j)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
 		})
 		ui.Column(c).Width(220).Gap(6).Children(func() {
 			bar := widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Running: running, Still: a.scrolling(c),
 				Failed: j.Status == domain.JobFailed, Bad: k.Bad, Finished: j.Status == domain.JobCompleted, Done: k.Fg.Alpha(0.85)}
 			bar.Show(c, "bar")
 			ui.Row(c).Children(func() {
-				mono(c, rowCount(j), 11).TextColor(k.Muted)
+				mono(c, a.jobCount(j), 11).TextColor(k.Muted)
 				ui.Spacer(c)
-				note, col := rowNote(j, k)
+				note, col := rowNote(j, k, a.jobQualityText(j))
 				mono(c, note, 11).TextColor(col).Ellipsis("…")
 			})
 		})
@@ -346,7 +346,7 @@ func rowCount(j *store.Job) string {
 	return s
 }
 
-func rowNote(j *store.Job, k *Tokens) (string, ui.Color) {
+func rowNote(j *store.Job, k *Tokens, quality string) (string, ui.Color) {
 	switch j.Status {
 	case domain.JobQueued:
 		return "waiting for a worker", k.Muted
@@ -359,7 +359,7 @@ func rowNote(j *store.Job, k *Tokens) (string, ui.Color) {
 	case domain.JobCancelled:
 		return "cancelled", k.Muted
 	}
-	return jobQuality(j), k.Muted
+	return quality, k.Muted
 }
 
 func statusPill(c *ui.Context, k *Tokens, j *store.Job) {

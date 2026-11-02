@@ -172,6 +172,8 @@ type App struct {
 	viewArtist string
 	viewAt     time.Time
 	viewScroll bool
+	// texts keeps the words lists made, for the frames after (words).
+	texts texts
 	// confirmAll is the artist whose "Download all" waits for its second
 	// click since confirmAt.
 	confirmAll string

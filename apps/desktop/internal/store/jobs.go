@@ -40,6 +40,10 @@ type Job struct {
 	// linkOK (link).
 	linkOf, linkType, linkID string
 	linkOK                   bool
+	// album is the album bar recompute made of Status and Items, when
+	// albumOK: the views ask for it of every job on every frame.
+	album   progress.Album
+	albumOK bool
 }
 
 // link is parseLink of the job's Input, parsed once: the views ask for it
@@ -130,8 +134,14 @@ func (j *Job) By() string {
 // Done counts the tracks that are finished, written now or found on disk.
 func (j *Job) Done() int { return j.CompletedItems + j.SkippedItems }
 
-// Album is the job's album bar, from the tracks the app has followed.
-func (j *Job) Album() progress.Album { return progress.AlbumProgress(j.Status, j.Items) }
+// Album is the job's album bar, from the tracks the app has followed: as
+// the store last read them (recompute), or else made now.
+func (j *Job) Album() progress.Album {
+	if j.albumOK {
+		return j.album
+	}
+	return progress.AlbumProgress(j.Status, j.Items)
+}
 
 // Percent is the job's overall progress as its album bar states it, so every
 // number the app shows for a job agrees with the web console's; a job whose
@@ -225,6 +235,7 @@ func (j *Job) Phase() Phase {
 // recompute refreshes the track counters and the derived progress fields.
 func (j *Job) recompute(now time.Time) {
 	j.recount()
+	j.album, j.albumOK = progress.AlbumProgress(j.Status, j.Items), true
 	j.Stages = progress.JobStages(j.Job, j.Items)
 	j.Progress = j.Stages.Weighted()
 	if j.Status == domain.JobRunning {
