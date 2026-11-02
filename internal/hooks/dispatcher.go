@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -172,11 +173,19 @@ func listedEntry(entry Entry) ListedEntry {
 	return out
 }
 
-// Dispatch evaluates every entry against the event and the job's type, then
-// launches the enabled matches asynchronously. Safe to call with
-// a no-op Dispatcher (nil-safe) so callers don't need to branch when hooks are
-// disabled.
+// Dispatch is DispatchRun for a run with no record.
 func (d *Dispatcher) Dispatch(event string, job domain.Job, items []domain.JobItem) {
+	d.DispatchRun(event, job, items, RunContext{})
+}
+
+// DispatchRun evaluates every entry against the event and the run's job
+// types, then launches the enabled matches asynchronously. A run's job types
+// are its type (album, playlist, station or a 1.x type), plus song for an
+// album record whose tracks were added one by one and artist for a run an
+// artist link started. A notification preset skips a job_failed that will be
+// retried. Safe to call with a no-op Dispatcher (nil-safe) so callers don't
+// need to branch when hooks are disabled.
+func (d *Dispatcher) DispatchRun(event string, job domain.Job, items []domain.JobItem, run RunContext) {
 	if d == nil {
 		return
 	}
@@ -184,9 +193,20 @@ func (d *Dispatcher) Dispatch(event string, job domain.Job, items []domain.JobIt
 	if !cfg.Enabled {
 		return
 	}
+	jobTypes := []string{job.Type}
+	if run.Resource != nil && run.Resource.Kind == string(domain.ResourceAlbum) && !run.WantedAll {
+		jobTypes = append(jobTypes, "song")
+	}
+	if job.Trigger == domain.TriggerArtist {
+		jobTypes = append(jobTypes, "artist")
+	}
+	willRetry := run.WillRetry && event == string(domain.EventJobFailed)
 	var matched []Entry
 	for _, e := range cfg.Entries {
-		if !e.IsEnabled() || !e.MatchesEvent(event) || !e.MatchesJobType(job.Type) {
+		if !e.IsEnabled() || !e.MatchesEvent(event) || !slices.ContainsFunc(jobTypes, e.MatchesJobType) {
+			continue
+		}
+		if willRetry && e.skipsRetries() {
 			continue
 		}
 		matched = append(matched, e)
@@ -195,7 +215,8 @@ func (d *Dispatcher) Dispatch(event string, job domain.Job, items []domain.JobIt
 		return
 	}
 
-	payload := Payload{Event: event, Timestamp: time.Now().UTC().Format(time.RFC3339), Job: jobPayload(job), Items: itemPayloads(items)}
+	payload := Payload{Event: event, Timestamp: time.Now().UTC().Format(time.RFC3339), Job: jobPayload(job), Resource: run.Resource, Items: itemPayloads(items)}
+	payload.Job.WillRetry = willRetry
 
 	d.mu.Lock()
 	if d.closed {
