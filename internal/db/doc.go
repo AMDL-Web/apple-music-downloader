@@ -4,10 +4,13 @@
 //
 // OpenWith applies the pending schema migrations and returns a Store on a
 // single-connection pool, so every statement is serialized. Records:
-// GetAlbum, GetPlaylist, ListAlbumTracks, ListPlaylistTracks, Tombstoned,
-// RecordSources, ListEligibleRecords. Files: GetFile, ListFiles. Pending
-// adds: AddPending, ListPending, DeletePending, RecordPendingFailure,
-// RetryPending. Runs (domain.Job): CreateJob, GetJob,
+// AddAlbum, AddPlaylist, ApplyAlbumRead, ApplyPlaylistRead, GetAlbum,
+// GetPlaylist, ListAlbumTracks, ListPlaylistTracks, SetCatalogState,
+// SetPaused, DeleteRecord, Tombstoned, RecordSources, ListEligibleRecords.
+// Files: GetFile, ListFiles, ClaimPath, MarkFileDone, MarkFileFailed,
+// MarkFileUnavailable, MarkFileMissing, RequestSlot, ResetFiles,
+// RecoverRunningFiles. Pending adds: AddPending, ListPending, DeletePending,
+// RecordPendingFailure, RetryPending. Runs (domain.Job): CreateJob, GetJob,
 // ListJobs, UpdateJob, DeleteJob, FinalizeJob, FindActiveJobByKey,
 // FindLatestFinishedJobByKey, RequeueJob. Run order: NextQueueOrder,
 // SetQueueOrder, NextQueuedJobID, QueuedJobIDs, MoveQueuedJob. Items:
@@ -25,7 +28,8 @@
 //     is stored and recomputed in the transaction of every write to its tracks
 //     or files, so it always equals computeRollup.
 //   - files.path is unique and stored relative to the downloads dir when the
-//     file is under it (storedPath).
+//     file is under it; ClaimPath and MarkFileDone report a path another slot
+//     holds as a *PathTakenError.
 //   - Timestamps are stored via formatTime in fixed-width form so TEXT order is
 //     chronological.
 //   - At most one queued/running run per record and per canonical_key;
