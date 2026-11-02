@@ -5,19 +5,22 @@ The per-track pipeline. Entry points and invariants are in the package comment
 
 ## Output paths are load-bearing
 
-Libraries, media-server scans and the skip-existing check key on the exact path a
-track lands at, so changing any of these renames or duplicates files on every
+Libraries, media-server scans and the stored `files.path` of every record key on
+the exact path a track lands at, so changing any of these renames or duplicates files on every
 install and needs the maintainer's OK and an upgrade note:
 
 - template expansion in `outputPath` and `libraryTrackPath` and its variables
   (defaults and the variable list are in `configs/config.example.yaml`);
 - library placement: a song, album or artist track's path comes only from
-  `libraryTrackPath` (its album and its number in the album, `albumSongNumbers`), its
-  folder from `libraryAlbumDir`, so one track has one path whichever job type
-  downloads it; `download.library_path_format` folders take album values only
+  `libraryTrackPathFor` (its album and its number in the album, `albumSongNumbers`),
+  its folder from `libraryAlbumDir`, so one track copy has one path per slot whichever
+  add downloads it; `download.library_path_format` folders take album values only
   (`internal/config#validateLibraryFormat`);
-- `safeName`: replaced characters, trimming, the segment byte cap;
-- `qualityLabel` strings, which `{Quality}` puts into names;
+- slot names (`trackTarget.outputPath`): a stored path wins; another quality is the
+  main file's name plus `qualitySuffixedPath`'s suffix unless the file name names
+  `{Codec}` or `{Quality}`;
+- `safeName` and `safeNameCapped`: replaced characters, trimming, the segment byte cap;
+- `qualityLabel` strings, which `{Quality}` and the suffix put into names;
 - sidecar names: `lyricsSidecarPath`, `cover.<ext>`, `artist.<ext>`.
 
 `paths_golden_test.go` pins these. A golden that has to change is a path change,

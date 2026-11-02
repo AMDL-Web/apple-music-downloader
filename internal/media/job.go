@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"amdl/internal/applemusic"
+	"amdl/internal/config"
 	"amdl/internal/domain"
 	"amdl/internal/ids"
 	"amdl/internal/jobs"
@@ -194,12 +195,21 @@ func (d *Downloader) trackTargets(parsed applemusic.ParsedURL, resolved resolved
 		if inLibrary(parsed.Type) && i < len(resolved.Placements) {
 			placement := resolved.Placements[i]
 			target.collectionIndex = placement.Number
-			target.libraryPath = libraryTrackPath(d.cfg, placement)
+			target.placement = &placement
 			target.albumDir, target.artistDir = libraryCoverDirs(d.cfg, placement.Album)
 		}
 		targets[i] = target
 	}
 	return targets
+}
+
+// plainLibraryPath is a library track's path with {Codec} and {Quality}
+// empty; "" for playlist and station tracks.
+func (t trackTarget) plainLibraryPath(cfg config.Config) string {
+	if t.placement == nil {
+		return ""
+	}
+	return libraryTrackPath(cfg, *t.placement)
 }
 
 // keepFinished decides whether a track finished by an earlier run of the job
@@ -213,7 +223,7 @@ func (d *Downloader) keepFinished(backend mediaBackend, targets []trackTarget) f
 		if force || prev.OutputPath == "" {
 			return false
 		}
-		if path := targets[i].libraryPath; path != "" && prev.OutputPath != domain.AbsolutePath(path) {
+		if path := targets[i].plainLibraryPath(d.cfg); path != "" && prev.OutputPath != domain.AbsolutePath(path) {
 			return false
 		}
 		_, ok := backend.statOutput(prev.OutputPath)
@@ -234,7 +244,7 @@ func (d *Downloader) skipTracksOnDisk(ctx context.Context, backend mediaBackend,
 	coverTrack := make(map[string]int)
 	var coverOrder []string
 	for i := range items {
-		path := targets[i].libraryPath
+		path := targets[i].plainLibraryPath(d.cfg)
 		if finished[i] || path == "" {
 			continue
 		}

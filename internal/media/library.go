@@ -16,7 +16,7 @@ import (
 // library: its album, its 1-based index in that album's track list (the entry
 // whose values name the file), and its number in the album as released
 // (albumSongNumbers), which {SongNumber} takes. Every library path comes from a
-// placement, so a track has one path whichever job type downloads it.
+// placement, so a track copy has one path per slot whichever add downloads it.
 type libraryPlacement struct {
 	Album  applemusic.Collection
 	Index  int
@@ -105,18 +105,25 @@ func libraryAlbumDir(cfg config.Config, album applemusic.Collection) string {
 	return filepath.Join(append([]string{cfg.Download.DownloadsDir}, libraryFolders(cfg, album)...)...)
 }
 
-// libraryTrackPath is the final .m4a path of the track at p. The file name is
-// expanded from the album's own track entry with the album's values, so a
-// single song resolved through its own song read lands where its album's
-// download puts it.
+// libraryTrackPath is the final .m4a path of the track at p, with {Codec}
+// and {Quality} empty. The file name is expanded from the album's own track
+// entry with the album's values, so a single song resolved through its own
+// song read lands where its album's download puts it.
 func libraryTrackPath(cfg config.Config, p libraryPlacement) string {
+	return libraryTrackPathFor(cfg, p, "", "")
+}
+
+// libraryTrackPathFor is libraryTrackPath for one codec attempt: the file
+// name may name {Codec} and {Quality} (the folders may not, config
+// validateLibraryFormat).
+func libraryTrackPathFor(cfg config.Config, p libraryPlacement, codec, quality string) string {
 	var track applemusic.Song
 	if p.Index >= 1 && p.Index <= len(p.Album.Tracks) {
 		track = p.Album.Tracks[p.Index-1]
 	}
 	track.AlbumName, track.AlbumArtist, track.AlbumID, track.AlbumRelease = p.Album.Name, p.Album.Artist, p.Album.ID, p.Album.ReleaseDate
 	segments := strings.Split(cfg.Download.LibraryPathFormat, "/")
-	name := safeName(formatPattern(segments[len(segments)-1], pathTemplateContext{song: track, collectionIndex: p.Number})) + ".m4a"
+	name := safeName(formatPattern(segments[len(segments)-1], pathTemplateContext{song: track, collectionIndex: p.Number, codec: codec, quality: quality})) + ".m4a"
 	return filepath.Join(libraryAlbumDir(cfg, p.Album), name)
 }
 

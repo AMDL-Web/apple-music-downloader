@@ -35,16 +35,43 @@ const maxSegmentBytes = 240
 // one or a trailing space breaks Windows and SMB clients), and the result is
 // capped at maxSegmentBytes on a rune boundary. Output names depend on every
 // rule here.
-func safeName(v string) string {
+func safeName(v string) string { return safeNameCapped(v, maxSegmentBytes) }
+
+// safeNameCapped is safeName with a byte cap of limit instead of
+// maxSegmentBytes, for a segment something is appended to afterwards.
+func safeNameCapped(v string, limit int) string {
 	v = invalidPathChars.ReplaceAllString(v, "_")
 	v = strings.TrimFunc(v, isDotOrSpace)
-	if len(v) > maxSegmentBytes {
-		v = strings.TrimRightFunc(trimToRuneBoundary(v, maxSegmentBytes), isDotOrSpace)
+	if len(v) > limit {
+		v = strings.TrimRightFunc(trimToRuneBoundary(v, limit), isDotOrSpace)
 	}
 	if v == "" {
 		return "_"
 	}
 	return v
+}
+
+// qualitySuffixedPath is where another quality of the track at mainPath
+// lands (design §3.8): next to it, named after it plus " [CODEC label]", or
+// " [CODEC]" without a label. The codec is in the suffix because aac and
+// aac-binaural share a label. The base name is capped so the suffix always
+// survives maxSegmentBytes.
+func qualitySuffixedPath(mainPath, codec, label string) string {
+	inner := strings.ToUpper(codec)
+	if label != "" {
+		inner += " " + label
+	}
+	suffix := " [" + safeName(inner) + "]"
+	base := strings.TrimSuffix(filepath.Base(mainPath), ".m4a")
+	return filepath.Join(filepath.Dir(mainPath), safeNameCapped(base, maxSegmentBytes-len(suffix))+suffix+".m4a")
+}
+
+// fileNamesQuality reports whether the file-name segment of pattern names
+// {Codec} or {Quality}; every quality is then named by the template, and no
+// suffix is added.
+func fileNamesQuality(pattern string) bool {
+	segments := strings.Split(pattern, "/")
+	return segmentReferences(segments[len(segments)-1], "Codec", "Quality")
 }
 
 func isDotOrSpace(r rune) bool { return r == '.' || unicode.IsSpace(r) }

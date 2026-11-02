@@ -20,23 +20,53 @@ type trackTarget struct {
 	collectionName  string
 	collectionID    string
 	collectionIndex int
-	// libraryPath, albumDir and artistDir place a song, album or artist track
-	// in the library (libraryTrackPath, libraryCoverDirs). Empty for playlist
-	// and station tracks, whose template is expanded per codec attempt.
-	libraryPath string
-	albumDir    string
-	artistDir   string
+	// placement, albumDir and artistDir place a song, album or artist track
+	// in the library (libraryTrackPathFor, libraryCoverDirs). placement is nil
+	// for playlist and station tracks.
+	placement *libraryPlacement
+	albumDir  string
+	artistDir string
+	// fixedPath is the path the slot claimed before (a reset of a done slot,
+	// a retry of one that claimed a path). It wins over the template, so a
+	// template change since does not move the file.
+	fixedPath string
+	// extra marks another quality of a downloaded track: unless the template
+	// names {Codec} or {Quality}, it is named after mainPath, the track's
+	// main file, with a quality suffix (qualitySuffixedPath).
+	extra    bool
+	mainPath string
+	// replace is set when the slot was done before this run: a file at the
+	// target is replaced once the new copy is complete, instead of being
+	// adopted as the slot's file.
+	replace bool
 }
 
+// outputPath is the path of the attempt with codec and its quality label.
+// Every attempt expands the template again, so a template that names {Codec}
+// or {Quality} gives each codec its own name.
 func (t trackTarget) outputPath(cfg config.Config, song applemusic.Song, codec, quality string) string {
-	if t.libraryPath != "" {
-		return t.libraryPath
+	if t.fixedPath != "" {
+		return t.fixedPath
+	}
+	if t.extra && !fileNamesQuality(pathPattern(cfg, t.collectionType)) {
+		main := t.mainPath
+		if main == "" {
+			main = t.templatePath(cfg, song, "", "")
+		}
+		return qualitySuffixedPath(main, codec, quality)
+	}
+	return t.templatePath(cfg, song, codec, quality)
+}
+
+func (t trackTarget) templatePath(cfg config.Config, song applemusic.Song, codec, quality string) string {
+	if t.placement != nil {
+		return libraryTrackPathFor(cfg, *t.placement, codec, quality)
 	}
 	return outputPath(cfg, song, t.collectionType, t.collectionIndex, t.collectionName, t.collectionID, codec, quality)
 }
 
 func (t trackTarget) coverDirs(cfg config.Config, song applemusic.Song) (albumDir, artistDir string) {
-	if t.libraryPath != "" {
+	if t.placement != nil {
 		return t.albumDir, t.artistDir
 	}
 	return libraryCoverDirs(cfg, trackAlbum(song))
