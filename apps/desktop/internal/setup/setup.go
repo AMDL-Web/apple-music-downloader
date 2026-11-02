@@ -96,8 +96,9 @@ type Setup struct {
 	Server  Server
 	Testing string
 
-	checked time.Time
-	testGen int
+	checked       time.Time
+	updateChecked time.Time
+	testGen       int
 }
 
 // New returns a Setup that hands background results to post, which runs a

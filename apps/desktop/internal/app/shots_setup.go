@@ -220,7 +220,7 @@ func renderSetupShots(dir string, dirs mode.Dirs) error {
 	}
 	// Settings' connection page, which opens the setup screen.
 	for _, theme := range []string{"dark", "light"} {
-		for _, name := range []string{"remote", "standalone", "elsewhere"} {
+		for _, name := range []string{"remote", "standalone", "update", "uninstall", "elsewhere"} {
 			settings := mode.DefaultSettings()
 			settings.Mode, settings.RemoteURL = mode.Standalone, "http://192.168.3.5:18570"
 			if name == "remote" {
@@ -229,8 +229,14 @@ func renderSetupShots(dir string, dirs mode.Dirs) error {
 			v := &appui.App{Store: store.New(post, nil), Art: artwork.New(post), Settings: settings, Dirs: dirs,
 				Act: shotActions{}, Theme: theme, Setup: stagedSetup(post), NoMotion: true}
 			switch name {
-			case "standalone":
+			case "standalone", "update", "uninstall":
 				v.Store.Server.Wrapper = managed("serving", "hvf", true, true)
+				tools(v.Setup)
+				v.Setup.Guest.Installed.Commit = "bde3335f47a30518e1f53f79cbae94bf76b27fb3"
+				v.Setup.Guest.Latest.Commit = v.Setup.Guest.Installed.Commit
+				if name == "update" {
+					v.Setup.Guest.Latest.Commit = "7c41d09e2b8a5f3361c0d4e9a8b7f2e1d0c9b8a7"
+				}
 			case "elsewhere":
 				v.Settings.WrapperElsewhere, v.Settings.WrapperAddress = true, "http://192.168.3.44:12340"
 				v.Store.Server.Wrapper = &client.WrapperStatus{Ready: true}
@@ -239,6 +245,12 @@ func renderSetupShots(dir string, dirs mode.Dirs) error {
 			tt := ui.NewTester(v.View, 1280, 800)
 			tt.SetScale(2)
 			tt.Frame()
+			if name == "uninstall" {
+				if err := tt.Click("Uninstall…"); err != nil {
+					return err
+				}
+				tt.Frame()
+			}
 			if err := writePNG(filepath.Join(dir, fmt.Sprintf("connection-%s-%s.png", name, theme)), tt.Image()); err != nil {
 				return err
 			}

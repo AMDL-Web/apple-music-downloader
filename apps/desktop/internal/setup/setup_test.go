@@ -317,3 +317,62 @@ func TestPinFailureFailsTheGuest(t *testing.T) {
 		t.Errorf("guest %+v", h.Guest)
 	}
 }
+
+// An uninstall keeps the account's disk, and leaves the wrapper enabled for
+// the next install, unless it purges, which removes the wrapper's directory.
+func TestUninstallGuestKeepsTheAccountDiskUnlessPurged(t *testing.T) {
+	body, pin := guestZip(t)
+	h := newHarness(t, Deps{Now: clock(), Fetcher: &fetcher{body: body}, Pin: func(context.Context) (wrapperhost.Pin, error) { return pin, nil }})
+	home := h.deps.Home
+	install := func() {
+		h.InstallGuest()
+		h.until(t, "the install", func() bool { return h.Guest.State != Working })
+		if h.Guest.State != Ready {
+			t.Fatalf("guest %+v", h.Guest)
+		}
+	}
+	install()
+	h.UninstallGuest(false)
+	h.until(t, "the uninstall", func() bool { return h.Guest.State != Working })
+	if h.Guest.State != Missing {
+		t.Fatalf("after uninstall: %+v", h.Guest)
+	}
+	if _, err := home.Current(); !errors.Is(err, wrapperhost.ErrNotInstalled) {
+		t.Errorf("still installed: %v", err)
+	}
+	if _, err := os.Stat(home.ImagePath()); err != nil {
+		t.Errorf("account disk gone without purge: %v", err)
+	}
+	if !home.Enabled() {
+		t.Error("the wrapper stays stopped for the next install")
+	}
+	install()
+	h.UninstallGuest(true)
+	h.until(t, "the purge", func() bool { return h.Guest.State != Working })
+	if _, err := os.Stat(home.Dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("purge left %s: %v", home.Dir, err)
+	}
+}
+
+// A newer pin shows as an update, and updating installs it.
+func TestUpdateGuestInstallsTheNewerPin(t *testing.T) {
+	body, pin := guestZip(t)
+	current := pin
+	h := newHarness(t, Deps{Now: clock(), Fetcher: &fetcher{body: body}, Pin: func(context.Context) (wrapperhost.Pin, error) { return current, nil }})
+	h.InstallGuest()
+	h.until(t, "the install", func() bool { return h.Guest.State != Working })
+	if h.Guest.Latest.Commit != pin.Commit || h.Guest.UpdateAvailable() {
+		t.Fatalf("the installed pin shows as an update: %+v", h.Guest)
+	}
+	current.Commit = "0123456789abcdef0123456789abcdef01234567"
+	h.CheckGuestUpdate()
+	h.until(t, "the second check", func() bool { return h.Guest.Latest.Commit == current.Commit })
+	if !h.Guest.UpdateAvailable() {
+		t.Fatalf("no update for a newer pin: %+v", h.Guest)
+	}
+	h.UpdateGuest()
+	h.until(t, "the update", func() bool { return h.Guest.State != Working })
+	if h.Guest.State != Ready || h.Guest.Installed.Commit != current.Commit || h.Guest.UpdateAvailable() {
+		t.Fatalf("after update: %+v", h.Guest)
+	}
+}

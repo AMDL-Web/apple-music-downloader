@@ -111,7 +111,9 @@ The packages are not signed yet, so each system stops the first launch once:
 
 On its first launch the app asks where downloads run: a server on your network, or this
 computer, whose setup screen checks and installs what that needs (see
-[A wrapper amdl runs](#a-wrapper-amdl-runs)). The packages carry neither ffmpeg nor
+[A wrapper amdl runs](#a-wrapper-amdl-runs)). Afterwards Settings › Connection shows
+that wrapper, offers its update when a newer guest is pinned, and stops or uninstalls
+it, optionally with the account's disk. The packages carry neither ffmpeg nor
 QEMU. The app keeps its settings beside the backend's files ([Where files go](#where-files-go)),
 which uninstalling the app leaves in place.
 

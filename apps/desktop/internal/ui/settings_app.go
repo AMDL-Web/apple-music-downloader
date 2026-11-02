@@ -8,6 +8,7 @@ import (
 
 	"amdl/apps/desktop/internal/ffmpeg"
 	"amdl/apps/desktop/internal/mode"
+	"amdl/apps/desktop/internal/setup"
 )
 
 // The app's own settings: where downloads run, and how the app looks and
@@ -138,6 +139,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 			})
 			if !elsewhere {
 				a.wrapperRow(c, k, here)
+				a.guestManageRow(c, k)
 				return
 			}
 			ui.Column(c).Padding(padCard).Gap(14).Children(func() {
@@ -269,5 +271,78 @@ func (a *App) aboutSettings(c *ui.Context, k *Tokens) {
 		ui.Text(c, "JetBrains Mono © 2020 The JetBrains Mono Project Authors, under the SIL Open Font License 1.1.").FontSize(12).TextColor(k.Faint)
 		ui.Text(c, "Data: "+a.Dirs.Data).Font(MonoFont).FontSize(11.5).TextColor(k.Faint)
 		ui.Text(c, "Web console: "+a.consoleURL()).Font(MonoFont).FontSize(11.5).TextColor(k.Faint)
+	})
+}
+
+// guestManageRow is this computer's installed guest: its build, an update
+// when a newer one is pinned, stop, and uninstall. A guest not installed, or
+// being downloaded, shows as the setup screen shows it.
+func (a *App) guestManageRow(c *ui.Context, k *Tokens) {
+	s := a.Setup
+	if s == nil {
+		return
+	}
+	if s.Guest.State == setup.Unchecked {
+		s.Check(a.Settings.FFmpeg)
+	}
+	g := s.Guest
+	const title = "Wrapper guest"
+	switch {
+	case g.Removing:
+		setupRow(c, k, "guest", setup.Working, title, "Removing", false, nil, func() { ui.Progress(c, -1).Height(6) })
+		return
+	case g.State != setup.Ready:
+		a.guestRow(c, k)
+		return
+	}
+	s.CheckGuestUpdate()
+	status := g.Installed.ID
+	if g.UpdateAvailable() {
+		status += " · " + g.Latest.Commit[:min(12, len(g.Latest.Commit))] + " available"
+	}
+	w := a.Store.Server.Wrapper
+	running := w != nil && w.Managed != nil && w.Managed.Mode != "stopped"
+	setupRow(c, k, "guest", setup.Ready, title, status, true, func() {
+		if g.UpdateAvailable() && button(c, k, buttonPlain, "Update", nil).Clicked() {
+			s.UpdateGuest()
+		}
+		if running && button(c, k, buttonPlain, "Stop", nil).Clicked() {
+			_ = s.StopGuest() // a failure shows as the wrapper still serving
+			a.Store.WatchServerWithin(0)
+		}
+		if button(c, k, buttonGhost, "Uninstall…", nil).Clicked() {
+			a.set.uninstall, a.set.purge = true, false
+		}
+	}, nil)
+	a.uninstallDialog(c, k)
+}
+
+// uninstallDialog confirms removing this computer's wrapper, and asks
+// whether the signed-in account goes with it.
+func (a *App) uninstallDialog(c *ui.Context, k *Tokens) {
+	f := &a.set
+	if !f.uninstall {
+		return
+	}
+	ui.DialogBase(c.Key("uninstall"), &f.uninstall, func(back, panel ui.Element) {
+		back.Background(ui.RGBA(0, 0, 0, 0.45))
+		panel.Width(440).Padding(padCard).Gap(12).Radius(radiusCard).Background(k.Raise).Border(1, k.Line2).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, 0.4))
+		ui.Text(c, "Uninstall the wrapper?").FontSize(15).FontWeight(650)
+		ui.Text(c, "Downloads stop until a wrapper is installed again.").FontSize(12.5).TextColor(k.Muted)
+		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			toggle(c, k, "purge", &f.purge, "Also log out the account")
+			ui.Text(c, "Also log out the account").FontSize(12.5)
+		})
+		ui.Row(c).Gap(8).Justify(ui.End).Padding(6, 0, 0, 0).Children(func() {
+			if button(c, k, buttonPlain, "Cancel", nil).Clicked() {
+				f.uninstall = false
+			}
+			ok := button(c, k, buttonPrimary, "Uninstall", nil)
+			ok.Background(k.Bad)
+			if ok.Clicked() {
+				a.Setup.UninstallGuest(f.purge)
+				f.uninstall = false
+			}
+		})
 	})
 }

@@ -45,6 +45,9 @@ type settingsForm struct {
 	edit     fieldEdit
 	login    loginForm
 	order    orderDrag
+	// uninstall is the open confirmation of removing this computer's
+	// wrapper, and whether it deletes the account's disk too.
+	uninstall, purge bool
 }
 
 // statusDelay is how long a request runs before the screen says it is under
