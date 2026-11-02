@@ -16,9 +16,10 @@ import (
 const (
 	// SearchMaxTerm is the longest term the backend searches (GET search).
 	SearchMaxTerm = 200
-	// SearchFirst is the hits per group of a new term; SearchMore what a
+	// SearchFirst is the hits per group of a new term, at least what the
+	// overview shows of a group at its widest; SearchMore what a
 	// group's next page adds; ArtistPage the albums per page of an artist.
-	SearchFirst, SearchMore, ArtistPage = 5, 25, 25
+	SearchFirst, SearchMore, ArtistPage = 6, 25, 25
 	// searchDelay waits for typing to pause before a search starts.
 	searchDelay = 300 * time.Millisecond
 	// searchCacheMax bounds the answers kept, oldest dropped first.
@@ -63,10 +64,14 @@ type Search struct {
 	Err    string
 	// More is a group's next page while it loads or after it failed.
 	More map[string]PageState
-	// Focus is the group shown alone, page after page, or "" for the first
-	// hits of every group. It stays as the words change, and clearing the
-	// field drops it.
+	// Focus is the group shown alone, page after page, or "" for the
+	// overview, the first hits of every group. It stays as the words
+	// change, and clearing the field drops it.
 	Focus string
+	// Overview is how many hits of a group the overview shows, as the view
+	// lays it out for its width (SetOverview); a group without one shows
+	// every hit read.
+	Overview map[string]int
 	// Artist is the artist whose albums show instead of the hits.
 	Artist ArtistPages
 	// Album is the album the album screen shows, opened from a hit.
@@ -302,9 +307,17 @@ func appendPage(g, page *client.HitGroup) *client.HitGroup {
 	return out
 }
 
+// SetOverview records that the overview shows n hits of group.
+func (q *Search) SetOverview(group string, n int) {
+	if q.Overview == nil {
+		q.Overview = map[string]int{}
+	}
+	q.Overview[group] = n
+}
+
 // ShownHits are the hits in the order the rows show them and the arrow keys
 // move through: the open artist's albums, else the focused group's hits,
-// else every group's.
+// else the overview's of every group.
 func (q *Search) ShownHits() []client.SearchHit {
 	if q.Artist.ID != "" {
 		return q.Artist.Albums.Items
@@ -321,7 +334,11 @@ func (q *Search) ShownHits() []client.SearchHit {
 	var out []client.SearchHit
 	for _, g := range SearchGroups {
 		if hg := hitGroup(q.Result, g); hg != nil {
-			out = append(out, hg.Items...)
+			items := hg.Items
+			if n, ok := q.Overview[g]; ok && n < len(items) {
+				items = items[:n]
+			}
+			out = append(out, items...)
 		}
 	}
 	return out

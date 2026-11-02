@@ -98,8 +98,9 @@ type App struct {
 	// backend of this computer to offer.
 	Demo bool
 	// PageMotion moves the album page in and out over the screen it opens
-	// from (flight.go); without it the screens change at once, as tests
-	// need, whose clock stands still between Advances.
+	// from (flight.go), and a search's groups between its tabs
+	// (groupMotion); without it the screens change at once, as tests need,
+	// whose clock stands still between Advances.
 	PageMotion bool
 	// EdgeFades fades the scroll containers' edges (scrollArea) through a
 	// shader, which a GPU draws in no time and a headless Tester runs on
@@ -158,6 +159,11 @@ type App struct {
 	searchSel    string
 	searchReveal bool
 	searchKeyed  bool
+	// groupsAt is when the search last changed tab, from groupsFrom, which
+	// groupsMoved asks the next frame to note (tabChange).
+	groupsAt    time.Time
+	groupsFrom  string
+	groupsMoved bool
 	// confirmAll is the artist whose "Download all" waits for its second
 	// click since confirmAt.
 	confirmAll string

@@ -45,12 +45,12 @@ func TestAnEmptyGroupKeepsTheTabsAndTheWayBack(t *testing.T) {
 	}
 	a.focusGroup("playlists")
 	tt.Frame()
-	if err := tt.Click("All results"); err != nil {
+	if err := tt.Click("Overview"); err != nil {
 		t.Fatalf("the way back is gone: %v in %q", err, tt.Texts())
 	}
 	tt.Frame()
 	if s.Search.Focus != "" || !tt.HasText("One Last Kiss") {
-		t.Errorf("All results: focus %q, texts %q", s.Search.Focus, tt.Texts())
+		t.Errorf("Overview: focus %q, texts %q", s.Search.Focus, tt.Texts())
 	}
 	// Only when every group is empty does the search answer as a whole.
 	s.Search.Result = &client.SearchResult{}

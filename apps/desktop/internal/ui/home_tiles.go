@@ -28,16 +28,26 @@ const (
 	songHeight = 64
 )
 
+// tileColumns is how many tiles a row width wide holds, at least three.
+func tileColumns(width float32) int { return tileFit(width, tileMin) }
+
+func tileFit(width, min float32) int { return max(3, int((width+tileGap)/(min+tileGap))) }
+
 // tileSize is the width of count tiles' tile when a row of them fills
 // width; count 0 is a row of any number.
 func tileSize(width float32, count int) float32 {
-	fit := func(min float32) int { return max(3, int((width+tileGap)/(min+tileGap))) }
-	n := fit(tileMin)
-	if count > n && count <= fit(tileSnug) {
+	n := tileColumns(width)
+	if count > n && count <= tileFit(width, tileSnug) {
 		n = count
 	}
 	return (width - float32(n-1)*tileGap) / float32(n)
 }
+
+// songGap is the room between song cards.
+const songGap = 12
+
+// songColumns is how many song cards a row width wide holds.
+func songColumns(width float32) int { return max(1, int((width+songGap)/(songMin+songGap))) }
 
 // tileGrid lays hits out as tiles of their covers, rows filling width.
 func (a *App) tileGrid(c *ui.Context, k *Tokens, key string, hits []client.SearchHit, sel *client.SearchHit, width float32) {
@@ -62,7 +72,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 	if round {
 		radius = radiusFull
 	}
-	ui.Column(c.Key(key)).Width(size).Gap(10).Children(func() {
+	ui.Column(c.Key(key)).Width(size).Gap(10).Transition(a.hitMotion(c)).Children(func() {
 		art := ui.Box(c.Key("art")).Size(size, size)
 		hover := art.Hovered()
 		art.Children(func() {
@@ -188,10 +198,9 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 
 // songGrid lays songs out as cards, rows filling width.
 func (a *App) songGrid(c *ui.Context, k *Tokens, hits []client.SearchHit, sel *client.SearchHit, width float32) {
-	const gap = 12
-	cols := max(1, int((width+gap)/(songMin+gap)))
-	cw := (width - gap*float32(cols-1)) / float32(cols)
-	ui.Row(c).Width(width).Wrap().Gap(gap).Children(func() {
+	cols := songColumns(width)
+	cw := (width - songGap*float32(cols-1)) / float32(cols)
+	ui.Row(c).Width(width).Wrap().Gap(songGap).Children(func() {
 		for i, h := range hits {
 			a.songCard(c, k, h, fmt.Sprint("songs", i), sel, cw)
 		}
@@ -205,7 +214,7 @@ func (a *App) songCard(c *ui.Context, k *Tokens, h client.SearchHit, key string,
 	hk := store.HitKey(h)
 	on := sel != nil && store.HitKey(*sel) == hk
 	card := ui.Row(c.Key(key)).Width(width).Height(songHeight).Padding(padTile).PaddingEnd(10).Gap(12).Radius(radiusTile).
-		AlignItems(ui.Center).Background(k.Raise).Border(1, k.Line)
+		AlignItems(ui.Center).Background(k.Raise).Border(1, k.Line).Transition(a.hitMotion(c))
 	if card.Hovered() {
 		card.Background(k.Raise2)
 	}
@@ -356,8 +365,8 @@ func hitPalette(h client.SearchHit) Palette {
 	return ParsePalette(h.ArtworkBgColor, h.ArtworkTextColor1, h.ArtworkTextColor2, h.ArtworkTextColor3, h.ArtworkTextColor4)
 }
 
-// skeletonGroups stand for the first answer of a term while it loads: a row
-// of album tiles and a row of song cards, at the sizes they will take.
+// skeletonGroups stand for the first answer of a term while it loads: the
+// overview's albums and songs at the sizes and counts they will take.
 func skeletonGroups(c *ui.Context, k *Tokens, width float32) {
 	ui.Column(c).Gap(32).Children(func() {
 		ui.Column(c.Key("albums")).Gap(14).Children(func() {
@@ -366,11 +375,10 @@ func skeletonGroups(c *ui.Context, k *Tokens, width float32) {
 		})
 		ui.Column(c.Key("songs")).Gap(14).Children(func() {
 			skeleton(c, k, 64, 14).Margin(8, 0)
-			const gap = 12
-			cols := max(1, int((width+gap)/(songMin+gap)))
-			cw := (width - gap*float32(cols-1)) / float32(cols)
-			ui.Row(c).Gap(gap).Children(func() {
-				for i := range cols {
+			cols := songColumns(width)
+			cw := (width - songGap*float32(cols-1)) / float32(cols)
+			ui.Row(c).Width(width).Wrap().Gap(songGap).Children(func() {
+				for i := range overviewCount("songs", width) {
 					ui.Row(c.Key(i)).Width(cw).Height(songHeight).Padding(padTile).Gap(12).Radius(radiusTile).AlignItems(ui.Center).
 						Background(k.Raise).Border(1, k.Line).Children(func() {
 						skeleton(c, k, songHeight-2*padTile, songHeight-2*padTile).Radius(radiusControl)
@@ -387,8 +395,8 @@ func skeletonGroups(c *ui.Context, k *Tokens, width float32) {
 
 // skeletonTiles is a row of tiles while they load; n 0 fills the row.
 func skeletonTiles(c *ui.Context, k *Tokens, width float32, n int) {
-	size := tileSize(width, store.SearchFirst)
-	if fit := int((width + tileGap) / (size + tileGap)); n == 0 || n > fit {
+	size := tileSize(width, 0)
+	if fit := tileColumns(width); n == 0 || n > fit {
 		n = fit
 	}
 	ui.Row(c).Gap(tileGap).Children(func() {

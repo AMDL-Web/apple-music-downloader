@@ -34,6 +34,7 @@ var (
 	icLink     = icon(`<path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1"/>`)
 	icSearch   = icon(`<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/>`)
 	icBack     = icon(`<path d="M10 3 5 8l5 5"/>`)
+	icForward  = icon(`<path d="M6 3l5 5-5 5"/>`)
 	icMore     = icon(`<path d="M4 8h.01M8 8h.01M12 8h.01" stroke-width="2.2"/>`)
 	icGrip     = icon(`<path d="M6 4h.01M10 4h.01M6 8h.01M10 8h.01M6 12h.01M10 12h.01" stroke-width="2"/>`)
 	icChevron  = icon(`<path d="M4.5 6.5 8 10l3.5-3.5"/>`)

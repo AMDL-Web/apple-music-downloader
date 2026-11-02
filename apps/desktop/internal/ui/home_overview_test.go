@@ -1,0 +1,96 @@
+//go:build !race
+
+package ui
+
+import (
+	"testing"
+	"time"
+
+	"github.com/egoist/mygo/ui"
+
+	"amdl/apps/desktop/internal/store"
+)
+
+// overviewApp is home on the demo's answer to "a", in the overview.
+func overviewApp(t *testing.T, motion bool) (*App, *ui.Tester, func(until func() bool)) {
+	t.Helper()
+	a, run := demoApp(t)
+	a.Screen, a.PageMotion = ScreenHome, motion
+	tt := ui.NewTester(a.View, 1280, 800)
+	a.Store.SetOmniText("a")
+	tt.Frame()
+	run(func() bool { tt.Frame(); return a.Store.Search.Status == store.SearchReady })
+	tt.Advance(time.Second)
+	return a, tt, run
+}
+
+// The overview keeps each group to its row: the songs a tab reads further
+// stay in the tab, and the overview shows the cards it showed before.
+func TestTheOverviewKeepsEachGroupToItsRows(t *testing.T) {
+	a, tt, run := overviewApp(t, false)
+	q := &a.Store.Search
+	shown := len(q.ShownHits())
+	// The demo's names repeat across groups and the queue.
+	before := map[string]bool{}
+	for _, x := range tt.Texts() {
+		before[x] = true
+	}
+	a.focusGroup("songs")
+	tt.Frame()
+	first := len(q.Result.Songs.Items)
+	run(func() bool { tt.Frame(); return len(q.Result.Songs.Items) > first })
+	a.focusGroup("")
+	tt.Frame()
+	songs := q.Result.Songs.Items
+	// Two rows of song cards at most: the page is 1280 wide, so a row holds
+	// two or three.
+	for _, h := range songs[6:] {
+		if !before[h.Name] && tt.HasText(h.Name) {
+			t.Errorf("the overview shows %q, read by the Songs tab, of %d songs", h.Name, len(songs))
+		}
+	}
+	if n := len(q.ShownHits()); n != shown {
+		t.Errorf("the keys walk %d hits of the overview, %d before the Songs tab read more", n, shown)
+	}
+}
+
+// A group's title opens its tab with the group's hits moving there from
+// the overview, not appearing in place.
+func TestAGroupsHitsMoveIntoItsTab(t *testing.T) {
+	a, tt, _ := overviewApp(t, true)
+	// A song whose name shows once: the demo's names repeat across groups
+	// and the queue.
+	count := map[string]int{}
+	for _, x := range tt.Texts() {
+		count[x]++
+	}
+	name := ""
+	for _, h := range a.Store.Search.Result.Songs.Items[:4] {
+		if count[h.Name] == 1 && name == "" {
+			name = h.Name
+		}
+	}
+	from, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("no first song %q in the overview: %q", name, tt.Texts())
+	}
+	a.focusGroup("songs")
+	tt.Frame()
+	// Partway: past the others' fade, before the group lands.
+	tt.Advance(250 * time.Millisecond)
+	mid, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("partway, the first song is gone: %q", tt.Texts())
+	}
+	tt.Advance(time.Second)
+	to, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("in the Songs tab, the first song is gone: %q", tt.Texts())
+	}
+	if to.Y >= from.Y-20 {
+		t.Fatalf("the Songs tab moved the first song from %v to %v, not up", from, to)
+	}
+	if mid.Y <= to.Y+2 || mid.Y >= from.Y-2 {
+		t.Errorf("partway the first song is at %.1f, not between %.1f and %.1f", mid.Y, from.Y, to.Y)
+	}
+}

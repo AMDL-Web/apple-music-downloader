@@ -21,15 +21,23 @@ func (a *App) searchText() (term string, tooLong bool) {
 	return store.SearchTerm(o.Text, len(o.Links) > 0)
 }
 
-// searchBody is home's answer to words: the first of the catalog's albums,
-// songs, playlists and artists, or one group of them page after page, or
-// one artist's albums, or the state that stands for them. A group shown
-// alone with no hits answers inside its tab, never as the whole search, so
-// the tabs stay to leave it by; "Nothing found" is for every group empty.
+// searchBody is home's answer to words: the tabs, Overview and the four
+// groups, over the first of the catalog's albums, songs, playlists and
+// artists, or one group of them page after page; or one artist's albums,
+// or the state that stands for them. A group shown alone with no hits
+// answers inside its tab, never as the whole search, so the tabs stay to
+// leave it by; "Nothing found" is for every group empty.
 func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 	s := a.Store
 	q := &s.Search
 	sel := a.chosenHit(q.ShownHits())
+	if a.groupsMoved {
+		a.groupsAt, a.groupsMoved = c.Now(), false
+	}
+	if since := c.Now().Sub(a.groupsAt); since < groupEnter {
+		c.After(groupEnter - since)
+	}
+	focus := q.Focus
 	body := ui.Column(c).Width(width).Gap(32)
 	if q.Stale {
 		body.Opacity(0.5)
@@ -41,79 +49,191 @@ func (a *App) searchBody(c *ui.Context, k *Tokens, width float32) {
 		case q.Status == store.SearchFailed:
 			searchFailed(c, k, q.Err, s.RetrySearch)
 		case q.Result == nil:
+			a.groupTabs(c, k)
 			skeletonGroups(c, k, width)
 		case store.NoHits(q.Result):
 			searchMessage(c, k, icSearch, "Nothing found for “"+q.Term+"”", "")
-		case q.Focus != "":
-			a.focusedGroup(c, k, sel, width)
 		default:
-			for _, g := range store.SearchGroups {
-				hg := store.HitGroup(q.Result, g)
-				if hg == nil || len(hg.Items) == 0 {
-					continue
-				}
-				ui.Column(c.Key(g)).Gap(14).Children(func() {
-					ui.Row(c).Height(groupRow).AlignItems(ui.Center).Children(func() {
-						display(c, groupTitle(g), 18)
-						ui.Spacer(c)
-						if hg.NextOffset > 0 && button(c, k, buttonGhost, "Show more", nil).Label("Show more "+g).Clicked() {
-							a.focusGroup(g)
-						}
-					})
-					a.groupGrid(c, k, g, hg.Items, sel, width)
-				})
-			}
+			a.groupTabs(c, k)
+			a.searchGroups(c, k, focus, sel, width)
 		}
 	})
 }
 
-// groupRow is the height of a group's title row, and of the tabs that take
-// its place when one group shows alone; loadAhead is how far from the end
-// of a group shown alone its next page is read.
+// groupRow is the height of a group's title row and of the tabs; loadAhead
+// is how far from the end of a group shown alone its next page is read.
 const groupRow, loadAhead = 30, 600
 
 func groupTitle(g string) string { return strings.ToUpper(g[:1]) + g[1:] }
 
-// groupGrid lays a group's hits out: songs as cards, the rest as tiles.
-func (a *App) groupGrid(c *ui.Context, k *Tokens, g string, hits []client.SearchHit, sel *client.SearchHit, width float32) {
-	if g == "songs" {
-		a.songGrid(c, k, hits, sel, width)
-		return
+// The motion between the overview and a group alone, when the window
+// moves the album page too (App.PageMotion), in turns so that nothing
+// passes over what is still there. Into a tab, the other groups and the
+// group's title fade (groupFade); then the group glides to the top
+// (groupEase, after groupClear) and the hits past the overview's fade in
+// where they land. Out to the overview, the group glides to its place
+// first and the other groups fade in after it. Things fade in only for
+// groupEnter after a tab changes, so a new answer in the same tab shows
+// at once.
+var (
+	groupEase  = ui.Animation{Duration: 320 * time.Millisecond, Ease: ui.EaseInOut}
+	groupFade  = ui.Animation{Duration: 160 * time.Millisecond, Ease: ui.EaseOut}
+	groupClear = groupFade.Duration - 20*time.Millisecond
+	groupEnter = groupClear + groupEase.Duration + groupFade.Duration + 50*time.Millisecond
+
+	groupGlideLate = ui.Animation{Duration: groupEase.Duration, Ease: groupEase.Ease, Delay: groupClear}
+	groupFadeLate  = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupEase.Duration}
+	hitFadeLate    = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupClear + groupEase.Duration/2}
+	landFadeLate   = ui.Animation{Duration: groupFade.Duration, Ease: groupFade.Ease, Delay: groupClear + groupEase.Duration}
+	fadeOut        = ui.Motion{}
+	riseIn         = ui.Motion{Y: 12}
+)
+
+// tabChange reports whether the search changed tab within groupEnter, and
+// whether into a group's rather than out to the overview.
+func (a *App) tabChange(c *ui.Context) (changing, into bool) {
+	if c.Now().Sub(a.groupsAt) >= groupEnter {
+		return false, false
 	}
-	a.tileGrid(c, k, g, hits, sel, width)
+	return true, a.Store.Search.Focus != ""
 }
 
-// focusGroup shows group alone from its top, or every group for "".
-func (a *App) focusGroup(group string) {
-	a.Store.FocusGroup(group)
-	a.searchSel = ""
-	if st := a.scrolls["home-body"]; st != nil {
-		st.Y = 0
+// groupMotion is the Transition of a group of the search: one leaving
+// fades out; one coming into the overview fades in after the group that
+// stays has moved; the one that stays glides, after the others clear the
+// way into a tab. It is none without page motion.
+func (a *App) groupMotion(c *ui.Context, g string, leaving bool) ui.ElementTransition {
+	if !a.PageMotion {
+		return ui.ElementTransition{}
 	}
+	changing, into := a.tabChange(c)
+	switch {
+	case leaving:
+		return ui.ElementTransition{Animation: &groupFade, Exit: &fadeOut}
+	case changing && !into && g != a.groupsFrom:
+		return ui.ElementTransition{Animation: &groupFadeLate, Exit: &fadeOut, Enter: &fadeOut}
+	}
+	t := ui.ElementTransition{Animation: &groupEase, Position: true, Exit: &fadeOut}
+	if changing && into {
+		t.Animation, t.Enter = &groupGlideLate, &fadeOut
+	}
+	return t
 }
 
-// focusedGroup is one group alone under the four groups' tabs, its next
-// page read as the end comes near.
-func (a *App) focusedGroup(c *ui.Context, k *Tokens, sel *client.SearchHit, width float32) {
+// titleMotion is the Transition of a group's title, or of the row under a
+// group alone, which fade out at once and in once the group has landed.
+func (a *App) titleMotion(c *ui.Context) ui.ElementTransition {
+	if !a.PageMotion {
+		return ui.ElementTransition{}
+	}
+	t := ui.ElementTransition{Animation: &groupFade, Exit: &fadeOut}
+	if changing, into := a.tabChange(c); changing {
+		t.Enter, t.Animation = &fadeOut, &groupFadeLate
+		if into {
+			t.Animation = &landFadeLate
+		}
+	}
+	return t
+}
+
+// hitMotion is the Transition of a hit of the search: it settles as its
+// row lays out again and fades out when its group no longer shows it;
+// one appearing in a tab just opened rises in once its group is there.
+func (a *App) hitMotion(c *ui.Context) ui.ElementTransition {
+	if !a.PageMotion {
+		return ui.ElementTransition{}
+	}
+	t := ui.ElementTransition{Animation: &groupFade, Position: true, Size: true, Exit: &fadeOut}
+	if changing, into := a.tabChange(c); changing {
+		t.Enter = &riseIn
+		if into {
+			t.Animation = &hitFadeLate
+		}
+	}
+	return t
+}
+
+// searchGroups are the overview, every group with hits cut to what one row
+// of tiles or rows of song cards hold at width (overviewCount) under its
+// title, which opens its tab; or the focused group alone, its next page
+// read as the end comes near. The frame shows focus, the tab it started
+// with: one a click in it opens is the next frame's, and the groups that
+// one leaves are given the quicker fade they go with.
+func (a *App) searchGroups(c *ui.Context, k *Tokens, focus string, sel *client.SearchHit, width float32) {
 	s := a.Store
 	q := &s.Search
-	g := q.Focus
-	a.groupTabs(c, k)
-	hg := store.HitGroup(q.Result, g)
-	if hg == nil || len(hg.Items) == 0 {
-		if hg != nil && hg.NextOffset > 0 {
-			skeletonTiles(c, k, width, 5)
-		} else {
-			searchMessage(c, k, icSearch, "No "+g+" for “"+q.Term+"”", "")
+	type built struct {
+		g  string
+		el ui.Element
+	}
+	var groups [4]built
+	n := 0
+	for _, g := range store.SearchGroups {
+		hg := store.HitGroup(q.Result, g)
+		alone := focus == g
+		if focus != "" && !alone || focus == "" && (hg == nil || len(hg.Items) == 0) {
+			continue
 		}
-	} else {
-		a.groupGrid(c, k, g, hg.Items, sel, width)
+		el := ui.Column(c.Key(g)).Gap(14).Children(func() {
+			if !alone {
+				n := overviewCount(g, width)
+				q.SetOverview(g, n)
+				a.groupHead(c, k, g)
+				a.groupGrid(c, k, g, hg.Items[:min(n, len(hg.Items))], sel, width)
+				return
+			}
+			switch {
+			case hg != nil && len(hg.Items) > 0:
+				a.groupGrid(c, k, g, hg.Items, sel, width)
+			case hg != nil && hg.NextOffset > 0:
+				skeletonTiles(c, k, width, 5)
+			default:
+				searchMessage(c, k, icSearch, "No "+g+" for “"+q.Term+"”", "")
+			}
+			if hg != nil && hg.NextOffset > 0 {
+				a.groupMore(c, k, g)
+			}
+		})
+		groups[n] = built{g, el}
+		n++
 	}
-	if hg == nil || hg.NextOffset == 0 {
-		return
+	for _, b := range groups[:n] {
+		b.el.Transition(a.groupMotion(c, b.g, q.Focus != focus && q.Focus != "" && b.g != q.Focus))
 	}
-	// The row keeps one height whether it loads, failed or waits.
-	ui.Row(c.Key(g + "-more")).Height(groupRow).Gap(10).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+}
+
+// overviewCount is how many hits of group the overview shows at width: a
+// row of tiles, or two rows of song cards, four when a row holds one.
+func overviewCount(g string, width float32) int {
+	if g == "songs" {
+		return max(4, 2*songColumns(width))
+	}
+	return tileColumns(width)
+}
+
+// groupHead is a group's title in the overview, which opens its tab.
+func (a *App) groupHead(c *ui.Context, k *Tokens, g string) {
+	head := ui.ButtonBase(c.Key("head")).Height(groupRow).Gap(4).AlignItems(ui.Center).AlignSelf(ui.Start).
+		Label("See all " + g).Transition(a.titleMotion(c))
+	col := k.Faint
+	if head.Hovered() {
+		col = k.Fg
+	}
+	if head.Clicked() {
+		a.focusGroup(g)
+	}
+	head.Cursor(ui.CursorPointer).Children(func() {
+		display(c, groupTitle(g), 18)
+		ui.Icon(c, icForward).FontSize(15).TextColor(col)
+	})
+}
+
+// groupMore is the row under a group alone while its next page loads or
+// after it failed; it keeps one height whether it loads, failed or waits.
+func (a *App) groupMore(c *ui.Context, k *Tokens, g string) {
+	s := a.Store
+	q := &s.Search
+	ui.Row(c.Key("more")).Height(groupRow).Gap(10).Justify(ui.Center).AlignItems(ui.Center).Transition(a.titleMotion(c)).Children(func() {
 		switch q.More[g] {
 		case store.PageLoading:
 			ui.Text(c, "Loading more…").FontSize(12).TextColor(k.Muted)
@@ -131,24 +251,56 @@ func (a *App) focusedGroup(c *ui.Context, k *Tokens, sel *client.SearchHit, widt
 	}
 }
 
-// groupTabs are the four groups as pills in the row of a group's title,
-// the one shown filled, after a Back to every group.
+// groupGrid lays a group's hits out: songs as cards, the rest as tiles. It
+// moves as its group does when the title over it goes.
+func (a *App) groupGrid(c *ui.Context, k *Tokens, g string, hits []client.SearchHit, sel *client.SearchHit, width float32) {
+	ui.Column(c.Key("grid")).Transition(a.groupMotion(c, g, false)).Children(func() {
+		if g == "songs" {
+			a.songGrid(c, k, hits, sel, width)
+			return
+		}
+		a.tileGrid(c, k, g, hits, sel, width)
+	})
+}
+
+// focusGroup shows group alone from its top, or the overview for "".
+func (a *App) focusGroup(group string) {
+	if a.Store.Search.Focus == group {
+		return
+	}
+	a.groupsFrom = a.Store.Search.Focus
+	a.Store.FocusGroup(group)
+	a.searchSel = ""
+	a.groupsMoved = true
+	if st := a.scrolls["home-body"]; st != nil {
+		// Into a tab from near the top, the page glides there as the group
+		// does. Out to the overview, or from further down, it starts at
+		// its top and only the groups move: a glide up while the group
+		// moves down would carry it and the tabs in from above the window.
+		if a.PageMotion && group != "" && st.Y <= groupGlideMax {
+			st.ScrollTo(0, 0, groupEase)
+		} else {
+			st.Y = 0
+		}
+	}
+}
+
+// groupGlideMax is how far down, in DIPs, the search glides back to its
+// top as a tab opens; from further it jumps there.
+const groupGlideMax = 400
+
+// groupTabs are Overview and the four groups as pills, the one shown
+// filled.
 func (a *App) groupTabs(c *ui.Context, k *Tokens) {
 	q := &a.Store.Search
-	ui.Row(c).Height(groupRow).Gap(8).AlignItems(ui.Center).Children(func() {
-		back := ui.ButtonBase(c.Key("focus-back")).Size(groupRow, groupRow).Radius(radiusFull).Center().Label("All results").Tooltip("All results")
-		col := k.Muted
-		if back.Hovered() {
-			back.Background(k.Track)
-			col = k.Fg
-		}
-		if back.Clicked() {
-			a.focusGroup("")
-		}
-		back.Cursor(ui.CursorPointer).Children(func() { ui.Icon(c, icBack).FontSize(15).TextColor(col) })
-		for _, g := range store.SearchGroups {
+	ui.Row(c.Key("tabs")).Height(groupRow).Gap(8).AlignItems(ui.Center).Children(func() {
+		for _, g := range append([]string{""}, store.SearchGroups...) {
 			on := g == q.Focus
-			t := ui.ButtonBase(c.Key("tab-" + g)).Height(groupRow).PaddingX(14).Radius(radiusFull).AlignItems(ui.Center).Label(groupTitle(g))
+			name := "Overview"
+			if g != "" {
+				name = groupTitle(g)
+			}
+			t := ui.ButtonBase(c.Key("tab-" + g)).Height(groupRow).PaddingX(14).Radius(radiusFull).AlignItems(ui.Center).Label(name)
 			bg, fg := k.Wash, k.Fg
 			switch {
 			case on:
@@ -157,11 +309,11 @@ func (a *App) groupTabs(c *ui.Context, k *Tokens) {
 				bg = k.Track
 			}
 			t.Background(bg)
-			if t.Clicked() && !on {
+			if t.Clicked() {
 				a.focusGroup(g)
 			}
 			t.Cursor(ui.CursorPointer).Children(func() {
-				ui.Text(c, groupTitle(g)).FontSize(13.5).FontWeight(600).TextColor(fg).SingleLine()
+				ui.Text(c, name).FontSize(13.5).FontWeight(600).TextColor(fg).SingleLine()
 			})
 		}
 	})

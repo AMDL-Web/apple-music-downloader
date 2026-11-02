@@ -49,11 +49,11 @@ func TestSearchShowsOneGroupUnderTabsAndReadsItsNextPages(t *testing.T) {
 	if songs != store.SearchFirst || !tt.HasText("Playlists") {
 		t.Fatalf("first page: %d songs, texts %q", songs, tt.Texts())
 	}
-	if err := tt.Click("Show more songs"); err != nil {
+	if err := tt.Click("See all songs"); err != nil {
 		t.Fatal(err)
 	}
 	if a.Store.Search.Focus != "songs" {
-		t.Fatalf("focus %q after Show more songs", a.Store.Search.Focus)
+		t.Fatalf("focus %q after See all songs", a.Store.Search.Focus)
 	}
 	// The short page asks for the next one at once.
 	run(func() bool {

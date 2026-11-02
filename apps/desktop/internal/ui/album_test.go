@@ -62,6 +62,8 @@ func TestAlbumTileHasOneControl(t *testing.T) {
 func TestAlbumOpensFromSearchAndBackReturnsThere(t *testing.T) {
 	a, albums := searchApp(t)
 	s := a.Store
+	// The overview holds a row of them; the Albums tab scrolls.
+	s.FocusGroup("albums")
 	tt := ui.NewTester(a.View, 1280, 800)
 	home := a.scrolls["home-body"]
 	if home == nil || home.MaxY < 400 {
