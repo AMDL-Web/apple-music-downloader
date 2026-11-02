@@ -265,34 +265,75 @@ func TestARowsGreyCoverColorsInAsItFlies(t *testing.T) {
 	if err := tt.Click(failed.Name()); err != nil {
 		t.Fatalf("no row for %q: %v", failed.Name(), err)
 	}
-	saturation := func(r ui.Rect) int {
-		img := tt.Image()
-		s := float32(img.Bounds().Dx()) / 1280
-		hi := 0
-		for dy := float32(-0.3); dy <= 0.3; dy += 0.1 {
-			for dx := float32(-0.3); dx <= 0.3; dx += 0.1 {
-				p := img.RGBAAt(int((r.X+r.W*(0.5+dx))*s), int((r.Y+r.H*(0.5+dy))*s))
-				hi = max(hi, int(max(p.R, p.G, p.B))-int(min(p.R, p.G, p.B)))
-			}
-		}
-		return hi
-	}
 	// In the first frame the page's cover is where the row's was.
 	tt.Advance(filmFrame)
 	if !a.fly.moving || !a.fly.src[partCover].ok {
 		t.Fatal("the page does not fly from the row")
 	}
-	first := saturation(a.fly.src[partCover].box)
+	first := saturation(tt, a.fly.src[partCover].box)
 	flyFrames(a, tt, 120)
 	page, ok := tt.Find("Artwork")
 	if !ok {
 		t.Fatal("no cover on the page")
 	}
-	landed := saturation(page)
+	landed := saturation(tt, page)
 	if landed < 40 {
 		t.Fatalf("the landed cover shows saturation %d: no colors to compare", landed)
 	}
 	if first > landed/2 {
 		t.Errorf("the cover left the grey row with saturation %d of the landed %d: it was in color from the start", first, landed)
 	}
+}
+
+// A recent cover leaves in its own colors, whatever the rows under it
+// show: a queued row's grey is that row's alone.
+func TestARecentCoverLeavesInItsColors(t *testing.T) {
+	a, run := demoApp(t)
+	a.PageMotion = true
+	s := a.Store
+	run(func() bool { return s.Loaded && len(s.Finished()) > 1 })
+	fin := s.Finished()
+	j := fin[len(fin)-1]
+	a.Go(ScreenQueue)
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(1)
+	run(func() bool {
+		tt.Advance(filmFrame)
+		return a.Art.Get(j.ArtworkURL, 160) != nil && a.Art.Get(j.ArtworkURL, 512) != nil
+	})
+	tt.Advance(time.Second)
+	r, ok := tt.Find(j.Name())
+	if !ok {
+		t.Fatalf("no recent cover %q", j.Name())
+	}
+	tt.Move(r.X+r.W/2, r.Y+r.H/2)
+	tt.Advance(time.Second)
+	tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	tt.Advance(filmFrame)
+	if !a.fly.moving || a.fly.from != "wall:"+j.ID {
+		t.Fatalf("the page does not fly from the recent cover: %q", a.fly.from)
+	}
+	first := saturation(tt, a.fly.src[partCover].box)
+	flyFrames(a, tt, 120)
+	page, ok := tt.Find("Artwork")
+	if !ok {
+		t.Fatal("no cover on the page")
+	}
+	if landed := saturation(tt, page); landed < 40 || first < landed/2 {
+		t.Errorf("the recent cover left with saturation %d of the landed %d: it left grey", first, landed)
+	}
+}
+
+// saturation is the most saturated of a few points in the middle of r.
+func saturation(tt *ui.Tester, r ui.Rect) int {
+	img := tt.Image()
+	s := float32(img.Bounds().Dx()) / 1280
+	hi := 0
+	for dy := float32(-0.3); dy <= 0.3; dy += 0.1 {
+		for dx := float32(-0.3); dx <= 0.3; dx += 0.1 {
+			p := img.RGBAAt(int((r.X+r.W*(0.5+dx))*s), int((r.Y+r.H*(0.5+dy))*s))
+			hi = max(hi, int(max(p.R, p.G, p.B))-int(min(p.R, p.G, p.B)))
+		}
+	}
+	return hi
 }

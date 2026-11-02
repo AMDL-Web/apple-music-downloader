@@ -78,7 +78,9 @@ func (a *App) flySourceBadge(el ui.Element, from string, part flightPart, build 
 // leaves and lands with them (flyCover), not with its own.
 func (a *App) flySourceCover(el ui.Element, from string, radius, tone, dim, shadow float32) {
 	a.flySource(el, from, partCover, "", radius)
-	if src := &a.fly.src[partCover]; src.ok {
+	// Every cover of a screen calls this; only the one the page flies
+	// from sets the source.
+	if src := &a.fly.src[partCover]; src.ok && from == a.fly.from {
 		src.tone, src.dim, src.shadow = tone, dim, shadow
 	}
 }
