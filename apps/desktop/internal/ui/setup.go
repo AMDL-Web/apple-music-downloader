@@ -69,7 +69,8 @@ func (a *App) OpenSetup(m mode.Kind) {
 		a.Setup.Recheck()
 		a.Setup.Check(a.Settings.FFmpeg)
 		// A standalone mode without a guest here uses the wrapper it names.
-		f.elsewhere = a.Settings.Mode == mode.Standalone && a.Settings.WrapperAddress != "" && a.Setup.Guest.State != setup.Ready
+		f.elsewhere = a.Settings.Mode == mode.Standalone && a.Settings.WrapperAddress != "" &&
+			(a.Settings.WrapperElsewhere || a.Setup.Guest.State != setup.Ready)
 	}
 	a.Store.CloseDetail()
 	a.Screen = ScreenSetup

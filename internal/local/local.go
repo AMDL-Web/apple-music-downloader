@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -114,8 +115,13 @@ func (b Backend) WriteConfig() error {
 	path := b.ConfigPath()
 	cfg := config.Default()
 	if _, err := os.Stat(path); err == nil {
-		if cfg, err = config.Load(path); err != nil {
+		var dropped []string
+		if cfg, dropped, err = config.LoadGenerated(path); err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if len(dropped) > 0 && b.LogOutput != nil {
+			fmt.Fprintf(b.LogOutput, "config.yaml: dropped %s, which this version no longer has (%s)\n",
+				strings.Join(dropped, ", "), config.UpgradeGuide)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err

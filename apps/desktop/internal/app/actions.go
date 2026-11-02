@@ -26,10 +26,11 @@ func (a *App) ApplySettings(s mode.Settings) {
 	if s.FFmpeg != prev.FFmpeg {
 		a.findFFmpeg()
 	}
-	if s.WrapperAddress != prev.WrapperAddress {
+	if s.WrapperAddress != prev.WrapperAddress || s.WrapperElsewhere != prev.WrapperElsewhere {
 		a.wrapperApplied = true
 	}
 	if s.Mode != prev.Mode || s.RemoteURL != prev.RemoteURL || s.WrapperAddress != prev.WrapperAddress ||
+		s.WrapperElsewhere != prev.WrapperElsewhere ||
 		(s.Mode == mode.Standalone && s.FFmpeg != prev.FFmpeg) {
 		a.connect()
 	}

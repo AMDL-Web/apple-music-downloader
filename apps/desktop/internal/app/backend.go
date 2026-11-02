@@ -54,15 +54,16 @@ func (a *App) localDirs() local.Dirs {
 // wrapper's guest.
 func (a *App) wrapperDir() string { return a.localDirs().WrapperDir() }
 
-// localBackend is the backend standalone mode runs, from the settings. It
-// runs the wrapper the setup screen or amdl wrapper install installed, when
-// there is one, in place of WrapperAddress. config.yaml owns the wrapper
+// localBackend is the backend standalone mode runs, from the settings. Unless
+// the setup screen chose another machine's wrapper, it runs the wrapper the
+// setup screen or amdl wrapper install installed, when there is one, in
+// place of WrapperAddress. config.yaml owns the wrapper
 // address: the setting is written there only on a first start and after
 // Apply changed it, so a change made in Settings or the console stays. The
 // downloads folder is config.yaml's too, which Settings changes through the
 // API.
 func (a *App) localBackend() local.Backend {
-	b := local.Backend{Dirs: a.localDirs(), ManageWrapper: true}
+	b := local.Backend{Dirs: a.localDirs(), ManageWrapper: !a.settings.WrapperElsewhere}
 	if _, err := os.Stat(b.ConfigPath()); a.wrapperApplied || err != nil {
 		b.Wrapper = a.settings.WrapperAddress
 	}

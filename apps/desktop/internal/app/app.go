@@ -219,6 +219,7 @@ func (a *App) load() error {
 		a.settings.Mode, a.settings.RemoteURL = mode.Remote, a.opts.Remote
 	case a.opts.Wrapper != "":
 		a.settings.Mode, a.settings.WrapperAddress = mode.Standalone, a.opts.Wrapper
+		a.settings.WrapperElsewhere = true
 		a.wrapperApplied = true
 	}
 	return nil

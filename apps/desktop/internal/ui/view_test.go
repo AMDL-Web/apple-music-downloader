@@ -20,6 +20,7 @@ import (
 type fakeActions struct {
 	applied    *mode.Settings
 	reconnects int
+	startErr   string
 	// wrapperDone is the answer a test of a wrapper address waits for.
 	wrapperDone func([]mode.Check)
 }
@@ -35,7 +36,7 @@ func (f *fakeActions) ChooseFolder(string, func(string)) {}
 func (f *fakeActions) ShowWindow()                       {}
 func (f *fakeActions) FitPanel(float32)                  {}
 func (f *fakeActions) Starting() bool                    { return false }
-func (f *fakeActions) StartErr() string                  { return "" }
+func (f *fakeActions) StartErr() string                  { return f.startErr }
 func (f *fakeActions) Shared() string                    { return "" }
 func (f *fakeActions) Reconnect()                        { f.reconnects++ }
 func (f *fakeActions) ChooseFile(string, func(string))   {}

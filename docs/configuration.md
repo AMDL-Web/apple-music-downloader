@@ -42,6 +42,12 @@ value it saves always loads. `internal/config#classOf` sorts the keys:
 While this machine runs its own wrapper (`amdl wrapper install`), the backend writes
 `wrapper.address` itself and `PUT` refuses to change it (`config_key_not_mutable`,
 `details.reason` `managed_wrapper`).
+The desktop app's "Another machine" leaves an installed wrapper stopped and uses the
+address it names instead.
+
+The `config.yaml` the desktop app and other clients write for the backend they run
+(`internal/local`) drops keys this version removed and names them in the backend log; a
+`config.yaml` you keep fails startup on them, as the upgrade guide lists.
 
 `GET /api/v1/config` returns runtime keys as they run and restart keys as saved;
 `pending_restart` in its answer, in the `PUT` answer and in `GET /api/v1/system` names the

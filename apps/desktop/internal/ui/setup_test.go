@@ -303,3 +303,43 @@ func TestTheDemoOffersNoBackendOfThisComputer(t *testing.T) {
 		t.Errorf("setup: mode %q, texts %q", a.su.mode, tt.Texts())
 	}
 }
+
+// Another machine stays chosen over a wrapper installed here, and a backend
+// that did not start says why on the wrapper row.
+func TestAnotherMachineOverAnInstalledGuest(t *testing.T) {
+	s := mode.DefaultSettings()
+	s.Mode, s.WrapperAddress, s.WrapperElsewhere = mode.Standalone, "http://127.0.0.1:12340", true
+	a, act, tt, _, _ := setupApp(t, s, mode.Standalone)
+	a.Setup.Guest = setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "bde3335f47a3"}}
+	a.OpenSetup(mode.Standalone)
+	tt.Frame()
+	if !a.su.elsewhere || !a.localApplied() {
+		t.Fatalf("elsewhere %v, applied %v; want Another machine, applied", a.su.elsewhere, a.localApplied())
+	}
+	act.startErr = "read config.yaml: unknown config key(s) download.memory_mode"
+	tt.Frame()
+	if !tt.HasText(act.startErr) || !tt.HasText("Restart") {
+		t.Errorf("start error not on the wrapper row: %q", tt.Texts())
+	}
+	// Switching to This computer is a change to apply, not the applied state.
+	a.su.elsewhere = false
+	if a.localApplied() {
+		t.Error("This computer counts as applied while the settings use another machine")
+	}
+}
+
+func TestStartRecordsWhichWrapper(t *testing.T) {
+	s := mode.DefaultSettings()
+	s.Mode = mode.Standalone
+	a, act, _, _, _ := setupApp(t, s, mode.Standalone)
+	a.su.elsewhere, a.su.wrapperAddr = true, "http://127.0.0.1:12340"
+	a.startLocal()
+	if act.applied == nil || !act.applied.WrapperElsewhere || act.applied.WrapperAddress != "http://127.0.0.1:12340" {
+		t.Fatalf("Another machine applied %+v", act.applied)
+	}
+	a.su.elsewhere = false
+	a.startLocal()
+	if act.applied.WrapperElsewhere {
+		t.Errorf("This computer applied %+v", act.applied)
+	}
+}
