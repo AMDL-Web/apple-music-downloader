@@ -237,3 +237,17 @@ func TestSettingsOpenAtASectionAndScrollFreelyFromThere(t *testing.T) {
 		t.Errorf("the page went back to %v (pin %q) after the user scrolled", st.Y, a.set.pin)
 	}
 }
+
+// A build without a commit, as a development one, shows its version alone,
+// with no dot left hanging after it.
+func TestVersionLeavesOutWhatIsNotKnown(t *testing.T) {
+	for _, c := range []struct{ version, commit, want string }{
+		{"dev", "", "dev"},
+		{"2.0.0", "4ee45a99f1c2", "2.0.0 · 4ee45a9"},
+		{"", "4ee45a99f1c2", "4ee45a9"},
+	} {
+		if got := versionText(c.version, c.commit); got != c.want {
+			t.Errorf("version %q, commit %q: %q, want %q", c.version, c.commit, got, c.want)
+		}
+	}
+}

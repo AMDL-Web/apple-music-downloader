@@ -479,6 +479,18 @@ func hooksCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element 
 	})
 }
 
+// versionText is a version and its short commit, joined by a dot when both
+// are known: a development build has no commit.
+func versionText(version, commit string) string {
+	var parts []string
+	for _, p := range []string{version, shortCommit(commit)} {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
 func shortCommit(s string) string {
 	if len(s) > 7 {
 		return s[:7]
