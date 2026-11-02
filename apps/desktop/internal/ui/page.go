@@ -277,8 +277,9 @@ func (a *App) pageHead(c *ui.Context, k *Tokens, l heroLayout, p *store.AlbumPag
 const heroBand = 900
 
 // jobFigures are a download's figures under the title: what landed, which
-// counts the bytes still arriving while it runs, how fast, how long it has
-// left or when it finished, and when it started. How many tracks finished
+// counts the bytes still arriving while it runs, how fast it goes or, done,
+// how long it took, how long it has left or when it finished, and when it
+// started. How many tracks finished
 // is the bar's to say.
 func jobFigures(c *ui.Context, k *Tokens, l heroLayout, j *store.Job, hc heroColors) {
 	b := j.Bytes()
@@ -291,10 +292,14 @@ func jobFigures(c *ui.Context, k *Tokens, l heroLayout, j *store.Job, hc heroCol
 	} else {
 		heroStat(c, k, hc, l, "Size", "—", "")
 	}
-	if sp := j.AvgSpeed(c.Now()); sp > 0 {
+	switch sp := j.ShownSpeed(c.Now()); {
+	case j.Status.IsTerminal() && j.StartedAt != nil && j.FinishedAt != nil:
+		// Once it is done, how long it took says more than how fast.
+		heroStat(c, k, hc, l, "Total time", format.Duration(j.FinishedAt.Sub(*j.StartedAt)), "")
+	case sp > 0:
 		v, u := format.Scale(sp)
 		heroStat(c, k, hc, l, "Avg speed", format.Number(v, 1), " "+u+"/s")
-	} else {
+	default:
 		heroStat(c, k, hc, l, "Avg speed", "—", "")
 	}
 	switch r := format.Remaining(j.Remaining); {

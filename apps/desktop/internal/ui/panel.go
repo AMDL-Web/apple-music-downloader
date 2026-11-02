@@ -138,7 +138,7 @@ func (a *App) panelHead(c *ui.Context, k *Tokens, sum store.Summary) {
 func (a *App) panelChips(c *ui.Context, k *Tokens, sum store.Summary) {
 	j := sum.Now
 	ui.Row(c).Gap(6).Wrap().Children(func() {
-		if sp := j.AvgSpeed(c.Now()); sp > 0 {
+		if sp := j.ShownSpeed(c.Now()); sp > 0 {
 			chip(c, k, format.Rate(sp), ui.Color{})
 		}
 		if r := format.Remaining(j.Remaining); r != "" {

@@ -377,7 +377,7 @@ func (a *App) heroProgressText(j *store.Job) string {
 
 func (a *App) heroRateText(c *ui.Context, j *store.Job) string {
 	var parts []string
-	if sp := j.AvgSpeed(c.Now()); sp > 0 {
+	if sp := j.ShownSpeed(c.Now()); sp > 0 {
 		parts = append(parts, "avg "+format.Rate(sp))
 	}
 	if r := format.Remaining(j.Remaining); r != "" {

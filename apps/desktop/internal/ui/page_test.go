@@ -270,3 +270,30 @@ func TestARunningDownloadsPageOpensWithItsColumnsInPlace(t *testing.T) {
 		t.Errorf("the lengths moved from %v to %v as the page opened", first.X, later.X)
 	}
 }
+
+// A finished download's page says how long it took where a running one's
+// says how fast it goes.
+func TestAFinishedDownloadsPageSaysHowLongItTook(t *testing.T) {
+	a, run := demoApp(t)
+	s := a.Store
+	var done *store.Job
+	run(func() bool {
+		for _, j := range s.Jobs {
+			if j.Status == domain.JobCompleted && j.StartedAt != nil && j.FinishedAt != nil {
+				done = j
+				return true
+			}
+		}
+		return false
+	})
+	a.OpenJob(done.ID)
+	tt := stillTester(a.View, 1280, 800)
+	took := done.FinishedAt.Sub(*done.StartedAt).Round(time.Second)
+	want := fmt.Sprintf("%d:%02d", int(took.Minutes()), int(took.Seconds())%60)
+	if !tt.HasText("TOTAL TIME") || !tt.HasText(want) {
+		t.Errorf("no total time %s on a finished download's page: %q", want, tt.Texts())
+	}
+	if tt.HasText("AVG SPEED") {
+		t.Errorf("a finished download's page still shows its average speed")
+	}
+}

@@ -32,7 +32,13 @@ type Job struct {
 	rate           progress.Rate
 	seq            int
 	snapshotCursor int64
+	// speed is the figure ShownSpeed shows, taken at speedAt.
+	speed   float64
+	speedAt time.Time
 }
+
+// speedHold is how long ShownSpeed keeps a running job's figure.
+const speedHold = 2 * time.Second
 
 // Activity is one line of a job's activity log.
 type Activity struct {
@@ -135,6 +141,16 @@ func (j *Job) Transferred() int64 { return progress.Transferred(j.Items) }
 // AvgSpeed is the bytes moved per second of the run, until now or until it
 // finished (progress.AvgSpeed). 0 when unknown.
 func (j *Job) AvgSpeed(now time.Time) float64 { return progress.AvgSpeed(j.Job, j.Items, now) }
+
+// ShownSpeed is AvgSpeed as the views show it: a running job's figure is
+// taken again at most every speedHold, so it does not change with every
+// frame and every track's burst, and a finished job's is its last.
+func (j *Job) ShownSpeed(now time.Time) float64 {
+	if j.speed == 0 || j.FinishedAt != nil || now.Sub(j.speedAt) >= speedHold || now.Before(j.speedAt) {
+		j.speed, j.speedAt = j.AvgSpeed(now), now
+	}
+	return j.speed
+}
 
 // Phase is what a job is doing, for its status pill.
 type Phase int

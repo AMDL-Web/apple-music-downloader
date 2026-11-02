@@ -333,7 +333,7 @@ func (a *App) nowCard(c *ui.Context, k *Tokens, j *store.Job) {
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(12).FontWeight(600).Ellipsis("…").SingleLine()
 			line := fmt.Sprintf("%d of %d", j.Done(), j.TotalItems)
-			if sp := j.AvgSpeed(c.Now()); sp > 0 {
+			if sp := j.ShownSpeed(c.Now()); sp > 0 {
 				line += " · " + format.Rate(sp)
 			}
 			mono(c, line, 10.5).TextColor(k.Muted).Margin(0, 0, 4, 0)

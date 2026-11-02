@@ -238,3 +238,22 @@ func TestRemainingSurvivesTracksFinishing(t *testing.T) {
 		}
 	}
 }
+
+// A running job's speed shows a new figure at most every two seconds,
+// whatever arrives meanwhile, so it does not jump with each track's burst.
+func TestTheShownSpeedHoldsItsFigureAWhile(t *testing.T) {
+	start := at(0)
+	j := &Job{Job: domain.Job{Status: domain.JobRunning, StartedAt: &start}, Items: []domain.JobItem{{Status: domain.ItemDownloading}}}
+	j.Items[0].Progress.DownloadBytes = 10 << 20
+	first := j.ShownSpeed(start.Add(10 * time.Second))
+	if first <= 0 {
+		t.Fatalf("a job 10 MB in shows speed %v", first)
+	}
+	j.Items[0].Progress.DownloadBytes = 30 << 20
+	if got := j.ShownSpeed(start.Add(11 * time.Second)); got != first {
+		t.Errorf("a second on, a burst of 20 MB moved the speed from %v to %v", first, got)
+	}
+	if got := j.ShownSpeed(start.Add(12 * time.Second)); got == first {
+		t.Errorf("two seconds on, the speed still shows %v", got)
+	}
+}
