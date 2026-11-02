@@ -16,9 +16,9 @@ install and needs the maintainer's OK and an upgrade note:
   its folder from `libraryAlbumDir`, so one track copy has one path per slot whichever
   add downloads it; `download.library_path_format` folders take album values only
   (`internal/config#validateLibraryFormat`);
-- slot names (`trackTarget.outputPath`): a stored path wins; another quality is the
-  main file's name plus `qualitySuffixedPath`'s suffix unless the file name names
-  `{Codec}` or `{Quality}`;
+- slot names (`trackTarget.outputPath`): a completed slot's stored path wins; another
+  quality is the main file's name plus `qualitySuffixedPath`'s suffix unless the file
+  name names `{Codec}` or `{Quality}`;
 - `safeName` and `safeNameCapped`: replaced characters, trimming, the segment byte cap;
 - `qualityLabel` strings, which `{Quality}` and the suffix put into names;
 - sidecar names: `lyricsSidecarPath`, `cover.<ext>`, `artist.<ext>`.

@@ -774,6 +774,41 @@ func TestRecordLyricsResetSkipsATrackNoLongerListed(t *testing.T) {
 	}
 }
 
+// A slot that only claimed a path before, and never completed, is named by
+// the template again: with {Codec} in the file name, a run that lands
+// AAC-LC after an ALAC attempt was released names the file AAC-LC.
+func TestRecordRunRenamesASlotThatNeverCompleted(t *testing.T) {
+	cfg := recordTestConfig(t)
+	cfg.Download.LibraryPathFormat = "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName} [{Codec} {Quality}]"
+	catalog := newRecordCatalog()
+	album := catalog.addAlbum("100", "Album", "Artist", 1, 1, 1000, "")
+	h := newRecordHarness(t, cfg, nil, catalog)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if _, err := h.store.AddAlbum(ctx, db.AlbumAdd{ID: "100", WantedAll: true, Source: domain.SourceManual, Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.ApplyAlbumRead(ctx, albumRead(album, "cn")); err != nil {
+		t.Fatal(err)
+	}
+	key := domain.FileKey{OwnerKind: domain.ResourceAlbum, OwnerID: "100", SongID: "1001", Slot: domain.SlotMain}
+	alac := filepath.Join(cfg.Download.DownloadsDir, "library", "Artist", "Album", "01. Song 1 [ALAC 24-bit_96 kHz].m4a")
+	if err := h.store.ClaimPath(ctx, key, alac, "run-earlier", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.ReleaseRunSlots(ctx, "run-earlier", now); err != nil {
+		t.Fatal(err)
+	}
+	h.start()
+	h.submit("https://music.apple.com/cn/album/album/100")
+	h.waitFor("the album", h.albumComplete("100"))
+	h.waitFor("the run to end", h.idle())
+	f := h.files(domain.ResourceAlbum, "100")[0]
+	if want := "library/Artist/Album/01. Song 1 [AAC-LC 256Kbps].m4a"; f.Codec != "aac-lc" || f.Path != want {
+		t.Fatalf("slot = %s at %q, want aac-lc at %q", f.Codec, f.Path, want)
+	}
+}
+
 // The animated cover the backfill finds is stored on the album record.
 func TestRecordRunStoresMotionArtworkOnTheAlbum(t *testing.T) {
 	cfg := recordTestConfig(t)

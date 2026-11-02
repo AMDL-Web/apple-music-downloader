@@ -362,8 +362,9 @@ complete, so a failed or paused run leaves the old file as it was.
 A library track copy has one path per slot: the main slot takes the plain template name,
 and another quality of a downloaded track is named after it with a quality suffix,
 `01. Song [ALAC 24-bit_96 kHz].m4a` (`internal/media#qualitySuffixedPath`), unless the
-file name names `{Codec}` or `{Quality}`. A path a slot once claimed stays its path when
-the template changes. Playlists keep their own copies in their folders. A station is a
+file name names `{Codec}` or `{Quality}`. The path of a file a slot completed stays its
+path when the template changes; a slot that never completed is named by the template
+again on each attempt. Playlists keep their own copies in their folders. A station is a
 one-off run that downloads every track of its feed.
 
 ### Standalone covers

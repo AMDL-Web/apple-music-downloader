@@ -49,9 +49,10 @@ type PlannedSlot struct {
 	// Position is the track's {SongNumber}: its number in the album as
 	// released, or its playlist position.
 	Position int `json:"position"`
-	// FixedPath is the absolute path the slot downloaded to before (a reset
-	// of a done slot, a retry of a slot that claimed a path). It wins over
-	// the path template, so a template change since does not move the file.
+	// FixedPath is the absolute path of the file the slot completed before
+	// (a reset of a done slot). It wins over the path template, so a template
+	// change since does not move the file. A slot that never completed has
+	// none: a path it only claimed may name a codec that did not land.
 	FixedPath string `json:"fixed_path,omitempty"`
 	// MainPath is, for an extra slot, the absolute path of the track's main
 	// file; the extra file is named after it with a quality suffix.
@@ -206,12 +207,15 @@ func (m *Manager) PlanRun(ctx context.Context, job domain.Job) (Plan, error) {
 	reused := map[string]bool{}
 	for _, slot := range due {
 		f := slot.File
+		completed := f.CompletedAt != nil && f.Path != ""
 		planned := PlannedSlot{
 			FileKey: f.FileKey, Position: slot.Position,
-			FixedPath:       domain.ResolveStoredPath(downloadsDir, f.Path),
 			MainPath:        domain.ResolveStoredPath(downloadsDir, slot.MainPath),
 			QualityPriority: f.QualityPriority,
-			Replace:         f.CompletedAt != nil && f.Path != "",
+			Replace:         completed,
+		}
+		if completed {
+			planned.FixedPath = domain.ResolveStoredPath(downloadsDir, f.Path)
 		}
 		if f.Slot != domain.SlotMain {
 			planned.QualityPriority = []string{f.Slot}

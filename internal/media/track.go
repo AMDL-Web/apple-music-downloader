@@ -28,9 +28,9 @@ type trackTarget struct {
 	placement *libraryPlacement
 	albumDir  string
 	artistDir string
-	// fixedPath is the path the slot claimed before (a reset of a done slot,
-	// a retry of one that claimed a path). It wins over the template, so a
-	// template change since does not move the file.
+	// fixedPath is the path of the file the slot completed before (a reset of
+	// a done slot). It wins over the template, so a template change since
+	// does not move the file.
 	fixedPath string
 	// extra marks another quality of a downloaded track: unless the template
 	// names {Codec} or {Quality}, it is named after mainPath, the track's
