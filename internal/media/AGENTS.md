@@ -12,7 +12,7 @@ install and needs the maintainer's OK and an upgrade note:
 - template expansion in `outputPath` and `libraryTrackPath` and its variables
   (defaults and the variable list are in `configs/config.example.yaml`);
 - library placement: a song, album or artist track's path comes only from
-  `libraryTrackPath` (its album and its position in the album's track list), its
+  `libraryTrackPath` (its album and its number in the album, `albumSongNumbers`), its
   folder from `libraryAlbumDir`, so one track has one path whichever job type
   downloads it; `download.library_path_format` folders take album values only
   (`internal/config#validateLibraryFormat`);

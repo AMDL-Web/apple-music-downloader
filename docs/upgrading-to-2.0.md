@@ -302,7 +302,7 @@ the Compose service name stay as they were.
 | Area | 1.x | 2.0 | Affects |
 | --- | --- | --- | --- |
 | Song, album and artist paths | three templates, `songs/{ArtistName}/{AlbumName}/{TrackNumber:02d}. {SongName}`, `albums/…` and `artists/…` | one, `download.library_path_format`; a track has one path whichever job type downloads it, and a file there counts as downloaded at any quality | every library, media-server scans, scripts that read paths |
-| A single song's file | in the song's artist's folder, numbered by `{TrackNumber}` (`{SongNumber}` was always 1) | in its album artist's folder, numbered by its position in the album, as an album download names it; the song's album is read to place it, and a song without one, or missing from its album's track list, fails | single-song downloads |
+| A single song's file | in the song's artist's folder, numbered by `{TrackNumber}` (`{SongNumber}` was always 1) | in its album artist's folder, numbered by its number in the album, as an album download names it; the song's album is read to place it, and a song without one, or missing from its album's track list, fails | single-song downloads |
 | An artist download | every album under the first album's artist | each album under its own album artist, so a compilation lands in its own folder | artist downloads |
 | Standalone covers of a song or artist download | the song's artwork and the track artist's picture | the album's artwork and the album artist's picture, as for an album | `cover.jpg` and `artist.jpg` |
 | Playlists and stations | own folders | unchanged; not part of the library, so a song can be on disk twice | none |
@@ -321,7 +321,7 @@ only affect unusual titles; the last two only templates that use `{SongNumber}` 
   longer names only after the whole download (file names over 251 bytes, folder names
   over 255); a name between 241 bytes and those limits is now shorter, so that track
   downloads again.
-- In an artist job, `{SongNumber}` is each track's position in its own album; 1.x
+- In an artist job, `{SongNumber}` is each track's number in its own album; 1.x
   numbered the whole discography in one run.
 - `{TrackCount}` is the number of tracks on the track's own disc; 1.x used the album-wide
   count. A template that uses `{TrackCount}` downloads multi-disc albums again.

@@ -10,13 +10,15 @@ import (
 )
 
 // JobMark is the part of a job row that names a catalog item's queue entry:
-// the job's id, canonical key, status and times.
+// the job's id, canonical key, status, times and total_items, the tracks its
+// last run resolved (0 before any run resolved them).
 type JobMark struct {
 	ID           string
 	CanonicalKey string
 	Status       domain.JobStatus
 	CreatedAt    time.Time
 	FinishedAt   *time.Time
+	TotalItems   int
 }
 
 // JobMarks returns the queued, running and completed jobs of types whose
@@ -37,7 +39,7 @@ func (s *Store) JobMarks(ctx context.Context, types, ids []string) ([]JobMark, e
 		match[i] = "instr(canonical_key, ?) > 0"
 		args = append(args, ":"+id)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, canonical_key, status, created_at, finished_at FROM jobs
+	rows, err := s.db.QueryContext(ctx, `SELECT id, canonical_key, status, created_at, finished_at, total_items FROM jobs
 		WHERE type IN (`+placeholders(len(types))+`) AND status IN (?,?,?) AND (`+strings.Join(match, " OR ")+`)`, args...)
 	if err != nil {
 		return nil, err
@@ -51,7 +53,7 @@ func (s *Store) JobMarks(ctx context.Context, types, ids []string) ([]JobMark, e
 			created  string
 			finished sql.NullString
 		)
-		if err := rows.Scan(&mark.ID, &mark.CanonicalKey, &status, &created, &finished); err != nil {
+		if err := rows.Scan(&mark.ID, &mark.CanonicalKey, &status, &created, &finished, &mark.TotalItems); err != nil {
 			return nil, err
 		}
 		mark.Status = domain.JobStatus(status)

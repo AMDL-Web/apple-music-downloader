@@ -13,19 +13,22 @@ import (
 )
 
 // libraryPlacement is where a song, album or artist track sits in the
-// library: its album, and its 1-based position in that album's track list,
-// counting on across discs. Every library path comes from a placement, so a
-// track has one path whichever job type downloads it.
+// library: its album, its 1-based index in that album's track list (the entry
+// whose values name the file), and its number in the album as released
+// (albumSongNumbers), which {SongNumber} takes. Every library path comes from a
+// placement, so a track has one path whichever job type downloads it.
 type libraryPlacement struct {
-	Album applemusic.Collection
-	Index int
+	Album  applemusic.Collection
+	Index  int
+	Number int
 }
 
-// albumPlacements places every track of album at its own position.
+// albumPlacements places every track of album, in album.Tracks order.
 func albumPlacements(album applemusic.Collection) []libraryPlacement {
+	numbers := albumSongNumbers(album.Tracks)
 	placements := make([]libraryPlacement, len(album.Tracks))
 	for i := range album.Tracks {
-		placements[i] = libraryPlacement{Album: album, Index: i + 1}
+		placements[i] = libraryPlacement{Album: album, Index: i + 1, Number: numbers[i]}
 	}
 	return placements
 }
@@ -34,10 +37,47 @@ func albumPlacements(album applemusic.Collection) []libraryPlacement {
 func placeInAlbum(album applemusic.Collection, songID string) (libraryPlacement, bool) {
 	for i, track := range album.Tracks {
 		if track.ID == songID {
-			return libraryPlacement{Album: album, Index: i + 1}, true
+			return libraryPlacement{Album: album, Index: i + 1, Number: albumSongNumbers(album.Tracks)[i]}, true
 		}
 	}
 	return libraryPlacement{}, false
+}
+
+// albumSongNumbers numbers an album's tracks as the album was released: each
+// track's own trackNumber, counting on across discs by every earlier disc's
+// track total. A storefront can withhold a track from the track list; the
+// tracks after it keep their numbers, so the files match the album rather
+// than the list. When a track has no trackNumber, or two tracks would share a
+// number, every track takes its list position instead, which is unique.
+func albumSongNumbers(tracks []applemusic.Song) []int {
+	// A disc's total is its highest trackNumber or its entry count, whichever
+	// is larger, as applemusic.DiscTrackCount reckons it; a disc the list does
+	// not name at all counts as empty.
+	totals := map[int]int{}
+	counts := map[int]int{}
+	for _, track := range tracks {
+		disc := max(1, track.DiscNumber)
+		counts[disc]++
+		totals[disc] = max(totals[disc], track.TrackNumber, counts[disc])
+	}
+	numbers := make([]int, len(tracks))
+	seen := make(map[int]bool, len(tracks))
+	for i, track := range tracks {
+		disc := max(1, track.DiscNumber)
+		number := track.TrackNumber
+		for d := 1; d < disc; d++ {
+			number += totals[d]
+		}
+		if track.TrackNumber < 1 || seen[number] {
+			for j := range numbers {
+				numbers[j] = j + 1
+			}
+			return numbers
+		}
+		seen[number] = true
+		numbers[i] = number
+	}
+	return numbers
 }
 
 // albumTemplateSong carries only an album's own values, which are all
@@ -76,7 +116,7 @@ func libraryTrackPath(cfg config.Config, p libraryPlacement) string {
 	}
 	track.AlbumName, track.AlbumArtist, track.AlbumID, track.AlbumRelease = p.Album.Name, p.Album.Artist, p.Album.ID, p.Album.ReleaseDate
 	segments := strings.Split(cfg.Download.LibraryPathFormat, "/")
-	name := safeName(formatPattern(segments[len(segments)-1], pathTemplateContext{song: track, collectionIndex: p.Index})) + ".m4a"
+	name := safeName(formatPattern(segments[len(segments)-1], pathTemplateContext{song: track, collectionIndex: p.Number})) + ".m4a"
 	return filepath.Join(libraryAlbumDir(cfg, p.Album), name)
 }
 

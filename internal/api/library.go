@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"slices"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/domain"
@@ -55,11 +56,20 @@ func (s *Server) songOnDisk(ctx context.Context, storefront string, song applemu
 
 // markAlbumFolders sets library on each album hit from its folder alone
 // (LibraryService.AlbumFolderStates), within ctx. albums are the summaries
-// the hits were made from, in the same order. A hit counted after ctx ended
-// keeps library unset.
+// the hits were made from, in the same order; it runs after markPriorJobs. A
+// hit whose queue entry has resolved its tracks counts against that number:
+// a storefront can withhold tracks from an album's track list, and the
+// summary's track_count still counts them, so a fully downloaded album would
+// never read complete. A hit counted after ctx ended keeps library unset.
 func (s *Server) markAlbumFolders(ctx context.Context, hits []*searchHit, albums []applemusic.Collection) {
 	if s.library == nil || len(albums) == 0 {
 		return
+	}
+	albums = slices.Clone(albums)
+	for i := range albums {
+		if i < len(hits) && hits[i].resolvedTracks > 0 {
+			albums[i].TrackCount = hits[i].resolvedTracks
+		}
 	}
 	for i, state := range s.library.AlbumFolderStates(ctx, albums) {
 		if i < len(hits) {

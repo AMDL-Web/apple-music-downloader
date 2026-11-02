@@ -618,9 +618,11 @@ failing the search. A completed `prior_job` does not mean the files are still th
 
 An album hit carries `library`, a [library state](#library-state) estimated from its
 library folder alone: one listing per album, no further catalog read, the `.m4a` files in
-it counted against `track_count`. A file the track list does not name counts too, and an
-album the catalog gives no `track_count` reads as `none`; `GET /albums/{id}` checks song
-by song. An album whose listing does not finish within the search's 10 seconds has no
+it counted against the tracks its `prior_job` resolved, else against `track_count`. A
+storefront can withhold tracks from an album's track list that `track_count` still counts,
+so a downloaded album with a withheld track reads `partial` until it has a job. A file the
+track list does not name counts too, and an album the catalog gives no `track_count` and
+that has no job reads as `none`; `GET /albums/{id}` checks song by song. An album whose listing does not finish within the search's 10 seconds has no
 `library`. Songs, playlists and artists have none.
 
 `in_apple_library` says whether the item is in the signed-in Apple Music account library
@@ -691,8 +693,9 @@ finish within the 15 seconds.
 `library` on an album, a song lookup and an album hit is `{state, tracks_on_disk,
 tracks_total}`: `state` is `complete` when every track has a file at its library path
 (`download.library_path_format`, with at least one track), `partial` when some do, `none`
-otherwise. Job history plays no part: a file moved away reads as not on disk, and a file a
-lower-quality download wrote counts.
+otherwise. `tracks_total` counts the songs the album's track list names, so a track the
+storefront withholds is not missing. Job history never says a track is on disk: a file
+moved away reads as not on disk, and a file a lower-quality download wrote counts.
 
 | Case | Answer |
 | --- | --- |

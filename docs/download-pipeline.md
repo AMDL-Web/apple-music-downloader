@@ -307,9 +307,15 @@ track list (`internal/media#libraryTrackPath`).
 - The file name is expanded from the album's own entry for the track, with the album's
   values, so a single song lands where its album's download puts it even when its own
   song read names it differently.
-- `{SongNumber}` is the 1-based position in the album's track list. Apple orders an
-  album's tracks disc by disc, so the numbering counts on across the disc boundary instead
-  of restarting. The file name must contain `{SongNumber}`, or both `{DiscNumber}` and
+- `{SongNumber}` is the track's number in its album as released: Apple's track number,
+  counting on across the disc boundary instead of restarting (disc 2 of a 12-track first
+  disc starts at 13). A storefront can withhold a track from the album's track list (cn
+  lists 9 of the 10 tracks of album 1524443761); the tracks after it keep their numbers,
+  so track 3 is still `03.`. Withheld tracks are not counted as missing: an album is
+  complete when every track the list names is on disk. A track withheld last on a disc
+  moves the next disc's numbers, which the list cannot show, and an album whose tracks
+  carry no track numbers is numbered in list order. The file name must contain
+  `{SongNumber}`, or both `{DiscNumber}` and
   `{TrackNumber}`: `{TrackNumber}` alone repeats `01, 02, …` once per disc, and two
   identically titled tracks on different discs would share a path.
 - `{Quality}`, `{Codec}`, `{Tag}` and the playlist and station variables are rejected:

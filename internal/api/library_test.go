@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
@@ -220,6 +221,34 @@ func TestSearchAndArtistAlbumsEstimateAlbumsFromTheirFolders(t *testing.T) {
 	items := got["albums"].(map[string]any)["items"].([]any)
 	if lib := items[0].(map[string]any)["library"]; !reflect.DeepEqual(lib, want) {
 		t.Errorf("artist album library = %v, want %v", lib, want)
+	}
+}
+
+// A storefront can withhold tracks from an album's track list while the
+// summary's track_count still counts them. An album whose queue entry
+// resolved 15 of the summary's 16 tracks, all 15 on disk, reads complete on a
+// card, as it does on its album page, instead of 15/16 for good.
+func TestAlbumCardsCountTheTracksTheirJobResolved(t *testing.T) {
+	catalog := &fakeCatalog{t: t, search: sampleSearch(), artist: &applemusic.Artist{ID: "159260351", Name: "Taylor Swift"},
+		albums: &applemusic.AlbumPage{Albums: sampleSearch().Albums}}
+	server := newServer(t, Deps{Catalog: catalog, Library: &fakeLibrary{folders: map[string]int{"6814997249": 15}}})
+	created := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	if err := server.store.CreateJob(context.Background(), domain.Job{
+		ID: "album-done", Type: "album", Input: "input", Storefront: "cn", CanonicalKey: "album:cn:6814997249",
+		Status: domain.JobCompleted, TotalItems: 15, CreatedAt: created, UpdatedAt: created, FinishedAt: &created,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"state": "complete", "tracks_on_disk": float64(15), "tracks_total": float64(15)}
+	for _, path := range []string{"/api/v1/search?term=taylor&types=albums&storefront=us", "/api/v1/artists/159260351/albums?storefront=us"} {
+		recorder := requestJSON(t, server.Routes(), http.MethodGet, path, "")
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, body %s", path, recorder.Code, recorder.Body.String())
+		}
+		hit := decodeBody(t, recorder.Body.Bytes())["albums"].(map[string]any)["items"].([]any)[0].(map[string]any)
+		if got := hit["library"]; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s album library = %v, want %v", path, got, want)
+		}
 	}
 }
 

@@ -24,7 +24,7 @@ func TestLibraryTrackPathUsesAlbumValuesForFolders(t *testing.T) {
 			{ID: "song-2", Name: "Guest Track", ArtistName: "Guest Artist", AlbumName: "Track-level album title"},
 		},
 	}
-	got := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 2})
+	got := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 2, Number: 2})
 	want := filepath.Join("downloads", "Primary Artist", "Shared Album", "02. Guest Artist - Guest Track.m4a")
 	if got != want {
 		t.Fatalf("libraryTrackPath() = %q, want %q", got, want)
@@ -141,7 +141,7 @@ func TestLibraryTrackPathSanitizesEachSegmentIndependently(t *testing.T) {
 
 	album := applemusic.Collection{Name: "Back in Black", Artist: "AC/DC", Tracks: make([]applemusic.Song, 4)}
 	album.Tracks[3] = applemusic.Song{Name: "Hells: Bells?"}
-	got := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 4})
+	got := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 4, Number: 4})
 	want := filepath.Join("downloads", "library", "AC_DC", "Back in Black", "04. Hells_ Bells_.m4a")
 	if got != want {
 		t.Fatalf("libraryTrackPath() = %q, want %q", got, want)
@@ -165,7 +165,7 @@ func TestOutputPathCannotEscapeDownloadsDir(t *testing.T) {
 		outputPath(cfg, song, applemusic.TypeSong, 1, "", "", "", ""),
 		outputPath(cfg, song, applemusic.TypeStation, 1, "Radio", "ra.1", "", ""),
 		outputPath(cfg, song, applemusic.TypePlaylist, 1, "List", "pl.1", "", ""),
-		libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1}),
+		libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1, Number: 1}),
 	} {
 		if got != filepath.Clean(got) || strings.HasPrefix(got, "..") || filepath.IsAbs(got) {
 			t.Fatalf("path escaped downloads_dir: %q", got)
@@ -182,7 +182,7 @@ func TestOutputPathCannotEscapeDownloadsDir(t *testing.T) {
 			t.Fatalf("path %q outside %q", got, cfg.Download.DownloadsDir)
 		}
 	}
-	if got := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1}); got != filepath.Join("downloads", "_", "_", "Song.m4a") {
+	if got := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1, Number: 1}); got != filepath.Join("downloads", "_", "_", "Song.m4a") {
 		t.Fatalf("parent-segment template produced %q, want sanitized _ segments", got)
 	}
 	if got := outputPath(cfg, song, applemusic.TypePlaylist, 1, "List", "pl.1", "", ""); got != filepath.Join("downloads", "{SongNumber_xx}. Song.m4a") {
@@ -320,8 +320,8 @@ func TestAlbumPathKeepsIdenticallyTitledDiscTracksApart(t *testing.T) {
 	album.Tracks[0] = applemusic.Song{Name: "The Greatest Show", DiscNumber: 1, TrackNumber: 1, DiscCount: 2}
 	album.Tracks[14] = applemusic.Song{Name: "The Greatest Show", DiscNumber: 2, TrackNumber: 1, DiscCount: 2}
 
-	first := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1})
-	second := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 15})
+	first := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 1, Number: 1})
+	second := libraryTrackPath(cfg, libraryPlacement{Album: album, Index: 15, Number: 15})
 	if first == second {
 		t.Fatalf("both discs resolved to %q", first)
 	}

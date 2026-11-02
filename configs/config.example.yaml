@@ -228,8 +228,10 @@ download:
   # contain {SongNumber}, or both {DiscNumber} and {TrackNumber}, so two tracks of an album
   # never share a name. {Quality}, {Codec}, {Tag} and the playlist and station variables are
   # rejected: whether a track is downloaded is decided before a codec is chosen.
-  # {SongNumber} is the track's 1-based position in its album's track list, counting on
-  # across discs; a single song takes its position from its album, which is read to place it.
+  # {SongNumber} is the track's number in its album as released: Apple's track number,
+  # counting on across discs, so a track a storefront withholds keeps its number free (an
+  # album whose tracks carry no numbers uses the track list order); a single song takes its
+  # number from its album, which is read to place it.
   # Names come from the album in catalog.language, so changing the language, Apple renaming
   # an album or editing this template makes files at the old paths count as missing, and they
   # download again. Runtime key: applies to jobs started after the change.

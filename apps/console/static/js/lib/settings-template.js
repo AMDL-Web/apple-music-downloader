@@ -8,7 +8,7 @@
 /** The template variables config.example.yaml documents, with what each holds. */
 export const TEMPLATE_VARIABLES = [
   ['SongName', 'Track title'],
-  ['SongNumber', '1-based position in the album (library) or the playlist or station; keeps counting across discs'],
+  ['SongNumber', 'Number in the album (library), keeps counting across discs; position in the playlist or station'],
   ['TrackNumber', 'Apple’s track number, restarting at 1 on every disc'],
   ['TrackCount', 'Tracks on the track’s own disc'],
   ['DiscNumber', 'Disc number'],

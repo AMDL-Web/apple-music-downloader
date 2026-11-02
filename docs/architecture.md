@@ -320,7 +320,7 @@ Songs, albums and artists share one library layout, `download.library_path_forma
 a track lands at one path whichever job type downloads it, and the "already downloaded"
 check compares that path, so a song downloaded on its own is skipped when its album
 comes, and an album already on disk is skipped inside an artist download. The path comes
-from the track's placement, its album and its position in the album's track list
+from the track's placement, its album and its number in that album as released
 (`internal/media#libraryTrackPath`); folders take only album values, so one album is one
 folder. Playlists and stations keep their own templates and folders. Any change to how a
 path is built re-downloads whole libraries. Path segments are cleaned by `safeName`:

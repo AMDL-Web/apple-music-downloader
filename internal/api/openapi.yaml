@@ -2910,8 +2910,9 @@ components:
                 downloads_dir; a file at that path counts as downloaded. Folder
                 segments may use only {AlbumArtist}, {AlbumName}, {AlbumId},
                 {ReleaseDate} and {ReleaseYear} and must name {AlbumName} or
-                {AlbumId}; the file name must contain {SongNumber} (the position in
-                the album's track list) or both {DiscNumber} and {TrackNumber}, and
+                {AlbumId}; the file name must contain {SongNumber} (the track's
+                number in its album, counting on across discs) or both {DiscNumber}
+                and {TrackNumber}, and
                 cannot use {Quality}, {Codec}, {Tag} or playlist and station
                 variables. Anything else is 422 invalid_config. Default
                 "library/{AlbumArtist}/{AlbumName}/{SongNumber:02d}. {SongName}".
@@ -3810,10 +3811,12 @@ components:
               $ref: '#/components/schemas/LibraryState'
               description: >-
                 An estimate from the album's library folder alone: the .m4a
-                files in it against track_count, so a file the track list does
-                not name counts and an album without a track_count reads as
-                none. GET /api/v1/albums/{album_id} checks song by song. Absent
-                when the listing did not finish in time.
+                files in it against the tracks its prior_job resolved, else
+                against track_count (which also counts tracks the storefront
+                withholds from the track list), so a file the track list does
+                not name counts and an album without either reads as none.
+                GET /api/v1/albums/{album_id} checks song by song. Absent when
+                the listing did not finish in time.
     SearchPlaylist:
       allOf:
         - $ref: '#/components/schemas/SearchHit'
@@ -4006,7 +4009,9 @@ components:
         tracks_total:
           type: integer
           minimum: 0
-          description: The album's songs, 1 for a song.
+          description: >-
+            The songs the album's track list names (a storefront can withhold
+            some), 1 for a song.
     Job:
       type: object
       required: [id, input, type, status, total_items, completed_items, skipped_items, failed_items, cancelled_items, created_at, updated_at]

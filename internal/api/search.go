@@ -62,6 +62,9 @@ type searchHit struct {
 	AppleDigitalMaster bool               `json:"apple_digital_master,omitempty"`
 	AudioTraits        []string           `json:"audio_traits,omitempty"`
 	PriorJob           *priorJob          `json:"prior_job,omitempty"`
+	// resolvedTracks is the track count the prior job's last run resolved
+	// (markPriorJobs), 0 when unknown; markAlbumFolders counts against it.
+	resolvedTracks int
 	// InAppleLibrary is whether the hit is in the user's Apple Music account
 	// library; absent when that is not known (markAppleLibrary).
 	InAppleLibrary *bool `json:"in_apple_library,omitempty"`
@@ -207,6 +210,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := searchResponse{Term: term, Storefront: storefront}
 	var hits []*searchHit
+	var albumHits []*searchHit
 	for _, t := range types {
 		group := &hitGroup{Items: []*searchHit{}, NextOffset: res.NextOffset[t]}
 		switch t {
@@ -219,7 +223,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 			for _, album := range res.Albums {
 				group.Items = append(group.Items, albumHit(storefront, album))
 			}
-			s.markAlbumFolders(ctx, group.Items, res.Albums)
+			albumHits = group.Items
 			resp.Albums = group
 		case applemusic.SearchPlaylists:
 			for _, playlist := range res.Playlists {
@@ -236,6 +240,7 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 		hits = append(hits, group.Items...)
 	}
 	s.markPriorJobs(r.Context(), hits)
+	s.markAlbumFolders(ctx, albumHits, res.Albums)
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -279,10 +284,10 @@ func (s *Server) artistAlbums(w http.ResponseWriter, r *http.Request) {
 	for _, album := range page.Albums {
 		resp.Albums.Items = append(resp.Albums.Items, albumHit(storefront, album))
 	}
-	s.markAlbumFolders(ctx, resp.Albums.Items, page.Albums)
 	s.markAppleLibrary(r.Context(), applemusic.SearchArtists, []*searchHit{resp.Artist}, nil)
 	s.markAppleLibrary(r.Context(), applemusic.SearchAlbums, resp.Albums.Items, nil)
 	s.markPriorJobs(r.Context(), append([]*searchHit{resp.Artist}, resp.Albums.Items...))
+	s.markAlbumFolders(ctx, resp.Albums.Items, page.Albums)
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -379,6 +384,7 @@ func (s *Server) markPriorJobs(ctx context.Context, hits []*searchHit) {
 	for _, h := range hits {
 		if m, ok := best[string(h.Type)+"\x00"+h.ID]; ok {
 			h.PriorJob = &priorJob{ID: m.ID, Status: m.Status, FinishedAt: m.FinishedAt}
+			h.resolvedTracks = m.TotalItems
 		}
 	}
 }

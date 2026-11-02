@@ -193,7 +193,7 @@ func (d *Downloader) trackTargets(parsed applemusic.ParsedURL, resolved resolved
 		}
 		if inLibrary(parsed.Type) && i < len(resolved.Placements) {
 			placement := resolved.Placements[i]
-			target.collectionIndex = placement.Index
+			target.collectionIndex = placement.Number
 			target.libraryPath = libraryTrackPath(d.cfg, placement)
 			target.albumDir, target.artistDir = libraryCoverDirs(d.cfg, placement.Album)
 		}
