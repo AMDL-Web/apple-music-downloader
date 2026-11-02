@@ -18,7 +18,8 @@ const OFFLINE_HELD_RETRY_MS = 1000;
 export function useToasts(route) {
   const [toasts, setToasts] = useState([]);
   // Toasts: {id, key, message, role, sticky, offline, at, action: {label, hash} or {label, run}}.
-  // A toast raised with a `key` takes the place of the one showing with the same key.
+  // A toast raised with a `key` takes the place of the one showing with the same key;
+  // {key, dismiss: true} takes it away.
   const toastTimers = useRef(new Map());
   const toastsHeld = useRef(false);
   const toastsRef = useRef(null);
@@ -30,6 +31,10 @@ export function useToasts(route) {
   }, []);
   const toast = useCallback(
     (t) => {
+      if (t.dismiss) {
+        if (t.key) setToasts((list) => list.filter((x) => x.key !== t.key));
+        return;
+      }
       const id = `${Date.now()}-${Math.random()}`;
       const role = t.role || 'neutral';
       const key = t.key || '';

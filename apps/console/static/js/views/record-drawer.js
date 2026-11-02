@@ -171,7 +171,11 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
         const mine = batch.filter((m) => m.type === 'check_updated' && m.check && m.check.scope === scope && m.check.finished_at).pop();
         if (!mine) return;
         setChecked(mine.check);
-        if (!mine.check.aborted_reason && said.current !== mine.check.id) {
+        // A stopped check says so in the drawer; its "Checking" toast goes.
+        if (mine.check.aborted_reason) {
+          said.current = mine.check.id;
+          app.toast({ key: `check:${scope}`, dismiss: true });
+        } else if (said.current !== mine.check.id) {
           said.current = mine.check.id;
           app.toast({ key: `check:${scope}`, message: checkText(mine.check), role: 'success' });
         }
@@ -184,7 +188,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
       setChecked(null);
       const scope = checkScope(kind, record.id);
       const out = await startCheck(checkBody(scope, force));
-      if (!(out && out.check && said.current === out.check.id)) app.toast({ key: `check:${scope}`, message: 'Checking its files', role: 'success' });
+      if (!(out && out.check && (said.current === out.check.id || out.check.finished_at))) app.toast({ key: `check:${scope}`, message: 'Checking its files', role: 'success' });
       return out;
     });
   const remove = async () => {
