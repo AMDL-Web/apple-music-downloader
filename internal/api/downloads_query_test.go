@@ -88,6 +88,7 @@ func TestListDownloadsQueryFilters(t *testing.T) {
 		"/api/v1/downloads?offset=-1",
 		"/api/v1/downloads?status=nope",
 		"/api/v1/downloads?type=video",
+		"/api/v1/downloads?current=yes",
 		"/api/v1/downloads?sort=title",
 		"/api/v1/downloads?order=up",
 	} {

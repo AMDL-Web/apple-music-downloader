@@ -1319,7 +1319,8 @@ paths:
       summary: Count the records per state and flag
       description: |
         Album and playlist records per state (none, partial, complete) and per
-        flag, pending adds per state, and the running or last disk check.
+        flag, pending adds per state, and the running or last disk check (a
+        finished check of a record removed since is skipped).
       operationId: getLibrarySummary
       responses:
         '200':
@@ -1521,7 +1522,9 @@ paths:
       operationId: getLibraryCheck
       responses:
         '200':
-          description: The check; null before the first.
+          description: >-
+            The check; null before the first. A finished check of a record
+            removed since is skipped.
           content:
             application/json:
               schema:
@@ -1900,6 +1903,15 @@ paths:
               $ref: '#/components/schemas/RunTrigger'
           style: form
           explode: true
+        - name: current
+          in: query
+          description: >-
+            true keeps only the runs nothing has replaced: a run is left out
+            once its record has a newer run (a station's run, once its link
+            has one) or its record is complete.
+          schema:
+            type: boolean
+            default: false
         - name: q
           in: query
           description: >-
@@ -2160,8 +2172,8 @@ paths:
       description: |
         Starts a failed or cancelled job's download again as a new job, which
         the answer names. For a record's run it resumes the record, re-arms the
-        record's failed and given-up slots and queues a run with trigger reset;
-        done slots stay done. When no run is queued it answers 200, as POST
+        record's failed, given-up and missing slots and queues a run with
+        trigger reset; done slots stay done. When no run is queued it answers 200, as POST
         /library/{kind}/{id}/download does. For a station it queues a new run
         of the same link and overrides. The new job fires job_queued like any
         other.
@@ -2173,9 +2185,8 @@ paths:
           description: >-
             A record's run queued nothing: already_downloaded (every wanted
             track is done) or waiting (slots are left that no run takes now:
-            the queue is full and the scheduler queues it later, a failed slot
-            waits for its automatic retry, the record is gone from the catalog,
-            or only missing files are left, which a reset downloads).
+            the queue is full and the scheduler queues it later, or the record
+            is gone from the catalog).
           content:
             application/json:
               schema:
