@@ -276,9 +276,10 @@ func importPlaylistFiles(ctx context.Context, tx *sql.Tx, env migrationEnv) erro
 	}
 	// The rollup of every imported record, spelled out rather than through
 	// recomputeRollup so the migration does not change with later code. The
-	// playlists table holds only the records created above, all unresolved,
-	// so state stays 'none' and completed_at NULL; every imported file is a
-	// done main slot, so nothing failed, was given up or is missing.
+	// playlists table holds only the records created above, all unresolved
+	// and each with at least one done file, so state is 'partial' and
+	// completed_at NULL; every imported file is a done main slot, so nothing
+	// failed, was given up or is missing.
 	if _, err := tx.ExecContext(ctx, `UPDATE playlists SET
 			tracks_wanted = (SELECT COUNT(*) FROM playlist_tracks t
 				WHERE t.playlist_id = playlists.id AND t.removed_at IS NULL AND t.availability = 'available'),
@@ -286,7 +287,7 @@ func importPlaylistFiles(ctx context.Context, tx *sql.Tx, env migrationEnv) erro
 				WHERE t.playlist_id = playlists.id AND t.removed_at IS NULL AND t.availability = 'available'
 				AND EXISTS(SELECT 1 FROM files f WHERE f.owner_kind = 'playlist' AND f.owner_id = t.playlist_id
 					AND f.song_id = t.song_id AND f.slot = 'main' AND f.audio_state = 'done')),
-			tracks_failed = 0, tracks_given_up = 0, tracks_missing = 0, state = 'none', completed_at = NULL`); err != nil {
+			tracks_failed = 0, tracks_given_up = 0, tracks_missing = 0, state = 'partial', completed_at = NULL`); err != nil {
 		return fmt.Errorf("store rollups of imported playlists: %w", err)
 	}
 	return nil

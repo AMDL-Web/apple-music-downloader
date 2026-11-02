@@ -4691,8 +4691,9 @@ components:
       enum: [none, partial, complete]
       description: >-
         A record's rollup over the main slots of its wanted, available tracks:
-        complete when every one is done, none when none is (and while the
-        record is unresolved), partial otherwise.
+        none when none is done, complete when every one is and the record is
+        resolved, partial otherwise (an unresolved record with files, such as
+        a 1.x import, is partial).
     AudioState:
       type: string
       enum: [pending, running, done, failed, given_up, unavailable, missing]

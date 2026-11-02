@@ -68,8 +68,12 @@ func computeRollup(ctx context.Context, q rowQueryer, kind domain.ResourceKind, 
 		return domain.Rollup{}, fmt.Errorf("count tracks of %s %s: %w", kind, id, err)
 	}
 	switch {
-	case !resolved || r.TracksWanted == 0 || r.TracksDone == 0:
+	case r.TracksWanted == 0 || r.TracksDone == 0:
 		r.State = domain.RecordNone
+	case !resolved:
+		// Files an unresolved record already holds (the 1.x import) count,
+		// but its track list is not read yet, so it cannot be complete.
+		r.State = domain.RecordPartial
 	case r.TracksDone == r.TracksWanted:
 		r.State = domain.RecordComplete
 	default:

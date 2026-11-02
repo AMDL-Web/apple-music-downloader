@@ -17,8 +17,9 @@ const (
 )
 
 // RecordState is a record's stored rollup over the main slots of its wanted,
-// available tracks: complete when every one is done, none when none is (and
-// always while the record is unresolved), partial otherwise.
+// available tracks: none when none is done, complete when every one is and the
+// record is resolved, partial otherwise (an unresolved record with files is
+// partial, as its track list is not read yet).
 type RecordState string
 
 const (

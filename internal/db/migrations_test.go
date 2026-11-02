@@ -263,7 +263,7 @@ func TestOpenMigrates1xDatabasePreservingRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !playlist.Paused || playlist.ResolvedAt != nil || playlist.State != domain.RecordNone || playlist.TracksWanted != 3 || playlist.TracksDone != 3 ||
+	if !playlist.Paused || playlist.ResolvedAt != nil || playlist.State != domain.RecordPartial || playlist.TracksWanted != 3 || playlist.TracksDone != 3 ||
 		playlist.Name != "Mix JP" || playlist.Artwork.URL != "https://art/mixjp.jpg" || playlist.Artwork.Colors.Bg != "445566" ||
 		!playlist.AddedAt.Equal(mustTime(t, "2024-07-15T10:00:00Z")) {
 		t.Errorf("pl.u1 record = %+v", playlist)

@@ -59,7 +59,7 @@ func TestAlbumRecordLifecycleKeepsRollupInStep(t *testing.T) {
 	}
 
 	// A song add before the album is read: one placeholder track, wanted,
-	// with a pending main slot; the record is unresolved, so state none.
+	// with a pending main slot; nothing is done yet, so state none.
 	codecAlt := false
 	_, err := store.AddAlbum(ctx, AlbumAdd{ID: "1", SongIDs: []string{"12"}, Source: domain.SourceManual,
 		Overrides: &config.DownloadOverrides{CodecAlternative: &codecAlt}, Now: now})
