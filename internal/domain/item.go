@@ -165,10 +165,16 @@ type JobItem struct {
 	// a later start from another directory still points at the file. Rows
 	// written before that may hold a relative path. The pipeline sets it
 	// before the file exists; MarshalJSON decides what the API shows.
-	OutputPath string    `json:"output_path,omitempty"`
-	Error      string    `json:"error,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	OutputPath string `json:"output_path,omitempty"`
+	// Slot, OwnerKind and OwnerID name the files row this item downloads:
+	// Slot is SlotMain or a codec id; the owner is empty for station items.
+	// TODO(P3): expose them in the API.
+	Slot      string       `json:"-"`
+	OwnerKind ResourceKind `json:"-"`
+	OwnerID   string       `json:"-"`
+	Error     string       `json:"error,omitempty"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
 }
 
 // MarshalJSON is the one place that decides what the API and the event stream

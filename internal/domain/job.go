@@ -131,6 +131,16 @@ type Job struct {
 	MotionArtworkTallTextColor3 string `json:"motion_artwork_tall_text_color3,omitempty"`
 	MotionArtworkTallTextColor4 string `json:"motion_artwork_tall_text_color4,omitempty"`
 	CanonicalKey                string `json:"-"`
+	// ResourceKind and ResourceID name the record a run downloads for; both
+	// empty for stations and for imported 1.x song and artist history.
+	// Trigger is what started the run, Priority its claim class
+	// (PriorityNow, PriorityManual, PriorityAuto) and Plan the JSON of the
+	// slots and overrides it started with. TODO(P3): expose them in the API.
+	ResourceKind ResourceKind `json:"-"`
+	ResourceID   string       `json:"-"`
+	Trigger      RunTrigger   `json:"-"`
+	Priority     int          `json:"-"`
+	Plan         string       `json:"-"`
 	// Overrides is the per-request job config overlay attached at submission;
 	// nil for jobs submitted without one. It is persisted with the job and
 	// applied on top of the live runtime config each time the job runs
@@ -147,7 +157,7 @@ type Job struct {
 	// every read; JSON carries it only while Status is queued (MarshalJSON).
 	QueueOrder *int64 `json:"queue_order,omitempty"`
 	// TotalItems is stored when the input resolves. The four item counters
-	// are disjoint, never stored, and filled from job_items by every store
+	// are disjoint, never stored, and filled from run_items by every store
 	// read: CompletedItems were written by this job, SkippedItems were already
 	// on disk (skipped_existing).
 	TotalItems     int `json:"total_items"`
