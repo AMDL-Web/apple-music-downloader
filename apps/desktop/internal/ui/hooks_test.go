@@ -128,3 +128,23 @@ func TestHooksSwitchAndDeleteReachTheBackend(t *testing.T) {
 		t.Errorf("the backend has %+v", h)
 	}
 }
+
+// The services a new hook can call run three a row, one width; a kind with
+// one service, as Other's Custom, gives it the whole row.
+func TestALoneServiceTakesTheWholeRow(t *testing.T) {
+	_, tt, _ := hooksApp(t)
+	if err := tt.Click("Add hook"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	ntfy, ok1 := tt.Find("ntfy")
+	telegram, ok2 := tt.Find("Telegram")
+	custom, ok3 := tt.Find("Custom")
+	if !ok1 || !ok2 || !ok3 {
+		t.Fatalf("no services to pick: %q", tt.Texts())
+	}
+	row := telegram.X + telegram.W - ntfy.X
+	if custom.X != ntfy.X || custom.W < row-1 || custom.W > row+1 {
+		t.Errorf("Custom spans %v–%v, want the row %v–%v", custom.X, custom.X+custom.W, ntfy.X, ntfy.X+row)
+	}
+}

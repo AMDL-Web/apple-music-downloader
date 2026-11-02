@@ -375,13 +375,25 @@ func (a *App) consoleURL() string {
 // fieldBox is a one-line text input in the design's look: the box and the
 // input inside it.
 func fieldBox(c *ui.Context, k *Tokens, key string, value *string, placeholder string, monoFace bool) (box, in ui.Element) {
-	box = ui.Row(c).Grow(1).Height(32).PaddingX(10).Radius(radiusControl).AlignItems(ui.Center).Background(k.Raise2).Border(1, k.Line2)
+	return fieldBoxUnit(c, k, key, value, placeholder, monoFace, "")
+}
+
+// A field's room either side of its text, and between its text and its unit,
+// in DIPs.
+const fieldPadX, fieldUnitGap = 10, 6
+
+// fieldBoxUnit is fieldBox with unit, when there is one, at its right.
+func fieldBoxUnit(c *ui.Context, k *Tokens, key string, value *string, placeholder string, monoFace bool, unit string) (box, in ui.Element) {
+	box = ui.Row(c).Grow(1).Height(32).PaddingX(fieldPadX).Gap(fieldUnitGap).Radius(radiusControl).AlignItems(ui.Center).Background(k.Raise2).Border(1, k.Line2)
 	box.Children(func() {
-		in = ui.TextInputBase(c.Key(key), value).Grow(1).Placeholder(placeholder).Label(placeholder).FocusRing(false)
+		in = ui.TextInputBase(c.Key(key), value).Grow(1).MinWidth(0).Placeholder(placeholder).Label(placeholder).FocusRing(false)
 		if monoFace {
 			in.Font(MonoFont).FontSize(12)
 		} else {
 			in.FontSize(13)
+		}
+		if unit != "" {
+			ui.Text(c, unit).FontSize(12).TextColor(k.Muted).SingleLine().Shrink(0)
 		}
 	})
 	if in.Focused() {
