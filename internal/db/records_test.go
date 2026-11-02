@@ -342,6 +342,10 @@ func TestStoredPath(t *testing.T) {
 		if got := storedPath(c.dir, c.path); got != c.want {
 			t.Errorf("storedPath(%q, %q) = %q, want %q", c.dir, c.path, got, c.want)
 		}
+		// The migration's frozen copy; it keeps these cases if storedPath changes.
+		if got := storedPath1x(c.dir, c.path); got != c.want {
+			t.Errorf("storedPath1x(%q, %q) = %q, want %q", c.dir, c.path, got, c.want)
+		}
 	}
 	if got := domain.ResolveStoredPath("/music", "A/b.m4a"); got != "/music/A/b.m4a" {
 		t.Errorf("ResolveStoredPath = %q", got)

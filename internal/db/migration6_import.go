@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 )
 
@@ -239,7 +240,7 @@ func importPlaylistFiles(ctx context.Context, tx *sql.Tx, env migrationEnv) erro
 					codec, bit_depth, sample_rate, bitrate, file_size, path, last_run_id, completed_at, updated_at)
 				VALUES('playlist', ?, ?, 'main', 'done', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				run.playlistID, it.songID, it.lyricsStatus, it.codec, it.bitDepth, it.sampleRate, it.bitrate, it.fileSize,
-				storedPath(env.downloadsDir, it.outputPath), run.runID, it.updatedAt, it.updatedAt)
+				storedPath1x(env.downloadsDir, it.outputPath), run.runID, it.updatedAt, it.updatedAt)
 			if err != nil {
 				return fmt.Errorf("import file of %s in %s: %w", it.songID, run.playlistID, err)
 			}
@@ -272,10 +273,20 @@ func importPlaylistFiles(ctx context.Context, tx *sql.Tx, env migrationEnv) erro
 			}
 		}
 	}
-	for id := range created {
-		if err := recomputeRollup(ctx, tx, "playlist", id, env.now); err != nil {
-			return err
-		}
+	// The rollup of every imported record, spelled out rather than through
+	// recomputeRollup so the migration does not change with later code. The
+	// playlists table holds only the records created above, all unresolved,
+	// so state stays 'none' and completed_at NULL; every imported file is a
+	// done main slot, so nothing failed, was given up or is missing.
+	if _, err := tx.ExecContext(ctx, `UPDATE playlists SET
+			tracks_wanted = (SELECT COUNT(*) FROM playlist_tracks t
+				WHERE t.playlist_id = playlists.id AND t.removed_at IS NULL AND t.availability = 'available'),
+			tracks_done = (SELECT COUNT(*) FROM playlist_tracks t
+				WHERE t.playlist_id = playlists.id AND t.removed_at IS NULL AND t.availability = 'available'
+				AND EXISTS(SELECT 1 FROM files f WHERE f.owner_kind = 'playlist' AND f.owner_id = t.playlist_id
+					AND f.song_id = t.song_id AND f.slot = 'main' AND f.audio_state = 'done')),
+			tracks_failed = 0, tracks_given_up = 0, tracks_missing = 0, state = 'none', completed_at = NULL`); err != nil {
+		return fmt.Errorf("store rollups of imported playlists: %w", err)
 	}
 	return nil
 }
@@ -388,6 +399,35 @@ func parseKey1x(key string) (jobType, storefront, id string, ok bool) {
 		return "", "", "", false
 	}
 	return jobType, storefront, id, true
+}
+
+// storedPath1x is the form files.path keeps p in: relative to downloadsDir
+// when p is under it, else absolute. A frozen copy of storedPath at the 2.0
+// migration, for the same reason as parseKey1x.
+func storedPath1x(downloadsDir, p string) string {
+	if p == "" || downloadsDir == "" {
+		return p
+	}
+	dir, path := filepath.Clean(downloadsDir), filepath.Clean(p)
+	if filepath.IsAbs(dir) != filepath.IsAbs(path) {
+		absDir, errDir := filepath.Abs(dir)
+		absPath, errPath := filepath.Abs(path)
+		if errDir != nil || errPath != nil {
+			return p
+		}
+		dir, path = absDir, absPath
+	}
+	rel, err := filepath.Rel(dir, path)
+	if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return rel
+	}
+	if filepath.IsAbs(path) {
+		return path
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return p
 }
 
 func isLegacyDestination1x(s string) bool {
