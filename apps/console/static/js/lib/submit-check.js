@@ -121,13 +121,30 @@ export function downloadLabel(kinds, hasLinks = true, pickable = false) {
 }
 
 /**
+ * How the links that can be sent split for the count line, by each one's
+ * mark (lib/on-disk.js diskMark): `fresh` those a download fetches songs for
+ * (no mark, or partly on disk: the missing songs), `library` those wholly on
+ * disk, `queued` those in the queue. The three add up to `urls`.
+ */
+export function markCounts(urls, markOf) {
+  const out = { fresh: 0, library: 0, queued: 0 };
+  for (const url of Array.isArray(urls) ? urls : []) {
+    const state = (markOf(url) || {}).state;
+    if (state === 'complete') out.library++;
+    else if (state === 'active') out.queued++;
+    else out.fresh++;
+  }
+  return out;
+}
+
+/**
  * The dock's count line: "4 links · 1 can't download · 1 merged · 1 new · 2
  * in library"; '' with no links. What stops or needs a look comes first, and
  * each part is short, so two lines on a phone hold it. `blocked` counts the
  * links that cannot be sent, `warned` those with a warning, `merged`
- * repeats folded into one link, `fresh` links that can be sent and were
- * never downloaded, `library` and `queued` those with an earlier job done
- * or still in the queue.
+ * repeats folded into one link; `fresh`, `library` and `queued` split the
+ * links that can be sent (markCounts): songs to fetch, all files on disk, in
+ * the queue.
  */
 export function countLine({ links = 0, merged = 0, fresh = 0, library = 0, queued = 0, blocked = 0, warned = 0 } = {}) {
   if (!links) return '';

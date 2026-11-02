@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scanLinks, removeLink } from '../static/js/lib/links.js';
-import { linkIssue, servedRegions, servedNote, submittable, TOKEN_SETTINGS_HASH, downloadLabel, countLine } from '../static/js/lib/submit-check.js';
+import { linkIssue, servedRegions, servedNote, submittable, TOKEN_SETTINGS_HASH, downloadLabel, countLine, markCounts } from '../static/js/lib/submit-check.js';
 import {
   chunk,
   resultView,
@@ -270,6 +270,19 @@ test('submitSummary says started, then how started jobs finished', () => {
   assert.equal(submitSummary(done), 'Started 2 downloads · 1 completed · 1 deleted');
 });
 
+test('submitSummary says a resubmitted link was queued again, not started', () => {
+  const again = (url, id) => ({ url, result: { url, status: 'accepted', requeued: true, job: job(id, 'queued', '2026-10-29T00:00:00Z') } });
+  const fresh = (url, id) => ({ url, result: { url, status: 'accepted', job: job(id, 'queued', '2026-10-29T00:00:00Z') } });
+  assert.equal(submitSummary(resultRows([again(IGOR, 'a')])), 'Queued again');
+  assert.equal(submitSummary(resultRows([again(IGOR, 'a'), again(FOLKLORE, 'b')])), 'Queued 2 downloads again');
+  const mixed = resultRows([fresh(IGOR, 'a'), again(FOLKLORE, 'b')]);
+  assert.equal(submitSummary(mixed), 'Started 1 download · 1 queued again');
+  const done = applyFeedToResults(mixed, [{ type: 'download_upserted', job: job('b', 'completed', '2026-10-29T00:01:00Z') }]);
+  assert.equal(submitSummary(done), 'Started 1 download · 1 queued again · 1 completed');
+  const stored = resultRows([again(IGOR, 'a')]).map((r) => ({ ...r, view: { ...r.view, requeued: undefined } }));
+  assert.equal(submitSummary(stored), 'Queued again', 'rows stored before requeued was kept read by their label');
+});
+
 test('stored results round-trip with only the known overrides', () => {
   const rows = resultRows([{ url: IGOR, result: { url: IGOR, status: 'accepted', job: job('a', 'queued', '2026-10-29T00:00:00Z') } }]);
   const text = storedResults({ rows, overrides: { force_overwrite: true, media_user_token: 'secret' } });
@@ -292,6 +305,10 @@ test('Download names what it sends, and the count line what the links are', () =
   assert.equal(countLine({ links: 3, fresh: 1, queued: 1, warned: 1 }), '3 links · 1 to check · 1 new · 1 queued');
   assert.doesNotMatch(countLine({ links: 5, blocked: 2, warned: 2 }), /flagged/);
   assert.equal(countLine({ links: 3, merged: 2, fresh: 3 }), '3 links · 2 merged · 3 new', 'repeats folded into one link are counted after the links');
+  const marks = { a: null, b: { state: 'partial' }, c: { state: 'complete' }, d: { state: 'complete' }, e: { state: 'active' } };
+  const counts = markCounts(Object.keys(marks), (u) => marks[u]);
+  assert.deepEqual(counts, { fresh: 2, library: 2, queued: 1 }, 'a link partly on disk downloads its missing songs, so it counts as new');
+  assert.equal(countLine({ links: 5, ...counts }), '5 links · 2 new · 2 in library · 1 queued', 'the parts add up to the links');
 });
 
 test('a submitted row shows the preview until its job resolves', () => {

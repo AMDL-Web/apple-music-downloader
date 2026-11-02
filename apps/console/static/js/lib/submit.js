@@ -41,7 +41,7 @@ const UNREACHABLE = /cannot reach the wrapper|connection refused|no such host|de
 
 /**
  * How one SubmitResult reads: {status, code, role, icon, label, message,
- * detail, retry, existingJobId, storefronts}. `label` is the short state,
+ * detail, retry, existingJobId, storefronts}, and `requeued` when accepted. `label` is the short state,
  * `message` the human reason for the code, `detail` the server's message
  * where it says more (store errors, parse failures, unknown codes);
  * `retry` marks results a later submit may fix. A requeued result is the
@@ -50,7 +50,7 @@ const UNREACHABLE = /cannot reach the wrapper|connection refused|no such host|de
 export function resultView(result) {
   const r = result || {};
   const err = r.error || {};
-  if (r.status === 'accepted') return { status: 'accepted', code: '', role: 'success', icon: 'circle-check', label: r.requeued ? 'Queued again' : 'Queued', message: '', detail: '', retry: false };
+  if (r.status === 'accepted') return { status: 'accepted', code: '', role: 'success', icon: 'circle-check', label: r.requeued ? 'Queued again' : 'Queued', requeued: r.requeued === true, message: '', detail: '', retry: false };
   const code = err.code || r.status || '';
   const known = CODES[code];
   const isError = r.status === 'error';
@@ -188,10 +188,10 @@ export function applyFeedToResults(rows, batch) {
   return next;
 }
 
-// The summary's parts after "Started N downloads": accepted jobs that have
-// finished (or were deleted), then the rows the server did not queue.
-// Queued and running jobs are what "started" means, so they get no part of
-// their own and the words never contradict the list.
+// The summary's parts after "Started N downloads" and "N queued again":
+// accepted jobs that have finished (or were deleted), then the rows the
+// server did not queue. Queued and running jobs are what "started" means, so
+// they get no part of their own and the words never contradict the list.
 const SUMMARY = [
   ['completed', 'completed'],
   ['failed', 'failed'],
@@ -213,11 +213,16 @@ function summaryState(r) {
   return 'other';
 }
 
+/** Whether an accepted row is a link's earlier job queued again under its id (rows stored before `requeued` carry only the label). */
+const isRequeued = (r) => r.view.requeued === true || r.view.label === 'Queued again';
+
 /**
  * One line for the toast, the live region and the Submitted card, from the
- * rows as they are now: "Started 3 downloads · 1 completed · 1 already
- * downloading · 1 not accepted". Every accepted row counts as started;
- * those that finished are named again by how.
+ * rows as they are now: "Started 3 downloads · 1 queued again · 1 completed
+ * · 1 already downloading · 1 not accepted", or "Queued again" for one
+ * resubmitted link alone. Every accepted row counts as started, or as queued
+ * again when the server requeued the link's earlier job; those that finished
+ * are named again by how.
  */
 export function submitSummary(rows) {
   const n = new Map();
@@ -225,8 +230,11 @@ export function submitSummary(rows) {
     const k = summaryState(r);
     n.set(k, (n.get(k) || 0) + 1);
   }
-  const started = rows.filter((r) => r.view.status === 'accepted').length;
+  const accepted = rows.filter((r) => r.view.status === 'accepted');
+  const again = accepted.filter(isRequeued).length;
+  const started = accepted.length - again;
   const parts = SUMMARY.filter(([k]) => n.get(k)).map(([k, text]) => `${n.get(k)} ${text}`);
+  if (again) parts.unshift(started ? `${again} queued again` : again === 1 ? 'Queued again' : `Queued ${again} downloads again`);
   if (started) parts.unshift(`Started ${started} ${started === 1 ? 'download' : 'downloads'}`);
   return parts.join(' · ') || 'Nothing was submitted';
 }

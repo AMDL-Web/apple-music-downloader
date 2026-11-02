@@ -6,7 +6,7 @@
 
 import { html, useState, useEffect, useRef, useCallback, useMemo } from '../ui/preact.js';
 import { scanLinks, duplicateCount } from '../lib/links.js';
-import { submittable, countLine } from '../lib/submit-check.js';
+import { submittable, countLine, markCounts } from '../lib/submit-check.js';
 import { useApp, Button, Notice } from '../ui/components.js';
 import { useMedia } from '../ui/hooks.js';
 import { isMac } from './palette.js';
@@ -113,13 +113,10 @@ export function useLinkCount({ settled, storefront, issueOf, markOf }) {
   const settledEntries = useMemo(() => scanLinks(settled, storefront), [settled, storefront]);
   const settledDupes = useMemo(() => duplicateCount(settled, storefront), [settled, storefront]);
   const settledSend = submittable(settledEntries, issueOf);
-  const markState = (url) => (markOf(url) || {}).state;
   return countLine({
     links: settledEntries.length,
     merged: settledDupes,
-    fresh: settledSend.filter((u) => !markOf(u)).length,
-    library: settledSend.filter((u) => markState(u) === 'complete').length,
-    queued: settledSend.filter((u) => markState(u) === 'active').length,
+    ...markCounts(settledSend, markOf),
     blocked: settledEntries.filter((e) => (issueOf(e) || {}).blocking).length,
     warned: settledEntries.filter((e) => {
       const i = issueOf(e);
