@@ -305,7 +305,7 @@ export function LibraryPage({ route }) {
           busy=${busy === 'delete'}
           onConfirm=${() => bulk('delete')}
           onCancel=${() => setConfirm(null)}
-        >The files stay. Adding them again downloads them again over them.</${ConfirmDialog}>`
+        >The files stay. Adding them again picks them up.</${ConfirmDialog}>`
       : null}
     ${confirm && confirm.action === 'again'
       ? html`<${ConfirmDialog}

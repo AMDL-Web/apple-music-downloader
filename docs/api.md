@@ -320,7 +320,8 @@ first quality, `409 quality_present` when the first quality is that codec). Paus
 the record's run, keeps its resume checkpoints and stops the scheduler from queuing it;
 resume continues it. Both answer the record. Delete answers `204`; a record with a queued
 or running run is `409 run_active`. The library monitor does not add a deleted album back;
-adding it by hand does, and its first run downloads every track again over the files.
+adding it by hand does, and its first run takes a file still at a track's path as that
+track's download instead of downloading it again.
 
 **Reset** replaces what `force_overwrite` did:
 

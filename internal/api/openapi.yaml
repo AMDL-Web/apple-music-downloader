@@ -1808,8 +1808,9 @@ paths:
       description: |
         Deletes the record with its tracks, slots and resume checkpoints. The
         files on disk and the record's runs stay. The library monitor does not
-        add it back; adding it by hand does, and its first run then downloads
-        every track again over the files.
+        add it back; adding it by hand does, and its first run takes a file
+        still at a track's path as that track's download instead of
+        downloading it again.
       operationId: deleteLibraryRecord
       parameters:
         - $ref: '#/components/parameters/RecordKind'

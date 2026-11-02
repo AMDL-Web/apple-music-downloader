@@ -19,7 +19,7 @@ import (
 )
 
 // Deps are the components the HTTP layer serves. Every field is required
-// except Logger, Logging, Library, Tokens, Console, Hooks and Restart; New
+// except Logger, Logging, Tokens, Console, Hooks and Restart; New
 // refuses a nil one, so no handler answers 503 for a missing dependency.
 type Deps struct {
 	// Config is the live runtime config shared with the download pipeline;

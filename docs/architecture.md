@@ -167,17 +167,18 @@ non-envelope error is the `503` of `GET /health`, which keeps its `HealthRespons
 
 `feature_unavailable` comes only from `GET /logs` and `GET /logs/stream`: `logging.buffer_size`
 is `0`, so no log history is kept. Every other dependency in `internal/api#Deps` is
-required, and the process does not start without it, except `Library`: without it the album, lookup and
-search answers leave out `library` and `on_disk`.
+required, and the process does not start without it. The album, lookup and search answers
+read the records for their `resource` marks and stat no file.
 
-Per-URL submit results keep the coarse `status` enum (`accepted`, `invalid`,
-`duplicate_in_request`, `duplicate_active`, `queue_full`, plus `error` for a server-side
-failure) and carry the detail in `results[].error` (`{code, message, details?}`). The
-codes are the spec's `SubmitErrorCode` enum: with `invalid`, `invalid_url`,
-`unsupported_input`, `unsupported_storefront` (`details` carries the storefront and the
-supported ones), `decryptor_unavailable` and `invalid_configuration`; with the status of
-the same name, `duplicate_in_request`, `duplicate_active` and `queue_full`; with
-`error`, `store_error` and `internal_error` (the validator failed unexpectedly).
+Per-URL submit results keep the coarse `status` enum (`accepted`, `pending`,
+`already_downloaded`, `invalid`, `duplicate_in_request`, `duplicate_active`, `queue_full`,
+plus `error` for a server-side failure) and carry the detail in `results[].error`
+(`{code, message, details?}`). The codes are the spec's `SubmitErrorCode` enum: with
+`invalid`, `invalid_url`, `unsupported_input`, `decryptor_unavailable` (for a storefront
+the wrapper's account does not serve, `details` carries the storefront and the supported
+ones) and `invalid_configuration`; with the status of the same name,
+`duplicate_in_request`, `duplicate_active` and `queue_full`; with `error`, `store_error`
+and `internal_error` (the validator failed unexpectedly).
 `POST /downloads` answers `202` with the batch body when at least one URL was accepted.
 When none was, it answers `500 store_error` if any rejection was a store failure,
 `500 internal_error` if the only server-side failures came from the validator (the
