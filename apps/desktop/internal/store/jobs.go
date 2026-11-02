@@ -36,6 +36,21 @@ type Job struct {
 	// speed is the figure ShownSpeed shows, taken at speedAt.
 	speed   float64
 	speedAt time.Time
+	// linkOf is the Input link last parsed, into linkType, linkID and
+	// linkOK (link).
+	linkOf, linkType, linkID string
+	linkOK                   bool
+}
+
+// link is parseLink of the job's Input, parsed once: the views ask for it
+// of every job on every frame.
+func (j *Job) link() (typ, id string, ok bool) {
+	// An empty Input, never parsed, has the zero values parseLink gives it.
+	if j.linkOf != j.Input {
+		j.linkOf = j.Input
+		j.linkType, j.linkID, j.linkOK = parseLink(j.Input)
+	}
+	return j.linkType, j.linkID, j.linkOK
 }
 
 // speedHold is how long ShownSpeed keeps a running job's figure.

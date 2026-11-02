@@ -159,6 +159,8 @@ type App struct {
 	searchSel    string
 	searchReveal bool
 	searchKeyed  bool
+	// keys are the window shortcuts' actions (shortcuts).
+	keys struct{ toggle, field, home, queue, settings func() }
 	// groupsAt is when the search last changed tab, from groupsFrom, which
 	// groupsMoved asks the next frame to note (tabChange).
 	groupsAt    time.Time

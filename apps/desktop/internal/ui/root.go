@@ -99,13 +99,22 @@ func (a *App) View(c *ui.Context) {
 // settings, Cmd+L home's field from any screen, and the sidebar's, which
 // the View menu holds on macOS (sidebarKey).
 func (a *App) shortcuts(c *ui.Context) {
-	if runtime.GOOS != "darwin" {
-		c.OnShortcut(sidebarMods, ui.KeyS, a.ToggleSidebar)
+	k := &a.keys
+	if k.home == nil {
+		// Made once: bound here every frame, they would be allocated every
+		// frame.
+		k.toggle, k.field = a.ToggleSidebar, a.FocusField
+		k.home = func() { a.Go(ScreenHome) }
+		k.queue = func() { a.Go(ScreenQueue) }
+		k.settings = func() { a.Go(ScreenSettings) }
 	}
-	c.OnShortcut(ui.Cmd, ui.KeyL, a.FocusField)
-	c.OnShortcut(ui.Cmd, ui.Key1, func() { a.Go(ScreenHome) })
-	c.OnShortcut(ui.Cmd, ui.Key2, func() { a.Go(ScreenQueue) })
-	c.OnShortcut(ui.Cmd, ui.KeyComma, func() { a.Go(ScreenSettings) })
+	if runtime.GOOS != "darwin" {
+		c.OnShortcut(sidebarMods, ui.KeyS, k.toggle)
+	}
+	c.OnShortcut(ui.Cmd, ui.KeyL, k.field)
+	c.OnShortcut(ui.Cmd, ui.Key1, k.home)
+	c.OnShortcut(ui.Cmd, ui.Key2, k.queue)
+	c.OnShortcut(ui.Cmd, ui.KeyComma, k.settings)
 	switch a.Screen {
 	case ScreenAlbum:
 		if c.Shortcut(0, ui.KeyEscape) {

@@ -34,10 +34,17 @@ type Cache struct {
 	post    func(func())
 	http    *http.Client
 	slots   chan struct{}
-	entries map[string]*entry
+	entries map[coverKey]*entry
 	swept   time.Time
 	// now is time.Now but in tests.
 	now func() time.Time
+}
+
+// coverKey names a cover by its URL template and size: Get, which runs for
+// each cover every frame, fills the URL only to fetch it.
+type coverKey struct {
+	template string
+	px       int
 }
 
 type entry struct {
@@ -64,7 +71,7 @@ func NewWith(post func(func()), rt http.RoundTripper) *Cache {
 		post:    post,
 		http:    &http.Client{Transport: rt, Timeout: 30 * time.Second},
 		slots:   make(chan struct{}, 6),
-		entries: map[string]*entry{},
+		entries: map[coverKey]*entry{},
 		now:     time.Now,
 	}
 }
@@ -85,8 +92,7 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 	if template == "" {
 		return nil
 	}
-	px = bucket(px)
-	key := URL(template, px)
+	key := coverKey{template, bucket(px)}
 	now := c.now()
 	e := c.entries[key]
 	if e == nil {
@@ -96,7 +102,7 @@ func (c *Cache) Get(template string, px int) ui.ImageSource {
 	e.used = now
 	if e.img == nil && !e.loading && (e.failures == 0 || now.Sub(e.failedAt) >= retryWait(e.failures)) {
 		e.loading = true
-		go c.fetch(key, e)
+		go c.fetch(URL(key.template, key.px), e)
 	}
 	if now.Sub(c.swept) > idleRelease/2 {
 		c.sweep(now)

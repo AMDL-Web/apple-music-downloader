@@ -58,7 +58,7 @@ func (s *Store) CloseAlbum() {
 func (s *Store) AlbumJob(id string) string {
 	done := ""
 	for _, j := range s.Jobs {
-		if t, aid, ok := parseLink(j.Input); j.Type != "album" || !ok || t != "album" || aid != id {
+		if t, aid, ok := j.link(); j.Type != "album" || !ok || t != "album" || aid != id {
 			continue
 		}
 		switch j.Status {
@@ -80,7 +80,7 @@ func (s *Store) JobAlbum(j *Job) (client.SearchHit, bool) {
 	if j == nil || j.Type != "album" {
 		return client.SearchHit{}, false
 	}
-	t, id, ok := parseLink(j.Input)
+	t, id, ok := j.link()
 	if !ok || t != "album" {
 		return client.SearchHit{}, false
 	}

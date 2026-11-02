@@ -48,62 +48,104 @@ func (b StageBar) Show(c *ui.Context, key any) ui.Element {
 		gap = 2
 	}
 	el := ui.Box(c.Key(key)).Height(h).FillWidth()
-	var fill [progress.StageCount]float32
+	d := *ui.Local(el, "draw", newStageDraw)
 	for i, v := range b.Stages {
-		fill[i] = el.AnimateTo(i, float32(v), stageAnimation)
+		d.fill[i] = el.AnimateTo(i, float32(v), stageAnimation)
 	}
-	current := b.Stages.Current()
-	reduce := b.Still || c.Preferences().ReduceMotion
-	el.Draw(func(p *ui.Painter, r ui.Rect) {
-		avail := r.W - gap*float32(progress.StageCount-1)
-		x := r.X
-		radius := min(h/2, 2.5)
-		for i, w := range progress.Weights {
-			sw := max(avail*float32(w), 3)
-			seg := ui.Rect{X: x, Y: r.Y, W: sw, H: h}
-			x += sw + gap
-			p.Fill(seg, b.Track, radius)
-			color := b.Color
-			if b.Finished && current == progress.StageCount {
-				color = b.Done
-			}
-			if b.Failed && progress.Stage(i) == current {
-				p.Fill(seg, b.Bad, radius)
-				continue
-			}
-			f := fill[i]
-			if b.Indeterminate && b.Running && progress.Stage(i) == current {
-				f = 1
-				color = color.Alpha(0.45)
-			}
-			if f <= 0.001 {
-				continue
-			}
-			done := ui.Rect{X: seg.X, Y: seg.Y, W: max(seg.W*min(f, 1), min(seg.W, h)), H: h}
-			p.Fill(done, color, radius)
-			if b.Running && progress.Stage(i) == current && current < progress.StageCount {
-				stripes(p, done, radius, reduce)
-			}
-		}
-	})
+	d.b, d.h, d.gap = b, h, gap
+	d.current = b.Stages.Current()
+	d.reduce = b.Still || c.Preferences().ReduceMotion
+	el.Draw(d.fn)
 	return el
+}
+
+// stageDraw is a StageBar's drawing as a frame builds it, kept with its
+// element (ui.Local) so that a frame sets it rather than allocating a
+// closure: drawing runs every frame its stripes move.
+type stageDraw struct {
+	b       StageBar
+	h, gap  float32
+	fill    [progress.StageCount]float32
+	current progress.Stage
+	reduce  bool
+	fn      func(*ui.Painter, ui.Rect)
+}
+
+func newStageDraw() *stageDraw {
+	d := &stageDraw{}
+	d.fn = d.draw
+	return d
+}
+
+func (d *stageDraw) draw(p *ui.Painter, r ui.Rect) {
+	b, h, gap, current := &d.b, d.h, d.gap, d.current
+	avail := r.W - gap*float32(progress.StageCount-1)
+	x := r.X
+	radius := min(h/2, 2.5)
+	for i, w := range progress.Weights {
+		sw := max(avail*float32(w), 3)
+		seg := ui.Rect{X: x, Y: r.Y, W: sw, H: h}
+		x += sw + gap
+		p.Fill(seg, b.Track, radius)
+		color := b.Color
+		if b.Finished && current == progress.StageCount {
+			color = b.Done
+		}
+		if b.Failed && progress.Stage(i) == current {
+			p.Fill(seg, b.Bad, radius)
+			continue
+		}
+		f := d.fill[i]
+		if b.Indeterminate && b.Running && progress.Stage(i) == current {
+			f = 1
+			color = color.Alpha(0.45)
+		}
+		if f <= 0.001 {
+			continue
+		}
+		done := ui.Rect{X: seg.X, Y: seg.Y, W: max(seg.W*min(f, 1), min(seg.W, h)), H: h}
+		p.Fill(done, color, radius)
+		if b.Running && progress.Stage(i) == current && current < progress.StageCount {
+			stripes(p, done, radius, d.reduce)
+		}
+	}
+}
+
+// stripePeriod is the distance between two stripes, and stripeInk their
+// color.
+const stripePeriod = 11.3
+
+var stripeInk = ui.RGBA(255, 255, 255, 0.28)
+
+// stripeBands is what fillStripes draws, set by stripes: one path serves
+// every band, the painter flattening it as it fills it, and a func literal
+// capturing the bands' place would be allocated on every frame they move.
+// Drawing is on the UI thread only.
+var stripeBands struct {
+	p     *ui.Painter
+	r     ui.Rect
+	shift float32
+	path  ui.Path
 }
 
 // stripes draws the moving diagonal stripes of a running segment.
 func stripes(p *ui.Painter, r ui.Rect, radius float32, still bool) {
-	const period = 11.3
-	shift := float32(0)
+	s := &stripeBands
+	s.p, s.r, s.shift = p, r, 0
 	if !still {
 		ms := p.Now().UnixMilli() % 1000
-		shift = period * float32(ms) / 1000
+		s.shift = stripePeriod * float32(ms) / 1000
 		p.AnimationFrameRate(30)
 	}
-	ink := ui.RGBA(255, 255, 255, 0.28)
-	p.Clip(r, radius, func() {
-		for x := r.X - r.H - period + shift; x < r.X+r.W+r.H; x += period {
-			var band ui.Path
-			band.MoveTo(x, r.Y+r.H).LineTo(x+4, r.Y+r.H).LineTo(x+4+r.H, r.Y).LineTo(x+r.H, r.Y).Close()
-			p.FillPath(&band, ink)
-		}
-	})
+	p.Clip(r, radius, fillStripes)
+	s.p = nil
+}
+
+func fillStripes() {
+	s := &stripeBands
+	r := s.r
+	for x := r.X - r.H - stripePeriod + s.shift; x < r.X+r.W+r.H; x += stripePeriod {
+		s.path.Reset().MoveTo(x, r.Y+r.H).LineTo(x+4, r.Y+r.H).LineTo(x+4+r.H, r.Y).LineTo(x+r.H, r.Y).Close()
+		s.p.FillPath(&s.path, stripeInk)
+	}
 }

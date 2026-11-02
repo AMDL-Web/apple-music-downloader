@@ -2,7 +2,6 @@ package ui
 
 import (
 	"math"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -144,7 +143,7 @@ func ParsePalette(bg, t1, t2, t3, t4 string) Palette {
 		if s == "" {
 			return ui.Color{}
 		}
-		return ui.Hex("#" + strings.TrimPrefix(s, "#"))
+		return ui.Hex(s) // with or without its "#"
 	}
 	return Palette{Bg: h(bg), Text1: h(t1), Text2: h(t2), Text3: h(t3), Text4: h(t4), OK: true}
 }

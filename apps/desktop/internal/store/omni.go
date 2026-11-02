@@ -153,7 +153,7 @@ func (s *Store) Running(l *Link) *Job {
 		if j.Status != domain.JobQueued && j.Status != domain.JobRunning {
 			continue
 		}
-		if t, id, ok := parseLink(j.Input); ok && t == l.Lookup.Type && id == l.Lookup.ID {
+		if t, id, ok := j.link(); ok && t == l.Lookup.Type && id == l.Lookup.ID {
 			return j
 		}
 	}
@@ -203,7 +203,7 @@ func (s *Store) LookupOne(url string, then func(client.Lookup)) {
 func (s *Store) PriorJobFor(l client.Lookup) *client.PriorJob {
 	var done *client.PriorJob
 	for _, j := range s.Jobs {
-		if t, id, ok := parseLink(j.Input); !ok || t != l.Type || id != l.ID {
+		if t, id, ok := j.link(); !ok || t != l.Type || id != l.ID {
 			continue
 		}
 		switch j.Status {
