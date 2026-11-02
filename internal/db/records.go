@@ -74,27 +74,32 @@ const albumColumns = `id, name, artist_name, artist_id, artist_url, release_date
 	tracks_wanted, tracks_done, tracks_failed, tracks_given_up, tracks_missing, state, added_at, refreshed_at, completed_at, updated_at`
 
 func getAlbum(ctx context.Context, q rowQueryer, id string) (domain.Album, error) {
+	a, err := scanAlbum(q.QueryRowContext(ctx, `SELECT `+albumColumns+` FROM albums WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Album{}, ErrRecordNotFound
+	}
+	return a, err
+}
+
+func scanAlbum(row jobScanner) (domain.Album, error) {
 	var (
 		a                                               domain.Album
 		artwork, catalogState, overrides, cover, artist string
 		state, added, updated                           string
 		resolved, refreshed, completed                  sql.NullString
 	)
-	err := q.QueryRowContext(ctx, `SELECT `+albumColumns+` FROM albums WHERE id = ?`, id).Scan(
+	err := row.Scan(
 		&a.ID, &a.Name, &a.ArtistName, &a.ArtistID, &a.ArtistURL, &a.ReleaseDate, &a.Genre, &a.UPC, &a.ContentRating, &artwork, &resolved,
 		&a.ReleaseTrackCount, &a.WithheldCount, &a.StorefrontRead, &catalogState, &a.WantedAll, &a.Paused, &a.Priority, &overrides, &cover, &artist,
 		&a.TracksWanted, &a.TracksDone, &a.TracksFailed, &a.TracksGivenUp, &a.TracksMissing, &state, &added, &refreshed, &completed, &updated)
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Album{}, ErrRecordNotFound
-	}
 	if err != nil {
 		return domain.Album{}, err
 	}
 	if a.Artwork, err = decodeArtwork(artwork); err != nil {
-		return domain.Album{}, fmt.Errorf("album %s: %w", id, err)
+		return domain.Album{}, fmt.Errorf("album %s: %w", a.ID, err)
 	}
 	if a.Overrides, err = decodeOverrides(overrides); err != nil {
-		return domain.Album{}, fmt.Errorf("album %s: %w", id, err)
+		return domain.Album{}, fmt.Errorf("album %s: %w", a.ID, err)
 	}
 	a.CatalogState = domain.CatalogState(catalogState)
 	a.CoverState, a.ArtistCoverState = domain.CoverState(cover), domain.CoverState(artist)
@@ -108,26 +113,31 @@ const playlistColumns = `id, name, curator_name, artwork, resolved_at, storefron
 	tracks_wanted, tracks_done, tracks_failed, tracks_given_up, tracks_missing, state, added_at, refreshed_at, completed_at, updated_at`
 
 func getPlaylist(ctx context.Context, q rowQueryer, id string) (domain.Playlist, error) {
+	p, err := scanPlaylist(q.QueryRowContext(ctx, `SELECT `+playlistColumns+` FROM playlists WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Playlist{}, ErrRecordNotFound
+	}
+	return p, err
+}
+
+func scanPlaylist(row jobScanner) (domain.Playlist, error) {
 	var (
 		p                                              domain.Playlist
 		artwork, catalogState, overrides, cover, state string
 		added, updated                                 string
 		resolved, refreshed, completed                 sql.NullString
 	)
-	err := q.QueryRowContext(ctx, `SELECT `+playlistColumns+` FROM playlists WHERE id = ?`, id).Scan(
+	err := row.Scan(
 		&p.ID, &p.Name, &p.CuratorName, &artwork, &resolved, &p.StorefrontRead, &catalogState, &p.LastModified, &p.Paused, &p.Priority, &overrides, &cover,
 		&p.TracksWanted, &p.TracksDone, &p.TracksFailed, &p.TracksGivenUp, &p.TracksMissing, &state, &added, &refreshed, &completed, &updated)
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Playlist{}, ErrRecordNotFound
-	}
 	if err != nil {
 		return domain.Playlist{}, err
 	}
 	if p.Artwork, err = decodeArtwork(artwork); err != nil {
-		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", id, err)
+		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", p.ID, err)
 	}
 	if p.Overrides, err = decodeOverrides(overrides); err != nil {
-		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", id, err)
+		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", p.ID, err)
 	}
 	p.CatalogState = domain.CatalogState(catalogState)
 	p.CoverState = domain.CoverState(cover)

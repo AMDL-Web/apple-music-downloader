@@ -40,6 +40,8 @@ func isUniqueConstraintErr(err error) bool {
 type Store struct {
 	db           *sql.DB
 	downloadsDir atomic.Pointer[string]
+	// downloadsDirFn, when set, is the live downloads dir (FollowDownloadsDir).
+	downloadsDirFn func() string
 }
 
 // Options configure OpenWith.
@@ -107,8 +109,21 @@ func OpenWith(path string, opts Options) (*Store, error) {
 // for writes from now on. Stored paths are not rewritten.
 func (s *Store) SetDownloadsDir(dir string) { s.downloadsDir.Store(&dir) }
 
+// FollowDownloadsDir makes the store read the downloads dir from get on every
+// use, so a runtime change of download.downloads_dir applies to the next
+// write and read. Call it before the store is shared.
+func (s *Store) FollowDownloadsDir(get func() string) { s.downloadsDirFn = get }
+
 // storedPath is p as files.path stores it under the current downloads dir.
-func (s *Store) storedPath(p string) string { return storedPath(*s.downloadsDir.Load(), p) }
+func (s *Store) storedPath(p string) string { return storedPath(s.DownloadsDir(), p) }
+
+// DownloadsDir returns the directory file paths are stored relative to.
+func (s *Store) DownloadsDir() string {
+	if s.downloadsDirFn != nil {
+		return s.downloadsDirFn()
+	}
+	return *s.downloadsDir.Load()
+}
 
 func (s *Store) Close() error { return s.db.Close() }
 

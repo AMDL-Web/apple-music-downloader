@@ -312,3 +312,59 @@ type PendingAdd struct {
 	LastError string                    `json:"last_error,omitempty"`
 	State     PendingAddState           `json:"state"`
 }
+
+// ResourceRef names a record.
+type ResourceRef struct {
+	Kind ResourceKind `json:"kind"`
+	ID   string       `json:"id"`
+}
+
+// CheckTrigger is what started a disk check.
+type CheckTrigger string
+
+const (
+	CheckManual CheckTrigger = "manual"
+	CheckPatrol CheckTrigger = "patrol"
+)
+
+// Reasons a disk check stopped without marking anything.
+const (
+	// CheckAbortedTooManyMissing: more than half the checked files were
+	// missing and the check was not forced, which is what an unmounted share
+	// looks like.
+	CheckAbortedTooManyMissing = "too_many_missing"
+	// CheckAbortedInterrupted: the server stopped during the check.
+	CheckAbortedInterrupted = "interrupted"
+	// CheckAbortedFailed: a store read or write failed.
+	CheckAbortedFailed = "failed"
+)
+
+// CheckRun is one disk check: it stats the stored path of every done slot in
+// its scope and marks the missing ones, unless it aborts. Scope is "all" or
+// "<kind>:<id>". FinishedAt is nil while it runs.
+type CheckRun struct {
+	ID            int64        `json:"id"`
+	Trigger       CheckTrigger `json:"trigger"`
+	Scope         string       `json:"scope"`
+	StartedAt     time.Time    `json:"started_at"`
+	FinishedAt    *time.Time   `json:"finished_at,omitempty"`
+	Checked       int          `json:"checked"`
+	Missing       int          `json:"missing"`
+	AbortedReason string       `json:"aborted_reason,omitempty"`
+}
+
+// ResourceMark is the `resource` field of search hits, lookups and the album
+// page: the record that holds a catalog object, read from the records, never
+// from the disk. For a song it is the album record holding the song, with
+// SongState its main slot's state.
+type ResourceMark struct {
+	Kind          ResourceKind `json:"kind"`
+	ID            string       `json:"id"`
+	State         RecordState  `json:"state"`
+	TracksDone    int          `json:"tracks_done"`
+	TracksWanted  int          `json:"tracks_wanted"`
+	WithheldCount int          `json:"withheld_count"`
+	ActiveJobID   string       `json:"active_job_id,omitempty"`
+	Paused        bool         `json:"paused"`
+	SongState     AudioState   `json:"song_state,omitempty"`
+}
