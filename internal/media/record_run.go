@@ -58,24 +58,28 @@ func (d *Downloader) processRecordRun(ctx context.Context, job domain.Job, repor
 	if err := reporter.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventResolvedInput, Message: message, Payload: domain.MarshalEventPayload(job, map[string]any{"message": message})}); err != nil {
 		return err
 	}
-	switch plan.Scope {
-	case jobs.ScopeLyrics, jobs.ScopeCovers:
-		return fmt.Errorf("a %s run is not supported yet", plan.Scope)
-	}
-	if parsed.Type == applemusic.TypePlaylist && d.cfg.Download.SavePlaylistCover && len(resolved.Tracks) > 0 {
-		folder := collectionFolderPath(d.cfg, resolved.Tracks[0], parsed.Type, resolved.Name, resolved.ID)
-		if coverErr := d.savePlaylistCover(ctx, resolved.ArtworkURL, folder); coverErr != nil && ctx.Err() == nil {
-			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventStandaloneCoverFailed, Phase: "playlist_cover", Message: coverErr.Error()})
-		}
+	if plan.Scope == jobs.ScopeCovers {
+		// A covers reset writes over the files there.
+		return d.saveRecordCovers(ctx, job, parsed, resolved, record, reporter, true)
 	}
 	d.startMotionArtworkBackfill(ctx, job.ID, parsed, resolved.Tracks, reporter)
 	if len(plan.Slots) == 0 {
 		return nil
 	}
+	if plan.Scope == jobs.ScopeAudio {
+		if err := d.saveRecordCovers(ctx, job, parsed, resolved, record, reporter, false); err != nil {
+			return err
+		}
+	}
 
 	runs, err := d.slotRuns(ctx, job, plan, parsed, resolved, record, reporter)
 	if err != nil {
 		return err
+	}
+	if plan.Scope == jobs.ScopeLyrics {
+		for _, run := range runs {
+			run.lyricsOnly = true
+		}
 	}
 	log := logging.FromContext(ctx, d.logger)
 	return runTrackTasks(ctx, log, len(runs), make([]bool, len(runs)), false, func(trackCtx context.Context, i int) error {
@@ -125,6 +129,60 @@ func (d *Downloader) resolveRecord(ctx context.Context, job domain.Job, parsed a
 		return resolvedCollection{}, fmt.Errorf("store the read of playlist %s: %w", parsed.ID, err)
 	}
 	return playlistCollection(collection), nil
+}
+
+// saveRecordCovers writes the record's standalone covers, as configured, and
+// stores their states: cover.<ext> of an album or playlist and artist.<ext>
+// of an album. Without replace a file already there is kept (the write-time
+// stat); a covers reset writes over it. A failed cover never fails the run;
+// the error is ctx's.
+func (d *Downloader) saveRecordCovers(ctx context.Context, job domain.Job, parsed applemusic.ParsedURL, resolved resolvedCollection, record jobs.RecordReporter, reporter jobs.Reporter, replace bool) error {
+	cfg := d.cfg.Download
+	failed := func(phase string, err error) domain.CoverState {
+		if ctx.Err() != nil {
+			return ""
+		}
+		_ = reporter.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventStandaloneCoverFailed, Phase: phase, Message: err.Error()})
+		return domain.CoverFailed
+	}
+	cover, artist := domain.CoverOff, domain.CoverOff
+	switch {
+	case len(resolved.Tracks) == 0:
+		return nil
+	case parsed.Type == applemusic.TypePlaylist:
+		artist = ""
+		if cfg.SavePlaylistCover {
+			cover = domain.CoverDone
+			folder := collectionFolderPath(d.cfg, resolved.Tracks[0], parsed.Type, resolved.Name, resolved.ID)
+			if err := d.savePlaylistCover(ctx, resolved.ArtworkURL, folder, replace); err != nil {
+				cover = failed("playlist_cover", err)
+			}
+		}
+	case len(resolved.Placements) > 0:
+		placement := resolved.Placements[0]
+		albumDir, artistDir := libraryCoverDirs(d.cfg, placement.Album)
+		song := resolved.Tracks[0]
+		song.AlbumArtworkURL = firstNonEmpty(song.AlbumArtworkURL, placement.Album.ArtworkURL)
+		if cfg.SaveAlbumCover {
+			cover = domain.CoverDone
+			if err := d.saveAlbumCover(ctx, song, albumDir, replace); err != nil {
+				cover = failed("album_cover", err)
+			}
+		}
+		if cfg.SaveArtistCover && artistDir != "" {
+			artist = domain.CoverDone
+			if err := d.saveArtistCover(ctx, song, parsed.Storefront, artistDir, replace); err != nil {
+				artist = failed("artist_cover", err)
+			}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := record.SetCoverStates(ctx, job.ResourceKind, job.ResourceID, cover, artist); err != nil {
+		logging.FromContext(ctx, d.logger).Error("record the cover states", "job_id", job.ID, "error", err)
+	}
+	return nil
 }
 
 // isCatalogNotFound reports a catalog read Apple answered 404.
@@ -278,6 +336,10 @@ func (r *trackRun) reportSlot(ctx context.Context, err error) {
 	if r.slot == nil || r.record == nil {
 		return
 	}
+	if r.lyricsOnly {
+		r.reportLyrics(ctx, err)
+		return
+	}
 	finished := err == nil && (r.item.Status == domain.ItemCompleted || r.item.Status == domain.ItemSkipped)
 	// A file that landed is reported even when the pause came right after it.
 	if !finished && ctx.Err() != nil {
@@ -315,6 +377,83 @@ func (r *trackRun) reportSlot(ctx context.Context, err error) {
 			r.discardCheckpoint()
 		}
 	}
+}
+
+// reportLyrics reports a lyrics run's refresh of the slot. Its audio state is
+// left as it is: the file is the one the slot already had.
+func (r *trackRun) reportLyrics(ctx context.Context, err error) {
+	if err != nil && ctx.Err() != nil {
+		return
+	}
+	state := r.item.LyricsStatus
+	if err != nil {
+		state = domain.LyricsFailed
+	}
+	key := r.slot.FileKey
+	log := logging.FromContext(ctx, r.d.logger).With("job_id", r.job.ID, "song_id", key.SongID, "slot", key.Slot)
+	r.writeSlot(ctx, log, "lyrics", func(ctx context.Context) error { return r.record.SlotLyrics(ctx, r.job.ID, key, state) })
+}
+
+// refreshLyrics is the track run of a lyrics run (a lyrics reset): it
+// fetches the lyrics again and writes them into the slot's file and its
+// sidecars, without downloading audio.
+func (r *trackRun) refreshLyrics(ctx context.Context) error {
+	set := r.stageSetter(ctx)
+	set(domain.ItemResolving, "resolving metadata", nil)
+	if err := r.resolveMetadata(ctx); err != nil {
+		return err
+	}
+	path := r.target.fixedPath
+	if path == "" {
+		return errors.New("the slot has no file to refresh")
+	}
+	if err := r.output.acquire(ctx, path); err != nil {
+		return err
+	}
+	r.lastOutPath = path
+	if err := r.fetchLyrics(ctx); err != nil {
+		return err
+	}
+	item := &r.item
+	item.OutputPath = domain.AbsolutePath(path)
+	message := "Lyrics refreshed"
+	if item.LyricsStatus == domain.LyricsFetched {
+		set(domain.ItemTagging, "writing lyrics", nil)
+		if err := r.writeLyrics(ctx, path); err != nil {
+			return fmt.Errorf("write lyrics: %w", err)
+		}
+	} else {
+		message = "No lyrics to write: " + string(item.LyricsStatus)
+	}
+	item.Status = domain.ItemCompleted
+	item.StatusMessage = message
+	// TODO(P3): the lyrics_refreshed event (design §4.3).
+	r.d.persistTerminal(ctx, r.reporter, item, func() domain.Event {
+		return domain.Event{JobID: r.job.ID, ItemID: item.ID, Type: domain.EventItemCompleted, Message: message, Payload: domain.MarshalEventPayload(*item, map[string]any{"message": message})}
+	})
+	return nil
+}
+
+// writeLyrics writes the fetched lyrics into the file at path (embed_lyrics)
+// and its sidecars (lyrics_files). The tag is rewritten on a copy first; the
+// sidecars are installed only once it landed.
+func (r *trackRun) writeLyrics(ctx context.Context, path string) error {
+	cfg := r.d.cfg.Download
+	var sidecars stagedSidecars
+	defer sidecars.discard()
+	for _, format := range cfg.LyricsFiles {
+		if text := r.lyrics.sidecar(format); text != "" {
+			if err := sidecars.stage(r.media, lyricsSidecarPath(path, format), []byte(text)); err != nil {
+				return err
+			}
+		}
+	}
+	if cfg.EmbedLyrics {
+		if err := r.media.rewriteLyrics(ctx, path, r.lyrics.lrc); err != nil {
+			return err
+		}
+	}
+	return sidecars.install()
 }
 
 // writeSlot writes a slot outcome, retrying once detached from ctx as

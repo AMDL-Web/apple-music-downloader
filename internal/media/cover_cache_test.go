@@ -201,7 +201,7 @@ func TestStandaloneAndEmbeddedCoversShareJobCache(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "album", "cover.jpg")
 	if err := downloader.ensureStandaloneCover(context.Background(), path, func(context.Context) (string, error) {
 		return "album-art", nil
-	}); err != nil {
+	}, false); err != nil {
 		t.Fatal(err)
 	}
 	written, err := os.ReadFile(path)
@@ -233,10 +233,10 @@ func TestStandaloneCoverFailureIsHandledOncePerJob(t *testing.T) {
 		return "", wantErr
 	}
 
-	if err := downloader.ensureStandaloneCover(context.Background(), path, resolve); !errors.Is(err, wantErr) {
+	if err := downloader.ensureStandaloneCover(context.Background(), path, resolve, false); !errors.Is(err, wantErr) {
 		t.Fatalf("first ensure error=%v, want %v", err, wantErr)
 	}
-	if err := downloader.ensureStandaloneCover(context.Background(), path, resolve); err != nil {
+	if err := downloader.ensureStandaloneCover(context.Background(), path, resolve, false); err != nil {
 		t.Fatalf("second ensure error=%v, want suppressed duplicate", err)
 	}
 	if calls != 1 {
@@ -283,7 +283,7 @@ func TestStandaloneCoversForDifferentPathsProceedConcurrently(t *testing.T) {
 		go func() {
 			errs <- downloader.ensureStandaloneCover(context.Background(), req.path, func(context.Context) (string, error) {
 				return req.url, nil
-			})
+			}, false)
 		}()
 	}
 

@@ -160,7 +160,7 @@ func (d *Downloader) processJob(ctx context.Context, job domain.Job, reporter jo
 	// The simulate backend makes this a no-op that writes nothing.
 	if (parsed.Type == applemusic.TypePlaylist || parsed.Type == applemusic.TypeStation) && d.cfg.Download.SavePlaylistCover && len(tracks) > 0 {
 		folder := collectionFolderPath(d.cfg, tracks[0], parsed.Type, collectionName, collectionID)
-		if coverErr := d.savePlaylistCover(ctx, resolved.ArtworkURL, folder); coverErr != nil && ctx.Err() == nil {
+		if coverErr := d.savePlaylistCover(ctx, resolved.ArtworkURL, folder, false); coverErr != nil && ctx.Err() == nil {
 			_ = reporter.Event(ctx, domain.Event{JobID: job.ID, Type: domain.EventStandaloneCoverFailed, Phase: "playlist_cover", Message: coverErr.Error()})
 		}
 	}

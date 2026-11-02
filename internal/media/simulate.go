@@ -75,6 +75,10 @@ func (m simulatedMedia) statOutput(outPath string) (int64, bool) {
 	return statDiskOutput(outPath)
 }
 
+func (simulatedMedia) rewriteLyrics(ctx context.Context, _, _ string) error {
+	return simulatePause(ctx, simulatedTagPause)
+}
+
 func (simulatedMedia) stage(media encryptedMedia) (stagedFile, func(), error) {
 	return stagedFile{size: media.size}, func() {}, nil
 }

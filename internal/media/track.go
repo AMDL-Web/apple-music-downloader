@@ -114,6 +114,9 @@ type trackRun struct {
 	owner       string
 	quality     string
 	lastOutPath string
+	// lyricsOnly makes the run a lyrics refresh of the slot's file
+	// (refreshLyrics) instead of a download.
+	lyricsOnly bool
 	// enriched is set once cover and lyrics hold what enrich fetched.
 	enriched bool
 	cover    []byte
@@ -234,6 +237,9 @@ func (r *trackRun) stageSetter(ctx context.Context) publishStage {
 func (r *trackRun) maxAttempts() int { return r.d.cfg.Download.MaxAttempts }
 
 func (r *trackRun) process(ctx context.Context) error {
+	if r.lyricsOnly {
+		return r.refreshLyrics(ctx)
+	}
 	set := r.stageSetter(ctx)
 	set(domain.ItemResolving, "resolving metadata", nil)
 	if err := r.resolveMetadata(ctx); err != nil {

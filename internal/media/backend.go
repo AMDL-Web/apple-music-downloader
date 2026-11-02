@@ -11,6 +11,8 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/wrapper"
+
+	"github.com/zhaarey/go-mp4tag"
 )
 
 // mediaBackend is every piece of I/O one track performs: network transfers,
@@ -79,6 +81,10 @@ type mediaBackend interface {
 	// commit moves the staged file to outPath and returns its final size; see
 	// finalizeToOutput for why this is the only way a track reaches outPath.
 	commit(staged stagedFile, outPath string) (int64, error)
+	// rewriteLyrics replaces the embedded lyrics of the finished track at
+	// path, keeping every other tag: on a temp copy, committed over path
+	// once written, so a failure leaves the file as it was.
+	rewriteLyrics(ctx context.Context, path, lyrics string) error
 }
 
 // backend picks the media backend for this Downloader's effective config.
@@ -366,6 +372,24 @@ func (m realMedia) stageFile(path string, data []byte) (func() error, func(), er
 
 func (m realMedia) tag(ctx context.Context, staged stagedFile, song applemusic.Song, lyrics string, cover []byte) error {
 	return m.d.mp4.writeMetadata(ctx, staged.path, song, lyrics, cover)
+}
+
+func (m realMedia) rewriteLyrics(ctx context.Context, path, lyrics string) error {
+	staged, cleanup, err := m.stage(encryptedMedia{})
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if err := copyFile(path, staged.path); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := writeMP4Tags(staged.path, &mp4tag.MP4Tags{Lyrics: lyrics}); err != nil {
+		return err
+	}
+	return finalizeToOutput(staged.path, path)
 }
 
 func (m realMedia) commit(staged stagedFile, outPath string) (int64, error) {

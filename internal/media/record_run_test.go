@@ -674,3 +674,88 @@ func TestResumeCheckpointsBelongToTheRecord(t *testing.T) {
 		t.Fatalf("deleting the record left its checkpoint: %v", err)
 	}
 }
+
+// A lyrics reset refreshes the lyrics of a done slot without downloading its
+// audio again, and a covers reset writes the covers again; both leave the
+// slot's file and audio state as they are.
+func TestRecordLyricsAndCoversResets(t *testing.T) {
+	cfg := recordTestConfig(t)
+	cfg.Download.SaveAlbumCover = true
+	cfg.Download.EmbedLyrics = true
+	catalog := newRecordCatalog()
+	catalog.addAlbum("100", "Album", "Artist", 1, 1, 1000, "")
+	h := newRecordHarness(t, cfg, nil, catalog)
+	h.start()
+	h.submit("https://music.apple.com/cn/album/album/100")
+	h.waitFor("the album", h.albumComplete("100"))
+	h.waitFor("the first run to end", h.idle())
+	before := h.files(domain.ResourceAlbum, "100")[0]
+	if before.LyricsState != domain.LyricsNone || h.album("100").CoverState != domain.CoverDone {
+		t.Fatalf("after the download: lyrics %q, cover %q; want none and done", before.LyricsState, h.album("100").CoverState)
+	}
+
+	catalog.mu.Lock()
+	song := catalog.songs["1001"]
+	song.HasLyrics = true
+	catalog.songs["1001"] = song
+	catalog.mu.Unlock()
+	ctx := context.Background()
+	if _, err := h.m.Reset(ctx, jobs.ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: jobs.ResetLyrics}); err != nil {
+		t.Fatal(err)
+	}
+	h.waitFor("the lyrics run", func() bool {
+		runs := h.runsOf(domain.ResourceAlbum, "100")
+		return len(runs) == 2 && runs[0].Status.IsTerminal()
+	})
+	after := h.files(domain.ResourceAlbum, "100")[0]
+	if after.LyricsState != domain.LyricsFetched || after.AudioState != domain.AudioDone || after.Path != before.Path ||
+		after.Codec != before.Codec || after.LastRunID != before.LastRunID {
+		t.Fatalf("after the lyrics run: %+v, want lyrics fetched and the audio slot unchanged", after)
+	}
+	if run := h.runsOf(domain.ResourceAlbum, "100")[0]; run.Status != domain.JobCompleted || run.CompletedItems != 1 {
+		t.Fatalf("lyrics run = %s, %d completed (%s)", run.Status, run.CompletedItems, run.Error)
+	}
+
+	if _, err := h.m.Reset(ctx, jobs.ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: jobs.ResetCovers}); err != nil {
+		t.Fatal(err)
+	}
+	h.waitFor("the covers run", func() bool {
+		runs := h.runsOf(domain.ResourceAlbum, "100")
+		return len(runs) == 3 && runs[0].Status.IsTerminal()
+	})
+	if run := h.runsOf(domain.ResourceAlbum, "100")[0]; run.Status != domain.JobCompleted {
+		t.Fatalf("covers run = %s (%s)", run.Status, run.Error)
+	}
+	if album := h.album("100"); album.CoverState != domain.CoverDone || album.State != domain.RecordComplete {
+		t.Fatalf("after the covers run: %+v", album)
+	}
+}
+
+// The animated cover the backfill finds is stored on the album record.
+func TestRecordRunStoresMotionArtworkOnTheAlbum(t *testing.T) {
+	cfg := recordTestConfig(t)
+	cfg.Catalog.MotionArtworkEnabled = true
+	catalog := &motionCatalog{recordCatalog: newRecordCatalog()}
+	catalog.addAlbum("100", "Album", "Artist", 1, 1, 1000, "")
+	h := newRecordHarness(t, cfg, nil, catalog.recordCatalog)
+	h.d.catalog = catalog
+	h.start()
+	h.submit("https://music.apple.com/cn/album/album/100")
+	h.waitFor("the motion artwork", func() bool {
+		album, err := h.store.GetAlbum(context.Background(), "100")
+		return err == nil && album.Artwork.MotionSquareURL == "square.m3u8"
+	})
+	if art := h.album("100").Artwork; art.MotionTallURL != "tall.m3u8" || art.MotionSquareColors.Bg != "112233" {
+		t.Fatalf("artwork = %+v", art)
+	}
+	h.waitFor("the run to end", h.idle())
+	if err := h.d.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type motionCatalog struct{ *recordCatalog }
+
+func (motionCatalog) MotionArtworkViaWebToken(context.Context, string, string) (applemusic.MotionArtwork, error) {
+	return applemusic.MotionArtwork{Square: "square.m3u8", Tall: "tall.m3u8", SquareColors: applemusic.ArtworkColors{BgColor: "112233"}}, nil
+}
