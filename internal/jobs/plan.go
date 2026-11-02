@@ -102,7 +102,9 @@ func encodePlan(plan Plan) (string, error) {
 //
 // A slot the run planned and left without an outcome counts as failed when
 // the run ends, unless the run was paused, cancelled or interrupted by
-// shutdown, which put such slots back to pending. A user pause cancels the
+// shutdown, which put such slots back to pending. A run that ends before
+// PlanRun counts no failure against a slot; the record's backoff holds it
+// back instead. A user pause cancels the
 // run's context with the cause ErrPaused: keep the record's resume
 // checkpoints then.
 //
@@ -324,15 +326,30 @@ func artworkColors(p domain.ArtworkPalette) domain.ArtworkColors {
 // outcome.
 var errNoSlotOutcome = errors.New("the run ended without finishing this track")
 
+// errRunNotPlanned fails a record run that ended without planning its slots
+// and without an error of its own.
+var errRunNotPlanned = errors.New("the run ended without planning its tracks")
+
+// settled is how settleRecordRun left a finished record run.
+type settled struct {
+	// failures is how many of the record's slots this run ended failed or
+	// given up, by the processor or by settleRecordRun.
+	failures int
+	// unplanned is set when the run ended, not stopped, without planning its
+	// slots: it fails, and the record's backoff holds it back.
+	unplanned bool
+}
+
 // settleRecordRun brings a finished record run's slots to rest, so the picker
-// never meets a slot the run abandoned: a stopped run (paused, cancelled)
-// puts its running slots back to pending; any other ending fails every slot
-// it planned and left pending or running, or, when it never planned, every
-// slot that is due now. A record whose catalog read said it is gone only
-// releases its slots: it counts no failure and the picker skips it. A slot it
-// fails gets runErr as its error when set. It returns how many of the run's
-// slots ended failed or given up, by the processor or here.
-func (m *Manager) settleRecordRun(ctx context.Context, job domain.Job, stopped bool, runErr error) int {
+// never meets a slot the run abandoned. A stopped run (paused, cancelled), a
+// run that never planned and a run whose record's catalog read said it is
+// gone only put their running slots back to pending: they count no failure
+// against a slot (design §3.4 counts per slot a run ended failed), and a run
+// that never planned is held back by the record's backoff instead
+// (noteRecordRunEnd). Any other run fails each slot it planned and left
+// pending or running, with runErr's text when set; that cause never gives a
+// slot up at once, since the run's error is not the slot's.
+func (m *Manager) settleRecordRun(ctx context.Context, job domain.Job, stopped bool, runErr error) settled {
 	logger := m.logger.With("job_id", job.ID, "resource_kind", job.ResourceKind, "resource_id", job.ResourceID)
 	now := time.Now().UTC()
 	release := func() {
@@ -342,74 +359,64 @@ func (m *Manager) settleRecordRun(ctx context.Context, job domain.Job, stopped b
 	}
 	if stopped {
 		release()
-		return 0
+		return settled{}
 	}
 	if state, err := m.catalogState(ctx, job.ResourceKind, job.ResourceID); err != nil {
 		if !errors.Is(err, db.ErrRecordNotFound) {
 			logger.Error("read the record after its run", "error", err)
 		}
 		release()
-		return 0
+		return settled{}
 	} else if state != domain.CatalogOK {
 		release()
-		return 0
+		return settled{}
 	}
 	stored, err := m.store.GetJob(ctx, job.ID)
 	if err != nil {
 		logger.Error("read the run's plan", "error", err)
 		release()
-		return 0
+		return settled{}
 	}
 	plan, err := ParsePlan(stored)
 	if err != nil {
 		logger.Error("read the run's plan", "error", err)
 	}
-	var keys []domain.FileKey
-	switch {
-	case plan.Planned && plan.Scope == ScopeAudio:
-		for _, slot := range plan.Slots {
-			keys = append(keys, slot.FileKey)
-		}
-	case !plan.Planned && plan.Scope == ScopeAudio:
-		due, err := m.store.DueSlots(ctx, job.ResourceKind, job.ResourceID, now)
-		if err != nil {
-			logger.Error("list the record's due slots", "error", err)
-		}
-		for _, slot := range due {
-			keys = append(keys, slot.File.FileKey)
-		}
+	if !plan.Planned {
+		release()
+		return settled{unplanned: true}
 	}
 	cause := errNoSlotOutcome
 	if runErr != nil {
-		cause = runErr
+		// The text only: a NonRetryable marker on the run's error must not
+		// give up slots the run never tried.
+		cause = errors.New(runErr.Error())
 	}
-	for _, key := range keys {
-		f, err := m.store.GetFile(ctx, key)
-		if err != nil {
-			if !errors.Is(err, db.ErrFileNotFound) {
-				logger.Error("read a planned slot", "song_id", key.SongID, "slot", key.Slot, "error", err)
+	if plan.Scope == ScopeAudio {
+		for _, slot := range plan.Slots {
+			f, err := m.store.GetFile(ctx, slot.FileKey)
+			if err != nil {
+				if !errors.Is(err, db.ErrFileNotFound) {
+					logger.Error("read a planned slot", "song_id", slot.SongID, "slot", slot.Slot, "error", err)
+				}
+				continue
 			}
-			continue
-		}
-		// A failed slot of a run that never planned is due again: it was not
-		// tried, but the run failed before reaching it, which counts.
-		if f.AudioState != domain.AudioPending && f.AudioState != domain.AudioRunning &&
-			(plan.Planned || f.AudioState != domain.AudioFailed) {
-			continue
-		}
-		if _, err := m.SlotFailed(ctx, job.ID, key, cause); err != nil {
-			logger.Error("fail a slot the run left", "song_id", key.SongID, "slot", key.Slot, "error", err)
+			if f.AudioState != domain.AudioPending && f.AudioState != domain.AudioRunning {
+				continue
+			}
+			if _, err := m.SlotFailed(ctx, job.ID, slot.FileKey, cause); err != nil {
+				logger.Error("fail a slot the run left", "song_id", slot.SongID, "slot", slot.Slot, "error", err)
+			}
 		}
 	}
 	release()
-	failed := 0
-	for _, key := range keys {
-		f, err := m.store.GetFile(ctx, key)
+	var out settled
+	for _, slot := range plan.Slots {
+		f, err := m.store.GetFile(ctx, slot.FileKey)
 		if err == nil && f.LastRunID == job.ID && (f.AudioState == domain.AudioFailed || f.AudioState == domain.AudioGivenUp) {
-			failed++
+			out.failures++
 		}
 	}
-	return failed
+	return out
 }
 
 // catalogState reads a record's catalog state; db.ErrRecordNotFound when it

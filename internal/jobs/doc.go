@@ -22,9 +22,10 @@
 // database's partial unique index over runs(resource_kind, resource_id). A
 // one-off run's input has at most one active run (canonical_key's index). A
 // retry is a new run; no row is ever queued twice. A record run never leaves
-// a slot running once it ends: a stopped run releases its slots to pending, any
-// other ending fails the slots it left, so the picker never re-queues a record
-// forever on the same abandoned slots. Every terminal status is written by
+// a slot running once it ends: a stopped run releases its slots to pending, a
+// run that planned fails the slots it left, and one that never planned fails
+// and holds its record back (noteRecordRunEnd), so the picker never re-queues
+// a record forever on the same abandoned slots. Every terminal status is written by
 // persistTerminal together with its terminal event in one store call, and
 // hooks are dispatched only after that write succeeds. A run interrupted by
 // Shutdown (cause ErrShutdown) gets no terminal write and stays running for

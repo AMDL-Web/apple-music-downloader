@@ -242,14 +242,15 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, job d
 		return
 	}
 	stopped := !panicked && errors.Is(ctx.Err(), context.Canceled)
-	settledFailures := 0
+	var rest settled
 	if job.ResourceID != "" {
 		var runErr error
 		if !stopped {
 			runErr = err
 		}
-		settledFailures = m.settleRecordRun(context.Background(), job, stopped, runErr)
+		rest = m.settleRecordRun(context.Background(), job, stopped, runErr)
 	}
+	settledFailures := rest.failures
 	// The reload carries the item counters the terminal decision and the
 	// terminal event payload use, derived by the store from run_items.
 	latest, loadErr := m.store.GetJob(context.Background(), job.ID)
@@ -301,6 +302,11 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelCauseFunc, job d
 		case settledFailures > 0:
 			job.Status = domain.JobFailed
 			job.Error = fmt.Sprintf("%d tracks failed", settledFailures)
+		case rest.unplanned:
+			// Completed would clear the record's backoff and let the picker
+			// queue the same run again at once.
+			job.Status = domain.JobFailed
+			job.Error = errRunNotPlanned.Error()
 		default:
 			job.Status = domain.JobCompleted
 		}

@@ -26,6 +26,9 @@ type recordProcessor struct {
 	tracks   []string
 	skipPlan bool
 	runErr   error
+	// leaveErr, when set, is returned right after planning, leaving every
+	// planned slot without an outcome.
+	leaveErr error
 	outcome  func(PlannedSlot) error
 	// hold, when set, blocks each run until it is closed or the run is
 	// cancelled; started gets the run first.
@@ -73,6 +76,9 @@ func (p *recordProcessor) ProcessJob(ctx context.Context, job domain.Job, report
 	p.mu.Lock()
 	p.plans = append(p.plans, plan)
 	p.mu.Unlock()
+	if p.leaveErr != nil {
+		return p.leaveErr
+	}
 	for _, slot := range plan.Slots {
 		path := filepath.Join(p.dir, job.ResourceID, slot.SongID+"-"+slot.Slot+".m4a")
 		if err := rr.ClaimSlot(ctx, job.ID, slot.FileKey, path); err != nil {
@@ -356,10 +362,11 @@ func TestRecordRunPlansAndReportsSlots(t *testing.T) {
 	}
 }
 
-// A run that ends without reporting its slots (a processor that ignores
-// records, or one that failed before reaching them) fails them, so the
-// picker meets a backoff instead of queueing the record again at once.
-func TestRunThatLeavesSlotsFailsThem(t *testing.T) {
+// A run that ends without planning, as a processor that ignores records
+// does, counts no failure against a slot (its error is the run's, not the
+// slot's). It fails, and the record's backoff holds it back instead of the
+// picker queueing it again at once.
+func TestRunThatNeverPlansCountsNoSlotFailure(t *testing.T) {
 	p := &recordProcessor{dir: t.TempDir(), tracks: []string{"1", "2"}, skipPlan: true}
 	m, store := newRecordManager(t, p, config.Default())
 	startManager(t, m)
@@ -368,16 +375,55 @@ func TestRunThatLeavesSlotsFailsThem(t *testing.T) {
 	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
 	done := waitRun(t, store, run.ID)
 	if done.Status != domain.JobFailed {
-		t.Fatalf("run = %s, want failed: it left both slots", done.Status)
+		t.Fatalf("run = %s, want failed: it planned nothing", done.Status)
 	}
 	for _, song := range []string{"1", "2"} {
-		if f := fileState(t, store, "100", song, domain.SlotMain); f.AudioState != domain.AudioFailed || f.Failures != 1 {
-			t.Fatalf("slot %s = %+v, want failed once", song, f)
+		if f := fileState(t, store, "100", song, domain.SlotMain); f.AudioState != domain.AudioPending || f.Failures != 0 {
+			t.Fatalf("slot %s = %+v, want pending without a failure", song, f)
 		}
 	}
 	m.pickOnce(ctx)
 	if runs := runsOf(t, store, domain.ResourceAlbum, "100"); len(runs) != 1 {
-		t.Fatalf("runs = %d, want one: the failed slots wait for their backoff", len(runs))
+		t.Fatalf("runs = %d, want one: the record's backoff holds it", len(runs))
+	}
+}
+
+// nonRetryableErr is an error that says a retry cannot pass, as an amp-api
+// 4xx does.
+type nonRetryableErr struct{ msg string }
+
+func (e nonRetryableErr) Error() string      { return e.msg }
+func (e nonRetryableErr) NonRetryable() bool { return true }
+
+// A non-retryable run error (a 403 on the record's read) gives up no slot:
+// before planning it counts none, after planning each slot it left counts
+// one failure.
+func TestNonRetryableRunErrorGivesUpNoSlot(t *testing.T) {
+	forbidden := nonRetryableErr{"catalog 403"}
+	for name, p := range map[string]*recordProcessor{
+		"before planning": {runErr: forbidden},
+		"after planning":  {leaveErr: forbidden},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p.dir, p.tracks = t.TempDir(), []string{"1", "2"}
+			m, store := newRecordManager(t, p, config.Default())
+			startManager(t, m)
+			ctx := context.Background()
+
+			run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
+			if done := waitRun(t, store, run.ID); done.Status != domain.JobFailed {
+				t.Fatalf("run = %s, want failed", done.Status)
+			}
+			want, failures := domain.AudioPending, 0
+			if p.leaveErr != nil {
+				want, failures = domain.AudioFailed, 1
+			}
+			for _, song := range []string{"1", "2"} {
+				if f := fileState(t, store, "100", song, domain.SlotMain); f.AudioState != want || f.Failures != failures {
+					t.Fatalf("slot %s = %s with %d failures, want %s with %d", song, f.AudioState, f.Failures, want, failures)
+				}
+			}
+		})
 	}
 }
 
