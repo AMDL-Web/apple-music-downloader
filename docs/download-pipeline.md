@@ -296,27 +296,9 @@ directories. How a segment is cleaned (reserved characters, leading and trailing
 | `download.playlist_path_format` | `playlists/{PlaylistName}/{SongNumber:02d}. {SongName}` |
 | `download.station_path_format` | `stations/{StationName}/{SongNumber:02d}. {SongName}` |
 
-A track has one library path whichever job type downloads it, and a file at that path
-counts as downloaded: the track is skipped (`force_overwrite` replaces it), whatever
-quality it was saved in. So a song downloaded on its own is skipped when its album is
-downloaded later, and an artist download skips the tracks of albums already on disk.
-
-A job checks its library tracks before any of them starts
-(`internal/media#Downloader.skipTracksOnDisk`): a track already at its path is
-`skipped_existing` after one stat, with no per-track catalog read and no stream
-selection, so an album that is fully on disk finishes in seconds. The check at claim
-time stays, for a file another job commits meanwhile. Every run also re-checks the
-tracks an earlier run of the job finished (`internal/media#Downloader.keepFinished`):
-one stays finished only while its file is still at the path it recorded, that path is
-its current library path, and `force_overwrite` is off; otherwise it runs again.
-
-The library state of an album is answered from the same paths:
-`internal/media#Downloader.AlbumTracksOnDisk` stats each track of a track list (exact),
-and `internal/media#Downloader.AlbumFolderStates` counts the `.m4a` files in each album's
-folder against its summary's track count, with no catalog read (approximate, for album
-cards).
-
-The path comes from the track's placement: its album and its position in that album's
+A track has one library path whichever job type downloads it, and a file there counts as
+downloaded ([Library and skipping](#library-and-skipping)). The path comes from the
+track's placement: its album and its position in that album's
 track list (`internal/media#libraryTrackPath`).
 
 - Folder segments take only the album's own values (`{AlbumArtist}`, `{AlbumName}`,
@@ -353,6 +335,42 @@ list is in the `download` section of
 `{SongNumber}`, `{DiscNumber}`, `{DiscCount}`, `{TrackNumber}`, `{TrackCount}` — support
 `:02d` padding. `{TrackCount}` is the number of tracks on that track's disc, not the whole
 release. Unknown variables are preserved literally.
+
+### Library and skipping
+
+A track has one library path whichever job type downloads it, and a file at that path
+counts as downloaded, whatever quality it was saved in. So a song downloaded on its own
+is skipped when its album is downloaded later, and an artist download skips the tracks of
+albums already on disk. Playlists and stations are not part of the library: a song in one
+is downloaded into its folder even when the library holds it.
+
+A submit does not look at the files, and reads nothing from Apple: it only queues the
+link. A link whose last job is finished is queued again on that job, under the same id
+(`requeued: true`, `job_retried` with `cause: resubmit`), instead of adding a row; a
+station always gets a new job. The work happens when the job runs:
+
+- Before any track starts, the job checks its library tracks
+  (`internal/media#Downloader.skipTracksOnDisk`): a track already at its path is
+  `skipped_existing` after one stat, with no per-track catalog read and no stream
+  selection, so an album fully on disk finishes in seconds and an artist download skips
+  every album already there. The check at claim time stays, for a file another job
+  commits meanwhile.
+- Every run re-checks the tracks an earlier run of the job finished
+  (`internal/media#Downloader.keepFinished`): one stays finished only while its file is
+  still at the path it recorded, that path is its current library path, and
+  `force_overwrite` is off; otherwise it runs again.
+- "Download again" is a submit with `force_overwrite`: nothing is skipped, and each new
+  file replaces the old one only once it is complete, so cancelling or failing midway
+  leaves the old files as they were.
+
+Clients learn what is on disk from the reads that already go to the catalog, not from the
+submit. `internal/media#Downloader.AlbumTracksOnDisk` stats each track of an album's
+track list (exact; the album page and an album lookup), a song lookup reads the song's
+album and stats that one track (`internal/media#Downloader.SongOnDisk`), and
+`internal/media#Downloader.AlbumFolderStates` counts the `.m4a` files in each album's
+folder against its summary's track count, with no catalog read (approximate; search and
+artist album cards). Each answers `library`: `complete`, `partial` with a count, or
+`none`.
 
 ### Standalone covers
 
