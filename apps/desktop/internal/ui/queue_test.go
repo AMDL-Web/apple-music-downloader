@@ -101,3 +101,27 @@ func TestTheRowMenuOpensOnAClickAndDeletesOnlyAFinishedJob(t *testing.T) {
 		t.Errorf("%s still shows after its delete: %q", done.Name(), tt.Texts())
 	}
 }
+
+// Each finished row shows its quality, though the feed lists the jobs
+// without the tracks it is read from: the row reads them, not only the
+// latest download or one opened this run.
+func TestEveryFinishedRowShowsItsQuality(t *testing.T) {
+	a, run := demoApp(t)
+	a.Screen = ScreenQueue
+	run(func() bool { return a.Store.Loaded })
+	a.Tab = int(store.TabDone)
+	tt := stillTester(a.View, 1280, 1600)
+	done := a.Store.Filter(store.TabDone, "")
+	if len(done) < 2 {
+		t.Fatalf("the demo has %d finished jobs, want the latest and one before it", len(done))
+	}
+	run(func() bool {
+		tt.Frame()
+		for _, j := range done {
+			if jobQuality(j) == "" {
+				return false
+			}
+		}
+		return true
+	})
+}

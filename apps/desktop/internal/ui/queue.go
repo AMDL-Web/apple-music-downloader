@@ -214,30 +214,37 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 			head = 2
 		}
 	}
-	list := ui.List(c.Key("queue"), &a.queue, head+len(earlier), func(i int) {
-		switch {
-		case i == 0 && upNext:
-			a.upNext(c, k, running, queued, compact)
-		case i == 1 && head == 2:
-			ui.Row(c).Padding(18, 18, 6, 18).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Earlier").FontSize(12).FontWeight(650).TextColor(k.Muted)
-				ui.Spacer(c)
-				if !compact {
-					ui.Text(c, "Newest first").FontSize(12).TextColor(k.Faint)
-				}
-			})
-		default:
-			a.jobRow(c, k, earlier[i-head], compact, nil)
-		}
-	}).Grow(1).Background(k.Ground).ItemKey(func(i int) any {
-		switch {
-		case i == 0 && upNext:
-			return "up-next"
-		case i == 1 && head == 2:
-			return "earlier"
-		}
-		return earlier[i-head].ID
-	}).TrackScroll(a.scrollState(c, "queue"))
+	// The list fades under the bar above it (fadeEdges), over the ground,
+	// not the backdrop behind the page.
+	var list ui.Element
+	ui.Box(c.Key("queue-area")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
+		st := a.scrollState(c, "queue")
+		list = ui.List(c.Key("queue"), &a.queue, head+len(earlier), func(i int) {
+			switch {
+			case i == 0 && upNext:
+				a.upNext(c, k, running, queued, compact)
+			case i == 1 && head == 2:
+				ui.Row(c).Padding(18, 18, 6, 18).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "Earlier").FontSize(12).FontWeight(650).TextColor(k.Muted)
+					ui.Spacer(c)
+					if !compact {
+						ui.Text(c, "Newest first").FontSize(12).TextColor(k.Faint)
+					}
+				})
+			default:
+				a.jobRow(c, k, earlier[i-head], compact, nil)
+			}
+		}).Absolute().Top(0).Left(0).Right(0).Bottom(0).ItemKey(func(i int) any {
+			switch {
+			case i == 0 && upNext:
+				return "up-next"
+			case i == 1 && head == 2:
+				return "earlier"
+			}
+			return earlier[i-head].ID
+		}).TrackScroll(st)
+		a.fadeEdges(list, st)
+	})
 	a.settleQueueDrag(c, list)
 }
 
@@ -410,6 +417,11 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 	pal := jobPalette(j, false)
 	accent := AccentFor(pal, k)
 	running := j.Status == domain.JobRunning
+	if j.Status == domain.JobCompleted {
+		// The feed lists jobs without their tracks, which the quality is
+		// read from.
+		s.WantTracks(j)
+	}
 	row := ui.Row(c.Key(j.ID)).Padding(10, 18).Gap(14).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(k.Line).Focusable().Label(j.Name())
 	if s.Selection[j.ID] {
 		row.Background(k.AccentSoft)

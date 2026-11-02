@@ -138,7 +138,7 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 		})
 		width := min(max(a.pageWidth(c)-settingsNavWidth-2*settingsPad, 320), settingsMaxWidth)
 		area := a.scrollArea(c, "settings", 0, func() {
-			ui.Column(c).FillWidth().AlignItems(ui.Center).Padding(20, settingsPad, 64, settingsPad).Children(func() {
+			ui.Column(c).FillWidth().AlignItems(ui.Center).Padding(settingsPinRoom, settingsPad, 64, settingsPad).Children(func() {
 				ui.Column(c).Width(width).Gap(40).Children(func() { a.settingsSections(c, k, width) })
 			})
 		}).Grow(1)
@@ -152,6 +152,11 @@ func (a *App) settings(c *ui.Context, k *Tokens) {
 // Settings' page, in DIPs: the navigation's width, the room either side of
 // the sections, and the widest they grow.
 const settingsNavWidth, settingsPad, settingsMaxWidth = 196, 28, 1160
+
+// settingsPinRoom is how far below the page's top a section the navigation
+// brings up stops, and where the first one sits: clear of the band the top
+// edge fades in (scrollFade), so its title shows whole.
+const settingsPinRoom = scrollFade
 
 // restartBarWidth is the widest the restart bar grows; restartBarBottom
 // keeps it inside the 64 DIPs the sections leave below themselves.
@@ -266,7 +271,7 @@ func (a *App) followSections(c *ui.Context) {
 			c.Invalidate()
 			return
 		default:
-			y := max(0, min(laid+top-f.areaTop, st.MaxY))
+			y := max(0, min(laid+top-f.areaTop-settingsPinRoom, st.MaxY))
 			f.page = f.pin
 			if f.gliding && st.Scrolling() {
 				// The sections above may grow while it glides: it glides
@@ -318,7 +323,7 @@ func (a *App) settingsNavItem(c *ui.Context, k *Tokens, p settingsPage) {
 	if it.Clicked() {
 		f.page, f.pin, f.pinY = p.id, p.id, -1
 		if st, top := a.scrolls["settings"], f.tops[p.id]; st != nil {
-			f.gliding, f.glideTo = true, max(0, min(f.laidY+top-f.areaTop, st.MaxY))
+			f.gliding, f.glideTo = true, max(0, min(f.laidY+top-f.areaTop-settingsPinRoom, st.MaxY))
 			st.ScrollTo(0, f.glideTo, ui.Smooth)
 		}
 	}

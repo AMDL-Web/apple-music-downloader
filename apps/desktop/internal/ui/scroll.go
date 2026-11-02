@@ -79,22 +79,30 @@ func (a *App) scrollArea(c *ui.Context, key string, gutter float32, children fun
 	area := ui.Box(c.Key(key + "-area")).MinHeight(0)
 	area.Children(func() {
 		sc := ui.Scroll(c.Key(key)).Absolute().Top(0).Left(0).Right(0).Bottom(0).TrackScroll(st)
-		var top, bottom float32
-		if st.Y > 1 {
-			top = scrollFade
-		}
-		if st.MaxY-st.Y > 1 {
-			bottom = scrollFade
-		}
-		if a.EdgeFades && (top > 0 || bottom > 0) {
-			v := edgeFade.NewValues().Float(edgeFadeTop, top).Float(edgeFadeBottom, bottom)
-			sc.Effect(edgeFade.Effect(shader.Options{Values: v}))
-		}
+		a.fadeEdges(sc, st)
 		sc.Children(func() {
 			ui.Column(c).FillWidth().Padding(0, gutter, 0, 0).Children(children)
 		})
 	})
 	return area
+}
+
+// fadeEdges fades the edges of sc, a scroll container scrolled by st, that
+// have more beyond them (edgeFade, with EdgeFades). The band starts at sc's
+// own edge, so whatever stays above it, a page's title or a list's header,
+// keeps clear of it: it fades only what scrolls under that.
+func (a *App) fadeEdges(sc ui.Element, st *ui.ScrollState) {
+	var top, bottom float32
+	if st.Y > 1 {
+		top = scrollFade
+	}
+	if st.MaxY-st.Y > 1 {
+		bottom = scrollFade
+	}
+	if a.EdgeFades && (top > 0 || bottom > 0) {
+		v := edgeFade.NewValues().Float(edgeFadeTop, top).Float(edgeFadeBottom, bottom)
+		sc.Effect(edgeFade.Effect(shader.Options{Values: v}))
+	}
 }
 
 // scrollbars colors the thumbs as the frame ends: always where the desktop
