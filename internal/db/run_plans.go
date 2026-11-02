@@ -59,6 +59,20 @@ type PlanSlot struct {
 // track order: pending, or failed with the backoff over, of wanted (album) or
 // listed (playlist), available tracks.
 func (s *Store) DueSlots(ctx context.Context, kind domain.ResourceKind, id string, now time.Time) ([]PlanSlot, error) {
+	return s.planSlots(ctx, kind, id, slotDue, formatTime(now))
+}
+
+// DoneSlots returns the done slots of a record's wanted (album) or listed
+// (playlist), available tracks, in track order: what a lyrics run refreshes.
+// A done file of a track Apple withheld or a playlist dropped is left out, as
+// the run's read no longer lists it.
+func (s *Store) DoneSlots(ctx context.Context, kind domain.ResourceKind, id string) ([]PlanSlot, error) {
+	return s.planSlots(ctx, kind, id, `f.audio_state = 'done'`)
+}
+
+// planSlots returns the slots of a record that match cond (over files f,
+// with args after the owner id) on the record's slot join, in track order.
+func (s *Store) planSlots(ctx context.Context, kind domain.ResourceKind, id, cond string, args ...any) ([]PlanSlot, error) {
 	join, err := slotJoin(kind)
 	if err != nil {
 		return nil, err
@@ -70,7 +84,7 @@ func (s *Store) DueSlots(ctx context.Context, kind domain.ResourceKind, id strin
 	rows, err := s.db.QueryContext(ctx, `SELECT `+prefixedFileColumns+`, `+position+`, t.name, t.artist_name, t.duration_ms,
 			COALESCE((SELECT m.path FROM files m WHERE m.owner_kind = f.owner_kind AND m.owner_id = f.owner_id
 				AND m.song_id = f.song_id AND m.slot = 'main' AND f.slot <> 'main'), '')
-		FROM `+join+` AND `+slotDue+` ORDER BY `+order, id, formatTime(now))
+		FROM `+join+` AND `+cond+` ORDER BY `+order, append([]any{id}, args...)...)
 	if err != nil {
 		return nil, err
 	}

@@ -731,6 +731,49 @@ func TestRecordLyricsAndCoversResets(t *testing.T) {
 	}
 }
 
+// A lyrics reset after Apple dropped one of an album's downloaded tracks
+// refreshes the tracks still listed and leaves the dropped one's file alone,
+// instead of failing on a planned song the read no longer lists.
+func TestRecordLyricsResetSkipsATrackNoLongerListed(t *testing.T) {
+	cfg := recordTestConfig(t)
+	cfg.Download.EmbedLyrics = true
+	catalog := newRecordCatalog()
+	catalog.addAlbum("100", "Album", "Artist", 2, 2, 1000, "")
+	h := newRecordHarness(t, cfg, nil, catalog)
+	h.start()
+	h.submit("https://music.apple.com/cn/album/album/100")
+	h.waitFor("the album", h.albumComplete("100"))
+	h.waitFor("the first run to end", h.idle())
+
+	catalog.mu.Lock()
+	album := catalog.albums["100"]
+	album.Tracks = album.Tracks[:1]
+	catalog.albums["100"] = album
+	song := catalog.songs["1001"]
+	song.HasLyrics = true
+	catalog.songs["1001"] = song
+	catalog.mu.Unlock()
+	if _, err := h.m.Reset(context.Background(), jobs.ResetRequest{Kind: domain.ResourceAlbum, ID: "100", What: jobs.ResetLyrics}); err != nil {
+		t.Fatal(err)
+	}
+	h.waitFor("the lyrics run", func() bool {
+		runs := h.runsOf(domain.ResourceAlbum, "100")
+		return len(runs) == 2 && runs[0].Status.IsTerminal()
+	})
+	if run := h.runsOf(domain.ResourceAlbum, "100")[0]; run.Status != domain.JobCompleted || run.TotalItems != 1 {
+		t.Fatalf("lyrics run = %s with %d items (%s), want completed over the listed track", run.Status, run.TotalItems, run.Error)
+	}
+	for _, f := range h.files(domain.ResourceAlbum, "100") {
+		want := domain.LyricsFetched
+		if f.SongID == "1002" {
+			want = domain.LyricsNone
+		}
+		if f.AudioState != domain.AudioDone || f.LyricsState != want {
+			t.Fatalf("slot %s = %s, lyrics %q; want done with lyrics %q", f.SongID, f.AudioState, f.LyricsState, want)
+		}
+	}
+}
+
 // The animated cover the backfill finds is stored on the album record.
 func TestRecordRunStoresMotionArtworkOnTheAlbum(t *testing.T) {
 	cfg := recordTestConfig(t)

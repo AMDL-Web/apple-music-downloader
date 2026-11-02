@@ -267,23 +267,22 @@ func (m *Manager) settleUnplannedItems(ctx context.Context, jobID string, items 
 	return m.store.ResetItems(ctx, jobID, reset, now)
 }
 
-// doneSlots is the done slots of songIDs (every song when empty) as plan
-// slots, for a lyrics run.
+// doneSlots is the done slots of songIDs (every song when empty) whose
+// track the record still lists, for a lyrics run.
 func (m *Manager) doneSlots(ctx context.Context, kind domain.ResourceKind, id string, songIDs []string) ([]db.PlanSlot, error) {
-	files, err := m.store.ListFiles(ctx, kind, id)
-	if err != nil {
-		return nil, err
+	slots, err := m.store.DoneSlots(ctx, kind, id)
+	if err != nil || len(songIDs) == 0 {
+		return slots, err
 	}
 	only := map[string]bool{}
 	for _, songID := range songIDs {
 		only[songID] = true
 	}
-	var out []db.PlanSlot
-	for _, f := range files {
-		if f.AudioState != domain.AudioDone || (len(only) > 0 && !only[f.SongID]) {
-			continue
+	out := slots[:0]
+	for _, slot := range slots {
+		if only[slot.File.SongID] {
+			out = append(out, slot)
 		}
-		out = append(out, db.PlanSlot{File: f})
 	}
 	return out, nil
 }
