@@ -7,7 +7,9 @@
 # wrapper-lite-linux-x86_64 artifact (the payload the guest's manager is told
 # to install, with its digest), both from the lite branch only, once each one's
 # downloaded bytes match the digest GitHub reports, and commits the file only
-# when it changed. wrapper-pin.json on that
+# when it changed, and only after it boots that guest in QEMU the way amdl does
+# (.github/actions/guestboot) and its manager answers: a candidate that does not
+# boot is never committed. wrapper-pin.json on that
 # branch pins upstream's unpatched guest for the 2.0 release candidates and is
 # no longer updated.
 name: wrapper-pin
@@ -23,7 +25,7 @@ permissions:
 jobs:
   pin:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,6 +35,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/wrapper-pin.mjs "$RUNNER_TEMP/wrapper-pin.json"
+
+      - name: Boot the candidate guest
+        uses: ./.github/actions/guestboot
+        with:
+          pin-file: ${{ runner.temp }}/wrapper-pin.json
+          fresh: 'true'
 
       - name: Commit it to wrapper-pins
         run: |

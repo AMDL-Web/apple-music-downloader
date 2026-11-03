@@ -139,6 +139,7 @@ and console checks and the report format.
 | Go logic | the package's tests, then `make test` |
 | Bug fix with a regression test | `go run ./tools/revertproof -test <file> -run <new tests>` after committing ([amdl-verify](.claude/skills/amdl-verify/SKILL.md#revert-proof)) |
 | Decryption (`internal/fairplay`, `tools/temaridiff`) | `go test ./internal/fairplay/` and `make temaridiff`, which `make check` does not run |
+| Local wrapper guest (`internal/wrapperhost`) | its tests, then `make guestboot` (not in `make check`) |
 | Concurrency (jobs, media pools, events, SSE) | `make race` |
 | API routes, schemas, SSE | `go test ./internal/api/` and a live check with `make dev` |
 | Config keys | `go test ./internal/config/ ./internal/api/`, then reread the key's example comment |
