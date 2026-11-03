@@ -89,7 +89,7 @@ func (e *hintError) Unwrap() error { return e.err }
 
 // requestError is the package's requestError, with workersDevHint added when
 // the wrapper is at *.workers.dev and the request timed out or its
-// connection was reset.
+// connection was cut.
 func (c *Client) requestError(parent context.Context, endpoint string, timeout time.Duration, err error) error {
 	out := requestError(parent, endpoint, timeout, err)
 	if c.workersDev && cutOff(err) {
@@ -102,6 +102,7 @@ func (c *Client) requestError(parent context.Context, endpoint string, timeout t
 func cutOff(err error) bool {
 	var netErr net.Error
 	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNABORTED) ||
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		(errors.As(err, &netErr) && netErr.Timeout())
 }
