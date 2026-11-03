@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Starts a release candidate on the files the previous release wrote, as an
-# upgrade does: a server install (serve, simulate mode) and the embedded
-# backend the desktop app and --server embedded run. The amdl-release skill
-# runs it before the release PR.
+# upgrade does: a server install (serve, simulate mode), the embedded backend
+# the desktop app and --server embedded run, and a desktop install whose local
+# wrapper is still the retired bare-lite guest (installed.json without a kind,
+# plus an account disk). The amdl-release skill runs it before the release PR;
+# ci.yml runs it on every push and pull request.
 #
 # Usage: tools/upgradecheck/run.sh <previous-version> <candidate-amdl>
 # Needs gh, curl and a Linux or macOS host; downloads the previous release.
@@ -59,4 +61,53 @@ if out=$("$new" --server embedded system get 2>&1); then
 else
 	echo "FAIL: embedded backend:"; echo "$out" | tail -5; fail=1
 fi
+
+# A desktop install whose local wrapper guest is the retired bare-lite one: the
+# candidate cannot run it, so it must start without a wrapper, say so once, and
+# leave the guest's record and the account disk exactly as they were. The
+# desktop app tells the user the guest needs an update from that record (an
+# installed.json without "kind": "manager"; apps/desktop/internal/setup#Guest),
+# so a candidate that rewrites, moves or boots it hides the prompt or loses the
+# account. Nothing may start QEMU or restart the guest in a loop.
+sha() { { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | cut -d' ' -f1; }
+if [ "$os" = darwin ]; then w="$HOME/Library/Application Support/AMDL/wrapper"; else w="$XDG_CONFIG_HOME/AMDL/wrapper"; fi
+mkdir -p "$w/logs" "$w/assets/0123456789ab"
+head -c 4194304 /dev/urandom >"$w/data.img"
+digest=$(printf 'a%.0s' $(seq 64))
+printf '{"id":"0123456789ab","commit":"0123456789abcdef0123456789abcdef01234567","artifact_id":1,"sha256":"%s","source":"artifact 1","installed_at":"2026-10-01T00:00:00Z","port":%s,"qemu":"%s"}\n' \
+	"$digest" $((port + 1)) "$(command -v true)" >"$w/installed.json"
+disk=$(sha "$w/data.img")
+record=$(sha "$w/installed.json")
+lport=$((port + 2))
+lurl=http://127.0.0.1:$lport
+(exec "$new" --wrapper http://127.0.0.1:9 serve --local --listen "127.0.0.1:$lport") >"$d/legacy-serve.log" 2>&1 &
+lpid=$!
+pids+=("$lpid")
+up=0
+for _ in $(seq 60); do
+	curl -fsS -m 2 "$lurl/api/v1/health" >/dev/null 2>&1 && { up=1; break; }
+	kill -0 "$lpid" 2>/dev/null || break
+	sleep 0.5
+done
+if [ $up = 0 ]; then
+	echo "FAIL: bare-lite guest: the candidate did not start:"; tail -5 "$d/legacy-serve.log"; fail=1
+else
+	sleep 8 # a restart loop shows within a few backoff steps
+	problems=()
+	said=$(grep -c 'needs a manager guest update' "$d/legacy-serve.log" || true)
+	[ "$said" -ge 1 ] || problems+=("the backend never said the guest needs an update")
+	[ "$said" -le 1 ] || problems+=("the backend repeats that the guest needs an update ($said times)")
+	curl -sS -m 5 "$lurl/api/v1/wrapper/status" | grep -q '"managed"' && problems+=("wrapper status reports a managed guest it cannot run")
+	[ "$(sha "$w/data.img")" = "$disk" ] || problems+=("the account disk changed")
+	[ "$(sha "$w/installed.json")" = "$record" ] || problems+=("installed.json changed, so the app cannot show the update")
+	if ls "$w" | grep -q '^data-lite-'; then problems+=("the account disk was moved aside"); fi
+	[ ! -e "$w/state.json" ] || problems+=("a guest was started (state.json)")
+	[ -z "$(pgrep -P "$lpid" || true)" ] || problems+=("the backend started a guest process")
+	if [ ${#problems[@]} -eq 0 ]; then
+		echo "ok: bare-lite guest needs an update, disk and record untouched, no restart loop"
+	else
+		printf 'FAIL: bare-lite guest: %s\n' "${problems[@]}"; tail -8 "$d/legacy-serve.log"; fail=1
+	fi
+fi
+kill "$lpid" 2>/dev/null || true
 exit $fail

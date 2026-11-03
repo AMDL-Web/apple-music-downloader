@@ -120,7 +120,7 @@ jobs:
   # dependency failed reports as passing to branch protection.
   build-and-test:
     name: Build and test
-    needs: [unit, race]
+    needs: [unit, race, upgrade]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -187,6 +187,30 @@ jobs:
 
       - name: Build and render the release files
         run: make dist-check
+
+  # Starts the build on the files the newest release wrote, as an upgrade does:
+  # a server install, the embedded backend, and a desktop install whose local
+  # wrapper guest is the retired bare-lite one (tools/upgradecheck/run.sh).
+  upgrade:
+    name: Upgrade check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Start the build on the previous release's files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: make upgradecheck
 
   docker:
     name: Docker build
