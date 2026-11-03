@@ -24,7 +24,7 @@ DEV_DIR := data/dev
 DEV_LISTEN := 127.0.0.1:18080
 DOCKER_IMAGE ?= amdl-backend:dev
 
-.PHONY: help build run dev fmt fmt-check vet tui-web test cover race race-ui race-rest vuln node-test check temaridiff docker dist dist-check desktop desktop-web site
+.PHONY: help build run dev fmt fmt-check vet tui-web test cover race race-ui race-rest vuln node-test check temaridiff guestboot docker dist dist-check desktop desktop-web site
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{ printf "  %-10s %s\n", $$1, $$2 }'
@@ -58,8 +58,9 @@ fmt-check: ## Fail if any Go file is not gofmt-formatted
 		exit 1; \
 	fi
 
-vet: ## go vet every package, and the desktop app's browser build
+vet: ## go vet every package, and the desktop app's browser build and guest boot test
 	$(GO) vet ./...
+	$(GO) vet -tags guestboot ./internal/wrapperhost/
 	GOOS=js GOARCH=wasm $(GO) vet ./apps/desktop/...
 
 tui-web: ## Build the terminal interface's browser demo into apps/amdl/build/web/
@@ -116,6 +117,13 @@ check: fmt-check build vet tui-web test race vuln node-test ## The CI gate: ever
 
 temaridiff: ## Compare internal/fairplay with upstream Temari (own CI job; downloads Temari's cdylib)
 	cd tools/temaridiff && $(GO) test -count=1 ./...
+
+# TestGuestBoot downloads the pinned guest and payload (about 80 MB, kept in
+# GUESTBOOT_CACHE_DIR when set) and boots them; without KVM it takes ten minutes
+# or more. CI runs it as its own job (.github/actions/guestboot), so `make check`
+# leaves it out. Its environment variables are listed in the test file.
+guestboot: ## Boot the pinned wrapper guest in QEMU and wait for its manager (needs qemu and network; its own CI job)
+	$(GO) test -tags guestboot -run '^TestGuestBoot$$' -count=1 -timeout 30m -v ./internal/wrapperhost/
 
 docker: ## Build the server image locally (single arch, not pushed)
 	docker build -f deploy/server/Dockerfile -t $(DOCKER_IMAGE) .
