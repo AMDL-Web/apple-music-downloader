@@ -200,9 +200,11 @@ func TestRangedDownloadBeatsOneStream(t *testing.T) {
 	}
 	many := time.Since(start)
 	size := float64(len(a.body))
-	t.Logf("one stream %v (%.0f KB/s), eight connections %v (%.0f KB/s)", one, size/1024/one.Seconds(), many, size/1024/many.Seconds())
-	if many*3 > one {
-		t.Errorf("eight connections took %v against %v for one stream; want at least 3 times faster", many, one)
+	t.Logf("one stream %v (%.0f KB/s), %d connections %v (%.0f KB/s)", one, size/1024/one.Seconds(), defaultConns, many, size/1024/many.Seconds())
+	// defaultConns times faster at best; half that leaves room for a busy
+	// machine and the race detector.
+	if many*defaultConns/2 > one {
+		t.Errorf("%d connections took %v against %v for one stream; want at least %d times faster", defaultConns, many, one, defaultConns/2)
 	}
 	sameFile(t, filepath.Join(dir, "many.zip"), a.body)
 	if _, err := os.Stat(filepath.Join(dir, "many.zip.parts")); !errors.Is(err, os.ErrNotExist) {
