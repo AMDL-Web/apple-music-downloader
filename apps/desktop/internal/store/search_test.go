@@ -103,7 +103,7 @@ func TestSearchErrorIsNotCached(t *testing.T) {
 	if q.Status != SearchFailed || q.Err != "upstream_timeout" {
 		t.Fatalf("status %v err %q", q.Status, q.Err)
 	}
-	if _, ok := q.cache.get("x"); ok {
+	if _, ok := q.cache.get(s.searchKey("x")); ok {
 		t.Error("an error was cached")
 	}
 	s.RetrySearch()
@@ -130,7 +130,7 @@ func TestSearchMoreAppendsToOneGroup(t *testing.T) {
 	if ids(q.ShownHits()) != "a,1,2" || q.Result.Songs.NextOffset != 0 {
 		t.Errorf("hits %s next %d", ids(q.ShownHits()), q.Result.Songs.NextOffset)
 	}
-	if r, _ := q.cache.get("t"); ids(r.Songs.Items) != "1,2" {
+	if r, _ := q.cache.get(s.searchKey("t")); ids(r.Songs.Items) != "1,2" {
 		t.Error("the cache missed the new page")
 	}
 }

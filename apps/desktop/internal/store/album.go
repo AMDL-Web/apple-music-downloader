@@ -11,10 +11,12 @@ type AlbumPage struct {
 	ID string
 	// Hit is the search hit the page opened from: its mark and its download
 	// are the tile's.
-	Hit    client.SearchHit
-	Status SearchStatus
-	Album  client.Album
-	Err    string
+	Hit client.SearchHit
+	// Storefront is the one the hit's link names; the album is read in it.
+	Storefront string
+	Status     SearchStatus
+	Album      client.Album
+	Err        string
 
 	gen   int
 	cache *lru[client.Album]
@@ -36,8 +38,8 @@ func (s *Store) OpenAlbum(h client.SearchHit) {
 		return
 	}
 	p.gen++
-	p.ID, p.Hit, p.Album, p.Err = h.ID, h, client.Album{}, ""
-	if a, ok := p.cache.get(h.ID); ok {
+	p.ID, p.Hit, p.Storefront, p.Album, p.Err = h.ID, h, LinkStorefront(h.URL), client.Album{}, ""
+	if a, ok := p.cache.get(albumKey(p.Storefront, h.ID)); ok {
 		p.Status, p.Album = SearchReady, a
 		return
 	}
@@ -49,7 +51,7 @@ func (s *Store) OpenAlbum(h client.SearchHit) {
 func (s *Store) CloseAlbum() {
 	p := &s.Search.Album
 	p.gen++
-	p.ID, p.Hit, p.Status, p.Album, p.Err = "", client.SearchHit{}, SearchIdle, client.Album{}, ""
+	p.ID, p.Hit, p.Storefront, p.Status, p.Album, p.Err = "", client.SearchHit{}, "", SearchIdle, client.Album{}, ""
 }
 
 // AlbumJob is the run of album id's record the album screen shows: a
@@ -100,13 +102,13 @@ func (s *Store) JobAlbum(j *Job) (client.SearchHit, bool) {
 // at once, so its songs' states follow, a cached one when it opens next.
 func (s *Store) albumMoved(id string) {
 	p := &s.Search.Album
-	p.cache.drop(id)
+	p.cache.dropIf(func(k string) bool { return albumKeyOf(k) == id })
 	if p.ID != id || p.Status != SearchReady || s.client == nil {
 		return
 	}
-	c, ctx, gen := s.client, s.ctx, p.gen
+	c, ctx, gen, storefront := s.client, s.ctx, p.gen, p.Storefront
 	go func() {
-		a, err := c.Album(ctx, id, "")
+		a, err := c.Album(ctx, id, storefront)
 		s.postIf(ctx, func() {
 			// A failed read keeps the songs the page shows.
 			if err == nil {
@@ -127,13 +129,13 @@ func (s *Store) RetryAlbum() {
 func (s *Store) readAlbum() {
 	p := &s.Search.Album
 	p.Status, p.Err = SearchLoading, ""
-	c, ctx, gen, id := s.client, s.ctx, p.gen, p.ID
+	c, ctx, gen, id, storefront := s.client, s.ctx, p.gen, p.ID, p.Storefront
 	if c == nil {
 		p.Status, p.Err = SearchFailed, "Not connected to a server"
 		return
 	}
 	go func() {
-		a, err := c.Album(ctx, id, "")
+		a, err := c.Album(ctx, id, storefront)
 		s.postIf(ctx, func() { s.applyAlbum(gen, id, a, err) })
 	}()
 }
@@ -148,7 +150,7 @@ func (s *Store) applyAlbum(gen int, id string, a client.Album, err error) {
 		p.Status, p.Err = SearchFailed, err.Error()
 		return
 	}
-	p.cache.put(id, a)
+	p.cache.put(albumKey(p.Storefront, id), a)
 	p.Status, p.Album = SearchReady, a
 }
 

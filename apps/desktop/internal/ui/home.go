@@ -62,6 +62,7 @@ func (a *App) home(c *ui.Context, k *Tokens, page float32) {
 			sp.Height(sp.AnimateWith("y", lift, heroGlide, ui.EaseOut))
 			ui.Column(c).Width(fieldW).Padding(homeTop, 0, 0, 0).AlignItems(ui.Center).Children(func() {
 				a.homeField(c, k, fieldW)
+				a.searchRegion(c, k, fieldW)
 			})
 			if !docked {
 				return

@@ -75,6 +75,9 @@ type Search struct {
 	Overview map[string]int
 	// Artist is the artist whose albums show instead of the hits.
 	Artist ArtistPages
+	// Region is the storefront the person chose to search, "" until they do;
+	// the backend's default then answers (SearchRegion).
+	Region string
 	// Album is the album the album screen shows, opened from a hit.
 	Album AlbumPage
 	// Starting holds the hits whose download is being submitted, by HitKey,
@@ -144,11 +147,10 @@ func (s *Store) WantSearch(term string) {
 	// A new term shows its own hits, not the artist opened from the last.
 	s.OpenArtist("")
 	if term == "" {
-		*q = Search{cache: q.cache, sent: q.sent, gone: q.gone, Starting: q.Starting, Artist: q.Artist, Album: q.Album, want: term, gen: q.gen}
+		*q = Search{Region: q.Region, cache: q.cache, sent: q.sent, gone: q.gone, Starting: q.Starting, Artist: q.Artist, Album: q.Album, want: term, gen: q.gen}
 		return
 	}
-	if r, ok := q.cache.get(term); ok {
-		q.Term, q.Status, q.Result, q.Stale, q.Err, q.More = term, SearchReady, &r, false, "", nil
+	if s.showCachedSearch(term) {
 		return
 	}
 	if s.client == nil {
@@ -178,13 +180,13 @@ func (s *Store) RetrySearch() {
 func (s *Store) startSearch(term string) {
 	q := &s.Search
 	q.Term, q.Status, q.Stale, q.Err, q.More = term, SearchLoading, q.Result != nil, "", nil
-	c, ctx, gen := s.client, s.ctx, q.gen
+	c, ctx, gen, storefront := s.client, s.ctx, q.gen, s.searchStorefront()
 	if c == nil {
 		q.Status, q.Stale, q.Err = SearchFailed, false, "Not connected to a server"
 		return
 	}
 	go func() {
-		r, err := c.Search(ctx, client.SearchQuery{Term: term, Limit: SearchFirst})
+		r, err := c.Search(ctx, client.SearchQuery{Term: term, Storefront: storefront, Limit: SearchFirst})
 		s.postIf(ctx, func() { s.applySearch(gen, term, r, err) })
 	}()
 }
@@ -200,7 +202,7 @@ func (s *Store) applySearch(gen int, term string, r client.SearchResult, err err
 		q.Status, q.Result, q.Stale, q.Err = SearchFailed, nil, false, err.Error()
 		return
 	}
-	q.cache.put(term, r)
+	q.cache.put(s.searchKey(term), r)
 	q.Status, q.Result, q.Stale, q.Err = SearchReady, &r, false, ""
 }
 
@@ -218,9 +220,9 @@ func (s *Store) MoreSearch(group string) {
 		q.More = map[string]PageState{}
 	}
 	q.More[group] = PageLoading
-	c, ctx, gen, term, offset := s.client, s.ctx, q.gen, q.Term, g.NextOffset
+	c, ctx, gen, term, offset, storefront := s.client, s.ctx, q.gen, q.Term, g.NextOffset, s.searchStorefront()
 	go func() {
-		r, err := c.Search(ctx, client.SearchQuery{Term: term, Types: []string{group}, Offset: offset, Limit: SearchMore})
+		r, err := c.Search(ctx, client.SearchQuery{Term: term, Storefront: storefront, Types: []string{group}, Offset: offset, Limit: SearchMore})
 		s.postIf(ctx, func() { s.applyMore(gen, term, group, hitGroup(&r, group), err) })
 	}()
 }
@@ -248,7 +250,7 @@ func (s *Store) applyMore(gen int, term, group string, page *client.HitGroup, er
 		next.Artists = merged
 	}
 	q.Result = &next
-	q.cache.put(term, next)
+	q.cache.put(s.searchKey(term), next)
 }
 
 // hitGroup is r's group of that name, or nil.
@@ -356,7 +358,7 @@ func (s *Store) OpenArtist(id string) {
 		*a = ArtistPages{cache: a.cache, gen: a.gen}
 		return
 	}
-	if e, ok := a.cache.get(id); ok {
+	if e, ok := a.cache.get(s.searchKey(id)); ok {
 		a.ID, a.Status, a.Artist, a.Albums, a.Err, a.More = id, SearchReady, e.Artist, e.Albums, "", PageIdle
 		return
 	}
@@ -374,13 +376,13 @@ func (s *Store) RetryArtist() {
 func (s *Store) firstArtistPage(id string) {
 	a := &s.Search.Artist
 	a.ID, a.Status, a.Artist, a.Albums, a.Err, a.More = id, SearchLoading, client.SearchHit{}, client.HitGroup{}, "", PageIdle
-	c, ctx, gen := s.client, s.ctx, a.gen
+	c, ctx, gen, storefront := s.client, s.ctx, a.gen, s.searchStorefront()
 	if c == nil {
 		a.Status, a.Err = SearchFailed, "Not connected to a server"
 		return
 	}
 	go func() {
-		r, err := c.ArtistAlbums(ctx, id, client.PageQuery{Limit: ArtistPage})
+		r, err := c.ArtistAlbums(ctx, id, client.PageQuery{Storefront: storefront, Limit: ArtistPage})
 		s.postIf(ctx, func() { s.applyArtist(gen, id, r, err, false) })
 	}()
 }
@@ -392,9 +394,9 @@ func (s *Store) MoreArtist() {
 		return
 	}
 	a.More = PageLoading
-	c, ctx, gen, id, offset := s.client, s.ctx, a.gen, a.ID, a.Albums.NextOffset
+	c, ctx, gen, id, offset, storefront := s.client, s.ctx, a.gen, a.ID, a.Albums.NextOffset, s.searchStorefront()
 	go func() {
-		r, err := c.ArtistAlbums(ctx, id, client.PageQuery{Limit: ArtistPage, Offset: offset})
+		r, err := c.ArtistAlbums(ctx, id, client.PageQuery{Storefront: storefront, Limit: ArtistPage, Offset: offset})
 		s.postIf(ctx, func() { s.applyArtist(gen, id, r, err, true) })
 	}()
 }
@@ -418,7 +420,7 @@ func (s *Store) applyArtist(gen int, id string, r client.ArtistAlbums, err error
 	default:
 		a.Status, a.Artist, a.Albums = SearchReady, r.Artist, *appendPage(nil, &r.Albums)
 	}
-	a.cache.put(id, client.ArtistAlbums{Storefront: r.Storefront, Artist: a.Artist, Albums: a.Albums})
+	a.cache.put(s.searchKey(id), client.ArtistAlbums{Storefront: r.Storefront, Artist: a.Artist, Albums: a.Albums})
 }
 
 // MarkState is how a hit stands in amdl's records.
@@ -522,6 +524,14 @@ func (c *lru[V]) drop(k string) {
 	if _, ok := c.items[k]; ok {
 		delete(c.items, k)
 		c.order = slices.DeleteFunc(c.order, func(x string) bool { return x == k })
+	}
+}
+
+func (c *lru[V]) dropIf(match func(k string) bool) {
+	for _, k := range slices.Clone(c.order) {
+		if match(k) {
+			c.drop(k)
+		}
 	}
 }
 
