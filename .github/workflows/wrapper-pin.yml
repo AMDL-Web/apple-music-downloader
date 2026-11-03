@@ -42,9 +42,12 @@ jobs:
           pin-file: ${{ runner.temp }}/wrapper-pin.json
           fresh: 'true'
 
+      # The step switches the workspace to wrapper-pins and back: the
+      # guestboot action's post steps read their files from this ref.
       - name: Commit it to wrapper-pins
         run: |
           set -eu
+          trap 'git checkout -q --detach "$GITHUB_SHA"' EXIT
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if git fetch --depth 1 origin wrapper-pins; then
