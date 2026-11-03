@@ -309,7 +309,7 @@ func (d parts) copyPart(out io.Writer, s span, from int64) error {
 // downloadRanges fetches p into path over several connections. It reports
 // false, with no error, when the single stream should do it: the fetcher
 // cannot serve ranges, the file is small, or the server ignores Range.
-func downloadRanges(ctx context.Context, f Fetcher, p Pin, path string, report func(Progress)) (bool, error) {
+func downloadRanges(ctx context.Context, f Fetcher, p Asset, path string, report func(Progress)) (bool, error) {
 	rf, ok := f.(RangeFetcher)
 	if !ok || p.Size < 2*chunkSize {
 		return false, nil

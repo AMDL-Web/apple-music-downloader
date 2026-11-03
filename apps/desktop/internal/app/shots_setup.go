@@ -67,6 +67,14 @@ func tools(s *setup.Setup) {
 
 func standalone(s *mode.Settings) { s.Mode = mode.Standalone }
 
+// typeInto types text into the field that shows placeholder.
+func typeInto(tt *ui.Tester, placeholder, text string) {
+	tt.Frame()
+	if tt.Click(placeholder) == nil {
+		tt.Type(text)
+	}
+}
+
 // remoteAddr is a first launch that knows a server's address, as one typed
 // before a test.
 func remoteAddr(s *mode.Settings) { s.RemoteURL = "http://192.168.3.5:18570" }
@@ -116,12 +124,12 @@ var setupStages = []setupStage{
 	{name: "06-downloading", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) {
 		s.QEMU = setup.Tool{State: setup.Ready, Path: qemuPath}
 		s.FFmpeg = setup.Tool{State: setup.Ready, Path: ffmpegPath, Source: "system"}
-		s.Guest = setup.Guest{State: setup.Working, Size: 64_451_213, Rate: 4_200_000,
-			Progress: wrapperhost.Progress{Phase: wrapperhost.Downloading, Done: 24_480_000, Total: 64_451_213}}
+		s.Guest = setup.Guest{State: setup.Working, Size: 80_125_881, Rate: 6_500_000,
+			Progress: wrapperhost.Progress{Phase: wrapperhost.Downloading, Done: 34_480_000, Total: 80_125_881}}
 	}},
 	{name: "07-guest-failed", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) {
 		s.QEMU = setup.Tool{State: setup.Ready, Path: qemuPath}
-		s.Guest = setup.Guest{State: setup.Failed, Size: 64_451_213, Err: "artifact 12598758939 is gone from GitHub"}
+		s.Guest = setup.Guest{State: setup.Failed, Size: 80_125_881, Err: "https://github.com/AMDL-Web/wrapper/releases/download/guest-b60beea21807/manager-qemu-guest.zip is not published"}
 	}},
 	{name: "08-start", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) { tools(s) }},
 	{name: "09-booting", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, tt *ui.Tester) {
@@ -131,16 +139,43 @@ var setupStages = []setupStage{
 		tt.Frame()
 		tt.Advance(34 * time.Second)
 	}},
+	{name: "09a-wrapper-download", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, _ *ui.Tester) {
+		tools(s)
+		v.Store.Server.Wrapper = managed("starting", "tcg", false, false)
+		v.Store.Server.Wrapper.Managed.Download = &client.WrapperDownload{DoneBytes: 21_400_000, TotalBytes: 50_118_510}
+		storage(&v.Store.Server)
+	}},
 	{name: "10-sign-in", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, _ *ui.Tester) {
 		tools(s)
 		v.Store.Server.Wrapper = managed("serving", "tcg", true, false)
 		storage(&v.Store.Server)
+	}},
+	{name: "10b-signing-in", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, tt *ui.Tester) {
+		tools(s)
+		v.Store.Server.Wrapper = managed("serving", "tcg", true, false)
+		storage(&v.Store.Server)
+		typeInto(tt, "Password", "not-a-real-password")
+		tt.Key(ui.Shift, ui.KeyTab) // back to the Apple ID field; its row is titled the same
+		tt.Type("someone@icloud.com")
+		v.Store.Login.Busy, v.Store.Login.Since = true, tt.Now()
+		tt.Frame()
+		tt.Advance(3 * time.Second)
 	}},
 	{name: "11-code", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, _ *ui.Tester) {
 		tools(s)
 		v.Store.Server.Wrapper = managed("serving", "tcg", true, false)
 		v.Store.Login.LoginID = "staged"
 		storage(&v.Store.Server)
+	}},
+	{name: "11b-verifying", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, tt *ui.Tester) {
+		tools(s)
+		v.Store.Server.Wrapper = managed("serving", "tcg", true, false)
+		v.Store.Login.LoginID = "staged"
+		storage(&v.Store.Server)
+		typeInto(tt, "6-digit code", "123456")
+		v.Store.Login.Busy, v.Store.Login.Since = true, tt.Now()
+		tt.Frame()
+		tt.Advance(3 * time.Second)
 	}},
 	{name: "12-ready", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, _ *ui.Tester) {
 		tools(s)

@@ -157,6 +157,15 @@ type Managed struct {
 	// serving boot.
 	LoginResidue bool   `json:"login_residue"`
 	LastError    string `json:"last_error,omitempty"`
+	// Download is set while mode is starting and the host downloads the
+	// wrapper-lite payload the guest installs, before the guest boots.
+	Download *Download `json:"download,omitempty"`
+}
+
+// Download is a download's progress in bytes.
+type Download struct {
+	DoneBytes  int64 `json:"done_bytes"`
+	TotalBytes int64 `json:"total_bytes"`
 }
 
 // LyricsRequestOptions are wrapper-lite's /lyrics query parameters, sent as

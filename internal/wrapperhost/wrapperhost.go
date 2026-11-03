@@ -1,8 +1,9 @@
 // Package wrapperhost installs and runs wrapper-manager in a QEMU guest for
 // the desktop app and amdl serve --local. The manager's registry, per-account
 // state and wrapper-lite payload all live on the owner-only account disk.
-// Guest assets are downloaded and verified at install time; QEMU is supplied
-// by the host. Credentials reach the manager through loopback HTTP only.
+// Guest assets and the wrapper-lite payload are downloaded and verified on
+// the host, and the guest's manager installs the payload from a loopback
+// server; QEMU is supplied by the host. Credentials reach the manager through loopback HTTP only.
 package wrapperhost
 
 import (
@@ -33,6 +34,7 @@ const guestPort = 8080
 //
 //	installed.json  what is installed (Installed)
 //	assets/<id>/    the guest's kernel and initramfs
+//	payload/        the pinned wrapper-lite payload zip, served to the guest
 //	data.img        the manager's disk: all accounts and payload; 0600
 //	manager-args    the manager's arguments for the running boot
 //	state.json      what the runner is doing (State)
@@ -52,11 +54,10 @@ type Installed struct {
 	ID string `json:"id"`
 	// Commit is the GuestRepo commit the artifact was built from; empty for
 	// an import of unknown origin.
-	Commit     string    `json:"commit,omitempty"`
-	ArtifactID int64     `json:"artifact_id,omitempty"`
-	SHA256     string    `json:"sha256"`
-	Source     string    `json:"source"`
-	At         time.Time `json:"installed_at"`
+	Commit string    `json:"commit,omitempty"`
+	SHA256 string    `json:"sha256"`
+	Source string    `json:"source"`
+	At     time.Time `json:"installed_at"`
 	// Port is the loopback port the wrapper answers on, picked at the first
 	// install and kept, so wrapper.address stays valid across updates.
 	Port int `json:"port"`

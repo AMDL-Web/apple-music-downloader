@@ -235,18 +235,24 @@ the guest: the kernel, manager initramfs and empty ext4 disk of the
 `manager-qemu-guest` artifact from the `manager.yml` workflow on the `lite` branch
 of `internal/wrapperhost#GuestRepo`. The manager guest is defined in
 [manager/guest](https://github.com/AMDL-Web/wrapper/tree/lite/manager/guest).
-The download goes through nightly.link and is installed only if its sha256 matches
+That repository's `publish` workflow puts each successful build on `lite` up as a
+release asset, `guest-<commit12>/manager-qemu-guest.zip`, byte for byte the
+artifact's zip; amdl downloads it from there, over several connections that resume
+after an interruption, and installs it only if its sha256 matches
 `internal/wrapperhost#Builtin` or the newer pin at `internal/wrapperhost#ManifestURL`.
-Only successful manager runs on `lite` are pinned, by run and artifact id. The manager
-artifacts expire after 90 days. When no pin is downloadable, fetch that artifact
-and run `amdl wrapper import <zip|dir>`; bare-lite guest packages are refused.
+Release assets do not expire. When no pin is downloadable, fetch the asset and run
+`amdl wrapper import <zip|dir>`; bare-lite guest packages are refused.
 Guest files are downloaded at install time, rather than shipped with amdl. The
-guest does not contain wrapper-lite: the manager downloads it on first boot and again
-whenever the pin changes, which also needs internet. amdl pins that payload too, as
-`lite` in the same pin: the `wrapper-lite-linux-x86_64` artifact of one successful
-`build-lite` run on `lite` (the guest is x86_64 on every host), passed to the manager as
-`-payload-url` with its sha256 as `-payload-sha256`, and refused on a mismatch. An
-imported guest takes the payload pin built into amdl.
+guest does not contain wrapper-lite: amdl pins that payload too, as `lite` in the
+same pin: the `wrapper-lite-linux-x86_64` artifact of one successful `build-lite` run
+on `lite` (the guest is x86_64 on every host), published as
+`lite-<commit12>/wrapper-lite-linux-x86_64.zip`. `amdl wrapper install` and `update`
+download it with the guest, and the backend downloads it before a boot when it is
+missing, with progress in `managed.download`. The host serves it to the guest on a
+loopback port for the boot; the manager installs it into its disk on first boot and
+whenever the pin changes, checks it against the sha256 it is given
+(`-payload-sha256`), and refuses a mismatch. An imported guest takes the payload pin
+built into amdl.
 Running `amdl wrapper install` again replaces a guest whose sha256 differs from the pin.
 
 The desktop app's setup screen does the same in standalone mode, row by row: it shows
@@ -286,7 +292,10 @@ changes do not hot-resize a running guest.
 The manager starts in /data on the persistent ext4 disk. Its registry is
 /data/data/instances.json; account directories are under
 /data/data/wrapper/rootfs/data/instances/. The whole manager state and payload
-stay in the owner-only data.img across updates and uninstall without purge.
+stay in the owner-only data.img across updates and uninstall without purge. /data
+mounts with `commit=1,nodelalloc`, and amdl stops the guest by asking the manager to
+sync and power off (`POST /shutdown`), killing QEMU only after 10 seconds without
+it, so a stop or a crash of the host loses no installed payload or login.
 Accounts are discovered through GET /status's data.instances; each token is read
 through GET /token?instance=<id>, and logout removes just that id. Credentials
 travel over the loopback HTTP login API, never boot arguments.

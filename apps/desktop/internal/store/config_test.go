@@ -26,6 +26,11 @@ type fakeBackend struct {
 	pending   []string
 	down      int
 	restarted bool
+	// stall holds POST /wrapper/login until it is closed or the client
+	// goes away, which gone counts.
+	stall   chan struct{}
+	stalled int
+	gone    int
 }
 
 // body is the i-th request body the backend read.
@@ -39,6 +44,25 @@ func (f *fakeBackend) body(i int) string {
 }
 
 func (f *fakeBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	stall := f.stall
+	f.mu.Unlock()
+	if stall != nil && r.URL.Path == "/api/v1/wrapper/login" {
+		// A server sees the client go away only once the body is read, as
+		// the backend's handler reads it before it calls the wrapper.
+		_, _ = io.Copy(io.Discard, r.Body)
+		f.mu.Lock()
+		f.stalled++
+		f.mu.Unlock()
+		select {
+		case <-stall:
+		case <-r.Context().Done():
+			f.mu.Lock()
+			f.gone++
+			f.mu.Unlock()
+			return
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	reply := func(status int, v any) {
@@ -157,6 +181,50 @@ func TestSetConfigSendsOneKeyAndKeepsTheOldValueWhenRefused(t *testing.T) {
 	}
 	if msg := s.Config.Failed["download.max_attempts"]; msg != "download.max_attempts must be between 1 and 10" {
 		t.Errorf("refusal reads %q; want the backend's message", msg)
+	}
+}
+
+func TestCancelEndsTheLoginOnTheBackend(t *testing.T) {
+	f := &fakeBackend{config: map[string]map[string]any{}, stall: make(chan struct{})}
+	s, settle := live(t, f)
+	s.StartLogin("someone@example.invalid", "not-a-real-password")
+	if !s.Login.Busy {
+		t.Fatal("the login is not under way")
+	}
+	count := func(n *int) int { f.mu.Lock(); defer f.mu.Unlock(); return *n }
+	for deadline := time.Now().Add(5 * time.Second); count(&f.stalled) == 0; {
+		if time.Now().After(deadline) {
+			t.Fatal("the login never reached the backend")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	s.CancelLogin()
+	if s.Login.Busy || s.Login.LoginID != "" || s.Login.Err != "" {
+		t.Fatalf("after Cancel %+v; want the form back", s.Login)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		f.mu.Lock()
+		gone := f.gone
+		f.mu.Unlock()
+		if gone == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the backend never saw the canceled request go away")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// A retry right away is a login of its own: the canceled answer, posted
+	// late, does not end it.
+	f.mu.Lock()
+	close(f.stall)
+	f.stall = nil
+	f.mu.Unlock()
+	s.StartLogin("someone@example.invalid", "not-a-real-password")
+	settle(func() bool { return !s.Login.Busy })
+	if s.Login.LoginID != "l-1" || s.Login.Err != "" {
+		t.Fatalf("the retry %+v; want the code step", s.Login)
 	}
 }
 

@@ -14,16 +14,16 @@ import (
 	"time"
 )
 
-// RangeFetcher is a Fetcher that can also serve byte ranges of the artifact,
+// RangeFetcher is a Fetcher that can also serve byte ranges of the asset,
 // which lets Download run several connections at once.
 type RangeFetcher interface {
 	Fetcher
-	// Ranges prepares a download of p. A failure that reaches the caller is
+	// Ranges prepares a download of a. A failure that reaches the caller is
 	// one retrying will not cure.
-	Ranges(ctx context.Context, p Pin) (RangeSource, error)
+	Ranges(ctx context.Context, a Asset) (RangeSource, error)
 }
 
-// RangeSource serves the byte ranges of one artifact. Range is safe to call
+// RangeSource serves the byte ranges of one asset. Range is safe to call
 // from several goroutines.
 type RangeSource interface {
 	// Conns is how many ranges to fetch at once.
@@ -43,7 +43,7 @@ type permanent struct{ err error }
 func (e permanent) Error() string { return e.err.Error() }
 func (e permanent) Unwrap() error { return e.err }
 
-// statusError is an unexpected HTTP status, named by host only: a blob URL
+// statusError is an unexpected HTTP status, named by host only: a CDN URL
 // carries a signature.
 type statusError struct {
 	host, status string
@@ -52,47 +52,37 @@ type statusError struct {
 
 func (e *statusError) Error() string { return e.host + ": " + e.status }
 
-// defaultConns is how many connections a download uses. nightly.link hands
-// out a signed Azure blob URL that serves one connection at about 25 KB/s,
-// and eight connections measured eight times that, so the limit is per
-// connection; eight stays clear of the six to sixteen that browsers and
+// defaultConns is how many connections a download uses. GitHub's release CDN
+// measured 6.5 MB/s on one connection from China; a few more ride out one
+// that stalls, and stay clear of the six to sixteen that browsers and
 // download managers open to one host.
-const defaultConns = 8
+const defaultConns = 4
 
-// resolveTimeout bounds one nightly.link lookup.
+// resolveTimeout bounds one redirect lookup.
 const resolveTimeout = 30 * time.Second
 
-func (n NightlyLink) artifactURL(p Pin) string {
-	base := n.Base
-	if base == "" {
-		base = "https://nightly.link"
-	}
-	return fmt.Sprintf("%s/%s/actions/artifacts/%d.zip", base, GuestRepo, p.ArtifactID)
-}
-
-// Ranges implements RangeFetcher. It resolves nightly.link's redirect once;
-// the ranges then go straight to the blob host, and a range refused as
-// expired resolves again.
-func (n NightlyLink) Ranges(ctx context.Context, p Pin) (RangeSource, error) {
-	conns := n.Conns
+// Ranges implements RangeFetcher. It resolves GitHub's redirect once; the
+// ranges then go straight to the CDN, and a range refused as expired
+// resolves again.
+func (r Releases) Ranges(ctx context.Context, a Asset) (RangeSource, error) {
+	conns := r.Conns
 	if conns <= 0 {
 		conns = defaultConns
 	}
-	client := http.DefaultClient
-	if n.Client != nil {
-		client = n.Client
-	}
-	s := &nightlySource{src: n.artifactURL(p), id: p.ArtifactID, size: p.Size, conns: conns}
+	client := r.client()
+	s := &assetSource{src: r.url(a), size: a.Size, conns: conns}
 	s.resolver = *client
 	s.resolver.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	s.client = client
 	if client.Transport == nil {
 		// One idle connection per worker, and no HTTP/2: it would carry every
-		// range over a single connection, and the limit is per connection.
+		// range over a single connection. The TLS handshake still offers
+		// http/1.1 by ALPN: github.com closes one that offers nothing.
 		t := http.DefaultTransport.(*http.Transport).Clone()
 		t.MaxIdleConnsPerHost = conns
 		t.ForceAttemptHTTP2 = false
 		t.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+		t.TLSClientConfig = &tls.Config{NextProtos: []string{"http/1.1"}}
 		c := *client
 		c.Transport = t
 		s.client, s.transport = &c, t
@@ -104,9 +94,9 @@ func (n NightlyLink) Ranges(ctx context.Context, p Pin) (RangeSource, error) {
 	return s, nil
 }
 
-type nightlySource struct {
+type assetSource struct {
 	src       string
-	id, size  int64
+	size      int64
 	conns     int
 	resolver  http.Client
 	client    *http.Client
@@ -116,17 +106,17 @@ type nightlySource struct {
 	url string
 }
 
-func (s *nightlySource) Conns() int { return s.conns }
+func (s *assetSource) Conns() int { return s.conns }
 
-func (s *nightlySource) Close() {
+func (s *assetSource) Close() {
 	if s.transport != nil {
 		s.transport.CloseIdleConnections()
 	}
 }
 
-// refresh returns the blob URL, resolving it again unless another worker did
+// refresh returns the CDN URL, resolving it again unless another worker did
 // since stale was handed out.
-func (s *nightlySource) refresh(ctx context.Context, stale string) (string, error) {
+func (s *assetSource) refresh(ctx context.Context, stale string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.url != "" && s.url != stale {
@@ -158,12 +148,12 @@ func (s *nightlySource) refresh(ctx context.Context, stale string) (string, erro
 	return s.url, nil
 }
 
-func (s *nightlySource) statusErr(u *url.URL, resp *http.Response) error {
+func (s *assetSource) statusErr(u *url.URL, resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return permanent{fmt.Errorf("artifact %d is gone from GitHub (manager guest artifacts expire 90 days after their build)", s.id)}
+		return permanent{fmt.Errorf("%s is not published", s.src)}
 	case http.StatusRequestedRangeNotSatisfiable:
-		return permanent{fmt.Errorf("%s: %s: the pin's size %d does not fit the artifact", u.Host, resp.Status, s.size)}
+		return permanent{fmt.Errorf("%s: %s: the pin's size %d does not fit the asset", u.Host, resp.Status, s.size)}
 	}
 	return &statusError{host: u.Host, status: resp.Status, code: resp.StatusCode}
 }
@@ -182,14 +172,14 @@ func redact(err error) error {
 }
 
 // Range implements RangeSource.
-func (s *nightlySource) Range(ctx context.Context, start, end int64, w io.Writer) error {
+func (s *assetSource) Range(ctx context.Context, start, end int64, w io.Writer) error {
 	s.mu.Lock()
 	u := s.url
 	s.mu.Unlock()
 	err := s.get(ctx, u, start, end, w)
 	var se *statusError
 	if errors.As(err, &se) && (se.code == http.StatusForbidden || se.code == http.StatusUnauthorized) {
-		// A signed URL expires; ask nightly.link for a fresh one.
+		// A signed URL expires; ask GitHub for a fresh one.
 		fresh, rerr := s.refresh(ctx, u)
 		if rerr != nil {
 			return rerr
@@ -199,7 +189,7 @@ func (s *nightlySource) Range(ctx context.Context, start, end int64, w io.Writer
 	return err
 }
 
-func (s *nightlySource) get(ctx context.Context, u string, start, end int64, w io.Writer) error {
+func (s *assetSource) get(ctx context.Context, u string, start, end int64, w io.Writer) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return redact(err)
@@ -222,7 +212,7 @@ func (s *nightlySource) get(ctx context.Context, u string, start, end int64, w i
 		case first != start:
 			return permanent{ErrNoRange}
 		case total != s.size:
-			return permanent{fmt.Errorf("the artifact is %d bytes but the pin says %d", total, s.size)}
+			return permanent{fmt.Errorf("the asset is %d bytes but the pin says %d", total, s.size)}
 		}
 	}
 	n, err := io.Copy(w, io.LimitReader(resp.Body, end-start))

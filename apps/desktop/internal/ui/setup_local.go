@@ -190,6 +190,14 @@ func (a *App) wrapperRow(c *ui.Context, k *Tokens, applied bool) setup.State {
 		}, nil)
 		return setup.Failed
 	}
+	if d := downloading(w); d != nil {
+		frac := float64(d.DoneBytes) / float64(d.TotalBytes)
+		setupRow(c, k, "wrapper", setup.Working, title, "Downloading wrapper-lite", false, nil, func() {
+			ui.Progress(c, frac).Height(6)
+			mono(c, sizeOf(d.DoneBytes, d.TotalBytes), 12).TextColor(k.Muted)
+		})
+		return setup.Working
+	}
 	status := "Starting · " + accel
 	if m.Mode == "login" {
 		status = "Signing in · " + accel
@@ -314,6 +322,11 @@ func (a *App) setupCredentials(c *ui.Context, k *Tokens) {
 		pass.Password().Disabled(wait)
 		box.Grow(1)
 		filled := f.user != "" && f.pass != ""
+		// As on the Account page: Cancel shows once the login is slow, before
+		// the button, which stays put, and stops the login on its way.
+		if wait && button(c, k, buttonGhost, "Cancel", nil).Height(32).Clicked() {
+			a.Store.CancelLogin()
+		}
 		text := "Log in"
 		if wait {
 			text = "Logging in…"
@@ -342,7 +355,11 @@ func (a *App) setupCode(c *ui.Context, k *Tokens) {
 			a.Store.SubmitCode(f.code)
 			f.sent = true
 		}
-		if buttonOff(c, k, buttonGhost, "Start over", nil, wait).Height(32).Clicked() && !l.Busy {
+		again := "Start over"
+		if wait {
+			again = "Cancel"
+		}
+		if buttonRoom(c, k, buttonGhost, again, "Start over", nil, false).Height(32).Clicked() {
 			a.Store.CancelLogin()
 			f.code = ""
 		}

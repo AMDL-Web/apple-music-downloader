@@ -2,7 +2,8 @@ name: Boot the wrapper guest
 description: >-
   Boots a wrapper-manager guest in QEMU the way amdl does (TestGuestBoot in
   internal/wrapperhost) and fails unless the manager answers /status with its
-  pinned payload downloaded. Used by ci.yml, guestboot.yml, wrapper-pin.yml and
+  pinned payload installed from the host, and the guest comes back without
+  reinstalling it after a kill and after a stop. Used by ci.yml, guestboot.yml, wrapper-pin.yml and
   the wrapper repository's manager.yml, which checks amdl out with `checkout`.
 
 inputs:
@@ -18,7 +19,7 @@ inputs:
   fresh:
     description: >-
       'true' downloads the guest again instead of using the cached one, so a
-      pinned artifact that has vanished from nightly.link or GitHub fails the run.
+      pinned release asset that has vanished from GitHub fails the run.
       Scheduled and pin-refresh runs set it; runs on a change reuse the cache.
     default: 'false'
   timeout:

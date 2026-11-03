@@ -86,6 +86,15 @@ type ManagedWrapper struct {
 	Guest         string `json:"guest"`
 	LoginResidue  bool   `json:"login_residue"`
 	LastError     string `json:"last_error,omitempty"`
+	// Download is the host's download of the wrapper-lite payload, while
+	// mode is starting.
+	Download *WrapperDownload `json:"download,omitempty"`
+}
+
+// WrapperDownload is the WrapperDownload schema: a download's progress in bytes.
+type WrapperDownload struct {
+	DoneBytes  int64 `json:"done_bytes"`
+	TotalBytes int64 `json:"total_bytes"`
 }
 
 // DownloadList is the DownloadList schema.

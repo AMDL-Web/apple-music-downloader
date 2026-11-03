@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"net/http"
+
 	"amdl/internal/config"
 	"amdl/internal/wrapper"
 )
@@ -30,9 +32,12 @@ type State struct {
 	QEMU          string `json:"qemu"`
 	// LoginResidue is retained for readers of old state files. Manager
 	// guests never receive credentials in boot arguments.
-	LoginResidue bool      `json:"login_residue,omitempty"`
-	LastError    string    `json:"last_error,omitempty"`
-	Updated      time.Time `json:"updated"`
+	LoginResidue bool   `json:"login_residue,omitempty"`
+	LastError    string `json:"last_error,omitempty"`
+	// Download is the wrapper-lite payload's download while mode is
+	// starting and the host does not have it yet.
+	Download *wrapper.Download `json:"download,omitempty"`
+	Updated  time.Time         `json:"updated"`
 }
 
 // ReadState returns the last state a supervisor wrote.
@@ -83,20 +88,34 @@ type Supervisor struct {
 	// run is Run's context: serving guests live as long as it, not as long
 	// as the request that restarted them after a login.
 	run context.Context
+	// fetcher downloads the payload when the host does not have it.
+	fetcher Fetcher
+	// payloadOK is the sha256 of the payload checked on the host in this
+	// process; a boot serves only a checked one.
+	payloadOK string
+	// fetching is the payload download under way, canceled by a stop.
+	fetching context.CancelFunc
+	// stateWritten spaces the state.json writes of download progress.
+	stateWritten time.Time
 }
 
-// readyTimeout allows a TCG guest to download its ~50 MB payload on first
-// boot, which the manager does before it answers and starts over after a
-// restart: a slow link (30-50 KB/s measured from China) needs most of half an
-// hour, the manager's own limit for that download. A guest that fails exits
-// QEMU at once (panic=1, and the guest init powers off when the manager
-// exits), so the wait only runs out on a guest that hangs.
+// readyTimeout bounds a boot, from QEMU's start to the manager's answer. The
+// host downloads the payload first, with its own progress and timeout
+// (fetchTimeout per attempt), and serves it to the guest over loopback, so
+// this covers the boot and the payload's install from the host: 20 s on TCG,
+// plain emulation, on an Apple M-series Mac, 7 s for a boot that finds the
+// payload installed. A guest that fails exits QEMU at once (panic=1, and the
+// guest init powers off when the manager exits), so the wait only runs out on
+// a guest that hangs.
 var (
-	readyTimeout = 30 * time.Minute
+	readyTimeout = 3 * time.Minute
 	pollEvery    = 2 * time.Second
 )
 
-// LoginLimit bounds one manager login or two-step verification request.
+// LoginLimit bounds one manager login or two-step verification request. The
+// manager's own wait for a login ends first (90 s, its write deadline 105 s),
+// so the error a client sees is the manager's "login timeout"; the desktop
+// app and the CLI wait longer still (client.LoginWait).
 func LoginLimit() time.Duration { return 2 * time.Minute }
 
 // NewSupervisor prepares to run the installed guest with qemu and accel.
@@ -115,7 +134,8 @@ func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, erro
 	if log == nil {
 		log = io.Discard
 	}
-	s := &Supervisor{home: h, in: in, qemu: qemu, log: log, wake: make(chan struct{}, 1), run: context.Background(), manager: manager}
+	s := &Supervisor{home: h, in: in, qemu: qemu, log: log, wake: make(chan struct{}, 1), run: context.Background(), manager: manager,
+		fetcher: Releases{Client: &http.Client{}}}
 	s.st = State{Mode: "stopped", Port: in.Port, Accel: accel, QEMU: qemu}
 	if prev, err := h.ReadState(); err == nil {
 		reapStale(prev)
@@ -151,7 +171,7 @@ func (s *Supervisor) Managed() wrapper.Managed {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return wrapper.Managed{Mode: s.st.Mode, Accel: s.st.Accel, AccelFallback: s.st.AccelFallback, QEMU: s.st.QEMU,
-		Guest: s.in.ID, LoginResidue: s.st.LoginResidue, LastError: s.st.LastError}
+		Guest: s.in.ID, LoginResidue: s.st.LoginResidue, LastError: s.st.LastError, Download: s.st.Download}
 }
 
 // Run keeps the guest in the wanted state until ctx ends, then stops it.
@@ -164,19 +184,11 @@ func (s *Supervisor) Run(ctx context.Context) {
 		s.mu.Lock()
 		switch {
 		case ctx.Err() != nil:
-			if s.g != nil {
-				s.g.stop()
-				s.g = nil
-			}
-			s.setState(func(st *State) { st.Mode = "stopped" })
+			s.stopLocked()
 			s.mu.Unlock()
 			return
 		case !s.home.Enabled() || s.uninstalled():
-			if s.g != nil {
-				s.g.stop()
-				s.g = nil
-			}
-			s.setState(func(st *State) { st.Mode = "stopped" })
+			s.stopLocked()
 		case s.g == nil || s.g.exited():
 			s.startServingLocked()
 		}
@@ -187,6 +199,25 @@ func (s *Supervisor) Run(ctx context.Context) {
 		case <-time.After(pollEvery):
 		}
 	}
+}
+
+// stopLocked cancels a payload download and powers the guest off, letting go
+// of s.mu while the guest syncs and powers off (shutdownWait at most), so
+// status reads do not wait on it.
+func (s *Supervisor) stopLocked() {
+	if s.fetching != nil {
+		s.fetching()
+		s.fetching = nil
+	}
+	if g := s.g; g != nil {
+		s.mu.Unlock()
+		g.stop()
+		s.mu.Lock()
+		if s.g == g {
+			s.g = nil
+		}
+	}
+	s.setState(func(st *State) { st.Mode, st.Download = "stopped", nil })
 }
 
 // uninstalled reports whether amdl wrapper uninstall, or the app's, removed
@@ -211,7 +242,58 @@ func (s *Supervisor) refreshLocked() {
 func (s *Supervisor) failLocked(err error) {
 	s.fails++
 	s.failedAt = time.Now()
-	s.setState(func(st *State) { st.Mode, st.LastError = "failed", err.Error() })
+	s.setState(func(st *State) { st.Mode, st.LastError, st.Download = "failed", err.Error(), nil })
+}
+
+// fetchPayloadLocked starts the payload's download on the host, or its
+// sha256 check when it is here; the next start boots once it passed. The
+// state shows the download's progress meanwhile.
+func (s *Supervisor) fetchPayloadLocked(ctx context.Context) {
+	if s.fetching != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	s.fetching = cancel
+	l := s.in.Lite
+	if !s.home.HasPayload(l) {
+		s.setState(func(st *State) { st.Mode, st.Download = "starting", &wrapper.Download{TotalBytes: l.Size} })
+		fmt.Fprintf(s.log, "[amdl] downloading the wrapper-lite payload (%d MB) from %s\n", l.Size>>20, l.Asset().URL)
+	}
+	report := func(p Progress) {
+		if p.Phase != Downloading {
+			return
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.fetching == nil || ctx.Err() != nil {
+			return
+		}
+		s.st.Download = &wrapper.Download{DoneBytes: p.Done, TotalBytes: p.Total}
+		if time.Since(s.stateWritten) >= time.Second || p.Done == p.Total {
+			s.stateWritten = time.Now()
+			s.setState(func(*State) {})
+		}
+	}
+	go func() {
+		err := s.home.FetchPayload(ctx, s.fetcher, l, report)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		canceled := ctx.Err() != nil
+		cancel()
+		if s.fetching == nil && canceled {
+			return // a stop canceled it and wrote the state
+		}
+		s.fetching = nil
+		switch {
+		case err == nil:
+			s.payloadOK = l.SHA256
+			s.setState(func(st *State) { st.Download = nil })
+		case canceled:
+		default:
+			s.failLocked(err)
+		}
+		s.poke()
+	}()
 }
 
 // startServingLocked boots the manager on its persistent account disk. Each
@@ -236,22 +318,32 @@ func (s *Supervisor) startServingLocked() {
 		s.failLocked(fmt.Errorf("%w; amdl wrapper update installs a guest that pins it", err))
 		return
 	}
+	if s.payloadOK != s.in.Lite.SHA256 {
+		s.fetchPayloadLocked(ctx)
+		return
+	}
+	payload, err := servePayload(s.home.payloadPath(s.in.Lite), s.in.Lite)
+	if err != nil {
+		s.failLocked(err)
+		return
+	}
 	argsFile := s.home.path(managerArgsName)
-	if err := os.WriteFile(argsFile, []byte(strings.Join(managerArgs(s.in.Lite), "\n")+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(argsFile, []byte(strings.Join(managerArgs(s.in.Lite, payload.URL), "\n")+"\n"), 0o600); err != nil {
+		payload.Close()
 		s.failLocked(err)
 		return
 	}
 	kernel, initrd := s.home.assets(s.in)
 	g, err := startGuest(s.qemu, RunOpts{Accel: s.st.Accel, Kernel: kernel, Initrd: initrd, Image: s.home.ImagePath(),
-		HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: GuestMemoryMB(accounts), CPUs: 2, ArgsFile: argsFile}, s.consoleLine())
+		HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: GuestMemoryMB(accounts), CPUs: 2, ArgsFile: argsFile}, s.consoleLine(), payload.Close)
 	if err != nil {
+		payload.Close()
 		s.g = nil
 		s.failLocked(err)
 		return
 	}
 	s.g = g
-	s.setState(func(st *State) { st.Mode = "starting" })
-	started := time.Now()
+	s.setState(func(st *State) { st.Mode, st.Download = "starting", nil })
 	go func() {
 		err := g.waitReady(ctx, s.in.Port, readyTimeout)
 		s.mu.Lock()
@@ -260,9 +352,11 @@ func (s *Supervisor) startServingLocked() {
 			return
 		}
 		if err != nil {
-			if failed := s.st.Accel; errors.Is(err, errExited) && failed != "tcg" && time.Since(started) < 30*time.Second {
-				s.setState(func(st *State) { st.Accel, st.AccelFallback = "tcg", true })
-				fmt.Fprintf(s.log, "[amdl] %s could not start the guest; falling back to tcg\n", failed)
+			if failed := s.st.Accel; errors.Is(err, errExited) && failed != "tcg" {
+				if line := g.accelFailed(); line != "" {
+					s.setState(func(st *State) { st.Accel, st.AccelFallback = "tcg", true })
+					fmt.Fprintf(s.log, "[amdl] %s could not start the guest (%s); falling back to tcg\n", failed, line)
+				}
 			}
 			if ctx.Err() == nil {
 				g.stop() // a guest that never answered is retried like one that crashed

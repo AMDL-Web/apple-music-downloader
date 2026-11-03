@@ -334,9 +334,12 @@ func wrapperWords(w *client.WrapperStatus) account {
 	if m := w.Managed; m != nil {
 		switch m.Mode {
 		case "starting":
-			return account{word: "Starting", state: "Booting", kind: pillWait, note: "The local wrapper boots in about 15 seconds"}
+			if d := m.Download; d != nil && d.TotalBytes > 0 {
+				return account{word: "Downloading", state: "Downloading", kind: pillWait, note: "wrapper-lite · " + sizeOf(d.DoneBytes, d.TotalBytes)}
+			}
+			return account{word: "Starting", state: "Booting", kind: pillWait}
 		case "login":
-			return account{word: "Logging in", state: "Logging in", kind: pillWait, note: "The local wrapper restarts with the account; this takes about half a minute"}
+			return account{word: "Logging in", state: "Logging in", kind: pillWait}
 		case "stopped":
 			return account{word: "Stopped", state: "Not running", kind: pillWarn, icon: icWarn, note: "Start it with amdl wrapper start"}
 		case "failed":
@@ -403,8 +406,25 @@ func (a *App) accountCard(c *ui.Context, k *Tokens, sv *store.Server, span int) 
 				}
 			})
 		}
-		cardFoot(c, k, st.note)
+		if d := downloading(w); d != nil {
+			meter(c, k, float64(d.DoneBytes)/float64(d.TotalBytes), 6)
+		}
+		if st.note != "" {
+			cardFoot(c, k, st.note)
+		}
 	})
+}
+
+// downloading is the local wrapper's payload download while it is starting,
+// else nil.
+func downloading(w *client.WrapperStatus) *client.WrapperDownload {
+	if w == nil || w.Managed == nil || w.Managed.Mode != "starting" {
+		return nil
+	}
+	if d := w.Managed.Download; d != nil && d.TotalBytes > 0 {
+		return d
+	}
+	return nil
 }
 
 func syncCard(c *ui.Context, k *Tokens, sv *store.Server, span int) ui.Element {

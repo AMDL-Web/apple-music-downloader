@@ -10,22 +10,22 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
-// Fetcher writes a pinned artifact's bytes from offset on, so an interrupted
+// Fetcher writes a pinned asset's bytes from offset on, so an interrupted
 // download resumes. Download checks what it wrote against the pin.
 type Fetcher interface {
-	Fetch(ctx context.Context, p Pin, offset int64, w io.Writer) error
+	Fetch(ctx context.Context, a Asset, offset int64, w io.Writer) error
 }
 
-// NightlyLink fetches through nightly.link, which serves a public repository's
-// Actions artifacts without a GitHub sign-in (GitHub's own artifact URL
-// answers 401 to anonymous requests). The URL names the artifact by id, so it
-// cannot drift to a newer build; the sha256 check guards the bytes.
-type NightlyLink struct {
+// Releases fetches GuestRepo's release assets. The URL names the release of
+// one commit, whose assets are never replaced, and the sha256 check guards
+// the bytes.
+type Releases struct {
 	Client *http.Client
-	// Base replaces "https://nightly.link"; tests point it at a local server.
+	// Base replaces "https://github.com"; tests point it at a local server.
 	Base string
 	// Conns is how many ranges Download fetches at once; 0 means defaultConns.
 	Conns int
@@ -34,11 +34,26 @@ type NightlyLink struct {
 // fetchTimeout bounds one download attempt; a slow link resumes on the next.
 const fetchTimeout = 30 * time.Minute
 
+// url is a's URL, on Base when it is set.
+func (r Releases) url(a Asset) string {
+	if r.Base == "" {
+		return a.URL
+	}
+	return r.Base + strings.TrimPrefix(a.URL, "https://github.com")
+}
+
+func (r Releases) client() *http.Client {
+	if r.Client != nil {
+		return r.Client
+	}
+	return http.DefaultClient
+}
+
 // Fetch implements Fetcher.
-func (n NightlyLink) Fetch(ctx context.Context, p Pin, offset int64, w io.Writer) error {
+func (r Releases) Fetch(ctx context.Context, a Asset, offset int64, w io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	url := n.artifactURL(p)
+	url := r.url(a)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -46,15 +61,15 @@ func (n NightlyLink) Fetch(ctx context.Context, p Pin, offset int64, w io.Writer
 	if offset > 0 {
 		req.Header.Set("Range", "bytes="+strconv.FormatInt(offset, 10)+"-")
 	}
-	resp, err := n.Client.Do(req)
+	resp, err := r.client().Do(req)
 	if err != nil {
-		return err
+		return redact(err)
 	}
 	defer resp.Body.Close()
 	switch {
 	case offset > 0 && resp.StatusCode == http.StatusPartialContent, offset == 0 && resp.StatusCode == http.StatusOK:
 	case resp.StatusCode == http.StatusNotFound:
-		return fmt.Errorf("artifact %d is gone from GitHub (manager guest artifacts expire 90 days after their build)", p.ArtifactID)
+		return fmt.Errorf("%s is not published", url)
 	default:
 		return fmt.Errorf("%s: %s", url, resp.Status)
 	}
@@ -95,13 +110,13 @@ func (c *countWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Download fetches p into path and fails unless the whole file has p's size
+// Download fetches a into path and fails unless the whole file has a's size
 // and sha256. A RangeFetcher is asked for several ranges at once, resuming
 // from the parts a canceled or failed attempt left in path+".parts"; any other
 // Fetcher, or a server that ignores Range, streams into path, resuming a
 // partial file left there. report, when not nil, hears of every written chunk
 // (never from two goroutines at once) and then of the checksum pass.
-func Download(ctx context.Context, f Fetcher, p Pin, path string, report func(Progress)) error {
+func Download(ctx context.Context, f Fetcher, p Asset, path string, report func(Progress)) error {
 	if report == nil {
 		report = func(Progress) {}
 	}
@@ -122,7 +137,7 @@ func Download(ctx context.Context, f Fetcher, p Pin, path string, report func(Pr
 	return err
 }
 
-func downloadStream(ctx context.Context, f Fetcher, p Pin, path string, report func(Progress)) error {
+func downloadStream(ctx context.Context, f Fetcher, p Asset, path string, report func(Progress)) error {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
@@ -148,7 +163,7 @@ func downloadStream(ctx context.Context, f Fetcher, p Pin, path string, report f
 	return nil
 }
 
-func verify(path string, p Pin) error {
+func verify(path string, p Asset) error {
 	file, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
 		return err

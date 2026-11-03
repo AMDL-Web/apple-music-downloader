@@ -65,7 +65,7 @@ func (a *App) accountSession(c *ui.Context, k *Tokens) {
 		case l.LoginID != "":
 			a.codeStep(c, k)
 		case st.signIn || adding:
-			a.credentials(c, k, w.Managed != nil, adding)
+			a.credentials(c, k, adding)
 		case unlisted:
 			a.signedIn(c, k)
 		}
@@ -78,7 +78,7 @@ func (a *App) accountSession(c *ui.Context, k *Tokens) {
 
 // credentials is the login's first step; another names a login while
 // accounts are logged in, which Cancel closes.
-func (a *App) credentials(c *ui.Context, k *Tokens, local, another bool) {
+func (a *App) credentials(c *ui.Context, k *Tokens, another bool) {
 	f := &a.set.login
 	l := &a.Store.Login
 	wait := waited(c, l.Busy, l.Since)
@@ -89,6 +89,18 @@ func (a *App) credentials(c *ui.Context, k *Tokens, local, another bool) {
 		pass.Password().Disabled(wait)
 		box.Grow(1)
 		filled := f.user != "" && f.pass != ""
+		// Cancel stops a login on its way, which frees the account for the
+		// next one, or closes the form for one more account. Like the
+		// button's text, it shows once the step is slow, so an answer within
+		// a frame moves nothing; it sits before the button, which stays put.
+		if (wait || another) && button(c, k, buttonGhost, "Cancel", nil).Height(32).Clicked() {
+			if l.Busy {
+				a.Store.CancelLogin()
+			} else {
+				f.adding, f.user, f.pass = false, "", ""
+				l.Err, l.Code = "", ""
+			}
+		}
 		text := "Log in"
 		if wait {
 			text = "Logging in…"
@@ -97,14 +109,7 @@ func (a *App) credentials(c *ui.Context, k *Tokens, local, another bool) {
 			a.Store.StartLogin(f.user, f.pass)
 			f.sent = true
 		}
-		if another && buttonOff(c, k, buttonGhost, "Cancel", nil, wait).Height(32).Clicked() && !l.Busy {
-			f.adding, f.user, f.pass = false, "", ""
-			l.Err, l.Code = "", ""
-		}
 	})
-	if wait && local {
-		ui.Text(c, "The local wrapper restarts to log in; this takes about half a minute.").FontSize(11.5).TextColor(k.Faint)
-	}
 }
 
 func (a *App) codeStep(c *ui.Context, k *Tokens) {
@@ -125,7 +130,13 @@ func (a *App) codeStep(c *ui.Context, k *Tokens) {
 			a.Store.SubmitCode(f.code)
 			f.sent = true
 		}
-		if buttonOff(c, k, buttonGhost, "Start over", nil, wait).Height(32).Clicked() && !l.Busy {
+		// While the code is checked, Cancel ends that check; either way the
+		// next login starts from the password.
+		again := "Start over"
+		if wait {
+			again = "Cancel"
+		}
+		if buttonRoom(c, k, buttonGhost, again, "Start over", nil, false).Height(32).Clicked() {
 			a.Store.CancelLogin()
 			f.code = ""
 		}

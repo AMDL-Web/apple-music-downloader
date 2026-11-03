@@ -220,8 +220,10 @@ While it is not `""`, downloads, lookups and library sync use the wrapper's toke
 When amdl runs the wrapper itself (`amdl wrapper install`, [install.md](install.md#the-wrapper)),
 the response also carries `managed`: `mode` (`starting`, `serving`, `login`, `stopped` or
 `failed`), the QEMU `accel` in use and whether it fell back to TCG (`accel_fallback`), the
-`qemu` binary, the installed `guest`, `last_error`, and `login_residue`. A booting or
-stopped managed wrapper answers `200` with `ready` false rather than `503`.
+`qemu` binary, the installed `guest`, `last_error`, and `login_residue`. While mode is
+`starting` and the backend downloads the guest's wrapper-lite payload before the boot,
+`download` carries its `done_bytes` and `total_bytes`. A booting or stopped managed
+wrapper answers `200` with `ready` false rather than `503`.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login \
@@ -240,7 +242,10 @@ the login; start again from the password.
 With a wrapper amdl runs, login and two-step verification use the guest manager's
 HTTP API on loopback. They do not restart the guest or put credentials in boot
 arguments; `managed.login_residue` is false for manager guests. A login or code
-request is bounded by `internal/wrapperhost#LoginLimit`. A code that is not six
+request is bounded by `internal/wrapperhost#LoginLimit`; the manager's own wait ends
+first and answers `504 upstream_timeout`. A client that closes the login or code request
+cancels the login: the manager stops it and frees the account, so a retry starts at once.
+A new login of an account replaces one that waits for its code. A code that is not six
 digits is `400 invalid_request` and leaves the pending login available. While
 `amdl wrapper stop` has turned the wrapper off, login is `503 wrapper_unavailable`.
 The local manager holds at most ten accounts. Local logout resolves the supplied

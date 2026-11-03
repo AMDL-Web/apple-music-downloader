@@ -3,13 +3,17 @@ package wrapperhost
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -29,7 +33,7 @@ func TestMain(m *testing.M) {
 }
 
 func fakeQEMU(args []string) {
-	var image, memory string
+	var image, memory, accel string
 	var port int
 	for i := 0; i < len(args)-1; i++ {
 		switch args[i] {
@@ -39,6 +43,8 @@ func fakeQEMU(args []string) {
 			fmt.Sscanf(args[i+1][strings.Index(args[i+1], "127.0.0.1:")+len("127.0.0.1:"):], "%d", &port)
 		case "-m":
 			memory = args[i+1]
+		case "-accel":
+			accel = args[i+1]
 		case "-fw_cfg":
 			// Only the manager's arguments go through fw_cfg; a login never does.
 			name, file, _ := strings.Cut(args[i+1], ",file=")
@@ -50,9 +56,22 @@ func fakeQEMU(args []string) {
 				os.Exit(5)
 			}
 			os.WriteFile(image+".args", raw, 0o600)
+			fetchFakePayload(image, strings.Fields(string(raw)))
 		}
 	}
 	os.WriteFile(image+".memory", []byte(memory), 0o600)
+	switch os.Getenv("AMDL_FAKE_QEMU_MODE") {
+	case "accel":
+		if accel != "tcg" {
+			fmt.Println("qemu-system-x86_64: -accel kvm: failed to initialize kvm: Permission denied")
+			os.Exit(1)
+		}
+	case "guest-exit":
+		// A guest whose manager exits at once: init powers off cleanly.
+		fmt.Println("[init] starting wrapper-manager")
+		fmt.Println("[init] wrapper-manager exited with status 1, syncing and powering off")
+		os.Exit(0)
+	}
 	fmt.Println("[init] starting wrapper-manager")
 	fmt.Println("token cache loaded (dev=synthetic-dev-prefix music=synthetic-music-prefix)")
 	var mu sync.Mutex
@@ -98,6 +117,10 @@ func fakeQEMU(args []string) {
 		mu.Lock()
 		defer mu.Unlock()
 		switch r.URL.Path {
+		case "/shutdown":
+			os.WriteFile(image+".shutdown", nil, 0o600)
+			fmt.Fprint(w, `{"code":0,"data":{}}`)
+			go func() { time.Sleep(20 * time.Millisecond); os.Exit(0) }()
 		case "/status":
 			regions := []string{}
 			if len(accounts) > 0 {
@@ -134,6 +157,25 @@ func fakeQEMU(args []string) {
 	}))
 }
 
+// fetchFakePayload downloads the payload the manager arguments name, as the
+// guest's manager would, from the host's loopback instead of guestHost, and
+// records its sha256 in image.payload.
+func fetchFakePayload(image string, args []string) {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] != "-payload-url" {
+			continue
+		}
+		resp, err := http.Get(strings.Replace(args[i+1], "http://"+guestHost+":", "http://127.0.0.1:", 1))
+		if err != nil {
+			os.Exit(6)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		sum := sha256.Sum256(body)
+		os.WriteFile(image+".payload", []byte(hex.EncodeToString(sum[:])), 0o600)
+	}
+}
+
 func TestClientsOutwaitALogin(t *testing.T) {
 	if client.LoginWait <= LoginLimit() {
 		t.Fatalf("client wait %v <= login limit %v", client.LoginWait, LoginLimit())
@@ -156,6 +198,15 @@ func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return 
 
 func runFake(t *testing.T) (*Supervisor, Home, *syncBuffer) {
 	t.Helper()
+	s, h, log := startFake(t, "tcg", nil, nil)
+	waitMode(t, s, "serving")
+	return s, h, log
+}
+
+// startFake installs a fake guest and runs a supervisor for it on accel. prep
+// runs after the install; fetcher, when set, downloads the payload.
+func startFake(t *testing.T, accel string, prep func(Home), fetcher Fetcher) (*Supervisor, Home, *syncBuffer) {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -166,10 +217,17 @@ func runFake(t *testing.T) (*Supervisor, Home, *syncBuffer) {
 	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
+	if prep != nil {
+		prep(h)
+	}
 	log := &syncBuffer{}
-	s, err := NewSupervisor(h, exe, "tcg", log)
+	s, err := NewSupervisor(h, exe, accel, log)
 	if err != nil {
 		t.Fatal(err)
+	}
+	s.fetcher = &fakeFetcher{}
+	if fetcher != nil {
+		s.fetcher = fetcher
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -182,7 +240,6 @@ func runFake(t *testing.T) (*Supervisor, Home, *syncBuffer) {
 			t.Error("supervisor did not stop")
 		}
 	})
-	waitMode(t, s, "serving")
 	return s, h, log
 }
 
@@ -355,18 +412,20 @@ func TestServiceLogoutResolvesAccountName(t *testing.T) {
 }
 
 func TestGuestBootsWithThePinnedPayload(t *testing.T) {
-	_, h, _ := runFake(t)
+	s, h, _ := runFake(t)
 	raw, err := os.ReadFile(h.ImagePath() + ".args")
 	if err != nil {
 		t.Fatalf("the guest was given no manager arguments: %v", err)
 	}
 	// The guest's init splits this on whitespace into the manager's argv.
-	want := "-host 0.0.0.0 -port 8080 -payload-url " + Builtin.Lite.URL() + " -payload-sha256 " + Builtin.Lite.SHA256
-	if got := strings.Join(strings.Fields(string(raw)), " "); got != want {
-		t.Fatalf("manager arguments %q, want %q", got, want)
+	args := strings.Fields(string(raw))
+	want := regexp.MustCompile(`^-host 0\.0\.0\.0 -port 8080 -payload-url http://10\.0\.2\.2:[0-9]+/[0-9a-f]{24}/wrapper-lite-linux-x86_64\.zip -payload-sha256 ` + s.in.Lite.SHA256 + `$`)
+	if got := strings.Join(args, " "); !want.MatchString(got) {
+		t.Fatalf("manager arguments %q, want the payload from the host", got)
 	}
-	if !strings.HasPrefix(Builtin.Lite.URL(), "https://nightly.link/AMDL-Web/wrapper/actions/runs/41582282341/wrapper-lite-linux-x86_64.zip") {
-		t.Fatalf("payload URL %s", Builtin.Lite.URL())
+	got, err := os.ReadFile(h.ImagePath() + ".payload")
+	if err != nil || string(got) != s.in.Lite.SHA256 {
+		t.Fatalf("the guest fetched a payload with sha256 %s (%v), want %s", got, err, s.in.Lite.SHA256)
 	}
 }
 
@@ -400,5 +459,99 @@ func TestGuestWithoutAPayloadPinDoesNotBoot(t *testing.T) {
 	}
 	if got := s.Managed().LastError; !strings.Contains(got, "amdl wrapper update") {
 		t.Fatalf("error %q does not say how to fix it", got)
+	}
+}
+
+func TestAnAcceleratorThatFailsFallsBackToTCG(t *testing.T) {
+	t.Setenv("AMDL_FAKE_QEMU_MODE", "accel")
+	s, _, log := startFake(t, "kvm", nil, nil)
+	waitMode(t, s, "serving")
+	if m := s.Managed(); m.Accel != "tcg" || !m.AccelFallback {
+		t.Errorf("accel %s, fallback %v: want tcg after kvm failed", m.Accel, m.AccelFallback)
+	}
+	if !strings.Contains(log.String(), "failed to initialize kvm") {
+		t.Errorf("the log does not say why: %s", log)
+	}
+}
+
+func TestAGuestThatExitsKeepsItsAccelerator(t *testing.T) {
+	t.Setenv("AMDL_FAKE_QEMU_MODE", "guest-exit")
+	s, _, _ := startFake(t, "kvm", nil, nil)
+	fails := func() int { s.mu.Lock(); defer s.mu.Unlock(); return s.fails }
+	deadline := time.Now().Add(10 * time.Second)
+	for fails() < 2 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if n := fails(); n < 2 {
+		t.Fatalf("%d failed boots, want the guest to exit at least twice", n)
+	}
+	if m := s.Managed(); m.Accel != "kvm" || m.AccelFallback {
+		t.Errorf("accel %s, fallback %v: a guest that exits on its own is no fault of kvm", m.Accel, m.AccelFallback)
+	}
+}
+
+func TestStopAsksTheGuestToPowerOff(t *testing.T) {
+	s, h, _ := runFake(t)
+	start := time.Now()
+	if err := h.SetEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	s.poke()
+	waitMode(t, s, "stopped")
+	if _, err := os.Stat(h.ImagePath() + ".shutdown"); err != nil {
+		t.Fatalf("the guest was not asked to shut down: %v", err)
+	}
+	if d := time.Since(start); d >= shutdownWait {
+		t.Errorf("stopping took %s: the guest was killed after the wait", d)
+	}
+}
+
+// gatedFetcher serves the payload's first half, then waits for open.
+type gatedFetcher struct{ open chan struct{} }
+
+func (g gatedFetcher) Fetch(ctx context.Context, a Asset, offset int64, w io.Writer) error {
+	half := int64(len(fakePayload) / 2)
+	if offset < half {
+		if _, err := w.Write(fakePayload[offset:half]); err != nil {
+			return err
+		}
+		offset = half
+	}
+	select {
+	case <-g.open:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	_, err := w.Write(fakePayload[offset:])
+	return err
+}
+
+func TestTheHostDownloadsAMissingPayloadBeforeBooting(t *testing.T) {
+	gate := gatedFetcher{open: make(chan struct{})}
+	s, h, _ := startFake(t, "tcg", func(h Home) { os.RemoveAll(h.path(payloadDir)) }, gate)
+	deadline := time.Now().Add(10 * time.Second)
+	var m wrapper.Managed
+	for time.Now().Before(deadline) {
+		if m = s.Managed(); m.Download != nil && m.Download.DoneBytes > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if m.Mode != "starting" || m.Download == nil || m.Download.TotalBytes != int64(len(fakePayload)) || m.Download.DoneBytes != int64(len(fakePayload)/2) {
+		t.Fatalf("while the payload downloads: %+v (download %+v)", m, m.Download)
+	}
+	if st, err := h.ReadState(); err != nil || st.Download == nil {
+		t.Errorf("state.json does not show the download: %+v, %v", st, err)
+	}
+	if _, err := os.Stat(h.ImagePath() + ".args"); err == nil {
+		t.Fatal("the guest booted before its payload was here")
+	}
+	close(gate.open)
+	waitMode(t, s, "serving")
+	if m := s.Managed(); m.Download != nil {
+		t.Errorf("serving still shows a download: %+v", m.Download)
+	}
+	if !h.HasPayload(s.in.Lite) {
+		t.Error("the payload is not on the host")
 	}
 }

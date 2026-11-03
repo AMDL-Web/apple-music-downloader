@@ -1,15 +1,15 @@
 # Keeps the pin of the wrapper guest (internal/wrapperhost#GuestRepo) current.
 # amdl wrapper install reads it from wrapper-manager-guest.json on the wrapper-pins
 # branch (internal/wrapperhost#ManifestURL) before the one built into the
-# binary, which goes stale when GitHub deletes the artifact 90 days after its
-# build. Weekly, the job pins the newest successful manager run's
-# manager-qemu-guest artifact and the newest successful build-lite run's
-# wrapper-lite-linux-x86_64 artifact (the payload the guest's manager is told
-# to install, with its digest), both from the lite branch only, once each one's
-# downloaded bytes match the digest GitHub reports, and commits the file only
-# when it changed, and only after it boots that guest in QEMU the way amdl does
-# (.github/actions/guestboot) and its manager answers: a candidate that does not
-# boot is never committed. wrapper-pin.json on that
+# binary, so installs follow new guests between amdl releases. Weekly, the job
+# pins the newest successful manager run's manager-qemu-guest and the newest
+# successful build-lite run's wrapper-lite-linux-x86_64 (the payload the
+# guest's manager is told to install, with its digest), both from the lite
+# branch only and as that repository's publish workflow put them up as release
+# assets, once each one's downloaded bytes match the digest GitHub reports, and
+# commits the file only when it changed, and only after it boots that guest in
+# QEMU the way amdl does (.github/actions/guestboot) and its manager answers: a
+# candidate that does not boot is never committed. wrapper-pin.json on that
 # branch pins upstream's unpatched guest for the 2.0 release candidates and is
 # no longer updated.
 name: wrapper-pin
@@ -25,7 +25,7 @@ permissions:
 jobs:
   pin:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:

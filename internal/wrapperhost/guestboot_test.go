@@ -9,15 +9,21 @@ package wrapperhost
 //
 // It fails on the faults the fake-QEMU tests cannot see: manager arguments
 // that never reach the guest's init, a guest with no network, a pinned payload
-// that does not download or does not match its sha256, a manager or kernel
-// panic, and a guest that restarts in a loop.
+// that the host does not download, or the guest does not install from the
+// host, or does not match its sha256, a manager or kernel panic, and a guest
+// that restarts in a loop. Then it checks that the account disk keeps what was
+// written: it kills QEMU 2 s after /status answered, and the guest must come
+// back without installing the payload again; it stops the guest the way the
+// app does (POST /shutdown), and the guest must power off by itself and come
+// back the same way.
 //
 // Environment:
 //
 //	GUESTBOOT_PIN_FILE   a pin as JSON (the wrapper-pins file); default Builtin
 //	GUESTBOOT_GUEST_DIR  boot the guest files in this directory (kernel,
 //	                     initramfs, data.img) instead of downloading the pin's
-//	                     guest; the pin's Lite payload is still the payload
+//	                     guest; the pin's Lite payload is still the payload,
+//	                     which the supervisor downloads on the host
 //	GUESTBOOT_CACHE_DIR  keep the downloaded guest zip here between runs
 //	GUESTBOOT_ACCEL      force an accelerator (tcg, kvm); default Accel()
 //	GUESTBOOT_TIMEOUT    how long the guest may take to answer, e.g. 6m
@@ -189,10 +195,10 @@ func TestGuestBoot(t *testing.T) {
 	guestDir := os.Getenv("GUESTBOOT_GUEST_DIR")
 	now := time.Now()
 	if guestDir == "" {
-		if err := pin.valid(now); err != nil {
+		if err := pin.valid(); err != nil {
 			t.Fatalf("the pin to boot: %v", err)
 		}
-	} else if err := pin.Lite.valid(now); err != nil {
+	} else if err := pin.Lite.complete(); err != nil {
 		t.Fatalf("the payload pin to boot: %v", err)
 	}
 
@@ -245,8 +251,8 @@ func TestGuestBoot(t *testing.T) {
 			// Download keeps a whole, matching file as it is, so a cache hit
 			// costs only the checksum; Install then finds the zip in place.
 			cached := filepath.Join(cache, "guest-"+pin.SHA256[:12]+".zip")
-			f := NightlyLink{Client: &http.Client{}}
-			if err := Download(t.Context(), f, pin, cached, nil); err != nil {
+			f := Releases{Client: &http.Client{}}
+			if err := Download(t.Context(), f, pin.Asset(), cached, nil); err != nil {
 				return err
 			}
 			if err := home.prepare(); err != nil {
@@ -269,10 +275,11 @@ func TestGuestBoot(t *testing.T) {
 
 	watch := &bootWatch{phases: []*bootPhase{
 		{name: "arguments reach init", match: has("[init] reading manager args from fw_cfg")},
+		{name: "data disk mounted", match: has("[init] data: ")},
 		{name: "link up", match: has("[init] eth0 carrier:")},
 		{name: "network up", match: has("[init] dns test:")},
-		{name: "payload download starts", match: has("downloading wrapper-lite from")},
-		{name: "payload downloaded and verified", match: has("wrapper-lite ready")},
+		{name: "payload install from the host starts", match: has("downloading wrapper-lite from")},
+		{name: "payload installed and verified", match: has("wrapper-lite ready")},
 		{name: "manager listening", match: has("wrapperManager running at")},
 	}}
 	sup, err := NewSupervisor(home, qemu, accel, watch)
@@ -309,13 +316,12 @@ wait:
 		watch.mu.Lock()
 		boots, panics := watch.boots, append([]string(nil), watch.panics...)
 		watch.mu.Unlock()
-		wantURL := in.Lite.URL()
-		switch dl := watch.seen("payload download starts"); {
+		switch dl := watch.seen("payload install from the host starts"); {
 		case m.Mode == "serving":
 			served = time.Since(watch.start)
 			break wait
-		case dl != "" && !strings.Contains(dl, wantURL):
-			fail("the manager downloads a payload other than the pinned %s: its arguments did not reach it", wantURL)
+		case dl != "" && !strings.Contains(dl, "http://"+guestHost+":"):
+			fail("the manager downloads its payload from elsewhere than the host: %s", dl)
 		case watch.seen("arguments reach init") == "" && watch.seen("link up") != "":
 			fail("the manager arguments did not reach init")
 		case noCarrier(watch.seen("link up")), badNetwork(watch.seen("network up")):
@@ -346,16 +352,97 @@ wait:
 	console, _ := watch.console()
 	// The guest prints the arguments one per line, a bare-lite init on one; only
 	// their order and values matter.
-	if want := "[init] starting wrapper-manager with: " + strings.Join(managerArgs(in.Lite), " "); !strings.Contains(strings.Join(strings.Fields(console), " "), want) {
-		fail("init did not start the manager with the pinned payload: want %q", want)
+	argsRaw, err := os.ReadFile(home.path(managerArgsName))
+	if err != nil {
+		t.Fatal(err)
 	}
-	time.Sleep(3 * time.Second)
+	args := strings.Fields(string(argsRaw))
+	if want := "[init] starting wrapper-manager with: " + strings.Join(args, " "); !strings.Contains(strings.Join(strings.Fields(console), " "), want) {
+		fail("init did not start the manager with the boot's arguments: want %q", want)
+	}
+	if args[len(args)-1] != in.Lite.SHA256 {
+		fail("the manager was not given the pinned payload's sha256: %v", args)
+	}
+	if line := watch.seen("data disk mounted"); !strings.Contains(line, "commit=1") || !strings.Contains(line, "nodelalloc") {
+		fail("the data disk is not mounted with commit=1,nodelalloc: %s", line)
+	}
+	// 2 s after /status answered: it still answers, and then comes the kill.
+	time.Sleep(2*time.Second - time.Since(watch.start) + served)
 	if _, err := statusOf(t.Context(), in.Port); err != nil {
 		fail("/status stopped answering: %v", err)
 	}
 	if _, boots := watch.console(); boots != 1 {
 		fail("%d boots, want 1", boots)
 	}
+
+	// waitBoot waits for boot number n to serve and checks it installed no
+	// payload: the account disk kept the one installed before.
+	waitBoot := func(n int, from int) time.Duration {
+		t.Helper()
+		start := time.Now()
+		deadline := time.Now().Add(timeout)
+		for {
+			_, boots := watch.console()
+			if m := sup.Managed(); boots >= n && m.Mode == "serving" {
+				break
+			}
+			if time.Now().After(deadline) {
+				fail("boot %d did not answer /status in %s (mode %s)", n, timeout, sup.Managed().Mode)
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		watch.mu.Lock()
+		after := append([]string(nil), watch.lines[from:]...)
+		watch.mu.Unlock()
+		for _, l := range after {
+			if strings.Contains(l, "downloading wrapper-lite") || strings.Contains(l, "wrapper-lite does not exist") || strings.Contains(l, "installed from another source") {
+				fail("boot %d installed the payload again, so the disk lost it: %s", n, l)
+			}
+		}
+		return time.Since(start)
+	}
+	mark := func() int { watch.mu.Lock(); defer watch.mu.Unlock(); return len(watch.lines) }
+
+	// A kill, the worst a stop can do.
+	from := mark()
+	sup.mu.Lock()
+	g := sup.g
+	sup.mu.Unlock()
+	if g == nil {
+		fail("no guest runs")
+	}
+	_ = g.cmd.Process.Kill()
+	afterKill := waitBoot(2, from)
+
+	// The stop the app does: the guest syncs and powers itself off.
+	from = mark()
+	stopStart := time.Now()
+	if err := home.SetEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	sup.poke()
+	for sup.Managed().Mode != "stopped" {
+		if time.Since(stopStart) > shutdownWait+shutdownAsk+10*time.Second {
+			fail("the guest did not stop")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	stopped := time.Since(stopStart)
+	watch.mu.Lock()
+	stopLines := strings.Join(watch.lines[from:], "\n")
+	watch.mu.Unlock()
+	if !strings.Contains(stopLines, "shutdown requested") || !strings.Contains(stopLines, "syncing and powering off") {
+		fail("the guest did not power itself off on the stop request:\n%s", stopLines)
+	}
+	if stopped >= shutdownWait {
+		fail("the stop took %s: the guest was killed after the wait", stopped)
+	}
+	from = mark()
+	if err := home.SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	sup.poke()
+	afterStop := waitBoot(3, from)
 
 	rows := [][2]string{}
 	if d, ok := report["guest download"]; ok {
@@ -365,8 +452,11 @@ wait:
 		rows = append(rows, [2]string{ph.name, ph.at.Round(100 * time.Millisecond).String()})
 	}
 	rows = append(rows, [2]string{"/status answers", served.Round(100 * time.Millisecond).String()})
+	rows = append(rows, [2]string{"killed 2 s after answering, answers again after", afterKill.Round(100 * time.Millisecond).String()})
+	rows = append(rows, [2]string{"stop request powers it off after", stopped.Round(100 * time.Millisecond).String()})
+	rows = append(rows, [2]string{"started again, answers after", afterStop.Round(100 * time.Millisecond).String()})
 	var out strings.Builder
-	fmt.Fprintf(&out, "### Guest boot (%s, %s)\n\n| Phase | Since QEMU started |\n| --- | --- |\n", accel, filepath.Base(in.ID))
+	fmt.Fprintf(&out, "### Guest boot (%s, %s)\n\n| Phase | Time |\n| --- | --- |\n", accel, filepath.Base(in.ID))
 	for _, r := range rows {
 		fmt.Fprintf(&out, "| %s | %s |\n", r[0], r[1])
 	}

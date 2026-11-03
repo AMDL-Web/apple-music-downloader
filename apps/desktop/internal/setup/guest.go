@@ -14,8 +14,9 @@ import (
 type Guest struct {
 	State     State
 	Installed wrapperhost.Installed
-	// Size is the download's size in bytes: the pin's once a download
-	// started, the built-in pin's before.
+	// Size is the download's size in bytes, the guest's and, unless it is
+	// here, its payload's: the pin's once a download started, the built-in
+	// pin's before.
 	Size     int64
 	Progress wrapperhost.Progress
 	// Rate is the download's speed in bytes per second, smoothed.
@@ -50,6 +51,9 @@ func (s *Setup) checkGuest() {
 	}
 	if s.Guest.Size == 0 {
 		s.Guest.Size = wrapperhost.Builtin.Size
+		if !s.deps.Home.HasPayload(wrapperhost.Builtin.Lite) {
+			s.Guest.Size += wrapperhost.Builtin.Lite.Size
+		}
 	}
 }
 
@@ -92,9 +96,13 @@ func (s *Setup) installGuest() {
 			resume, err = s.pauseGuest()
 		}
 		if err == nil {
+			size := pin.Size
+			if !s.deps.Home.HasPayload(pin.Lite) {
+				size += pin.Lite.Size
+			}
 			s.post(func() {
 				if g.State == Working {
-					g.Size = pin.Size
+					g.Size = size
 				}
 			})
 			in, err = s.deps.Home.Install(ctx, s.deps.Fetcher, pin, s.deps.Now(), report)
@@ -187,7 +195,7 @@ func (s *Setup) GuestLog() string { return s.deps.Home.LogPath() }
 // commit is not compared.
 func (g Guest) UpdateAvailable() bool {
 	return g.NeedsUpdate() || g.State == Ready && g.Latest.Commit != "" &&
-		g.Installed.Commit != "" && (g.Latest.Commit != g.Installed.Commit || g.Latest.Lite.RunID != g.Installed.Lite.RunID)
+		g.Installed.Commit != "" && (g.Latest.Commit != g.Installed.Commit || g.Latest.Lite.SHA256 != g.Installed.Lite.SHA256)
 }
 
 // NeedsUpdate reports an installed guest this build cannot run, such as a

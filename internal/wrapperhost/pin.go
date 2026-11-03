@@ -10,94 +10,99 @@ import (
 	"time"
 )
 
-// GuestRepo builds the manager guest on its lite branch.
+// GuestRepo builds the manager guest and the wrapper-lite payload on its lite
+// branch, and its publish workflow puts each successful build on lite up as a
+// release asset: actions artifacts download at about 30 KB/s from China and
+// expire, release assets come from GitHub's CDN and stay.
 const GuestRepo = "AMDL-Web/wrapper"
 
-// GuestArtifact is the manager.yml artifact, including the kernel and disk.
+// GuestArtifact is the manager.yml artifact, including the kernel and disk,
+// published as <GuestArtifact>.zip in the release guest-<commit12>.
 const GuestArtifact = "manager-qemu-guest"
 
-// LiteArtifact is the build-lite artifact holding the wrapper-lite payload.
-// The guest is x86_64 whatever the host, so this is the only one amdl pins.
+// LiteArtifact is the build-lite artifact holding the wrapper-lite payload,
+// published as <LiteArtifact>.zip in the release lite-<commit12>. The guest
+// is x86_64 whatever the host, so this is the only one amdl pins.
 const LiteArtifact = "wrapper-lite-linux-x86_64"
 
-// LitePin names one successful build-lite run on lite and the exact zip
-// digest of the wrapper-lite payload the guest's manager installs into its
-// data disk on first boot. The manager is told this URL and digest, so it
-// installs nothing else.
+// Asset is one file amdl downloads: where from, and the exact size and
+// sha256 it must have.
+type Asset struct {
+	URL    string
+	SHA256 string
+	Size   int64
+}
+
+// releaseURL is where GuestRepo's publish workflow puts artifact for commit.
+func releaseURL(prefix, commit, artifact string) string {
+	return fmt.Sprintf("https://github.com/%s/releases/download/%s-%s/%s.zip", GuestRepo, prefix, commit[:min(12, len(commit))], artifact)
+}
+
+// LitePin names one build-lite build on lite and the exact zip digest of the
+// wrapper-lite payload the guest's manager installs into its data disk on
+// first boot. amdl downloads it on the host and serves it to the guest; the
+// manager is told the digest, so it installs nothing else.
 type LitePin struct {
-	Artifact string    `json:"artifact"`
-	Commit   string    `json:"commit"`
-	RunID    int64     `json:"run_id"`
-	SHA256   string    `json:"sha256"`
-	Size     int64     `json:"size"`
-	Expires  time.Time `json:"expires_at"`
+	Artifact string `json:"artifact"`
+	Commit   string `json:"commit"`
+	SHA256   string `json:"sha256"`
+	Size     int64  `json:"size"`
 }
 
-// URL is where the manager downloads the payload: the run's own artifact, not
-// the newest one on lite.
-func (l LitePin) URL() string {
-	return fmt.Sprintf("https://nightly.link/%s/actions/runs/%d/%s.zip", GuestRepo, l.RunID, l.Artifact)
+// Asset is the payload's release asset.
+func (l LitePin) Asset() Asset {
+	return Asset{URL: releaseURL("lite", l.Commit, l.Artifact), SHA256: l.SHA256, Size: l.Size}
 }
 
-// complete reports whether l names a payload; expiry only matters to a
-// download, and a payload already on the disk needs none.
+// complete reports whether l names a payload.
 func (l LitePin) complete() error {
-	if l.Artifact != LiteArtifact || l.RunID <= 0 || l.Commit == "" || !hexSHA.MatchString(l.SHA256) || l.Size <= 0 {
-		return fmt.Errorf("the wrapper-lite pin for run %d is incomplete", l.RunID)
+	if l.Artifact != LiteArtifact || len(l.Commit) < 12 || !hexSHA.MatchString(l.SHA256) || l.Size <= 0 {
+		return fmt.Errorf("the wrapper-lite pin for commit %q is incomplete", l.Commit)
 	}
 	return nil
 }
 
-func (l LitePin) valid(now time.Time) error {
-	if err := l.complete(); err != nil {
-		return err
-	}
-	if !l.Expires.IsZero() && now.After(l.Expires) {
-		return fmt.Errorf("wrapper-lite run %d expired on %s", l.RunID, l.Expires.Format("2006-01-02"))
-	}
-	return nil
-}
+// guestHost is the host as the guest's user-mode network reaches it: QEMU
+// forwards 10.0.2.2 to the host's loopback.
+const guestHost = "10.0.2.2"
 
 // managerArgs are the manager's arguments for one boot, one per line in the
 // fw_cfg file the guest's init splits on whitespace: the listen address its
-// default would give, and the pinned payload. Without -payload-url the
-// manager installs the newest build-lite artifact, whatever its digest.
-func managerArgs(l LitePin) []string {
-	return []string{"-host", "0.0.0.0", "-port", fmt.Sprint(guestPort), "-payload-url", l.URL(), "-payload-sha256", l.SHA256}
+// default would give, and the pinned payload at payloadURL, where the host
+// serves it. Without -payload-url the manager installs the newest build-lite
+// artifact, whatever its digest.
+func managerArgs(l LitePin, payloadURL string) []string {
+	return []string{"-host", "0.0.0.0", "-port", fmt.Sprint(guestPort), "-payload-url", payloadURL, "-payload-sha256", l.SHA256}
 }
 
-// Pin names one successful manager workflow run on lite and the exact zip
-// digest, with the wrapper-lite payload that guest installs. Artifacts
-// expire; ManifestURL serves a refreshed pin.
+// Pin names one successful manager build on lite, the exact zip digest of its
+// release asset, and the wrapper-lite payload that guest installs.
 type Pin struct {
-	Artifact   string    `json:"artifact"`
-	Commit     string    `json:"commit"`
-	RunID      int64     `json:"run_id"`
-	ArtifactID int64     `json:"artifact_id"`
-	SHA256     string    `json:"sha256"`
-	Size       int64     `json:"size"`
-	Expires    time.Time `json:"expires_at"`
-	Lite       LitePin   `json:"lite"`
+	Artifact string  `json:"artifact"`
+	Commit   string  `json:"commit"`
+	SHA256   string  `json:"sha256"`
+	Size     int64   `json:"size"`
+	Lite     LitePin `json:"lite"`
 }
 
-// Builtin pins a successful manager.yml run on lite and a successful
-// build-lite run; SHA256 is GitHub's artifact digest; install verifies the
-// downloaded zip before unpacking, and the manager verifies the payload.
+// Asset is the guest's release asset.
+func (p Pin) Asset() Asset {
+	return Asset{URL: releaseURL("guest", p.Commit, p.Artifact), SHA256: p.SHA256, Size: p.Size}
+}
+
+// Builtin pins a successful manager build on lite and a successful build-lite
+// build; SHA256 is GitHub's digest of each release asset. Install verifies
+// both downloads before unpacking, and the manager verifies the payload.
 var Builtin = Pin{
-	Artifact:   GuestArtifact,
-	Commit:     "3ff150fdbd27b7cab46582eee4f738230aafe6ee",
-	RunID:      41594421666,
-	ArtifactID: 13212080359,
-	SHA256:     "cfb5fcda8e346b1f53c437d02ec181d48a777729d7798d4d76893328eecc9d64",
-	Size:       29997755,
-	Expires:    time.Date(2027, 2, 1, 7, 9, 15, 0, time.UTC),
+	Artifact: GuestArtifact,
+	Commit:   "b60beea21807c46cd8b788769ae061e173cfd744",
+	SHA256:   "71cf59e4bb2b4f3a2f4afd98445b0fe218767136cf464712b196d2d192830499",
+	Size:     30007371,
 	Lite: LitePin{
 		Artifact: LiteArtifact,
 		Commit:   "97267425669943e9ced5691ee8a311543110a258",
-		RunID:    41582282341,
 		SHA256:   "0bed5a806f52c71bc2b45f94ed08da3758d22084bc897578ee898673721847c3",
 		Size:     50118510,
-		Expires:  time.Date(2027, 2, 1, 5, 9, 59, 0, time.UTC),
 	},
 }
 
@@ -107,28 +112,25 @@ const ManifestURL = "https://raw.githubusercontent.com/AMDL-Web/apple-music-down
 
 var hexSHA = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-func (p Pin) valid(now time.Time) error {
-	switch {
-	case p.Artifact != GuestArtifact || p.RunID <= 0 || p.Commit == "" || p.ArtifactID <= 0 || !hexSHA.MatchString(p.SHA256) || p.Size <= 0:
-		return fmt.Errorf("pin for artifact %d is incomplete", p.ArtifactID)
-	case !p.Expires.IsZero() && now.After(p.Expires):
-		return fmt.Errorf("artifact %d expired on %s", p.ArtifactID, p.Expires.Format("2006-01-02"))
+func (p Pin) valid() error {
+	if p.Artifact != GuestArtifact || len(p.Commit) < 12 || !hexSHA.MatchString(p.SHA256) || p.Size <= 0 {
+		return fmt.Errorf("the guest pin for commit %q is incomplete", p.Commit)
 	}
-	return p.Lite.valid(now)
+	return p.Lite.complete()
 }
 
 // manifestTimeout bounds the manifest read; the builtin pin is the fallback.
 const manifestTimeout = 10 * time.Second
 
 // CurrentPin returns the published pin when ManifestURL answers with a valid
-// one, else Builtin when it has not expired, saying which.
-func CurrentPin(ctx context.Context, c *http.Client, now time.Time) (Pin, string, error) {
-	if p, err := fetchPin(ctx, c); err == nil && p.valid(now) == nil {
+// one, else Builtin, saying which.
+func CurrentPin(ctx context.Context, c *http.Client) (Pin, string, error) {
+	if p, err := fetchPin(ctx, c); err == nil && p.valid() == nil {
 		return p, "manifest", nil
 	}
-	if err := Builtin.valid(now); err != nil {
-		return Pin{}, "", fmt.Errorf("no current wrapper download: the built-in %w and %s did not give a newer one; "+
-			"download the manager-qemu-guest artifact yourself and run amdl wrapper import <zip>", err, ManifestURL)
+	if err := Builtin.valid(); err != nil {
+		return Pin{}, "", fmt.Errorf("no current wrapper download: the built-in %w and %s did not give a valid one; "+
+			"download the manager-qemu-guest release asset yourself and run amdl wrapper import <zip>", err, ManifestURL)
 	}
 	return Builtin, "builtin", nil
 }

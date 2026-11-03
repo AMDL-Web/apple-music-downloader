@@ -13,28 +13,53 @@ import (
 	"time"
 )
 
-// Install downloads and verifies the pinned manager guest. Manager disks
-// survive updates; a bare-lite disk is set aside for a fresh manager login.
+// Install downloads and verifies the pinned manager guest and, unless it is
+// already here, its wrapper-lite payload, then installs the guest. Manager
+// disks survive updates; a bare-lite disk is set aside for a fresh manager
+// login. report hears of both downloads as one: Done and Total count the
+// bytes of both.
 func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, report func(Progress)) (Installed, error) {
-	if err := p.valid(now); err != nil {
+	if err := p.valid(); err != nil {
 		return Installed{}, err
 	}
 	if err := h.prepare(); err != nil {
 		return Installed{}, err
 	}
+	if report == nil {
+		report = func(Progress) {}
+	}
+	total := p.Size
+	payload := !h.HasPayload(p.Lite)
+	if payload {
+		total += p.Lite.Size
+	}
 	zipPath := h.path("download-" + p.SHA256[:12] + ".zip")
-	if err := Download(ctx, f, p, zipPath, report); err != nil {
+	if err := Download(ctx, f, p.Asset(), zipPath, shifted(report, 0, total)); err != nil {
 		return Installed{}, err
 	}
-	if report != nil {
-		report(Progress{Phase: Unpacking})
+	if payload {
+		if err := h.FetchPayload(ctx, f, p.Lite, shifted(report, p.Size, total)); err != nil {
+			return Installed{}, err
+		}
 	}
+	report(Progress{Phase: Unpacking})
 	in, err := h.unpack(zipPath, Installed{ID: p.Commit[:min(12, len(p.Commit))], Commit: p.Commit,
-		ArtifactID: p.ArtifactID, SHA256: p.SHA256, Lite: p.Lite, Source: fmt.Sprintf("artifact %d", p.ArtifactID), At: now})
+		SHA256: p.SHA256, Lite: p.Lite, Source: "release guest-" + p.Commit[:min(12, len(p.Commit))], At: now})
 	if err == nil {
 		_ = os.Remove(zipPath) // unpacked; a leftover only costs disk
 	}
 	return in, err
+}
+
+// shifted reports one of several downloads as part of their sum: offset bytes
+// came before it, total is all of them.
+func shifted(report func(Progress), offset, total int64) func(Progress) {
+	return func(p Progress) {
+		if p.Phase == Downloading || p.Phase == Verifying {
+			p.Done, p.Total = offset+p.Done, total
+		}
+		report(p)
+	}
 }
 
 // Import installs a manager-qemu-guest zip or a directory holding its
@@ -42,7 +67,7 @@ func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, repo
 // The guest's wrapper-lite payload is the built-in pin's, since an import
 // carries none.
 func (h Home) Import(path string, now time.Time) (Installed, error) {
-	if err := Builtin.Lite.valid(now); err != nil {
+	if err := Builtin.Lite.complete(); err != nil {
 		return Installed{}, fmt.Errorf("this amdl build cannot pin a payload for an imported guest: %w; update amdl", err)
 	}
 	if err := h.prepare(); err != nil {
@@ -172,7 +197,7 @@ func copyOut(src string, want map[string]bool, dir string) (map[string]bool, err
 // Uninstall removes the installed guest. With purge it also removes data.img,
 // which logs every account out for good and removes preserved bare-lite disks.
 func (h Home) Uninstall(purge bool) error {
-	for _, p := range []string{h.path("installed.json"), h.path("assets"), h.path("state.json"), h.path("login-args"), h.path(managerArgsName)} {
+	for _, p := range []string{h.path("installed.json"), h.path("assets"), h.path("state.json"), h.path("login-args"), h.path(managerArgsName), h.path(payloadDir)} {
 		if err := os.RemoveAll(p); err != nil {
 			return err
 		}

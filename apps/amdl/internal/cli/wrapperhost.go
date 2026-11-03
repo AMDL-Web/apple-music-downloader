@@ -112,22 +112,37 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 			if err != nil {
 				return err
 			}
-			pin, source, err := wrapperhost.CurrentPin(e.ctx, &http.Client{}, time.Now())
+			pin, source, err := wrapperhost.CurrentPin(e.ctx, &http.Client{})
 			if err != nil {
 				return &cliError{Code: "wrapper_unavailable", exit: exitUnavailable, Message: err.Error(),
-					Hint: "download the manager-qemu-guest artifact and run amdl wrapper import <zip>"}
+					Hint: "download the manager-qemu-guest release asset and run amdl wrapper import <zip>"}
 			}
-			if curErr == nil && cur.SHA256 == pin.SHA256 && cur.Lite.RunID == pin.Lite.RunID {
+			fetcher := wrapperhost.Releases{Client: &http.Client{}}
+			rep := e.installReport()
+			switch {
+			case curErr == nil && cur.SHA256 == pin.SHA256 && cur.Lite.SHA256 == pin.Lite.SHA256 && h.HasPayload(pin.Lite):
 				e.note("the wrapper guest from %s is already installed", pin.Commit[:12])
-			} else {
-				e.progressf("downloading the wrapper guest (%d MB, commit %s, %s pin) and checking its sha256",
-					pin.Size>>20, pin.Commit[:12], source)
-				rep := e.installReport()
-				_, err := h.Install(e.ctx, wrapperhost.NightlyLink{Client: &http.Client{}}, pin, time.Now(), rep.report)
+			case curErr == nil && cur.SHA256 == pin.SHA256 && cur.Lite.SHA256 == pin.Lite.SHA256:
+				e.progressf("downloading the wrapper-lite payload (%d MB, commit %s) and checking its sha256", pin.Lite.Size>>20, pin.Lite.Commit[:12])
+				err := h.FetchPayload(e.ctx, fetcher, pin.Lite, rep.report)
+				rep.finish()
+				if err != nil {
+					return &cliError{Code: "wrapper_download_failed", exit: exitUnavailable, Message: err.Error(), Hint: "run it again to resume"}
+				}
+			default:
+				size := pin.Size
+				what := "the wrapper guest"
+				if !h.HasPayload(pin.Lite) {
+					size += pin.Lite.Size
+					what += " and its wrapper-lite payload"
+				}
+				e.progressf("downloading %s (%d MB, commit %s, %s pin) and checking the sha256",
+					what, size>>20, pin.Commit[:12], source)
+				_, err := h.Install(e.ctx, fetcher, pin, time.Now(), rep.report)
 				rep.finish()
 				if err != nil {
 					return &cliError{Code: "wrapper_download_failed", exit: exitUnavailable, Message: err.Error(),
-						Hint: "run it again to resume, or download the manager-qemu-guest artifact and run amdl wrapper import <zip>"}
+						Hint: "run it again to resume, or download the manager-qemu-guest release asset and run amdl wrapper import <zip>"}
 				}
 			}
 			if *qemuFlag != "" {

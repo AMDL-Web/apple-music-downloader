@@ -83,7 +83,7 @@ func TestCheckOffersThePlatformsPackageManager(t *testing.T) {
 	if h.QEMU.State != Missing || h.QEMU.Install.Command != "brew install qemu" || len(h.QEMU.Install.Args) == 0 {
 		t.Errorf("QEMU on a Mac with Homebrew: %+v", h.QEMU)
 	}
-	if h.Guest.State != Missing || h.Guest.Size != wrapperhost.Builtin.Size {
+	if h.Guest.State != Missing || h.Guest.Size != wrapperhost.Builtin.Size+wrapperhost.Builtin.Lite.Size {
 		t.Errorf("guest before any install: %+v", h.Guest)
 	}
 
@@ -216,9 +216,18 @@ func guestZip(t *testing.T) ([]byte, wrapperhost.Pin) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(buf.Bytes())
-	return buf.Bytes(), wrapperhost.Pin{Artifact: wrapperhost.GuestArtifact, RunID: 42, Commit: "bde3335f47a30518e1f53f79cbae94bf76b27fb3", ArtifactID: 1,
-		SHA256: hex.EncodeToString(sum[:]), Size: int64(buf.Len()), Lite: wrapperhost.Builtin.Lite}
+	return buf.Bytes(), wrapperhost.Pin{Artifact: wrapperhost.GuestArtifact, Commit: "bde3335f47a30518e1f53f79cbae94bf76b27fb3",
+		SHA256: hex.EncodeToString(sum[:]), Size: int64(buf.Len()), Lite: payloadPin}
 }
+
+// payload is the wrapper-lite payload the test pins name, which fetcher
+// serves for payloadPin's asset.
+var payload = bytes.Repeat([]byte("wrapper-lite"), 300)
+
+var payloadPin = func() wrapperhost.LitePin {
+	sum := sha256.Sum256(payload)
+	return wrapperhost.LitePin{Artifact: wrapperhost.LiteArtifact, Commit: "1111111111111111", SHA256: hex.EncodeToString(sum[:]), Size: int64(len(payload))}
+}()
 
 // clock is a Now that moves a second each time it is read, so no progress
 // report falls under reportEvery.
@@ -236,7 +245,11 @@ type fetcher struct {
 	mu      sync.Mutex
 }
 
-func (f *fetcher) Fetch(ctx context.Context, _ wrapperhost.Pin, offset int64, w io.Writer) error {
+func (f *fetcher) Fetch(ctx context.Context, a wrapperhost.Asset, offset int64, w io.Writer) error {
+	if a.SHA256 == payloadPin.SHA256 {
+		_, err := w.Write(payload[offset:])
+		return err
+	}
 	f.mu.Lock()
 	f.offsets = append(f.offsets, offset)
 	f.mu.Unlock()
@@ -271,8 +284,8 @@ func TestInstallGuestDownloadsChecksAndInstalls(t *testing.T) {
 	if h.Guest.State != Ready || h.Guest.Installed.Commit != pin.Commit || h.Guest.Installed.SHA256 != pin.SHA256 {
 		t.Fatalf("guest %+v", h.Guest)
 	}
-	if !sawProgress || h.Guest.Size != pin.Size {
-		t.Errorf("progress shown %v, size %d want %d", sawProgress, h.Guest.Size, pin.Size)
+	if !sawProgress || h.Guest.Size != pin.Size+pin.Lite.Size {
+		t.Errorf("progress shown %v, size %d want the guest's and its payload's %d", sawProgress, h.Guest.Size, pin.Size+pin.Lite.Size)
 	}
 	if _, err := os.Stat(h.deps.Home.ImagePath()); err != nil {
 		t.Errorf("no account disk after the first install: %v", err)

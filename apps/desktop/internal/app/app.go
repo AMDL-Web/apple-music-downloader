@@ -126,8 +126,8 @@ func (a *App) ready() {
 	a.view.Motion = motion.New(a.post, filepath.Join(dirs.Cache, "motion"), a.log)
 	a.view.ScrollbarsAlways = scrollbarsAlways()
 	deps := setup.SystemDeps(dirs.Resources, wrapperhost.Home{Dir: a.wrapperDir()},
-		wrapperhost.NightlyLink{Client: &http.Client{}}, func(ctx context.Context) (wrapperhost.Pin, error) {
-			pin, _, err := wrapperhost.CurrentPin(ctx, &http.Client{}, time.Now())
+		wrapperhost.Releases{Client: &http.Client{}}, func(ctx context.Context) (wrapperhost.Pin, error) {
+			pin, _, err := wrapperhost.CurrentPin(ctx, &http.Client{})
 			return pin, err
 		})
 	deps.Diagnose = func(ctx context.Context, address string) setup.Server {

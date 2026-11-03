@@ -15,8 +15,8 @@ func TestAccountSaysWhyTheLocalWrapperCannotDecrypt(t *testing.T) {
 			Managed: &client.ManagedWrapper{Mode: mode, Accel: "hvf", LastError: lastErr}}
 	}
 	for _, tc := range []struct{ mode, lastErr, word, next string }{
-		{"starting", "", "Starting", "15 seconds"},
-		{"login", "", "Logging in", "half a minute"},
+		{"starting", "", "Starting", ""},
+		{"login", "", "Logging in", ""},
 		{"stopped", "", "Stopped", "amdl wrapper start"},
 		{"failed", "qemu exited: status 1", "Failed", "qemu exited: status 1"},
 	} {
@@ -24,6 +24,11 @@ func TestAccountSaysWhyTheLocalWrapperCannotDecrypt(t *testing.T) {
 		if st.word != tc.word || !strings.Contains(st.note, tc.next) || st.signIn || st.problem == "" {
 			t.Errorf("mode %s: %+v; want %q with %q, no sign-in", tc.mode, st, tc.word, tc.next)
 		}
+	}
+	dl := down("starting", "")
+	dl.Managed.Download = &client.WrapperDownload{DoneBytes: 12_000_000, TotalBytes: 48_000_000}
+	if st := accountState(dl, ""); st.word != "Downloading" || st.note != "wrapper-lite · 12.0 / 48.0 MB" || st.signIn {
+		t.Errorf("while the host downloads the payload: %+v", st)
 	}
 	serving := down("serving", "")
 	serving.Ready = true

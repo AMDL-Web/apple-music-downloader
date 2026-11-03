@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -25,6 +26,10 @@ type Login struct {
 	// They stay while the next step runs, until its answer replaces them,
 	// so an answer that comes within a frame moves nothing.
 	Err, Code string
+
+	// cancel ends the request on its way; the backend then stops the login
+	// and frees the account for the next one.
+	cancel context.CancelFunc
 }
 
 // loginAnswer is the LoggedInResponse or NeedsTwoStepResponse schema.
@@ -48,25 +53,35 @@ func (s *Store) SubmitCode(code string) {
 	s.loginStep("/api/v1/wrapper/login/"+url.PathEscape(s.Login.LoginID)+"/2fa", map[string]string{"two_step_code": code})
 }
 
-// CancelLogin forgets a login that waits for its code; the backend lets it
-// expire.
-func (s *Store) CancelLogin() { s.Login = Login{} }
+// CancelLogin ends the login: a step on its way is canceled, which the
+// backend passes on to the wrapper, and a login that waits for its code is
+// forgotten; the next login of the account replaces it.
+func (s *Store) CancelLogin() {
+	if s.Login.cancel != nil {
+		s.Login.cancel()
+	}
+	s.Login = Login{}
+}
 
 func (s *Store) loginStep(path string, body any) {
 	if s.client == nil || s.Login.Busy {
 		return
 	}
-	s.Login.Busy, s.Login.Since = true, s.now()
-	c, ctx := s.client.WithTimeout(client.LoginWait), s.ctx
+	ctx, cancel := context.WithCancel(s.ctx)
+	s.Login.Busy, s.Login.Since, s.Login.cancel = true, s.now(), cancel
+	c := s.client.WithTimeout(client.LoginWait)
 	go func() {
 		var ans loginAnswer
 		raw, err := c.Call(ctx, http.MethodPost, path, nil, body)
 		if err == nil {
 			err = json.Unmarshal(raw, &ans)
 		}
+		// A canceled step's answer is dropped: CancelLogin already reset
+		// the login, and the next one may be on its way.
 		s.postIf(ctx, func() {
+			cancel() // the request is over; this only releases ctx
 			l := &s.Login
-			l.Busy, l.Err, l.Code = false, "", ""
+			l.Busy, l.Err, l.Code, l.cancel = false, "", "", nil
 			switch {
 			case err != nil:
 				l.Err, l.Code = Reason(err), client.ErrorCode(err)
@@ -92,8 +107,9 @@ func (s *Store) Logout(user string) {
 	if s.client == nil || s.Login.Busy {
 		return
 	}
-	s.Login.Busy, s.Login.Since = true, s.now()
-	c, ctx := s.client.WithTimeout(client.LoginWait), s.ctx
+	ctx, cancel := context.WithCancel(s.ctx)
+	s.Login.Busy, s.Login.Since, s.Login.cancel = true, s.now(), cancel
+	c := s.client.WithTimeout(client.LoginWait)
 	go func() {
 		_, err := c.Call(ctx, http.MethodPost, "/api/v1/wrapper/logout", nil, map[string]string{"username": user})
 		s.postIf(ctx, func() {

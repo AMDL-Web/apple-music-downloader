@@ -109,7 +109,20 @@ type fakeFetcher struct {
 	calls []int64
 }
 
-func (f *fakeFetcher) Fetch(_ context.Context, _ Pin, offset int64, w io.Writer) error {
+// fakePayload is the wrapper-lite payload the fake pins name.
+var fakePayload = []byte("a wrapper-lite payload zip")
+
+var fakeLite = func() LitePin {
+	sum := sha256.Sum256(fakePayload)
+	return LitePin{Artifact: LiteArtifact, Commit: "1111111111111111", SHA256: hex.EncodeToString(sum[:]), Size: int64(len(fakePayload))}
+}()
+
+// Fetch serves fakePayload for fakeLite's asset, else body.
+func (f *fakeFetcher) Fetch(_ context.Context, a Asset, offset int64, w io.Writer) error {
+	if a.SHA256 == fakeLite.SHA256 {
+		_, err := w.Write(fakePayload[offset:])
+		return err
+	}
 	f.calls = append(f.calls, offset)
 	_, err := w.Write(f.body[offset:])
 	return err
@@ -117,7 +130,10 @@ func (f *fakeFetcher) Fetch(_ context.Context, _ Pin, offset int64, w io.Writer)
 
 func pinFor(body []byte, commit string) Pin {
 	sum := sha256.Sum256(body)
-	return Pin{Artifact: GuestArtifact, RunID: 42, Commit: commit, ArtifactID: 7, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(body)), Lite: Builtin.Lite}
+	if len(commit) < 12 {
+		commit += strings.Repeat("0", 12-len(commit))
+	}
+	return Pin{Artifact: GuestArtifact, Commit: commit, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(body)), Lite: fakeLite}
 }
 
 func TestDownloadResumesAndVerifies(t *testing.T) {
@@ -125,13 +141,13 @@ func TestDownloadResumesAndVerifies(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a.zip")
 	os.WriteFile(path, body[:1200], 0o600)
 	f := &fakeFetcher{body: body}
-	if err := Download(context.Background(), f, pinFor(body, "c"), path, nil); err != nil {
+	if err := Download(context.Background(), f, pinFor(body, "c").Asset(), path, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.calls) != 1 || f.calls[0] != 1200 {
 		t.Errorf("fetch offsets %v, want a resume at 1200", f.calls)
 	}
-	bad := pinFor(body, "c")
+	bad := pinFor(body, "c").Asset()
 	bad.SHA256 = strings.Repeat("0", 64)
 	if err := Download(context.Background(), f, bad, path, nil); !errors.Is(err, ErrChecksum) {
 		t.Errorf("mismatch: %v", err)
@@ -148,6 +164,9 @@ func TestInstallReportsEachStep(t *testing.T) {
 	// A partial file left by an earlier attempt: the count starts from it.
 	h.prepare()
 	os.WriteFile(h.path("download-"+p.SHA256[:12]+".zip"), art[:100], 0o600)
+	if err := h.FetchPayload(context.Background(), &fakeFetcher{}, p.Lite, nil); err != nil {
+		t.Fatal(err)
+	}
 	var got []Progress
 	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, p, time.Now(), func(pr Progress) { got = append(got, pr) }); err != nil {
 		t.Fatal(err)
@@ -165,6 +184,41 @@ func TestInstallReportsEachStep(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("report %d = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+func TestInstallFetchesThePayloadToo(t *testing.T) {
+	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
+	art := fakeArtifact(t, "", "empty image")
+	p := pinFor(art, "bde3335f47a30518")
+	var last Progress
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, p, time.Now(), func(pr Progress) {
+		if pr.Phase == Downloading {
+			last = pr
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if total := p.Size + p.Lite.Size; last.Done != total || last.Total != total {
+		t.Errorf("the last download report %+v, want both files' %d bytes", last, total)
+	}
+	if !h.HasPayload(p.Lite) {
+		t.Error("the payload is not on the host")
+	}
+	// Another pin's payload goes once the new one is in.
+	other := p.Lite
+	other.SHA256 = strings.Repeat("e", 64)
+	os.WriteFile(h.payloadPath(other), fakePayload, 0o600)
+	if err := h.FetchPayload(context.Background(), &fakeFetcher{}, p.Lite, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(h.payloadPath(other)); !os.IsNotExist(err) {
+		t.Error("another pin's payload stayed")
+	}
+	bad := p.Lite
+	bad.SHA256 = strings.Repeat("0", 64)
+	if err := h.FetchPayload(context.Background(), &fakeFetcher{}, bad, nil); !errors.Is(err, ErrChecksum) {
+		t.Errorf("a payload that does not match its pin: %v", err)
 	}
 }
 
@@ -238,36 +292,36 @@ type roundTrip func(*http.Request) (*http.Response, error)
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestCurrentPin(t *testing.T) {
-	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
 	down := &http.Client{Transport: roundTrip(func(*http.Request) (*http.Response, error) { return nil, errors.New("offline") })}
-	if p, src, err := CurrentPin(context.Background(), down, now); err != nil || src != "builtin" || p != Builtin {
+	if p, src, err := CurrentPin(context.Background(), down); err != nil || src != "builtin" || p != Builtin {
 		t.Errorf("offline: %v %s %v", p, src, err)
 	}
-	if _, _, err := CurrentPin(context.Background(), down, Builtin.Expires.Add(time.Hour)); err == nil ||
-		!strings.Contains(err.Error(), "amdl wrapper import") {
-		t.Errorf("expired builtin and no manifest: %v", err)
-	}
-	newer := `{"artifact":"manager-qemu-guest","commit":"c0ffee","run_id":2,"artifact_id":99,"sha256":"` + strings.Repeat("a", 64) + `","size":5,"expires_at":"2027-03-01T00:00:00Z","lite":{"artifact":"wrapper-lite-linux-x86_64","commit":"c0ffee","run_id":3,"sha256":"` + strings.Repeat("b", 64) + `","size":6,"expires_at":"2027-03-01T00:00:00Z"}}`
+	newer := `{"artifact":"manager-qemu-guest","commit":"c0ffeec0ffee","sha256":"` + strings.Repeat("a", 64) + `","size":5,"lite":{"artifact":"wrapper-lite-linux-x86_64","commit":"c0ffeec0ffee","sha256":"` + strings.Repeat("b", 64) + `","size":6}}`
 	up := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(newer)), Request: r}, nil
 	})}
-	if p, src, _ := CurrentPin(context.Background(), up, now); src != "manifest" || p.ArtifactID != 99 {
+	p, src, _ := CurrentPin(context.Background(), up)
+	if src != "manifest" || p.Commit != "c0ffeec0ffee" {
 		t.Errorf("manifest: %v %s", p, src)
+	}
+	if want := "https://github.com/AMDL-Web/wrapper/releases/download/guest-c0ffeec0ffee/manager-qemu-guest.zip"; p.Asset().URL != want {
+		t.Errorf("guest URL %s, want %s", p.Asset().URL, want)
+	}
+	if want := "https://github.com/AMDL-Web/wrapper/releases/download/lite-c0ffeec0ffee/wrapper-lite-linux-x86_64.zip"; p.Lite.Asset().URL != want {
+		t.Errorf("payload URL %s, want %s", p.Lite.Asset().URL, want)
 	}
 }
 
-func TestPinRequiresManagerArtifactAndRun(t *testing.T) {
-	now := time.Now()
-	for _, change := range []func(*Pin){func(p *Pin) { p.Artifact = "qemu-assets" }, func(p *Pin) { p.RunID = 0 }, func(p *Pin) { p.ArtifactID = 0 }, func(p *Pin) { p.SHA256 = "bad" }, func(p *Pin) { p.Expires = now.Add(-time.Hour) },
-		func(p *Pin) { p.Lite = LitePin{} }, func(p *Pin) { p.Lite.Artifact = "wrapper-lite-qemu-linux-x86_64" }, func(p *Pin) { p.Lite.SHA256 = "bad" },
-		func(p *Pin) { p.Lite.Expires = now.Add(-time.Hour) }} {
+func TestPinRequiresManagerArtifactAndPayload(t *testing.T) {
+	for _, change := range []func(*Pin){func(p *Pin) { p.Artifact = "qemu-assets" }, func(p *Pin) { p.Commit = "short" }, func(p *Pin) { p.SHA256 = "bad" }, func(p *Pin) { p.Size = 0 },
+		func(p *Pin) { p.Lite = LitePin{} }, func(p *Pin) { p.Lite.Artifact = "wrapper-lite-qemu-linux-x86_64" }, func(p *Pin) { p.Lite.SHA256 = "bad" }} {
 		p := Builtin
 		change(&p)
-		if err := p.valid(now); err == nil {
+		if err := p.valid(); err == nil {
 			t.Fatalf("invalid pin accepted: %+v", p)
 		}
 	}
-	if err := Builtin.valid(time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)); err != nil {
+	if err := Builtin.valid(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -276,7 +330,7 @@ func TestCurrentPinRejectsBareLiteManifest(t *testing.T) {
 	c := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"commit":"old","run_id":2,"artifact_id":99,"sha256":"` + strings.Repeat("a", 64) + `","size":5}`)), Request: r}, nil
 	})}
-	if p, source, err := CurrentPin(context.Background(), c, time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)); err != nil || source != "builtin" || p != Builtin {
+	if p, source, err := CurrentPin(context.Background(), c); err != nil || source != "builtin" || p != Builtin {
 		t.Fatalf("old manifest: %+v, %s, %v", p, source, err)
 	}
 }
@@ -285,7 +339,6 @@ func TestInstallAndImportRecordThePayloadPin(t *testing.T) {
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
 	art := fakeArtifact(t, "", "[]")
 	pin := pinFor(art, "bde3335f47a30518")
-	pin.Lite.RunID = 5
 	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pin, time.Now(), nil)
 	if err != nil || in.Lite != pin.Lite {
 		t.Fatalf("install: %+v, %v", in.Lite, err)
@@ -298,8 +351,5 @@ func TestInstallAndImportRecordThePayloadPin(t *testing.T) {
 	in, err = h.Import(zipPath, time.Now())
 	if err != nil || in.Lite != Builtin.Lite {
 		t.Fatalf("import: %+v, %v", in.Lite, err)
-	}
-	if _, err := h.Import(zipPath, Builtin.Lite.Expires.Add(time.Hour)); err == nil || !strings.Contains(err.Error(), "update amdl") {
-		t.Fatalf("import with an expired built-in payload pin: %v", err)
 	}
 }

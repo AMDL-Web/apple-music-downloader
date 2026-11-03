@@ -181,7 +181,8 @@ func TestWaitingWordsKeepTheirButtonWhereItWas(t *testing.T) {
 		a.Store.Login.Busy, a.Store.Login.Since = true, tt.Now()
 		slowly(tt)
 		keepsCenter(t, "Verify", before, findAny(t, tt, "Verifying…"))
-		sameBox(t, "Start over", over, findAny(t, tt, "Start over"))
+		// Start over turns into Cancel in the same box.
+		keepsCenter(t, "Start over", over, findAny(t, tt, "Cancel"))
 	})
 	t.Run("reload", func(t *testing.T) {
 		a, _ := newTestApp(remoteSettings())

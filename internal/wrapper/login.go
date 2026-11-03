@@ -69,11 +69,22 @@ type loginBook struct {
 	sessions map[string]*loginSession
 }
 
-// begin claims username for a login. Two logins of one account must not overlap:
-// wrapper-manager would start a second login process on the same data directory.
+// begin claims username for a login. Two requests of one account must not
+// overlap: wrapper-manager would start a second login process on the same data
+// directory. A login that only waits for its code is no request in flight:
+// starting over replaces it, and amdl's wrapper-manager kills its process
+// before it starts the new one.
 func (b *loginBook) begin(username string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if _, busy := b.active[username]; busy {
+		for id, session := range b.sessions {
+			if session.username == username && !session.verifying {
+				b.drop(id)
+				break
+			}
+		}
+	}
 	if _, busy := b.active[username]; busy {
 		return ErrLoginPending
 	}
@@ -267,8 +278,9 @@ func loginFailure(err error) error {
 		case strings.HasPrefix(reply.Msg, msgNoPendingLogin):
 			return ErrLoginSessionNotFound
 		}
-	// wrapper-manager closes the connection unanswered once a request has run
-	// 60 seconds (its HTTP write timeout), including a login that then succeeds.
+	// A wrapper-manager before amdl's fork's login wait closes the connection
+	// unanswered once a request has run 60 seconds (its HTTP write timeout),
+	// including a login that then succeeds.
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		return ErrLoginTimeout
 	}

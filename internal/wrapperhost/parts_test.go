@@ -92,7 +92,7 @@ func newArtifactServer(t *testing.T, body []byte, rate int) *artifactServer {
 	t.Helper()
 	a := &artifactServer{body: body}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/"+GuestRepo+"/actions/artifacts/7.zip", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/"+GuestRepo+"/releases/download/guest-c00000000000/"+GuestArtifact+".zip", func(w http.ResponseWriter, r *http.Request) {
 		a.resolves.Add(1)
 		http.Redirect(w, r, fmt.Sprintf("/blob/%d?sig=secret", a.token.Load()), http.StatusFound)
 	})
@@ -137,11 +137,11 @@ func (a *artifactServer) resetServed() {
 	a.served.Store(0)
 }
 
-func (a *artifactServer) link() NightlyLink {
-	return NightlyLink{Client: &http.Client{}, Base: a.srv.URL}
+func (a *artifactServer) link() Releases {
+	return Releases{Client: &http.Client{}, Base: a.srv.URL}
 }
 
-func (a *artifactServer) pin() Pin { return pinFor(a.body, "c") }
+func (a *artifactServer) pin() Asset { return pinFor(a.body, "c").Asset() }
 
 func randomBody(n int) []byte {
 	r := rand.New(rand.NewPCG(1, 2))

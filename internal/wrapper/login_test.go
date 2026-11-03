@@ -34,6 +34,11 @@ type fakeManager struct {
 	logouts  []string
 	// hold, when set, blocks every /login that carries a code until it is closed.
 	hold chan struct{}
+	// stall, when set, blocks every /login without a code until it is closed
+	// or the client goes away.
+	stall chan struct{}
+	// gone counts the stalled logins whose client went away.
+	gone int
 	// reply, when set for a username, answers that account's /login.
 	reply map[string][2]any
 }
@@ -69,10 +74,20 @@ func (m *fakeManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		m.mu.Lock()
 		m.logins = append(m.logins, body)
-		hold := m.hold
+		hold, stall := m.hold, m.stall
 		m.mu.Unlock()
 		if hold != nil && body.Code != "" {
 			<-hold
+		}
+		if stall != nil && body.Code == "" {
+			select {
+			case <-stall:
+			case <-r.Context().Done():
+				m.mu.Lock()
+				m.gone++
+				m.mu.Unlock()
+				return
+			}
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -270,7 +285,7 @@ func TestWrongCodeEndsTheLogin(t *testing.T) {
 	}
 }
 
-func TestSecondLoginOfOneAccountIsPending(t *testing.T) {
+func TestANewLoginReplacesOneWaitingForItsCode(t *testing.T) {
 	m := &fakeManager{needsCode: true}
 	c := newTestClient(t, m)
 	ctx := context.Background()
@@ -278,14 +293,95 @@ func TestSecondLoginOfOneAccountIsPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.StartLogin(ctx, testUser, testPassword); !errors.Is(err, ErrLoginPending) {
-		t.Fatalf("StartLogin() while waiting for a code = %v, want ErrLoginPending", err)
+	// The user starts over instead of entering the code.
+	second, err := c.StartLogin(ctx, testUser, testPassword)
+	if err != nil || second.LoginID == "" || second.LoginID == first.LoginID {
+		t.Fatalf("StartLogin() while waiting for a code = %+v, %v; want a new login", second, err)
 	}
-	if got := len(m.loginCalls()); got != 1 {
-		t.Fatalf("wrapper saw %d login requests, want only the first", got)
+	if got := len(m.loginCalls()); got != 2 {
+		t.Fatalf("wrapper saw %d login requests, want the first and the new one", got)
 	}
-	if _, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode); err != nil {
+	if _, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode); !errors.Is(err, ErrLoginSessionNotFound) {
+		t.Fatalf("the replaced login's code = %v, want ErrLoginSessionNotFound", err)
+	}
+	if _, err := c.SubmitTwoStepCode(ctx, second.LoginID, testCode); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestALoginWhileACodeIsVerifiedIsPending(t *testing.T) {
+	m := &fakeManager{needsCode: true, hold: make(chan struct{})}
+	c := newTestClient(t, m)
+	ctx := context.Background()
+	first, err := c.StartLogin(ctx, testUser, testPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified := make(chan error, 1)
+	go func() {
+		_, err := c.SubmitTwoStepCode(ctx, first.LoginID, testCode)
+		verified <- err
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(m.loginCalls()) < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the code never reached the wrapper")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := c.StartLogin(ctx, testUser, testPassword); !errors.Is(err, ErrLoginPending) {
+		t.Fatalf("StartLogin() while the code is verified = %v, want ErrLoginPending", err)
+	}
+	close(m.hold)
+	if err := <-verified; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestACanceledLoginFreesTheAccount(t *testing.T) {
+	m := &fakeManager{stall: make(chan struct{})}
+	c := newTestClient(t, m)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.StartLogin(ctx, "slow@example.invalid", testPassword)
+		done <- err
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(m.loginCalls()) < 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("the login never reached the wrapper")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled StartLogin() = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a canceled login did not return")
+	}
+	// The wrapper sees the client go away, as wrapper-manager's /login does.
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		m.mu.Lock()
+		gone := m.gone
+		m.mu.Unlock()
+		if gone == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the wrapper never saw the canceled login go away")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	m.mu.Lock()
+	close(m.stall)
+	m.stall = nil
+	m.mu.Unlock()
+	if _, err := c.StartLogin(context.Background(), "slow@example.invalid", testPassword); err != nil {
+		t.Fatalf("a retry after the cancel = %v", err)
 	}
 }
 
