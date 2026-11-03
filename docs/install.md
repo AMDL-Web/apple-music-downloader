@@ -304,6 +304,13 @@ amdl service status
 the terminal interface find the service without `--server`. The service, how it restarts
 and how to stop it: [cli.md](cli.md#background-service).
 
+Or in the foreground, in a directory of its own, which holds its config and data as in
+[Try it without a wrapper](#try-it-without-a-wrapper):
+
+```bash
+amdl serve --init wrapper.address=http://127.0.0.1:12340
+```
+
 Or for one command at a time, without a service: `amdl --server embedded <command>`
 ([cli.md](cli.md#running-the-backend-in-amdl)).
 

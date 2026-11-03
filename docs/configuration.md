@@ -213,7 +213,8 @@ submitted without a running wrapper. Catalog metadata and Enhanced HLS media sel
 still run for real, so titles, artwork and the reported bit depth / sample rate / bitrate
 are authentic and selection failures fall back through `quality_priority` exactly like a
 real download. Every API response, status, progress breakdown and SSE event matches a real
-job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`. A
+job. Transfer speed is randomised between `min_speed_kbps` and `max_speed_kbps`; raise
+both for a Hi-Res album to finish in seconds. A
 simulated run records its slots as downloaded like a real one, across restarts, but writes
 no file, so a disk check (`POST /api/v1/library/check`) finds them missing.
 
