@@ -40,7 +40,7 @@ func (a *App) sidebar(c *ui.Context, k *Tokens, vib bool, w float32) {
 			ui.Box(c).Height(controlsBand(c.TitleBar())).Margin(0, -10, -6, -10).DragWindow()
 			ui.Column(c).Gap(2).Children(func() {
 				a.navItem(c, k, ScreenHome, icHome, k.TileHome, "Home", "", ui.Color{})
-				a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(0)), ui.Color{})
+				a.navItem(c, k, ScreenQueue, icQueue, k.TileQueue, "Queue", countText(a.Store.Count(store.TabActive)), ui.Color{})
 				a.navItem(c, k, ScreenLibrary, icShelf, k.TileLibrary, "Library", "", ui.Color{})
 				ui.Text(c, a.serverHeading()).FontSize(11).FontWeight(600).TextColor(k.Muted).Padding(8, 10, 4, 10)
 				reading, col := a.systemReading(k)
