@@ -92,7 +92,7 @@ func (s *Server) systemInfo(w http.ResponseWriter, r *http.Request) {
 		UptimeSeconds:        int64(s.clock().Sub(buildinfo.StartedAt) / time.Second),
 		Simulate:             cfg.Simulate.Enabled,
 		MotionArtworkEnabled: cfg.Catalog.MotionArtworkEnabled,
-		DefaultStorefront:    cfg.Catalog.DefaultStorefront,
+		DefaultStorefront:    s.defaultStorefront(cfg),
 		Jobs: systemJobs{
 			Workers: queue.Workers, Active: queue.Active, QueueDepth: queue.QueueDepth,
 			QueueCapacity: queue.QueueCapacity, RecoveryBacklog: queue.RecoveryBacklog,

@@ -61,7 +61,6 @@ func TestFirstLaunchShowsSetup(t *testing.T) {
 	a.Setup.Server = setup.Server{Address: "http://nas:18570", State: setup.Ready,
 		Reach:   setup.Line{State: setup.Ready, Text: "amdl 2.0.0 · 12 ms"},
 		Account: setup.Line{State: setup.Missing, Text: "Not signed in"},
-		Token:   setup.Line{State: setup.Missing, Text: "None"},
 		FFmpeg:  setup.Line{State: setup.Failed, Text: "Missing"},
 		Folder:  setup.Line{State: setup.Ready, Text: "/volume1/music · 2.1 TB free"}}
 	tt.Frame()

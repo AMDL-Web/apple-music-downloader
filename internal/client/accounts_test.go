@@ -55,9 +55,9 @@ func TestAccountCallsTheSpecRoutes(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/accounts":
-			_, _ = w.Write([]byte(`{"accounts":[{"id":"a1","name":"a@icloud.com","region":"us","position":0,"default":true,"library_sync":true,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z","media_user_token":"...a1b2"}]}`))
+			_, _ = w.Write([]byte(`{"accounts":[{"id":"a1","name":"a@icloud.com","region":"us","position":0,"default":true,"library_sync":true,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z"}]}`))
 		case r.Method == http.MethodPatch:
-			_, _ = w.Write([]byte(`{"id":"a1","name":"","region":"us","position":0,"default":true,"library_sync":false,"apple_library":true,"state":"active","added_at":"2026-11-02T08:30:00Z","media_user_token":""}`))
+			_, _ = w.Write([]byte(`{"id":"a1","name":"","region":"us","position":0,"default":true,"library_sync":false,"apple_library":true,"state":"active","added_at":"2026-11-02T08:30:00Z"}`))
 		case r.Method == http.MethodDelete:
 			_, _ = w.Write([]byte(`{"deleted":"a/1","logged_out":true}`))
 		default:
@@ -73,7 +73,7 @@ func TestAccountCallsTheSpecRoutes(t *testing.T) {
 	ctx := context.Background()
 
 	list, err := c.ListAccounts(ctx)
-	if err != nil || len(list.Accounts) != 1 || !list.Accounts[0].LibrarySync || list.Accounts[0].MediaUserToken != "...a1b2" {
+	if err != nil || len(list.Accounts) != 1 || !list.Accounts[0].LibrarySync {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 	off, on, first := false, true, 0

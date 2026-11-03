@@ -53,11 +53,12 @@ func TestResolveCollectionArtistKeepsSharedSongInEveryAlbum(t *testing.T) {
 }
 
 func TestResolveCollectionStationPassesTokenAndTracks(t *testing.T) {
-	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = "media-token-xyz"
+	var gotToken string
+	mediaToken := strings.Repeat("m", 32)
 	downloader := &Downloader{
-		cfg: cfg,
-		catalog: fakeDownloaderCatalog{station: applemusic.Collection{
+		cfg:    config.Default(),
+		tokens: usertoken.NewReading(func(string) (string, error) { return mediaToken, nil }),
+		catalog: fakeDownloaderCatalog{stationToken: &gotToken, station: applemusic.Collection{
 			ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station", ArtworkURL: "station-art",
 			Tracks: []applemusic.Song{{ID: "song-1", Name: "One"}, {ID: "song-2", Name: "Two"}},
 		}},
@@ -75,48 +76,27 @@ func TestResolveCollectionStationPassesTokenAndTracks(t *testing.T) {
 	if resolved.Name != "My Station" || resolved.ID != "ra.1" || resolved.ArtworkURL != "station-art" {
 		t.Fatalf("resolved = %+v", resolved)
 	}
-}
-
-func TestResolveCollectionStationUsesConfiguredToken(t *testing.T) {
-	var gotToken string
-	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = " configured-token "
-	downloader := newTestDownloader(&Downloader{
-		cfg: cfg,
-		catalog: fakeDownloaderCatalog{
-			station:      applemusic.Collection{ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station"},
-			stationToken: &gotToken,
-		},
-	})
-
-	if _, err := downloader.resolveCollection(context.Background(), applemusic.ParsedURL{
-		Storefront: "us", Type: applemusic.TypeStation, ID: "ra.1",
-	}, true); err != nil {
-		t.Fatal(err)
-	}
-	if gotToken != "configured-token" {
-		t.Fatalf("token = %q, want trimmed configured token", gotToken)
+	if gotToken != mediaToken {
+		t.Fatalf("station token = %q, want the account's", gotToken)
 	}
 }
 
-// The wrapper's token beats the configured one, and an empty wrapper falls
-// back to it.
-func TestResolveCollectionStationPrefersWrapperToken(t *testing.T) {
+// The station is read with the account's token from the wrapper, trimmed;
+// with none, the read goes out without one.
+func TestResolveCollectionStationUsesWrapperToken(t *testing.T) {
 	wrapperToken := strings.Repeat("W", 200)
 	for _, tt := range []struct {
 		name    string
 		wrapper string
 		want    string
 	}{
-		{"wrapper has one", wrapperToken, wrapperToken},
-		{"wrapper has none", "", "configured-token"},
+		{"wrapper has one", " " + wrapperToken + " ", wrapperToken},
+		{"wrapper has none", "", ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotToken string
-			cfg := config.Default()
-			cfg.Catalog.MediaUserToken = "configured-token"
 			downloader := newTestDownloader(&Downloader{
-				cfg:    cfg,
+				cfg:    config.Default(),
 				tokens: usertoken.NewReading(func(string) (string, error) { return tt.wrapper, nil }),
 				catalog: fakeDownloaderCatalog{
 					station:      applemusic.Collection{ID: "ra.1", Type: applemusic.TypeStation, Name: "My Station"},

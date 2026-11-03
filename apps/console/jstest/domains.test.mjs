@@ -23,7 +23,7 @@ const system = (over = {}) => ({
   storage: [disk(200 * GB), disk(200 * GB, 500 * GB, 'temp_dir')],
   ...over,
 });
-const config = (over = {}) => ok({ config: { catalog: { media_user_token: 'tok' }, download: { quality_priority: ['alac', 'ec3', 'aac'] }, ...over }, persisted: true });
+const config = (over = {}) => ok({ config: { download: { quality_priority: ['alac', 'ec3', 'aac'] }, ...over }, persisted: true });
 
 test('every domain renders a view; loading before an answer, unavailable without data, missing on 404', () => {
   for (const s of BOARD_SECTIONS) {
@@ -99,15 +99,15 @@ test('hooks: a failure in the last 24 h warns, never danger; 23 h 59 m vs 24 h',
 
 test('library sync: Off, Needs token (its error not repeated), Error, Watching', () => {
   const sync = ({ enabled = true, ...over } = {}) => ok({ enabled, interval_minutes: 15, accounts: [{ account_id: 'a', name: 'a@example.com', region: 'us', enabled: true, anchor_size: 412, last_submitted: 0, total_submitted: 37, last_poll_at: new Date(NOW - 6 * 60e3).toISOString(), ...over }] });
-  const noWrapperToken = ok({ ready: true, logged_in: true, regions: ['us'], media_user_token: '' });
-  const view = (s, cfg = config(), wrapper = noWrapperToken) => domainView('library_sync', { librarySync: s, config: cfg, wrapper }, ctx());
+  const signedIn = ok({ ready: true, logged_in: true, regions: ['us'] });
+  const view = (s, cfg = config(), wrapper = signedIn) => domainView('library_sync', { librarySync: s, config: cfg, wrapper }, ctx());
   assert.equal(view(sync({ enabled: false })).tag.label, 'Off');
   assert.equal(view(sync({ enabled: false })).note, null, 'the figure already says what was recorded');
-  const needs = view(sync({ last_error: 'no media-user-token' }), config({ catalog: { media_user_token: '' } }));
+  const needs = view(sync({ last_error: 'no media-user-token' }), config(), ok({ ready: true, logged_in: false, regions: [] }));
   assert.equal(needs.tag.label, 'Needs token');
   assert.equal(needs.role, 'warning');
-  assert.equal(needs.note.text, 'Needs the media user token', 'the raw error is suppressed');
-  assert.equal(needs.note.link.label, 'Set token');
+  assert.equal(needs.note.text, 'Needs a signed-in account', 'the raw error is suppressed');
+  assert.equal(needs.note.link.label, 'Sign in');
   const err = view(sync({ last_error: 'boom' }));
   assert.equal(err.tag.label, 'Error');
   assert.equal(err.role, 'danger');
@@ -118,23 +118,20 @@ test('library sync: Off, Needs token (its error not repeated), Error, Watching',
   assert.equal(view(sync({ last_poll_at: undefined })).note.text, 'First check within 15 min · 37 albums since start');
   assert.match(view(sync({ last_poll_at: new Date(NOW - 20 * 60e3).toISOString() })).note.text, /^Checking…/);
   assert.equal(view(sync({ anchor_size: 0 })).figure.value, 'Not anchored yet');
-  // Overview shares the state function; an unread config counts as a set token.
+  // Overview shares the state function; an unread wrapper status counts as signed in.
   assert.equal(librarySyncState({ enabled: true }, undefined).label, 'Watching');
 });
 
-test('library sync: the wrapper\'s token is enough, and the view waits for the wrapper status', () => {
+test('library sync: a signed-in account is enough, and the view waits for the wrapper status', () => {
   const sync = ok({ enabled: true, interval_minutes: 15, accounts: [{ account_id: 'a', enabled: true, anchor_size: 412, last_submitted: 0, total_submitted: 0, last_poll_at: new Date(NOW - 6 * 60e3).toISOString() }] });
-  const empty = config({ catalog: { media_user_token: '' } });
-  const label = (wrapper, cfg = empty) => domainView('library_sync', { librarySync: sync, config: cfg, wrapper }, ctx()).tag.label;
-  assert.equal(label(ok({ ready: true, media_user_token: '...a1b2' })), 'Watching', 'only the wrapper has a token');
-  assert.equal(label(ok({ ready: true, media_user_token: '' })), 'Needs token');
-  assert.equal(label(fail(503)), 'Needs token', 'an unreachable wrapper has no token to give');
-  assert.equal(label(undefined, config({ catalog: { media_user_token: '...wxyz' } })), 'Watching', 'a saved token before the wrapper status answers');
-  const idle = (wrapper) => domainView('library_sync', { librarySync: ok({ ...sync.data, accounts: [{ ...sync.data.accounts[0], last_error: 'no media-user-token' }] }), config: empty, wrapper }, ctx());
+  const label = (wrapper) => domainView('library_sync', { librarySync: sync, config: config(), wrapper }, ctx()).tag.label;
+  assert.equal(label(ok({ ready: true, logged_in: true })), 'Watching');
+  assert.equal(label(ok({ ready: true, logged_in: false })), 'Needs token');
+  assert.equal(label(fail(503)), 'Needs token', 'an unreachable wrapper has no account to give a token');
+  const idle = (wrapper) => domainView('library_sync', { librarySync: ok({ ...sync.data, accounts: [{ ...sync.data.accounts[0], last_error: 'no media-user-token' }] }), config: config(), wrapper }, ctx());
   assert.equal(idle(undefined).state, 'loading', 'neither Needs token nor an Error while the wrapper status is pending');
   assert.equal(idle(undefined).tag, null);
-  assert.equal(idle(ok({ ready: true, media_user_token: '...a1b2' })).tag.label, 'Error', 'with the wrapper token in use, last_error is a real failure');
-  assert.equal(label(ok({ ready: true, media_user_token: '' }), config({ catalog: { media_user_token: '...wxyz' } })), 'Watching');
+  assert.equal(idle(ok({ ready: true, logged_in: true })).tag.label, 'Error', 'with an account signed in, last_error is a real failure');
 });
 
 test('account: Ready with storefronts, a warning when the default is not served, Unreachable, simulate neutral', () => {
@@ -266,7 +263,7 @@ test('accessible names join label, tag and figure; Overview lists only what need
     health: ok({ status: 'ok' }),
     wrapper: { data: undefined, error: { status: 503, code: 'wrapper_unavailable', message: raw }, at: NOW, okAt: 0 },
     librarySync: ok({ enabled: true, interval_minutes: 15, accounts: [{ account_id: 'a', enabled: true, anchor_size: 1 }] }),
-    config: config({ catalog: { media_user_token: '' } }),
+    config: config(),
   };
   const rows = attentionRows(s, ctx(), SETTINGS_SECTIONS);
   assert.deepEqual(rows.map((r) => [r.id, r.role, r.href]), [

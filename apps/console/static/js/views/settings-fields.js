@@ -26,17 +26,16 @@ const GROUPED = new Set(['list', 'set']);
  * differs from the default offers Reset (to the default), which is an edit like
  * any other (Undo takes it back). A `disabled` field keeps its row and value
  * but takes no input (it applies only while another setting allows it);
- * `after` is a line under the row (a folder's free space); `extra` holds
- * more props for the control (the wrapper's token for the token field).
+ * `after` is a line under the row (a folder's free space).
  */
-export function SettingsField({ field, value, changed, error, warning, showKeys, disabled, after, extra, onChange, onRevert }) {
+export function SettingsField({ field, value, changed, error, warning, showKeys, disabled, after, onChange, onRevert }) {
   const id = fieldId(field.key);
   const hasDefault = field.defaultValue !== undefined;
   // The chosen option's note joins the help line, so the control column stays a bare control.
   const picked = field.type === 'select' ? field.options.find((o) => o.value === value) : null;
   const hint = picked && picked.hint ? picked.hint : '';
   const described = [field.help || hint ? `${id}-help` : '', showKeys && hasDefault ? `${id}-default` : '', error ? `${id}-error` : '', warning && !error ? `${id}-warn` : ''].filter(Boolean).join(' ');
-  const ctl = { ...extra, field, id, value, invalid: Boolean(error), described, onChange };
+  const ctl = { field, id, value, invalid: Boolean(error), described, onChange };
   const grouped = GROUPED.has(field.type);
   const resettable = !changed && hasDefault && value !== undefined && field.type !== 'token' && !sameValue(value, field.defaultValue);
   return html`<div

@@ -34,9 +34,8 @@ type resolvedCollection struct {
 
 // mediaUserToken returns the effective media-user-token (internal/usertoken)
 // of the account that serves the storefront this job reads in, else the
-// default account's: the wrapper's when amdl can read it, else
-// catalog.media_user_token from the runtime snapshot this job runs under. A
-// submission cannot supply its own.
+// default account's, as amdl has it from the wrapper. A submission cannot
+// supply its own.
 func (d *Downloader) mediaUserToken() string {
 	return d.tokens.TokenFor(d.cfg, d.storefront).Value
 }

@@ -7,7 +7,6 @@ export const CONFIG = {
     default_storefront: 'us',
     language: 'en-US',
     max_parallel_requests: 16,
-    media_user_token: '',
     motion_artwork_enabled: false,
     token_cache_ttl_hours: 12,
   },
@@ -42,7 +41,7 @@ export const CONFIG = {
   library_sync: { enabled: false, interval_minutes: 15 },
   logging: { access_log: false, buffer_size: 2000, console: true, level: 'info' },
   simulate: { enabled: false, max_speed_kbps: 4096, min_speed_kbps: 512 },
-  wrapper: { address: 'http://wrapper:12340', data_dir: '', login_timeout_seconds: 120, timeout_seconds: 30, token: '' },
+  wrapper: { address: 'http://wrapper:12340', login_timeout_seconds: 120, timeout_seconds: 30, token: '' },
 };
 
 // The keys a PUT saves for the next start (x-applies: restart in openapi.yaml).

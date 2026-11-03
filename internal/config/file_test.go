@@ -100,7 +100,6 @@ func TestSaveConfigRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
 	}
 	cfg := Default()
 	cfg.Server.Listen = "127.0.0.1:19999"
-	cfg.Catalog.MediaUserToken = "secret-media-user-token"
 	cfg.Download.CoverFormat = "png"
 	cfg.Download.QualityPriority = []string{"aac"}
 	if err := saveConfig(path, cfg); err != nil {
@@ -110,8 +109,8 @@ func TestSaveConfigRoundTripUsesOwnerOnlyPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(raw), "# Managed by the amdl backend") || !strings.Contains(string(raw), "secret-media-user-token") {
-		t.Fatalf("saved config missing header or token:\n%s", raw)
+	if !strings.HasPrefix(string(raw), "# Managed by the amdl backend") {
+		t.Fatalf("saved config missing header:\n%s", raw)
 	}
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("saved config permissions = %v, %v; want 0600", info.Mode().Perm(), err)

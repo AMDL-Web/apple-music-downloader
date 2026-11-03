@@ -22,12 +22,10 @@ type WrapperService interface {
 }
 
 // wrapperStatusResponse is the WrapperStatus schema: the wrapper's own status
-// plus the default account's media-user-token amdl reads from it, masked, and
-// whether wrapper.token is set.
+// plus whether wrapper.token is set.
 type wrapperStatusResponse struct {
 	wrapper.Status
-	MediaUserToken string `json:"media_user_token"`
-	TokenSet       bool   `json:"token_set"`
+	TokenSet bool `json:"token_set"`
 }
 
 // wrapperStatus answers GET /wrapper/status. A wrapper whose gateway refuses
@@ -43,17 +41,7 @@ func (s *Server) wrapperStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnavailable, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, wrapperStatusResponse{Status: status, MediaUserToken: s.wrapperToken(), TokenSet: s.currentConfig().Wrapper.Token != ""})
-}
-
-// wrapperToken is the wrapper's media-user-token masked as GET /config masks
-// the configured one, or "" when amdl cannot read one.
-func (s *Server) wrapperToken() string {
-	v, err := s.tokens.Wrapper(s.currentConfig(), s.tokens.DefaultAccount())
-	if err != nil {
-		return ""
-	}
-	return redactToken(v)
+	writeJSON(w, http.StatusOK, wrapperStatusResponse{Status: status, TokenSet: s.currentConfig().Wrapper.Token != ""})
 }
 
 func (s *Server) wrapperLogin(w http.ResponseWriter, r *http.Request) {

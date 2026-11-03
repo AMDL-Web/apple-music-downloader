@@ -34,8 +34,7 @@ export const PREVIEW_KINDS = ['album', 'song', 'playlist', 'artist', 'station'];
  * - retry(url): forgets a cached answer so want() fetches it again.
  * - forget(urls): aborts these lookups in flight and drops their cached
  *   answers, then fetches the wanted ones again (the media user token in
- *   use for private playlist covers, the wrapper's or the one in Settings,
- *   changed).
+ *   use for private playlist covers, signing in or out, changed).
  * - refresh(urls): fetches wanted answers again in the background (a
  *   download of the link finished, so its library state moved); status
  *   keeps the cached answer until the new one arrives, and a failed

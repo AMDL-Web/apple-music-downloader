@@ -35,7 +35,7 @@ value it saves always loads. `internal/config#classOf` sorts the keys:
 
 | | |
 | --- | --- |
-| **Runtime** | `logging.level`, `logging.access_log`, `wrapper.data_dir`, `catalog.default_storefront`, `catalog.album_track_url_mode`, `catalog.media_user_token`, `catalog.motion_artwork_enabled`, every `download.*` key except the two pools below, the whole `simulate` section, and the whole `library_sync` and `apple_library` sections. A change applies at once, to new requests and newly started jobs. |
+| **Runtime** | `logging.level`, `logging.access_log`, `catalog.default_storefront`, `catalog.album_track_url_mode`, `catalog.motion_artwork_enabled`, every `download.*` key except the two pools below, the whole `simulate` section, and the whole `library_sync` and `apple_library` sections. A change applies at once, to new requests and newly started jobs. |
 | **Restart** | `wrapper.address`, `wrapper.timeout_seconds`, `wrapper.login_timeout_seconds`, `catalog.language`, `catalog.token_cache_ttl_hours`, `logging.console`, `logging.buffer_size`, and the pool sizes `download.max_running_jobs`, `download.max_parallel_downloads`, `catalog.max_parallel_requests`. `PUT` saves the value; it applies when the backend starts again, since components built at startup hold the old one. |
 | **File only** | `server.listen` (a wrong value cuts the console off), `database.path` (a new path looks like lost history) and `tools.ffmpeg` (the desktop app writes the ffmpeg it found on every start; the container image keeps the default, its ffmpeg being on PATH). `PUT` refuses them with `422 config_key_not_mutable`; edit the file and restart. |
 
@@ -87,7 +87,7 @@ No environment variable sets a key. Two choose the files:
 | `AMDL_HOOKS_CONFIG` | Path of `hooks.yaml` (default `configs/hooks.yaml`, not committed; `configs/hooks.example.yaml` is the commented template) |
 
 Any other `AMDL_*` variable is ignored, and startup logs one warning per variable naming
-it; that includes `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS`, `AMDL_WRAPPER_DATA_DIR` and
+it; that includes `AMDL_SERVER_LISTEN`, `AMDL_WRAPPER_ADDRESS` and
 `AMDL_DATABASE_PATH`, which earlier releases read. Move such a setting into the file or
 Settings.
 
@@ -104,7 +104,7 @@ nothing.
 ## Wrapper
 
 The `wrapper` section points the backend at the HTTP service that holds the Apple Music
-account sessions. `wrapper.data_dir` is a runtime key; the other four apply after a restart.
+account sessions. All its keys apply after a restart.
 
 - `wrapper.address` is `http://host:port` or `https://host:port`, with an optional path
   prefix for a reverse proxy; the default is `http://127.0.0.1:12340`. A bare `host:port`
@@ -126,9 +126,6 @@ account sessions. `wrapper.data_dir` is a runtime key; the other four apply afte
   Decryption runs in the backend and has no wrapper timeout.
 - `wrapper.login_timeout_seconds` (default 120) bounds one console login request to a
   wrapper-manager. A login that needs a two-step code takes two requests.
-- `wrapper.data_dir` (default empty) is the wrapper's data directory as the backend sees
-  it, so the backend can read the wrapper's media-user-tokens
-  ([The media-user-token](#the-media-user-token)).
 - `wrapper.token` (default empty) is an optional key for a wrapper behind a gateway that
   checks one, such as a Cloudflare Worker in front of a wrapper-manager, or a reverse
   proxy. The backend sends it as `Authorization: Bearer <key>` on every wrapper request;
@@ -158,45 +155,35 @@ token of the active account that serves the request's storefront (the one with t
 position when several do), else the default account's. With one, the backend also fetches lyrics and the
 AAC-LC playlist and license from Apple itself rather than through the wrapper
 ([Download pipeline](download-pipeline.md#lyrics)); without one, the wrapper does that.
-The wrapper keeps each logged-in account's token, in memory and in a file named
-`MUSIC_TOKEN`, and refreshes it itself, so the backend uses that one whenever it can get
-it, and `catalog.media_user_token` only when it cannot. For each account, the first of
-these that has a token wins:
 
-1. The wrapper's `GET /token`, which amdl's wrapper-lite fork serves at
-   `wrapper.address` (a wrapper-manager answers `GET /token?instance=<id>` for each
-   account; the wrapper amdl runs itself, `amdl wrapper install`, is a wrapper-manager read
-   this way too), so it works for a wrapper on another machine or in another
-   container with nothing to configure. The backend asks at startup, again a few seconds
-   after the wrapper's own next refresh (`next_refresh_at`; at least one minute and at
-   most one hour apart), after a console login or logout, and when Apple refuses the token.
-   Upstream wrapper-lite, older fork builds and a wrapper-manager that does not forward the
-   route answer `404`; the backend then uses the sources below and asks again only every
-   30 minutes.
-2. A wrapper whose files the backend can see: set `wrapper.data_dir` to the wrapper's data
-   directory. A wrapper-lite base directory holds `MUSIC_TOKEN` directly, for its one
-   account; a wrapper-manager's data directory holds one per account under
-   `instances/<id>/`, and the backend reads the file of the account with that instance id.
-   A wrapper that does not list its accounts falls back to the newest `instances/*/MUSIC_TOKEN`.
-   In containers, mount that directory read-only into the backend
-   ([Deployment](deployment.md#the-wrapper)). The file must be readable by the user the
-   backend runs as. It is read afresh on every use, so a login or a refreshed token takes
-   effect with the next request.
-3. The backend's own copy of the last token `GET /token` returned for the account, kept in
-   `usertoken/` next to the database file (`wrapper-token.json` for the implicit account,
-   `account-<id>.json` for another; directory mode 0700, file
-   0600). It lets the backend work on while the wrapper restarts. It is replaced by every
-   new token, deleted when the wrapper answers that no account is logged in (`503`) or
-   that it has no `GET /token` (`404`), and not used once `wrapper.address` points at
-   another wrapper.
-4. `catalog.media_user_token`, for the default account only, when a wrapper's token none of
-   the above reaches: paste the token there (the console's Settings › Account).
+The wrapper holds each logged-in account's token and refreshes it itself; the backend
+never takes one from the user. It reads the token over HTTP: `GET /token?instance=<id>` on a
+wrapper-manager (the wrapper amdl runs itself, `amdl wrapper install`, is read this way
+too), `GET /token` on amdl's wrapper-lite fork, so it works for a wrapper on another machine
+or in another container with nothing to configure beyond `wrapper.address` and, behind a
+gateway, `wrapper.token`. Accounts come from the wrapper-manager's `/status` instances. The backend
+asks at startup, again a few seconds after the wrapper's own next refresh
+(`next_refresh_at`; at least one minute and at most one hour apart), after a console login
+or logout, and when Apple refuses the token.
 
-`GET /api/v1/wrapper/status` reports the default account's token in use from the wrapper,
-masked, as `media_user_token` (`""` when there is none), and `GET /api/v1/accounts` each
-account's, masked the same way. A token typed into
-`catalog.media_user_token` is never overwritten or removed; it is simply not used while the
-wrapper has one. The token is never logged.
+The backend keeps its own copy of the last token `GET /token` returned for each account, in
+`usertoken/` next to the database file (`wrapper-token.json` for the implicit account,
+`account-<id>.json` for another; directory mode 0700, file 0600). It lets the backend work
+on while the wrapper restarts. It is replaced by every new token, deleted when the wrapper
+answers that no account is logged in (`503`) or that it has no `GET /token` (`404`), and not
+used once `wrapper.address` points at another wrapper. The token is never logged and no API
+response carries it.
+
+A wrapper without `GET /token` (upstream wrapper-lite, older fork builds, a wrapper-manager
+that does not forward the route) answers `404`; the backend asks again only every 30
+minutes and has no token meanwhile. Albums, songs and playlists still download, with
+lyrics and AAC-LC licenses from the wrapper; stations, private playlist covers, library
+sync and the Apple library do not work.
+
+`catalog.default_storefront` applies only while no account is known: a fresh install before
+the first sign-in, or a backend without a wrapper or with `simulate.enabled`. Search,
+browse, record reads and links without a region then use it. Once an account exists, the
+default account's region wins, and `GET /api/v1/system` reports the effective value.
 
 ## Catalog tokens and the Hi-Res manifest
 

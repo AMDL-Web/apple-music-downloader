@@ -195,7 +195,6 @@ var setupStages = []setupStage{
 		s.Server = setup.Server{Address: "http://192.168.3.5:18570", State: setup.Ready,
 			Reach:   setup.Line{State: setup.Ready, Text: "amdl 2.0.0 · 38 ms"},
 			Account: setup.Line{State: setup.Ready, Text: "us, cn"},
-			Token:   setup.Line{State: setup.Ready, Text: "From the wrapper · ends …kg=="},
 			FFmpeg:  setup.Line{State: setup.Ready, Text: "/usr/bin/ffmpeg"},
 			Folder:  setup.Line{State: setup.Ready, Text: "/volume1/music · 2.1 TB free"}}
 	}},
@@ -203,7 +202,6 @@ var setupStages = []setupStage{
 		s.Server = setup.Server{Address: "http://192.168.3.5:18570", State: setup.Ready,
 			Reach:   setup.Line{State: setup.Ready, Text: "amdl 2.0.0 · 38 ms"},
 			Account: setup.Line{State: setup.Missing, Text: "Not signed in"},
-			Token:   setup.Line{State: setup.Missing, Text: "None"},
 			FFmpeg:  setup.Line{State: setup.Failed, Text: "Missing"},
 			Folder:  setup.Line{State: setup.Missing, Text: "/volume1/music · 1.2 GB free"}}
 	}},
@@ -288,6 +286,37 @@ func renderSetupShots(dir string, dirs mode.Dirs) error {
 				tt.Frame()
 			}
 			if err := writePNG(filepath.Join(dir, fmt.Sprintf("connection-%s-%s.png", name, theme)), tt.Image()); err != nil {
+				return err
+			}
+		}
+	}
+	// Settings' Account page: two accounts signed in, and none yet, where
+	// the storefront shows under the login.
+	seen := time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
+	for _, theme := range []string{"dark", "light"} {
+		for _, name := range []string{"accounts", "none"} {
+			settings := mode.DefaultSettings()
+			settings.Mode = mode.Standalone
+			v := &appui.App{Store: store.New(post, nil), Art: artwork.New(post), Settings: settings, Dirs: dirs,
+				Act: shotActions{}, Theme: theme, Setup: stagedSetup(post), NoMotion: true}
+			sv := &v.Store.Server
+			sv.Read = seen
+			sv.Wrapper = managed("serving", "hvf", true, name == "accounts")
+			sv.Accounts = []client.Account{}
+			if name == "accounts" {
+				sv.Wrapper.Regions = []string{"cn", "us"}
+				sv.Accounts = []client.Account{
+					{ID: "a1", Name: "someone@icloud.com", Region: "cn", Default: true, LibrarySync: true, AppleLibrary: true, State: client.AccountActive, AddedAt: seen, SeenAt: &seen},
+					{ID: "a2", Name: "someone.us@icloud.com", Region: "us", Position: 1, State: client.AccountActive, AddedAt: seen, SeenAt: &seen},
+				}
+			}
+			v.Store.Config.Values = map[string]any{"catalog": map[string]any{"default_storefront": "cn", "language": "zh-Hans_CN"}}
+			v.GoSettings("account")
+			tt := ui.NewTester(v.View, 1280, 800)
+			tt.SetScale(2)
+			tt.Frame()
+			tt.Frame()
+			if err := writePNG(filepath.Join(dir, fmt.Sprintf("account-%s-%s.png", name, theme)), tt.Image()); err != nil {
 				return err
 			}
 		}

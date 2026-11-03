@@ -1034,9 +1034,8 @@ paths:
         Every link type returns a tracks array: a song has one element, and
         collections keep Apple Music's original order and repeated track occurrences.
         The i parameter on an album URL still follows the runtime
-        catalog.album_track_url_mode; station resolution uses the runtime
-        media-user-token (the wrapper's when amdl can read it, else
-        catalog.media_user_token). Internally this reuses the download jobs' region
+        catalog.album_track_url_mode; station resolution uses the account's
+        media-user-token, which amdl reads from the wrapper. Internally this reuses the download jobs' region
         check, collection resolution, track metadata refresh, retries, concurrency
         scheduling, HLS source selection and codec/ALAC filtering rules. On the
         normal success path, each track occurrence reads its master playlist once
@@ -1107,9 +1106,8 @@ paths:
         ResourceMark).
 
         Only a private (pl.u-) playlist's cover uses a media-user-token: the
-        wrapper's when amdl has it (WrapperStatus.media_user_token), else the
-        runtime catalog.media_user_token; the request cannot supply one. It is
-        never echoed.
+        account's, which amdl reads from the wrapper; the request cannot supply
+        one. It is never echoed.
 
         Once the link has parsed, every error carries it in details.link
         (LookupLink), so a client can still show what was pasted.
@@ -2114,9 +2112,8 @@ paths:
         record whose every wanted track is done answers already_downloaded and
         queues nothing; a station is a one-off run. Each download is a new
         job. The optional overrides field is stored on the record and applies
-        to its runs. The media-user-token is the wrapper's when amdl can read
-        it, else the runtime catalog.media_user_token (never one from the
-        request), and every enabled hooks.yaml entry that matches runs for
+        to its runs. The media-user-token is the account's, which amdl reads
+        from the wrapper (never one from the request), and every enabled hooks.yaml entry that matches runs for
         every job.
       operationId: createDownload
       requestBody:
@@ -2574,8 +2571,9 @@ components:
       name: storefront
       in: query
       description: >-
-        Two-letter Apple Music storefront code, case-insensitive; default
-        catalog.default_storefront.
+        Two-letter Apple Music storefront code, case-insensitive; default the
+        default account's region, else catalog.default_storefront while no
+        account is known.
       schema:
         type: string
         pattern: '^[A-Za-z]{2}$'
@@ -2906,10 +2904,10 @@ components:
         One Apple Music account the wrapper holds, with amdl's switches for it.
         A wrapper-manager's accounts are its instances, by instance id; a
         wrapper that does not list accounts (a bare wrapper-lite) holds one,
-        with id wrapper, and so does catalog.media_user_token alone. amdl
+        with id wrapper. amdl
         reads the wrapper's accounts at start, every 10 minutes and after a
         login or logout.
-      required: [id, name, region, position, default, library_sync, apple_library, state, added_at, media_user_token]
+      required: [id, name, region, position, default, library_sync, apple_library, state, added_at]
       properties:
         id:
           type: string
@@ -2950,12 +2948,6 @@ components:
           type: string
           format: date-time
           description: The last discovery that found the account.
-        media_user_token:
-          type: string
-          description: >-
-            The account's media-user-token as amdl has it, masked as in
-            WrapperStatus.media_user_token; "" when amdl has none.
-          example: "...a1b2"
     AccountList:
       type: object
       required: [accounts]
@@ -2988,7 +2980,7 @@ components:
           description: The wrapper logged the account out; false when it was missing or the wrapper no longer knew it.
     WrapperStatus:
       type: object
-      required: [ready, logged_in, regions, login_supported, media_user_token, token_set]
+      required: [ready, logged_in, regions, login_supported, token_set]
       properties:
         ready:
           type: boolean
@@ -3015,19 +3007,6 @@ components:
             session to find.
         managed:
           $ref: '#/components/schemas/ManagedWrapper'
-        media_user_token:
-          type: string
-          description: >-
-            The default account's media-user-token as amdl has it, masked like
-            catalog.media_user_token in GET /config: "..." and its last four
-            characters. amdl takes it from the wrapper's GET /token, else from
-            wrapper.data_dir's MUSIC_TOKEN,
-            else from its own copy of an earlier GET /token answer. "" when
-            none has one: the wrapper has no GET /token or no logged-in account,
-            wrapper.data_dir is unset, its file is missing, unreadable or not a
-            token, and amdl keeps no copy. While it is not "", downloads,
-            lookups and library sync use it instead of catalog.media_user_token.
-          example: "...a1b2"
         token_set:
           type: boolean
           description: >-
@@ -3123,7 +3102,9 @@ components:
         default_storefront:
           type: string
           description: >-
-            catalog.default_storefront, a runtime key, as it runs. The
+            The storefront a request that names none uses: the default
+            account's region, else catalog.default_storefront while no account
+            is known. The
             API itself refuses a link without a storefront in its path (a
             submit result with invalid_url); a client that accepts such links, as
             the web console does, completes them with this value.
@@ -3685,7 +3666,7 @@ components:
             after splitting. Stations (station, shaped like
             .../station/.../ra.xxxx) are supported only for personalized/curated
             stations that resolve to a track list, and require a media-user-token
-            (the wrapper's, or the runtime catalog.media_user_token); live radio
+            (the account's, which amdl reads from the wrapper); live radio
             stations (Apple Music 1, etc.) have no static track list and cannot
             be downloaded.
           minItems: 1
@@ -3710,8 +3691,8 @@ components:
         download key of the same name. Every other setting (directories, path
         templates, lyrics, covers, max_attempts, check_integrity,
         integrity_mode and hook selection) comes from the runtime configuration and hooks.yaml for
-        every job, and the media-user-token is the wrapper's when amdl can read
-        it, else the runtime catalog.media_user_token. All fields are optional; on submission the
+        every job, and the media-user-token is the account's, which amdl reads
+        from the wrapper. All fields are optional; on submission the
         full validation runs against "current runtime configuration + overrides",
         and an unknown field is rejected with 400 invalid_request naming it. Job
         rows stored before a field was removed are read with that field ignored.
@@ -3741,7 +3722,8 @@ components:
               type: string
               description: >-
                 Two-letter storefront that search and the catalog routes use when a
-                request names none.
+                request names none while no account is known; the default
+                account's region wins otherwise.
             language:
               type: string
               x-applies: restart
@@ -3760,17 +3742,6 @@ components:
             album_track_url_mode:
               type: string
               enum: [song, album]
-            media_user_token:
-              type: string
-              description: >-
-                The media-user-token for station downloads, private playlist covers
-                and library sync while amdl cannot read the wrapper's own
-                (WrapperStatus.media_user_token is ""); while it can, this value
-                stays saved but is not used. No request can supply its own. It can be
-                changed through PUT and is written back to the configuration file.
-                Responses never carry it: a set token reads "..." and its last four
-                characters, an unset one "". A PUT whose value starts with "..."
-                leaves the saved token unchanged.
             motion_artwork_enabled:
               type: boolean
               description: >-
@@ -3968,12 +3939,6 @@ components:
                 Worker); one word without spaces or control characters; "" sends
                 none. Write-only: responses show a set key as "...", and a PUT
                 that sends "..." back keeps the saved one.
-            data_dir:
-              type: string
-              description: >-
-                The wrapper's data directory as this backend sees it, where it reads
-                each account's MUSIC_TOKEN on every use while the wrapper's GET /token
-                gives none; "" reads nothing.
         simulate:
           type: object
           properties:
@@ -3986,9 +3951,9 @@ components:
             Library monitor: polls the signed-in Apple Music library and submits
             the albums of newly added tracks as ordinary download jobs (sharing the
             same deduplication, validation and hooks as manual submissions).
-            Requires a media-user-token, the wrapper's or catalog.media_user_token
-            — a personal library can be read only with the subscription token;
-            while neither has one the monitor idles, and last_error in GET
+            Requires the account's media-user-token, which amdl reads from the
+            wrapper — a personal library can be read only with the subscription
+            token; while there is none the monitor idles, and last_error in GET
             /api/v1/library-sync shows the status.
           properties:
             enabled:
@@ -4068,8 +4033,7 @@ components:
           description: >-
             Failure reason of the account's most recent poll; absent on success.
             When the account is enabled but amdl has no media-user-token for it
-            (none from the wrapper, and, for the default account,
-            catalog.media_user_token empty), this explains why it is idling.
+            from the wrapper, this explains why it is idling.
         last_submitted:
           type: integer
           description: Number of albums enqueued in the account's most recent poll.
@@ -4620,8 +4584,7 @@ components:
               type: boolean
               description: >-
                 True for a station: its download reads the next-tracks feed,
-                which needs a media-user-token (the wrapper's or
-                catalog.media_user_token). Absent for other types.
+                which needs the account's media-user-token. Absent for other types.
             resource:
               $ref: '#/components/schemas/ResourceMark'
               description: >-

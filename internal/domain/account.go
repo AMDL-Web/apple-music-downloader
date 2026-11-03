@@ -16,7 +16,7 @@ const (
 
 // ImplicitAccountID is the one account of a wrapper that does not list its
 // accounts (a bare wrapper-lite, or a wrapper-manager older than the
-// instances list), and of catalog.media_user_token alone.
+// instances list).
 const ImplicitAccountID = "wrapper"
 
 // Account is one Apple Music account the wrapper holds, with amdl's

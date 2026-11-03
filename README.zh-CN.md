@@ -234,17 +234,14 @@ curl -N http://localhost:18080/api/v1/downloads/{job_id}/events
 的可选值、单位和默认值。除 `server.listen`、`database.path` 和 `tools.ffmpeg` 外，每个配置项都能通过
 `PUT /api/v1/config`（控制台和桌面应用的 Settings）修改，这会重写整个文件并丢掉注释；wrapper 地址这类
 重启生效的配置项在重启后生效，控制台的 Settings 页面可以直接发起重启（`POST /api/v1/system/restart`）。
-没有环境变量能覆盖配置项。下载电台需要订阅令牌：后端自己运行
-wrapper、wrapper 提供 `GET /token`（amdl 维护的 wrapper-lite 分支），或 `wrapper.data_dir`
-指向 wrapper 的文件时，直接从 wrapper 取；否则用
-`catalog.media_user_token` 里填的。详见 [docs/configuration.md](docs/configuration.md)（英文）。
+没有环境变量能覆盖配置项。下载电台需要订阅令牌：后端通过 wrapper 的 `GET /token`
+（wrapper-manager，或 amdl 维护的 wrapper-lite 分支）读取；没有这个路由的 wrapper 不提供令牌。详见 [docs/configuration.md](docs/configuration.md)（英文）。
 
 ## 自动化
 
 - **作业钩子**（[`configs/hooks.example.yaml`](configs/hooks.example.yaml)）在作业入队或结束时调用 webhook 或
   运行命令，比如刷新媒体服务器或发送通知。webhook 也能通过接口编辑；命令只能在文件里改。
-- **资料库同步**监视你的 Apple Music 资料库，你每加一首歌，就下载它所在的专辑。需要订阅令牌：
-  wrapper 的，或 `catalog.media_user_token`。
+- **资料库同步**监视你的 Apple Music 资料库，你每加一首歌，就下载它所在的专辑。需要 wrapper 提供的订阅令牌。
 
 两者默认都关闭。见 [docs/automation.md](docs/automation.md)（英文）。
 

@@ -10,7 +10,6 @@ import { SETTINGS_GROUPS } from '../lib/settings-sections.js';
 import { bytes, absTime } from '../lib/format.js';
 import { groupByDisk } from '../lib/storage.js';
 import { settingsHash } from '../lib/route.js';
-import { tokenState } from '../lib/user-token.js';
 import { Notice, ErrorNote, SkeletonRows, Unavailable, Button, CopyButton, Icon } from '../ui/components.js';
 import { SettingsField } from './settings-fields.js';
 import { AccountPanel } from './settings-account.js';
@@ -24,9 +23,9 @@ export const groupDomId = (id) => `settings-group-${id}`;
 /**
  * `form` carries the page state every field needs: valueOf, dirtyKeys,
  * errors, warnings, setValue, revert, showKeys. `after` maps a key to a
- * line under its row, `extra` to more props for its control.
+ * line under its row.
  */
-function FieldRows({ fields, form, after = {}, extra = {} }) {
+function FieldRows({ fields, form, after = {} }) {
   if (fields.length === 0) return null;
   return html`<div class="field-list">
     ${fields.map(
@@ -40,7 +39,6 @@ function FieldRows({ fields, form, after = {}, extra = {} }) {
         showKeys=${form.showKeys}
         disabled=${fieldDisabled(f.key, form.valueOf)}
         after=${after[f.key]}
-        extra=${extra[f.key]}
         onChange=${(v) => form.setValue(f.key, v)}
         onRevert=${() => form.revert(f.key)}
       />`,
@@ -117,38 +115,26 @@ export function SectionBody({ section, cfg, form, dirty, onRetry, onReloaded, st
   // Until the configuration answers, each list of rows holds a skeleton line
   // per field; a failed read says so once, in place of the first list.
   let told = false;
-  const fieldRows = (list, after, extra) => {
+  const fieldRows = (list, after) => {
     if (failed) {
       if (told) return null;
       told = true;
       return failed;
     }
     if (!cfg.loaded) return list.length ? html`<${SkeletonRows} n=${Math.min(list.length, 6)} kind="line" />` : null;
-    return html`<${FieldRows} fields=${list} form=${form} after=${after} extra=${extra} />`;
+    return html`<${FieldRows} fields=${list} form=${form} after=${after} />`;
   };
 
   switch (section.id) {
     case 'account': {
-      const token = tokenState(cfg.loaded ? cfg.base['catalog.media_user_token'] || '' : undefined, st.wrapper);
-      const syncWaits = cfg.loaded && cfg.base['library_sync.enabled'] === true && token.known && !token.present;
-      const tokenField = fields.filter((f) => f.key === 'catalog.media_user_token');
       const wrapper = st.wrapper && st.wrapper.data;
       // While amdl runs the wrapper itself, its fact row (factRows) stands in
       // for the wrapper.address field, which the API refuses to change.
       const managed = !sysPending && Boolean(wrapper && wrapper.managed);
-      const shown = fields.filter((f) => f.key !== 'catalog.media_user_token' && !(managed && (f.key === 'wrapper.address' || f.key === 'wrapper.token')));
+      const shown = fields.filter((f) => !(managed && (f.key === 'wrapper.address' || f.key === 'wrapper.token')));
       return html`<${FactRows} section="account" system=${sys} pending=${sysPending} showKeys=${form.showKeys} wrapper=${wrapper} />
         ${fieldRows(shown)}
-        <${AccountPanel}>
-          <section class="account-block" aria-label="Media user token">
-            ${fieldRows(tokenField, undefined, { 'catalog.media_user_token': { wrapperToken: token.wrapperToken } })}
-            ${syncWaits
-              ? html`<p class="field-warning settings-token-wait" data-role="warning">
-                  <${Icon} name="triangle-alert" size="sm" /><span>Library sync is waiting for this token. <a class="link" href=${settingsHash('library_sync')}>Library sync</a></span>
-                </p>`
-              : null}
-          </section>
-        </${AccountPanel}>`;
+        <${AccountPanel} />`;
     }
     case 'files': {
       const storage = sys && Array.isArray(sys.storage) ? sys.storage : null;

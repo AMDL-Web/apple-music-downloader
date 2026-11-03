@@ -223,7 +223,6 @@ func goodServer() setup.Server {
 	return setup.Server{State: setup.Ready,
 		Reach:   setup.Line{State: setup.Ready, Text: "amdl 2.0.0 · 12 ms"},
 		Account: setup.Line{State: setup.Ready, Text: "us"},
-		Token:   setup.Line{State: setup.Missing, Text: "None"},
 		FFmpeg:  setup.Line{State: setup.Ready, Text: "/usr/bin/ffmpeg"},
 		Folder:  setup.Line{State: setup.Ready, Text: "/volume1/music · 2.1 TB free"}}
 }
@@ -237,7 +236,7 @@ func TestRemoteTestKeepsTheChecklistWhileItRuns(t *testing.T) {
 	// The first test: nothing on screen before it, and nothing but the
 	// answer after.
 	before, _, after := noFlash(t, tt, "Test connection", drain)
-	if before.differs(after) == "" || !tt.HasText("Media user token") {
+	if before.differs(after) == "" || !tt.HasText("Folder") {
 		t.Fatalf("the first test showed nothing: %q", tt.Texts())
 	}
 
@@ -247,7 +246,7 @@ func TestRemoteTestKeepsTheChecklistWhileItRuns(t *testing.T) {
 	if d := before.differs(after); d != "" {
 		t.Errorf("an unchanged answer changed the screen: %s", d)
 	}
-	for _, want := range []string{"Apple ID", "Media user token", "ffmpeg", "Folder", "Ready"} {
+	for _, want := range []string{"Apple ID", "ffmpeg", "Folder", "Ready"} {
 		if !tt.HasText(want) {
 			t.Errorf("after the second test no %q: %q", want, tt.Texts())
 		}
@@ -269,7 +268,7 @@ func TestRemoteTestSaysTestingOnlyOnceItIsSlow(t *testing.T) {
 		t.Fatalf("before statusDelay the screen changed (%s): %q", d, tt.Texts())
 	}
 	tt.Advance(2 * time.Millisecond)
-	for _, want := range []string{"Testing", "Apple ID", "Media user token", "ffmpeg", "Folder", "Ready"} {
+	for _, want := range []string{"Testing", "Apple ID", "ffmpeg", "Folder", "Ready"} {
 		if !tt.HasText(want) {
 			t.Errorf("past statusDelay no %q: the rows stay and the Server row says it is testing: %q", want, tt.Texts())
 		}

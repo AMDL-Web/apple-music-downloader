@@ -67,7 +67,7 @@ func TestTokenPerAccountAndByStorefront(t *testing.T) {
 		{ID: "gone", Region: "kr", Position: 2, Active: false},
 	})
 	runLoop(t, p)
-	cfg := cfgWith(configTok, "")
+	cfg := cfg0()
 	waitFor(t, "both tokens", func() bool {
 		return p.Account(cfg, "us-id").Value == usTok && p.Account(cfg, "jp-id").Value == jpTok
 	})
@@ -86,7 +86,7 @@ func TestTokenPerAccountAndByStorefront(t *testing.T) {
 	if !p.Serves("JP") || p.Serves("kr") || p.DefaultRegion() != "us" {
 		t.Fatalf("Serves(JP)=%v Serves(kr)=%v DefaultRegion=%q", p.Serves("JP"), p.Serves("kr"), p.DefaultRegion())
 	}
-	// catalog.media_user_token stands in for the default account only.
+	// An account the wrapper no longer serves has no token.
 	if got := p.Account(cfg, "gone"); got.Value != "" {
 		t.Fatalf("a non-default account fell back to %s", got.Source)
 	}
@@ -98,7 +98,7 @@ func TestSameRegionLowerPositionWins(t *testing.T) {
 	p := accountsProvider(t, w, t.TempDir())
 	p.SetAccounts([]Account{{ID: "b", Region: "us", Position: 1, Active: true}, {ID: "a", Region: "us", Position: 0, Active: true}})
 	runLoop(t, p)
-	cfg := cfgWith("", "")
+	cfg := cfg0()
 	waitFor(t, "token of a", func() bool { return p.TokenFor(cfg, "us").Value == usTok })
 	p.SetAccounts([]Account{{ID: "b", Region: "us", Position: 0, Active: true}, {ID: "a", Region: "us", Position: 1, Active: true}})
 	if got := p.TokenFor(cfg, "us"); got.Account != "b" {
@@ -112,32 +112,13 @@ func TestImplicitAccountUntilAccountsAreKnown(t *testing.T) {
 	w := &instanceWrapper{tokens: map[string]string{"": usTok, "jp-id": jpTok}}
 	p := accountsProvider(t, w, t.TempDir())
 	runLoop(t, p)
-	cfg := cfgWith("", "")
+	cfg := cfg0()
 	waitFor(t, "implicit token", func() bool { return p.Token(cfg).Value == usTok })
 	if p.DefaultAccount() != implicitID {
 		t.Fatalf("default = %q", p.DefaultAccount())
 	}
 	p.SetAccounts([]Account{{ID: "jp-id", Region: "jp", Active: true}})
 	waitFor(t, "jp token", func() bool { return p.Token(cfg).Value == jpTok })
-}
-
-// data_dir serves an instance its own file.
-func TestDataDirInstanceFile(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "instances", "jp-id", FileName), jpTok, time.Time{})
-	writeFile(t, filepath.Join(dir, "instances", "us-id", FileName), usTok, time.Now().Add(time.Hour))
-	p := New()
-	p.SetAccounts([]Account{{ID: "us-id", Active: true}, {ID: "jp-id", Position: 1, Active: true}})
-	cfg := cfgWith("", dir)
-	if v, err := p.Wrapper(cfg, "jp-id"); err != nil || v != jpTok {
-		t.Fatalf("jp-id = %d bytes, %v", len(v), err)
-	}
-	if v, err := p.Wrapper(cfg, "../jp-id"); err != nil || v != "" {
-		t.Fatalf("a path in the id read %d bytes, %v", len(v), err)
-	}
-	if v, _ := p.Wrapper(cfg, "missing"); v != "" {
-		t.Fatal("an account without a file has a token")
-	}
 }
 
 // Forget drops a deleted account's stored copy.
@@ -155,7 +136,7 @@ func TestForgetDropsTheStoredCopy(t *testing.T) {
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stored copy still there: %v", err)
 	}
-	if got := p.Account(cfgWith("", ""), "jp-id"); got.Value != "" {
+	if got := p.Account(cfg0(), "jp-id"); got.Value != "" {
 		t.Fatal("a forgotten account still has a token")
 	}
 }

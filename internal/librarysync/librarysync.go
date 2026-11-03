@@ -146,15 +146,15 @@ type accountState struct {
 	clientErrorPasses map[string]int
 }
 
-// IdleNoToken is the watcher's last_error while neither the wrapper nor the
-// config has a media-user-token.
-const IdleNoToken = "no media-user-token: amdl cannot read one from the wrapper and catalog.media_user_token is empty; the library cannot be read without one"
+// IdleNoToken is the watcher's last_error while amdl has no media-user-token
+// for the account.
+const IdleNoToken = "no media-user-token: amdl cannot read one from the wrapper; the library cannot be read without one"
 
 // pollTick is how often the poll loop checks whether a pass is due.
 const pollTick = 15 * time.Second
 
 // New builds a watcher over the live config. tokens picks each account's
-// media-user-token; nil uses catalog.media_user_token alone. accounts lists
+// media-user-token; nil has none. accounts lists
 // the accounts; nil watches the token provider's default account alone,
 // with its switch on. It does no I/O; Run runs it.
 func New(cfg *config.Store, tokens *usertoken.Provider, accounts Accounts, library Library, store AnchorStore, jobs Submitter, logger *slog.Logger) *Watcher {

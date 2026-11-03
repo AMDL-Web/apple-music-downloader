@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"amdl/internal/applemusic"
+	"amdl/internal/config"
 	"amdl/internal/domain"
 )
 
@@ -297,19 +298,26 @@ func parseSearchTypes(q url.Values) ([]applemusic.SearchType, error) {
 }
 
 // browseStorefront reads the storefront parameter, defaulting to
-// catalog.default_storefront.
+// defaultStorefront.
 func (s *Server) browseStorefront(q url.Values) (string, error) {
 	storefront := strings.ToLower(strings.TrimSpace(q.Get("storefront")))
 	if storefront == "" {
-		storefront = s.tokens.DefaultRegion()
-	}
-	if storefront == "" {
-		storefront = strings.ToLower(strings.TrimSpace(s.currentConfig().Catalog.DefaultStorefront))
+		storefront = s.defaultStorefront(s.currentConfig())
 	}
 	if !applemusic.ValidStorefront(storefront) {
 		return "", fmt.Errorf("storefront must be a two-letter Apple Music storefront code such as us or jp, got %q", storefront)
 	}
 	return storefront, nil
+}
+
+// defaultStorefront is the storefront a request that names none uses: the
+// default account's region, else catalog.default_storefront while no account
+// is known.
+func (s *Server) defaultStorefront(cfg config.Config) string {
+	if region := s.tokens.DefaultRegion(); region != "" {
+		return region
+	}
+	return strings.ToLower(strings.TrimSpace(cfg.Catalog.DefaultStorefront))
 }
 
 // parseBrowsePage reads limit (1 to max, def when absent) and offset (0 or more).

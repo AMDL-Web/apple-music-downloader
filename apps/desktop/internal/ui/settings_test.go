@@ -53,6 +53,9 @@ func TestSettingsFieldsCoverRuntimeConfig(t *testing.T) {
 		}
 		shown[f.key] = true
 	}
+	// The Connection section sets the wrapper's address with the app's own
+	// settings.
+	shown["wrapper.address"] = true
 	for key := range api {
 		if !shown[key] {
 			t.Errorf("Settings has no field for the runtime key %s", key)
@@ -162,56 +165,29 @@ func TestAccountSectionOffersTheLoginOnlyWhereItWorks(t *testing.T) {
 	}
 }
 
-// While this computer runs its own wrapper, the backend refuses a change to
-// wrapper.address, so its field is dimmed and takes no input.
-func TestWrapperAddressIsOffWhileThisComputerRunsTheWrapper(t *testing.T) {
-	a, _ := newTestApp(remoteSettings())
-	var f *configField
-	for i := range configFields {
-		if configFields[i].key == "wrapper.address" {
-			f = &configFields[i]
-		}
-	}
-	if f == nil {
-		t.Fatal("no wrapper.address field")
-	}
-	a.Store.Server.Wrapper = &client.WrapperStatus{Ready: true}
-	if a.fieldOff(f) {
-		t.Error("another machine's wrapper: the address should be editable")
-	}
-	a.Store.Server.Wrapper.Managed = &client.ManagedWrapper{Mode: "serving", Accel: "kvm"}
-	if !a.fieldOff(f) {
-		t.Error("this computer's wrapper: the address should be off")
-	}
-}
-
-func TestTokenFieldNamesTheWrappersToken(t *testing.T) {
+// The storefront applies only while no account is known, so the Account
+// section shows it only then: not before the accounts are read, nor once one
+// is signed in.
+func TestStorefrontShowsOnlyWithoutAnAccount(t *testing.T) {
 	a, _ := newTestApp(remoteSettings())
 	a.GoSettings("account")
 	sv := &a.Store.Server
 	sv.Read = time.Now()
-	sv.Wrapper = &client.WrapperStatus{Ready: true, LoggedIn: true}
-	a.Store.Config.Values = map[string]any{"catalog": map[string]any{"media_user_token": "...wxyz"}}
+	a.Store.Config.Values = map[string]any{"catalog": map[string]any{"default_storefront": "cn", "language": "en-US"}}
 	tt := ui.NewTester(a.View, 1280, 800)
-	if !tt.HasText("Replace") || tt.HasText("From the wrapper") {
-		t.Fatalf("without the wrapper's token the saved one should be replaceable: %q", tt.Texts())
+	if tt.HasText("Storefront") {
+		t.Fatalf("before the accounts are read: %q", tt.Texts())
 	}
-
-	sv.Wrapper.MediaUserToken = "...abcd"
+	sv.Wrapper, sv.Accounts = &client.WrapperStatus{Ready: true, LoginSupported: true}, []client.Account{}
 	tt.Frame()
-	for _, want := range []string{"From the wrapper", "…abcd", "Saved token · ends", "…wxyz", "· not used", "Remove"} {
-		if !tt.HasText(want) {
-			t.Errorf("no %q: %q", want, tt.Texts())
-		}
+	if !tt.HasText("Storefront") || !tt.HasText("Catalog language") {
+		t.Fatalf("no account: %q", tt.Texts())
 	}
-	if tt.HasText("Replace") || tt.HasText("Paste the token") {
-		t.Errorf("the wrapper's token in use still offers a typed one: %q", tt.Texts())
-	}
-
-	a.Store.Config.Values = map[string]any{"catalog": map[string]any{"media_user_token": ""}}
+	sv.Wrapper.LoggedIn = true
+	sv.Accounts = []client.Account{{ID: "a", Name: "a@b.c", Region: "cn", Default: true, State: client.AccountActive}}
 	tt.Frame()
-	if !tt.HasText("…abcd") || tt.HasText("Saved token · ends") || tt.HasText("Remove") {
-		t.Errorf("with no saved token only the wrapper's should show: %q", tt.Texts())
+	if tt.HasText("Storefront") || !tt.HasText("Catalog language") {
+		t.Fatalf("an account is signed in: %q", tt.Texts())
 	}
 }
 

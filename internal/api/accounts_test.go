@@ -28,7 +28,7 @@ func TestAccountRoutes(t *testing.T) {
 	list := got["accounts"].([]any)
 	first, second := list[0].(map[string]any), list[1].(map[string]any)
 	if len(list) != 2 || first["id"] != "us-id" || first["default"] != true || first["name"] != "u@icloud.com" ||
-		first["media_user_token"] != "...uszz" || second["default"] != false || second["state"] != "active" {
+		first["media_user_token"] != nil || second["default"] != false || second["state"] != "active" {
 		t.Fatalf("accounts = %v", got)
 	}
 	if strings.Contains(requestJSON(t, handler, http.MethodGet, "/api/v1/accounts", "").Body.String(), strings.Repeat("A", 16)) {

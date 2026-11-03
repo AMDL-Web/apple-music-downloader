@@ -523,9 +523,9 @@ pointer is near its edge. Under reduced motion rows move at once.
   every answer to a config read is the status store's config snapshot.
   Library sync's body is its two fields and "Start over from now" (the
   anchor reset, a `ConfirmDialog`, offered only once a check has recorded
-  the library); its head says Off, Needs token (neither the wrapper nor
-  Settings has a media user token), Error or Watching, and stays loading
-  until the config and the wrapper status say whether there is one. Account
+  the library); its head says Off, Needs token (no account is signed in
+  to the session service), Error or Watching, and stays loading
+  until the wrapper status says whether one is. Account
   shows, below its head and when the session service has a login API
   (`login_supported`), Log out (a `ConfirmDialog`: per account of `GET /accounts`, listed as
   "name · region", else, for an account without a name, one that asks for the Apple ID) and the
@@ -547,17 +547,11 @@ pointer is near its edge. Under reduced motion rows move at once.
   loads that one line holds its room unseen (`.holds-room`);
   while the service cannot be reached, the head says so once (the tag
   Unreachable, the figure No answer, the note the error in a line with the
-  server's own text as its tooltip) and the body holds only the media user
-  token; the page
+  server's own text as its tooltip) and the body holds nothing more; the page
   and its errors say "session service" and leave wrapper-manager to that
-  text. Then the media user token: while the backend reads the wrapper's
-  own (`media_user_token` of `GET /wrapper/status`), one line "From the
-  wrapper · ends …abcd" and, when a token is also saved, a second "Saved
-  token · ends …wxyz · not used" with Remove, no box and no steps;
-  otherwise a saved token
-  is never put in the page, only "Token set · ends …a1b2" with Replace and
-  Remove; without one an empty box, and "Where do I find this?" opens three
-  steps; Server's Configuration file group shows
+  text. The user never enters or sees a media user token: the wrapper
+  holds each account's. A write-only token field (`wrapper.token`) shows
+  "Token set" with Replace and Remove, or an empty box; Server's Configuration file group shows
   `persisted` and "Reload from file", which reports how many
   settings changed; a file that cannot be used is one warning under the button
   (`reload_error`, also after leaving and returning, but announced as an alert
@@ -707,7 +701,7 @@ a reload or Back, stays) and the page writes its links back (replace), so a
   simulate mode, and then nothing is flagged; other links are read in the
   account's storefront, and the submit's `decryptor_unavailable` naming
   both still has the last word), or unknown to Apple (its 404, private
-  playlists included: the catalog read never carries the token) are flagged
+  playlists included: the catalog read never carries the media-user-token) are flagged
   and not sent; the count line counts them as "can't download", and warnings
   apart. An album, song or playlist shows what its preview's `resource`
   (the record) says, with the feed's `resource_updated` over it and a
@@ -727,15 +721,13 @@ a reload or Back, stays) and the page writes its links back (replace), so a
   "queued" too): what stops or needs a look comes first, and each part is
   short, so two lines on a phone hold it. An artist row says it queues the whole discography (a "Whole discography" fact; a name the row's title already says is not repeated in its meta line), and a
   submit with artist links asks first. The media-user-token is the
-  wrapper's when the backend reads one (`media_user_token` of
-  `GET /wrapper/status`), else Settings' `catalog.media_user_token`: while
-  neither has one a station (or a
+  signed-in account's (`logged_in` of `GET /wrapper/status`): while no
+  account is signed in a station (or a
   link whose preview says `needs_media_user_token`) gets a warning with a
-  "Set it in Settings" link to `#/settings?section=account&field=catalog.media_user_token`,
-  which scrolls to the field (nothing is flagged until the config and the
-  wrapper status have answered); a private playlist downloads without one
+  "Sign in" link to `#/settings?section=account` (nothing is flagged until
+  the wrapper status has answered); a private playlist downloads without one
   and uses it only for the owner's cover, and is looked up again when the
-  token in use changes.
+  sign-in state changes.
   Available qualities (albums and songs only) opens a read-only sheet from
   `POST /quality`: each offered slot once, then only the tracks whose formats
   differ from the album's ("All 12 tracks offer the same formats" otherwise,

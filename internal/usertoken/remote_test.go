@@ -140,7 +140,7 @@ func TestEndpointTokenIsUsedAndStoredPrivately(t *testing.T) {
 	w.set(ok(endpointTok, 0))
 	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
 	runLoop(t, p)
-	waitFor(t, "the /token token", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper, implicitID}))
+	waitFor(t, "the /token token", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
 
 	st, err := os.Stat(filepath.Join(dir, StoreFileName))
 	if err != nil {
@@ -162,20 +162,6 @@ func TestEndpointTokenIsUsedAndStoredPrivately(t *testing.T) {
 	assertNoToken(t, &logs, endpointTok)
 }
 
-func TestEndpointBeatsDataDirFile(t *testing.T) {
-	dataDir := t.TempDir()
-	writeFile(t, filepath.Join(dataDir, FileName), wrapperTok, time.Now())
-	w := &fakeWrapper{}
-	w.set(ok(endpointTok, 0))
-	var logs lockedBuffer
-	p, _ := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
-	if got := p.Token(cfgWith(configTok, dataDir)); got.Value != wrapperTok {
-		t.Fatalf("before any /token answer: %d bytes, want the data_dir file", len(got.Value))
-	}
-	runLoop(t, p)
-	waitFor(t, "/token to win over data_dir", tokenIs(p, cfgWith(configTok, dataDir), Token{endpointTok, SourceWrapper, implicitID}))
-}
-
 func TestStoredCopyServesARestart(t *testing.T) {
 	dir := t.TempDir()
 	var logs lockedBuffer
@@ -183,32 +169,26 @@ func TestStoredCopyServesARestart(t *testing.T) {
 	first.set(ok(endpointTok, 0))
 	p, _ := endpointProvider(t, first.fetch, dir, testAddress, &logs)
 	runLoop(t, p)
-	waitFor(t, "the first run's token", tokenIs(p, cfgWith("", ""), Token{endpointTok, SourceWrapper, implicitID}))
+	waitFor(t, "the first run's token", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
 
 	// The second run's wrapper is restarting: nothing answers.
 	down := &fakeWrapper{}
 	down.set(fakeReply{err: errors.New("connection refused")})
 	again, _ := endpointProvider(t, down.fetch, dir, testAddress, &logs)
-	if got := again.Token(cfgWith(configTok, "")); got != (Token{endpointTok, SourceWrapper, implicitID}) {
+	if got := again.Token(cfg0()); got != (Token{endpointTok, SourceWrapper, implicitID}) {
 		t.Fatalf("after a restart: {%d bytes, %q}, want the stored copy", len(got.Value), got.Source)
 	}
 	runLoop(t, again)
 	waitFor(t, "a failed fetch", func() bool { return down.calls.Load() >= 1 })
-	if got := again.Token(cfgWith(configTok, "")); got.Value != endpointTok {
+	if got := again.Token(cfg0()); got.Value != endpointTok {
 		t.Fatalf("a failed fetch dropped the stored copy: %d bytes", len(got.Value))
 	}
 
-	dataDir := t.TempDir()
-	writeFile(t, filepath.Join(dataDir, FileName), wrapperTok, time.Now())
-	if got := again.Token(cfgWith(configTok, dataDir)); got.Value != wrapperTok {
-		t.Fatalf("data_dir file vs stored copy: %d bytes, want the file", len(got.Value))
-	}
-
 	other, _ := endpointProvider(t, down.fetch, dir, "http://another-wrapper:12340", &logs)
-	if got := other.Token(cfgWith(configTok, "")); got.Source != SourceConfig {
+	if got := other.Token(cfg0()); got.Source != SourceNone {
 		t.Fatalf("a copy from another wrapper.address was used: %q", got.Source)
 	}
-	assertNoToken(t, &logs, endpointTok, wrapperTok)
+	assertNoToken(t, &logs, endpointTok)
 }
 
 func TestLoggedOutDropsTheStoredCopy(t *testing.T) {
@@ -220,25 +200,23 @@ func TestLoggedOutDropsTheStoredCopy(t *testing.T) {
 	w := &fakeWrapper{}
 	w.set(fakeReply{err: wrapper.ErrNoToken})
 	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
-	if got := p.Token(cfgWith(configTok, "")); got.Value != endpointTok {
+	if got := p.Token(cfg0()); got.Value != endpointTok {
 		t.Fatal("the stored copy was not loaded")
 	}
 	runLoop(t, p)
-	waitFor(t, "the config fallback", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig, implicitID}))
+	waitFor(t, "no token after the logout", tokenIs(p, cfg0(), Token{Account: implicitID}))
 	// The token stops being used first; the copy goes and the logout is
 	// logged right after.
 	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
 	waitFor(t, "the logout's log line", func() bool { return strings.Contains(logs.String(), "no logged-in account") })
 	again, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
-	if got := again.Token(cfgWith("", "")); got != (Token{Account: implicitID}) {
+	if got := again.Token(cfg0()); got != (Token{Account: implicitID}) {
 		t.Fatal("a restart brought the logged-out token back")
 	}
 	assertNoToken(t, &logs, endpointTok)
 }
 
-func TestNoTokenEndpointFallsBackAndIsNotHammered(t *testing.T) {
-	dataDir := t.TempDir()
-	writeFile(t, filepath.Join(dataDir, FileName), wrapperTok, time.Now())
+func TestNoTokenEndpointIsNotHammered(t *testing.T) {
 	var logs lockedBuffer
 	w := &fakeWrapper{}
 	w.set(fakeReply{err: wrapper.ErrTokenUnsupported})
@@ -252,8 +230,8 @@ func TestNoTokenEndpointFallsBackAndIsNotHammered(t *testing.T) {
 	if n := w.calls.Load(); n != 1 {
 		t.Fatalf("/token asked %d times after a 404, want 1", n)
 	}
-	if got := p.Token(cfgWith(configTok, dataDir)); got.Value != wrapperTok {
-		t.Fatalf("after a 404: %d bytes, want the data_dir file", len(got.Value))
+	if got := p.Token(cfg0()); got.Value != "" {
+		t.Fatalf("after a 404: %d bytes, want none", len(got.Value))
 	}
 	if c := strings.Count(logs.String(), "has no GET /token"); c != 1 {
 		t.Fatalf("the 404 was logged %d times, want once:\n%s", c, logs.String())
@@ -268,7 +246,7 @@ func TestRefetchesAndPicksUpTheNewToken(t *testing.T) {
 	p, r := endpointProvider(t, w.fetch, t.TempDir(), testAddress, &logs)
 	r.floor = 20 * time.Millisecond
 	runLoop(t, p)
-	waitFor(t, "the refreshed token", tokenIs(p, cfgWith("", ""), Token{newerTok, SourceWrapper, implicitID}))
+	waitFor(t, "the refreshed token", tokenIs(p, cfg0(), Token{newerTok, SourceWrapper, implicitID}))
 	assertNoToken(t, &logs, endpointTok, newerTok)
 }
 
@@ -389,9 +367,9 @@ func TestRealClientAgainstAWrapper(t *testing.T) {
 	p, r := endpointProvider(t, client.MusicToken, dir, srv.URL, &logs)
 	r.floor, r.loggedOutRetry = 20*time.Millisecond, 20*time.Millisecond
 	runLoop(t, p)
-	waitFor(t, "the token over HTTP", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper, implicitID}))
+	waitFor(t, "the token over HTTP", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
 	loggedIn.Store(false)
-	waitFor(t, "the logout", tokenIs(p, cfgWith(configTok, ""), Token{configTok, SourceConfig, implicitID}))
+	waitFor(t, "the logout", tokenIs(p, cfg0(), Token{Account: implicitID}))
 	waitFor(t, "the stored copy to go after a 503", storeGone(dir))
 	assertNoToken(t, &logs, endpointTok)
 }
@@ -426,7 +404,7 @@ func TestUnwritableStoreWarnsOnce(t *testing.T) {
 	w.set(ok(endpointTok, 0))
 	p, _ := endpointProvider(t, w.fetch, dir, testAddress, &logs)
 	runLoop(t, p)
-	waitFor(t, "the /token token", tokenIs(p, cfgWith(configTok, ""), Token{endpointTok, SourceWrapper, implicitID}))
+	waitFor(t, "the /token token", tokenIs(p, cfg0(), Token{endpointTok, SourceWrapper, implicitID}))
 	for i := int32(2); i <= 3; i++ {
 		p.RefreshSoon()
 		waitFor(t, "another fetch", func() bool { return w.calls.Load() >= i })

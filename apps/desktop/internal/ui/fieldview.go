@@ -105,10 +105,17 @@ func (a *App) fieldOff(f *configField) bool {
 	case "download.integrity_mode":
 		on, _ := cf.Value("download.check_integrity").(bool)
 		return !on
-	case "wrapper.address":
-		// This computer's wrapper sets it, and the backend refuses a change.
-		w := a.Store.Server.Wrapper
-		return w != nil && w.Managed != nil
+	}
+	return false
+}
+
+// fieldHidden reports a field that has nothing to set now. The storefront
+// applies only while no account is known, so it shows only once the
+// accounts list is read and empty, together with the sign-in.
+func (a *App) fieldHidden(f *configField) bool {
+	if f.key == "catalog.default_storefront" {
+		sv := &a.Store.Server
+		return sv.Wrapper == nil || sv.Accounts == nil || len(sv.Accounts) > 0
 	}
 	return false
 }
@@ -389,14 +396,8 @@ func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string, 
 }
 
 // tokenField keeps a secret out of sight: it says whether one is set and
-// takes a new one in a masked box. While the backend reads the wrapper's own
-// token, which it uses first, the field names that one instead and offers
-// only to remove a saved one.
+// takes a new one in a masked box.
 func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string) {
-	if w := a.Store.Server.Wrapper; w != nil && w.MediaUserToken != "" && f.key == "catalog.media_user_token" {
-		a.wrapperToken(c, k, f, w.MediaUserToken, saved)
-		return
-	}
 	e := &a.set.edit
 	draft, replacing := e.text[f.key]
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -411,7 +412,7 @@ func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string)
 			}
 			return
 		}
-		box, in := fieldBox(c, k, f.key, &draft, "Paste the token", true)
+		box, in := fieldBox(c, k, f.key, &draft, "Paste the key", true)
 		in.Password().Label(f.label)
 		box.Grow(1)
 		if in.Changed() {
@@ -426,11 +427,7 @@ func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string)
 				a.Act.CopyText(key)
 			}
 		}
-		saveText := "Save token"
-		if f.key == "wrapper.token" {
-			saveText = "Save key"
-		}
-		save := buttonOff(c, k, buttonPrimary, saveText, nil, draft == "").Height(32)
+		save := buttonOff(c, k, buttonPrimary, "Save key", nil, draft == "").Height(32)
 		if (save.Clicked() || in.Submitted()) && draft != "" {
 			delete(e.text, f.key)
 			a.Store.SetConfig(f.key, draft)
@@ -439,44 +436,6 @@ func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string)
 			delete(e.text, f.key)
 		}
 	})
-}
-
-// wrapperToken is the token field while the wrapper's token is in use: its
-// last characters, and a saved token it leaves unused with Remove. Both
-// arrive masked, "..." and the last four characters.
-func (a *App) wrapperToken(c *ui.Context, k *Tokens, f *configField, token, saved string) {
-	// The parts of one phrase sit a space apart, and the two lines of the
-	// field close together.
-	const space = 4
-	ui.Column(c).Children(func() {
-		ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			pill(c, k, pillOK, icLock, "From the wrapper")
-			ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "ends").FontSize(12.5).TextColor(k.Muted)
-				mono(c, "…"+tokenTail(token), 12.5).TextColor(k.Muted)
-			})
-		})
-		if saved == "" {
-			return
-		}
-		ui.Row(c).Height(32).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Row(c).Gap(space).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "Saved token · ends").FontSize(12.5).TextColor(k.Faint)
-				mono(c, "…"+tokenTail(saved), 12.5).TextColor(k.Faint)
-				ui.Text(c, "· not used").FontSize(12.5).TextColor(k.Faint)
-			})
-			ui.Spacer(c)
-			if button(c, k, buttonGhost, "Remove", nil).Height(32).Clicked() {
-				delete(a.set.edit.text, f.key)
-				a.Store.SetConfig(f.key, "")
-			}
-		})
-	})
-}
-
-// tokenTail is the last four characters of a masked token, for "ends …a1b2".
-func tokenTail(token string) string {
-	return token[max(0, len(token)-4):]
 }
 
 // setField is a row of options to switch on and off; each change applies at

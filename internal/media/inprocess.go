@@ -16,9 +16,8 @@ import (
 // the Apple request gate, not the wrapper's permits.
 //
 // A failed in-process request goes to the wrapper only when Apple refused the
-// token (applemusic.IsUserTokenRejected): the file amdl read may hold an older
-// token than the one the wrapper has in memory, or catalog.media_user_token
-// may have expired, while the wrapper's own token still works. Lyrics also go
+// token (applemusic.IsUserTokenRejected): amdl's copy may be older than the
+// token the wrapper has in memory, which still works. Lyrics also go
 // to the wrapper on a 404, because Apple answers a rejected token there with
 // the same 404 as a song without lyrics, and on an account storefront that
 // cannot be read. Every other failure (Apple 5xx, 429, a timeout) is returned

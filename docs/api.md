@@ -97,7 +97,8 @@ Returns what is running and what it has to work with:
   from git, if it was built inside a checkout; `go run` leaves both empty.
 - `go_version`, `os`, `arch`, `started_at`, `uptime_seconds`.
 - `simulate` (`simulate.enabled`), `motion_artwork_enabled`,
-  `default_storefront` (`catalog.default_storefront`, a runtime key). The API refuses a
+  `default_storefront`, the effective value: the default account's region, else the
+  `catalog.default_storefront` key (used while no account is known). The API refuses a
   link without a storefront in its path (`invalid_url`); a client that accepts such links, like the
   web console, completes them with this value. Search, artist albums and the album page default to it.
 - `jobs`: `workers` (`download.max_running_jobs` at startup), `active`, `queue_depth` of
@@ -194,7 +195,7 @@ restart.
 curl http://localhost:18080/api/v1/wrapper/status
 ```
 
-Returns `ready`, `logged_in`, `regions`, `login_supported`, `media_user_token` and
+Returns `ready`, `logged_in`, `regions`, `login_supported` and
 `token_set`. `logged_in` is true
 when an account is logged in and serves a storefront. `regions` lists each storefront the
 wrapper's accounts serve once; the accounts themselves are under
@@ -209,13 +210,9 @@ gateway or proxy that checks one ([configuration.md](configuration.md#wrapper));
 itself is never in a response. A gateway that answers `401` to it is
 `503 wrapper_unauthorized`, here and on every route that asks the wrapper.
 
-`media_user_token` is the default account's media-user-token as the backend has it, masked
-like the configured token in `GET /config` (`...` and its last four characters), or `""`
-when it has none. The backend reads it from a wrapper it runs itself, from the wrapper's
-`GET /token`, from `wrapper.data_dir`, or from its own copy of an earlier `GET /token`
-answer, in that order ([configuration.md](configuration.md#the-media-user-token)).
-While it is not `""`, downloads, lookups and library sync use the wrapper's token, and
-`catalog.media_user_token` stays saved but unused.
+No response carries a media-user-token. The backend reads each account's from the wrapper's
+`GET /token` ([configuration.md](configuration.md#the-media-user-token)); stations, private
+playlist covers, library sync and the Apple library need it.
 
 When amdl runs the wrapper itself (`amdl wrapper install`, [install.md](install.md#the-wrapper)),
 the response also carries `managed`: `mode` (`starting`, `serving`, `login`, `stopped` or
@@ -280,8 +277,7 @@ host), `502 upstream_error`, `504 upstream_timeout`.
 
 amdl serves several Apple Music accounts held by one wrapper-manager (at most 10). Its
 `/status` lists them as instances, by instance id, and `GET /token?instance=<id>` hands
-over each one's media-user-token. A wrapper that lists none (a bare wrapper-lite, or
-`catalog.media_user_token` alone) counts as one implicit account with the id `wrapper`.
+over each one's media-user-token. A wrapper that lists none (a bare wrapper-lite) counts as one implicit account with the id `wrapper`.
 
 ```bash
 curl http://localhost:18080/api/v1/accounts
@@ -290,14 +286,13 @@ curl http://localhost:18080/api/v1/accounts
 ```json
 {"accounts":[{"id":"6f1c…","name":"a@icloud.com","region":"us","position":0,"default":true,
   "library_sync":true,"apple_library":true,"state":"active",
-  "added_at":"2026-11-02T08:30:00Z","seen_at":"2026-11-03T01:10:00Z","media_user_token":"...a1b2"}]}
+  "added_at":"2026-11-02T08:30:00Z","seen_at":"2026-11-03T01:10:00Z"}]}
 ```
 
 The list is sorted by `position`; position 0 is the default account, which reads records
 with no pinned storefront and links whose storefront no account serves. `name` is the
 Apple ID, `""` when the wrapper does not say; `region` is the storefront, `""` while
-unknown; `media_user_token` is masked like the one in `GET /wrapper/status`, `""` when
-amdl has none. `state` is `active` or `missing` (the wrapper no longer reports it; its row
+unknown. `state` is `active` or `missing` (the wrapper no longer reports it; its row
 and switches stay). The route makes no wrapper request: amdl reads the wrapper's accounts
 at start, every 10 minutes and after a login, logout or delete, so refetch a second or two
 after a login. A new account starts with `library_sync` and `apple_library` off; the one
@@ -494,7 +489,7 @@ is `422 invalid_overrides`.
 
 Everything else comes from the runtime config for every job: directories, path templates,
 lyrics, covers, `max_attempts`, `check_integrity`, `integrity_mode`, and the media-user-token
-(the wrapper's when the backend can read it, else `catalog.media_user_token`). Every enabled hook in `hooks.yaml` whose `events` and
+(the wrapper's). Every enabled hook in `hooks.yaml` whose `events` and
 `job_types` match runs for every job. Any other field, at the top level (`force`,
 `media_user_token`) or inside `overrides` (`force_overwrite`, `hooks`, `downloads_dir`,
 `media_user_token`, ...), is `400 invalid_request` naming the unknown field. To download
@@ -511,9 +506,8 @@ terminal write drops them.
 
 Station links (`https://music.apple.com/us/station/.../ra.xxxx`) are supported when they
 resolve to a track list — personalised and curated stations. They need an Apple Music
-subscription token: the wrapper's, when the backend can read it (`media_user_token` in
-`GET /api/v1/wrapper/status` is not `""`), else `catalog.media_user_token` (Settings in the
-console, or `PUT /api/v1/config`).
+subscription token, which the backend reads from the wrapper; a wrapper without `GET /token`
+gives none, so station links do not download.
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/downloads \
@@ -727,7 +721,7 @@ An album, playlist or song amdl keeps a record of carries `resource` (a [record
 mark](#record-marks)).
 
 The body is `{url}` only. A private playlist's cover is read with the wrapper's
-media-user-token when the backend can read it, else `catalog.media_user_token`; the token is
+media-user-token; the token is
 never echoed.
 
 | Case | Answer |
@@ -777,7 +771,7 @@ Apple's relevance order. Nothing is downloaded and no job is created.
 | --- | --- |
 | `term` | Required. Runs of white space count as one space; at most 200 characters. |
 | `types` | A subset of `songs`, `albums`, `playlists`, `artists`, comma-separated or repeated; default all four. Groups come back in that order whatever order is given. |
-| `storefront` | A two-letter storefront code; default `catalog.default_storefront`. |
+| `storefront` | A two-letter storefront code; default `default_storefront` from `GET /system`. |
 | `limit`, `offset` | Hits per group, 1-50 (default 10), and where each group's page starts (default 0). |
 
 Each requested group is there, `items` empty when Apple has nothing, and carries
@@ -851,7 +845,7 @@ highest `disc_number`), and `url` downloads the whole album when submitted to
 `disc_number` (1 when the catalog sends none), `track_number`, `name` and, when the catalog
 has them, `artist_name`, `duration_ms`, `content_rating`, `apple_digital_master`,
 `audio_traits` and `has_lyrics`. The whole list comes in one answer; there is no paging.
-`storefront` is a two-letter code, default `catalog.default_storefront`.
+`storefront` is a two-letter code, default `default_storefront` from `GET /system`.
 
 With `catalog.motion_artwork_enabled` on, the album's animated cover is read alongside it:
 `motion_artwork_url`, `motion_artwork_tall_url` and the square cover's palette
@@ -902,7 +896,7 @@ storefront to be among the regions it reports.
 
 All link types return per-track `tracks`; a song returns one element, collections keep
 Apple Music's original order and duplicate track occurrences. Stations use the wrapper's
-media-user-token when the backend can read it, else the runtime `catalog.media_user_token`.
+media-user-token.
 
 ## Config and hooks
 
@@ -914,9 +908,7 @@ curl -X POST http://localhost:18080/api/v1/config/reload
 `GET /api/v1/config` returns every key except the file-only `server.listen`,
 `database.path` and `tools.ffmpeg`, and has no side effects: runtime keys as they run,
 restart keys as saved in the file, and `pending_restart`, the keys whose saved value
-differs from the running one (a hand edit of a file-only key included). `catalog.media_user_token` is redacted in every
-config response: a set token reads `...` and its last four characters. A `PUT` whose value
-starts with `...` leaves the saved token as it is. Next to `config`, `persisted` says whether a
+differs from the running one (a hand edit of a file-only key included). Next to `config`, `persisted` says whether a
 `PUT` is written to the file. `POST /api/v1/config/reload` re-reads `configs/config.yaml`
 and applies its runtime keys, then answers like `GET`. When the file is unreadable or
 invalid, the previous config stays active and the answer is still `200`, with

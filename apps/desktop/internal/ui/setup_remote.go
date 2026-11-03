@@ -46,7 +46,6 @@ func (a *App) setupRemote(c *ui.Context, k *Tokens) {
 					return
 				}
 				remoteRow(c, k, "account", "Apple ID", sv.Account, true)
-				remoteRow(c, k, "token", "Media user token", sv.Token, false)
 				remoteRow(c, k, "ffmpeg", "ffmpeg", sv.FFmpeg, true)
 				remoteRow(c, k, "folder", "Folder", sv.Folder, true)
 			})

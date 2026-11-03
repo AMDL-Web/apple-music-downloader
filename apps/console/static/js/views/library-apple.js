@@ -147,7 +147,7 @@ export function AppleLibrary({ filters }) {
   const left = Math.max(0, page.total - page.items.length);
   if (unavailable) {
     return html`<${Notice} role="warning" icon="key" action=${html`<a class="link" href=${settingsHash('account')}>Account settings</a>`}>
-      ${st && st.reason === 'disabled' ? 'The Apple Music library is turned off for this account.' : st && st.reason === 'token_refused' ? 'Apple refused the media-user-token.' : 'No media-user-token to read the Apple Music library with.'}
+      ${st && st.reason === 'disabled' ? 'The Apple Music library is turned off for this account.' : st && st.reason === 'token_refused' ? 'Apple refused the account’s token.' : 'No signed-in account to read the Apple Music library with.'}
     </${Notice}>`;
   }
   return html`<div class="apple-lib">

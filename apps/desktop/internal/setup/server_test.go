@@ -10,7 +10,7 @@ import (
 )
 
 // fakeServer answers the reads Diagnose makes with the given bodies.
-func fakeServer(t *testing.T, system, wrapper, config string) string {
+func fakeServer(t *testing.T, system, wrapper string) string {
 	t.Helper()
 	mux := http.NewServeMux()
 	answer := func(body string) http.HandlerFunc {
@@ -26,7 +26,6 @@ func fakeServer(t *testing.T, system, wrapper, config string) string {
 	mux.HandleFunc("/api/v1/health", answer(`{"status":"ok"}`))
 	mux.HandleFunc("/api/v1/system", answer(system))
 	mux.HandleFunc("/api/v1/wrapper/status", answer(wrapper))
-	mux.HandleFunc("/api/v1/config", answer(config))
 	mux.HandleFunc("/api/v1/accounts", answer(`{"accounts":[{"id":"a1","name":"a@b.c","region":"us","default":true,"state":"active"},{"id":"a2","name":"","region":"jp","state":"active"}]}`))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -44,16 +43,15 @@ func system(version string, ffmpeg bool, free int64) string {
 
 func TestDiagnoseAHealthyServer(t *testing.T) {
 	url := fakeServer(t, system("2.0.0", true, 2<<40),
-		`{"ready":true,"logged_in":true,"regions":["us","jp"],"login_supported":true,"media_user_token":"...kg=="}`,
-		`{"config":{"catalog":{"media_user_token":""}}}`)
+		`{"ready":true,"logged_in":true,"regions":["us","jp"],"login_supported":true}`)
 	sv := Diagnose(context.Background(), url, "2.1.0")
-	for name, l := range map[string]Line{"reach": sv.Reach, "account": sv.Account, "token": sv.Token, "ffmpeg": sv.FFmpeg, "folder": sv.Folder} {
+	for name, l := range map[string]Line{"reach": sv.Reach, "account": sv.Account, "ffmpeg": sv.FFmpeg, "folder": sv.Folder} {
 		if l.State != Ready {
 			t.Errorf("%s: %+v", name, l)
 		}
 	}
 	if !strings.HasPrefix(sv.Reach.Text, "amdl 2.0.0 · ") || sv.Account.Text != "a@b.c · United States, Japan" ||
-		sv.Token.Text != "From the wrapper · ends …kg==" || sv.FFmpeg.Text != "/usr/bin/ffmpeg" || sv.Folder.Text != "/volume1/music · 2.2 TB free" {
+		sv.FFmpeg.Text != "/usr/bin/ffmpeg" || sv.Folder.Text != "/volume1/music · 2.2 TB free" {
 		t.Errorf("texts: %+v", sv)
 	}
 }
@@ -69,17 +67,13 @@ func TestAccountTextFallsBackToTheRegions(t *testing.T) {
 
 func TestDiagnoseNamesWhatTheServerLacks(t *testing.T) {
 	url := fakeServer(t, system("1.9.2", false, 1<<30),
-		`{"ready":true,"logged_in":false,"regions":[],"accounts":[],"login_supported":false,"media_user_token":""}`,
-		`{"config":{"catalog":{"media_user_token":"...wxyz"}}}`)
+		`{"ready":true,"logged_in":false,"regions":[],"accounts":[],"login_supported":false}`)
 	sv := Diagnose(context.Background(), url, "2.0.0")
 	if sv.Reach.State != Failed || sv.Reach.Text != "amdl 1.9.2 · this app needs amdl 2" {
 		t.Errorf("an older major version: %+v", sv.Reach)
 	}
 	if sv.Account.State != Missing || sv.FFmpeg.State != Failed || sv.Folder.State != Missing {
 		t.Errorf("account %+v, ffmpeg %+v, folder %+v", sv.Account, sv.FFmpeg, sv.Folder)
-	}
-	if sv.Token.State != Ready || sv.Token.Text != "Saved · ends …wxyz" {
-		t.Errorf("a saved token: %+v", sv.Token)
 	}
 
 	if sv := Diagnose(context.Background(), "http://127.0.0.1:1", "2.0.0"); sv.State != Failed || sv.Reach.State != Failed || sv.Account.State != Unchecked {

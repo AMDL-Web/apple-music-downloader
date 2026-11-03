@@ -35,15 +35,12 @@ const (
 func classOf(key string) keyClass {
 	switch key {
 	case "logging.level", "logging.access_log",
-		"catalog.album_track_url_mode", "catalog.media_user_token",
+		"catalog.album_track_url_mode",
 		// Read per job when the input resolves, so flipping it takes effect on
 		// newly started jobs without a restart.
 		"catalog.motion_artwork_enabled",
 		// Read from the live snapshot by each search and catalog request.
 		"catalog.default_storefront",
-		// The token provider reads the directory on every use, from the
-		// snapshot its caller passes.
-		"wrapper.data_dir",
 		// Read from the live snapshot by every wrapper request.
 		"wrapper.token":
 		return classRuntime

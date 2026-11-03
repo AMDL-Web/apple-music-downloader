@@ -97,8 +97,8 @@ test('chipOf per kind', () => {
 });
 
 test('refreshKeys: de-duplicated in first-seen order', () => {
-  assert.deepEqual(refreshKeys(['simulate.enabled', 'download.temp_dir', 'library_sync.enabled', 'catalog.media_user_token', 'download.cover_size']), ['system', 'librarySync']);
-  assert.deepEqual(refreshKeys(['catalog.media_user_token', 'simulate.enabled']), ['librarySync', 'system']);
+  assert.deepEqual(refreshKeys(['simulate.enabled', 'download.temp_dir', 'library_sync.enabled', 'download.cover_size']), ['system', 'librarySync']);
+  assert.deepEqual(refreshKeys(['library_sync.enabled', 'simulate.enabled']), ['librarySync', 'system']);
   assert.deepEqual(refreshKeys([]), []);
   assert.deepEqual(refreshKeys(['download.cover_size']), []);
 });

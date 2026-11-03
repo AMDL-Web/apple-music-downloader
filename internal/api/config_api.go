@@ -57,17 +57,12 @@ func (s *Server) pendingRestart(saved config.Config) []string {
 
 // writeConfigResponse answers GET, PUT and POST /config/reload alike: the
 // ConfigResponse schema for cfg, the configuration as saved, with
-// catalog.media_user_token redacted and wrapper.token hidden.
+// wrapper.token hidden.
 func (s *Server) writeConfigResponse(w http.ResponseWriter, cfg config.Config, reloadErr error) {
 	view, err := config.MutableView(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, CodeInternalError, "render config: "+err.Error())
 		return
-	}
-	if catalog, ok := view["catalog"].(map[string]any); ok {
-		if _, ok := catalog["media_user_token"]; ok {
-			catalog["media_user_token"] = redactToken(cfg.Catalog.MediaUserToken)
-		}
 	}
 	if wrapperView, ok := view["wrapper"].(map[string]any); ok {
 		if _, ok := wrapperView["token"]; ok {
@@ -118,11 +113,8 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			return config.Config{}, err
 		}
-		// A client that writes back the config it read sends the redacted
+		// A client that writes back the config it read sends the hidden
 		// token; that leaves the saved one as it is.
-		if strings.HasPrefix(merged.Catalog.MediaUserToken, redactedTokenPrefix) {
-			merged.Catalog.MediaUserToken = current.Catalog.MediaUserToken
-		}
 		if strings.HasPrefix(merged.Wrapper.Token, redactedTokenPrefix) {
 			merged.Wrapper.Token = current.Wrapper.Token
 		}
@@ -167,21 +159,8 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	s.writeConfigResponse(w, updated, nil)
 }
 
-// redactedTokenPrefix starts the form a config response shows a set
-// media-user-token in: the prefix and the token's last four characters,
-// enough to tell two tokens apart without the credential reaching a client
-// or an agent's context.
+// redactedTokenPrefix is how a config response shows a set wrapper.token.
 const redactedTokenPrefix = "..."
-
-func redactToken(token string) string {
-	if token == "" {
-		return ""
-	}
-	if len(token) < 16 {
-		return redactedTokenPrefix
-	}
-	return redactedTokenPrefix + token[len(token)-4:]
-}
 
 // hideSecret is how a config response shows a write-only secret: "..." when
 // set, with none of its characters.

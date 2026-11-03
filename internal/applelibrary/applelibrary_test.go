@@ -13,6 +13,13 @@ import (
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/db"
+	"amdl/internal/usertoken"
+)
+
+// Tokens the wrapper stand-in hands out; they pass usertoken.Validate.
+const (
+	testToken    = "mmmmmmmmmmmmmmmmmmmmmmmm"
+	expiredToken = "eeeeeeeeeeeeeeeeeeeeeeee"
 )
 
 // fakeApple serves a library held in memory, newest first per kind, the way
@@ -102,7 +109,7 @@ func newEngine(t *testing.T, token string) (*Engine, *fakeApple, *db.Store) {
 	}
 	t.Cleanup(func() { store.Close() })
 	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = token
+	tokens := usertoken.NewReading(func(string) (string, error) { return token, nil })
 	apple := &fakeApple{items: map[applemusic.LibraryKind][]applemusic.LibraryItem{}, tracks: map[string][]applemusic.LibraryItem{}}
 	apple.set(applemusic.LibrarySongs, songs(250, "a")...)
 	apple.set(applemusic.LibraryAlbums, applemusic.LibraryItem{ID: "l.1", CatalogID: "900", CatalogURL: "https://music.apple.com/cn/album/x/900?l=en-GB", Name: "Album", ArtistName: "Artist", TrackCount: 3})
@@ -115,7 +122,7 @@ func newEngine(t *testing.T, token string) (*Engine, *fakeApple, *db.Store) {
 	apple.tracks["p.fav"] = songs(3, "f")
 	apple.tracks["p.own"] = songs(120, "o")
 	apple.tracks["p.ed"] = songs(2, "e")
-	e := New(config.NewStore(cfg), nil, apple, store, slog.Default())
+	e := New(config.NewStore(cfg), tokens, apple, store, slog.Default())
 	return e, apple, store
 }
 
@@ -129,7 +136,7 @@ func list(t *testing.T, e *Engine, kind, sortBy string, desc bool) Page {
 }
 
 func TestFullSyncFillsEveryKind(t *testing.T) {
-	e, apple, _ := newEngine(t, "mut")
+	e, apple, _ := newEngine(t, testToken)
 	run, err := e.SyncNow(context.Background(), ModeFull)
 	if err != nil || !run.OK {
 		t.Fatalf("sync = %+v, %v", run, err)
@@ -180,7 +187,7 @@ func TestFullSyncFillsEveryKind(t *testing.T) {
 }
 
 func TestIncrementalSyncCatchesAdditionsRemovalsAndPlaylistChanges(t *testing.T) {
-	e, apple, _ := newEngine(t, "mut")
+	e, apple, _ := newEngine(t, testToken)
 	if _, err := e.SyncNow(context.Background(), ModeFull); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +243,7 @@ func TestIncrementalSyncCatchesAdditionsRemovalsAndPlaylistChanges(t *testing.T)
 }
 
 func TestInterruptedOrShiftingFullSyncRemovesNothing(t *testing.T) {
-	e, apple, _ := newEngine(t, "mut")
+	e, apple, _ := newEngine(t, testToken)
 	if _, err := e.SyncNow(context.Background(), ModeFull); err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +288,7 @@ func TestUnavailableWithoutTokenOrWhenRefused(t *testing.T) {
 		t.Fatalf("status = %+v", st)
 	}
 
-	e, apple, _ := newEngine(t, "expired")
+	e, apple, _ := newEngine(t, expiredToken)
 	apple.err = tokenRefused{}
 	run, _ := e.SyncNow(context.Background(), ModeFull)
 	st := e.Status(context.Background())
@@ -292,13 +299,13 @@ func TestUnavailableWithoutTokenOrWhenRefused(t *testing.T) {
 	if _, err := e.List(context.Background(), Query{Kind: "albums", Sort: "added", Limit: 10}); !errors.As(err, &unavailable) || unavailable.Reason != ReasonTokenRefused {
 		t.Fatalf("list after refusal err = %v", err)
 	}
-	if e.isRefused("expired") != true {
+	if e.isRefused(expiredToken) != true {
 		t.Fatal("refused token not remembered, the schedule would retry it every tick")
 	}
 }
 
 func TestTriggerRefusesASecondPass(t *testing.T) {
-	e, apple, _ := newEngine(t, "mut")
+	e, apple, _ := newEngine(t, testToken)
 	release := make(chan struct{})
 	apple.onPage = func(applemusic.LibraryKind, int) { <-release }
 	ctx, cancel := context.WithCancel(context.Background())
@@ -319,7 +326,7 @@ func TestTriggerRefusesASecondPass(t *testing.T) {
 }
 
 func TestScheduleAndMembership(t *testing.T) {
-	e, _, _ := newEngine(t, "mut")
+	e, _, _ := newEngine(t, testToken)
 	if e.due() != ModeFull {
 		t.Fatal("an empty cache must schedule a full sync")
 	}

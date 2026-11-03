@@ -24,14 +24,6 @@ const RESTART = 'Applies after a restart.';
 export const FIELDS = [
   // Account
   {
-    key: 'catalog.media_user_token',
-    section: 'account',
-    type: 'token',
-    label: 'Media user token',
-    help: 'Optional: stations, private playlist covers, library sync.',
-    defaultValue: '',
-  },
-  {
     key: 'wrapper.address',
     section: 'account',
     type: 'text',
@@ -46,13 +38,6 @@ export const FIELDS = [
     type: 'token',
     label: 'Session service key',
     help: 'Only for a session service behind a gateway, such as a Cloudflare Worker.',
-    defaultValue: '',
-  },
-  {
-    key: 'wrapper.data_dir',
-    section: 'account',
-    type: 'path',
-    label: 'Session service data folder',
     defaultValue: '',
   },
   {
@@ -320,7 +305,7 @@ export const FIELDS = [
     section: 'library_sync',
     type: 'switch',
     label: 'Watch my library',
-    help: 'Needs the media user token.',
+    help: 'Needs a signed-in account.',
     defaultValue: false,
   },
   {

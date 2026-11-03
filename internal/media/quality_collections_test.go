@@ -10,14 +10,18 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
 	"amdl/internal/limits"
+	"amdl/internal/usertoken"
 	"amdl/internal/wrapper"
 )
+
+var userToken = strings.Repeat("u", 32)
 
 const qualityTestMaster = `#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio-stereo-256",NAME="AAC"
@@ -162,12 +166,12 @@ func TestQualityQuerySupportsCollectionURLTypes(t *testing.T) {
 			}
 		}},
 		{name: "playlist", url: "https://beta.music.apple.com/cn/playlist/example/pl.1", wantType: applemusic.TypePlaylist, wantID: "pl.1", wantSongs: []string{"s2", "s1"}, check: func(t *testing.T, f *collectionQualityCatalog) {
-			if !reflect.DeepEqual(f.playlistTokens, []string{"user-token"}) {
+			if !reflect.DeepEqual(f.playlistTokens, []string{userToken}) {
 				t.Fatalf("playlist tokens = %#v", f.playlistTokens)
 			}
 		}},
 		{name: "station", url: "https://music.apple.com/cn/station/example/ra.1", wantType: applemusic.TypeStation, wantID: "ra.1", wantSongs: []string{"s1", "s3"}, check: func(t *testing.T, f *collectionQualityCatalog) {
-			if !reflect.DeepEqual(f.stationTokens, []string{"user-token"}) {
+			if !reflect.DeepEqual(f.stationTokens, []string{userToken}) {
 				t.Fatalf("station tokens = %#v", f.stationTokens)
 			}
 		}},
@@ -181,9 +185,11 @@ func TestQualityQuerySupportsCollectionURLTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			catalog := newCollectionQualityCatalog(manifest.URL)
-			cfg := config.Default()
-			cfg.Catalog.MediaUserToken = "  user-token  "
-			service := newTestQualityService(cfg, catalog, &collectionQualityWrapper{})
+			service := NewQualityService(newTestDownloader(&Downloader{
+				cfg:     config.Default(),
+				tokens:  usertoken.NewReading(func(string) (string, error) { return "  " + userToken + "  ", nil }),
+				catalog: catalog, wrapper: &collectionQualityWrapper{}, http: newHTTPClient(),
+			}))
 
 			result, err := service.QueryQuality(context.Background(), QualityRequest{URL: tt.url})
 			if err != nil {
@@ -261,7 +267,7 @@ func TestQualityQueryAlbumTrackModeUsesUnifiedTracks(t *testing.T) {
 	}
 }
 
-func TestQualityQueryReadsLiveMediaUserToken(t *testing.T) {
+func TestQualityQueryReadsTheTokenOnEveryQuery(t *testing.T) {
 	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeQualityTestPlaylist(w, r, qualityTestMaster)
 	}))
@@ -269,22 +275,26 @@ func TestQualityQueryReadsLiveMediaUserToken(t *testing.T) {
 	catalog := newCollectionQualityCatalog(manifest.URL)
 	catalog.station.Tracks[0].EnhancedHLS = manifest.URL + "/s1.m3u8"
 	catalog.station.Tracks = catalog.station.Tracks[:1]
+	first, second := strings.Repeat("f", 32), strings.Repeat("s", 32)
+	var current atomic.Value
+	current.Store(first)
 	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = "first"
-	store := config.NewStore(cfg)
-	service := NewQualityService(newTestDownloader(&Downloader{store: store, cfg: cfg, catalog: catalog, wrapper: &collectionQualityWrapper{}, http: newHTTPClient()}))
+	service := NewQualityService(newTestDownloader(&Downloader{
+		cfg:     cfg,
+		tokens:  usertoken.NewReading(func(string) (string, error) { return current.Load().(string), nil }),
+		catalog: catalog, wrapper: &collectionQualityWrapper{}, http: newHTTPClient(),
+	}))
 	url := "https://music.apple.com/cn/station/example/ra.1"
 	if _, err := service.QueryQuality(context.Background(), QualityRequest{URL: url}); err != nil {
 		t.Fatal(err)
 	}
-	cfg.Catalog.MediaUserToken = " second "
-	store.Set(cfg)
+	current.Store(" " + second + " ")
 	if _, err := service.QueryQuality(context.Background(), QualityRequest{URL: url}); err != nil {
 		t.Fatal(err)
 	}
 	catalog.mu.Lock()
 	defer catalog.mu.Unlock()
-	if !reflect.DeepEqual(catalog.stationTokens, []string{"first", "second"}) {
+	if !reflect.DeepEqual(catalog.stationTokens, []string{first, second}) {
 		t.Fatalf("station tokens = %#v", catalog.stationTokens)
 	}
 }

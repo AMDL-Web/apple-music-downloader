@@ -29,7 +29,7 @@ func captureLog(e *Engine) *bytes.Buffer {
 // other kinds finish, nothing is removed, the cap is warned about once and
 // the later incremental passes do not retry the full read.
 func TestKindOverItsPageCapIsPartialAndTheRestSyncs(t *testing.T) {
-	e, apple, _ := newEngine(t, "mut")
+	e, apple, _ := newEngine(t, testToken)
 	ctx := context.Background()
 	if run, err := e.SyncNow(ctx, ModeFull); err != nil || !run.OK || len(run.Capped) != 0 {
 		t.Fatalf("uncapped full sync = %+v, %v", run, err)
@@ -108,7 +108,7 @@ func TestKindOverItsPageCapIsPartialAndTheRestSyncs(t *testing.T) {
 // A playlist over its track page cap keeps its first tracks, is named in
 // Run.Capped, and neither fails the pass nor is read again until it changes.
 func TestPlaylistOverItsTrackCapIsPartialAndTheRestSyncs(t *testing.T) {
-	e, apple, _ := newEngine(t, "mut")
+	e, apple, _ := newEngine(t, testToken)
 	ctx := context.Background()
 	logs := captureLog(e)
 	lowerCaps(t, 300, 1)

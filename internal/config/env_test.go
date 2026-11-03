@@ -12,7 +12,6 @@ func TestEnvironmentSetsNoKey(t *testing.T) {
 	t.Setenv("AMDL_SERVER_LISTEN", ":19090")
 	t.Setenv("AMDL_WRAPPER_ADDRESS", "http://wrapper:12340")
 	t.Setenv("AMDL_DATABASE_PATH", "/srv/amdl/amdl.db")
-	t.Setenv("AMDL_WRAPPER_DATA_DIR", "/wrapper-data")
 	path := writeConfig(t, "wrapper:\n  address: \"http://10.0.0.1:12340\"\n")
 	cfg, err := Load(path)
 	if err != nil {
@@ -20,7 +19,7 @@ func TestEnvironmentSetsNoKey(t *testing.T) {
 	}
 	def := Default()
 	if cfg.Server.Listen != def.Server.Listen || cfg.Wrapper.Address != "http://10.0.0.1:12340" ||
-		cfg.Database.Path != def.Database.Path || cfg.Wrapper.DataDir != "" {
+		cfg.Database.Path != def.Database.Path {
 		t.Fatalf("an environment variable reached the config: %+v %+v %+v", cfg.Server, cfg.Wrapper, cfg.Database)
 	}
 }

@@ -16,7 +16,7 @@ import { resourceMark, applyResourceFeed, withLatest, submitMark, resourceKey } 
 // An album ?i= link previews as a song or the album depending on
 // catalog.album_track_url_mode, so those answers hold only for the mode
 // they were read under (LOOKUPS_MODE), and a private playlist's cover only
-// for the media-user-token in use then (LOOKUPS_TOKEN, tokenState's key).
+// for the sign-in state then (LOOKUPS_TOKEN, tokenState's key).
 const LOOKUPS = new Map();
 let LOOKUPS_MODE = null;
 let LOOKUPS_TOKEN = null;
@@ -46,7 +46,7 @@ const isAlbumTrack = (url) => {
  * The page's link previews: the lookup queue, the status and issue of each
  * entry, the links the submit may send, and each link's mark (markOf).
  * `settled` is the debounced text, `entries` its scanned links, `token`
- * the media-user-token a download would use (lib/user-token.js tokenState)
+ * whether a signed-in account gives a download its media-user-token (lib/user-token.js tokenState)
  * and `trackMode` the server's catalog config, `epoch` the shell's reconnect counter (a resync after an
  * outage looks failed previews and the history up again), `storefront` the
  * server's default storefront for links without one (see scanLinks),
@@ -120,8 +120,7 @@ export function useLookups({ settled, entries, token, regions, trackMode, epoch,
     }
     LOOKUPS_MODE = trackMode;
   }, [trackMode]);
-  // Another token in use (the wrapper's appears, one is set or cleared in
-  // Settings) reads private playlists again.
+  // A sign-in or sign-out reads private playlists again.
   useEffect(() => {
     if (!token.known) return;
     if (LOOKUPS_TOKEN !== null && LOOKUPS_TOKEN !== token.key) queue.current.forget([...LOOKUPS.keys()].filter(isPrivate));

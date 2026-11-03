@@ -120,9 +120,8 @@ export function DownloadPage({ route }) {
   // refuses it; null (flag nothing) while unknown or in simulate mode.
   const { wrapper } = useStatus(['wrapper']);
   const regions = servedRegions(wrapper, app.simulate);
-  // The media-user-token a download would use: the wrapper's, else Settings'.
-  const savedToken = cfg.data && cfg.data.config && cfg.data.config.catalog ? cfg.data.config.catalog.media_user_token || '' : undefined;
-  const token = tokenState(savedToken, wrapper);
+  // A signed-in account gives a download its media-user-token.
+  const token = tokenState(wrapper);
 
   const { statusOf, issueOf, sendable: allowed, skipped, queue, markOf, noteSubmitted } = useLookups({
     settled,

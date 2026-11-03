@@ -117,7 +117,7 @@ func TestCatalogNotFoundIsNotARetry(t *testing.T) {
 
 func TestConfigSetEchoesOnlyTheKeysSet(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"config":{"catalog":{"media_user_token":"...1a2b","motion_artwork_enabled":true},"logging":{"level":"debug","access_log":false}},"persisted":true}`)
+		fmt.Fprint(w, `{"config":{"catalog":{"language":"ja","motion_artwork_enabled":true},"logging":{"level":"debug","access_log":false}},"persisted":true}`)
 	}))
 	defer srv.Close()
 	r := run(t, srv, "", "config", "set", "logging.level=debug")

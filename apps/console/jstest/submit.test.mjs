@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scanLinks, removeLink } from '../static/js/lib/links.js';
-import { linkIssue, servedRegions, servedNote, submittable, TOKEN_SETTINGS_HASH, downloadLabel, countLine, markCounts } from '../static/js/lib/submit-check.js';
+import { linkIssue, servedRegions, servedNote, submittable, downloadLabel, countLine, markCounts } from '../static/js/lib/submit-check.js';
 import {
   chunk,
   resultView,
@@ -52,11 +52,10 @@ test('linkIssue flags what cannot be sent and what needs attention', () => {
     code: 'needs_token',
     role: 'warning',
     blocking: false,
-    message: 'Stations need a media-user-token',
-    href: TOKEN_SETTINGS_HASH,
-    action: 'Set it in Settings',
+    message: 'Stations need a signed-in account',
+    href: '#/settings?section=account',
+    action: 'Sign in',
   });
-  assert.equal(TOKEN_SETTINGS_HASH, '#/settings?section=account&field=catalog.media_user_token', 'the hint opens Settings at the token field');
   assert.equal(linkIssue(entry(STATION), null, { hasToken: true }), null);
   assert.equal(linkIssue(entry(PRIVATE)), null, 'a private playlist downloads without a token; the token only finds its cover');
   const live = { state: 'error', error: { status: 400, code: 'invalid_request', message: 'station "Apple Music 1" is a live radio stream' } };

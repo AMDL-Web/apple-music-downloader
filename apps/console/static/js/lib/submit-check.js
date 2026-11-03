@@ -7,14 +7,14 @@ import { PREVIEW_KINDS, shortError } from './lookup.js';
 import { capitalized } from './format.js';
 import { settingsHash } from './route.js';
 
-/** Where Settings edits catalog.media_user_token, the token a download uses when the wrapper's cannot be read. */
-export const TOKEN_SETTINGS_HASH = settingsHash('account', 'catalog.media_user_token');
+/** Where Settings signs an account in, which gives the backend a media-user-token. */
+const SIGN_IN_HASH = settingsHash('account');
 
 /**
  * Why a scanned link (lib/links.js scanLinks entry) cannot be downloaded or
  * needs attention, or null when it is fine. `lookup` is its preview status
- * (lib/lookup.js), `hasToken` whether the backend has a media-user-token, the
- * wrapper's or Settings' (lib/user-token.js),
+ * (lib/lookup.js), `hasToken` whether an account is signed in, so the backend has a media-user-token
+ * (lib/user-token.js),
  * `regions` the storefronts the wrapper's account serves (servedRegions, checked for stations;
  * null when unknown, which flags nothing). Returns {code, role, blocking, message, title?, href?, action?}; a blocking
  * issue keeps the link out of the submission, `title` holds a long server
@@ -61,9 +61,9 @@ export function linkIssue(entry, lookup = null, { hasToken = false, regions = nu
       code: 'needs_token',
       role: 'warning',
       blocking: false,
-      message: link.kind === 'station' ? 'Stations need a media-user-token' : 'This link needs a media-user-token',
-      href: TOKEN_SETTINGS_HASH,
-      action: 'Set it in Settings',
+      message: link.kind === 'station' ? 'Stations need a signed-in account' : 'This link needs a signed-in account',
+      href: SIGN_IN_HASH,
+      action: 'Sign in',
     };
   }
   if (err && err.code !== 'aborted') {

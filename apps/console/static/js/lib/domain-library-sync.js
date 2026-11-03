@@ -2,7 +2,7 @@
 // whether it waits for a token. Pure.
 
 import { count } from './format.js';
-import { pct, plural, savedConfig, frame, roleOf } from './domain-frame.js';
+import { pct, plural, frame, roleOf } from './domain-frame.js';
 import { keysToLabels } from './settings-draft.js';
 import { nextCheckFraction, nextCheckIn } from './sysdata.js';
 import { settingsHash } from './route.js';
@@ -11,7 +11,7 @@ import { flattenLibrarySync } from './accounts.js';
 
 /**
  * Library sync's state, shared with Overview: Off, Needs token (on, but
- * neither the wrapper nor Settings has a media user token), Error, or
+ * no account is signed in), Error, or
  * Watching. `tokenSet` undefined (not known yet) counts as set.
  */
 export function librarySyncState(sync, tokenSet) {
@@ -21,7 +21,7 @@ export function librarySyncState(sync, tokenSet) {
   return { icon: 'circle-check', role: 'success', label: 'Watching' };
 }
 
-const TOKEN_HREF = settingsHash('account', 'catalog.media_user_token');
+const SIGN_IN_HREF = settingsHash('account');
 
 // Library sync: tracks seen, and when the next check is.
 export function librarySync(s, ctx) {
@@ -30,10 +30,10 @@ export function librarySync(s, ctx) {
   if (v.state !== 'ok') return v;
   // GET /library-sync lists one entry per account; the head shows them summed.
   const sync = flattenLibrarySync(e.data);
-  // Until the config and the wrapper status say whether there is a token, the
+  // Until the wrapper status says whether an account is signed in, the
   // view stays loading rather than show Needs token, or an idle watcher's
   // last_error as an Error, for a moment.
-  const token = tokenState(savedConfig(s).token, s.wrapper);
+  const token = tokenState(s.wrapper);
   if (!token.known) return frame('library_sync', undefined, ctx);
   const tag = librarySyncState(sync, token.present);
   const anchor = sync.anchor_size || 0;
@@ -47,7 +47,7 @@ export function librarySync(s, ctx) {
     note = null;
     summary = { text: 'Off' };
   } else if (tag.label === 'Needs token') {
-    note = { text: 'Needs the media user token', role: 'warning', link: { href: TOKEN_HREF, label: 'Set token' } };
+    note = { text: 'Needs a signed-in account', role: 'warning', link: { href: SIGN_IN_HREF, label: 'Sign in' } };
     summary = { text: 'Needs token', role: 'warning' };
   } else if (tag.label === 'Error') {
     const text = keysToLabels(sync.last_error);

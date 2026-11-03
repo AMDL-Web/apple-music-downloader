@@ -1,7 +1,7 @@
 // Package usertoken decides which Apple Music media-user-token the backend
 // uses for which account. The wrapper keeps each account's token and
-// refreshes it on its own; amdl uses the wrapper's token whenever it can get
-// it, and catalog.media_user_token is the default account's fallback.
+// refreshes it on its own; amdl reads it over HTTP and never takes one from
+// its config.
 //
 // Accounts are the rows of the accounts table (internal/db), which the
 // account discovery (internal/accounts) passes in with SetAccounts: a
@@ -14,16 +14,9 @@
 //
 //  1. The wrapper's GET /token (amdl's wrapper-lite fork; GET
 //     /token?instance=<id> on a wrapper-manager), held in memory from this
-//     run's last 200. It is the token the running wrapper uses, so it beats
-//     a file that may be a leftover of another account or install, and it
-//     works for a wrapper on another host or in another container.
-//  2. wrapper.data_dir: an instance's <data_dir>/instances/<id>/MUSIC_TOKEN;
-//     for the implicit account <data_dir>/MUSIC_TOKEN, the layout of a
-//     wrapper-lite base directory, or when that file is missing the newest
-//     <data_dir>/instances/*/MUSIC_TOKEN. Read afresh on every use.
-//  3. amdl's stored copy of an earlier run's GET /token, until the wrapper
+//     run's last 200.
+//  2. amdl's stored copy of an earlier run's GET /token, until the wrapper
 //     answers in this run, so amdl keeps working while the wrapper restarts.
-//  4. For the default account only, catalog.media_user_token.
 //
 // TokenFor picks by storefront: the active account of that region with the
 // lowest position, else the default account.
@@ -44,8 +37,8 @@
 // The stored copies live in <database dir>/usertoken (StoreDir), directory
 // 0700 and files 0600, written by a rename, and tied to the wrapper.address
 // they came from: wrapper-token.json for the implicit account,
-// account-<id>.json for another. The value is never logged, never written to
-// the config, and never part of an error.
+// account-<id>.json for another. The value is never logged and never part of
+// an error.
 package usertoken
 
 import (
@@ -54,14 +47,9 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"amdl/internal/config"
 	"amdl/internal/domain"
@@ -71,13 +59,11 @@ import (
 type Source string
 
 const (
-	// SourceNone means neither the wrapper nor the config has a token.
+	// SourceNone means amdl has no token for the account.
 	SourceNone Source = ""
-	// SourceWrapper is the wrapper's token: its MUSIC_TOKEN file, its GET
-	// /token, or amdl's stored copy of that.
+	// SourceWrapper is the wrapper's token: its GET /token, or amdl's stored
+	// copy of that.
 	SourceWrapper Source = "wrapper"
-	// SourceConfig is catalog.media_user_token.
-	SourceConfig Source = "config"
 )
 
 // Token is an effective media-user-token, where it came from and the
@@ -89,19 +75,14 @@ type Token struct {
 }
 
 const (
-	// FileName is the file the wrapper keeps its token in.
-	FileName = "MUSIC_TOKEN"
-	minLen   = 16
-	maxLen   = 4096
-	// maxRead bounds a read of the file, surrounding whitespace included; a
-	// longer file is not a token.
-	maxRead = 2 * maxLen
+	minLen = 16
+	maxLen = 4096
 
 	implicitID = domain.ImplicitAccountID
 )
 
-// ErrInvalid means the wrapper's file does not hold a media-user-token. The
-// error never includes the file's contents.
+// ErrInvalid means a value is not a media-user-token. The error never
+// includes the value.
 var ErrInvalid = errors.New("not a media-user-token")
 
 // Account is what the provider knows of one account: its id, storefront
@@ -140,9 +121,9 @@ func New() *Provider {
 	return &Provider{}
 }
 
-// NewReading returns a Provider that reads an account's raw token with read
-// in place of wrapper.data_dir: "" when it has none. Tests use it to stand
-// in for a wrapper.
+// NewReading returns a Provider that reads an account's raw token with read,
+// "" when it has none, ahead of the stored copy. Tests use it to stand in for
+// a wrapper.
 func NewReading(read func(accountID string) (string, error)) *Provider {
 	return &Provider{read: read}
 }
@@ -392,31 +373,22 @@ func (p *Provider) TokenFor(cfg config.Config, storefront string) Token {
 	return p.Account(cfg, p.AccountFor(storefront))
 }
 
-// Account returns an account's effective token for cfg: the wrapper's
-// (Wrapper) when amdl has one, else, for the default account,
-// catalog.media_user_token trimmed, else none. An unreadable or invalid
-// wrapper file is logged once per distinct error.
+// Account returns an account's effective token (Wrapper), none when amdl
+// has none for it. An invalid NewReading value is logged once per distinct
+// error.
 func (p *Provider) Account(cfg config.Config, accountID string) Token {
 	v, err := p.Wrapper(cfg, accountID)
 	p.noteErr(err)
 	if err == nil && v != "" {
 		return Token{Value: v, Source: SourceWrapper, Account: accountID}
 	}
-	if accountID == p.DefaultAccount() {
-		if v = strings.TrimSpace(cfg.Catalog.MediaUserToken); v != "" {
-			return Token{Value: v, Source: SourceConfig, Account: accountID}
-		}
-	}
 	return Token{Account: accountID}
 }
 
-// Wrapper returns an account's wrapper token alone, in the package comment's
-// order without catalog.media_user_token: "" with a nil error when there is
-// none, an error when the file cannot be read or is not a token and no stored
-// copy stands in. A file read is one small file, so files are not cached and
-// a login or a refresh shows up on the next call; GET /token's token is held
-// in memory.
-func (p *Provider) Wrapper(cfg config.Config, accountID string) (string, error) {
+// Wrapper returns an account's wrapper token in the package comment's order:
+// "" with a nil error when there is none. GET /token's token is held in
+// memory.
+func (p *Provider) Wrapper(_ config.Config, accountID string) (string, error) {
 	if p == nil {
 		return "", nil
 	}
@@ -426,7 +398,7 @@ func (p *Provider) Wrapper(cfg config.Config, accountID string) (string, error) 
 	if v := r.liveToken(); v != "" {
 		return v, nil
 	}
-	v, err := p.readFile(cfg, accountID)
+	v, err := p.readTest(accountID)
 	if err == nil && v != "" {
 		return v, nil
 	}
@@ -473,32 +445,16 @@ func (p *Provider) MatchStored(ctx context.Context, candidates []string) string 
 	return ""
 }
 
-// readFile reads and validates an account's MUSIC_TOKEN under
-// wrapper.data_dir, or NewReading's source.
-func (p *Provider) readFile(cfg config.Config, accountID string) (string, error) {
-	if p.read != nil {
-		raw, err := p.read(accountID)
-		if err != nil || raw == "" {
-			return "", err
-		}
-		return Validate(raw)
-	}
-	dir := strings.TrimSpace(cfg.Wrapper.DataDir)
-	if dir == "" {
+// readTest reads and validates NewReading's source; "" without one.
+func (p *Provider) readTest(accountID string) (string, error) {
+	if p.read == nil {
 		return "", nil
 	}
-	raw, err := readDataDir(dir, accountID)
-	if err != nil {
+	raw, err := p.read(accountID)
+	if err != nil || raw == "" {
 		return "", err
 	}
-	if raw == "" {
-		return "", nil
-	}
-	v, err := Validate(raw)
-	if err != nil {
-		return "", fmt.Errorf("wrapper.data_dir %s: %w", dir, err)
-	}
-	return v, nil
+	return Validate(raw)
 }
 
 // noteErr logs a wrapper token error when it differs from the last one, so a
@@ -516,14 +472,13 @@ func (p *Provider) noteErr(err error) {
 	p.lastErr = msg
 	p.errMu.Unlock()
 	if msg != "" && !repeat {
-		slog.Default().Warn("the wrapper's media-user-token is unusable; catalog.media_user_token applies", "component", "usertoken", "error", msg)
+		slog.Default().Warn("the wrapper's media-user-token is unusable", "component", "usertoken", "error", msg)
 	}
 }
 
 // Validate trims surrounding whitespace and checks what is left looks like a
 // media-user-token: 16 to 4096 bytes of base64 or base64url (Apple's are
-// base64). A torn read of a file being rewritten, or another file's bytes,
-// fails here too.
+// base64).
 func Validate(raw string) (string, error) {
 	v := strings.TrimSpace(raw)
 	if len(v) < minLen || len(v) > maxLen {
@@ -539,68 +494,4 @@ func Validate(raw string) (string, error) {
 
 func tokenByte(c byte) bool {
 	return 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9' || strings.IndexByte("+/=-_", c) >= 0
-}
-
-// readDataDir reads an account's MUSIC_TOKEN under dir: a wrapper-manager
-// instance's <dir>/instances/<id>/MUSIC_TOKEN, or for the implicit account
-// <dir>/MUSIC_TOKEN, and when that is missing the newest
-// <dir>/instances/*/MUSIC_TOKEN. A missing directory or file is no token.
-func readDataDir(dir, accountID string) (string, error) {
-	if accountID != implicitID {
-		if strings.ContainsAny(accountID, `/\`) || accountID == "." || accountID == ".." {
-			return "", nil
-		}
-		raw, err := readLimited(filepath.Join(dir, "instances", accountID, FileName))
-		if errors.Is(err, fs.ErrNotExist) {
-			return "", nil
-		}
-		return raw, err
-	}
-	raw, err := readLimited(filepath.Join(dir, FileName))
-	if err == nil || !errors.Is(err, fs.ErrNotExist) {
-		return raw, err
-	}
-	entries, err := os.ReadDir(filepath.Join(dir, "instances"))
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return "", nil
-		}
-		return "", err
-	}
-	var newest string
-	var newestMod time.Time
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		path := filepath.Join(dir, "instances", e.Name(), FileName)
-		st, err := os.Stat(path)
-		if err != nil || !st.Mode().IsRegular() {
-			continue
-		}
-		if newest == "" || st.ModTime().After(newestMod) {
-			newest, newestMod = path, st.ModTime()
-		}
-	}
-	if newest == "" {
-		return "", nil
-	}
-	return readLimited(newest)
-}
-
-// readLimited reads path, refusing a file longer than maxRead.
-func readLimited(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, maxRead+1))
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", path, err)
-	}
-	if len(b) > maxRead {
-		return "", fmt.Errorf("%s: %w: longer than %d bytes", path, ErrInvalid, maxRead)
-	}
-	return string(b), nil
 }

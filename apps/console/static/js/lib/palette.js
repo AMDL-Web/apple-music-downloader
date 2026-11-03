@@ -46,7 +46,7 @@ const SECTIONS_SHOWN_EMPTY = ['account', 'library_sync'];
 
 /** Words a section or group answers to besides its label and id (what its panels do). */
 const SECTION_WORDS = {
-  account: 'login log in log out wrapper session apple id media user token storefront language',
+  account: 'login log in log out wrapper session apple id storefront language',
   quality: 'codec alac atmos lossless formats',
   files: 'folder path template naming disk storage space',
   lyrics_artwork: 'cover artwork lyrics lrc ttml karaoke translation romanization pronunciation motion animated',

@@ -140,11 +140,11 @@ func newWatcher(t *testing.T, lib *fakeLibrary, store *fakeStore, jobs *fakeSubm
 	t.Helper()
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
-	cfg.Catalog.MediaUserToken = "token"
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	return New(config.NewStore(cfg), nil, nil, lib, store, jobs, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	tokens := usertoken.NewReading(func(string) (string, error) { return strings.Repeat("t", 32), nil })
+	return New(config.NewStore(cfg), tokens, nil, lib, store, jobs, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 // A first pass records where the library stands and submits nothing: whatever
@@ -274,14 +274,14 @@ func TestMissingAnchorReanchorsWithoutSubmitting(t *testing.T) {
 	}
 }
 
-// Without catalog.media_user_token a personal library is unreadable, so the
+// Without a token from the wrapper a personal library is unreadable, so the
 // watcher stays idle rather than failing a request every tick.
 func TestIdleWithoutMediaUserToken(t *testing.T) {
 	songs, catalog := library(80, nil)
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
-	store := &fakeStore{}
-	jobs := &fakeSubmitter{}
-	w := newWatcher(t, lib, store, jobs, func(c *config.Config) { c.Catalog.MediaUserToken = "" })
+	cfg := config.Default()
+	cfg.LibrarySync.Enabled = true
+	w := New(config.NewStore(cfg), nil, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	w.RunOnce(context.Background(), testAccount)
 
 	if lib.pageCalls != 0 {
@@ -292,9 +292,8 @@ func TestIdleWithoutMediaUserToken(t *testing.T) {
 	}
 }
 
-// The wrapper's token is enough: a pass runs with it while the config has
-// none, and it is the token the library is read with.
-func TestWrapperTokenRunsWithoutConfigToken(t *testing.T) {
+// The wrapper's token is what the library is read with.
+func TestWrapperTokenRunsAPass(t *testing.T) {
 	songs, catalog := library(80, nil)
 	lib := &fakeLibrary{songs: songs, catalog: catalog}
 	cfg := config.Default()
@@ -315,9 +314,8 @@ func TestWrapperTokenRunsWithoutConfigToken(t *testing.T) {
 	}
 }
 
-// With neither token the watcher idles with the message naming both sources,
-// even when a wrapper reader is wired.
-func TestIdleWhenNeitherSourceHasAToken(t *testing.T) {
+// When the wrapper has no token the watcher idles, even with a reader wired.
+func TestIdleWhenTheWrapperHasNoToken(t *testing.T) {
 	lib := &fakeLibrary{}
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
@@ -464,8 +462,8 @@ func TestRunReturnsAfterCancelAndInFlightPass(t *testing.T) {
 	lib := &blockingLibrary{entered: make(chan struct{}), exited: make(chan struct{})}
 	cfg := config.Default()
 	cfg.LibrarySync.Enabled = true
-	cfg.Catalog.MediaUserToken = "token"
-	w := New(config.NewStore(cfg), nil, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	tokens := usertoken.NewReading(func(string) (string, error) { return strings.Repeat("t", 32), nil })
+	w := New(config.NewStore(cfg), tokens, nil, lib, &fakeStore{}, &fakeSubmitter{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

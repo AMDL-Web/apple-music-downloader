@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"amdl/internal/applelibrary"
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
+	"amdl/internal/usertoken"
 )
 
 // fakeAppleLibrary answers membership from a fixed map; the other methods are
@@ -86,10 +88,23 @@ func firstAccount(t *testing.T, got map[string]any) map[string]any {
 	return accounts[0].(map[string]any)
 }
 
+// tokenOf is a provider whose wrapper holds token for every account; "" is
+// none.
+func tokenOf(token string) *usertoken.Provider {
+	return usertoken.NewReading(func(string) (string, error) { return token, nil })
+}
+
+// Valid media-user-tokens for tests: usertoken.Validate wants at least 16
+// base64 characters.
+var (
+	mutToken     = strings.Repeat("m", 32)
+	expiredToken = strings.Repeat("e", 32)
+)
+
 func newAppleLibraryServer(t *testing.T, token string) (*Server, defaultLibrary, *pagedApple) {
 	t.Helper()
 	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = token
+	tokens := tokenOf(token)
 	cfg.Catalog.DefaultStorefront = "cn"
 	store := config.NewStore(cfg)
 	songs := make([]applemusic.LibraryItem, 130)
@@ -109,14 +124,14 @@ func newAppleLibraryServer(t *testing.T, token string) (*Server, defaultLibrary,
 		},
 		tracks: map[string][]applemusic.LibraryItem{"p.1": songs[:3]},
 	}
-	server := newServer(t, Deps{Config: store})
-	set := applelibrary.NewSet(store, nil, apple, server.store, server.accounts, slog.Default())
+	server := newServer(t, Deps{Config: store, Tokens: tokens})
+	set := applelibrary.NewSet(store, tokens, apple, server.store, server.accounts, slog.Default())
 	server.appleLibrary = set
 	return server, defaultLibrary{set}, apple
 }
 
 func TestAppleLibraryRoutesServeTheCache(t *testing.T) {
-	server, engine, apple := newAppleLibraryServer(t, "mut")
+	server, engine, apple := newAppleLibraryServer(t, mutToken)
 	handler := server.Routes()
 
 	recorder := requestJSON(t, handler, http.MethodGet, "/api/v1/apple-library/songs", "")
@@ -214,7 +229,7 @@ func TestAppleLibraryUnavailableWithoutTokenOrWhenRefused(t *testing.T) {
 		t.Fatalf("status = %v", got)
 	}
 
-	server, engine, apple := newAppleLibraryServer(t, "expired")
+	server, engine, apple := newAppleLibraryServer(t, expiredToken)
 	apple.err = refusedToken{}
 	if run, _ := engine.SyncNow(context.Background(), applelibrary.ModeFull); run.OK {
 		t.Fatal("a refused token synced")
@@ -238,8 +253,7 @@ func TestSearchMarksHitsInTheAppleLibrary(t *testing.T) {
 	catalog := &fakeCatalog{t: t, search: search}
 	cfg := config.Default()
 	cfg.Catalog.DefaultStorefront = "us"
-	cfg.Catalog.MediaUserToken = "mut"
-	server := newServer(t, Deps{Config: config.NewStore(cfg), Catalog: catalog})
+	server := newServer(t, Deps{Config: config.NewStore(cfg), Catalog: catalog, Tokens: tokenOf(mutToken)})
 	server.appleLibrary = &fakeAppleLibrary{in: map[string]map[string]bool{
 		"playlists": {"pl.2553030a768547e9ab3e91230de8439f": true},
 		"artists":   {},
@@ -251,13 +265,12 @@ func TestSearchMarksHitsInTheAppleLibrary(t *testing.T) {
 	if mark("songs") != true || mark("albums") != false || mark("playlists") != true || mark("artists") != false {
 		t.Fatalf("marks = songs %v albums %v playlists %v artists %v", mark("songs"), mark("albums"), mark("playlists"), mark("artists"))
 	}
-	if catalog.searchToken != "mut" {
+	if catalog.searchToken != mutToken {
 		t.Fatalf("search carried token %q", catalog.searchToken)
 	}
 
 	// No token, nothing cached: no mark at all, and search answers as before.
 	search.InLibrary = nil
-	cfg.Catalog.MediaUserToken = ""
 	server = newServer(t, Deps{Config: config.NewStore(cfg), Catalog: catalog})
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/search?term=taylor", "")
 	got = decodeBody(t, recorder.Body.Bytes())

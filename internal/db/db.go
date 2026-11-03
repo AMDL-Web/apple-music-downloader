@@ -90,7 +90,7 @@ func OpenWith(path string, opts Options) (*Store, error) {
 	}
 	// Job rows written before overrides lost media_user_token may still hold
 	// one. Keep the database and its live WAL files owner-only, matching the
-	// managed config file that holds the token. SQLite derives future sidecar modes from the main file.
+	// managed config file, which holds wrapper.token. SQLite derives future sidecar modes from the main file.
 	if path != ":memory:" && !strings.HasPrefix(path, "file:") {
 		for _, databaseFile := range []string{path, path + "-wal", path + "-shm"} {
 			if err := os.Chmod(databaseFile, 0o600); err != nil && !errors.Is(err, os.ErrNotExist) {

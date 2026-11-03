@@ -24,10 +24,9 @@ type Account struct {
 	LibrarySync  bool `json:"library_sync"`
 	AppleLibrary bool `json:"apple_library"`
 	// State is AccountActive or AccountMissing.
-	State          string     `json:"state"`
-	AddedAt        time.Time  `json:"added_at"`
-	SeenAt         *time.Time `json:"seen_at,omitempty"`
-	MediaUserToken string     `json:"media_user_token"`
+	State   string     `json:"state"`
+	AddedAt time.Time  `json:"added_at"`
+	SeenAt  *time.Time `json:"seen_at,omitempty"`
 }
 
 // Account states.

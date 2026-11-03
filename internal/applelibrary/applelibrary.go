@@ -213,8 +213,8 @@ type Engine struct {
 }
 
 // New builds the engine of the token provider's default account (an Engine
-// of a Set has its own account). tokens picks the media-user-token; nil uses
-// catalog.media_user_token alone. It does no I/O; Run runs the schedule.
+// of a Set has its own account). tokens picks the media-user-token; nil has
+// none. It does no I/O; Run runs the schedule.
 func New(cfg *config.Store, tokens *usertoken.Provider, apple Apple, store *db.Store, logger *slog.Logger) *Engine {
 	return newAccountEngine(cfg, tokens, apple, store, logger, tokens.DefaultAccount(), nil)
 }

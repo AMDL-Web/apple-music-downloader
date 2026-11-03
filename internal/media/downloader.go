@@ -28,7 +28,7 @@ type Downloader struct {
 	store *config.Store
 	cfg   config.Config
 	// tokens picks the media-user-token for playlists, stations and the
-	// in-process playback requests; nil uses catalog.media_user_token alone.
+	// in-process playback requests; nil has none.
 	tokens *usertoken.Provider
 	// storefront is the storefront a job-scoped clone reads in: the token
 	// of the account that serves it is used (usertoken.Provider.TokenFor).

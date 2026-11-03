@@ -96,8 +96,7 @@ func TestDiscoveryOfAManager(t *testing.T) {
 	}
 }
 
-// A bare wrapper-lite holds the implicit account while it reports a region,
-// and so does catalog.media_user_token alone.
+// A bare wrapper-lite holds the implicit account while it reports a region.
 func TestDiscoveryOfTheImplicitAccount(t *testing.T) {
 	cfg := config.Default()
 	w := &fakeWrapper{status: wrapper.Status{Ready: true, LoggedIn: true, Regions: []string{"cn"}, Name: "me@icloud.com"}}
@@ -123,6 +122,19 @@ func TestDiscoveryOfTheImplicitAccount(t *testing.T) {
 	}
 	if out, err := s.Delete(ctx, domain.ImplicitAccountID); err != nil || out {
 		t.Fatalf("delete a missing account = %v, %v", out, err)
+	}
+}
+
+// A wrapper that lists no instances and reports no region holds no account.
+func TestDiscoveryWithoutInstancesOrRegionsFindsNoAccount(t *testing.T) {
+	w := &fakeWrapper{status: wrapper.Status{Ready: true}}
+	s, store, _ := newService(t, w, config.Default())
+	ctx := context.Background()
+	if err := s.Discover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if list, err := store.ListAccounts(ctx); err != nil || len(list) != 0 {
+		t.Fatalf("accounts = %+v, %v; want none", list, err)
 	}
 }
 

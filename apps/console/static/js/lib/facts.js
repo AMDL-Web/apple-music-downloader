@@ -71,7 +71,6 @@ export function chipOf(row) {
 export const REFRESH_ON_SAVE = [
   ['simulate.', ['system']],
   ['library_sync.', ['librarySync']],
-  ['catalog.media_user_token', ['librarySync']],
   ['catalog.motion_artwork_enabled', ['system']],
   ['catalog.default_storefront', ['system']],
   ['download.downloads_dir', ['system']],

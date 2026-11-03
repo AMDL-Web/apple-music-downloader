@@ -284,7 +284,7 @@ func (c *CatalogClient) StationTracks(ctx context.Context, storefront, id, media
 		return Collection{}, fmt.Errorf("station %q is not downloadable: only track-based stations (playParams.format=tracks) are supported, not live/stream stations", info.Name)
 	}
 	if strings.TrimSpace(mediaUserToken) == "" {
-		return Collection{}, fmt.Errorf("station downloads require a media_user_token")
+		return Collection{}, fmt.Errorf("station downloads require a media-user-token")
 	}
 	var resp stationTracksResponse
 	if err := c.stationNextTracks(ctx, id, mediaUserToken, &resp); err != nil {

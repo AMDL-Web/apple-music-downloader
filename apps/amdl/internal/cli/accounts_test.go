@@ -10,10 +10,10 @@ import (
 )
 
 const accountsBody = `{"accounts":[
- {"id":"a1","name":"a@icloud.com","region":"us","position":0,"default":true,"library_sync":true,"apple_library":true,"state":"active","added_at":"2026-11-02T08:30:00Z","media_user_token":"...a1b2"},
- {"id":"b2","name":"b@icloud.com","region":"jp","position":1,"default":false,"library_sync":false,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z","media_user_token":""},
- {"id":"c3","name":"c@icloud.com","region":"kr","position":2,"default":false,"library_sync":false,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z","media_user_token":""},
- {"id":"d4","name":"d@icloud.com","region":"kr","position":3,"default":false,"library_sync":false,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z","media_user_token":""}]}`
+ {"id":"a1","name":"a@icloud.com","region":"us","position":0,"default":true,"library_sync":true,"apple_library":true,"state":"active","added_at":"2026-11-02T08:30:00Z"},
+ {"id":"b2","name":"b@icloud.com","region":"jp","position":1,"default":false,"library_sync":false,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z"},
+ {"id":"c3","name":"c@icloud.com","region":"kr","position":2,"default":false,"library_sync":false,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z"},
+ {"id":"d4","name":"d@icloud.com","region":"kr","position":3,"default":false,"library_sync":false,"apple_library":false,"state":"active","added_at":"2026-11-02T08:30:00Z"}]}`
 
 // accountsServer answers the accounts list and records every other request.
 func accountsServer(t *testing.T) (*httptest.Server, func() []string) {

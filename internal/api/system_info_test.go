@@ -19,6 +19,7 @@ import (
 	"amdl/internal/events"
 	"amdl/internal/jobs"
 	"amdl/internal/logging"
+	"amdl/internal/usertoken"
 )
 
 func TestSystemInfo(t *testing.T) {
@@ -28,7 +29,6 @@ func TestSystemInfo(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = "secret-media-user-token"
 	cfg.Simulate.Enabled = true
 	cfg.Catalog.MotionArtworkEnabled = false
 	cfg.Catalog.DefaultStorefront = "jp"
@@ -56,7 +56,7 @@ func TestSystemInfo(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
-	for _, secret := range []string{"secret-media-user-token", "wrapper-user", "wrapper-secret", "wrapper-query-secret", "frag"} {
+	for _, secret := range []string{"wrapper-user", "wrapper-secret", "wrapper-query-secret", "frag"} {
 		if strings.Contains(rec.Body.String(), secret) {
 			t.Fatalf("body exposes %q: %s", secret, rec.Body.String())
 		}
@@ -224,5 +224,29 @@ func TestLogRoutesWithoutRetention(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), "logging.buffer_size") {
 			t.Errorf("%s: message does not name logging.buffer_size: %s", path, rec.Body.String())
 		}
+	}
+}
+
+// default_storefront is the one a request that names none uses: the default
+// account's region once one is known, the config key before.
+func TestSystemInfoStorefrontFollowsTheDefaultAccount(t *testing.T) {
+	cfg := config.Default()
+	cfg.Catalog.DefaultStorefront = "jp"
+	tokens := usertoken.New()
+	server := newServer(t, Deps{Config: config.NewStore(cfg), Tokens: tokens})
+	storefront := func() any {
+		t.Helper()
+		rec := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/system", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+		}
+		return decodeBody(t, rec.Body.Bytes())["default_storefront"]
+	}
+	if got := storefront(); got != "jp" {
+		t.Fatalf("no account: default_storefront = %v, want jp", got)
+	}
+	tokens.SetAccounts([]usertoken.Account{{ID: "a", Region: "CA", Active: true}})
+	if got := storefront(); got != "ca" {
+		t.Fatalf("an account of ca: default_storefront = %v, want ca", got)
 	}
 }

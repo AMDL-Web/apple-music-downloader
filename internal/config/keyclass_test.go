@@ -33,7 +33,6 @@ func TestRuntimeLockedChangesNamesOnlyFileKeys(t *testing.T) {
 	updated := base
 	updated.Download.QualityPriority = []string{"aac"}
 	updated.Catalog.DefaultStorefront = "jp"
-	updated.Wrapper.DataDir = "/wrapper"
 	updated.Logging.Console = false
 	updated.Wrapper.Address = "http://10.0.0.1:12340"
 	updated.Catalog.Language = "en-US"
@@ -66,7 +65,7 @@ func TestMutableViewHasRuntimeAndRestartKeys(t *testing.T) {
 		t.Fatal("view has the tools section")
 	}
 	wrapper, _ := view["wrapper"].(map[string]any)
-	if wrapper["address"] != "http://127.0.0.1:12340" || wrapper["timeout_seconds"] != 30 || wrapper["data_dir"] != "" {
+	if wrapper["address"] != "http://127.0.0.1:12340" || wrapper["timeout_seconds"] != 30 {
 		t.Fatalf("wrapper section = %v", view["wrapper"])
 	}
 	download, _ := view["download"].(map[string]any)
@@ -74,7 +73,7 @@ func TestMutableViewHasRuntimeAndRestartKeys(t *testing.T) {
 		t.Fatalf("download section = %v", view["download"])
 	}
 	catalog, _ := view["catalog"].(map[string]any)
-	if catalog["default_storefront"] != "cn" || catalog["language"] != "zh-Hans_CN" || len(catalog) != 7 {
+	if catalog["default_storefront"] != "cn" || catalog["language"] != "zh-Hans_CN" || len(catalog) != 6 {
 		t.Fatalf("catalog section = %v", view["catalog"])
 	}
 	logging, _ := view["logging"].(map[string]any)

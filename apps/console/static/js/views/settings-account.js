@@ -5,7 +5,6 @@
 // own text replaces all of it; a wrapper amdl runs that failed adds its
 // error, one that is stopped keeps its form disabled (a login needs it
 // running), and one whose guest disk may hold the last password says so.
-// `children` (the media user token field) follows as the last block.
 
 import { html, useState } from '../ui/preact.js';
 import { loginWrapper, submitWrapperTwoStep, logoutWrapper } from '../api.js';
@@ -25,7 +24,7 @@ function WrapperError({ error, step, role = 'danger' }) {
   </${Notice}>`;
 }
 
-export function AccountPanel({ children }) {
+export function AccountPanel() {
   const { wrapper: res, accounts: accountsRes } = useStatus(['wrapper', 'accounts']);
   // The account list follows a login or logout a moment later (the backend
   // discovers the wrapper's accounts after it).
@@ -42,9 +41,7 @@ export function AccountPanel({ children }) {
   // The section head says the service is unreachable, its note the error in
   // a line with the server's own words as its tooltip; the body has nothing
   // more to add.
-  if (down) {
-    return html`<div class="account">${children}</div>`;
-  }
+  if (down) return null;
 
   const w = res && !res.error ? res.data : null;
   const accounts = accountsRes && !accountsRes.error ? accountList(accountsRes.data) : [];
@@ -107,7 +104,6 @@ export function AccountPanel({ children }) {
           }}
         />`
       : null}
-    ${children}
   </div>`;
 }
 

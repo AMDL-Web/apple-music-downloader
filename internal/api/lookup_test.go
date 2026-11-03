@@ -191,38 +191,20 @@ func TestLookupAlbumTrackLinkFollowsTrackMode(t *testing.T) {
 	}
 }
 
-// A lookup reads private playlist covers with the wrapper's token when amdl
-// can read one, ahead of the configured token.
-func TestLookupPlaylistPrefersWrapperToken(t *testing.T) {
-	wrapperToken := strings.Repeat("W", 200)
-	playlist := &applemusic.Collection{Name: "Mix", Tracks: make([]applemusic.Song, 3)}
-	catalog := &fakeCatalog{t: t, playlist: playlist}
-	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = "settings-token-secret"
-	handler := (&Server{cfg: config.NewStore(cfg), catalog: catalog, tokens: usertoken.NewReading(func(string) (string, error) { return wrapperToken, nil })}).Routes()
-	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc"}`)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
-	}
-	if catalog.token != wrapperToken {
-		t.Fatalf("token passed to the catalog: %d bytes, want the wrapper's", len(catalog.token))
-	}
-	if strings.Contains(recorder.Body.String(), "WWWW") {
-		t.Fatal("response carries the token")
-	}
-}
-
-func TestLookupPlaylistUsesSettingsTokenButNeverEchoesIt(t *testing.T) {
-	const secret = "settings-token-secret"
+// A lookup reads private playlist covers with the wrapper's token and never
+// echoes it.
+func TestLookupPlaylistUsesTheWrapperTokenButNeverEchoesIt(t *testing.T) {
+	secret := strings.Repeat("S", 200)
 	playlist := &applemusic.Collection{Name: "Mix", Artist: "Apple Music Hip-Hop", ArtworkURL: "pl-art", Tracks: make([]applemusic.Song, 50)}
 	catalog := &fakeCatalog{t: t, playlist: playlist}
-	handler := newLookupServer(catalog, func(cfg *config.Config) { cfg.Catalog.MediaUserToken = " " + secret + " " })
+	handler := (&Server{cfg: config.NewStore(config.Default()), catalog: catalog, appleLibrary: &fakeAppleLibrary{},
+		tokens: usertoken.NewReading(func(string) (string, error) { return " " + secret + " ", nil })}).Routes()
 	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/playlist/mix/pl.u-abc"}`)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", recorder.Code, recorder.Body.String())
 	}
 	if catalog.token != secret {
-		t.Fatalf("token passed to the catalog = %q, want %q", catalog.token, secret)
+		t.Fatalf("token passed to the catalog: %d bytes, want the wrapper's", len(catalog.token))
 	}
 	if body := recorder.Body.String(); strings.Contains(body, "token") {
 		t.Fatalf("response mentions a token: %s", body)

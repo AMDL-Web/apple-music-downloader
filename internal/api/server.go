@@ -46,9 +46,8 @@ type Deps struct {
 	// Catalog backs POST /lookup, GET /search, GET /artists/{id}/albums and
 	// GET /albums/{id}.
 	Catalog CatalogService
-	// Tokens picks the media-user-token for lookups and reports the
-	// wrapper's, masked, on GET /wrapper/status; nil means
-	// catalog.media_user_token alone.
+	// Tokens picks the media-user-token for lookups and the default
+	// account's region; nil has neither.
 	Tokens *usertoken.Provider
 	// Console serves the web console under /console/ (apps/console), and GET /
 	// redirects to it. Nil leaves both routes out. The binary passes it in so

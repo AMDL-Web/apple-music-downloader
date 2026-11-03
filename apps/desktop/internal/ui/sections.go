@@ -30,12 +30,18 @@ func (a *App) backendSection(c *ui.Context, k *Tokens, id string) {
 	}
 }
 
+// unfieldedLabels name the keys Settings sets outside configFields.
+var unfieldedLabels = map[string]string{"wrapper.address": "Wrapper address"}
+
 // pendingLabels are the labels of the keys in pending, in its order; a key
-// with no field keeps its dotted name.
+// with no label keeps its dotted name.
 func pendingLabels(pending []string) []string {
 	out := make([]string, 0, len(pending))
 	for _, key := range pending {
 		label := key
+		if l, ok := unfieldedLabels[key]; ok {
+			label = l
+		}
 		for i := range configFields {
 			if configFields[i].key == key {
 				label = configFields[i].label
@@ -50,7 +56,12 @@ func pendingLabels(pending []string) []string {
 // card per group under its name.
 func (a *App) sectionFields(c *ui.Context, k *Tokens, id string) {
 	cf := &a.Store.Config
-	fields := fieldsOf(id)
+	var fields []*configField
+	for _, f := range fieldsOf(id) {
+		if !a.fieldHidden(f) {
+			fields = append(fields, f)
+		}
+	}
 	if len(fields) == 0 {
 		return
 	}

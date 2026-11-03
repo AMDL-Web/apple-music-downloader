@@ -20,20 +20,15 @@ type AccountsService interface {
 	Nudge()
 }
 
-// accountResponse is the Account schema: the stored account, whether it is
-// the default, and its media-user-token as amdl has it, masked.
+// accountResponse is the Account schema: the stored account and whether it
+// is the default.
 type accountResponse struct {
 	domain.Account
-	Default        bool   `json:"default"`
-	MediaUserToken string `json:"media_user_token"`
+	Default bool `json:"default"`
 }
 
 func (s *Server) accountResponse(a domain.Account) accountResponse {
-	out := accountResponse{Account: a, Default: a.Position == 0}
-	if v, err := s.tokens.Wrapper(s.currentConfig(), a.ID); err == nil {
-		out.MediaUserToken = redactToken(v)
-	}
-	return out
+	return accountResponse{Account: a, Default: a.Position == 0}
 }
 
 // listAccounts answers GET /accounts: every account, the default first.

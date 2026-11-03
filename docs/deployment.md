@@ -328,28 +328,14 @@ then restart from the notice:
   by default. A bare `host:port` fails startup, and `https://` verifies the certificate
   against the system trust store.
 
-The backend uses the media-user-token the wrapper keeps for its account, so station
-downloads, private playlist covers and library sync need no token pasted into Settings
-([configuration.md](configuration.md#the-media-user-token)). amdl's wrapper-lite fork hands
-it over at `GET /token` on `wrapper.address`, with nothing to mount. For a wrapper without
-that route, the backend reads the wrapper's `MUSIC_TOKEN` file instead: with a compose
-service, mount its data into the backend read-only and set Settings › Account › Session
-service data folder (`wrapper.data_dir`) to the mount; the compose file has both mounts
-commented:
-
-- wrapper-manager: mount the `wrapper-data` volume at `/app/data/wrapper-manager:ro` and
-  set the folder to `/app/data/wrapper-manager/wrapper/rootfs/data`, where it
-  keeps `instances/<id>/MUSIC_TOKEN`.
-- wrapper-lite: mount `./data/wrapper` at `/app/data/wrapper:ro` and set the folder to
-  `/app/data/wrapper`.
-- wrapper-lite on the same host outside Docker: mount its base directory the same way
-  (`<launcher directory>/rootfs/<base directory>`). Natively, set `wrapper.data_dir` to it.
-
-The backend reads the file as the user it runs as (`PUID`), so the file must be readable
-by that user. It keeps its own copy of a token from `GET /token` in the database volume
-(`data/db/usertoken/`, mode 0600), which carries it through a wrapper restart.
-`GET /api/v1/wrapper/status` shows the token it uses, masked, as `media_user_token`; `""`
-means it has none from the wrapper and `catalog.media_user_token` applies.
+The backend reads each account's media-user-token from the wrapper over HTTP, so station
+downloads, private playlist covers and library sync need nothing mounted or pasted
+([configuration.md](configuration.md#the-media-user-token)): `GET /token?instance=<id>` on a
+wrapper-manager, `GET /token` on amdl's wrapper-lite fork, both at `wrapper.address`. It
+keeps its own copy of the last answer in the database volume (`data/db/usertoken/`, mode
+0600), which carries it through a wrapper restart. A wrapper without that route (upstream
+wrapper-lite) gives the backend no token: albums, songs and playlists still download;
+stations, private playlist covers, library sync and the Apple library do not work.
 
 wrapper-lite's API has no authentication, upstream says so, and wrapper-manager's README
 documents none, so keep both ports off any network you do not trust, as with this

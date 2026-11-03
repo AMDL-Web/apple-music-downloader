@@ -33,7 +33,7 @@ import { readFileSync } from 'node:fs';
 
 // A trimmed GET /api/v1/config "config" as the preview server returned it.
 const CONFIG = {
-  catalog: { album_track_url_mode: 'song', media_user_token: '', motion_artwork_enabled: true },
+  catalog: { album_track_url_mode: 'song', motion_artwork_enabled: true },
   download: { max_attempts: 3, quality_priority: ['alac'], lyrics_extras: [], cover_size: '5000x5000', downloads_dir: '/data/downloads' },
   library_sync: { enabled: false, interval_minutes: 15 },
   logging: { access_log: false, level: 'info' },
@@ -82,7 +82,7 @@ test('retired section ids and fields open the section that holds them now', () =
     assert.equal(sectionById(old).id, now, old);
   }
   // A field wins over the section named next to it (old links and bookmarks).
-  assert.equal(sectionById('catalog', 'catalog.media_user_token').id, 'account');
+  assert.equal(sectionById('catalog', 'catalog.default_storefront').id, 'account');
   assert.equal(sectionById('downloads', 'download.max_attempts').id, 'jobs');
   assert.equal(sectionById('advanced', 'download.temp_dir').id, 'files');
   assert.equal(sectionById('advanced', 'catalog.motion_artwork_enabled').id, 'lyrics_artwork');
@@ -92,8 +92,8 @@ test('retired section ids and fields open the section that holds them now', () =
 
 test('every runtime key belongs to exactly one of the nine sections, and the board leaves out Lyrics & artwork', () => {
   const counts = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, FIELDS.filter((f) => f.section === s.id).length]));
-  assert.deepEqual(counts, { account: 6, quality: 5, files: 5, lyrics_artwork: 11, jobs: 8, library_sync: 4, hooks: 0, logging: 4, server: 6 });
-  assert.equal(FIELDS.length, 49);
+  assert.deepEqual(counts, { account: 4, quality: 5, files: 5, lyrics_artwork: 11, jobs: 8, library_sync: 4, hooks: 0, logging: 4, server: 6 });
+  assert.equal(FIELDS.length, 47);
   assert.deepEqual(BOARD_SECTIONS.map((s) => s.id), ['account', 'quality', 'files', 'jobs', 'library_sync', 'hooks', 'logging', 'server']);
   assert.deepEqual(SETTINGS_GROUPS.map((g) => [g.id, g.section]), [['wrapper', 'server'], ['simulate', 'server'], ['config_file', 'server']]);
   assert.equal(SETTINGS_SECTIONS.findIndex((s) => s.split), 5, 'the nav splits before Library sync');

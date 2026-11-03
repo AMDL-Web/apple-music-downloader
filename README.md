@@ -269,10 +269,9 @@ comments document every key: allowed values, units and defaults. Every key excep
 comments; restart keys, such as the wrapper address, apply after a restart, which the
 console starts from its Settings page (`POST /api/v1/system/restart`). No environment
 variable overrides a key. Radio stations need
-your subscription token: the backend gets it from the wrapper when it runs the wrapper
-itself, when the wrapper serves `GET /token` (amdl's wrapper-lite fork) or when
-`wrapper.data_dir` points at the wrapper's files, and otherwise from
-`catalog.media_user_token`. Details: [docs/configuration.md](docs/configuration.md).
+your subscription token: the backend reads it from the wrapper's `GET /token` (a
+wrapper-manager, or amdl's wrapper-lite fork); a wrapper without that route gives it none.
+Details: [docs/configuration.md](docs/configuration.md).
 
 ## Automation
 
@@ -280,7 +279,7 @@ itself, when the wrapper serves `GET /token` (amdl's wrapper-lite fork) or when
   command when a job is queued or ends, for example to refresh a media server or send a
   notification. Webhooks can also be edited through the API; commands only in the file.
 - **Library sync** watches your Apple Music library and downloads the album behind each
-  song you add. It needs a subscription token, the wrapper's or `catalog.media_user_token`.
+  song you add. It needs the wrapper's subscription token.
 
 Both are off by default. See [docs/automation.md](docs/automation.md).
 

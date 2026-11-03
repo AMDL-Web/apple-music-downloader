@@ -63,7 +63,6 @@ func TestDownloadOverridesIgnoreRemovedKeysInPersistedJSON(t *testing.T) {
 		t.Fatalf("re-encoded override = %s, %v; want only codec_alternative", raw, err)
 	}
 	base := Default()
-	base.Catalog.MediaUserToken = "settings-token"
 	got, err := overrides.ApplyValidated(base)
 	if err != nil {
 		t.Fatalf("historical override no longer validates: %v", err)

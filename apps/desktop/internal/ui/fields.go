@@ -34,7 +34,8 @@ type option struct {
 	label string
 }
 
-// configField is one runtime key in Settings.
+// configField is one runtime key in Settings. wrapper.address has none: the
+// Connection section sets it with the app's own settings.
 type configField struct {
 	key, section, group string
 	kind                fieldKind
@@ -55,15 +56,11 @@ type configField struct {
 const restartHelp = "Applies after a restart."
 
 var configFields = []configField{
-	{key: "catalog.media_user_token", section: "account", kind: fieldToken, label: "Media user token",
-		help: "Optional: stations, private playlist covers, library sync."},
-	{key: "wrapper.address", section: "account", kind: fieldText, label: "Wrapper address",
-		help: restartHelp},
-	{key: "wrapper.data_dir", section: "account", kind: fieldPath, label: "Wrapper data folder"},
 	// Shown in Connection (wrapperKeyCard).
 	{key: "wrapper.token", section: "connection", kind: fieldToken, label: "Key",
 		help: "Only for a wrapper behind a gateway, such as a Cloudflare Worker."},
-	{key: "catalog.default_storefront", section: "account", kind: fieldSelect, label: "Default storefront",
+	// Shown only while no account is known (fieldHidden).
+	{key: "catalog.default_storefront", section: "account", kind: fieldSelect, label: "Storefront",
 		options: []option{{"cn", "China (CN)"}, {"us", "United States (US)"}, {"jp", "Japan (JP)"}, {"gb", "United Kingdom (GB)"}, {"hk", "Hong Kong (HK)"}, {"tw", "Taiwan (TW)"}},
 		custom:  true, pattern: regexp.MustCompile(`^[a-z]{2}$`), hint: "Two lowercase letters, as de"},
 	{key: "catalog.language", section: "account", kind: fieldSelect, label: "Catalog language",
@@ -140,8 +137,7 @@ var configFields = []configField{
 	{key: "download.integrity_mode", section: "jobs", kind: fieldSelect, label: "Integrity check",
 		help: "Quick checks every ALAC packet and decodes only the ends.", options: []option{{"full", "Full"}, {"quick", "Quick"}}},
 
-	{key: "library_sync.enabled", section: "library_sync", kind: fieldSwitch, label: "Watch my library",
-		help: "Needs the media user token."},
+	{key: "library_sync.enabled", section: "library_sync", kind: fieldSwitch, label: "Watch my library"},
 	{key: "library_sync.interval_minutes", section: "library_sync", kind: fieldNumber, label: "Check every",
 		help: "A check is usually one Apple request.", min: 1, max: 1440, unit: "min"},
 	{key: "apple_library.sync_interval_minutes", section: "library_sync", kind: fieldNumber, label: "Sync Apple library every",

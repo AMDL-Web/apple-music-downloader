@@ -47,7 +47,7 @@ func (b *Backend) handler() http.Handler {
 		list := client.AccountList{Accounts: []client.Account{}}
 		if in {
 			list.Accounts = append(list.Accounts, client.Account{ID: demoAccountID, Name: "demo@example.com", Region: "us", Default: true,
-				LibrarySync: true, AppleLibrary: true, State: client.AccountActive, AddedAt: b.now(), MediaUserToken: "...d3mo"})
+				LibrarySync: true, AppleLibrary: true, State: client.AccountActive, AddedAt: b.now()})
 		}
 		writeJSON(w, http.StatusOK, list)
 	})
@@ -148,7 +148,7 @@ func (b *Backend) wrapperStatus(w http.ResponseWriter, r *http.Request) {
 	b.mu.Unlock()
 	s := client.WrapperStatus{Ready: true, LoggedIn: in, LoginSupported: true, Regions: []string{}}
 	if in {
-		s.Regions, s.MediaUserToken = []string{"us"}, "...d3mo"
+		s.Regions = []string{"us"}
 	}
 	writeJSON(w, http.StatusOK, s)
 }

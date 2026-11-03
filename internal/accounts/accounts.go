@@ -7,7 +7,7 @@
 // a deleted account). A wrapper-manager lists its accounts in /status
 // instances, by instance id; a wrapper that does not (a bare wrapper-lite, an
 // older wrapper-manager) holds one implicit account (domain.ImplicitAccountID)
-// while it reports a region, and so does catalog.media_user_token alone. An
+// while it reports a region. An
 // account the wrapper stops reporting stays as missing, with its switches.
 //
 // The first discovery that finds an account in an empty table hands it the
@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -176,8 +175,6 @@ func (s *Service) discoverLocked(ctx context.Context) error {
 		}
 	case len(status.Regions) > 0:
 		d.Seen = []db.SeenAccount{{ID: domain.ImplicitAccountID, Name: status.Name, Region: status.Regions[0]}}
-	case strings.TrimSpace(cfg.Catalog.MediaUserToken) != "":
-		d.Seen = []db.SeenAccount{{ID: domain.ImplicitAccountID}}
 	}
 	before, err := s.store.ListAccounts(ctx)
 	if err != nil {

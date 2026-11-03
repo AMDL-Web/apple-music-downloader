@@ -135,8 +135,8 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
   const pending = new Set();
   const configBody = () => ({ config, persisted: true, pending_restart: [...pending].sort() });
   const accounts = [
-    { id: 'wm_demo_us', name: 'demo@example.com', region: STOREFRONT, position: 0, default: true, library_sync: true, apple_library: true, state: 'active', added_at: iso(now - 30 * 86400000), seen_at: iso(now - 60000), media_user_token: '...a1b2' },
-    { id: 'wm_demo_jp', name: 'demo.jp@example.com', region: 'jp', position: 1, default: false, library_sync: false, apple_library: false, state: 'active', added_at: iso(now - 9 * 86400000), seen_at: iso(now - 60000), media_user_token: '...c3d4' },
+    { id: 'wm_demo_us', name: 'demo@example.com', region: STOREFRONT, position: 0, default: true, library_sync: true, apple_library: true, state: 'active', added_at: iso(now - 30 * 86400000), seen_at: iso(now - 60000) },
+    { id: 'wm_demo_jp', name: 'demo.jp@example.com', region: 'jp', position: 1, default: false, library_sync: false, apple_library: false, state: 'active', added_at: iso(now - 9 * 86400000), seen_at: iso(now - 60000) },
   ];
   const sortAccounts = () => {
     accounts.sort((a, b) => a.position - b.position);
@@ -980,7 +980,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         return json(200, { account: acc.id, cleared, status: librarySyncBody() });
       }
       case 'GET /api/v1/wrapper/status':
-        return json(200, { ready: true, logged_in: true, regions: [...new Set(accounts.map((a) => a.region))], login_supported: false, media_user_token: accounts.length ? accounts[0].media_user_token : '', token_set: false });
+        return json(200, { ready: true, logged_in: true, regions: [...new Set(accounts.map((a) => a.region))], login_supported: false, token_set: false });
       case 'GET /api/v1/logs': {
         const match = logMatcher(q);
         const after = Number(q.get('cursor')) || 0;

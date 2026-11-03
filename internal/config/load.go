@@ -32,6 +32,8 @@ func Load(path string) (Config, error) {
 // startup warning.
 var retiredKeys = map[string]string{
 	"download.force_overwrite": "records decide what downloads; re-download with Reset",
+	"wrapper.data_dir":         "amdl reads each account's media-user-token from the wrapper's GET /token",
+	"catalog.media_user_token": "amdl reads each account's media-user-token from the wrapper's GET /token",
 }
 
 // RetiredKey is a retired key found in a config file and what replaces it.

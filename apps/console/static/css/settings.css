@@ -706,7 +706,7 @@
   cursor: pointer;
 }
 
-/* The media user token: its state or an empty box, and the help steps. */
+/* A token field: its state or an empty box. */
 .token-field {
   display: flex;
   flex-direction: column;
@@ -734,36 +734,10 @@
   line-height: var(--lh-14);
 }
 
-/* A saved token the wrapper's own leaves unused. */
-.token-unused .token-state {
-  color: var(--text-secondary);
-}
-
 .token-actions {
   display: flex;
   gap: var(--s-2);
   margin-left: auto;
-}
-
-.token-help-btn {
-  padding: 0;
-  border: 0;
-  background: none;
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  cursor: pointer;
-}
-
-.token-steps {
-  margin: 0;
-  padding-left: var(--s-5);
-  color: var(--text-secondary);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-}
-
-.token-steps li + li {
-  margin-top: var(--s-1);
 }
 
 .settings-error:focus {

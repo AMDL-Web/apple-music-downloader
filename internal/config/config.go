@@ -44,9 +44,9 @@ type AppleLibraryConfig struct {
 // flipping Enabled or changing the interval takes effect without a restart, and
 // disabling it stops the polling rather than merely dropping the results.
 //
-// It needs a media-user-token, the wrapper's or catalog.media_user_token
+// It needs the account's media-user-token, which amdl gets from the wrapper
 // (internal/usertoken): a personal library is not readable with the
-// web-player token alone. With neither the watcher stays idle and says so
+// web-player token alone. Without one the watcher stays idle and says so
 // once per change instead of failing every tick.
 type LibrarySyncConfig struct {
 	Enabled         bool `yaml:"enabled" json:"enabled"`
@@ -85,10 +85,7 @@ type LoggingConfig struct {
 
 // WrapperConfig is the wrapper-lite connection. Address is an http:// or
 // https:// URL; https uses TLS 1.2+ and verifies the certificate; amdl also
-// asks it for the account's media-user-token (GET /token). DataDir is the
-// wrapper's data directory as amdl sees it, where internal/usertoken reads that
-// token's file when GET /token gives none; empty means amdl does not read it.
-// Token is a key sent as a bearer token on every wrapper request, for a
+// asks it for the account's media-user-token (GET /token). Token is a key sent as a bearer token on every wrapper request, for a
 // wrapper behind a gateway or reverse proxy; empty sends none
 // (internal/wrapper#WithToken).
 type WrapperConfig struct {
@@ -96,7 +93,6 @@ type WrapperConfig struct {
 	Token               string `yaml:"token" json:"token"`
 	TimeoutSeconds      int    `yaml:"timeout_seconds" json:"timeout_seconds"`
 	LoginTimeoutSeconds int    `yaml:"login_timeout_seconds" json:"login_timeout_seconds"`
-	DataDir             string `yaml:"data_dir" json:"data_dir"`
 }
 
 // LoginTimeout bounds a wrapper login including its 2FA step; values <= 0 fall
@@ -126,7 +122,6 @@ type CatalogConfig struct {
 	MaxParallelRequests int    `yaml:"max_parallel_requests" json:"max_parallel_requests"`
 	TokenCacheTTLHours  int    `yaml:"token_cache_ttl_hours" json:"token_cache_ttl_hours"`
 	AlbumTrackURLMode   string `yaml:"album_track_url_mode" json:"album_track_url_mode"`
-	MediaUserToken      string `yaml:"media_user_token" json:"media_user_token"`
 	// MotionArtworkEnabled controls the out-of-band animated-cover lookup. It
 	// is the only feature that talks to amp-api purely for decoration, and it
 	// costs one undocumented-endpoint request plus a scraped web-player token

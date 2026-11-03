@@ -289,7 +289,7 @@ func TestGetConfigOfAnUnknownKeyIsConfigKeyNotFound(t *testing.T) {
 
 func TestSetConfigEchoesOnlyTheKeysSet(t *testing.T) {
 	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"config":{"catalog":{"media_user_token":"...9z8y"},"logging":{"level":"debug","access_log":false}},"persisted":true}`)
+		fmt.Fprint(w, `{"config":{"catalog":{"language":"ja"},"logging":{"level":"debug","access_log":false}},"persisted":true}`)
 	}))
 	out, isErr := s.call(t, "set_config", map[string]any{"changes": map[string]any{"logging.level": "debug"}})
 	cfg, _ := out["config"].(map[string]any)

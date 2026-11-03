@@ -162,11 +162,10 @@ with `POST /api/v1/config/reload` — the polling loop reads them at the start o
 pass, so turning it off really stops the polling rather than just discarding results, and
 shortening the interval takes effect immediately instead of after the current wait.
 
-It depends on the account's media-user-token: the wrapper's when the backend can read it
-([configuration.md](configuration.md#the-media-user-token)), else, for the default account,
-`catalog.media_user_token`. A personal library is readable only with a subscription token,
-and the web-player token alone will not do. With neither the watcher idles and warns once
-instead of erroring every pass.
+It depends on the account's media-user-token, which the backend reads from the wrapper
+([configuration.md](configuration.md#the-media-user-token)). A personal library is readable
+only with a subscription token, and the web-player token alone will not do. Without one the
+watcher idles and warns once instead of erroring every pass.
 
 New albums are added through `jobs.Manager.AddAlbums` as album records, not through the
 backend's own HTTP API, so their runs are ordinary runs — same picker, same hooks. An album

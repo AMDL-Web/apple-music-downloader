@@ -55,7 +55,7 @@ func TestGetConfigReturnsEditableFields(t *testing.T) {
 	if err := json.Unmarshal(resp.Config["catalog"], &catalog); err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog) != 7 || catalog["album_track_url_mode"] != "song" || catalog["media_user_token"] != "" ||
+	if len(catalog) != 6 || catalog["album_track_url_mode"] != "song" ||
 		catalog["motion_artwork_enabled"] != true || catalog["language"] != "zh-Hans_CN" {
 		t.Fatalf("catalog section = %v, want every catalog key", catalog)
 	}
@@ -110,57 +110,20 @@ func TestUpdateConfigRejectsRemovedPathFormats(t *testing.T) {
 	}
 }
 
-func TestUpdateConfigRejectsRemovedMediaUserTokenPriority(t *testing.T) {
-	store := config.NewStore(config.Default())
-	server := &Server{cfg: store}
-	recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config",
-		`{"catalog":{"media_user_token":"configured-token","media_user_token_priority":"request"}}`)
-	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "media_user_token_priority") {
-		t.Fatalf("status = %d, body = %s; want 400 naming the removed key", recorder.Code, recorder.Body.String())
-	}
-	if got := store.Get().Catalog.MediaUserToken; got != "" {
-		t.Fatalf("rejected update changed media_user_token to %q", got)
-	}
-}
-
-func TestConfigResponsesRedactTheMediaUserToken(t *testing.T) {
-	const token = "AgK7wxQe9ZtYv2LmNpRs4UoX1a2b"
-	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = token
-	store := config.NewStore(cfg)
-	routes := (&Server{cfg: store}).Routes()
-	tokenIn := func(body string) string {
-		t.Helper()
-		var resp struct {
-			Config struct {
-				Catalog struct {
-					MediaUserToken string `json:"media_user_token"`
-				} `json:"catalog"`
-			} `json:"config"`
+// The keys amdl no longer reads are refused like any unknown key, so a
+// client that still sends one learns it at once.
+func TestUpdateConfigRejectsRetiredKeys(t *testing.T) {
+	for _, body := range []string{
+		`{"catalog":{"media_user_token":"configured-token"}}`,
+		`{"wrapper":{"data_dir":"/wrapper"}}`,
+		`{"catalog":{"media_user_token_priority":"request"}}`,
+	} {
+		store := config.NewStore(config.Default())
+		server := &Server{cfg: store}
+		recorder := requestJSON(t, server.Routes(), http.MethodPut, "/api/v1/config", body)
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, body = %s; want 400", body, recorder.Code, recorder.Body.String())
 		}
-		if err := json.Unmarshal([]byte(body), &resp); err != nil {
-			t.Fatalf("decode %s: %v", body, err)
-		}
-		if strings.Contains(body, token[:8]) {
-			t.Fatalf("response carries the token: %s", body)
-		}
-		return resp.Config.Catalog.MediaUserToken
-	}
-	get := requestJSON(t, routes, http.MethodGet, "/api/v1/config", "")
-	if got := tokenIn(get.Body.String()); got != "...1a2b" {
-		t.Fatalf("GET media_user_token = %q, want ...1a2b", got)
-	}
-	// Writing back what GET showed keeps the saved token.
-	put := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"catalog":{"media_user_token":"...1a2b","motion_artwork_enabled":false}}`)
-	if put.Code != http.StatusOK || tokenIn(put.Body.String()) != "...1a2b" {
-		t.Fatalf("PUT = %d %s", put.Code, put.Body.String())
-	}
-	if got := store.Get().Catalog.MediaUserToken; got != token {
-		t.Fatalf("saved token = %q after writing back the redacted form", got)
-	}
-	cleared := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"catalog":{"media_user_token":""}}`)
-	if cleared.Code != http.StatusOK || tokenIn(cleared.Body.String()) != "" || store.Get().Catalog.MediaUserToken != "" {
-		t.Fatalf("clearing the token: %d %s", cleared.Code, cleared.Body.String())
 	}
 }
 

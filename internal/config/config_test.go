@@ -440,22 +440,57 @@ func TestValidateReportsViolationsInKeyOrder(t *testing.T) {
 	}
 }
 
-// download.force_overwrite was written into every config.yaml by PUT
-// /api/v1/config. Its removal must not stop an upgraded install: Load drops
-// it, RetiredKeys names it for the startup warning, and the other keys of the
-// section still load.
-func TestLoadDropsRetiredForceOverwrite(t *testing.T) {
-	path := writeConfig(t, "download:\n  force_overwrite: true\n  max_attempts: 5\n")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v, want the retired key dropped", err)
+// download.force_overwrite, wrapper.data_dir and catalog.media_user_token were
+// written into config.yaml by PUT /api/v1/config. Their removal must not stop
+// an upgraded install: Load drops them, RetiredKeys names them for the startup
+// warning, and the other keys of their sections still load.
+func TestLoadDropsRetiredKeys(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantRetired []string
+		check       func(t *testing.T, cfg Config)
+	}{
+		{
+			name:        "force_overwrite",
+			body:        "download:\n  force_overwrite: true\n  max_attempts: 5\n",
+			wantRetired: []string{"download.force_overwrite"},
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Download.MaxAttempts != 5 {
+					t.Fatalf("max_attempts = %d, want 5 from the file", cfg.Download.MaxAttempts)
+				}
+			},
+		},
+		{
+			name:        "wrapper token sources",
+			body:        "wrapper:\n  address: \"http://10.0.0.1:12340\"\n  data_dir: /wrapper-data\ncatalog:\n  media_user_token: old-token\n  language: en-US\n",
+			wantRetired: []string{"catalog.media_user_token", "wrapper.data_dir"},
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Wrapper.Address != "http://10.0.0.1:12340" || cfg.Catalog.Language != "en-US" {
+					t.Fatalf("kept keys lost: wrapper %+v, catalog %+v", cfg.Wrapper, cfg.Catalog)
+				}
+			},
+		},
 	}
-	if cfg.Download.MaxAttempts != 5 {
-		t.Fatalf("max_attempts = %d, want 5 from the file", cfg.Download.MaxAttempts)
-	}
-	retired := RetiredKeys(path)
-	if len(retired) != 1 || retired[0].Key != "download.force_overwrite" || retired[0].Replacement == "" {
-		t.Fatalf("RetiredKeys() = %+v, want download.force_overwrite with its replacement", retired)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeConfig(t, tt.body)
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load() error = %v, want the retired keys dropped", err)
+			}
+			tt.check(t, cfg)
+			var got []string
+			for _, r := range RetiredKeys(path) {
+				if r.Replacement == "" {
+					t.Fatalf("retired key %s has no replacement text", r.Key)
+				}
+				got = append(got, r.Key)
+			}
+			if !reflect.DeepEqual(got, tt.wantRetired) {
+				t.Fatalf("RetiredKeys() = %v, want %v", got, tt.wantRetired)
+			}
+		})
 	}
 	if got := RetiredKeys(writeConfig(t, "download:\n  max_attempts: 5\n")); len(got) != 0 {
 		t.Fatalf("RetiredKeys() of a current file = %+v, want none", got)

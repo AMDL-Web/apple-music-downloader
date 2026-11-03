@@ -2,9 +2,7 @@ package setup
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -27,10 +25,9 @@ type Server struct {
 	Address string
 	State   State
 	// Reach is the server's answer and version; Account the Apple ID its
-	// wrapper has signed in; Token its media-user-token, which is
-	// optional; FFmpeg its ffmpeg; Folder its downloads folder.
-	Reach, Account, Token, FFmpeg, Folder Line
-	Taken                                 time.Duration
+	// wrapper has signed in; FFmpeg its ffmpeg; Folder its downloads folder.
+	Reach, Account, FFmpeg, Folder Line
+	Taken                          time.Duration
 }
 
 // serverTimeout bounds a whole test of a server.
@@ -114,15 +111,6 @@ func DiagnoseClient(ctx context.Context, c *client.Client, address, mine string)
 		list, _ := c.ListAccounts(ctx)
 		sv.Account = Line{Ready, AccountText(list.Accounts, ws.Regions)}
 	}
-	saved := savedToken(ctx, c)
-	switch {
-	case err == nil && ws.MediaUserToken != "":
-		sv.Token = Line{Ready, "From the wrapper · ends …" + tail(ws.MediaUserToken)}
-	case saved != "":
-		sv.Token = Line{Ready, "Saved · ends …" + tail(saved)}
-	default:
-		sv.Token = Line{Missing, "None"}
-	}
 	return sv
 }
 
@@ -169,27 +157,6 @@ func FolderLine(st client.Storage) Line {
 	}
 	return Line{Ready, st.Path}
 }
-
-// savedToken is the server's saved media-user-token, masked, or "".
-func savedToken(ctx context.Context, c *client.Client) string {
-	raw, err := c.Call(ctx, http.MethodGet, "/api/v1/config", nil, nil)
-	if err != nil {
-		return ""
-	}
-	var v struct {
-		Config struct {
-			Catalog struct {
-				Token string `json:"media_user_token"`
-			} `json:"catalog"`
-		} `json:"config"`
-	}
-	if json.Unmarshal(raw, &v) != nil {
-		return ""
-	}
-	return v.Config.Catalog.Token
-}
-
-func tail(token string) string { return token[max(0, len(token)-4):] }
 
 // Compatible reports whether a client of version mine can use a server of
 // version theirs: the same major version, or either one a development build.

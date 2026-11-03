@@ -8,6 +8,7 @@ import (
 
 	"amdl/internal/applemusic"
 	"amdl/internal/config"
+	"amdl/internal/usertoken"
 	"amdl/internal/wrapper"
 )
 
@@ -97,9 +98,13 @@ var errApple5xx = errors.New("Apple Music request failed: 503 Service Unavailabl
 
 func inProcessDownloader(token string, playback playbackClient, calls *[]string) *Downloader {
 	cfg := config.Default()
-	cfg.Catalog.MediaUserToken = token
 	cfg.Catalog.Language = "ja"
-	return &Downloader{cfg: cfg, playback: playback, wrapper: recordingWrapper{calls: calls}}
+	return &Downloader{
+		cfg:      cfg,
+		tokens:   usertoken.NewReading(func(string) (string, error) { return token, nil }),
+		playback: playback,
+		wrapper:  recordingWrapper{calls: calls},
+	}
 }
 
 func TestInProcessRequestsPickTheirRoute(t *testing.T) {

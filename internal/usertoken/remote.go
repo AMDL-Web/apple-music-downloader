@@ -192,7 +192,7 @@ func (r *remote) fetchOnce(ctx context.Context) time.Duration {
 		r.forget(stateLoggedOut, "the wrapper has no logged-in account; its token is no longer used")
 		return r.loggedOutRetry
 	case errors.Is(err, wrapper.ErrTokenUnsupported):
-		r.forget(stateUnsupported, "the wrapper has no GET /token; its token is read from files only")
+		r.forget(stateUnsupported, "the wrapper has no GET /token; amdl has no media-user-token from it")
 		return r.unsupportedRetry
 	default:
 		return r.failed(err)

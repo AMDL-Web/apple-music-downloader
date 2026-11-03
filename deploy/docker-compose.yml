@@ -14,9 +14,7 @@
 #   - or edit ./configs/config.yaml directly, then apply runtime fields with
 #     POST /api/v1/config/reload (the console's "Reload from file") and startup
 #     fields with docker compose restart.
-# Only the listen address, the wrapper address, the wrapper's data directory and
-# the database path can also be set through the environment (below); they win
-# over config.yaml.
+# No environment variable sets a key (see the environment block below).
 #
 # Stopping or restarting is safe mid-download: running jobs stay running in
 # the database and resume on the next start.
@@ -89,13 +87,6 @@ services:
       - ./data/downloads:/app/data/downloads
       # The temp directory data/tmp stays inside the container and needs no
       # mount; with an NVMe drive, mount one there for faster scratch files.
-      # The wrapper's data, read-only, so the backend uses the media-user-token
-      # the wrapper keeps there: option A's volume or option B's directory.
-      # Then set Settings > Account > Session service data folder to
-      # "/app/data/wrapper-manager/wrapper/rootfs/data" (A) or
-      # "/app/data/wrapper" (B).
-      # - wrapper-data:/app/data/wrapper-manager:ro
-      # - ./data/wrapper:/app/data/wrapper:ro
 
   # Wrapper, option A (recommended): wrapper-manager v2, which supervises
   # wrapper-lite accounts behind one HTTP port and lets you log in from the

@@ -34,7 +34,7 @@ database:
   # string: SQLite database file path. Relative paths are resolved from the backend working directory. In the
   # container image keep the default and move the data with the volume mapping instead: the entrypoint gives
   # only the default path to the container's user. The backend also keeps its copy of the wrapper's media-user-token
-  # (from the wrapper's GET /token) in usertoken/wrapper-token.json in this file's directory, mode 0600.
+  # (from the wrapper's GET /token) under usertoken/ in this file's directory, mode 0600.
   # Set only in this file, not through the API; applies after a restart.
   path: "data/db/amdl.db"
 
@@ -92,27 +92,13 @@ wrapper:
   # minutes for each, so a longer value does not help them. A wrapper amdl runs itself ignores this key.
   # Values <= 0 fall back to 120 seconds. Saved through PUT /api/v1/config (the console's Settings); applies after a restart (POST /api/v1/system/restart).
   login_timeout_seconds: 120
-  # string: the wrapper's data directory as this backend sees it, so the backend can read the Apple Music
-  # media-user-token the wrapper keeps for each account in a file named MUSIC_TOKEN and refreshes itself; while it
-  # can, that token is used instead of catalog.media_user_token. A wrapper that serves GET /token at wrapper.address
-  # (amdl's wrapper-lite fork, and a wrapper-manager for each account by GET /token?instance=) hands its tokens over
-  # directly and needs no data_dir; while it gives one, the file is not read (docs/configuration.md, The
-  # media-user-token). Two layouts are read: a wrapper-lite base directory, read as <data_dir>/MUSIC_TOKEN for its one
-  # account (the ./data/wrapper bind mount of deploy/docker-compose.yml's wrapper-lite option), and a
-  # wrapper-manager's data directory, read as <data_dir>/instances/<id>/MUSIC_TOKEN for the account with that
-  # instance id (<volume>/wrapper/rootfs/data in the wrapper-manager option); a wrapper that does not list its
-  # accounts falls back to the newest instances/*/MUSIC_TOKEN. The file is read afresh on every use. A container
-  # mounts that directory read-only and sets this key to the mount point. A relative path is resolved from the
-  # backend working directory. The file must be readable by the user the backend runs as; a missing directory or
-  # file means no wrapper token. Empty (the default) reads nothing. Runtime: the next token read uses a new value.
-  data_dir: ""
 
 catalog:
-  # string: default Apple Music storefront code, for example "us", "cn", "jp". GET /api/v1/search,
+  # string: Apple Music storefront code, for example "us", "cn", "jp", used only while no account is known (before
+  # the first sign-in, or with no wrapper): the default account's region otherwise. GET /api/v1/search,
   # GET /api/v1/artists/{artist_id}/albums and GET /api/v1/albums/{album_id} use it when the request names no
-  # storefront. Submissions never do: a link without a storefront in its path is refused with invalid_url. The web
-  # console reads it from GET /api/v1/system (default_storefront) to complete pasted links that have no region.
-  # Runtime: the next request uses a new value.
+  # storefront, and GET /api/v1/system returns the one in use as default_storefront. Submissions never do: a link
+  # without a storefront in its path is refused with invalid_url. Runtime: the next request uses a new value.
   default_storefront: "cn"
   # string: Apple Music catalog language tag passed as the "l" query parameter, for example "en-US", "zh-Hans_CN", "ja-JP".
   # It is also the language of lyrics translations (download.lyrics_extras, the .ttml sidecar), of the genre tag,
@@ -134,16 +120,6 @@ catalog:
   # and config reload; no restart is required.
   # enum: song, album. song means album URLs containing ?i= are single-song tasks; album downloads the full album.
   album_track_url_mode: "song"
-  # string: optional Apple Music subscription token (media-user-token); album, song and playlist downloads do not need it.
-  # Station downloads need one, and private playlist covers and library sync use one; with one, lyrics and the AAC-LC
-  # playlist and license are requested from Apple by the backend instead of the wrapper. This key is the fallback: while
-  # the backend has the wrapper's own token (a wrapper it runs itself, the wrapper's GET /token, wrapper.data_dir, or its
-  # stored copy of an earlier GET /token answer), it uses that one and
-  # leaves this value saved but unused. A download or lookup request cannot supply its own token.
-  # Runtime: a change applies to jobs and lookups that start afterwards. GET /api/v1/config returns it masked, "..."
-  # and its last four characters; the full value is only in this file. Empty means none: without a wrapper token,
-  # stations fail and private playlists keep the catalog cover.
-  media_user_token: ""
   # bool: true/false. Whether to look up Apple Music animated album covers (attributes.editorialVideo) and
   # expose them on jobs and on GET /api/v1/albums/{id} as motion_artwork_url / motion_artwork_tall_url plus
   # each variant's palette.
@@ -414,9 +390,8 @@ library_sync:
   # monitor off really stops polling rather than just discarding the results.
   #
   # Requires the account's media-user-token — a personal library can be read only with the
-  # subscription token; the web-player token alone is not enough. The wrapper's is used when the
-  # backend has it (the wrapper's GET /token, wrapper.data_dir, or its stored copy of an earlier
-  # GET /token answer), else, for the default account, catalog.media_user_token. While an
+  # subscription token; the web-player token alone is not enough. amdl reads it from the wrapper
+  # (its GET /token, or amdl's stored copy of an earlier answer). While an
   # account has none it idles and warns once, instead of reporting an error every round, and
   # starts within a tick of one appearing.
   #
