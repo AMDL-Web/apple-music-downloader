@@ -87,6 +87,21 @@ func TestQueueRowsTagTheirRegionOnlyAcrossRegions(t *testing.T) {
 		}
 	}
 	one, _ := tt.Find("Tidal Rooms")
+	// A row without artwork still draws its cover slot, not a hole.
+	for _, name := range []string{"City Pop Essentials", "Chill Radio"} {
+		r, _ := tt.Find(name)
+		img := tt.Image()
+		scale := float32(img.Bounds().Dx()) / 1280
+		at := func(x, y float32) [4]uint8 {
+			o := img.PixOffset(int(x*scale), int(y*scale))
+			return [4]uint8(img.Pix[o : o+4])
+		}
+		// The row: its padding, then the 44-point cover.
+		y := r.Y + r.H/2
+		if slot, beside := at(r.X+18+6, y), at(r.X+8, y); slot == beside {
+			t.Errorf("%s: its cover slot is the ground's color %v", name, slot)
+		}
+	}
 
 	_, tt = seededQueue(t, "us", "jp")
 	for _, tag := range []string{"US", "JP"} {

@@ -54,7 +54,7 @@ func (a *App) recordRow(c *ui.Context, k *Tokens, r *store.Record, compact bool)
 		case failedOf(r):
 			dim = 0.3
 		}
-		cover := widgets.Cover{Image: a.Art.Get(r.Artwork.URL, 88), Placeholder: pal.Bg, Size: 44, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
+		cover := a.rowCover(c, k, r.Artwork.URL, pal, color, dim)
 		a.flySourceCover(cover, from, radiusInner, color, dim, 0)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, recordName(*r)).FontSize(13.5).FontWeight(600).Ellipsis("…").SingleLine()
@@ -95,6 +95,27 @@ func (a *App) recordRow(c *ui.Context, k *Tokens, r *store.Record, compact bool)
 		more.PopoverMenuButton(func(m *ui.Menu) { a.rowMenu(m, r, nil) })
 		more.Cursor(ui.CursorPointer).Children(func() { ui.Icon(c, icMore).FontSize(16).TextColor(col) })
 	})
+}
+
+// rowCover is a row's cover slot, always drawn: the artwork over its
+// palette's ground, or, without artwork, the ground (the track color
+// without a palette) with a note, as the Apple grid shows a missing cover.
+// It returns the cover, which the album page flies from.
+func (a *App) rowCover(c *ui.Context, k *Tokens, url string, pal Palette, color, dim float32) ui.Element {
+	ground := pal.Bg
+	if !pal.OK {
+		ground = k.Track
+	}
+	var cover ui.Element
+	ui.Box(c).Size(44, 44).Shrink(0).Children(func() {
+		cover = widgets.Cover{Image: a.Art.Get(url, 88), Placeholder: ground, Size: 44, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
+		if url == "" {
+			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Center().PassThrough().Children(func() {
+				ui.Icon(c, icNote).FontSize(15).TextColor(k.Faint)
+			})
+		}
+	})
+	return cover
 }
 
 // pillColumn is the width of a row's state column: the pill in it is as

@@ -348,7 +348,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 		case domain.JobFailed, domain.JobCancelled:
 			dim = 0.3
 		}
-		cover := widgets.Cover{Image: a.Art.Get(j.ArtworkURL, 88), Placeholder: pal.Bg, Size: 44, Radius: radiusInner, Color: color, Dim: dim}.Show(c)
+		cover := a.rowCover(c, k, j.ArtworkURL, pal, color, dim)
 		a.flySourceCover(cover, "row:"+j.ID, radiusInner, color, dim, 0)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(13.5).FontWeight(600).Ellipsis("…").SingleLine()
