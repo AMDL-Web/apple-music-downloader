@@ -84,8 +84,7 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 		art := ui.Box(c.Key("art")).Size(size, size)
 		hover := art.Hovered()
 		art.Children(func() {
-			open := ui.ButtonBase(c.Key("open")).Size(size, size).Radius(radius).Label(h.Name).
-				Shadow(0, 12, 28, -14, ui.RGBA(0, 0, 0, 0.5))
+			open := tileOpen(c, size, radius, h.Name)
 			if on {
 				if a.searchKeyed {
 					focusRing(open, radius)
@@ -131,16 +130,37 @@ func (a *App) hitTile(c *ui.Context, k *Tokens, h client.SearchHit, key string, 
 		}
 		texts.Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).MaxWidth(size).Children(func() {
-				ui.Text(c, hitName(h)).FontSize(13).FontWeight(600).SingleLine().Ellipsis("…").Shrink(1)
+				tileTitle(c, hitName(h), 1).Shrink(1)
 				if h.ContentRating == "explicit" {
 					explicitBadge(c, k)
 				}
 			})
-			if sub := a.tileLine(h); sub != "" {
-				ui.Text(c, sub).FontSize(12).TextColor(k.Muted).SingleLine().Ellipsis("…").MaxWidth(size)
-			}
+			tileSub(c, k, a.tileLine(h), size)
 		})
 	})
+}
+
+// tileOpen is a tile's cover, a button size square rounded at radius,
+// labeled label, which drops the tile's shadow; its children are the cover.
+func tileOpen(c *ui.Context, size, radius float32, label string) ui.Element {
+	return ui.ButtonBase(c.Key("open")).Size(size, size).Radius(radius).Label(label).
+		Shadow(0, 12, 28, -14, ui.RGBA(0, 0, 0, 0.5))
+}
+
+// tileTitle is a tile's title under its cover, on up to lines lines.
+func tileTitle(c *ui.Context, name string, lines int) ui.Element {
+	t := ui.Text(c, name).FontSize(13).FontWeight(600).Ellipsis("…")
+	if lines <= 1 {
+		return t.SingleLine()
+	}
+	return t.MaxLines(lines)
+}
+
+// tileSub is a tile's line of facts under its title, when it has one.
+func tileSub(c *ui.Context, k *Tokens, sub string, size float32) {
+	if sub != "" {
+		ui.Text(c, sub).FontSize(12).TextColor(k.Muted).SingleLine().Ellipsis("…").MaxWidth(size)
+	}
 }
 
 // qualityHint is a tile's glass pill of its best quality.
@@ -169,8 +189,7 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 	startedAt, starting := s.Search.Starting[hk]
 	// The glyph changes only when the start is slow, as a pill's does.
 	wait := waited(c, starting, startedAt)
-	b := ui.ButtonBase(c.Key("control")).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().
-		Absolute().Right(8).Bottom(8)
+	b := tileCorner(c)
 	pointed := b.Hovered()
 	look := markLook{ic: icDown, fg: k.Fg, glass: true}
 	switch {
@@ -204,20 +223,10 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 		b.Label("Download " + h.Name)
 		look.interactive = true
 	}
-	look.style(b)
 	// Only the download button waits for the pointer; a mark, and the
 	// button of an album partly downloaded, stays.
-	look.op = 1
-	if mark == store.MarkNone {
-		show := float32(0)
-		if shown || starting {
-			show = 1
-		}
-		look.op = b.AnimateWith("shown", show, 120*time.Millisecond, ui.EaseOut)
-	}
-	op := look.op
-	b.Opacity(op).Hidden(op < 0.01)
-	if a.fliesFrom(from) && op >= 0.01 {
+	look.show(b, mark != store.MarkNone || shown || starting, mark == store.MarkNone)
+	if a.fliesFrom(from) && look.op >= 0.01 {
 		a.flySourceBadge(b, from, partMark, func() ui.Element { return look.copy(c) })
 	}
 	if b.Clicked() && !starting {
@@ -231,10 +240,14 @@ func (a *App) tileControl(c *ui.Context, k *Tokens, h client.SearchHit, shown bo
 			a.download(h)
 		}
 	}
-	b.Cursor(ui.CursorPointer).Children(func() {
-		look.glyph(c)
-		look.doneCheck(c)
-	})
+	look.fill(c, b.Cursor(ui.CursorPointer))
+}
+
+// tileCorner is the round control in a tile's bottom corner, over its
+// cover.
+func tileCorner(c *ui.Context) ui.Element {
+	return ui.ButtonBase(c.Key("control")).Size(tileControlSize, tileControlSize).Radius(radiusFull).Center().
+		Absolute().Right(8).Bottom(8)
 }
 
 // markLook is how a tile's control looks: on glass, interactive while it
@@ -250,6 +263,25 @@ type markLook struct {
 	// button, on ok.
 	check float32
 	ok    ui.Color
+}
+
+// show styles b as m looks and sets how opaque it is: shown, at once, or
+// easing to shown or gone where it waits for the pointer (wait).
+func (m *markLook) show(b ui.Element, shown, wait bool) {
+	m.style(b)
+	m.op = 1
+	if wait {
+		m.op = b.AnimateWith("shown", map[bool]float32{true: 1, false: 0}[shown], 120*time.Millisecond, ui.EaseOut)
+	}
+	b.Opacity(m.op).Hidden(m.op < 0.01)
+}
+
+// fill draws m's glyph and check in b.
+func (m markLook) fill(c *ui.Context, b ui.Element) {
+	b.Children(func() {
+		m.glyph(c)
+		m.doneCheck(c)
+	})
 }
 
 func (m markLook) style(el ui.Element) {

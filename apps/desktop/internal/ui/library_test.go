@@ -44,7 +44,8 @@ func TestTheLibraryListsPausesAndAddsRecords(t *testing.T) {
 	if m := s.RecordMark(domain.ResourceAlbum, "920006"); m == nil || m.Paused {
 		t.Errorf("resumed, the record's mark is %+v", m)
 	}
-	// The Apple library marks the albums amdl keeps and adds the others.
+	// The Apple library marks the albums amdl keeps and adds the others,
+	// from the corner of a cover pointed at.
 	a.lib.tab = int(store.LibraryApple)
 	s.SetLibraryTab(store.LibraryApple)
 	run(func() bool { return s.Library.AppleStatus == store.SearchReady })
@@ -52,6 +53,10 @@ func TestTheLibraryListsPausesAndAddsRecords(t *testing.T) {
 	if !tt.HasText("In Library") {
 		t.Errorf("no album marked: %q", tt.Texts())
 	}
+	if _, ok := tt.Find("Add Salt & Static"); ok {
+		t.Errorf("a tile not pointed at shows its Add")
+	}
+	pointAt(t, tt, "Salt & Static")
 	if err := tt.Click("Add Salt & Static"); err != nil {
 		t.Fatalf("%v in %q", err, tt.Texts())
 	}

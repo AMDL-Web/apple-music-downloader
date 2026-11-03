@@ -33,9 +33,10 @@ const (
 	recordPage       = 100
 	appleMarkPages   = 10
 	appleMarkPerPage = 500
-	// appleReadMax is the most items GET /apple-library/{kind} answers at
-	// once.
-	appleReadMax = 200
+	// applePage is a read of the Apple library list, the most the API
+	// gives at once, and applePages the most reads of one list.
+	applePage  = 200
+	applePages = 50
 )
 
 // AppleKinds are the Apple library lists the Apple tab shows.
@@ -82,9 +83,6 @@ type Library struct {
 	Apple       client.AppleLibraryPage
 	AppleStatus SearchStatus
 	AppleErr    string
-	// AppleMore is the list's next page being read, or the last that
-	// failed.
-	AppleMore PageState
 	// AppleSync is the Apple library's sync status, one entry per account;
 	// nil until read.
 	AppleSync *client.AppleLibraryStatus
@@ -100,10 +98,6 @@ type Library struct {
 
 	open bool
 	gen  int
-	// appleWant is how many items of the Apple list a read keeps, the
-	// pages shown so far; appleView counts the lists shown, so a page read
-	// for another kind or account is dropped.
-	appleWant, appleView int
 }
 
 func (l *Library) reset() {
@@ -175,7 +169,6 @@ func (s *Store) SetAppleKind(kind string) {
 		return
 	}
 	l.AppleKind, l.Apple, l.AppleStatus = kind, client.AppleLibraryPage{}, SearchIdle
-	l.newAppleView()
 	l.refresh(s)
 }
 
@@ -243,7 +236,6 @@ func (s *Store) SetAppleAccount(id string) {
 	}
 	l.AppleAccount, l.Apple, l.AppleStatus = id, client.AppleLibraryPage{}, SearchIdle
 	l.Tracks = map[string][]domain.AppleLibraryTrack{}
-	l.newAppleView()
 	l.refresh(s)
 }
 
@@ -346,7 +338,6 @@ func readRecords(ctx context.Context, c *client.Client, tab LibraryTab, q client
 // every record, which mark the items amdl keeps.
 func (l *Library) readApple(s *Store, gen int) {
 	c, ctx, kind, account := s.client, s.ctx, l.AppleKind, l.AppleAccount
-	want := max(l.appleWant, recordPage)
 	if l.Apple.Items == nil {
 		l.AppleStatus, l.AppleErr = SearchLoading, ""
 	}
@@ -355,7 +346,7 @@ func (l *Library) readApple(s *Store, gen int) {
 		if stErr == nil {
 			account = appleAccountOf(st, account)
 		}
-		page, err := readApplePages(ctx, c, kind, account, want)
+		page, err := readAppleList(ctx, c, kind, account)
 		kept := map[string]bool{}
 		for _, tab := range []LibraryTab{LibraryAlbums, LibraryPlaylists} {
 			for p := 0; p < appleMarkPages; p++ {
@@ -377,7 +368,6 @@ func (l *Library) readApple(s *Store, gen int) {
 			}
 			if l.AppleAccount != account {
 				l.AppleAccount, l.Tracks = account, map[string][]domain.AppleLibraryTrack{}
-				l.newAppleView()
 			}
 			l.Kept = kept
 			if err != nil {
@@ -389,68 +379,21 @@ func (l *Library) readApple(s *Store, gen int) {
 	}()
 }
 
-// readApplePages reads the first want items of an Apple list, all of them
-// when it holds fewer, a page of at most appleReadMax at a time.
-func readApplePages(ctx context.Context, c *client.Client, kind, account string, want int) (client.AppleLibraryPage, error) {
-	var all client.AppleLibraryPage
-	for len(all.Items) < want {
-		page, err := c.AppleLibrary(ctx, kind, client.AppleLibraryQuery{Limit: min(want-len(all.Items), appleReadMax),
-			Offset: len(all.Items), Account: account})
+// readAppleList reads all of the Apple library's list of kind, a page at
+// a time, up to applePages of them.
+func readAppleList(ctx context.Context, c *client.Client, kind, account string) (client.AppleLibraryPage, error) {
+	page, err := c.AppleLibrary(ctx, kind, client.AppleLibraryQuery{Limit: applePage, Account: account})
+	for p := 1; err == nil && p < applePages && len(page.Items) < page.Total; p++ {
+		more, err := c.AppleLibrary(ctx, kind, client.AppleLibraryQuery{Limit: applePage, Offset: len(page.Items), Account: account})
 		if err != nil {
-			return all, err
+			return page, err
 		}
-		page.Items, page.Offset = append(all.Items, page.Items...), 0
-		short := len(page.Items) == len(all.Items)
-		all = page
-		if short || len(all.Items) >= all.Total {
+		if len(more.Items) == 0 {
 			break
 		}
+		page.Items = append(page.Items, more.Items...)
 	}
-	return all, nil
-}
-
-// newAppleView starts another Apple list: its pages start over.
-func (l *Library) newAppleView() {
-	l.appleView++
-	l.appleWant, l.AppleMore = 0, PageIdle
-}
-
-// MoreApple reads the Apple list's next page and adds it after the items
-// shown.
-func (s *Store) MoreApple() {
-	l := &s.Library
-	if s.client == nil || l.AppleStatus != SearchReady || l.AppleMore == PageLoading || len(l.Apple.Items) >= l.Apple.Total {
-		return
-	}
-	offset := len(l.Apple.Items)
-	l.AppleMore, l.appleWant = PageLoading, offset+recordPage
-	c, ctx, kind, account, view := s.client, s.ctx, l.AppleKind, l.AppleAccount, l.appleView
-	go func() {
-		page, err := c.AppleLibrary(ctx, kind, client.AppleLibraryQuery{Limit: recordPage, Offset: offset, Account: account})
-		s.postIf(ctx, func() { l.applyAppleMore(view, offset, page, err) })
-	}()
-}
-
-// applyAppleMore adds a next page read at offset of the list view, unless
-// another list is shown or a fresh read already holds that page.
-func (l *Library) applyAppleMore(view, offset int, page client.AppleLibraryPage, err error) {
-	if view != l.appleView {
-		return
-	}
-	if err != nil {
-		l.AppleMore = PageFailed
-		return
-	}
-	l.AppleMore = PageIdle
-	if len(l.Apple.Items) != offset {
-		return
-	}
-	l.Apple.Items = append(l.Apple.Items, page.Items...)
-	l.Apple.Total = page.Total
-	if len(page.Items) == 0 {
-		// The list ended early: no further page is asked for.
-		l.Apple.Total = len(l.Apple.Items)
-	}
+	return page, err
 }
 
 // SyncApple asks the backend to read the shown account's Apple library

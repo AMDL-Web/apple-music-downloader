@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -28,14 +29,16 @@ func (a *App) appleSyncBar(c *ui.Context, k *Tokens, compact bool) {
 	}
 }
 
-// appleList is the Apple library's list of the chosen kind: each item
-// amdl keeps marked, any other with Add; a playlist without a catalog link
-// opens its tracks, each added on its own.
+// libraryPadX is the room either side of the Library's lists.
+const libraryPadX = 18
+
+// appleList is the Apple library's list of the chosen kind: albums and
+// playlists as a grid of their covers, songs as rows.
 func (a *App) appleList(c *ui.Context, k *Tokens) {
 	s := a.Store
 	l := &s.Library
 	f := &a.lib
-	ui.Row(c).Padding(0, 18, 10, 18).Gap(8).AlignItems(ui.Center).Background(k.Ground).Children(func() {
+	ui.Row(c).Padding(0, libraryPadX, 10, libraryPadX).Gap(8).AlignItems(ui.Center).Background(k.Ground).Children(func() {
 		prev := f.apple
 		segmented(c, k, "apple", &f.apple, []string{"Albums", "Songs", "Playlists"}, nil)
 		if f.apple != prev {
@@ -55,35 +58,244 @@ func (a *App) appleList(c *ui.Context, k *Tokens) {
 		return
 	}
 	items := l.Apple.Items
-	a.scrollArea(c, "apple", scrollGutter, func() {
-		for _, it := range items {
-			a.appleRow(c, k, it)
-		}
-		a.appleMore(c, k)
-	}).Grow(1).Background(k.Ground)
-}
-
-// appleMore reads the list's next page as the end comes near, and holds
-// the row under the list that says when that read failed.
-func (a *App) appleMore(c *ui.Context, k *Tokens) {
-	s := a.Store
-	l := &s.Library
-	if len(l.Apple.Items) >= l.Apple.Total {
+	if l.AppleKind == "songs" {
+		a.appleSongs(c, k, items)
 		return
 	}
-	ui.Row(c.Key("more")).Height(groupRow).Gap(10).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-		if l.AppleMore == store.PageFailed {
-			ui.Text(c, "Could not load more.").FontSize(12).TextColor(k.Bad)
-			if button(c, k, buttonGhost, "Try again", nil).Clicked() {
-				s.MoreApple()
+	a.appleGrid(c, k, items)
+}
+
+// appleListState is the place of the Apple list of kind, which each kind
+// keeps of its own.
+func (a *App) appleListState(kind string) *ui.ListState {
+	if a.lib.appleLists == nil {
+		a.lib.appleLists = map[string]*ui.ListState{}
+	}
+	st := a.lib.appleLists[kind]
+	if st == nil {
+		st = &ui.ListState{}
+		a.lib.appleLists[kind] = st
+	}
+	return st
+}
+
+// appleSongs is the Apple library's songs, a row each, built as they show.
+func (a *App) appleSongs(c *ui.Context, k *Tokens, items []domain.AppleLibraryItem) {
+	ui.Box(c.Key("apple-area")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
+		st := a.scrollState(c, "apple-songs")
+		list := ui.List(c.Key("apple-songs"), a.appleListState("songs"), len(items), func(i int) {
+			a.appleRow(c, k, items[i])
+		}).Absolute().Top(0).Left(0).Right(0).Bottom(0).ItemKey(func(i int) any { return items[i].ID }).TrackScroll(st)
+		a.fadeEdges(list, st)
+	})
+}
+
+// appleGridGapY is the room between two rows of the Apple grid, as between
+// home's rows of tiles.
+const appleGridGapY = 24
+
+// applePlace is a row of the Apple grid: the tiles of row, or the tracks
+// of the library-only playlist tracks names, opened under its row.
+type applePlace struct {
+	row    int
+	tracks string
+}
+
+// appleGrid lays the Apple library's albums or playlists out as home's
+// tiles, rows filling the page; a library-only playlist opened shows its
+// tracks under its row. The list builds only the rows in view.
+func (a *App) appleGrid(c *ui.Context, k *Tokens, items []domain.AppleLibraryItem) {
+	kind := a.Store.Library.AppleKind
+	width := a.pageWidth(c) - 2*libraryPadX
+	cols, size := tileColumns(width), tileSize(width, 0)
+	var places []applePlace
+	for r := 0; r*cols < len(items); r++ {
+		places = append(places, applePlace{row: r})
+		for _, it := range items[r*cols : min(len(items), (r+1)*cols)] {
+			// The tracks take their row once they are read, so the grid
+			// moves once.
+			if a.lib.opened[it.ID] && appleLibraryOnly(kind, it) && len(a.Store.Library.Tracks[it.ID]) > 0 {
+				places = append(places, applePlace{row: r, tracks: it.ID})
 			}
 		}
+	}
+	ui.Box(c.Key("apple-area")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
+		st := a.scrollState(c, "apple-"+kind)
+		list := ui.List(c.Key("apple-"+kind), a.appleListState(kind), len(places), func(i int) {
+			p := places[i]
+			if p.tracks != "" {
+				a.appleTracks(c, k, p.tracks)
+				return
+			}
+			ui.Row(c).Padding(0, libraryPadX, appleGridGapY, libraryPadX).Gap(tileGap).AlignItems(ui.Start).Children(func() {
+				for _, it := range items[p.row*cols : min(len(items), (p.row+1)*cols)] {
+					a.appleTile(c, k, kind, it, size)
+				}
+			})
+		}).Absolute().Top(0).Left(0).Right(0).Bottom(0).ItemKey(func(i int) any {
+			if p := places[i]; p.tracks != "" {
+				return "tracks:" + p.tracks
+			}
+			return items[places[i].row*cols].ID
+		}).TrackScroll(st)
+		a.fadeEdges(list, st)
 	})
-	if l.AppleMore == store.PageIdle {
-		if st := a.scrolls["apple"]; st == nil || st.MaxY-st.Y < loadAhead {
-			s.MoreApple()
+}
+
+// appleLibraryOnly reports whether it is a playlist with no catalog link,
+// whose tracks are added one by one.
+func appleLibraryOnly(kind string, it domain.AppleLibraryItem) bool {
+	return kind == "playlists" && it.CatalogID == ""
+}
+
+// appleTile is an Apple album or playlist as home's tiles show one: its
+// cover large, which opens an album's page or a library-only playlist's
+// tracks, its title on up to two lines, its artist or curator, and its one
+// control in the cover's corner (appleControl).
+func (a *App) appleTile(c *ui.Context, k *Tokens, kind string, it domain.AppleLibraryItem, size float32) {
+	ui.Column(c.Key(it.ID)).Width(size).Gap(10).Children(func() {
+		art := ui.Box(c.Key("art")).Size(size, size)
+		hover := art.Hovered()
+		art.Children(func() {
+			open := tileOpen(c, size, radiusCover, it.Name)
+			if act := a.appleOpen(kind, it); act != nil {
+				if open.Clicked() {
+					act()
+				}
+				open.Cursor(ui.CursorPointer)
+			}
+			open.Children(func() {
+				widgets.Cover{Image: a.Art.Get(it.ArtworkURL, int(2*size)), Placeholder: k.Track, Size: size, Radius: radiusCover, Color: 1}.Show(c)
+				if it.ArtworkURL == "" {
+					ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Center().PassThrough().Children(func() {
+						ui.Icon(c, icNote).FontSize(size / 4).TextColor(k.Faint)
+					})
+				}
+			})
+			a.appleControl(c, k, kind, it, hover)
+		})
+		ui.Column(c).Gap(3).Children(func() {
+			tileTitle(c, it.Name, 2).MaxWidth(size)
+			tileSub(c, k, it.ArtistName, size)
+		})
+	})
+}
+
+// appleOpen is what a click on an Apple tile's cover does: an album's opens
+// its page, a library-only playlist's shows or hides its tracks; nil for a
+// cover that opens nothing.
+func (a *App) appleOpen(kind string, it domain.AppleLibraryItem) func() {
+	switch {
+	case kind == "albums" && it.CatalogID != "":
+		return func() { a.openAppleAlbum(it) }
+	case appleLibraryOnly(kind, it):
+		return func() { a.toggleAppleTracks(it.ID) }
+	}
+	return nil
+}
+
+func (a *App) openAppleAlbum(it domain.AppleLibraryItem) {
+	a.OpenAlbum(client.SearchHit{Type: "album", ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL,
+		Resource: a.Store.RecordMark(domain.ResourceAlbum, it.CatalogID)})
+}
+
+func (a *App) toggleAppleTracks(id string) {
+	if a.lib.opened == nil {
+		a.lib.opened = map[string]bool{}
+	}
+	a.lib.opened[id] = !a.lib.opened[id]
+	a.Store.OpenApplePlaylist(id)
+}
+
+// appleControl is an Apple tile's control, as a search tile's: the check
+// of an item amdl keeps, which opens an album; a library-only playlist's
+// button that shows its tracks; else Add, shown while the tile is pointed
+// at, and what the add became.
+func (a *App) appleControl(c *ui.Context, k *Tokens, kind string, it domain.AppleLibraryItem, hover bool) {
+	s := a.Store
+	l := &s.Library
+	done := markLook{bg: k.OK, fg: ui.RGB(255, 255, 255), ic: icCheck}
+	switch {
+	case it.CatalogID != "" && l.Kept[it.CatalogID]:
+		b := tileCorner(c).Tooltip("In Library")
+		if kind == "albums" {
+			b.Label("In Library: open it").Cursor(ui.CursorPointer)
+			if b.Clicked() {
+				a.openAppleAlbum(it)
+			}
+		} else {
+			b.Label("In Library")
+		}
+		done.show(b, true, false)
+		done.fill(c, b)
+		return
+	case appleLibraryOnly(kind, it):
+		b := tileCorner(c).Label("Show its tracks").Cursor(ui.CursorPointer)
+		if b.Clicked() {
+			a.toggleAppleTracks(it.ID)
+		}
+		look := markLook{glass: true, interactive: true, fg: k.Fg, ic: icChevron}
+		look.show(b, hover || a.lib.opened[it.ID], true)
+		look.fill(c, b)
+		return
+	case it.URL == "":
+		return
+	}
+	st, sent := l.Added[it.URL]
+	b := tileCorner(c)
+	look, wait := markLook{glass: true, fg: k.Fg, ic: icPlus}, false
+	switch {
+	case sent && st == "" && waited(c, true, a.lib.addedAt[it.URL]):
+		// The button changes only when the add is slow, as a pill does.
+		b.Label("Adding " + it.Name)
+		look.ic = nil
+	case sent && st == "":
+		b.Label("Add " + it.Name).Cursor(ui.CursorPointer)
+		look.interactive = true
+	case st == domain.SubmitAccepted:
+		b.Label(it.Name + " is in the queue").Tooltip("In the queue")
+		look = markLook{bg: k.Accent, fg: k.AccentInk, ic: icDown}
+	case st == domain.SubmitPending:
+		b.Label("Adding " + it.Name).Tooltip("Adding")
+		look = markLook{bg: k.Raise2, fg: k.Fg, ic: icClock}
+	case st == domain.SubmitAlreadyDownloaded:
+		b.Label(it.Name + " is in your library").Tooltip("In Library")
+		look = done
+	default:
+		b.Label("Add " + it.Name).Cursor(ui.CursorPointer)
+		look.interactive, wait = true, true
+		if b.Clicked() {
+			if a.lib.addedAt == nil {
+				a.lib.addedAt = map[string]time.Time{}
+			}
+			a.lib.addedAt[it.URL] = c.Now()
+			s.AddApple(it.URL, it.Name)
 		}
 	}
+	look.show(b, hover, wait)
+	look.fill(c, b)
+}
+
+// appleTracks is the tracks of the library-only playlist id, opened under
+// its row, each added on its own.
+func (a *App) appleTracks(c *ui.Context, k *Tokens, id string) {
+	tracks := a.Store.Library.Tracks[id]
+	ui.Column(c).Padding(0, libraryPadX, appleGridGapY, libraryPadX).Children(func() {
+		if len(tracks) == 0 {
+			return
+		}
+		ui.Column(c).Padding(6, padCard).Radius(radiusCard).Background(k.Raise).Border(1, k.Line).Children(func() {
+			for _, t := range tracks {
+				ui.Row(c.Key(t.Position)).Height(34).Gap(10).AlignItems(ui.Center).Children(func() {
+					mono(c, fmt.Sprint(t.Position+1), 11).TextColor(k.Faint).Width(22)
+					ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Children(func() {
+						ui.Text(c, t.Name).FontSize(12.5).SingleLine().Ellipsis("…")
+					})
+					a.appleAdd(c, k, t.URL, t.Name)
+				})
+			}
+		})
+	})
 }
 
 // appleAccounts switches between the accounts whose Apple library amdl
@@ -126,66 +338,24 @@ func appleAccountLabels(on []client.AppleLibraryAccountStatus) (labels, names []
 	return labels, names
 }
 
+// appleRow is an Apple library song: its cover, title, artist and album,
+// and its Add.
 func (a *App) appleRow(c *ui.Context, k *Tokens, it domain.AppleLibraryItem) {
-	s := a.Store
-	l := &s.Library
-	kind := l.AppleKind
-	libraryOnly := kind == "playlists" && it.CatalogID == ""
-	ui.Column(c.Key(it.ID)).BorderWidth(0, 0, 1, 0).BorderColor(k.Line).Children(func() {
-		ui.Row(c).Padding(8, 18).Gap(12).AlignItems(ui.Center).Children(func() {
-			widgets.Cover{Image: a.Art.Get(it.ArtworkURL, 80), Placeholder: k.Track, Size: 40, Radius: radiusInner, Color: 1}.Show(c)
-			ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, it.Name).FontSize(13).FontWeight(600).SingleLine().Ellipsis("…")
-				var parts []string
-				if it.ArtistName != "" {
-					parts = append(parts, it.ArtistName)
+	ui.Row(c.Key(it.ID)).Padding(8, libraryPadX).Gap(12).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(k.Line).Children(func() {
+		widgets.Cover{Image: a.Art.Get(it.ArtworkURL, 80), Placeholder: k.Track, Size: 40, Radius: radiusInner, Color: 1}.Show(c)
+		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
+			ui.Text(c, it.Name).FontSize(13).FontWeight(600).SingleLine().Ellipsis("…")
+			var parts []string
+			for _, p := range []string{it.ArtistName, it.AlbumName} {
+				if p != "" {
+					parts = append(parts, p)
 				}
-				if kind == "songs" && it.AlbumName != "" {
-					parts = append(parts, it.AlbumName)
-				}
-				if kind == "albums" && it.TrackCount > 0 {
-					parts = append(parts, plural(it.TrackCount, "song"))
-				}
-				if sub := joinParts(parts); sub != "" {
-					ui.Text(c, sub).FontSize(12).TextColor(k.Muted).SingleLine().Ellipsis("…")
-				}
-			})
-			switch {
-			case it.CatalogID != "" && (kind == "albums" || kind == "playlists") && l.Kept[it.CatalogID]:
-				if kind == "albums" {
-					if markButton(c, k, "In Library", pillOK, icCheck).Label("In Library: open it").Clicked() {
-						a.OpenAlbum(client.SearchHit{Type: "album", ID: it.CatalogID, Name: it.Name, ArtistName: it.ArtistName, ArtworkURL: it.ArtworkURL,
-							Resource: s.RecordMark(domain.ResourceAlbum, it.CatalogID)})
-					}
-				} else {
-					pill(c, k, pillOK, icCheck, "In Library")
-				}
-			case libraryOnly:
-				open := a.lib.opened[it.ID]
-				if button(c, k, buttonPlain, "Tracks", icChevron).Label("Show its tracks").Clicked() {
-					if a.lib.opened == nil {
-						a.lib.opened = map[string]bool{}
-					}
-					a.lib.opened[it.ID] = !open
-					s.OpenApplePlaylist(it.ID)
-				}
-			default:
-				a.appleAdd(c, k, it.URL, it.Name)
+			}
+			if sub := joinParts(parts); sub != "" {
+				ui.Text(c, sub).FontSize(12).TextColor(k.Muted).SingleLine().Ellipsis("…")
 			}
 		})
-		if libraryOnly && a.lib.opened[it.ID] {
-			ui.Column(c).Padding(0, 18, 8, 70).Children(func() {
-				for _, t := range l.Tracks[it.ID] {
-					ui.Row(c.Key(t.Position)).Height(34).Gap(10).AlignItems(ui.Center).Children(func() {
-						mono(c, fmt.Sprint(t.Position+1), 11).TextColor(k.Faint).Width(22)
-						ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Children(func() {
-							ui.Text(c, t.Name).FontSize(12.5).SingleLine().Ellipsis("…")
-						})
-						a.appleAdd(c, k, t.URL, t.Name)
-					})
-				}
-			})
-		}
+		a.appleAdd(c, k, it.URL, it.Name)
 	})
 }
 

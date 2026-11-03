@@ -95,33 +95,11 @@ func TestTheAppleTabReachesEveryItemOfALongLibrary(t *testing.T) {
 	s.SetLibraryTab(LibraryApple)
 	s.OpenLibrary()
 	settle(func() bool { return l.AppleStatus == SearchReady })
-	if len(l.Apple.Items) != recordPage || l.Apple.Total != 343 {
-		t.Fatalf("first read: %d of %d", len(l.Apple.Items), l.Apple.Total)
-	}
-	for len(l.Apple.Items) < l.Apple.Total {
-		shown := len(l.Apple.Items)
-		s.MoreApple()
-		if l.AppleMore != PageLoading {
-			t.Fatalf("at %d of %d no next page was asked for", shown, l.Apple.Total)
-		}
-		// Asking again while the page loads reads nothing more.
-		s.MoreApple()
-		settle(func() bool { return l.AppleMore != PageLoading })
-		if len(l.Apple.Items) <= shown {
-			t.Fatalf("the page after %d added nothing", shown)
-		}
-	}
-	if err := inOrder(l.Apple.Items, "albums"); err != nil || len(l.Apple.Items) != 343 {
-		t.Fatalf("all albums: %d, %v", len(l.Apple.Items), err)
-	}
-	reads := f.listReads()
-	s.MoreApple()
-	if l.AppleMore != PageIdle || f.listReads() != reads {
-		t.Errorf("past the end: state %v, reads %d then %d", l.AppleMore, reads, f.listReads())
+	if err := inOrder(l.Apple.Items, "albums"); err != nil || len(l.Apple.Items) != 343 || l.Apple.Total != 343 {
+		t.Fatalf("all albums: %d of %d, %v", len(l.Apple.Items), l.Apple.Total, err)
 	}
 
-	// A fresh read, as after an add, keeps every item shown, not the first
-	// page.
+	// A fresh read, as after an add, still reads every item.
 	l.Apple.Items = []domain.AppleLibraryItem{}
 	l.refresh(s)
 	settle(func() bool { return len(l.Apple.Items) > 0 })
@@ -129,16 +107,9 @@ func TestTheAppleTabReachesEveryItemOfALongLibrary(t *testing.T) {
 		t.Errorf("after a fresh read: %d items, %v", len(l.Apple.Items), err)
 	}
 
-	// Another kind starts at its first page, and a page read for the last
-	// kind never lands in it.
 	s.SetAppleKind("songs")
 	settle(func() bool { return l.AppleStatus == SearchReady && l.Apple.Kind == "songs" })
-	if len(l.Apple.Items) != recordPage || l.Apple.Total != 747 {
-		t.Fatalf("songs: %d of %d", len(l.Apple.Items), l.Apple.Total)
-	}
-	view := l.appleView
-	l.applyAppleMore(view-1, recordPage, client.AppleLibraryPage{Items: []domain.AppleLibraryItem{{ID: "l.albums100"}}, Total: 343}, nil)
-	if len(l.Apple.Items) != recordPage || l.Apple.Total != 747 {
-		t.Errorf("a page of the albums landed in songs: %d of %d", len(l.Apple.Items), l.Apple.Total)
+	if err := inOrder(l.Apple.Items, "songs"); err != nil || len(l.Apple.Items) != 747 {
+		t.Errorf("all songs: %d, %v", len(l.Apple.Items), err)
 	}
 }

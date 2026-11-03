@@ -21,6 +21,10 @@ type libraryForm struct {
 	removing           *store.Record
 	removeOpen         bool
 	opened             map[string]bool
+	// appleLists are the places of the Apple lists, by kind, and addedAt
+	// when each Apple item's Add was clicked, by URL.
+	appleLists map[string]*ui.ListState
+	addedAt    map[string]time.Time
 }
 
 // libraryFilters are the filters a record list offers, in the order of its
