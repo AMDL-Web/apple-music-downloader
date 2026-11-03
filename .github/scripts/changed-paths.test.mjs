@@ -33,6 +33,17 @@ test('documentation, rules, the website and the console skip the Go jobs', () =>
   assert.equal(classify(['docs/api.md', 'apps/console/static/app.js', 'apps/site/content/en.json']).go, false);
 });
 
+// Go tests read these light files (internal/progress the console's status.js,
+// internal/api docs/api.md), so a change to only them skips the Go jobs and the
+// light job runs those packages instead; tools/repocheck
+// TestLightPathsReadByGoTestsAreCovered checks the packages against ci.yml.
+test('light files that Go tests read are light, not Go changes', () => {
+  for (const f of ['apps/console/static/js/lib/status.js', 'apps/console/static/js/lib/album-progress.js', 'docs/api.md']) {
+    assert.equal(classify([f]).go, false, f);
+  }
+  assert.equal(classify(['docs/api.md', 'internal/api/events.go']).go, true);
+});
+
 test('anything else, embedded Markdown included, runs the Go jobs', () => {
   for (const f of ['internal/jobs/jobs.go', 'apps/amdl/skill/SKILL.md', 'configs/config.example.yaml', 'Makefile', 'go.mod',
     '.github/workflows/ci.yml', '.github/scripts/shard.mjs', 'deploy/server/Dockerfile', 'tools/upgradecheck/run.sh', 'apps/desktop/internal/ui/x.go']) {

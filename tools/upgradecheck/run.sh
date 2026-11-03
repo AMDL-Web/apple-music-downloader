@@ -43,8 +43,10 @@ stop() { kill "${pids[-1]}" && wait "${pids[-1]}" 2>/dev/null || true; }
 
 mkdir -p "$d/srv"
 serve "$old" "$d/old-serve.log" || { echo "FAIL: $prev did not start; see $d/old-serve.log"; exit 1; }
+# Without the previous release's own download there is no old state to upgrade
+# from, and a check of nothing must not pass.
 "$old" --server "$url" download https://music.apple.com/us/album/1524443761 --wait --timeout 5m >/dev/null ||
-	echo "note: $prev's simulated download did not finish"
+	{ echo "FAIL: $prev's simulated download did not finish, so there is no download state to upgrade; see $d/old-serve.log"; exit 1; }
 stop
 if serve "$new" "$d/new-serve.log"; then
 	"$new" --server "$url" download https://music.apple.com/us/album/1524443761 --wait --timeout 5m >/dev/null &&
@@ -57,7 +59,7 @@ fi
 # The embedded backend keeps its files in the per-user directories.
 export HOME=$d/home XDG_CONFIG_HOME=$d/home/.config XDG_CACHE_HOME=$d/home/.cache
 "$old" --server embedded --wrapper http://127.0.0.1:9 system get >/dev/null ||
-	echo "note: $prev's embedded backend did not answer"
+	{ echo "FAIL: $prev's embedded backend did not answer, so it left no per-user files to upgrade"; exit 1; }
 if out=$("$new" --server embedded system get 2>&1); then
 	echo "ok: embedded backend"
 else

@@ -215,8 +215,10 @@ jobs:
 
   # For a change to only documentation, rules, the website or the console: the
   # checks that can see it. The repository checks (links, paths, AGENTS.md
-  # sizes), the console's Go tests, the Node tests of the scripts, hooks,
-  # console and website, and a build that compiles what the console embeds.
+  # sizes), the console's Go tests, the Go tests that read a console or docs
+  # file (tools/repocheck TestLightPathsReadByGoTestsAreCovered keeps that list
+  # complete), the Node tests of the scripts, hooks, console and website, and a
+  # build that compiles what the console embeds.
   light:
     name: Light checks
     needs: changes
@@ -241,7 +243,7 @@ jobs:
         run: make build
 
       - name: Repository and console tests
-        run: go test -count=1 ./tools/repocheck/ ./apps/console/...
+        run: go test -count=1 ./tools/repocheck/ ./apps/console/... ./internal/progress/ ./internal/api/
 
       - name: Script tests
         run: make node-test
