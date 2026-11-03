@@ -1,6 +1,7 @@
 package console
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
@@ -774,5 +775,22 @@ func TestLoginWaitMatchesTheGoClient(t *testing.T) {
 	ms, _ := strconv.Atoi(m[1]) // the pattern only matches digits
 	if got := time.Duration(ms) * time.Millisecond; got != client.LoginWait {
 		t.Fatalf("LOGIN_TIMEOUT_MS is %v, client.LoginWait %v: a login to a wrapper amdl runs outlasts the shorter one", got, client.LoginWait)
+	}
+}
+
+// A request line that carries the fragment ("GET /#/settings HTTP/1.1"),
+// as some phone proxies send it, gets the page the fragment belongs to.
+func TestFragmentInRequestPath(t *testing.T) {
+	h := Handler()
+	for _, target := range []string{"/#/settings?section=account", "/index.html#/library"} {
+		req, err := http.ReadRequest(bufio.NewReader(strings.NewReader("GET " + target + " HTTP/1.1\r\nHost: amdl\r\n\r\n")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<html") {
+			t.Errorf("%s: %d %.60q", target, rec.Code, rec.Body.String())
+		}
 	}
 }
