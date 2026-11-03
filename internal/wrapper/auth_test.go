@@ -110,6 +110,25 @@ func TestWrapperOwn401IsNotTheKey(t *testing.T) {
 	}
 }
 
+// A 401 that asks for a bearer key is the gateway's refusal, whatever its
+// body: a gateway may answer in JSON shaped like the wrapper's envelope.
+func TestBearerChallengeIsTheKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"code":401,"msg":"unauthorized"}`))
+	}))
+	t.Cleanup(srv.Close)
+	c, err := NewClient(config.WrapperConfig{Address: srv.URL, TimeoutSeconds: 5}, WithToken(func() string { return "k" }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	if _, err := c.Status(context.Background()); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("status = %v, want ErrUnauthorized", err)
+	}
+}
+
 // A wrapper at *.workers.dev that times out or loses its connection says to
 // bind a custom domain; elsewhere it does not.
 func TestWorkersDevHint(t *testing.T) {

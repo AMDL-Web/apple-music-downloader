@@ -53,11 +53,12 @@ func (t tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 	// A wrapper's own 401 carries its {code, msg} envelope; a gateway's
-	// does not.
+	// asks for a bearer key or has no envelope.
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 	resp.Body.Close()
+	bearer := strings.HasPrefix(strings.ToLower(strings.TrimSpace(resp.Header.Get("WWW-Authenticate"))), "bearer")
 	var env envelope
-	if json.Unmarshal(raw, &env) == nil && env.Msg != "" {
+	if !bearer && json.Unmarshal(raw, &env) == nil && env.Msg != "" {
 		resp.Body = io.NopCloser(bytes.NewReader(raw))
 		return resp, nil
 	}
