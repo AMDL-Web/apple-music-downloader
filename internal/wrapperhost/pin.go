@@ -100,9 +100,9 @@ var Builtin = Pin{
 	Size:     30008241,
 	Lite: LitePin{
 		Artifact: LiteArtifact,
-		Commit:   "97267425669943e9ced5691ee8a311543110a258",
-		SHA256:   "0bed5a806f52c71bc2b45f94ed08da3758d22084bc897578ee898673721847c3",
-		Size:     50118510,
+		Commit:   "38bebfc834e944b5664d15f1bb0cf9b6005d79e5",
+		SHA256:   "01437bc27ebc1728aae71a28781bad14fe29375388428ae16b124918c44758f0",
+		Size:     30642052,
 	},
 }
 

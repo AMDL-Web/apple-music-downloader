@@ -14,7 +14,7 @@ const MaxAccounts = 10
 
 // guestBaseMemoryMB is the guest without accounts: the kernel, the
 // initramfs held in RAM, init, and the manager, which was measured at 15 to
-// 50 MiB and downloads the 50 MB wrapper-lite zip into memory on first boot.
+// 50 MiB and downloads the 31 MB wrapper-lite zip into memory on first boot.
 const guestBaseMemoryMB = 384
 
 // guestAccountMemoryMB is one account's launcher and wrapper-lite. Measured
