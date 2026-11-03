@@ -17,13 +17,21 @@ import (
 // from the top of the list under it, and the light behind both turns from
 // the one screen's to the other's (backdrop). Everything follows one value,
 // q, from 0 (the screen under) to 1 (the page), on a spring, which Back
-// turns round from wherever it is. While the desktop asks for less motion,
-// q is a short fade, and nothing flies.
+// turns round from wherever it is: the cover goes with q itself, so it sets
+// off at once and leads, and the rest follows from crossover (travel).
+// While the desktop asks for less motion, q is a short fade, and nothing
+// flies.
 
-// flightSpring is how q moves: critically damped, so nothing overshoots,
-// 95% of the way in 0.29 s and 99% in 0.4 s; it comes to rest within a
-// thousandth of the way, under half a DIP of the longest flight.
+// flightSpring is how q comes in: critically damped, so nothing
+// overshoots, 95% of the way in 0.29 s and 99% in 0.4 s; it comes to rest
+// within a thousandth of the way, under half a DIP of the longest flight.
 var flightSpring = ui.Animation{Spring: ui.SpringOptions{Duration: 380 * time.Millisecond}}
+
+// flightBack is how q goes out: quicker than it comes in, and aimed
+// flightPast below 0, so that the flight ends as q gets to 0, where the
+// cover lands, in about 0.28 s, still moving under 1% of its way a frame
+// rather than over the spring's slow tail.
+var flightBack = ui.Animation{Spring: ui.SpringOptions{Duration: 320 * time.Millisecond}}
 
 const (
 	// flightFade is how long q takes while the desktop asks for less
@@ -31,18 +39,23 @@ const (
 	flightFade = 150 * time.Millisecond
 	// flightRise is how far what only the page has rises as it comes in.
 	flightRise = 16
-	// crossover is the q from which what flies moves (travel), as the
-	// screens cross (cross): going back, the flight ends when it is down to
-	// it, where the cover lands.
+	// flightPast is how far below 0 q aims going out (flightBack).
+	flightPast = 0.03
+	// crossover is the q from which what flies, but the cover, moves
+	// (travel), once the screens are crossing coming in (cross).
 	crossover = 0.2
+	// outLand is the q by which, going out, the screens have crossed back
+	// and the light has turned (cross, light): the cover settles the last
+	// of its way, about a fifth of it, over its own screen.
+	outLand = 0.08
 	// inCross and outCross are how much of q the screens take to cross
 	// (cross): coming in from the start, over the first few frames, and
-	// going out down to crossover, where the cover lands.
+	// going out down to outLand.
 	inCross, outCross = 0.45, 0.3
 	// inParts and outParts are the q from which the page's own parts show
 	// (partsFrom), as the screen under thins out, so the two overlap a
 	// little and the window never stands blank between them.
-	inParts, outParts = 0.3, 0.4
+	inParts, outParts = 0.3, 0.25
 	// panelLined is the q from which the lower panel's top line shows, as
 	// it lands.
 	panelLined = 0.85
@@ -242,13 +255,19 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 		root.Jump(flightKey{}, target)
 		f.q = q
 	default:
-		f.q = root.AnimateTo(flightKey{}, target, flightSpring)
+		aim, spring := target, flightSpring
+		if f.out && f.q > 0 {
+			// f.q is still the frame before's: at rest at 0, q aims at
+			// 0 and asks for no frames.
+			aim, spring = -flightPast, flightBack
+		}
+		f.q = root.AnimateTo(flightKey{}, aim, spring)
 		f.fadeFrom, f.fadeTo = target, target
-		if f.out && f.q > 0 && f.q <= crossover {
+		if f.out && f.q <= 0 {
 			// Going out, the cover has landed and the screens have crossed
-			// (cross) by crossover: the flight ends there, not over the
-			// spring's slow tail, so the screen under takes the pointer,
-			// and shows its tile's own shadow and marks, as the cover lands.
+			// (cross): the flight ends there, so the screen under takes the
+			// pointer, and shows its tile's own shadow and marks, as the
+			// cover lands.
 			root.Jump(flightKey{}, 0)
 			f.q = 0
 		}
@@ -342,11 +361,11 @@ func (a *App) flyTags(row, quality ui.Element, text string, hi bool, fg ui.Color
 // until the panel is half in and only then thins out (underShown). Two
 // layers thinning out together over the light ground wash out to white,
 // and a screen gone before the panel is there leaves it blank. Coming in
-// it runs over inCross of q; going out over outCross above crossover, so
-// it has crossed back when the cover lands and the flight ends (flightQ).
+// it runs over inCross of q; going out over outCross above outLand, as the
+// cover comes down to its place.
 func (f *flight) cross() float32 {
 	if f.out {
-		return unit((f.q - crossover) / outCross)
+		return unit((f.q - outLand) / outCross)
 	}
 	return unit(f.q / inCross)
 }
@@ -363,11 +382,11 @@ func (f *flight) partsFrom() float32 {
 }
 
 // light is how far the light and the lower panel's ground have turned to
-// the page's: q coming in, and going out all the way back by the time the
-// cover lands.
+// the page's: q coming in, and going out all the way back by outLand, with
+// the screens.
 func (f *flight) light() float32 {
 	if f.out {
-		return unit((f.q - crossover) / (1 - crossover))
+		return unit((f.q - outLand) / (1 - outLand))
 	}
 	return f.q
 }
@@ -380,6 +399,12 @@ func (f *flight) travel() float32 {
 	x := unit((f.q - crossover) / (1 - crossover))
 	return x * x * (3 - 2*x)
 }
+
+// lead is how far the cover has gone, from 0 (where the screen under the
+// page shows it) to 1 (where the page does): q itself, so that it sets off
+// in the first frame, ahead of what travels, and lands as the flight ends;
+// q's spring eases it in and out.
+func (f *flight) lead() float32 { return f.q }
 
 // flyPage shows el, a part of the album page, as this frame of a flight
 // has it: from where its match under the page shows, scaled from the
@@ -408,6 +433,9 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 		return
 	}
 	t := f.travel()
+	if part == partCover {
+		t = f.lead()
+	}
 	s := float32(1)
 	switch part {
 	case partCover:
@@ -437,7 +465,7 @@ func (a *App) flyCover() (tone, dim, shadow float32, jump bool) {
 	if !f.moving || f.still || !src.ok {
 		return 1, 0, 1, false
 	}
-	t := f.travel()
+	t := f.lead()
 	return lerp(src.tone, 1, t), lerp(src.dim, 0, t), lerp(src.shadow, 1, t), true
 }
 

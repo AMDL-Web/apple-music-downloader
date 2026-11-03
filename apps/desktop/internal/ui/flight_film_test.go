@@ -80,7 +80,7 @@ func TestTheWayBackEndsAsTheCoverLands(t *testing.T) {
 	landed, prev, before, last := 0, -1.0, 0.0, 0.0
 	for range 60 {
 		tt.Advance(filmFrame)
-		if a.fly.moving && a.fly.travel() == 0 {
+		if a.fly.moving && a.fly.lead() == 0 {
 			landed++
 		}
 		lum := meanLuma(tt.Image(), under)
@@ -112,7 +112,7 @@ func TestAnotherTileTakesAClickOnceTheCoverLands(t *testing.T) {
 	tt.Frame()
 	for range 60 {
 		tt.Advance(filmFrame)
-		if a.fly.travel() == 0 {
+		if !a.fly.moving {
 			break
 		}
 	}

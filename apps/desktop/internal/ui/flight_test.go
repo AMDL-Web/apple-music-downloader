@@ -117,24 +117,26 @@ func TestTheHeroCoverFliesToThePageAndBack(t *testing.T) {
 	}
 }
 
-// The cover sets off only once the queue is gone, and lands before the
-// queue comes back: it never slides beside what stands still.
-func TestNothingMovesBesideTheQueue(t *testing.T) {
+// The cover sets off in the first frames, ahead of the rest of the page,
+// which follows it; going out, the queue comes back over the last stretch
+// of the cover's way and is whole only as it lands, rather than standing
+// still while the cover is still crossing it.
+func TestTheCoverLeadsAndLandsWithTheQueue(t *testing.T) {
 	a, tt, j := flightApp(t)
 	from, ok := tt.Find("Open " + j.Name())
 	if !ok {
 		t.Fatalf("no hero cover in %q", tt.Texts())
 	}
 	type frame struct {
-		q   float32
-		box ui.Rect
+		under float32
+		box   ui.Rect
 	}
 	run := func() []frame {
 		var fs []frame
 		for range 60 {
 			tt.Advance(refresh)
-			if r, ok := tt.Find("Artwork"); ok {
-				fs = append(fs, frame{a.fly.q, r})
+			if r, ok := tt.Find("Artwork"); ok && a.fly.moving {
+				fs = append(fs, frame{a.fly.underShown(), r})
 			}
 			if !a.fly.moving {
 				break
@@ -145,20 +147,23 @@ func TestNothingMovesBesideTheQueue(t *testing.T) {
 	if err := tt.Click("Open " + j.Name()); err != nil {
 		t.Fatal(err)
 	}
-	for i, f := range run() {
-		if f.q < crossover && dist(f.box, from) > 1 {
-			t.Errorf("coming in, frame %d (q %.3f): the cover is at %v, not the hero's %v, while the queue shows", i, f.q, f.box, from)
-		}
+	in := run()
+	if len(in) < 10 {
+		t.Fatalf("the page came in over %d frames", len(in))
+	}
+	to, _ := tt.Find("Artwork")
+	whole := dist(from, to)
+	if d := dist(in[1].box, from); d < whole/30 {
+		t.Errorf("coming in, the cover went %.1f of %.1f in its first two frames: it waited", d, whole)
 	}
 	tt.Key(0, ui.KeyEscape)
 	out := run()
 	if len(out) == 0 {
 		t.Fatal("no frame of the page going out")
 	}
-	last := out[len(out)-1].box
 	for i, f := range out {
-		if f.q < crossover && dist(f.box, last) > 0.5 {
-			t.Errorf("going out, frame %d (q %.3f): the cover is at %v, still on its way to %v, while the queue shows", i, f.q, f.box, last)
+		if d := dist(f.box, from); f.under >= 1 && d > whole/4 {
+			t.Errorf("going out, frame %d: the queue is whole while the cover is still %.1f of %.1f from the hero", i, d, whole)
 		}
 	}
 }
@@ -404,7 +409,7 @@ func TestATilesMarkRidesItsFlyingCover(t *testing.T) {
 	// The last frame of the flight back and the first without it.
 	for range 120 {
 		tt.Advance(refresh)
-		if a.fly.moving && a.fly.travel() < 0.05 {
+		if a.fly.moving && a.fly.lead() < 0.05 {
 			green("landing")
 			flyFrames(a, tt, 10)
 			break
@@ -453,5 +458,28 @@ func TestATilesHintKeepsToItsCoverCorner(t *testing.T) {
 	}
 	if dx, dy := now.X-art.X-left, art.Y+art.H-now.Y-below; dx*dx+dy*dy > 4 {
 		t.Errorf("a quarter of the way the hint is %.1f, %.1f off its corner of the cover %v: %v", dx, dy, art, now)
+	}
+}
+
+// Once the page is gone, q rests at 0 and asks for no more frames: the
+// flight aims past 0 only while it goes out.
+func TestTheFlightAtRestAsksForNoFrames(t *testing.T) {
+	a, albums := searchApp(t)
+	a.PageMotion = true
+	tt := ui.NewTester(a.View, 1280, 800)
+	tt.SetScale(0.5)
+	if err := tt.Click(albums[1].Name); err != nil {
+		t.Fatal(err)
+	}
+	flyFrames(a, tt, 120)
+	a.Back()
+	tt.Frame()
+	flyFrames(a, tt, 120)
+	if a.fly.moving || a.fly.q != 0 {
+		t.Fatalf("the page did not go out: q %.2f", a.fly.q)
+	}
+	tt.Advance(time.Second)
+	if tt.FramePending() {
+		t.Errorf("a second after the page went out, the window still asks for frames")
 	}
 }

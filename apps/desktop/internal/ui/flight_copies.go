@@ -46,7 +46,7 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 				}
 			})
 		}
-		a.flyBadges(c, o, t)
+		a.flyBadges(c, o, f.lead())
 		if f.paired[partKicker] == swaps {
 			src, dst := f.src[partKicker], f.label
 			at := func(el ui.Element, w float32) ui.Element {
