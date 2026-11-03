@@ -303,34 +303,38 @@ func TestAnotherScreenLeavesThePageAtOnce(t *testing.T) {
 	}
 }
 
-// The hero's track count flies into the page's label, which says it,
-// rather than fading where it is with the queue.
-func TestTheTrackCountFliesIntoThePagesLabel(t *testing.T) {
+// The hero's track count, which has no place on the page, fades with the
+// queue where it is, both ways, rather than flying off to nowhere.
+func TestTheTrackCountFadesInPlace(t *testing.T) {
 	a, tt, j := flightApp(t)
 	n := plural(j.TotalItems, "track")
 	from, ok := tt.Find(n)
 	if !ok {
 		t.Fatalf("no track count %q on the hero: %q", n, tt.Texts())
 	}
+	way := func(name string) {
+		t.Helper()
+		for i := range 60 {
+			tt.Advance(refresh)
+			if r, ok := tt.Find(n); ok && a.fly.moving && dist(from, r) > 0.5 {
+				t.Errorf("%s, frame %d: the track count is at %v, not its place %v", name, i, r, from)
+			}
+			if !a.fly.moving {
+				break
+			}
+		}
+	}
 	if err := tt.Click("Open " + j.Name()); err != nil {
 		t.Fatal(err)
 	}
-	for range 60 {
-		tt.Advance(refresh)
-		if a.fly.travel() >= 0.3 {
-			break
-		}
-	}
-	r, ok := tt.Find(n)
-	if !ok {
-		t.Fatalf("a third of the way in, the track count is gone: %q", tt.Texts())
-	}
-	if d := dist(from, r); d < 10 {
-		t.Errorf("a third of the way in, the track count moved %.1f DIPs from %v", d, from)
-	}
-	flyFrames(a, tt, 60)
+	way("coming in")
 	if _, ok := tt.Find(n); ok {
 		t.Errorf("landed, the page still shows the hero's track count")
+	}
+	tt.Key(0, ui.KeyEscape)
+	way("going out")
+	if r, ok := tt.Find(n); !ok || dist(from, r) > 0.5 {
+		t.Errorf("back on the queue, the track count is at %v (%v), not %v", r, ok, from)
 	}
 }
 

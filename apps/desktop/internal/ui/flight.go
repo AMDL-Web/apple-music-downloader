@@ -77,9 +77,6 @@ const (
 	partTitle
 	partArtist
 	partTag
-	// partTracks is the queue hero's track count, which flies into the
-	// page's label, where the page says it (flyLabel).
-	partTracks
 	// partHint and partMark are a search tile's quality hint and mark in
 	// its cover's corners, which ride the flying cover and fade
 	// (flySourceBadge): the page's own quality tag comes in apart.
@@ -296,9 +293,10 @@ func (a *App) flightQ(c *ui.Context, root ui.Element) {
 }
 
 // flyLabel shows el, the album page's label saying text in color, as this
-// frame of a flight has it: it swaps with its match under the page, the
-// match's track count flying into it and fading meanwhile; with no match,
-// it rises in.
+// frame of a flight has it: it swaps with its match under the page; with
+// no match, it rises in. What the match's element has with no place on the
+// page, as the queue hero's track count, fades with its screen where it
+// is.
 func (a *App) flyLabel(el ui.Element, text string, color ui.Color) {
 	f := &a.fly
 	if !f.moving {
@@ -313,9 +311,6 @@ func (a *App) flyLabel(el ui.Element, text string, color ui.Color) {
 		return
 	}
 	f.paired[partKicker] = swaps
-	if f.src[partTracks].ok {
-		f.paired[partTracks] = swaps
-	}
 	f.label = flightLabel{box: dst, text: text, color: color}
 	el.Invisible()
 }

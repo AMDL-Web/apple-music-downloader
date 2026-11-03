@@ -12,8 +12,8 @@ import (
 // text, its color turning to the page's; the quality tag's box as it
 // morphs (flyTags), from its match's place, size, gilt and color to the
 // page's, the one's text fading out in it as the other's fades in; and the
-// label as it swaps (flyLabel), with the track count flying into it. Where
-// they have not moved, they are their matches, drawn as those are.
+// label as it swaps (flyLabel). Where they have not moved, they are their
+// matches, drawn as those are.
 func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 	f := &a.fly
 	if !f.moving {
@@ -56,13 +56,6 @@ func (a *App) flightCopies(c *ui.Context, k *Tokens) {
 			// as it lands, as the quality tag's do.
 			at(label(c, k, src.text).TextColor(src.color), src.box.W).Opacity(1 - unit((t-0.2)/0.4))
 			at(label(c, k, dst.text).TextColor(dst.color), dst.box.W).Opacity(unit((t - 0.4) / 0.4))
-			if n := f.src[partTracks]; f.paired[partTracks] == swaps {
-				// The track count goes into the label, which says it, and
-				// is gone by the time it lands.
-				x, y := dst.box.X+max(dst.box.W-n.box.W, 0), dst.box.Y+(dst.box.H-n.box.H)/2
-				tag(c, k, n.text, false, n.color).Absolute().Left(lerp(n.box.X, x, t) - o.X).Top(lerp(n.box.Y, y, t) - o.Y).
-					Opacity(1 - unit(t/0.6))
-			}
 		}
 		for part, src := range f.src {
 			if f.paired[part] != morphs || f.own[part] || src.build == nil {

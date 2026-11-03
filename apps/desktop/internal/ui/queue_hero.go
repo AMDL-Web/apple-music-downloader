@@ -117,7 +117,8 @@ func (a *App) heroNames(c *ui.Context, k *Tokens, j *store.Job, kicker string, h
 			}
 			if j.TotalItems > 0 {
 				n := plural(j.TotalItems, "track")
-				a.flySourceLabel(tag(c, k, n, false, hc.meta), from, partTracks, n, hc.meta)
+				// The page has no place for it: it fades with the queue.
+				tag(c, k, n, false, hc.meta)
 			}
 		})
 	})

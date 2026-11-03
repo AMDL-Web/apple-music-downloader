@@ -20,8 +20,7 @@ func (a *App) flySource(el ui.Element, from string, part flightPart, text string
 
 // flySourceLabel marks el, a label of the element from on the screen under
 // the page saying text in color, as flySource does, for the page's label
-// to swap with (flyLabel); part is partKicker for that label, partTracks
-// for a tag of the track count, which flies into it.
+// to swap with (flyLabel), as part.
 func (a *App) flySourceLabel(el ui.Element, from string, part flightPart, text string, color ui.Color) {
 	a.flySource(el, from, part, text, 0)
 	if src := &a.fly.src[part]; src.ok {
