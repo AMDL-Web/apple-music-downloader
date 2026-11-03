@@ -23,6 +23,8 @@ type fakeActions struct {
 	startErr   string
 	// wrapperDone is the answer a test of a wrapper address waits for.
 	wrapperDone func([]mode.Check)
+	// copied is the last text put on the clipboard.
+	copied string
 }
 
 func (f *fakeActions) ApplySettings(s mode.Settings)         { f.applied = &s }
@@ -31,7 +33,7 @@ func (f *fakeActions) TestWrapper(_ string, done func([]mode.Check)) {
 	f.wrapperDone = done
 }
 func (f *fakeActions) Reveal(string)                     {}
-func (f *fakeActions) CopyText(string)                   {}
+func (f *fakeActions) CopyText(s string)                 { f.copied = s }
 func (f *fakeActions) ChooseFolder(string, func(string)) {}
 func (f *fakeActions) ShowWindow()                       {}
 func (f *fakeActions) FitPanel(float32)                  {}

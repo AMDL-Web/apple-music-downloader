@@ -40,9 +40,6 @@ type Deps struct {
 	LibrarySync LibrarySyncService
 	// Accounts is the accounts table and its discovery (internal/accounts).
 	Accounts AccountsService
-	// Pairing is the wrapper pairing; nil answers the /wrapper/pairing
-	// routes 503 feature_unavailable.
-	Pairing PairingService
 	// AppleLibrary backs /apple-library and the in_apple_library mark on
 	// search hits.
 	AppleLibrary AppleLibraryService
@@ -91,7 +88,6 @@ type Server struct {
 	quality      QualityService
 	librarySync  LibrarySyncService
 	accounts     AccountsService
-	pairing      PairingService
 	appleLibrary AppleLibraryService
 	catalog      CatalogService
 	// accountStorefront is Deps.AccountStorefront.
@@ -139,7 +135,7 @@ func New(deps Deps) (*Server, error) {
 	s := &Server{
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
-		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, accounts: deps.Accounts, pairing: deps.Pairing, appleLibrary: deps.AppleLibrary,
+		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, accounts: deps.Accounts, appleLibrary: deps.AppleLibrary,
 		catalog: deps.Catalog, accountStorefront: deps.AccountStorefront, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
@@ -206,9 +202,6 @@ func (s *Server) routes() []route {
 		{http.MethodPost, "/api/v1/wrapper/login", h(s.wrapperLogin)},
 		{http.MethodPost, "/api/v1/wrapper/login/{login_id}/2fa", h(s.wrapperTwoStep)},
 		{http.MethodPost, "/api/v1/wrapper/logout", h(s.wrapperLogout)},
-		{http.MethodGet, "/api/v1/wrapper/pairing", h(s.wrapperPairing)},
-		{http.MethodPost, "/api/v1/wrapper/pairing", h(s.startWrapperPairing)},
-		{http.MethodDelete, "/api/v1/wrapper/pairing", h(s.deleteWrapperPairing)},
 		{http.MethodPost, "/api/v1/quality", h(s.queryQuality)},
 		{http.MethodPost, "/api/v1/lookup", h(s.lookupLink)},
 		{http.MethodGet, "/api/v1/search", h(s.search)},

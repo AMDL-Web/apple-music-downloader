@@ -164,6 +164,52 @@ func TestConfigResponsesRedactTheMediaUserToken(t *testing.T) {
 	}
 }
 
+func TestConfigResponsesHideTheWrapperToken(t *testing.T) {
+	const token = "wrapper-static-token-9f3c"
+	cfg := config.Default()
+	cfg.Wrapper.Token = token
+	store := config.NewStore(cfg)
+	routes := (&Server{cfg: store}).Routes()
+	tokenIn := func(body string) string {
+		t.Helper()
+		var resp struct {
+			Config struct {
+				Wrapper struct {
+					Token string `json:"token"`
+				} `json:"wrapper"`
+			} `json:"config"`
+		}
+		if err := json.Unmarshal([]byte(body), &resp); err != nil {
+			t.Fatalf("decode %s: %v", body, err)
+		}
+		if strings.Contains(body, "static-token") || strings.Contains(body, "9f3c") {
+			t.Fatalf("response carries the token: %s", body)
+		}
+		return resp.Config.Wrapper.Token
+	}
+	if got := tokenIn(requestJSON(t, routes, http.MethodGet, "/api/v1/config", "").Body.String()); got != "..." {
+		t.Fatalf("GET wrapper.token = %q, want ...", got)
+	}
+	put := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":"..."}}`)
+	if put.Code != http.StatusOK || tokenIn(put.Body.String()) != "..." || store.Get().Wrapper.Token != token {
+		t.Fatalf("writing back the hidden form: %d %s", put.Code, put.Body.String())
+	}
+	if bad := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":"two words"}}`); bad.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("a token with a space: %d %s", bad.Code, bad.Body.String())
+	}
+	set := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":"next-token"}}`)
+	if set.Code != http.StatusOK || store.Get().Wrapper.Token != "next-token" || len(set.Body.String()) == 0 {
+		t.Fatalf("setting a token: %d %s", set.Code, set.Body.String())
+	}
+	if pending := store.PendingRestart(store.Saved()); len(pending) != 0 {
+		t.Fatalf("wrapper.token waits for a restart: %v", pending)
+	}
+	cleared := requestJSON(t, routes, http.MethodPut, "/api/v1/config", `{"wrapper":{"token":""}}`)
+	if cleared.Code != http.StatusOK || tokenIn(cleared.Body.String()) != "" || store.Get().Wrapper.Token != "" {
+		t.Fatalf("clearing the token: %d %s", cleared.Code, cleared.Body.String())
+	}
+}
+
 func TestUpdateConfigAppliesLoggingLevel(t *testing.T) {
 	cfg := config.Default()
 	cfg.Logging.Console = false

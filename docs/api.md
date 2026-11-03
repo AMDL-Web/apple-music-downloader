@@ -38,9 +38,9 @@ write it lists the offending keys, on a failed `POST /lookup` it holds the parse
 | 413 | `request_too_large` (JSON bodies are capped at 1 MiB) |
 | 422 | `invalid_overrides`, `config_key_not_mutable`, `invalid_config`, `invalid_hook`, `invalid_hooks_file`, `no_urls_accepted` |
 | 500 | `internal_error`, `store_error` (the job store failed; retrying may succeed) |
-| 501 | `login_unsupported`, `pairing_unsupported` |
+| 501 | `login_unsupported` |
 | 502 | `upstream_error` |
-| 503 | `queue_full`, `wrapper_unavailable`, `feature_unavailable`, `apple_library_unavailable`, `downloads_dir_unavailable` |
+| 503 | `queue_full`, `wrapper_unavailable`, `wrapper_unauthorized` (the wrapper's gateway refused `wrapper.token`), `feature_unavailable`, `apple_library_unavailable`, `downloads_dir_unavailable` |
 | 504 | `upstream_timeout` |
 
 An unknown path under `/api/` answers `404 route_not_found`; a path that exists with other
@@ -194,8 +194,8 @@ restart.
 curl http://localhost:18080/api/v1/wrapper/status
 ```
 
-Returns `ready`, `logged_in`, `regions`, `login_supported` and
-`media_user_token`. `logged_in` is true
+Returns `ready`, `logged_in`, `regions`, `login_supported`, `media_user_token` and
+`token_set`. `logged_in` is true
 when an account is logged in and serves a storefront. `regions` lists each storefront the
 wrapper's accounts serve once; the accounts themselves are under
 [Accounts](#accounts). `login_supported` is true when the wrapper is a wrapper-manager, or a
@@ -203,6 +203,11 @@ wrapper amdl runs on this machine; the three routes below need one of them. The 
 does not contact the wrapper at startup, so it starts fine without a reachable wrapper,
 and this endpoint is how you verify connectivity; an unreachable wrapper is
 `503 wrapper_unavailable`.
+
+`token_set` says the backend sends `wrapper.token` as a bearer key, for a wrapper behind a
+gateway or proxy that checks one ([configuration.md](configuration.md#wrapper)); the key
+itself is never in a response. A gateway that answers `401` to it is
+`503 wrapper_unauthorized`, here and on every route that asks the wrapper.
 
 `media_user_token` is the default account's media-user-token as the backend has it, masked
 like the configured token in `GET /config` (`...` and its last four characters), or `""`
@@ -265,42 +270,6 @@ code, is already in progress), `404 login_not_found` (the two-step session expir
 `404 account_not_found` (logout of an account with no wrapper), `501 login_unsupported`
 (the wrapper is a bare wrapper-lite: log in with `wrapper-lite-rootless --login` on its
 host), `502 upstream_error`, `504 upstream_timeout`.
-
-### Pairing
-
-A wrapper behind a gateway that asks for a bearer token (the Cloudflare deploy of
-wrapper-manager) is reached through a pairing, device-code style. The credential is kept
-in the backend, never in `config.yaml` and never in a response.
-
-```bash
-curl http://localhost:18080/api/v1/wrapper/pairing
-curl -X POST http://localhost:18080/api/v1/wrapper/pairing
-curl -X DELETE http://localhost:18080/api/v1/wrapper/pairing
-```
-
-All three answer a `WrapperPairing`: `state` is `unpaired` (no credential), `pending` (a
-pairing is under way), `paired`, or `needs_pairing` (the wrapper answered `401` and amdl
-holds no credential it accepts: pair again). `pending` carries `user_code`,
-`verification_url`, `verification_url_complete` (the page with the code filled in, the link
-to show) and `expires_at`; `paired` carries `paired_at` and `access_expires_at`;
-`last_error` says why the last pairing or renewal failed.
-
-`POST` starts a pairing and answers `202` at once with state `pending`: the wrapper's owner
-opens `verification_url_complete`, checks `user_code` and approves it with a passkey. The
-backend names itself to the wrapper as `amdl on <hostname>`; a wrapper that rate-limits the
-start answers `429`, reported as `502 upstream_error`. The backend
-polls the wrapper in the background; poll `GET` every couple of seconds until the state
-leaves `pending`, which becomes `paired`, or `unpaired` with a `last_error` when the owner
-refused or the code expired. A new `POST` replaces a pairing under way. Once paired, every
-wrapper request carries the access token, which the backend renews before it expires and
-once after a `401`; a renewal the gateway refuses (its refresh token unused for 30 days, or
-revoked) drops the credential and the state becomes `needs_pairing`. `DELETE` forgets the
-credential and any pairing under way; wrapper requests then go out without a token.
-
-Errors: `501 pairing_unsupported` (`POST`: the wrapper takes requests without a token),
-`502 upstream_error` (`POST`: the wrapper could not be asked), `503 feature_unavailable`
-(a process started without a pairing), `500 internal_error` (`DELETE`: the stored credential
-could not be removed).
 
 ## Accounts
 

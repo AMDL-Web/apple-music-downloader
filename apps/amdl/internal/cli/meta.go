@@ -153,7 +153,7 @@ var synonyms = map[string]string{
 	"logs": "log error errors debug", "config": "setting settings option options", "wrapper": "login account apple id signin",
 	"system": "status server version health disk space", "library": "finished completed downloaded collection",
 	"artists": "artist discography albums", "context": "server address remote nas host",
-	"wrapper login": "sign signin log authenticate password", "wrapper logout": "signout logoff", "wrapper pair": "connect pairing token gateway cloudflare", "wrapper unpair": "disconnect forget token",
+	"wrapper login": "sign signin log authenticate password", "wrapper logout": "signout logoff", "wrapper keygen": "key token secret generate random gateway cloudflare worker",
 	"accounts": "account apple id region storefront multiple switch default login", "accounts set": "enable disable switch toggle default library sync region",
 	"wrapper 2fa": "code two step verification sms", "jobs get": "detail details tracks show file files path output location folder where",
 }

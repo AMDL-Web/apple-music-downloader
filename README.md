@@ -239,7 +239,7 @@ is the API's only browser client: responses carry no CORS headers.
 | **Lookup** | `POST /lookup`: preview a link's title, artist and cover, and its record, without creating a job |
 | **Search** | `GET /search`: search the catalog for songs, albums, playlists and artists · `GET /artists/{id}/albums`: an artist's albums, page by page · `GET /albums/{id}`: an album's songs, each with its state in the album's record |
 | **Quality** | `POST /quality`: probe a link's codecs and audio quality without creating a job |
-| **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` · `GET /wrapper/pairing` · `POST /wrapper/pairing` · `DELETE /wrapper/pairing` |
+| **Wrapper** | `GET /wrapper/status` · `POST /wrapper/login` · `POST /wrapper/login/{login_id}/2fa` · `POST /wrapper/logout` |
 | **Accounts** | `GET /accounts` · `PATCH /accounts/{account_id}`: library switches and position · `DELETE /accounts/{account_id}`: log the account out and drop its rows |
 | **Config** | `GET /config` · `PUT /config` · `POST /config/reload` · `GET /hooks` · `PUT /hooks` · `GET /hooks/presets` · `PUT /hooks/{name}` · `DELETE /hooks/{name}` · `POST /hooks/{name}/test` |
 | **Library sync** | `GET /library-sync`: master switch and one entry per account · `POST /library-sync/reset`: one account's anchor |

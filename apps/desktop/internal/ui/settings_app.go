@@ -174,7 +174,7 @@ func (a *App) connectionSettings(c *ui.Context, k *Tokens) {
 		}
 	})
 	if d.Mode == a.Settings.Mode {
-		a.pairingCard(c, k)
+		a.wrapperKeyCard(c, k)
 	}
 	if d.Mode == mode.Standalone {
 		on := a.Settings.KeepAwake

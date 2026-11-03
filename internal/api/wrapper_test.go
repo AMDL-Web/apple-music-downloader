@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ func TestWrapperStatusEndpoint(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
-	want := `{"ready":true,"logged_in":true,"regions":["us"],"login_supported":false,"media_user_token":""}` + "\n"
+	want := `{"ready":true,"logged_in":true,"regions":["us"],"login_supported":false,"media_user_token":"","token_set":false}` + "\n"
 	if recorder.Body.String() != want {
 		t.Fatalf("body = %s, want %s", recorder.Body.String(), want)
 	}
@@ -79,6 +80,24 @@ func TestWrapperStatusUnavailable(t *testing.T) {
 	server := &Server{wrapper: &fakeWrapperService{statusErr: errors.New("offline")}}
 	recorder := requestJSON(t, server.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
 	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "wrapper_unavailable")
+}
+
+// A gateway that refuses wrapper.token is wrapper_unauthorized; a set token
+// shows as token_set, never its value.
+func TestWrapperStatusReportsTheKey(t *testing.T) {
+	refused := &Server{wrapper: &fakeWrapperService{statusErr: fmt.Errorf("wrapper /status: %w", wrapper.ErrUnauthorized)}}
+	recorder := requestJSON(t, refused.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+	assertErrorCode(t, recorder, http.StatusServiceUnavailable, "wrapper_unauthorized")
+	if !strings.Contains(recorder.Body.String(), "wrapper.token") {
+		t.Fatalf("the error does not point at wrapper.token: %s", recorder.Body.String())
+	}
+	cfg := config.Default()
+	cfg.Wrapper.Token = "static-key-value"
+	set := &Server{cfg: config.NewStore(cfg), wrapper: &fakeWrapperService{statusResult: wrapper.Status{Ready: true, Regions: []string{}}}}
+	recorder = requestJSON(t, set.Routes(), http.MethodGet, "/api/v1/wrapper/status", "")
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"token_set":true`) || strings.Contains(recorder.Body.String(), "static-key") {
+		t.Fatalf("token set: %d %s", recorder.Code, recorder.Body.String())
+	}
 }
 
 func TestWrapperLoginResponses(t *testing.T) {

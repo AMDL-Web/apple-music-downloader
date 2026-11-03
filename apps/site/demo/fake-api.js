@@ -980,7 +980,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         return json(200, { account: acc.id, cleared, status: librarySyncBody() });
       }
       case 'GET /api/v1/wrapper/status':
-        return json(200, { ready: true, logged_in: true, regions: [...new Set(accounts.map((a) => a.region))], login_supported: false, media_user_token: accounts.length ? accounts[0].media_user_token : '' });
+        return json(200, { ready: true, logged_in: true, regions: [...new Set(accounts.map((a) => a.region))], login_supported: false, media_user_token: accounts.length ? accounts[0].media_user_token : '', token_set: false });
       case 'GET /api/v1/logs': {
         const match = logMatcher(q);
         const after = Number(q.get('cursor')) || 0;

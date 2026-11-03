@@ -51,8 +51,8 @@ func TestStatusInstances(t *testing.T) {
 	}
 }
 
-// GET /token names the instance asked for; an unpaired client sends no
-// Authorization header.
+// GET /token names the instance asked for; a client without wrapper.token
+// sends no Authorization header.
 func TestTokenInstance(t *testing.T) {
 	var auths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

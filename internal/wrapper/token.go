@@ -54,7 +54,7 @@ func (c *Client) MusicToken(ctx context.Context, instance string) (TokenReply, e
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return TokenReply{}, requestError(ctx, endpoint, c.timeout, err)
+		return TokenReply{}, c.requestError(ctx, endpoint, c.timeout, err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenReply))

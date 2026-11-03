@@ -88,8 +88,12 @@ type LoggingConfig struct {
 // asks it for the account's media-user-token (GET /token). DataDir is the
 // wrapper's data directory as amdl sees it, where internal/usertoken reads that
 // token's file when GET /token gives none; empty means amdl does not read it.
+// Token is a key sent as a bearer token on every wrapper request, for a
+// wrapper behind a gateway or reverse proxy; empty sends none
+// (internal/wrapper#WithToken).
 type WrapperConfig struct {
 	Address             string `yaml:"address" json:"address"`
+	Token               string `yaml:"token" json:"token"`
 	TimeoutSeconds      int    `yaml:"timeout_seconds" json:"timeout_seconds"`
 	LoginTimeoutSeconds int    `yaml:"login_timeout_seconds" json:"login_timeout_seconds"`
 	DataDir             string `yaml:"data_dir" json:"data_dir"`

@@ -393,7 +393,7 @@ func (a *App) pathField(c *ui.Context, k *Tokens, f *configField, saved string, 
 // token, which it uses first, the field names that one instead and offers
 // only to remove a saved one.
 func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string) {
-	if w := a.Store.Server.Wrapper; w != nil && w.MediaUserToken != "" {
+	if w := a.Store.Server.Wrapper; w != nil && w.MediaUserToken != "" && f.key == "catalog.media_user_token" {
 		a.wrapperToken(c, k, f, w.MediaUserToken, saved)
 		return
 	}
@@ -417,7 +417,20 @@ func (a *App) tokenField(c *ui.Context, k *Tokens, f *configField, saved string)
 		if in.Changed() {
 			e.text[f.key] = draft
 		}
-		save := buttonOff(c, k, buttonPrimary, "Save", nil, draft == "").Height(32)
+		// The wrapper's key can be made here: it fills the field and goes
+		// to the clipboard, for the gateway's side.
+		if f.key == "wrapper.token" && button(c, k, buttonPlain, "Generate", nil).Height(32).Label("Generate a random key and copy it").Clicked() {
+			if key := newWrapperKey(); key != "" {
+				draft = key
+				e.text[f.key] = key
+				a.Act.CopyText(key)
+			}
+		}
+		saveText := "Save token"
+		if f.key == "wrapper.token" {
+			saveText = "Save key"
+		}
+		save := buttonOff(c, k, buttonPrimary, saveText, nil, draft == "").Height(32)
 		if (save.Clicked() || in.Submitted()) && draft != "" {
 			delete(e.text, f.key)
 			a.Store.SetConfig(f.key, draft)

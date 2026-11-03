@@ -80,9 +80,6 @@ type Store struct {
 	Login Login
 	// accountOps counts the account changes waiting for their answer.
 	accountOps int
-	// Pair is the wrapper pairing Settings runs; its state is
-	// Server.Pairing.
-	Pair Pair
 
 	nextSeq   int
 	followers map[string]context.CancelFunc
@@ -116,7 +113,7 @@ func (s *Store) reset() {
 	s.followers, s.histories, s.notified, s.tracksRead = map[string]context.CancelFunc{}, map[string]bool{}, map[string]domain.JobStatus{}, map[string]bool{}
 	s.Omni.reset()
 	s.Search.reset()
-	s.Server, s.Config, s.Login, s.accountOps, s.Pair = Server{}, Config{}, Login{}, 0, Pair{}
+	s.Server, s.Config, s.Login, s.accountOps = Server{}, Config{}, Login{}, 0
 	s.Records.reset()
 	s.Library.reset()
 }

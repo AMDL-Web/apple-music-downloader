@@ -69,7 +69,7 @@ func exitFor(code string, status int) int {
 	case "upstream_error", "queue_full", "wrapper_unavailable", "feature_unavailable", "apple_library_unavailable", "downloads_dir_unavailable",
 		"upstream_timeout", "server_unreachable", "server_not_configured":
 		return exitUnavailable
-	case "authentication_failed", "login_unsupported", "pairing_failed", "pairing_unsupported":
+	case "authentication_failed", "login_unsupported", "wrapper_unauthorized":
 		return exitAuth
 	case "internal_error", "store_error":
 		return exitInternal
@@ -109,8 +109,8 @@ func asCLIError(err error) *cliError {
 			if strings.Contains(string(api.Details), "managed_wrapper") {
 				ce.Hint = "this machine runs its own wrapper, which sets wrapper.address; to use another, run amdl wrapper uninstall, then " + otherWrapper
 			}
-		case "pairing_unsupported":
-			ce.Hint = "this wrapper takes requests without a token, so there is nothing to pair"
+		case "wrapper_unauthorized":
+			ce.Hint = "the wrapper's gateway refused the key: set the one it expects with amdl config set wrapper.token=<key> (amdl wrapper keygen makes a new one for both sides)"
 		case "wrapper_unavailable":
 			ce.Hint = "the backend cannot reach its wrapper; start the wrapper, or point the backend at another: " + restartWithWrapper
 		}

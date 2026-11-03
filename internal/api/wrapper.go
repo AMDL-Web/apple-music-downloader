@@ -22,19 +22,28 @@ type WrapperService interface {
 }
 
 // wrapperStatusResponse is the WrapperStatus schema: the wrapper's own status
-// plus the default account's media-user-token amdl reads from it, masked.
+// plus the default account's media-user-token amdl reads from it, masked, and
+// whether wrapper.token is set.
 type wrapperStatusResponse struct {
 	wrapper.Status
 	MediaUserToken string `json:"media_user_token"`
+	TokenSet       bool   `json:"token_set"`
 }
 
+// wrapperStatus answers GET /wrapper/status. A wrapper whose gateway refuses
+// wrapper.token is 503 wrapper_unauthorized; any other failure is 503
+// wrapper_unavailable.
 func (s *Server) wrapperStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := s.wrapper.Status(r.Context())
-	if err != nil {
+	switch {
+	case errors.Is(err, wrapper.ErrUnauthorized):
+		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnauthorized, err.Error())
+		return
+	case err != nil:
 		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnavailable, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, wrapperStatusResponse{Status: status, MediaUserToken: s.wrapperToken()})
+	writeJSON(w, http.StatusOK, wrapperStatusResponse{Status: status, MediaUserToken: s.wrapperToken(), TokenSet: s.currentConfig().Wrapper.Token != ""})
 }
 
 // wrapperToken is the wrapper's media-user-token masked as GET /config masks
@@ -142,6 +151,8 @@ func (s *Server) wrapperLogout(w http.ResponseWriter, r *http.Request) {
 // the wrapper package does not classify is an upstream failure.
 func writeWrapperError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, wrapper.ErrUnauthorized):
+		writeError(w, http.StatusServiceUnavailable, CodeWrapperUnauthorized, err.Error())
 	case errors.Is(err, wrapper.ErrCredentialsUnusable), errors.Is(err, wrapper.ErrInvalidTwoStepCode):
 		writeError(w, http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	case errors.Is(err, wrapper.ErrAuthenticationFailed):

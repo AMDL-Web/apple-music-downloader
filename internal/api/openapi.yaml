@@ -862,7 +862,8 @@ paths:
         for connectivity and runtime state such as login and regions; use it
         before downloading or managing accounts. login_supported tells whether
         the login routes work against this wrapper. The accounts themselves are
-        GET /accounts.
+        GET /accounts. token_set says whether amdl sends wrapper.token; a
+        gateway that refuses it is 503 wrapper_unauthorized.
       operationId: getWrapperStatus
       responses:
         '200':
@@ -872,7 +873,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/WrapperStatus'
         '503':
-          description: wrapper_unavailable; the wrapper did not answer.
+          description: >-
+            wrapper_unavailable, the wrapper did not answer; or
+            wrapper_unauthorized, its gateway or proxy answered 401 to
+            wrapper.token (or wants one that is not set).
           content:
             application/json:
               schema:
@@ -1020,81 +1024,6 @@ paths:
           $ref: '#/components/responses/NotImplemented'
         '502':
           $ref: '#/components/responses/BadGateway'
-  /api/v1/wrapper/pairing:
-    get:
-      tags: [Wrapper]
-      summary: Get the wrapper pairing
-      description: >-
-        Whether amdl holds a credential for a wrapper behind a gateway that
-        asks for a bearer token (the Cloudflare deploy of wrapper-manager), a
-        pairing under way with its code and page, or a credential the gateway
-        refused (needs_pairing). The credential itself never leaves the
-        backend.
-      operationId: getWrapperPairing
-      responses:
-        '200':
-          description: The pairing.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WrapperPairing'
-        '503':
-          $ref: '#/components/responses/PairingUnavailable'
-    post:
-      tags: [Wrapper]
-      summary: Pair with the wrapper
-      description: >-
-        Starts a device-code pairing: amdl asks the wrapper's POST /pair/start
-        for a user code and the page its owner approves it on with a passkey,
-        answers them at once (state pending), and polls the wrapper in the
-        background until the owner approved, refused or the code expired.
-        Poll GET /wrapper/pairing until state leaves pending. Once paired,
-        every wrapper request carries the access token, which amdl renews
-        before it expires and once after a 401; a renewal the gateway refuses
-        (its refresh token unused for 30 days, or revoked) drops the
-        credential and the state becomes needs_pairing. A new pairing replaces
-        one under way. A wrapper without pairing answers 501
-        pairing_unsupported.
-      operationId: startWrapperPairing
-      responses:
-        '202':
-          description: The pairing started; user_code and verification_url are in the body.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WrapperPairing'
-        '501':
-          description: pairing_unsupported; the wrapper takes requests without a token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
-          $ref: '#/components/responses/BadGateway'
-        '503':
-          $ref: '#/components/responses/PairingUnavailable'
-    delete:
-      tags: [Wrapper]
-      summary: Unpair from the wrapper
-      description: >-
-        Forgets the stored credential and any pairing under way; wrapper
-        requests go out without a token until the next pairing.
-      operationId: deleteWrapperPairing
-      responses:
-        '200':
-          description: Unpaired; the body is the pairing now (state unpaired).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WrapperPairing'
-        '500':
-          description: internal_error; the stored credential could not be removed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '503':
-          $ref: '#/components/responses/PairingUnavailable'
   /api/v1/quality:
     post:
       tags: [Quality]
@@ -2798,12 +2727,6 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-    PairingUnavailable:
-      description: feature_unavailable; this process runs without a wrapper pairing.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
     AccountNotFound:
       description: account_not_found; no account has this id.
       content:
@@ -2928,7 +2851,8 @@ components:
         invalid_overrides, config_key_not_mutable, invalid_config, invalid_hook,
         invalid_hooks_file, no_urls_accepted; 500 internal_error, store_error
         (retrying may succeed); 501 login_unsupported; 502 upstream_error; 503 queue_full,
-        wrapper_unavailable, feature_unavailable (the process keeps no log
+        wrapper_unavailable, wrapper_unauthorized (the wrapper's gateway refused
+        wrapper.token), feature_unavailable (the process keeps no log
         history, so the log routes cannot answer, or has no hooks.yaml to
         write), apple_library_unavailable (no usable media-user-token and
         nothing cached), downloads_dir_unavailable (download.downloads_dir is
@@ -2970,10 +2894,10 @@ components:
         - internal_error
         - store_error
         - login_unsupported
-        - pairing_unsupported
         - upstream_error
         - queue_full
         - wrapper_unavailable
+        - wrapper_unauthorized
         - feature_unavailable
         - apple_library_unavailable
         - downloads_dir_unavailable
@@ -3064,44 +2988,9 @@ components:
         logged_out:
           type: boolean
           description: The wrapper logged the account out; false when it was missing or the wrapper no longer knew it.
-    WrapperPairing:
-      type: object
-      required: [state]
-      properties:
-        state:
-          type: string
-          enum: [unpaired, pending, paired, needs_pairing]
-          description: >-
-            needs_pairing: the wrapper answered 401 and amdl has no credential
-            it accepts; pair again.
-        user_code:
-          type: string
-          description: While pending, the code the owner confirms on verification_url.
-          example: ABCD-EFGH
-        verification_url:
-          type: string
-          description: While pending, the page the owner approves the pairing on.
-        verification_url_complete:
-          type: string
-          description: While pending, verification_url with the code filled in; the link to show.
-        expires_at:
-          type: string
-          format: date-time
-          description: While pending, when the code expires.
-        paired_at:
-          type: string
-          format: date-time
-          description: While paired, when the pairing was approved.
-        access_expires_at:
-          type: string
-          format: date-time
-          description: While paired, when the current access token runs out; amdl renews it before.
-        last_error:
-          type: string
-          description: Why the last pairing or renewal failed; absent after a success.
     WrapperStatus:
       type: object
-      required: [ready, logged_in, regions, login_supported, media_user_token]
+      required: [ready, logged_in, regions, login_supported, media_user_token, token_set]
       properties:
         ready:
           type: boolean
@@ -3141,6 +3030,11 @@ components:
             token, and amdl keeps no copy. While it is not "", downloads,
             lookups and library sync use it instead of catalog.media_user_token.
           example: "...a1b2"
+        token_set:
+          type: boolean
+          description: >-
+            wrapper.token is set: amdl sends it as a bearer key to a wrapper
+            behind a gateway or proxy. The key itself is never in a response.
     ManagedWrapper:
       type: object
       description: >-
@@ -4053,6 +3947,14 @@ components:
               type: integer
               x-applies: restart
               description: Bound on one console login request; values <= 0 mean 120.
+            token:
+              type: string
+              description: >-
+                An optional key sent as a bearer token on every wrapper request,
+                for a wrapper behind a gateway or reverse proxy (a Cloudflare
+                Worker); one word without spaces or control characters; "" sends
+                none. Write-only: responses show a set key as "...", and a PUT
+                that sends "..." back keeps the saved one.
             data_dir:
               type: string
               description: >-
