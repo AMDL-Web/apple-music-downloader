@@ -54,7 +54,7 @@ func (n NightlyLink) Fetch(ctx context.Context, p Pin, offset int64, w io.Writer
 	switch {
 	case offset > 0 && resp.StatusCode == http.StatusPartialContent, offset == 0 && resp.StatusCode == http.StatusOK:
 	case resp.StatusCode == http.StatusNotFound:
-		return fmt.Errorf("artifact %d is gone from GitHub (artifacts expire 90 days after their build)", p.ArtifactID)
+		return fmt.Errorf("artifact %d is gone from GitHub (manager guest artifacts expire 90 days after their build)", p.ArtifactID)
 	default:
 		return fmt.Errorf("%s: %s", url, resp.Status)
 	}

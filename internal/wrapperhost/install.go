@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,10 +13,12 @@ import (
 	"time"
 )
 
-// Install downloads p's qemu-assets artifact with f, verifies it and makes it
-// the installed guest. An account's data.img is kept; a first install seeds it
-// from the artifact's empty image. report, when not nil, hears of each step.
+// Install downloads and verifies the pinned manager guest. Manager disks
+// survive updates; a bare-lite disk is set aside for a fresh manager login.
 func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, report func(Progress)) (Installed, error) {
+	if err := p.valid(now); err != nil {
+		return Installed{}, err
+	}
 	if err := h.prepare(); err != nil {
 		return Installed{}, err
 	}
@@ -29,17 +30,21 @@ func (h Home) Install(ctx context.Context, f Fetcher, p Pin, now time.Time, repo
 		report(Progress{Phase: Unpacking})
 	}
 	in, err := h.unpack(zipPath, Installed{ID: p.Commit[:min(12, len(p.Commit))], Commit: p.Commit,
-		ArtifactID: p.ArtifactID, SHA256: p.SHA256, Source: fmt.Sprintf("artifact %d", p.ArtifactID), At: now})
+		ArtifactID: p.ArtifactID, SHA256: p.SHA256, Lite: p.Lite, Source: fmt.Sprintf("artifact %d", p.ArtifactID), At: now})
 	if err == nil {
 		_ = os.Remove(zipPath) // unpacked; a leftover only costs disk
 	}
 	return in, err
 }
 
-// Import installs a qemu-assets zip, one of the wrapper-lite-qemu
-// packages, or a directory holding vmlinuz-lite-qemu, lite-initramfs.cpio.gz
-// and data.img: the way in when no pin can be downloaded any more.
+// Import installs a manager-qemu-guest zip or a directory holding its
+// kernel, manager initramfs and empty data.img. Bare-lite imports are refused.
+// The guest's wrapper-lite payload is the built-in pin's, since an import
+// carries none.
 func (h Home) Import(path string, now time.Time) (Installed, error) {
+	if err := Builtin.Lite.valid(now); err != nil {
+		return Installed{}, fmt.Errorf("this amdl build cannot pin a payload for an imported guest: %w; update amdl", err)
+	}
 	if err := h.prepare(); err != nil {
 		return Installed{}, err
 	}
@@ -47,7 +52,7 @@ func (h Home) Import(path string, now time.Time) (Installed, error) {
 	if err != nil {
 		return Installed{}, err
 	}
-	return h.unpack(path, Installed{ID: "import-" + sum[:12], SHA256: sum, Source: "import of " + filepath.Base(path), At: now})
+	return h.unpack(path, Installed{ID: "import-" + sum[:12], SHA256: sum, Lite: Builtin.Lite, Source: "import of " + filepath.Base(path), At: now})
 }
 
 func (h Home) prepare() error {
@@ -79,18 +84,19 @@ func (h Home) unpack(src string, in Installed) (Installed, error) {
 	}
 	for name := range want {
 		if !found[name] {
-			return Installed{}, fmt.Errorf("%s has no %s; expected a qemu-assets artifact or a wrapper-lite-qemu package", src, name)
+			return Installed{}, fmt.Errorf("%s has no %s; expected a manager-qemu-guest artifact", src, name)
 		}
 	}
 	_ = os.RemoveAll(dst) // a reinstall of the same id
 	if err := os.Rename(tmp, dst); err != nil {
 		return Installed{}, err
 	}
-	if _, err := os.Stat(h.ImagePath()); errors.Is(err, os.ErrNotExist) {
-		if err := copyFile(filepath.Join(dst, imageName), h.ImagePath(), 0o600); err != nil {
-			return Installed{}, err
-		}
+	layout, err := h.managerDisk(filepath.Join(dst, imageName))
+	if err != nil {
+		return Installed{}, err
 	}
+	in.Kind, in.LegacyDisk = ManagerGuest, layout.LegacyDisk
+	in.Port, in.QEMU = layout.Port, layout.QEMU
 	if prev, err := h.Current(); err == nil {
 		in.Port = prev.Port
 		if in.QEMU == "" {
@@ -101,6 +107,10 @@ func (h Home) unpack(src string, in Installed) (Installed, error) {
 		if in.Port, err = freePort(); err != nil {
 			return Installed{}, err
 		}
+	}
+	layout.Port, layout.QEMU = in.Port, in.QEMU
+	if err := writeJSON(h.path("disk.json"), layout); err != nil {
+		return Installed{}, err
 	}
 	if err := writeJSON(h.path("installed.json"), in); err != nil {
 		return Installed{}, err
@@ -160,9 +170,9 @@ func copyOut(src string, want map[string]bool, dir string) (map[string]bool, err
 }
 
 // Uninstall removes the installed guest. With purge it also removes data.img,
-// which logs the account out for good.
+// which logs every account out for good and removes preserved bare-lite disks.
 func (h Home) Uninstall(purge bool) error {
-	for _, p := range []string{h.path("installed.json"), h.path("assets"), h.path("state.json"), h.path("login-args")} {
+	for _, p := range []string{h.path("installed.json"), h.path("assets"), h.path("state.json"), h.path("login-args"), h.path(managerArgsName)} {
 		if err := os.RemoveAll(p); err != nil {
 			return err
 		}

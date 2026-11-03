@@ -2,8 +2,6 @@ package wrapperhost
 
 import (
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,25 +30,17 @@ func seedImage(t *testing.T, h Home, name string) {
 	}
 }
 
-func TestMusicToken(t *testing.T) {
+func TestAccountCountOfAnEmptyExt4Registry(t *testing.T) {
+	h := Home{Dir: t.TempDir()}
+	seedImage(t, h, "nofile")
+	if got, err := h.accountCount(); err != nil || got != 0 {
+		t.Fatalf("empty registry count: %d, %v", got, err)
+	}
+}
+
+func TestMusicTokenWithoutAnInstallation(t *testing.T) {
 	h := Home{Dir: t.TempDir()}
 	if got, err := h.MusicToken(); got != "" || err != nil {
-		t.Fatalf("no disk: %q, %v", got, err)
-	}
-	seedImage(t, h, "nofile")
-	if got, err := h.MusicToken(); got != "" || err != nil {
-		t.Fatalf("no MUSIC_TOKEN: %q, %v", got, err)
-	}
-	seedImage(t, h, "std4k")
-	got, err := h.MusicToken()
-	sum := sha256.Sum256([]byte(got))
-	if err != nil || hex.EncodeToString(sum[:]) != "5c0c8438c1e7f56a6dbb654912c95188d3704fcd2540ba3db3a14bfec78a55bb" {
-		t.Fatalf("MusicToken: %d bytes, %v; want the test image's made-up token", len(got), err)
-	}
-	if err := os.WriteFile(h.ImagePath(), make([]byte, 1<<20), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := h.MusicToken(); err == nil {
-		t.Fatal("a disk that is not ext4 reads without an error")
+		t.Fatalf("no installation: %d bytes, %v", len(got), err)
 	}
 }

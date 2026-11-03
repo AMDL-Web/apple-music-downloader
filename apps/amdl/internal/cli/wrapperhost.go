@@ -115,9 +115,9 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 			pin, source, err := wrapperhost.CurrentPin(e.ctx, &http.Client{}, time.Now())
 			if err != nil {
 				return &cliError{Code: "wrapper_unavailable", exit: exitUnavailable, Message: err.Error(),
-					Hint: "download the qemu-assets artifact and run amdl wrapper import <zip>"}
+					Hint: "download the manager-qemu-guest artifact and run amdl wrapper import <zip>"}
 			}
-			if curErr == nil && cur.SHA256 == pin.SHA256 {
+			if curErr == nil && cur.SHA256 == pin.SHA256 && cur.Lite.RunID == pin.Lite.RunID {
 				e.note("the wrapper guest from %s is already installed", pin.Commit[:12])
 			} else {
 				e.progressf("downloading the wrapper guest (%d MB, commit %s, %s pin) and checking its sha256",
@@ -127,7 +127,7 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 				rep.finish()
 				if err != nil {
 					return &cliError{Code: "wrapper_download_failed", exit: exitUnavailable, Message: err.Error(),
-						Hint: "run it again to resume, or download the qemu-assets artifact and run amdl wrapper import <zip>"}
+						Hint: "run it again to resume, or download the manager-qemu-guest artifact and run amdl wrapper import <zip>"}
 				}
 			}
 			if *qemuFlag != "" {
@@ -145,7 +145,7 @@ func wrapperInstallCmd(update bool) func(fs *flag.FlagSet) func(e *env, args []s
 func wrapperImportCmd(*flag.FlagSet) func(e *env, args []string) error {
 	return func(e *env, args []string) error {
 		if len(args) != 1 {
-			return usageErr("usage: amdl wrapper import <qemu-assets.zip|wrapper-lite-qemu.zip|dir>")
+			return usageErr("usage: amdl wrapper import <manager-qemu-guest.zip|dir>")
 		}
 		h, err := wrapperHome()
 		if err != nil {

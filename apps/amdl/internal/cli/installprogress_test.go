@@ -105,7 +105,7 @@ func TestWrapperUninstallOmitsEnabled(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	src := t.TempDir()
-	for _, n := range []string{"vmlinuz-lite-qemu", "lite-initramfs.cpio.gz", "data.img"} {
+	for _, n := range []string{"vmlinuz-lite-qemu", "wrapper-manager-initramfs.cpio.gz", "data.img"} {
 		if err := os.WriteFile(filepath.Join(src, n), []byte(n), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func TestWrapperPurgeTakesYes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	src := t.TempDir()
-	for _, n := range []string{"vmlinuz-lite-qemu", "lite-initramfs.cpio.gz", "data.img"} {
+	for _, n := range []string{"vmlinuz-lite-qemu", "wrapper-manager-initramfs.cpio.gz", "data.img"} {
 		if err := os.WriteFile(filepath.Join(src, n), []byte(n), 0o600); err != nil {
 			t.Fatal(err)
 		}

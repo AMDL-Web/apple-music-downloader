@@ -108,7 +108,8 @@ The first 2.0 release changes the image name and starts the wrapper pin. These s
   package public in its settings.
 - **Wrapper pin** (agent). `gh api repos/AMDL-Web/apple-music-downloader/branches/wrapper-pins`
   answers, and the manifest at `internal/wrapperhost#ManifestURL` has the same
-  `sha256` as `internal/wrapperhost#Builtin` and an `expires_at` weeks away. Otherwise
+  `sha256` and `lite.run_id` as `internal/wrapperhost#Builtin` and an `expires_at` (guest
+  and `lite`) weeks away. Otherwise
   run `gh workflow run wrapper-pin.yml`, and bump `Builtin` when upstream has a newer
   build.
 - **NAS.** Redeploy the maintainer's own install on the new image name after the

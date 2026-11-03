@@ -223,7 +223,7 @@ var All = []Capability{
 		Examples: []string{"amdl wrapper install", "amdl wrapper install --qemu /opt/homebrew/bin/qemu-system-x86_64"}},
 	{Command: "wrapper update", Safety: Write, Summary: "Install the current pinned guest for the local wrapper, keeping its account"},
 	{Command: "wrapper import", Safety: Write, Args: []string{"path"},
-		Summary: "Install the local wrapper's guest from a downloaded qemu-assets zip, a wrapper-lite-qemu package or a directory"},
+		Summary: "Install the local wrapper's guest from a downloaded manager-qemu-guest zip or a directory"},
 	{Command: "wrapper uninstall", Safety: Write, Summary: "Remove the local wrapper's guest; --purge also deletes its account disk"},
 	{Command: "wrapper start", Safety: Write, Summary: "Have the backend run the local wrapper again after wrapper stop"},
 	{Command: "wrapper stop", Safety: Write, Summary: "Have the backend stop the local wrapper until wrapper start"},

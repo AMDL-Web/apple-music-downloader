@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"amdl/internal/wrapperhost"
@@ -52,13 +53,13 @@ func (s *Setup) checkGuest() {
 const reportEvery = 100 * time.Millisecond
 
 // InstallGuest downloads the current guest, checks its sha256 and installs
-// it, resuming a download a failure or a cancel left. An account's disk is
-// kept.
-func (s *Setup) InstallGuest() { s.installGuest(false) }
+// it, resuming a download a failure or a cancel left. Manager disks are
+// kept; a bare-lite disk is preserved separately for a fresh login.
+func (s *Setup) InstallGuest() { s.installGuest() }
 
-// installGuest installs the current guest; with reboot it then stops the
-// running guest and starts it again on the new files, before it reports.
-func (s *Setup) installGuest(reboot bool) {
+// installGuest stops the guest before replacing any files, then restores
+// whether it was enabled, including after a canceled or failed install.
+func (s *Setup) installGuest() {
 	if s.Guest.State == Working {
 		return
 	}
@@ -81,6 +82,10 @@ func (s *Setup) installGuest(reboot bool) {
 	go func() {
 		pin, err := s.deps.Pin(ctx)
 		var in wrapperhost.Installed
+		var resume func() error
+		if err == nil {
+			resume, err = s.pauseGuest()
+		}
 		if err == nil {
 			s.post(func() {
 				if g.State == Working {
@@ -91,8 +96,8 @@ func (s *Setup) installGuest(reboot bool) {
 		}
 		canceled := errors.Is(ctx.Err(), context.Canceled)
 		cancel()
-		if err == nil && reboot {
-			s.rebootGuest()
+		if resume != nil {
+			err = errors.Join(err, resume())
 		}
 		s.post(func() {
 			size := g.Size
@@ -136,8 +141,7 @@ func (s *Setup) CancelGuest() {
 	}
 }
 
-// ImportGuest installs the guest from a qemu-assets zip, a wrapper-lite-qemu
-// package or a directory of its files: the way in when the download is gone.
+// ImportGuest installs a manager guest zip or a directory of its files.
 func (s *Setup) ImportGuest(path string) {
 	if s.Guest.State == Working {
 		return
@@ -145,7 +149,14 @@ func (s *Setup) ImportGuest(path string) {
 	g := &s.Guest
 	*g = Guest{State: Working, Size: g.Size, Progress: wrapperhost.Progress{Phase: wrapperhost.Unpacking}}
 	go func() {
-		in, err := s.deps.Home.Import(path, s.deps.Now())
+		resume, err := s.pauseGuest()
+		var in wrapperhost.Installed
+		if err == nil {
+			in, err = s.deps.Home.Import(path, s.deps.Now())
+		}
+		if resume != nil {
+			err = errors.Join(err, resume())
+		}
 		s.post(func() {
 			if err != nil {
 				*g = Guest{State: Failed, Err: err.Error(), Size: g.Size}
@@ -165,9 +176,11 @@ func (s *Setup) StartGuest() error { return s.deps.Home.SetEnabled(true) }
 func (s *Setup) GuestLog() string { return s.deps.Home.LogPath() }
 
 // UpdateAvailable reports whether CheckGuestUpdate found a guest newer than
-// the one installed. An imported guest names no commit and is not compared.
+// the one installed, or pins another wrapper-lite payload. A bare-lite guest always needs a manager update, even
+// when imported; a manager import with no commit is not compared.
 func (g Guest) UpdateAvailable() bool {
-	return g.State == Ready && g.Installed.Commit != "" && g.Latest.Commit != "" && g.Latest.Commit != g.Installed.Commit
+	return g.State == Ready && g.Latest.Commit != "" && (g.Installed.Kind != wrapperhost.ManagerGuest ||
+		g.Installed.Commit != "" && (g.Latest.Commit != g.Installed.Commit || g.Latest.Lite.RunID != g.Installed.Lite.RunID))
 }
 
 // CheckGuestUpdate reads the current pin, at most once every updateEvery.
@@ -195,12 +208,12 @@ func (s *Setup) CheckGuestUpdate() {
 const updateEvery = 10 * time.Minute
 
 // UpdateGuest installs the current guest over the one installed, keeping the
-// account's disk, then reboots the running guest onto it.
+// manager's disk, or setting aside a bare-lite disk, then restores its state.
 func (s *Setup) UpdateGuest() {
 	if !s.Guest.UpdateAvailable() {
 		return
 	}
-	s.installGuest(true)
+	s.installGuest()
 }
 
 // StopGuest stops the running guest; StartGuest lets it run again.
@@ -215,7 +228,13 @@ func (s *Setup) waitStopped() error {
 	deadline := time.Now().Add(stopWait)
 	for {
 		st, err := s.deps.Home.ReadState()
-		if err != nil || st.Mode == "stopped" || st.Mode == "" {
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if st.PID == 0 && (st.Mode == "stopped" || st.Mode == "") {
 			return nil
 		}
 		if time.Now().After(deadline) {
@@ -225,14 +244,27 @@ func (s *Setup) waitStopped() error {
 	}
 }
 
-// rebootGuest stops the guest and starts it again, so the supervisor boots
-// the files installed last.
-func (s *Setup) rebootGuest() {
-	if err := s.StopGuest(); err != nil {
-		return
+// pauseGuest protects old disks from replacement while QEMU still writes.
+func (s *Setup) pauseGuest() (func() error, error) {
+	if _, err := s.deps.Home.Current(); errors.Is(err, wrapperhost.ErrNotInstalled) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
 	}
-	_ = s.waitStopped() // a guest that will not stop is stopped by the start's reboot
-	_ = s.StartGuest()
+	enabled := s.deps.Home.Enabled()
+	if err := s.StopGuest(); err != nil {
+		return nil, err
+	}
+	resume := func() error {
+		if enabled {
+			return s.StartGuest()
+		}
+		return nil
+	}
+	if err := s.waitStopped(); err != nil {
+		return resume, err
+	}
+	return resume, nil
 }
 
 // UninstallGuest stops the guest and removes it. With purge it also deletes

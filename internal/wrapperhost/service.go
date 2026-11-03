@@ -8,7 +8,7 @@ import (
 )
 
 // Service is the backend's wrapper service for a managed wrapper: status
-// from the guest's own lite, marked as managed and as able to log in, and
+// from the guest's manager, marked as managed and as able to log in, and
 // login, two-step and logout through the supervisor.
 type Service struct {
 	Wrapper interface {
@@ -47,4 +47,17 @@ func (s Service) SubmitTwoStepCode(ctx context.Context, id, code string) (wrappe
 }
 
 // Logout implements the backend's wrapper service.
-func (s Service) Logout(ctx context.Context, user string) error { return s.Sup.Logout(ctx, user) }
+func (s Service) Logout(ctx context.Context, account string) error {
+	instances, err := s.Sup.home.Instances(ctx)
+	if err != nil {
+		return err
+	}
+	for _, in := range instances {
+		// The backend's existing logout contract supplies a username; the
+		// manager removes an instance by id. Account-aware callers can pass id.
+		if in.ID == account || in.Name == account {
+			return s.Sup.Logout(ctx, in.ID)
+		}
+	}
+	return wrapper.ErrAccountNotFound
+}

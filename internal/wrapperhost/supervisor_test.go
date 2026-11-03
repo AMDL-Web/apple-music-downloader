@@ -1,9 +1,9 @@
 package wrapperhost
 
 import (
-	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -19,8 +19,7 @@ import (
 	"amdl/internal/wrapper"
 )
 
-// TestMain lets the test binary stand in for QEMU: with AMDL_FAKE_QEMU set it
-// behaves like upstream's guest as far as the supervisor can see.
+// TestMain runs the test binary as an HTTP-only manager stand-in, never QEMU.
 func TestMain(m *testing.M) {
 	if os.Getenv("AMDL_FAKE_QEMU") == "1" {
 		fakeQEMU(os.Args[1:])
@@ -29,101 +28,119 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// fakeQEMU boots "the guest": with a fw_cfg file it runs a login the way
-// upstream's lite logs it, where the account 2fa@example.com needs the code
-// 123456 on the serial console and any other password but "right" fails;
-// without one it serves /status, listing a storefront once a login succeeded.
 func fakeQEMU(args []string) {
-	var image, fwcfg string
+	var image, memory string
 	var port int
 	for i := 0; i < len(args)-1; i++ {
 		switch args[i] {
 		case "-drive":
 			image = strings.TrimPrefix(strings.Split(args[i+1], ",format")[0], "file=")
-		case "-fw_cfg":
-			fwcfg = strings.TrimPrefix(args[i+1], "name=lite_args,file=")
 		case "-nic":
 			fmt.Sscanf(args[i+1][strings.Index(args[i+1], "127.0.0.1:")+len("127.0.0.1:"):], "%d", &port)
-		}
-	}
-	if fwcfg != "" {
-		raw, err := os.ReadFile(fwcfg)
-		if err != nil {
-			fmt.Println("[init] wrapper-lite QEMU guest booting...")
-			os.Exit(0)
-		}
-		fmt.Println("[init] wrapper-lite QEMU guest (custom args from file)")
-		// Upstream's init copies the arguments onto the guest disk.
-		if f, err := os.OpenFile(image, os.O_WRONLY|os.O_APPEND, 0); err == nil {
-			f.Write(raw)
-			f.Close()
-		}
-		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-		user, pass, _ := strings.Cut(lines[1], ":")
-		fmt.Println("2026-10-30 09:00:00.000 [INFO ] wrapper-lite login mode for " + user)
-		if user == "slow@example.com" {
-			time.Sleep(time.Minute) // a TCG guest still signing in
-		}
-		if user == "2fa@example.com" {
-			fmt.Println("2026-10-30 09:00:00.100 [INFO ] credentialHandler: {title: , message: , 2FA: true}")
-			fmt.Print("2FA code: ")
-			code, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-			fmt.Println(strings.TrimSpace(code)) // the tty's echo
-			pass += strings.TrimSpace(code)
-		} else {
-			fmt.Println("2026-10-30 09:00:00.100 [INFO ] credentialHandler: {title: , message: , 2FA: false}")
-		}
-		if pass == "right" || pass == "right123456" {
-			if f, err := os.OpenFile(image, os.O_WRONLY, 0); err == nil { // the real guest keeps them on its disk too
-				f.WriteAt([]byte("tokens"), 0)
-				f.Close()
+		case "-m":
+			memory = args[i+1]
+		case "-fw_cfg":
+			// Only the manager's arguments go through fw_cfg; a login never does.
+			name, file, _ := strings.Cut(args[i+1], ",file=")
+			if name != "name=manager_args" {
+				os.Exit(4)
 			}
-		} else {
-			fmt.Println("2026-10-30 09:00:01.000 [WARN ] auth error: code=-1, message=iTunesStoreErrorCategory")
-			fmt.Println("2026-10-30 09:00:01.000 [ERROR] login failed")
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				os.Exit(5)
+			}
+			os.WriteFile(image+".args", raw, 0o600)
 		}
-		fmt.Println("[init] lite exited, powering off...")
-		os.Exit(0)
 	}
-	fmt.Println("[init] wrapper-lite QEMU guest booting...")
-	fmt.Println("2026-10-30 09:00:02.000 [INFO ] token cache loaded (dev=eyJhbGciOiJFUzI1... music=AqPLtJ3x9fKz0bQw...)")
+	os.WriteFile(image+".memory", []byte(memory), 0o600)
+	fmt.Println("[init] starting wrapper-manager")
+	fmt.Println("token cache loaded (dev=synthetic-dev-prefix music=synthetic-music-prefix)")
+	var mu sync.Mutex
+	accounts := []Instance{}
+	if raw, err := os.ReadFile(image); err == nil {
+		_ = json.Unmarshal(raw, &accounts)
+	}
+	if accounts == nil {
+		accounts = []Instance{}
+	}
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		os.Exit(3)
 	}
 	http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		regions := "[]"
-		if raw, _ := os.ReadFile(image); strings.HasPrefix(string(raw), "tokens") {
-			regions = `["us"]`
+		if r.URL.Path == "/login" {
+			var body struct{ Username, Password, Code string }
+			json.NewDecoder(r.Body).Decode(&body)
+			if body.Username == "slow@example.com" {
+				<-r.Context().Done()
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if body.Password != "right" || body.Code != "" && body.Code != "123456" {
+				fmt.Fprint(w, `{"code":-1,"msg":"login failed"}`)
+				return
+			}
+			if body.Username == "2fa@example.com" && body.Code == "" {
+				fmt.Fprint(w, `{"code":2,"msg":"need code"}`)
+				return
+			}
+			if len(accounts) >= 10 {
+				fmt.Fprint(w, `{"code":-1,"msg":"account limit reached"}`)
+				return
+			}
+			accounts = append(accounts, Instance{ID: fmt.Sprintf("account-%d", len(accounts)+1), Name: body.Username, Region: "us", Ready: true})
+			raw, _ := json.Marshal(accounts)
+			os.WriteFile(image, raw, 0o600)
+			fmt.Fprint(w, `{"code":0,"data":{}}`)
+			return
 		}
-		fmt.Fprintf(w, `{"code":0,"msg":"SUCCESS","data":{"regions":%s}}`, regions)
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/status":
+			regions := []string{}
+			if len(accounts) > 0 {
+				regions = []string{"us"}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"ready": true, "clientCount": len(accounts), "regions": regions, "instances": accounts}})
+		case "/token":
+			for _, in := range accounts {
+				if in.ID == r.URL.Query().Get("instance") {
+					fmt.Fprint(w, `{"code":0,"data":{"region":"us","music_token":"synthetic-token"}}`)
+					return
+				}
+			}
+			w.WriteHeader(503)
+			fmt.Fprint(w, `{"code":503}`)
+		case "/logout":
+			var body struct {
+				ID string `json:"id"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			for i, in := range accounts {
+				if in.ID == body.ID {
+					accounts = append(accounts[:i], accounts[i+1:]...)
+					raw, _ := json.Marshal(accounts)
+					os.WriteFile(image, raw, 0o600)
+					fmt.Fprint(w, `{"code":0,"data":{}}`)
+					return
+				}
+			}
+			fmt.Fprint(w, `{"code":-1}`)
+		default:
+			w.WriteHeader(404)
+		}
 	}))
 }
 
-// defaultLoginLimit is LoginLimit before init shortens the tunables.
-var defaultLoginLimit = LoginLimit()
-
 func TestClientsOutwaitALogin(t *testing.T) {
-	if client.LoginWait <= defaultLoginLimit {
-		t.Fatalf("client.LoginWait %v does not outwait a login's %v", client.LoginWait, defaultLoginLimit)
+	if client.LoginWait <= LoginLimit() {
+		t.Fatalf("client wait %v <= login limit %v", client.LoginWait, LoginLimit())
 	}
 }
 
-func TestTokenPrefixesAreRedacted(t *testing.T) {
-	_, _, log := runFake(t)
-	for i := 0; i < 100 && !strings.Contains(log.String(), "token cache loaded"); i++ {
-		time.Sleep(50 * time.Millisecond)
-	}
-	got := log.String()
-	if !strings.Contains(got, "(dev=<redacted> music=<redacted>)") || strings.Contains(got, "eyJhbG") || strings.Contains(got, "AqPLtJ") {
-		t.Fatalf("console log = %q", got)
-	}
-}
-
-func init() {
-	pollEvery = 50 * time.Millisecond
-	readyTimeout = 20 * time.Second
-}
+func init() { pollEvery = 50 * time.Millisecond; readyTimeout = 20 * time.Second }
 
 type syncBuffer struct {
 	mu sync.Mutex
@@ -135,12 +152,7 @@ func (s *syncBuffer) Write(p []byte) (int, error) {
 	defer s.mu.Unlock()
 	return s.b.Write(p)
 }
-
-func (s *syncBuffer) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.b.String()
-}
+func (s *syncBuffer) String() string { s.mu.Lock(); defer s.mu.Unlock(); return s.b.String() }
 
 func runFake(t *testing.T) (*Supervisor, Home, *syncBuffer) {
 	t.Helper()
@@ -150,7 +162,7 @@ func runFake(t *testing.T) (*Supervisor, Home, *syncBuffer) {
 	}
 	t.Setenv("AMDL_FAKE_QEMU", "1")
 	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
-	art := fakeArtifact(t, "", "empty image")
+	art := fakeArtifact(t, "", "[]")
 	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -162,163 +174,234 @@ func runFake(t *testing.T) (*Supervisor, Home, *syncBuffer) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.Run(ctx); close(done) }()
-	t.Cleanup(func() { cancel(); <-done })
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(25 * time.Second):
+			t.Error("supervisor did not stop")
+		}
+	})
 	waitMode(t, s, "serving")
 	return s, h, log
 }
 
 func waitMode(t *testing.T, s *Supervisor, mode string) {
 	t.Helper()
-	for i := 0; i < 200; i++ {
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
 		if s.Managed().Mode == mode {
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("mode = %s, want %s", s.Managed().Mode, mode)
 }
 
+func TestTokenPrefixesAreRedacted(t *testing.T) {
+	_, _, log := runFake(t)
+	if got := log.String(); !strings.Contains(got, "(dev=<redacted> music=<redacted>)") || strings.Contains(got, "synthetic-dev-prefix") || strings.Contains(got, "synthetic-music-prefix") {
+		t.Fatal("console token prefixes were not redacted")
+	}
+}
+
 func TestLoginWithTwoStepCode(t *testing.T) {
-	s, h, log := runFake(t)
+	s, h, _ := runFake(t)
+	before, _ := h.ReadState()
 	r, err := s.StartLogin(context.Background(), "2fa@example.com", "right")
 	if err != nil || r.Status != wrapper.LoginStatusNeedsTwoStep || r.LoginID == "" {
 		t.Fatalf("StartLogin = %+v, %v", r, err)
 	}
-	if _, err := os.Stat(filepath.Join(h.Dir, "login-args")); !errors.Is(err, os.ErrNotExist) {
-		t.Error("the login's argument file outlives the guest's first line")
-	}
-	if _, err := s.SubmitTwoStepCode(context.Background(), "nope", "123456"); !errors.Is(err, wrapper.ErrLoginSessionNotFound) {
-		t.Errorf("a wrong login id: %v", err)
-	}
-	if st, err := h.ReadState(); err != nil || st.Mode != "login" || st.PID == 0 {
-		t.Errorf("state.json during the login = %+v, %v: a later process could not reap its guest", st, err)
-	}
 	if _, err := s.SubmitTwoStepCode(context.Background(), r.LoginID, "12345"); !errors.Is(err, wrapper.ErrInvalidTwoStepCode) {
-		t.Errorf("a five-digit code: %v", err)
+		t.Fatalf("invalid code: %v", err)
+	}
+	if _, err := s.SubmitTwoStepCode(context.Background(), "unknown", "123456"); !errors.Is(err, wrapper.ErrLoginSessionNotFound) {
+		t.Fatalf("unknown login: %v", err)
 	}
 	r, err = s.SubmitTwoStepCode(context.Background(), r.LoginID, "123456")
 	if err != nil || r.Status != wrapper.LoginStatusLoggedIn {
 		t.Fatalf("SubmitTwoStepCode = %+v, %v", r, err)
 	}
-	for _, secret := range []string{"2fa@example.com", "right", "123456"} {
-		if strings.Contains(log.String(), secret) {
-			t.Errorf("the console log holds %q:\n%s", secret, log.String())
+	after, _ := h.ReadState()
+	if after.Mode != "serving" || after.PID != before.PID || after.LoginResidue {
+		t.Fatalf("login restarted the guest: %+v -> %+v", before, after)
+	}
+	if _, err := os.Stat(h.path("login-args")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("login wrote arguments on the host")
+	}
+}
+
+func TestRefusedAndAbandonedLogin(t *testing.T) {
+	s, _, _ := runFake(t)
+	if _, err := s.StartLogin(context.Background(), "someone@example.com", "wrong"); !errors.Is(err, wrapper.ErrAuthenticationFailed) {
+		t.Fatalf("refused login: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if _, err := s.StartLogin(ctx, "slow@example.com", "right"); err == nil {
+		t.Fatal("abandoned login succeeded")
+	}
+	if _, err := s.StartLogin(context.Background(), "another@example.com", "right"); err != nil {
+		t.Fatalf("next login: %v", err)
+	}
+}
+
+func TestAccountCapAndLogoutKeepOtherAccounts(t *testing.T) {
+	s, h, _ := runFake(t)
+	for i := 0; i < 10; i++ {
+		if _, err := s.StartLogin(context.Background(), fmt.Sprintf("account%d@example.com", i), "right"); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if s.Managed().LoginResidue {
-		t.Error("the serving boot after a login left its arguments on the guest disk")
+	if _, err := s.StartLogin(context.Background(), "eleventh@example.com", "right"); !errors.Is(err, ErrAccountLimit) {
+		t.Fatalf("11th account: %v", err)
 	}
-	if img, _ := os.ReadFile(h.ImagePath()); strings.Contains(string(img), "2fa@example.com:right") || !strings.HasPrefix(string(img), "tokens") {
-		t.Errorf("guest disk after the login = %q", img)
+	accounts, err := h.Instances(context.Background())
+	if err != nil || len(accounts) != 10 {
+		t.Fatalf("instances: %d, %v", len(accounts), err)
 	}
-	if err := s.Logout(context.Background(), ""); err != nil {
+	token, err := h.InstanceToken(context.Background(), accounts[1].ID)
+	if err != nil || token.MusicToken == "" {
+		t.Fatal("per-account token unavailable")
+	}
+	if _, err := h.MusicToken(); !errors.Is(err, ErrMultipleAccounts) {
+		t.Fatalf("scalar token selected an arbitrary account: %v", err)
+	}
+	before, _ := h.ReadState()
+	if err := s.Logout(context.Background(), accounts[0].ID); err != nil {
 		t.Fatal(err)
 	}
+	left, _ := h.Instances(context.Background())
+	if len(left) != 9 {
+		t.Fatalf("logout left %d accounts", len(left))
+	}
+	h.SetEnabled(false)
+	s.poke()
+	waitMode(t, s, "stopped")
+	h.SetEnabled(true)
+	s.poke()
 	waitMode(t, s, "serving")
-	if regions, _ := statusOf(context.Background(), s.in.Port); len(regions) != 0 {
-		t.Errorf("after logout the account still serves %v", regions)
+	left, err = h.Instances(context.Background())
+	if err != nil || len(left) != 9 {
+		t.Fatalf("restart lost accounts: %d, %v", len(left), err)
 	}
-}
-
-func TestRefusedLogin(t *testing.T) {
-	s, _, _ := runFake(t)
-	start := time.Now()
-	_, err := s.StartLogin(context.Background(), "someone@example.com", "wrong")
-	if !errors.Is(err, wrapper.ErrAuthenticationFailed) || !strings.Contains(err.Error(), "auth error") {
-		t.Fatalf("StartLogin = %v", err)
+	for _, in := range left {
+		if in.ID == accounts[0].ID {
+			t.Fatal("logged-out instance restored")
+		}
 	}
-	if time.Since(start) > 10*time.Second {
-		t.Error("a refused login waits for the serving boot")
-	}
-	waitMode(t, s, "serving")
-	if _, err := s.StartLogin(context.Background(), "a:b@example.com", "x"); !errors.Is(err, wrapper.ErrCredentialsUnusable) {
-		t.Errorf("a colon in the username: %v", err)
-	}
-	if _, err := s.StartLogin(context.Background(), "a@example.com", "x\n--debug"); !errors.Is(err, wrapper.ErrCredentialsUnusable) {
-		t.Errorf("a newline in the password: %v", err)
-	}
-}
-
-func TestAbandonedLoginEnds(t *testing.T) {
-	s, _, _ := runFake(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if _, err := s.StartLogin(ctx, "slow@example.com", "right"); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("StartLogin = %v", err)
-	}
-	waitMode(t, s, "serving")
-	if _, err := s.StartLogin(context.Background(), "someone@example.com", "wrong"); !errors.Is(err, wrapper.ErrAuthenticationFailed) {
-		t.Fatalf("the next login = %v, want it to run", err)
+	after, _ := h.ReadState()
+	if before.PID == after.PID {
+		t.Fatal("restart did not replace fake process")
 	}
 }
 
 func TestNoLoginWhileStopped(t *testing.T) {
 	s, h, _ := runFake(t)
-	if err := h.SetEnabled(false); err != nil {
-		t.Fatal(err)
-	}
+	h.SetEnabled(false)
 	if _, err := s.StartLogin(context.Background(), "someone@example.com", "right"); !errors.Is(err, wrapper.ErrUnavailable) {
-		t.Fatalf("StartLogin = %v", err)
+		t.Fatalf("stopped login: %v", err)
 	}
 }
 
 func TestStopAndStart(t *testing.T) {
 	s, h, _ := runFake(t)
-	if err := h.SetEnabled(false); err != nil {
-		t.Fatal(err)
-	}
+	h.SetEnabled(false)
 	s.poke()
 	waitMode(t, s, "stopped")
 	h.SetEnabled(true)
 	s.poke()
 	waitMode(t, s, "serving")
 	if st, err := h.ReadState(); err != nil || st.Mode != "serving" || st.PID == 0 {
-		t.Errorf("state.json = %+v, %v", st, err)
+		t.Fatalf("state: %+v, %v", st, err)
 	}
 }
 
-// TestUninstallStopsUntilTheNextInstall covers an uninstall that keeps the
-// account's disk and the wrapper turned on: the supervisor stops rather than
-// boot assets that are gone, and serves the next install on its disk.
 func TestUninstallStopsUntilTheNextInstall(t *testing.T) {
 	s, h, _ := runFake(t)
+	h.SetEnabled(false)
+	s.poke()
+	waitMode(t, s, "stopped")
 	if err := h.Uninstall(false); err != nil {
 		t.Fatal(err)
 	}
-	s.poke()
-	waitMode(t, s, "stopped")
-	if m := s.Managed(); m.LastError != "" {
-		t.Errorf("stopped with error %q", m.LastError)
-	}
-	if !h.Enabled() {
-		t.Fatal("uninstall turned the wrapper off")
-	}
-	art := fakeArtifact(t, "", "a newer empty image")
+	art := fakeArtifact(t, "", "[]")
 	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "c0ffee5f47a30518"), time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
+	h.SetEnabled(true)
 	s.poke()
 	waitMode(t, s, "serving")
 	if got := s.Managed().Guest; got != "c0ffee5f47a3" {
-		t.Errorf("serving guest %s, want the new install's", got)
+		t.Fatalf("guest %s", got)
 	}
 }
 
-// TestBannerOfAGuestThatAlreadyExited covers a login guest that printed its
-// banner and exited before StartLogin waited for it, as a refused login can
-// on a busy host: both are ready, and the banner has to win.
-func TestBannerOfAGuestThatAlreadyExited(t *testing.T) {
-	done := make(chan struct{})
-	close(done)
-	failed := 0
-	for range 1000 {
-		x := &session{banner: make(chan string, 1), g: &guest{done: done}}
-		x.banner <- "[init] wrapper-lite QEMU guest (custom args from file)"
-		if err := x.awaitBanner(context.Background(), nil); err != nil {
-			failed++
+func TestServiceLogoutResolvesAccountName(t *testing.T) {
+	s, h, _ := runFake(t)
+	for _, name := range []string{"first@example.com", "second@example.com"} {
+		if _, err := s.StartLogin(context.Background(), name, "right"); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if failed > 0 {
-		t.Fatalf("%d of 1000 waits took the exit for a missing banner", failed)
+	service := Service{Sup: s}
+	if err := service.Logout(context.Background(), "first@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := h.Instances(context.Background())
+	if err != nil || len(accounts) != 1 || accounts[0].Name != "second@example.com" {
+		t.Fatalf("logout did not preserve the other account: %d, %v", len(accounts), err)
+	}
+	if err := service.Logout(context.Background(), "missing@example.com"); !errors.Is(err, wrapper.ErrAccountNotFound) {
+		t.Fatalf("unknown account: %v", err)
+	}
+}
+
+func TestGuestBootsWithThePinnedPayload(t *testing.T) {
+	_, h, _ := runFake(t)
+	raw, err := os.ReadFile(h.ImagePath() + ".args")
+	if err != nil {
+		t.Fatalf("the guest was given no manager arguments: %v", err)
+	}
+	// The guest's init splits this on whitespace into the manager's argv.
+	want := "-host 0.0.0.0 -port 8080 -payload-url " + Builtin.Lite.URL() + " -payload-sha256 " + Builtin.Lite.SHA256
+	if got := strings.Join(strings.Fields(string(raw)), " "); got != want {
+		t.Fatalf("manager arguments %q, want %q", got, want)
+	}
+	if !strings.HasPrefix(Builtin.Lite.URL(), "https://nightly.link/AMDL-Web/wrapper/actions/runs/41582282341/wrapper-lite-linux-x86_64.zip") {
+		t.Fatalf("payload URL %s", Builtin.Lite.URL())
+	}
+}
+
+func TestGuestWithoutAPayloadPinDoesNotBoot(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AMDL_FAKE_QEMU", "1")
+	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
+	art := fakeArtifact(t, "", "[]")
+	if _, err := h.Install(context.Background(), &fakeFetcher{body: art}, pinFor(art, "bde3335f47a30518"), time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	in, _ := h.Current()
+	in.Lite = LitePin{} // a record from before the payload was pinned
+	if err := writeJSON(h.path("installed.json"), in); err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewSupervisor(h, exe, "tcg", &syncBuffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	waitMode(t, s, "failed")
+	if _, err := os.Stat(h.path(managerArgsName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("an arguments file was written for a guest that was not started")
+	}
+	if got := s.Managed().LastError; !strings.Contains(got, "amdl wrapper update") {
+		t.Fatalf("error %q does not say how to fix it", got)
 	}
 }

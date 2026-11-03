@@ -76,7 +76,7 @@ passes it on through `internal/api#Deps`, and the API leaves `/` and `/console/`
 | `internal/progress` | the clients' stage weights, stage bar, album bar and remaining-time estimate, kept equal to the console's by a test | |
 | `internal/format` | sizes, durations, rates and quality labels the clients show, and which qualities a download asks between | |
 | `internal/capability` | the one table of client capabilities (CLI command, MCP tool, safety) and the operations parsed from the embedded spec | hold behaviour; a capability without an operation runs in its client |
-| `internal/wrapperhost` | the wrapper amdl runs in a QEMU guest: pinned download of upstream's guest, QEMU arguments, the supervisor and its fw_cfg login | ship upstream's files or put a credential on a command line |
+| `internal/wrapperhost` | the wrapper amdl runs in a QEMU guest: pinned download of upstream's guest, QEMU arguments, the supervisor and its HTTP manager login | ship upstream's files or put a credential on a command line |
 | `internal/demo` | a made-up backend held in memory behind an `http.RoundTripper`, for the products' browser demos | open a port or reach anything outside the process |
 | `internal/local` | the backend run inside a client's process (the desktop app, `amdl --server embedded`): its directories, its config, and the runtime file that lets a second client find it, and the lock that keeps one backend per data directory | |
 
@@ -88,8 +88,8 @@ over HTTP (`wrapper.address`) to one of two services, which look the same to
 which holds one logged-in account, or [wrapper-manager
 v2](https://github.com/AMDL-Web/wrapper/tree/lite/manager), which runs one
 wrapper-lite per account behind a single port and forwards each request to an account
-whose storefront can serve it. A wrapper-lite can also be one amdl runs itself in a QEMU
-guest (`internal/wrapperhost`, the managed wrapper). What the backend asks for:
+whose storefront can serve it. The managed wrapper (`internal/wrapperhost`) runs wrapper-manager in a QEMU
+guest with all accounts and the payload on one persistent disk. What the backend asks for:
 
 - `/key`: for each FairPlay key URI, a white-box template (`ctx` and `state`). The client
   caches templates across jobs, and `internal/fairplay#Template` decrypts samples in

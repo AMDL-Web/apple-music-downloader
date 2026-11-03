@@ -110,20 +110,17 @@ type RunOpts struct {
 	Kernel, Initrd string
 	Image          string
 	HostPort       int
-	// GuestPort is where the guest's lite listens: guestPort for a boot
+	// GuestPort is where the guest's manager listens: guestPort for a boot
 	// without arguments.
 	GuestPort int
 	MemoryMB  int
 	CPUs      int
-	// ArgsFile, when set, passes lite's arguments through fw_cfg; only a
-	// login boot uses it.
+	// ArgsFile, when set, passes non-secret manager arguments through fw_cfg.
 	ArgsFile string
 }
 
-// Args are QEMU's arguments for o: buildQemuArgs of upstream's
-// wrapper-lite-qemu.cpp at bde3335, for a QEMU the user installed (so no -L
-// or library paths), with the kernel command line fixed (never lite_args_b64)
-// and the forwarded port bound to loopback only.
+// Args are QEMU's arguments for the manager guest, with a fixed kernel
+// command line and the forwarded port bound to loopback only.
 func Args(o RunOpts) []string {
 	accel, cpu := o.Accel, "max"
 	switch o.Accel {
@@ -142,7 +139,7 @@ func Args(o RunOpts) []string {
 		"-drive", "file=" + optValue(o.Image) + ",format=raw,if=virtio",
 	}
 	if o.ArgsFile != "" {
-		args = append(args, "-fw_cfg", "name=lite_args,file="+optValue(o.ArgsFile))
+		args = append(args, "-fw_cfg", "name=manager_args,file="+optValue(o.ArgsFile))
 	}
 	return args
 }

@@ -1,10 +1,13 @@
 # Keeps the pin of the wrapper guest (internal/wrapperhost#GuestRepo) current.
-# amdl wrapper install reads it from wrapper-guest.json on the wrapper-pins
+# amdl wrapper install reads it from wrapper-manager-guest.json on the wrapper-pins
 # branch (internal/wrapperhost#ManifestURL) before the one built into the
 # binary, which goes stale when GitHub deletes the artifact 90 days after its
-# build. Weekly, the job pins the newest successful build-lite run's
-# qemu-assets artifact once its downloaded bytes match the digest GitHub
-# reports, and commits the file only when it changed. wrapper-pin.json on that
+# build. Weekly, the job pins the newest successful manager run's
+# manager-qemu-guest artifact and the newest successful build-lite run's
+# wrapper-lite-linux-x86_64 artifact (the payload the guest's manager is told
+# to install, with its digest), both from the lite branch only, once each one's
+# downloaded bytes match the digest GitHub reports, and commits the file only
+# when it changed. wrapper-pin.json on that
 # branch pins upstream's unpatched guest for the 2.0 release candidates and is
 # no longer updated.
 name: wrapper-pin
@@ -26,7 +29,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Pin the newest guest
+      - name: Pin the newest guest and payload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/wrapper-pin.mjs "$RUNNER_TEMP/wrapper-pin.json"
@@ -41,8 +44,8 @@ jobs:
           else
             git switch --orphan wrapper-pins
           fi
-          cp "$RUNNER_TEMP/wrapper-pin.json" wrapper-guest.json
-          git add wrapper-guest.json
+          cp "$RUNNER_TEMP/wrapper-pin.json" wrapper-manager-guest.json
+          git add wrapper-manager-guest.json
           if git diff --cached --quiet; then echo "the pin is current"; exit 0; fi
-          git commit -s -m "chore(wrapper): pin $(node -p "require('./wrapper-guest.json').commit.slice(0, 12)")"
+          git commit -s -m "chore(wrapper): pin $(node -p "const p = require('./wrapper-manager-guest.json'); p.commit.slice(0, 12) + ' with lite ' + p.lite.commit.slice(0, 12)")"
           git push origin wrapper-pins

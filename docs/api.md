@@ -232,18 +232,15 @@ wait (at most 75 seconds) and, once a code is submitted, until its verification 
 `needs_2fa` response. With a wrapper-manager it is never written to disk. A wrong code ends
 the login; start again from the password.
 
-With a wrapper amdl runs, a login boots the guest with the password in a 0600 file that
-QEMU passes to it through `fw_cfg` and that is deleted at the guest's first console line;
-the password never appears on a command line. The guest copies it onto its own disk, and
-amdl zeroes that copy before the next boot, which follows at once: `managed.login_residue`
-stays true until then. A login or code answers within `internal/wrapperhost#LoginLimit`,
-since the guest boots twice per login and may run emulated. A caller that disconnects from
-the login before its answer ends the login; a submitted code runs to its outcome whether or
-not the caller waits. The code waits up to four minutes. A username with a
-colon, or either value with a line break or NUL, is `400 invalid_request`; so is a code
-that is not six digits, which leaves the login waiting for the right one. While
-`amdl wrapper stop` has turned the wrapper off, a login is `503 wrapper_unavailable`.
-Logout gives the guest a fresh disk, whatever the username.
+With a wrapper amdl runs, login and two-step verification use the guest manager's
+HTTP API on loopback. They do not restart the guest or put credentials in boot
+arguments; `managed.login_residue` is false for manager guests. A login or code
+request is bounded by `internal/wrapperhost#LoginLimit`. A code that is not six
+digits is `400 invalid_request` and leaves the pending login available. While
+`amdl wrapper stop` has turned the wrapper off, login is `503 wrapper_unavailable`.
+The local manager holds at most ten accounts. Local logout resolves the supplied
+account name to its manager instance id and removes only that account. Updating a bare-lite guest preserves its disk and
+requires login again ([Install](install.md#a-wrapper-amdl-runs)).
 
 ```bash
 curl -X POST http://localhost:18080/api/v1/wrapper/login/{login_id}/2fa \

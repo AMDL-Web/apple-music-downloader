@@ -68,9 +68,8 @@ func startGuest(qemu string, o RunOpts, onLine func(string)) (*guest, error) {
 	return g, nil
 }
 
-// stop kills QEMU and waits for it. The guest's lite runs as init, so there
-// is no clean shutdown to ask for; its disk is ext4, whose journal keeps it
-// consistent, and lite's tokens are rewritten on their next refresh.
+// stop kills QEMU and waits for it. The manager runs as init, so there is
+// no shutdown service; the account disk uses ext4's journal.
 func (g *guest) stop() {
 	_ = g.cmd.Process.Kill() // already exited is fine
 	<-g.done

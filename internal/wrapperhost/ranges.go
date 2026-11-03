@@ -161,7 +161,7 @@ func (s *nightlySource) refresh(ctx context.Context, stale string) (string, erro
 func (s *nightlySource) statusErr(u *url.URL, resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusNotFound:
-		return permanent{fmt.Errorf("artifact %d is gone from GitHub (artifacts expire 90 days after their build)", s.id)}
+		return permanent{fmt.Errorf("artifact %d is gone from GitHub (manager guest artifacts expire 90 days after their build)", s.id)}
 	case http.StatusRequestedRangeNotSatisfiable:
 		return permanent{fmt.Errorf("%s: %s: the pin's size %d does not fit the artifact", u.Host, resp.Status, s.size)}
 	}

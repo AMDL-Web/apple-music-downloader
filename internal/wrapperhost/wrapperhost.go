@@ -1,15 +1,8 @@
-// Package wrapperhost installs and runs wrapper-lite on this machine, in a
-// QEMU guest, for a backend that has no wrapper elsewhere: the desktop app's
-// standalone mode and amdl serve --local.
-//
-// The guest is wrapper-lite from the AMDL-Web fork (GuestRepo, branch lite):
-// its kernel, initramfs and empty data image, the qemu-assets artifact of the
-// build-lite workflow, downloaded at install time and never shipped
-// with amdl, since the initramfs holds Apple's Android libraries. QEMU is the
-// user's own. amdl starts QEMU itself rather than through upstream's
-// wrapper-lite-qemu launcher, which puts --login user:pass on the QEMU command
-// line and in a world-readable file; here a login's arguments reach the guest
-// only through a 0600 fw_cfg file removed once the guest has read it.
+// Package wrapperhost installs and runs wrapper-manager in a QEMU guest for
+// the desktop app and amdl serve --local. The manager's registry, per-account
+// state and wrapper-lite payload all live on the owner-only account disk.
+// Guest assets are downloaded and verified at install time; QEMU is supplied
+// by the host. Credentials reach the manager through loopback HTTP only.
 package wrapperhost
 
 import (
@@ -24,12 +17,15 @@ import (
 // The guest's files, as upstream names them.
 const (
 	kernelName = "vmlinuz-lite-qemu"
-	initrdName = "lite-initramfs.cpio.gz"
+	initrdName = "wrapper-manager-initramfs.cpio.gz"
 	imageName  = "data.img"
 )
 
-// guestPort is where the guest's lite listens when it boots without
-// arguments (upstream qemu/init: --port 8080).
+// managerArgsName is the file in Home that holds one boot's manager
+// arguments for QEMU's fw_cfg. It holds nothing secret.
+const managerArgsName = "manager-args"
+
+// guestPort is manager/guest/init's HTTP listen port.
 const guestPort = 8080
 
 // Home is the managed wrapper's directory, <data>/wrapper beside the
@@ -37,13 +33,21 @@ const guestPort = 8080
 //
 //	installed.json  what is installed (Installed)
 //	assets/<id>/    the guest's kernel and initramfs
-//	data.img        the account's disk: its login tokens; 0600, kept across updates
+//	data.img        the manager's disk: all accounts and payload; 0600
+//	manager-args    the manager's arguments for the running boot
 //	state.json      what the runner is doing (State)
 //	logs/wrapper.log the guest's console, with secrets redacted
 type Home struct{ Dir string }
 
+// ManagerGuest identifies the manager guest and its persistent disk layout.
+const ManagerGuest = "manager"
+
 // Installed records the guest files in use.
 type Installed struct {
+	// Kind is empty in records of the retired bare-lite guest.
+	Kind string `json:"kind,omitempty"`
+	// LegacyDisk names a preserved bare-lite disk that needs a fresh login.
+	LegacyDisk string `json:"legacy_disk,omitempty"`
 	// ID names the assets directory: the build's commit, or import-<sha>.
 	ID string `json:"id"`
 	// Commit is the GuestRepo commit the artifact was built from; empty for
@@ -56,6 +60,8 @@ type Installed struct {
 	// Port is the loopback port the wrapper answers on, picked at the first
 	// install and kept, so wrapper.address stays valid across updates.
 	Port int `json:"port"`
+	// Lite is the wrapper-lite payload the manager installs on this disk.
+	Lite LitePin `json:"lite"`
 	// QEMU is the emulator chosen at install (--qemu), else empty for
 	// FindQEMU at each start.
 	QEMU string `json:"qemu,omitempty"`
@@ -68,7 +74,7 @@ func (h Home) path(parts ...string) string {
 	return filepath.Join(append([]string{h.Dir}, parts...)...)
 }
 
-// ImagePath is the account's disk.
+// ImagePath is the manager's disk, mounted at /data in the guest.
 func (h Home) ImagePath() string { return h.path(imageName) }
 
 // LogPath is the guest's console log.

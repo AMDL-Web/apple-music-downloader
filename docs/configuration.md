@@ -143,9 +143,13 @@ The wrapper keeps its logged-in account's token, in memory and in a file named
 it, and `catalog.media_user_token` only when it cannot. The first of these that has a token
 wins:
 
-1. A wrapper the backend runs itself (`amdl wrapper install`): read from the guest's disk,
-   with nothing to configure. Nothing below applies; `wrapper.data_dir` is ignored, and
-   startup says so when it is set.
+1. A wrapper the backend runs itself (`amdl wrapper install`): discover accounts through
+   the local manager's `/status.instances`, then read `/token?instance=<id>`. The disk
+   is used only to count accounts before boot, never to read tokens. The scalar token
+   reader refuses multiple accounts rather than selecting an arbitrary Apple ID;
+   account-aware callers use `internal/wrapperhost#Home.Instances` and
+   `internal/wrapperhost#Home.InstanceToken`. Nothing below applies; `wrapper.data_dir`
+   is ignored, and startup says so when it is set.
 2. The wrapper's `GET /token`, which amdl's wrapper-lite fork serves at
    `wrapper.address`, so it works for a wrapper on another machine or in another
    container with nothing to configure. The backend asks at startup, again a few seconds
@@ -156,9 +160,9 @@ wins:
    30 minutes.
 3. A wrapper whose files the backend can see: set `wrapper.data_dir` to the wrapper's data
    directory. A wrapper-lite base directory holds `MUSIC_TOKEN` directly; a
-   wrapper-manager's data directory holds one per account under `instances/<id>/`. amdl
-   2.0 supports one wrapper account, a wrapper-manager's included; with several, the
-   newest token is read. In containers, mount that directory read-only into the backend
+   wrapper-manager's data directory holds one per account under `instances/<id>/`. This
+   filesystem fallback reads the newest token when several exist; per-account
+   selection uses the manager's HTTP API instead. In containers, mount that directory read-only into the backend
    ([Deployment](deployment.md#the-wrapper)). The file must be readable by the user the
    backend runs as. It is read afresh on every use, so a login or a refreshed token takes
    effect with the next request.

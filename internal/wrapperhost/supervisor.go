@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
+	"amdl/internal/config"
 	"amdl/internal/wrapper"
 )
 
@@ -26,9 +28,8 @@ type State struct {
 	// on TCG.
 	AccelFallback bool   `json:"accel_fallback,omitempty"`
 	QEMU          string `json:"qemu"`
-	// LoginResidue means a login boot ran and its arguments, the password
-	// among them, may still be on the guest disk: amdl zeroes them
-	// (scrubLogin) before the next serving boot.
+	// LoginResidue is retained for readers of old state files. Manager
+	// guests never receive credentials in boot arguments.
 	LoginResidue bool      `json:"login_residue,omitempty"`
 	LastError    string    `json:"last_error,omitempty"`
 	Updated      time.Time `json:"updated"`
@@ -63,18 +64,18 @@ func (h Home) SetEnabled(on bool) error {
 }
 
 // Supervisor runs the installed guest for a backend in this process: it keeps
-// a serving guest up while enabled, restarts it after a crash, and runs the
-// login boots behind the backend's login routes.
+// a serving guest up while enabled, restarts it after a crash, and forwards
+// logins to its manager over HTTP.
 type Supervisor struct {
-	home Home
-	in   Installed
-	qemu string
-	log  io.Writer
-	mu   sync.Mutex
-	g    *guest
-	st   State
-	sess *session
-	wake chan struct{}
+	home    Home
+	in      Installed
+	qemu    string
+	log     io.Writer
+	mu      sync.Mutex
+	g       *guest
+	st      State
+	manager *wrapper.Client
+	wake    chan struct{}
 	// fails counts serving boots in a row that did not reach serving, and
 	// failedAt is when the last one failed: the next waits a backoff.
 	fails    int
@@ -82,25 +83,16 @@ type Supervisor struct {
 	// run is Run's context: serving guests live as long as it, not as long
 	// as the request that restarted them after a login.
 	run context.Context
-	// unscrubbed means no serving boot of this supervisor has scrubbed the
-	// disk yet, which covers a process that died during a login.
-	unscrubbed bool
 }
 
-// Tunables: how long a TCG guest may take to boot, how long a login may
-// wait for lite before and after the two-step code, how long a logged-in
-// guest may take to serve a storefront.
+// readyTimeout allows a TCG guest to download its payload on first boot.
 var (
-	readyTimeout   = 3 * time.Minute
-	loginStepLimit = 4 * time.Minute
-	storefrontWait = time.Minute
-	pollEvery      = 2 * time.Second
+	readyTimeout = 3 * time.Minute
+	pollEvery    = 2 * time.Second
 )
 
-// LoginLimit is the longest a login or two-step request can take: one login
-// step, then the serving boot and its storefront check. Clients wait longer
-// (client.LoginWait).
-func LoginLimit() time.Duration { return loginStepLimit + readyTimeout + storefrontWait }
+// LoginLimit bounds one manager login or two-step verification request.
+func LoginLimit() time.Duration { return 2 * time.Minute }
 
 // NewSupervisor prepares to run the installed guest with qemu and accel.
 func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, error) {
@@ -108,26 +100,28 @@ func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, erro
 	if err != nil {
 		return nil, err
 	}
+	if in.Kind != ManagerGuest {
+		return nil, errors.New("the local wrapper needs a manager guest update; its account disk will be preserved; log in again after updating")
+	}
+	manager, err := wrapper.NewClient(config.WrapperConfig{Address: in.URL(), TimeoutSeconds: 5, LoginTimeoutSeconds: int(LoginLimit() / time.Second)})
+	if err != nil {
+		return nil, err
+	}
 	if log == nil {
 		log = io.Discard
 	}
-	s := &Supervisor{home: h, in: in, qemu: qemu, log: log, wake: make(chan struct{}, 1), run: context.Background()}
+	s := &Supervisor{home: h, in: in, qemu: qemu, log: log, wake: make(chan struct{}, 1), run: context.Background(), manager: manager}
 	s.st = State{Mode: "stopped", Port: in.Port, Accel: accel, QEMU: qemu}
 	if prev, err := h.ReadState(); err == nil {
 		reapStale(prev)
-		s.st.LoginResidue = prev.LoginResidue || prev.Mode == "login"
 	}
-	// No login runs yet: a file left here is from a process that died in
-	// one. The first serving boot scrubs the disk the same way.
-	_ = os.Remove(h.path("login-args")) // absent is the usual case
-	s.unscrubbed = true
 	return s, nil
 }
 
 // URL is the wrapper address of the managed guest.
 func (s *Supervisor) URL() string { return s.in.URL() }
 
-// MusicToken reads the media-user-token from the managed account disk.
+// MusicToken reads the sole ready account through the manager HTTP API.
 func (s *Supervisor) MusicToken() (string, error) { return s.home.MusicToken() }
 
 func (s *Supervisor) poke() {
@@ -142,10 +136,6 @@ func (s *Supervisor) setState(f func(*State)) {
 	f(&s.st)
 	s.st.Updated = time.Now().UTC()
 	g := s.g
-	if g == nil && s.sess != nil {
-		// A login boot's pid, so that a later process can reap it.
-		g = s.sess.g
-	}
 	if g != nil && !g.exited() {
 		s.st.PID = g.cmd.Process.Pid
 	} else {
@@ -164,6 +154,7 @@ func (s *Supervisor) Managed() wrapper.Managed {
 
 // Run keeps the guest in the wanted state until ctx ends, then stops it.
 func (s *Supervisor) Run(ctx context.Context) {
+	defer s.manager.Close()
 	s.mu.Lock()
 	s.run = ctx
 	s.mu.Unlock()
@@ -175,14 +166,9 @@ func (s *Supervisor) Run(ctx context.Context) {
 				s.g.stop()
 				s.g = nil
 			}
-			if s.sess != nil {
-				s.sess.end()
-				s.sess = nil
-			}
 			s.setState(func(st *State) { st.Mode = "stopped" })
 			s.mu.Unlock()
 			return
-		case s.sess != nil:
 		case !s.home.Enabled() || s.uninstalled():
 			if s.g != nil {
 				s.g.stop()
@@ -226,11 +212,8 @@ func (s *Supervisor) failLocked(err error) {
 	s.setState(func(st *State) { st.Mode, st.LastError = "failed", err.Error() })
 }
 
-// startServingLocked boots the guest without arguments, so its lite serves
-// on guestPort, after zeroing what a login boot left on its disk. A failure
-// is retried on a later turn after a backoff, and a guest that does not
-// answer in time is stopped for it; a non-TCG accelerator that fails at once
-// is replaced by TCG.
+// startServingLocked boots the manager on its persistent account disk. Each
+// boot sizes memory from the registry; account changes take effect on restart.
 func (s *Supervisor) startServingLocked() {
 	ctx := s.run
 	if ctx.Err() != nil {
@@ -240,22 +223,25 @@ func (s *Supervisor) startServingLocked() {
 		return
 	}
 	s.refreshLocked()
-	if s.unscrubbed || s.st.LoginResidue {
-		n, err := scrubLogin(s.home.ImagePath())
-		if err != nil {
-			fmt.Fprintf(s.log, "[amdl] could not clear the login's arguments from the guest disk: %v\n", err)
-			s.setState(func(st *State) { st.LoginResidue = true })
-		} else {
-			if n > 0 {
-				fmt.Fprintf(s.log, "[amdl] cleared %d copies of a login's arguments from the guest disk\n", n)
-			}
-			s.unscrubbed = false
-			s.setState(func(st *State) { st.LoginResidue = false })
-		}
+	accounts, err := s.home.accountCount()
+	if err != nil {
+		// A damaged registry must not under-size a guest restoring many accounts.
+		accounts = MaxAccounts
+		fmt.Fprintln(s.log, "[amdl] could not read the account count; reserving memory for the account limit")
+	}
+	if err := s.in.Lite.complete(); err != nil {
+		// Booting without arguments would install whatever build-lite built last.
+		s.failLocked(fmt.Errorf("%w; amdl wrapper update installs a guest that pins it", err))
+		return
+	}
+	argsFile := s.home.path(managerArgsName)
+	if err := os.WriteFile(argsFile, []byte(strings.Join(managerArgs(s.in.Lite), "\n")+"\n"), 0o600); err != nil {
+		s.failLocked(err)
+		return
 	}
 	kernel, initrd := s.home.assets(s.in)
 	g, err := startGuest(s.qemu, RunOpts{Accel: s.st.Accel, Kernel: kernel, Initrd: initrd, Image: s.home.ImagePath(),
-		HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: 512, CPUs: 2}, s.consoleLine(nil))
+		HostPort: s.in.Port, GuestPort: guestPort, MemoryMB: GuestMemoryMB(accounts), CPUs: 2, ArgsFile: argsFile}, s.consoleLine())
 	if err != nil {
 		s.g = nil
 		s.failLocked(err)
@@ -292,14 +278,9 @@ func (s *Supervisor) startServingLocked() {
 // cache ("token cache loaded (dev=… music=…)").
 var tokenPrefix = regexp.MustCompile(`\b(dev|music)=[^\s)]+`)
 
-// consoleLine logs a console line with every token prefix and the session's
-// secrets redacted, and hands it to the session, if any, as it came.
-func (s *Supervisor) consoleLine(sess *session) func(string) {
+// consoleLine redacts the token prefixes lite logs through the manager.
+func (s *Supervisor) consoleLine() func(string) {
 	return func(line string) {
-		if sess != nil {
-			sess.onLine(line)
-			line = sess.redact(line)
-		}
 		fmt.Fprintln(s.log, tokenPrefix.ReplaceAllString(line, "$1=<redacted>"))
 	}
 }

@@ -19,12 +19,12 @@ import (
 func TestArgs(t *testing.T) {
 	o := RunOpts{Accel: "whpx", Kernel: "/k", Initrd: "/i", Image: "/a,b/data.img", HostPort: 52011, GuestPort: 8080,
 		MemoryMB: 512, CPUs: 2, ArgsFile: "/s/login-args"}
-	// upstream buildQemuArgs at bde3335 for WHPX, minus -L and lite_args_b64,
+	// The manager guest on WHPX, without credentials on the kernel command line,
 	// with hostfwd on loopback; a comma in a path is doubled for QEMU.
 	want := "-accel whpx,kernel-irqchip=off -cpu qemu64-v1 -m 512 -smp 2 -kernel /k -initrd /i " +
 		"-append console=ttyS0 quiet net.ifnames=0 biosdevname=0 -display none -serial stdio -no-reboot " +
 		"-nic user,model=e1000,hostfwd=tcp:127.0.0.1:52011-:8080 -drive file=/a,,b/data.img,format=raw,if=virtio " +
-		"-fw_cfg name=lite_args,file=/s/login-args"
+		"-fw_cfg name=manager_args,file=/s/login-args"
 	if got := strings.Join(Args(o), " "); got != want {
 		t.Errorf("Args =\n%s\nwant\n%s", got, want)
 	}
@@ -87,8 +87,7 @@ func TestFindQEMU(t *testing.T) {
 	}
 }
 
-// fakeArtifact is a zip shaped like upstream's qemu-assets artifact, or with
-// prefix like a wrapper-lite-qemu package.
+// fakeArtifact is a zip shaped like the manager-qemu-guest artifact.
 func fakeArtifact(t *testing.T, prefix, image string) []byte {
 	var b bytes.Buffer
 	z := zip.NewWriter(&b)
@@ -118,7 +117,7 @@ func (f *fakeFetcher) Fetch(_ context.Context, _ Pin, offset int64, w io.Writer)
 
 func pinFor(body []byte, commit string) Pin {
 	sum := sha256.Sum256(body)
-	return Pin{Commit: commit, ArtifactID: 7, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(body))}
+	return Pin{Artifact: GuestArtifact, RunID: 42, Commit: commit, ArtifactID: 7, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(body)), Lite: Builtin.Lite}
 }
 
 func TestDownloadResumesAndVerifies(t *testing.T) {
@@ -248,11 +247,59 @@ func TestCurrentPin(t *testing.T) {
 		!strings.Contains(err.Error(), "amdl wrapper import") {
 		t.Errorf("expired builtin and no manifest: %v", err)
 	}
-	newer := `{"commit":"c0ffee","run_id":2,"artifact_id":99,"sha256":"` + strings.Repeat("a", 64) + `","size":5,"expires_at":"2027-03-01T00:00:00Z"}`
+	newer := `{"artifact":"manager-qemu-guest","commit":"c0ffee","run_id":2,"artifact_id":99,"sha256":"` + strings.Repeat("a", 64) + `","size":5,"expires_at":"2027-03-01T00:00:00Z","lite":{"artifact":"wrapper-lite-linux-x86_64","commit":"c0ffee","run_id":3,"sha256":"` + strings.Repeat("b", 64) + `","size":6,"expires_at":"2027-03-01T00:00:00Z"}}`
 	up := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(newer)), Request: r}, nil
 	})}
 	if p, src, _ := CurrentPin(context.Background(), up, now); src != "manifest" || p.ArtifactID != 99 {
 		t.Errorf("manifest: %v %s", p, src)
+	}
+}
+
+func TestPinRequiresManagerArtifactAndRun(t *testing.T) {
+	now := time.Now()
+	for _, change := range []func(*Pin){func(p *Pin) { p.Artifact = "qemu-assets" }, func(p *Pin) { p.RunID = 0 }, func(p *Pin) { p.ArtifactID = 0 }, func(p *Pin) { p.SHA256 = "bad" }, func(p *Pin) { p.Expires = now.Add(-time.Hour) },
+		func(p *Pin) { p.Lite = LitePin{} }, func(p *Pin) { p.Lite.Artifact = "wrapper-lite-qemu-linux-x86_64" }, func(p *Pin) { p.Lite.SHA256 = "bad" },
+		func(p *Pin) { p.Lite.Expires = now.Add(-time.Hour) }} {
+		p := Builtin
+		change(&p)
+		if err := p.valid(now); err == nil {
+			t.Fatalf("invalid pin accepted: %+v", p)
+		}
+	}
+	if err := Builtin.valid(time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCurrentPinRejectsBareLiteManifest(t *testing.T) {
+	c := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"commit":"old","run_id":2,"artifact_id":99,"sha256":"` + strings.Repeat("a", 64) + `","size":5}`)), Request: r}, nil
+	})}
+	if p, source, err := CurrentPin(context.Background(), c, time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)); err != nil || source != "builtin" || p != Builtin {
+		t.Fatalf("old manifest: %+v, %s, %v", p, source, err)
+	}
+}
+
+func TestInstallAndImportRecordThePayloadPin(t *testing.T) {
+	h := Home{Dir: filepath.Join(t.TempDir(), "wrapper")}
+	art := fakeArtifact(t, "", "[]")
+	pin := pinFor(art, "bde3335f47a30518")
+	pin.Lite.RunID = 5
+	in, err := h.Install(context.Background(), &fakeFetcher{body: art}, pin, time.Now(), nil)
+	if err != nil || in.Lite != pin.Lite {
+		t.Fatalf("install: %+v, %v", in.Lite, err)
+	}
+	if cur, _ := h.Current(); cur.Lite != pin.Lite {
+		t.Fatalf("installed.json keeps %+v", cur.Lite)
+	}
+	zipPath := filepath.Join(t.TempDir(), "guest.zip")
+	os.WriteFile(zipPath, art, 0o600)
+	in, err = h.Import(zipPath, time.Now())
+	if err != nil || in.Lite != Builtin.Lite {
+		t.Fatalf("import: %+v, %v", in.Lite, err)
+	}
+	if _, err := h.Import(zipPath, Builtin.Lite.Expires.Add(time.Hour)); err == nil || !strings.Contains(err.Error(), "update amdl") {
+		t.Fatalf("import with an expired built-in payload pin: %v", err)
 	}
 }

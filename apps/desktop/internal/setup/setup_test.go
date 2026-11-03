@@ -6,7 +6,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -197,14 +199,14 @@ func TestInstallFailsOrIsCanceled(t *testing.T) {
 	}
 }
 
-// guestZip is a qemu-assets artifact holding the guest's three files.
+// guestZip is a manager-qemu-guest artifact holding the guest's three files.
 func guestZip(t *testing.T) ([]byte, wrapperhost.Pin) {
 	t.Helper()
 	var buf bytes.Buffer
 	z := zip.NewWriter(&buf)
-	for _, name := range []string{"vmlinuz-lite-qemu", "lite-initramfs.cpio.gz", "data.img"} {
+	for _, name := range []string{"vmlinuz-lite-qemu", "wrapper-manager-initramfs.cpio.gz", "data.img"} {
 		// Stored, not deflated, so the download takes many chunks.
-		w, err := z.CreateHeader(&zip.FileHeader{Name: "qemu-assets/" + name, Method: zip.Store})
+		w, err := z.CreateHeader(&zip.FileHeader{Name: "manager-qemu-guest/" + name, Method: zip.Store})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -214,8 +216,8 @@ func guestZip(t *testing.T) ([]byte, wrapperhost.Pin) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(buf.Bytes())
-	return buf.Bytes(), wrapperhost.Pin{Commit: "bde3335f47a30518e1f53f79cbae94bf76b27fb3", ArtifactID: 1,
-		SHA256: hex.EncodeToString(sum[:]), Size: int64(buf.Len())}
+	return buf.Bytes(), wrapperhost.Pin{Artifact: wrapperhost.GuestArtifact, RunID: 42, Commit: "bde3335f47a30518e1f53f79cbae94bf76b27fb3", ArtifactID: 1,
+		SHA256: hex.EncodeToString(sum[:]), Size: int64(buf.Len()), Lite: wrapperhost.Builtin.Lite}
 }
 
 // clock is a Now that moves a second each time it is read, so no progress
@@ -374,5 +376,64 @@ func TestUpdateGuestInstallsTheNewerPin(t *testing.T) {
 	h.until(t, "the update", func() bool { return h.Guest.State != Working })
 	if h.Guest.State != Ready || h.Guest.Installed.Commit != current.Commit || h.Guest.UpdateAvailable() {
 		t.Fatalf("after update: %+v", h.Guest)
+	}
+}
+
+func TestLegacyGuestUpdatePreservesDiskAndPort(t *testing.T) {
+	body, pin := guestZip(t)
+	home := wrapperhost.Home{Dir: t.TempDir()}
+	old := wrapperhost.Installed{ID: "legacy-lite", Port: 12345}
+	raw, _ := json.Marshal(old)
+	if err := os.WriteFile(filepath.Join(home.Dir, "installed.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(home.ImagePath(), []byte("synthetic legacy state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, Deps{Home: home, Now: clock(), Fetcher: &fetcher{body: body}, Pin: func(context.Context) (wrapperhost.Pin, error) { return pin, nil }})
+	h.Check("")
+	h.Guest.Latest = pin
+	if !h.Guest.UpdateAvailable() {
+		t.Fatal("legacy import without commit did not offer manager upgrade")
+	}
+	h.UpdateGuest()
+	h.until(t, "legacy guest update", func() bool { return h.Guest.State != Working })
+	in := h.Guest.Installed
+	if h.Guest.State != Ready || in.Kind != wrapperhost.ManagerGuest || in.LegacyDisk == "" || in.Port != 12345 {
+		t.Fatalf("updated guest: %+v", h.Guest)
+	}
+	backup, err := os.ReadFile(filepath.Join(home.Dir, in.LegacyDisk))
+	if err != nil || string(backup) != "synthetic legacy state" {
+		t.Fatal("legacy disk was lost")
+	}
+	if !home.Enabled() {
+		t.Fatal("enabled guest was not resumed")
+	}
+}
+
+func TestUpdatePreservesManualStopAndResumesAfterFailure(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			body, pin := guestZip(t)
+			current := pin
+			h := newHarness(t, Deps{Now: clock(), Fetcher: &fetcher{body: body}, Pin: func(context.Context) (wrapperhost.Pin, error) { return current, nil }})
+			h.InstallGuest()
+			h.until(t, "install", func() bool { return h.Guest.State != Working })
+			if h.Guest.State != Ready {
+				t.Fatal(h.Guest.Err)
+			}
+			h.deps.Home.SetEnabled(enabled)
+			current.Commit = "new-manager"
+			current.SHA256 = strings.Repeat("a", 64)
+			h.Guest.Latest = current
+			h.UpdateGuest()
+			h.until(t, "failed update", func() bool { return h.Guest.State != Working })
+			if h.Guest.State != Failed {
+				t.Fatal("invalid guest update did not fail")
+			}
+			if h.deps.Home.Enabled() != enabled {
+				t.Fatal("update changed the wanted running state")
+			}
+		})
 	}
 }

@@ -42,7 +42,7 @@ capabilities as MCP tools, and `amdl` alone in a terminal opens an interactive i
 for people, which `make tui-web` also builds for browsers over the desktop demo's made-up
 backend. Without a server of its own, `amdl service install` runs the backend on this
 machine as a background service that starts at login, and `amdl wrapper install` gives it
-a wrapper of its own: wrapper-lite in a QEMU guest that the backend runs
+a wrapper of its own: wrapper-manager (up to ten accounts) in a QEMU guest that the backend runs
 ([docs/install.md](docs/install.md#a-wrapper-amdl-runs)). [docs/cli.md](docs/cli.md)
 describes it all.
 

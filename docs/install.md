@@ -222,7 +222,7 @@ Notes on `wrapper-lite-qemu`, from its sources:
 ### A wrapper amdl runs
 
 ```bash
-amdl wrapper install          # QEMU, then the wrapper-lite guest
+amdl wrapper install          # QEMU, then the wrapper-manager guest
 amdl service install          # runs the backend, which runs the wrapper
 amdl wrapper login            # asks for the Apple ID, password and any two-step code
 ```
@@ -231,16 +231,23 @@ amdl wrapper login            # asks for the Apple ID, password and any two-step
 `brew install qemu` on macOS or `winget install --id SoftwareFreedomConservancy.QEMU -e`
 on Windows (pass `--yes` when no one can answer), and prints the package command on
 Linux, where it needs `sudo`; `--qemu PATH` names one elsewhere. It then downloads
-the guest: the kernel, initramfs and empty disk image of the `qemu-assets` artifact of
-the `build-lite` workflow in `internal/wrapperhost#GuestRepo`, AMDL-Web's fork of
-wrapper-lite ([why](deployment.md#the-wrapper)), through nightly.link, and installs it
-only if its sha256 matches the pin amdl carries (`internal/wrapperhost#Builtin`) or
-the newer one published at `internal/wrapperhost#ManifestURL`. The artifacts expire
-90 days after their build; when no pin can be downloaded, fetch the artifact yourself
-and run `amdl wrapper import <zip|dir>`, which also accepts one of the
-`wrapper-lite-qemu` packages. No guest is shipped with amdl: it holds Apple's Android
-libraries. Running `amdl wrapper install` again replaces an installed guest whose
-sha256 differs from the current pin.
+the guest: the kernel, manager initramfs and empty ext4 disk of the
+`manager-qemu-guest` artifact from the `manager.yml` workflow on the `lite` branch
+of `internal/wrapperhost#GuestRepo`. The manager guest is defined in
+[manager/guest](https://github.com/AMDL-Web/wrapper/tree/lite/manager/guest).
+The download goes through nightly.link and is installed only if its sha256 matches
+`internal/wrapperhost#Builtin` or the newer pin at `internal/wrapperhost#ManifestURL`.
+Only successful manager runs on `lite` are pinned, by run and artifact id. The manager
+artifacts expire after 90 days. When no pin is downloadable, fetch that artifact
+and run `amdl wrapper import <zip|dir>`; bare-lite guest packages are refused.
+Guest files are downloaded at install time, rather than shipped with amdl. The
+guest does not contain wrapper-lite: the manager downloads it on first boot and again
+whenever the pin changes, which also needs internet. amdl pins that payload too, as
+`lite` in the same pin: the `wrapper-lite-linux-x86_64` artifact of one successful
+`build-lite` run on `lite` (the guest is x86_64 on every host), passed to the manager as
+`-payload-url` with its sha256 as `-payload-sha256`, and refused on a mismatch. An
+imported guest takes the payload pin built into amdl.
+Running `amdl wrapper install` again replaces a guest whose sha256 differs from the pin.
 
 The desktop app's setup screen does the same in standalone mode, row by row: it shows
 the QEMU or ffmpeg package command and runs it after Run (it only shows a command that
@@ -271,24 +278,30 @@ desktop app), then `amdl config set wrapper.address=<address>` and
 | Apple Silicon Mac | TCG: the guest is x86_64, which HVF cannot run there |
 | Windows on ARM | not supported |
 
-TCG is plain emulation. On a Linux PC it booted the guest in about 12 seconds and
-answered `/status` in 2 ms. On an M4 Pro Mac it booted in about 11 seconds and served
-again about 25 seconds after a login; a `/key` took 0.52 s at the median and 0.73 s at
-p95 (1.69 s for the first after a boot), and a 12-track ALAC 24-bit/96 kHz album of
-1011 MB downloaded in 65 seconds. QEMU used 16% of the CPU on average while downloading
-(44% at peak, about 7% idle) and at most about 176 MiB of memory.
+TCG is plain emulation. Memory is sized at each guest restart as a base plus
+one allocation per logged-in account, capped by `internal/wrapperhost#MaxAccounts`.
+`internal/wrapperhost#GuestMemoryMB` contains the provisional figures; account
+changes do not hot-resize a running guest.
 
-Known limits, all upstream's:
+The manager starts in /data on the persistent ext4 disk. Its registry is
+/data/data/instances.json; account directories are under
+/data/data/wrapper/rootfs/data/instances/. The whole manager state and payload
+stay in the owner-only data.img across updates and uninstall without purge.
+Accounts are discovered through GET /status's data.instances; each token is read
+through GET /token?instance=<id>, and logout removes just that id. Credentials
+travel over the loopback HTTP login API, never boot arguments.
 
-- A login's password reaches the guest in a 0600 file that is deleted once the guest
-  has read it, never on a command line. The guest copies it to its own disk, where deleting
-  the file leaves its blocks, so amdl zeroes every copy in `data.img` before the boot
-  that follows each login, and once when the backend starts; `managed.login_residue`
-  in `amdl wrapper status` is true until then. The disk, `data.img` in the data directory's `wrapper/`, holds the
-  account's tokens: it stays owner-only and survives `amdl wrapper update`.
-- wrapper-lite does not verify Apple's TLS certificates
-  ([upstream issue #75](https://github.com/WorldObservationLog/wrapper/issues/75)).
-- One account per machine.
+Updating a bare-lite guest preserves its entire disk as an owner-only
+`data-lite-*.img` backup beside data.img, recorded in installed.json's legacy_disk.
+The old disk has no Apple ID registry to derive the manager's instance ids from,
+so no login state is guessed or copied. Log in again through the setup screen's
+Apple ID row or the Account page; an empty manager reports logged_in=false and
+login_supported=true, so the existing login form appears. Explicit uninstall with
+purge also deletes the preserved disk. Updates stop the guest before replacing
+files and keep a manually stopped guest stopped.
+
+The underlying wrapper-lite does not verify Apple's TLS certificates
+([upstream issue #75](https://github.com/WorldObservationLog/wrapper/issues/75)).
 
 ## Run the backend
 

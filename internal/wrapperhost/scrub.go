@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-// serveArgs are lite's arguments after a login's --login user:pass.
+// serveArgs describes the retired bare-lite guest's credential file format.
 func serveArgs() []string {
 	return []string{"--base-dir", "/data", "--host", "0.0.0.0", "--port", strconv.Itoa(guestPort)}
 }
 
-// loginArgs are a login boot's arguments, one per line in its args file.
+// loginArgs describes the retired bare-lite login format for scrubLogin.
 func loginArgs(user, pass string) []string {
 	return append([]string{"--login", user + ":" + pass}, serveArgs()...)
 }

@@ -235,8 +235,10 @@ connection with `GET /api/v1/wrapper/status`.
 | wrapper-manager v2 (recommended) | [AMDL-Web's wrapper-manager fork, `manager/` in AMDL-Web/wrapper](https://github.com/AMDL-Web/wrapper/tree/lite/manager): supervises one wrapper-lite per account behind one HTTP port | 8080 | From the console's Account page, through its `POST /login` |
 | wrapper-lite | [AMDL-Web's wrapper fork, `lite` branch](https://github.com/AMDL-Web/wrapper/tree/lite): one account | 12340 | On its own command line (`--login user:pass`, with `--code-from-file` for 2FA); the console shows that command |
 
-amdl 2.0 supports one wrapper account with either option: log one account into
-wrapper-manager. Accounts in several storefronts are not supported yet.
+The local managed guest runs wrapper-manager and holds up to ten accounts;
+a bare wrapper-lite holds one. See [Install](install.md#a-wrapper-amdl-runs) for
+persistence and upgrades, and [token selection](configuration.md#the-media-user-token)
+for the per-account provider boundary.
 
 The wrapper-lite that amdl points to is AMDL-Web's fork of
 [upstream's `lite` branch](https://github.com/WorldObservationLog/wrapper/tree/lite)
