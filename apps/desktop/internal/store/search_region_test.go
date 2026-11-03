@@ -20,7 +20,9 @@ func accountsIn(regions ...string) []client.Account {
 }
 
 // requestsTo gives the store a client over a backend that records the
-// query of each request it gets, and answers with an empty object.
+// query of each request it gets, and answers with an empty object. The
+// answers are never applied: the reads run on their own goroutines, and the
+// test, standing in for the UI thread, only looks at what was asked.
 func requestsTo(t *testing.T, s *Store) <-chan string {
 	t.Helper()
 	got := make(chan string, 8)
@@ -34,7 +36,7 @@ func requestsTo(t *testing.T, s *Store) <-chan string {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); srv.Close() })
-	s.client, s.ctx = c, ctx
+	s.client, s.ctx, s.post = c, ctx, func(func()) {}
 	return got
 }
 
