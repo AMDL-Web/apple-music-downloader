@@ -270,9 +270,17 @@ func (j *Job) recount() {
 }
 
 // ApplySnapshot replaces the job list with l, as the feed's first message
-// does; tests use it to seed the store.
+// does; tests use it to seed the store. Following a backend, the store is
+// Loaded once the queue's lists and counts are read too, so the queue's
+// first frame shows them.
 func (s *Store) ApplySnapshot(l client.DownloadList) {
-	s.Loaded = true
+	defer func() {
+		s.snapshotIn = true
+		if s.client != nil {
+			s.OpenQueue(TabAll)
+		}
+		s.noteLoaded()
+	}()
 	s.Counts = l.StatusCounts
 	keep := map[string]*Job{}
 	s.Jobs = s.Jobs[:0]
@@ -353,6 +361,7 @@ func (s *Store) upsert(dj domain.Job) *Job {
 	} else {
 		s.unfollowUnlessNeeded(j.ID)
 	}
+	s.Queue.runFeed(s, j, false)
 	return j
 }
 
@@ -377,8 +386,10 @@ func (s *Store) noteStatus(j *Job) {
 func (s *Store) remove(id string) {
 	j := s.byID[id]
 	if j == nil {
+		s.Queue.runGone(s, id)
 		return
 	}
+	s.Queue.runFeed(s, j, true)
 	delete(s.byID, id)
 	s.Search.gone[id] = true
 	delete(s.Selection, id)

@@ -92,7 +92,6 @@ func TestTheAppleTabReachesEveryItemOfALongLibrary(t *testing.T) {
 	f := &appleCopy{albums: 343, songs: 747}
 	s, settle := live(t, f)
 	l := &s.Library
-	s.SetLibraryTab(LibraryApple)
 	s.OpenLibrary()
 	settle(func() bool { return l.AppleStatus == SearchReady })
 	if err := inOrder(l.Apple.Items, "albums"); err != nil || len(l.Apple.Items) != 343 || l.Apple.Total != 343 {

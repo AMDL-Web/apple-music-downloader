@@ -81,25 +81,41 @@ func TestTheRowMenuOpensOnAClickAndDeletesOnlyAFinishedJob(t *testing.T) {
 	}
 	tt.Key(0, ui.KeyEscape)
 
+	// A downloaded record is removed from amdl, after its dialog.
 	a.Tab = int(store.TabDone)
 	tt.Frame()
-	done := a.Store.Filter(store.TabDone, "")[0]
+	run(func() bool { return a.Store.Queue.List(store.TabDone).Status == store.SearchReady })
+	tt.Frame()
+	rows, _ := a.Store.QueueRows(store.TabDone)
+	if len(rows) == 0 || rows[0].Record == nil {
+		t.Fatalf("Done lists %+v", rows)
+	}
+	done := rows[0].Record
+	name := recordName(*done)
 	if err := tt.Click("More actions"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click("Delete…"); err != nil {
-		t.Fatalf("a finished job's menu: %v in %q", err, tt.Texts())
+	for _, want := range []string{"Show details", "Download again", "Check files", "Copy link"} {
+		if !tt.HasText(want) {
+			t.Errorf("a downloaded record's menu has no %q: %q", want, tt.Texts())
+		}
 	}
-	if !tt.HasText("Delete “" + done.Name() + "”?") {
-		t.Fatalf("no delete dialog in %q", tt.Texts())
+	if err := tt.Click("Remove from amdl…"); err != nil {
+		t.Fatalf("a downloaded record's menu: %v in %q", err, tt.Texts())
 	}
-	if err := tt.Click("Delete"); err != nil {
+	if !tt.HasText("Remove “" + name + "” from amdl?") {
+		t.Fatalf("no remove dialog in %q", tt.Texts())
+	}
+	if err := tt.Click("Remove"); err != nil {
 		t.Fatal(err)
 	}
-	run(func() bool { return a.Store.Job(done.ID) == nil })
+	run(func() bool { return a.Store.Queue.Find(done.Ref) == nil })
 	tt.Frame()
-	if tt.HasText(done.Name()) {
-		t.Errorf("%s still shows after its delete: %q", done.Name(), tt.Texts())
+	if tt.HasText("Remove “" + name + "” from amdl?") {
+		t.Errorf("the dialog stays after the removal: %q", tt.Texts())
+	}
+	if rows, _ := a.Store.QueueRows(store.TabDone); len(rows) > 0 && rows[0].Record != nil && rows[0].Record.Ref == done.Ref {
+		t.Errorf("%s still lists after its removal", name)
 	}
 }
 

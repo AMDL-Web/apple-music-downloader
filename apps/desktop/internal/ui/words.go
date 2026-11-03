@@ -46,6 +46,11 @@ type texts struct {
 	length   words[int]
 	trackSub words[trackSubKey]
 	gridKey  words[gridKey]
+	// recordNote is a record row's failed tracks, region a storefront's
+	// tag.
+	recordNote words[recordNoteKey]
+	region     words[string]
+	recordFrom words[domain.ResourceRef]
 }
 
 type rowSubKey struct {

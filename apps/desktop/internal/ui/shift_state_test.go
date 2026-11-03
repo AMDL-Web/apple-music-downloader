@@ -101,6 +101,8 @@ func TestQueueTabsKeepTheirPlaceAsACountGainsADigit(t *testing.T) {
 	s := a.Store
 	set := func(active, done, failed int) {
 		s.Counts = domain.JobStatusCounts{Queued: active, Completed: done, Failed: failed, Total: active + done + failed}
+		run(func() bool { return !s.Queue.Counting() })
+		s.Queue.SetCounts(done, failed)
 		tt.Frame()
 	}
 	tabs := func(active, done, failed int) (ui.Rect, ui.Rect, ui.Rect) {

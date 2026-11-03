@@ -120,8 +120,10 @@ type App struct {
 	albumSeen string
 	// fly is the album page's way in and out.
 	fly flight
-	// Tab is the queue's filter.
-	Tab int
+	// Tab is the queue's filter, and tabShown the one its list last read
+	// for.
+	Tab      int
+	tabShown int
 
 	// winW is the window's width as last built; compact is set while the
 	// page is narrower than compactContent. openNarrow is set while the
@@ -185,6 +187,10 @@ type App struct {
 	// deleteOpen keeps the dialog up.
 	deleting   *store.Job
 	deleteOpen bool
+	// removing is the record whose removal waits for its dialog's answer;
+	// removeOpen keeps the dialog up.
+	removing   *store.Record
+	removeOpen bool
 	// asking is the download whose sheet is up, or nil.
 	asking *downloadAsk
 	// qd is a queued job dragged through Up next.

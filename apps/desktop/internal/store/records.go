@@ -21,29 +21,37 @@ type Records struct {
 
 func (r *Records) reset() { *r = Records{marks: map[domain.ResourceRef]domain.ResourceMark{}} }
 
-// feedRecord is what a mark reads of a record as GET /library/{kind} lists
-// it, which resource_updated carries.
-type feedRecord struct {
-	domain.Rollup
-	WithheldCount int    `json:"withheld_count"`
-	Paused        bool   `json:"paused"`
-	ActiveJobID   string `json:"active_job_id"`
-}
-
 // applyResource keeps a resource_updated message's record as its newest
-// mark, and reads the open album again when its tracks moved on.
+// mark, reads the open album again when its tracks moved on, and moves the
+// record's row in the queue.
 func (s *Store) applyResource(m domain.DownloadFeedMessage) {
 	if m.ResourceKind == "" || m.ResourceID == "" || m.Resource == nil {
 		return
 	}
 	raw, err := json.Marshal(m.Resource)
-	var r feedRecord
-	if err != nil || json.Unmarshal(raw, &r) != nil {
+	if err != nil {
+		return
+	}
+	var r Record
+	switch m.ResourceKind {
+	case domain.ResourceAlbum:
+		var a client.AlbumRecord
+		err = json.Unmarshal(raw, &a)
+		r = albumRecord(a)
+	case domain.ResourcePlaylist:
+		var p client.PlaylistRecord
+		err = json.Unmarshal(raw, &p)
+		r = playlistRecord(p)
+	default:
+		return
+	}
+	if err != nil {
 		// A record the store cannot read keeps its last mark.
 		return
 	}
-	s.putMark(domain.ResourceMark{Kind: m.ResourceKind, ID: m.ResourceID, State: r.State, TracksDone: r.TracksDone,
-		TracksWanted: r.TracksWanted, WithheldCount: r.WithheldCount, ActiveJobID: r.ActiveJobID, Paused: r.Paused})
+	r.Ref.ID = m.ResourceID
+	s.putMark(*r.Mark())
+	s.Queue.recordFeed(s, r)
 }
 
 // putMark keeps mark as its record's newest, and moves what shows the
@@ -58,7 +66,7 @@ func (s *Store) putMark(mark domain.ResourceMark) {
 	if ref.Kind == domain.ResourceAlbum {
 		s.albumMoved(ref.ID)
 	}
-	s.Library.recordMoved(s, ref, mark)
+	s.Library.recordMoved(ref)
 }
 
 // noteSubmitted marks the records a submit added with the run it queued,
@@ -204,7 +212,7 @@ func (s *Store) recordAction(ref domain.ResourceRef, act func(*client.Client) er
 			if done != "" {
 				s.setNotice(done, false)
 			}
-			s.Library.refresh(s)
+			s.recordsChanged()
 		})
 	}()
 }
@@ -237,7 +245,7 @@ func (s *Store) Reset(ref domain.ResourceRef, songs, codecs []string, name strin
 			default:
 				s.setNotice(name+" waits to download again", false)
 			}
-			s.Library.refresh(s)
+			s.recordsChanged()
 		})
 	}()
 }

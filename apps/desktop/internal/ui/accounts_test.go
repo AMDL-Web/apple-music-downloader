@@ -250,7 +250,6 @@ func appleLibraryApp(entries []client.AppleLibraryAccountStatus) (*App, *ui.Test
 	a, _ := newTestApp(remoteSettings())
 	a.Go(ScreenLibrary)
 	l := &a.Store.Library
-	a.LibraryTab(store.LibraryApple)
 	l.AppleSync = &client.AppleLibraryStatus{SyncIntervalMinutes: 30, FullSyncHours: 24, Accounts: entries}
 	l.AppleAccount = entries[0].AccountID
 	l.AppleStatus = store.SearchReady

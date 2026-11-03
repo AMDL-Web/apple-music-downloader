@@ -179,6 +179,7 @@ func TestBackToTheQueueKeepsItsTabAndPlace(t *testing.T) {
 			Title: "Album " + string(rune('A'+i%26)) + string(rune('A'+i/26)), ArtistName: "Artist", TotalItems: 5, CreatedAt: done, FinishedAt: &done})
 	}
 	a.Store.ApplySnapshot(client.DownloadList{StatusCounts: domain.JobStatusCounts{Completed: 40, Total: 40}, Downloads: jobs})
+	a.Store.SeedQueue(nil)
 	a.Tab = int(store.TabDone)
 	tt := ui.NewTester(a.View, 1280, 800)
 	// Over the list, under the hero and the covers.

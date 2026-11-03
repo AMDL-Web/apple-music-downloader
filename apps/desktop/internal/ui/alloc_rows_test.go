@@ -44,11 +44,43 @@ func TestAQueueRowAllocatesLittleEachFrame(t *testing.T) {
 				CuratorName: "Apple Music", TotalItems: 12, CompletedItems: 12, CreatedAt: done, FinishedAt: &done})
 		}
 		a.Store.ApplySnapshot(client.DownloadList{StatusCounts: domain.JobStatusCounts{Completed: n, Total: n}, Downloads: jobs})
+		a.Store.SeedQueue(nil)
 		return ui.NewTester(a.View, 1280, 3000)
 	})
 	t.Logf("%.1f allocations a frame for each row", n)
 	if n > rowAllocs {
 		t.Errorf("each row of the queue allocates %.1f times a frame, want at most %d", n, rowAllocs)
+	}
+}
+
+// A record's row, the queue's usual one, makes its words once too, its
+// region's tag included.
+func TestARecordRowAllocatesLittleEachFrame(t *testing.T) {
+	n := perRow(t, 5, 25, func(n int) *ui.Tester {
+		a, _ := newTestApp(remoteSettings())
+		a.Screen = ScreenQueue
+		a.Store.Loaded = true
+		a.Store.Server.Accounts = []client.Account{{ID: "a", Region: "us", Default: true}, {ID: "b", Region: "jp", Position: 1}}
+		now := time.Now()
+		var recs []store.Record
+		for i := range n {
+			r := store.Record{Ref: domain.ResourceRef{Kind: domain.ResourceAlbum, ID: fmt.Sprint(i)}, Name: fmt.Sprint("Album ", i), By: "Someone",
+				ResolvedAt: true, ActivityAt: now.Add(-time.Duration(i) * time.Minute)}
+			r.State, r.TracksDone, r.TracksWanted = domain.RecordPartial, i%9, 12
+			switch i % 3 {
+			case 1:
+				r.TracksFailed, r.Storefront = 2, "jp"
+			case 2:
+				r.Paused = true
+			}
+			recs = append(recs, r)
+		}
+		a.Store.SeedQueue(recs)
+		return ui.NewTester(a.View, 1280, 3000)
+	})
+	t.Logf("%.1f allocations a frame for each record row", n)
+	if n > rowAllocs {
+		t.Errorf("each record row allocates %.1f times a frame, want at most %d", n, rowAllocs)
 	}
 }
 

@@ -2,35 +2,20 @@ package store
 
 import (
 	"context"
-	"slices"
+	"time"
 
 	"amdl/internal/client"
 	"amdl/internal/domain"
 )
 
-// LibraryTab is one of the Library screen's tabs.
-type LibraryTab int
-
-// Library tabs: amdl's album and playlist records, and the Apple Music
-// account library the backend keeps a copy of.
-const (
-	LibraryAlbums LibraryTab = iota
-	LibraryPlaylists
-	LibraryApple
-)
-
 // Record list filters, as GET /library/{kind} takes them: a state, and a
 // flag.
 const (
-	FilterAll        = ""
 	FilterComplete   = "complete"
-	FilterPartial    = "partial"
-	FilterNone       = "none"
 	FilterFailed     = "failed"
 	FilterGivenUp    = "given_up"
 	FilterMissing    = "missing"
 	FilterPaused     = "paused"
-	recordPage       = 100
 	appleMarkPages   = 10
 	appleMarkPerPage = 500
 	// applePage is a read of the Apple library list, the most the API
@@ -44,15 +29,30 @@ var AppleKinds = []string{"albums", "songs", "playlists"}
 
 // Record is one row of a record list: an album or a playlist record.
 type Record struct {
-	Ref         domain.ResourceRef
-	Name, By    string
-	Artwork     domain.Artwork
+	Ref      domain.ResourceRef
+	Name, By string
+	Artwork  domain.Artwork
+	// Storefront is the one its runs read it in, empty for the default
+	// account's.
+	Storefront  string
 	ResolvedAt  bool
 	Catalog     domain.CatalogState
 	Paused      bool
 	ActiveJobID string
 	domain.Rollup
 	WithheldCount int
+	// ActivityAt is when one of its runs last changed, or when it was
+	// added.
+	ActivityAt time.Time
+}
+
+// Link is the record's Apple Music link.
+func (r Record) Link() string {
+	sf := r.Storefront
+	if sf == "" {
+		sf = "us"
+	}
+	return "https://music.apple.com/" + sf + "/" + string(r.Ref.Kind) + "/" + r.Ref.ID
 }
 
 // Mark is the record as a search hit's mark reads it.
@@ -61,23 +61,9 @@ func (r Record) Mark() *domain.ResourceMark {
 		WithheldCount: r.WithheldCount, ActiveJobID: r.ActiveJobID, Paused: r.Paused}
 }
 
-// Library is the Library screen: a page of records of the open tab under
-// its filter, the counts and the last disk check, the adds the resolver
-// gave up on, and the Apple library tab's list.
+// Library is the Library screen: the Apple Music account library the
+// backend keeps a copy of.
 type Library struct {
-	Tab LibraryTab
-	// Filter is the state the list selects ("" for any), Flag the flag
-	// ("" for any).
-	Filter, Flag string
-	Status       SearchStatus
-	Err          string
-	Rows         []Record
-	Total        int
-	// Summary is nil until read.
-	Summary *client.LibrarySummary
-	// Failed are the adds the resolver gave up on ("Couldn't add").
-	Failed []domain.PendingAdd
-
 	// AppleKind is the Apple tab's list, one of AppleKinds.
 	AppleKind   string
 	Apple       client.AppleLibraryPage
@@ -105,7 +91,7 @@ func (l *Library) reset() {
 		Tracks: map[string][]domain.AppleLibraryTrack{}}
 }
 
-// Open reports whether the Library screen follows the records.
+// Open reports whether the Library screen follows the Apple library.
 func (l *Library) Open() bool { return l.open }
 
 // OpenApplePlaylist reads the tracks of an Apple library playlist, once.
@@ -132,35 +118,14 @@ func (s *Store) OpenApplePlaylist(id string) {
 	}()
 }
 
-// OpenLibrary reads the Library screen's tab, counts and failed adds.
+// OpenLibrary reads the Apple library list.
 func (s *Store) OpenLibrary() {
 	s.Library.open = true
 	s.Library.refresh(s)
 }
 
-// CloseLibrary stops the Library screen from following the records.
+// CloseLibrary stops the Library screen from following the Apple library.
 func (s *Store) CloseLibrary() { s.Library.open = false }
-
-// SetLibraryTab shows tab, reading it.
-func (s *Store) SetLibraryTab(tab LibraryTab) {
-	l := &s.Library
-	if l.Tab == tab {
-		return
-	}
-	l.Tab, l.Rows, l.Total, l.Status = tab, nil, 0, SearchIdle
-	l.refresh(s)
-}
-
-// SetLibraryFilter lists the records in state filter ("" for any) that
-// carry flag ("" for any).
-func (s *Store) SetLibraryFilter(filter, flag string) {
-	l := &s.Library
-	if l.Filter == filter && l.Flag == flag {
-		return
-	}
-	l.Filter, l.Flag, l.Rows, l.Total, l.Status = filter, flag, nil, 0, SearchIdle
-	l.refresh(s)
-}
 
 // SetAppleKind shows the Apple library's list of kind.
 func (s *Store) SetAppleKind(kind string) {
@@ -239,99 +204,47 @@ func (s *Store) SetAppleAccount(id string) {
 	l.refresh(s)
 }
 
-// recordMoved puts a record's new mark into the row that shows it, and
-// reads the counts again.
-func (l *Library) recordMoved(s *Store, ref domain.ResourceRef, m domain.ResourceMark) {
-	shown := false
-	for i := range l.Rows {
-		r := &l.Rows[i]
-		if r.Ref != ref {
-			continue
-		}
-		r.State, r.TracksDone, r.TracksWanted, r.WithheldCount, r.ActiveJobID, r.Paused =
-			m.State, m.TracksDone, m.TracksWanted, m.WithheldCount, m.ActiveJobID, m.Paused
-		shown = true
-	}
-	l.Kept[ref.ID] = true
-	// A record the list does not show yet, as one just added, takes its
-	// place in a fresh read.
-	if !shown && l.Tab != LibraryApple {
-		l.refresh(s)
-	}
-}
+// recordMoved notes that amdl keeps record ref, marking its Apple item.
+func (l *Library) recordMoved(ref domain.ResourceRef) { l.Kept[ref.ID] = true }
 
-// refresh reads what the open screen shows again, keeping what it shows
-// until the answer.
+// refresh reads the Apple list again, keeping what it shows until the
+// answer.
 func (l *Library) refresh(s *Store) {
-	c, ctx := s.client, s.ctx
-	if !l.open || c == nil {
+	if !l.open || s.client == nil {
 		return
 	}
 	l.gen++
-	gen, tab := l.gen, l.Tab
-	if l.Rows == nil && tab != LibraryApple {
-		l.Status, l.Err = SearchLoading, ""
-	}
-	go func() {
-		sum, sumErr := c.LibrarySummary(ctx)
-		failed, _ := c.PendingAdds(ctx)
-		s.postIf(ctx, func() {
-			if l.gen != gen {
-				return
-			}
-			if sumErr == nil {
-				l.Summary = &sum
-				if sum.Check != nil && (s.Records.Check == nil || s.Records.Check.ID <= sum.Check.ID) {
-					s.Records.Check = sum.Check
-				}
-			}
-			l.Failed = slices.DeleteFunc(failed, func(p domain.PendingAdd) bool { return p.State != domain.PendingAddFailed })
-		})
-	}()
-	if tab == LibraryApple {
-		l.readApple(s, gen)
-		return
-	}
-	q := client.RecordQuery{Sort: "added", Limit: recordPage}
-	if l.Filter != "" {
-		q.State = []string{l.Filter}
-	}
-	if l.Flag != "" {
-		q.Flag = []string{l.Flag}
-	}
-	go func() {
-		rows, total, err := readRecords(ctx, c, tab, q)
-		s.postIf(ctx, func() {
-			if l.gen != gen {
-				return
-			}
-			if err != nil {
-				l.Status, l.Err = SearchFailed, err.Error()
-				return
-			}
-			l.Status, l.Err, l.Rows, l.Total = SearchReady, "", rows, total
-		})
-	}()
+	l.readApple(s, l.gen)
 }
 
-func readRecords(ctx context.Context, c *client.Client, tab LibraryTab, q client.RecordQuery) ([]Record, int, error) {
-	if tab == LibraryPlaylists {
+// readRecords reads a page of the records of kind.
+func readRecords(ctx context.Context, c *client.Client, kind domain.ResourceKind, q client.RecordQuery) ([]Record, int, error) {
+	if kind == domain.ResourcePlaylist {
 		page, err := c.LibraryPlaylists(ctx, q)
 		rows := make([]Record, len(page.Items))
 		for i, p := range page.Items {
-			rows[i] = Record{Ref: domain.ResourceRef{Kind: domain.ResourcePlaylist, ID: p.ID}, Name: p.Name, By: p.CuratorName, Artwork: p.Artwork,
-				ResolvedAt: p.ResolvedAt != nil, Catalog: p.CatalogState, Paused: p.Paused, ActiveJobID: p.ActiveJobID, Rollup: p.Rollup}
+			rows[i] = playlistRecord(p)
 		}
 		return rows, page.Total, err
 	}
 	page, err := c.LibraryAlbums(ctx, q)
 	rows := make([]Record, len(page.Items))
 	for i, a := range page.Items {
-		rows[i] = Record{Ref: domain.ResourceRef{Kind: domain.ResourceAlbum, ID: a.ID}, Name: a.Name, By: a.ArtistName, Artwork: a.Artwork,
-			ResolvedAt: a.ResolvedAt != nil, Catalog: a.CatalogState, Paused: a.Paused, ActiveJobID: a.ActiveJobID, Rollup: a.Rollup,
-			WithheldCount: a.WithheldCount}
+		rows[i] = albumRecord(a)
 	}
 	return rows, page.Total, err
+}
+
+func albumRecord(a client.AlbumRecord) Record {
+	return Record{Ref: domain.ResourceRef{Kind: domain.ResourceAlbum, ID: a.ID}, Name: a.Name, By: a.ArtistName, Artwork: a.Artwork,
+		Storefront: a.PinnedStorefront, ResolvedAt: a.ResolvedAt != nil, Catalog: a.CatalogState, Paused: a.Paused, ActiveJobID: a.ActiveJobID,
+		Rollup: a.Rollup, WithheldCount: a.WithheldCount, ActivityAt: a.ActivityAt}
+}
+
+func playlistRecord(p client.PlaylistRecord) Record {
+	return Record{Ref: domain.ResourceRef{Kind: domain.ResourcePlaylist, ID: p.ID}, Name: p.Name, By: p.CuratorName, Artwork: p.Artwork,
+		Storefront: p.PinnedStorefront, ResolvedAt: p.ResolvedAt != nil, Catalog: p.CatalogState, Paused: p.Paused, ActiveJobID: p.ActiveJobID,
+		Rollup: p.Rollup, ActivityAt: p.ActivityAt}
 }
 
 // readApple reads the Apple tab's list, its sync status and the ids of
@@ -348,9 +261,9 @@ func (l *Library) readApple(s *Store, gen int) {
 		}
 		page, err := readAppleList(ctx, c, kind, account)
 		kept := map[string]bool{}
-		for _, tab := range []LibraryTab{LibraryAlbums, LibraryPlaylists} {
+		for _, kind := range []domain.ResourceKind{domain.ResourceAlbum, domain.ResourcePlaylist} {
 			for p := 0; p < appleMarkPages; p++ {
-				rows, total, err := readRecords(ctx, c, tab, client.RecordQuery{Limit: appleMarkPerPage, Offset: p * appleMarkPerPage})
+				rows, total, err := readRecords(ctx, c, kind, client.RecordQuery{Limit: appleMarkPerPage, Offset: p * appleMarkPerPage})
 				for _, r := range rows {
 					kept[r.Ref.ID] = true
 				}
@@ -463,7 +376,7 @@ func (s *Store) DownloadRecord(ref domain.ResourceRef, name string) {
 			default:
 				s.setNotice(runAnswerNotice(a), false)
 			}
-			s.Library.refresh(s)
+			s.recordsChanged()
 		})
 	}()
 }
@@ -475,9 +388,8 @@ func (s *Store) RemoveRecord(ref domain.ResourceRef, name string) {
 		if err == nil {
 			s.post(func() {
 				delete(s.Records.marks, ref)
-				l := &s.Library
-				l.Rows = slices.DeleteFunc(l.Rows, func(r Record) bool { return r.Ref == ref })
-				delete(l.Kept, ref.ID)
+				delete(s.Library.Kept, ref.ID)
+				s.Queue.dropRecord(ref)
 			})
 		}
 		return err
@@ -521,7 +433,7 @@ func (s *Store) ResetFlagged(flag string) {
 			default:
 				s.setNotice(plural(n, "record")+" reset", false)
 			}
-			s.Library.refresh(s)
+			s.recordsChanged()
 		})
 	}()
 }

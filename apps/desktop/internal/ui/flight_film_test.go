@@ -260,9 +260,11 @@ func TestARowsGreyCoverColorsInAsItFlies(t *testing.T) {
 	tt.SetScale(1)
 	run(func() bool {
 		tt.Advance(filmFrame)
-		return a.Art.Get(failed.ArtworkURL, 88) != nil && a.Art.Get(failed.ArtworkURL, 512) != nil
+		return s.Queue.List(store.TabFailed).Status == store.SearchReady &&
+			a.Art.Get(failed.ArtworkURL, 88) != nil && a.Art.Get(failed.ArtworkURL, 512) != nil
 	})
 	tt.Advance(time.Second)
+	tt.Frame()
 	if err := tt.Click(failed.Name()); err != nil {
 		t.Fatalf("no row for %q: %v", failed.Name(), err)
 	}

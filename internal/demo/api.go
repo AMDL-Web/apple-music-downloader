@@ -241,11 +241,21 @@ func (b *Backend) putConfig(w http.ResponseWriter, r *http.Request) {
 func (b *Backend) list(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	q := r.URL.Query()
+	types, statuses := splitList(q["type"]), splitList(q["status"])
 	l := client.DownloadList{StatusCounts: b.counts(), Limit: client.SnapshotLimit, EventCursor: b.seq, Downloads: []domain.Job{}}
 	for _, j := range b.sortedJobs() {
+		if (len(types) > 0 && !slices.Contains(types, j.Type)) || (len(statuses) > 0 && !slices.Contains(statuses, string(j.Status))) {
+			continue
+		}
 		l.Downloads = append(l.Downloads, j.snapshot())
 	}
 	l.Total = len(l.Downloads)
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	l.Downloads = l.Downloads[min(max(offset, 0), l.Total):]
+	if limit, _ := strconv.Atoi(q.Get("limit")); limit > 0 && limit < len(l.Downloads) {
+		l.Downloads = l.Downloads[:limit]
+	}
 	writeJSON(w, http.StatusOK, l)
 }
 

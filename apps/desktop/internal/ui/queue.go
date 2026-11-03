@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"amdl/apps/desktop/internal/mode"
@@ -138,12 +137,24 @@ func jobQuality(j *store.Job) string {
 func isHiRes(q string) bool { return strings.HasPrefix(q, "ALAC 24/") }
 
 // queueScreen is the main screen: the album downloading now, or else the
-// one that finished last, the covers of those before it, then the queue.
+// one that finished last, the covers of those before it, then the queue:
+// what runs and waits, then amdl's records and the stations' runs, one row
+// each, newest activity first.
 func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 	s := a.Store
 	if s.Conn.Phase == client.Offline {
 		a.offlineBanner(c, k)
 	}
+	tab := store.Tab(a.Tab)
+	if s.Loaded {
+		s.OpenQueue(tab)
+		if a.tabShown != a.Tab {
+			a.tabShown = a.Tab
+			s.ShowQueueTab(tab)
+		}
+	}
+	// Loaded waits for the queue's counts and lists as for the feed, so
+	// neither pops in after the first frame.
 	if !s.Loaded {
 		if s.Conn.Phase != client.Offline {
 			a.loadingState(c, k)
@@ -159,8 +170,8 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		a.latestHero(c, k, latest, compact)
 	}
 	a.recentWall(c, k, finished, latest, compact)
-	tabs := []string{"All", fmt.Sprintf("Active · %d", s.Count(store.TabActive)), fmt.Sprintf("Done · %d", s.Count(store.TabDone)),
-		fmt.Sprintf("Failed · %d", s.Count(store.TabFailed))}
+	tabs := []string{"All", fmt.Sprintf("Active · %d", s.QueueCount(store.TabActive)), fmt.Sprintf("Done · %d", s.QueueCount(store.TabDone)),
+		fmt.Sprintf("Failed · %d", s.QueueCount(store.TabFailed))}
 	// Each count keeps the room of two digits, so a count going from 9 to 10
 	// moves no tab.
 	room := []string{"All", "Active · 00", "Done · 00", "Failed · 00"}
@@ -169,24 +180,22 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 			room[i] = t
 		}
 	}
-	tab := store.Tab(a.Tab)
-	jobs := s.Filter(tab, "")
-	// All and Active lead with Up next, in the order the jobs run; the
-	// finished ones follow, newest first.
-	var running, queued, earlier []*store.Job
+	// All and Active lead with Up next, in the order the jobs run; the rows
+	// below follow, newest activity first.
+	var running, queued []*store.Job
 	if tab == store.TabAll || tab == store.TabActive {
-		for _, j := range jobs {
-			switch j.Status {
-			case domain.JobRunning:
+		for _, j := range s.Jobs {
+			if j.Status == domain.JobRunning {
 				running = append(running, j)
-			case domain.JobQueued:
-			default:
-				earlier = append(earlier, j)
 			}
 		}
 		queued = s.Queued()
-	} else {
-		earlier = jobs
+	}
+	rows, more := s.QueueRows(tab)
+	l := s.Queue.List(tab)
+	var adds []domain.PendingAdd
+	if tab == store.TabFailed {
+		adds = s.Queue.Adds
 	}
 	upNext := len(running)+len(queued) > 0
 	top := ui.Row(c).Padding(14, 18, 10, 18).Gap(12).AlignItems(ui.Center).Background(k.Ground)
@@ -196,33 +205,76 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 		display(c, "Queue", 22).SingleLine()
 		segmentedRoom(c, k, "tabs", &a.Tab, tabs, room, map[int]ui.Color{int(store.TabFailed): k.Bad})
 		ui.Spacer(c)
-		if !compact && !upNext && len(jobs) > 0 {
-			ui.Text(c, "Newest first").FontSize(12).TextColor(k.Muted)
-		}
+		// As tall as a button whatever it holds, so Done's disk check moves
+		// nothing.
+		ui.Row(c).Height(30).Gap(12).AlignItems(ui.Center).MinWidth(0).Shrink(1).Children(func() {
+			switch {
+			case tab == store.TabDone:
+				a.checkBar(c, k, compact)
+			case !compact && !upNext && len(rows) > 0:
+				ui.Text(c, "Newest first").FontSize(12).TextColor(k.Muted)
+			}
+		})
 	})
-	if len(jobs) == 0 {
-		a.emptyQueue(c, k, latest != nil)
+	if !upNext && len(rows) == 0 && len(adds) == 0 {
+		switch {
+		case tab != store.TabActive && l.Status == store.SearchFailed:
+			queueFailed(c, k, l.Err, func() { s.RetryQueue(tab) })
+		case tab != store.TabActive && l.Status != store.SearchReady:
+			// The first read is out; what it brings takes the room.
+		default:
+			a.emptyQueue(c, k, latest != nil)
+		}
 		return
 	}
-	// The list's items: Up next as one, the heading of the rest, then the
-	// rest one by one.
-	head := 0
+	// The list's items: Up next as one, the failed adds as one, the
+	// heading of the rest, then the rest one by one, and the row that says
+	// a next page failed.
+	type part int
+	const (
+		partUpNext part = iota
+		partAdds
+		partEarlier
+		partRow
+		partMore
+	)
+	var parts []part
 	if upNext {
-		head = 1
-		if len(earlier) > 0 {
-			head = 2
-		}
+		parts = append(parts, partUpNext)
+	}
+	if len(adds) > 0 {
+		parts = append(parts, partAdds)
+	}
+	if upNext && len(rows) > 0 {
+		parts = append(parts, partEarlier)
+	}
+	head := len(parts)
+	failedMore := more && l.More == store.PageFailed
+	n := head + len(rows)
+	if failedMore {
+		n++
 	}
 	// The list fades under the bar above it (fadeEdges), over the ground,
 	// not the backdrop behind the page.
 	var list ui.Element
 	ui.Box(c.Key("queue-area")).Grow(1).MinHeight(0).Background(k.Ground).Children(func() {
 		st := a.scrollState(c, "queue")
-		list = ui.List(c.Key("queue"), &a.queue, head+len(earlier), func(i int) {
+		list = ui.List(c.Key("queue"), &a.queue, n, func(i int) {
 			switch {
-			case i == 0 && upNext:
+			case i >= head+len(rows):
+				ui.Row(c.Key("more")).Height(44).Gap(10).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "Could not load more.").FontSize(12).TextColor(k.Bad)
+					if button(c, k, buttonGhost, "Try again", nil).Clicked() {
+						s.MoreQueue(tab)
+					}
+				})
+			case i >= head:
+				a.queueRow(c, k, rows[i-head], compact)
+			case parts[i] == partUpNext:
 				a.upNext(c, k, running, queued, compact)
-			case i == 1 && head == 2:
+			case parts[i] == partAdds:
+				a.failedAdds(c, k, adds)
+			default:
 				ui.Row(c).Padding(18, 18, 6, 18).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, "Earlier").FontSize(12).FontWeight(650).TextColor(k.Muted)
 					ui.Spacer(c)
@@ -230,19 +282,25 @@ func (a *App) queueScreen(c *ui.Context, k *Tokens, compact bool) {
 						ui.Text(c, "Newest first").FontSize(12).TextColor(k.Faint)
 					}
 				})
-			default:
-				a.jobRow(c, k, earlier[i-head], compact, nil)
 			}
 		}).Absolute().Top(0).Left(0).Right(0).Bottom(0).ItemKey(func(i int) any {
 			switch {
-			case i == 0 && upNext:
+			case i >= head+len(rows):
+				return "more"
+			case i >= head:
+				return rows[i-head].Key()
+			case parts[i] == partUpNext:
 				return "up-next"
-			case i == 1 && head == 2:
-				return "earlier"
+			case parts[i] == partAdds:
+				return "adds"
 			}
-			return earlier[i-head].ID
+			return "earlier"
 		}).TrackScroll(st)
 		a.fadeEdges(list, st)
+		// The next page is read as the end of the list comes near.
+		if more && l.More == store.PageIdle && st.MaxY-st.Y < loadAhead {
+			s.MoreQueue(tab)
+		}
 	})
 	a.settleQueueDrag(c, list)
 }
@@ -294,7 +352,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 		a.flySourceCover(cover, "row:"+j.ID, radiusInner, color, dim, 0)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, j.Name()).FontSize(13.5).FontWeight(600).Ellipsis("…").SingleLine()
-			ui.Text(c, a.jobSubtitle(j)).FontSize(12).TextColor(k.Muted).Ellipsis("…").SingleLine()
+			a.rowSub(c, k, a.jobSubtitle(j), a.region(j.Storefront))
 		})
 		ui.Column(c).Width(220).Gap(6).Children(func() {
 			bar := widgets.StageBar{Stages: j.Stages, Color: accent, Track: k.Track, Running: running, Still: a.scrolling(c),
@@ -310,7 +368,7 @@ func (a *App) jobRow(c *ui.Context, k *Tokens, j *store.Job, compact bool, place
 		if !compact {
 			// The column keeps its width whatever the state; the pill in it
 			// is as wide as its words.
-			ui.Row(c).Width(110).AlignItems(ui.Center).Children(func() { statusPill(c, k, j) })
+			ui.Row(c).Width(pillColumn).AlignItems(ui.Center).Children(func() { statusPill(c, k, j) })
 		}
 		// PopoverMenu would open only for the secondary button.
 		more := ui.ButtonBase(c.Key("more")).Size(28, 28).Radius(radiusControl).Center().Label("More actions")
@@ -383,45 +441,9 @@ func statusPill(c *ui.Context, k *Tokens, j *store.Job) {
 	}
 }
 
-// jobMenu is what can be done with j in its state: a job under way is
-// cancelled, a finished one deleted.
-func (a *App) jobMenu(m *ui.Menu, j *store.Job) {
-	if m.Item("Show details").Chosen() {
-		a.OpenJob(j.ID)
-	}
-	switch j.Status {
-	case domain.JobQueued, domain.JobRunning:
-		if q := a.Store.Queued(); j.Status == domain.JobQueued && len(q) > 1 {
-			at := slices.Index(q, j)
-			if at > 0 && m.Item("Run next").Chosen() {
-				a.Store.MoveJob(j.ID, 0)
-			}
-			if at < len(q)-1 && m.Item("Run last").Chosen() {
-				a.Store.MoveJob(j.ID, len(q)-1)
-			}
-		}
-		if m.Item(cancelWord(j)).Chosen() {
-			a.Store.Cancel(j.ID)
-		}
-	case domain.JobFailed, domain.JobCancelled:
-		if m.Item(retryWord(j)).Chosen() {
-			a.Store.Retry(j.ID)
-		}
-	}
-	if dir := a.revealDir(j); dir != "" && m.Item(revealLabel).Chosen() {
-		a.Act.Reveal(dir)
-	}
-	m.Separator()
-	if m.Item("Copy link").Chosen() {
-		a.Act.CopyText(j.Input)
-	}
-	if j.Status.IsTerminal() {
-		m.Separator()
-		if m.Item("Delete…").Chosen() {
-			a.askDelete(j)
-		}
-	}
-}
+// jobMenu is what can be done with j in its state: a record's run takes
+// its record's menu, a station's run its own.
+func (a *App) jobMenu(m *ui.Menu, j *store.Job) { a.rowMenu(m, a.rowRecord(j), j) }
 
 // revealDir is the folder of j's tracks on this computer, or "" when they
 // are on another machine or nowhere yet.

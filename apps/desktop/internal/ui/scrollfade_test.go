@@ -89,6 +89,7 @@ func TestTheQueueFadesUnderItsBar(t *testing.T) {
 			Title: "Album " + string(rune('A'+i%26)) + string(rune('A'+i/26)), ArtistName: "Artist", TotalItems: 5, CreatedAt: done, FinishedAt: &done})
 	}
 	a.Store.ApplySnapshot(client.DownloadList{StatusCounts: domain.JobStatusCounts{Failed: 40, Total: 40}, Downloads: jobs})
+	a.Store.SeedQueue(nil)
 	a.Tab = int(store.TabFailed)
 	tt := ui.NewTester(a.View, 1280, 800)
 	tt.Frame()

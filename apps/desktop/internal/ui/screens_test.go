@@ -119,6 +119,7 @@ func TestQueueRowOpensOnAClickAndKeepsItsMenuForTheRightButton(t *testing.T) {
 				{ID: "f", Type: "album", Status: domain.JobFailed, Title: "Broken Album", ArtistName: "Artist f", TotalItems: 5, CreatedAt: now},
 			},
 		})
+		a.Store.SeedQueue(nil)
 		a.Tab = int(store.TabFailed)
 		tt := ui.NewTester(a.View, 1280, 800)
 		r, ok := tt.Find("Artist f · Album")
@@ -165,6 +166,7 @@ func TestQueueOpensOnAllAndTheHeroCoverOpensTheJob(t *testing.T) {
 			Downloads: []domain.Job{job,
 				{ID: "f", Type: "album", Status: domain.JobFailed, Title: "Broken Album", ArtistName: "Artist f", TotalItems: 5, CreatedAt: now.Add(-2 * time.Hour)}},
 		})
+		a.Store.SeedQueue(nil)
 		tt := ui.NewTester(a.View, 1280, 800)
 		all, ok := tt.Find("All")
 		active, ok2 := tt.Find("Active · 1")

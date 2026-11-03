@@ -55,20 +55,29 @@ type albumResource struct {
 // activity is when a's newest run last changed, or zero without one. The
 // caller holds b.mu.
 func (b *Backend) activity(a *album) time.Time {
-	var at time.Time
+	if j := b.lastRun(a); j != nil {
+		return runAt(j)
+	}
+	return time.Time{}
+}
+
+// lastRun is the album run of a that changed last, nil for none. The
+// caller holds b.mu.
+func (b *Backend) lastRun(a *album) *job {
+	var last *job
 	for _, j := range b.jobs {
-		if j.album != a || j.Type != "album" {
-			continue
-		}
-		t := j.UpdatedAt
-		if j.FinishedAt != nil {
-			t = *j.FinishedAt
-		}
-		if t.After(at) {
-			at = t
+		if j.album == a && j.Type == "album" && (last == nil || runAt(j).After(runAt(last))) {
+			last = j
 		}
 	}
-	return at
+	return last
+}
+
+func runAt(j *job) time.Time {
+	if j.FinishedAt != nil {
+		return *j.FinishedAt
+	}
+	return j.UpdatedAt
 }
 
 // albumRecord is a's record, false when amdl keeps none. The caller holds
@@ -90,7 +99,7 @@ func (b *Backend) albumRecord(a *album) (albumResource, bool) {
 	if rec.ActivityAt.IsZero() {
 		rec.ActivityAt = t
 	}
-	if j, held := b.priorJob(a.id); held && j.Status == domain.JobFailed {
+	if j := b.lastRun(a); j != nil && j.Status == domain.JobFailed {
 		for i, st := range states {
 			if st != domain.AudioDone && i < len(j.items) {
 				rec.TracksFailed++

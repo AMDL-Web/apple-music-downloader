@@ -41,8 +41,10 @@ type Store struct {
 	// LastLive is when the feed was last known to be live: the age of what
 	// an offline view shows.
 	LastLive time.Time
-	// Loaded is set once the first snapshot arrived.
-	Loaded bool
+	// Loaded is set once the first snapshot arrived, with the queue's first
+	// lists and counts; snapshotIn once the snapshot did.
+	Loaded     bool
+	snapshotIn bool
 
 	// Jobs are newest first, as the backend lists them.
 	Jobs []*Job
@@ -65,7 +67,9 @@ type Store struct {
 	Search Search
 	// Records are the newest marks of amdl's records and the disk check.
 	Records Records
-	// Library is the Library screen's lists of records and Apple's library.
+	// Queue is what the queue lists below Up next: records and station runs.
+	Queue QueueList
+	// Library is the Library screen: Apple Music.s library.
 	Library Library
 	// Notice is the latest message for a toast, or zero.
 	Notice Notice
@@ -107,7 +111,7 @@ func New(post func(func()), notifier Notifier) *Store {
 }
 
 func (s *Store) reset() {
-	s.Conn, s.ConnChanged, s.LastLive, s.Loaded = client.ConnState{Phase: client.Connecting}, s.now(), time.Time{}, false
+	s.Conn, s.ConnChanged, s.LastLive, s.Loaded, s.snapshotIn = client.ConnState{Phase: client.Connecting}, s.now(), time.Time{}, false, false
 	s.Jobs, s.byID, s.Counts, s.move = nil, map[string]*Job{}, domain.JobStatusCounts{}, nil
 	s.Selection, s.DetailID = map[string]bool{}, ""
 	s.followers, s.histories, s.notified, s.tracksRead = map[string]context.CancelFunc{}, map[string]bool{}, map[string]domain.JobStatus{}, map[string]bool{}
@@ -115,6 +119,7 @@ func (s *Store) reset() {
 	s.Search.reset()
 	s.Server, s.Config, s.Login, s.accountOps = Server{}, Config{}, Login{}, 0
 	s.Records.reset()
+	s.Queue.reset()
 	s.Library.reset()
 }
 

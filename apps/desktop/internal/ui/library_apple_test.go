@@ -86,7 +86,6 @@ func bulkApp(t *testing.T, n, w int) (*App, *ui.Tester, func(until func() bool))
 	s := a.Store
 	run(func() bool { return s.Loaded })
 	a.Go(ScreenLibrary)
-	a.LibraryTab(store.LibraryApple)
 	tt := ui.NewTester(a.View, w, 800)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Frame()
@@ -198,7 +197,6 @@ func TestAnAppleTileAddsWithoutAFlash(t *testing.T) {
 	s := a.Store
 	run(func() bool { return s.Loaded })
 	a.Go(ScreenLibrary)
-	a.LibraryTab(store.LibraryApple)
 	tt := ui.NewTester(a.View, 1280, 800)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Frame()
@@ -239,7 +237,6 @@ func TestALibraryOnlyPlaylistOpensItsTracksUnderItsRow(t *testing.T) {
 	s := a.Store
 	run(func() bool { return s.Loaded })
 	a.Go(ScreenLibrary)
-	a.LibraryTab(store.LibraryApple)
 	a.AppleKind("playlists")
 	tt := ui.NewTester(a.View, 1280, 800)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
