@@ -30,8 +30,9 @@ type AlbumAdd struct {
 	// Priority is the record's class (domain.PriorityManual or PriorityAuto);
 	// zero means manual. An existing record keeps the higher class.
 	Priority int
-	// Overrides replaces the record's overrides on a manual add and on a new
-	// record.
+	// Overrides replaces the record's overrides on a new record and on a
+	// manual add while none of its tracks is done: once one is, the record's
+	// first quality is chosen, and another quality is a slot of its own.
 	Overrides *config.DownloadOverrides
 	// Paused sets the record's paused flag when non-nil; nil leaves an
 	// existing record's flag alone and makes a new one unpaused.
@@ -125,7 +126,7 @@ func upsertRecord(ctx context.Context, tx *sql.Tx, kind domain.ResourceKind, id 
 		ON CONFLICT(id) DO UPDATE SET
 			paused = CASE WHEN ? THEN excluded.paused ELSE paused END,
 			priority = MIN(priority, excluded.priority),
-			overrides = CASE WHEN ? THEN excluded.overrides ELSE overrides END,
+			overrides = CASE WHEN ? AND tracks_done = 0 THEN excluded.overrides ELSE overrides END,
 			updated_at = excluded.updated_at`,
 		id, newPaused, priority, encoded, stamp, stamp,
 		paused != nil, source == domain.SourceManual)

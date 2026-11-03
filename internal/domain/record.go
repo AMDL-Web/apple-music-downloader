@@ -160,8 +160,8 @@ type Album struct {
 	WantedAll         bool         `json:"wanted_all"`
 	Paused            bool         `json:"paused"`
 	Priority          int          `json:"priority"`
-	// Overrides is the latest manual add's download overrides; nil for none.
-	// Each run copies it into its plan.
+	// Overrides is the download overrides of the latest manual add before a
+	// track was done; nil for none. Each run copies it into its plan.
 	Overrides        *config.DownloadOverrides `json:"overrides,omitempty"`
 	CoverState       CoverState                `json:"cover_state"`
 	ArtistCoverState CoverState                `json:"artist_cover_state"`

@@ -312,9 +312,10 @@ run that ends a slot failed counts a failure and the scheduler queues a new run 
 that cannot pass gives up at once. A track the account storefront stops listing, and a
 codec the track does not offer, is `unavailable` and never retried.
 
-**Download, pause, delete.** `POST /library/{kind}/{id}/download` resumes the record and
-answers `202 {status: "queued", job}`, or `200 {status: "already_downloaded"}`, or `200
-{status: "waiting"}` when a failed slot waits for its retry. With `codec`, each track whose
+**Download, pause, delete.** `POST /library/{kind}/{id}/download` resumes the record,
+sets its failed, given-up and missing slots pending as a retry does, and answers `202
+{status: "queued", job}`, or `200 {status: "already_downloaded"}`, or `200 {status:
+"waiting"}` when no run takes the record now (a full queue, a record gone from the catalog). With `codec`, each track whose
 main slot is done gets that quality as another slot (`409 main_not_done` when none has its
 first quality, `409 quality_present` when the first quality is that codec). Pause cancels
 the record's run, keeps its resume checkpoints and stops the scheduler from queuing it;
@@ -399,7 +400,8 @@ store (`500 internal_error` if the only server failure was an unexpected validat
 else `422 no_urls_accepted`.
 
 An album link, an album-track link and a catalog playlist (`pl.`) add or extend a
-[record](#library) and queue its run when the record needs one; a record with an active run
+[record](#library), set the failed, given-up and missing slots of what the link names
+pending, and queue its run when the record needs one; a record with an active run
 answers `duplicate_active` with that run's id. Every download is a new job. A record is
 read in the account's storefront whatever the link's says, so a `us` link on a `cn`
 account downloads the `cn` track list; the wrapper must serve the account storefront, else
@@ -430,8 +432,10 @@ lyrics, covers, `max_attempts`, `check_integrity`, `integrity_mode`, and the med
 `media_user_token`, ...), is `400 invalid_request` naming the unknown field. To download
 again, [reset](#library) the record.
 
-The overrides are stored on the record, the latest add's winning, and copied into each of
-its runs, so they apply on a retry and after a restart.
+The overrides are stored on the record, the latest add's winning until one of its tracks
+is done, and copied into each of its runs, so they apply on a retry and after a restart.
+An add of a record with done tracks keeps its overrides: another quality of those tracks
+is `POST /library/{kind}/{id}/download` with `codec`.
 A job row written before the other fields were removed is read with them ignored, and its
 terminal write drops them.
 

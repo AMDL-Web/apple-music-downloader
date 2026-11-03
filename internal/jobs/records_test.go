@@ -598,6 +598,59 @@ func TestRetryDownloadsMissingFiles(t *testing.T) {
 	}
 }
 
+// Submitting a downloaded album again after a disk check marked a file
+// missing queues a run for that file: the user asked for the album, and a
+// missing file is not downloaded.
+func TestSubmitAgainDownloadsMissingFiles(t *testing.T) {
+	p := &recordProcessor{dir: t.TempDir(), tracks: []string{"1", "2"}}
+	m, store := newRecordManager(t, p, config.Default())
+	ctx := context.Background()
+	startManager(t, m)
+
+	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
+	if done := waitRun(t, store, run.ID); done.Status != domain.JobCompleted {
+		t.Fatalf("first run = %s, want completed", done.Status)
+	}
+	key := domain.FileKey{OwnerKind: domain.ResourceAlbum, OwnerID: "100", SongID: "2", Slot: domain.SlotMain}
+	if marked, err := store.MarkFileMissing(ctx, key, time.Now().UTC()); err != nil || !marked {
+		t.Fatalf("mark missing = %v (%v)", marked, err)
+	}
+
+	again := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0]
+	if again.Status != domain.SubmitAccepted || again.Job == nil {
+		t.Fatalf("submit with a missing file = %+v, want an accepted run", again)
+	}
+	waitRun(t, store, again.Job.ID)
+	if plan := p.lastPlan(); len(plan.Slots) != 1 || plan.Slots[0].SongID != "2" {
+		t.Fatalf("plan = %+v, want the missing slot", plan.Slots)
+	}
+	if f := fileState(t, store, "100", "2", domain.SlotMain); f.AudioState != domain.AudioDone {
+		t.Fatalf("slot 2 = %s, want done again", f.AudioState)
+	}
+}
+
+// A submit with a codec order does not change the first quality of an album
+// whose tracks are done: another quality is a slot of its own.
+func TestSubmitKeepsTheQualityOfADownloadedRecord(t *testing.T) {
+	m, store := newRecordManager(t, &recordProcessor{dir: t.TempDir(), tracks: []string{"1"}}, config.Default())
+	ctx := context.Background()
+	startManager(t, m)
+
+	run := m.SubmitBatch(ctx, []string{"album|us|100"}, nil).Results[0].Job
+	waitRun(t, store, run.ID)
+	aac := &config.DownloadOverrides{QualityPriority: &[]string{"aac"}}
+	if res := m.SubmitBatch(ctx, []string{"album|us|100"}, aac).Results[0]; res.Status != domain.SubmitAlreadyDownloaded {
+		t.Fatalf("submit with aac = %+v, want already_downloaded", res)
+	}
+	album, err := store.GetAlbum(ctx, "100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if album.Overrides != nil && album.Overrides.QualityPriority != nil {
+		t.Fatalf("overrides = %+v, want the first add's (none)", album.Overrides)
+	}
+}
+
 // A retry of a record's run that the full queue cannot take queues nothing
 // and is not "already downloaded": the scheduler queues the record later.
 func TestRetryWithAFullQueueWaits(t *testing.T) {

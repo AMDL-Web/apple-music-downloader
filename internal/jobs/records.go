@@ -102,8 +102,8 @@ const (
 	// AddActive: the album already had a queued or running run.
 	AddActive AddOutcome = "active"
 	// AddRecorded: the record is stored and needs no run now (paused, a
-	// failed slot waiting for its retry), or the queue is full and the picker
-	// queues it.
+	// failed slot of an automatic add waiting for its retry), or the queue is
+	// full and the picker queues it.
 	AddRecorded AddOutcome = "recorded"
 	// AddAlreadyDone: every wanted track of the resolved record is done.
 	AddAlreadyDone AddOutcome = "already_downloaded"
@@ -152,7 +152,28 @@ func (m *Manager) addAlbum(ctx context.Context, add db.AlbumAdd, trigger domain.
 	if _, err := m.store.AddAlbum(ctx, add); err != nil {
 		return "", domain.Job{}, err
 	}
+	if trigger == domain.TriggerManual {
+		if err := m.rearmLocked(ctx, domain.ResourceAlbum, add.ID, add.SongIDs, add.Now); err != nil {
+			return "", domain.Job{}, err
+		}
+	}
 	return m.afterAddLocked(ctx, domain.ResourceAlbum, add.ID, trigger, add.Now)
+}
+
+// rearmLocked sets the failed, given-up and missing slots of a record the
+// user asked to download again pending, as a retry does, so the add queues a
+// run for them instead of leaving them to the retry schedule or to a reset.
+// songIDs limits it to those tracks. A record with an active run is left as
+// is: the add reports that run. Caller holds m.mu.
+func (m *Manager) rearmLocked(ctx context.Context, kind domain.ResourceKind, id string, songIDs []string, now time.Time) error {
+	_, err := m.store.ResetFiles(ctx, db.FileReset{
+		Kind: kind, ID: id, SongIDs: songIDs,
+		States: []domain.AudioState{domain.AudioFailed, domain.AudioGivenUp, domain.AudioMissing}, Now: now,
+	})
+	if errors.Is(err, db.ErrRunActive) {
+		return nil
+	}
+	return err
 }
 
 // afterAddLocked queues a run for a record just added when it needs one and

@@ -185,6 +185,9 @@ func (m *Manager) addPlaylist(ctx context.Context, add db.PlaylistAdd) (AddOutco
 	if _, err := m.store.AddPlaylist(ctx, add); err != nil {
 		return "", domain.Job{}, err
 	}
+	if err := m.rearmLocked(ctx, domain.ResourcePlaylist, add.ID, nil, add.Now); err != nil {
+		return "", domain.Job{}, err
+	}
 	return m.afterAddLocked(ctx, domain.ResourcePlaylist, add.ID, domain.TriggerManual, add.Now)
 }
 

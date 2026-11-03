@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -60,6 +61,9 @@ func computeRollup(ctx context.Context, q rowQueryer, kind domain.ResourceKind, 
 	}
 	var resolved bool
 	if err := q.QueryRowContext(ctx, `SELECT resolved_at IS NOT NULL FROM `+table+` WHERE id = ?`, id).Scan(&resolved); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Rollup{}, ErrRecordNotFound
+		}
 		return domain.Rollup{}, fmt.Errorf("read %s %s: %w", kind, id, err)
 	}
 	var r domain.Rollup

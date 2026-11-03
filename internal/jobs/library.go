@@ -75,6 +75,12 @@ func (m *Manager) DownloadRecord(ctx context.Context, r RecordDownload) (RecordD
 		m.mu.Unlock()
 		return RecordDownloadResult{}, err
 	}
+	if r.Codec == "" {
+		if err := m.rearmLocked(ctx, r.Kind, r.ID, r.SongIDs, now); err != nil {
+			m.mu.Unlock()
+			return RecordDownloadResult{}, err
+		}
+	}
 	outcome, job, err := m.afterAddLocked(ctx, r.Kind, r.ID, domain.TriggerManual, now)
 	m.mu.Unlock()
 	if err != nil {

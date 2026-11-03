@@ -73,6 +73,7 @@ func TestLibraryRoutesServeRecords(t *testing.T) {
 		{http.MethodPost, "/api/v1/library/reset", `{"what":"audio","filter":{}}`, http.StatusBadRequest, CodeInvalidScope},
 		{http.MethodDelete, "/api/v1/library/songs/1", "", http.StatusNotFound, CodeResourceNotFound},
 		{http.MethodGet, "/api/v1/library/albums/9", "", http.StatusNotFound, CodeResourceNotFound},
+		{http.MethodPost, "/api/v1/library/albums/9/reset", `{"what":"audio"}`, http.StatusNotFound, CodeResourceNotFound},
 		{http.MethodPost, "/api/v1/library/check", "", http.StatusServiceUnavailable, CodeDownloadsDirUnavailable},
 		{http.MethodGet, "/api/v1/library/albums?flag=bogus", "", http.StatusBadRequest, CodeInvalidRequest},
 	} {

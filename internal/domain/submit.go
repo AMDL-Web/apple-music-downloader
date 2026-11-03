@@ -28,8 +28,8 @@ type SubmitStatus string
 
 const (
 	// SubmitAccepted: the link was added; Job is its record's queued or
-	// running run, absent when the record waits (a failed slot's retry, a
-	// full queue the picker drains).
+	// running run, absent when the record waits (a full queue the picker
+	// drains, a record gone from the catalog).
 	SubmitAccepted SubmitStatus = "accepted"
 	// SubmitPending: the link needs a catalog read before it becomes records
 	// (a song without its album, an artist, a library playlist's songs); the

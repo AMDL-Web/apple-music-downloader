@@ -1676,8 +1676,9 @@ paths:
         '200':
           description: >-
             Nothing was queued: already_downloaded (every wanted track is done)
-            or waiting (a failed slot waits for its automatic retry, or the
-            queue is full and the scheduler queues it later).
+            or waiting (the queue is full and the scheduler queues it later,
+            or the record is gone from the catalog). Failed, given-up and
+            missing slots are set pending first, as a retry does.
           content:
             application/json:
               schema:
