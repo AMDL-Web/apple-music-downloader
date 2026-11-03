@@ -204,6 +204,57 @@ func TestSyncAccountsAdoptsUnownedRows(t *testing.T) {
 	}
 }
 
+func TestSyncAccountsAdoptsPastAnEmptyID(t *testing.T) {
+	store, err := Open(create6Database(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	res, err := store.SyncAccounts(ctx, AccountDiscovery{Seen: []SeenAccount{{ID: ""}, {ID: "acc1"}}, Complete: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Adopted != "acc1" {
+		t.Fatalf("sync = %+v, want acc1 to adopt", res)
+	}
+	accounts, err := store.ListAccounts(ctx)
+	if err != nil || len(accounts) != 1 || accounts[0].ID != "acc1" || accounts[0].Position != 0 || !accounts[0].AppleLibrary {
+		t.Fatalf("accounts = %+v, %v", accounts, err)
+	}
+	unowned := func() int {
+		total := 0
+		for _, table := range accountTables {
+			var n int
+			if err := store.db.QueryRow(`SELECT COUNT(*) FROM ` + table + ` WHERE account_id = ''`).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			total += n
+		}
+		return total
+	}
+	if n := unowned(); n != 0 {
+		t.Fatalf("%d rows left without an account", n)
+	}
+
+	// Rows without an account that show up while the table has accounts go
+	// to the default account on the next discovery.
+	if _, err := store.db.Exec(`INSERT INTO library_sync_anchor(account_id, position, song_id) VALUES('', 99, 'late')`); err != nil {
+		t.Fatal(err)
+	}
+	res, err = store.SyncAccounts(ctx, AccountDiscovery{Seen: []SeenAccount{{ID: "acc1"}}, Complete: true})
+	if err != nil || res.Adopted != "acc1" {
+		t.Fatalf("second sync = %+v, %v", res, err)
+	}
+	if n := unowned(); n != 0 {
+		t.Fatalf("%d rows left without an account after the second sync", n)
+	}
+	var owner string
+	if err := store.db.QueryRow(`SELECT account_id FROM library_sync_anchor WHERE song_id = 'late'`).Scan(&owner); err != nil || owner != "acc1" {
+		t.Fatalf("late row owner = %q, %v", owner, err)
+	}
+}
+
 func TestUpdateAndDeleteAccount(t *testing.T) {
 	store, err := Open(create6Database(t))
 	if err != nil {
