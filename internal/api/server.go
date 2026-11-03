@@ -63,6 +63,10 @@ type Deps struct {
 	// /system/restart); it must not block. Nil answers that route 503
 	// feature_unavailable.
 	Restart func()
+	// AccountStorefront is the storefront record runs read in
+	// (internal/media#Downloader.AccountStorefront); POST /lookup reads songs,
+	// albums and playlists there too. Nil reads them in the link's.
+	AccountStorefront func(ctx context.Context) (string, error)
 }
 
 // Server holds the HTTP handlers; build it with New and serve Routes.
@@ -82,9 +86,11 @@ type Server struct {
 	librarySync  LibrarySyncService
 	appleLibrary AppleLibraryService
 	catalog      CatalogService
-	tokens       *usertoken.Provider
-	console      http.Handler
-	hooks        HooksService
+	// accountStorefront is Deps.AccountStorefront.
+	accountStorefront func(ctx context.Context) (string, error)
+	tokens            *usertoken.Provider
+	console           http.Handler
+	hooks             HooksService
 	// wrapperManaged and restart are Deps.WrapperManaged and Deps.Restart.
 	wrapperManaged bool
 	restart        func()
@@ -125,7 +131,7 @@ func New(deps Deps) (*Server, error) {
 		cfg: deps.Config, store: deps.Store, hub: deps.Hub, manager: deps.Manager,
 		logger: deps.Logger, logSystem: deps.Logging,
 		wrapper: deps.Wrapper, quality: deps.Quality, librarySync: deps.LibrarySync, appleLibrary: deps.AppleLibrary,
-		catalog: deps.Catalog, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
+		catalog: deps.Catalog, accountStorefront: deps.AccountStorefront, tokens: deps.Tokens, console: deps.Console, hooks: deps.Hooks,
 		wrapperManaged: deps.WrapperManaged, restart: deps.Restart,
 	}
 	s.streams, s.endStreams = context.WithCancel(context.Background())

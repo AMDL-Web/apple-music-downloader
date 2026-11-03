@@ -257,7 +257,7 @@ func Run(ctx context.Context, opts Options) (err error) {
 		Logger: logSystem.Logger, Logging: logSystem,
 		Wrapper: wrapperService(wrapperClient, opts.WrapperHost), Quality: qualityService, LibrarySync: libraryWatcher,
 		AppleLibrary: appleLibrary, Catalog: catalog, Tokens: tokens, Console: opts.Console, Hooks: hooksEditor,
-		WrapperManaged: opts.WrapperHost != nil,
+		WrapperManaged: opts.WrapperHost != nil, AccountStorefront: downloader.AccountStorefront,
 		Restart: func() {
 			select {
 			case restart <- struct{}{}:

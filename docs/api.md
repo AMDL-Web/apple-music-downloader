@@ -652,6 +652,9 @@ a song or album carries Apple's `audio_traits` as search hits do, and a station 
 album or playlist pages through its track list): never the animated-cover or Enhanced
 HLS reads, never a station's next-tracks feed, at most 15 seconds in all.
 
+A song, album or playlist is read in the account storefront, as its download is, so its
+`track_count` is what the download gets and a link the account storefront lacks is `404
+catalog_not_found`; `storefront` stays the link's. A station is read in its own storefront.
 An album, playlist or song amdl keeps a record of carries `resource` (a [record
 mark](#record-marks)).
 

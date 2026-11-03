@@ -240,6 +240,27 @@ func TestLookupPlaylistUsesSettingsTokenButNeverEchoesIt(t *testing.T) {
 	}
 }
 
+// A song, album or playlist link is read in the account storefront, as its
+// download is, so a us link on a cn account previews the cn release; the
+// response keeps the link's storefront. A station is read in its own.
+func TestLookupReadsInTheAccountStorefront(t *testing.T) {
+	catalog := &fakeCatalog{t: t, album: &applemusic.Collection{ID: "1463409338", Name: "IGOR", Tracks: make([]applemusic.Song, 9)},
+		station: &applemusic.StationInfo{Name: "Chill Station", Format: "tracks"}}
+	cfg := config.Default()
+	handler := (&Server{cfg: config.NewStore(cfg), catalog: catalog, appleLibrary: &fakeAppleLibrary{},
+		accountStorefront: func(context.Context) (string, error) { return "cn", nil }}).Routes()
+
+	recorder := requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/album/igor/1463409338"}`)
+	got := decodeLookup(t, recorder.Body.Bytes())
+	if recorder.Code != http.StatusOK || got["storefront"] != "us" || got["track_count"] != float64(9) {
+		t.Fatalf("album: status %d, %v", recorder.Code, got)
+	}
+	requestJSON(t, handler, http.MethodPost, "/api/v1/lookup", `{"url":"https://music.apple.com/us/station/chill/ra.123"}`)
+	if want := []string{"album cn/1463409338", "station us/ra.123"}; !reflect.DeepEqual(catalog.calls, want) {
+		t.Fatalf("catalog calls = %v, want %v", catalog.calls, want)
+	}
+}
+
 func TestLookupStationAndArtist(t *testing.T) {
 	station := &fakeCatalog{t: t, station: &applemusic.StationInfo{Name: "Chill Station", ArtworkURL: "st-art", Format: "tracks"}}
 	recorder := requestJSON(t, newLookupServer(station, nil), http.MethodPost, "/api/v1/lookup",

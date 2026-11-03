@@ -959,14 +959,16 @@ paths:
         a song reads the song resource, an album the album with its track list, a
         playlist the playlist with its track list, a station its metadata (never
         the next-tracks feed), an artist the artist alone (so track_count is
-        absent). A song also reads its album, to find where the song sits in the
-        library; when that read fails the song answers without library. The
-        animated-cover and Enhanced HLS reads are never made. The whole lookup is
-        bounded by 15 seconds.
+        absent). The animated-cover and Enhanced HLS reads are never made. The
+        whole lookup is bounded by 15 seconds.
 
-        An album or song carries library: how much of it has a file at its
-        library path (download.library_path_format), checked track by track,
-        whatever job put it there.
+        A song, album or playlist is read in the account storefront, as its
+        download is, so track_count is what the download gets and a link the
+        account storefront lacks is 404 catalog_not_found; storefront stays the
+        link's. A station is read in its own storefront.
+
+        An album, playlist or song amdl keeps a record of carries resource (a
+        ResourceMark).
 
         Only a private (pl.u-) playlist's cover uses a media-user-token: the
         wrapper's when amdl has it (WrapperStatus.media_user_token), else the

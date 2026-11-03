@@ -119,7 +119,7 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), lookupTimeout)
 	defer cancel()
-	resp, err := s.previewLink(ctx, parsed, s.tokens.Token(cfg).Value)
+	resp, err := s.previewLink(ctx, s.readStorefront(ctx, parsed), s.tokens.Token(cfg).Value)
 	switch {
 	case err == nil:
 		resp.lookupLinkFields = link
@@ -130,6 +130,23 @@ func (s *Server) lookupLink(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.writeCatalogError(ctx, w, r, err, lookupTimeout, details, "lookup failed", "link", link.Input)
 	}
+}
+
+// readStorefront returns parsed with the storefront its download reads in: the
+// account's for a song, album or playlist, so the preview shows what the run
+// gets (or that it gets nothing), and the link's for a station or when the
+// account storefront cannot be read.
+func (s *Server) readStorefront(ctx context.Context, parsed applemusic.ParsedURL) applemusic.ParsedURL {
+	if s.accountStorefront == nil {
+		return parsed
+	}
+	switch parsed.Type {
+	case applemusic.TypeSong, applemusic.TypeAlbum, applemusic.TypePlaylist:
+		if account, err := s.accountStorefront(ctx); err == nil && account != "" {
+			parsed.Storefront = account
+		}
+	}
+	return parsed
 }
 
 // writeCatalogError answers a failed catalog read bounded by ctx: 504
