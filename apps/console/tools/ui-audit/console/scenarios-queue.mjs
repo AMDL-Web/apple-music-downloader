@@ -35,6 +35,10 @@ const finish = (ctx) => {
 };
 
 const DOWN = { status: 503, code: 'unavailable' };
+const TWO_REGIONS = [
+  { id: 'wm_cn', name: 'demo@example.com', region: 'cn', position: 0, default: true, state: 'active' },
+  { id: 'wm_jp', name: 'demo.jp@example.com', region: 'jp', position: 1, default: false, state: 'active' },
+];
 
 export const QUEUE_SCENARIOS = [
   { id: 'queue/one', world: (now) => { const w = WORLDS.empty(now); makeJob(w, { key: 'one', album: 4, status: 'completed', createdAgo: HOUR }); return w; }, path: '#/queue' },
@@ -42,6 +46,8 @@ export const QUEUE_SCENARIOS = [
   { id: 'queue/offline', world: 'many', path: '#/queue', faults: Object.fromEntries(['downloads', 'library/albums', 'library/playlists', 'library/summary', 'library/pending'].map((p) => [`GET /api/v1/${p}`, DOWN])) },
   // The adds that head Failed cannot be read: the list still draws.
   { id: 'queue/failed-no-adds', world: 'many', path: '#/queue?tab=failed', faults: { 'GET /api/v1/library/pending': DOWN } },
+  // Accounts in two regions: every row leads its second line with its region's tag.
+  ...['all', 'failed'].map((tab) => ({ id: `queue/regions-${tab}`, world: 'many', worldOpts: { accounts: TWO_REGIONS }, path: `#/queue?tab=${tab}` })),
   { id: 'queue/record-drawer', world: 'many', path: `#/queue/albums/${CATALOG.albums[12].id}`, require: '.drawer' },
   {
     id: 'queue/order-all',

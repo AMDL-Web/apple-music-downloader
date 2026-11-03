@@ -315,6 +315,8 @@ export function emptyWorld(now = Date.now()) {
     logs: [],
     config: structuredClone(BASE_CONFIG.config),
     wrapper: { ready: true, logged_in: true, regions: ['cn', 'us', 'jp'], accounts: [], login_supported: false },
+    // GET /accounts: one region, so rows carry no region tag.
+    accounts: [{ id: 'wm_cn', name: 'demo@example.com', region: 'cn', position: 0, default: true, library_sync: false, apple_library: false, state: 'active' }],
     hooks: { enabled: false, entries: [] },
     librarySync: { enabled: false, interval_minutes: 15, anchor_size: 0, last_submitted: 0, total_submitted: 0 },
     health: { status: 'ok' },

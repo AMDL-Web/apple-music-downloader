@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accountLabel, accountList, defaultAppleAccount, flattenLibrarySync, librarySyncLines } from '../static/js/lib/accounts.js';
+import { accountLabel, accountList, defaultAppleAccount, accountRegions, regionTag, flattenLibrarySync, librarySyncLines } from '../static/js/lib/accounts.js';
 import { wrapperErrorText } from '../static/js/lib/settings-account.js';
 
 test('accountLabel: name and region, the region alone, or the name alone', () => {
@@ -54,4 +54,16 @@ test('library sync lines: none for one account, one per account for several', ()
 test('login at the account limit shows the server message', () => {
   const t = wrapperErrorText({ status: 409, code: 'account_limit_reached', message: 'The session service holds 10 accounts, the most it keeps.' }, 'login');
   assert.equal(t.message, 'The session service holds 10 accounts, the most it keeps.');
+});
+
+test('a region tag shows only while the accounts serve two regions or more', () => {
+  const one = accountRegions({ accounts: [{ id: 'a', region: 'us', default: true, state: 'active' }, { id: 'b', region: 'US', state: 'active' }] });
+  assert.deepEqual(one, { regions: ['us'], fallback: 'us' });
+  assert.equal(regionTag('jp', one), '', 'one region: no tag');
+  assert.equal(regionTag('', one), '');
+  const two = accountRegions({ accounts: [{ id: 'b', region: 'jp', state: 'active' }, { id: 'a', region: 'us', default: true, state: 'active' }, { id: 'c', region: 'cn', state: 'missing' }] });
+  assert.deepEqual(two, { regions: ['jp', 'us'], fallback: 'us' }, 'a missing account serves no region');
+  assert.equal(regionTag('jp', two), 'JP');
+  assert.equal(regionTag('', two), 'US', 'an empty storefront is the region of the default account');
+  assert.equal(regionTag('jp', accountRegions(undefined)), '', 'no accounts read yet: no tag');
 });

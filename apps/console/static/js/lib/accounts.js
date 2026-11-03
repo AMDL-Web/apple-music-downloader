@@ -16,6 +16,29 @@ export function accountList(body) {
 }
 
 /**
+ * The regions the logged-in accounts serve: {regions, fallback}. `regions`
+ * are the distinct regions of the accounts not missing, lowercase;
+ * `fallback` is the default account's (else the first's), the region an
+ * empty storefront means.
+ */
+export function accountRegions(body) {
+  const live = accountList(body).filter((a) => a && a.state !== 'missing' && typeof a.region === 'string' && a.region);
+  const regions = [...new Set(live.map((a) => a.region.toLowerCase()))];
+  const def = live.find((a) => a.default) || live[0];
+  return { regions, fallback: def ? def.region.toLowerCase() : '' };
+}
+
+/**
+ * A row's region tag ("JP") for `storefront`, or '' while the accounts
+ * serve one region or none, where every row is the same region and the tag
+ * would say nothing. An empty storefront is the default account's region.
+ */
+export function regionTag(storefront, info) {
+  if (!info || info.regions.length < 2) return '';
+  return (storefront || info.fallback || '').toUpperCase();
+}
+
+/**
  * The entry the single-account views read from GET /apple-library/status:
  * the default account's, else the first, else null.
  */

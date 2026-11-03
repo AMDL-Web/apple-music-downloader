@@ -9,6 +9,7 @@ const ROW_ART = artWidths(40, 48);
 import { rowView } from '../lib/jobview.js';
 import { upsertJob, removeJob } from '../lib/store.js';
 import { useApp, Artwork, Badge, JobProgress, RelTime, Icon } from '../ui/components.js';
+import { RegionTag } from './region-tag.js';
 
 /**
  * One job in a list: artwork, title and a second line, progress while it
@@ -22,11 +23,13 @@ import { useApp, Artwork, Badge, JobProgress, RelTime, Icon } from '../ui/compon
  * Overview passes neither prop): `selected` sets data-selected, and with
  * `onSelect` a plain click selects instead of opening the drawer
  * (Cmd/Ctrl-click still opens). `also` adds a word to the second line (a
- * record's run of another quality names it: "AAC").
+ * record's run of another quality names it: "AAC"); `region` leads it with
+ * a region tag (views/region-tag.js), where the list shows one.
  */
-export function JobRow({ job, href, selected, onSelect, also = '' }) {
+export function JobRow({ job, href, selected, onSelect, also = '', region = '' }) {
   const app = useApp();
-  const v = rowView(job, app && app.defaultStorefront);
+  // With a region tag the second line does not say the storefront again.
+  const v = rowView(job, region ? job.storefront : app && app.defaultStorefront);
   const sub = [v.sub, also].filter(Boolean).join(' · ');
   const palette = artPalette(job);
   const f = jobFacts(job);
@@ -56,7 +59,11 @@ export function JobRow({ job, href, selected, onSelect, also = '' }) {
         ${f.started ? html`<span class="job-fact" data-key="started">Started ${f.started}</span>` : null}
       </span>
       <span class=${v.mono ? 'job-title is-unresolved' : 'job-title'} dir="auto" title=${v.mono ? job.input || v.title : v.title}>${v.title}</span>
-      ${sub ? html`<span class="job-sub" dir="auto">${sub}</span>` : null}
+      ${region
+        ? html`<span class="job-sub has-region"><${RegionTag} region=${region} /><span class="job-sub-text" dir="auto">${sub}</span></span>`
+        : sub
+          ? html`<span class="job-sub" dir="auto">${sub}</span>`
+          : null}
       ${v.reason ? html`<span class="job-error" title=${job.error}>${v.reason}</span>` : null}
     </span>
     <span class="job-progress">${v.progress ? html`<${JobProgress} job=${job} />` : null}</span>

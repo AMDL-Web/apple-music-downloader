@@ -209,7 +209,7 @@ base durations (120 ms color, 200 ms overlays).
 - **Throughput**: totals as 20 px figures over their labels; the per-day
   bars are `--chart-bar`. The formats bar (Settings › Quality) takes one hue
   per position (`--series-1` to `-4`: blue, orange, purple, gray).
-- **Activity**: one grouped list, 48 px covers, hairlines inset past the cover; a record's row and a run's are drawn the same way.
+- **Activity**: one grouped list, 48 px covers, hairlines inset past the cover; a record's row and a run's are drawn the same way, a region tag (the quality chip's look, 16 px tall) first on the second line while the accounts serve two regions or more.
   Only a queued or running job draws progress; a finished row is title, then
   artist and track count, and a plain completed status is a green check with
   no word. A failed row says what went wrong in red under the link and ends
@@ -231,7 +231,8 @@ base durations (120 ms color, 200 ms overlays).
   list" red text; during a run the red meter and "Deleting 3 of 12" in
   semibold.
 - **Drawer**: a floating 22 px sheet inset 8 px from the window (full screen on
-  phones); the head is an album-colored card with a 112 px cover; times and
+  phones); the head is an album-colored card with a 112 px cover (a region
+  tag there takes the head's ink, as its facts do); times and
   action buttons are grouped cells, Remove (finished jobs) in red text and
   glyph as the one destructive cell. The album bar under the tracks head
   takes the base drawing in the skin's 6 px capsule (`--bar-h`, `--r-bar`).

@@ -6,15 +6,17 @@ import { html } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths } from '../lib/format.js';
 import { recordTitle, recordSub, recordArt, recordPalette, recordView } from '../lib/records.js';
 import { Artwork, Badge, RelTime, Icon } from '../ui/components.js';
+import { RegionTag } from './region-tag.js';
 
 const ROW_ART = artWidths(40, 48);
 
 /**
  * Props: record, href, selected, onSelect(e) (selection mode: a plain click
  * selects), bare (no state badge, where the list already says it),
- * runStatus (its active run's status, where the list knows it).
+ * runStatus (its active run's status, where the list knows it), region
+ * (a region tag leading the second line, views/region-tag.js).
  */
-export function RecordRow({ record, href, selected, onSelect, bare = false, runStatus = '' }) {
+export function RecordRow({ record, href, selected, onSelect, bare = false, runStatus = '', region = '' }) {
   const palette = artPalette(recordPalette(record));
   const { view, flags } = recordView(record, runStatus);
   const sub = recordSub(record);
@@ -38,8 +40,9 @@ export function RecordRow({ record, href, selected, onSelect, bare = false, runS
     <${Artwork} url=${recordArt(record)} bg=${palette && palette.bg} px=${100} widths=${ROW_ART} sizes="48px" className="art-40" />
     <span class="job-main">
       <span class=${record.name ? 'job-title' : 'job-title is-unresolved'} dir="auto" title=${recordTitle(record)}>${recordTitle(record)}</span>
-      ${sub || flags.length
-        ? html`<span class="job-sub">
+      ${sub || flags.length || region
+        ? html`<span class=${region ? 'job-sub has-region' : 'job-sub'}>
+            <${RegionTag} region=${region} />
             ${sub ? html`<span dir="auto">${sub}</span>` : null}
             ${flags.map((f) => html`<span key=${f.key} class="record-flag" data-flag=${f.key}>${f.label}</span>`)}
           </span>`

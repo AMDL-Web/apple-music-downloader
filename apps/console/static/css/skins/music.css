@@ -1723,6 +1723,12 @@
   --role: var(--art-t1, var(--info));
 }
 
+/* The region tag on the album color takes the head's ink, as its facts do. */
+:root[data-skin="music"] .drawer-head .region-tag {
+  border-color: var(--art-t3, var(--border-subtle));
+  color: var(--art-t2, var(--text-secondary));
+}
+
 /* A failure keeps its chip on any album color: the danger tint over an opaque
    surface, so the red word reads as it does everywhere else. */
 :root[data-skin="music"] .drawer-head .badge[data-role="danger"] {

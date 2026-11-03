@@ -21,6 +21,8 @@ import { useApp, Artwork, Badge, Button, Empty, ErrorNote, SkeletonRows, StatusT
 import { ConfirmDialog } from '../ui/dialogs.js';
 import { MenuButton } from '../ui/menu.js';
 import { JobRow } from './queue-row.js';
+import { RegionTag, useRegions } from './region-tag.js';
+import { regionTag } from '../lib/accounts.js';
 
 const HEAD_ART = artWidths(88, 112);
 const FOCUSABLE = 'a[href], button:not([disabled]), summary, input:not([disabled]), select:not([disabled]), textarea, [tabindex]:not([tabindex="-1"])';
@@ -134,7 +136,11 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
   const { view, flags } = recordView(record, run ? run.status : '');
   const sub = recordSub(record);
   const year = record.release_date ? record.release_date.slice(0, 4) : '';
-  const meta = [kindWord(kind) === 'album' ? 'Album' : 'Playlist', year, record.genre, trackCountText(record), record.storefront_read ? record.storefront_read.toUpperCase() : ''].filter(Boolean).join(' · ');
+  // While the accounts serve two regions or more, its region is a tag by its
+  // state; the storefront of its last read is said only where it differs.
+  const region = regionTag(record.pinned_storefront, useRegions());
+  const read = record.storefront_read ? record.storefront_read.toUpperCase() : '';
+  const meta = [kindWord(kind) === 'album' ? 'Album' : 'Playlist', year, record.genre, trackCountText(record), read !== region ? read : ''].filter(Boolean).join(' · ');
   // The quality most tracks have is said once, with the record's other
   // qualities; a track shows a chip only where its main quality differs.
   // With another quality, each track's state names every quality it has.
@@ -222,6 +228,7 @@ function RecordBody({ kind, record, runs, reload, onClose }) {
         ${qualities ? html`<p class="drawer-meta drawer-summary">${qualities}</p>` : null}
         ${record.last_checked_at ? html`<p class="drawer-meta">Checked <${RelTime} value=${record.last_checked_at} /></p>` : null}
         <div class="drawer-badges">
+          <${RegionTag} region=${region} />
           <${Badge} view=${view} />
           ${flags.map((f) => html`<span key=${f.key} class="badge record-flag" data-flag=${f.key}><span class="badge-label">${f.label}</span></span>`)}
         </div>

@@ -203,6 +203,8 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       }
       case 'POST /api/v1/config/reload':
         return json(res, 200, { config: w.config, persisted: true, ...(w.reloadError ? { reload_error: w.reloadError } : {}) });
+      case 'GET /api/v1/accounts':
+        return json(res, 200, { accounts: w.accounts });
       case 'GET /api/v1/library-sync':
         return json(res, 200, w.librarySync);
       case 'POST /api/v1/library-sync/reset':

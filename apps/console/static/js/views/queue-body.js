@@ -14,6 +14,8 @@ import { JobRow } from './queue-row.js';
 import { RecordRow } from './record-row.js';
 import { JobMenu, runOne, jobName } from './queue-menu.js';
 import { RecordMenu } from './queue-record-menu.js';
+import { useRegions } from './region-tag.js';
+import { regionTag } from '../lib/accounts.js';
 import { JobGrip } from './queue-order.js';
 
 const RETRY_STATES = ['failed', 'given_up', 'missing'];
@@ -29,8 +31,11 @@ const nameOf = (row) => (row.kind === 'station' ? jobName(row.job) : recordTitle
  * drawers), selecting, selected (Set of row keys), onToggle(key, shift),
  * order (views/queue-order.js useQueueDrag), grouped (rows slide when the
  * feed moves them), busy (a bulk run), onLeaving(key), onRetry(row).
+ * While the accounts serve two regions or more, each row's second line
+ * leads with its region's tag.
  */
 export function QueueRows({ rows, params, selecting, selected, onToggle, order, grouped, busy, onLeaving, onRetry }) {
+  const regions = useRegions();
   return rows.map((row) => {
     const job = row.live || row.job || null;
     const href = rowHref(row, params);
@@ -48,6 +53,8 @@ export function QueueRows({ rows, params, selecting, selected, onToggle, order, 
         ? { 'data-sort-flip': row.id }
         : {};
     const name = nameOf(row);
+    // A record's region is where its runs read it (pinned); a station run's, its own.
+    const region = regionTag(row.kind === 'station' ? job.storefront : row.record.pinned_storefront || (row.live && row.live.storefront) || '', regions);
     const select = selecting ? (e) => onToggle(row.id, e.shiftKey) : undefined;
     return html`<li key=${row.id} class="job-item" data-row-key=${row.id} data-job-id=${job ? job.id : undefined} data-kind=${row.kind} data-selected=${on ? '' : undefined} data-action=${selecting ? undefined : retry ? 'retry' : 'menu'} ...${drag}>
       ${selecting
@@ -56,8 +63,8 @@ export function QueueRows({ rows, params, selecting, selected, onToggle, order, 
           </label>`
         : null}
       ${job
-        ? html`<${JobRow} job=${job} href=${href} selected=${selecting ? on : undefined} onSelect=${select} />`
-        : html`<${RecordRow} record=${r} runStatus=${r.active_job_id ? 'completed' : ''} href=${href} selected=${selecting ? on : undefined} onSelect=${select} />`}
+        ? html`<${JobRow} job=${job} href=${href} region=${region} selected=${selecting ? on : undefined} onSelect=${select} />`
+        : html`<${RecordRow} record=${r} region=${region} runStatus=${r.active_job_id ? 'completed' : ''} href=${href} selected=${selecting ? on : undefined} onSelect=${select} />`}
       ${retry
         ? html`<${Button}
             size="sm"

@@ -11,6 +11,29 @@
   color: var(--text-primary);
 }
 
+/* A row's region (views/region-tag.js), first on its second line (first on
+   a failed add's title line), while the accounts serve two regions or
+   more: the quality chip's look, shorter than the line so a row keeps its
+   height. */
+.region-tag {
+  flex: none;
+  height: 16px;
+  padding: 0 var(--s-1);
+}
+
+.job-sub.has-region,
+.held-title.has-region {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1_5);
+}
+
+.job-sub-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* A tab's count keeps the room of two digits, so a count that changes
    (or arrives) moves nothing beside it. */
 .page-queue .seg-num {
