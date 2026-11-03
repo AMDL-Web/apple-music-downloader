@@ -48,6 +48,20 @@ export function useDebounced(value, ms) {
   return v;
 }
 
+/** Whether `on` has held for `ms`: a placeholder shown only for a slow answer, never flashed for a quick one. */
+export function useLate(on, ms) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    if (!on) {
+      setLate(false);
+      return undefined;
+    }
+    const t = setTimeout(() => setLate(true), ms);
+    return () => clearTimeout(t);
+  }, [on, ms]);
+  return on && late;
+}
+
 const FOCUS_REFRESH_MS = 5000;
 
 /**

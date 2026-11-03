@@ -37,13 +37,16 @@ export function jobAllows(job, action) {
   }
 }
 
-const MENU_LABELS = { details: 'Show details', record: 'Open in Library', top: 'Move to top', bottom: 'Move to bottom', retry: 'Retry', again: 'Download again…', cancel: 'Cancel', pause: 'Pause', copy: 'Copy link', delete: 'Delete…' };
+const MENU_LABELS = { details: 'Show details', top: 'Run next', bottom: 'Run last', retry: 'Retry', again: 'Download again…', cancel: 'Cancel', pause: 'Pause', copy: 'Copy link', delete: 'Delete…' };
+
+/** The words of the link from a record's run to its record: "Open album", "Open playlist". */
+export const openRecordLabel = (job) => (job && job.resource && job.resource.kind === 'playlist' ? 'Open playlist' : 'Open album');
 
 /**
- * An Activity row's menu, as the desktop app draws it: Show details, and
- * Open in Library for a record's run; for a queued job Move to top and
- * Move to bottom (`place` {first, last}, when known, leaves out the one
- * that would not move it); Cancel (queued, running; Pause for a record's
+ * A run's menu (a station run's row on Activity), as the desktop app draws
+ * it: Show details, and Open album (or playlist) for a record's run; for a
+ * queued job Run next and Run last (`place` {first, last}, when known,
+ * leaves out the one that would not move it); Cancel (queued, running; Pause for a record's
  * run), Retry (failed, cancelled) or Download again… (completed: a reset of
  * its record, or a station's link queued again); then Copy link (the job's
  * input), and for a finished job Delete… after a separator of its own. A
@@ -63,7 +66,7 @@ export function rowMenu(job, place = {}) {
   else if (job && job.status === 'completed' && (job.resource || job.input)) ids.push('again');
   if (job && job.input) ids.push('-', 'copy');
   if (jobAllows(job, 'delete')) ids.push('-', 'delete');
-  return ids.map((id) => (id === '-' ? { separator: true } : { id, label: MENU_LABELS[id] }));
+  return ids.map((id) => (id === '-' ? { separator: true } : { id, label: id === 'record' ? openRecordLabel(job) : MENU_LABELS[id] }));
 }
 
 /** The jobs each action applies to, in the order given: {retry, cancel, delete}. */

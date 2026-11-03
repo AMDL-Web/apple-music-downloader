@@ -1,11 +1,8 @@
 /* Library (views/library.js, views/library-apple.js), the record drawer
-   (views/record-drawer.js), record rows (views/record-row.js) and
-   Activity's held groups (views/activity-held.js). Rows reuse the job row
-   frame (.job-row); these rules add what records have of their own. */
-
-.page-library .job-row[data-progress="off"] .job-status {
-  justify-self: end;
-}
+   (views/record-drawer.js), record rows (views/record-row.js), and
+   Activity's disk check (views/queue-check.js) and Couldn't add
+   (views/queue-failed-adds.js). Rows reuse the job row frame (.job-row);
+   these rules add what records have of their own. */
 
 /* A record's flags on its second line, after the artist. */
 .record-row .job-sub {
@@ -48,11 +45,6 @@
   flex-wrap: wrap;
   gap: var(--s-2);
   margin-left: auto;
-}
-
-.library-flag-bar {
-  display: flex;
-  justify-content: flex-end;
 }
 
 /* Record drawer tracks: number, title, quality chips, length, state, menu. */
@@ -277,35 +269,6 @@
 }
 
 @media (max-width: 639px) {
-  /* The filter takes a row of its own; the two selects share the next one,
-     Select after them, as on Activity. */
-  .page-library .toolbar-filters {
-    display: contents;
-  }
-
-  .page-library .search {
-    flex: 1 1 100%;
-    min-width: 0;
-  }
-
-  .page-library .toolbar-filters > .select {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  .page-library .queue-select > .icon {
-    display: none;
-  }
-
-  .page-library .bulk-bar {
-    position: fixed;
-    top: auto;
-    right: var(--s-3);
-    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-2));
-    left: var(--s-3);
-    z-index: 19;
-  }
-
   /* On a phone a track's chips and state go under its title. */
   .rtrack {
     grid-template-columns: 24px minmax(0, 1fr) auto var(--touch);

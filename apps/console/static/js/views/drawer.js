@@ -22,7 +22,7 @@ import {
 } from '../lib/format.js';
 import { drawerSummary, codecNote, isNotFound, rowView } from '../lib/jobview.js';
 import { jobStatusView, isTerminal, isPausedRun } from '../lib/status.js';
-import { jobAllows, actionDone, actionError, retryToast } from '../lib/jobactions.js';
+import { jobAllows, actionDone, actionError, retryToast, openRecordLabel } from '../lib/jobactions.js';
 import { buildHash, parseHash, recordHash } from '../lib/route.js';
 import { useDrawerDetail } from './drawer-detail.js';
 import { AlbumProgress, TrackList } from './drawer-tracks.js';
@@ -273,7 +273,7 @@ function Actions({ job, app, onChanged, onDelete }) {
   return html`<div class="drawer-actions">
     <div class="drawer-actions-row">
       <${LinkButton} href=${buildHash('logs', { job_id: job.id })} icon="file-text" variant="ghost">View logs</${LinkButton}>
-      ${job.resource ? html`<${LinkButton} href=${recordHash(job.resource.kind, job.resource.id)} icon="disc" variant="ghost">Open in Library</${LinkButton}>` : null}
+      ${job.resource ? html`<${LinkButton} href=${recordHash(job.resource.kind, job.resource.id)} icon="disc" variant="ghost">${openRecordLabel(job)}</${LinkButton}>` : null}
       ${open ? html`<${LinkButton} href=${open} variant="ghost" icon="music" external>Open in Apple Music</${LinkButton}>` : null}
     </div>
     <div class="drawer-actions-row">

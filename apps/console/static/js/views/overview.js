@@ -55,7 +55,7 @@ export function OverviewPage() {
 const TILES = [
   { key: 'queued', label: 'Queued', icon: 'circle-dashed', role: 'neutral', href: buildHash('queue', { tab: 'active' }) },
   { key: 'running', label: 'Running', icon: 'dot', role: 'info', href: buildHash('queue', { tab: 'active' }) },
-  { key: 'completed', label: 'Completed', icon: 'circle-check', role: 'success', href: buildHash('queue', { tab: 'all' }) },
+  { key: 'completed', label: 'Completed', icon: 'circle-check', role: 'success', href: buildHash('queue', { tab: 'done' }) },
   { key: 'failed', label: 'Failed', icon: 'circle-x', role: 'danger', href: buildHash('queue', { tab: 'failed' }) },
 ];
 

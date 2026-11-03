@@ -11,13 +11,20 @@
   color: var(--text-primary);
 }
 
+/* A tab's count keeps the room of two digits, so a count that changes
+   (or arrives) moves nothing beside it. */
+.page-queue .seg-num {
+  display: inline-block;
+  min-inline-size: 2ch;
+}
+
 /* Until the counts arrive the toolbar is laid out but not drawn (QueuePage's hold). */
 .page-queue[data-held] > .toolbar {
   visibility: hidden;
 }
 
 /* The head of the list, inside its card: "5 results" while the filter is
-   set, Retry all on the Failed and Cancelled tabs. */
+   set, Retry all on the Failed tab. */
 .queue-list-bar {
   display: flex;
   align-items: center;

@@ -11,9 +11,10 @@ export function withProgress(world, job) {
   return { ...job, progress: albumProgress(job.status, world.items.get(job.id) || []).percent / 100 };
 }
 
-export function statusCounts(world) {
+/** The jobs per status: every job of the world (the feed's), or those a list read selects. */
+export function statusCounts(world, jobs = world.jobs.values()) {
   const c = { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0, total: 0 };
-  for (const j of world.jobs.values()) {
+  for (const j of jobs) {
     c[j.status]++;
     c.total++;
   }
@@ -50,7 +51,7 @@ export function advance(w, steps = 1) {
         const a = CATALOG.albums[(job.id.charCodeAt(8) + 5) % CATALOG.albums.length];
         const tmp = { now: Date.now(), jobs: new Map(), items: new Map(), addEvent: () => {} };
         const fresh = makeJob(tmp, { key: `${job.id}:resolved`, id: job.id, album: a, status: 'running', tracks: 8, stages: () => 'queued' });
-        Object.assign(job, { ...fresh, input: job.input, created_at: job.created_at, started_at: job.started_at, updated_at: iso(Date.now()) });
+        Object.assign(job, { ...fresh, input: job.input, resource: job.resource, created_at: job.created_at, started_at: job.started_at, updated_at: iso(Date.now()) });
         w.items.set(job.id, tmp.items.get(job.id));
         w.addEvent({ job_id: job.id, type: 'resolved_input', message: job.type, payload: { ...job } });
         moved++;

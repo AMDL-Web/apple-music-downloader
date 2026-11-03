@@ -218,6 +218,8 @@ export function makeJob(world, spec) {
       job.curator_name = spec.curator || 'Apple Music';
     }
   }
+  // A run of an album, a song (its album) or a playlist downloads for that record; a station's has none.
+  if (type !== 'station') job.resource = { kind: type === 'playlist' ? 'playlist' : 'album', id: String(spec.input ? spec.input.split('/').pop() : a.id) };
   if (started) job.started_at = iso(started);
   if (finished) job.finished_at = iso(finished);
   if (spec.error) job.error = spec.error;

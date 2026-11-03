@@ -84,12 +84,13 @@ const SCENARIOS = [
   { id: 'boot/theme-stored-dark', world: 'active', path: '#/', themes: ['light'], storage: { 'amdl.console.theme': 'dark' }, noStates: true },
 
   // ---- Queue
-  ...['active', 'completed', 'failed', 'cancelled', 'all'].map((tab) => ({ id: `queue/${tab}`, world: 'many', path: `#/queue?tab=${tab}` })),
+  ...['all', 'active', 'done', 'failed'].map((tab) => ({ id: `queue/${tab}`, world: 'many', path: `#/queue?tab=${tab}` })),
   { id: 'queue/empty', world: 'empty', path: '#/queue?tab=active' },
-  { id: 'queue/empty-failed', world: 'idle', path: '#/queue?tab=cancelled' },
+  { id: 'queue/empty-all', world: 'empty', path: '#/queue' },
+  { id: 'queue/empty-failed', world: 'active', path: '#/queue?tab=failed&type=station' },
   { id: 'queue/search', world: 'many', path: '#/queue?tab=all&q=yoru' },
   { id: 'queue/search-none', world: 'many', path: '#/queue?tab=all&q=zzzzzz' },
-  { id: 'queue/type-song', world: 'many', path: '#/queue?tab=all&type=song' },
+  { id: 'queue/type-station', world: 'many', path: '#/queue?tab=all&type=station' },
   {
     id: 'queue/selecting',
     world: 'many',
@@ -106,9 +107,9 @@ const SCENARIOS = [
     path: '#/queue?tab=active',
     noStates: true,
     transitions: [
-      { id: 'tab-completed', title: 'tab Active → Completed', expectContent: true, run: (ctx) => ctx.hash('#/queue?tab=completed') },
-      { id: 'tab-failed', title: 'tab Completed → Failed', expectContent: true, run: (ctx) => ctx.hash('#/queue?tab=failed') },
-      { id: 'type-filter', title: 'type filter Song', expectContent: true, run: (ctx) => ctx.hash('#/queue?tab=failed&type=song') },
+      { id: 'tab-done', title: 'tab Active → Done', expectContent: true, run: (ctx) => ctx.hash('#/queue?tab=done') },
+      { id: 'tab-failed', title: 'tab Done → Failed', expectContent: true, run: (ctx) => ctx.hash('#/queue?tab=failed') },
+      { id: 'type-filter', title: 'type filter Albums', expectContent: true, run: (ctx) => ctx.hash('#/queue?tab=failed&type=album') },
       {
         id: 'search-typing',
         title: 'typing a search',
@@ -119,8 +120,8 @@ const SCENARIOS = [
           await ctx.page.locator('.page-queue input[type=search]').first().pressSequentially('radio', { delay: 90 });
         },
       },
-      { id: 'load-more', title: 'Load more', expectContent: true, run: (ctx) => ctx.page.locator('button:has-text("Load more")').first().click({ timeout: 3000 }).catch(() => {}) },
-      { id: 'open-drawer', title: 'open a job from the list', ignoreFocus: true, run: (ctx) => ctx.page.locator('a.job-row').first().click() },
+      { id: 'next-page', title: 'scroll to the end: the next page joins', expectContent: true, run: (ctx) => ctx.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)) },
+      { id: 'open-drawer', title: 'open a record from the list', ignoreFocus: true, run: (ctx) => ctx.page.locator('a.job-row').first().click() },
       { id: 'close-drawer', title: 'close the drawer with Esc', ignoreFocus: true, run: (ctx) => ctx.page.keyboard.press('Escape') },
     ],
   },

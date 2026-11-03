@@ -2,7 +2,7 @@
 // (empty, idle, active, many), their seeded logs, and the stable job keys
 // the drawer scenarios open.
 
-import { makeJob, emptyWorld, album, hexId, ERRORS, HOUR, MIN } from './fixtures.mjs';
+import { makeJob, emptyWorld, album, hexId, ERRORS, HOUR, MIN, iso } from './fixtures.mjs';
 import { seedHooks } from './fixtures-hooks.mjs';
 
 const LOG_LINES = [
@@ -69,6 +69,11 @@ export const WORLDS = {
         stages: st === 'failed' ? (k) => (k % 3 === 0 ? 'failed' : 'completed') : st === 'cancelled' ? (k) => (k < 2 ? 'completed' : 'cancelled') : undefined,
       });
     }
+    // Station runs have no record: they stay rows of their own.
+    makeJob(w, { key: 'station-done', album: 70, type: 'station', status: 'completed', tracks: 25, createdAgo: 90 * MIN, title: 'Yorushika Station', input: 'https://music.apple.com/cn/station/yorushika-station/ra.1250709916' });
+    makeJob(w, { key: 'station-failed', album: 71, type: 'station', status: 'failed', unresolved: true, createdAgo: 7 * HOUR, error: ERRORS.notFound, input: 'https://music.apple.com/cn/station/x/ra.978194965' });
+    // An add the resolver gave up on.
+    w.pending = [{ id: 1, kind: 'song', catalog_id: '1440857788', source: 'manual', priority: 1, paused: false, added_at: iso(now - 2 * HOUR), attempts: 3, state: 'failed', last_error: 'read song 1440857788 in storefront cn: Apple Music has no song 1440857788 in storefront cn (404)', storefront: '' }];
     seedLogs(w, 400);
     return w;
   },

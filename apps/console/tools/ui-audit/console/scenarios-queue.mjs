@@ -1,6 +1,11 @@
-// The audit's Queue reordering scenarios (All and Active): the queue in run order, a row held
-// mid-drag, the row menu's moves, a refused move (409) and a queued job
-// that starts while the queue is shown. worldOpts.queued adds a long queue.
+// The audit's Queue scenarios beyond the plain tabs: one record, the reads
+// failing, a record's drawer, and the reordering ones (All and Active): the
+// queue in run order, a row held mid-drag, the row menu's moves, a refused
+// move (409) and a queued job that starts while the queue is shown.
+// worldOpts.queued adds a long queue.
+
+import { CATALOG, makeJob, HOUR } from './fixtures.mjs';
+import { WORLDS } from './fixtures-worlds.mjs';
 
 const QUEUED = '.job-list > .job-item[data-sortable]';
 
@@ -29,7 +34,15 @@ const finish = (ctx) => {
   w.addEvent({ job_id: job.id, type: 'job_finished', message: 'job finished', payload: { ...job } });
 };
 
+const DOWN = { status: 503, code: 'unavailable' };
+
 export const QUEUE_SCENARIOS = [
+  { id: 'queue/one', world: (now) => { const w = WORLDS.empty(now); makeJob(w, { key: 'one', album: 4, status: 'completed', createdAgo: HOUR }); return w; }, path: '#/queue' },
+  // The reads fail: the note with Retry, never an endless skeleton.
+  { id: 'queue/offline', world: 'many', path: '#/queue', faults: Object.fromEntries(['downloads', 'library/albums', 'library/playlists', 'library/summary', 'library/pending'].map((p) => [`GET /api/v1/${p}`, DOWN])) },
+  // The adds that head Failed cannot be read: the list still draws.
+  { id: 'queue/failed-no-adds', world: 'many', path: '#/queue?tab=failed', faults: { 'GET /api/v1/library/pending': DOWN } },
+  { id: 'queue/record-drawer', world: 'many', path: `#/queue/albums/${CATALOG.albums[12].id}`, require: '.drawer' },
   {
     id: 'queue/order-all',
     world: 'active',
@@ -52,11 +65,11 @@ export const QUEUE_SCENARIOS = [
     transitions: [
       {
         id: 'move-refused',
-        title: 'Move to top refused (409): the row goes back, a toast says why',
+        title: 'Run next refused (409): the row goes back, a toast says why',
         expectContent: true,
         run: async (ctx) => {
           await menu(3)(ctx);
-          await ctx.page.locator('[role=menuitem]:has-text("Move to top")').click();
+          await ctx.page.locator('[role=menuitem]:has-text("Run next")').click();
         },
       },
     ],

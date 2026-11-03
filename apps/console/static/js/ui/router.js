@@ -3,7 +3,7 @@
 // bookkeeping that undoes a refused change (lib/route.js refusedMove).
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from './preact.js';
-import { parseHash, buildHash, historyIndex, refusedMove } from '../lib/route.js';
+import { parseHash, buildHash, recordHash, historyIndex, refusedMove } from '../lib/route.js';
 
 /** Route state and navigation for App(): {route, navigate, resumeLeave, setLeaveGuard}. */
 export function useHashRouter() {
@@ -78,9 +78,10 @@ export function useHashRouter() {
     return () => window.removeEventListener('hashchange', on);
   }, []);
 
-  // An alias address (#/system) is rewritten in place to the page it names.
+  // An alias address (#/system, a record's Library address of before) is
+  // rewritten in place to the page it names.
   useLayoutEffect(() => {
-    if (route.replace) navigate(buildHash(route.page, route.params), { replace: true });
+    if (route.replace) navigate(route.record ? recordHash(route.record.kind, route.record.id, route.params) : buildHash(route.page, route.params), { replace: true });
   }, [route]);
 
   return { route, navigate, resumeLeave, setLeaveGuard };

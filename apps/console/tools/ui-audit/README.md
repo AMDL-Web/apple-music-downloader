@@ -59,7 +59,11 @@ it received, to compare request bodies. Queued jobs carry `queue_order` and
 start in that order; `POST /api/v1/downloads/{id}/move` reorders them as the
 server does (`console/mock-world.mjs`), `GET /__mock/moves` lists every move body
 it received, and a world's `queued: N` option (a scenario's `worldOpts`) adds a
-long queue to reorder.
+long queue to reorder. A run of an album, song or playlist names its record
+(`resource`), and the record routes (`GET /api/v1/library/...`, with
+`sort=activity` and the feed's `resource_updated`) answer from the runs
+(`console/mock-records.mjs`); the `many` world adds station runs and an add
+that could not be read.
 
 WebKit runs on a Linux host with Playwright's WebKit installed: copy the
 repository there and run the same command with `--engine webkit`.

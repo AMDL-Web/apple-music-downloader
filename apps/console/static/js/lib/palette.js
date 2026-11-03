@@ -20,14 +20,14 @@ const STATIC_ITEMS = [
     group: 'Navigate',
     label: 'Activity',
     icon: 'activity',
-    words: 'queue runs jobs downloads',
+    words: 'queue runs jobs downloads records albums playlists stations done check files missing',
     // Its last filters, read when the palette lists it.
     get hash() {
       return queueHash();
     },
     keys: 'g q',
   },
-  { id: 'nav-library', group: 'Navigate', label: 'Library', icon: 'disc', hash: buildHash('library'), keys: 'g b', words: 'albums playlists records check disk missing apple music' },
+  { id: 'nav-library', group: 'Navigate', label: 'Library', icon: 'disc', hash: buildHash('library'), keys: 'g b', words: 'apple music songs albums playlists artists sync' },
   { id: 'nav-logs', group: 'Navigate', label: 'Logs', icon: 'file-text', hash: buildHash('logs'), keys: 'g l' },
   { id: 'nav-settings', group: 'Navigate', label: 'Settings', icon: 'settings', hash: settingsHash(), keys: 'g ,', words: 'system status health server' },
   { id: 'f-failed', group: 'Filters', label: 'Show failed jobs', icon: 'circle-x', hash: buildHash('queue', { tab: 'failed' }) },

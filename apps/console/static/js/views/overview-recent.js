@@ -98,7 +98,7 @@ export function RecentSection() {
     section="recent"
     title="Recently completed"
     labelId="recent-title"
-    actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('queue', { tab: 'completed' })}>See all</${LinkButton}>`}
+    actions=${html`<${LinkButton} variant="ghost" size="sm" href=${buildHash('queue', { tab: 'done' })}>See all</${LinkButton}>`}
   >
     <div class="recent" ref=${ref} style=${{ '--cols': String(Math.max(1, cols)) }}>${body}</div>
   </${Card}>`;

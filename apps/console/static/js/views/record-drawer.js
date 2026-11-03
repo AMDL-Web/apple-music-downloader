@@ -1,4 +1,4 @@
-// Record drawer (#/library/albums/:id, #/library/playlists/:id): one album or
+// Record drawer (#/queue/albums/:id, #/queue/playlists/:id): one album or
 // playlist record from GET /library/{kind}/{id}. The head (cover, title,
 // artist, facts with the tracks the storefront withholds, its qualities, its
 // state, with its active run's status, and Paused), the actions (Reset and
@@ -6,8 +6,8 @@
 // something to download, and Download missing last, so it appears without
 // moving the others, then Check this album and Remove from amdl), how its
 // last disk check ended, each track with its state (each quality's own
-// state once it has more than one), and its runs, a run of another quality
-// naming it. Kept fresh by the feed's resource_updated and
+// state once it has more than one), and its last runs, newest first, a run
+// of another quality naming it. Kept fresh by the feed's resource_updated and
 // check_updated; what it changes it tells the app (recordsChanged), since
 // a pause, resume or removal with no run sends no resource_updated.
 
@@ -43,7 +43,7 @@ function useRecord(app, kind, id) {
   useEffect(() => {
     let live = true;
     const res = kind === 'playlists' ? 'playlist' : 'album';
-    Promise.allSettled([getRecord(kind, id), listDownloads({ resource_kind: res, resource_id: id, limit: RUNS })]).then(([r, j]) => {
+    Promise.allSettled([getRecord(kind, id), listDownloads({ resource_kind: res, resource_id: id, sort: 'created_at', order: 'desc', limit: RUNS })]).then(([r, j]) => {
       if (!live) return;
       setState((s) => ({
         record: r.status === 'fulfilled' ? r.value : s.record,

@@ -26,6 +26,7 @@ import { stats, system } from './fixtures-status.mjs';
 import { json, apiError, readBody, parseLink } from './mock-http.mjs';
 import { lookup, quality } from './mock-links.mjs';
 import { createHookStore } from '../../../../site/demo/fake-hooks.js';
+import { libraryRoute, recordMessage, ofResource } from './mock-records.mjs';
 
 const STATIC_DIR = fileURLToPath(new URL('../../../static/', import.meta.url));
 const CONSOLE_GO = fileURLToPath(new URL('../../../console.go', import.meta.url));
@@ -78,6 +79,8 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
           ? { type: 'download_upserted', job: withProgress(w, job), event_id: ev.id, status_counts: statusCounts(w) }
           : { type: 'download_deleted', job_id: ev.job_id, event_id: ev.id, status_counts: statusCounts(w) };
         for (const res of feeds) send(res, ev.id, msg.type, msg);
+        const upd = recordMessage(w, job, ev.id);
+        if (upd) for (const res of feeds) send(res, ev.id, upd.type, upd);
       }
     };
     w.onLog = (l) => {
@@ -141,7 +144,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       if (statuses.length && !statuses.includes(j.status)) return false;
       if (types.length && !types.includes(j.type)) return false;
       if (term && !`${j.title || ''}\n${j.input}\n${j.artist_name || ''}`.toLowerCase().includes(term)) return false;
-      return true;
+      return ofResource(j, q);
     });
     const sort = q.get('sort') || 'created_at';
     const dir = q.get('order') === 'asc' ? 1 : -1;
@@ -177,6 +180,10 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
       w.hookStore ||= createHookStore(w.hooks);
       const out = w.hookStore.handle(req.method, path, req.method === 'PUT' ? await readBody(req) : null);
       return json(res, out.status, out.body);
+    }
+    if (path.startsWith('/api/v1/library/')) {
+      const out = libraryRoute(w, req.method, path, q, ['POST', 'PUT'].includes(req.method) ? await readBody(req) : null);
+      if (out) return json(res, out.status, out.body);
     }
     const am = path.match(/^\/api\/v1\/artists\/([^/]+)\/albums$/);
     if (am) return artistAlbums(res, am[1], q);
@@ -226,7 +233,7 @@ export async function startMockServer({ port = 0, host = '127.0.0.1', world = 'a
         const all = filteredJobs(q);
         const limit = Math.min(200, Number(q.get('limit')) || 50);
         const offset = Number(q.get('offset')) || 0;
-        return json(res, 200, { downloads: all.slice(offset, offset + limit).map((j) => withProgress(w, j)), total: all.length, limit, offset, status_counts: statusCounts(w), event_cursor: w.cursor });
+        return json(res, 200, { downloads: all.slice(offset, offset + limit).map((j) => withProgress(w, j)), total: all.length, limit, offset, status_counts: statusCounts(w, all), event_cursor: w.cursor });
       }
       case 'POST /api/v1/downloads':
         return submit(req, res);

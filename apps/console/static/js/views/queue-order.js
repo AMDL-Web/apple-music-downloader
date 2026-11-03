@@ -21,6 +21,9 @@ const LIMIT = 200;
 const QUEUED = { statuses: ['queued'] };
 const RUNNING = { statuses: ['running'] };
 
+// The last lists read, so a page opened again draws them at once while it reads again.
+let lastLists = { queue: [], running: [], ready: false };
+
 const applyBatch = (list, batch, filter) => {
   let next = list;
   for (const m of batch) {
@@ -33,20 +36,20 @@ const applyBatch = (list, batch, filter) => {
 /**
  * The jobs a grouped view draws on top whatever page they are on: the queued
  * ones (GET /downloads?status=queued&sort=queue_order) and the running ones,
- * read while `read` and kept live from the feed: { queue, running, setQueue,
- * reload }. While `grouped`, beforeChange() runs before every feed batch
+ * read while `read` and kept live from the feed: { queue, running, ready,
+ * setQueue, reload } (`ready` once a read answered, or the last one is drawn). While `grouped`, beforeChange() runs before every feed batch
  * that changes a job's status or place is drawn, so the rows slide there
  * (a start, a finish, a move, the burst of a renumbering) instead of jumping.
  */
 export function useUpNext(app, read, grouped, key, beforeChange) {
-  const [lists, setLists] = useState({ queue: [], running: [] });
+  const [lists, setLists] = useState(() => lastLists);
   const seq = useRef(0);
   const before = useRef(beforeChange);
   before.current = beforeChange;
   const reload = () => {
     const mine = ++seq.current;
     if (!read) {
-      setLists({ queue: [], running: [] });
+      setLists({ queue: [], running: [], ready: true });
       return;
     }
     Promise.all([
@@ -54,10 +57,13 @@ export function useUpNext(app, read, grouped, key, beforeChange) {
       listDownloads({ status: 'running', sort: 'created_at', order: 'asc', limit: LIMIT }),
     ]).then(
       ([queued, running]) => {
-        if (mine === seq.current) setLists({ queue: queued.downloads, running: running.downloads });
+        if (mine !== seq.current) return;
+        lastLists = { queue: queued.downloads, running: running.downloads, ready: true };
+        setLists(lastLists);
       },
       () => {
-        // The page's own list still shows the jobs it read.
+        // Nothing to draw on top: the list shows what its own reads hold.
+        if (mine === seq.current) setLists((l) => (l.ready ? l : { ...l, ready: true }));
       },
     );
   };
@@ -81,7 +87,9 @@ export function useUpNext(app, read, grouped, key, beforeChange) {
       setLists((l) => {
         const queue = applyBatch(l.queue, batch, QUEUED);
         const running = applyBatch(l.running, batch, RUNNING);
-        return queue === l.queue && running === l.running ? l : { queue, running };
+        if (queue === l.queue && running === l.running) return l;
+        lastLists = { ...l, queue, running };
+        return lastLists;
       });
     });
   }, [read, grouped, key]);
@@ -90,7 +98,7 @@ export function useUpNext(app, read, grouped, key, beforeChange) {
     for (const j of jobs) if (!statuses.current.has(j.id)) statuses.current.set(j.id, j.status);
   };
   const setQueue = (fn) => setLists((l) => ({ ...l, queue: fn(l.queue) }));
-  return { queue: lists.queue, running: lists.running, setQueue, reload, seeJobs };
+  return { queue: lists.queue, running: lists.running, ready: Boolean(lists.ready), setQueue, reload, seeJobs };
 }
 
 /**

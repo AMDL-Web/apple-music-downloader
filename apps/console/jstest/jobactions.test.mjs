@@ -145,7 +145,7 @@ test("a record's run opens its record and pauses it instead of cancelling", () =
   assert.deepEqual(run('running'), ['details', 'record', 'pause', '-', 'copy']);
   assert.deepEqual(run('completed'), ['details', 'record', 'again', '-', 'copy', '-', 'delete']);
   const labels = rowMenu({ id: 'j', status: 'queued', resource: { kind: 'album', id: '1' } }).filter((it) => !it.separator).map((it) => it.label);
-  assert.deepEqual(labels, ['Show details', 'Open in Library', 'Move to top', 'Move to bottom', 'Pause']);
+  assert.deepEqual(labels, ['Show details', 'Open album', 'Run next', 'Run last', 'Pause']);
 });
 
 test('a queued row offers only the moves that move it', () => {
@@ -154,6 +154,6 @@ test('a queued row offers only the moves that move it', () => {
   assert.deepEqual(ids({ first: false, last: true }), ['details', 'top', 'cancel', '-', 'copy']);
   assert.deepEqual(ids({ first: true, last: true }), ['details', 'cancel', '-', 'copy'], 'alone in the queue');
   const labels = rowMenu({ id: 'j', status: 'queued', input: 'x' }).filter((it) => !it.separator).map((it) => it.label);
-  assert.deepEqual(labels, ['Show details', 'Move to top', 'Move to bottom', 'Cancel', 'Copy link']);
+  assert.deepEqual(labels, ['Show details', 'Run next', 'Run last', 'Cancel', 'Copy link']);
   assert.equal(actionError('move', { status: 409, code: 'job_not_queued' }), "Couldn't move this job: it or the job beside it is no longer queued.");
 });

@@ -188,9 +188,10 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
 
   const withProgress = (job) => ({ ...job, progress: progress(job.status, items.get(job.id) || []).percent / 100 });
 
-  function statusCounts() {
+  /** The jobs per status: every job (the feed's), or those a list read selects. */
+  function statusCounts(list = jobs.values()) {
     const c = { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0, total: 0 };
-    for (const j of jobs.values()) {
+    for (const j of list) {
       c[j.status]++;
       c.total++;
     }
@@ -325,11 +326,14 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
     if (finished) job.finished_at = iso(finished);
     if (rest.error) job.error = rest.error;
     if (rest.overrides) job.overrides = rest.overrides;
-    // Albums, songs and playlists download for a record; stations and artists do not.
-    const ref = type === 'station' ? null : resourceOf(src);
+    // Albums, songs and playlists download for a record, known from the link
+    // before it is read; stations and artists do not.
+    const link = input ? parseLink(input) : null;
+    const target = src || (link && find(link.id));
+    const ref = type === 'station' ? null : resourceOf(target);
     if (ref) {
       job.resource = ref;
-      records.ensure(ref, created, src.type === 'song' ? src.id : '');
+      records.ensure(ref, created, target.type === 'song' ? target.id : '');
     }
     job.trigger = rest.trigger || 'manual';
     job.priority = 1;
@@ -1002,7 +1006,7 @@ export function createFakeApi({ progress, now = Date.now(), timers = globalThis 
         const all = filteredJobs(q);
         const limit = Math.min(200, Number(q.get('limit')) || 50);
         const offset = Number(q.get('offset')) || 0;
-        return json(200, { downloads: all.slice(offset, offset + limit).map(withProgress), total: all.length, limit, offset, status_counts: statusCounts(), event_cursor: nextEvent - 1 });
+        return json(200, { downloads: all.slice(offset, offset + limit).map(withProgress), total: all.length, limit, offset, status_counts: statusCounts(all), event_cursor: nextEvent - 1 });
       }
       case 'POST /api/v1/downloads':
         return submit(await readBody(req));

@@ -1,8 +1,8 @@
 // Pure hash routing and filter mapping. Routes are #/ (also #/overview),
-// #/overview/:id, #/queue (Activity; also #/activity), #/queue/:id,
-// #/library, #/library/albums/:id and #/library/playlists/:id (a record),
-// #/logs, #/new, #/new/:id and #/settings; filters live in the hash query
-// so a filtered view is a shareable link.
+// #/overview/:id, #/queue (Activity; also #/activity), #/queue/:id (a job),
+// #/queue/albums/:id and #/queue/playlists/:id (a record), #/library (the
+// Apple Music library), #/logs, #/new, #/new/:id and #/settings; filters
+// live in the hash query so a filtered view is a shareable link.
 
 export const PAGES = ['overview', 'queue', 'library', 'logs', 'new', 'settings'];
 
@@ -31,8 +31,10 @@ function decodeSegment(s) {
 /**
  * Parses location.hash into {page, jobId, params}, plus `record` and `replace:
  * true` for an alias address. `record` ({kind: 'albums'|'playlists', id})
- * opens a record's drawer over the Library. Unknown paths, and an id with
- * a malformed percent escape, give page "notfound".
+ * opens a record's drawer over Activity. The Library's record addresses of
+ * before (#/library/albums/:id, #/library?tab=albums|playlists) are aliases
+ * of Activity's. Unknown paths, and an id with a malformed percent escape,
+ * give page "notfound".
  */
 export function parseHash(hash) {
   let h = typeof hash === 'string' ? hash : '';
@@ -46,49 +48,48 @@ export function parseHash(hash) {
   if (parts.length === 1 && PAGE_ALIASES[parts[0]]) return { page: PAGE_ALIASES[parts[0]], jobId: null, params: {}, replace: true };
   const page = PATH_PAGES[parts[0] || ''];
   if (!page) return { page: 'notfound', jobId: null, params };
+  if (page === 'library' && parts.length === 1 && OLD_LIBRARY_TABS.includes(params.tab)) return { page: 'queue', jobId: null, params: oldLibraryParams(params), replace: true };
   if (parts.length === 1 || parts.length === 0) return { page, jobId: null, params };
   if (parts.length === 2 && DRAWER_PAGES.has(page)) {
     const jobId = decodeSegment(parts[1]);
     if (jobId !== null) return { page, jobId, params };
   }
-  if (parts.length === 3 && page === 'library' && RECORD_KINDS.includes(parts[1])) {
+  if (parts.length === 3 && (page === 'queue' || page === 'library') && RECORD_KINDS.includes(parts[1])) {
     const id = decodeSegment(parts[2]);
-    if (id) return { page, jobId: null, record: { kind: parts[1], id }, params };
+    if (id && page === 'queue') return { page, jobId: null, record: { kind: parts[1], id }, params };
+    if (id) return { page: 'queue', jobId: null, record: { kind: parts[1], id }, params: {}, replace: true };
   }
   return { page: 'notfound', jobId: null, params };
 }
 
-/** The hash of a record's drawer over the Library; kind is album(s) or playlist(s). */
+/** The hash of a record's drawer over Activity; kind is album(s) or playlist(s). */
 export function recordHash(kind, id, params = {}) {
   const k = kind === 'playlist' || kind === 'playlists' ? 'playlists' : 'albums';
-  return buildHash('library', params).replace(/^#\/library/, `#/library/${k}/${encodeURIComponent(id)}`);
+  return buildHash('queue', params).replace(/^#\/queue/, `#/queue/${k}/${encodeURIComponent(id)}`);
 }
 
-/** The Library's tabs: amdl's album and playlist records, and the Apple Music account library. */
-export const LIBRARY_TABS = ['albums', 'playlists', 'apple'];
-const RECORD_STATES = ['none', 'partial', 'complete'];
-const RECORD_FLAGS = ['failed', 'given_up', 'missing', 'waiting', 'paused', 'unresolved'];
+// The Library's record tabs of before, and the Activity filters their state and flag filters became.
+const OLD_LIBRARY_TABS = ['albums', 'playlists'];
+const FAILED_FLAGS = ['failed', 'given_up', 'missing'];
+
+/** Activity's params for an address of the Library's record tabs of before. */
+function oldLibraryParams(params) {
+  const tab = params.state === 'complete' ? 'done' : FAILED_FLAGS.includes(params.flag) ? 'failed' : '';
+  return { tab, type: params.tab === 'playlists' ? 'playlist' : params.tab === 'albums' ? 'album' : '', q: typeof params.q === 'string' ? params.q : '' };
+}
+
 const APPLE_KINDS = ['albums', 'songs', 'playlists', 'artists'];
 
-/** Normalizes Library route params: tab, state, flag, q, and the Apple tab's kind. */
+/** Normalizes Library route params (the Apple Music library): q and kind. */
 export function libraryFilters(params = {}) {
-  const tab = LIBRARY_TABS.includes(params.tab) ? params.tab : LIBRARY_TABS[0];
-  const state = RECORD_STATES.includes(params.state) ? params.state : '';
-  const flag = RECORD_FLAGS.includes(params.flag) ? params.flag : '';
   const q = typeof params.q === 'string' ? params.q : '';
   const kind = APPLE_KINDS.includes(params.kind) ? params.kind : APPLE_KINDS[0];
-  return { tab, state, flag, q, kind };
+  return { q, kind };
 }
 
 /** The Library hash for these filters (defaults left out). */
 export function libraryHash(f = {}) {
-  return buildHash('library', {
-    tab: f.tab && f.tab !== LIBRARY_TABS[0] ? f.tab : '',
-    state: f.state || '',
-    flag: f.flag || '',
-    q: f.q || '',
-    kind: f.tab === 'apple' && f.kind && f.kind !== APPLE_KINDS[0] ? f.kind : '',
-  });
+  return buildHash('library', { q: f.q || '', kind: f.kind && f.kind !== APPLE_KINDS[0] ? f.kind : '' });
 }
 
 /** Builds a hash from a page, optional job id and params (empty values omitted). */
@@ -147,49 +148,18 @@ export function refusedMove(shownIdx, state) {
 }
 
 /** The Queue's tabs in the order drawn; the first, All, is the default. */
-export const QUEUE_TABS = ['all', 'active', 'completed', 'failed', 'cancelled'];
+export const QUEUE_TABS = ['all', 'active', 'done', 'failed'];
 
-const TAB_STATUSES = { active: ['running', 'queued'], completed: ['completed'], failed: ['failed'], cancelled: ['cancelled'], all: [] };
+// Tabs of before: Completed is Done, Cancelled lives on All.
+const OLD_TABS = { completed: 'done', cancelled: 'all' };
 
-/** Normalizes queue route params: tab, type and q. */
+/** Normalizes queue route params: tab, type (album, playlist, station) and q. */
 export function queueFilters(params = {}) {
-  const tab = QUEUE_TABS.includes(params.tab) ? params.tab : QUEUE_TABS[0];
-  const type = ['album', 'playlist', 'song', 'artist', 'station'].includes(params.type) ? params.type : '';
+  const asked = OLD_TABS[params.tab] || params.tab;
+  const tab = QUEUE_TABS.includes(asked) ? asked : QUEUE_TABS[0];
+  const type = ['album', 'playlist', 'station'].includes(params.type) ? params.type : '';
   const q = typeof params.q === 'string' ? params.q : '';
   return { tab, type, q };
-}
-
-/** The list filter (for store.jobMatches) of a queue view. */
-export function queueMatchFilter(filters) {
-  return { statuses: TAB_STATUSES[filters.tab] || [], types: filters.type ? [filters.type] : [], q: filters.q };
-}
-
-/**
- * GET /api/v1/downloads query for a queue view. Active jobs read oldest
- * first; finished ones by when they finished, newest first; All in the
- * server's order, newest first. All and Active draw their running and queued
- * jobs on top in run order (lib/queue-order.js arrange), and with no search
- * or type read them on their own too (views/queue-order.js useUpNext).
- */
-export function queueQuery(filters, offset = 0, limit = 50) {
-  const query = { limit, offset };
-  const statuses = TAB_STATUSES[filters.tab] || [];
-  if (statuses.length) query.status = statuses.join(',');
-  if (filters.type) query.type = filters.type;
-  if (filters.q) query.q = filters.q;
-  if (filters.tab === 'active') {
-    query.sort = 'created_at';
-    query.order = 'asc';
-  } else if (filters.tab !== 'all') {
-    query.sort = 'updated_at';
-    query.order = 'desc';
-  }
-  return query;
-}
-
-/** Whether new rows go to the end of a queue view (oldest-first order). */
-export function queueAppends(filters) {
-  return filters.tab === 'active';
 }
 
 /**

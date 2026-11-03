@@ -1,7 +1,7 @@
 // Pure helpers for amdl's records (GET /library/albums, /library/playlists
-// and one record with its tracks): what a Library row and the record drawer
-// say about a record, a track and a quality slot, the Library's list query,
-// and what a disk check or a pending add reads as. No DOM.
+// and one record with its tracks): what an Activity row and the record drawer
+// say about a record, a track and a quality slot, and what a disk check or
+// a pending add reads as. No DOM.
 
 import { codecName } from './overrides.js';
 import { count } from './format.js';
@@ -170,15 +170,6 @@ export function songsIn(record, states) {
   }).map((t) => t.song_id);
 }
 
-/** The GET /library/{kind} query for Library filters (lib/route.js libraryFilters). */
-export function recordQuery(f, offset = 0, limit = 50) {
-  const q = { limit, offset, sort: 'added' };
-  if (f.state) q.state = f.state;
-  if (f.flag) q.flag = f.flag;
-  if (f.q) q.q = f.q;
-  return q;
-}
-
 /** A record kind's word: "album" or "playlist", plural with n !== 1. */
 export const kindWord = (kind, n = 1) => {
   const one = kind === 'playlists' || kind === 'playlist' ? 'playlist' : 'album';
@@ -235,30 +226,6 @@ export function resetNote(out, record, queued) {
   if (record && record.paused) return `Reset “${name}”. Resume it to download`;
   if (out && out.slots) return `Reset “${name}”. It waits for room in the queue`;
   return 'Nothing to download';
-}
-
-/**
- * The toast of a bulk reset over runLimited outcomes (item: the record,
- * value: its reset answer) that all went through: how many it queued, and
- * how many it left paused, waiting or with nothing to download.
- */
-export function bulkResetText(outcomes, kind) {
-  let queued = 0;
-  let paused = 0;
-  let waiting = 0;
-  let none = 0;
-  for (const o of outcomes) {
-    if (o.value && o.value.job) queued++;
-    else if (o.item && o.item.paused) paused++;
-    else if (o.value && o.value.slots) waiting++;
-    else none++;
-  }
-  const parts = [];
-  if (queued || outcomes.length === 0) parts.push(`Queued ${count(queued)} ${kindWord(kind, queued)}`);
-  if (paused) parts.push(`${count(paused)} paused: resume to download`);
-  if (waiting) parts.push(`${count(waiting)} waiting for room in the queue`);
-  if (none) parts.push(`${count(none)} with nothing to download`);
-  return parts.join(' · ');
 }
 
 const PENDING_KIND = { song: 'Song', artist: 'Artist', album: 'Album', playlist: 'Playlist' };

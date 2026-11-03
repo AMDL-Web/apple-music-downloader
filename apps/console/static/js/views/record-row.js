@@ -1,7 +1,6 @@
-// One record row for the lists that show records (the Library's Albums and
-// Playlists, Activity's Paused group): cover, title and artist, its flags,
-// its state badge and when it last changed, as a job row is drawn (the
-// .job-row frame), linking to the record's drawer.
+// One record row on Activity: cover, title and artist, its flags, its state
+// badge and its last activity (when one of its runs last changed), as a
+// job row is drawn (the .job-row frame), linking to the record's drawer.
 
 import { html } from '../ui/preact.js';
 import { artPalette, paletteStyle, artWidths } from '../lib/format.js';
@@ -48,7 +47,7 @@ export function RecordRow({ record, href, selected, onSelect, bare = false, runS
     </span>
     <span class="job-progress"></span>
     <span class="job-status">${bare ? null : html`<${Badge} view=${view} />`}</span>
-    <span class="job-updated"><${RelTime} value=${record.updated_at} /></span>
+    <span class="job-updated"><${RelTime} value=${record.activity_at || record.updated_at} /></span>
     <span class="job-chevron"><${Icon} name="chevron-right" /></span>
   </a>`;
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { recordView, recordHasWork, slotStates, hasExtraSlots, extraCodecs, runSlot, trackState, trackCountText, checkText, checkRunning, applyCheckFeed, songsIn, recordQuery, slotQuality, pendingTitle, recordTitle, commonQuality, checkScope, checkBody, resetNote, bulkResetText } from '../static/js/lib/records.js';
+import { recordView, recordHasWork, slotStates, hasExtraSlots, extraCodecs, runSlot, trackState, trackCountText, checkText, checkRunning, applyCheckFeed, songsIn, slotQuality, pendingTitle, recordTitle, commonQuality, checkScope, checkBody, resetNote } from '../static/js/lib/records.js';
 
 const rec = (fields = {}) => ({ id: '1', name: 'A', state: 'none', tracks_done: 0, tracks_wanted: 9, withheld_count: 0, paused: false, resolved_at: '2026-11-02T00:00:00Z', catalog_state: 'ok', ...fields });
 
@@ -73,7 +73,6 @@ test('counts, checks and queries read as the page shows them', () => {
   const c = { id: 2, checked: 5, missing: 0 };
   assert.equal(applyCheckFeed(null, [{ type: 'check_updated', check: c }]), c);
   assert.equal(applyCheckFeed(c, [{ type: 'download_upserted', job: {} }]), c);
-  assert.deepEqual(recordQuery({ state: 'partial', flag: '', q: 'x' }), { limit: 50, offset: 0, sort: 'added', state: 'partial', q: 'x' });
   assert.equal(pendingTitle({ kind: 'song', catalog_id: '1' }), 'Song 1');
 });
 
@@ -97,11 +96,4 @@ test('a reset says why nothing downloads yet', () => {
   assert.equal(resetNote({ slots: 2 }, rec({ paused: true }), 'Downloading'), 'Reset “A”. Resume it to download');
   assert.equal(resetNote({ slots: 2 }, rec(), 'Downloading'), 'Reset “A”. It waits for room in the queue');
   assert.equal(resetNote({ slots: 0 }, rec(), 'Downloading'), 'Nothing to download');
-});
-
-test('a bulk reset counts what it queued and what it left', () => {
-  const o = (item, value) => ({ item, ok: true, value });
-  const out = [o(rec({ id: '1' }), { slots: 3, job: { id: 'j' } }), o(rec({ id: '2', paused: true }), { slots: 3 }), o(rec({ id: '3' }), { slots: 0 })];
-  assert.equal(bulkResetText(out, 'albums'), 'Queued 1 album · 1 paused: resume to download · 1 with nothing to download');
-  assert.equal(bulkResetText([o(rec(), { slots: 1, job: { id: 'j' } }), o(rec(), { slots: 1, job: { id: 'k' } })], 'playlists'), 'Queued 2 playlists');
 });

@@ -209,7 +209,7 @@ base durations (120 ms color, 200 ms overlays).
 - **Throughput**: totals as 20 px figures over their labels; the per-day
   bars are `--chart-bar`. The formats bar (Settings › Quality) takes one hue
   per position (`--series-1` to `-4`: blue, orange, purple, gray).
-- **Activity**: one grouped list, 48 px covers, hairlines inset past the cover; the Library's record lists and Activity's Paused group are drawn the same way.
+- **Activity**: one grouped list, 48 px covers, hairlines inset past the cover; a record's row and a run's are drawn the same way.
   Only a queued or running job draws progress; a finished row is title, then
   artist and track count, and a plain completed status is a green check with
   no word. A failed row says what went wrong in red under the link and ends

@@ -1,9 +1,9 @@
-// An Activity row's "…" menu (items from lib/jobactions.js rowMenu): Show
-// details opens the drawer, Open in Library its record, Move to top and
-// Move to bottom reorder a queued job (views/queue-order.js), Cancel, Pause
-// and Retry act at once, Copy link copies the job's link, and Download
-// again… and Delete… ask first. One job's action runs alone, so the
-// selection bar (a bulk run) stays out of it.
+// A station run's "…" menu on Activity (items from lib/jobactions.js
+// rowMenu): Show details opens its drawer, Run next and Run last reorder a
+// queued one (views/queue-order.js), Cancel and Retry act at once, Copy
+// link copies its link, and Download again… and Delete… ask first. One
+// run's action runs alone, so the selection bar (a bulk run) stays out of
+// it. A record's row has its own menu (views/queue-record-menu.js).
 
 import { html, useState } from '../ui/preact.js';
 import { cancelDownload, retryDownload, deleteDownload, createDownload, resetRecord } from '../api.js';

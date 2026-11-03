@@ -9,8 +9,6 @@ import {
   queueFilters,
   rememberQueue,
   queueHash,
-  queueQuery,
-  queueMatchFilter,
   logFilters,
   logParams,
   logQuery,
@@ -95,26 +93,14 @@ test('#/settings takes an optional section', () => {
   assert.equal(settingsSection({}), '');
 });
 
-test('queue tabs map to API queries', () => {
-  assert.deepEqual(QUEUE_TABS, ['all', 'active', 'completed', 'failed', 'cancelled'], 'All comes first');
+test('queue tabs: All first, the tabs of before land on Done and All', () => {
+  assert.deepEqual(QUEUE_TABS, ['all', 'active', 'done', 'failed'], 'All comes first');
   assert.deepEqual(queueFilters({}), { tab: 'all', type: '', q: '' }, 'the Queue opens on All');
-  const active = queueFilters({ tab: 'active' });
-  assert.deepEqual(queueQuery(active), { limit: 50, offset: 0, status: 'running,queued', sort: 'created_at', order: 'asc' });
-  assert.deepEqual(queueQuery(queueFilters({ tab: 'failed', type: 'album', q: 'x' }), 50, 25), {
-    limit: 25,
-    offset: 50,
-    status: 'failed',
-    type: 'album',
-    q: 'x',
-    sort: 'updated_at',
-    order: 'desc',
-  });
-  assert.deepEqual(queueQuery(queueFilters({ tab: 'all' })), { limit: 50, offset: 0 });
-  assert.deepEqual(queueQuery(queueFilters({ tab: 'completed' })), { limit: 50, offset: 0, status: 'completed', sort: 'updated_at', order: 'desc' });
-  assert.deepEqual(queueQuery(queueFilters({ tab: 'cancelled' })), { limit: 50, offset: 0, status: 'cancelled', sort: 'updated_at', order: 'desc' });
-  assert.equal(queueFilters({ tab: 'cancelled' }).tab, 'cancelled');
+  assert.equal(queueFilters({ tab: 'completed' }).tab, 'done');
+  assert.equal(queueFilters({ tab: 'cancelled' }).tab, 'all');
+  assert.deepEqual(queueFilters({ tab: 'failed', type: 'station', q: 'x' }), { tab: 'failed', type: 'station', q: 'x' });
   assert.equal(queueFilters({ tab: 'bogus', type: 'bogus' }).tab, 'all');
-  assert.deepEqual(queueMatchFilter({ tab: 'failed', type: 'song', q: 'z' }), { statuses: ['failed'], types: ['song'], q: 'z' });
+  assert.equal(queueFilters({ type: 'song' }).type, '', 'songs and artists have no rows of their own');
 });
 
 test('log filters, params and queries', () => {
@@ -167,15 +153,21 @@ test('the plain way to the Queue returns to its last filters', () => {
   assert.equal(queueHash(), '#/queue');
 });
 
-test('a record opens its drawer over the Library, and Activity has its own address', () => {
-  assert.deepEqual(parseHash('#/library/albums/1524443761?tab=albums'), { page: 'library', jobId: null, record: { kind: 'albums', id: '1524443761' }, params: { tab: 'albums' } });
-  assert.deepEqual(parseHash('#/library/playlists/pl.u-abc'), { page: 'library', jobId: null, record: { kind: 'playlists', id: 'pl.u-abc' }, params: {} });
-  assert.equal(parseHash('#/library/songs/1').page, 'notfound');
-  assert.equal(parseHash('#/library/albums/%E0%A4%A').page, 'notfound');
-  assert.equal(recordHash('album', '1'), '#/library/albums/1');
-  assert.equal(recordHash('playlist', 'pl.1', { tab: 'playlists' }), '#/library/playlists/pl.1?tab=playlists');
+test('a record opens its drawer over Activity; the Library is the Apple Music library', () => {
+  assert.deepEqual(parseHash('#/queue/albums/1524443761?tab=done'), { page: 'queue', jobId: null, record: { kind: 'albums', id: '1524443761' }, params: { tab: 'done' } });
+  assert.deepEqual(parseHash('#/queue/playlists/pl.u-abc'), { page: 'queue', jobId: null, record: { kind: 'playlists', id: 'pl.u-abc' }, params: {} });
+  assert.equal(parseHash('#/queue/songs/1').page, 'notfound');
+  assert.equal(parseHash('#/queue/albums/%E0%A4%A').page, 'notfound');
+  assert.equal(recordHash('album', '1'), '#/queue/albums/1');
+  assert.equal(recordHash('playlist', 'pl.1', { tab: 'failed' }), '#/queue/playlists/pl.1?tab=failed');
   assert.deepEqual(parseHash('#/activity'), { page: 'queue', jobId: null, params: {} });
-  assert.deepEqual(libraryFilters({ tab: 'apple', kind: 'songs', flag: 'nope' }), { tab: 'apple', state: '', flag: '', q: '', kind: 'songs' });
-  assert.equal(libraryHash({ tab: 'albums', flag: 'missing' }), '#/library?flag=missing');
-  assert.equal(libraryHash({ tab: 'apple', kind: 'albums' }), '#/library?tab=apple');
+  // The Library's record addresses of before are rewritten to Activity's.
+  assert.deepEqual(parseHash('#/library/albums/1?tab=albums'), { page: 'queue', jobId: null, record: { kind: 'albums', id: '1' }, params: {}, replace: true });
+  assert.equal(parseHash('#/library/songs/1').page, 'notfound');
+  assert.deepEqual(parseHash('#/library?tab=playlists&flag=missing&q=x'), { page: 'queue', jobId: null, params: { tab: 'failed', type: 'playlist', q: 'x' }, replace: true });
+  assert.deepEqual(parseHash('#/library?tab=albums&state=complete'), { page: 'queue', jobId: null, params: { tab: 'done', type: 'album', q: '' }, replace: true });
+  assert.deepEqual(parseHash('#/library?tab=apple&kind=songs'), { page: 'library', jobId: null, params: { tab: 'apple', kind: 'songs' } });
+  assert.deepEqual(libraryFilters({ tab: 'apple', kind: 'songs', flag: 'nope' }), { q: '', kind: 'songs' });
+  assert.equal(libraryHash({ kind: 'albums' }), '#/library');
+  assert.equal(libraryHash({ kind: 'songs', q: 'a' }), '#/library?q=a&kind=songs');
 });

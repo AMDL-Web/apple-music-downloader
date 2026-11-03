@@ -76,6 +76,12 @@ export function createRecordStore({ jobs, items, now }) {
     return { tracks_wanted: wanted, tracks_done: done, tracks_failed: failed, tracks_given_up: 0, tracks_missing: 0, state: wanted && done >= wanted ? 'complete' : done ? 'partial' : 'none' };
   }
 
+  /** When one of a record's runs last changed (its finish, else its last update), or when it was added. */
+  function activityAt(r) {
+    const times = runsOf(r).map((j) => Date.parse(j.finished_at || j.updated_at) || 0);
+    return times.length ? iso(Math.max(...times)) : r.added_at;
+  }
+
   /** A record as GET /library/{kind} lists it. */
   function record(r) {
     const src = srcOf(r) || {};
@@ -92,6 +98,7 @@ export function createRecordStore({ jobs, items, now }) {
       cover_state: 'done',
       added_at: r.added_at,
       updated_at: r.updated_at,
+      activity_at: activityAt(r),
       ...rollup(r),
       ...(run ? { active_job_id: run.id } : {}),
     };
@@ -140,7 +147,7 @@ export function createRecordStore({ jobs, items, now }) {
     return false;
   };
 
-  /** GET /library/{kind}: filters state, flag, q; newest added first. */
+  /** GET /library/{kind}: filters state, flag (each a comma-separated list), q; newest added first, or newest activity with sort=activity; limit, offset. */
   function list(kind, q) {
     const k = kind === 'playlists' ? 'playlist' : 'album';
     const states = (q.get('state') || '').split(',').filter((s) => STATES.includes(s));
@@ -154,7 +161,7 @@ export function createRecordStore({ jobs, items, now }) {
         const x = record(r);
         return !term || [x.name, x.artist_name, x.curator_name].some((v) => v && v.toLowerCase().includes(term));
       })
-      .sort((a, b) => Date.parse(b.added_at) - Date.parse(a.added_at));
+      .sort((a, b) => (q.get('sort') === 'activity' ? Date.parse(activityAt(b)) - Date.parse(activityAt(a)) : 0) || Date.parse(b.added_at) - Date.parse(a.added_at) || (a.id < b.id ? -1 : 1));
     const limit = Math.min(500, Number(q.get('limit')) || 50);
     const offset = Number(q.get('offset')) || 0;
     return { items: all.slice(offset, offset + limit).map(record), total: all.length, limit, offset };
