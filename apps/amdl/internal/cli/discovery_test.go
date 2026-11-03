@@ -1,11 +1,18 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"amdl/internal/local"
 )
 
 func TestVersionFlagsPrintTheVersionCommand(t *testing.T) {
@@ -110,5 +117,52 @@ func TestContextAddReportsReachability(t *testing.T) {
 	}
 	if r.code != 0 || json.Unmarshal([]byte(r.stdout), &out) != nil || out.Name != "nowhere" || out.Current || out.Reachable == nil || *out.Reachable {
 		t.Errorf("got %+v", r)
+	}
+}
+
+// A current context on this machine that does not answer, such as a closed
+// tunnel, gives way to this machine's running backend; one that answers, or
+// one on another host, is kept.
+func TestAStaleLocalContextGivesWayToThisMachinesBackend(t *testing.T) {
+	isolate(t)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/wrapper/status" {
+			_, _ = w.Write([]byte(`{"ready":true,"logged_in":true,"regions":["cn"],"login_supported":true,"token_set":false}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	t.Cleanup(backend.Close)
+	dirs, err := local.DefaultDirs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dirs.ServerDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(local.Runtime{URL: backend.URL, PID: 4242, Version: "test", Started: time.Now()})
+	if err := os.WriteFile(filepath.Join(dirs.ServerDir(), "runtime.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"context", "add", "tunnel", "http://127.0.0.1:1"}, {"context", "use", "tunnel"}} {
+		if r := runLocal(t, args...); r.code != 0 {
+			t.Fatalf("amdl %v = %+v", args, r)
+		}
+	}
+	if r := runLocal(t, "wrapper", "status"); r.code != 0 || !strings.Contains(r.stdout, `"regions"`) {
+		t.Fatalf("a stale local context: %+v", r)
+	}
+
+	// A context on another host is the user's choice: it is kept, even
+	// while it does not answer, rather than talk to another server.
+	for _, args := range [][]string{{"context", "add", "nas", "http://192.0.2.7:1"}, {"context", "use", "nas"}} {
+		if r := runLocal(t, args...); r.code != 0 {
+			t.Fatalf("amdl %v = %+v", args, r)
+		}
+	}
+	e := &env{IO: IO{Stdin: strings.NewReader(""), Stdout: io.Discard, Stderr: io.Discard, Getenv: func(string) string { return "" }}, ctx: context.Background()}
+	if got, err := e.resolve(); err != nil || got.URL != "http://192.0.2.7:1" || got.Name != "nas" {
+		t.Fatalf("a context on another host: %+v, %v", got, err)
 	}
 }

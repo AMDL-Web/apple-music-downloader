@@ -212,7 +212,9 @@ The first of these that is set wins:
 2. `AMDL_URL`, the same.
 3. The current context, saved by `amdl context add` or `amdl context use` in
    `cli.yaml` under the user config directory (`~/Library/Application Support/amdl` on
-   macOS, `$XDG_CONFIG_HOME/amdl` or `~/.config/amdl` on Linux).
+   macOS, `$XDG_CONFIG_HOME/amdl` or `~/.config/amdl` on Linux). A current context on a
+   loopback address that does not answer (a closed tunnel, an old port) gives way to the
+   next item when that backend runs, with a note on stderr; one on another host is kept.
 4. The backend running on this machine for the desktop app, `amdl service` or
    `--server embedded`, when its runtime file names one that answers ([Running the backend in amdl](#running-the-backend-in-amdl)).
 5. `http://127.0.0.1:18080`, when its health check answers at once (`apps/amdl/internal/cli#probe`).

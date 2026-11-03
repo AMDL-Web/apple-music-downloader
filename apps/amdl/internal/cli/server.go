@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -77,8 +79,11 @@ type target struct {
 }
 
 // resolve picks the server: --server, then $AMDL_URL, then the current
-// context, then the default address if it answers. Each of the first two may
-// name a saved context instead of a URL.
+// context, then this machine's backend (the runtime file), then the default
+// address if it answers. Each of the first two may name a saved context
+// instead of a URL. A current context on this machine that does not answer,
+// such as a closed tunnel or an old port, gives way to this machine's backend
+// when that one runs.
 func (e *env) resolve() (target, error) {
 	ctxs, _, err := loadContexts()
 	if err != nil {
@@ -110,13 +115,19 @@ func (e *env) resolve() (target, error) {
 	}
 	if ctxs.Current != "" {
 		if u, ok := ctxs.Servers[ctxs.Current]; ok {
-			return target{URL: u, From: "context", Name: ctxs.Current}, nil
+			current := target{URL: u, From: "context", Name: ctxs.Current}
+			if e.dry || !onThisMachine(u) || probe(e.ctx, u) {
+				return current, nil
+			}
+			if t, ok := e.thisMachine(); ok {
+				e.note("context %s (%s) does not answer; using this machine's backend", ctxs.Current, u)
+				return t, nil
+			}
+			return current, nil
 		}
 	}
-	if dirs, err := local.DefaultDirs(); err == nil {
-		if u, ok := local.Find(e.ctx, dirs); ok {
-			return target{URL: u, From: "desktop", Name: "this machine's backend"}, nil
-		}
+	if t, ok := e.thisMachine(); ok {
+		return t, nil
 	}
 	if e.dry || probe(e.ctx, defaultURL) {
 		return target{URL: defaultURL, From: "default"}, nil
@@ -124,6 +135,31 @@ func (e *env) resolve() (target, error) {
 	return target{}, &cliError{Code: "server_not_configured", exit: exitUnavailable,
 		Message: "no amdl server named and none answers at " + defaultURL,
 		Hint:    "amdl context add <name> http://<host>:<port>, or pass --server"}
+}
+
+// thisMachine is the backend running on this machine, such as the desktop
+// app's, when its runtime file names one that answers.
+func (e *env) thisMachine() (target, bool) {
+	dirs, err := local.DefaultDirs()
+	if err != nil {
+		return target{}, false
+	}
+	u, ok := local.Find(e.ctx, dirs)
+	return target{URL: u, From: "desktop", Name: "this machine's backend"}, ok
+}
+
+// onThisMachine reports whether base names a loopback host.
+func onThisMachine(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // looksLikeName reports whether a --server value reads as a context name
