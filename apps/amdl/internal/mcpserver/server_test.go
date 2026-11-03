@@ -562,3 +562,36 @@ func TestAccountToolsTakeARegionAndReachTheirRoutes(t *testing.T) {
 		t.Errorf("requests = %q, want %q", seen, want)
 	}
 }
+
+func TestStorefrontParamIsDescribedAndPassedOn(t *testing.T) {
+	var seen sync.Map
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.Store(r.URL.Path, r.URL.Query().Get("storefront"))
+		fmt.Fprint(w, `{"term":"x","storefront":"jp","storefront_ignored":true,"albums":{"items":[]},"artist":{"id":"7","type":"artist","name":"A","url":"u"}}`)
+	}))
+	res, err := s.cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range res.Tools {
+		switch tl.Name {
+		case "search_catalog", "list_artist_albums", "get_album":
+			raw, _ := json.Marshal(tl.InputSchema)
+			var sch struct {
+				Properties map[string]struct {
+					Description string `json:"description"`
+				} `json:"properties"`
+			}
+			if json.Unmarshal(raw, &sch) != nil || !strings.Contains(sch.Properties["storefront"].Description, "regions of the logged-in accounts") {
+				t.Errorf("%s: storefront is described as %q", tl.Name, sch.Properties["storefront"].Description)
+			}
+		}
+	}
+	s.call(t, "search_catalog", map[string]any{"term": "x", "storefront": "jp"})
+	s.call(t, "list_artist_albums", map[string]any{"artist_id": "7", "storefront": "jp"})
+	for _, path := range []string{"/api/v1/search", "/api/v1/artists/7/albums"} {
+		if got, _ := seen.Load(path); got != "jp" {
+			t.Errorf("%s got storefront %v", path, got)
+		}
+	}
+}

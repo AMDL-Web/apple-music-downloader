@@ -771,7 +771,7 @@ Apple's relevance order. Nothing is downloaded and no job is created.
 | --- | --- |
 | `term` | Required. Runs of white space count as one space; at most 200 characters. |
 | `types` | A subset of `songs`, `albums`, `playlists`, `artists`, comma-separated or repeated; default all four. Groups come back in that order whatever order is given. |
-| `storefront` | A two-letter storefront code; default `default_storefront` from `GET /system`. |
+| `storefront` | A two-letter storefront code, normally one a logged-in account serves (`GET /accounts` lists their `region`); each hit's `url` carries it. Default `default_storefront` from `GET /system`. |
 | `limit`, `offset` | Hits per group, 1-50 (default 10), and where each group's page starts (default 0). |
 
 Each requested group is there, `items` empty when Apple has nothing, and carries

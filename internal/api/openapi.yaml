@@ -2571,9 +2571,11 @@ components:
       name: storefront
       in: query
       description: >-
-        Two-letter Apple Music storefront code, case-insensitive; default the
+        Two-letter Apple Music storefront code, case-insensitive, normally the
+        region of a logged-in account (GET /accounts lists them); default the
         default account's region, else catalog.default_storefront while no
-        account is known.
+        account is known. Search reads with the token of the account serving
+        it, and the hits' links carry it.
       schema:
         type: string
         pattern: '^[A-Za-z]{2}$'

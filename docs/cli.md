@@ -101,6 +101,10 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
 bytes, base64url), and contacts no server: set it on the wrapper's gateway and with
 `amdl config set wrapper.token=<key>` ([configuration.md](configuration.md#wrapper)).
 
+`--storefront` (the `storefront` argument of `search_catalog`, `list_artist_albums` and `get_album`)
+reads the catalog of another region: pass one a logged-in account serves (`accounts` shows each
+account's `region`), such as `jp`; every hit's `url` carries it. Without it, the default account's region answers.
+
 What is downloaded is what amdl's records say, never the disk: `library list` and
 `library get` show them, and `search`, `lookup` and `albums get` mark what they find with
 its record's `resource` (`albums get` gives each song in its `tracks` its `state`). `download` of a record

@@ -429,3 +429,29 @@ func TestAlbumsGetReadsOneAlbum(t *testing.T) {
 		t.Errorf("albums get: %+v", r)
 	}
 }
+
+func TestStorefrontFlagReachesSearchAndArtistAlbums(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Path+"?storefront="+r.URL.Query().Get("storefront"))
+		if r.URL.Path == "/api/v1/search" {
+			fmt.Fprint(w, `{"term":"yorushika","storefront":"jp","albums":{"items":[{"id":"1","type":"album","name":"エルマ","url":"https://music.apple.com/jp/album/x/1"}]}}`)
+			return
+		}
+		fmt.Fprint(w, `{"storefront":"jp","artist":{"id":"7","type":"artist","name":"ヨルシカ","url":"https://music.apple.com/jp/artist/x/7"},"albums":{"items":[]}}`)
+	}))
+	defer srv.Close()
+	if r := run(t, srv, "", "search", "yorushika", "--storefront", "jp"); r.code != 0 || !strings.Contains(r.stdout, "music.apple.com/jp/") {
+		t.Errorf("search: %+v", r)
+	}
+	if r := run(t, srv, "", "artists", "albums", "7", "--storefront", "jp"); r.code != 0 {
+		t.Errorf("artists albums: %+v", r)
+	}
+	if r := run(t, srv, "", "search", "yorushika"); r.code != 0 {
+		t.Errorf("search without it: %+v", r)
+	}
+	want := []string{"/api/v1/search?storefront=jp", "/api/v1/artists/7/albums?storefront=jp", "/api/v1/search?storefront="}
+	if strings.Join(seen, " ") != strings.Join(want, " ") {
+		t.Errorf("requests %v, want %v: the default stays the backend's", seen, want)
+	}
+}

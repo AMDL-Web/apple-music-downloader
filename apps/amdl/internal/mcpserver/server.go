@@ -297,11 +297,14 @@ func inputSchema(c capability.Capability) map[string]any {
 // written for an HTTP client: by "tool.param", else by parameter name where the
 // spec has none.
 var paramDescriptions = map[string]string{
-	"job_id":               "The job's id, job_<32 hex>.",
-	"url":                  "One Apple Music link, such as the url of a search hit.",
-	"search_catalog.types": "The groups to search: any of songs, albums, playlists, artists; default all four.",
-	"get_logs.cursor":      "Only entries after this sequence number: the next_cursor of the previous page.",
-	"get_logs.limit":       "Maximum number of entries to return; default 200.",
+	"job_id":                        "The job's id, job_<32 hex>.",
+	"url":                           "One Apple Music link, such as the url of a search hit.",
+	"search_catalog.types":          "The groups to search: any of songs, albums, playlists, artists; default all four.",
+	"search_catalog.storefront":     storefrontRef,
+	"list_artist_albums.storefront": storefrontRef,
+	"get_album.storefront":          storefrontRef,
+	"get_logs.cursor":               "Only entries after this sequence number: the next_cursor of the previous page.",
+	"get_logs.limit":                "Maximum number of entries to return; default 200.",
 
 	"update_account.account_id":                  accountRef,
 	"delete_account.account_id":                  accountRef,
@@ -311,6 +314,8 @@ var paramDescriptions = map[string]string{
 	"list_apple_library_playlist_tracks.account": accountRef + " Omit for the default account.",
 	"sync_apple_library.account":                 accountRef + " Omit for the default account.",
 }
+
+const storefrontRef = "A two-letter storefront such as us or jp. Valid values are the regions of the logged-in accounts (the region of each account in list_accounts); omit it for the default account's region. Search in another region to find what its catalog has; each hit's url carries that storefront."
 
 const accountRef = "An account id from list_accounts, an Apple ID, or a region such as jp when exactly one active account serves it."
 
