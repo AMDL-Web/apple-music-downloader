@@ -10,10 +10,11 @@ import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // The paths that make a job run. The guest boot runs for the code that builds
-// the QEMU command and what it imports, the pin, and its own files.
+// the QEMU command and every internal package it imports (tools/repocheck
+// checks the list against `go list -deps`), the pin, and its own files.
 export const rules = {
   guestboot: [
-    /^internal\/(wrapperhost|wrapper|ext4|sysproc)\//,
+    /^internal\/(wrapperhost|client|config|domain|ext4|fairplay|limits|sysproc|wrapper)\//,
     /^go\.(mod|sum)$/,
     /^\.github\/scripts\/wrapper-pin/,
     /^\.github\/actions\/guestboot\//,

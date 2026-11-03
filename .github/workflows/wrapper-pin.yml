@@ -40,6 +40,7 @@ jobs:
         uses: ./.github/actions/guestboot
         with:
           pin-file: ${{ runner.temp }}/wrapper-pin.json
+          fresh: 'true'
 
       - name: Commit it to wrapper-pins
         run: |

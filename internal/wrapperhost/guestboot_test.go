@@ -125,6 +125,36 @@ func has(sub string) func(string) bool {
 	return func(line string) bool { return strings.Contains(line, sub) }
 }
 
+// noCarrier reports whether init's eth0 line shows no link.
+func noCarrier(line string) bool {
+	return line != "" && strings.TrimSpace(strings.TrimPrefix(line, "[init] eth0 carrier:")) != "1"
+}
+
+// diagnose names the faults the console shows so far, one per line.
+func (w *bootWatch) diagnose() string {
+	var b strings.Builder
+	console, _ := w.console()
+	if w.seen("link up") != "" && w.seen("arguments reach init") == "" {
+		b.WriteString("  the manager arguments never reached init: it started the manager with its defaults\n")
+		if strings.Contains(console, "fw_cfg") && strings.Contains(console, "warning") {
+			b.WriteString("  (QEMU warned about the fw_cfg item's name; see the console)\n")
+		}
+	}
+	if line := w.seen("link up"); noCarrier(line) {
+		fmt.Fprintf(&b, "  the guest has no network link: %s\n", line)
+	}
+	if line := w.seen("network up"); badNetwork(line) {
+		fmt.Fprintf(&b, "  the guest cannot resolve names: %s\n", line)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, l := range w.panics {
+		fmt.Fprintf(&b, "  panic: %s\n", l)
+		break
+	}
+	return b.String()
+}
+
 // badNetwork reports whether init's DNS probe line says the lookup failed.
 func badNetwork(line string) bool {
 	for _, bad := range []string{"can't resolve", "NXDOMAIN", "timed out", "unreachable", "bad address", "no servers"} {
@@ -239,6 +269,7 @@ func TestGuestBoot(t *testing.T) {
 
 	watch := &bootWatch{phases: []*bootPhase{
 		{name: "arguments reach init", match: has("[init] reading manager args from fw_cfg")},
+		{name: "link up", match: has("[init] eth0 carrier:")},
 		{name: "network up", match: has("[init] dns test:")},
 		{name: "payload download starts", match: has("downloading wrapper-lite from")},
 		{name: "payload downloaded and verified", match: has("wrapper-lite ready")},
@@ -262,6 +293,7 @@ func TestGuestBoot(t *testing.T) {
 	fail := func(format string, args ...any) {
 		t.Helper()
 		t.Errorf(format, args...)
+		t.Errorf("diagnosis:\n%s", watch.diagnose())
 		t.Errorf("phases:\n%s", watch.progress())
 		t.Errorf("the guest's console, last 60 lines:\n%s", watch.tail(60))
 		t.FailNow()
@@ -284,8 +316,10 @@ wait:
 			break wait
 		case dl != "" && !strings.Contains(dl, wantURL):
 			fail("the manager downloads a payload other than the pinned %s: its arguments did not reach it", wantURL)
-		case badNetwork(watch.seen("network up")):
-			fail("the guest has no working network: %s", watch.seen("network up"))
+		case watch.seen("arguments reach init") == "" && watch.seen("link up") != "":
+			fail("the manager arguments did not reach init")
+		case noCarrier(watch.seen("link up")), badNetwork(watch.seen("network up")):
+			fail("the guest has no working network")
 		case len(panics) > 0:
 			fail("the guest panicked: %s", panics[0])
 		case m.Mode == "failed":

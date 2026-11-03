@@ -42,14 +42,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.before }}
           HEAD: ${{ github.sha }}
         run: |
           set -u
+          # Both listings page through every file but stop at 3000; a list that
+          # long may be cut short, so it counts as unknown like a failed read.
+          limit=3000
           files=
-          if [ -n "$BASE" ] && [ "${BASE#0000000}" = "$BASE" ]; then
-            files=$(timeout 60 gh api --paginate "repos/$REPO/compare/$BASE...$HEAD" --jq '.files[].filename' 2>/dev/null) || files=
+          if [ -n "$PR" ]; then
+            files=$(timeout 120 gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" --jq '.[] | .filename, (.previous_filename // empty)' 2>/dev/null) || files=
+          elif [ -n "$BASE" ] && [ "${BASE#0000000}" = "$BASE" ]; then
+            files=$(timeout 120 gh api --paginate "repos/$REPO/compare/$BASE...$HEAD?per_page=100" --jq '.files[] | .filename, (.previous_filename // empty)' 2>/dev/null) || files=
           fi
+          if [ -n "$files" ] && [ "$(printf '%s\n' "$files" | wc -l)" -ge "$limit" ]; then files=; fi
           [ -n "$files" ] || echo "the changed paths are unknown; every optional job runs"
           printf '%s\n' "$files" | node .github/scripts/changed-paths.mjs
 
