@@ -12,10 +12,11 @@ import (
 )
 
 // leftover starts a process that sleeps with args on its command line, and a
-// listener standing in for its guest's port.
+// listener standing in for its guest's port. The trailing ":" keeps sh from
+// exec'ing sleep, which would drop args from the command line.
 func leftover(t *testing.T, args ...string) State {
 	t.Helper()
-	cmd := exec.Command("/bin/sh", append([]string{"-c", "sleep 30", "sh"}, args...)...)
+	cmd := exec.Command("/bin/sh", append([]string{"-c", "sleep 30; :", "sh"}, args...)...)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
