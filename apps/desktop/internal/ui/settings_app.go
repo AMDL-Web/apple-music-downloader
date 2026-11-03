@@ -304,12 +304,19 @@ func (a *App) guestManageRow(c *ui.Context, k *Tokens) {
 	}
 	s.CheckGuestUpdate()
 	status := g.Installed.ID
-	if g.UpdateAvailable() {
+	switch {
+	case g.NeedsUpdate():
+		status += " · needs an update"
+	case g.UpdateAvailable():
 		status += " · " + g.Latest.Commit[:min(12, len(g.Latest.Commit))] + " available"
 	}
 	w := a.Store.Server.Wrapper
 	running := w != nil && w.Managed != nil && w.Managed.Mode != "stopped"
-	setupRow(c, k, "guest", setup.Ready, title, status, true, func() {
+	state := setup.Ready
+	if g.NeedsUpdate() {
+		state = setup.Missing
+	}
+	setupRow(c, k, "guest", state, title, status, true, func() {
 		if g.UpdateAvailable() && button(c, k, buttonPlain, "Update", nil).Clicked() {
 			s.UpdateGuest()
 		}

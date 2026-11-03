@@ -112,6 +112,14 @@ func (a *App) guestRow(c *ui.Context, k *Tokens) {
 	const title = "Wrapper guest"
 	switch g.State {
 	case setup.Ready:
+		if g.NeedsUpdate() {
+			setupRow(c, k, "guest", setup.Missing, title, g.Installed.ID+" · needs an update", true, func() {
+				if button(c, k, buttonPlain, "Update", nil).Clicked() {
+					s.UpdateGuest()
+				}
+			}, nil)
+			return
+		}
 		setupRow(c, k, "guest", setup.Ready, title, g.Installed.ID, true, nil, nil)
 	case setup.Working:
 		status, frac := "Downloading", -1.0

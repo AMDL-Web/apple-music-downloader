@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -136,7 +139,7 @@ func TestSetupStartsOnceTheWrapperCanRun(t *testing.T) {
 	}
 	a.Setup.QEMU = setup.Tool{State: setup.Ready, Path: "/opt/homebrew/bin/qemu-system-x86_64"}
 	a.Setup.FFmpeg = setup.Tool{State: setup.Ready, Path: "/opt/homebrew/bin/ffmpeg", Source: "system"}
-	a.Setup.Guest = setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "bde3335f47a3"}}
+	a.Setup.Guest = setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{Kind: wrapperhost.ManagerGuest, ID: "bde3335f47a3"}}
 	tt.Frame()
 	if err := tt.Click("Start"); err != nil {
 		t.Fatal(err)
@@ -311,7 +314,7 @@ func TestAnotherMachineOverAnInstalledGuest(t *testing.T) {
 	s := mode.DefaultSettings()
 	s.Mode, s.WrapperAddress, s.WrapperElsewhere = mode.Standalone, "http://127.0.0.1:12340", true
 	a, act, tt, _, _ := setupApp(t, s, mode.Standalone)
-	a.Setup.Guest = setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "bde3335f47a3"}}
+	a.Setup.Guest = setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{Kind: wrapperhost.ManagerGuest, ID: "bde3335f47a3"}}
 	a.OpenSetup(mode.Standalone)
 	tt.Frame()
 	if !a.su.elsewhere || !a.localApplied() {
@@ -386,7 +389,7 @@ func connectionWithGuest(t *testing.T, wrapperMode string, g setup.Guest) (*App,
 // The uninstall dialog's label flips its switch, as a checkbox's label does,
 // and a click on the switch itself flips it once.
 func TestUninstallLabelFlipsTheSwitch(t *testing.T) {
-	a, tt := connectionWithGuest(t, "serving", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "34e9b5796c0d"}})
+	a, tt := connectionWithGuest(t, "serving", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{Kind: wrapperhost.ManagerGuest, ID: "34e9b5796c0d"}})
 	if err := tt.Click("Uninstall…"); err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +417,7 @@ func TestStoppedWrapperStartsOnlyWithAGuest(t *testing.T) {
 	if !tt.HasText("Stopped") || tt.HasText("Start") || !tt.HasText("Download") {
 		t.Fatalf("no guest: %q", tt.Texts())
 	}
-	_, tt = connectionWithGuest(t, "stopped", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "34e9b5796c0d"}})
+	_, tt = connectionWithGuest(t, "stopped", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{Kind: wrapperhost.ManagerGuest, ID: "34e9b5796c0d"}})
 	if !tt.HasText("Stopped") || !tt.HasText("Start") {
 		t.Fatalf("a guest: %q", tt.Texts())
 	}
@@ -428,8 +431,57 @@ func TestNoWrapperAnswerIsNotRunning(t *testing.T) {
 	if !tt.HasText("Not running") || tt.HasText("Restart") {
 		t.Fatalf("no guest: %q", tt.Texts())
 	}
-	_, tt = connectionWithGuest(t, "", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "34e9b5796c0d"}})
+	_, tt = connectionWithGuest(t, "", setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{Kind: wrapperhost.ManagerGuest, ID: "34e9b5796c0d"}})
 	if !tt.HasText("Not running") || !tt.HasText("Restart") {
 		t.Fatalf("a guest: %q", tt.Texts())
+	}
+}
+
+// A guest of the retired bare-lite kind, which the backend cannot run, is
+// offered its update on both rows, never a Restart that runs nothing.
+func TestAnOldGuestOffersTheUpdateNotARestart(t *testing.T) {
+	dir := t.TempDir()
+	raw, _ := json.Marshal(wrapperhost.Installed{ID: "bde3335f47a3", Port: 52376})
+	if err := os.WriteFile(filepath.Join(dir, "installed.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, screen := range []string{"settings", "setup"} {
+		s := mode.DefaultSettings()
+		s.Mode = mode.Standalone
+		a, act := newTestApp(s)
+		a.Setup, _ = fakeSetup(func(func()) {}, func(d *setup.Deps) { d.Home = wrapperhost.Home{Dir: dir} })
+		a.Setup.Check("")
+		a.Store.Server.WrapperErr = "wrapper /status: connection refused"
+		if screen == "settings" {
+			a.GoSettings("connection")
+		} else {
+			a.OpenSetup(mode.Standalone)
+		}
+		tt := ui.NewTester(a.View, 1280, 800)
+		tt.Frame()
+		if !a.Setup.Guest.NeedsUpdate() || !a.Setup.Guest.UpdateAvailable() {
+			t.Fatalf("%s: guest %+v", screen, a.Setup.Guest)
+		}
+		if !tt.HasText("needs an update") || !tt.HasText("Update") {
+			t.Fatalf("%s: no update offered: %q", screen, tt.Texts())
+		}
+		if _, ok := tt.Find("Restart"); ok {
+			t.Fatalf("%s: Restart offered for a guest no restart can run: %q", screen, tt.Texts())
+		}
+		if act.reconnects != 0 {
+			t.Fatalf("%s: the backend restarted by itself", screen)
+		}
+	}
+}
+
+// A guest that replaced one the backend could not run starts the backend
+// again, once.
+func TestAReplacedGuestRestartsTheBackendOnce(t *testing.T) {
+	a, tt := connectionWithGuest(t, "", setup.Guest{State: setup.Ready, Replaced: true, Installed: wrapperhost.Installed{Kind: wrapperhost.ManagerGuest, ID: "34e9b5796c0d"}})
+	act := a.Act.(*fakeActions)
+	tt.Frame()
+	tt.Frame()
+	if act.reconnects != 1 || a.Setup.Guest.Replaced {
+		t.Fatalf("reconnects %d, replaced %v", act.reconnects, a.Setup.Guest.Replaced)
 	}
 }

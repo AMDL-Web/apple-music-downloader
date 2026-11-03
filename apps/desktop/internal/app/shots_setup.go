@@ -62,7 +62,7 @@ var (
 func tools(s *setup.Setup) {
 	s.QEMU = setup.Tool{State: setup.Ready, Path: qemuPath}
 	s.FFmpeg = setup.Tool{State: setup.Ready, Path: ffmpegPath, Source: "system"}
-	s.Guest = setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{ID: "bde3335f47a3"}}
+	s.Guest = setup.Guest{State: setup.Ready, Installed: wrapperhost.Installed{Kind: wrapperhost.ManagerGuest, ID: "bde3335f47a3"}}
 }
 
 func standalone(s *mode.Settings) { s.Mode = mode.Standalone }

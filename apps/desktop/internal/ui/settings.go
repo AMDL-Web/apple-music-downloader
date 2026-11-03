@@ -26,10 +26,21 @@ type settingsForm struct {
 	// sections above it may still grow as their state arrives; pinY is
 	// where it put the scroll last. gliding is a navigation click's smooth
 	// scroll to it, which glideTo is the end of.
-	pin     string
-	pinY    float32
+	pin  string
+	pinY float32
+	// pinOff is how far below the pinned section's top the page stays: 0
+	// for the navigation's pin, where the user had scrolled for a pin that
+	// holds their place across a reconnect.
+	pinOff float32
+	// pinMax is the scroll's end when the pin last placed it: a scroll that
+	// moved because the page's length changed is not the user's.
+	pinMax  float32
 	gliding bool
-	glideTo float32
+	// full is whether the backend's sections were all laid out with what it
+	// read, the last frame; a change (a reconnect drops them and brings them
+	// back) pins the section the user is in, so the page keeps its place.
+	full, laid bool
+	glideTo    float32
 	// draft holds the app's connection settings until Apply, since
 	// applying them connects again.
 	loaded bool
@@ -105,7 +116,7 @@ func (a *App) GoSettings(page string) {
 // there until the user scrolls.
 func (a *App) showSection(id string) {
 	f := &a.set
-	f.page, f.pin, f.pinY, f.gliding = id, id, -1, false
+	f.page, f.pin, f.pinY, f.pinOff, f.gliding = id, id, -1, 0, false
 }
 
 func (a *App) settings(c *ui.Context, k *Tokens) {
@@ -206,6 +217,17 @@ func (a *App) settingsSections(c *ui.Context, k *Tokens, width float32) {
 	s.WatchConfig()
 	c.After(store.ServerEvery)
 	down := s.Server.Read.IsZero() && a.unreachable(c, k)
+	f := &a.set
+	full := !down && !s.Server.Read.IsZero()
+	if f.laid && full != f.full && f.page != "" && f.pin == "" {
+		// Where the user is, as the last frame laid the page out.
+		var off float32
+		if st, top := a.scrolls["settings"], f.tops[f.page]; st != nil {
+			off = st.Y - (f.laidY + top - f.areaTop - settingsPinRoom)
+		}
+		f.pin, f.pinY, f.pinOff, f.gliding = f.page, -1, off, false
+	}
+	f.laid, f.full = true, full
 	for g, group := range settingsNav {
 		if g == len(settingsNav)-1 {
 			label(c, k, "This app").Margin(8, 0, -24, 0)
@@ -266,7 +288,7 @@ func (a *App) followSections(c *ui.Context) {
 	if f.pin != "" {
 		top, ok := f.tops[f.pin]
 		switch {
-		case f.pinY >= 0 && st.Y != f.pinY:
+		case f.pinY >= 0 && st.Y != f.pinY && st.MaxY == f.pinMax:
 			// The user scrolled: the pin lets go.
 			f.pin = ""
 		case !ok:
@@ -274,7 +296,7 @@ func (a *App) followSections(c *ui.Context) {
 			c.Invalidate()
 			return
 		default:
-			y := max(0, min(laid+top-f.areaTop-settingsPinRoom, st.MaxY))
+			y := max(0, min(laid+top-f.areaTop-settingsPinRoom+f.pinOff, st.MaxY))
 			f.page = f.pin
 			if f.gliding && st.Scrolling() {
 				// The sections above may grow while it glides: it glides
@@ -290,7 +312,7 @@ func (a *App) followSections(c *ui.Context) {
 				st.Y = y
 				c.Invalidate()
 			}
-			f.pinY = st.Y
+			f.pinY, f.pinMax = st.Y, st.MaxY
 			return
 		}
 	}
@@ -324,7 +346,7 @@ func (a *App) settingsNavItem(c *ui.Context, k *Tokens, p settingsPage) {
 		it.Background(k.Raise)
 	}
 	if it.Clicked() {
-		f.page, f.pin, f.pinY = p.id, p.id, -1
+		f.page, f.pin, f.pinY, f.pinOff = p.id, p.id, -1, 0
 		if st, top := a.scrolls["settings"], f.tops[p.id]; st != nil {
 			f.gliding, f.glideTo = true, max(0, min(f.laidY+top-f.areaTop-settingsPinRoom, st.MaxY))
 			st.ScrollTo(0, f.glideTo, ui.Smooth)

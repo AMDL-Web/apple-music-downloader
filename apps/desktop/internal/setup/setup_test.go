@@ -392,6 +392,11 @@ func TestLegacyGuestUpdatePreservesDiskAndPort(t *testing.T) {
 	}
 	h := newHarness(t, Deps{Home: home, Now: clock(), Fetcher: &fetcher{body: body}, Pin: func(context.Context) (wrapperhost.Pin, error) { return pin, nil }})
 	h.Check("")
+	// The update is offered before the pin was ever read: this build
+	// cannot run the guest at all.
+	if !h.Guest.NeedsUpdate() || !h.Guest.UpdateAvailable() {
+		t.Fatalf("a bare-lite guest did not offer the update: %+v", h.Guest)
+	}
 	h.Guest.Latest = pin
 	if !h.Guest.UpdateAvailable() {
 		t.Fatal("legacy import without commit did not offer manager upgrade")
@@ -399,7 +404,7 @@ func TestLegacyGuestUpdatePreservesDiskAndPort(t *testing.T) {
 	h.UpdateGuest()
 	h.until(t, "legacy guest update", func() bool { return h.Guest.State != Working })
 	in := h.Guest.Installed
-	if h.Guest.State != Ready || in.Kind != wrapperhost.ManagerGuest || in.LegacyDisk == "" || in.Port != 12345 {
+	if h.Guest.State != Ready || in.Kind != wrapperhost.ManagerGuest || in.LegacyDisk == "" || in.Port != 12345 || !h.Guest.Replaced || h.Guest.NeedsUpdate() {
 		t.Fatalf("updated guest: %+v", h.Guest)
 	}
 	backup, err := os.ReadFile(filepath.Join(home.Dir, in.LegacyDisk))
