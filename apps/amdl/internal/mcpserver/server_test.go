@@ -132,8 +132,8 @@ func TestToolsComeFromTheCapabilityTable(t *testing.T) {
 			t.Errorf("%s readOnlyHint = %v", c.Tool, tl.Annotations.ReadOnlyHint)
 		}
 	}
-	if len(got) != 25 {
-		t.Errorf("%d tools, want 25", len(got))
+	if len(got) != 33 {
+		t.Errorf("%d tools, want 33", len(got))
 	}
 	if d := got["delete_job"].Annotations.DestructiveHint; d == nil || !*d {
 		t.Error("delete_job should be destructive")
@@ -465,5 +465,56 @@ func TestGetAlbumReadsOneAlbumAndDropsThePalette(t *testing.T) {
 	out, isErr := s.call(t, "get_album", map[string]any{"album_id": "1783644603", "storefront": "cn"})
 	if _, has := out["artwork_bg_color"]; isErr || has || len(out["tracks"].([]any)) != 1 {
 		t.Errorf("get_album = %v", out)
+	}
+}
+
+func TestLibraryRecordToolsReachTheirRoutes(t *testing.T) {
+	var got sync.Map
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := make([]byte, 512)
+		n, _ := r.Body.Read(raw)
+		got.Store(r.Method+" "+r.URL.Path, string(raw[:n]))
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		fmt.Fprint(w, `{"status":"queued","id":"pl.x","items":[],"total":0}`)
+	}))
+	for _, c := range []struct {
+		tool, route string
+		args        map[string]any
+		body        string
+	}{
+		{"download_resource", "POST /api/v1/library/albums/1/download", map[string]any{"kind": "albums", "id": "1", "codec": "aac", "now": true}, `"codec":"aac"`},
+		{"pause_resource", "POST /api/v1/library/playlists/pl.x/pause", map[string]any{"kind": "playlists", "id": "pl.x"}, ""},
+		{"resume_resource", "POST /api/v1/library/albums/1/resume", map[string]any{"kind": "albums", "id": "1"}, ""},
+		{"delete_resource", "DELETE /api/v1/library/albums/1", map[string]any{"kind": "albums", "id": "1"}, ""},
+		{"get_library_playlist", "GET /api/v1/library/playlists/pl.x", map[string]any{"id": "pl.x"}, ""},
+		{"list_library_playlists", "GET /api/v1/library/playlists", map[string]any{}, ""},
+		{"get_library_summary", "GET /api/v1/library/summary", map[string]any{}, ""},
+		{"get_library_check", "GET /api/v1/library/check", map[string]any{}, ""},
+	} {
+		if out, isErr := s.call(t, c.tool, c.args); isErr {
+			t.Errorf("%s failed: %v", c.tool, out)
+			continue
+		}
+		body, ok := got.Load(c.route)
+		if !ok {
+			t.Errorf("%s did not call %s", c.tool, c.route)
+		} else if !strings.Contains(body.(string), c.body) {
+			t.Errorf("%s sent %q, want it to hold %q", c.tool, body, c.body)
+		}
+	}
+}
+
+func TestStartDownloadHintsDownloadResourceForAnotherQuality(t *testing.T) {
+	s := connect(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		fmt.Fprint(w, `{"accepted":1,"rejected":0,"results":[{"url":"https://music.apple.com/us/album/x/1","status":"already_downloaded","resource":{"kind":"album","id":"1"}}]}`)
+	}))
+	out, isErr := s.call(t, "start_download", map[string]any{"urls": []any{"https://music.apple.com/us/album/x/1"}, "codec_priority": []any{"aac"}})
+	acc, _ := out["accepted"].([]any)
+	if isErr || len(acc) != 1 || !strings.Contains(acc[0].(map[string]any)["hint"].(string), "download_resource with kind albums, id 1 and codec aac") {
+		t.Errorf("start_download = %v", out)
 	}
 }

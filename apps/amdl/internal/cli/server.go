@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -90,6 +91,11 @@ func (e *env) resolve() (target, error) {
 		if u, ok := ctxs.Servers[v]; ok {
 			return target{URL: u, From: from, Name: v}, nil
 		}
+		if looksLikeName(v) {
+			return target{}, &cliError{Code: "context_not_found", exit: exitNotFound,
+				Message: from + " " + v + " is neither a saved server name nor a URL",
+				Hint:    "amdl context list shows the saved names; a server address is a URL such as http://host:18080, or host:port"}
+		}
 		u, err := client.NormalizeBase(v)
 		if err != nil {
 			return target{}, usageErr("%s: %v", from, err)
@@ -118,6 +124,13 @@ func (e *env) resolve() (target, error) {
 	return target{}, &cliError{Code: "server_not_configured", exit: exitUnavailable,
 		Message: "no amdl server named and none answers at " + defaultURL,
 		Hint:    "amdl context add <name> http://<host>:<port>, or pass --server"}
+}
+
+// looksLikeName reports whether a --server value reads as a context name
+// rather than an address: a single word with no scheme, port, path or dot.
+// localhost stays an address.
+func looksLikeName(v string) bool {
+	return !strings.ContainsAny(v, ":./[") && v != "localhost"
 }
 
 func (e *env) connect() (*client.Client, error) {

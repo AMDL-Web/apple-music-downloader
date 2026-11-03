@@ -26,11 +26,15 @@ type Track struct {
 }
 
 // AlbumProgress is how far a job is in its summary: of Total tracks, Finished
-// have ended (saved, already on disk, failed or cancelled), and Percent is
-// the overall progress, 100 once the job completes.
+// have ended (saved, already on disk, failed or cancelled), Done of those have
+// a file (saved or already on disk) and Failed failed, so a cancelled run can
+// have Finished equal to Total and Done 0. Percent is the overall progress,
+// stage-weighted and 100 once the job completes.
 type AlbumProgress struct {
 	Total    int `json:"total"`
 	Finished int `json:"finished"`
+	Done     int `json:"done"`
+	Failed   int `json:"failed"`
 	Percent  int `json:"percent"`
 }
 
@@ -64,7 +68,7 @@ func Summary(d client.DownloadDetail) map[string]any {
 	// The bar's drawing (runs, fill ends, ticks) is for the console; an
 	// agent reads how far the job is.
 	a := progress.AlbumProgress(d.Job.Status, d.Items)
-	out["album_progress"] = AlbumProgress{Total: a.Total, Finished: a.Lit, Percent: a.Percent}
+	out["album_progress"] = AlbumProgress{Total: a.Total, Finished: a.Lit, Done: a.OnDisk, Failed: a.Failed, Percent: a.Percent}
 	out["tracks"] = tracks
 	return out
 }

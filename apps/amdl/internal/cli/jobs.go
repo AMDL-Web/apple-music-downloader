@@ -54,6 +54,7 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 	wait := fs.Bool("wait", false, "wait until every job finishes and print them")
 	watch := fs.Bool("watch", false, "stream the jobs' events as NDJSON until they finish")
 	timeout := fs.Duration("timeout", 2*time.Hour, "how long --wait or --watch waits for all the jobs together, as a duration such as 90s, 20m or 2h (default 2h); 0 only looks once")
+	interval := fs.Duration("progress-interval", 2*time.Second, "with --watch, the least time between two item_progress lines of one track; 0 prints all")
 	return func(e *env, args []string) error {
 		urls, err := readURLs(e, args)
 		if err != nil {
@@ -92,6 +93,12 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		} else if err := json.Unmarshal(raw, &batch); err != nil {
 			return err
 		}
+		if hint := alreadyHaveHint(batch, *codecs); hint != "" {
+			e.note("%s", hint)
+			if raw, err = withHint(raw, hint); err != nil {
+				return err
+			}
+		}
 		ids := jobIDs(batch)
 		if e.running != nil && !*wait && !*watch {
 			// The backend lives only as long as this command.
@@ -116,9 +123,9 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 		ctx, cancel := context.WithTimeout(e.ctx, *timeout)
 		defer cancel()
 		var finals []map[string]any
-		failed := 0
+		var failed []client.DownloadDetail
 		for _, id := range ids {
-			d, err := e.follow(ctx, id, *watch, watchOpts{interval: 2 * time.Second, stopAtTerminal: !*watch})
+			d, err := e.follow(ctx, id, *watch, watchOpts{interval: *interval, stopAtTerminal: !*watch})
 			if err != nil {
 				return e.waitErr(err, id, d, finals)
 			}
@@ -131,7 +138,7 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 				finals = append(finals, s)
 			}
 			if d.Job.Status != domain.JobCompleted {
-				failed++
+				failed = append(failed, d)
 			}
 		}
 		if !*watch {
@@ -143,12 +150,78 @@ func downloadCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 				return err
 			}
 		}
-		if failed > 0 {
+		if len(failed) > 0 {
+			hint := "amdl jobs list --status failed,cancelled"
+			if len(failed) == 1 {
+				_, hint = e.endedHint(failed[0])
+			}
 			return &cliError{Code: "job_failed", exit: exitJobFailed,
-				Message: fmt.Sprintf("%d of %d jobs did not complete", failed, len(ids)), Hint: "amdl jobs list --status failed,cancelled"}
+				Message: fmt.Sprintf("%d of %d jobs did not complete", len(failed), len(ids)), Hint: hint}
 		}
 		return nil
 	}
+}
+
+// recordArgs are the kind and id arguments of the library commands for the
+// record a link or job belongs to, such as "albums 1463409338".
+func recordArgs(kind domain.ResourceKind, id string) string {
+	return string(kind) + "s " + id
+}
+
+// alreadyHaveHint says how to get another quality when --codec was given and
+// a link answered already_downloaded: download ignores the codec then, and
+// library download adds it as a second file. "" when nothing applies.
+func alreadyHaveHint(b domain.BatchSubmitResponse, codecs string) string {
+	order := splitList(codecs)
+	if len(order) == 0 {
+		return ""
+	}
+	var cmds []string
+	for _, r := range b.Results {
+		if r.Status == domain.SubmitAlreadyDownloaded && r.Resource != nil {
+			cmds = append(cmds, fmt.Sprintf("amdl library download %s --codec %s", recordArgs(r.Resource.Kind, r.Resource.ID), order[0]))
+		}
+	}
+	if len(cmds) == 0 {
+		return ""
+	}
+	return "already downloaded, so --codec changed nothing; to add that quality as another file: " + strings.Join(cmds, "; ")
+}
+
+// withHint adds a top-level hint to a JSON object.
+func withHint(raw json.RawMessage, hint string) (json.RawMessage, error) {
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	obj["hint"] = hint
+	return json.Marshal(obj)
+}
+
+// endedHint says what to do about a job that ended without completing: why
+// in a few words (or "") and the command to run next. A run its record's
+// pause cancelled is continued by resuming the record, a retry would not
+// help a link the catalog does not have, and any other job is retried.
+func (e *env) endedHint(d client.DownloadDetail) (why, hint string) {
+	j := d.Job
+	retry := "amdl jobs retry " + j.ID
+	switch {
+	case j.Status == domain.JobCancelled && j.Error == "paused" && j.ResourceID != "":
+		return " (its record is paused)", "amdl library resume " + recordArgs(j.ResourceKind, j.ResourceID)
+	case notInStorefront(j.Error) && j.ResourceID != "":
+		return " (the catalog does not have it)", "the link is not in this account's storefront, so a retry fails again: check the link's storefront with amdl lookup " +
+			j.Input + ", or drop the record with amdl library delete " + recordArgs(j.ResourceKind, j.ResourceID)
+	}
+	return "", retry
+}
+
+// notInStorefront reports whether a job's error says the catalog has no such
+// resource: the run's own error text ("Apple Music has no album 1 in
+// storefront cn (404)"), or the reason a claimed run of a record already
+// marked that way gives.
+func notInStorefront(msg string) bool {
+	return msg == string(domain.CatalogNotInStorefront) || msg == string(domain.CatalogGone) ||
+		strings.Contains(msg, "has no ") && strings.Contains(msg, "in storefront")
 }
 
 // readURLs takes the links from the arguments, or one or more per line from
@@ -325,8 +398,9 @@ func jobsWaitCmd(fs *flag.FlagSet) func(e *env, args []string) error {
 			return err
 		}
 		if d.Job.Status != domain.JobCompleted {
+			why, hint := e.endedHint(d)
 			return &cliError{Code: "job_failed", exit: exitJobFailed,
-				Message: fmt.Sprintf("job %s ended %s", d.Job.ID, d.Job.Status), Hint: "amdl jobs retry " + d.Job.ID}
+				Message: fmt.Sprintf("job %s ended %s%s", d.Job.ID, d.Job.Status, why), Hint: hint}
 		}
 		return nil
 	}

@@ -16,6 +16,7 @@ import (
 func custom() map[string]func(fs *flag.FlagSet) func(e *env, args []string) error {
 	return map[string]func(fs *flag.FlagSet) func(e *env, args []string) error{
 		"download":          downloadCmd,
+		"library check":     libraryCheckCmd,
 		"jobs get":          jobsGetCmd,
 		"jobs watch":        jobsWatchCmd,
 		"jobs wait":         jobsWaitCmd,

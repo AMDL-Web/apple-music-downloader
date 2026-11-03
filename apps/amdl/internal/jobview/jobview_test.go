@@ -29,3 +29,19 @@ func TestSummaryShowsRunningHooksAndOnlySavedQualities(t *testing.T) {
 		t.Error("a running job's summary carries hooks_running")
 	}
 }
+
+func TestSummaryAlbumProgressSeparatesEndedFromDone(t *testing.T) {
+	d := client.DownloadDetail{
+		Job: domain.Job{ID: "job_1", Status: domain.JobCancelled},
+		Items: []domain.JobItem{
+			{Index: 1, Status: domain.ItemCancelled},
+			{Index: 2, Status: domain.ItemCancelled},
+			{Index: 3, Status: domain.ItemFailed},
+			{Index: 4, Status: domain.ItemCompleted},
+		},
+	}
+	a := Summary(d)["album_progress"].(AlbumProgress)
+	if a.Total != 4 || a.Finished != 4 || a.Done != 1 || a.Failed != 1 {
+		t.Errorf("album_progress = %+v, want total 4, finished 4, done 1, failed 1", a)
+	}
+}

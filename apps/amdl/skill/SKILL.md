@@ -16,8 +16,8 @@ Find music with search_catalog (or list_artist_albums for an artist hit), pass t
 
 On the command line:
 
-1. `amdl search "<terms>" --types albums,songs`, then `amdl artists albums <artist_id>` for an artist hit; `amdl albums get <album_id>` lists an album's songs, each with a `url` that downloads it alone; `amdl lookup <url>` previews a pasted link.
-2. `amdl download <url>...` starts jobs. A link already queued or running is rejected with `duplicate_active` and the `existing_job_id` to follow. A link whose every track is downloaded answers `already_downloaded` and queues nothing; `amdl library reset <kind> <id> --what audio` downloads it again. A song or artist link answers `pending` with no `job_id`: it is read into records first, and `amdl library pending list` shows it until then.
+1. `amdl search "<terms>" --types albums,songs`, then `amdl artists albums <artist_id>` for an artist hit; `amdl albums get <album_id>` lists an album's songs (the `tracks` key), each with a `url` that downloads it alone; `amdl lookup <url>` previews a pasted link.
+2. `amdl download <url>...` starts jobs. A link already queued or running is rejected with `duplicate_active` and the `existing_job_id` to follow. A link whose every track is downloaded answers `already_downloaded` and queues nothing; `amdl library reset <kind> <id> --what audio` downloads it again, and `--codec` is ignored: `amdl library download <kind> <id> --codec <codec>` adds another quality as a second file. A song or artist link answers `pending` with no `job_id`: it is read into records first, and `amdl library pending list` shows it until then.
 3. `amdl jobs wait <job_id> --timeout 30m` follows one; `amdl download <url> --wait` does both. Files land on the server's disk.
 
 ## Output
@@ -42,7 +42,7 @@ On the command line:
 | 4 | Conflict, such as a login already pending | Wait, or finish what is pending |
 | 5 | Server, wrapper or a local tool unavailable | `amdl doctor`, then follow its hints |
 | 6 | Apple refused the wrapper's sign-in | Tell the user; see below |
-| 7 | The job failed | `amdl jobs get <job_id>` shows each track's error; `amdl jobs retry <job_id>` |
+| 7 | The job failed or was cancelled | `amdl jobs get <job_id>` shows each track's error; follow `error.hint`: `amdl jobs retry <job_id>`, or `amdl library resume <kind> <id>` when the record was paused. A link the catalog does not have fails again on a retry |
 | 8 | The wait timed out; the job goes on | Wait again |
 | 10 | Needs confirmation | Ask the user; add `--yes` only if they agree |
 | 130 | Interrupted | |
@@ -57,6 +57,6 @@ A machine with no wrapper can run one: `amdl wrapper install`, then `amdl servic
 
 ## Setup and diagnosis
 
-- `amdl doctor` checks the server, its ffmpeg and wrapper, and ffmpeg here; every failure carries a hint.
+- `amdl doctor` checks the server, its ffmpeg and wrapper, and ffmpeg here; every failure carries a hint, and a `simulate` entry says the server writes no files.
 - The server is `--server`, else `AMDL_URL`, else the current context (`amdl context list`), else this machine's backend.
 - `amdl cli setup` prints the MCP configuration for Claude Code, Codex and other clients, and this skill.

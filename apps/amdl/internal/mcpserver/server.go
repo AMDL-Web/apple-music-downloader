@@ -245,7 +245,7 @@ func tool(c capability.Capability) *mcp.Tool {
 var openWorld = map[string]bool{"search_catalog": true, "list_artist_albums": true, "get_album": true, "lookup_link": true, "probe_quality": true}
 
 // idempotent are the changing tools that a repeat leaves as the first call did.
-var idempotent = map[string]bool{"start_download": true, "cancel_job": true, "delete_job": true, "move_job": true}
+var idempotent = map[string]bool{"start_download": true, "cancel_job": true, "delete_job": true, "move_job": true, "pause_resource": true, "resume_resource": true}
 
 // alsoDestructive are changing tools marked destructive although their CLI
 // command needs no --yes: set_config replaces settings and cancel_job throws
@@ -535,6 +535,9 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 		Status   string              `json:"status"`
 		JobID    string              `json:"job_id,omitempty"`
 		Resource *domain.ResourceRef `json:"resource,omitempty"`
+		// Hint is set when codec_priority was given and the link was
+		// already downloaded: the codec changed nothing.
+		Hint string `json:"hint,omitempty"`
 	}
 	type rejected struct {
 		URL           string `json:"url"`
@@ -552,6 +555,9 @@ func (h handlers) startDownload(ctx context.Context, _ *mcp.CallToolRequest, arg
 			a := accepted{URL: r.URL, Status: string(r.Status), Resource: r.Resource}
 			if r.Job != nil {
 				a.JobID = r.Job.ID
+			}
+			if order := stringsArg(args, "codec_priority"); len(order) > 0 && r.Status == domain.SubmitAlreadyDownloaded && r.Resource != nil {
+				a.Hint = fmt.Sprintf("already downloaded, so codec_priority changed nothing; download_resource with kind %ss, id %s and codec %s adds that quality as another file", r.Resource.Kind, r.Resource.ID, order[0])
 			}
 			out.Accepted = append(out.Accepted, a)
 			continue

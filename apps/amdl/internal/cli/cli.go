@@ -180,10 +180,36 @@ func Run(ctx context.Context, args []string, io IO) int {
 // badValue matches the flag package's error for a value it cannot parse.
 var badValue = regexp.MustCompile(`^invalid value ".*" for flag -(\S+): parse error$`)
 
+// unknownFlag matches the flag package's error for a flag the command lacks.
+var unknownFlag = regexp.MustCompile(`^flag provided but not defined: -(\S+)$`)
+
+// globalFlags are the flags every command takes; an unknown-flag error lists
+// only the command's own.
+var globalFlags = map[string]bool{"server": true, "wrapper": true, "fields": true, "quiet": true, "yes": true, "dry-run": true, "help": true}
+
 // flagErr is the usage error for a flag the parser rejected. A duration given
-// without a unit, as --timeout 30, gets a hint with examples.
+// without a unit, as --timeout 30, gets a hint with examples; an unknown flag
+// lists the command's flags and the ones spelled almost the same.
 func flagErr(fs *flag.FlagSet, err error) error {
 	ue := usageErr("%v", err).(*cliError)
+	if m := unknownFlag.FindStringSubmatch(err.Error()); m != nil {
+		own, near := []string{}, []string{}
+		fs.VisitAll(func(f *flag.Flag) {
+			if globalFlags[f.Name] {
+				return
+			}
+			own = append(own, "--"+f.Name)
+			if editDistance(m[1], f.Name) <= 2 {
+				near = append(near, "--"+f.Name)
+			}
+		})
+		sort.SliceStable(near, func(i, j int) bool {
+			return editDistance(m[1], near[i][2:]) < editDistance(m[1], near[j][2:])
+		})
+		ue.Details = mustJSON(map[string]any{"did_you_mean": near, "flags": own})
+		ue.Hint = fs.Name() + " --help"
+		return ue
+	}
 	if m := badValue.FindStringSubmatch(err.Error()); m != nil {
 		if f := fs.Lookup(m[1]); f != nil {
 			if g, ok := f.Value.(flag.Getter); ok {
@@ -410,6 +436,7 @@ func rootHelp(io IO, cmds []command) int {
 		return exitOK
 	}
 	fmt.Fprintf(io.Stdout, "amdl %s - download music from Apple Music through an amdl server.\n\n", version())
+	fmt.Fprintln(io.Stdout, "Quick start:  amdl download <url> --wait    amdl library list")
 	fmt.Fprintln(io.Stdout, `Agents: run amdl cli search "<task>" first; results are JSON on stdout.`)
 	fmt.Fprintln(io.Stdout)
 	width := 0

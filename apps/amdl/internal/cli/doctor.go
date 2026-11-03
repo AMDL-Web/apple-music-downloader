@@ -44,6 +44,9 @@ func doctorCmd(*flag.FlagSet) func(e *env, args []string) error {
 		}
 		srv, onThisMachine := e.serverCheck(dirs)
 		checks := []check{srv}
+		if srv.Detail["simulate"] == true {
+			checks = append(checks, simulateCheck())
+		}
 		if onThisMachine {
 			checks = append(checks, ffmpegCheck(e, dirs))
 		}
@@ -115,6 +118,9 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 	_ = json.Unmarshal(raw, &sys) // missing fields stay empty
 	c.OK = true
 	c.Detail["version"] = sys.Version
+	if sys.Simulate {
+		c.Detail["simulate"] = true
+	}
 	for _, tool := range sys.Tools {
 		c.Detail[tool.Name] = tool.Available
 		if !tool.Available && !sys.Simulate {
@@ -155,6 +161,13 @@ func (e *env) serverCheck(dirs local.Dirs) (check, bool) {
 		}
 	}
 	return c, onThisMachine
+}
+
+// simulateCheck warns that the server only pretends to download: records and
+// jobs complete, but no file is written. It is never required.
+func simulateCheck() check {
+	return check{Name: "simulate", Detail: map[string]any{"simulate": true},
+		Hint: "simulate mode is on: downloads finish without writing any file; turn it off with amdl config set simulate.enabled=false"}
 }
 
 // ffmpegCheck looks for the ffmpeg this machine's backend would run: the

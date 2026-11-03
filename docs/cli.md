@@ -13,7 +13,7 @@ that passes a request through are read from `internal/api/openapi.yaml`, so `--h
 
 | Command | Answers |
 | --- | --- |
-| `amdl` | With stdout not a terminal, a short JSON list of every command; in a terminal, the same as text |
+| `amdl` | With stdout not a terminal, a short JSON list of every command; in a terminal, the same as text, after a two-line quick start |
 | `amdl cli search "<task>"` | The five commands that best match a task, offline: `[{command, summary, example}]` |
 | `amdl cli commands` | Every command with its MCP tool and safety level |
 | `amdl schema <command>` | The command's flags, positional arguments, safety, exit statuses, examples, and each API operation it calls: method, path and parameters. `--view full` adds the parameters' descriptions, the request body and the output JSON Schema |
@@ -21,6 +21,8 @@ that passes a request through are read from `internal/api/openapi.yaml`, so `--h
 | `amdl <group>`, `amdl <group> --help` | The commands under a group such as `jobs` or `library sync`: `{group, commands: [{command, summary}]}`, text in a terminal |
 | `amdl --version`, `-v`, `-V` | The same as `amdl version` |
 
+An unknown flag fails with `usage_error`, `details.flags` (the command's own flags) and
+`details.did_you_mean` (those spelled almost the same), and a hint to `--help`.
 An unknown command fails with `usage_error` and `details.did_you_mean`: up to three
 commands spelled almost the same (`jobs lst` suggests `jobs list`), then the best matches
 by meaning.
@@ -34,7 +36,7 @@ by meaning.
 | `albums get <album_id> [--storefront]` | `GET /albums/{album_id}` | read |
 | `lookup <url>` | `POST /lookup` | read |
 | `quality <url>` | `POST /quality` | read |
-| `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--wait\|--watch] [--timeout]` | `POST /downloads` | write |
+| `download <url>... [--codec] [--codec-fallback] [--max-sample-rate] [--max-bit-depth] [--wait\|--watch] [--timeout] [--progress-interval]` | `POST /downloads` | write |
 | `jobs list [--status] [--type] [--q] [--sort] [--order] [--limit] [--offset]` | `GET /downloads` | read |
 | `jobs get <job_id> [--view summary\|full]` | `GET /downloads/{job_id}` | read |
 | `jobs watch [<job_id>] [--types] [--progress-interval] [--timeout]` | the job's event stream, or the overview feed | read |
@@ -47,7 +49,7 @@ by meaning.
 | `library download <kind> <id> [--codec] [--songs] [--now]`, `library pause <kind> <id>`, `library resume <kind> <id>` | `POST /library/{kind}/{id}/download`, `…/pause`, `…/resume` | write |
 | `library reset <kind> <id> --what [--slot] [--songs] [--codecs] [--states]`, `library reset-all --what --filter <json> [--kind]` | `POST /library/{kind}/{id}/reset`, `POST /library/reset` | destructive |
 | `library delete <kind> <id>` | `DELETE /library/{kind}/{id}` | destructive |
-| `library check [--kind --id] [--force]`, `library check-status` | `POST`/`GET /library/check` | write, read |
+| `library check [--kind --id] [--force] [--wait] [--timeout]`, `library check-status` | `POST`/`GET /library/check` | write, read |
 | `library pending list [--state]`, `library pending retry <pending_id>`, `library pending delete <pending_id>` | `/library/pending`, `…/{pending_id}/retry`, `DELETE …/{pending_id}` | read, write, destructive |
 | `library sync get`, `library sync reset` | `/library-sync`, `…/reset` | read, destructive |
 | `apple-library list <kind> [--sort] [--order] [--q] [--limit] [--offset]`, `apple-library tracks <playlist_id>`, `apple-library status` | `GET /apple-library/{kind}`, `…/playlists/{playlist_id}/tracks`, `…/status` | read |
@@ -76,8 +78,10 @@ prompt in a terminal, else stdin's first line) and has to follow within 60 secon
 
 What is downloaded is what amdl's records say, never the disk: `library list` and
 `library get` show them, and `search`, `lookup` and `albums get` mark what they find with
-its record's `resource` (`albums get` gives each song its `state`). `download` of a record
-with every track done answers `already_downloaded` and queues nothing; `library reset`
+its record's `resource` (`albums get` gives each song in its `tracks` its `state`). `download` of a record
+with every track done answers `already_downloaded` and queues nothing, ignoring `--codec`; the answer then
+carries a `hint` naming `library download <kind> <id> --codec <codec>`, which adds that quality
+as a second file. `library reset`
 downloads it again (`--what audio`), and `library check` then `library reset --what audio
 --states missing` brings back files deleted outside amdl. `{kind}` is `albums` or
 `playlists`. `jobs list` is the history: one job per download.
@@ -95,7 +99,9 @@ downloads it again (`--what audio`), and `library check` then `library reset --w
   `--artwork-colors` is given.
   Every command takes it except `mcp`.
 - **`jobs get` prints a summary by default**: the job, `album_progress`
-  (`total` tracks, how many have `finished`, and the overall `percent`) and one short entry per track
+  (`total` tracks; `finished`, every track that ended, cancelled and failed ones included;
+  `done`, those with a file, saved or already on disk; `failed`; and the overall `percent`,
+  weighted by stage) and one short entry per track
   (`index, title, status, quality, file_size, output_path, error`). `--view full` prints
   the API's `DownloadDetail`.
 - **Streams are NDJSON.** `jobs watch <job_id>` prints each `Event` as one line,
@@ -122,6 +128,17 @@ downloads it again (`--what audio`), and `library check` then `library reset --w
   `jobs watch` without an id and `logs tail` end normally.
 - A timed-out wait prints the job it was waiting for before the error: an object for one job,
   an array for several.
+- A job that ends without completing exits 7 with `job_failed`, and the `hint` says what to
+  do: `amdl library resume <kind> <id>` for a run that ended cancelled with the error `paused`
+  (its record was paused; resuming queues a new run, whose id `jobs list --q <id>` or the
+  record's `active_job_id` gives), a note that a retry fails again when the error says the
+  catalog does not have the album or playlist in the account's storefront (with
+  `amdl lookup <link>` and `amdl library delete <kind> <id>`), and `amdl jobs retry <job_id>`
+  otherwise.
+- `library check` returns at once with the check just started. `--wait` follows it, asking
+  every second, until it is finished and prints `{check}` (`--timeout`, default `10m`; `0`
+  looks once; `wait_timeout` when it runs out). A check that ended `too_many_missing`
+  carries a `hint` with the command that repeats it with `--force`.
 
 ## Errors and exit statuses
 
@@ -165,7 +182,8 @@ and prints the batch, whose results carry `existing_job_id`.
 
 The first of these that is set wins:
 
-1. `--server`, a URL, a saved context name, or `embedded`.
+1. `--server`, a URL, a saved context name, or `embedded`. A single word with no `:` or `.`
+   that is no saved context is `context_not_found`, not a host name; give `host:port` or a URL.
 2. `AMDL_URL`, the same.
 3. The current context, saved by `amdl context add` or `amdl context use` in
    `cli.yaml` under the user config directory (`~/Library/Application Support/amdl` on
@@ -229,7 +247,13 @@ which are all queued or running already are not an error. `set_config`, like
   `pending` for a link read into records first, `already_downloaded` with nothing queued)
   and `rejected[]`; links already queued or running come back rejected with
   `existing_job_id`. `reset_resource` downloads a record again, `check_library` checks its
-  files on disk, and `list_library` and `get_resource` read the records. This shape is the MCP's own: the CLI's `download`
+  files on disk (read the result with `get_library_check`), and `list_library`, `get_resource`
+  (an album), `list_library_playlists`, `get_library_playlist` and `get_library_summary` read the
+  records. `download_resource` downloads a record now or adds a second quality with `codec`
+  (`{status: queued, job}`, whose `job.id` `wait_for_job` follows), `pause_resource` and
+  `resume_resource` stop and continue a record, and `delete_resource` removes it. A link
+  `start_download` answers `already_downloaded` for a `codec_priority` carries a `hint` naming
+  `download_resource`. This shape is the MCP's own: the CLI's `download`
   prints the API's batch, whose jobs are `results[].job.id`. `search_catalog`,
   `list_artist_albums`, `get_album` and `lookup_link` leave out the artwork color palette unless
   `artwork_colors` is true.
@@ -371,7 +395,8 @@ lingering is on (`loginctl enable-linger`).
 `amdl doctor` checks what downloading needs and never starts a backend: the server a
 command would use answers, has ffmpeg and a ready wrapper; and, when that server runs on
 this machine's local files, ffmpeg is installed here (with its version). It also reports
-the local data directory and service. Each failed check carries a hint, such as the
+the local data directory and service, and, when the server is in simulate mode, a
+`simulate` entry (not required, so `ok` stays true) saying downloads write no file. Each failed check carries a hint, such as the
 command that installs ffmpeg with the package manager found (or, without root, where to
 put an ffmpeg binary and the `tools.ffmpeg` to set); any required check failing exits 5
 with `checks_failed`, whose own hint repeats the failed checks' hints. With a server
