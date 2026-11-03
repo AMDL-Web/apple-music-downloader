@@ -177,6 +177,8 @@ export function trackNote(item, statusLabel) {
   const label = String(statusLabel || '').trim().toLowerCase();
   const plain = msg.replace(/[.\s]+$/, '').toLowerCase();
   if (!msg || plain === label) return '';
+  // "Not offered for this track: <the selector's error>" restates the status.
+  if (item.status === 'unavailable' && label && plain.startsWith(label)) return '';
   if (WORKING.includes(item.status) && ((label && plain.startsWith(label)) || /\d%$/.test(plain))) return '';
   return msg;
 }

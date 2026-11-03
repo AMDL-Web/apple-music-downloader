@@ -290,7 +290,10 @@ function Actions({ job, app, onChanged, onDelete }) {
             <${Button} variant="ghost" onClick=${() => setConfirming(false)}>Keep running</${Button}>
           </div>`
         : null}
-      ${canRetry
+      ${canRetry && isPausedRun(job)
+        ? html`<${Button} variant="primary" icon="play" onClick=${() => run('retry', retryDownload, 'Resumed')} disabled=${busy}>Resume</${Button}>`
+        : null}
+      ${canRetry && !isPausedRun(job)
         ? html`<${Button} variant="primary" icon="rotate" onClick=${() => run('retry', retryDownload, 'Job queued again')} disabled=${busy}>Retry</${Button}>`
         : null}
       ${jobAllows(job, 'delete') ? html`<${Button} variant="ghost" icon="trash" className="drawer-delete" onClick=${onDelete} disabled=${busy}>Remove</${Button}>` : null}

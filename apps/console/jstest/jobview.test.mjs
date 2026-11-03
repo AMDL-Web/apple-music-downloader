@@ -110,6 +110,7 @@ test('trackNote drops messages that restate the stage, keeps the ones that expla
   assert.equal(trackNote({ status: 'cancelled', status_message: 'Cancelled by the user' }, 'Cancelled'), 'Cancelled by the user', 'only a working stage drops a longer message');
   assert.equal(trackNote({ status: 'completed', status_message: 'ALAC download completed' }, 'Completed'), '');
   assert.equal(trackNote({ status: 'skipped_existing', status_message: 'File already exists; skipped' }, 'Already on disk'), '');
+  assert.equal(trackNote({ status: 'unavailable', status_message: 'Not offered for this track: select ec3 media: codec ec3 not found in manifest' }, 'Not offered'), '');
 });
 
 test('activityRows folds Gave up into the Failed that says the same', () => {
