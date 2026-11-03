@@ -129,7 +129,7 @@ var setupStages = []setupStage{
 	}},
 	{name: "07-guest-failed", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) {
 		s.QEMU = setup.Tool{State: setup.Ready, Path: qemuPath}
-		s.Guest = setup.Guest{State: setup.Failed, Size: 80_125_881, Err: "https://github.com/AMDL-Web/wrapper/releases/download/guest-b60beea21807/manager-qemu-guest.zip is not published"}
+		s.Guest = setup.Guest{State: setup.Failed, Size: 80_125_881, Err: "https://github.com/AMDL-Web/wrapper/releases/download/guest-bb4d4d86f6cd/manager-qemu-guest.zip is not published"}
 	}},
 	{name: "08-start", show: mode.Standalone, stage: func(_ *appui.App, s *setup.Setup, _ *ui.Tester) { tools(s) }},
 	{name: "09-booting", settings: standalone, show: mode.Standalone, stage: func(v *appui.App, s *setup.Setup, tt *ui.Tester) {

@@ -95,9 +95,9 @@ func (p Pin) Asset() Asset {
 // both downloads before unpacking, and the manager verifies the payload.
 var Builtin = Pin{
 	Artifact: GuestArtifact,
-	Commit:   "b60beea21807c46cd8b788769ae061e173cfd744",
-	SHA256:   "71cf59e4bb2b4f3a2f4afd98445b0fe218767136cf464712b196d2d192830499",
-	Size:     30007371,
+	Commit:   "bb4d4d86f6cd166c585edb5aa70441d079e07624",
+	SHA256:   "e47c0923c1fd540444f864fbcb38e1a753b97a28c2e960fdedc88d02c08e45d2",
+	Size:     30008241,
 	Lite: LitePin{
 		Artifact: LiteArtifact,
 		Commit:   "97267425669943e9ced5691ee8a311543110a258",
