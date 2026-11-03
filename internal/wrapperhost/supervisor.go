@@ -85,9 +85,14 @@ type Supervisor struct {
 	run context.Context
 }
 
-// readyTimeout allows a TCG guest to download its payload on first boot.
+// readyTimeout allows a TCG guest to download its ~50 MB payload on first
+// boot, which the manager does before it answers and starts over after a
+// restart: a slow link (30-50 KB/s measured from China) needs most of half an
+// hour, the manager's own limit for that download. A guest that fails exits
+// QEMU at once (panic=1, and the guest init powers off when the manager
+// exits), so the wait only runs out on a guest that hangs.
 var (
-	readyTimeout = 3 * time.Minute
+	readyTimeout = 30 * time.Minute
 	pollEvery    = 2 * time.Second
 )
 

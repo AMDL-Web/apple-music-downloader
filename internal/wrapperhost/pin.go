@@ -85,12 +85,12 @@ type Pin struct {
 // downloaded zip before unpacking, and the manager verifies the payload.
 var Builtin = Pin{
 	Artifact:   GuestArtifact,
-	Commit:     "0345f267425806a473f45213289ba79f73dc44d6",
-	RunID:      41583637553,
-	ArtifactID: 13206802333,
-	SHA256:     "4d41f3c1cdf3a3c3c64fdfd2c067503b1a97b13f648056e6e3482d436953c446",
-	Size:       29998316,
-	Expires:    time.Date(2027, 2, 1, 5, 23, 29, 0, time.UTC),
+	Commit:     "3ff150fdbd27b7cab46582eee4f738230aafe6ee",
+	RunID:      41594421666,
+	ArtifactID: 13212080359,
+	SHA256:     "cfb5fcda8e346b1f53c437d02ec181d48a777729d7798d4d76893328eecc9d64",
+	Size:       29997755,
+	Expires:    time.Date(2027, 2, 1, 7, 9, 15, 0, time.UTC),
 	Lite: LitePin{
 		Artifact: LiteArtifact,
 		Commit:   "97267425669943e9ced5691ee8a311543110a258",

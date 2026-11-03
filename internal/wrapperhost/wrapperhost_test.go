@@ -22,7 +22,7 @@ func TestArgs(t *testing.T) {
 	// The manager guest on WHPX, without credentials on the kernel command line,
 	// with hostfwd on loopback; a comma in a path is doubled for QEMU.
 	want := "-accel whpx,kernel-irqchip=off -cpu qemu64-v1 -m 512 -smp 2 -kernel /k -initrd /i " +
-		"-append console=ttyS0 quiet net.ifnames=0 biosdevname=0 -display none -serial stdio -no-reboot " +
+		"-append console=ttyS0 quiet panic=1 net.ifnames=0 biosdevname=0 -display none -serial stdio -no-reboot " +
 		"-nic user,model=e1000,hostfwd=tcp:127.0.0.1:52011-:8080 -drive file=/a,,b/data.img,format=raw,if=virtio " +
 		"-fw_cfg name=manager_args,file=/s/login-args"
 	if got := strings.Join(Args(o), " "); got != want {

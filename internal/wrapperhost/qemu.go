@@ -120,7 +120,10 @@ type RunOpts struct {
 }
 
 // Args are QEMU's arguments for the manager guest, with a fixed kernel
-// command line and the forwarded port bound to loopback only.
+// command line and the forwarded port bound to loopback only. panic=1 turns a
+// guest kernel panic into a reboot, which -no-reboot turns into QEMU's exit:
+// the supervisor then sees the guest stop at once instead of waiting out
+// readyTimeout on a guest that will never answer.
 func Args(o RunOpts) []string {
 	accel, cpu := o.Accel, "max"
 	switch o.Accel {
@@ -133,7 +136,7 @@ func Args(o RunOpts) []string {
 		"-accel", accel, "-cpu", cpu,
 		"-m", strconv.Itoa(o.MemoryMB), "-smp", strconv.Itoa(o.CPUs),
 		"-kernel", o.Kernel, "-initrd", o.Initrd,
-		"-append", "console=ttyS0 quiet net.ifnames=0 biosdevname=0",
+		"-append", "console=ttyS0 quiet panic=1 net.ifnames=0 biosdevname=0",
 		"-display", "none", "-serial", "stdio", "-no-reboot",
 		"-nic", fmt.Sprintf("user,model=e1000,hostfwd=tcp:127.0.0.1:%d-:%d", o.HostPort, o.GuestPort),
 		"-drive", "file=" + optValue(o.Image) + ",format=raw,if=virtio",
