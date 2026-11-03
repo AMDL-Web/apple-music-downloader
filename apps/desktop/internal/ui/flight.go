@@ -39,6 +39,9 @@ const (
 	flightFade = 150 * time.Millisecond
 	// flightRise is how far what only the page has rises as it comes in.
 	flightRise = 16
+	// flightBlur is how far, in DIPs, what fades in a flight is blurred
+	// once it has all but faded (fade).
+	flightBlur = 3
 	// flightPast is how far below 0 q aims going out (flightBack).
 	flightPast = 0.03
 	// crossover is the q from which what flies, but the cover, moves
@@ -444,7 +447,7 @@ func (a *App) flyPage(el ui.Element, part flightPart, text string, size float32)
 		el.Radius(lerp(src.size, size, t) / s)
 	}
 	if p == crosses {
-		el.Opacity(unit((f.q - f.partsFrom()) / 0.45))
+		f.fade(el, unit((f.q-f.partsFrom())/0.45))
 	}
 }
 
@@ -536,8 +539,9 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 	if !f.moving {
 		return
 	}
-	el.Background(k.Ground.Mix(detailGround(k), f.light())).Opacity(f.cross()).
+	el.Background(k.Ground.Mix(detailGround(k), f.light())).
 		BorderColor(k.Line.Alpha(unit((f.q - panelLined) / (1 - panelLined))))
+	f.fade(el, f.cross())
 	if f.still {
 		return
 	}
@@ -554,8 +558,20 @@ func (a *App) flyPanel(el ui.Element, k *Tokens) {
 func (a *App) flyFade(el ui.Element) {
 	if f := &a.fly; f.moving {
 		from := f.partsFrom()
-		el.Opacity(unit((f.q - from) / (1 - from)))
+		f.fade(el, unit((f.q-from)/(1-from)))
 	}
+}
+
+// fade shows el, which fades in or out in a flight, at opacity op, and
+// blurred as far as it has faded, up to flightBlur: it goes soft as it goes.
+// Whole, or gone, it is not blurred, which costs a layer; nor while the
+// desktop asks for less motion.
+func (f *flight) fade(el ui.Element, op float32) ui.Element {
+	el.Opacity(op)
+	if op > 0 && op < 1 && !f.still {
+		el.Blur(flightBlur * (1 - op))
+	}
+	return el
 }
 
 func lerp(a, b, k float32) float32 { return a + (b-a)*k }
