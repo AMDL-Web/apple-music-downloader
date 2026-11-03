@@ -319,7 +319,8 @@ sets its failed, given-up and missing slots pending as a retry does, and answers
 main slot is done gets that quality as another slot (`409 main_not_done` when none has its
 first quality, `409 quality_present` when the first quality is that codec). Pause cancels
 the record's run, keeps its resume checkpoints and stops the scheduler from queuing it;
-resume continues it. Both answer the record. Delete answers `204`; a record with a queued
+resume queues its run again. Both answer the record, which names a queued or running run
+in `active_job_id`. Delete answers `204`; a record with a queued
 or running run is `409 run_active`. The library monitor does not add a deleted album back;
 adding it by hand does, and its first run takes a file still at a track's path as that
 track's download instead of downloading it again.

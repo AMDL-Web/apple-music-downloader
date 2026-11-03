@@ -250,16 +250,19 @@ func (m *Manager) Pause(ctx context.Context, kind domain.ResourceKind, id string
 	return err
 }
 
-// Resume clears a record's paused flag; the picker queues its run.
+// Resume clears a record's paused flag and queues its run when it needs one,
+// so the record a client reads back names that run (active_job_id); a full
+// queue leaves it to the picker.
 func (m *Manager) Resume(ctx context.Context, kind domain.ResourceKind, id string) error {
-	if err := m.store.SetPaused(ctx, kind, id, false, time.Now().UTC()); err != nil {
+	now := time.Now().UTC()
+	if err := m.store.SetPaused(ctx, kind, id, false, now); err != nil {
 		return err
 	}
 	m.mu.Lock()
-	delete(m.backoff, recordKey{kind, id})
+	_, _, err := m.afterAddLocked(ctx, kind, id, domain.TriggerManual, now)
 	m.mu.Unlock()
 	m.pickWake.broadcast()
-	return nil
+	return err
 }
 
 // ResetWhat is what a reset re-arms (design §3.7).

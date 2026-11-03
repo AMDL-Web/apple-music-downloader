@@ -486,6 +486,9 @@ func TestCancelPausesTheRecordAndResumeRunsIt(t *testing.T) {
 	if err := m.Resume(ctx, domain.ResourceAlbum, "100"); err != nil {
 		t.Fatal(err)
 	}
+	if runs := runsOf(t, store, domain.ResourceAlbum, "100"); len(runs) != 2 {
+		t.Fatalf("runs after Resume = %d, want the resumed run queued before Resume returns", len(runs))
+	}
 	var resumed domain.Job
 	select {
 	case resumed = <-p.started:
