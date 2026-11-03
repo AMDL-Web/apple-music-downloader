@@ -138,7 +138,7 @@ func NewSupervisor(h Home, qemu, accel string, log io.Writer) (*Supervisor, erro
 		fetcher: Releases{Client: &http.Client{}}}
 	s.st = State{Mode: "stopped", Port: in.Port, Accel: accel, QEMU: qemu}
 	if prev, err := h.ReadState(); err == nil {
-		reapStale(prev)
+		reapStale(h.Dir, prev)
 	}
 	return s, nil
 }

@@ -43,4 +43,4 @@ func adopt(p *os.Process) error {
 }
 
 // reapStale has nothing to do: a QEMU of ours died with its job.
-func reapStale(State) {}
+func reapStale(string, State) {}

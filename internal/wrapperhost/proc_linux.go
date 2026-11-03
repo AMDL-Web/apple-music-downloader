@@ -15,4 +15,4 @@ func tieToParent(cmd *exec.Cmd) {
 func adopt(*os.Process) error { return nil }
 
 // reapStale has nothing to do: a QEMU of ours died with its parent.
-func reapStale(State) {}
+func reapStale(string, State) {}
