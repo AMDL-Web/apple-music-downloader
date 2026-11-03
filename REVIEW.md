@@ -1,6 +1,6 @@
 # REVIEW.md
 
-What pull-request review agents (Claude review, Codex, Devin Review) report. The
+What pull-request review agents (Claude review, Devin Review) report. The
 rules being checked are in [AGENTS.md](AGENTS.md) and the `AGENTS.md` files under
 `internal/`.
 
