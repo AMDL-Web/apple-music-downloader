@@ -7,13 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -506,137 +504,6 @@ func (p *Pairing) post(ctx context.Context, endpoint string, body any, out any) 
 		return resp.StatusCode, fmt.Errorf("%w: wrapper %s reply does not have the expected shape", ErrWrapperResponse, endpoint)
 	}
 	return resp.StatusCode, nil
-}
-
-// pairingStore is the stored credential.
-type pairingStore struct{ dir string }
-
-const pairingFile = "wrapper.json"
-
-func (s pairingStore) path() string { return filepath.Join(s.dir, pairingFile) }
-
-func (s pairingStore) load(address string) (*pairingCredential, error) {
-	if s.dir == "" {
-		return nil, nil
-	}
-	raw, err := os.ReadFile(s.path())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var cred pairingCredential
-	if json.Unmarshal(raw, &cred) != nil || cred.AccessToken == "" || cred.RefreshToken == "" {
-		return nil, fmt.Errorf("%s is not a stored pairing", s.path())
-	}
-	if cred.Address != address {
-		return nil, nil
-	}
-	return &cred, nil
-}
-
-func (s pairingStore) save(cred pairingCredential) error {
-	if s.dir == "" {
-		return nil
-	}
-	if err := os.MkdirAll(s.dir, 0o700); err != nil {
-		return err
-	}
-	if err := os.Chmod(s.dir, 0o700); err != nil {
-		return err
-	}
-	raw, err := json.Marshal(cred)
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(s.dir, pairingFile+".*.tmp")
-	if err != nil {
-		return err
-	}
-	done := false
-	defer func() {
-		if !done {
-			_ = tmp.Close()
-			_ = os.Remove(tmp.Name())
-		}
-	}()
-	if err := tmp.Chmod(0o600); err != nil {
-		return err
-	}
-	if _, err := tmp.Write(raw); err != nil {
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp.Name(), s.path()); err != nil {
-		return err
-	}
-	done = true
-	return nil
-}
-
-func (s pairingStore) drop() error {
-	if s.dir == "" {
-		return nil
-	}
-	err := os.Remove(s.path())
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	return err
-}
-
-// pairedTransport sends the pairing's access token on every request and,
-// after a 401, renews it once and sends the request again.
-type pairedTransport struct {
-	pairing *Pairing
-	next    http.RoundTripper
-}
-
-func (t pairedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	token := t.pairing.accessToken(req.Context())
-	if token == "" {
-		resp, err := t.next.RoundTrip(req)
-		if err == nil && resp.StatusCode == http.StatusUnauthorized {
-			t.pairing.askedForToken()
-		}
-		return resp, err
-	}
-	resp, err := t.next.RoundTrip(withBearer(req, token))
-	if err != nil || resp.StatusCode != http.StatusUnauthorized {
-		return resp, err
-	}
-	retry := t.pairing.unauthorized(req.Context(), token)
-	if retry == "" || (req.Body != nil && req.Body != http.NoBody && req.GetBody == nil) {
-		return resp, nil
-	}
-	again := withBearer(req, retry)
-	if req.GetBody != nil {
-		body, err := req.GetBody()
-		if err != nil {
-			return resp, nil
-		}
-		again.Body = body
-	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
-	resp.Body.Close()
-	resp, err = t.next.RoundTrip(again)
-	if err == nil && resp.StatusCode == http.StatusUnauthorized {
-		// A renewed token refused too: the pairing itself is gone.
-		t.pairing.drop("the wrapper refused a renewed access token; pair again")
-	}
-	return resp, err
-}
-
-func withBearer(req *http.Request, token string) *http.Request {
-	out := req.Clone(req.Context())
-	out.Header.Set("Authorization", "Bearer "+strings.TrimSpace(token))
-	return out
 }
 
 // deviceName is the name the owner sees for this pairing: "amdl on <host>".
