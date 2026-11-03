@@ -280,7 +280,7 @@ jobs:
   # must succeed when it is true; light is the reverse; OPTIONAL jobs may always
   # be skipped. ADVISORY jobs may also fail: a gate that is new, and red on a
   # defect the code under test still has, stays visible without blocking merges
-  # until the defect is fixed. Empty ADVISORY once guestboot is green.
+  # until the defect is fixed.
   build-and-test:
     name: Build and test
     needs: [changes, unit, test, race, light, temaridiff, dist, upgrade, docker, guestboot]
@@ -295,7 +295,7 @@ jobs:
           GATED: unit test race temaridiff dist upgrade docker
           LIGHT: light
           OPTIONAL: guestboot
-          ADVISORY: guestboot
+          ADVISORY: ''
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
           echo "go: $GO"
