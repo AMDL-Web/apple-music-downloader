@@ -126,12 +126,6 @@ func serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/")
-	// A browser never sends the fragment, but some phone proxies forward
-	// the whole address, "/#/settings" included; Go keeps "#..." in the path.
-	// The fragment names a console route, so serve the page it belongs to.
-	if i := strings.IndexByte(name, '#'); i >= 0 {
-		name = name[:i]
-	}
 	if name == "" {
 		name = indexFile
 	}
