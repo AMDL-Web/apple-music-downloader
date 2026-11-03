@@ -144,6 +144,8 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/go
+        with:
+          scope: test-${{ matrix.target }}-${{ strategy.job-index }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -198,6 +200,7 @@ jobs:
         uses: ./.github/actions/go
         with:
           name: race
+          scope: race-${{ matrix.target }}-${{ strategy.job-index }}
 
       # The media tests skip without ffmpeg, as in the test jobs.
       - name: Wait for ffmpeg

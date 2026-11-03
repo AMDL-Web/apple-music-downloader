@@ -12,6 +12,14 @@ inputs:
       Which cache family: plain for ordinary builds and tests, race for -race
       (its objects differ), so one family's entries do not push out another's.
     default: plain
+  scope:
+    description: >-
+      Which job or matrix shard writes the entry. Jobs on one commit would
+      otherwise share a key, and actions/cache never overwrites an existing
+      key, so the first job to finish (often one that only builds) would win
+      and the test shards would restore binaries they do not need. Empty uses
+      the job id; matrix jobs pass their target and strategy.job-index.
+    default: ''
 
 runs:
   using: composite
@@ -28,7 +36,8 @@ runs:
         path: |
           ~/go/pkg/mod
           ~/.cache/go-build
-        key: go-${{ runner.os }}-${{ inputs.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+        key: go-${{ runner.os }}-${{ inputs.name }}-${{ inputs.scope || github.job }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
         restore-keys: |
-          go-${{ runner.os }}-${{ inputs.name }}-${{ hashFiles('go.sum') }}-
+          go-${{ runner.os }}-${{ inputs.name }}-${{ inputs.scope || github.job }}-${{ hashFiles('go.sum') }}-
+          go-${{ runner.os }}-${{ inputs.name }}-${{ inputs.scope || github.job }}-
           go-${{ runner.os }}-${{ inputs.name }}-
